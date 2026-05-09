@@ -1,0 +1,22 @@
+# Dockerfile.init-test - Test agentd init in isolated environment
+#
+# Build: docker build -f Dockerfile.init-test -t agentd-init-test .
+# Run (quiet): docker run --rm agentd-init-test
+# Run (verbose): docker run --rm agentd-init-test -v
+#
+# To capture logs: docker run --rm agentd-init-test -v 2>&1 | tee init-output.log
+
+FROM golang:1.26-alpine AS builder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /agentd ./cmd/agentd
+
+FROM alpine:latest
+RUN apk add --no-cache sqlite-libs bash
+COPY --from=builder /agentd /usr/local/bin/agentd
+RUN mkdir -p /test-agentd && chmod 777 /test-agentd
+WORKDIR /test-agentd
+ENTRYPOINT ["agentd", "init", "--home", "/test-agentd"]
+CMD ["-v"]

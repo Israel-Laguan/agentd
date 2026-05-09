@@ -1,0 +1,112 @@
+package providers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"agentd/internal/gateway/spec"
+)
+
+// OpenAI calls the OpenAI-compatible chat completions API.
+type OpenAI struct {
+	cfg    spec.ProviderConfig
+	client *http.Client
+}
+
+// NewOpenAI constructs an OpenAI backend using cfg (BaseURL should include /v1 prefix when needed).
+func NewOpenAI(cfg spec.ProviderConfig, client *http.Client) *OpenAI {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return &OpenAI{cfg: cfg, client: client}
+}
+
+// Name implements Backend.
+func (o *OpenAI) Name() spec.Provider {
+	return spec.ProviderOpenAI
+}
+
+// MaxInputChars implements Backend.
+func (o *OpenAI) MaxInputChars() int {
+	return o.cfg.MaxInputChars
+}
+
+// Generate implements Backend.
+func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
+	if o.cfg.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, o.cfg.Timeout)
+		defer cancel()
+	}
+	model := o.cfg.Model
+	if req.Model != "" {
+		model = req.Model
+	}
+	body := openAIRequest{
+		Model:       model,
+		Messages:    req.Messages,
+		Temperature: req.Temperature,
+		MaxTokens:   req.MaxTokens,
+	}
+	if req.JSONMode {
+		body.ResponseFormat = map[string]string{"type": "json_object"}
+	}
+	data, _, err := postJSON(ctx, o.client, o.url(), body, o.cfg.APIKey)
+	if err != nil {
+		return spec.AIResponse{}, err
+	}
+	var decoded openAIResponse
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return spec.AIResponse{}, fmt.Errorf("decode openai response: %w", err)
+	}
+	return decoded.toAIResponse(model), nil
+}
+
+func (o *OpenAI) url() string {
+	return strings.TrimRight(o.cfg.BaseURL, "/") + "/chat/completions"
+}
+
+type openAIRequest struct {
+	Model          string            `json:"model"`
+	Messages       []spec.PromptMessage `json:"messages"`
+	Temperature    float64           `json:"temperature"`
+	MaxTokens      int               `json:"max_tokens,omitempty"`
+	ResponseFormat map[string]string `json:"response_format,omitempty"`
+}
+
+type openAIResponse struct {
+	Choices []struct {
+		Message struct {
+			Role             string `json:"role"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Usage struct {
+		TotalTokens int `json:"total_tokens"`
+	} `json:"usage"`
+	Model string `json:"model"`
+}
+
+func (r openAIResponse) toAIResponse(defaultModel string) spec.AIResponse {
+	model := r.Model
+	if model == "" {
+		model = defaultModel
+	}
+	content := ""
+	if len(r.Choices) > 0 {
+		content = r.Choices[0].Message.Content
+		if content == "" && r.Choices[0].Message.ReasoningContent != "" {
+			content = r.Choices[0].Message.ReasoningContent
+		}
+	}
+	return spec.AIResponse{
+		Content:      content,
+		TokenUsage:   r.Usage.TotalTokens,
+		ProviderUsed: string(spec.ProviderOpenAI),
+		ModelUsed:    model,
+	}
+}

@@ -1,0 +1,88 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - cyclop
+    - revive
+    - govet
+    - funlen
+    - depguard
+  settings:
+    cyclop:
+      max-complexity: 15
+    funlen:
+      lines: 60
+      statements: 40
+    revive:
+      rules:
+        - name: function-length
+          arguments: [100, 60]
+        - name: file-length-limit
+          arguments:
+            - max: 300
+    depguard:
+      rules:
+        no-outward-model-deps:
+          files:
+            - "**/internal/models/**/*.go"
+          deny:
+            - pkg: "agentd/internal/api"
+              desc: "models layer must stay inward and not depend on api"
+            - pkg: "agentd/internal/frontdesk"
+              desc: "models layer must stay inward and not depend on frontdesk"
+            - pkg: "agentd/internal/kanban"
+              desc: "models layer must stay inward and not depend on persistence"
+            - pkg: "agentd/internal/config"
+              desc: "models layer must stay inward and not depend on config"
+            - pkg: "agentd/internal/bus"
+              desc: "models layer must stay inward and not depend on bus"
+            - pkg: "agentd/internal/memory"
+              desc: "models layer must stay inward and not depend on memory"
+            - pkg: "agentd/internal/gateway"
+              desc: "models layer must stay inward and not depend on gateway"
+            - pkg: "agentd/internal/queue"
+              desc: "models layer must stay inward and not depend on queue"
+            - pkg: "agentd/internal/sandbox"
+              desc: "models layer must stay inward and not depend on sandbox"
+        queue-test-isolation:
+          files:
+            - "**/internal/queue/**_test.go"
+          deny:
+            - pkg: "agentd/internal/kanban"
+              desc: "use testutil.FakeKanbanStore instead of real kanban in queue tests"
+            - pkg: "agentd/internal/memory"
+              desc: "memory integration tests should use //go:build integration"
+        sandbox-test-isolation:
+          files:
+            - "**/internal/sandbox/**_test.go"
+          deny:
+            - pkg: "agentd/internal/kanban"
+              desc: "sandbox tests should not depend on the board"
+            - pkg: "agentd/internal/queue"
+              desc: "sandbox tests should not depend on queue"
+        gateway-test-isolation:
+          files:
+            - "**/internal/gateway/**_test.go"
+          deny:
+            - pkg: "agentd/internal/kanban"
+              desc: "gateway tests should not depend on the board"
+            - pkg: "agentd/internal/queue"
+              desc: "gateway tests should not depend on queue"
+            - pkg: "agentd/internal/sandbox"
+              desc: "gateway tests should not depend on sandbox"
+        kanban-test-isolation:
+          files:
+            - "**/internal/kanban/**_test.go"
+          deny:
+            - pkg: "agentd/internal/queue"
+              desc: "kanban tests should not depend on queue"
+            - pkg: "agentd/internal/gateway"
+              desc: "kanban tests should not depend on gateway"
+            - pkg: "agentd/internal/sandbox"
+              desc: "kanban tests should not depend on sandbox"
+            - pkg: "agentd/internal/api"
+              desc: "kanban tests should not depend on api"
