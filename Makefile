@@ -3,7 +3,13 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test coverage run tidy lint loc check
+.PHONY: build test coverage run tidy lint loc check test-e2e
+
+test-e2e:
+	$(GO) test -v ./e2e/... test-e2e
+
+test-e2e:
+	$(GO) test -v ./e2e/...
 
 build:
 	$(GO) build -o bin/agentd ./cmd/agentd
