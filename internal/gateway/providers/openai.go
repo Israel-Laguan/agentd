@@ -94,9 +94,10 @@ type openAITool struct {
 type openAIResponse struct {
 	Choices []struct {
 		Message struct {
-			Role             string `json:"role"`
-			Content          string `json:"content"`
-			ReasoningContent string `json:"reasoning_content"`
+			Role             string        `json:"role"`
+			Content          *string       `json:"content"`
+			ReasoningContent *string       `json:"reasoning_content"`
+			ToolCalls        []openAIToolCall `json:"tool_calls"`
 		} `json:"message"`
 	} `json:"choices"`
 	Usage struct {
@@ -105,16 +106,42 @@ type openAIResponse struct {
 	Model string `json:"model"`
 }
 
+type openAIToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
 func (r openAIResponse) toAIResponse(defaultModel string) spec.AIResponse {
 	model := r.Model
 	if model == "" {
 		model = defaultModel
 	}
 	content := ""
+	var toolCalls []spec.ToolCall
 	if len(r.Choices) > 0 {
-		content = r.Choices[0].Message.Content
-		if content == "" && r.Choices[0].Message.ReasoningContent != "" {
-			content = r.Choices[0].Message.ReasoningContent
+		msg := r.Choices[0].Message
+		if msg.Content != nil {
+			content = *msg.Content
+		}
+		if content == "" && msg.ReasoningContent != nil {
+			content = *msg.ReasoningContent
+		}
+		if len(msg.ToolCalls) > 0 {
+			toolCalls = make([]spec.ToolCall, len(msg.ToolCalls))
+			for i, tc := range msg.ToolCalls {
+				toolCalls[i] = spec.ToolCall{
+					ID:       tc.ID,
+					Type:     tc.Type,
+					Function: spec.ToolCallFunction{
+						Name:      tc.Function.Name,
+						Arguments: tc.Function.Arguments,
+					},
+				}
+			}
 		}
 	}
 	return spec.AIResponse{
@@ -122,5 +149,6 @@ func (r openAIResponse) toAIResponse(defaultModel string) spec.AIResponse {
 		TokenUsage:   r.Usage.TotalTokens,
 		ProviderUsed: string(spec.ProviderOpenAI),
 		ModelUsed:    model,
+		ToolCalls:    toolCalls,
 	}
 }
