@@ -42,7 +42,20 @@ type FunctionParameters struct {
 type ToolDefinition struct {
 	Name        string               `json:"name"`
 	Description string               `json:"description"`
-	Parameters  *FunctionParameters `json:"parameters,omitempty"`
+	Parameters  *FunctionParameters `json:"parameters"`
+}
+
+// ToolCallFunction represents a function call from the model.
+type ToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// ToolCall represents a tool call from the model.
+type ToolCall struct {
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Function ToolCallFunction `json:"function"`
 }
 
 // AIRequest is the provider-neutral input shape for model calls.
@@ -70,10 +83,11 @@ type Validatable interface {
 
 // AIResponse is the provider-neutral output shape for model calls.
 type AIResponse struct {
-	Content      string `json:"content"`
-	TokenUsage   int    `json:"token_usage"`
-	ProviderUsed string `json:"provider_used"`
-	ModelUsed    string `json:"model_used"`
+	Content      string      `json:"content"`
+	TokenUsage   int         `json:"token_usage"`
+	ProviderUsed string      `json:"provider_used"`
+	ModelUsed    string      `json:"model_used"`
+	ToolCalls    []ToolCall  `json:"tool_calls,omitempty"`
 }
 
 // ProviderConfig configures one concrete LLM endpoint.
