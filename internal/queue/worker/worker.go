@@ -40,6 +40,8 @@ type Worker struct {
 	sandboxExtraEnv     []string
 	maxRetries          int
 	maxToolIterations   int
+	truncatorMax        int
+	truncationThreshold int
 	toolExecutor        *ToolExecutor
 	capabilities        *capabilities.Registry
 	tokenBudget         int
@@ -52,17 +54,19 @@ type MemoryRetriever interface {
 }
 
 type WorkerOptions struct {
-	MaxRetries          int
-	MaxToolIterations   int
-	TokenBudget         int
-	Canceller           *CancelRegistry
-	Tuner               *planning.ParameterTuner
-	Retriever           MemoryRetriever
-	HeartbeatInterval   time.Duration
-	SandboxWallTimeout  time.Duration
-	SandboxEnvAllowlist []string
-	SandboxExtraEnv     []string
-	Capabilities        *capabilities.Registry
+	MaxRetries              int
+	MaxToolIterations       int
+	TokenBudget             int
+	AgenticTruncatorMax     int
+	AgenticTruncationThresh int
+	Canceller               *CancelRegistry
+	Tuner                   *planning.ParameterTuner
+	Retriever               MemoryRetriever
+	HeartbeatInterval       time.Duration
+	SandboxWallTimeout      time.Duration
+	SandboxEnvAllowlist     []string
+	SandboxExtraEnv         []string
+	Capabilities            *capabilities.Registry
 }
 
 func NewWorker(
@@ -91,6 +95,12 @@ func NewWorker(
 	if opts.MaxToolIterations <= 0 {
 		opts.MaxToolIterations = DefaultMaxToolIterations
 	}
+	if opts.AgenticTruncatorMax <= 0 {
+		opts.AgenticTruncatorMax = 30
+	}
+	if opts.AgenticTruncationThresh <= 0 {
+		opts.AgenticTruncationThresh = 40
+	}
 	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
 	var budgetTracker spec.BudgetTracker
 	if opts.TokenBudget > 0 {
@@ -105,6 +115,8 @@ func NewWorker(
 		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
 		maxRetries:          opts.MaxRetries,
 		maxToolIterations:   opts.MaxToolIterations,
+		truncatorMax:        opts.AgenticTruncatorMax,
+		truncationThreshold: opts.AgenticTruncationThresh,
 		toolExecutor:        NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
 		capabilities:        opts.Capabilities,
 		tokenBudget:         opts.TokenBudget,
@@ -275,7 +287,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
 	deadlineGuard := NewDeadlineGuard(ctx)
-	agenticTruncator := truncation.NewAgenticTruncator(30)
+	agenticTruncator := truncation.NewAgenticTruncator(w.truncatorMax)
 
 	for {
 		if err := deadlineGuard.BeforeIteration(); err != nil {
@@ -293,7 +305,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			iterationGuard.ResetAllowFinal()
 		}
 
-		if len(messages) > 40 {
+		if len(messages) > w.truncationThreshold {
 			var err error
 			messages, err = agenticTruncator.Apply(ctx, messages, 0)
 			if err != nil {
