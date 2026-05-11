@@ -53,13 +53,25 @@ func TestAgentHandler(t *testing.T) {
 			t.Fatalf("List code = %d", rec.Code)
 		}
 		var resp struct {
-			Data []interface{} `json:"data"`
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
 		}
 		if len(resp.Data) == 0 {
 			t.Fatal("expected at least one agent")
+		}
+		found := false
+		for _, a := range resp.Data {
+			if a.ID == "test-agent" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected seeded agent %q in list response", "test-agent")
 		}
 	})
 
