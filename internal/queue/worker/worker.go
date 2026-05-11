@@ -255,7 +255,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages := w.seedMessages(ctx, task, profile)
 	messages = w.buildAgenticMessages(messages, profile)
-	tools := w.agenticTools(ctx, toolExecutor)
+	tools, toolToAdapter := w.agenticTools(ctx, toolExecutor)
 
 	for i := 0; i < w.maxToolIterations; i++ {
 		req := gateway.AIRequest{
@@ -289,7 +289,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		}
 
 		for _, call := range resp.ToolCalls {
-			result := w.executeAgenticTool(cancelCtx, toolExecutor, call)
+			result := w.executeAgenticTool(cancelCtx, toolExecutor, call, toolToAdapter)
 			messages = append(messages, gateway.PromptMessage{
 				Role:       "tool",
 				ToolCallID: call.ID,
@@ -301,20 +301,20 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	w.handleIterationExceeded(ctx, task)
 }
 
-func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) []gateway.ToolDefinition {
+func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
 	tools := append([]gateway.ToolDefinition(nil), toolExecutor.Definitions()...)
 	if w.capabilities == nil {
-		return tools
+		return tools, nil
 	}
-	capabilityTools, err := w.capabilities.GetTools(ctx)
+	capabilityTools, toolToAdapter, err := w.capabilities.GetToolsAndAdapterIndex(ctx)
 	if err != nil {
 		slog.Warn("failed to get capability tools", "error", err)
-		return tools
+		return tools, nil
 	}
-	return append(tools, capabilityTools...)
+	return append(tools, capabilityTools...), toolToAdapter
 }
 
-func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall) string {
+func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
 		return toolExec.Execute(ctx, call)
@@ -322,7 +322,7 @@ func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor,
 		if w.capabilities == nil {
 			return jsonErrorf("unknown tool: %s", call.Function.Name)
 		}
-		adapterName, ok := w.capabilities.AdapterForTool(ctx, call.Function.Name)
+		adapterName, ok := toolToAdapter[call.Function.Name]
 		if !ok {
 			return jsonErrorf("unknown tool: %s", call.Function.Name)
 		}

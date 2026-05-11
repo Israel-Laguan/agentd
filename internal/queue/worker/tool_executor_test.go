@@ -26,7 +26,6 @@ func TestToolExecutor_UnknownTool_ReturnsValidJSON(t *testing.T) {
 }
 
 func TestToolExecutor_Read_RejectsOversizedFile(t *testing.T) {
-	t.Parallel()
 	prev := maxToolReadFileBytes
 	maxToolReadFileBytes = 8
 	t.Cleanup(func() { maxToolReadFileBytes = prev })

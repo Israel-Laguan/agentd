@@ -101,9 +101,10 @@ func TestExecuteAgenticTool_CapabilityRegistry(t *testing.T) {
 	})
 	w := &Worker{capabilities: registry}
 	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	toolToAdapter := map[string]string{"capability_tool": "fake"}
 	out := w.executeAgenticTool(context.Background(), ex, gateway.ToolCall{
 		Function: gateway.ToolCallFunction{Name: "capability_tool", Arguments: `{"id":"1"}`},
-	})
+	}, toolToAdapter)
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v out=%s", err, out)
@@ -132,14 +133,14 @@ func TestAgenticToolsIncludesExecutorAndCapabilityTools(t *testing.T) {
 	w := &Worker{capabilities: registry}
 	executor := NewToolExecutor(nil, "", nil, 0)
 
-	got := w.agenticTools(context.Background(), executor)
-	if len(got) != 4 {
-		t.Fatalf("expected 4 tools total (3 executor + 1 capability), got %d", len(got))
+	tools, _ := w.agenticTools(context.Background(), executor)
+	if len(tools) != 4 {
+		t.Fatalf("expected 4 tools total (3 executor + 1 capability), got %d", len(tools))
 	}
-	if !containsTool(got, "bash") {
+	if !containsTool(tools, "bash") {
 		t.Fatal("expected bash tool from executor")
 	}
-	if !containsTool(got, "capability_tool") {
+	if !containsTool(tools, "capability_tool") {
 		t.Fatal("expected capability tool")
 	}
 }

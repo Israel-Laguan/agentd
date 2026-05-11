@@ -18,7 +18,6 @@ type CapabilityAdapter interface {
 type Registry struct {
 	mu       sync.RWMutex
 	adapters map[string]CapabilityAdapter
-	allTools []gateway.ToolDefinition
 }
 
 func NewRegistry() *Registry {
@@ -47,20 +46,45 @@ func (r *Registry) GetAdapter(name string) (CapabilityAdapter, bool) {
 }
 
 func (r *Registry) GetTools(ctx context.Context) ([]gateway.ToolDefinition, error) {
+	tools, _, err := r.GetToolsAndAdapterIndex(ctx)
+	return tools, err
+}
+
+// GetToolsAndAdapterIndex returns all tools from all adapters along with a map
+// from tool name to adapter name. The map is useful for routing tool calls without
+// repeated adapter iteration.
+func (r *Registry) GetToolsAndAdapterIndex(ctx context.Context) ([]gateway.ToolDefinition, map[string]string, error) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	names := make([]string, 0, len(r.adapters))
+	adapters := make([]CapabilityAdapter, 0, len(r.adapters))
+	for n, a := range r.adapters {
+		names = append(names, n)
+		adapters = append(adapters, a)
+	}
+	r.mu.RUnlock()
+	sort.Strings(names)
 
 	var allTools []gateway.ToolDefinition
-	for _, adapter := range r.adapters {
+	toolToAdapter := make(map[string]string)
+
+	for i, name := range names {
+		adapter := adapters[i]
+		if adapter == nil {
+			continue
+		}
 		tools, err := adapter.ListTools(ctx)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		for _, t := range tools {
+			if _, exists := toolToAdapter[t.Name]; !exists {
+				toolToAdapter[t.Name] = name
+			}
 		}
 		allTools = append(allTools, tools...)
 	}
 
-	r.allTools = allTools
-	return allTools, nil
+	return allTools, toolToAdapter, nil
 }
 
 func (r *Registry) CallTool(ctx context.Context, adapterName, toolName string, args map[string]any) (any, error) {
@@ -88,8 +112,11 @@ func (r *Registry) AdapterForTool(ctx context.Context, toolName string) (adapter
 
 	for _, name := range names {
 		r.mu.RLock()
-		adapter := r.adapters[name]
+		adapter, exists := r.adapters[name]
 		r.mu.RUnlock()
+		if !exists || adapter == nil {
+			continue
+		}
 		tools, err := adapter.ListTools(ctx)
 		if err != nil {
 			continue
