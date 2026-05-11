@@ -353,6 +353,17 @@ func (s *gatewayScenario) toolMockProviderWithNullContentAndToolCalls(_ context.
 }
 
 func (s *gatewayScenario) toolGenerateWithNoParams(_ context.Context) error {
+	var ok bool
+	for _, p := range s.providers {
+		if p.providerName == "openai" {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		s.providers = append(s.providers, &fakeProvider{providerName: "openai"})
+	}
+
 	provs := make([]providers.Backend, len(s.providers))
 	for i, p := range s.providers {
 		provs[i] = p
@@ -366,32 +377,48 @@ func (s *gatewayScenario) toolGenerateWithNoParams(_ context.Context) error {
 			Parameters:  &FunctionParameters{Type: "object", Properties: map[string]any{}, Required: []string{}},
 		}},
 	}
-	var ok bool
-	for _, p := range s.providers {
-		if p.providerName == "openai" {
-			ok = true
-			break
-		}
-	}
-	if !ok {
-		s.providers = append(s.providers, &fakeProvider{providerName: "openai"})
-	}
 	s.aiResp, s.aiErr = s.router.Generate(context.Background(), s.toolReq)
 	return nil
 }
 
 func (s *gatewayScenario) toolReqHasParameters(_ context.Context) error {
-	if len(s.toolReq.Tools) == 0 || s.toolReq.Tools[0].Parameters == nil {
-		return fmt.Errorf("tool parameters not present")
+	if s.aiErr != nil {
+		return fmt.Errorf("Generate() error = %v", s.aiErr)
+	}
+	var provider *fakeProvider
+	for _, p := range s.providers {
+		if p.providerName == s.aiResp.ProviderUsed {
+			provider = p
+			break
+		}
+	}
+	if provider == nil {
+		return fmt.Errorf("provider %q not found", s.aiResp.ProviderUsed)
+	}
+	if len(provider.lastRequest.Tools) == 0 || provider.lastRequest.Tools[0].Parameters == nil {
+		return fmt.Errorf("tool parameters not present in downstream request")
 	}
 	return nil
 }
 
 func (s *gatewayScenario) toolParamsIsEmptyObject(_ context.Context) error {
-	if len(s.toolReq.Tools) == 0 || s.toolReq.Tools[0].Parameters == nil {
-		return fmt.Errorf("tool parameters not present")
+	if s.aiErr != nil {
+		return fmt.Errorf("Generate() error = %v", s.aiErr)
 	}
-	params := s.toolReq.Tools[0].Parameters
+	var provider *fakeProvider
+	for _, p := range s.providers {
+		if p.providerName == s.aiResp.ProviderUsed {
+			provider = p
+			break
+		}
+	}
+	if provider == nil {
+		return fmt.Errorf("provider %q not found", s.aiResp.ProviderUsed)
+	}
+	if len(provider.lastRequest.Tools) == 0 || provider.lastRequest.Tools[0].Parameters == nil {
+		return fmt.Errorf("tool parameters not present in downstream request")
+	}
+	params := provider.lastRequest.Tools[0].Parameters
 	if params.Type != "object" {
 		return fmt.Errorf("parameters.type = %q, want object", params.Type)
 	}
@@ -427,8 +454,21 @@ func (s *gatewayScenario) toolGenerateWithTools(_ context.Context) error {
 }
 
 func (s *gatewayScenario) toolReqHasTools(_ context.Context) error {
-	if len(s.toolReq.Tools) == 0 {
-		return fmt.Errorf("tools not present in request")
+	if s.aiErr != nil {
+		return fmt.Errorf("Generate() error = %v", s.aiErr)
+	}
+	var provider *fakeProvider
+	for _, p := range s.providers {
+		if p.providerName == s.aiResp.ProviderUsed {
+			provider = p
+			break
+		}
+	}
+	if provider == nil {
+		return fmt.Errorf("provider %q not found", s.aiResp.ProviderUsed)
+	}
+	if len(provider.lastRequest.Tools) == 0 {
+		return fmt.Errorf("tools not present in downstream request")
 	}
 	return nil
 }
@@ -457,11 +497,21 @@ func (s *gatewayScenario) toolReqNoResponseFormat(_ context.Context) error {
 	if s.aiErr != nil {
 		return fmt.Errorf("Generate() error = %v", s.aiErr)
 	}
-	if len(s.toolReq.Tools) == 0 {
-		return fmt.Errorf("expected tools in request")
+	var provider *fakeProvider
+	for _, p := range s.providers {
+		if p.providerName == s.aiResp.ProviderUsed {
+			provider = p
+			break
+		}
 	}
-	if !s.toolReq.JSONMode {
-		return fmt.Errorf("expected JSONMode=true")
+	if provider == nil {
+		return fmt.Errorf("provider %q not found", s.aiResp.ProviderUsed)
+	}
+	if len(provider.lastRequest.Tools) == 0 {
+		return fmt.Errorf("expected tools in downstream request")
+	}
+	if !provider.lastRequest.JSONMode {
+		return fmt.Errorf("expected JSONMode=true in downstream request")
 	}
 	return nil
 }
