@@ -267,6 +267,10 @@ func jsonErrorf(format string, args ...any) string {
 	return string(payload)
 }
 
+// isDangerous checks if a command contains patterns that suggest risky operations.
+// This is a best-effort hint, not a security boundary. The sandbox provides the actual
+// isolation and resource limits. This check can be bypassed by shell variables,
+// aliases, or other obfuscation techniques.
 func isDangerous(cmd string) bool {
 	lower := strings.ToLower(cmd)
 	dangerous := []string{
