@@ -51,8 +51,16 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		Temperature: req.Temperature,
 		MaxTokens:   req.MaxTokens,
 	}
-	if req.JSONMode {
+	// OpenAI does not allow response_format: json_object when tools are present.
+	// When tools are provided, we omit response_format to avoid conflicts.
+	if req.JSONMode && len(req.Tools) == 0 {
 		body.ResponseFormat = map[string]string{"type": "json_object"}
+	}
+	if len(req.Tools) > 0 {
+		body.Tools = make([]openAITool, len(req.Tools))
+		for i, t := range req.Tools {
+			body.Tools[i] = openAITool{Type: "function", Function: t}
+		}
 	}
 	data, _, err := postJSON(ctx, o.client, o.url(), body, o.cfg.APIKey)
 	if err != nil {
@@ -70,11 +78,17 @@ func (o *OpenAI) url() string {
 }
 
 type openAIRequest struct {
-	Model          string            `json:"model"`
-	Messages       []spec.PromptMessage `json:"messages"`
-	Temperature    float64           `json:"temperature"`
-	MaxTokens      int               `json:"max_tokens,omitempty"`
-	ResponseFormat map[string]string `json:"response_format,omitempty"`
+	Model          string                  `json:"model"`
+	Messages       []spec.PromptMessage    `json:"messages"`
+	Temperature    float64                 `json:"temperature"`
+	MaxTokens      int                     `json:"max_tokens,omitempty"`
+	ResponseFormat map[string]string       `json:"response_format,omitempty"`
+	Tools          []openAITool            `json:"tools,omitempty"`
+}
+
+type openAITool struct {
+	Type     string               `json:"type"`
+	Function spec.ToolDefinition  `json:"function"`
 }
 
 type openAIResponse struct {
