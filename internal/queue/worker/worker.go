@@ -261,12 +261,13 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages := w.seedMessages(ctx, task, profile)
 	messages = w.buildAgenticMessages(messages, profile)
+	tools := w.agenticTools(ctx, toolExecutor)
 
 	for i := 0; i < w.maxToolIterations; i++ {
 		req := gateway.AIRequest{
 			Messages:    messages,
 			Temperature: profile.Temperature,
-			Tools:       toolExecutor.Definitions(),
+			Tools:       tools,
 			AgentID:     task.AgentID,
 			Role:        gateway.RoleWorker,
 			TaskID:      task.ID,
@@ -306,6 +307,19 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	w.handleIterationExceeded(ctx, task)
 }
 
+func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) []gateway.ToolDefinition {
+	tools := append([]gateway.ToolDefinition(nil), toolExecutor.Definitions()...)
+	if w.capabilities == nil {
+		return tools
+	}
+	capabilityTools, err := w.capabilities.GetTools(ctx)
+	if err != nil {
+		slog.Warn("failed to get capability tools", "error", err)
+		return tools
+	}
+	return append(tools, capabilityTools...)
+}
+
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := workerMessages(task, profile)
 	if w.retriever == nil {
@@ -330,6 +344,11 @@ Return your response as plain text when the task is complete, or use tools to co
 	if profile.SystemPrompt.Valid {
 		system = strings.TrimSpace(profile.SystemPrompt.String) + "\n\n" + toolUseSystem
 	}
+	augmented := append([]gateway.PromptMessage(nil), messages...)
+	if len(augmented) > 0 && augmented[0].Role == "system" {
+		augmented[0].Content = system
+		return augmented
+	}
 
 	insertIdx := len(messages)
 	for i, message := range messages {
@@ -339,7 +358,6 @@ Return your response as plain text when the task is complete, or use tools to co
 		}
 	}
 
-	augmented := append([]gateway.PromptMessage(nil), messages...)
 	augmented = append(augmented, gateway.PromptMessage{})
 	copy(augmented[insertIdx+1:], augmented[insertIdx:])
 	augmented[insertIdx] = gateway.PromptMessage{Role: "system", Content: system}
