@@ -104,11 +104,12 @@ func TestCheckProviders_HordeFallback(t *testing.T) {
 
 func TestCheckProviders_OllamaHealthy(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/tags" {
-			w.WriteHeader(http.StatusOK)
+		if r.URL.Path != "/api/tags" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 
@@ -130,11 +131,12 @@ func TestCheckProviders_OllamaHealthy(t *testing.T) {
 
 func TestCheckProviders_LlamaCppHealthy(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/models" {
-			w.WriteHeader(http.StatusOK)
+		if r.URL.Path != "/v1/models" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 
