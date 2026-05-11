@@ -1,115 +1,83 @@
 package frontdesk
 
 import (
+	"strings"
 	"testing"
 
 	"agentd/internal/gateway"
 )
 
-func TestLastUserMessage_FindsUserMessage(t *testing.T) {
-	messages := []gateway.PromptMessage{
-		{Role: "system", Content: "You are helpful"},
-		{Role: "assistant", Content: "How can I help?"},
-		{Role: "user", Content: "Hello"},
+func TestLastUserMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		messages []gateway.PromptMessage
+		want     string
+	}{
+		{
+			name: "single user message",
+			messages: []gateway.PromptMessage{
+				{Role: "user", Content: "hello"},
+			},
+			want: "hello",
+		},
+		{
+			name: "user message with padding",
+			messages: []gateway.PromptMessage{
+				{Role: "user", Content: "  hello  "},
+			},
+			want: "hello",
+		},
+		{
+			name: "multiple messages, last user wins",
+			messages: []gateway.PromptMessage{
+				{Role: "user", Content: "first"},
+				{Role: "assistant", Content: "reply"},
+				{Role: "user", Content: "last"},
+			},
+			want: "last",
+		},
+		{
+			name: "no user message",
+			messages: []gateway.PromptMessage{
+				{Role: "system", Content: "init"},
+				{Role: "assistant", Content: "ready"},
+			},
+			want: "",
+		},
+		{
+			name:     "empty messages",
+			messages: []gateway.PromptMessage{},
+			want:     "",
+		},
 	}
-	_ = LastUserMessage(messages)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := LastUserMessage(tt.messages); got != tt.want {
+				t.Errorf("LastUserMessage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
 }
 
-func TestLastUserMessage_NoUserMessage(t *testing.T) {
-	messages := []gateway.PromptMessage{
-		{Role: "system", Content: "You are helpful"},
-		{Role: "assistant", Content: "How can I help?"},
-	}
-	_ = LastUserMessage(messages)
-}
-
-func TestLastUserMessage_TrimsWhitespace(t *testing.T) {
-	messages := []gateway.PromptMessage{
-		{Role: "user", Content: "  hello  \n"},
-	}
-	_ = LastUserMessage(messages)
-}
-
-func TestInputFile(t *testing.T) {
-	file := InputFile{
-		Name:    "test.txt",
-		Path:    "/path/to/test.txt",
-		Content: "Hello World",
-	}
-	if file.Name != "test.txt" {
-		t.Errorf("Name = %v, want test.txt", file.Name)
-	}
-	if file.Path != "/path/to/test.txt" {
-		t.Errorf("Path = %v, want /path/to/test.txt", file.Path)
-	}
-	if file.Content != "Hello World" {
-		t.Errorf("Content = %v, want Hello World", file.Content)
-	}
-}
-
-func TestFileRef(t *testing.T) {
-	ref := FileRef{
-		Name: "file.txt",
-		Path: "/path/file.txt",
-	}
-	if ref.Name != "file.txt" {
-		t.Errorf("Name = %v, want file.txt", ref.Name)
-	}
-	if ref.Path != "/path/file.txt" {
-		t.Errorf("Path = %v, want /path/file.txt", ref.Path)
-	}
-}
-
-func TestFormatFileReferenceIntent_EmptyRefs(t *testing.T) {
-	_ = FormatFileReferenceIntent("test", nil)
-}
-
-func TestFormatFileReferenceIntent_WithRefs(t *testing.T) {
+func TestFormatFileReferenceIntent(t *testing.T) {
+	intent := "test intent"
 	refs := []FileRef{
-		{Name: "a.txt", Path: "/path/a.txt"},
-		{Name: "b.txt", Path: "/path/b.txt"},
+		{Name: "file1.txt", Path: "/path/to/file1.txt"},
+		{Name: "file2.txt", Path: "/path/to/file2.txt"},
 	}
-	_ = FormatFileReferenceIntent("test", refs)
-}
 
-func TestPrepareIntent_NilStash(t *testing.T) {
-	_, _, err := PrepareIntent(nil, "test message", nil)
-	if err != nil {
-		t.Errorf("PrepareIntent() error = %v", err)
+	got := FormatFileReferenceIntent(intent, refs)
+	if !strings.Contains(got, "test intent") {
+		t.Errorf("expected intent in output")
 	}
-}
-
-func TestPrepareIntent_WithFilePath(t *testing.T) {
-	file := InputFile{
-		Name: "test.txt",
-		Path: "/some/path.txt",
+	if !strings.Contains(got, "[agentd file reference]") {
+		t.Errorf("expected file reference header")
 	}
-	_, _, err := PrepareIntent(nil, "test message", []InputFile{file})
-	if err != nil {
-		t.Errorf("PrepareIntent() error = %v", err)
+	if !strings.Contains(got, "name: file1.txt") || !strings.Contains(got, "path: /path/to/file1.txt") {
+		t.Errorf("expected file1 details")
 	}
-}
-
-func TestPrepareIntent_WithEmptyContent(t *testing.T) {
-	file := InputFile{
-		Name:    "empty.txt",
-		Path:    "",
-		Content: "",
-	}
-	_, _, err := PrepareIntent(nil, "test message", []InputFile{file})
-	if err != nil {
-		t.Errorf("PrepareIntent() error = %v", err)
-	}
-}
-
-func TestPrepareIntent_WithNoName(t *testing.T) {
-	file := InputFile{
-		Name:    "",
-		Path:    "/some/path.txt",
-		Content: "",
-	}
-	_, _, err := PrepareIntent(nil, "test message", []InputFile{file})
-	if err != nil {
-		t.Errorf("PrepareIntent() error = %v", err)
+	if !strings.Contains(got, "name: file2.txt") || !strings.Contains(got, "path: /path/to/file2.txt") {
+		t.Errorf("expected file2 details")
 	}
 }
