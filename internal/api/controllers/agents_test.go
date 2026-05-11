@@ -99,5 +99,13 @@ func TestAgentHandler(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("Delete code = %d", rec.Code)
 		}
+
+		getReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/test-agent", nil)
+		getReq.SetPathValue("id", "test-agent")
+		getRec := httptest.NewRecorder()
+		h.Get(getRec, getReq)
+		if getRec.Code != http.StatusNotFound {
+			t.Fatalf("expected not found after delete, got %d body = %s", getRec.Code, getRec.Body.String())
+		}
 	})
 }
