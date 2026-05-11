@@ -134,16 +134,18 @@ func TestFileRef(t *testing.T) {
 
 func TestFormatFileReferenceIntent(t *testing.T) {
 	tests := []struct {
-		name         string
-		intent       string
-		refs         []FileRef
-		wantContains []string
+		name            string
+		intent          string
+		refs            []FileRef
+		wantContains    []string
+		wantNotContains []string
 	}{
 		{
-			name:         "empty refs",
-			intent:       "test",
-			refs:         nil,
-			wantContains: []string{"test"},
+			name:            "empty refs",
+			intent:          "test",
+			refs:            nil,
+			wantContains:    []string{"test"},
+			wantNotContains: []string{"[agentd file reference]", "name:", "path:"},
 		},
 		{
 			name:   "with refs",
@@ -164,6 +166,11 @@ func TestFormatFileReferenceIntent(t *testing.T) {
 					t.Errorf("FormatFileReferenceIntent() missing %q in output: %s", want, got)
 				}
 			}
+			for _, notWant := range tt.wantNotContains {
+				if strings.Contains(got, notWant) {
+					t.Errorf("FormatFileReferenceIntent() unexpectedly contains %q in output: %s", notWant, got)
+				}
+			}
 		})
 	}
 }
@@ -175,6 +182,7 @@ func TestPrepareIntent(t *testing.T) {
 		message string
 		files   []InputFile
 		wantErr bool
+		assert  func(t *testing.T, intent string, refs []FileRef)
 	}{
 		{
 			name:    "nil stash",
@@ -182,35 +190,71 @@ func TestPrepareIntent(t *testing.T) {
 			message: "test message",
 			files:   nil,
 			wantErr: false,
+			assert: func(t *testing.T, intent string, refs []FileRef) {
+				if intent != "test message" {
+					t.Errorf("expected intent %q, got %q", "test message", intent)
+				}
+				if len(refs) != 0 {
+					t.Errorf("expected no refs, got %d", len(refs))
+				}
+			},
 		},
 		{
-			name:    "with file path",
+			name:    "with file path and nil stash",
 			stash:   nil,
 			message: "test message",
 			files:   []InputFile{{Name: "test.txt", Path: "/some/path.txt"}},
 			wantErr: false,
+			assert: func(t *testing.T, intent string, refs []FileRef) {
+				// When stash is nil, PrepareIntent returns early without processing files
+				if intent != "test message" {
+					t.Errorf("expected intent %q, got %q", "test message", intent)
+				}
+				if len(refs) != 0 {
+					t.Errorf("expected no refs with nil stash, got %d", len(refs))
+				}
+			},
 		},
 		{
-			name:    "with empty content",
+			name:    "with empty content and nil stash",
 			stash:   nil,
 			message: "test message",
 			files:   []InputFile{{Name: "empty.txt", Path: "", Content: ""}},
 			wantErr: false,
+			assert: func(t *testing.T, intent string, refs []FileRef) {
+				if intent != "test message" {
+					t.Errorf("expected intent %q, got %q", "test message", intent)
+				}
+				if len(refs) != 0 {
+					t.Errorf("expected no refs with nil stash, got %d", len(refs))
+				}
+			},
 		},
 		{
-			name:    "with no name",
+			name:    "with no name and nil stash",
 			stash:   nil,
 			message: "test message",
 			files:   []InputFile{{Name: "", Path: "/some/path.txt", Content: ""}},
 			wantErr: false,
+			assert: func(t *testing.T, intent string, refs []FileRef) {
+				if intent != "test message" {
+					t.Errorf("expected intent %q, got %q", "test message", intent)
+				}
+				if len(refs) != 0 {
+					t.Errorf("expected no refs with nil stash, got %d", len(refs))
+				}
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := PrepareIntent(tt.stash, tt.message, tt.files)
+			intent, refs, err := PrepareIntent(tt.stash, tt.message, tt.files)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("PrepareIntent() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err == nil && tt.assert != nil {
+				tt.assert(t, intent, refs)
 			}
 		})
 	}

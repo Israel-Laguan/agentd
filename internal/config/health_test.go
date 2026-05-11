@@ -77,10 +77,15 @@ func TestCheckProviders_OrderPreference(t *testing.T) {
 }
 
 func TestCheckProviders_HordeFallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
 	cfg := GatewayConfig{
 		Order:  []string{"openai", "ollama", "horde"},
 		OpenAI: gateway.ProviderConfig{APIKey: "", Model: "gpt-4"},
-		Ollama: gateway.ProviderConfig{BaseURL: "http://127.0.0.1:11434", Model: "llama3"},
+		Ollama: gateway.ProviderConfig{BaseURL: server.URL, Model: "llama3"},
 		Horde:  gateway.ProviderConfig{APIKey: "0000000000", Model: ""},
 	}
 	result := CheckProviders(cfg)
