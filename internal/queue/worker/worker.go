@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -192,14 +191,7 @@ func (w *Worker) loadContext(
 }
 
 func (w *Worker) command(ctx context.Context, task models.Task, profile models.AgentProfile) (workerResponse, error) {
-	messages := workerMessages(task, profile)
-	if w.retriever != nil {
-		intent := task.Title + " " + task.Description
-		recalled := w.retriever.Recall(ctx, intent, task.ProjectID, "")
-		if lessons := memoryFormatLessons(recalled); lessons != "" {
-			messages = append([]gateway.PromptMessage{{Role: "system", Content: lessons}}, messages...)
-		}
-	}
+	messages := w.seedMessages(ctx, task, profile)
 	req := gateway.AIRequest{
 		Messages:    messages,
 		Temperature: profile.Temperature,
@@ -267,7 +259,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		w.sandboxWallTimeout,
 	)
 
-	messages := w.buildAgenticMessages(task, profile)
+	messages := w.seedMessages(ctx, task, profile)
+	messages = w.buildAgenticMessages(messages, profile)
 
 	for i := 0; i < w.maxToolIterations; i++ {
 		req := gateway.AIRequest{
@@ -313,18 +306,44 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	w.handleIterationExceeded(ctx, task)
 }
 
-func (w *Worker) buildAgenticMessages(task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
-	system := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
+func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
+	messages := workerMessages(task, profile)
+	if w.retriever == nil {
+		return messages
+	}
+	intent := task.Title + " " + task.Description
+	recalled := w.retriever.Recall(ctx, intent, task.ProjectID, "")
+	if lessons := memoryFormatLessons(recalled); lessons != "" {
+		return append([]gateway.PromptMessage{{Role: "system", Content: lessons}}, messages...)
+	}
+	return messages
+}
+
+func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile models.AgentProfile) []gateway.PromptMessage {
+	toolUseSystem := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
 When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.`
 
+	system := toolUseSystem
 	if profile.SystemPrompt.Valid {
-		system = profile.SystemPrompt.String
+		system = strings.TrimSpace(profile.SystemPrompt.String) + "\n\n" + toolUseSystem
 	}
-	user := fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
-	return []gateway.PromptMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}
+
+	insertIdx := len(messages)
+	for i, message := range messages {
+		if message.Role == "user" {
+			insertIdx = i
+			break
+		}
+	}
+
+	augmented := append([]gateway.PromptMessage(nil), messages...)
+	augmented = append(augmented, gateway.PromptMessage{})
+	copy(augmented[insertIdx+1:], augmented[insertIdx:])
+	augmented[insertIdx] = gateway.PromptMessage{Role: "system", Content: system}
+	return augmented
 }
 
 func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {
