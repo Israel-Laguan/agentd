@@ -3,6 +3,7 @@ package spec
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -36,6 +37,14 @@ type FunctionParameters struct {
 	Type       string                 `json:"type"`
 	Properties map[string]any         `json:"properties,omitempty"`
 	Required   []string               `json:"required,omitempty"`
+}
+
+func (fp FunctionParameters) MarshalJSON() ([]byte, error) {
+	if fp.Type == "" && fp.Properties == nil && fp.Required == nil {
+		return []byte(`{"type":"object","properties":{},"required":[],"additionalProperties":false}`), nil
+	}
+	type Alias FunctionParameters
+	return json.Marshal(Alias(fp))
 }
 
 // ToolDefinition defines a function that the model can call.

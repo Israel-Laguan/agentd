@@ -176,7 +176,7 @@ func TestOpenAIJSONMode_WithoutTools_SetsResponseFormat(t *testing.T) {
 		}
 		rf, ok := reqBody["response_format"].(map[string]any)
 		if !ok {
-			t.Error("expected response_format when JSONMode true and no tools")
+			t.Fatal("expected response_format when JSONMode true and no tools")
 		}
 		if rf["type"] != "json_object" {
 			t.Errorf("response_format type = %q, want %q", rf["type"], "json_object")
