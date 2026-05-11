@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"agentd/internal/gateway/providers"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 
 	"github.com/cucumber/godog"
@@ -49,6 +50,11 @@ type gatewayScenario struct {
 
 	// JSON syntax self-correction (Router.Generate JSONMode)
 	jsonSeq *sequenceProvider
+
+	// Tool definition fields
+	toolReq          AIRequest
+	toolLastRequest  AIRequest
+	toolProviderName string
 }
 
 func initializeGatewayScenario(sc *godog.ScenarioContext) {
@@ -64,6 +70,7 @@ func initializeGatewayScenario(sc *godog.ScenarioContext) {
 	registerFallbackAndRoutingSteps(sc, state)
 	registerSchemaAndCancellationSteps(sc, state)
 	registerJSONSyntaxSteps(sc, state)
+	registerToolSteps(sc, state)
 }
 
 func registerResilienceSteps(sc *godog.ScenarioContext, state *gatewayScenario) {
@@ -260,3 +267,201 @@ func (s *gatewayScenario) errorMentionsAllProviders(context.Context) error {
 }
 
 // Truncation strategy steps
+
+func registerToolSteps(sc *godog.ScenarioContext, state *gatewayScenario) {
+	sc.Step(`^a mock OpenAI provider$`, state.toolMockProvider)
+	sc.Step(`^a mock OpenAI provider that returns tool_calls$`, state.toolMockProviderWithToolCalls)
+	sc.Step(`^a mock OpenAI provider that returns null content with tool_calls$`, state.toolMockProviderWithNullContentAndToolCalls)
+	sc.Step(`^Generate is called with a tool definition that has no parameters$`, state.toolGenerateWithNoParams)
+	sc.Step(`^the request should include the tool with parameters field present$`, state.toolReqHasParameters)
+	sc.Step(`^the parameters should be an empty object$`, state.toolParamsIsEmptyObject)
+	sc.Step(`^Generate is called with a request containing tool definitions$`, state.toolGenerateWithTools)
+	sc.Step(`^the request should include tools serialized in OpenAI format$`, state.toolReqHasTools)
+	sc.Step(`^the response should contain the tool_calls from the model$`, state.toolRespHasToolCalls)
+	sc.Step(`^the response should contain the tool_calls$`, state.toolRespHasToolCalls)
+	sc.Step(`^the content should be empty$`, state.toolContentEmpty)
+	sc.Step(`^Generate is called with JSONMode enabled and tools present$`, state.toolGenerateWithJSONModeAndTools)
+	sc.Step(`^the request should not include response_format$`, state.toolReqNoResponseFormat)
+	sc.Step(`^the request should include the tools$`, state.toolReqHasTools)
+}
+
+func (s *gatewayScenario) toolMockProvider(_ context.Context) error {
+	s.providers = append(s.providers, &fakeProvider{
+		providerName: "openai",
+		resp: AIResponse{
+			Content:      `{"result":"ok"}`,
+			ProviderUsed: "openai",
+		},
+	})
+	return nil
+}
+
+func (s *gatewayScenario) toolGenerateWithJSONModeAndTools(_ context.Context) error {
+	provs := make([]providers.Backend, len(s.providers))
+	for i, p := range s.providers {
+		provs[i] = p
+	}
+	s.router = NewRouter(provs...)
+	s.toolReq = AIRequest{
+		Messages: []PromptMessage{{Role: "user", Content: "test"}},
+		JSONMode: true,
+		Tools: []ToolDefinition{{
+			Name:        "test_func",
+			Description: "A test function",
+		}},
+	}
+	s.aiResp, s.aiErr = s.router.Generate(context.Background(), s.toolReq)
+	return nil
+}
+
+func (s *gatewayScenario) toolMockProviderWithToolCalls(_ context.Context) error {
+	s.providers = append(s.providers, &fakeProvider{
+		providerName: "openai",
+		resp: AIResponse{
+			Content:      "",
+			ProviderUsed: "openai",
+			ToolCalls: []spec.ToolCall{{
+				ID:   "call_123",
+				Type: "function",
+				Function: spec.ToolCallFunction{
+					Name:      "test_func",
+					Arguments: `{"arg": "value"}`,
+				},
+			}},
+		},
+	})
+	return nil
+}
+
+func (s *gatewayScenario) toolMockProviderWithNullContentAndToolCalls(_ context.Context) error {
+	s.providers = append(s.providers, &fakeProvider{
+		providerName: "openai",
+		resp: AIResponse{
+			Content:      "",
+			ProviderUsed: "openai",
+			ToolCalls: []spec.ToolCall{{
+				ID:   "call_456",
+				Type: "function",
+				Function: spec.ToolCallFunction{
+					Name:      "ping",
+					Arguments: `{}`,
+				},
+			}},
+		},
+	})
+	return nil
+}
+
+func (s *gatewayScenario) toolGenerateWithNoParams(_ context.Context) error {
+	provs := make([]providers.Backend, len(s.providers))
+	for i, p := range s.providers {
+		provs[i] = p
+	}
+	s.router = NewRouter(provs...)
+	s.toolReq = AIRequest{
+		Messages: []PromptMessage{{Role: "user", Content: "test"}},
+		Tools: []ToolDefinition{{
+			Name:        "ping",
+			Description: "Ping the service",
+			Parameters:  &FunctionParameters{Type: "object", Properties: map[string]any{}, Required: []string{}},
+		}},
+	}
+	var ok bool
+	for _, p := range s.providers {
+		if p.providerName == "openai" {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		s.providers = append(s.providers, &fakeProvider{providerName: "openai"})
+	}
+	s.aiResp, s.aiErr = s.router.Generate(context.Background(), s.toolReq)
+	return nil
+}
+
+func (s *gatewayScenario) toolReqHasParameters(_ context.Context) error {
+	if len(s.toolReq.Tools) == 0 || s.toolReq.Tools[0].Parameters == nil {
+		return fmt.Errorf("tool parameters not present")
+	}
+	return nil
+}
+
+func (s *gatewayScenario) toolParamsIsEmptyObject(_ context.Context) error {
+	if len(s.toolReq.Tools) == 0 || s.toolReq.Tools[0].Parameters == nil {
+		return fmt.Errorf("tool parameters not present")
+	}
+	params := s.toolReq.Tools[0].Parameters
+	if params.Type != "object" {
+		return fmt.Errorf("parameters.type = %q, want object", params.Type)
+	}
+	if len(params.Properties) != 0 {
+		return fmt.Errorf("parameters.properties = %v, want empty", params.Properties)
+	}
+	if len(params.Required) != 0 {
+		return fmt.Errorf("parameters.required = %v, want empty", params.Required)
+	}
+	return nil
+}
+
+func (s *gatewayScenario) toolGenerateWithTools(_ context.Context) error {
+	provs := make([]providers.Backend, len(s.providers))
+	for i, p := range s.providers {
+		provs[i] = p
+	}
+	s.router = NewRouter(provs...)
+	s.toolReq = AIRequest{
+		Messages: []PromptMessage{{Role: "user", Content: "test"}},
+		Tools: []ToolDefinition{{
+			Name:        "test_func",
+			Description: "A test function",
+			Parameters: &FunctionParameters{
+				Type:       "object",
+				Properties: map[string]any{"arg": map[string]any{"type": "string"}},
+				Required:   []string{"arg"},
+			},
+		}},
+	}
+	s.aiResp, s.aiErr = s.router.Generate(context.Background(), s.toolReq)
+	return nil
+}
+
+func (s *gatewayScenario) toolReqHasTools(_ context.Context) error {
+	if len(s.toolReq.Tools) == 0 {
+		return fmt.Errorf("tools not present in request")
+	}
+	return nil
+}
+
+func (s *gatewayScenario) toolRespHasToolCalls(_ context.Context) error {
+	if s.aiErr != nil {
+		return fmt.Errorf("Generate() error = %v", s.aiErr)
+	}
+	if len(s.aiResp.ToolCalls) == 0 {
+		return fmt.Errorf("tool_calls not present in response")
+	}
+	return nil
+}
+
+func (s *gatewayScenario) toolContentEmpty(_ context.Context) error {
+	if s.aiErr != nil {
+		return fmt.Errorf("Generate() error = %v", s.aiErr)
+	}
+	if s.aiResp.Content != "" {
+		return fmt.Errorf("content = %q, want empty", s.aiResp.Content)
+	}
+	return nil
+}
+
+func (s *gatewayScenario) toolReqNoResponseFormat(_ context.Context) error {
+	if s.aiErr != nil {
+		return fmt.Errorf("Generate() error = %v", s.aiErr)
+	}
+	if len(s.toolReq.Tools) == 0 {
+		return fmt.Errorf("expected tools in request")
+	}
+	if !s.toolReq.JSONMode {
+		return fmt.Errorf("expected JSONMode=true")
+	}
+	return nil
+}

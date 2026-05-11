@@ -2,6 +2,7 @@ package spec
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -30,9 +31,19 @@ func TestFunctionParametersMarshalJSON_NoArgumentSchema(t *testing.T) {
 				t.Fatalf("Marshal() error = %v", err)
 			}
 
-			want := `{"type":"object","properties":{},"required":[],"additionalProperties":false}`
-			if string(data) != want {
-				t.Fatalf("Marshal() = %s, want %s", data, want)
+			var gotObj map[string]any
+			if err := json.Unmarshal(data, &gotObj); err != nil {
+				t.Fatalf("Unmarshal(got) error = %v", err)
+			}
+
+			wantObj := map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{},
+				"required":             []any{},
+				"additionalProperties": false,
+			}
+			if !reflect.DeepEqual(gotObj, wantObj) {
+				t.Fatalf("Marshal() = %v, want %v", gotObj, wantObj)
 			}
 		})
 	}
