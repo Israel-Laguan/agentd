@@ -23,7 +23,6 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 	}
 
 	out := make([]spec.PromptMessage, 0, t.MaxMessages)
-
 	out = append(out, messages[0])
 
 	firstUserIdx := -1
@@ -38,22 +37,35 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 		out = append(out, messages[firstUserIdx])
 	}
 
-	if len(out) < t.MaxMessages {
-		remaining := t.MaxMessages - len(out)
-		startIdx := firstUserIdx + 1
-		if startIdx < len(messages) {
-			endIdx := startIdx + remaining
-			if endIdx > len(messages) {
-				endIdx = len(messages)
+	remaining := t.MaxMessages - len(out)
+	if remaining > 0 {
+		startFrom := len(messages) - remaining
+		minIdx := 1
+		if firstUserIdx > 0 {
+			minIdx = firstUserIdx + 1
+		}
+		if startFrom < minIdx {
+			startFrom = minIdx
+		}
+
+		if startFrom < len(messages) {
+			if startFrom > minIdx {
+				msg := messages[startFrom]
+				msg.Content = TruncationMarker + msg.Content
+				out = append(out, msg)
+				startFrom++
 			}
-			out = append(out, messages[startIdx:endIdx]...)
+			if startFrom < len(messages) {
+				out = append(out, messages[startFrom:]...)
+			}
 		}
 	}
 
-	if len(out) < t.MaxMessages && len(messages) > t.MaxMessages {
-		lastMsg := messages[len(messages)-1]
-		lastMsg.Content = TruncationMarker + lastMsg.Content
-		out = append(out, lastMsg)
+	if len(out) > 0 {
+		last := out[len(out)-1]
+		if last.Role == "assistant" && len(last.ToolCalls) > 0 {
+			out = out[:len(out)-1]
+		}
 	}
 
 	return out, nil

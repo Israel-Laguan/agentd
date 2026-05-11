@@ -275,6 +275,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
 	deadlineGuard := NewDeadlineGuard(ctx)
+	agenticTruncator := truncation.NewAgenticTruncator(30)
 
 	for {
 		if err := deadlineGuard.BeforeIteration(); err != nil {
@@ -293,7 +294,6 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		}
 
 		if len(messages) > 40 {
-			agenticTruncator := truncation.NewAgenticTruncator(30)
 			var err error
 			messages, err = agenticTruncator.Apply(ctx, messages, 0)
 			if err != nil {
@@ -322,10 +322,6 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 		resp, err := w.gateway.Generate(cancelCtx, req)
 		if err != nil {
-			if budgetGuard.IsBudgetExceeded(err) {
-				w.handleGatewayError(ctx, task, err)
-				return
-			}
 			w.handleGatewayError(ctx, task, err)
 			return
 		}

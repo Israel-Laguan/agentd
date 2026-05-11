@@ -207,10 +207,11 @@ func (state *agenticIterationScenario) gatewayReturnsToolCalls() error {
 }
 
 func (state *agenticIterationScenario) runAgenticLoop(n int) error {
-	ig := worker.NewIterationGuard(n)
+	ig := worker.NewIterationGuard(state.workerOpts.MaxToolIterations)
 	for i := 0; i < n; i++ {
 		if err := ig.BeforeIteration(); err != nil {
-			return err
+			state.lastError = err
+			break
 		}
 		ig.AfterIteration(true)
 	}
@@ -285,10 +286,14 @@ func (state *agenticIterationScenario) agenticLoopMakesThirdCall() error {
 }
 
 func (state *agenticIterationScenario) secondCallSucceeds() error {
-	if state.tokenUsage < state.tokenBudget*2 {
-		return nil
+	if state.lastError != nil {
+		return fmt.Errorf("expected second call to succeed, got error: %v", state.lastError)
 	}
-	return fmt.Errorf("expected second call to succeed")
+	want := state.gw.tokens * 2
+	if state.tokenUsage != want {
+		return fmt.Errorf("expected usage %d after second call, got %d", want, state.tokenUsage)
+	}
+	return nil
 }
 
 func (state *agenticIterationScenario) requestFailsBudgetExceeded() error {
@@ -365,15 +370,16 @@ func (state *agenticIterationScenario) resultCommitted() error {
 }
 
 func (state *agenticIterationScenario) taskUsesTokens(taskID string, tokens int) error {
-	tracker := gateway.NewBudgetTracker(100)
-	bg := worker.NewBudgetGuard(tracker, taskID)
+	if state.budgetTracker == nil {
+		state.budgetTracker = gateway.NewBudgetTracker(state.tokenBudget)
+	}
+	bg := worker.NewBudgetGuard(state.budgetTracker, taskID)
 	bg.AfterCall(tokens)
 	return nil
 }
 
 func (state *agenticIterationScenario) taskHasFullBudget(taskID string, budget int) error {
-	tracker := gateway.NewBudgetTracker(budget)
-	bg := worker.NewBudgetGuard(tracker, taskID)
+	bg := worker.NewBudgetGuard(state.budgetTracker, taskID)
 	if err := bg.BeforeCall(); err != nil {
 		return fmt.Errorf("expected full budget available but got error: %v", err)
 	}
@@ -381,9 +387,7 @@ func (state *agenticIterationScenario) taskHasFullBudget(taskID string, budget i
 }
 
 func (state *agenticIterationScenario) taskBlockedFromCalls(taskID string) error {
-	tracker := gateway.NewBudgetTracker(100)
-	tracker.Add(taskID, 100)
-	bg := worker.NewBudgetGuard(tracker, taskID)
+	bg := worker.NewBudgetGuard(state.budgetTracker, taskID)
 	err := bg.BeforeCall()
 	if err == nil {
 		return fmt.Errorf("expected task to be blocked but call succeeded")
