@@ -21,6 +21,8 @@ type fakeGateway struct {
 	plan           *models.DraftPlan
 	planCalls      int
 	lastPlanIntent string
+	toolCalls      []gateway.ToolCall
+	nextToolCalls  []gateway.ToolCall
 }
 
 func (g *fakeGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
@@ -28,10 +30,22 @@ func (g *fakeGateway) Generate(_ context.Context, req gateway.AIRequest) (gatewa
 	defer g.mu.Unlock()
 	g.requests = append(g.requests, req)
 	content := g.content
-	if len(g.requests) > 1 && g.nextContent != "" {
-		content = g.nextContent
+	var toolCalls []gateway.ToolCall
+	requestNum := len(g.requests)
+
+	if requestNum == 1 {
+		toolCalls = g.toolCalls
+	} else {
+		if g.nextContent != "" {
+			content = g.nextContent
+		}
+		toolCalls = g.nextToolCalls
 	}
-	return gateway.AIResponse{Content: content}, g.err
+
+	if len(toolCalls) == 0 && requestNum == 1 && g.content != "" {
+		return gateway.AIResponse{Content: content}, g.err
+	}
+	return gateway.AIResponse{Content: content, ToolCalls: toolCalls}, g.err
 }
 
 func (g *fakeGateway) GeneratePlan(_ context.Context, intent string) (*models.DraftPlan, error) {

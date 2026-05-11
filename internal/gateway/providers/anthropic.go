@@ -87,7 +87,7 @@ func splitSystemMessages(messages []spec.PromptMessage) (string, []anthropicMess
 			}
 			continue
 		}
-		out = append(out, anthropicMessage(m))
+		out = append(out, anthropicMessage{Role: m.Role, Content: m.Content})
 	}
 	return strings.Join(systemParts, "\n"), out
 }

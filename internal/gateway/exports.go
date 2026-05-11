@@ -32,6 +32,8 @@ type (
 	IntentAnalysis      = spec.IntentAnalysis
 	BudgetTracker       = spec.BudgetTracker
 	ToolDefinition      = spec.ToolDefinition
+	ToolCall            = spec.ToolCall
+	ToolCallFunction    = spec.ToolCallFunction
 	FunctionParameters  = spec.FunctionParameters
 )
 

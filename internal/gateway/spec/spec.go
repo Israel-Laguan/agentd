@@ -12,8 +12,10 @@ import (
 
 // PromptMessage follows the common chat completion message shape.
 type PromptMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 // Role classifies the caller so the gateway can route to the optimal

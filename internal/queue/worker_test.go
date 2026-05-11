@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
@@ -180,5 +181,88 @@ func TestWorkerPayloadEnvironmentDoesNotDependOnProcessEnvOrder(t *testing.T) {
 	got := strings.Join(sb.payloads[0].EnvVars, "\n")
 	if !strings.Contains(got, "PATH=") || !strings.Contains(got, "HOME=") {
 		t.Fatalf("payload env = %q", got)
+	}
+}
+
+func TestWorkerAgenticModeExecutesToolAndContinuesLoop(t *testing.T) {
+	store := newWorkerStore()
+	store.profile.AgenticMode = true
+	gw := &fakeGateway{
+		content:       "Task completed successfully",
+		toolCalls:     []gateway.ToolCall{{ID: "call_1", Type: "function", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hello"}`}}},
+		nextContent:   "Task completed successfully",
+		nextToolCalls: nil,
+	}
+	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "hello"}}
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
+
+	worker.Process(context.Background(), store.task)
+
+	if store.result == nil || !store.result.Success {
+		t.Fatalf("result = %#v, want success", store.result)
+	}
+	if len(sb.commands) != 1 || sb.commands[0] != "echo hello" {
+		t.Fatalf("commands = %#v, want [echo hello]", sb.commands)
+	}
+	if len(gw.requests) != 2 {
+		t.Fatalf("gateway requests = %d, want 2", len(gw.requests))
+	}
+}
+
+func TestWorkerAgenticModeTerminatesLoopOnTextResponse(t *testing.T) {
+	store := newWorkerStore()
+	store.profile.AgenticMode = true
+	gw := &fakeGateway{
+		content: "Final response text",
+	}
+	sb := &fakeSandbox{}
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
+
+	worker.Process(context.Background(), store.task)
+
+	if store.result == nil || !store.result.Success {
+		t.Fatalf("result = %#v, want success", store.result)
+	}
+	if !strings.Contains(store.result.Payload, "Final response text") {
+		t.Fatalf("payload = %v, want Final response text", store.result.Payload)
+	}
+	if len(gw.requests) != 1 {
+		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
+	}
+}
+
+func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
+	store := newWorkerStore()
+	store.profile.AgenticMode = true
+	gw := &fakeGateway{
+		content:       "Task completed",
+		toolCalls:     []gateway.ToolCall{{ID: "call_1", Type: "function", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"false"}`}}},
+		nextContent:   "Task completed",
+		nextToolCalls: nil,
+	}
+	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "command failed"}}
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
+
+	worker.Process(context.Background(), store.task)
+
+	if store.result == nil || !store.result.Success {
+		t.Fatalf("result = %#v, want success", store.result)
+	}
+}
+
+func TestWorkerLegacyPathWhenAgenticModeFalse(t *testing.T) {
+	store := newWorkerStore()
+	store.profile.AgenticMode = false
+	gw := &fakeGateway{content: `{"command":"echo legacy"}`}
+	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "legacy"}}
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
+
+	worker.Process(context.Background(), store.task)
+
+	if store.result == nil || !store.result.Success {
+		t.Fatalf("result = %#v", store.result)
+	}
+	if len(sb.commands) != 1 || sb.commands[0] != "echo legacy" {
+		t.Fatalf("commands = %#v", sb.commands)
 	}
 }

@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -18,6 +19,9 @@ import (
 // DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
 
+// DefaultMaxToolIterations is the default number of tool call iterations in agentic mode.
+const DefaultMaxToolIterations = 10
+
 type Worker struct {
 	store               models.KanbanStore
 	gateway             gateway.AIGateway
@@ -32,6 +36,8 @@ type Worker struct {
 	sandboxEnvAllowlist []string
 	sandboxExtraEnv     []string
 	maxRetries          int
+	maxToolIterations   int
+	toolExecutor        *ToolExecutor
 	capabilities        *capabilities.Registry
 }
 
@@ -75,6 +81,7 @@ func NewWorker(
 	if len(opts.SandboxExtraEnv) == 0 {
 		opts.SandboxExtraEnv = []string{"CI=true", "DEBIAN_FRONTEND=noninteractive", "NO_COLOR=1"}
 	}
+	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
@@ -83,6 +90,8 @@ func NewWorker(
 		sandboxEnvAllowlist: append([]string(nil), opts.SandboxEnvAllowlist...),
 		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
 		maxRetries:          opts.MaxRetries,
+		maxToolIterations:   DefaultMaxToolIterations,
+		toolExecutor:        NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
 		capabilities:        opts.Capabilities,
 	}
 }
@@ -104,6 +113,10 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer stopHeartbeat()
 	if planning.IsPhasePlanningTask(task.Title) {
 		w.handlePhasePlanning(ctx, task, *project)
+		return
+	}
+	if profile.AgenticMode {
+		w.processAgentic(ctx, task, *project, *profile)
 		return
 	}
 	response, err := w.command(ctx, task, *profile)
@@ -232,6 +245,86 @@ func (w *Worker) isPromptHang(result sandbox.Result, err error) bool {
 func (w *Worker) isPermissionFailure(result sandbox.Result, err error) bool {
 	failed := err != nil || !result.Success
 	return failed && safety.DetectPermission(result.Stdout, result.Stderr).Detected
+}
+
+func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
+	cancelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	w.registerCancel(task.ID, cancel)
+	defer w.deregisterCancel(task.ID)
+
+	w.toolExecutor.workspacePath = project.WorkspacePath
+
+	messages := w.buildAgenticMessages(task, profile)
+
+	for i := 0; i < w.maxToolIterations; i++ {
+		req := gateway.AIRequest{
+			Messages:    messages,
+			Temperature: profile.Temperature,
+			Tools:       w.toolExecutor.Definitions(),
+			AgentID:     task.AgentID,
+			Role:        gateway.RoleWorker,
+			TaskID:      task.ID,
+			Provider:    profile.Provider,
+			Model:       profile.Model,
+			MaxTokens:   profile.MaxTokens,
+		}
+		req = w.applyTuning(req, task, profile)
+
+		resp, err := w.gateway.Generate(cancelCtx, req)
+		if err != nil {
+			w.handleGatewayError(ctx, task, err)
+			return
+		}
+
+		messages = append(messages, gateway.PromptMessage{
+			Role:    "assistant",
+			Content: resp.Content,
+		})
+
+		if len(resp.ToolCalls) == 0 {
+			w.commitText(ctx, task, resp.Content)
+			return
+		}
+
+		for _, call := range resp.ToolCalls {
+			result := w.toolExecutor.Execute(cancelCtx, call)
+			messages = append(messages, gateway.PromptMessage{
+				Role:       "tool",
+				ToolCallID: call.ID,
+				Content:    result,
+			})
+		}
+	}
+
+	w.handleIterationExceeded(ctx, task)
+}
+
+func (w *Worker) buildAgenticMessages(task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
+	system := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
+When you need to execute a command, use the bash tool.
+When you need to read a file, use the read tool.
+When you need to create or modify a file, use the write tool.
+Return your response as plain text when the task is complete, or use tools to continue working.`
+
+	if profile.SystemPrompt.Valid {
+		system = profile.SystemPrompt.String
+	}
+	user := fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
+	return []gateway.PromptMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}
+}
+
+func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {
+	result := sandbox.Result{
+		Success: true,
+		Stdout:  content,
+	}
+	w.commit(ctx, task, result, nil)
+}
+
+func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) {
+	payload := "task exceeded maximum tool iterations without producing a final result"
+	w.handleAgentFailure(ctx, task, payload)
 }
 
 // SetSandbox swaps the executor used by integration tests that replace the sandbox.
