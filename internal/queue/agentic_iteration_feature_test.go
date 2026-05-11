@@ -11,7 +11,7 @@ func TestAgenticIterationSafetyFeatures(t *testing.T) {
 		ScenarioInitializer: initializeAgenticIterationScenario,
 		Options: &godog.Options{
 			Format:    "pretty",
-			Paths:     []string{"features/agentic_iteration_safety.feature"},
+			Paths:     []string{"features_agentic/agentic_iteration_safety.feature"},
 			TestingT:  t,
 			Strict:    true,
 		},

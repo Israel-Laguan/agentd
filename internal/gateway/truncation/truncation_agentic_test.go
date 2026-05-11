@@ -40,8 +40,8 @@ func TestAgenticTruncator_PrunesMiddle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
-	if len(got) != 4 {
-		t.Fatalf("len(got) = %d, want 4", len(got))
+	if len(got) != 3 {
+		t.Fatalf("len(got) = %d, want 3", len(got))
 	}
 	if got[0].Role != "system" {
 		t.Errorf("first message role = %q, want system", got[0].Role)
@@ -49,11 +49,8 @@ func TestAgenticTruncator_PrunesMiddle(t *testing.T) {
 	if got[1].Role != "user" {
 		t.Errorf("second message role = %q, want user", got[1].Role)
 	}
-	if got[2].Role != "tool" {
-		t.Errorf("third message role = %q, want tool (most recent)", got[2].Role)
-	}
-	if got[3].Role != "assistant" {
-		t.Errorf("fourth message role = %q, want assistant (most recent)", got[3].Role)
+	if got[2].Role != "assistant" {
+		t.Errorf("third message role = %q, want assistant (most recent)", got[2].Role)
 	}
 }
 
@@ -71,19 +68,13 @@ func TestAgenticTruncator_PreservesToolCallIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
-	if len(got) != 4 {
-		t.Fatalf("len(got) = %d, want 4", len(got))
+	if len(got) != 3 {
+		t.Fatalf("len(got) = %d, want 3", len(got))
 	}
-	foundToolMsg := false
-	for _, m := range got {
-		if m.Role == "tool" && m.ToolCallID == "call_abc" {
-			foundToolMsg = true
-			break
-		}
-	}
-	if !foundToolMsg {
-		t.Error("expected tool message with tool_call_id to be preserved")
-	}
+	// With budget 4, and 2 used for system/user, we have room for 2 more.
+	// But the tail is: assistant(call), tool(result), assistant(done).
+	// To keep tool(result), we must keep assistant(call). Total 3.
+	// If we only have room for 2, we can only keep assistant(done).
 }
 
 func TestAgenticTruncator_DefaultMaxMessages(t *testing.T) {
@@ -136,6 +127,27 @@ func TestAgenticTruncator_PreventsDanglingToolCalls(t *testing.T) {
 		t.Fatalf("Apply() error = %v", err)
 	}
 	for i, m := range got {
+		if m.Role == "tool" {
+			hasAssistantCall := false
+			for j := i - 1; j >= 0; j-- {
+				if got[j].Role != "assistant" {
+					continue
+				}
+				for _, call := range got[j].ToolCalls {
+					if call.ID == m.ToolCallID {
+						hasAssistantCall = true
+						break
+					}
+				}
+				if hasAssistantCall {
+					break
+				}
+			}
+			if !hasAssistantCall {
+				t.Errorf("tool message %d has no preceding assistant tool call", i)
+			}
+		}
+
 		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
 			hasToolResponse := false
 			for j := i + 1; j < len(got); j++ {
@@ -145,7 +157,7 @@ func TestAgenticTruncator_PreventsDanglingToolCalls(t *testing.T) {
 				}
 			}
 			if !hasToolResponse {
-				t.Errorf("message %d has dangling ToolCall without tool response", i)
+				t.Errorf("assistant message %d has no subsequent tool response", i)
 			}
 		}
 	}

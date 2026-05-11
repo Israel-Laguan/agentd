@@ -11,8 +11,8 @@ const (
 	defaultPollMaxInterval         = 10 * time.Second
 	defaultMaxToolIterations       = 10
 	defaultTokenBudget             = 0
-	defaultAgenticTruncatorMax     = 30
-	defaultAgenticTruncationThresh = 40
+	DefaultAgenticTruncatorMax     = 30
+	DefaultAgenticTruncationThresh = 40
 )
 
 type QueueConfig struct {
@@ -29,8 +29,8 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.poll_max_interval", defaultPollMaxInterval.String())
 	v.SetDefault("queue.max_tool_iterations", defaultMaxToolIterations)
 	v.SetDefault("queue.token_budget", defaultTokenBudget)
-	v.SetDefault("queue.agentic_truncator_max", defaultAgenticTruncatorMax)
-	v.SetDefault("queue.agentic_truncation_threshold", defaultAgenticTruncationThresh)
+	v.SetDefault("queue.agentic_truncator_max", DefaultAgenticTruncatorMax)
+	v.SetDefault("queue.agentic_truncation_threshold", DefaultAgenticTruncationThresh)
 }
 
 func loadQueueConfig(v *viper.Viper) QueueConfig {

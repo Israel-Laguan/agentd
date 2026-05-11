@@ -23,7 +23,7 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 	}
 
 	out := make([]spec.PromptMessage, 0, t.MaxMessages)
-	out = append(out, messages[0])
+	out = append(out, messages[0]) // Keep system prompt
 
 	firstUserIdx := -1
 	for i := 1; i < len(messages); i++ {
@@ -49,7 +49,13 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 		}
 
 		if startFrom < len(messages) {
-			if startFrom > minIdx {
+			truncated := startFrom > minIdx
+			for startFrom < len(messages) && messages[startFrom].Role == "tool" {
+				startFrom++
+				truncated = true
+			}
+
+			if startFrom < len(messages) && truncated {
 				msg := messages[startFrom]
 				msg.Content = TruncationMarker + msg.Content
 				out = append(out, msg)
