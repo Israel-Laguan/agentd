@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentd/internal/capabilities"
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/gateway/truncation"
@@ -96,10 +97,10 @@ func NewWorker(
 		opts.MaxToolIterations = DefaultMaxToolIterations
 	}
 	if opts.AgenticTruncatorMax <= 0 {
-		opts.AgenticTruncatorMax = 30
+		opts.AgenticTruncatorMax = config.DefaultAgenticTruncatorMax
 	}
 	if opts.AgenticTruncationThresh <= 0 {
-		opts.AgenticTruncationThresh = 40
+		opts.AgenticTruncationThresh = config.DefaultAgenticTruncationThresh
 	}
 	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
 	var budgetTracker spec.BudgetTracker
@@ -300,11 +301,6 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			return
 		}
 
-		if iterationGuard.ShouldInjectFinalMessage() {
-			messages = append(messages, iterationGuard.FinalMessage())
-			iterationGuard.ResetAllowFinal()
-		}
-
 		if len(messages) > w.truncationThreshold {
 			var err error
 			messages, err = agenticTruncator.Apply(ctx, messages, 0)
@@ -312,6 +308,11 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 				w.handleGatewayError(ctx, task, err)
 				return
 			}
+		}
+
+		if iterationGuard.ShouldInjectFinalMessage() {
+			messages = append(messages, iterationGuard.FinalMessage())
+			iterationGuard.ResetAllowFinal()
 		}
 
 		if err := budgetGuard.BeforeCall(); err != nil {

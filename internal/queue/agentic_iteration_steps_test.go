@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -46,6 +47,7 @@ type iterationGateway struct {
 	returnTools bool
 	calls       int
 	mu          sync.Mutex
+	scenario    *agenticIterationScenario
 }
 
 func (g *iterationGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
@@ -54,10 +56,13 @@ func (g *iterationGateway) Generate(ctx context.Context, req gateway.AIRequest) 
 	toolCalls := g.returnTools
 	g.mu.Unlock()
 
-	s.iterationCount++
-
-	if s.exceeded && s.finalInjected {
-		s.additionalCalled = true
+	if g.scenario != nil {
+		g.scenario.mu.Lock()
+		g.scenario.iterationCount++
+		if g.scenario.exceeded && g.scenario.finalInjected {
+			g.scenario.additionalCalled = true
+		}
+		g.scenario.mu.Unlock()
 	}
 
 	if toolCalls {
@@ -138,25 +143,41 @@ func (s *iterationSandbox) Execute(ctx context.Context, p sandbox.Payload) (sand
 	return s.result, s.err
 }
 
-var s *agenticIterationScenario
-
 func initializeAgenticIterationScenario(sc *godog.ScenarioContext) {
-	s = &agenticIterationScenario{
+	gw := &iterationGateway{content: "done", tokens: 50, returnTools: true}
+	state := &agenticIterationScenario{
 		store:   &iterationStore{tasks: make(map[string]*models.Task), projects: make(map[string]*models.Project)},
-		gw:      &iterationGateway{content: "done", tokens: 50, returnTools: true},
+		gw:      gw,
 		sandbox: &iterationSandbox{result: sandbox.Result{Success: true}},
 	}
+	gw.scenario = state
+
 	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
-		s.iterationCount = 0
-		s.exceeded = false
-		s.finalInjected = false
-		s.additionalCalled = false
-		s.lastError = nil
-		s.completed = false
-		s.gw.calls = 0
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		state.iterationCount = 0
+		state.maxIterations = 0
+		state.tokenBudget = 0
+		state.gatewayCalls = 0
+		state.tokenUsage = 0
+		state.toolCallCount = 0
+		state.exceeded = false
+		state.finalInjected = false
+		state.additionalCalled = false
+		state.lastError = nil
+		state.completed = false
+		state.resultContent = ""
+		state.budgetTracker = nil
+		state.budgetGuard = nil
+
+		state.gw.mu.Lock()
+		defer state.gw.mu.Unlock()
+		state.gw.calls = 0
+		state.gw.returnTools = true
+		state.gw.tokens = 50
 		return ctx, nil
 	})
-	registerAgenticIterationSteps(sc, s)
+	registerAgenticIterationSteps(sc, state)
 }
 
 func registerAgenticIterationSteps(sc *godog.ScenarioContext, state *agenticIterationScenario) {
@@ -300,8 +321,8 @@ func (state *agenticIterationScenario) requestFailsBudgetExceeded() error {
 	if state.lastError == nil {
 		return fmt.Errorf("expected error but got nil")
 	}
-	if !strings.Contains(state.lastError.Error(), "budget") {
-		return fmt.Errorf("expected budget error, got %v", state.lastError)
+	if !errors.Is(state.lastError, models.ErrBudgetExceeded) {
+		return fmt.Errorf("expected ErrBudgetExceeded, got %v", state.lastError)
 	}
 	return nil
 }
@@ -379,6 +400,9 @@ func (state *agenticIterationScenario) taskUsesTokens(taskID string, tokens int)
 }
 
 func (state *agenticIterationScenario) taskHasFullBudget(taskID string, budget int) error {
+	if state.budgetTracker == nil {
+		return fmt.Errorf("budget tracker not initialized for step")
+	}
 	bg := worker.NewBudgetGuard(state.budgetTracker, taskID)
 	if err := bg.BeforeCall(); err != nil {
 		return fmt.Errorf("expected full budget available but got error: %v", err)
@@ -387,6 +411,9 @@ func (state *agenticIterationScenario) taskHasFullBudget(taskID string, budget i
 }
 
 func (state *agenticIterationScenario) taskBlockedFromCalls(taskID string) error {
+	if state.budgetTracker == nil {
+		return fmt.Errorf("budget tracker not initialized for step")
+	}
 	bg := worker.NewBudgetGuard(state.budgetTracker, taskID)
 	err := bg.BeforeCall()
 	if err == nil {
