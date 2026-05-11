@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"agentd/internal/capabilities"
+	"agentd/internal/config"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
+	"agentd/internal/gateway/truncation"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/safety"
@@ -19,9 +22,6 @@ import (
 
 // DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
-
-// DefaultMaxToolIterations is the default number of tool call iterations in agentic mode.
-const DefaultMaxToolIterations = 10
 
 type Worker struct {
 	store               models.KanbanStore
@@ -38,8 +38,12 @@ type Worker struct {
 	sandboxExtraEnv     []string
 	maxRetries          int
 	maxToolIterations   int
+	truncatorMax        int
+	truncationThreshold int
 	toolExecutor        *ToolExecutor
 	capabilities        *capabilities.Registry
+	tokenBudget         int
+	budgetTracker       spec.BudgetTracker
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -48,15 +52,19 @@ type MemoryRetriever interface {
 }
 
 type WorkerOptions struct {
-	MaxRetries          int
-	Canceller           *CancelRegistry
-	Tuner               *planning.ParameterTuner
-	Retriever           MemoryRetriever
-	HeartbeatInterval   time.Duration
-	SandboxWallTimeout  time.Duration
-	SandboxEnvAllowlist []string
-	SandboxExtraEnv     []string
-	Capabilities        *capabilities.Registry
+	MaxRetries              int
+	MaxToolIterations       int
+	TokenBudget             int
+	AgenticTruncatorMax     int
+	AgenticTruncationThresh int
+	Canceller               *CancelRegistry
+	Tuner                   *planning.ParameterTuner
+	Retriever               MemoryRetriever
+	HeartbeatInterval       time.Duration
+	SandboxWallTimeout      time.Duration
+	SandboxEnvAllowlist     []string
+	SandboxExtraEnv         []string
+	Capabilities            *capabilities.Registry
 }
 
 func NewWorker(
@@ -82,7 +90,20 @@ func NewWorker(
 	if len(opts.SandboxExtraEnv) == 0 {
 		opts.SandboxExtraEnv = []string{"CI=true", "DEBIAN_FRONTEND=noninteractive", "NO_COLOR=1"}
 	}
+	if opts.MaxToolIterations <= 0 {
+		opts.MaxToolIterations = config.DefaultMaxToolIterations
+	}
+	if opts.AgenticTruncatorMax <= 0 {
+		opts.AgenticTruncatorMax = config.DefaultAgenticTruncatorMax
+	}
+	if opts.AgenticTruncationThresh <= 0 {
+		opts.AgenticTruncationThresh = config.DefaultAgenticTruncationThreshold
+	}
 	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
+	var budgetTracker spec.BudgetTracker
+	if opts.TokenBudget > 0 {
+		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
+	}
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
@@ -91,9 +112,13 @@ func NewWorker(
 		sandboxEnvAllowlist: append([]string(nil), opts.SandboxEnvAllowlist...),
 		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
 		maxRetries:          opts.MaxRetries,
-		maxToolIterations:   DefaultMaxToolIterations,
+		maxToolIterations:   opts.MaxToolIterations,
+		truncatorMax:        opts.AgenticTruncatorMax,
+		truncationThreshold: opts.AgenticTruncationThresh,
 		toolExecutor:        NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
 		capabilities:        opts.Capabilities,
+		tokenBudget:         opts.TokenBudget,
+		budgetTracker:       budgetTracker,
 	}
 }
 
@@ -257,7 +282,41 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	messages = w.buildAgenticMessages(messages, profile)
 	tools, toolToAdapter := w.agenticTools(ctx, toolExecutor)
 
-	for i := 0; i < w.maxToolIterations; i++ {
+	iterationGuard := NewIterationGuard(w.maxToolIterations)
+	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
+	deadlineGuard := NewDeadlineGuard(ctx)
+	agenticTruncator := truncation.NewAgenticTruncator(w.truncatorMax)
+
+	for {
+		if err := deadlineGuard.BeforeIteration(); err != nil {
+			w.handleGatewayError(ctx, task, err)
+			return
+		}
+
+		if err := iterationGuard.BeforeIteration(); err != nil {
+			w.handleIterationExceeded(ctx, task)
+			return
+		}
+
+		if len(messages) > w.truncationThreshold {
+			var err error
+			messages, err = agenticTruncator.Apply(ctx, messages, 0)
+			if err != nil {
+				w.handleGatewayError(ctx, task, err)
+				return
+			}
+		}
+
+		if iterationGuard.ShouldInjectFinalMessage() {
+			messages = append(messages, iterationGuard.FinalMessage())
+			iterationGuard.ResetAllowFinal()
+		}
+
+		if err := budgetGuard.BeforeCall(); err != nil {
+			w.handleGatewayError(ctx, task, err)
+			return
+		}
+
 		req := gateway.AIRequest{
 			Messages:    messages,
 			Temperature: profile.Temperature,
@@ -277,6 +336,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			return
 		}
 
+		budgetGuard.AfterCall(resp.TokenUsage)
+
 		messages = append(messages, gateway.PromptMessage{
 			Role:      "assistant",
 			Content:   resp.Content,
@@ -288,6 +349,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			return
 		}
 
+		iterationGuard.AfterIteration(true)
+
 		for _, call := range resp.ToolCalls {
 			result := w.executeAgenticTool(cancelCtx, toolExecutor, call, toolToAdapter)
 			messages = append(messages, gateway.PromptMessage{
@@ -297,8 +360,6 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			})
 		}
 	}
-
-	w.handleIterationExceeded(ctx, task)
 }
 
 func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {

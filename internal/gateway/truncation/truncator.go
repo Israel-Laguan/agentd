@@ -12,6 +12,7 @@ const (
 	TruncatorPolicyHeadTail  = "head_tail"
 	TruncatorPolicySummarize = "summarize"
 	TruncatorPolicyReject    = "reject"
+	TruncatorPolicyAgentic   = "agentic"
 )
 
 // StrategyTruncator applies a TruncationStrategy per message.
@@ -28,6 +29,8 @@ func NewTruncator(policy string, headRatio float64, gateway spec.AIGateway, brea
 		return SummarizeTruncator{Gateway: gateway, Breaker: breaker, Fallback: MiddleOutStrategy{}}
 	case TruncatorPolicyReject:
 		return RejectTruncator{}
+	case TruncatorPolicyAgentic:
+		return NewAgenticTruncator(0)
 	case TruncatorPolicyMiddleOut, "":
 		return StrategyTruncator{Strategy: MiddleOutStrategy{}}
 	default:

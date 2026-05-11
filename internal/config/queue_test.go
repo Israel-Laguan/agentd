@@ -7,8 +7,8 @@ import (
 
 func TestQueueConfig_Defaults(t *testing.T) {
 	cfg := QueueConfig{
-		TaskDeadline:    defaultTaskDeadline,
-		PollMaxInterval: defaultPollMaxInterval,
+		TaskDeadline:    DefaultTaskDeadline,
+		PollMaxInterval: DefaultPollMaxInterval,
 	}
 	if cfg.TaskDeadline != 10*time.Minute {
 		t.Errorf("TaskDeadline = %v, want 10m", cfg.TaskDeadline)
@@ -32,10 +32,10 @@ func TestQueueConfig_Custom(t *testing.T) {
 }
 
 func TestDefaultQueueValues(t *testing.T) {
-	if defaultTaskDeadline != 10*time.Minute {
-		t.Errorf("defaultTaskDeadline = %v, want 10m", defaultTaskDeadline)
+	if DefaultTaskDeadline != 10*time.Minute {
+		t.Errorf("DefaultTaskDeadline = %v, want 10m", DefaultTaskDeadline)
 	}
-	if defaultPollMaxInterval != 10*time.Second {
-		t.Errorf("defaultPollMaxInterval = %v, want 10s", defaultPollMaxInterval)
+	if DefaultPollMaxInterval != 10*time.Second {
+		t.Errorf("DefaultPollMaxInterval = %v, want 10s", DefaultPollMaxInterval)
 	}
 }
