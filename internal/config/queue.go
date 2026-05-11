@@ -12,7 +12,7 @@ const (
 	defaultMaxToolIterations       = 10
 	defaultTokenBudget             = 0
 	DefaultAgenticTruncatorMax     = 30
-	DefaultAgenticTruncationThresh = 40
+	DefaultAgenticTruncationThreshold = 40
 )
 
 type QueueConfig struct {
@@ -30,7 +30,7 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.max_tool_iterations", defaultMaxToolIterations)
 	v.SetDefault("queue.token_budget", defaultTokenBudget)
 	v.SetDefault("queue.agentic_truncator_max", DefaultAgenticTruncatorMax)
-	v.SetDefault("queue.agentic_truncation_threshold", DefaultAgenticTruncationThresh)
+	v.SetDefault("queue.agentic_truncation_threshold", DefaultAgenticTruncationThreshold)
 }
 
 func loadQueueConfig(v *viper.Viper) QueueConfig {

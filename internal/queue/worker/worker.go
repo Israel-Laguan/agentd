@@ -100,7 +100,7 @@ func NewWorker(
 		opts.AgenticTruncatorMax = config.DefaultAgenticTruncatorMax
 	}
 	if opts.AgenticTruncationThresh <= 0 {
-		opts.AgenticTruncationThresh = config.DefaultAgenticTruncationThresh
+		opts.AgenticTruncationThresh = config.DefaultAgenticTruncationThreshold
 	}
 	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
 	var budgetTracker spec.BudgetTracker

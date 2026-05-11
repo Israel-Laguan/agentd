@@ -71,10 +71,19 @@ func TestAgenticTruncator_PreservesToolCallIDs(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("len(got) = %d, want 3", len(got))
 	}
-	// With budget 4, and 2 used for system/user, we have room for 2 more.
-	// But the tail is: assistant(call), tool(result), assistant(done).
-	// To keep tool(result), we must keep assistant(call). Total 3.
-	// If we only have room for 2, we can only keep assistant(done).
+
+	// Verify system and user are retained
+	if got[0].Role != "system" {
+		t.Errorf("got[0].Role = %q, want system", got[0].Role)
+	}
+	if got[1].Role != "user" {
+		t.Errorf("got[1].Role = %q, want user", got[1].Role)
+	}
+
+	// Verify final assistant is retained (pruned middle assistant+tool pair)
+	if got[2].Role != "assistant" || got[2].Content == "" {
+		t.Errorf("got[2] = {Role: %q, Content: %q}, want {Role: assistant, Content: non-empty}", got[2].Role, got[2].Content)
+	}
 }
 
 func TestAgenticTruncator_DefaultMaxMessages(t *testing.T) {
