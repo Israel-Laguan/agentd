@@ -55,7 +55,8 @@ func TestAgenticTruncator_PrunesMiddle(t *testing.T) {
 }
 
 func TestAgenticTruncator_PreservesToolCallIDs(t *testing.T) {
-	truncator := NewAgenticTruncator(4)
+	// Use budget 5 to keep all messages including the assistant+tool pair
+	truncator := NewAgenticTruncator(5)
 	messages := []spec.PromptMessage{
 		{Role: "system", Content: "system"},
 		{Role: "user", Content: "task"},
@@ -68,8 +69,8 @@ func TestAgenticTruncator_PreservesToolCallIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
-	if len(got) != 3 {
-		t.Fatalf("len(got) = %d, want 3", len(got))
+	if len(got) != 5 {
+		t.Fatalf("len(got) = %d, want 5", len(got))
 	}
 
 	// Verify system and user are retained
@@ -80,9 +81,30 @@ func TestAgenticTruncator_PreservesToolCallIDs(t *testing.T) {
 		t.Errorf("got[1].Role = %q, want user", got[1].Role)
 	}
 
-	// Verify final assistant is retained (pruned middle assistant+tool pair)
-	if got[2].Role != "assistant" || got[2].Content == "" {
-		t.Errorf("got[2] = {Role: %q, Content: %q}, want {Role: assistant, Content: non-empty}", got[2].Role, got[2].Content)
+	// Verify assistant message with tool call is retained and has correct ID
+	foundAssistantWithToolCall := false
+	foundToolWithID := false
+	for i, m := range got {
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			for _, tc := range m.ToolCalls {
+				if tc.ID == "call_abc" {
+					foundAssistantWithToolCall = true
+					// Verify corresponding tool message exists after this
+					for j := i + 1; j < len(got); j++ {
+						if got[j].Role == "tool" && got[j].ToolCallID == "call_abc" {
+							foundToolWithID = true
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+	if !foundAssistantWithToolCall {
+		t.Error("expected assistant message with ToolCall ID call_abc to be preserved")
+	}
+	if !foundToolWithID {
+		t.Error("expected tool message with ToolCallID call_abc to be preserved")
 	}
 }
 
@@ -157,16 +179,19 @@ func TestAgenticTruncator_PreventsDanglingToolCalls(t *testing.T) {
 			}
 		}
 
+		// Check ALL retained tool calls in the assistant message, not just the first one
 		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
-			hasToolResponse := false
-			for j := i + 1; j < len(got); j++ {
-				if got[j].Role == "tool" && got[j].ToolCallID == m.ToolCalls[0].ID {
-					hasToolResponse = true
-					break
+			for toolIdx, tc := range m.ToolCalls {
+				hasToolResponse := false
+				for j := i + 1; j < len(got); j++ {
+					if got[j].Role == "tool" && got[j].ToolCallID == tc.ID {
+						hasToolResponse = true
+						break
+					}
 				}
-			}
-			if !hasToolResponse {
-				t.Errorf("assistant message %d has no subsequent tool response", i)
+				if !hasToolResponse {
+					t.Errorf("assistant message %d tool call index %d (ID: %q) has no subsequent tool response", i, toolIdx, tc.ID)
+				}
 			}
 		}
 	}
