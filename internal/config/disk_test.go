@@ -2,22 +2,26 @@ package config
 
 import (
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
-func TestDiskConfig_Defaults(t *testing.T) {
-	cfg := DiskConfig{
-		FreeThresholdPercent: defaultDiskFreeThresholdPercent,
-	}
-	if cfg.FreeThresholdPercent != 10.0 {
-		t.Errorf("FreeThresholdPercent = %v, want 10.0", cfg.FreeThresholdPercent)
-	}
-}
+func TestDiskConfig(t *testing.T) {
+	v := viper.New()
+	setDiskDefaults(v)
 
-func TestDiskConfig_Custom(t *testing.T) {
-	cfg := DiskConfig{
-		FreeThresholdPercent: 15.0,
+	if got := v.GetFloat64("disk.free_threshold_percent"); got != defaultDiskFreeThresholdPercent {
+		t.Errorf("expected default %v, got %v", defaultDiskFreeThresholdPercent, got)
 	}
-	if cfg.FreeThresholdPercent != 15.0 {
-		t.Errorf("FreeThresholdPercent = %v, want 15.0", cfg.FreeThresholdPercent)
+
+	cfg := loadDiskConfig(v)
+	if cfg.FreeThresholdPercent != defaultDiskFreeThresholdPercent {
+		t.Errorf("expected %v, got %v", defaultDiskFreeThresholdPercent, cfg.FreeThresholdPercent)
+	}
+
+	v.Set("disk.free_threshold_percent", 20.0)
+	cfg = loadDiskConfig(v)
+	if cfg.FreeThresholdPercent != 20.0 {
+		t.Errorf("expected 20.0, got %v", cfg.FreeThresholdPercent)
 	}
 }
