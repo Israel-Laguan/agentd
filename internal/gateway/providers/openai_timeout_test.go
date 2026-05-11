@@ -200,3 +200,115 @@ func TestOpenAIJSONMode_WithoutTools_SetsResponseFormat(t *testing.T) {
 		t.Fatalf("Generate error: %v", err)
 	}
 }
+
+func TestOpenAIToolCalls_ParsesToolCalls(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"model": "gpt-test",
+			"choices": []map[string]any{{
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": nil,
+					"tool_calls": []map[string]any{
+						{
+							"id":   "call_abc123",
+							"type": "function",
+							"function": map[string]any{
+								"name":      "get_weather",
+								"arguments": `{"location":"Boston","unit":"celsius"}`,
+							},
+						},
+						{
+							"id":   "call_xyz789",
+							"type": "function",
+							"function": map[string]any{
+								"name":      "get_time",
+								"arguments": `{"timezone":"UTC"}`,
+							},
+						},
+					},
+				},
+			}},
+			"usage": map[string]int{"total_tokens": 150},
+		}
+		writeOpenAIJSON(t, w, resp)
+	}))
+	defer srv.Close()
+
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "gpt-test",
+	}, srv.Client())
+
+	resp, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "What's the weather and time?"}},
+		Tools: []spec.ToolDefinition{{
+			Name:        "get_weather",
+			Description: "Get weather for a location",
+			Parameters:  &spec.FunctionParameters{},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+
+	if len(resp.ToolCalls) != 2 {
+		t.Fatalf("ToolCalls length = %d, want 2", len(resp.ToolCalls))
+	}
+
+	if resp.ToolCalls[0].ID != "call_abc123" {
+		t.Errorf("ToolCalls[0].ID = %q, want %q", resp.ToolCalls[0].ID, "call_abc123")
+	}
+	if resp.ToolCalls[0].Type != "function" {
+		t.Errorf("ToolCalls[0].Type = %q, want %q", resp.ToolCalls[0].Type, "function")
+	}
+	if resp.ToolCalls[0].Function.Name != "get_weather" {
+		t.Errorf("ToolCalls[0].Function.Name = %q, want %q", resp.ToolCalls[0].Function.Name, "get_weather")
+	}
+	if resp.ToolCalls[0].Function.Arguments != `{"location":"Boston","unit":"celsius"}` {
+		t.Errorf("ToolCalls[0].Function.Arguments = %q, want %q", resp.ToolCalls[0].Function.Arguments, `{"location":"Boston","unit":"celsius"}`)
+	}
+
+	if resp.ToolCalls[1].ID != "call_xyz789" {
+		t.Errorf("ToolCalls[1].ID = %q, want %q", resp.ToolCalls[1].ID, "call_xyz789")
+	}
+	if resp.ToolCalls[1].Function.Name != "get_time" {
+		t.Errorf("ToolCalls[1].Function.Name = %q, want %q", resp.ToolCalls[1].Function.Name, "get_time")
+	}
+}
+
+func TestOpenAIToolCalls_EmptyWhenAbsent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"model": "gpt-test",
+			"choices": []map[string]any{{
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "Hello, world!",
+				},
+			}},
+			"usage": map[string]int{"total_tokens": 10},
+		}
+		writeOpenAIJSON(t, w, resp)
+	}))
+	defer srv.Close()
+
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "gpt-test",
+	}, srv.Client())
+
+	resp, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "Hello"}},
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+
+	if resp.Content != "Hello, world!" {
+		t.Errorf("Content = %q, want %q", resp.Content, "Hello, world!")
+	}
+	if resp.ToolCalls != nil {
+		t.Errorf("ToolCalls = %v, want nil", resp.ToolCalls)
+	}
+}
