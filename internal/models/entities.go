@@ -91,6 +91,7 @@ type AgentProfile struct {
 	SystemPrompt sql.NullString
 	Role         string
 	MaxTokens    int
+	AgenticMode  bool
 	UpdatedAt    time.Time
 }
 
