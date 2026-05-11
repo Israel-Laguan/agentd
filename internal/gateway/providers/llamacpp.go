@@ -75,8 +75,8 @@ func openAIResponseToLlamaCpp(r openAIResponse, defaultModel string) spec.AIResp
 		model = defaultModel
 	}
 	content := ""
-	if len(r.Choices) > 0 {
-		content = r.Choices[0].Message.Content
+	if len(r.Choices) > 0 && r.Choices[0].Message.Content != nil {
+		content = *r.Choices[0].Message.Content
 	}
 	return spec.AIResponse{
 		Content:      content,

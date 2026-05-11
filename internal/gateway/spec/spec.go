@@ -3,6 +3,7 @@ package spec
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -31,17 +32,61 @@ type RoleTarget struct {
 	Model    string `json:"model"`
 }
 
+// FunctionParameters describes the parameters for a tool function in JSON Schema format.
+type FunctionParameters struct {
+	Type       string         `json:"type"`
+	Properties map[string]any `json:"properties,omitempty"`
+	Required   []string       `json:"required,omitempty"`
+}
+
+func (fp FunctionParameters) MarshalJSON() ([]byte, error) {
+	if len(fp.Properties) == 0 && len(fp.Required) == 0 {
+		return []byte(`{"type":"object","properties":{},"required":[],"additionalProperties":false}`), nil
+	}
+	type Alias FunctionParameters
+	return json.Marshal(Alias(fp))
+}
+
+// ToolDefinition defines a function that the model can call.
+type ToolDefinition struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Parameters  *FunctionParameters `json:"parameters"`
+}
+
+func (t ToolDefinition) MarshalJSON() ([]byte, error) {
+	if t.Parameters == nil {
+		t.Parameters = &FunctionParameters{}
+	}
+	type Alias ToolDefinition
+	return json.Marshal(Alias(t))
+}
+
+// ToolCallFunction represents a function call from the model.
+type ToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// ToolCall represents a tool call from the model.
+type ToolCall struct {
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Function ToolCallFunction `json:"function"`
+}
+
 // AIRequest is the provider-neutral input shape for model calls.
 type AIRequest struct {
-	Messages    []PromptMessage `json:"messages"`
-	Temperature float64         `json:"temperature"`
-	MaxTokens   int             `json:"max_tokens"`
-	JSONMode    bool            `json:"json_mode"`
-	AgentID     string          `json:"agent_id"`
-	Provider    string          `json:"provider,omitempty"`
-	Model       string          `json:"model,omitempty"`
-	Role        Role            `json:"role,omitempty"`
-	TaskID      string          `json:"task_id,omitempty"`
+	Messages    []PromptMessage  `json:"messages"`
+	Temperature float64          `json:"temperature"`
+	MaxTokens   int              `json:"max_tokens"`
+	JSONMode    bool             `json:"json_mode"`
+	Tools       []ToolDefinition `json:"tools,omitempty"`
+	AgentID     string           `json:"agent_id"`
+	Provider    string           `json:"provider,omitempty"`
+	Model       string           `json:"model,omitempty"`
+	Role        Role             `json:"role,omitempty"`
+	TaskID      string           `json:"task_id,omitempty"`
 	// SkipTruncation is used by internal middleware calls, such as summarization,
 	// to avoid recursively applying the truncator to its own request.
 	SkipTruncation bool `json:"-"`
@@ -55,10 +100,11 @@ type Validatable interface {
 
 // AIResponse is the provider-neutral output shape for model calls.
 type AIResponse struct {
-	Content      string `json:"content"`
-	TokenUsage   int    `json:"token_usage"`
-	ProviderUsed string `json:"provider_used"`
-	ModelUsed    string `json:"model_used"`
+	Content      string     `json:"content"`
+	TokenUsage   int        `json:"token_usage"`
+	ProviderUsed string     `json:"provider_used"`
+	ModelUsed    string     `json:"model_used"`
+	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // ProviderConfig configures one concrete LLM endpoint.
