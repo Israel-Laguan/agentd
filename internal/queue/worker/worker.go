@@ -2,9 +2,11 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"agentd/internal/capabilities"
@@ -17,6 +19,9 @@ import (
 
 // DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
+
+// DefaultMaxToolIterations is the default number of tool call iterations in agentic mode.
+const DefaultMaxToolIterations = 10
 
 type Worker struct {
 	store               models.KanbanStore
@@ -32,6 +37,8 @@ type Worker struct {
 	sandboxEnvAllowlist []string
 	sandboxExtraEnv     []string
 	maxRetries          int
+	maxToolIterations   int
+	toolExecutor        *ToolExecutor
 	capabilities        *capabilities.Registry
 }
 
@@ -75,6 +82,7 @@ func NewWorker(
 	if len(opts.SandboxExtraEnv) == 0 {
 		opts.SandboxExtraEnv = []string{"CI=true", "DEBIAN_FRONTEND=noninteractive", "NO_COLOR=1"}
 	}
+	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
@@ -83,6 +91,8 @@ func NewWorker(
 		sandboxEnvAllowlist: append([]string(nil), opts.SandboxEnvAllowlist...),
 		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
 		maxRetries:          opts.MaxRetries,
+		maxToolIterations:   DefaultMaxToolIterations,
+		toolExecutor:        NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
 		capabilities:        opts.Capabilities,
 	}
 }
@@ -105,6 +115,16 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	if planning.IsPhasePlanningTask(task.Title) {
 		w.handlePhasePlanning(ctx, task, *project)
 		return
+	}
+	if profile.AgenticMode {
+		if w.providerSupportsAgentic(*profile) {
+			w.processAgentic(ctx, task, *project, *profile)
+			return
+		}
+		slog.Warn("agentic mode requested but provider does not support tool round-tripping; falling back to legacy mode",
+			"task_id", task.ID,
+			"provider", profile.Provider,
+		)
 	}
 	response, err := w.command(ctx, task, *profile)
 	if err != nil {
@@ -172,14 +192,7 @@ func (w *Worker) loadContext(
 }
 
 func (w *Worker) command(ctx context.Context, task models.Task, profile models.AgentProfile) (workerResponse, error) {
-	messages := workerMessages(task, profile)
-	if w.retriever != nil {
-		intent := task.Title + " " + task.Description
-		recalled := w.retriever.Recall(ctx, intent, task.ProjectID, "")
-		if lessons := memoryFormatLessons(recalled); lessons != "" {
-			messages = append([]gateway.PromptMessage{{Role: "system", Content: lessons}}, messages...)
-		}
-	}
+	messages := w.seedMessages(ctx, task, profile)
 	req := gateway.AIRequest{
 		Messages:    messages,
 		Temperature: profile.Temperature,
@@ -191,14 +204,7 @@ func (w *Worker) command(ctx context.Context, task models.Task, profile models.A
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,
 	}
-	if w.capabilities != nil {
-		tools, err := w.capabilities.GetTools(ctx)
-		if err != nil {
-			slog.Warn("failed to get capability tools", "error", err)
-		} else {
-			req.Tools = tools
-		}
-	}
+	// Legacy JSON command mode does not execute tool calls; do not advertise tools here.
 	req = w.applyTuning(req, task, profile)
 	resp, err := gateway.GenerateJSON[workerResponse](ctx, w.gateway, req)
 	if err != nil {
@@ -232,6 +238,200 @@ func (w *Worker) isPromptHang(result sandbox.Result, err error) bool {
 func (w *Worker) isPermissionFailure(result sandbox.Result, err error) bool {
 	failed := err != nil || !result.Success
 	return failed && safety.DetectPermission(result.Stdout, result.Stderr).Detected
+}
+
+func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
+	cancelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	w.registerCancel(task.ID, cancel)
+	defer w.deregisterCancel(task.ID)
+
+	toolExecutor := NewToolExecutor(
+		w.sandbox,
+		project.WorkspacePath,
+		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
+		w.sandboxWallTimeout,
+	)
+
+	messages := w.seedMessages(ctx, task, profile)
+	messages = w.buildAgenticMessages(messages, profile)
+	tools, toolToAdapter := w.agenticTools(ctx, toolExecutor)
+
+	for i := 0; i < w.maxToolIterations; i++ {
+		req := gateway.AIRequest{
+			Messages:    messages,
+			Temperature: profile.Temperature,
+			Tools:       tools,
+			AgentID:     task.AgentID,
+			Role:        gateway.RoleWorker,
+			TaskID:      task.ID,
+			Provider:    profile.Provider,
+			Model:       profile.Model,
+			MaxTokens:   profile.MaxTokens,
+		}
+		req = w.applyTuning(req, task, profile)
+
+		resp, err := w.gateway.Generate(cancelCtx, req)
+		if err != nil {
+			w.handleGatewayError(ctx, task, err)
+			return
+		}
+
+		messages = append(messages, gateway.PromptMessage{
+			Role:      "assistant",
+			Content:   resp.Content,
+			ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
+		})
+
+		if len(resp.ToolCalls) == 0 {
+			w.commitText(ctx, task, resp.Content)
+			return
+		}
+
+		for _, call := range resp.ToolCalls {
+			result := w.executeAgenticTool(cancelCtx, toolExecutor, call, toolToAdapter)
+			messages = append(messages, gateway.PromptMessage{
+				Role:       "tool",
+				ToolCallID: call.ID,
+				Content:    result,
+			})
+		}
+	}
+
+	w.handleIterationExceeded(ctx, task)
+}
+
+func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
+	tools := append([]gateway.ToolDefinition(nil), toolExecutor.Definitions()...)
+	if w.capabilities == nil {
+		return tools, nil
+	}
+	capabilityTools, toolToAdapter, err := w.capabilities.GetToolsAndAdapterIndex(ctx)
+	if err != nil {
+		slog.Warn("failed to get capability tools", "error", err)
+		return tools, nil
+	}
+	return append(tools, capabilityTools...), toolToAdapter
+}
+
+func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
+	switch call.Function.Name {
+	case toolNameBash, toolNameRead, toolNameWrite:
+		return toolExec.Execute(ctx, call)
+	default:
+		if w.capabilities == nil {
+			return jsonErrorf("unknown tool: %s", call.Function.Name)
+		}
+		adapterName, ok := toolToAdapter[call.Function.Name]
+		if !ok {
+			return jsonErrorf("unknown tool: %s", call.Function.Name)
+		}
+		var args map[string]any
+		if strings.TrimSpace(call.Function.Arguments) != "" {
+			if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
+				return jsonErrorf("invalid arguments: %v", err)
+			}
+		}
+		if args == nil {
+			args = map[string]any{}
+		}
+		out, err := w.capabilities.CallTool(ctx, adapterName, call.Function.Name, args)
+		if err != nil {
+			return jsonErrorf("capability tool failed: %v", err)
+		}
+		encoded, err := json.Marshal(out)
+		if err != nil {
+			return jsonErrorf("capability tool result encode failed: %v", err)
+		}
+		return string(encoded)
+	}
+}
+
+func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
+	messages := workerMessages(task, profile)
+	if w.retriever == nil {
+		return messages
+	}
+	intent := task.Title + " " + task.Description
+	recalled := w.retriever.Recall(ctx, intent, task.ProjectID, "")
+	if lessons := memoryFormatLessons(recalled); lessons != "" {
+		return append([]gateway.PromptMessage{{Role: "system", Content: lessons}}, messages...)
+	}
+	return messages
+}
+
+func agenticToolUseSystemText() string {
+	return `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
+When you need to execute a command, use the bash tool.
+When you need to read a file, use the read tool.
+When you need to create or modify a file, use the write tool.
+Return your response as plain text when the task is complete, or use tools to continue working.`
+}
+
+func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile models.AgentProfile) []gateway.PromptMessage {
+	toolUse := agenticToolUseSystemText()
+	primary := toolUse
+	if profile.SystemPrompt.Valid {
+		primary = strings.TrimSpace(profile.SystemPrompt.String) + "\n\n" + toolUse
+	}
+
+	out := make([]gateway.PromptMessage, 0, len(messages)+1)
+	replacedCore := false
+
+	for _, m := range messages {
+		if m.Role != "system" {
+			out = append(out, m)
+			continue
+		}
+		if isMemoryLessonsSystem(m.Content) {
+			out = append(out, m)
+			continue
+		}
+		if isLegacyJSONCommandSystemPrompt(m.Content) {
+			if !replacedCore {
+				out = append(out, gateway.PromptMessage{Role: "system", Content: primary})
+				replacedCore = true
+			}
+			continue
+		}
+		if !replacedCore {
+			out = append(out, gateway.PromptMessage{Role: "system", Content: primary})
+			replacedCore = true
+			continue
+		}
+	}
+
+	if !replacedCore {
+		insertIdx := len(out)
+		for i, message := range out {
+			if message.Role == "user" {
+				insertIdx = i
+				break
+			}
+		}
+		out = append(out, gateway.PromptMessage{})
+		copy(out[insertIdx+1:], out[insertIdx:])
+		out[insertIdx] = gateway.PromptMessage{Role: "system", Content: primary}
+	}
+
+	return out
+}
+
+func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {
+	result := sandbox.Result{
+		Success: true,
+		Stdout:  content,
+	}
+	w.commit(ctx, task, result, nil)
+}
+
+func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) {
+	payload := "task exceeded maximum tool iterations without producing a final result"
+	w.handleAgentFailure(ctx, task, payload)
+}
+
+func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
+	return strings.EqualFold(profile.Provider, string(gateway.ProviderOpenAI))
 }
 
 // SetSandbox swaps the executor used by integration tests that replace the sandbox.

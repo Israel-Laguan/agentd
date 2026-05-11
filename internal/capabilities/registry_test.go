@@ -117,3 +117,26 @@ func TestRegistry_Close_ClosesAllAdapters(t *testing.T) {
 
 	reg.Close()
 }
+
+func TestRegistry_AdapterForTool(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register("zebra", &mockAdapter{
+		name:  "zebra",
+		tools: []gateway.ToolDefinition{{Name: "shared_tool"}},
+	})
+	reg.Register("alpha", &mockAdapter{
+		name:  "alpha",
+		tools: []gateway.ToolDefinition{{Name: "only_alpha"}, {Name: "shared_tool"}},
+	})
+
+	adapterName, ok := reg.AdapterForTool(context.Background(), "only_alpha")
+	require.True(t, ok)
+	assert.Equal(t, "alpha", adapterName)
+
+	adapterName, ok = reg.AdapterForTool(context.Background(), "shared_tool")
+	require.True(t, ok)
+	assert.Equal(t, "alpha", adapterName, "lexicographically smallest adapter wins on duplicate tool names")
+
+	_, ok = reg.AdapterForTool(context.Background(), "missing")
+	assert.False(t, ok)
+}

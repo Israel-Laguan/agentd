@@ -2,6 +2,7 @@ package capabilities
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	"agentd/internal/gateway"
@@ -15,9 +16,8 @@ type CapabilityAdapter interface {
 }
 
 type Registry struct {
-	mu         sync.RWMutex
-	adapters   map[string]CapabilityAdapter
-	allTools   []gateway.ToolDefinition
+	mu       sync.RWMutex
+	adapters map[string]CapabilityAdapter
 }
 
 func NewRegistry() *Registry {
@@ -46,20 +46,45 @@ func (r *Registry) GetAdapter(name string) (CapabilityAdapter, bool) {
 }
 
 func (r *Registry) GetTools(ctx context.Context) ([]gateway.ToolDefinition, error) {
+	tools, _, err := r.GetToolsAndAdapterIndex(ctx)
+	return tools, err
+}
+
+// GetToolsAndAdapterIndex returns all tools from all adapters along with a map
+// from tool name to adapter name. The map is useful for routing tool calls without
+// repeated adapter iteration.
+func (r *Registry) GetToolsAndAdapterIndex(ctx context.Context) ([]gateway.ToolDefinition, map[string]string, error) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	names := make([]string, 0, len(r.adapters))
+	for n := range r.adapters {
+		names = append(names, n)
+	}
+	r.mu.RUnlock()
+	sort.Strings(names)
 
 	var allTools []gateway.ToolDefinition
-	for _, adapter := range r.adapters {
+	toolToAdapter := make(map[string]string)
+
+	for _, name := range names {
+		r.mu.RLock()
+		adapter, exists := r.adapters[name]
+		r.mu.RUnlock()
+		if !exists || adapter == nil {
+			continue
+		}
 		tools, err := adapter.ListTools(ctx)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		for _, t := range tools {
+			if _, exists := toolToAdapter[t.Name]; !exists {
+				toolToAdapter[t.Name] = name
+			}
 		}
 		allTools = append(allTools, tools...)
 	}
 
-	r.allTools = allTools
-	return allTools, nil
+	return allTools, toolToAdapter, nil
 }
 
 func (r *Registry) CallTool(ctx context.Context, adapterName, toolName string, args map[string]any) (any, error) {
@@ -72,6 +97,37 @@ func (r *Registry) CallTool(ctx context.Context, adapterName, toolName string, a
 	}
 
 	return adapter.CallTool(ctx, toolName, args)
+}
+
+// AdapterForTool returns the registered adapter name that exposes the given tool name.
+// If multiple adapters expose the same tool name, the lexicographically smallest adapter name wins.
+func (r *Registry) AdapterForTool(ctx context.Context, toolName string) (adapterName string, ok bool) {
+	r.mu.RLock()
+	names := make([]string, 0, len(r.adapters))
+	for n := range r.adapters {
+		names = append(names, n)
+	}
+	r.mu.RUnlock()
+	sort.Strings(names)
+
+	for _, name := range names {
+		r.mu.RLock()
+		adapter, exists := r.adapters[name]
+		r.mu.RUnlock()
+		if !exists || adapter == nil {
+			continue
+		}
+		tools, err := adapter.ListTools(ctx)
+		if err != nil {
+			continue
+		}
+		for _, t := range tools {
+			if t.Name == toolName {
+				return name, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (r *Registry) Close() {
