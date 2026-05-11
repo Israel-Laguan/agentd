@@ -274,7 +274,7 @@ func registerToolSteps(sc *godog.ScenarioContext, state *gatewayScenario) {
 	sc.Step(`^a mock OpenAI provider that returns null content with tool_calls$`, state.toolMockProviderWithNullContentAndToolCalls)
 	sc.Step(`^Generate is called with a tool definition that has no parameters$`, state.toolGenerateWithNoParams)
 	sc.Step(`^the request should include the tool with parameters field present$`, state.toolReqHasParameters)
-	sc.Step(`^the parameters should be an empty object$`, state.toolParamsIsEmptyObject)
+	sc.Step(`^the parameters should be a valid JSON Schema object$`, state.toolParamsIsEmptyObject)
 	sc.Step(`^Generate is called with a request containing tool definitions$`, state.toolGenerateWithTools)
 	sc.Step(`^the request should include tools serialized in OpenAI format$`, state.toolReqHasTools)
 	sc.Step(`^the response should contain the tool_calls from the model$`, state.toolRespHasToolCalls)

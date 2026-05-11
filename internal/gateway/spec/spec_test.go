@@ -49,7 +49,7 @@ func TestFunctionParametersMarshalJSON_NoArgumentSchema(t *testing.T) {
 	}
 }
 
-func TestToolDefinitionMarshalJSON_OmitsNilParameters(t *testing.T) {
+func TestToolDefinitionMarshalJSON_IncludesParametersForNil(t *testing.T) {
 	data, err := json.Marshal(ToolDefinition{
 		Name:        "ping",
 		Description: "Ping the service",
@@ -62,7 +62,14 @@ func TestToolDefinitionMarshalJSON_OmitsNilParameters(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
-	if _, ok := got["parameters"]; ok {
-		t.Fatalf("parameters present in JSON: %s", data)
+	params, ok := got["parameters"].(map[string]any)
+	if !ok {
+		t.Fatalf("parameters not present or not an object in JSON: %s", data)
+	}
+	if params["type"] != "object" {
+		t.Errorf("parameters.type = %v, want object", params["type"])
+	}
+	if params["additionalProperties"] != false {
+		t.Errorf("parameters.additionalProperties = %v, want false", params["additionalProperties"])
 	}
 }
