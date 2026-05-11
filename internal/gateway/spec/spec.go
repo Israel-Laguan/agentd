@@ -34,13 +34,13 @@ type RoleTarget struct {
 
 // FunctionParameters describes the parameters for a tool function in JSON Schema format.
 type FunctionParameters struct {
-	Type       string                 `json:"type"`
-	Properties map[string]any         `json:"properties,omitempty"`
-	Required   []string               `json:"required,omitempty"`
+	Type       string         `json:"type"`
+	Properties map[string]any `json:"properties,omitempty"`
+	Required   []string       `json:"required,omitempty"`
 }
 
 func (fp FunctionParameters) MarshalJSON() ([]byte, error) {
-	if fp.Type == "" && fp.Properties == nil && fp.Required == nil {
+	if fp.Type == "" && len(fp.Properties) == 0 && len(fp.Required) == 0 {
 		return []byte(`{"type":"object","properties":{},"required":[],"additionalProperties":false}`), nil
 	}
 	type Alias FunctionParameters
@@ -49,9 +49,9 @@ func (fp FunctionParameters) MarshalJSON() ([]byte, error) {
 
 // ToolDefinition defines a function that the model can call.
 type ToolDefinition struct {
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
-	Parameters  *FunctionParameters `json:"parameters"`
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Parameters  *FunctionParameters `json:"parameters,omitempty"`
 }
 
 // ToolCallFunction represents a function call from the model.
@@ -92,11 +92,11 @@ type Validatable interface {
 
 // AIResponse is the provider-neutral output shape for model calls.
 type AIResponse struct {
-	Content      string      `json:"content"`
-	TokenUsage   int         `json:"token_usage"`
-	ProviderUsed string      `json:"provider_used"`
-	ModelUsed    string      `json:"model_used"`
-	ToolCalls    []ToolCall  `json:"tool_calls,omitempty"`
+	Content      string     `json:"content"`
+	TokenUsage   int        `json:"token_usage"`
+	ProviderUsed string     `json:"provider_used"`
+	ModelUsed    string     `json:"model_used"`
+	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // ProviderConfig configures one concrete LLM endpoint.
