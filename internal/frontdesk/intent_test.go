@@ -60,24 +60,158 @@ func TestLastUserMessage(t *testing.T) {
 	}
 }
 
-func TestFormatFileReferenceIntent(t *testing.T) {
-	intent := "test intent"
-	refs := []FileRef{
-		{Name: "file1.txt", Path: "/path/to/file1.txt"},
-		{Name: "file2.txt", Path: "/path/to/file2.txt"},
+func TestInputFile(t *testing.T) {
+	tests := []struct {
+		name        string
+		file        InputFile
+		wantName    string
+		wantPath    string
+		wantContent string
+	}{
+		{
+			name:        "full file",
+			file:        InputFile{Name: "test.txt", Path: "/path/to/test.txt", Content: "Hello World"},
+			wantName:    "test.txt",
+			wantPath:    "/path/to/test.txt",
+			wantContent: "Hello World",
+		},
+		{
+			name:        "empty file",
+			file:        InputFile{},
+			wantName:    "",
+			wantPath:    "",
+			wantContent: "",
+		},
 	}
 
-	got := FormatFileReferenceIntent(intent, refs)
-	if !strings.Contains(got, "test intent") {
-		t.Errorf("expected intent in output")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.file.Name != tt.wantName {
+				t.Errorf("Name = %v, want %v", tt.file.Name, tt.wantName)
+			}
+			if tt.file.Path != tt.wantPath {
+				t.Errorf("Path = %v, want %v", tt.file.Path, tt.wantPath)
+			}
+			if tt.file.Content != tt.wantContent {
+				t.Errorf("Content = %v, want %v", tt.file.Content, tt.wantContent)
+			}
+		})
 	}
-	if !strings.Contains(got, "[agentd file reference]") {
-		t.Errorf("expected file reference header")
+}
+
+func TestFileRef(t *testing.T) {
+	tests := []struct {
+		name     string
+		ref      FileRef
+		wantName string
+		wantPath string
+	}{
+		{
+			name:     "standard ref",
+			ref:      FileRef{Name: "file.txt", Path: "/path/file.txt"},
+			wantName: "file.txt",
+			wantPath: "/path/file.txt",
+		},
+		{
+			name:     "empty ref",
+			ref:      FileRef{},
+			wantName: "",
+			wantPath: "",
+		},
 	}
-	if !strings.Contains(got, "name: file1.txt") || !strings.Contains(got, "path: /path/to/file1.txt") {
-		t.Errorf("expected file1 details")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.ref.Name != tt.wantName {
+				t.Errorf("Name = %v, want %v", tt.ref.Name, tt.wantName)
+			}
+			if tt.ref.Path != tt.wantPath {
+				t.Errorf("Path = %v, want %v", tt.ref.Path, tt.wantPath)
+			}
+		})
 	}
-	if !strings.Contains(got, "name: file2.txt") || !strings.Contains(got, "path: /path/to/file2.txt") {
-		t.Errorf("expected file2 details")
+}
+
+func TestFormatFileReferenceIntent(t *testing.T) {
+	tests := []struct {
+		name         string
+		intent       string
+		refs         []FileRef
+		wantContains []string
+	}{
+		{
+			name:         "empty refs",
+			intent:       "test",
+			refs:         nil,
+			wantContains: []string{"test"},
+		},
+		{
+			name:   "with refs",
+			intent: "test intent",
+			refs: []FileRef{
+				{Name: "a.txt", Path: "/path/a.txt"},
+				{Name: "b.txt", Path: "/path/b.txt"},
+			},
+			wantContains: []string{"test intent", "[agentd file reference]", "name: a.txt", "path: /path/a.txt", "name: b.txt", "path: /path/b.txt"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatFileReferenceIntent(tt.intent, tt.refs)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("FormatFileReferenceIntent() missing %q in output: %s", want, got)
+				}
+			}
+		})
+	}
+}
+
+func TestPrepareIntent(t *testing.T) {
+	tests := []struct {
+		name    string
+		stash   *FileStash
+		message string
+		files   []InputFile
+		wantErr bool
+	}{
+		{
+			name:    "nil stash",
+			stash:   nil,
+			message: "test message",
+			files:   nil,
+			wantErr: false,
+		},
+		{
+			name:    "with file path",
+			stash:   nil,
+			message: "test message",
+			files:   []InputFile{{Name: "test.txt", Path: "/some/path.txt"}},
+			wantErr: false,
+		},
+		{
+			name:    "with empty content",
+			stash:   nil,
+			message: "test message",
+			files:   []InputFile{{Name: "empty.txt", Path: "", Content: ""}},
+			wantErr: false,
+		},
+		{
+			name:    "with no name",
+			stash:   nil,
+			message: "test message",
+			files:   []InputFile{{Name: "", Path: "/some/path.txt", Content: ""}},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := PrepareIntent(tt.stash, tt.message, tt.files)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("PrepareIntent() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

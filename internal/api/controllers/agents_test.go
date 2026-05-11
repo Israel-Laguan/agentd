@@ -55,7 +55,7 @@ func TestAgentHandler(t *testing.T) {
 		}
 	})
 
-t.Run("Patch", func(t *testing.T) {
+	t.Run("Patch", func(t *testing.T) {
 		body := `{"name": "Updated Agent"}`
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/test-agent", strings.NewReader(body))
 		req.SetPathValue("id", "test-agent")
