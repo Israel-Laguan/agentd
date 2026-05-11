@@ -256,9 +256,10 @@ func (state *agenticIterationScenario) finalMessageInjected() error {
 }
 
 func (state *agenticIterationScenario) additionalCallAllowed() error {
-	ig := worker.NewIterationGuard(2)
-	ig.AfterIteration(true)
-	ig.AfterIteration(true)
+	ig := worker.NewIterationGuard(state.workerOpts.MaxToolIterations)
+	for i := 0; i < state.workerOpts.MaxToolIterations; i++ {
+		ig.AfterIteration(true)
+	}
 	if !ig.ShouldInjectFinalMessage() {
 		return fmt.Errorf("expected final message to be allowed")
 	}
