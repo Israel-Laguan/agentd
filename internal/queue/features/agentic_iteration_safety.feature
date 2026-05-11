@@ -35,6 +35,6 @@ Feature: Agentic Iteration Budget and Safety
 
   Scenario: Multiple tasks have independent budgets
     Given token budget is set to 100 tokens
-    When task "task-A" uses 80 tokens
+    When task "task-A" uses 100 tokens
     Then task "task-B" should still have full 100 token budget available
     And task "task-A" should be blocked from further calls
