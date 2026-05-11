@@ -13,11 +13,25 @@ import (
 )
 
 func TestAgentHandler(t *testing.T) {
-	store := testutil.NewFakeStore()
-	svc := services.NewAgentService(store, nil)
-	h := controllers.AgentHandler{Service: svc}
+	newHandler := func() controllers.AgentHandler {
+		store := testutil.NewFakeStore()
+		svc := services.NewAgentService(store, nil)
+		return controllers.AgentHandler{Service: svc}
+	}
+
+	seedAgent := func(t *testing.T, h controllers.AgentHandler) {
+		t.Helper()
+		body := `{"id":"test-agent","name":"Test Agent","provider":"openai","model":"gpt-4"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		h.Create(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("seed create code = %d body = %s", rec.Code, rec.Body.String())
+		}
+	}
 
 	t.Run("Create", func(t *testing.T) {
+		h := newHandler()
 		body := `{"id": "test-agent", "name": "Test Agent", "provider": "openai", "model": "gpt-4"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
 		rec := httptest.NewRecorder()
@@ -28,6 +42,8 @@ func TestAgentHandler(t *testing.T) {
 	})
 
 	t.Run("List", func(t *testing.T) {
+		h := newHandler()
+		seedAgent(t, h)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
 		rec := httptest.NewRecorder()
 		h.List(rec, req)
@@ -46,6 +62,8 @@ func TestAgentHandler(t *testing.T) {
 	})
 
 	t.Run("Get", func(t *testing.T) {
+		h := newHandler()
+		seedAgent(t, h)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/test-agent", nil)
 		req.SetPathValue("id", "test-agent")
 		rec := httptest.NewRecorder()
@@ -56,6 +74,8 @@ func TestAgentHandler(t *testing.T) {
 	})
 
 	t.Run("Patch", func(t *testing.T) {
+		h := newHandler()
+		seedAgent(t, h)
 		body := `{"name": "Updated Agent"}`
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/test-agent", strings.NewReader(body))
 		req.SetPathValue("id", "test-agent")
@@ -70,6 +90,8 @@ func TestAgentHandler(t *testing.T) {
 	})
 
 	t.Run("Delete", func(t *testing.T) {
+		h := newHandler()
+		seedAgent(t, h)
 		req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/test-agent", nil)
 		req.SetPathValue("id", "test-agent")
 		rec := httptest.NewRecorder()
