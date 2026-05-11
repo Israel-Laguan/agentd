@@ -11,6 +11,7 @@ import (
 
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/truncation"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/safety"
@@ -258,6 +259,16 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	tools, toolToAdapter := w.agenticTools(ctx, toolExecutor)
 
 	for i := 0; i < w.maxToolIterations; i++ {
+		if len(messages) > 40 {
+			agenticTruncator := truncation.NewAgenticTruncator(30)
+			var err error
+			messages, err = agenticTruncator.Apply(ctx, messages, 0)
+			if err != nil {
+				w.handleGatewayError(ctx, task, err)
+				return
+			}
+		}
+
 		req := gateway.AIRequest{
 			Messages:    messages,
 			Temperature: profile.Temperature,
