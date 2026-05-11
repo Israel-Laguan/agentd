@@ -8,11 +8,11 @@ Feature: Tool Definitions in Gateway
     Then the request should include tools serialized in OpenAI format
     And the response should contain the tool_calls from the model
 
-  Scenario: Tools with no parameters should serialize with empty parameters object
+  Scenario: Tools with no parameters should serialize with a valid JSON Schema
     Given a mock OpenAI provider
     When Generate is called with a tool definition that has no parameters
     Then the request should include the tool with parameters field present
-    And the parameters should be an empty object
+    And the parameters should be a valid JSON Schema object
 
   Scenario: JSON mode is omitted when tools are present
     Given a mock OpenAI provider

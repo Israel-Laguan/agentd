@@ -40,7 +40,7 @@ type FunctionParameters struct {
 }
 
 func (fp FunctionParameters) MarshalJSON() ([]byte, error) {
-	if fp.Type == "" && len(fp.Properties) == 0 && len(fp.Required) == 0 {
+	if len(fp.Properties) == 0 && len(fp.Required) == 0 {
 		return []byte(`{"type":"object","properties":{},"required":[],"additionalProperties":false}`), nil
 	}
 	type Alias FunctionParameters
@@ -51,7 +51,15 @@ func (fp FunctionParameters) MarshalJSON() ([]byte, error) {
 type ToolDefinition struct {
 	Name        string              `json:"name"`
 	Description string              `json:"description"`
-	Parameters  *FunctionParameters `json:"parameters,omitempty"`
+	Parameters  *FunctionParameters `json:"parameters"`
+}
+
+func (t ToolDefinition) MarshalJSON() ([]byte, error) {
+	if t.Parameters == nil {
+		t.Parameters = &FunctionParameters{}
+	}
+	type Alias ToolDefinition
+	return json.Marshal(Alias(t))
 }
 
 // ToolCallFunction represents a function call from the model.
