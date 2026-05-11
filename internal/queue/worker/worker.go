@@ -23,9 +23,6 @@ import (
 // DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
 
-// DefaultMaxToolIterations is the default number of tool call iterations in agentic mode.
-const DefaultMaxToolIterations = 10
-
 type Worker struct {
 	store               models.KanbanStore
 	gateway             gateway.AIGateway
@@ -94,7 +91,7 @@ func NewWorker(
 		opts.SandboxExtraEnv = []string{"CI=true", "DEBIAN_FRONTEND=noninteractive", "NO_COLOR=1"}
 	}
 	if opts.MaxToolIterations <= 0 {
-		opts.MaxToolIterations = DefaultMaxToolIterations
+		opts.MaxToolIterations = config.DefaultMaxToolIterations
 	}
 	if opts.AgenticTruncatorMax <= 0 {
 		opts.AgenticTruncatorMax = config.DefaultAgenticTruncatorMax

@@ -408,6 +408,13 @@ func (state *agenticIterationScenario) taskHasFullBudget(taskID string, budget i
 	if err := bg.BeforeCall(); err != nil {
 		return fmt.Errorf("expected full budget available but got error: %v", err)
 	}
+	// Verify the actual remaining budget matches expected
+	// Usage should be 0 when no tokens have been consumed yet
+	usage := state.budgetTracker.Usage(taskID)
+	remaining := budget - usage
+	if remaining != budget {
+		return fmt.Errorf("expected remaining budget %d but got %d (usage: %d)", budget, remaining, usage)
+	}
 	return nil
 }
 
