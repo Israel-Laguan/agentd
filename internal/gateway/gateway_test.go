@@ -247,10 +247,12 @@ type fakeProvider struct {
 	err          error
 	calls        int
 	budget       int
+	lastRequest  AIRequest
 }
 
-func (p *fakeProvider) Generate(context.Context, AIRequest) (AIResponse, error) {
+func (p *fakeProvider) Generate(_ context.Context, req AIRequest) (AIResponse, error) {
 	p.calls++
+	p.lastRequest = req
 	if p.err != nil {
 		return AIResponse{}, p.err
 	}
