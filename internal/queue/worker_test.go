@@ -187,6 +187,7 @@ func TestWorkerPayloadEnvironmentDoesNotDependOnProcessEnvOrder(t *testing.T) {
 func TestWorkerAgenticModeExecutesToolAndContinuesLoop(t *testing.T) {
 	store := newWorkerStore()
 	store.profile.AgenticMode = true
+	store.profile.Provider = "openai"
 	gw := &fakeGateway{
 		content:       "Task completed successfully",
 		toolCalls:     []gateway.ToolCall{{ID: "call_1", Type: "function", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hello"}`}}},
@@ -212,6 +213,7 @@ func TestWorkerAgenticModeExecutesToolAndContinuesLoop(t *testing.T) {
 func TestWorkerAgenticModeTerminatesLoopOnTextResponse(t *testing.T) {
 	store := newWorkerStore()
 	store.profile.AgenticMode = true
+	store.profile.Provider = "openai"
 	gw := &fakeGateway{
 		content: "Final response text",
 	}
@@ -229,11 +231,15 @@ func TestWorkerAgenticModeTerminatesLoopOnTextResponse(t *testing.T) {
 	if len(gw.requests) != 1 {
 		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
 	}
+	if len(sb.commands) != 0 {
+		t.Fatalf("commands = %#v, want none", sb.commands)
+	}
 }
 
 func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
 	store := newWorkerStore()
 	store.profile.AgenticMode = true
+	store.profile.Provider = "openai"
 	gw := &fakeGateway{
 		content:       "Task completed",
 		toolCalls:     []gateway.ToolCall{{ID: "call_1", Type: "function", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"false"}`}}},
@@ -247,6 +253,29 @@ func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
 
 	if store.result == nil || !store.result.Success {
 		t.Fatalf("result = %#v, want success", store.result)
+	}
+	if len(sb.commands) != 1 || sb.commands[0] != "false" {
+		t.Fatalf("commands = %#v, want [false]", sb.commands)
+	}
+	if len(gw.requests) != 2 {
+		t.Fatalf("gateway requests = %d, want 2", len(gw.requests))
+	}
+	var toolMessage *gateway.PromptMessage
+	for i := range gw.requests[1].Messages {
+		msg := gw.requests[1].Messages[i]
+		if msg.Role == "tool" && msg.ToolCallID == "call_1" {
+			toolMessage = &msg
+			break
+		}
+	}
+	if toolMessage == nil {
+		t.Fatalf("second request missing tool response for call_1: %#v", gw.requests[1].Messages)
+	}
+	if !strings.Contains(toolMessage.Content, "exit code 1") || !strings.Contains(toolMessage.Content, "command failed") {
+		t.Fatalf("tool message = %q, want exit code and stderr details", toolMessage.Content)
+	}
+	if !strings.Contains(store.result.Payload, "Task completed") {
+		t.Fatalf("payload = %q, want final completion text", store.result.Payload)
 	}
 }
 
@@ -264,5 +293,8 @@ func TestWorkerLegacyPathWhenAgenticModeFalse(t *testing.T) {
 	}
 	if len(sb.commands) != 1 || sb.commands[0] != "echo legacy" {
 		t.Fatalf("commands = %#v", sb.commands)
+	}
+	if len(gw.requests) != 1 {
+		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
 	}
 }

@@ -94,7 +94,7 @@ type bashArgs struct {
 func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string) string {
 	var args bashArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return fmt.Sprintf(`{"error": "invalid arguments: %v"}`, err)
+		return jsonErrorf("invalid arguments: %v", err)
 	}
 
 	if args.Command == "" {
@@ -116,11 +116,11 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string) string 
 
 	result, err := t.sandbox.Execute(ctx, payload)
 	if err != nil {
-		return fmt.Sprintf(`{"error": "execution failed: %v}`, err)
+		return jsonErrorf("execution failed: %v", err)
 	}
 
 	if !result.Success {
-		return fmt.Sprintf(`{"error": "command failed with exit code %d: %s %s}`, result.ExitCode, result.Stdout, result.Stderr)
+		return jsonErrorf("command failed with exit code %d: %s %s", result.ExitCode, result.Stdout, result.Stderr)
 	}
 
 	output := result.Stdout
@@ -140,21 +140,21 @@ type readArgs struct {
 func (t *ToolExecutor) executeRead(argsJSON string) string {
 	var args readArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return fmt.Sprintf(`{"error": "invalid arguments: %v"}`, err)
+		return jsonErrorf("invalid arguments: %v", err)
 	}
 
 	if args.Path == "" {
 		return `{"error": "path is required"}`
 	}
 
-	fullPath, err := t.resolvePath(args.Path)
+	fullPath, err := t.resolvePath(args.Path, false)
 	if err != nil {
-		return fmt.Sprintf(`{"error": "%v}`, err)
+		return jsonErrorf("%v", err)
 	}
 
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
-		return fmt.Sprintf(`{"error": "read failed: %v}`, err)
+		return jsonErrorf("read failed: %v", err)
 	}
 
 	return string(content)
@@ -168,36 +168,103 @@ type writeArgs struct {
 func (t *ToolExecutor) executeWrite(argsJSON string) string {
 	var args writeArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return fmt.Sprintf(`{"error": "invalid arguments: %v"}`, err)
+		return jsonErrorf("invalid arguments: %v", err)
 	}
 
 	if args.Path == "" {
 		return `{"error": "path is required"}`
 	}
 
-	fullPath, err := t.resolvePath(args.Path)
+	fullPath, err := t.resolvePath(args.Path, true)
 	if err != nil {
-		return fmt.Sprintf(`{"error": "%v}`, err)
+		return jsonErrorf("%v", err)
 	}
 
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Sprintf(`{"error": "create directory failed: %v}`, err)
+		return jsonErrorf("create directory failed: %v", err)
 	}
 
 	if err := os.WriteFile(fullPath, []byte(args.Content), 0644); err != nil {
-		return fmt.Sprintf(`{"error": "write failed: %v}`, err)
+		return jsonErrorf("write failed: %v", err)
 	}
 
 	return `{"success": true}`
 }
 
-func (t *ToolExecutor) resolvePath(relPath string) (string, error) {
+func (t *ToolExecutor) resolvePath(relPath string, forWrite bool) (string, error) {
 	clean := filepath.Clean(relPath)
-	if strings.HasPrefix(clean, "..") {
-		return "", fmt.Errorf("path traversal not allowed")
+	if clean == "." || clean == "" {
+		return "", fmt.Errorf("path is required")
 	}
-	return filepath.Join(t.workspacePath, clean), nil
+	if filepath.IsAbs(clean) {
+		return "", fmt.Errorf("absolute paths are not allowed")
+	}
+
+	workspaceRoot, err := filepath.EvalSymlinks(t.workspacePath)
+	if err != nil {
+		return "", fmt.Errorf("workspace path is invalid: %w", err)
+	}
+	workspaceRoot = filepath.Clean(workspaceRoot)
+
+	candidate := filepath.Clean(filepath.Join(t.workspacePath, clean))
+
+	if forWrite {
+		parentReal, err := evalExistingAncestor(filepath.Dir(candidate))
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve parent directory: %w", err)
+		}
+		if !isWithinRoot(workspaceRoot, parentReal) {
+			return "", fmt.Errorf("path escapes workspace")
+		}
+		return candidate, nil
+	}
+
+	targetReal, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path: %w", err)
+	}
+	targetReal = filepath.Clean(targetReal)
+	if !isWithinRoot(workspaceRoot, targetReal) {
+		return "", fmt.Errorf("path escapes workspace")
+	}
+	return targetReal, nil
+}
+
+func evalExistingAncestor(path string) (string, error) {
+	current := filepath.Clean(path)
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			return filepath.Clean(resolved), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		current = parent
+	}
+}
+
+func isWithinRoot(root, candidate string) bool {
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "..")
+}
+
+func jsonErrorf(format string, args ...any) string {
+	payload, err := json.Marshal(map[string]string{
+		"error": fmt.Sprintf(format, args...),
+	})
+	if err != nil {
+		return `{"error":"failed to encode error payload"}`
+	}
+	return string(payload)
 }
 
 func isDangerous(cmd string) bool {
