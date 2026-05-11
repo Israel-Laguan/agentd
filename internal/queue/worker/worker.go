@@ -11,6 +11,7 @@ import (
 
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/gateway/truncation"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
@@ -41,6 +42,8 @@ type Worker struct {
 	maxToolIterations   int
 	toolExecutor        *ToolExecutor
 	capabilities        *capabilities.Registry
+	tokenBudget         int
+	budgetTracker       spec.BudgetTracker
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -50,6 +53,8 @@ type MemoryRetriever interface {
 
 type WorkerOptions struct {
 	MaxRetries          int
+	MaxToolIterations   int
+	TokenBudget         int
 	Canceller           *CancelRegistry
 	Tuner               *planning.ParameterTuner
 	Retriever           MemoryRetriever
@@ -83,7 +88,14 @@ func NewWorker(
 	if len(opts.SandboxExtraEnv) == 0 {
 		opts.SandboxExtraEnv = []string{"CI=true", "DEBIAN_FRONTEND=noninteractive", "NO_COLOR=1"}
 	}
+	if opts.MaxToolIterations <= 0 {
+		opts.MaxToolIterations = DefaultMaxToolIterations
+	}
 	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
+	var budgetTracker spec.BudgetTracker
+	if opts.TokenBudget > 0 {
+		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
+	}
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
@@ -92,9 +104,11 @@ func NewWorker(
 		sandboxEnvAllowlist: append([]string(nil), opts.SandboxEnvAllowlist...),
 		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
 		maxRetries:          opts.MaxRetries,
-		maxToolIterations:   DefaultMaxToolIterations,
+		maxToolIterations:   opts.MaxToolIterations,
 		toolExecutor:        NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
 		capabilities:        opts.Capabilities,
+		tokenBudget:         opts.TokenBudget,
+		budgetTracker:       budgetTracker,
 	}
 }
 
@@ -258,7 +272,26 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	messages = w.buildAgenticMessages(messages, profile)
 	tools, toolToAdapter := w.agenticTools(ctx, toolExecutor)
 
-	for i := 0; i < w.maxToolIterations; i++ {
+	iterationGuard := NewIterationGuard(w.maxToolIterations)
+	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
+	deadlineGuard := NewDeadlineGuard(ctx)
+
+	for {
+		if err := deadlineGuard.BeforeIteration(); err != nil {
+			w.handleGatewayError(ctx, task, err)
+			return
+		}
+
+		if err := iterationGuard.BeforeIteration(); err != nil {
+			w.handleIterationExceeded(ctx, task)
+			return
+		}
+
+		if iterationGuard.ShouldInjectFinalMessage() {
+			messages = append(messages, iterationGuard.FinalMessage())
+			iterationGuard.ResetAllowFinal()
+		}
+
 		if len(messages) > 40 {
 			agenticTruncator := truncation.NewAgenticTruncator(30)
 			var err error
@@ -267,6 +300,11 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 				w.handleGatewayError(ctx, task, err)
 				return
 			}
+		}
+
+		if err := budgetGuard.BeforeCall(); err != nil {
+			w.handleGatewayError(ctx, task, err)
+			return
 		}
 
 		req := gateway.AIRequest{
@@ -284,9 +322,15 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 		resp, err := w.gateway.Generate(cancelCtx, req)
 		if err != nil {
+			if budgetGuard.IsBudgetExceeded(err) {
+				w.handleGatewayError(ctx, task, err)
+				return
+			}
 			w.handleGatewayError(ctx, task, err)
 			return
 		}
+
+		budgetGuard.AfterCall(resp.TokenUsage)
 
 		messages = append(messages, gateway.PromptMessage{
 			Role:      "assistant",
@@ -299,6 +343,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			return
 		}
 
+		iterationGuard.AfterIteration(true)
+
 		for _, call := range resp.ToolCalls {
 			result := w.executeAgenticTool(cancelCtx, toolExecutor, call, toolToAdapter)
 			messages = append(messages, gateway.PromptMessage{
@@ -308,8 +354,6 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			})
 		}
 	}
-
-	w.handleIterationExceeded(ctx, task)
 }
 
 func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
