@@ -17,13 +17,18 @@ const (
 	toolNameBash  = "bash"
 	toolNameRead  = "read"
 	toolNameWrite = "write"
+
+	defaultMaxToolReadFileBytes = 10 << 20 // 10 MiB
 )
 
+// maxToolReadFileBytes caps read tool file size to avoid loading huge files into memory (tests may override).
+var maxToolReadFileBytes = int64(defaultMaxToolReadFileBytes)
+
 type ToolExecutor struct {
-	sandbox          sandbox.Executor
-	workspacePath    string
-	envVars          []string
-	wallTimeout      time.Duration
+	sandbox       sandbox.Executor
+	workspacePath string
+	envVars       []string
+	wallTimeout   time.Duration
 }
 
 func NewToolExecutor(sb sandbox.Executor, workspacePath string, envVars []string, wallTimeout time.Duration) *ToolExecutor {
@@ -44,7 +49,7 @@ func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall) strin
 	case toolNameWrite:
 		return t.executeWrite(call.Function.Arguments)
 	default:
-		return fmt.Sprintf(`{"error": "unknown tool: %s"}`, call.Function.Name)
+		return jsonErrorf("unknown tool: %s", call.Function.Name)
 	}
 }
 
@@ -150,6 +155,14 @@ func (t *ToolExecutor) executeRead(argsJSON string) string {
 	fullPath, err := t.resolvePath(args.Path, false)
 	if err != nil {
 		return jsonErrorf("%v", err)
+	}
+
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return jsonErrorf("stat failed: %v", err)
+	}
+	if info.Size() > maxToolReadFileBytes {
+		return jsonErrorf("file too large: %d bytes (max %d)", info.Size(), maxToolReadFileBytes)
 	}
 
 	content, err := os.ReadFile(fullPath)

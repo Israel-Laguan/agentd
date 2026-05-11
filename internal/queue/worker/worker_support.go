@@ -39,8 +39,19 @@ func memoryFormatLessons(memories []models.Memory) string {
 	return b.String()
 }
 
+// legacyJSONCommandSystemSentinel matches the non-agentic JSON-command worker system prompt.
+const legacyJSONCommandSystemSentinel = "Return JSON with either one safe shell command"
+
+func isLegacyJSONCommandSystemPrompt(content string) bool {
+	return strings.Contains(content, legacyJSONCommandSystemSentinel)
+}
+
+func isMemoryLessonsSystem(content string) bool {
+	return strings.HasPrefix(strings.TrimSpace(content), "LESSONS LEARNED")
+}
+
 func workerMessages(task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
-	system := `Return JSON with either one safe shell command, {"command":"..."}, or if the task is too complex for one command, {"too_complex":true,"subtasks":[{"title":"...","description":"..."}]}.
+	system := legacyJSONCommandSystemSentinel + `, {"command":"..."}, or if the task is too complex for one command, {"too_complex":true,"subtasks":[{"title":"...","description":"..."}]}.
 Only use subtasks when they are smaller, independently executable units of work. Always use non-interactive flags. Examples: -y, --yes, --assume-yes, --non-interactive, DEBIAN_FRONTEND=noninteractive for apt. Never generate commands that prompt for user input, confirmation, or passwords. Never use sudo or run commands requiring root privileges.`
 	if profile.SystemPrompt.Valid {
 		system = profile.SystemPrompt.String
