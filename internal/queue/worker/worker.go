@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -203,14 +204,7 @@ func (w *Worker) command(ctx context.Context, task models.Task, profile models.A
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,
 	}
-	if w.capabilities != nil {
-		tools, err := w.capabilities.GetTools(ctx)
-		if err != nil {
-			slog.Warn("failed to get capability tools", "error", err)
-		} else {
-			req.Tools = tools
-		}
-	}
+	// Legacy JSON command mode does not execute tool calls; do not advertise tools here.
 	req = w.applyTuning(req, task, profile)
 	resp, err := gateway.GenerateJSON[workerResponse](ctx, w.gateway, req)
 	if err != nil {
@@ -295,7 +289,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		}
 
 		for _, call := range resp.ToolCalls {
-			result := toolExecutor.Execute(cancelCtx, call)
+			result := w.executeAgenticTool(cancelCtx, toolExecutor, call)
 			messages = append(messages, gateway.PromptMessage{
 				Role:       "tool",
 				ToolCallID: call.ID,
@@ -320,6 +314,39 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) [
 	return append(tools, capabilityTools...)
 }
 
+func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall) string {
+	switch call.Function.Name {
+	case toolNameBash, toolNameRead, toolNameWrite:
+		return toolExec.Execute(ctx, call)
+	default:
+		if w.capabilities == nil {
+			return jsonErrorf("unknown tool: %s", call.Function.Name)
+		}
+		adapterName, ok := w.capabilities.AdapterForTool(ctx, call.Function.Name)
+		if !ok {
+			return jsonErrorf("unknown tool: %s", call.Function.Name)
+		}
+		var args map[string]any
+		if strings.TrimSpace(call.Function.Arguments) != "" {
+			if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
+				return jsonErrorf("invalid arguments: %v", err)
+			}
+		}
+		if args == nil {
+			args = map[string]any{}
+		}
+		out, err := w.capabilities.CallTool(ctx, adapterName, call.Function.Name, args)
+		if err != nil {
+			return jsonErrorf("capability tool failed: %v", err)
+		}
+		encoded, err := json.Marshal(out)
+		if err != nil {
+			return jsonErrorf("capability tool result encode failed: %v", err)
+		}
+		return string(encoded)
+	}
+}
+
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := workerMessages(task, profile)
 	if w.retriever == nil {
@@ -333,35 +360,61 @@ func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile mod
 	return messages
 }
 
-func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile models.AgentProfile) []gateway.PromptMessage {
-	toolUseSystem := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
+func agenticToolUseSystemText() string {
+	return `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
 When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.`
+}
 
-	system := toolUseSystem
+func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile models.AgentProfile) []gateway.PromptMessage {
+	toolUse := agenticToolUseSystemText()
+	primary := toolUse
 	if profile.SystemPrompt.Valid {
-		system = strings.TrimSpace(profile.SystemPrompt.String) + "\n\n" + toolUseSystem
-	}
-	augmented := append([]gateway.PromptMessage(nil), messages...)
-	if len(augmented) > 0 && augmented[0].Role == "system" {
-		augmented[0].Content = system
-		return augmented
+		primary = strings.TrimSpace(profile.SystemPrompt.String) + "\n\n" + toolUse
 	}
 
-	insertIdx := len(messages)
-	for i, message := range messages {
-		if message.Role == "user" {
-			insertIdx = i
-			break
+	out := make([]gateway.PromptMessage, 0, len(messages)+1)
+	replacedCore := false
+
+	for _, m := range messages {
+		if m.Role != "system" {
+			out = append(out, m)
+			continue
+		}
+		if isMemoryLessonsSystem(m.Content) {
+			out = append(out, m)
+			continue
+		}
+		if isLegacyJSONCommandSystemPrompt(m.Content) {
+			if !replacedCore {
+				out = append(out, gateway.PromptMessage{Role: "system", Content: primary})
+				replacedCore = true
+			}
+			continue
+		}
+		if !replacedCore {
+			out = append(out, gateway.PromptMessage{Role: "system", Content: primary})
+			replacedCore = true
+			continue
 		}
 	}
 
-	augmented = append(augmented, gateway.PromptMessage{})
-	copy(augmented[insertIdx+1:], augmented[insertIdx:])
-	augmented[insertIdx] = gateway.PromptMessage{Role: "system", Content: system}
-	return augmented
+	if !replacedCore {
+		insertIdx := len(out)
+		for i, message := range out {
+			if message.Role == "user" {
+				insertIdx = i
+				break
+			}
+		}
+		out = append(out, gateway.PromptMessage{})
+		copy(out[insertIdx+1:], out[insertIdx:])
+		out[insertIdx] = gateway.PromptMessage{Role: "system", Content: primary}
+	}
+
+	return out
 }
 
 func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {

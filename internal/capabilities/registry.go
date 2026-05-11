@@ -2,6 +2,7 @@ package capabilities
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	"agentd/internal/gateway"
@@ -15,9 +16,9 @@ type CapabilityAdapter interface {
 }
 
 type Registry struct {
-	mu         sync.RWMutex
-	adapters   map[string]CapabilityAdapter
-	allTools   []gateway.ToolDefinition
+	mu       sync.RWMutex
+	adapters map[string]CapabilityAdapter
+	allTools []gateway.ToolDefinition
 }
 
 func NewRegistry() *Registry {
@@ -72,6 +73,34 @@ func (r *Registry) CallTool(ctx context.Context, adapterName, toolName string, a
 	}
 
 	return adapter.CallTool(ctx, toolName, args)
+}
+
+// AdapterForTool returns the registered adapter name that exposes the given tool name.
+// If multiple adapters expose the same tool name, the lexicographically smallest adapter name wins.
+func (r *Registry) AdapterForTool(ctx context.Context, toolName string) (adapterName string, ok bool) {
+	r.mu.RLock()
+	names := make([]string, 0, len(r.adapters))
+	for n := range r.adapters {
+		names = append(names, n)
+	}
+	r.mu.RUnlock()
+	sort.Strings(names)
+
+	for _, name := range names {
+		r.mu.RLock()
+		adapter := r.adapters[name]
+		r.mu.RUnlock()
+		tools, err := adapter.ListTools(ctx)
+		if err != nil {
+			continue
+		}
+		for _, t := range tools {
+			if t.Name == toolName {
+				return name, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (r *Registry) Close() {
