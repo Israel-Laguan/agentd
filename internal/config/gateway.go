@@ -9,16 +9,31 @@ import (
 	"github.com/spf13/viper"
 )
 
+type AuthConfig struct {
+	Type  string `json:"type"`
+	Token string `json:"token"`
+}
+
+type CapabilityManifest struct {
+	Type      string     `json:"type"`
+	Name      string     `json:"name"`
+	ServerURL string     `json:"server_url,omitempty"`
+	Command   string     `json:"command,omitempty"`
+	Args      []string   `json:"args,omitempty"`
+	Auth      AuthConfig `json:"auth,omitempty"`
+}
+
 type GatewayConfig struct {
-	Order            []string
-	OpenAI           gateway.ProviderConfig
-	Anthropic        gateway.ProviderConfig
-	Ollama           gateway.ProviderConfig
-	LlamaCpp         gateway.ProviderConfig
-	Horde            gateway.ProviderConfig
-	Truncation       TruncationConfig
-	Truncator        TruncatorConfig
+	Order         []string
+	OpenAI        gateway.ProviderConfig
+	Anthropic     gateway.ProviderConfig
+	Ollama        gateway.ProviderConfig
+	LlamaCpp      gateway.ProviderConfig
+	Horde         gateway.ProviderConfig
+	Truncation    TruncationConfig
+	Truncator     TruncatorConfig
 	MaxTasksPerPhase int
+	Capabilities []CapabilityManifest `json:"-"`
 }
 
 type TruncationConfig struct {
@@ -119,6 +134,7 @@ func loadGatewayConfig(v *viper.Viper) GatewayConfig {
 			MaxInputChars: v.GetInt("gateway.truncator.max_input_chars"),
 		},
 		MaxTasksPerPhase: v.GetInt("gateway.max_tasks_per_phase"),
+		Capabilities:    loadCapabilities(v),
 	}
 }
 
@@ -162,4 +178,17 @@ func durationOrDefault(value, fallback time.Duration) time.Duration {
 		return value
 	}
 	return fallback
+}
+
+func loadCapabilities(v *viper.Viper) []CapabilityManifest {
+	var caps []CapabilityManifest
+	if err := v.UnmarshalKey("gateway.capabilities", &caps); err != nil {
+		return nil
+	}
+	for i := range caps {
+		if caps[i].Auth.Token != "" {
+			caps[i].Auth.Token = os.ExpandEnv(caps[i].Auth.Token)
+		}
+	}
+	return caps
 }
