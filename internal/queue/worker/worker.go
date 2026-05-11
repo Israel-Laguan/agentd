@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
@@ -31,6 +32,7 @@ type Worker struct {
 	sandboxEnvAllowlist []string
 	sandboxExtraEnv     []string
 	maxRetries          int
+	capabilities        *capabilities.Registry
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -47,6 +49,7 @@ type WorkerOptions struct {
 	SandboxWallTimeout  time.Duration
 	SandboxEnvAllowlist []string
 	SandboxExtraEnv     []string
+	Capabilities        *capabilities.Registry
 }
 
 func NewWorker(
@@ -80,6 +83,7 @@ func NewWorker(
 		sandboxEnvAllowlist: append([]string(nil), opts.SandboxEnvAllowlist...),
 		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
 		maxRetries:          opts.MaxRetries,
+		capabilities:        opts.Capabilities,
 	}
 }
 
@@ -186,6 +190,14 @@ func (w *Worker) command(ctx context.Context, task models.Task, profile models.A
 		Provider:    profile.Provider,
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,
+	}
+	if w.capabilities != nil {
+		tools, err := w.capabilities.GetTools(ctx)
+		if err != nil {
+			slog.Warn("failed to get capability tools", "error", err)
+		} else {
+			req.Tools = tools
+		}
 	}
 	req = w.applyTuning(req, task, profile)
 	resp, err := gateway.GenerateJSON[workerResponse](ctx, w.gateway, req)

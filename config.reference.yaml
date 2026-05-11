@@ -67,6 +67,14 @@ gateway:
     head_ratio: 0.5
     max_input_chars: 12000
     stash_threshold: 50000
+  # MCP (Model Context Protocol) capabilities - external tool servers
+  # capabilities:
+  #   - type: mcp
+  #     name: "github"
+  #     server_url: "https://api.example.com/mcp"
+  #     auth:
+  #       type: bearer
+  #       token: "${MCP_TOKEN}"
 
 # Sandbox command execution hardening.
 sandbox:
