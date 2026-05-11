@@ -17,20 +17,22 @@ const TruncationMarker = truncation.TruncationMarker
 
 // Wire types (spec).
 type (
-	PromptMessage   = spec.PromptMessage
-	Role            = spec.Role
-	RoleTarget      = spec.RoleTarget
-	AIRequest       = spec.AIRequest
-	AIResponse      = spec.AIResponse
-	ProviderConfig  = spec.ProviderConfig
-	Provider        = spec.Provider
-	AIGateway       = spec.AIGateway
-	ContractAdapter = spec.ContractAdapter
-	Truncator       = spec.Truncator
-	ScopeAnalysis   = spec.ScopeAnalysis
-	ScopeOption     = spec.ScopeOption
-	IntentAnalysis  = spec.IntentAnalysis
-	BudgetTracker   = spec.BudgetTracker
+	PromptMessage       = spec.PromptMessage
+	Role                = spec.Role
+	RoleTarget          = spec.RoleTarget
+	AIRequest           = spec.AIRequest
+	AIResponse          = spec.AIResponse
+	ProviderConfig      = spec.ProviderConfig
+	Provider            = spec.Provider
+	AIGateway           = spec.AIGateway
+	ContractAdapter     = spec.ContractAdapter
+	Truncator           = spec.Truncator
+	ScopeAnalysis       = spec.ScopeAnalysis
+	ScopeOption         = spec.ScopeOption
+	IntentAnalysis      = spec.IntentAnalysis
+	BudgetTracker       = spec.BudgetTracker
+	ToolDefinition      = spec.ToolDefinition
+	FunctionParameters  = spec.FunctionParameters
 )
 
 // Role constants.

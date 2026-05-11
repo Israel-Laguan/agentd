@@ -31,17 +31,32 @@ type RoleTarget struct {
 	Model    string `json:"model"`
 }
 
+// FunctionParameters describes the parameters for a tool function in JSON Schema format.
+type FunctionParameters struct {
+	Type       string                 `json:"type"`
+	Properties map[string]any         `json:"properties,omitempty"`
+	Required   []string               `json:"required,omitempty"`
+}
+
+// ToolDefinition defines a function that the model can call.
+type ToolDefinition struct {
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Parameters  *FunctionParameters `json:"parameters,omitempty"`
+}
+
 // AIRequest is the provider-neutral input shape for model calls.
 type AIRequest struct {
-	Messages    []PromptMessage `json:"messages"`
-	Temperature float64         `json:"temperature"`
-	MaxTokens   int             `json:"max_tokens"`
-	JSONMode    bool            `json:"json_mode"`
-	AgentID     string          `json:"agent_id"`
-	Provider    string          `json:"provider,omitempty"`
-	Model       string          `json:"model,omitempty"`
-	Role        Role            `json:"role,omitempty"`
-	TaskID      string          `json:"task_id,omitempty"`
+	Messages    []PromptMessage  `json:"messages"`
+	Temperature float64          `json:"temperature"`
+	MaxTokens   int              `json:"max_tokens"`
+	JSONMode    bool             `json:"json_mode"`
+	Tools       []ToolDefinition `json:"tools,omitempty"`
+	AgentID     string           `json:"agent_id"`
+	Provider    string           `json:"provider,omitempty"`
+	Model       string           `json:"model,omitempty"`
+	Role        Role             `json:"role,omitempty"`
+	TaskID      string           `json:"task_id,omitempty"`
 	// SkipTruncation is used by internal middleware calls, such as summarization,
 	// to avoid recursively applying the truncator to its own request.
 	SkipTruncation bool `json:"-"`
