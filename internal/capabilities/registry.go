@@ -56,10 +56,8 @@ func (r *Registry) GetTools(ctx context.Context) ([]gateway.ToolDefinition, erro
 func (r *Registry) GetToolsAndAdapterIndex(ctx context.Context) ([]gateway.ToolDefinition, map[string]string, error) {
 	r.mu.RLock()
 	names := make([]string, 0, len(r.adapters))
-	adapters := make([]CapabilityAdapter, 0, len(r.adapters))
-	for n, a := range r.adapters {
+	for n := range r.adapters {
 		names = append(names, n)
-		adapters = append(adapters, a)
 	}
 	r.mu.RUnlock()
 	sort.Strings(names)
@@ -67,9 +65,11 @@ func (r *Registry) GetToolsAndAdapterIndex(ctx context.Context) ([]gateway.ToolD
 	var allTools []gateway.ToolDefinition
 	toolToAdapter := make(map[string]string)
 
-	for i, name := range names {
-		adapter := adapters[i]
-		if adapter == nil {
+	for _, name := range names {
+		r.mu.RLock()
+		adapter, exists := r.adapters[name]
+		r.mu.RUnlock()
+		if !exists || adapter == nil {
 			continue
 		}
 		tools, err := adapter.ListTools(ctx)
