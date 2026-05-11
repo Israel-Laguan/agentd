@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"agentd/internal/capabilities"
@@ -116,8 +117,14 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		return
 	}
 	if profile.AgenticMode {
-		w.processAgentic(ctx, task, *project, *profile)
-		return
+		if w.providerSupportsAgentic(*profile) {
+			w.processAgentic(ctx, task, *project, *profile)
+			return
+		}
+		slog.Warn("agentic mode requested but provider does not support tool round-tripping; falling back to legacy mode",
+			"task_id", task.ID,
+			"provider", profile.Provider,
+		)
 	}
 	response, err := w.command(ctx, task, *profile)
 	if err != nil {
@@ -253,7 +260,12 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	w.registerCancel(task.ID, cancel)
 	defer w.deregisterCancel(task.ID)
 
-	w.toolExecutor.workspacePath = project.WorkspacePath
+	toolExecutor := NewToolExecutor(
+		w.sandbox,
+		project.WorkspacePath,
+		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
+		w.sandboxWallTimeout,
+	)
 
 	messages := w.buildAgenticMessages(task, profile)
 
@@ -261,7 +273,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		req := gateway.AIRequest{
 			Messages:    messages,
 			Temperature: profile.Temperature,
-			Tools:       w.toolExecutor.Definitions(),
+			Tools:       toolExecutor.Definitions(),
 			AgentID:     task.AgentID,
 			Role:        gateway.RoleWorker,
 			TaskID:      task.ID,
@@ -278,8 +290,9 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		}
 
 		messages = append(messages, gateway.PromptMessage{
-			Role:    "assistant",
-			Content: resp.Content,
+			Role:      "assistant",
+			Content:   resp.Content,
+			ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
 		})
 
 		if len(resp.ToolCalls) == 0 {
@@ -288,7 +301,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		}
 
 		for _, call := range resp.ToolCalls {
-			result := w.toolExecutor.Execute(cancelCtx, call)
+			result := toolExecutor.Execute(cancelCtx, call)
 			messages = append(messages, gateway.PromptMessage{
 				Role:       "tool",
 				ToolCallID: call.ID,
@@ -325,6 +338,10 @@ func (w *Worker) commitText(ctx context.Context, task models.Task, content strin
 func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) {
 	payload := "task exceeded maximum tool iterations without producing a final result"
 	w.handleAgentFailure(ctx, task, payload)
+}
+
+func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
+	return strings.EqualFold(profile.Provider, string(gateway.ProviderOpenAI))
 }
 
 // SetSandbox swaps the executor used by integration tests that replace the sandbox.
