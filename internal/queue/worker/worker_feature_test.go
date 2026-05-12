@@ -50,7 +50,7 @@ func (h *testLogHandler) Enabled(_ context.Context, _ slog.Level) bool { return 
 func (h *testLogHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.records = append(h.records, r)
+	h.records = append(h.records, r.Clone())
 	return nil
 }
 func (h *testLogHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
@@ -594,10 +594,9 @@ func (s *workerScenario) verifyFinalTextCommitted(context.Context) error {
 }
 
 func (s *workerScenario) verifyStoppedAfter3Iterations(context.Context) error {
-	// Gateway is called 4 times: 3 normal iterations + 1 final call with injected message.
-	// The iteration guard allows one more call after the limit is hit.
-	if s.gateway.callCount != 4 {
-		return fmt.Errorf("expected 4 gateway calls (3 normal + 1 final), got %d", s.gateway.callCount)
+	// The worker should stop after maxIterations gateway calls.
+	if s.gateway.callCount != s.maxIterations {
+		return fmt.Errorf("expected %d gateway calls (iteration cap), got %d", s.maxIterations, s.gateway.callCount)
 	}
 	return nil
 }
