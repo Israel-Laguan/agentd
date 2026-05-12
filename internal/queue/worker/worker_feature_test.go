@@ -237,15 +237,16 @@ func (s *workerTestStore) MarkCommentProcessed(context.Context, string, string) 
 }
 
 type workerTestGateway struct {
-	content          string
-	toolCalls        []gateway.ToolCall
-	nextContent      string
-	nextToolCalls    []gateway.ToolCall
-	err              error
-	requests         []gateway.AIRequest
-	callCount        int
-	returnToolCalls  bool // For simulating sequence: first returns tool calls, then plain text
-	returnsPlainText bool // Flag to indicate next call should return plain text
+	content              string
+	toolCalls            []gateway.ToolCall
+	nextContent          string
+	nextToolCalls        []gateway.ToolCall
+	err                  error
+	requests             []gateway.AIRequest
+	callCount            int
+	returnToolCalls      bool // For simulating sequence: first returns tool calls, then plain text
+	returnsPlainText     bool // Flag to indicate next call should return plain text
+	lastResponseToolCalls int // Track tool calls count in the last response
 }
 
 func (g *workerTestGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
@@ -254,22 +255,32 @@ func (g *workerTestGateway) Generate(_ context.Context, req gateway.AIRequest) (
 
 	// Handle sequence: first call returns tool calls, second returns plain text
 	if g.returnToolCalls && g.callCount == 1 {
-		return gateway.AIResponse{Content: "I'll execute a command", ToolCalls: g.toolCalls}, g.err
+		resp := gateway.AIResponse{Content: "I'll execute a command", ToolCalls: g.toolCalls}
+		g.lastResponseToolCalls = len(g.toolCalls)
+		return resp, g.err
 	}
 
 	if g.returnsPlainText && g.callCount == 2 {
-		return gateway.AIResponse{Content: g.nextContent, ToolCalls: nil}, g.err
+		resp := gateway.AIResponse{Content: g.nextContent, ToolCalls: nil}
+		g.lastResponseToolCalls = 0
+		return resp, g.err
 	}
 
 	// For max iterations test - always return tool calls
 	if g.returnToolCalls && len(g.toolCalls) > 0 {
-		return gateway.AIResponse{Content: "Executing command", ToolCalls: g.toolCalls}, g.err
+		resp := gateway.AIResponse{Content: "Executing command", ToolCalls: g.toolCalls}
+		g.lastResponseToolCalls = len(g.toolCalls)
+		return resp, g.err
 	}
 
 	if len(g.toolCalls) == 0 {
-		return gateway.AIResponse{Content: g.content}, g.err
+		resp := gateway.AIResponse{Content: g.content}
+		g.lastResponseToolCalls = 0
+		return resp, g.err
 	}
-	return gateway.AIResponse{Content: g.content, ToolCalls: g.toolCalls}, g.err
+	resp := gateway.AIResponse{Content: g.content, ToolCalls: g.toolCalls}
+	g.lastResponseToolCalls = len(g.toolCalls)
+	return resp, g.err
 }
 
 func (g *workerTestGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
@@ -560,7 +571,10 @@ func (s *workerScenario) verifyToolResultMessagesAppended(context.Context) error
 }
 
 func (s *workerScenario) verifyGatewayNoToolCalls(context.Context) error {
-	// This step is for documentation - the actual verification is in verifyFinalTextCommitted
+	// Verify that the gateway's final response had no tool calls
+	if s.gateway.lastResponseToolCalls > 0 {
+		return fmt.Errorf("expected no tool calls in gateway response, got %d", s.gateway.lastResponseToolCalls)
+	}
 	return nil
 }
 
@@ -571,6 +585,10 @@ func (s *workerScenario) verifyFinalTextCommitted(context.Context) error {
 	}
 	if !s.store.result.Success {
 		return fmt.Errorf("expected successful result")
+	}
+	// Verify the committed payload contains the gateway's final text
+	if s.gateway.nextContent != "" && !strings.Contains(s.store.result.Payload, s.gateway.nextContent) {
+		return fmt.Errorf("expected committed payload to contain final text %q, got %q", s.gateway.nextContent, s.store.result.Payload)
 	}
 	return nil
 }
