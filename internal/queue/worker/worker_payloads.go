@@ -47,5 +47,10 @@ func truncate(value string, max int) string {
 	if len(runes) <= max {
 		return value
 	}
-	return string(runes[:max]) + "...[truncated]"
+	suffix := "...[truncated]"
+	suffixLen := len([]rune(suffix))
+	if max <= suffixLen {
+		return string(runes[:max])
+	}
+	return string(runes[:max-suffixLen]) + suffix
 }

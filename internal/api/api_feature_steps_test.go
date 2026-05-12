@@ -136,7 +136,7 @@ func registerAPIToolCallEventSteps(sc *godog.ScenarioContext, state *apiScenario
 	sc.Step(`^a tool is executed with sensitive arguments$`, noopAPI)
 	sc.Step(`^the TOOL_CALL event is emitted$`, noopAPI)
 	sc.Step(`^sensitive patterns should be replaced with "\[REDACTED\]" in arguments_summary$`, noopAPI)
-	sc.Step(`^given a tool produces large output$`, noopAPI)
+  sc.Step(`^a tool produces large output$`, noopAPI)
 	sc.Step(`^the TOOL_RESULT event is emitted$`, noopAPI)
 	sc.Step(`^output_summary should be truncated to 1000 characters with "\.\.\.\[truncated\]" suffix$`, noopAPI)
 	sc.Step(`^stdout_bytes and stderr_bytes should reflect original sizes before truncation$`, noopAPI)

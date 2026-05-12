@@ -217,7 +217,9 @@ func TestToolCallIDMatching(t *testing.T) {
 		}
 
 		// Verify that call_id in TOOL_CALL matches call_id in TOOL_RESULT
-		callIDs := make(map[string]string) // call_id -> call_id (expected from TOOL_CALL)
+		// Use pending map to ensure one-to-one pairing: each TOOL_CALL must have
+		// exactly one TOOL_RESULT, no more, no less.
+		pending := make(map[string]int) // call_id -> unmatched TOOL_CALL count
 
 		for _, ev := range sink.events {
 			callID := extractCallID(ev.Payload)
@@ -226,15 +228,20 @@ func TestToolCallIDMatching(t *testing.T) {
 			}
 
 			if ev.Type == models.EventTypeToolCall {
-				callIDs[callID] = callID
+				pending[callID]++
 			} else if ev.Type == models.EventTypeToolResult {
-				if expected, ok := callIDs[callID]; !ok {
-					// No matching TOOL_CALL - property violated
-					return false
-				} else if callID != expected {
-					// Call IDs don't match - property violated
+				if pending[callID] == 0 {
+					// No matching TOOL_CALL - property violated (result without call)
 					return false
 				}
+				pending[callID]--
+			}
+		}
+
+		// Ensure all TOOL_CALLs have exactly one TOOL_RESULT
+		for _, unmatched := range pending {
+			if unmatched != 0 {
+				return false
 			}
 		}
 

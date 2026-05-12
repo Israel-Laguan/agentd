@@ -29,7 +29,7 @@ Feature: Tool call events are emitted for agentic loop visibility
     Given a tool is executed with sensitive arguments
     When the TOOL_CALL event is emitted
     Then sensitive patterns should be replaced with "[REDACTED]" in arguments_summary
-    And given a tool produces large output
+    Given a tool produces large output
     When the TOOL_RESULT event is emitted
     Then output_summary should be truncated to 1000 characters with "...[truncated]" suffix
     And stdout_bytes and stderr_bytes should reflect original sizes before truncation
