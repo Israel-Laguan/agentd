@@ -1,4 +1,4 @@
-import { Task, TaskStatus } from "@/lib//types"; // adjust path if needed
+import { Task, TaskStatus } from "@/lib/types"; // adjust path if needed
 
 export const mockBoard: { tasks: Task[] } = {
   tasks: [
@@ -16,44 +16,48 @@ export const mockBoard: { tasks: Task[] } = {
     {
       id: "t2",
       projectId: "p1",
-      title: "Setup project structure",
-      description: "Initialize Next.js + API layer",
-      status: TaskStatus.QUEUED,
-      dependsOn: [],
-      logs: [],
+      title: "Build API integration",
+      description: "Connect frontend to backend",
+      status: TaskStatus.RUNNING,
+      dependsOn: ["t1"],
+      logs: [
+        {
+          message: "started execution...",
+          timestamp: Date.now(),
+        },
+      ],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     },
     {
       id: "t3",
       projectId: "p1",
-      title: "Build API integration",
-      description: "Connect frontend to backend",
-      status: TaskStatus.RUNNING,
+      title: "AI orchestration layer",
+      description: "Implement planner logic",
+      status: TaskStatus.COMPLETED,
       dependsOn: ["t2"],
-      logs: ["started execution..."],
+      logs: [
+        {
+          message: "completed successfully",
+          timestamp: Date.now(),
+        },
+      ],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     },
     {
       id: "t4",
       projectId: "p1",
-      title: "AI orchestration layer",
-      description: "Implement planner logic",
-      status: TaskStatus.COMPLETED,
-      dependsOn: ["t3"],
-      logs: ["completed successfully"],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    },
-    {
-      id: "t5",
-      projectId: "p1",
       title: "Deploy system",
       description: "Deploy to production",
       status: TaskStatus.FAILED,
-      dependsOn: ["t4"],
-      logs: ["deployment failed: missing env vars"],
+      dependsOn: ["t3"],
+      logs: [
+        {
+          message: "deployment failed: missing env vars",
+          timestamp: Date.now(),
+        },
+      ],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     },

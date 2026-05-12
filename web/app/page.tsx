@@ -36,35 +36,32 @@ export default function Page() {
   const [workforce, setWorkforce] = useState<WorkforceState | null>(null);
   const [draftPlan, setDraftPlan] = useState<DraftPlan | null>(null);
 
-  const fetchBoard = async () => {
-    const data = await getBoard();
-    setBoardData(data);
-  };
+  useEffect(() => {
+    let mounted = true;
 
-  const fetchWorkforce = async () => {
-    const data = await getWorkforce();
-    setWorkforce(data);
-  };
-useEffect(() => {
-  let mounted = true;
+    const poll = async () => {
+      try {
+        const [board, workforce] = await Promise.all([getBoard(), getWorkforce()]);
+        if (!mounted) return;
+        setBoardData(board);
+        setWorkforce(workforce);
+      } catch (e) {
+        console.error("Polling failed", e);
+      }
+    };
 
-  const init = async () => {
-    await Promise.all([fetchBoard(), fetchWorkforce()]);
-  };
+    void poll();
 
-  init();
+    const interval = setInterval(() => {
+      if (!mounted) return;
+      void poll();
+    }, 3000);
 
-  const interval = setInterval(() => {
-    if (!mounted) return;
-    fetchBoard();
-    fetchWorkforce();
-  }, 3000);
-
-  return () => {
-    mounted = false;
-    clearInterval(interval);
-  };
-}, []);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -75,10 +72,11 @@ useEffect(() => {
 
     try {
       const data = await sendChat(input);
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+      setMessages(prev => [...prev, data.message]);
       if (data.plan) {
         setDraftPlan(data.plan);
       }
+  
     } catch (e) {
       setMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting to the system core. Please try again." }]);
     } finally {
@@ -125,7 +123,13 @@ useEffect(() => {
               <div className="h-1 bg-border rounded-full overflow-hidden">
                 <motion.div 
                    initial={{ width: 0 }}
-                   animate={{ width: `${(workforce.activeWorkers / workforce.maxWorkers) * 100}%` }}
+                   animate={{
+                     width: `${
+                       workforce.maxWorkers > 0
+                         ? Math.min(100, (workforce.activeWorkers / workforce.maxWorkers) * 100)
+                         : 0
+                     }%`
+                   }}
                    className="h-full bg-blue" 
                 />
               </div>
@@ -255,14 +259,20 @@ useEffect(() => {
                     <ChevronRight size={18} />
                   </div>
                   <input 
-                    type="text" 
+                    type="text"
+                    aria-label="Chat input" 
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     placeholder="Input organizational goal..." 
                     className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-3 text-text placeholder:text-text-dim/30"
                   />
-                  <button onClick={handleSend} className="h-9 px-4 bg-accent text-white rounded-lg flex items-center justify-center hover:bg-accent-hover transition-all mr-1 shadow-md">
+                  <button
+                    type="button"
+                    aria-label="Send message" 
+                    onClick={handleSend} 
+                    className="h-9 px-4 bg-accent text-white rounded-lg flex items-center justify-center hover:bg-accent-hover transition-all mr-1 shadow-md"
+                  >
                     <Send size={16} />
                   </button>
                 </div>
@@ -290,7 +300,8 @@ useEffect(() => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
-                   {[TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.COMPLETED, TaskStatus.FAILED].map(status => (
+                   {[
+                    TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.COMPLETED, TaskStatus.FAILED].map(status => (
                      <div key={status} className="flex flex-col gap-3 min-w-[240px]">
                         <div className="flex justify-between items-center px-1 py-1.5 border-b border-border shadow-[0_1px_0_var(--color-bg)]">
                            <h3 className={cn(
@@ -331,19 +342,30 @@ useEffect(() => {
                     <span>agentd Kernel View - Task Execution Stream</span>
                     <span className="animate-pulse">● System Live</span>
                   </div>
-                  {boardData.tasks.flatMap(t => t.logs).slice(-150).map((log, i) => (
-                    <div key={i} className="flex gap-3 hover:bg-white/5 py-0.5 px-1 rounded transition-colors group">
-                       <span className="text-blue/40 shrink-0 select-none">[{new Date().toLocaleTimeString()}]</span>
-                       <span className={cn(
-                         "flex-1",
-                         log.startsWith('[SYSTEM]') ? "text-blue" :
-                         log.startsWith('[AGENT]') ? "text-text" :
-                         log.startsWith('[ERROR]') ? "text-error font-bold" :
-                         "text-text-dim"
-                       )}>
-                         {log}
-                       </span>
-                    </div>
+                  {boardData.tasks
+                    .flatMap(t => t.logs)
+                    .slice(-150)
+                    .map((log, i) => (
+                      <div
+                        key={`${log.timestamp}-${i}`}
+                        className="flex gap-3 hover:bg-white/5 py-0.5 px-1 rounded transition-colors group"
+                      >
+                        <span className="text-blue/40 shrink-0 select-none">
+                          [{new Date(log.timestamp).toLocaleTimeString()}]
+                        </span>
+
+                        <span
+                          className={cn(
+                            "flex-1",
+                            log.message.startsWith('[SYSTEM]') ? "text-blue" :
+                            log.message.startsWith('[AGENT]') ? "text-text" :
+                            log.message.startsWith('[ERROR]') ? "text-error font-bold" :
+                            "text-text-dim"
+                          )}
+                        >
+                          {log.message}
+                        </span>
+                      </div>
                   ))}
                   <div className="h-4" />
                </div>

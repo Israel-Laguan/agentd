@@ -11,6 +11,7 @@ export async function getBoard() {
   if (USE_MOCK) return mockBoard;
 
   const res = await fetch(`${API}/api/v1/projects`);
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
   return res.json();
 }
 

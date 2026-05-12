@@ -15,6 +15,11 @@ export enum TaskStatus {
   IN_CONSIDERATION = 'IN_CONSIDERATION'
 }
 
+export interface TaskLog {
+  message: string;
+  timestamp: number;
+}
+
 export interface Task {
   id: string;
   projectId: string;
@@ -22,7 +27,7 @@ export interface Task {
   description: string;
   status: TaskStatus;
   dependsOn: string[];
-  logs: string[];
+  logs: TaskLog[];
   createdAt: number;
   updatedAt: number;
 }
@@ -44,6 +49,11 @@ export interface WorkforceState {
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+}
+
+export interface ChatResponse {
+  message: ChatMessage;
+  plan?: DraftPlan;
 }
 
 interface DraftPlanTask {

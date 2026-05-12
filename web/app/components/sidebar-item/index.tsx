@@ -9,6 +9,7 @@ interface SidebarItemProps {
 
 export const SidebarItem = ({ icon: Icon, label, active, onClick }: SidebarItemProps) => (
   <button
+    type="button"
     role="button"
     onClick={onClick}
     className={cn(
