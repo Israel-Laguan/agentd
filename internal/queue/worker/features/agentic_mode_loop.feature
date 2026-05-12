@@ -20,7 +20,8 @@ Feature: Agentic mode inner loop with tool calling
 
   Scenario: Worker respects max iterations
     Given the maximum tool iterations is set to 3
+    And the maximum tool retries is set to 1
     And the gateway always returns tool calls
     When the worker processes a task
     Then the worker shall stop after 3 iterations
-    And the worker shall trigger a retry for the task
+    And the worker shall commit a failure result

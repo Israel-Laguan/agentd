@@ -36,6 +36,7 @@ type workerScenario struct {
 	agenticCalled  bool
 	warningsLogged []string
 	maxIterations  int
+	maxRetries     int
 	logHandler     *testLogHandler
 }
 
@@ -326,6 +327,7 @@ func initializeWorkerScenario(sc *godog.ScenarioContext) {
 		state.agenticCalled = false
 		state.warningsLogged = nil
 		state.maxIterations = 10
+		state.maxRetries = 1
 		return ctx, nil
 	})
 
@@ -354,6 +356,7 @@ func registerWorkerSteps(sc *godog.ScenarioContext, state *workerScenario) {
 	sc.Step(`^the gateway will return tool calls on first call$`, state.gatewayReturnsToolCallsFirst)
 	sc.Step(`^the gateway will return plain text on second call$`, state.gatewayReturnsPlainTextSecond)
 	sc.Step(`^the maximum tool iterations is set to 3$`, state.maxIterationsSetTo3)
+	sc.Step(`^the maximum tool retries is set to 1$`, state.maxRetriesSetTo1)
 	sc.Step(`^the gateway always returns tool calls$`, state.gatewayAlwaysReturnsToolCalls)
 
 	// Then steps for agentic mode loop
@@ -364,7 +367,7 @@ func registerWorkerSteps(sc *godog.ScenarioContext, state *workerScenario) {
 	sc.Step(`^the gateway returns a response without tool calls$`, state.verifyGatewayNoToolCalls)
 	sc.Step(`^the worker shall commit the final text as the task result$`, state.verifyFinalTextCommitted)
 	sc.Step(`^the worker shall stop after 3 iterations$`, state.verifyStoppedAfter3Iterations)
-	sc.Step(`^the worker shall trigger a retry for the task$`, state.verifyFailureResult)
+	sc.Step(`^the worker shall commit a failure result$`, state.verifyFailureResult)
 }
 
 func (s *workerScenario) agenticModeDisabled(context.Context) error {
@@ -401,6 +404,7 @@ func (s *workerScenario) workerProcessesTask(context.Context) error {
 		nil,
 		worker.WorkerOptions{
 			MaxToolIterations: s.maxIterations,
+			MaxRetries:        s.maxRetries,
 		},
 	)
 	w.Process(context.Background(), s.store.task)
@@ -489,6 +493,11 @@ func (s *workerScenario) maxIterationsSetTo3(context.Context) error {
 	return nil
 }
 
+func (s *workerScenario) maxRetriesSetTo1(context.Context) error {
+	s.maxRetries = 1
+	return nil
+}
+
 func (s *workerScenario) gatewayAlwaysReturnsToolCalls(context.Context) error {
 	s.gateway.returnToolCalls = true
 	s.gateway.toolCalls = []gateway.ToolCall{
@@ -558,10 +567,11 @@ func (s *workerScenario) verifyStoppedAfter3Iterations(context.Context) error {
 }
 
 func (s *workerScenario) verifyFailureResult(context.Context) error {
-	// handleAgentFailure triggers a retry (requeue) rather than immediate failure.
-	// Verify the retry mechanism was triggered by checking RetryCount was incremented.
-	if s.store.task.RetryCount == 0 {
-		return fmt.Errorf("expected task RetryCount > 0 after iteration limit, got %d", s.store.task.RetryCount)
+	if s.store.result == nil {
+		return fmt.Errorf("expected a task result to be committed")
+	}
+	if s.store.result.Success {
+		return fmt.Errorf("expected failure result, got success")
 	}
 	return nil
 }
