@@ -74,8 +74,7 @@ useEffect(() => {
     setIsTyping(true);
 
     try {
-      const res = await sendChat(input);
-      const data = await res.json();
+      const data = await sendChat(input);
       setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
       if (data.plan) {
         setDraftPlan(data.plan);
