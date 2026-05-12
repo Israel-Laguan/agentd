@@ -13,6 +13,7 @@ const (
 	DefaultTokenBudget             = 0
 	DefaultAgenticTruncatorMax     = 30
 	DefaultAgenticTruncationThreshold = 40
+	DefaultAgenticCharacterBudget = 0 // 0 = unlimited
 )
 
 type QueueConfig struct {
@@ -22,6 +23,7 @@ type QueueConfig struct {
 	TokenBudget                int
 	AgenticTruncatorMax        int
 	AgenticTruncationThreshold int
+	AgenticCharacterBudget     int
 }
 
 func setQueueDefaults(v *viper.Viper) {
@@ -31,6 +33,7 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.token_budget", DefaultTokenBudget)
 	v.SetDefault("queue.agentic_truncator_max", DefaultAgenticTruncatorMax)
 	v.SetDefault("queue.agentic_truncation_threshold", DefaultAgenticTruncationThreshold)
+	v.SetDefault("queue.agentic_character_budget", DefaultAgenticCharacterBudget)
 }
 
 func loadQueueConfig(v *viper.Viper) QueueConfig {
@@ -41,5 +44,6 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 		TokenBudget:                v.GetInt("queue.token_budget"),
 		AgenticTruncatorMax:        v.GetInt("queue.agentic_truncator_max"),
 		AgenticTruncationThreshold: v.GetInt("queue.agentic_truncation_threshold"),
+		AgenticCharacterBudget:     v.GetInt("queue.agentic_character_budget"),
 	}
 }

@@ -41,6 +41,7 @@ type Worker struct {
 	maxToolIterations   int
 	truncatorMax        int
 	truncationThreshold int
+	characterBudget     int
 	toolExecutor        *ToolExecutor
 	capabilities        *capabilities.Registry
 	tokenBudget         int
@@ -58,6 +59,7 @@ type WorkerOptions struct {
 	TokenBudget             int
 	AgenticTruncatorMax     int
 	AgenticTruncationThresh int
+	AgenticCharacterBudget  int
 	Canceller               *CancelRegistry
 	Tuner                   *planning.ParameterTuner
 	Retriever               MemoryRetriever
@@ -101,6 +103,9 @@ func NewWorker(
 	if opts.AgenticTruncationThresh <= 0 {
 		opts.AgenticTruncationThresh = config.DefaultAgenticTruncationThreshold
 	}
+	if opts.AgenticCharacterBudget < 0 {
+		opts.AgenticCharacterBudget = config.DefaultAgenticCharacterBudget
+	}
 	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
 	var budgetTracker spec.BudgetTracker
 	if opts.TokenBudget > 0 {
@@ -120,6 +125,7 @@ func NewWorker(
 		maxToolIterations:   opts.MaxToolIterations,
 		truncatorMax:        opts.AgenticTruncatorMax,
 		truncationThreshold: opts.AgenticTruncationThresh,
+		characterBudget:     opts.AgenticCharacterBudget,
 		toolExecutor:        NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
 		capabilities:        opts.Capabilities,
 		tokenBudget:         opts.TokenBudget,
@@ -310,9 +316,9 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			return
 		}
 
-		if len(messages) > w.truncationThreshold {
+		if len(messages) > w.truncationThreshold || (w.characterBudget > 0 && totalChars(messages) > w.characterBudget) {
 			var err error
-			messages, err = agenticTruncator.Apply(ctx, messages, 0)
+			messages, err = agenticTruncator.Apply(ctx, messages, w.characterBudget)
 			if err != nil {
 				w.handleGatewayError(ctx, task, err)
 				return

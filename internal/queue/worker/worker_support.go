@@ -306,3 +306,17 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 		Payload:   payload,
 	})
 }
+// totalChars counts the total character count in all message contents.
+// This is used to enforce character budget constraints during truncation.
+func totalChars(messages []gateway.PromptMessage) int {
+	total := 0
+	for _, m := range messages {
+		total += len(m.Content)
+		// Also count tool call function names and arguments
+		for _, tc := range m.ToolCalls {
+			total += len(tc.Function.Name)
+			total += len(tc.Function.Arguments)
+		}
+	}
+	return total
+}

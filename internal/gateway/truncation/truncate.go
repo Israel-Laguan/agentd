@@ -2,10 +2,13 @@ package truncation
 
 import "agentd/internal/gateway/spec"
 
-const truncationMarker = "\n...[TRUNCATED BY AGENTD]...\n"
+const truncationMarker = "【...】"
 
-// TruncationMarker is the delimiter inserted between head and tail segments.
+// TruncationMarker is inserted when a message or section is truncated.
 const TruncationMarker = truncationMarker
+
+// CollapseMarker indicates that N tool exchanges have been collapsed.
+const CollapseMarker = "【N tool exchanges collapsed】"
 
 // MiddleOutStrategy removes the middle of oversized content.
 type MiddleOutStrategy struct{}

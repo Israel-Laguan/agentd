@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
@@ -83,14 +84,14 @@ func TestAgenticLoop_IntegrationWithMockGateway(t *testing.T) {
 	}
 
 	profile := models.AgentProfile{
-		ID:         "agent-1",
-		Provider:   "openai",
-		Model:      "gpt-4",
+		ID:          "agent-1",
+		Provider:    "openai",
+		Model:       "gpt-4",
 		AgenticMode: true,
 	}
 	store.profile = profile
 	store.project = models.Project{
-		BaseEntity:     models.BaseEntity{ID: "project-1"},
+		BaseEntity:    models.BaseEntity{ID: "project-1"},
 		WorkspacePath: "/tmp/test-workspace",
 	}
 
@@ -167,28 +168,29 @@ func TestAgenticLoop_MaxIterationsRespected(t *testing.T) {
 	}
 
 	profile := models.AgentProfile{
-		ID:         "agent-1",
-		Provider:   "openai",
-		Model:      "gpt-4",
+		ID:          "agent-1",
+		Provider:    "openai",
+		Model:       "gpt-4",
 		AgenticMode: true,
 	}
 	store.profile = profile
 	store.project = models.Project{
-		BaseEntity:     models.BaseEntity{ID: "project-1"},
+		BaseEntity:    models.BaseEntity{ID: "project-1"},
 		WorkspacePath: "/tmp/test-workspace",
 	}
 
 	w.Process(context.Background(), task)
 
-	// Gateway should be called 4 times: 3 normal iterations + 1 final with injected message
-	// The iteration guard allows one more call after the limit is hit
-	if alwaysToolCallsGateway.callCount != 4 {
-		t.Errorf("expected 4 gateway calls (3 normal + 1 final), got %d", alwaysToolCallsGateway.callCount)
+	if alwaysToolCallsGateway.callCount != 3 {
+		t.Errorf("expected 3 gateway calls before iteration guard stopped the loop, got %d", alwaysToolCallsGateway.callCount)
 	}
 
-	// Note: handleAgentFailure triggers a retry rather than immediate failure.
-	// The task state is updated to requeue, so committedResult may be nil.
-	// The key verification is that gateway was called only 4 times (not unbounded).
+	if store.task.RetryCount != 1 {
+		t.Errorf("expected task retry count incremented after max iterations, got %d", store.task.RetryCount)
+	}
+	if store.task.State != models.TaskStateReady {
+		t.Errorf("expected task requeued after max iterations, got state %q", store.task.State)
+	}
 }
 
 // maxIterationsGateway always returns tool calls, simulating a gateway that
@@ -269,14 +271,14 @@ func TestAgenticLoop_AppendsToolResultMessages(t *testing.T) {
 	}
 
 	profile := models.AgentProfile{
-		ID:         "agent-1",
-		Provider:   "openai",
-		Model:      "gpt-4",
+		ID:          "agent-1",
+		Provider:    "openai",
+		Model:       "gpt-4",
 		AgenticMode: true,
 	}
 	store.profile = profile
 	store.project = models.Project{
-		BaseEntity:     models.BaseEntity{ID: "project-1"},
+		BaseEntity:    models.BaseEntity{ID: "project-1"},
 		WorkspacePath: "/tmp/test-workspace",
 	}
 
@@ -316,6 +318,107 @@ func TestAgenticLoop_AppendsToolResultMessages(t *testing.T) {
 	}
 }
 
+func TestAgenticLoop_InvokesCapabilityRegistryAndAccumulatesMessages(t *testing.T) {
+	t.Parallel()
+
+	mockGateway := &sequenceGateway{
+		responses: []gateway.AIResponse{
+			{
+				Content: "I will call the no-op tool.",
+				ToolCalls: []gateway.ToolCall{
+					{ID: "call_noop", Type: "function", Function: gateway.ToolCallFunction{Name: "noop", Arguments: `{"value":"probe"}`}},
+				},
+			},
+			{Content: "No-op complete."},
+		},
+	}
+	mockSandbox := &mockAgenticSandbox{}
+	store := newMockAgenticStore("task-capability-registry")
+	adapter := &recordingCapabilityAdapter{
+		tools: []gateway.ToolDefinition{
+			{
+				Name:        "noop",
+				Description: "No-op test tool.",
+				Parameters:  &gateway.FunctionParameters{Type: "object"},
+			},
+		},
+		result: map[string]any{"ok": true},
+	}
+	registry := capabilities.NewRegistry()
+	registry.Register("recording", adapter)
+
+	w := NewWorker(store, mockGateway, mockSandbox, nil, nil, WorkerOptions{
+		MaxToolIterations: 5,
+		Capabilities:      registry,
+	})
+
+	w.Process(context.Background(), store.task)
+
+	if mockGateway.callCount != 2 {
+		t.Fatalf("expected 2 gateway calls, got %d", mockGateway.callCount)
+	}
+	if adapter.callCount != 1 {
+		t.Fatalf("expected capability registry tool to be invoked once, got %d", adapter.callCount)
+	}
+	if adapter.lastName != "noop" || adapter.lastArgs["value"] != "probe" {
+		t.Fatalf("unexpected capability call name=%q args=%#v", adapter.lastName, adapter.lastArgs)
+	}
+	if mockSandbox.executionCount != 0 {
+		t.Fatalf("expected no sandbox calls for capability tool, got %d", mockSandbox.executionCount)
+	}
+	if store.committedResult == nil || !store.committedResult.Success || !strings.Contains(store.committedResult.Payload, "No-op complete.") {
+		t.Fatalf("expected final text committed successfully, got %#v", store.committedResult)
+	}
+
+	if len(mockGateway.requests) != 2 {
+		t.Fatalf("expected 2 recorded gateway requests, got %d", len(mockGateway.requests))
+	}
+	if !requestContainsTool(mockGateway.requests[0], "noop") {
+		t.Fatalf("expected first request to advertise noop tool")
+	}
+	if !requestContainsToolResult(mockGateway.requests[1], "call_noop", `"ok":true`) {
+		t.Fatalf("expected second request to include noop tool result, got %#v", mockGateway.requests[1].Messages)
+	}
+}
+
+func TestAgenticLoop_ToolErrorStringStillContinuesToFinalResponse(t *testing.T) {
+	t.Parallel()
+
+	mockGateway := &sequenceGateway{
+		responses: []gateway.AIResponse{
+			{
+				Content: "I will run a command.",
+				ToolCalls: []gateway.ToolCall{
+					{ID: "call_fail", Type: "function", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"false"}`}},
+				},
+			},
+			{Content: "The command failed, so I am reporting the failure."},
+		},
+	}
+	mockSandbox := &mockAgenticSandbox{
+		results: map[string]sandbox.Result{
+			"false": {Success: false, ExitCode: 1, Stdout: "", Stderr: "boom"},
+		},
+	}
+	store := newMockAgenticStore("task-tool-error")
+	w := NewWorker(store, mockGateway, mockSandbox, nil, nil, WorkerOptions{MaxToolIterations: 5})
+
+	w.Process(context.Background(), store.task)
+
+	if mockGateway.callCount != 2 {
+		t.Fatalf("expected model to continue after tool error with a second call, got %d calls", mockGateway.callCount)
+	}
+	if mockSandbox.executionCount != 1 {
+		t.Fatalf("expected one sandbox call, got %d", mockSandbox.executionCount)
+	}
+	if !requestContainsToolResult(mockGateway.requests[1], "call_fail", "command failed with exit code 1") {
+		t.Fatalf("expected second request to include tool error string, got %#v", mockGateway.requests[1].Messages)
+	}
+	if store.committedResult == nil || !store.committedResult.Success {
+		t.Fatalf("expected final response committed after tool error, got %#v", store.committedResult)
+	}
+}
+
 // sequenceGateway is a mock gateway that returns a predefined sequence of responses.
 // Used for testing the agentic loop that requires multiple gateway calls.
 type sequenceGateway struct {
@@ -351,9 +454,9 @@ func (m *sequenceGateway) ClassifyIntent(ctx context.Context, userIntent string)
 
 // mockAgenticSandbox executes commands and returns predefined results
 type mockAgenticSandbox struct {
-	results         map[string]sandbox.Result
-	executionCount  int
-	lastCommand     string
+	results        map[string]sandbox.Result
+	executionCount int
+	lastCommand    string
 }
 
 func (m *mockAgenticSandbox) Execute(ctx context.Context, payload sandbox.Payload) (sandbox.Result, error) {
@@ -380,6 +483,77 @@ type mockAgenticStore struct {
 	project         models.Project
 	profile         models.AgentProfile
 	committedResult *models.TaskResult
+}
+
+func newMockAgenticStore(taskID string) *mockAgenticStore {
+	store := &mockAgenticStore{
+		task: models.Task{
+			BaseEntity: models.BaseEntity{ID: taskID},
+			ProjectID:  "project-1",
+			AgentID:    "agent-1",
+			Title:      "Run agentic loop",
+			State:      models.TaskStateQueued,
+		},
+		project: models.Project{
+			BaseEntity:    models.BaseEntity{ID: "project-1"},
+			WorkspacePath: "/tmp/test-workspace",
+		},
+		profile: models.AgentProfile{
+			ID:          "agent-1",
+			Provider:    "openai",
+			Model:       "gpt-4",
+			AgenticMode: true,
+		},
+	}
+	return store
+}
+
+type recordingCapabilityAdapter struct {
+	tools     []gateway.ToolDefinition
+	result    any
+	err       error
+	callCount int
+	lastName  string
+	lastArgs  map[string]any
+}
+
+func (r *recordingCapabilityAdapter) Name() string { return "recording" }
+
+func (r *recordingCapabilityAdapter) ListTools(context.Context) ([]gateway.ToolDefinition, error) {
+	return r.tools, nil
+}
+
+func (r *recordingCapabilityAdapter) CallTool(_ context.Context, name string, args map[string]any) (any, error) {
+	r.callCount++
+	r.lastName = name
+	r.lastArgs = args
+	if r.err != nil {
+		return nil, r.err
+	}
+	if r.result == nil {
+		return map[string]any{"ok": true}, nil
+	}
+	return r.result, nil
+}
+
+func (r *recordingCapabilityAdapter) Close() error { return nil }
+
+func requestContainsTool(req gateway.AIRequest, name string) bool {
+	for _, tool := range req.Tools {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func requestContainsToolResult(req gateway.AIRequest, toolCallID, contentSubstring string) bool {
+	for _, message := range req.Messages {
+		if message.Role == "tool" && message.ToolCallID == toolCallID && strings.Contains(message.Content, contentSubstring) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *mockAgenticStore) MarkTaskRunning(_ context.Context, id string, _ time.Time, pid int) (*models.Task, error) {
