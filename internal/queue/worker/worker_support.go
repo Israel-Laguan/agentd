@@ -198,21 +198,24 @@ type ToolResultEvent struct {
 
 // truncateToMax truncates the input string to maxLength, appending truncationSuffix if truncation occurred.
 func truncateToMax(input string, maxLength int) string {
-	if len(input) <= maxLength {
+	if maxLength <= 0 {
+		return ""
+	}
+
+	runes := []rune(input)
+	if len(runes) <= maxLength {
 		return input
 	}
-	// Ensure we have room for the truncation suffix
-	truncLen := maxLength - len(truncationSuffix)
+
+	suffixRunes := []rune(truncationSuffix)
+	truncLen := maxLength - len(suffixRunes)
 	if truncLen < 0 {
 		truncLen = 0
 	}
-	// Use rune-aware truncation to avoid splitting multi-byte UTF-8 characters
-	// Find the last rune boundary that doesn't exceed truncLen
-	// We need to count runes, not bytes
-	runes := []rune(input)
-	if len(runes) <= truncLen {
-		return input + truncationSuffix
+	if truncLen == 0 {
+		return string(suffixRunes[:maxLength])
 	}
+
 	return string(runes[:truncLen]) + truncationSuffix
 }
 
