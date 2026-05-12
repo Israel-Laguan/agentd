@@ -77,6 +77,11 @@ func (o *OpenAI) url() string {
 	return strings.TrimRight(o.cfg.BaseURL, "/") + "/chat/completions"
 }
 
+// Capabilities implements Backend.
+func (o *OpenAI) Capabilities() Capabilities {
+	return Capabilities{SupportsChatTools: true}
+}
+
 type openAIRequest struct {
 	Model          string                  `json:"model"`
 	Messages       []spec.PromptMessage    `json:"messages"`

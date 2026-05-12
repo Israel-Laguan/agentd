@@ -37,9 +37,16 @@ func TestTruncateHelper(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 	s := strings.Repeat("z", 30)
-	got := truncate(s, 10)
-	if !strings.HasPrefix(got, strings.Repeat("z", 10)) || !strings.HasSuffix(got, "...[truncated]") {
-		t.Fatalf("truncate long: %q", got)
+	// When max > suffix length, result should be max-suffixLen chars + suffix
+	got := truncate(s, 20)
+	expectedPrefix := strings.Repeat("z", 20-len("...[truncated]"))
+	if !strings.HasPrefix(got, expectedPrefix) || !strings.HasSuffix(got, "...[truncated]") {
+		t.Fatalf("truncate long: %q, expected prefix %q", got, expectedPrefix)
+	}
+	// When max <= suffix length, just truncate without suffix
+	got2 := truncate(s, 10)
+	if got2 != strings.Repeat("z", 10) {
+		t.Fatalf("truncate when max <= suffixLen: %q", got2)
 	}
 }
 

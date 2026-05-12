@@ -77,6 +77,11 @@ func (a *Anthropic) post(ctx context.Context, body anthropicRequest) ([]byte, er
 	return data, err
 }
 
+// Capabilities implements Backend.
+func (a *Anthropic) Capabilities() Capabilities {
+	return Capabilities{SupportsChatTools: false}
+}
+
 func splitSystemMessages(messages []spec.PromptMessage) (string, []anthropicMessage) {
 	var systemParts []string
 	var out []anthropicMessage

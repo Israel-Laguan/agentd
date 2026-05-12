@@ -36,6 +36,7 @@ type Worker struct {
 	sandboxWallTimeout  time.Duration
 	sandboxEnvAllowlist []string
 	sandboxExtraEnv     []string
+	sandboxScrubber     sandbox.Scrubber
 	maxRetries          int
 	maxToolIterations   int
 	truncatorMax        int
@@ -64,6 +65,7 @@ type WorkerOptions struct {
 	SandboxWallTimeout      time.Duration
 	SandboxEnvAllowlist     []string
 	SandboxExtraEnv         []string
+	SandboxScrubPatterns    []string
 	Capabilities            *capabilities.Registry
 }
 
@@ -104,6 +106,8 @@ func NewWorker(
 	if opts.TokenBudget > 0 {
 		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
 	}
+	// Initialize scrubber with configured patterns (may be nil for default patterns)
+	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
@@ -111,6 +115,7 @@ func NewWorker(
 		sandboxWallTimeout:  opts.SandboxWallTimeout,
 		sandboxEnvAllowlist: append([]string(nil), opts.SandboxEnvAllowlist...),
 		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
+		sandboxScrubber:     scrubber,
 		maxRetries:          opts.MaxRetries,
 		maxToolIterations:   opts.MaxToolIterations,
 		truncatorMax:        opts.AgenticTruncatorMax,
@@ -359,7 +364,17 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		iterationGuard.AfterIteration(true)
 
 		for _, call := range resp.ToolCalls {
+			// Emit TOOL_CALL event before execution (Requirements 1.3, 7.1)
+			w.emitToolCall(ctx, task, call)
+
+			// Measure execution time
+			startTime := time.Now()
 			result := w.executeAgenticTool(cancelCtx, toolExecutor, call, toolToAdapter)
+			durationMs := time.Since(startTime).Milliseconds()
+
+			// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
+			w.emitToolResult(ctx, task, call, result, durationMs)
+
 			messages = append(messages, gateway.PromptMessage{
 				Role:       "tool",
 				ToolCallID: call.ID,

@@ -68,6 +68,11 @@ func (o *Ollama) url() string {
 	return strings.TrimRight(o.cfg.BaseURL, "/") + "/api/chat"
 }
 
+// Capabilities implements Backend.
+func (o *Ollama) Capabilities() Capabilities {
+	return Capabilities{SupportsChatTools: false}
+}
+
 type ollamaRequest struct {
 	Model       string                `json:"model"`
 	Messages    []spec.PromptMessage `json:"messages"`

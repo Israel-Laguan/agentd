@@ -155,6 +155,8 @@ const (
 	EventTypeRebootRecovery        EventType = "REBOOT_RECOVERY"
 	EventTypeRebootRecoveryHandoff EventType = "REBOOT_RECOVERY_HANDOFF"
 	EventTypeHeartbeatReconcile    EventType = "HEARTBEAT_RECONCILE"
+	EventTypeToolCall              EventType = "TOOL_CALL"
+	EventTypeToolResult            EventType = "TOOL_RESULT"
 )
 
 // CommentAuthor identifies the actor that produced a comment.

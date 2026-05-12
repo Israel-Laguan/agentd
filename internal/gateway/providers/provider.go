@@ -11,6 +11,12 @@ type Backend interface {
 	Name() spec.Provider
 	MaxInputChars() int
 	Generate(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error)
+	Capabilities() Capabilities
+}
+
+// Capabilities represents the capabilities of a provider.
+type Capabilities struct {
+	SupportsChatTools bool
 }
 
 // AppendFromConfig appends a provider built from cfg when Type is recognized.

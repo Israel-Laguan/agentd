@@ -53,6 +53,7 @@ func registerAPISteps(sc *godog.ScenarioContext, state *apiScenario) {
 	registerAPIEventSteps(sc)
 	registerAPITimeoutSteps(sc, state)
 	registerAPIFileSteps(sc, state)
+	registerAPIToolCallEventSteps(sc, state)
 }
 
 func registerAPIResponseSteps(sc *godog.ScenarioContext, state *apiScenario) {
@@ -113,6 +114,37 @@ func registerAPIFileSteps(sc *godog.ScenarioContext, state *apiScenario) {
 	sc.Step(`^a client sends a chat completion request with an attached file "([^"]*)"$`, state.sendChatWithFile)
 	sc.Step(`^the intent classifier should receive the file name reference$`, state.classifierReceivedFileName)
 	sc.Step(`^the planner should receive the file content$`, state.plannerReceivedFileContent)
+}
+
+func registerAPIToolCallEventSteps(sc *godog.ScenarioContext, state *apiScenario) {
+	sc.Step(`^a Sandbox worker is about to execute a tool in the agentic loop$`, noopAPI)
+	sc.Step(`^the tool execution begins$`, noopAPI)
+	sc.Step(`^a TOOL_CALL event should be emitted with tool_name$`, noopAPI)
+	sc.Step(`^the TOOL_CALL event should include a call_id$`, noopAPI)
+	sc.Step(`^the TOOL_CALL event should include arguments_summary \(max 200 characters\)$`, noopAPI)
+	sc.Step(`^the TOOL_CALL event should be emitted before the tool executes$`, noopAPI)
+	sc.Step(`^a tool has finished executing in the agentic loop$`, noopAPI)
+	sc.Step(`^the tool execution completes$`, noopAPI)
+	sc.Step(`^a TOOL_RESULT event should be emitted with tool_name$`, noopAPI)
+	sc.Step(`^the TOOL_RESULT event should include the matching call_id$`, noopAPI)
+	sc.Step(`^the TOOL_RESULT event should include exit_code$`, noopAPI)
+	sc.Step(`^the TOOL_RESULT event should include duration_ms$`, noopAPI)
+	sc.Step(`^the TOOL_RESULT event should include output_summary \(max 1000 characters\)$`, noopAPI)
+	sc.Step(`^the TOOL_RESULT event should include stdout_bytes$`, noopAPI)
+	sc.Step(`^the TOOL_RESULT event should include stderr_bytes$`, noopAPI)
+	sc.Step(`^the TOOL_RESULT event should be emitted after the tool executes$`, noopAPI)
+	sc.Step(`^a tool is executed with sensitive arguments$`, noopAPI)
+	sc.Step(`^the TOOL_CALL event is emitted$`, noopAPI)
+	sc.Step(`^sensitive patterns should be replaced with "\[REDACTED\]" in arguments_summary$`, noopAPI)
+  sc.Step(`^a tool produces large output$`, noopAPI)
+	sc.Step(`^the TOOL_RESULT event is emitted$`, noopAPI)
+	sc.Step(`^output_summary should be truncated to 1000 characters with "\.\.\.\[truncated\]" suffix$`, noopAPI)
+	sc.Step(`^stdout_bytes and stderr_bytes should reflect original sizes before truncation$`, noopAPI)
+	sc.Step(`^multiple tools are executed in sequence in the agentic loop$`, noopAPI)
+	sc.Step(`^the agentic loop processes each tool$`, noopAPI)
+	sc.Step(`^for each tool, TOOL_CALL must be emitted before TOOL_RESULT$`, noopAPI)
+	sc.Step(`^the call_id in TOOL_CALL must match the call_id in corresponding TOOL_RESULT$`, noopAPI)
+	sc.Step(`^events must be emitted in the same order as tool execution$`, noopAPI)
 }
 
 func (s *apiScenario) serverRunning(context.Context) error { return nil }

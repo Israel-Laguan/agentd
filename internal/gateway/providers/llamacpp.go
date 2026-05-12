@@ -69,6 +69,11 @@ func (l *LlamaCpp) url() string {
 	return strings.TrimRight(l.cfg.BaseURL, "/") + "/v1/chat/completions"
 }
 
+// Capabilities implements Backend.
+func (l *LlamaCpp) Capabilities() Capabilities {
+	return Capabilities{SupportsChatTools: false}
+}
+
 func openAIResponseToLlamaCpp(r openAIResponse, defaultModel string) spec.AIResponse {
 	model := r.Model
 	if model == "" {

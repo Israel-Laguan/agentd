@@ -43,8 +43,14 @@ func permissionPayload(command string, detection safety.PermissionDetection, res
 
 func truncate(value string, max int) string {
 	value = strings.TrimSpace(value)
-	if len(value) <= max {
+	runes := []rune(value)
+	if len(runes) <= max {
 		return value
 	}
-	return value[:max] + "...[truncated]"
+	suffix := "...[truncated]"
+	suffixLen := len([]rune(suffix))
+	if max <= suffixLen {
+		return string(runes[:max])
+	}
+	return string(runes[:max-suffixLen]) + suffix
 }

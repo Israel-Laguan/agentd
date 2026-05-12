@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/gateway/truncation"
 )
@@ -31,4 +32,8 @@ func (p *captureProvider) MaxInputChars() int   { return p.budget }
 func (p *captureProvider) Generate(_ context.Context, req spec.AIRequest) (spec.AIResponse, error) {
 	p.request = req
 	return spec.AIResponse{Content: "ok", ProviderUsed: string(p.providerName)}, nil
+}
+
+func (p *captureProvider) Capabilities() providers.Capabilities {
+	return providers.Capabilities{SupportsChatTools: true}
 }

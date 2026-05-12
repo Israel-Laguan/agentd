@@ -64,6 +64,11 @@ func (h *Horde) MaxInputChars() int {
 	return h.cfg.MaxInputChars
 }
 
+// Capabilities implements Backend.
+func (h *Horde) Capabilities() Capabilities {
+	return Capabilities{SupportsChatTools: false}
+}
+
 // Generate implements Backend.
 func (h *Horde) Generate(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, h.timeout)

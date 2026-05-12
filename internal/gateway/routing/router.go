@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/providers"
@@ -101,11 +102,47 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 	req = r.applyRoleRouting(req)
 
 	var providerErrs []error
+	// Pre-scan selected providers for tool support when tools are requested.
+	hasRequestedTools := len(req.Tools) > 0
+	selectedHasToolSupport := false
+	if hasRequestedTools {
+		for _, p := range r.providers {
+			if req.Provider != "" && req.Provider != string(p.Name()) {
+				continue
+			}
+			if p.Capabilities().SupportsChatTools {
+				selectedHasToolSupport = true
+				break
+			}
+		}
+	}
+
 	for _, p := range r.providers {
 		if req.Provider != "" && req.Provider != string(p.Name()) {
 			continue
 		}
+
+		// Check if explicit provider doesn't support tools - return error instead of fallback
+		if req.Provider != "" && len(req.Tools) > 0 && !p.Capabilities().SupportsChatTools {
+			return spec.AIResponse{}, fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", req.Provider)
+		}
+
+		// Check if we need to fall back to legacy mode due to capability mismatch
 		providerReq := req
+		if hasRequestedTools && !p.Capabilities().SupportsChatTools {
+			if selectedHasToolSupport {
+				// Skip incapable providers while tool-capable candidates exist.
+				continue
+			}
+			// Create a copy to avoid mutating the original request
+			providerReq.Tools = nil
+			providerReq.JSONMode = true
+
+			// Log warning for fallback
+			slog.Warn("provider does not support tools, falling back to legacy mode",
+				"provider", string(p.Name()))
+		}
+
 		if !providerReq.SkipTruncation {
 			messages, err := r.applyTruncation(ctx, providerReq.Messages, p.MaxInputChars())
 			if err != nil {

@@ -109,6 +109,10 @@ func eventName(t string) string {
 		return "task_recovered"
 	case models.EventTypeHeartbeatReconcile:
 		return "task_reconciled"
+	case models.EventTypeToolCall:
+		return "tool_called"
+	case models.EventTypeToolResult:
+		return "tool_result"
 	}
 	switch t {
 	case "agent_updated", "agent_deleted", "task_assigned", "task_split", "task_retried":
