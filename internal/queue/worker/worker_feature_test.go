@@ -538,7 +538,25 @@ func (s *workerScenario) verifyToolResultMessagesAppended(context.Context) error
 	if s.gateway.callCount < 2 {
 		return fmt.Errorf("expected at least 2 gateway calls (tool call + final), got %d", s.gateway.callCount)
 	}
-	return nil
+
+	// Also verify that the second request actually contains a tool-result message
+	if len(s.gateway.requests) < 2 {
+		return fmt.Errorf("expected at least 2 gateway requests recorded, got %d", len(s.gateway.requests))
+	}
+
+	// Check the second request for a tool message
+	lastReq := s.gateway.requests[len(s.gateway.requests)-1]
+	for _, msg := range lastReq.Messages {
+		if msg.Role == "tool" {
+			// Verify the tool message contains the sandbox output
+			if s.sandbox.result.Stdout != "" && !strings.Contains(msg.Content, s.sandbox.result.Stdout) {
+				return fmt.Errorf("expected tool message to contain sandbox output %q, got %q", s.sandbox.result.Stdout, msg.Content)
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("expected second gateway request to include a tool-result message")
 }
 
 func (s *workerScenario) verifyGatewayNoToolCalls(context.Context) error {

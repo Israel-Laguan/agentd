@@ -102,7 +102,7 @@ The worker checks `profile.AgenticMode` at task processing time and routes to ei
 | Concept | agentd today |
 | --- | --- |
 | Shell execution | [`internal/sandbox/executor.go`](../internal/sandbox/executor.go) — `BashExecutor.Execute()` with sudo blocking, path jailing, ulimits, scrubbing, inactivity timeout. |
-| Read/write as **LLM-invokable** tools | Exposed as `bash`, `read`, and `write` tool definitions via `ToolExecutor` in [`worker_tools.go`](../internal/queue/worker/worker_tools.go). In agentic mode (`AgenticMode: true`), these tools are advertised to the LLM and executed through the inner loop. Legacy JSON `command` path still drives the sandbox when agentic mode is off. |
+| Read/write as **LLM-invokable** tools | Exposed as `bash`, `read`, and `write` tool definitions via `ToolExecutor` in [`tool_executor.go`](../internal/queue/worker/tool_executor.go). In agentic mode (`AgenticMode: true`), these tools are advertised to the LLM and executed through the inner loop. Legacy JSON `command` path still drives the sandbox when agentic mode is off. |
 
 ### Tool definitions and parsing
 
