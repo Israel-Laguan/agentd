@@ -23,4 +23,4 @@ Feature: Agentic mode inner loop with tool calling
     And the gateway always returns tool calls
     When the worker processes a task
     Then the worker shall stop after 3 iterations
-    And the worker shall commit a failure result
+    And the worker shall trigger a retry for the task

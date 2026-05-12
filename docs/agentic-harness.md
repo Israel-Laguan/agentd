@@ -43,7 +43,7 @@ flowchart TB
 | Layer | Responsibility | Where it lives |
 | --- | --- | --- |
 | **Outer loop** | Poll the store, claim ready work, run one worker invocation per claimed task, then commit, retry, heal, or hand off. | [`internal/queue/daemon.go`](../internal/queue/daemon.go) starts `taskLoop`; [`internal/queue/loop.go`](../internal/queue/loop.go) implements `taskLoop`, `dispatch`, and related intake behavior. |
-| **Inner loop** | Multiple gateway round-trips **inside** a single task, accumulating assistant and tool messages until a final text response. | **Not implemented yet**; entry point remains [`Worker.Process`](../internal/queue/worker/worker.go) in [`internal/queue/worker/`](../internal/queue/worker/). |
+| **Inner loop** | Multiple gateway round-trips **inside** a single task, accumulating assistant and tool messages until a final text response. | Implemented via `processAgentic` in [`Worker.Process`](../internal/queue/worker/worker.go); opt-in per profile via `AgenticMode` flag. |
 
 Outer retry/healing/handoff must continue to wrap the **whole** inner loop as one logical attempt (or one explicitly designed unit of work), not each tool invocation. A tool error should be returned to the model as tool output unless policy says otherwise; it should not automatically trigger the same outer path as a sandbox failure on the legacy single command.
 
@@ -102,21 +102,21 @@ The worker checks `profile.AgenticMode` at task processing time and routes to ei
 | Concept | agentd today |
 | --- | --- |
 | Shell execution | [`internal/sandbox/executor.go`](../internal/sandbox/executor.go) — `BashExecutor.Execute()` with sudo blocking, path jailing, ulimits, scrubbing, inactivity timeout. |
-| Read/write as **LLM-invokable** tools | Not exposed; only the legacy JSON `command` path drives the sandbox. |
+| Read/write as **LLM-invokable** tools | Exposed as `bash`, `read`, and `write` tool definitions via `ToolExecutor` in [`worker_tools.go`](../internal/queue/worker/worker_tools.go). In agentic mode (`AgenticMode: true`), these tools are advertised to the LLM and executed through the inner loop. Legacy JSON `command` path still drives the sandbox when agentic mode is off. |
 
 ### Tool definitions and parsing
 
 | Concept | agentd today |
 | --- | --- |
-| `tools` on API requests | Not wired; see [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go) (`AIRequest` has no tools field). |
-| `tool_calls` on responses | Not parsed; [`AIResponse`](../internal/gateway/spec/spec.go) is content-oriented only. OpenAI provider types live in [`internal/gateway/providers/openai.go`](../internal/gateway/providers/openai.go). |
+| `tools` on API requests | Wired via `AIRequest.Tools` field in [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go). Agentic mode populates `Tools` with executor and capability definitions; legacy mode omits them. |
+| `tool_calls` on responses | Parsed via `AIResponse.ToolCalls` and `PromptMessage.ToolCalls`/`ToolCallID` in [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go). OpenAI provider maps response tool calls in [`internal/gateway/providers/openai.go`](../internal/gateway/providers/openai.go). |
 
 ### Messages and history
 
 | Concept | agentd today |
 | --- | --- |
-| Per-task messages | Built per invocation; [`PromptMessage`](../internal/gateway/spec/spec.go) is `role` + `content` only (no `tool_calls` / `tool_call_id`). |
-| Tool results in the model context | Sandbox stdout/stderr become task result and **events**, not a follow-up chat message. Retry context uses `ExecutionPayload.PreviousAttempts`, not full chat history. |
+| Per-task messages | Built per invocation; [`PromptMessage`](../internal/gateway/spec/spec.go) includes `role`, `content`, `tool_calls`, and `tool_call_id`. In agentic mode, assistant messages carry `tool_calls` and tool result messages carry `tool_call_id`. |
+| Tool results in the model context | In agentic mode, tool results are appended as `role: tool` messages with `tool_call_id` for the next gateway call. In legacy mode, sandbox stdout/stderr become task result and **events**. Retry context uses `ExecutionPayload.PreviousAttempts`, not full chat history. |
 | Event stream | Persisted event types include `LOG`, `RESULT`, `FAILURE`, etc. — see [`internal/models/enums.go`](../internal/models/enums.go); no first-class tool-call events until the backlog item that adds them. |
 
 ### Client / input surface
@@ -127,7 +127,7 @@ The worker checks `profile.AgenticMode` at task processing time and routes to ei
 
 ## Production capabilities that already exist
 
-These support the outer system and will **wrap** the inner loop once it exists:
+These support the outer system and **wrap** the inner agentic loop:
 
 - Multi-provider routing with fallback and circuit breaking.
 - Task breakdown, parameter tuning on retry, human handoffs.

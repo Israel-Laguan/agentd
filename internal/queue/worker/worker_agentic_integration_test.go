@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -294,6 +295,24 @@ func TestAgenticLoop_AppendsToolResultMessages(t *testing.T) {
 	// Verify result was committed
 	if store.committedResult == nil {
 		t.Error("expected a result to be committed")
+	}
+
+	// Verify second gateway request includes tool-result message(s)
+	if len(mockGateway.requests) < 2 {
+		t.Fatalf("expected at least 2 gateway requests, got %d", len(mockGateway.requests))
+	}
+	foundToolMessage := false
+	for _, msg := range mockGateway.requests[1].Messages {
+		if msg.Role == "tool" {
+			foundToolMessage = true
+			if !strings.Contains(msg.Content, "file1.txt") {
+				t.Errorf("expected tool message content to contain sandbox output 'file1.txt', got %q", msg.Content)
+			}
+			break
+		}
+	}
+	if !foundToolMessage {
+		t.Error("expected second gateway request to include a tool-result message with role 'tool'")
 	}
 }
 

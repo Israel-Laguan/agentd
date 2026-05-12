@@ -61,12 +61,12 @@ This feature is already implemented in the codebase. The tasks below verify the 
   - _Requirements: 2, 7_
 
 - [x] 8. Run Gherkin feature tests
-  - Run: `go test -v ./internal/queue/worker/... -run "Feature: agentic mode toggle"`
+  - Run: `go test -v ./internal/queue/worker/... -run "TestWorkerAgenticModeFeatures"`
   - Confirm all feature scenarios pass
   - _Requirements: 6.1, 6.2_
 
 - [x] 9. Run unit tests
-  - Run: `go test -v ./internal/queue/worker/... -run "TestProcess|TestProviderSupportsAgentic|TestAgentProfile"`
+  - Run: `go test -v ./internal/queue/worker/... -run "TestRoutingDecision|TestProviderSupportsAgentic|TestAgenticMode"` and `go test -v ./internal/models/... -run "TestAgentProfile"`
   - Confirm all unit tests pass
   - _Requirements: 6.1, 6.2_
 

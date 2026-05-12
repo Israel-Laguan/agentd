@@ -66,7 +66,6 @@ The toggle ensures **no silent behavior change** for existing deployments—lega
 1. THE Worker SHALL have a `processAgentic` method that can be called when agentic mode is enabled.
 2. THE `processAgentic` method SHALL receive the context, task, project, and profile as parameters.
 3. THE `processAgentic` method SHALL be implemented to handle the inner loop of tool execution.
-4. UNTIL task 07 is implemented, THE `processAgentic` method SHALL return an appropriate not-implemented response or error.
 
 ### Requirement 6: Integration Test Regression
 

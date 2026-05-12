@@ -3,6 +3,9 @@ package worker_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,7 +36,24 @@ type workerScenario struct {
 	agenticCalled  bool
 	warningsLogged []string
 	maxIterations  int
+	logHandler     *testLogHandler
 }
+
+// testLogHandler captures slog records during test execution.
+type testLogHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *testLogHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *testLogHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *testLogHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *testLogHandler) WithGroup(_ string) slog.Handler       { return h }
 
 type workerTestStore struct {
 	task    models.Task
@@ -344,7 +364,7 @@ func registerWorkerSteps(sc *godog.ScenarioContext, state *workerScenario) {
 	sc.Step(`^the gateway returns a response without tool calls$`, state.verifyGatewayNoToolCalls)
 	sc.Step(`^the worker shall commit the final text as the task result$`, state.verifyFinalTextCommitted)
 	sc.Step(`^the worker shall stop after 3 iterations$`, state.verifyStoppedAfter3Iterations)
-	sc.Step(`^the worker shall commit a failure result$`, state.verifyFailureResult)
+	sc.Step(`^the worker shall trigger a retry for the task$`, state.verifyFailureResult)
 }
 
 func (s *workerScenario) agenticModeDisabled(context.Context) error {
@@ -367,6 +387,12 @@ func (s *workerScenario) workerHasTask(context.Context) error {
 }
 
 func (s *workerScenario) workerProcessesTask(context.Context) error {
+	// Capture slog output during processing for log assertions
+	handler := &testLogHandler{}
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
 	w := worker.NewWorker(
 		s.store,
 		s.gateway,
@@ -378,6 +404,7 @@ func (s *workerScenario) workerProcessesTask(context.Context) error {
 		},
 	)
 	w.Process(context.Background(), s.store.task)
+	s.logHandler = handler
 	return nil
 }
 
@@ -428,14 +455,17 @@ func (s *workerScenario) fallBackToLegacy(context.Context) error {
 }
 
 func (s *workerScenario) warningLogged(context.Context) error {
-	// When agentic mode is enabled but provider doesn't support it,
-	// a warning is logged via slog.Warn
-	// We can verify this by checking the provider was not OpenAI
-	if s.store.profile.Provider == "openai" {
-		return fmt.Errorf("expected provider to not be openai for warning scenario")
+	if s.logHandler == nil {
+		return fmt.Errorf("no log handler captured; workerProcessesTask must run first")
 	}
-	// The warning is logged internally; we verify behavior via fallback
-	return nil
+	s.logHandler.mu.Lock()
+	defer s.logHandler.mu.Unlock()
+	for _, r := range s.logHandler.records {
+		if r.Level == slog.LevelWarn && strings.Contains(r.Message, "agentic mode requested but provider does not support") {
+			return nil
+		}
+	}
+	return fmt.Errorf("expected a slog.Warn about unsupported provider, but none was recorded")
 }
 
 // New step implementations for agentic mode loop feature
@@ -528,8 +558,10 @@ func (s *workerScenario) verifyStoppedAfter3Iterations(context.Context) error {
 }
 
 func (s *workerScenario) verifyFailureResult(context.Context) error {
-	// Note: handleAgentFailure triggers a retry rather than immediate failure.
-	// The key verification is that the gateway was called limited times (not unbounded).
-	// We already verified this in verifyStoppedAfter3Iterations.
+	// handleAgentFailure triggers a retry (requeue) rather than immediate failure.
+	// Verify the retry mechanism was triggered by checking RetryCount was incremented.
+	if s.store.task.RetryCount == 0 {
+		return fmt.Errorf("expected task RetryCount > 0 after iteration limit, got %d", s.store.task.RetryCount)
+	}
 	return nil
 }
