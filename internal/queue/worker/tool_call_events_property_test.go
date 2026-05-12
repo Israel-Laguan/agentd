@@ -79,7 +79,8 @@ func extractCallID(payload string) string {
 
 // runPropertyTest runs a property test with multiple random iterations.
 // The property function returns true if the property holds, false otherwise.
-func runPropertyTest(t *testing.T, name string, iterations int, property func(ToolCallSequence) bool) {
+// The property receives the harness RNG for reproducibility.
+func runPropertyTest(t *testing.T, name string, iterations int, property func(ToolCallSequence, *rand.Rand) bool) {
 	// Seed the random generator for reproducibility within this test
 	seed := time.Now().UnixNano()
 	rnd := rand.New(rand.NewSource(seed))
@@ -94,7 +95,7 @@ func runPropertyTest(t *testing.T, name string, iterations int, property func(To
 		size := rnd.Intn(15) + 1
 		seq := generateToolCallSequence(rnd, size)
 
-		if !property(seq) {
+		if !property(seq, rnd) {
 			failures++
 			lastFailedInput = seq
 		}
@@ -121,7 +122,7 @@ func runPropertyTest(t *testing.T, name string, iterations int, property func(To
 func TestToolCallPrecedesToolResult(t *testing.T) {
 	iterations := 150
 
-	property := func(seq ToolCallSequence) bool {
+	property := func(seq ToolCallSequence, rnd *rand.Rand) bool {
 		sink := &mockEventSink{}
 		w := &Worker{
 			sink:            sink,
@@ -195,7 +196,7 @@ func TestToolCallPrecedesToolResult(t *testing.T) {
 func TestToolCallIDMatching(t *testing.T) {
 	iterations := 150
 
-	property := func(seq ToolCallSequence) bool {
+	property := func(seq ToolCallSequence, rnd *rand.Rand) bool {
 		sink := &mockEventSink{}
 		w := &Worker{
 			sink:            sink,
@@ -368,23 +369,55 @@ func generateRandomJSON(rnd *rand.Rand, targetLength int) string {
 	return b.String()
 }
 
-// randomString generates a random alphanumeric string of the given length.
+// randomString generates a random string of the given length (in runes).
+// It uses a mix of ASCII and multibyte Unicode characters to test rune boundary handling.
 func randomString(rnd *rand.Rand, length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
-	result := make([]byte, length)
-	for i := range result {
-		result[i] = charset[rnd.Intn(len(charset))]
+	// Include ASCII and some Unicode characters (including multibyte)
+	// Using runes ensures proper handling of multibyte characters
+	runeSet := []rune{
+		// ASCII letters (a-z, A-Z)
+		'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+		'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+		'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+		'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+		// Digits (0-9)
+		'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+		// Some punctuation
+		'_', '-',
+		// Multibyte Unicode characters (e.g., accented letters, emoji)
+		'é', 'ñ', 'ü', 'ö', 'ä', 'ß', 'ø', 'å', // Latin-1 Supplement
+		'€', '£', '¥', '©', '®', '™',           // Symbols
+		// Emoji (each is a multibyte rune - encode as string and convert to runes)
+	}
+	// Append emoji from string literals (can't be rune literals)
+	emojiSet := []rune("😀🎉🚀💡⚡🔥")
+	
+	result := make([]rune, length)
+	for i := 0; i < length; i++ {
+		if rnd.Intn(10) < 7 { // 70% ASCII
+			result[i] = runeSet[rnd.Intn(len(runeSet))]
+		} else { // 30% emoji
+			result[i] = emojiSet[rnd.Intn(len(emojiSet))]
+		}
 	}
 	return string(result)
 }
 
+// extractResult wraps a value with an error to distinguish between
+// missing fields and JSON decode failures.
+type extractResult struct {
+	value string
+	err   error
+}
+
 // extractArgumentsSummary extracts the arguments_summary from a TOOL_CALL event payload.
-func extractArgumentsSummary(payload string) string {
+// Returns an error if JSON decoding fails (not just if the field is missing).
+func extractArgumentsSummary(payload string) extractResult {
 	var event ToolCallEvent
 	if err := json.Unmarshal([]byte(payload), &event); err != nil {
-		return ""
+		return extractResult{value: "", err: err}
 	}
-	return event.ArgumentsSummary
+	return extractResult{value: event.ArgumentsSummary, err: nil}
 }
 
 // TestArgumentsSummaryLengthBound tests Property 3: Arguments Summary Length Bound.
@@ -397,8 +430,7 @@ func extractArgumentsSummary(payload string) string {
 func TestArgumentsSummaryLengthBound(t *testing.T) {
 	iterations := 150
 
-	property := func(seq ToolCallSequence) bool {
-		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	property := func(seq ToolCallSequence, rnd *rand.Rand) bool {
 		sink := &mockEventSink{}
 		w := &Worker{
 			sink:            sink,
@@ -428,8 +460,13 @@ func TestArgumentsSummaryLengthBound(t *testing.T) {
 				continue
 			}
 
-			argsSummary := extractArgumentsSummary(ev.Payload)
-			argsSummaryLength := utf8.RuneCountInString(argsSummary)
+			argsSummaryResult := extractArgumentsSummary(ev.Payload)
+			if argsSummaryResult.err != nil {
+				t.Logf("Failed to decode TOOL_CALL payload: %v", argsSummaryResult.err)
+				t.Logf("Payload: %s", ev.Payload)
+				return false
+			}
+			argsSummaryLength := utf8.RuneCountInString(argsSummaryResult.value)
 			if argsSummaryLength > maxArgumentsSummaryLength {
 				t.Logf("arguments_summary length: %d (max: %d)", argsSummaryLength, maxArgumentsSummaryLength)
 				t.Logf("Payload: %s", ev.Payload)
@@ -481,12 +518,13 @@ func generateRandomOutput(rnd *rand.Rand) string {
 }
 
 // extractOutputSummary extracts the output_summary from a TOOL_RESULT event payload.
-func extractOutputSummary(payload string) string {
+// Returns an error if JSON decoding fails (not just if the field is missing).
+func extractOutputSummary(payload string) extractResult {
 	var event ToolResultEvent
 	if err := json.Unmarshal([]byte(payload), &event); err != nil {
-		return ""
+		return extractResult{value: "", err: err}
 	}
-	return event.OutputSummary
+	return extractResult{value: event.OutputSummary, err: nil}
 }
 
 // TestOutputSummaryLengthBound tests Property 4: Output Summary Length Bound.
@@ -500,8 +538,7 @@ func extractOutputSummary(payload string) string {
 func TestOutputSummaryLengthBound(t *testing.T) {
 	iterations := 150
 
-	property := func(seq ToolCallSequence) bool {
-		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	property := func(seq ToolCallSequence, rnd *rand.Rand) bool {
 		sink := &mockEventSink{}
 		w := &Worker{
 			sink:            sink,
@@ -527,10 +564,15 @@ func TestOutputSummaryLengthBound(t *testing.T) {
 				continue
 			}
 
-			outputSummary := extractOutputSummary(ev.Payload)
+			outputSummaryResult := extractOutputSummary(ev.Payload)
+			if outputSummaryResult.err != nil {
+				t.Logf("Failed to decode TOOL_RESULT payload: %v", outputSummaryResult.err)
+				t.Logf("Payload: %s", ev.Payload)
+				return false
+			}
 			// The max length includes the truncation suffix "...[truncated]" (14 chars)
 			// So the actual max is maxOutputSummaryLength = 1000
-			outputSummaryLength := utf8.RuneCountInString(outputSummary)
+			outputSummaryLength := utf8.RuneCountInString(outputSummaryResult.value)
 			if outputSummaryLength > maxOutputSummaryLength {
 				t.Logf("output_summary length: %d (max: %d)", outputSummaryLength, maxOutputSummaryLength)
 				t.Logf("Payload: %s", ev.Payload)
