@@ -400,7 +400,7 @@ func (s *workerScenario) workerHasTask(context.Context) error {
 	return nil
 }
 
-func (s *workerScenario) workerProcessesTask(context.Context) error {
+func (s *workerScenario) workerProcessesTask(ctx context.Context) error {
 	// Capture slog output during processing for log assertions
 	handler := &testLogHandler{}
 	oldLogger := slog.Default()
@@ -418,7 +418,7 @@ func (s *workerScenario) workerProcessesTask(context.Context) error {
 			MaxRetries:        s.maxRetries,
 		},
 	)
-	w.Process(context.Background(), s.store.task)
+	w.Process(ctx, s.store.task)
 	s.logHandler = handler
 	return nil
 }
@@ -586,9 +586,9 @@ func (s *workerScenario) verifyFinalTextCommitted(context.Context) error {
 	if !s.store.result.Success {
 		return fmt.Errorf("expected successful result")
 	}
-	// Verify the committed payload contains the gateway's final text
-	if s.gateway.nextContent != "" && !strings.Contains(s.store.result.Payload, s.gateway.nextContent) {
-		return fmt.Errorf("expected committed payload to contain final text %q, got %q", s.gateway.nextContent, s.store.result.Payload)
+	// Verify the committed payload matches the gateway's final text exactly
+	if s.gateway.nextContent != "" && s.store.result.Payload != s.gateway.nextContent {
+		return fmt.Errorf("expected committed payload to equal final text %q, got %q", s.gateway.nextContent, s.store.result.Payload)
 	}
 	return nil
 }
