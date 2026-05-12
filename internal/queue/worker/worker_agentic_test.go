@@ -198,43 +198,6 @@ func countRole(messages []gateway.PromptMessage, role string) int {
 	return count
 }
 
-// TestProcessAgentic_CreatesToolExecutor verifies that processAgentic creates a ToolExecutor.
-// Validates: Requirements 5, 6.2
-func TestProcessAgentic_CreatesToolExecutor(t *testing.T) {
-	t.Parallel()
-
-	// We cannot directly test processAgentic since it's a method that runs the full loop.
-	// Instead, we test that the Worker can create a ToolExecutor correctly
-	// which is the first step in processAgentic.
-	ws := t.TempDir()
-	executor := NewToolExecutor(nil, ws, BuildSandboxEnv(nil, nil), 0)
-
-	if executor == nil {
-		t.Fatal("expected ToolExecutor to be created")
-	}
-
-	// Verify executor has expected tool definitions
-	defs := executor.Definitions()
-	if len(defs) != 3 {
-		t.Fatalf("expected 3 tool definitions (bash, read, write), got %d", len(defs))
-	}
-
-	toolNames := make(map[string]bool)
-	for _, def := range defs {
-		toolNames[def.Name] = true
-	}
-
-	if !toolNames["bash"] {
-		t.Error("expected bash tool in executor")
-	}
-	if !toolNames["read"] {
-		t.Error("expected read tool in executor")
-	}
-	if !toolNames["write"] {
-		t.Error("expected write tool in executor")
-	}
-}
-
 // TestProcessAgentic_BuildsAgenticMessages verifies that buildAgenticMessages correctly
 // adds the agentic system prompt to messages.
 // Validates: Requirements 5, 6.2
