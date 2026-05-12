@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -305,6 +306,7 @@ func TestEventOrderingWithVaryingCallCounts(t *testing.T) {
 		})
 	}
 }
+
 // generateRandomArguments generates random argument strings of varying lengths.
 func generateRandomArguments(rnd *rand.Rand) string {
 	// Generate arguments of different lengths to test truncation
@@ -402,6 +404,7 @@ func TestArgumentsSummaryLengthBound(t *testing.T) {
 	iterations := 150
 
 	property := func(seq ToolCallSequence) bool {
+		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 		sink := &mockEventSink{}
 		w := &Worker{
 			sink:            sink,
@@ -417,7 +420,7 @@ func TestArgumentsSummaryLengthBound(t *testing.T) {
 
 		// Override arguments with random ones
 		for i := range seq.Calls {
-			seq.Calls[i].Function.Arguments = generateRandomArguments(rand.New(rand.NewSource(time.Now().UnixNano())))
+			seq.Calls[i].Function.Arguments = generateRandomArguments(rnd)
 		}
 
 		// Emit TOOL_CALL for each tool call
@@ -432,8 +435,9 @@ func TestArgumentsSummaryLengthBound(t *testing.T) {
 			}
 
 			argsSummary := extractArgumentsSummary(ev.Payload)
-			if len(argsSummary) > maxArgumentsSummaryLength {
-				t.Logf("arguments_summary length: %d (max: %d)", len(argsSummary), maxArgumentsSummaryLength)
+			argsSummaryLength := utf8.RuneCountInString(argsSummary)
+			if argsSummaryLength > maxArgumentsSummaryLength {
+				t.Logf("arguments_summary length: %d (max: %d)", argsSummaryLength, maxArgumentsSummaryLength)
 				t.Logf("Payload: %s", ev.Payload)
 				return false
 			}
@@ -510,6 +514,7 @@ func TestOutputSummaryLengthBound(t *testing.T) {
 	iterations := 150
 
 	property := func(seq ToolCallSequence) bool {
+		rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 		sink := &mockEventSink{}
 		w := &Worker{
 			sink:            sink,
@@ -525,8 +530,7 @@ func TestOutputSummaryLengthBound(t *testing.T) {
 
 		// Generate random outputs and emit TOOL_RESULT for each tool call
 		for _, call := range seq.Calls {
-			// Use time.Now().UnixNano() as seed for generating random output
-			output := generateRandomOutput(rand.New(rand.NewSource(time.Now().UnixNano())))
+			output := generateRandomOutput(rnd)
 			w.emitToolResult(ctx, task, call, output, 100)
 		}
 
@@ -539,8 +543,9 @@ func TestOutputSummaryLengthBound(t *testing.T) {
 			outputSummary := extractOutputSummary(ev.Payload)
 			// The max length includes the truncation suffix "...[truncated]" (14 chars)
 			// So the actual max is maxOutputSummaryLength = 1000
-			if len(outputSummary) > maxOutputSummaryLength {
-				t.Logf("output_summary length: %d (max: %d)", len(outputSummary), maxOutputSummaryLength)
+			outputSummaryLength := utf8.RuneCountInString(outputSummary)
+			if outputSummaryLength > maxOutputSummaryLength {
+				t.Logf("output_summary length: %d (max: %d)", outputSummaryLength, maxOutputSummaryLength)
 				t.Logf("Payload: %s", ev.Payload)
 				return false
 			}

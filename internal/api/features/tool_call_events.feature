@@ -10,7 +10,7 @@ Feature: Tool call events are emitted for agentic loop visibility
     And the TOOL_CALL event should include a call_id
     And the TOOL_CALL event should include arguments_summary (max 200 characters)
     And the TOOL_CALL event should be emitted before the tool executes
-    Validates: Requirements 1.3, 1.4
+# Validates: Requirements 1.3, 1.4
 
   Scenario: TOOL_RESULT event emitted after tool execution
     Given a tool has finished executing in the agentic loop
@@ -23,7 +23,7 @@ Feature: Tool call events are emitted for agentic loop visibility
     And the TOOL_RESULT event should include stdout_bytes
     And the TOOL_RESULT event should include stderr_bytes
     And the TOOL_RESULT event should be emitted after the tool executes
-    Validates: Requirements 2.3, 2.4, 7.2, 7.4
+# Validates: Requirements 2.3, 2.4, 7.2, 7.4
 
   Scenario: Events include scrubbed and truncated data
     Given a tool is executed with sensitive arguments
@@ -33,7 +33,7 @@ Feature: Tool call events are emitted for agentic loop visibility
     When the TOOL_RESULT event is emitted
     Then output_summary should be truncated to 1000 characters with "...[truncated]" suffix
     And stdout_bytes and stderr_bytes should reflect original sizes before truncation
-    Validates: Requirements 3.1, 3.2, 3.3, 4.1, 4.2, 4.3
+# Validates: Requirements 3.1, 3.2, 3.3, 4.1, 4.2, 4.3
 
   Scenario: Event ordering is correct (TOOL_CALL before TOOL_RESULT)
     Given multiple tools are executed in sequence in the agentic loop
@@ -41,4 +41,4 @@ Feature: Tool call events are emitted for agentic loop visibility
     Then for each tool, TOOL_CALL must be emitted before TOOL_RESULT
     And the call_id in TOOL_CALL must match the call_id in corresponding TOOL_RESULT
     And events must be emitted in the same order as tool execution
-    Validates: Requirements 6.1, 6.2, 6.3
+# Validates: Requirements 6.1, 6.2, 6.3

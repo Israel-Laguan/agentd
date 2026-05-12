@@ -269,6 +269,10 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 		stderrBytes = 0
 	}
 
+	// Scrub output_summary before truncation
+	if w.sandboxScrubber != nil {
+		outputSummary = w.sandboxScrubber.Scrub(outputSummary)
+	}
 	// Truncate output_summary to maxOutputSummaryLength (1000 characters)
 	outputSummary = truncateToMax(outputSummary, maxOutputSummaryLength)
 
