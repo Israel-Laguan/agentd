@@ -75,6 +75,7 @@ func buildStartRuntime(cfg config.Config, store models.KanbanStore, deps runtime
 		SandboxWallTimeout:  cfg.Sandbox.WallTimeout,
 		SandboxEnvAllowlist: cfg.Sandbox.EnvAllowlist,
 		SandboxExtraEnv:     cfg.Sandbox.ExtraEnv,
+		SandboxScrubPatterns: cfg.Sandbox.ScrubPatterns,
 	})
 	intake := frontdesk.NewIntakeProcessor(store, deps.gateway, deps.emitter, cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), cfg.Gateway.Truncator.MaxInputChars)
 	librarian := &memory.Librarian{
