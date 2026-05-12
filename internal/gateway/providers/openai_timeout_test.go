@@ -346,12 +346,7 @@ func TestOpenAICapabilities_Consistency(t *testing.T) {
 	caps2 := o.Capabilities()
 	caps3 := o.Capabilities()
 
-	if caps1.SupportsChatTools != caps2.SupportsChatTools {
-		t.Errorf("Capabilities() returned inconsistent results: call1=%v, call2=%v",
-			caps1.SupportsChatTools, caps2.SupportsChatTools)
-	}
-	if caps2.SupportsChatTools != caps3.SupportsChatTools {
-		t.Errorf("Capabilities() returned inconsistent results: call2=%v, call3=%v",
-			caps2.SupportsChatTools, caps3.SupportsChatTools)
+	if caps1 != caps2 || caps2 != caps3 {
+		t.Errorf("Capabilities() returned inconsistent results: call1=%+v call2=%+v call3=%+v", caps1, caps2, caps3)
 	}
 }

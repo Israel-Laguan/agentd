@@ -490,8 +490,8 @@ func extractOutputSummary(payload string) string {
 		return ""
 	}
 	rest := payload[idx+len("output_summary="):]
-	// Find the end of output_summary (next space or end of string)
-	endIdx := strings.IndexAny(rest, " ")
+	// End at the next known field marker, not first whitespace.
+	endIdx := strings.Index(rest, " stdout_bytes=")
 	if endIdx == -1 {
 		endIdx = len(rest)
 	}

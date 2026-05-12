@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -164,9 +165,7 @@ func (w *Worker) emitToolCall(ctx context.Context, task models.Task, call gatewa
 	}
 
 	// Truncate to maxArgumentsSummaryLength (200 characters)
-	if len(argumentsSummary) > maxArgumentsSummaryLength {
-		argumentsSummary = argumentsSummary[:maxArgumentsSummaryLength]
-	}
+	argumentsSummary = truncateToMax(argumentsSummary, maxArgumentsSummaryLength)
 
 	event := ToolCallEvent{
 		ToolName:         call.Function.Name,
@@ -174,11 +173,9 @@ func (w *Worker) emitToolCall(ctx context.Context, task models.Task, call gatewa
 		ArgumentsSummary: argumentsSummary,
 	}
 
-	payload := fmt.Sprintf("tool_name=%s call_id=%s arguments_summary=%s",
-		event.ToolName,
-		event.CallID,
-		event.ArgumentsSummary,
-	)
+	// Use JSON marshaling to ensure proper escaping and structural integrity
+	eventData, _ := json.Marshal(event)
+	payload := string(eventData)
 
 	_ = w.sink.Emit(ctx, models.Event{
 		ProjectID: task.ProjectID,
@@ -209,7 +206,14 @@ func truncateToMax(input string, maxLength int) string {
 	if truncLen < 0 {
 		truncLen = 0
 	}
-	return input[:truncLen] + truncationSuffix
+	// Use rune-aware truncation to avoid splitting multi-byte UTF-8 characters
+	// Find the last rune boundary that doesn't exceed truncLen
+	// We need to count runes, not bytes
+	runes := []rune(input)
+	if len(runes) <= truncLen {
+		return input + truncationSuffix
+	}
+	return string(runes[:truncLen]) + truncationSuffix
 }
 
 // emitToolResult emits a TOOL_RESULT event with the tool name, call ID, exit code, duration,
@@ -221,62 +225,52 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 	}
 
 	// Determine exit code and output summary
-	var exitCode int
-	var outputSummary string
+	var (
+		exitCode      int
+		outputSummary string
+		stdoutBytes   int
+		stderrBytes   int
+	)
 
-	// Try to parse the result as a JSON error or execution result
-	if strings.HasPrefix(result, `{"error"`) || strings.HasPrefix(result, `{"FatalError"`) {
-		// Tool execution failed - exit code -1
-		exitCode = -1
-		outputSummary = result
-	} else if strings.HasPrefix(result, `{"Success":false`) {
-		// ExecutionResult with Success=false
-		exitCode = -1
+	// Define a struct to unmarshal the tool execution result
+	type toolExecEnvelope struct {
+		Success  bool   `json:"Success"`
+		ExitCode int    `json:"ExitCode"`
+		Stdout   string `json:"Stdout"`
+		Stderr   string `json:"Stderr"`
+		Error    string `json:"error"`
+	}
+
+	var env toolExecEnvelope
+	if err := json.Unmarshal([]byte(result), &env); err == nil {
+		// Successfully parsed JSON
+		if env.Error != "" || !env.Success {
+			exitCode = -1
+		} else {
+			exitCode = env.ExitCode
+		}
+		stdoutBytes = len(env.Stdout)
+		stderrBytes = len(env.Stderr)
 		outputSummary = result
 	} else {
-		// Success case - use ExitCode from ExecutionResult if available, otherwise 0
-		exitCode = 0
-
-		// Try to extract ExitCode from the result JSON
-		if strings.Contains(result, `"ExitCode"`) {
-			// Use simple string extraction for ExitCode
-			if idx := strings.Index(result, `"ExitCode"`); idx != -1 {
-				// Look for number after "ExitCode":
-				rest := result[idx+len(`"ExitCode"`):]
-				rest = strings.TrimSpace(rest)
-				if len(rest) > 0 && rest[0] == ':' {
-					rest = strings.TrimSpace(rest[1:])
-					// Extract number
-					for i, c := range rest {
-						if c >= '0' && c <= '9' {
-							// Try to parse the number
-							var n int
-							for j := i; j < len(rest); j++ {
-								if rest[j] >= '0' && rest[j] <= '9' {
-									n = n*10 + int(rest[j]-'0')
-								} else {
-									break
-								}
-							}
-							if n > 0 {
-								exitCode = n
-								break
-							}
-						}
-					}
-				}
-			}
+		// Fallback behavior for non-JSON tool results
+		// Try to parse the result as a JSON error or execution result
+		if strings.HasPrefix(result, `{"error"`) || strings.HasPrefix(result, `{"FatalError"`) {
+			// Tool execution failed - exit code -1
+			exitCode = -1
+		} else if strings.HasPrefix(result, `{"Success":false`) {
+			// ExecutionResult with Success=false
+			exitCode = -1
+		} else {
+			exitCode = 0
 		}
-
 		outputSummary = result
+		stdoutBytes = len(result)
+		stderrBytes = 0
 	}
 
 	// Truncate output_summary to maxOutputSummaryLength (1000 characters)
 	outputSummary = truncateToMax(outputSummary, maxOutputSummaryLength)
-
-	// Calculate original byte counts (before truncation)
-	stdoutBytes := len(result)
-	stderrBytes := 0
 
 	event := ToolResultEvent{
 		ToolName:      call.Function.Name,
@@ -288,15 +282,9 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 		StderrBytes:   stderrBytes,
 	}
 
-	payload := fmt.Sprintf("tool_name=%s call_id=%s exit_code=%d duration_ms=%d output_summary=%s stdout_bytes=%d stderr_bytes=%d",
-		event.ToolName,
-		event.CallID,
-		event.ExitCode,
-		event.DurationMs,
-		event.OutputSummary,
-		event.StdoutBytes,
-		event.StderrBytes,
-	)
+	// Use JSON marshaling to ensure proper escaping and structural integrity
+	eventData, _ := json.Marshal(event)
+	payload := string(eventData)
 
 	_ = w.sink.Emit(ctx, models.Event{
 		ProjectID: task.ProjectID,

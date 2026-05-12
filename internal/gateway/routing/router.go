@@ -102,6 +102,21 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 	req = r.applyRoleRouting(req)
 
 	var providerErrs []error
+	// Pre-scan selected providers for tool support when tools are requested.
+	hasRequestedTools := len(req.Tools) > 0
+	selectedHasToolSupport := false
+	if hasRequestedTools {
+		for _, p := range r.providers {
+			if req.Provider != "" && req.Provider != string(p.Name()) {
+				continue
+			}
+			if p.Capabilities().SupportsChatTools {
+				selectedHasToolSupport = true
+				break
+			}
+		}
+	}
+
 	for _, p := range r.providers {
 		if req.Provider != "" && req.Provider != string(p.Name()) {
 			continue
@@ -114,7 +129,11 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 
 		// Check if we need to fall back to legacy mode due to capability mismatch
 		providerReq := req
-		if len(req.Tools) > 0 && !p.Capabilities().SupportsChatTools {
+		if hasRequestedTools && !p.Capabilities().SupportsChatTools {
+			if selectedHasToolSupport {
+				// Skip incapable providers while tool-capable candidates exist.
+				continue
+			}
 			// Create a copy to avoid mutating the original request
 			providerReq.Tools = nil
 			providerReq.JSONMode = true
