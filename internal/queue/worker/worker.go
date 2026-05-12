@@ -122,6 +122,11 @@ func NewWorker(
 	}
 }
 
+// Process handles task execution, supporting two modes:
+// - Legacy mode (default): single-shot JSON command execution via GenerateJSON
+// - Agentic mode: inner loop with tool calling and message accumulation (processAgentic)
+// Routing is determined by profile.AgenticMode flag. When agentic mode is enabled but
+// the provider doesn't support tool round-tripping, falls back to legacy mode.
 func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
 	project, profile, err := w.loadContext(ctx, task)
@@ -141,6 +146,8 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.handlePhasePlanning(ctx, task, *project)
 		return
 	}
+	// Routing: check AgenticMode flag to determine execution path
+	// Agentic mode requires provider support (currently OpenAI only)
 	if profile.AgenticMode {
 		if w.providerSupportsAgentic(*profile) {
 			w.processAgentic(ctx, task, *project, *profile)
@@ -491,6 +498,8 @@ func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) 
 	w.handleAgentFailure(ctx, task, payload)
 }
 
+// providerSupportsAgentic returns true if the provider supports agentic mode
+// (tool round-tripping with message accumulation). Currently only OpenAI supports this.
 func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
 	return strings.EqualFold(profile.Provider, string(gateway.ProviderOpenAI))
 }

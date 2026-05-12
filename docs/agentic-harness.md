@@ -61,6 +61,40 @@ Outer retry/healing/handoff must continue to wrap the **whole** inner loop as on
 - The worker appends assistant messages (including `tool_calls`) and tool result messages, then calls the gateway again until there are no more tool calls.
 - **Task completion semantics** (for implementers): define explicitly how final assistant text maps to task success—for example, treat non-empty final text as a summary that closes the task, or require a small structured tail (JSON) in the last message for `command`/status. The roadmap and task prompts assume this is decided in the orchestration task so the state machine and events stay consistent.
 
+## Agentic mode toggle
+
+The agentic mode is controlled by the **`AgenticMode`** boolean field on the `AgentProfile` entity:
+
+```go
+type AgentProfile struct {
+    // ...
+    // AgenticMode enables the inner agentic loop with tool calling.
+    // When false (default), the worker uses legacy single-shot JSON mode.
+    // When true and provider supports agentic mode, the worker executes
+    // the inner loop via processAgentic.
+    AgenticMode bool
+}
+```
+
+### Behavior
+
+| `AgenticMode` | Provider | Behavior |
+|---------------|----------|----------|
+| `false` (default) | any | Legacy single-shot JSON mode: one LLM call, one sandbox execution |
+| `true` | `openai` | Agentic mode: inner loop with tool calling, multiple sandbox executions |
+| `true` | other | Falls back to legacy mode with a warning log |
+
+### Enabling agentic mode
+
+To enable agentic mode for a profile:
+
+1. Set `AgenticMode: true` on the `AgentProfile`
+2. Use an OpenAI-compatible provider (currently the only supported provider)
+
+The worker checks `profile.AgenticMode` at task processing time and routes to either:
+- Legacy path: `command()` → single sandbox run
+- Agentic path: `processAgentic()` → inner loop with tool calling
+
 ## How concepts map in agentd today
 
 ### Tools
