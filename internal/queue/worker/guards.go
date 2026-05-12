@@ -29,7 +29,7 @@ func NewIterationGuard(maxIterations int) *IterationGuard {
 }
 
 func (g *IterationGuard) BeforeIteration() error {
-	if g.exceeded && !g.allowFinal {
+	if g.exceeded {
 		return errors.New("iteration limit exceeded")
 	}
 	return nil

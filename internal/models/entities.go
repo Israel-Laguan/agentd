@@ -91,6 +91,8 @@ type AgentProfile struct {
 	SystemPrompt sql.NullString
 	Role         string
 	MaxTokens    int
+	// AgenticMode enables agentic worker behavior, allowing the agent to
+	// autonomously plan and execute multi-step tasks without human intervention.
 	AgenticMode  bool
 	UpdatedAt    time.Time
 }
