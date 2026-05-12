@@ -312,3 +312,46 @@ func TestOpenAIToolCalls_EmptyWhenAbsent(t *testing.T) {
 		t.Errorf("ToolCalls = %v, want nil", resp.ToolCalls)
 	}
 }
+
+// TestOpenAICapabilities_SupportsChatTools verifies that OpenAI provider's
+// Capabilities() returns SupportsChatTools = true.
+// Validates: Requirements 1.3, 5.1, 5.5
+func TestOpenAICapabilities_SupportsChatTools(t *testing.T) {
+	t.Parallel()
+
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: "https://api.openai.com/v1",
+		Model:   "gpt-4",
+	}, nil)
+
+	caps := o.Capabilities()
+	if !caps.SupportsChatTools {
+		t.Errorf("Capabilities().SupportsChatTools = false, want true")
+	}
+}
+
+// TestOpenAICapabilities_Consistency verifies that the Capabilities result
+// is consistent across multiple calls (idempotent query).
+// Validates: Property 1 - Capability Consistency
+func TestOpenAICapabilities_Consistency(t *testing.T) {
+	t.Parallel()
+
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: "https://api.openai.com/v1",
+		Model:   "gpt-4",
+	}, nil)
+
+	// Call Capabilities multiple times and verify consistency
+	caps1 := o.Capabilities()
+	caps2 := o.Capabilities()
+	caps3 := o.Capabilities()
+
+	if caps1.SupportsChatTools != caps2.SupportsChatTools {
+		t.Errorf("Capabilities() returned inconsistent results: call1=%v, call2=%v",
+			caps1.SupportsChatTools, caps2.SupportsChatTools)
+	}
+	if caps2.SupportsChatTools != caps3.SupportsChatTools {
+		t.Errorf("Capabilities() returned inconsistent results: call2=%v, call3=%v",
+			caps2.SupportsChatTools, caps3.SupportsChatTools)
+	}
+}

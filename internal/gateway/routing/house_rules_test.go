@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
 )
 
@@ -67,4 +68,8 @@ func (f *captureHouseRulesProvider) Generate(ctx context.Context, req spec.AIReq
 		return spec.AIResponse{}, f.err
 	}
 	return f.resp, nil
+}
+
+func (f *captureHouseRulesProvider) Capabilities() providers.Capabilities {
+	return providers.Capabilities{SupportsChatTools: true}
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/gateway/providers"
 	"agentd/internal/models"
 )
 
@@ -270,6 +271,10 @@ func (p *fakeProvider) MaxInputChars() int {
 	return p.budget
 }
 
+func (p *fakeProvider) Capabilities() providers.Capabilities {
+	return providers.Capabilities{SupportsChatTools: true}
+}
+
 type sequenceProvider struct {
 	values   []string
 	requests []AIRequest
@@ -287,4 +292,8 @@ func (*sequenceProvider) Name() Provider {
 
 func (*sequenceProvider) MaxInputChars() int {
 	return 0
+}
+
+func (*sequenceProvider) Capabilities() providers.Capabilities {
+	return providers.Capabilities{SupportsChatTools: true}
 }

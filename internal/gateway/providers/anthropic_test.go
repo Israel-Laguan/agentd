@@ -115,3 +115,14 @@ func TestAnthropicSystemMessageFlattening(t *testing.T) {
 		t.Fatalf("roles = %v", out)
 	}
 }
+
+func TestAnthropicCapabilities(t *testing.T) {
+	a := NewAnthropic(spec.ProviderConfig{
+		Model: "claude-3-haiku",
+	}, nil)
+
+	caps := a.Capabilities()
+	if caps.SupportsChatTools != false {
+		t.Fatalf("SupportsChatTools = %v, want false", caps.SupportsChatTools)
+	}
+}
