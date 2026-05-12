@@ -234,23 +234,29 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 
 	// Define a struct to unmarshal the tool execution result
 	type toolExecEnvelope struct {
-		Success  bool   `json:"Success"`
-		ExitCode int    `json:"ExitCode"`
-		Stdout   string `json:"Stdout"`
-		Stderr   string `json:"Stderr"`
-		Error    string `json:"error"`
+		Success    *bool  `json:"Success"`
+		ExitCode   int    `json:"ExitCode"`
+		Stdout     string `json:"Stdout"`
+		Stderr     string `json:"Stderr"`
+		Error      string `json:"error"`
+		FatalError string `json:"FatalError"`
 	}
 
 	var env toolExecEnvelope
 	if err := json.Unmarshal([]byte(result), &env); err == nil {
 		// Successfully parsed JSON
-		if env.Error != "" || !env.Success {
+		if env.Error != "" || env.FatalError != "" || (env.Success != nil && !*env.Success) {
 			exitCode = -1
 		} else {
 			exitCode = env.ExitCode
 		}
-		stdoutBytes = len(env.Stdout)
-		stderrBytes = len(env.Stderr)
+		if env.Stdout != "" || env.Stderr != "" || env.Success != nil {
+			stdoutBytes = len(env.Stdout)
+			stderrBytes = len(env.Stderr)
+		} else {
+			stdoutBytes = len(result)
+			stderrBytes = 0
+		}
 		outputSummary = result
 	} else {
 		// Fallback behavior for non-JSON tool results

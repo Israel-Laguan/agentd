@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -67,18 +68,13 @@ func generateToolCallSequence(rnd *rand.Rand, size int) ToolCallSequence {
 
 // extractCallID extracts the call_id from a tool event payload.
 func extractCallID(payload string) string {
-	// Payload format: "tool_name=bash call_id=call_123 arguments_summary=..."
-	// or: "tool_name=bash call_id=call_123 exit_code=0 ..."
-	idx := strings.Index(payload, "call_id=")
-	if idx == -1 {
+	var event struct {
+		CallID string `json:"call_id"`
+	}
+	if err := json.Unmarshal([]byte(payload), &event); err != nil {
 		return ""
 	}
-	rest := payload[idx+len("call_id="):]
-	endIdx := strings.IndexAny(rest, " ")
-	if endIdx == -1 {
-		endIdx = len(rest)
-	}
-	return rest[:endIdx]
+	return event.CallID
 }
 
 // runPropertyTest runs a property test with multiple random iterations.
@@ -225,7 +221,7 @@ func TestToolCallIDMatching(t *testing.T) {
 		for _, ev := range sink.events {
 			callID := extractCallID(ev.Payload)
 			if callID == "" {
-				continue
+				return false
 			}
 
 			if ev.Type == models.EventTypeToolCall {
@@ -384,13 +380,11 @@ func randomString(rnd *rand.Rand, length int) string {
 
 // extractArgumentsSummary extracts the arguments_summary from a TOOL_CALL event payload.
 func extractArgumentsSummary(payload string) string {
-	// Payload format: "tool_name=bash call_id=call_123 arguments_summary={\"key\":\"value\"}"
-	idx := strings.Index(payload, "arguments_summary=")
-	if idx == -1 {
+	var event ToolCallEvent
+	if err := json.Unmarshal([]byte(payload), &event); err != nil {
 		return ""
 	}
-	rest := payload[idx+len("arguments_summary="):]
-	return rest
+	return event.ArgumentsSummary
 }
 
 // TestArgumentsSummaryLengthBound tests Property 3: Arguments Summary Length Bound.
@@ -488,18 +482,11 @@ func generateRandomOutput(rnd *rand.Rand) string {
 
 // extractOutputSummary extracts the output_summary from a TOOL_RESULT event payload.
 func extractOutputSummary(payload string) string {
-	// Payload format: "tool_name=bash call_id=call_123 exit_code=0 duration_ms=100 output_summary=hello stdout_bytes=5 stderr_bytes=0"
-	idx := strings.Index(payload, "output_summary=")
-	if idx == -1 {
+	var event ToolResultEvent
+	if err := json.Unmarshal([]byte(payload), &event); err != nil {
 		return ""
 	}
-	rest := payload[idx+len("output_summary="):]
-	// End at the next known field marker, not first whitespace.
-	endIdx := strings.Index(rest, " stdout_bytes=")
-	if endIdx == -1 {
-		endIdx = len(rest)
-	}
-	return rest[:endIdx]
+	return event.OutputSummary
 }
 
 // TestOutputSummaryLengthBound tests Property 4: Output Summary Length Bound.
