@@ -12,7 +12,7 @@ const truncationMarker = "【...】"
 // TruncationMarker is inserted when a message or section is truncated.
 const TruncationMarker = truncationMarker
 
-// CollapseMarker returns a marker indicating that N tool exchanges have been collapsed.
+// CollapseMarkerFor returns a marker indicating that N tool exchanges have been collapsed.
 func CollapseMarkerFor(n int) string {
 	return fmt.Sprintf("【%d tool exchanges collapsed】", n)
 }
@@ -30,56 +30,19 @@ func (s MiddleOutStrategy) Name() string {
 
 // Truncate applies middle-out cutting with UTF-8 safe slicing.
 func (s MiddleOutStrategy) Truncate(input string, maxChars int) string {
-	if maxChars <= 0 || len(input) <= maxChars {
+	runes := []rune(input)
+	if maxChars <= 0 || len(runes) <= maxChars {
 		return input
 	}
-	markerBytes := len(truncationMarker)
-	if maxChars <= markerBytes {
-		// Truncate to maxChars bytes safely
-		runes := []rune(input)
-		if maxChars >= len(runes) {
-			return input[:maxChars]
-		}
-		// Find the byte position that corresponds to maxChars runes
-		var pos int
-		for i, r := range runes {
-			if i >= maxChars {
-				break
-			}
-			pos += utf8.RuneLen(r)
-		}
-		return input[:pos]
+	markerRunes := utf8.RuneCountInString(truncationMarker)
+	if maxChars <= markerRunes {
+		return string(runes[:maxChars])
 	}
-	remaining := maxChars - markerBytes
-	headBytes := remaining / 2
-	tailBytes := remaining - headBytes
+	remaining := maxChars - markerRunes
+	headRunes := remaining / 2
+	tailRunes := remaining - headRunes
 
-	// Find head boundary: convert headBytes to rune count safely
-	headRunes := 0
-	var headPos int
-	for _, r := range []rune(input) {
-		runeLen := utf8.RuneLen(r)
-		if headPos+runeLen > headBytes {
-			break
-		}
-		headPos += runeLen
-		headRunes++
-	}
-	headStr := input[:headPos]
-
-	// Find tail boundary: start from end
-	inputLen := len(input)
-	tailStart := inputLen - tailBytes
-	// Adjust tailStart to a valid UTF-8 boundary
-	for tailStart > 0 && !utf8.RuneStart(input[tailStart]) {
-		tailStart--
-	}
-	if tailStart < 0 {
-		tailStart = 0
-	}
-	tailStr := input[tailStart:]
-
-	return headStr + truncationMarker + tailStr
+	return string(runes[:headRunes]) + truncationMarker + string(runes[len(runes)-tailRunes:])
 }
 
 // MiddleOut keeps the beginning and end of long content while removing the

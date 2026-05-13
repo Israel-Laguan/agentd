@@ -217,6 +217,7 @@ func (t *AgenticTruncator) removeDanglingToolCalls(messages []spec.PromptMessage
 
 	return out
 }
+
 // totalChars calculates the total character count of all message contents including tool calls
 func totalChars(messages []spec.PromptMessage) int {
 	total := 0
@@ -240,7 +241,7 @@ func (t *AgenticTruncator) truncateToBudget(messages []spec.PromptMessage, budge
 
 	// Reserve space for markers that will be added during truncation
 	// Max overhead: TruncationMarker + space + CollapseMarker + space
-	markerOverhead := len(TruncationMarker) + len(CollapseMarker) + 2
+	markerOverhead := utf8.RuneCountInString(TruncationMarker) + utf8.RuneCountInString(CollapseMarker) + 2
 	effectiveBudget := budget - markerOverhead
 	// Clamp: don't let the floor exceed the caller budget
 	if effectiveBudget < 0 {
@@ -378,10 +379,16 @@ func (t *AgenticTruncator) truncateMiddleToBudget(messages []spec.PromptMessage,
 
 	// If we had to drop any messages, add collapse marker
 	if truncated && len(out) > 0 {
-		droppedCount := len(messages) - len(out)
-		if droppedCount > 0 {
+		droppedUntil := len(messages) - len(out)
+		droppedExchanges := 0
+		for _, ex := range findToolExchanges(messages) {
+			if ex.assistantIndex < droppedUntil {
+				droppedExchanges++
+			}
+		}
+		if droppedExchanges > 0 {
 			// Add collapse marker to first message
-			out[0].Content = CollapseMarkerFor(droppedCount) + " " + out[0].Content
+			out[0].Content = CollapseMarkerFor(droppedExchanges) + " " + out[0].Content
 		}
 	}
 

@@ -197,6 +197,7 @@ func TestAgenticTruncator_PreventsDanglingToolCalls(t *testing.T) {
 		}
 	}
 }
+
 // Test for pairwise consistency - tool_calls and tool results handled together
 func TestAgenticTruncator_PairwiseConsistency(t *testing.T) {
 	truncator := NewAgenticTruncator(4)
@@ -442,7 +443,6 @@ func containsTruncationMarker(content string) bool {
 	return containsString(content, TruncationMarker)
 }
 
-
 // ============================================================================
 // Task 3.3: Unit Tests for Collapse Markers
 // Validates: Requirement 2.4
@@ -521,7 +521,7 @@ func TestCollapseMarker_PlacedAtBeginning(t *testing.T) {
 			return // Found and verified marker placement
 		}
 	}
-t.Error("collapse marker not found in any message")
+	t.Error("collapse marker not found in any message")
 }
 
 // Test that multiple tool exchanges dropped shows correct count in marker
@@ -693,6 +693,7 @@ func min(a, b int) int {
 	}
 	return b
 }
+
 // ============================================================================
 // Task 4.4: Unit Tests for Character Budget
 // Validates: Requirement 5.1
@@ -736,9 +737,9 @@ func TestAgenticTruncator_BudgetNotExceeded(t *testing.T) {
 	messages := []spec.PromptMessage{
 		{Role: "system", Content: "System prompt"},
 		{Role: "user", Content: "User task description"},
-		{Role: "assistant", Content: strings.Repeat("A", 500)}, // 500 chars
+		{Role: "assistant", Content: strings.Repeat("A", 500)},             // 500 chars
 		{Role: "tool", ToolCallID: "1", Content: strings.Repeat("B", 500)}, // 500 chars
-		{Role: "assistant", Content: strings.Repeat("C", 500)}, // 500 chars
+		{Role: "assistant", Content: strings.Repeat("C", 500)},             // 500 chars
 	}
 
 	// Budget of 200 chars should force truncation
@@ -914,6 +915,7 @@ func TestAgenticTruncator_NegativeBudgetUnlimited(t *testing.T) {
 		t.Errorf("len(got) = %d, want %d (negative budget = unlimited)", len(got), len(messages))
 	}
 }
+
 // Test character budget behavior with assertions
 func TestAgenticTruncator_DebugBudget(t *testing.T) {
 	truncator := NewAgenticTruncator(100) // High max messages to avoid count truncation
@@ -986,5 +988,48 @@ func TestAgenticTruncator_DebugBudget(t *testing.T) {
 			}
 		}
 		lastRole = m.Role
+	}
+}
+
+func TestAgenticTruncator_BudgetDropNonToolMessagesDoesNotClaimCollapsedExchanges(t *testing.T) {
+	truncator := NewAgenticTruncator(50)
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "system prompt"},
+		{Role: "user", Content: "first user anchor"},
+		{Role: "user", Content: strings.Repeat("x", 40)},
+		{Role: "assistant", Content: strings.Repeat("y", 40)},
+		{Role: "assistant", Content: "recent reply"},
+	}
+
+	got, err := truncator.Apply(context.Background(), messages, 35)
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	for _, m := range got {
+		if containsCollapseMarker(m.Content) {
+			t.Fatalf("unexpected collapse marker when only non-tool messages were dropped: %q", m.Content)
+		}
+	}
+}
+
+func TestTruncateMiddleToBudget_CollapseMarkerCountsDroppedToolExchanges(t *testing.T) {
+	truncator := &AgenticTruncator{}
+	messages := []spec.PromptMessage{
+		{Role: "assistant", Content: "a", ToolCalls: []spec.ToolCall{{ID: "call1", Type: "function", Function: spec.ToolCallFunction{Name: "f1"}}}},
+		{Role: "tool", ToolCallID: "call1", Content: "b"},
+		{Role: "assistant", Content: "c", ToolCalls: []spec.ToolCall{{ID: "call2", Type: "function", Function: spec.ToolCallFunction{Name: "f2"}}}},
+		{Role: "tool", ToolCallID: "call2", Content: "d"},
+		{Role: "assistant", Content: "e"},
+	}
+
+	got := truncator.truncateMiddleToBudget(messages, 3)
+	if len(got) != 3 {
+		t.Fatalf("len(got) = %d, want 3", len(got))
+	}
+
+	wantPrefix := CollapseMarkerFor(1) + " "
+	if !strings.HasPrefix(got[0].Content, wantPrefix) {
+		t.Fatalf("got[0].Content = %q, want prefix %q", got[0].Content, wantPrefix)
 	}
 }

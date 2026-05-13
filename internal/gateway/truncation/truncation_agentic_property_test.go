@@ -96,7 +96,7 @@ func TestProperty2_FirstUserMessageAlwaysPreserved(t *testing.T) {
 
 		// Apply truncation - use low max messages to trigger truncation
 		maxMessages := r.Intn(8) + 3 // 3 to 10 - will trigger truncation
-		budget := 0                   // unlimited
+		budget := 0                  // unlimited
 
 		truncator := NewAgenticTruncator(maxMessages)
 		got, err := truncator.Apply(context.Background(), messages, budget)
@@ -108,7 +108,7 @@ func TestProperty2_FirstUserMessageAlwaysPreserved(t *testing.T) {
 		// It should be present somewhere in the output (not necessarily at same index)
 		foundFirstUser := false
 		for _, m := range got {
-			if m.Role == "user" {
+			if m.Role == "user" && m.Content == messages[firstUserIdx].Content {
 				foundFirstUser = true
 				break
 			}
@@ -258,7 +258,7 @@ func TestProperty5_NoopWhenUnderThreshold(t *testing.T) {
 				t.Fatalf("iteration %d: got[%d].Role = %q, want %q", i, j, got[j].Role, messages[j].Role)
 			}
 			// Only check content for messages that are in both
-			if j < len(messages) && got[j].Content != messages[j].Content && len(got) == len(messages) {
+			if got[j].Content != messages[j].Content {
 				t.Fatalf("iteration %d: got[%d].Content changed", i, j)
 			}
 		}
@@ -296,13 +296,19 @@ func TestProperty6_ToolExchangesDroppedBeforeAnchors(t *testing.T) {
 		// Property: System and first user must always be preserved
 		hasSystem := false
 		hasFirstUser := false
+		firstUserContent := ""
+		for _, m := range messages {
+			if m.Role == "user" {
+				firstUserContent = m.Content
+				break
+			}
+		}
 		for _, m := range got {
-			if m.Role == "system" {
+			if m.Role == "system" && m.Content == messages[0].Content {
 				hasSystem = true
 			}
-			if m.Role == "user" {
+			if firstUserContent != "" && m.Role == "user" && m.Content == firstUserContent {
 				hasFirstUser = true
-				break // Only need first user
 			}
 		}
 
@@ -541,12 +547,12 @@ func randomContent(r *rand.Rand, minLen, maxLen int) string {
 	words := []string{"hello", "world", "test", "data", "result", "error", "success", "message", "content", "value",
 		"function", "call", "api", "request", "response", "parameter", "output", "input", "system", "user",
 		"assistant", "tool", "info", "debug", "log", "warning", "critical", "note", "summary", "detail"}
-	
+
 	wordCount := r.Intn(maxLen/5-minLen/5) + minLen/5
 	if wordCount < 1 {
 		wordCount = 1
 	}
-	
+
 	var parts []string
 	for i := 0; i < wordCount; i++ {
 		parts = append(parts, words[r.Intn(len(words))])
