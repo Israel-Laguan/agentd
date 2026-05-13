@@ -76,6 +76,16 @@ gateway:
   #       type: bearer
   #       token: "${MCP_TOKEN}"
 
+# Per-tool rate limiting (PreToolUse).
+# Keys are tool names; values are max invocations per session.
+# The special "default" key applies to any tool without an explicit entry.
+# 0 or absent = unlimited.
+# Future extension: values may become objects with max_calls / window_seconds.
+agentic:
+  tool_rate_limits:
+    bash: 50
+    default: 100
+
 # Sandbox command execution hardening.
 sandbox:
   inactivity_timeout: "60s"
