@@ -390,7 +390,8 @@ func (s *workerScenario) agenticModeEnabled(context.Context) error {
 }
 
 func (s *workerScenario) providerIs(_ context.Context, provider string) error {
-	s.store.profile.Provider = provider
+	// Use lowercase for consistent comparison with agenticProviders
+	s.store.profile.Provider = strings.ToLower(provider)
 	return nil
 }
 

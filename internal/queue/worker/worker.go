@@ -23,6 +23,13 @@ import (
 // DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
 
+// agenticProviders lists providers that support agentic mode
+// (tool round-tripping with message accumulation).
+var agenticProviders = []spec.Provider{
+	spec.ProviderOpenAI,
+	spec.ProviderAnthropic,
+}
+
 type Worker struct {
 	store               models.KanbanStore
 	gateway             gateway.AIGateway
@@ -158,7 +165,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		return
 	}
 	// Routing: check AgenticMode flag to determine execution path
-	// Agentic mode requires provider support (currently OpenAI only)
+	// Agentic mode requires provider support (see agenticProviders)
 	if profile.AgenticMode {
 		if w.providerSupportsAgentic(*profile) {
 			w.processAgentic(ctx, task, *project, *profile)
@@ -289,7 +296,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	w.registerCancel(task.ID, cancel)
 	defer w.deregisterCancel(task.ID)
 
-	w.toolExecutor = NewToolExecutor(
+	// Create task-local ToolExecutor to avoid races with concurrent task executions
+	taskToolExecutor := NewToolExecutor(
 		w.sandbox,
 		project.WorkspacePath,
 		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
@@ -298,7 +306,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages := w.seedMessages(ctx, task, profile)
 	messages = w.buildAgenticMessages(messages, profile)
-	tools, toolToAdapter := w.agenticTools(ctx, w.toolExecutor)
+	tools, toolToAdapter := w.agenticTools(ctx, taskToolExecutor)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
@@ -307,7 +315,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	for {
 		shouldContinue, err := w.processAgenticIteration(
-			cancelCtx, task, profile, &messages, tools, toolToAdapter,
+			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
 			iterationGuard, budgetGuard, deadlineGuard, agenticTruncator,
 		)
 		if err != nil {
@@ -322,7 +330,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 func (w *Worker) processAgenticIteration(
 	ctx context.Context, task models.Task, profile models.AgentProfile,
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
-	toolToAdapter map[string]string,
+	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
 	deadlineGuard *DeadlineGuard, agenticTruncator spec.Truncator,
 ) (bool, error) {
@@ -395,8 +403,8 @@ func (w *Worker) processAgenticIteration(
 
 		// Measure execution time
 		startTime := time.Now()
-		// Use DispatchTool as the single entry point for tool execution (Requirement 1.1)
-		result := w.DispatchTool(ctx, call, toolToAdapter)
+		// Use task-local ToolExecutor for thread-safe tool execution
+		result := w.DispatchTool(ctx, call, toolToAdapter, toolExecutor)
 		durationMs := time.Since(startTime).Milliseconds()
 
 		// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
@@ -433,10 +441,10 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) (
 //   - toolToAdapter: Map of tool names to adapter names for MCP tools
 //
 // Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
-func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string) string {
+func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
-		return w.toolExecutor.Execute(ctx, call)
+		return toolExecutor.Execute(ctx, call)
 	default:
 		if w.capabilities == nil {
 			return jsonErrorf("unknown tool: %s", call.Function.Name)
@@ -470,7 +478,7 @@ func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolTo
 // Deprecated: The toolExec parameter is ignored; the worker's internal toolExecutor is used.
 // Use DispatchTool directly instead.
 func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
-	return w.DispatchTool(ctx, call, toolToAdapter)
+	return w.DispatchTool(ctx, call, toolToAdapter, w.toolExecutor)
 }
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
@@ -557,9 +565,14 @@ func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) 
 }
 
 // providerSupportsAgentic returns true if the provider supports agentic mode
-// (tool round-tripping with message accumulation). Currently only OpenAI supports this.
+// (tool round-tripping with message accumulation).
 func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
-	return strings.EqualFold(profile.Provider, string(gateway.ProviderOpenAI))
+	for _, p := range agenticProviders {
+		if strings.EqualFold(profile.Provider, string(p)) {
+			return true
+		}
+	}
+	return false
 }
 
 // SetSandbox swaps the executor used by integration tests that replace the sandbox.

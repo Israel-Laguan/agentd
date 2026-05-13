@@ -132,9 +132,16 @@ func (r *Registry) AdapterForTool(ctx context.Context, toolName string) (adapter
 
 func (r *Registry) Close() error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	var lastErr error
+	adapters := make([]CapabilityAdapter, 0, len(r.adapters))
 	for _, adapter := range r.adapters {
+		if adapter != nil {
+			adapters = append(adapters, adapter)
+		}
+	}
+	r.mu.Unlock()
+
+	var lastErr error
+	for _, adapter := range adapters {
 		if err := adapter.Close(); err != nil {
 			lastErr = err
 		}

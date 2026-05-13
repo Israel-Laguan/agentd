@@ -3,6 +3,7 @@ package capabilities
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"agentd/internal/gateway"
 
@@ -135,7 +136,7 @@ func parseToolNames(toolsStr string) []string { //nolint:unused
 	if toolsStr == "" {
 		return nil
 	}
-	return splitAndTrim(toolsStr, ", ")
+	return splitAndTrim(toolsStr, ",")
 }
 
 // splitAndTrim is used by parseToolNames.
@@ -143,5 +144,16 @@ func splitAndTrim(s, sep string) []string { //nolint:unused
 	if s == "" {
 		return nil
 	}
-	return []string{s}
+	parts := strings.Split(s, sep)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

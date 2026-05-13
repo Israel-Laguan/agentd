@@ -11,10 +11,10 @@ import (
 	"agentd/internal/sandbox"
 )
 
-// TestProviderSupportsAgentic_ReturnsTrueForOpenAI verifies that providerSupportsAgentic
-// returns true for OpenAI provider.
+// TestProviderSupportsAgentic_ReturnsTrueForSupportedProviders verifies that providerSupportsAgentic
+// returns true for OpenAI and Anthropic providers.
 // Validates: Requirements 1, 3, 4, 6.2
-func TestProviderSupportsAgentic_ReturnsTrueForOpenAI(t *testing.T) {
+func TestProviderSupportsAgentic_ReturnsTrueForSupportedProviders(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -25,6 +25,9 @@ func TestProviderSupportsAgentic_ReturnsTrueForOpenAI(t *testing.T) {
 		{"OpenAI lowercase", "openai", true},
 		{"OpenAI uppercase", "OPENAI", true},
 		{"OpenAI mixed case", "OpenAI", true},
+		{"Anthropic lowercase", "anthropic", true},
+		{"Anthropic uppercase", "ANTHROPIC", true},
+		{"Anthropic mixed case", "Anthropic", true},
 	}
 
 	for _, tc := range testCases {
@@ -48,7 +51,7 @@ func TestProviderSupportsAgentic_ReturnsTrueForOpenAI(t *testing.T) {
 }
 
 // TestProviderSupportsAgentic_ReturnsFalseForOtherProviders verifies that providerSupportsAgentic
-// returns false for providers other than OpenAI.
+// returns false for providers other than OpenAI and Anthropic.
 // Validates: Requirements 1, 3, 4, 6.2
 func TestProviderSupportsAgentic_ReturnsFalseForOtherProviders(t *testing.T) {
 	t.Parallel()
@@ -57,9 +60,6 @@ func TestProviderSupportsAgentic_ReturnsFalseForOtherProviders(t *testing.T) {
 		name     string
 		provider string
 	}{
-		{"Anthropic", "anthropic"},
-		{"Anthropic uppercase", "ANTHROPIC"},
-		{"Anthropic mixed case", "Anthropic"},
 		{"Ollama", "ollama"},
 		{"Ollama uppercase", "OLLAMA"},
 		{"Azure OpenAI", "azure-openai"},
@@ -322,7 +322,7 @@ func TestRoutingDecision_AgenticModeFalse_MakesOnlyLegacySingleCall(t *testing.T
 }
 
 // TestRoutingDecision_AgenticModeTrue_ProviderSupported verifies by calling Process
-// that when AgenticMode is true and provider is OpenAI, the agentic path is taken.
+// that when AgenticMode is true and provider supports agentic mode, the agentic path is taken.
 // Validates: Requirements 1, 3, 6.2
 func TestRoutingDecision_AgenticModeTrue_ProviderSupported(t *testing.T) {
 	t.Parallel()
@@ -358,7 +358,6 @@ func TestRoutingDecision_AgenticModeTrue_ProviderNotSupported(t *testing.T) {
 		name     string
 		provider string
 	}{
-		{"Anthropic", "anthropic"},
 		{"Ollama", "ollama"},
 		{"Azure OpenAI", "azure-openai"},
 		{"Vertex", "vertex"},
@@ -437,7 +436,7 @@ func TestLegacyPath_DoesNotUseTruncation(t *testing.T) {
 
 	profile := models.AgentProfile{
 		ID:          "agent-1",
-		Provider:    "anthropic", // Non-OpenAI provider
+		Provider:    "ollama", // Non-agentic provider
 		Model:       "claude-3",
 		AgenticMode: false, // Explicitly disable agentic mode
 	}

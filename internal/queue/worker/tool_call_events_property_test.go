@@ -241,18 +241,6 @@ func TestToolCallIDMatching(t *testing.T) {
 			}
 		}
 
-			switch ev.Type {
-			case models.EventTypeToolCall:
-				pending[callID]++
-			case models.EventTypeToolResult:
-				if pending[callID] == 0 {
-					// No matching TOOL_CALL - property violated (result without call)
-					return false
-				}
-				pending[callID]--
-			}
-		}
-
 		// Ensure all TOOL_CALLs have exactly one TOOL_RESULT
 		for _, unmatched := range pending {
 			if unmatched != 0 {
@@ -479,13 +467,9 @@ func TestArgumentsSummaryLengthBound(t *testing.T) {
 
 		// Verify: each TOOL_CALL event has arguments_summary <= 200 characters
 		for _, ev := range sink.events {
-			switch ev.Type {
-			case models.EventTypeToolCall:
-				toolCallCount++
-			case models.EventTypeToolResult:
-				toolResultCount++
+			if ev.Type != models.EventTypeToolCall {
+				continue
 			}
-		}
 
 			argsSummaryResult := extractArgumentsSummary(ev.Payload)
 			if argsSummaryResult.err != nil {
