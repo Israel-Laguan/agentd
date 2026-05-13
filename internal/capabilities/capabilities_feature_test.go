@@ -2,6 +2,7 @@ package capabilities
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -115,7 +116,11 @@ func (s *capabilitiesScenario) stepToolsEmpty(_ context.Context) error { //nolin
 }
 
 func (s *capabilitiesScenario) stepCallTool(_ context.Context, adapterName, toolName, argsStr string) error { //nolint:unused
-	s.result, s.resultErr = s.registry.CallTool(context.Background(), adapterName, toolName, nil)
+	var args map[string]any
+	if err := json.Unmarshal([]byte(argsStr), &args); err != nil {
+		return fmt.Errorf("invalid args %q: %w", argsStr, err)
+	}
+	s.result, s.resultErr = s.registry.CallTool(context.Background(), adapterName, toolName, args)
 	return nil
 }
 

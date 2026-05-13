@@ -327,24 +327,29 @@ func TestRoutingDecision_AgenticModeFalse_MakesOnlyLegacySingleCall(t *testing.T
 func TestRoutingDecision_AgenticModeTrue_ProviderSupported(t *testing.T) {
 	t.Parallel()
 
-	profile := models.AgentProfile{
-		ID:          "agent-1",
-		Provider:    "openai",
-		Model:       "gpt-4",
-		AgenticMode: true,
-	}
-	w, store, gw, _ := newRoutingTest(profile)
-	w.Process(context.Background(), store.task)
+	for _, provider := range []string{"openai", "anthropic"} {
+		provider := provider
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			profile := models.AgentProfile{
+				ID:          "agent-1",
+				Provider:    provider,
+				Model:       "gpt-4",
+				AgenticMode: true,
+			}
+			w, store, gw, _ := newRoutingTest(profile)
+			w.Process(context.Background(), store.task)
 
-	// Agentic path: gateway request should include tools and NOT use JSONMode
-	if len(gw.requests) == 0 {
-		t.Fatal("expected at least 1 gateway request")
-	}
-	if gw.requests[0].JSONMode {
-		t.Error("expected JSONMode=false for agentic path")
-	}
-	if len(gw.requests[0].Tools) == 0 {
-		t.Error("expected tools in agentic path request")
+			if len(gw.requests) == 0 {
+				t.Fatal("expected at least 1 gateway request")
+			}
+			if gw.requests[0].JSONMode {
+				t.Error("expected JSONMode=false for agentic path")
+			}
+			if len(gw.requests[0].Tools) == 0 {
+				t.Error("expected tools in agentic path request")
+			}
+		})
 	}
 }
 

@@ -475,10 +475,12 @@ func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolTo
 }
 
 // executeAgenticTool is a wrapper around DispatchTool for backward compatibility.
-// Deprecated: The toolExec parameter is ignored; the worker's internal toolExecutor is used.
 // Use DispatchTool directly instead.
 func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
-	return w.DispatchTool(ctx, call, toolToAdapter, w.toolExecutor)
+	if toolExec == nil {
+		toolExec = w.toolExecutor
+	}
+	return w.DispatchTool(ctx, call, toolToAdapter, toolExec)
 }
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
