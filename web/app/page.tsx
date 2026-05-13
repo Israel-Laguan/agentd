@@ -72,7 +72,12 @@ export default function Page() {
 
     try {
       const data = await sendChat(input);
-      setMessages(prev => [...prev, data.message]);
+      const assistantMessage =
+        data?.message ??
+        (data?.choices?.[0]?.message?.content
+          ? { role: 'assistant', content: data.choices[0].message.content }
+          : null);
+      if (assistantMessage) setMessages(prev => [...prev, assistantMessage]);
       if (data.plan) {
         setDraftPlan(data.plan);
       }
