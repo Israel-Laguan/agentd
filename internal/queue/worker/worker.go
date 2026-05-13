@@ -53,6 +53,7 @@ type Worker struct {
 	capabilities        *capabilities.Registry
 	tokenBudget         int
 	budgetTracker       spec.BudgetTracker
+	hooks               *HookChain
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -76,6 +77,7 @@ type WorkerOptions struct {
 	SandboxExtraEnv         []string
 	SandboxScrubPatterns    []string
 	Capabilities            *capabilities.Registry
+	Hooks                   *HookChain
 }
 
 func NewWorker(
@@ -118,7 +120,6 @@ func NewWorker(
 	if opts.TokenBudget > 0 {
 		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
 	}
-	// Initialize scrubber with configured patterns (may be nil for default patterns)
 	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
@@ -137,6 +138,7 @@ func NewWorker(
 		capabilities:        opts.Capabilities,
 		tokenBudget:         opts.TokenBudget,
 		budgetTracker:       budgetTracker,
+		hooks:               resolveHooks(opts.Hooks),
 	}
 }
 
@@ -404,7 +406,7 @@ func (w *Worker) processAgenticIteration(
 		// Measure execution time
 		startTime := time.Now()
 		// Use task-local ToolExecutor for thread-safe tool execution
-		result := w.DispatchTool(ctx, call, toolToAdapter, toolExecutor)
+		result := w.DispatchTool(ctx, task.ID, call, toolToAdapter, toolExecutor)
 		durationMs := time.Since(startTime).Milliseconds()
 
 		// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
@@ -441,10 +443,24 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) (
 //   - toolToAdapter: Map of tool names to adapter names for MCP tools
 //
 // Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
-func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
+func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
+	hookCtx := HookContext{
+		ToolName:  call.Function.Name,
+		Args:      call.Function.Arguments,
+		SessionID: sessionID,
+		Timestamp: time.Now(),
+	}
+
+	if w.hooks != nil {
+		if verdict := w.hooks.RunPre(hookCtx); verdict.Veto {
+			return jsonErrorf("tool call vetoed: %s", verdict.Reason)
+		}
+	}
+
+	var result string
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
-		return toolExecutor.Execute(ctx, call)
+		result = toolExecutor.Execute(ctx, call)
 	default:
 		if w.capabilities == nil {
 			return jsonErrorf("unknown tool: %s", call.Function.Name)
@@ -470,17 +486,23 @@ func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolTo
 		if err != nil {
 			return jsonErrorf("capability tool result encode failed: %v", err)
 		}
-		return string(encoded)
+		result = string(encoded)
 	}
+
+	if w.hooks != nil {
+		result = w.hooks.RunPost(hookCtx, result)
+	}
+
+	return result
 }
 
 // executeAgenticTool is a wrapper around DispatchTool for backward compatibility.
 // Use DispatchTool directly instead.
-func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
+func (w *Worker) executeAgenticTool(ctx context.Context, sessionID string, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
 	if toolExec == nil {
 		toolExec = w.toolExecutor
 	}
-	return w.DispatchTool(ctx, call, toolToAdapter, toolExec)
+	return w.DispatchTool(ctx, sessionID, call, toolToAdapter, toolExec)
 }
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
