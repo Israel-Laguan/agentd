@@ -2,7 +2,6 @@ package truncation
 
 import (
 	"fmt"
-	"unicode/utf8"
 
 	"agentd/internal/gateway/spec"
 )
@@ -34,11 +33,11 @@ func (s MiddleOutStrategy) Truncate(input string, maxChars int) string {
 	if maxChars <= 0 || len(runes) <= maxChars {
 		return input
 	}
-	markerRunes := utf8.RuneCountInString(truncationMarker)
-	if maxChars <= markerRunes {
+	markerBytes := len(truncationMarker)
+	if maxChars <= markerBytes {
 		return string(runes[:maxChars])
 	}
-	remaining := maxChars - markerRunes
+	remaining := maxChars - markerBytes
 	headRunes := remaining / 2
 	tailRunes := remaining - headRunes
 
