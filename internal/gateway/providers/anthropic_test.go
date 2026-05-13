@@ -173,8 +173,16 @@ func TestAnthropicToolCalls_ParsesToolCalls(t *testing.T) {
 	if resp.ToolCalls[0].Function.Name != "get_weather" {
 		t.Errorf("ToolCalls[0].Function.Name = %q, want %q", resp.ToolCalls[0].Function.Name, "get_weather")
 	}
-	if resp.ToolCalls[0].Function.Arguments != `{"location":"Boston","unit":"celsius"}` {
-		t.Errorf("ToolCalls[0].Function.Arguments = %q, want %q", resp.ToolCalls[0].Function.Arguments, `{"location":"Boston","unit":"celsius"}`)
+	// Use JSON unmarshal for robust comparison (brittle to key ordering)
+	var gotArgs, wantArgs map[string]interface{}
+	if err := json.Unmarshal([]byte(resp.ToolCalls[0].Function.Arguments), &gotArgs); err != nil {
+		t.Errorf("Failed to unmarshal ToolCalls[0].Function.Arguments: %v", err)
+	}
+	if err := json.Unmarshal([]byte(`{"location":"Boston","unit":"celsius"}`), &wantArgs); err != nil {
+		t.Fatalf("Failed to unmarshal expected arguments: %v", err)
+	}
+	if gotArgs["location"] != wantArgs["location"] || gotArgs["unit"] != wantArgs["unit"] {
+		t.Errorf("ToolCalls[0] arguments = %v, want %v", gotArgs, wantArgs)
 	}
 
 	if resp.ToolCalls[1].ID != "call_xyz789" {
@@ -182,6 +190,18 @@ func TestAnthropicToolCalls_ParsesToolCalls(t *testing.T) {
 	}
 	if resp.ToolCalls[1].Function.Name != "get_time" {
 		t.Errorf("ToolCalls[1].Function.Name = %q, want %q", resp.ToolCalls[1].Function.Name, "get_time")
+	}
+	// Verify arguments using JSON unmarshal for robust comparison
+	gotArgs = nil
+	wantArgs = nil
+	if err := json.Unmarshal([]byte(resp.ToolCalls[1].Function.Arguments), &gotArgs); err != nil {
+		t.Errorf("Failed to unmarshal ToolCalls[1].Function.Arguments: %v", err)
+	}
+	if err := json.Unmarshal([]byte(`{"timezone":"UTC"}`), &wantArgs); err != nil {
+		t.Fatalf("Failed to unmarshal expected arguments: %v", err)
+	}
+	if gotArgs["timezone"] != wantArgs["timezone"] {
+		t.Errorf("ToolCalls[1].Function.Arguments timezone = %v, want %v", gotArgs["timezone"], wantArgs["timezone"])
 	}
 }
 
@@ -275,6 +295,19 @@ func TestAnthropicTools_Serialization(t *testing.T) {
 	}
 	if receivedBody.Tools[0].Description != "Get weather for a location" {
 		t.Errorf("Tool description = %q, want %q", receivedBody.Tools[0].Description, "Get weather for a location")
+	}
+	// Verify InputSchema is properly serialized
+	if receivedBody.Tools[0].InputSchema == nil {
+		t.Error("Tool InputSchema should not be nil")
+	}
+	if receivedBody.Tools[0].InputSchema.Type != "object" {
+		t.Errorf("Tool InputSchema.Type = %q, want %q", receivedBody.Tools[0].InputSchema.Type, "object")
+	}
+	if receivedBody.Tools[0].InputSchema.Properties == nil {
+		t.Error("Tool InputSchema.Properties should not be nil")
+	}
+	if _, ok := receivedBody.Tools[0].InputSchema.Properties["location"]; !ok {
+		t.Error("Tool InputSchema.Properties should have 'location'")
 	}
 }
 

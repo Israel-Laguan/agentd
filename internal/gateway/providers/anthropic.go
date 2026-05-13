@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -171,10 +172,14 @@ func (r anthropicResponse) toAIResponse(defaultModel string) spec.AIResponse {
 	var toolCalls []spec.ToolCall
 	for _, c := range r.Content {
 		if c.Type == "text" && c.Text != nil {
-			content = *c.Text
+			content += *c.Text
 		}
 		if c.Type == "tool_use" && c.ToolUse != nil {
-			inputBytes, _ := json.Marshal(c.ToolUse.Input)
+			inputBytes, err := json.Marshal(c.ToolUse.Input)
+			if err != nil {
+				log.Printf("failed to marshal tool input: tool=%s error=%v", c.ToolUse.Name, err)
+				inputBytes = []byte("{}")
+			}
 			toolCalls = append(toolCalls, spec.ToolCall{
 				ID: c.ToolUse.ID,
 				Type: "tool_use",

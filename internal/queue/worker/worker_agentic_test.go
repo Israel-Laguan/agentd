@@ -299,7 +299,7 @@ func TestProcessAgentic_ExecutesToolCalls(t *testing.T) {
 	}
 
 	// Use DispatchTool as the single entry point for tool execution
-	result := w.DispatchTool(context.Background(), "task_123", bashCall, nil)
+	result := w.DispatchTool(context.Background(), bashCall, nil)
 
 	// The result should contain the output
 	if !strings.Contains(result, "hello") {

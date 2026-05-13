@@ -146,10 +146,11 @@ func TestToolCallPrecedesToolResult(t *testing.T) {
 		callPositions := make(map[string]int) // call_id -> TOOL_CALL position
 
 		for i, ev := range sink.events {
-			if ev.Type == models.EventTypeToolCall {
+			switch ev.Type {
+			case models.EventTypeToolCall:
 				callID := extractCallID(ev.Payload)
 				callPositions[callID] = i
-			} else if ev.Type == models.EventTypeToolResult {
+			case models.EventTypeToolResult:
 				callID := extractCallID(ev.Payload)
 				if pos, ok := callPositions[callID]; !ok {
 					// No TOOL_CALL for this call_id - property violated
@@ -282,26 +283,27 @@ func TestEventOrderingWithVaryingCallCounts(t *testing.T) {
 				w.emitToolResult(ctx, task, call, `{"Success":true}`, 100)
 			}
 
-			// Verify ordering
-			callPositions := make(map[string]int)
-			for i, ev := range sink.events {
-				if ev.Type == models.EventTypeToolCall {
-					callID := extractCallID(ev.Payload)
-					callPositions[callID] = i
-				} else if ev.Type == models.EventTypeToolResult {
-					callID := extractCallID(ev.Payload)
-					pos, ok := callPositions[callID]
-					if !ok {
-						t.Errorf("No TOOL_CALL found for call_id %s", callID)
-						return
-					}
-					if i <= pos {
-						t.Errorf("TOOL_RESULT at index %d should be after TOOL_CALL at index %d for call_id %s",
-							i, pos, callID)
-						return
-					}
+// Verify ordering
+		callPositions := make(map[string]int)
+		for i, ev := range sink.events {
+			switch ev.Type {
+			case models.EventTypeToolCall:
+				callID := extractCallID(ev.Payload)
+				callPositions[callID] = i
+			case models.EventTypeToolResult:
+				callID := extractCallID(ev.Payload)
+				pos, ok := callPositions[callID]
+				if !ok {
+					t.Errorf("No TOOL_CALL found for call_id %s", callID)
+					return
+				}
+				if i <= pos {
+					t.Errorf("TOOL_RESULT at index %d should be after TOOL_CALL at index %d for call_id %s",
+						i, pos, callID)
+					return
 				}
 			}
+		}
 
 			// Verify event counts
 			if len(sink.events) != count*2 {

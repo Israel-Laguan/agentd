@@ -78,17 +78,7 @@ func schemaVersion(ctx context.Context, db *sql.DB) (int, error) {
 	return 1, nil
 }
 
-func tasksCheckAllowsBlocked(ctx context.Context, db *sql.DB) (bool, error) {
-	var createSQL string
-	err := db.QueryRowContext(ctx, `
-		SELECT sql
-		FROM sqlite_master
-		WHERE type = 'table' AND name = 'tasks'`).Scan(&createSQL)
-	if err != nil {
-		return false, fmt.Errorf("read tasks schema: %w", err)
-	}
-	return strings.Contains(createSQL, "'BLOCKED'"), nil
-}
+
 
 func setSchemaVersion(ctx context.Context, db *sql.DB, version int) error {
 	_, err := db.ExecContext(ctx, `

@@ -65,11 +65,18 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 }
 
 func buildStartRuntime(cfg config.Config, store models.KanbanStore, deps runtimeDeps, startOpts *startOptions) (*queue.Daemon, *http.Server) {
-	tuner := queue.NewParameterTuner(cfg.Healing)
+	worker := buildWorker(store, deps, cfg)
+	intake := buildIntake(store, deps, cfg)
+	daemon := buildDaemon(store, worker, intake, deps, cfg, startOpts)
+	apiServer := buildAPIServer(store, deps, cfg)
+	return daemon, apiServer
+}
+
+func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *queue.Worker {
 	workerRetriever := &memory.Retriever{Store: store, Cfg: cfg.Librarian}
-	worker := queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, queue.WorkerOptions{
+	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, queue.WorkerOptions{
 		Canceller:           deps.canceller,
-		Tuner:               tuner,
+		Tuner:               queue.NewParameterTuner(cfg.Healing),
 		Retriever:           workerRetriever,
 		HeartbeatInterval:   cfg.Cron.Heartbeat,
 		SandboxWallTimeout:  cfg.Sandbox.WallTimeout,
@@ -77,8 +84,18 @@ func buildStartRuntime(cfg config.Config, store models.KanbanStore, deps runtime
 		SandboxExtraEnv:     cfg.Sandbox.ExtraEnv,
 		SandboxScrubPatterns: cfg.Sandbox.ScrubPatterns,
 	})
-	intake := frontdesk.NewIntakeProcessor(store, deps.gateway, deps.emitter, cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), cfg.Gateway.Truncator.MaxInputChars)
-	librarian := &memory.Librarian{
+}
+
+func buildIntake(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *frontdesk.IntakeProcessor {
+	return frontdesk.NewIntakeProcessor(
+		store, deps.gateway, deps.emitter,
+		cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker),
+		cfg.Gateway.Truncator.MaxInputChars,
+	)
+}
+
+func buildLibrarian(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *memory.Librarian {
+	return &memory.Librarian{
 		Store:   store,
 		Gateway: deps.gateway,
 		Breaker: deps.breaker,
@@ -86,13 +103,19 @@ func buildStartRuntime(cfg config.Config, store models.KanbanStore, deps runtime
 		Cfg:     cfg.Librarian,
 		HomeDir: cfg.HomeDir,
 	}
-	dreamer := &memory.DreamAgent{
+}
+
+func buildDreamer(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *memory.DreamAgent {
+	return &memory.DreamAgent{
 		Store:   store,
 		Gateway: deps.gateway,
 		Breaker: deps.breaker,
 		Cfg:     cfg.Librarian,
 	}
-	daemon := queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{
+}
+
+func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontdesk.IntakeProcessor, deps runtimeDeps, cfg config.Config, startOpts *startOptions) *queue.Daemon {
+	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{
 		MaxWorkers:           startOpts.workers,
 		TaskInterval:         cfg.Cron.TaskDispatch,
 		MaxTaskInterval:      cfg.Queue.PollMaxInterval,
@@ -105,27 +128,29 @@ func buildStartRuntime(cfg config.Config, store models.KanbanStore, deps runtime
 		DiskWatchdogSchedule: cfg.Cron.DiskWatchdog.Schedule,
 		DiskFreeThreshold:    cfg.Disk.FreeThresholdPercent,
 		DiskCheckPath:        cfg.HomeDir,
-		Librarian:            librarian,
-		Dreamer:              dreamer,
+		Librarian:            buildLibrarian(store, deps, cfg),
+		Dreamer:              buildDreamer(store, deps, cfg),
 		CuratorEvery:         cfg.Cron.MemoryCurator.Every,
 		CuratorSchedule:      cfg.Cron.MemoryCurator.Schedule,
 		DreamEvery:           cfg.Cron.Dream.Every,
 		DreamSchedule:        cfg.Cron.Dream.Schedule,
 	})
+}
+
+func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *http.Server {
 	retriever := &memory.Retriever{Store: store, Cfg: cfg.Librarian}
 	summarizer := frontdesk.NewStatusSummarizer(store)
 	fileStash := &frontdesk.FileStash{Dir: cfg.UploadsDir, StashThreshold: cfg.Gateway.Truncation.StashThreshold}
 	board, _ := any(store).(models.KanbanBoardContract)
 	taskService := services.NewTaskService(store, board)
 	systemService := services.NewSystemService(summarizer, breakerProbe{breaker: deps.breaker})
-	apiServer := api.NewServer(api.ServerDeps{
+	return api.NewServer(api.ServerDeps{
 		Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus,
 		Project: deps.project, Tasks: taskService, System: systemService,
 		Summarizer: summarizer, FileStash: fileStash,
 		Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars,
 		Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken,
 	})
-	return daemon, apiServer
 }
 
 type startOptions struct {

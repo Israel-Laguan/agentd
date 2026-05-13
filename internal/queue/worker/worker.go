@@ -289,7 +289,6 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	w.registerCancel(task.ID, cancel)
 	defer w.deregisterCancel(task.ID)
 
-	// Re-initialize tool executor with project-specific workspace path for this task
 	w.toolExecutor = NewToolExecutor(
 		w.sandbox,
 		project.WorkspacePath,
@@ -303,93 +302,114 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
-	deadlineGuard := NewDeadlineGuard(ctx)
+	deadlineGuard := NewDeadlineGuard(cancelCtx)
 	agenticTruncator := truncation.NewAgenticTruncator(w.truncatorMax)
 
 	for {
-		if err := deadlineGuard.BeforeIteration(); err != nil {
-			w.handleGatewayError(ctx, task, err)
-			return
-		}
-
-		if err := iterationGuard.BeforeIteration(); err != nil {
-			w.handleIterationExceeded(ctx, task)
-			return
-		}
-
-		if len(messages) > w.truncationThreshold || (w.characterBudget > 0 && totalChars(messages) > w.characterBudget) {
-			var err error
-			messages, err = agenticTruncator.Apply(ctx, messages, w.characterBudget)
-			if err != nil {
-				w.handleGatewayError(ctx, task, err)
-				return
-			}
-		}
-
-		if iterationGuard.ShouldInjectFinalMessage() {
-			messages = append(messages, iterationGuard.FinalMessage())
-			iterationGuard.ResetAllowFinal()
-		}
-
-		if err := budgetGuard.BeforeCall(); err != nil {
-			w.handleGatewayError(ctx, task, err)
-			return
-		}
-
-		req := gateway.AIRequest{
-			Messages:    messages,
-			Temperature: profile.Temperature,
-			Tools:       tools,
-			AgentID:     task.AgentID,
-			Role:        gateway.RoleWorker,
-			TaskID:      task.ID,
-			Provider:    profile.Provider,
-			Model:       profile.Model,
-			MaxTokens:   profile.MaxTokens,
-		}
-		req = w.applyTuning(req, task, profile)
-
-		resp, err := w.gateway.Generate(cancelCtx, req)
+		shouldContinue, err := w.processAgenticIteration(
+			cancelCtx, task, profile, &messages, tools, toolToAdapter,
+			iterationGuard, budgetGuard, deadlineGuard, agenticTruncator,
+		)
 		if err != nil {
-			w.handleGatewayError(ctx, task, err)
 			return
 		}
-
-		budgetGuard.AfterCall(resp.TokenUsage)
-
-		messages = append(messages, gateway.PromptMessage{
-			Role:      "assistant",
-			Content:   resp.Content,
-			ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
-		})
-
-		if len(resp.ToolCalls) == 0 {
-			w.commitText(ctx, task, resp.Content)
+		if !shouldContinue {
 			return
-		}
-
-		iterationGuard.AfterIteration(true)
-
-		for _, call := range resp.ToolCalls {
-			// Emit TOOL_CALL event before execution (Requirements 1.3, 7.1)
-			w.emitToolCall(ctx, task, call)
-
-			// Measure execution time
-			startTime := time.Now()
-			// Use DispatchTool as the single entry point for tool execution (Requirement 1.1)
-			result := w.DispatchTool(cancelCtx, task.ID, call, toolToAdapter)
-			durationMs := time.Since(startTime).Milliseconds()
-
-			// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
-			w.emitToolResult(ctx, task, call, result, durationMs)
-
-			messages = append(messages, gateway.PromptMessage{
-				Role:       "tool",
-				ToolCallID: call.ID,
-				Content:    result,
-			})
 		}
 	}
+}
+
+func (w *Worker) processAgenticIteration(
+	ctx context.Context, task models.Task, profile models.AgentProfile,
+	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
+	toolToAdapter map[string]string,
+	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
+	deadlineGuard *DeadlineGuard, agenticTruncator spec.Truncator,
+) (bool, error) {
+	if err := deadlineGuard.BeforeIteration(); err != nil {
+		w.handleGatewayError(ctx, task, err)
+		return false, err
+	}
+
+	if err := iterationGuard.BeforeIteration(); err != nil {
+		w.handleIterationExceeded(ctx, task)
+		return false, err
+	}
+
+	if len(*messages) > w.truncationThreshold || (w.characterBudget > 0 && totalChars(*messages) > w.characterBudget) {
+		var err error
+		*messages, err = agenticTruncator.Apply(ctx, *messages, w.characterBudget)
+		if err != nil {
+			w.handleGatewayError(ctx, task, err)
+			return false, err
+		}
+	}
+
+	if iterationGuard.ShouldInjectFinalMessage() {
+		*messages = append(*messages, iterationGuard.FinalMessage())
+		iterationGuard.ResetAllowFinal()
+	}
+
+	if err := budgetGuard.BeforeCall(); err != nil {
+		w.handleGatewayError(ctx, task, err)
+		return false, err
+	}
+
+	req := gateway.AIRequest{
+		Messages:    *messages,
+		Temperature: profile.Temperature,
+		Tools:       tools,
+		AgentID:     task.AgentID,
+		Role:        gateway.RoleWorker,
+		TaskID:      task.ID,
+		Provider:    profile.Provider,
+		Model:       profile.Model,
+		MaxTokens:   profile.MaxTokens,
+	}
+	req = w.applyTuning(req, task, profile)
+
+	resp, err := w.gateway.Generate(ctx, req)
+	if err != nil {
+		w.handleGatewayError(ctx, task, err)
+		return false, err
+	}
+
+	budgetGuard.AfterCall(resp.TokenUsage)
+
+	*messages = append(*messages, gateway.PromptMessage{
+		Role:      "assistant",
+		Content:   resp.Content,
+		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
+	})
+
+	if len(resp.ToolCalls) == 0 {
+		w.commitText(ctx, task, resp.Content)
+		return false, nil
+	}
+
+	iterationGuard.AfterIteration(true)
+
+	for _, call := range resp.ToolCalls {
+		// Emit TOOL_CALL event before execution (Requirements 1.3, 7.1)
+		w.emitToolCall(ctx, task, call)
+
+		// Measure execution time
+		startTime := time.Now()
+		// Use DispatchTool as the single entry point for tool execution (Requirement 1.1)
+		result := w.DispatchTool(ctx, call, toolToAdapter)
+		durationMs := time.Since(startTime).Milliseconds()
+
+		// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
+		w.emitToolResult(ctx, task, call, result, durationMs)
+
+		*messages = append(*messages, gateway.PromptMessage{
+			Role:       "tool",
+			ToolCallID: call.ID,
+			Content:    result,
+		})
+	}
+
+	return true, nil
 }
 
 func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
@@ -409,17 +429,11 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) (
 // It handles both built-in tools (bash, read, write) and capability tools (MCP).
 // Parameters:
 //   - ctx: Context for cancellation and timeouts
-//   - taskID: Task ID for event emission
 //   - call: The tool call from the AI response
 //   - toolToAdapter: Map of tool names to adapter names for MCP tools
 //
 // Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
-func (w *Worker) DispatchTool(ctx context.Context, taskID string, call gateway.ToolCall, toolToAdapter map[string]string) string {
-	// Emit TOOL_CALL event before execution (Requirements 1.3, 7.1)
-	// Note: taskID is passed for event emission but we need a Task object with the ID
-	// The caller (processAgentic) should handle event emission around the DispatchTool call
-	// to maintain the existing event flow with proper task metadata.
-
+func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string) string {
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
 		return w.toolExecutor.Execute(ctx, call)
@@ -453,9 +467,10 @@ func (w *Worker) DispatchTool(ctx context.Context, taskID string, call gateway.T
 }
 
 // executeAgenticTool is a wrapper around DispatchTool for backward compatibility.
-// It uses the worker's internal tool executor.
+// Deprecated: The toolExec parameter is ignored; the worker's internal toolExecutor is used.
+// Use DispatchTool directly instead.
 func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
-	return w.DispatchTool(ctx, "", call, toolToAdapter)
+	return w.DispatchTool(ctx, call, toolToAdapter)
 }
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {

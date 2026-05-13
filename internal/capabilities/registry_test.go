@@ -115,7 +115,7 @@ func TestRegistry_Close_ClosesAllAdapters(t *testing.T) {
 	reg.Register("test1", adapter1)
 	reg.Register("test2", adapter2)
 
-	reg.Close()
+	_ = reg.Close()
 }
 
 func TestRegistry_AdapterForTool(t *testing.T) {
