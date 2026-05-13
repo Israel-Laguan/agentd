@@ -69,6 +69,7 @@ func (t *ToolExecutor) Definitions() []gateway.ToolDefinition {
 		{
 			Name:        toolNameRead,
 			Description: "Read a file from the workspace. Returns file contents or error.",
+			Cacheable:   true,
 			Parameters: &gateway.FunctionParameters{
 				Type: "object",
 				Properties: map[string]any{
