@@ -70,6 +70,17 @@ func TestAgenticTruncator_BudgetNotExceeded(t *testing.T) {
 	if len(got) < 2 {
 		t.Errorf("expected at least 2 messages (system + user), got %d", len(got))
 	}
+
+	// Verify output is unchanged when budget is not exceeded
+	if len(got) != len(messages) {
+		t.Errorf("len(got) = %d, want %d (output should be unchanged)", len(got), len(messages))
+	}
+	for i, m := range got {
+		if m.Role != messages[i].Role || m.Content != messages[i].Content {
+			t.Errorf("message %d changed: got role=%s content=%q, want role=%s content=%q",
+				i, m.Role, m.Content, messages[i].Role, messages[i].Content)
+		}
+	}
 }
 
 func TestAgenticTruncator_ZeroBudgetUnlimited(t *testing.T) {

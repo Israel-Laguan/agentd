@@ -7,15 +7,37 @@ import (
 // removeDanglingToolCalls ensures pairwise consistency:
 // - If an assistant message has ToolCalls, ensure corresponding tool responses exist
 // - If not, mark the ToolCalls as collapsed instead of leaving orphans
+// - Also remove tool responses that don't have corresponding tool calls (orphaned tool responses)
 func (t *AgenticTruncator) removeDanglingToolCalls(messages []spec.PromptMessage) []spec.PromptMessage {
 	if len(messages) == 0 {
 		return messages
 	}
 
-	out := make([]spec.PromptMessage, len(messages))
-	copy(out, messages)
+	// First, build a set of valid tool call IDs from assistant messages
+	validToolCallIDs := make(map[string]bool)
+	for i := 0; i < len(messages); i++ {
+		if messages[i].Role == "assistant" && len(messages[i].ToolCalls) > 0 {
+			for _, tc := range messages[i].ToolCalls {
+				validToolCallIDs[tc.ID] = true
+			}
+		}
+	}
 
-	// Check each assistant message with tool_calls
+	// Filter out orphaned tool responses (tool messages whose ToolCallID doesn't match any assistant's ToolCalls)
+	out := make([]spec.PromptMessage, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role == "tool" {
+			// Keep tool response only if its ToolCallID exists in validToolCallIDs
+			if validToolCallIDs[msg.ToolCallID] {
+				out = append(out, msg)
+			}
+			// Otherwise, it's orphaned - skip it
+		} else {
+			out = append(out, msg)
+		}
+	}
+
+	// Now handle assistant messages with orphan tool_calls (tool_calls without corresponding tool responses)
 	for i := 0; i < len(out); i++ {
 		if out[i].Role == "assistant" && len(out[i].ToolCalls) > 0 {
 			// Check if all tool calls have corresponding tool responses

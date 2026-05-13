@@ -20,7 +20,8 @@ func (t *AgenticTruncator) applyMessageCountTruncation(messages []spec.PromptMes
 	out = append(out, messages[0]) // Keep system prompt
 
 	firstUserIdx := t.findFirstUserIndex(messages)
-	if firstUserIdx > 0 {
+	// Only append first user anchor if we haven't exceeded MaxMessages
+	if firstUserIdx > 0 && len(out) < t.MaxMessages {
 		out = append(out, messages[firstUserIdx])
 	}
 
