@@ -156,7 +156,9 @@ func TestRateLimitHook_PerSessionIsolation(t *testing.T) {
 
 	// Exhaust store1
 	for i := 0; i < 2; i++ {
-		hook1.Fn(ctx)
+		if _, err := hook1.Fn(ctx); err != nil {
+			t.Fatalf("unexpected error exhausting store1: %v", err)
+		}
 	}
 
 	// store2 should still be fresh
@@ -211,6 +213,24 @@ func TestRateLimitHook_ZeroLimit_Unlimited(t *testing.T) {
 	}
 }
 
+func TestRateLimitHook_NegativeLimit_Vetoes(t *testing.T) {
+	t.Parallel()
+	limits := map[string]int{"bash": -5}
+	store := NewRateLimitStore()
+	hook := RateLimitHook(limits, store)
+
+	verdict, err := hook.Fn(HookContext{ToolName: "bash", Timestamp: time.Now()})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !verdict.Veto {
+		t.Fatal("negative limit should veto")
+	}
+	if !strings.Contains(verdict.Reason, "Invalid negative rate limit") {
+		t.Fatalf("reason should mention invalid negative limit, got %q", verdict.Reason)
+	}
+}
+
 func TestRateLimitHook_FailClosedPolicy(t *testing.T) {
 	t.Parallel()
 	hook := RateLimitHook(map[string]int{"bash": 1}, NewRateLimitStore())
@@ -248,9 +268,14 @@ func TestRateLimitHook_MessageFormat(t *testing.T) {
 	hook := RateLimitHook(limits, store)
 
 	ctx := HookContext{ToolName: "bash", Timestamp: time.Now()}
-	hook.Fn(ctx) // first call OK
+	if _, err := hook.Fn(ctx); err != nil {
+		t.Fatalf("first call: unexpected error: %v", err)
+	}
 
-	verdict, _ := hook.Fn(ctx) // second call vetoed
+	verdict, err := hook.Fn(ctx) // second call vetoed
+	if err != nil {
+		t.Fatalf("second call: unexpected error: %v", err)
+	}
 	want := `Rate limit exceeded for tool "bash" (1/1). Consider consolidating commands.`
 	if verdict.Reason != want {
 		t.Fatalf("reason mismatch:\n  got:  %s\n  want: %s", verdict.Reason, want)

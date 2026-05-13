@@ -57,8 +57,14 @@ func RateLimitHook(limits map[string]int, store *RateLimitStore) PreHook {
 				return HookVerdict{}, nil
 			}
 			limit := resolveLimit(limits, ctx.ToolName)
-			if limit <= 0 {
+			if limit == 0 {
 				return HookVerdict{}, nil
+			}
+			if limit < 0 {
+				return HookVerdict{
+					Veto:   true,
+					Reason: fmt.Sprintf("Invalid negative rate limit for tool %q (%d).", ctx.ToolName, limit),
+				}, nil
 			}
 			count := store.Increment(ctx.ToolName)
 			if count > limit {
