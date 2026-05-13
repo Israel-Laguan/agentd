@@ -277,7 +277,7 @@ func splitH2Sections(content string) map[string]string {
 
 // resolutionRule is appended to every assembled prompt so the model knows
 // how to resolve conflicting instructions across layers.
-const resolutionRule = "If instructions at different levels conflict, task-level overrides project-level, which overrides user-preferences, which override global."
+const resolutionRule = "If instructions at different levels conflict, task-level overrides project-level, which overrides global, which overrides user-preferences."
 
 // SystemPromptBuilder assembles the final system prompt by layering
 // instructions from multiple scopes in a deterministic order.
@@ -318,52 +318,48 @@ func (b *SystemPromptBuilder) WithUserPreferences(prefs *UserPreferences) *Syste
 }
 
 // Build assembles the final system prompt in precedence order:
-//  1. User preferences (silent prefix)
-//  2. Known Hazards (safety prefix, from project layer)
-//  3. Global (agentic tool-use system text)
-//  4. Agent Scope (capability constraints, from project layer)
-//  5. Task-level SystemPrompt (highest precedence override)
-//  6. Architecture + Conventions (project context)
-//  7. Resolution rule
+//  1. User preferences (base style, lowest precedence)
+//  2. Global (agentic tool-use foundation)
+//  3. Project (Hazards, Scope, Architecture, Conventions)
+//  4. Task-level SystemPrompt (highest precedence override)
+//  5. Resolution rule
 func (b *SystemPromptBuilder) Build() string {
 	var sections []string
 
-	// 1. User preferences — always first, silent prefix
+	// 1. User preferences — base style, silent prefix
 	if !b.userPrefs.IsEmpty() {
 		if text := b.userPrefs.FormatPrompt(); text != "" {
 			sections = append(sections, text)
 		}
 	}
 
-	// 2. Known Hazards — safety-first positioning
-	if b.project != nil && b.project.KnownHazards != "" {
-		sections = append(sections, "KNOWN HAZARDS (from project):\n"+b.project.KnownHazards)
-	}
-
-	// 3. Global agentic instructions
+	// 2. Global agentic instructions — system foundation
 	if b.global != "" {
 		sections = append(sections, b.global)
 	}
 
-	// 4. Agent Scope — capability constraints
-	if b.project != nil && b.project.AgentScope != "" {
-		sections = append(sections, "AGENT SCOPE (from project):\n"+b.project.AgentScope)
+	// 3. Project-level instructions
+	if b.project != nil {
+		if b.project.KnownHazards != "" {
+			sections = append(sections, "KNOWN HAZARDS (from project):\n"+b.project.KnownHazards)
+		}
+		if b.project.AgentScope != "" {
+			sections = append(sections, "AGENT SCOPE (from project):\n"+b.project.AgentScope)
+		}
+		if b.project.Architecture != "" {
+			sections = append(sections, "ARCHITECTURE (from project):\n"+b.project.Architecture)
+		}
+		if b.project.Conventions != "" {
+			sections = append(sections, "CONVENTIONS (from project):\n"+b.project.Conventions)
+		}
 	}
 
-	// 5. Architecture + Conventions — project context
-	if b.project != nil && b.project.Architecture != "" {
-		sections = append(sections, "ARCHITECTURE (from project):\n"+b.project.Architecture)
-	}
-	if b.project != nil && b.project.Conventions != "" {
-		sections = append(sections, "CONVENTIONS (from project):\n"+b.project.Conventions)
-	}
-
-	// 6. Task-level override — highest precedence content
+	// 4. Task-level override — highest precedence content
 	if b.taskPrompt != "" {
 		sections = append(sections, b.taskPrompt)
 	}
 
-	// 7. Resolution rule — always appended
+	// 5. Resolution rule — always appended
 	sections = append(sections, resolutionRule)
 
 	return strings.Join(sections, "\n\n")
