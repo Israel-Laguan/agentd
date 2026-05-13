@@ -31,7 +31,6 @@ type workerScenario struct {
 	store          *workerTestStore
 	gateway        *workerTestGateway
 	sandbox        *workerTestSandbox
-	result         *sandbox.Result
 	legacyCalled   bool
 	agenticCalled  bool
 	warningsLogged []string
@@ -240,7 +239,6 @@ type workerTestGateway struct {
 	content               string
 	toolCalls             []gateway.ToolCall
 	nextContent           string
-	nextToolCalls         []gateway.ToolCall
 	err                   error
 	requests              []gateway.AIRequest
 	callCount             int
@@ -392,7 +390,8 @@ func (s *workerScenario) agenticModeEnabled(context.Context) error {
 }
 
 func (s *workerScenario) providerIs(_ context.Context, provider string) error {
-	s.store.profile.Provider = provider
+	// Use lowercase for consistent comparison with agenticProviders
+	s.store.profile.Provider = strings.ToLower(provider)
 	return nil
 }
 

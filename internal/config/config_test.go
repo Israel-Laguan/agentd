@@ -120,7 +120,9 @@ func TestEnsureDirs_CreatesParent(t *testing.T) {
 func TestLoad_WithMissingConfig(t *testing.T) {
 	tmp := t.TempDir()
 	homeDir := filepath.Join(tmp, "agentd")
-	os.MkdirAll(homeDir, 0o755)
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("failed to create home dir: %v", err)
+	}
 
 	cfg, err := Load(LoadOptions{HomeOverride: homeDir})
 	if err != nil {

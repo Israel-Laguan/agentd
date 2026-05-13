@@ -4,6 +4,75 @@ import (
 	"agentd/internal/gateway/spec"
 )
 
+// collectValidToolCallIDs builds a set of tool call IDs from assistant messages.
+func collectValidToolCallIDs(messages []spec.PromptMessage) map[string]bool {
+	valid := make(map[string]bool)
+	for _, msg := range messages {
+		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
+			for _, tc := range msg.ToolCalls {
+				valid[tc.ID] = true
+			}
+		}
+	}
+	return valid
+}
+
+// filterOrphanedToolResponses removes tool responses that don't have corresponding tool calls.
+func filterOrphanedToolResponses(messages []spec.PromptMessage, validIDs map[string]bool) []spec.PromptMessage {
+	out := make([]spec.PromptMessage, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role == "tool" {
+			if validIDs[msg.ToolCallID] {
+				out = append(out, msg)
+			}
+		} else {
+			out = append(out, msg)
+		}
+	}
+	return out
+}
+
+// hasOrphanToolCalls checks if any tool calls in the given message lack corresponding tool responses later in the list.
+func hasOrphanToolCalls(msg spec.PromptMessage, messages []spec.PromptMessage, startIdx int) bool {
+	for _, tc := range msg.ToolCalls {
+		found := false
+		for j := startIdx + 1; j < len(messages); j++ {
+			if messages[j].Role == "tool" && messages[j].ToolCallID == tc.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return true
+		}
+	}
+	return false
+}
+
+// filterValidToolCalls keeps only tool calls that have corresponding tool responses.
+func filterValidToolCalls(calls []spec.ToolCall, messages []spec.PromptMessage, startIdx int) []spec.ToolCall {
+	var valid []spec.ToolCall
+	for _, tc := range calls {
+		for j := startIdx + 1; j < len(messages); j++ {
+			if messages[j].Role == "tool" && messages[j].ToolCallID == tc.ID {
+				valid = append(valid, tc)
+				break
+			}
+		}
+	}
+	return valid
+}
+
+// markOrphanToolCalls adds a collapse marker to content and filters orphan tool calls.
+func markOrphanToolCalls(msg spec.PromptMessage) spec.PromptMessage {
+	if msg.Content != "" {
+		msg.Content = msg.Content + " " + CollapseMarker
+	} else {
+		msg.Content = CollapseMarker
+	}
+	return msg
+}
+
 // removeDanglingToolCalls ensures pairwise consistency:
 // - If an assistant message has ToolCalls, ensure corresponding tool responses exist
 // - If not, mark the ToolCalls as collapsed instead of leaving orphans
@@ -13,72 +82,16 @@ func (t *AgenticTruncator) removeDanglingToolCalls(messages []spec.PromptMessage
 		return messages
 	}
 
-	// First, build a set of valid tool call IDs from assistant messages
-	validToolCallIDs := make(map[string]bool)
-	for i := 0; i < len(messages); i++ {
-		if messages[i].Role == "assistant" && len(messages[i].ToolCalls) > 0 {
-			for _, tc := range messages[i].ToolCalls {
-				validToolCallIDs[tc.ID] = true
-			}
-		}
-	}
+	validIDs := collectValidToolCallIDs(messages)
+	out := filterOrphanedToolResponses(messages, validIDs)
 
-	// Filter out orphaned tool responses (tool messages whose ToolCallID doesn't match any assistant's ToolCalls)
-	out := make([]spec.PromptMessage, 0, len(messages))
-	for _, msg := range messages {
-		if msg.Role == "tool" {
-			// Keep tool response only if its ToolCallID exists in validToolCallIDs
-			if validToolCallIDs[msg.ToolCallID] {
-				out = append(out, msg)
-			}
-			// Otherwise, it's orphaned - skip it
-		} else {
-			out = append(out, msg)
-		}
-	}
-
-	// Now handle assistant messages with orphan tool_calls (tool_calls without corresponding tool responses)
 	for i := 0; i < len(out); i++ {
 		if out[i].Role == "assistant" && len(out[i].ToolCalls) > 0 {
-			// Check if all tool calls have corresponding tool responses
-			hasOrphanToolCalls := false
-			for _, tc := range out[i].ToolCalls {
-				found := false
-				for j := i + 1; j < len(out); j++ {
-					if out[j].Role == "tool" && out[j].ToolCallID == tc.ID {
-						found = true
-						break
-					}
-				}
-				if !found {
-					hasOrphanToolCalls = true
-					break
-				}
+			if !hasOrphanToolCalls(out[i], out, i) {
+				continue
 			}
-
-			if hasOrphanToolCalls {
-				// Add collapse marker to the content and only keep tool calls that have corresponding responses
-				if out[i].Content != "" {
-					out[i].Content = out[i].Content + " " + CollapseMarker
-				} else {
-					out[i].Content = CollapseMarker
-				}
-				// Filter to keep only tool calls that have corresponding tool responses
-				var validToolCalls []spec.ToolCall
-				for _, tc := range out[i].ToolCalls {
-					hasResponse := false
-					for j := i + 1; j < len(out); j++ {
-						if out[j].Role == "tool" && out[j].ToolCallID == tc.ID {
-							hasResponse = true
-							break
-						}
-					}
-					if hasResponse {
-						validToolCalls = append(validToolCalls, tc)
-					}
-				}
-				out[i].ToolCalls = validToolCalls
-			}
+			out[i] = markOrphanToolCalls(out[i])
+			out[i].ToolCalls = filterValidToolCalls(out[i].ToolCalls, out, i)
 		}
 	}
 

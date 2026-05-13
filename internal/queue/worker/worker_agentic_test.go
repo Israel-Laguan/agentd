@@ -284,7 +284,10 @@ func TestProcessAgentic_ExecutesToolCalls(t *testing.T) {
 	mockSandbox := &mockExecSandbox{result: sandbox.Result{Stdout: "hello\n", Success: true}}
 	executor := NewToolExecutor(mockSandbox, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
 
-	w := &Worker{}
+	// Worker now uses DispatchTool which uses the internal toolExecutor
+	w := &Worker{
+		toolExecutor: executor,
+	}
 
 	// Test bash tool with echo command
 	bashCall := gateway.ToolCall{
@@ -295,7 +298,8 @@ func TestProcessAgentic_ExecutesToolCalls(t *testing.T) {
 		},
 	}
 
-	result := w.executeAgenticTool(context.Background(), executor, bashCall, nil)
+	// Use DispatchTool as the single entry point for tool execution
+	result := w.DispatchTool(context.Background(), bashCall, nil, w.toolExecutor)
 
 	// The result should contain the output
 	if !strings.Contains(result, "hello") {

@@ -228,56 +228,8 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 		return
 	}
 
-	// Determine exit code and output summary
-	var (
-		exitCode      int
-		outputSummary string
-		stdoutBytes   int
-		stderrBytes   int
-	)
-
-	// Define a struct to unmarshal the tool execution result
-	type toolExecEnvelope struct {
-		Success    *bool  `json:"Success"`
-		ExitCode   int    `json:"ExitCode"`
-		Stdout     string `json:"Stdout"`
-		Stderr     string `json:"Stderr"`
-		Error      string `json:"error"`
-		FatalError string `json:"FatalError"`
-	}
-
-	var env toolExecEnvelope
-	if err := json.Unmarshal([]byte(result), &env); err == nil {
-		// Successfully parsed JSON
-		if env.Error != "" || env.FatalError != "" || (env.Success != nil && !*env.Success) {
-			exitCode = -1
-		} else {
-			exitCode = env.ExitCode
-		}
-		if env.Stdout != "" || env.Stderr != "" || env.Success != nil {
-			stdoutBytes = len(env.Stdout)
-			stderrBytes = len(env.Stderr)
-		} else {
-			stdoutBytes = len(result)
-			stderrBytes = 0
-		}
-		outputSummary = result
-	} else {
-		// Fallback behavior for non-JSON tool results
-		// Try to parse the result as a JSON error or execution result
-		if strings.HasPrefix(result, `{"error"`) || strings.HasPrefix(result, `{"FatalError"`) {
-			// Tool execution failed - exit code -1
-			exitCode = -1
-		} else if strings.HasPrefix(result, `{"Success":false`) {
-			// ExecutionResult with Success=false
-			exitCode = -1
-		} else {
-			exitCode = 0
-		}
-		outputSummary = result
-		stdoutBytes = len(result)
-		stderrBytes = 0
-	}
+	exitCode := parseToolExitCode(result)
+	outputSummary := result
 
 	// Scrub output_summary before truncation
 	if w.sandboxScrubber != nil {
@@ -285,6 +237,18 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 	}
 	// Truncate output_summary to maxOutputSummaryLength (1000 characters)
 	outputSummary = truncateToMax(outputSummary, maxOutputSummaryLength)
+
+	var stdoutBytes, stderrBytes int
+	if env, err := parseToolEnv(result); err == nil && env != nil {
+		if env.Stdout != "" || env.Stderr != "" || env.Success != nil {
+			stdoutBytes = len(env.Stdout)
+			stderrBytes = len(env.Stderr)
+		} else {
+			stdoutBytes = len(result)
+		}
+	} else {
+		stdoutBytes = len(result)
+	}
 
 	event := ToolResultEvent{
 		ToolName:      call.Function.Name,
@@ -306,6 +270,47 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 		Type:      models.EventTypeToolResult,
 		Payload:   payload,
 	})
+}
+
+// toolExecEnvelope is used to parse tool execution results from JSON.
+type toolExecEnvelope struct {
+	Success    *bool  `json:"Success"`
+	ExitCode   int    `json:"ExitCode"`
+	Stdout     string `json:"Stdout"`
+	Stderr     string `json:"Stderr"`
+	Error      string `json:"error"`
+	FatalError string `json:"FatalError"`
+}
+
+// parseToolEnv attempts to parse the tool result as a toolExecEnvelope.
+// Returns the envelope and nil error if JSON is valid, or nil and the error otherwise.
+func parseToolEnv(result string) (*toolExecEnvelope, error) {
+	var env toolExecEnvelope
+	if err := json.Unmarshal([]byte(result), &env); err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+// parseToolExitCode determines the exit code from a tool result string.
+// Returns -1 for errors or failed executions, 0 otherwise.
+func parseToolExitCode(result string) int {
+	env, err := parseToolEnv(result)
+	if err != nil {
+		// Fallback behavior for non-JSON tool results
+		if strings.HasPrefix(result, `{"error"`) || strings.HasPrefix(result, `{"FatalError"`) {
+			return -1
+		}
+		if strings.HasPrefix(result, `{"Success":false`) {
+			return -1
+		}
+		return 0
+	}
+	// Successfully parsed JSON
+	if env.Error != "" || env.FatalError != "" || (env.Success != nil && !*env.Success) {
+		return -1
+	}
+	return env.ExitCode
 }
 // totalChars counts the total character count in all message contents.
 // This is used to enforce character budget constraints during truncation.

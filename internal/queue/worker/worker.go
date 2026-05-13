@@ -23,6 +23,13 @@ import (
 // DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
 
+// agenticProviders lists providers that support agentic mode
+// (tool round-tripping with message accumulation).
+var agenticProviders = []spec.Provider{
+	spec.ProviderOpenAI,
+	spec.ProviderAnthropic,
+}
+
 type Worker struct {
 	store               models.KanbanStore
 	gateway             gateway.AIGateway
@@ -158,7 +165,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		return
 	}
 	// Routing: check AgenticMode flag to determine execution path
-	// Agentic mode requires provider support (currently OpenAI only)
+	// Agentic mode requires provider support (see agenticProviders)
 	if profile.AgenticMode {
 		if w.providerSupportsAgentic(*profile) {
 			w.processAgentic(ctx, task, *project, *profile)
@@ -289,7 +296,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	w.registerCancel(task.ID, cancel)
 	defer w.deregisterCancel(task.ID)
 
-	toolExecutor := NewToolExecutor(
+	// Create task-local ToolExecutor to avoid races with concurrent task executions
+	taskToolExecutor := NewToolExecutor(
 		w.sandbox,
 		project.WorkspacePath,
 		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
@@ -298,96 +306,118 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages := w.seedMessages(ctx, task, profile)
 	messages = w.buildAgenticMessages(messages, profile)
-	tools, toolToAdapter := w.agenticTools(ctx, toolExecutor)
+	tools, toolToAdapter := w.agenticTools(ctx, taskToolExecutor)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
-	deadlineGuard := NewDeadlineGuard(ctx)
+	deadlineGuard := NewDeadlineGuard(cancelCtx)
 	agenticTruncator := truncation.NewAgenticTruncator(w.truncatorMax)
 
 	for {
-		if err := deadlineGuard.BeforeIteration(); err != nil {
-			w.handleGatewayError(ctx, task, err)
-			return
-		}
-
-		if err := iterationGuard.BeforeIteration(); err != nil {
-			w.handleIterationExceeded(ctx, task)
-			return
-		}
-
-		if len(messages) > w.truncationThreshold || (w.characterBudget > 0 && totalChars(messages) > w.characterBudget) {
-			var err error
-			messages, err = agenticTruncator.Apply(ctx, messages, w.characterBudget)
-			if err != nil {
-				w.handleGatewayError(ctx, task, err)
-				return
-			}
-		}
-
-		if iterationGuard.ShouldInjectFinalMessage() {
-			messages = append(messages, iterationGuard.FinalMessage())
-			iterationGuard.ResetAllowFinal()
-		}
-
-		if err := budgetGuard.BeforeCall(); err != nil {
-			w.handleGatewayError(ctx, task, err)
-			return
-		}
-
-		req := gateway.AIRequest{
-			Messages:    messages,
-			Temperature: profile.Temperature,
-			Tools:       tools,
-			AgentID:     task.AgentID,
-			Role:        gateway.RoleWorker,
-			TaskID:      task.ID,
-			Provider:    profile.Provider,
-			Model:       profile.Model,
-			MaxTokens:   profile.MaxTokens,
-		}
-		req = w.applyTuning(req, task, profile)
-
-		resp, err := w.gateway.Generate(cancelCtx, req)
+		shouldContinue, err := w.processAgenticIteration(
+			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
+			iterationGuard, budgetGuard, deadlineGuard, agenticTruncator,
+		)
 		if err != nil {
-			w.handleGatewayError(ctx, task, err)
 			return
 		}
-
-		budgetGuard.AfterCall(resp.TokenUsage)
-
-		messages = append(messages, gateway.PromptMessage{
-			Role:      "assistant",
-			Content:   resp.Content,
-			ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
-		})
-
-		if len(resp.ToolCalls) == 0 {
-			w.commitText(ctx, task, resp.Content)
+		if !shouldContinue {
 			return
-		}
-
-		iterationGuard.AfterIteration(true)
-
-		for _, call := range resp.ToolCalls {
-			// Emit TOOL_CALL event before execution (Requirements 1.3, 7.1)
-			w.emitToolCall(ctx, task, call)
-
-			// Measure execution time
-			startTime := time.Now()
-			result := w.executeAgenticTool(cancelCtx, toolExecutor, call, toolToAdapter)
-			durationMs := time.Since(startTime).Milliseconds()
-
-			// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
-			w.emitToolResult(ctx, task, call, result, durationMs)
-
-			messages = append(messages, gateway.PromptMessage{
-				Role:       "tool",
-				ToolCallID: call.ID,
-				Content:    result,
-			})
 		}
 	}
+}
+
+func (w *Worker) processAgenticIteration(
+	ctx context.Context, task models.Task, profile models.AgentProfile,
+	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
+	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
+	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
+	deadlineGuard *DeadlineGuard, agenticTruncator spec.Truncator,
+) (bool, error) {
+	if err := deadlineGuard.BeforeIteration(); err != nil {
+		w.handleGatewayError(ctx, task, err)
+		return false, err
+	}
+
+	if err := iterationGuard.BeforeIteration(); err != nil {
+		w.handleIterationExceeded(ctx, task)
+		return false, err
+	}
+
+	if len(*messages) > w.truncationThreshold || (w.characterBudget > 0 && totalChars(*messages) > w.characterBudget) {
+		var err error
+		*messages, err = agenticTruncator.Apply(ctx, *messages, w.characterBudget)
+		if err != nil {
+			w.handleGatewayError(ctx, task, err)
+			return false, err
+		}
+	}
+
+	if iterationGuard.ShouldInjectFinalMessage() {
+		*messages = append(*messages, iterationGuard.FinalMessage())
+		iterationGuard.ResetAllowFinal()
+	}
+
+	if err := budgetGuard.BeforeCall(); err != nil {
+		w.handleGatewayError(ctx, task, err)
+		return false, err
+	}
+
+	req := gateway.AIRequest{
+		Messages:    *messages,
+		Temperature: profile.Temperature,
+		Tools:       tools,
+		AgentID:     task.AgentID,
+		Role:        gateway.RoleWorker,
+		TaskID:      task.ID,
+		Provider:    profile.Provider,
+		Model:       profile.Model,
+		MaxTokens:   profile.MaxTokens,
+	}
+	req = w.applyTuning(req, task, profile)
+
+	resp, err := w.gateway.Generate(ctx, req)
+	if err != nil {
+		w.handleGatewayError(ctx, task, err)
+		return false, err
+	}
+
+	budgetGuard.AfterCall(resp.TokenUsage)
+
+	*messages = append(*messages, gateway.PromptMessage{
+		Role:      "assistant",
+		Content:   resp.Content,
+		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
+	})
+
+	if len(resp.ToolCalls) == 0 {
+		w.commitText(ctx, task, resp.Content)
+		return false, nil
+	}
+
+	iterationGuard.AfterIteration(true)
+
+	for _, call := range resp.ToolCalls {
+		// Emit TOOL_CALL event before execution (Requirements 1.3, 7.1)
+		w.emitToolCall(ctx, task, call)
+
+		// Measure execution time
+		startTime := time.Now()
+		// Use task-local ToolExecutor for thread-safe tool execution
+		result := w.DispatchTool(ctx, call, toolToAdapter, toolExecutor)
+		durationMs := time.Since(startTime).Milliseconds()
+
+		// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
+		w.emitToolResult(ctx, task, call, result, durationMs)
+
+		*messages = append(*messages, gateway.PromptMessage{
+			Role:       "tool",
+			ToolCallID: call.ID,
+			Content:    result,
+		})
+	}
+
+	return true, nil
 }
 
 func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
@@ -403,10 +433,18 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) (
 	return append(tools, capabilityTools...), toolToAdapter
 }
 
-func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
+// DispatchTool is the single entry point for tool execution in the agentic loop.
+// It handles both built-in tools (bash, read, write) and capability tools (MCP).
+// Parameters:
+//   - ctx: Context for cancellation and timeouts
+//   - call: The tool call from the AI response
+//   - toolToAdapter: Map of tool names to adapter names for MCP tools
+//
+// Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
+func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
-		return toolExec.Execute(ctx, call)
+		return toolExecutor.Execute(ctx, call)
 	default:
 		if w.capabilities == nil {
 			return jsonErrorf("unknown tool: %s", call.Function.Name)
@@ -434,6 +472,15 @@ func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor,
 		}
 		return string(encoded)
 	}
+}
+
+// executeAgenticTool is a wrapper around DispatchTool for backward compatibility.
+// Use DispatchTool directly instead.
+func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
+	if toolExec == nil {
+		toolExec = w.toolExecutor
+	}
+	return w.DispatchTool(ctx, call, toolToAdapter, toolExec)
 }
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
@@ -520,9 +567,14 @@ func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) 
 }
 
 // providerSupportsAgentic returns true if the provider supports agentic mode
-// (tool round-tripping with message accumulation). Currently only OpenAI supports this.
+// (tool round-tripping with message accumulation).
 func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
-	return strings.EqualFold(profile.Provider, string(gateway.ProviderOpenAI))
+	for _, p := range agenticProviders {
+		if strings.EqualFold(profile.Provider, string(p)) {
+			return true
+		}
+	}
+	return false
 }
 
 // SetSandbox swaps the executor used by integration tests that replace the sandbox.

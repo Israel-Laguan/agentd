@@ -88,6 +88,19 @@ func (r *Router) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	return r.generateOnce(ctx, req)
 }
 
+// detectToolSupport scans the provider list for tool support among selected providers.
+func (r *Router) detectToolSupport(req spec.AIRequest) bool {
+	for _, p := range r.providers {
+		if req.Provider != "" && req.Provider != string(p.Name()) {
+			continue
+		}
+		if p.Capabilities().SupportsChatTools {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
 	if len(r.providers) == 0 {
 		return spec.AIResponse{}, errors.New("no LLM providers configured")
@@ -101,22 +114,10 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 
 	req = r.applyRoleRouting(req)
 
-	var providerErrs []error
-	// Pre-scan selected providers for tool support when tools are requested.
 	hasRequestedTools := len(req.Tools) > 0
-	selectedHasToolSupport := false
-	if hasRequestedTools {
-		for _, p := range r.providers {
-			if req.Provider != "" && req.Provider != string(p.Name()) {
-				continue
-			}
-			if p.Capabilities().SupportsChatTools {
-				selectedHasToolSupport = true
-				break
-			}
-		}
-	}
+	selectedHasToolSupport := hasRequestedTools && r.detectToolSupport(req)
 
+	var providerErrs []error
 	for _, p := range r.providers {
 		if req.Provider != "" && req.Provider != string(p.Name()) {
 			continue

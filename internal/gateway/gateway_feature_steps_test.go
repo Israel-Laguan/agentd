@@ -52,9 +52,7 @@ type gatewayScenario struct {
 	jsonSeq *sequenceProvider
 
 	// Tool definition fields
-	toolReq          AIRequest
-	toolLastRequest  AIRequest
-	toolProviderName string
+	toolReq AIRequest
 }
 
 func initializeGatewayScenario(sc *godog.ScenarioContext) {
