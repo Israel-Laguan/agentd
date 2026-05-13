@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -113,9 +114,9 @@ func TestInactivityReader_EOFStopsTimer(t *testing.T) {
 
 func TestInactivityReader_ResetsOnRead(t *testing.T) {
 	reader := strings.NewReader("hello")
-	var timeoutCount int
-	ir := newInactivityReader(reader, time.Millisecond*50, func() { timeoutCount++ })
-	
+	var timeoutCount atomic.Int32
+	ir := newInactivityReader(reader, time.Millisecond*50, func() { timeoutCount.Add(1) })
+
 	ir.Read(make([]byte, 1))
 	time.Sleep(time.Millisecond * 10)
 	ir.Read(make([]byte, 1))
@@ -123,7 +124,7 @@ func TestInactivityReader_ResetsOnRead(t *testing.T) {
 	ir.Read(make([]byte, 1))
 	time.Sleep(time.Millisecond * 60)
 	ir.stop()
-	if timeoutCount == 0 {
+	if timeoutCount.Load() == 0 {
 		t.Error("should have timed out after inactivity")
 	}
 }
