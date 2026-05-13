@@ -93,8 +93,11 @@ type AgentProfile struct {
 	MaxTokens    int
 	// AgenticMode enables agentic worker behavior, allowing the agent to
 	// autonomously plan and execute multi-step tasks without human intervention.
-	AgenticMode  bool
-	UpdatedAt    time.Time
+	AgenticMode bool
+	// InstructionsPath overrides the default project instructions file path
+	// (e.g., ".agentd/AGENTS.md"). When empty, the loader uses the config default.
+	InstructionsPath string
+	UpdatedAt        time.Time
 }
 
 // Memory stores lessons learned globally or per project.
