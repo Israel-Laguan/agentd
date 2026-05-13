@@ -35,7 +35,6 @@ type agenticIterationScenario struct {
 	store          *iterationStore
 	sandbox        *iterationSandbox
 	workerOpts     worker.WorkerOptions
-	w              *worker.Worker
 	budgetTracker  *gateway.InMemoryBudgetTracker
 	budgetGuard    *worker.BudgetGuard
 }

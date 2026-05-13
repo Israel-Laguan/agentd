@@ -162,13 +162,3 @@ func (s *gatewayScenario) textTruncMarkerInMiddle(context.Context) error {
 	}
 	return nil
 }
-
-func (s *gatewayScenario) outputContainsDelimiter(_ context.Context, delim string) error {
-	if len(s.outputMsg) == 0 {
-		return fmt.Errorf("no output messages")
-	}
-	if !strings.Contains(s.outputMsg[0].Content, delim) {
-		return fmt.Errorf("output missing delimiter %q", delim)
-	}
-	return nil
-}

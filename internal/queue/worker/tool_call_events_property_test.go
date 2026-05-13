@@ -172,9 +172,10 @@ func TestToolCallPrecedesToolResult(t *testing.T) {
 		toolCallCount := 0
 		toolResultCount := 0
 		for _, ev := range sink.events {
-			if ev.Type == models.EventTypeToolCall {
+			switch ev.Type {
+			case models.EventTypeToolCall:
 				toolCallCount++
-			} else if ev.Type == models.EventTypeToolResult {
+			case models.EventTypeToolResult:
 				toolResultCount++
 			}
 		}
@@ -228,9 +229,22 @@ func TestToolCallIDMatching(t *testing.T) {
 				return false
 			}
 
-			if ev.Type == models.EventTypeToolCall {
+			switch ev.Type {
+			case models.EventTypeToolCall:
 				pending[callID]++
-			} else if ev.Type == models.EventTypeToolResult {
+			case models.EventTypeToolResult:
+				if pending[callID] == 0 {
+					// No matching TOOL_CALL - property violated (result without call)
+					return false
+				}
+				pending[callID]--
+			}
+		}
+
+			switch ev.Type {
+			case models.EventTypeToolCall:
+				pending[callID]++
+			case models.EventTypeToolResult:
 				if pending[callID] == 0 {
 					// No matching TOOL_CALL - property violated (result without call)
 					return false
@@ -465,9 +479,13 @@ func TestArgumentsSummaryLengthBound(t *testing.T) {
 
 		// Verify: each TOOL_CALL event has arguments_summary <= 200 characters
 		for _, ev := range sink.events {
-			if ev.Type != models.EventTypeToolCall {
-				continue
+			switch ev.Type {
+			case models.EventTypeToolCall:
+				toolCallCount++
+			case models.EventTypeToolResult:
+				toolResultCount++
 			}
+		}
 
 			argsSummaryResult := extractArgumentsSummary(ev.Payload)
 			if argsSummaryResult.err != nil {

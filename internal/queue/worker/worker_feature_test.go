@@ -31,7 +31,6 @@ type workerScenario struct {
 	store          *workerTestStore
 	gateway        *workerTestGateway
 	sandbox        *workerTestSandbox
-	result         *sandbox.Result
 	legacyCalled   bool
 	agenticCalled  bool
 	warningsLogged []string
@@ -240,7 +239,6 @@ type workerTestGateway struct {
 	content               string
 	toolCalls             []gateway.ToolCall
 	nextContent           string
-	nextToolCalls         []gateway.ToolCall
 	err                   error
 	requests              []gateway.AIRequest
 	callCount             int
