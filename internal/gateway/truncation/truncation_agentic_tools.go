@@ -35,13 +35,27 @@ func (t *AgenticTruncator) removeDanglingToolCalls(messages []spec.PromptMessage
 			}
 
 			if hasOrphanToolCalls {
-				// Add collapse marker to the content and clear tool calls
+				// Add collapse marker to the content and only keep tool calls that have corresponding responses
 				if out[i].Content != "" {
 					out[i].Content = out[i].Content + " " + CollapseMarker
 				} else {
 					out[i].Content = CollapseMarker
 				}
-				out[i].ToolCalls = nil
+				// Filter to keep only tool calls that have corresponding tool responses
+				var validToolCalls []spec.ToolCall
+				for _, tc := range out[i].ToolCalls {
+					hasResponse := false
+					for j := i + 1; j < len(out); j++ {
+						if out[j].Role == "tool" && out[j].ToolCallID == tc.ID {
+							hasResponse = true
+							break
+						}
+					}
+					if hasResponse {
+						validToolCalls = append(validToolCalls, tc)
+					}
+				}
+				out[i].ToolCalls = validToolCalls
 			}
 		}
 	}

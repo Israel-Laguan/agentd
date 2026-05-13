@@ -140,7 +140,12 @@ func (t *AgenticTruncator) collectMessagesInReverse(messages []spec.PromptMessag
 	// Iterate from most recent (end) to oldest (start)
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
+		// Calculate message length including content AND tool call arguments
 		msgLen := utf8.RuneCountInString(msg.Content)
+		for _, tc := range msg.ToolCalls {
+			msgLen += utf8.RuneCountInString(tc.Function.Name)
+			msgLen += utf8.RuneCountInString(tc.Function.Arguments)
+		}
 
 		if *budget >= msgLen {
 			reversed = append(reversed, msg)

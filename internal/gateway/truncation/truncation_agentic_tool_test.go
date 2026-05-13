@@ -295,22 +295,33 @@ func verifyCollapseMarkerWhenNoToolCalls(t *testing.T, messages []spec.PromptMes
 	}
 }
 
-// verifyAllToolCallsHaveResponses ensures every tool call has a corresponding response
+// verifyAllToolCallsHaveResponses ensures every tool call has a corresponding response AFTER it
 func verifyAllToolCallsHaveResponses(t *testing.T, messages []spec.PromptMessage, toolCalls []spec.ToolCall) {
 	t.Helper()
-	for _, tc := range toolCalls {
-		if !hasAnyToolResponse(messages, tc.ID) {
-			t.Errorf("tool_call %q has no corresponding response", tc.ID)
+	// Find the assistant message index that contains these tool calls
+	assistantIdx := -1
+	for i, m := range messages {
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			for _, tc := range m.ToolCalls {
+				for _, otc := range toolCalls {
+					if tc.ID == otc.ID {
+						assistantIdx = i
+						break
+					}
+				}
+				if assistantIdx >= 0 {
+					break
+				}
+			}
+		}
+		if assistantIdx >= 0 {
+			break
 		}
 	}
-}
 
-// hasAnyToolResponse checks if any tool message in the slice has the given tool call ID
-func hasAnyToolResponse(messages []spec.PromptMessage, toolCallID string) bool {
-	for _, m := range messages {
-		if m.Role == "tool" && m.ToolCallID == toolCallID {
-			return true
+	for _, tc := range toolCalls {
+		if !hasSubsequentToolResponse(messages, assistantIdx, tc.ID) {
+			t.Errorf("tool_call %q has no corresponding response after assistant message", tc.ID)
 		}
 	}
-	return false
 }

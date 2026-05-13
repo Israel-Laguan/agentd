@@ -168,15 +168,14 @@ func TestCollapseMarker_CountReflectsDroppedExchanges(t *testing.T) {
 		t.Fatalf("Apply() error = %v", err)
 	}
 
-	// Find message with collapse marker and verify count
+	// Find message with collapse marker and verify correct count (3 exchanges)
 	found := false
 	for _, m := range got {
 		if containsCollapseMarker(m.Content) {
 			found = true
-			// Check that the marker contains the expected format "【N tool exchanges collapsed】"
-			// Note: current implementation uses static string, but we verify format is present
-			if !strings.Contains(m.Content, "tool exchanges collapsed") {
-				t.Errorf("collapse marker format incorrect in: %q", m.Content)
+			// Verify the exact count: should be "【3 tool exchanges collapsed】"
+			if !strings.Contains(m.Content, "3 tool exchanges collapsed") {
+				t.Errorf("collapse marker should contain count 3, got: %q", m.Content)
 			}
 			break
 		}
