@@ -121,6 +121,9 @@ func NewWorker(
 		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
 	}
 	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
+	hooks := resolveHooks(opts.Hooks)
+	hooks.RegisterPost(ScrubResultHook(scrubber))
+	hooks.RegisterPost(AuditHook(sink, scrubber))
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
@@ -138,7 +141,7 @@ func NewWorker(
 		capabilities:        opts.Capabilities,
 		tokenBudget:         opts.TokenBudget,
 		budgetTracker:       budgetTracker,
-		hooks:               resolveHooks(opts.Hooks),
+		hooks:               hooks,
 	}
 }
 
@@ -400,17 +403,7 @@ func (w *Worker) processAgenticIteration(
 	iterationGuard.AfterIteration(true)
 
 	for _, call := range resp.ToolCalls {
-		// Emit TOOL_CALL event before execution (Requirements 1.3, 7.1)
-		w.emitToolCall(ctx, task, call)
-
-		// Measure execution time
-		startTime := time.Now()
-		// Use task-local ToolExecutor for thread-safe tool execution
-		result := w.DispatchTool(ctx, task.ID, call, toolToAdapter, toolExecutor)
-		durationMs := time.Since(startTime).Milliseconds()
-
-		// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
-		w.emitToolResult(ctx, task, call, result, durationMs)
+		result := w.dispatchToolWithProject(ctx, task.ID, task.ProjectID, call, toolToAdapter, toolExecutor)
 
 		*messages = append(*messages, gateway.PromptMessage{
 			Role:       "tool",
@@ -444,10 +437,16 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) (
 //
 // Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
 func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
+	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor)
+}
+
+func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
 	hookCtx := HookContext{
 		ToolName:  call.Function.Name,
 		Args:      call.Function.Arguments,
+		CallID:    call.ID,
 		SessionID: sessionID,
+		ProjectID: projectID,
 		Timestamp: time.Now(),
 	}
 
@@ -503,6 +502,14 @@ func (w *Worker) executeAgenticTool(ctx context.Context, sessionID string, toolE
 		toolExec = w.toolExecutor
 	}
 	return w.DispatchTool(ctx, sessionID, call, toolToAdapter, toolExec)
+}
+
+// executeAgenticToolWithProject is a project-aware variant of executeAgenticTool.
+func (w *Worker) executeAgenticToolWithProject(ctx context.Context, sessionID, projectID string, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
+	if toolExec == nil {
+		toolExec = w.toolExecutor
+	}
+	return w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExec)
 }
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {

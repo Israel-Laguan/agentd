@@ -30,7 +30,9 @@ type HookVerdict struct {
 type HookContext struct {
 	ToolName  string
 	Args      string
+	CallID    string
 	SessionID string
+	ProjectID string
 	Timestamp time.Time
 }
 
