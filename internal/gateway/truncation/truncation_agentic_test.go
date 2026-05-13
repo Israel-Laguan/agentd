@@ -435,17 +435,14 @@ func TestAgenticTruncator_OrphanedToolCallsRemoved(t *testing.T) {
 // Helper function to check for collapse marker
 func containsCollapseMarker(content string) bool {
 	// Check for the pattern "tool exchanges collapsed" which is present in all collapse markers
-	return containsString(content, "tool exchanges collapsed")
+	return strings.Contains(content, "tool exchanges collapsed")
 }
 
 // Helper function to check for truncation marker
 func containsTruncationMarker(content string) bool {
-	return containsString(content, TruncationMarker)
+	return strings.Contains(content, TruncationMarker)
 }
 
-// ============================================================================
-// Task 3.3: Unit Tests for Collapse Markers
-// Validates: Requirement 2.4
 // ============================================================================
 
 // Test that the CollapseMarker constant has the correct format
@@ -553,9 +550,9 @@ func TestCollapseMarker_CountReflectsDroppedExchanges(t *testing.T) {
 			found = true
 			// Check that the marker contains the expected format "【N tool exchanges collapsed】"
 			// Note: current implementation uses static string, but we verify format is present
-			if !containsString(m.Content, "tool exchanges collapsed") {
-				t.Errorf("collapse marker format incorrect in: %q", m.Content)
-			}
+		if !strings.Contains(m.Content, "tool exchanges collapsed") {
+			t.Errorf("collapse marker format incorrect in: %q", m.Content)
+		}
 			break
 		}
 	}

@@ -58,31 +58,17 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 		return messages, nil
 	}
 
-	// If budget is specified and exceeded, apply character budget truncation first
-	if budget > 0 && totalChars(messages) > budget {
+	// If budget is specified and exceeded, apply character budget truncation
+	for budget > 0 && totalChars(messages) > budget {
 		messages = t.truncateToBudget(messages, budget)
-		// After character budget truncation, check if message count is now under limit
-		if len(messages) <= t.MaxMessages {
-			messages = t.removeDanglingToolCalls(messages)
-			// Double-check character budget after pairwise cleanup
-			if budget <= 0 || totalChars(messages) <= budget {
-				return messages, nil
-			}
-			// Still over budget - need to truncate more
-		}
 	}
-
-	// If message count is now under limit but budget is still exceeded,
-	// we need to apply budget truncation (this happens when MaxMessages was already high)
-	if budget > 0 && totalChars(messages) > budget && len(messages) <= t.MaxMessages {
-		messages = t.truncateToBudget(messages, budget)
-		messages = t.removeDanglingToolCalls(messages)
-		// Final hard-budget enforcement: ensure output never exceeds budget
-		for budget > 0 && totalChars(messages) > budget {
-			messages = t.truncateToBudget(messages, budget)
-		}
+	messages = t.removeDanglingToolCalls(messages)
+	// Double-check message count and budget
+	if len(messages) <= t.MaxMessages && (budget <= 0 || totalChars(messages) <= budget) {
 		return messages, nil
 	}
+
+	
 
 	// Apply message count limit truncation
 	// Find all tool exchanges before truncation
@@ -135,12 +121,12 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 			if startFrom < len(messages) && truncated {
 				msg := messages[startFrom]
 				// Add truncation marker only if not already from budget truncation
-				if !containsString(msg.Content, TruncationMarker) && !containsString(msg.Content, "tool exchanges collapsed") {
+				if !strings.Contains(msg.Content, TruncationMarker) && !strings.Contains(msg.Content, "tool exchanges collapsed") {
 					msg.Content = TruncationMarker + msg.Content
 				}
 
 				// If we dropped tool exchanges, add collapse marker to this message
-				if droppedExchanges > 0 && !containsString(msg.Content, "tool exchanges collapsed") {
+				if droppedExchanges > 0 && !strings.Contains(msg.Content, "tool exchanges collapsed") {
 					msg.Content = CollapseMarkerFor(droppedExchanges) + " " + msg.Content
 				}
 
@@ -149,7 +135,7 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 			} else if droppedExchanges > 0 && startFrom < len(messages) {
 				// Add collapse marker to the first retained message
 				msg := messages[startFrom]
-				if !containsString(msg.Content, "tool exchanges collapsed") {
+				if !strings.Contains(msg.Content, "tool exchanges collapsed") {
 					msg.Content = CollapseMarkerFor(droppedExchanges) + " " + msg.Content
 				}
 				out = append(out, msg)
@@ -168,10 +154,7 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 	return out, nil
 }
 
-// containsString is a helper to check if a string contains a substring
-func containsString(s, substr string) bool {
-	return strings.Contains(s, substr)
-}
+
 
 // removeDanglingToolCalls ensures pairwise consistency:
 // - If an assistant message has ToolCalls, ensure corresponding tool responses exist
@@ -350,6 +333,8 @@ func (t *AgenticTruncator) truncateMiddleToBudget(messages []spec.PromptMessage,
 			budget -= msgLen
 		} else if budget > 0 {
 			// Truncate this message to fit - reserve space for marker
+			// Also clear ToolCalls since they contribute to totalChars but aren't being truncated,
+			// which could cause non-terminating budget enforcement
 			keep := budget - markerLen
 			if keep < 0 {
 				keep = 0
@@ -360,13 +345,14 @@ func (t *AgenticTruncator) truncateMiddleToBudget(messages []spec.PromptMessage,
 			truncatedMsg := spec.PromptMessage{
 				Role:       msg.Role,
 				Content:    truncatedContent,
-				ToolCalls:  msg.ToolCalls,
+				ToolCalls:  nil, // Clear tool calls to ensure budget enforcement terminates
 				ToolCallID: msg.ToolCallID,
 			}
 			reversed = append(reversed, truncatedMsg)
 			truncated = true
 			budget = 0
 		} else {
+			// No budget left - drop this message but note it was truncated
 			truncated = true
 		}
 	}
