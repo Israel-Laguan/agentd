@@ -68,8 +68,6 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 		return messages, nil
 	}
 
-	
-
 	// Apply message count limit truncation
 	// Find all tool exchanges before truncation
 	exchanges := findToolExchanges(messages)
@@ -150,11 +148,13 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 
 	// Remove dangling assistant tool_calls without corresponding tool responses
 	out = t.removeDanglingToolCalls(out)
+	for budget > 0 && totalChars(out) > budget {
+		out = t.truncateToBudget(out, budget)
+		out = t.removeDanglingToolCalls(out)
+	}
 
 	return out, nil
 }
-
-
 
 // removeDanglingToolCalls ensures pairwise consistency:
 // - If an assistant message has ToolCalls, ensure corresponding tool responses exist

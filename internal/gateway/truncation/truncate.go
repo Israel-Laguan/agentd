@@ -2,6 +2,7 @@ package truncation
 
 import (
 	"fmt"
+	"unicode/utf8"
 
 	"agentd/internal/gateway/spec"
 )
@@ -29,25 +30,51 @@ func (s MiddleOutStrategy) Name() string {
 
 // Truncate applies middle-out cutting with UTF-8 safe slicing.
 func (s MiddleOutStrategy) Truncate(input string, maxChars int) string {
-	runes := []rune(input)
-	if maxChars <= 0 || len(runes) <= maxChars {
+	if maxChars <= 0 || len(input) <= maxChars {
 		return input
 	}
 	markerBytes := len(truncationMarker)
 	if maxChars <= markerBytes {
-		return string(runes[:maxChars])
+		return utf8SafePrefix(input, maxChars)
 	}
 	remaining := maxChars - markerBytes
-	headRunes := remaining / 2
-	tailRunes := remaining - headRunes
+	headBytes := remaining / 2
+	tailBytes := remaining - headBytes
 
-	return string(runes[:headRunes]) + truncationMarker + string(runes[len(runes)-tailRunes:])
+	return utf8SafePrefix(input, headBytes) + truncationMarker + utf8SafeSuffix(input, tailBytes)
 }
 
 // MiddleOut keeps the beginning and end of long content while removing the
 // noisy middle, which is usually the least useful part of large logs.
 func MiddleOut(input string, maxChars int) string {
 	return MiddleOutStrategy{}.Truncate(input, maxChars)
+}
+
+func utf8SafePrefix(input string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if maxBytes >= len(input) {
+		return input
+	}
+	for maxBytes > 0 && !utf8.ValidString(input[:maxBytes]) {
+		maxBytes--
+	}
+	return input[:maxBytes]
+}
+
+func utf8SafeSuffix(input string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if maxBytes >= len(input) {
+		return input
+	}
+	start := len(input) - maxBytes
+	for start < len(input) && !utf8.RuneStart(input[start]) {
+		start++
+	}
+	return input[start:]
 }
 
 func truncateMessages(messages []spec.PromptMessage, maxChars int, strategy TruncationStrategy) []spec.PromptMessage {

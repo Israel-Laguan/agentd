@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"agentd/internal/gateway/spec"
 )
@@ -22,7 +23,7 @@ func (t SummarizeTruncator) Apply(ctx context.Context, messages []spec.PromptMes
 	out := make([]spec.PromptMessage, len(messages))
 	for i, msg := range messages {
 		out[i] = msg
-		if budget <= 0 || len(msg.Content) <= budget {
+		if budget <= 0 || utf8.RuneCountInString(msg.Content) <= budget {
 			continue
 		}
 		out[i].Content = t.summarizeOrFallback(ctx, msg.Content, budget)
@@ -55,7 +56,7 @@ func (t SummarizeTruncator) summarizeOrFallback(ctx context.Context, content str
 	if summary == "" {
 		return fallback.Truncate(content, budget)
 	}
-	if len(summary) > budget {
+	if utf8.RuneCountInString(summary) > budget {
 		return fallback.Truncate(summary, budget)
 	}
 	return summary

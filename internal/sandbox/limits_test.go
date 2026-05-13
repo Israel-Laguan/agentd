@@ -75,7 +75,7 @@ func TestInactivityReader(t *testing.T) {
 	var timedOut bool
 	ir := newInactivityReader(reader, time.Hour, func() { timedOut = true })
 	defer ir.stop()
-	
+
 	p := make([]byte, 5)
 	n, err := ir.Read(p)
 	if err != nil {
@@ -93,7 +93,7 @@ func TestInactivityReader_EOFStopsTimer(t *testing.T) {
 	reader := strings.NewReader("hi")
 	var timedOut bool
 	ir := newInactivityReader(reader, time.Hour, func() { timedOut = true })
-	
+
 	p := make([]byte, 10)
 	n, err := ir.Read(p)
 	if n != 2 {
@@ -117,11 +117,17 @@ func TestInactivityReader_ResetsOnRead(t *testing.T) {
 	var timeoutCount atomic.Int32
 	ir := newInactivityReader(reader, time.Millisecond*50, func() { timeoutCount.Add(1) })
 
-	ir.Read(make([]byte, 1))
+	if _, err := ir.Read(make([]byte, 1)); err != nil {
+		t.Fatalf("first Read() error = %v", err)
+	}
 	time.Sleep(time.Millisecond * 10)
-	ir.Read(make([]byte, 1))
+	if _, err := ir.Read(make([]byte, 1)); err != nil {
+		t.Fatalf("second Read() error = %v", err)
+	}
 	time.Sleep(time.Millisecond * 10)
-	ir.Read(make([]byte, 1))
+	if _, err := ir.Read(make([]byte, 1)); err != nil {
+		t.Fatalf("third Read() error = %v", err)
+	}
 	time.Sleep(time.Millisecond * 60)
 	ir.stop()
 	if timeoutCount.Load() == 0 {
@@ -132,7 +138,7 @@ func TestInactivityReader_ResetsOnRead(t *testing.T) {
 func TestInactivityReader_MultipleSmallReads(t *testing.T) {
 	reader := bytes.NewReader([]byte("hello"))
 	ir := newInactivityReader(reader, time.Hour, func() {})
-	
+
 	buf := make([]byte, 2)
 	for i := 0; i < 3; i++ {
 		n, err := ir.Read(buf)

@@ -550,9 +550,9 @@ func TestCollapseMarker_CountReflectsDroppedExchanges(t *testing.T) {
 			found = true
 			// Check that the marker contains the expected format "【N tool exchanges collapsed】"
 			// Note: current implementation uses static string, but we verify format is present
-		if !strings.Contains(m.Content, "tool exchanges collapsed") {
-			t.Errorf("collapse marker format incorrect in: %q", m.Content)
-		}
+			if !strings.Contains(m.Content, "tool exchanges collapsed") {
+				t.Errorf("collapse marker format incorrect in: %q", m.Content)
+			}
 			break
 		}
 	}
