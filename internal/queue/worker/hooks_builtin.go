@@ -1,12 +1,17 @@
 package worker
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"agentd/internal/gateway"
+	"agentd/internal/models"
+	"agentd/internal/sandbox"
 )
 
 // dangerousPatterns are command substrings that indicate risky operations.
@@ -158,6 +163,104 @@ func validateArgs(argsJSON string, schema *gateway.FunctionParameters) HookVerdi
 	}
 
 	return HookVerdict{}
+}
+
+// ScrubResultHook returns a PostHook that applies the given Scrubber to tool
+// results before they are appended to the model context window. This is
+// FailClosed because redaction is security-critical.
+func ScrubResultHook(scrubber sandbox.Scrubber) PostHook {
+	return PostHook{
+		Name:   "scrub-result",
+		Policy: FailClosed,
+		Fn: func(_ HookContext, result string) (string, error) {
+			if scrubber == nil {
+				return result, nil
+			}
+			return scrubber.Scrub(result), nil
+		},
+	}
+}
+
+// AuditHook returns a PostHook that emits TOOL_CALL and TOOL_RESULT
+// events through the provided EventSink. It replaces the inline
+// emitToolCall / emitToolResult calls that previously lived in the
+// agentic loop body, guaranteeing that every tool dispatch is audited
+// regardless of call site.
+func AuditHook(sink models.EventSink, scrubber sandbox.Scrubber) PostHook {
+	return PostHook{
+		Name:   "audit",
+		Policy: FailOpen,
+		Fn: func(ctx HookContext, result string) (string, error) {
+			if sink == nil {
+				return result, nil
+			}
+			emitToolCallHook(context.Background(), sink, ctx, scrubber)
+			durationMs := time.Since(ctx.Timestamp).Milliseconds()
+			emitToolResultHook(context.Background(), sink, ctx, result, durationMs, scrubber)
+			return result, nil
+		},
+	}
+}
+
+// emitToolCallHook emits a TOOL_CALL event via the sink using HookContext.
+func emitToolCallHook(ctx context.Context, sink models.EventSink, hctx HookContext, scrubber sandbox.Scrubber) {
+	argumentsSummary := hctx.Args
+	if scrubber != nil {
+		argumentsSummary = scrubber.Scrub(argumentsSummary)
+	}
+	argumentsSummary = truncateToMax(argumentsSummary, maxArgumentsSummaryLength)
+
+	event := ToolCallEvent{
+		ToolName:         hctx.ToolName,
+		CallID:           hctx.CallID,
+		ArgumentsSummary: argumentsSummary,
+	}
+	eventData, _ := json.Marshal(event)
+	_ = sink.Emit(ctx, models.Event{
+		ProjectID: hctx.ProjectID,
+		TaskID:    sql.NullString{String: hctx.SessionID, Valid: hctx.SessionID != ""},
+		Type:      models.EventTypeToolCall,
+		Payload:   string(eventData),
+	})
+}
+
+// emitToolResultHook emits a TOOL_RESULT event via the sink using HookContext.
+func emitToolResultHook(ctx context.Context, sink models.EventSink, hctx HookContext, result string, durationMs int64, scrubber sandbox.Scrubber) {
+	exitCode := parseToolExitCode(result)
+	outputSummary := result
+	if scrubber != nil {
+		outputSummary = scrubber.Scrub(outputSummary)
+	}
+	outputSummary = truncateToMax(outputSummary, maxOutputSummaryLength)
+
+	var stdoutBytes, stderrBytes int
+	if env, err := parseToolEnv(result); err == nil && env != nil {
+		if env.Stdout != "" || env.Stderr != "" || env.Success != nil {
+			stdoutBytes = len(env.Stdout)
+			stderrBytes = len(env.Stderr)
+		} else {
+			stdoutBytes = len(result)
+		}
+	} else {
+		stdoutBytes = len(result)
+	}
+
+	event := ToolResultEvent{
+		ToolName:      hctx.ToolName,
+		CallID:        hctx.CallID,
+		ExitCode:      exitCode,
+		DurationMs:    durationMs,
+		OutputSummary: outputSummary,
+		StdoutBytes:   stdoutBytes,
+		StderrBytes:   stderrBytes,
+	}
+	eventData, _ := json.Marshal(event)
+	_ = sink.Emit(ctx, models.Event{
+		ProjectID: hctx.ProjectID,
+		TaskID:    sql.NullString{String: hctx.SessionID, Valid: hctx.SessionID != ""},
+		Type:      models.EventTypeToolResult,
+		Payload:   string(eventData),
+	})
 }
 
 func checkType(key string, raw json.RawMessage, expected string) HookVerdict {
