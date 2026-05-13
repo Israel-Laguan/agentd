@@ -24,7 +24,7 @@ func TestBuildAgenticMessagesReplacesLeadingSystemMessage(t *testing.T) {
 		SystemPrompt: sql.NullString{String: "custom prompt", Valid: true},
 	}
 
-	got := w.buildAgenticMessages(messages, profile)
+	got := w.buildAgenticMessages(messages, profile, nil, nil)
 	if len(got) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(got))
 	}
@@ -34,7 +34,7 @@ func TestBuildAgenticMessagesReplacesLeadingSystemMessage(t *testing.T) {
 	if got[1].Role != "user" {
 		t.Fatalf("expected second role user, got %q", got[1].Role)
 	}
-	want := "custom prompt\n\n" + agenticToolUseSystemText()
+	want := agenticToolUseSystemText() + "\n\n" + "custom prompt" + "\n\n" + resolutionRule
 	if got[0].Content != want {
 		t.Fatalf("expected system message content %q, got %q", want, got[0].Content)
 	}
@@ -50,7 +50,7 @@ func TestBuildAgenticMessagesInsertsBeforeFirstUserWhenNoLeadingSystem(t *testin
 		{Role: "user", Content: "run task"},
 	}
 
-	got := w.buildAgenticMessages(messages, models.AgentProfile{})
+	got := w.buildAgenticMessages(messages, models.AgentProfile{}, nil, nil)
 	if len(got) != 3 {
 		t.Fatalf("expected 3 messages, got %d", len(got))
 	}
@@ -72,7 +72,7 @@ func TestBuildAgenticMessagesPreservesMemoryLessonsAndReplacesLegacy(t *testing.
 		{Role: "system", Content: legacy},
 		{Role: "user", Content: "task body"},
 	}
-	got := w.buildAgenticMessages(messages, models.AgentProfile{})
+	got := w.buildAgenticMessages(messages, models.AgentProfile{}, nil, nil)
 	if len(got) != 3 {
 		t.Fatalf("expected 3 messages, got %d", len(got))
 	}
@@ -88,7 +88,8 @@ func TestBuildAgenticMessagesPreservesMemoryLessonsAndReplacesLegacy(t *testing.
 	if !strings.Contains(got[1].Content, "You are an autonomous agent") || !strings.Contains(got[1].Content, "bash tool") {
 		t.Fatalf("expected agentic tool instructions in second system, got %q", got[1].Content)
 	}
-	if got[1].Content != agenticToolUseSystemText() {
+	want := agenticToolUseSystemText() + "\n\n" + resolutionRule
+	if got[1].Content != want {
 		t.Fatalf("expected bare agentic system when profile empty, got %q", got[1].Content)
 	}
 }
@@ -210,7 +211,7 @@ func TestProcessAgentic_BuildsAgenticMessages(t *testing.T) {
 	}
 
 	// Test with default profile (no custom system prompt)
-	result := w.buildAgenticMessages(messages, models.AgentProfile{})
+	result := w.buildAgenticMessages(messages, models.AgentProfile{}, nil, nil)
 
 	// Should have inserted a system message at the beginning
 	if len(result) != 2 {

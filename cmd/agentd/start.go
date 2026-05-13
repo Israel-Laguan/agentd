@@ -83,6 +83,8 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		SandboxEnvAllowlist: cfg.Sandbox.EnvAllowlist,
 		SandboxExtraEnv:     cfg.Sandbox.ExtraEnv,
 		SandboxScrubPatterns: cfg.Sandbox.ScrubPatterns,
+		AgentdHome:           cfg.HomeDir,
+		InstructionConfig:    cfg.Queue.Instructions,
 	})
 }
 

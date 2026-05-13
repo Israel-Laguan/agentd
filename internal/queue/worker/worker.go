@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -53,6 +54,7 @@ type Worker struct {
 	capabilities        *capabilities.Registry
 	tokenBudget         int
 	budgetTracker       spec.BudgetTracker
+	instructionLoader   *InstructionLoader
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -76,6 +78,11 @@ type WorkerOptions struct {
 	SandboxExtraEnv         []string
 	SandboxScrubPatterns    []string
 	Capabilities            *capabilities.Registry
+	// AgentdHome is the agentd home directory (e.g., ~/.agentd/) used to
+	// resolve user preference files for the instruction hierarchy.
+	AgentdHome              string
+	// InstructionConfig holds the instruction hierarchy file path settings.
+	InstructionConfig       config.InstructionsConfig
 }
 
 func NewWorker(
@@ -120,6 +127,17 @@ func NewWorker(
 	}
 	// Initialize scrubber with configured patterns (may be nil for default patterns)
 	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
+
+	// Initialize instruction loader with configured paths.
+	prefsPath := ""
+	if opts.AgentdHome != "" && opts.InstructionConfig.UserPreferencesFile != "" {
+		prefsPath = filepath.Join(opts.AgentdHome, opts.InstructionConfig.UserPreferencesFile)
+	}
+	loader := &InstructionLoader{
+		ProjectFile:         opts.InstructionConfig.ProjectFile,
+		UserPreferencesPath: prefsPath,
+	}
+
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
@@ -137,6 +155,7 @@ func NewWorker(
 		capabilities:        opts.Capabilities,
 		tokenBudget:         opts.TokenBudget,
 		budgetTracker:       budgetTracker,
+		instructionLoader:   loader,
 	}
 }
 
@@ -304,8 +323,25 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		w.sandboxWallTimeout,
 	)
 
+	// Load project-level and user-level instructions before the first iteration.
+	var projectInstructions *ProjectInstructions
+	var userPrefs *UserPreferences
+	if w.instructionLoader != nil {
+		var err error
+		projectInstructions, err = w.instructionLoader.LoadProjectInstructions(
+			project.WorkspacePath, profile.InstructionsPath,
+		)
+		if err != nil {
+			slog.Warn("failed to load project instructions", "error", err, "workspace", project.WorkspacePath)
+		}
+		userPrefs, err = w.instructionLoader.LoadUserPreferences()
+		if err != nil {
+			slog.Warn("failed to load user preferences", "error", err)
+		}
+	}
+
 	messages := w.seedMessages(ctx, task, profile)
-	messages = w.buildAgenticMessages(messages, profile)
+	messages = w.buildAgenticMessages(messages, profile, projectInstructions, userPrefs)
 	tools, toolToAdapter := w.agenticTools(ctx, taskToolExecutor)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
@@ -496,12 +532,16 @@ When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.`
 }
 
-func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile models.AgentProfile) []gateway.PromptMessage {
-	toolUse := agenticToolUseSystemText()
-	primary := toolUse
+func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile models.AgentProfile, projectInstructions *ProjectInstructions, userPrefs *UserPreferences) []gateway.PromptMessage {
+	// Assemble the primary system prompt using the instruction hierarchy.
+	builder := NewSystemPromptBuilder().
+		WithGlobal(agenticToolUseSystemText()).
+		WithProject(projectInstructions).
+		WithUserPreferences(userPrefs)
 	if profile.SystemPrompt.Valid {
-		primary = strings.TrimSpace(profile.SystemPrompt.String) + "\n\n" + toolUse
+		builder.WithTask(strings.TrimSpace(profile.SystemPrompt.String))
 	}
+	primary := builder.Build()
 
 	out := make([]gateway.PromptMessage, 0, len(messages)+1)
 	replacedCore := false
