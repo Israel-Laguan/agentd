@@ -9,7 +9,7 @@ fixture tests for that provider's actual wire format.
 | Provider | `SupportsChatTools` | Status | Notes |
 | --- | --- | --- | --- |
 | OpenAI | `true` | Verified | Sends OpenAI-compatible `tools` and parses `tool_calls` in provider fixture tests. |
-| Anthropic | `false` | Not wired | Native Messages API tools use top-level `tools`, `input_schema`, `tool_use`, and `tool_result` content blocks. |
+| Anthropic | `true` | Verified | Maps `AIRequest.Tools` to `tools` with `name`, `description`, `input_schema`; parses `tool_use` content blocks; fixture tests cover request/response. |
 | Ollama | `false` | Not wired | `/api/chat` supports a `tools` field and returns `message.tool_calls`, but support depends on server and model behavior. |
 | llama.cpp | `false` | Not wired | OpenAI-style function calling depends on runtime setup such as `llama-server --jinja`, chat templates, and model support. |
 | AI Horde | `false` | Unsupported | The current provider uses async text generation with prompt and Kobold-style generation parameters, not a chat tool-call contract. |
@@ -26,8 +26,7 @@ Parse response `content` blocks with `type: "tool_use"` into
 `AIResponse.ToolCalls`. The block `input` object should be serialized into
 `ToolCallFunction.Arguments`; text blocks remain normal response content.
 
-Keep `SupportsChatTools` false until request mapping, tool-use parsing, and a
-tool-result round trip are covered by fixtures.
+Implemented: request mapping, tool-use parsing, and fixture tests verified.
 
 ### Ollama
 
