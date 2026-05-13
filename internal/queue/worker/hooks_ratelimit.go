@@ -5,13 +5,24 @@ import (
 	"sync"
 )
 
-// RateLimitStore tracks per-tool invocation counts for a single session.
-// All methods are safe for concurrent use. The store is designed to
-// support both simple counter-based and future time-windowed modes.
+// RateLimitCounter abstracts per-tool invocation counting so that
+// callers can swap in alternative implementations (e.g., time-windowed
+// or externally-backed stores) without changing the hook.
+type RateLimitCounter interface {
+	Increment(tool string) int
+	Count(tool string) int
+}
+
+// RateLimitStore is the default in-memory RateLimitCounter. It tracks
+// per-tool invocation counts for a single session. All methods are safe
+// for concurrent use.
 type RateLimitStore struct {
 	mu       sync.Mutex
 	counters map[string]int
 }
+
+// compile-time interface check
+var _ RateLimitCounter = (*RateLimitStore)(nil)
 
 // NewRateLimitStore returns an empty RateLimitStore ready for use.
 func NewRateLimitStore() *RateLimitStore {
@@ -47,14 +58,21 @@ func resolveLimit(limits map[string]int, tool string) int {
 // within a single session. The limits map keys are tool names (plus the
 // special "default" key); values are the maximum allowed calls (0 =
 // unlimited). The store must be unique per session so counters are
-// isolated across workers.
-func RateLimitHook(limits map[string]int, store *RateLimitStore) PreHook {
+// isolated across workers. A nil store with non-empty limits is treated
+// as a misconfiguration and vetoes all calls.
+func RateLimitHook(limits map[string]int, store RateLimitCounter) PreHook {
 	return PreHook{
 		Name:   "rate-limit",
 		Policy: FailClosed,
 		Fn: func(ctx HookContext) (HookVerdict, error) {
-			if store == nil || len(limits) == 0 {
+			if len(limits) == 0 {
 				return HookVerdict{}, nil
+			}
+			if store == nil {
+				return HookVerdict{
+					Veto:   true,
+					Reason: "Rate limit store is not configured.",
+				}, nil
 			}
 			limit := resolveLimit(limits, ctx.ToolName)
 			if limit == 0 {

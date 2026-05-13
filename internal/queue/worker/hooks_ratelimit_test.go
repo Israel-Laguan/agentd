@@ -171,15 +171,30 @@ func TestRateLimitHook_PerSessionIsolation(t *testing.T) {
 	}
 }
 
-func TestRateLimitHook_NilStore(t *testing.T) {
+func TestRateLimitHook_NilStore_WithLimits_Vetoes(t *testing.T) {
 	t.Parallel()
 	hook := RateLimitHook(map[string]int{"bash": 1}, nil)
 	verdict, err := hook.Fn(HookContext{ToolName: "bash", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if !verdict.Veto {
+		t.Fatal("nil store with configured limits should veto (misconfiguration)")
+	}
+	if !strings.Contains(verdict.Reason, "not configured") {
+		t.Fatalf("reason should mention store not configured, got %q", verdict.Reason)
+	}
+}
+
+func TestRateLimitHook_NilStore_NoLimits_Allows(t *testing.T) {
+	t.Parallel()
+	hook := RateLimitHook(nil, nil)
+	verdict, err := hook.Fn(HookContext{ToolName: "bash", Timestamp: time.Now()})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if verdict.Veto {
-		t.Fatal("nil store should not veto")
+		t.Fatal("nil store with no limits should not veto")
 	}
 }
 
