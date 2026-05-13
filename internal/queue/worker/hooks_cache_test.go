@@ -233,6 +233,17 @@ func TestCacheStoreHook_NilCache(t *testing.T) {
 	}
 }
 
+// countingSandbox wraps mockExecSandbox and counts Execute calls.
+type countingSandbox struct {
+	inner sandbox.Executor
+	calls int
+}
+
+func (c *countingSandbox) Execute(ctx context.Context, p sandbox.Payload) (sandbox.Result, error) {
+	c.calls++
+	return c.inner.Execute(ctx, p)
+}
+
 // --- Integration: consecutive reads return cached result ---
 
 func TestCacheHooks_ConsecutiveReadsReturnCached(t *testing.T) {
@@ -243,11 +254,11 @@ func TestCacheHooks_ConsecutiveReadsReturnCached(t *testing.T) {
 	hc.RegisterPre(CacheLookupHook(rc))
 	hc.RegisterPost(CacheStoreHook(rc))
 
-	mockSB := &mockExecSandbox{result: sandbox.Result{
+	counting := &countingSandbox{inner: &mockExecSandbox{result: sandbox.Result{
 		Stdout:  "hello world",
 		Success: true,
-	}}
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	}}}
+	executor := NewToolExecutor(counting, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
 
 	w := &Worker{
 		toolExecutor: executor,
@@ -259,16 +270,20 @@ func TestCacheHooks_ConsecutiveReadsReturnCached(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "read", Arguments: `{"path":"test.txt"}`},
 	}
 
-	// First call executes the handler.
 	result1 := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
 
-	// Second call with identical args should return the cached result.
 	call.ID = "call_2"
 	result2 := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
 
 	if result1 != result2 {
 		t.Fatalf("expected identical results:\n  first:  %q\n  second: %q", result1, result2)
 	}
+	// read does not go through the sandbox (it uses os.ReadFile directly),
+	// so we verify via the cache: second call must hit the cache and skip
+	// execution entirely. The ShortCircuit path in DispatchTool returns
+	// before reaching Execute, which is validated by
+	// TestCacheHooks_ShortCircuitSkipsPostHooks. Here we confirm the
+	// returned values are identical.
 }
 
 // TestCacheHooks_BashNeverCached verifies that bash calls are never cached.
@@ -280,13 +295,11 @@ func TestCacheHooks_BashNeverCached(t *testing.T) {
 	hc.RegisterPre(CacheLookupHook(rc))
 	hc.RegisterPost(CacheStoreHook(rc))
 
-	callCount := 0
-	mockSB := &mockExecSandbox{result: sandbox.Result{
+	counting := &countingSandbox{inner: &mockExecSandbox{result: sandbox.Result{
 		Stdout:  "output",
 		Success: true,
-	}}
-	// Override to count calls.
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	}}}
+	executor := NewToolExecutor(counting, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
 
 	w := &Worker{
 		toolExecutor: executor,
@@ -299,17 +312,15 @@ func TestCacheHooks_BashNeverCached(t *testing.T) {
 	}
 
 	w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
-	callCount++
 
 	call.ID = "call_2"
 	w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
-	callCount++
 
 	if len(rc.entries) != 0 {
 		t.Fatal("bash results should never be stored in cache")
 	}
-	if callCount != 2 {
-		t.Fatalf("expected 2 bash executions, got %d", callCount)
+	if counting.calls != 2 {
+		t.Fatalf("expected 2 sandbox executions (no caching), got %d", counting.calls)
 	}
 }
 
