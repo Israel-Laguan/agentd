@@ -106,10 +106,6 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string) string 
 		return `{"error": "command is required"}`
 	}
 
-	if isDangerous(args.Command) {
-		return `{"error": "command blocked: dangerous operation"}`
-	}
-
 	payload := sandbox.Payload{
 		TaskID:        "tool",
 		ProjectID:     "",
@@ -280,24 +276,4 @@ func jsonErrorf(format string, args ...any) string {
 	return string(payload)
 }
 
-// isDangerous checks if a command contains patterns that suggest risky operations.
-// This is a best-effort hint, not a security boundary. The sandbox provides the actual
-// isolation and resource limits. This check can be bypassed by shell variables,
-// aliases, or other obfuscation techniques.
-func isDangerous(cmd string) bool {
-	lower := strings.ToLower(cmd)
-	dangerous := []string{
-		"sudo",
-		"su -",
-		"rm -rf /",
-		"mkfs",
-		"dd if=",
-		":(){:|:&};:",
-	}
-	for _, d := range dangerous {
-		if strings.Contains(lower, d) {
-			return true
-		}
-	}
-	return false
-}
+
