@@ -3,6 +3,7 @@ package planning
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
@@ -185,12 +186,13 @@ func compactWorkerMessages(messages []gateway.PromptMessage) []gateway.PromptMes
 	const maxContent = 2000
 	out := append([]gateway.PromptMessage(nil), messages...)
 	for i := range out {
-		if out[i].Role != "user" || len(out[i].Content) <= maxContent {
+		if out[i].Role != "user" || utf8.RuneCountInString(out[i].Content) <= maxContent {
 			continue
 		}
 		head := maxContent / 2
 		tail := maxContent - head
-		out[i].Content = out[i].Content[:head] + "\n...[compressed]...\n" + out[i].Content[len(out[i].Content)-tail:]
+		runes := []rune(out[i].Content)
+		out[i].Content = string(runes[:head]) + "\n...[compressed]\n" + string(runes[len(runes)-tail:])
 	}
 	return out
 }

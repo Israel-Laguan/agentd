@@ -54,7 +54,7 @@ func (h *testLogHandler) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 func (h *testLogHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
-func (h *testLogHandler) WithGroup(_ string) slog.Handler       { return h }
+func (h *testLogHandler) WithGroup(_ string) slog.Handler      { return h }
 
 type workerTestStore struct {
 	task    models.Task
@@ -237,16 +237,16 @@ func (s *workerTestStore) MarkCommentProcessed(context.Context, string, string) 
 }
 
 type workerTestGateway struct {
-	content              string
-	toolCalls            []gateway.ToolCall
-	nextContent          string
-	nextToolCalls        []gateway.ToolCall
-	err                  error
-	requests             []gateway.AIRequest
-	callCount            int
-	returnToolCalls      bool // For simulating sequence: first returns tool calls, then plain text
-	returnsPlainText     bool // Flag to indicate next call should return plain text
-	lastResponseToolCalls int // Track tool calls count in the last response
+	content               string
+	toolCalls             []gateway.ToolCall
+	nextContent           string
+	nextToolCalls         []gateway.ToolCall
+	err                   error
+	requests              []gateway.AIRequest
+	callCount             int
+	returnToolCalls       bool // For simulating sequence: first returns tool calls, then plain text
+	returnsPlainText      bool // Flag to indicate next call should return plain text
+	lastResponseToolCalls int  // Track tool calls count in the last response
 }
 
 func (g *workerTestGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
@@ -316,7 +316,7 @@ func initializeWorkerScenario(sc *godog.ScenarioContext) {
 				State:      models.TaskStateQueued,
 			},
 			project: models.Project{
-				BaseEntity:     models.BaseEntity{ID: "project-1"},
+				BaseEntity:    models.BaseEntity{ID: "project-1"},
 				WorkspacePath: "/tmp/test-workspace",
 			},
 			profile: models.AgentProfile{
@@ -586,9 +586,9 @@ func (s *workerScenario) verifyFinalTextCommitted(context.Context) error {
 	if !s.store.result.Success {
 		return fmt.Errorf("expected successful result")
 	}
-	// Verify the committed payload matches the gateway's final text exactly
-	if s.gateway.nextContent != "" && s.store.result.Payload != s.gateway.nextContent {
-		return fmt.Errorf("expected committed payload to equal final text %q, got %q", s.gateway.nextContent, s.store.result.Payload)
+	// Successful worker results include execution metadata; verify the final text is preserved.
+	if s.gateway.nextContent != "" && !strings.Contains(s.store.result.Payload, s.gateway.nextContent) {
+		return fmt.Errorf("expected committed payload to contain final text %q, got %q", s.gateway.nextContent, s.store.result.Payload)
 	}
 	return nil
 }

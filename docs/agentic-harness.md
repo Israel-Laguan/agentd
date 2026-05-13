@@ -151,4 +151,5 @@ These support the outer system and **wrap** the inner agentic loop:
 ## See also
 
 - [docs/agentic-harness-roadmap.md](agentic-harness-roadmap.md) — Phased implementation roadmap and links to task prompts.
+- [docs/provider-tool-calling.md](provider-tool-calling.md) — Provider tool-call capability matrix and wire-format deltas.
 - [tasks/](../tasks/) — Dependency-ordered implementation prompts (`01`–`12`).

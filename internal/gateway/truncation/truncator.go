@@ -3,6 +3,7 @@ package truncation
 import (
 	"context"
 	"fmt"
+	"unicode/utf8"
 
 	"agentd/internal/gateway/spec"
 )
@@ -61,8 +62,8 @@ func (t RejectTruncator) Apply(_ context.Context, messages []spec.PromptMessage,
 		return append([]spec.PromptMessage(nil), messages...), nil
 	}
 	for _, msg := range messages {
-		if len(msg.Content) > budget {
-			return nil, fmt.Errorf("%w: message content length %d exceeds budget %d", spec.ErrContextBudgetExceeded, len(msg.Content), budget)
+		if utf8.RuneCountInString(msg.Content) > budget {
+			return nil, fmt.Errorf("%w: message content length %d exceeds budget %d", spec.ErrContextBudgetExceeded, utf8.RuneCountInString(msg.Content), budget)
 		}
 	}
 	return append([]spec.PromptMessage(nil), messages...), nil

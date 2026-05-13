@@ -1,11 +1,24 @@
 package truncation
 
-import "agentd/internal/gateway/spec"
+import (
+	"fmt"
+	"unicode/utf8"
 
-const truncationMarker = "\n...[TRUNCATED BY AGENTD]...\n"
+	"agentd/internal/gateway/spec"
+)
 
-// TruncationMarker is the delimiter inserted between head and tail segments.
+const truncationMarker = "【...】"
+
+// TruncationMarker is inserted when a message or section is truncated.
 const TruncationMarker = truncationMarker
+
+// CollapseMarkerFor returns a marker indicating that N tool exchanges have been collapsed.
+func CollapseMarkerFor(n int) string {
+	return fmt.Sprintf("【%d tool exchanges collapsed】", n)
+}
+
+// CollapseMarker is the default marker (for backwards compatibility)
+const CollapseMarker = "【N tool exchanges collapsed】"
 
 // MiddleOutStrategy removes the middle of oversized content.
 type MiddleOutStrategy struct{}
@@ -15,24 +28,53 @@ func (s MiddleOutStrategy) Name() string {
 	return TruncationStrategyMiddleOut
 }
 
-// Truncate applies middle-out cutting.
+// Truncate applies middle-out cutting with UTF-8 safe slicing.
 func (s MiddleOutStrategy) Truncate(input string, maxChars int) string {
 	if maxChars <= 0 || len(input) <= maxChars {
 		return input
 	}
-	if maxChars <= len(truncationMarker) {
-		return input[:maxChars]
+	markerBytes := len(truncationMarker)
+	if maxChars <= markerBytes {
+		return utf8SafePrefix(input, maxChars)
 	}
-	remaining := maxChars - len(truncationMarker)
-	head := remaining / 2
-	tail := remaining - head
-	return input[:head] + truncationMarker + input[len(input)-tail:]
+	remaining := maxChars - markerBytes
+	headBytes := remaining / 2
+	tailBytes := remaining - headBytes
+
+	return utf8SafePrefix(input, headBytes) + truncationMarker + utf8SafeSuffix(input, tailBytes)
 }
 
 // MiddleOut keeps the beginning and end of long content while removing the
 // noisy middle, which is usually the least useful part of large logs.
 func MiddleOut(input string, maxChars int) string {
 	return MiddleOutStrategy{}.Truncate(input, maxChars)
+}
+
+func utf8SafePrefix(input string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if maxBytes >= len(input) {
+		return input
+	}
+	for maxBytes > 0 && !utf8.ValidString(input[:maxBytes]) {
+		maxBytes--
+	}
+	return input[:maxBytes]
+}
+
+func utf8SafeSuffix(input string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if maxBytes >= len(input) {
+		return input
+	}
+	start := len(input) - maxBytes
+	for start < len(input) && !utf8.RuneStart(input[start]) {
+		start++
+	}
+	return input[start:]
 }
 
 func truncateMessages(messages []spec.PromptMessage, maxChars int, strategy TruncationStrategy) []spec.PromptMessage {
