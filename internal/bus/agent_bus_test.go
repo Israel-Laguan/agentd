@@ -9,7 +9,7 @@ import (
 	"agentd/internal/models"
 )
 
-func TestAgentBridge_PublishAgentUpdated_NilBus(t *testing.T) {
+func TestAgentBridge_PublishAgentUpdated_NilBus(_ *testing.T) {
 	bridge := AgentBridge{Bus: nil}
 	bridge.PublishAgentUpdated(context.Background(), models.AgentProfile{
 		ID: "test",
@@ -17,7 +17,7 @@ func TestAgentBridge_PublishAgentUpdated_NilBus(t *testing.T) {
 	})
 }
 
-func TestAgentBridge_PublishAgentUpdated_WithBus(t *testing.T) {
+func TestAgentBridge_PublishAgentUpdated_WithBus(_ *testing.T) {
 	mb := NewInProcess()
 	bridge := AgentBridge{Bus: mb}
 	bridge.PublishAgentUpdated(context.Background(), models.AgentProfile{
@@ -31,7 +31,7 @@ func TestAgentBridge_PublishAgentUpdated_WithBus(t *testing.T) {
 	})
 }
 
-func TestAgentBridge_PublishAgentDeleted_NilBus(t *testing.T) {
+func TestAgentBridge_PublishAgentDeleted_NilBus(_ *testing.T) {
 	bridge := AgentBridge{Bus: nil}
 	bridge.PublishAgentDeleted(context.Background(), "test-id")
 }

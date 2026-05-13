@@ -158,10 +158,10 @@ func TestFormatFileReferenceIntent(t *testing.T) {
 			wantContains: []string{"test intent", "[agentd file reference]", "name: a.txt", "path: /path/a.txt", "name: b.txt", "path: /path/b.txt"},
 		},
 		{
-			name:         "with empty name ref",
-			intent:       "test intent",
-			refs:         []FileRef{{Name: "", Path: "/path/c.txt"}},
-			wantContains: []string{"test intent", "[agentd file reference]", "path: /path/c.txt"},
+			name:            "with empty name ref",
+			intent:          "test intent",
+			refs:            []FileRef{{Name: "", Path: "/path/c.txt"}},
+			wantContains:    []string{"test intent", "[agentd file reference]", "path: /path/c.txt"},
 			wantNotContains: []string{"name:"},
 		},
 	}
@@ -380,6 +380,9 @@ func TestPrepareIntent(t *testing.T) {
 			},
 			wantErr: false,
 			assert: func(t *testing.T, intent string, refs []FileRef) {
+				if !strings.Contains(intent, "test message") {
+					t.Errorf("expected intent to contain test message, got %q", intent)
+				}
 				if len(refs) != 2 {
 					t.Errorf("expected 2 refs, got %d", len(refs))
 				}
@@ -416,6 +419,7 @@ func TestIntentWithFileContents(t *testing.T) {
 		{
 			name: "nil stash returns intent unchanged",
 			setup: func(t *testing.T) (*FileStash, gateway.Truncator, int, string, []FileRef) {
+				t.Helper()
 				return nil, nil, 100, "original intent", []FileRef{}
 			},
 			wantErr: false,

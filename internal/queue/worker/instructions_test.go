@@ -54,10 +54,14 @@ This should be ignored.
 func TestLoadProjectInstructions(t *testing.T) {
 	tmp := t.TempDir()
 	workspace := filepath.Join(tmp, "repo")
-	os.MkdirAll(filepath.Join(workspace, ".agentd"), 0755)
+	if err := os.MkdirAll(filepath.Join(workspace, ".agentd"), 0755); err != nil {
+		t.Fatalf("failed to create directory: %v", err)
+	}
 
 	agentsContent := "## Architecture\nProject architecture."
-	os.WriteFile(filepath.Join(workspace, ".agentd", "AGENTS.md"), []byte(agentsContent), 0644)
+	if err := os.WriteFile(filepath.Join(workspace, ".agentd", "AGENTS.md"), []byte(agentsContent), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
 
 	loader := &InstructionLoader{
 		ProjectFile: ".agentd/AGENTS.md",
@@ -73,7 +77,9 @@ func TestLoadProjectInstructions(t *testing.T) {
 	}
 
 	// 2. Override path
-	os.WriteFile(filepath.Join(workspace, "CUSTOM.md"), []byte("## Architecture\nCustom architecture."), 0644)
+	if err := os.WriteFile(filepath.Join(workspace, "CUSTOM.md"), []byte("## Architecture\nCustom architecture."), 0644); err != nil {
+		t.Fatalf("failed to write custom file: %v", err)
+	}
 	pi, err = loader.LoadProjectInstructions(workspace, "CUSTOM.md")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -83,8 +89,12 @@ func TestLoadProjectInstructions(t *testing.T) {
 	}
 
 	// 3. Fallback to root AGENTS.md
-	os.Remove(filepath.Join(workspace, ".agentd", "AGENTS.md"))
-	os.WriteFile(filepath.Join(workspace, "AGENTS.md"), []byte("## Architecture\nRoot architecture."), 0644)
+	if err := os.Remove(filepath.Join(workspace, ".agentd", "AGENTS.md")); err != nil {
+		t.Fatalf("failed to remove file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "AGENTS.md"), []byte("## Architecture\nRoot architecture."), 0644); err != nil {
+		t.Fatalf("failed to write root file: %v", err)
+	}
 	pi, err = loader.LoadProjectInstructions(workspace, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -94,7 +104,9 @@ func TestLoadProjectInstructions(t *testing.T) {
 	}
 
 	// 4. No file
-	os.Remove(filepath.Join(workspace, "AGENTS.md"))
+	if err := os.Remove(filepath.Join(workspace, "AGENTS.md")); err != nil {
+		t.Fatalf("failed to remove root file: %v", err)
+	}
 	pi, err = loader.LoadProjectInstructions(workspace, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -113,7 +125,9 @@ preferences:
   style: concise
   editor: vim
 `
-	os.WriteFile(prefsPath, []byte(content), 0644)
+	if err := os.WriteFile(prefsPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write preferences file: %v", err)
+	}
 
 	loader := &InstructionLoader{
 		UserPreferencesPath: prefsPath,

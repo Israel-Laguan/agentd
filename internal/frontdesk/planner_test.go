@@ -55,9 +55,9 @@ func TestErrMultipleApprovedScopes(t *testing.T) {
 
 func TestPlanner_Defaults(t *testing.T) {
 	p := Planner{
-		Gateway:    nil,
-		Budget:     12000,
-		Truncator:  nil,
+		Gateway:   nil,
+		Budget:    12000,
+		Truncator: nil,
 	}
 	if p.Budget != 12000 {
 		t.Errorf("Budget = %v, want 12000", p.Budget)
@@ -66,9 +66,9 @@ func TestPlanner_Defaults(t *testing.T) {
 
 func TestPlanner_CanCreateWithGateway(t *testing.T) {
 	p := Planner{
-		Gateway:    &mockGateway{},
-		Budget:     12000,
-		Truncator:  nil,
+		Gateway:   &mockGateway{},
+		Budget:    12000,
+		Truncator: nil,
 	}
 	if p.Gateway == nil {
 		t.Error("Gateway should not be nil")
@@ -98,30 +98,30 @@ func TestMarshalContent(t *testing.T) {
 
 type mockGateway struct{}
 
-func (m *mockGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+func (m *mockGateway) Generate(_ context.Context, _ gateway.AIRequest) (gateway.AIResponse, error) {
 	return gateway.AIResponse{}, nil
 }
 
-func (m *mockGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
+func (m *mockGateway) GeneratePlan(_ context.Context, _ string) (*models.DraftPlan, error) {
 	return &models.DraftPlan{}, nil
 }
 
-func (m *mockGateway) AnalyzeScope(ctx context.Context, intent string) (*spec.ScopeAnalysis, error) {
+func (m *mockGateway) AnalyzeScope(_ context.Context, _ string) (*spec.ScopeAnalysis, error) {
 	return &spec.ScopeAnalysis{SingleScope: true}, nil
 }
 
-func (m *mockGateway) ClassifyIntent(ctx context.Context, intent string) (*spec.IntentAnalysis, error) {
+func (m *mockGateway) ClassifyIntent(_ context.Context, _ string) (*spec.IntentAnalysis, error) {
 	return &spec.IntentAnalysis{Intent: "plan_request"}, nil
 }
 
-func (m *mockGateway) GenerateText(ctx context.Context, prompt string, limit int) (string, error) {
+func (m *mockGateway) GenerateText(_ context.Context, _ string, _ int) (string, error) {
 	return "", nil
 }
 
-func (m *mockGateway) GenerateStructuredJSON(ctx context.Context, prompt string, target interface{}) error {
+func (m *mockGateway) GenerateStructuredJSON(_ context.Context, _ string, _ interface{}) error {
 	return nil
 }
 
-func (m *mockGateway) TruncateToBudget(input string, maxTokens int) string {
+func (m *mockGateway) TruncateToBudget(input string, _ int) string {
 	return input
 }
