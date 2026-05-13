@@ -359,3 +359,123 @@ func TestAuditHook_DispatchToolEmitsConsistently(t *testing.T) {
 		t.Fatalf("second dispatch call_id: want 'call_b', got %q", ev2.CallID)
 	}
 }
+
+// --- Clone / PrependPost tests ---
+
+func TestHookChainClone_DoesNotMutateOriginal(t *testing.T) {
+	t.Parallel()
+	original := NewHookChain()
+	original.RegisterPost(PostHook{
+		Name: "existing", Policy: FailOpen,
+		Fn: func(_ HookContext, r string) (string, error) { return r, nil },
+	})
+
+	clone := original.Clone()
+	clone.RegisterPost(PostHook{
+		Name: "added", Policy: FailOpen,
+		Fn: func(_ HookContext, r string) (string, error) { return r + " cloned", nil },
+	})
+
+	// Original should still have only 1 post-hook
+	original.mu.RLock()
+	origLen := len(original.postHooks)
+	original.mu.RUnlock()
+	if origLen != 1 {
+		t.Fatalf("original should have 1 post-hook, got %d", origLen)
+	}
+
+	clone.mu.RLock()
+	cloneLen := len(clone.postHooks)
+	clone.mu.RUnlock()
+	if cloneLen != 2 {
+		t.Fatalf("clone should have 2 post-hooks, got %d", cloneLen)
+	}
+}
+
+func TestHookChainPrependPost_RunsBeforeExisting(t *testing.T) {
+	t.Parallel()
+	hc := NewHookChain()
+	hc.RegisterPost(PostHook{
+		Name: "append", Policy: FailOpen,
+		Fn: func(_ HookContext, r string) (string, error) { return r + ":second", nil },
+	})
+	hc.PrependPost(PostHook{
+		Name: "prepend", Policy: FailOpen,
+		Fn: func(_ HookContext, r string) (string, error) { return r + ":first", nil },
+	})
+
+	got := hc.RunPost(HookContext{ToolName: "bash", Timestamp: time.Now()}, "start")
+	if got != "start:first:second" {
+		t.Fatalf("expected 'start:first:second', got %q", got)
+	}
+}
+
+func TestNewWorker_SharedHookChainNotMutated(t *testing.T) {
+	t.Parallel()
+	shared := NewHookChain()
+	shared.RegisterPost(PostHook{
+		Name: "user-hook", Policy: FailOpen,
+		Fn: func(_ HookContext, r string) (string, error) { return r, nil },
+	})
+
+	shared.mu.RLock()
+	beforeLen := len(shared.postHooks)
+	shared.mu.RUnlock()
+
+	mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "ok\n", Success: true}}
+	_ = NewWorker(&mockAgenticStore{}, nil, mockSB, nil, nil, WorkerOptions{
+		MaxToolIterations: 5,
+		Hooks:             shared,
+	})
+
+	shared.mu.RLock()
+	afterLen := len(shared.postHooks)
+	shared.mu.RUnlock()
+
+	if afterLen != beforeLen {
+		t.Fatalf("shared HookChain mutated: had %d post-hooks, now %d", beforeLen, afterLen)
+	}
+}
+
+// --- Error path scrubbing ---
+
+func TestErrorPathsRunThroughPostHooks(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{}
+	mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "ok\n", Success: true}}
+
+	w := NewWorker(
+		&mockAgenticStore{},
+		nil,
+		mockSB,
+		nil,
+		sink,
+		WorkerOptions{MaxToolIterations: 5},
+	)
+
+	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+
+	// Call an unknown tool — this used to bypass RunPost
+	call := gateway.ToolCall{
+		ID:       "call_unknown",
+		Function: gateway.ToolCallFunction{Name: "nonexistent", Arguments: `{}`},
+	}
+	result := w.dispatchToolWithProject(context.Background(), "task-err", "proj-err", call, nil, executor)
+
+	// Result should contain error message
+	if !strings.Contains(result, "unknown tool") {
+		t.Fatalf("expected unknown tool error, got %q", result)
+	}
+
+	// Audit events should still fire (error path goes through RunPost)
+	if len(sink.events) != 2 {
+		t.Fatalf("expected 2 audit events for error path, got %d", len(sink.events))
+	}
+	if sink.events[0].Type != models.EventTypeToolCall {
+		t.Fatalf("expected TOOL_CALL, got %q", sink.events[0].Type)
+	}
+	if sink.events[1].Type != models.EventTypeToolResult {
+		t.Fatalf("expected TOOL_RESULT, got %q", sink.events[1].Type)
+	}
+}

@@ -196,6 +196,26 @@ func (hc *HookChain) RunSessionStart(ctx HookContext) error {
 	return nil
 }
 
+// Clone returns a deep copy of the HookChain so that mutations on the
+// clone do not affect the original.
+func (hc *HookChain) Clone() *HookChain {
+	hc.mu.RLock()
+	defer hc.mu.RUnlock()
+	return &HookChain{
+		preHooks:     append([]PreHook(nil), hc.preHooks...),
+		postHooks:    append([]PostHook(nil), hc.postHooks...),
+		sessionHooks: append([]SessionStartHook(nil), hc.sessionHooks...),
+	}
+}
+
+// PrependPost inserts a post-tool hook at the front of the chain so it
+// runs before any previously registered PostHooks.
+func (hc *HookChain) PrependPost(h PostHook) {
+	hc.mu.Lock()
+	defer hc.mu.Unlock()
+	hc.postHooks = append([]PostHook{h}, hc.postHooks...)
+}
+
 // resolveHooks returns hc if non-nil, otherwise a new empty HookChain.
 func resolveHooks(hc *HookChain) *HookChain {
 	if hc != nil {

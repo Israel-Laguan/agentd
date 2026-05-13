@@ -121,8 +121,9 @@ func NewWorker(
 		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
 	}
 	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
-	hooks := resolveHooks(opts.Hooks)
-	hooks.RegisterPost(ScrubResultHook(scrubber))
+	base := resolveHooks(opts.Hooks)
+	hooks := base.Clone()
+	hooks.PrependPost(ScrubResultHook(scrubber))
 	hooks.RegisterPost(AuditHook(sink, scrubber))
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
@@ -462,30 +463,33 @@ func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, project
 		result = toolExecutor.Execute(ctx, call)
 	default:
 		if w.capabilities == nil {
-			return jsonErrorf("unknown tool: %s", call.Function.Name)
-		}
-		adapterName, ok := toolToAdapter[call.Function.Name]
-		if !ok {
-			return jsonErrorf("unknown tool: %s", call.Function.Name)
-		}
-		var args map[string]any
-		if strings.TrimSpace(call.Function.Arguments) != "" {
-			if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
-				return jsonErrorf("invalid arguments: %v", err)
+			result = jsonErrorf("unknown tool: %s", call.Function.Name)
+		} else if adapterName, ok := toolToAdapter[call.Function.Name]; !ok {
+			result = jsonErrorf("unknown tool: %s", call.Function.Name)
+		} else {
+			var args map[string]any
+			if strings.TrimSpace(call.Function.Arguments) != "" {
+				if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
+					result = jsonErrorf("invalid arguments: %v", err)
+				}
+			}
+			if result == "" {
+				if args == nil {
+					args = map[string]any{}
+				}
+				out, err := w.capabilities.CallTool(ctx, adapterName, call.Function.Name, args)
+				if err != nil {
+					result = jsonErrorf("capability tool failed: %v", err)
+				} else {
+					encoded, err := json.Marshal(out)
+					if err != nil {
+						result = jsonErrorf("capability tool result encode failed: %v", err)
+					} else {
+						result = string(encoded)
+					}
+				}
 			}
 		}
-		if args == nil {
-			args = map[string]any{}
-		}
-		out, err := w.capabilities.CallTool(ctx, adapterName, call.Function.Name, args)
-		if err != nil {
-			return jsonErrorf("capability tool failed: %v", err)
-		}
-		encoded, err := json.Marshal(out)
-		if err != nil {
-			return jsonErrorf("capability tool result encode failed: %v", err)
-		}
-		result = string(encoded)
 	}
 
 	if w.hooks != nil {
