@@ -289,7 +289,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	w.registerCancel(task.ID, cancel)
 	defer w.deregisterCancel(task.ID)
 
-	toolExecutor := NewToolExecutor(
+	// Re-initialize tool executor with project-specific workspace path for this task
+	w.toolExecutor = NewToolExecutor(
 		w.sandbox,
 		project.WorkspacePath,
 		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
@@ -298,7 +299,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages := w.seedMessages(ctx, task, profile)
 	messages = w.buildAgenticMessages(messages, profile)
-	tools, toolToAdapter := w.agenticTools(ctx, toolExecutor)
+	tools, toolToAdapter := w.agenticTools(ctx, w.toolExecutor)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
@@ -375,7 +376,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 			// Measure execution time
 			startTime := time.Now()
-			result := w.executeAgenticTool(cancelCtx, toolExecutor, call, toolToAdapter)
+			// Use DispatchTool as the single entry point for tool execution (Requirement 1.1)
+			result := w.DispatchTool(cancelCtx, task.ID, call, toolToAdapter)
 			durationMs := time.Since(startTime).Milliseconds()
 
 			// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
@@ -403,10 +405,24 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) (
 	return append(tools, capabilityTools...), toolToAdapter
 }
 
-func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
+// DispatchTool is the single entry point for tool execution in the agentic loop.
+// It handles both built-in tools (bash, read, write) and capability tools (MCP).
+// Parameters:
+//   - ctx: Context for cancellation and timeouts
+//   - taskID: Task ID for event emission
+//   - call: The tool call from the AI response
+//   - toolToAdapter: Map of tool names to adapter names for MCP tools
+//
+// Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
+func (w *Worker) DispatchTool(ctx context.Context, taskID string, call gateway.ToolCall, toolToAdapter map[string]string) string {
+	// Emit TOOL_CALL event before execution (Requirements 1.3, 7.1)
+	// Note: taskID is passed for event emission but we need a Task object with the ID
+	// The caller (processAgentic) should handle event emission around the DispatchTool call
+	// to maintain the existing event flow with proper task metadata.
+
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
-		return toolExec.Execute(ctx, call)
+		return w.toolExecutor.Execute(ctx, call)
 	default:
 		if w.capabilities == nil {
 			return jsonErrorf("unknown tool: %s", call.Function.Name)
@@ -434,6 +450,12 @@ func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor,
 		}
 		return string(encoded)
 	}
+}
+
+// executeAgenticTool is a wrapper around DispatchTool for backward compatibility.
+// It uses the worker's internal tool executor.
+func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
+	return w.DispatchTool(ctx, "", call, toolToAdapter)
 }
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
