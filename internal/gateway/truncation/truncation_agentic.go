@@ -217,11 +217,16 @@ func (t *AgenticTruncator) removeDanglingToolCalls(messages []spec.PromptMessage
 
 	return out
 }
-// totalChars calculates the total character count of all message contents
+// totalChars calculates the total character count of all message contents including tool calls
 func totalChars(messages []spec.PromptMessage) int {
 	total := 0
 	for _, m := range messages {
 		total += utf8.RuneCountInString(m.Content)
+		// Also count tool call function names and arguments
+		for _, tc := range m.ToolCalls {
+			total += utf8.RuneCountInString(tc.Function.Name)
+			total += utf8.RuneCountInString(tc.Function.Arguments)
+		}
 	}
 	return total
 }

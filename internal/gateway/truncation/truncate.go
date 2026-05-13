@@ -2,6 +2,7 @@ package truncation
 
 import (
 	"fmt"
+	"unicode/utf8"
 
 	"agentd/internal/gateway/spec"
 )
@@ -27,26 +28,57 @@ func (s MiddleOutStrategy) Name() string {
 	return TruncationStrategyMiddleOut
 }
 
-// Truncate applies middle-out cutting.
+// Truncate applies middle-out cutting with UTF-8 safe slicing.
 func (s MiddleOutStrategy) Truncate(input string, maxChars int) string {
 	if maxChars <= 0 || len(input) <= maxChars {
 		return input
 	}
 	markerBytes := len(truncationMarker)
 	if maxChars <= markerBytes {
-		// Return prefix truncated to maxChars bytes
-		return input[:maxChars]
+		// Truncate to maxChars bytes safely
+		runes := []rune(input)
+		if maxChars >= len(runes) {
+			return input[:maxChars]
+		}
+		// Find the byte position that corresponds to maxChars runes
+		var pos int
+		for i, r := range runes {
+			if i >= maxChars {
+				break
+			}
+			pos += utf8.RuneLen(r)
+		}
+		return input[:pos]
 	}
 	remaining := maxChars - markerBytes
-	head := remaining / 2
-	tail := remaining - head
-	// Truncate to byte boundaries safely
-	headStr := input[:head]
-	tailStart := len(input) - tail
+	headBytes := remaining / 2
+	tailBytes := remaining - headBytes
+
+	// Find head boundary: convert headBytes to rune count safely
+	headRunes := 0
+	var headPos int
+	for _, r := range []rune(input) {
+		runeLen := utf8.RuneLen(r)
+		if headPos+runeLen > headBytes {
+			break
+		}
+		headPos += runeLen
+		headRunes++
+	}
+	headStr := input[:headPos]
+
+	// Find tail boundary: start from end
+	inputLen := len(input)
+	tailStart := inputLen - tailBytes
+	// Adjust tailStart to a valid UTF-8 boundary
+	for tailStart > 0 && !utf8.RuneStart(input[tailStart]) {
+		tailStart--
+	}
 	if tailStart < 0 {
 		tailStart = 0
 	}
 	tailStr := input[tailStart:]
+
 	return headStr + truncationMarker + tailStr
 }
 
