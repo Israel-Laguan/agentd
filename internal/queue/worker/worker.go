@@ -406,7 +406,7 @@ func (w *Worker) processAgenticIteration(
 		// Measure execution time
 		startTime := time.Now()
 		// Use task-local ToolExecutor for thread-safe tool execution
-		result := w.DispatchTool(ctx, call, toolToAdapter, toolExecutor)
+		result := w.DispatchTool(ctx, task.ID, call, toolToAdapter, toolExecutor)
 		durationMs := time.Since(startTime).Milliseconds()
 
 		// Emit TOOL_RESULT after execution (Requirements 2.3, 7.2, 7.4)
@@ -443,10 +443,11 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) (
 //   - toolToAdapter: Map of tool names to adapter names for MCP tools
 //
 // Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
-func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
+func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
 	hookCtx := HookContext{
 		ToolName:  call.Function.Name,
 		Args:      call.Function.Arguments,
+		SessionID: sessionID,
 		Timestamp: time.Now(),
 	}
 
@@ -497,11 +498,11 @@ func (w *Worker) DispatchTool(ctx context.Context, call gateway.ToolCall, toolTo
 
 // executeAgenticTool is a wrapper around DispatchTool for backward compatibility.
 // Use DispatchTool directly instead.
-func (w *Worker) executeAgenticTool(ctx context.Context, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
+func (w *Worker) executeAgenticTool(ctx context.Context, sessionID string, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
 	if toolExec == nil {
 		toolExec = w.toolExecutor
 	}
-	return w.DispatchTool(ctx, call, toolToAdapter, toolExec)
+	return w.DispatchTool(ctx, sessionID, call, toolToAdapter, toolExec)
 }
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {

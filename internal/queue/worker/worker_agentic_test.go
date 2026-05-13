@@ -104,7 +104,7 @@ func TestExecuteAgenticTool_CapabilityRegistry(t *testing.T) {
 	w := &Worker{capabilities: registry}
 	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
 	toolToAdapter := map[string]string{"capability_tool": "fake"}
-	out := w.executeAgenticTool(context.Background(), ex, gateway.ToolCall{
+	out := w.executeAgenticTool(context.Background(), "", ex, gateway.ToolCall{
 		Function: gateway.ToolCallFunction{Name: "capability_tool", Arguments: `{"id":"1"}`},
 	}, toolToAdapter)
 	var payload map[string]any
@@ -299,7 +299,7 @@ func TestProcessAgentic_ExecutesToolCalls(t *testing.T) {
 	}
 
 	// Use DispatchTool as the single entry point for tool execution
-	result := w.DispatchTool(context.Background(), bashCall, nil, w.toolExecutor)
+	result := w.DispatchTool(context.Background(), "", bashCall, nil, w.toolExecutor)
 
 	// The result should contain the output
 	if !strings.Contains(result, "hello") {

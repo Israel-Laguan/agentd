@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -102,6 +103,13 @@ func (hc *HookChain) RunPre(ctx HookContext) HookVerdict {
 	hc.mu.RUnlock()
 
 	for _, h := range hooks {
+		if h.Fn == nil {
+			slog.Warn("pre-hook error", "hook", h.Name, "policy", policyLabel(h.Policy), "error", "nil hook callback")
+			if h.Policy == FailClosed {
+				return HookVerdict{Veto: true, Reason: "hook " + h.Name + " failed (fail_closed): nil hook callback"}
+			}
+			continue
+		}
 		verdict, err := h.Fn(ctx)
 		if err != nil {
 			slog.Warn("pre-hook error",
@@ -132,6 +140,13 @@ func (hc *HookChain) RunPost(ctx HookContext, result string) string {
 	hc.mu.RUnlock()
 
 	for _, h := range hooks {
+		if h.Fn == nil {
+			slog.Warn("post-hook error", "hook", h.Name, "policy", policyLabel(h.Policy), "error", "nil hook callback")
+			if h.Policy == FailClosed {
+				return "hook " + h.Name + " failed (fail_closed): nil hook callback"
+			}
+			continue
+		}
 		mutated, err := h.Fn(ctx, result)
 		if err != nil {
 			slog.Warn("post-hook error",
@@ -158,6 +173,13 @@ func (hc *HookChain) RunSessionStart(ctx HookContext) error {
 	hc.mu.RUnlock()
 
 	for _, h := range hooks {
+		if h.Fn == nil {
+			slog.Warn("session-start hook error", "hook", h.Name, "policy", policyLabel(h.Policy), "error", "nil hook callback")
+			if h.Policy == FailClosed {
+				return errors.New("hook " + h.Name + " failed (fail_closed): nil hook callback")
+			}
+			continue
+		}
 		if err := h.Fn(ctx); err != nil {
 			slog.Warn("session-start hook error",
 				"hook", h.Name,
