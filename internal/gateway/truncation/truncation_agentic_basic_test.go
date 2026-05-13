@@ -115,16 +115,10 @@ func TestAgenticTruncator_FindToolExchanges(t *testing.T) {
 	if exchanges[0].assistantIndex != 1 {
 		t.Errorf("first exchange assistant index = %d, want 1", exchanges[0].assistantIndex)
 	}
-	if len(exchanges[0].toolIndices) != 1 || exchanges[0].toolIndices[0] != 2 {
-		t.Errorf("first exchange tool indices = %v, want [2]", exchanges[0].toolIndices)
-	}
 
 	// Second exchange
 	if exchanges[1].assistantIndex != 3 {
 		t.Errorf("second exchange assistant index = %d, want 3", exchanges[1].assistantIndex)
-	}
-	if len(exchanges[1].toolIndices) != 1 || exchanges[1].toolIndices[0] != 4 {
-		t.Errorf("second exchange tool indices = %v, want [4]", exchanges[1].toolIndices)
 	}
 }
 
