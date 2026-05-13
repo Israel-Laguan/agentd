@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -311,11 +312,11 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 func totalChars(messages []gateway.PromptMessage) int {
 	total := 0
 	for _, m := range messages {
-		total += len(m.Content)
+		total += utf8.RuneCountInString(m.Content)
 		// Also count tool call function names and arguments
 		for _, tc := range m.ToolCalls {
-			total += len(tc.Function.Name)
-			total += len(tc.Function.Arguments)
+			total += utf8.RuneCountInString(tc.Function.Name)
+			total += utf8.RuneCountInString(tc.Function.Arguments)
 		}
 	}
 	return total

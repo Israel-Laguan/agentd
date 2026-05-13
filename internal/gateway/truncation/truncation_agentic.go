@@ -2,6 +2,8 @@ package truncation
 
 import (
 	"context"
+	"strings"
+	"unicode/utf8"
 
 	"agentd/internal/gateway/spec"
 )
@@ -75,6 +77,10 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 	if budget > 0 && totalChars(messages) > budget && len(messages) <= t.MaxMessages {
 		messages = t.truncateToBudget(messages, budget)
 		messages = t.removeDanglingToolCalls(messages)
+		// Final hard-budget enforcement: ensure output never exceeds budget
+		for budget > 0 && totalChars(messages) > budget {
+			messages = t.truncateToBudget(messages, budget)
+		}
 		return messages, nil
 	}
 
@@ -129,13 +135,13 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 			if startFrom < len(messages) && truncated {
 				msg := messages[startFrom]
 				// Add truncation marker only if not already from budget truncation
-				if !containsString(msg.Content, TruncationMarker) && !containsString(msg.Content, CollapseMarker) {
+				if !containsString(msg.Content, TruncationMarker) && !containsString(msg.Content, "tool exchanges collapsed") {
 					msg.Content = TruncationMarker + msg.Content
 				}
 
 				// If we dropped tool exchanges, add collapse marker to this message
-				if droppedExchanges > 0 && !containsString(msg.Content, CollapseMarker) {
-					msg.Content = CollapseMarker + " " + msg.Content
+				if droppedExchanges > 0 && !containsString(msg.Content, "tool exchanges collapsed") {
+					msg.Content = CollapseMarkerFor(droppedExchanges) + " " + msg.Content
 				}
 
 				out = append(out, msg)
@@ -143,8 +149,8 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 			} else if droppedExchanges > 0 && startFrom < len(messages) {
 				// Add collapse marker to the first retained message
 				msg := messages[startFrom]
-				if !containsString(msg.Content, CollapseMarker) {
-					msg.Content = CollapseMarker + " " + msg.Content
+				if !containsString(msg.Content, "tool exchanges collapsed") {
+					msg.Content = CollapseMarkerFor(droppedExchanges) + " " + msg.Content
 				}
 				out = append(out, msg)
 				startFrom++
@@ -162,79 +168,9 @@ func (t *AgenticTruncator) Apply(_ context.Context, messages []spec.PromptMessag
 	return out, nil
 }
 
-// truncateToBudgetStrict truncates without adding additional markers (assumes markers already exist or not needed)
-func (t *AgenticTruncator) truncateToBudgetStrict(messages []spec.PromptMessage, budget int) []spec.PromptMessage {
-	if len(messages) == 0 || budget <= 0 {
-		return messages
-	}
-
-	// Always keep system prompt
-	out := []spec.PromptMessage{messages[0]}
-
-	// Find first user message
-	firstUserIdx := -1
-	for i := 1; i < len(messages); i++ {
-		if messages[i].Role == "user" {
-			firstUserIdx = i
-			break
-		}
-	}
-
-	if firstUserIdx > 0 {
-		out = append(out, messages[firstUserIdx])
-	}
-
-	// Calculate remaining budget after anchors
-	remaining := budget
-	for _, m := range out {
-		remaining -= len(m.Content)
-	}
-
-	if remaining <= 0 {
-		return t.truncateAnchorsToBudget(out, budget)
-	}
-
-	// Collect middle messages
-	middle := []spec.PromptMessage{}
-	if firstUserIdx > 0 {
-		middle = messages[firstUserIdx+1:]
-	} else if len(messages) > 1 {
-		middle = messages[1:]
-	}
-
-	// Take from end (most recent) to fit remaining budget
-	for i := len(middle) - 1; i >= 0; i-- {
-		if remaining <= 0 {
-			break
-		}
-		msg := middle[i]
-		if len(msg.Content) <= remaining {
-			out = append(out, msg)
-			remaining -= len(msg.Content)
-		} else if remaining > 0 {
-			// Truncate this message but don't add another marker
-			truncatedMsg := spec.PromptMessage{
-				Role:       msg.Role,
-				Content:    msg.Content[:remaining],
-				ToolCalls:  msg.ToolCalls,
-				ToolCallID: msg.ToolCallID,
-			}
-			out = append(out, truncatedMsg)
-			remaining = 0
-		}
-	}
-
-	return out
-}
-
 // containsString is a helper to check if a string contains a substring
 func containsString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(s, substr)
 }
 
 // removeDanglingToolCalls ensures pairwise consistency:
@@ -285,7 +221,7 @@ func (t *AgenticTruncator) removeDanglingToolCalls(messages []spec.PromptMessage
 func totalChars(messages []spec.PromptMessage) int {
 	total := 0
 	for _, m := range messages {
-		total += len(m.Content)
+		total += utf8.RuneCountInString(m.Content)
 	}
 	return total
 }
@@ -301,8 +237,9 @@ func (t *AgenticTruncator) truncateToBudget(messages []spec.PromptMessage, budge
 	// Max overhead: TruncationMarker + space + CollapseMarker + space
 	markerOverhead := len(TruncationMarker) + len(CollapseMarker) + 2
 	effectiveBudget := budget - markerOverhead
-	if effectiveBudget < 10 {
-		effectiveBudget = 10 // Minimum budget for content
+	// Clamp: don't let the floor exceed the caller budget
+	if effectiveBudget < 0 {
+		effectiveBudget = 0
 	}
 
 	// Always keep system prompt (first message)
@@ -325,7 +262,7 @@ func (t *AgenticTruncator) truncateToBudget(messages []spec.PromptMessage, budge
 	// Calculate budget remaining after anchors
 	anchorChars := 0
 	for _, m := range out {
-		anchorChars += len(m.Content)
+		anchorChars += utf8.RuneCountInString(m.Content)
 	}
 	remainingBudget := effectiveBudget - anchorChars
 
@@ -364,12 +301,22 @@ func (t *AgenticTruncator) truncateAnchorsToBudget(messages []spec.PromptMessage
 			break
 		}
 		msg := m
-		if len(msg.Content) > remaining {
-			msg.Content = msg.Content[:remaining]
-			msg.Content = msg.Content + TruncationMarker
+		// Reserve space for marker before slicing
+		markerLen := utf8.RuneCountInString(TruncationMarker)
+		if utf8.RuneCountInString(msg.Content) > remaining {
+			// Reserve space for marker
+			keep := remaining - markerLen
+			if keep < 0 {
+				keep = 0
+			}
+			// Use rune-based slicing
+			runes := []rune(msg.Content)
+			msg.Content = string(runes[:keep]) + TruncationMarker
+			remaining -= utf8.RuneCountInString(msg.Content)
+		} else {
+			remaining -= utf8.RuneCountInString(msg.Content)
 		}
 		out = append(out, msg)
-		remaining -= len(msg.Content)
 	}
 
 	return out
@@ -381,27 +328,36 @@ func (t *AgenticTruncator) truncateMiddleToBudget(messages []spec.PromptMessage,
 		return messages
 	}
 
-	out := make([]spec.PromptMessage, 0, len(messages))
+	// Collect messages in reverse order (most recent first) to avoid O(N^2) prepend
+	var reversed []spec.PromptMessage
 	truncated := false
+	markerLen := utf8.RuneCountInString(TruncationMarker)
 
 	// Iterate from most recent (end) to oldest (start)
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
-		msgLen := len(msg.Content)
+		msgLen := utf8.RuneCountInString(msg.Content)
 
 		if budget >= msgLen {
-			// Prepend this message (working backwards)
-			out = append([]spec.PromptMessage{msg}, out...)
+			// Add this message (in reverse order)
+			reversed = append(reversed, msg)
 			budget -= msgLen
 		} else if budget > 0 {
-			// Truncate this message to fit
+			// Truncate this message to fit - reserve space for marker
+			keep := budget - markerLen
+			if keep < 0 {
+				keep = 0
+			}
+			// Use rune-based slicing
+			runes := []rune(msg.Content)
+			truncatedContent := string(runes[:keep]) + TruncationMarker
 			truncatedMsg := spec.PromptMessage{
 				Role:       msg.Role,
-				Content:    msg.Content[:budget] + TruncationMarker,
+				Content:    truncatedContent,
 				ToolCalls:  msg.ToolCalls,
 				ToolCallID: msg.ToolCallID,
 			}
-			out = append([]spec.PromptMessage{truncatedMsg}, out...)
+			reversed = append(reversed, truncatedMsg)
 			truncated = true
 			budget = 0
 		} else {
@@ -409,12 +365,18 @@ func (t *AgenticTruncator) truncateMiddleToBudget(messages []spec.PromptMessage,
 		}
 	}
 
+	// Reverse to get correct order (oldest to most recent)
+	out := make([]spec.PromptMessage, len(reversed))
+	for i, msg := range reversed {
+		out[len(reversed)-1-i] = msg
+	}
+
 	// If we had to drop any messages, add collapse marker
 	if truncated && len(out) > 0 {
 		droppedCount := len(messages) - len(out)
 		if droppedCount > 0 {
 			// Add collapse marker to first message
-			out[0].Content = CollapseMarker + " " + out[0].Content
+			out[0].Content = CollapseMarkerFor(droppedCount) + " " + out[0].Content
 		}
 	}
 

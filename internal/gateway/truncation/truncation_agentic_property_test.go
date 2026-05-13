@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"agentd/internal/gateway/spec"
 )
@@ -332,6 +333,31 @@ func TestProperty6_ToolExchangesDroppedBeforeAnchors(t *testing.T) {
 func TestProperty7_CharacterBudgetEnforcement(t *testing.T) {
 	r := rand.New(rand.NewSource(testSeed + 6))
 
+	// First, test very-small-budget cases to catch marker/overhead regressions
+	smallBudgets := []int{1, 2, 5, 10}
+	markerLen := utf8.RuneCountInString(TruncationMarker)
+	// Add budgets up to marker length
+	for b := markerLen - 2; b <= markerLen+2; b++ {
+		if b > 0 {
+			smallBudgets = append(smallBudgets, b)
+		}
+	}
+
+	for _, budget := range smallBudgets {
+		messages := generateRandomMessages(r, 5, 10)
+		truncator := NewAgenticTruncator(50)
+		got, err := truncator.Apply(context.Background(), messages, budget)
+		if err != nil {
+			t.Fatalf("small budget %d: Apply() error = %v", budget, err)
+		}
+		resultTotal := totalChars(got)
+		if resultTotal > budget {
+			t.Fatalf("small budget %d: result total chars %d exceeds budget %d",
+				budget, resultTotal, budget)
+		}
+	}
+
+	// Then test regular budget ranges
 	for i := 0; i < propertyTestIterations; i++ {
 		// Generate random message history
 		messages := generateRandomMessages(r, 10, 20)

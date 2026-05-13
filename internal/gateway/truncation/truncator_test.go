@@ -17,8 +17,8 @@ func TestStrategyTruncatorPolicies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(middle[0].Content, "[TRUNCATED BY AGENTD]") {
-		t.Fatalf("middle_out did not truncate with marker: %q", middle[0].Content)
+	if !strings.Contains(middle[0].Content, TruncationMarker) {
+			t.Fatalf("middle_out did not truncate with marker: %q", middle[0].Content)
 	}
 
 	headTail, err := NewTruncator(TruncatorPolicyHeadTail, 1, nil, nil).Apply(context.Background(), msgs, 40)
@@ -60,8 +60,8 @@ func TestSummarizeTruncatorFallsBackWhenBreakerOpen(t *testing.T) {
 	if gw.calls != 0 {
 		t.Fatalf("gateway calls = %d, want 0", gw.calls)
 	}
-	if !strings.Contains(msgs[0].Content, "[TRUNCATED BY AGENTD]") {
-		t.Fatalf("fallback did not middle-out truncate: %q", msgs[0].Content)
+	if !strings.Contains(msgs[0].Content, TruncationMarker) {
+			t.Fatalf("fallback did not middle-out truncate: %q", msgs[0].Content)
 	}
 }
 

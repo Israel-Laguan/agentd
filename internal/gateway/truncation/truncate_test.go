@@ -14,7 +14,7 @@ func TestMiddleOutShortInput(t *testing.T) {
 
 func TestMiddleOutLongInput(t *testing.T) {
 	got := MiddleOut("abcdefghijklmnopqrstuvwxyz", 20)
-	want := "abcdefghijklmnopqrst"
+	want := "abcde【...】uvwxyz"
 	if got != want {
 		t.Fatalf("MiddleOut() = %q, want %q", got, want)
 	}

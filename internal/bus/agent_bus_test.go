@@ -18,7 +18,7 @@ func TestAgentBridge_PublishAgentUpdated_NilBus(t *testing.T) {
 }
 
 func TestAgentBridge_PublishAgentUpdated_WithBus(t *testing.T) {
-	mb := &MemoryBus{}
+	mb := NewInProcess()
 	bridge := AgentBridge{Bus: mb}
 	bridge.PublishAgentUpdated(context.Background(), models.AgentProfile{
 		ID:           "test",
@@ -37,13 +37,13 @@ func TestAgentBridge_PublishAgentDeleted_NilBus(t *testing.T) {
 }
 
 func TestAgentBridge_PublishAgentDeleted_WithBus(t *testing.T) {
-	mb := &MemoryBus{}
+	mb := NewInProcess()
 	bridge := AgentBridge{Bus: mb}
 	bridge.PublishAgentDeleted(context.Background(), "test-id")
 }
 
 func TestAgentBridge_PublishAgentUpdated_Payload(t *testing.T) {
-	mb := &MemoryBus{}
+	mb := NewInProcess()
 	bridge := AgentBridge{Bus: mb}
 	bridge.PublishAgentUpdated(context.Background(), models.AgentProfile{
 		ID:           "test",
@@ -60,15 +60,15 @@ func TestAgentBridge_PublishAgentUpdated_Payload(t *testing.T) {
 func TestTaskBridge_PublishTaskAssigned_NilBus(t *testing.T) {
 	bridge := TaskBridge{Bus: nil}
 	bridge.PublishTaskAssigned(context.Background(), models.Task{
-		ID: "task-1",
+		BaseEntity: models.BaseEntity{ID: "task-1"},
 	})
 }
 
 func TestTaskBridge_PublishTaskAssigned_WithBus(t *testing.T) {
-	mb := &MemoryBus{}
+	mb := NewInProcess()
 	bridge := TaskBridge{Bus: mb}
 	bridge.PublishTaskAssigned(context.Background(), models.Task{
-		ID:        "task-1",
+		BaseEntity: models.BaseEntity{ID: "task-1"},
 		ProjectID: "proj-1",
 		AgentID:   "agent-1",
 		State:     models.TaskStatePending,
@@ -77,38 +77,38 @@ func TestTaskBridge_PublishTaskAssigned_WithBus(t *testing.T) {
 
 func TestTaskBridge_PublishTaskSplit_NilBus(t *testing.T) {
 	bridge := TaskBridge{Bus: nil}
-	bridge.PublishTaskSplit(context.Background(), models.Task{ID: "parent"}, []models.Task{{ID: "child"}})
+	bridge.PublishTaskSplit(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "parent"}}, []models.Task{{BaseEntity: models.BaseEntity{ID: "child"}}})
 }
 
 func TestTaskBridge_PublishTaskSplit_WithBus(t *testing.T) {
-	mb := &MemoryBus{}
+	mb := NewInProcess()
 	bridge := TaskBridge{Bus: mb}
 	bridge.PublishTaskSplit(context.Background(), models.Task{
-		ID:        "parent-1",
+		BaseEntity: models.BaseEntity{ID: "parent-1"},
 		ProjectID: "proj-1",
 		AgentID:   "agent-1",
 		State:     models.TaskStateRunning,
 	}, []models.Task{
-		{ID: "child-1"},
-		{ID: "child-2"},
+		{BaseEntity: models.BaseEntity{ID: "child-1"}},
+		{BaseEntity: models.BaseEntity{ID: "child-2"}},
 	})
 }
 
 func TestTaskBridge_PublishTaskRetried_NilBus(t *testing.T) {
 	bridge := TaskBridge{Bus: nil}
 	bridge.PublishTaskRetried(context.Background(), models.Task{
-		ID: "task-1",
+		BaseEntity: models.BaseEntity{ID: "task-1"},
 	})
 }
 
 func TestTaskBridge_PublishTaskRetried_WithBus(t *testing.T) {
-	mb := &MemoryBus{}
+	mb := NewInProcess()
 	bridge := TaskBridge{Bus: mb}
 	bridge.PublishTaskRetried(context.Background(), models.Task{
-		ID:        "task-1",
-		ProjectID: "proj-1",
-		AgentID:   "agent-1",
-		State:     models.TaskStatePending,
+		BaseEntity: models.BaseEntity{ID: "task-1"},
+		ProjectID:  "proj-1",
+		AgentID:    "agent-1",
+		State:      models.TaskStatePending,
 	})
 }
 
@@ -133,19 +133,19 @@ func TestAgentSignalPayload_JSON(t *testing.T) {
 }
 
 func TestTaskBridge_PublishTaskSplit_EmptyChildren(t *testing.T) {
-	mb := &MemoryBus{}
+	mb := NewInProcess()
 	bridge := TaskBridge{Bus: mb}
 	bridge.PublishTaskSplit(context.Background(), models.Task{
-		ID:        "parent-1",
-		ProjectID: "proj-1",
+		BaseEntity: models.BaseEntity{ID: "parent-1"},
+		ProjectID:  "proj-1",
 	}, []models.Task{})
 }
 
 func TestTaskBridge_PublishTaskSplit_NoProjectID(t *testing.T) {
-	mb := &MemoryBus{}
+	mb := NewInProcess()
 	bridge := TaskBridge{Bus: mb}
 	bridge.PublishTaskSplit(context.Background(), models.Task{
-		ID:      "parent-1",
-		AgentID: "agent-1",
-	}, []models.Task{{ID: "child-1"}})
+		BaseEntity: models.BaseEntity{ID: "parent-1"},
+		AgentID:    "agent-1",
+	}, []models.Task{{BaseEntity: models.BaseEntity{ID: "child-1"}}})
 }

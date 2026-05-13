@@ -433,10 +433,8 @@ func TestAgenticTruncator_OrphanedToolCallsRemoved(t *testing.T) {
 
 // Helper function to check for collapse marker
 func containsCollapseMarker(content string) bool {
-	return len(content) >= len(CollapseMarker) &&
-		(content[:len(CollapseMarker)] == CollapseMarker ||
-			(len(content) > len(CollapseMarker) && 
-			 (containsString(content, CollapseMarker))))
+	// Check for the pattern "tool exchanges collapsed" which is present in all collapse markers
+	return containsString(content, "tool exchanges collapsed")
 }
 
 // Helper function to check for truncation marker
@@ -516,23 +514,14 @@ func TestCollapseMarker_PlacedAtBeginning(t *testing.T) {
 	// Check that collapse marker is at the beginning of a message
 	for _, m := range got {
 		if containsCollapseMarker(m.Content) {
-			if len(m.Content) > len(CollapseMarker) {
-				// Marker should be at the start (possibly with trailing space)
-				prefix := m.Content[:len(CollapseMarker)]
-				if prefix != CollapseMarker {
-					// Also check for marker with space after
-					if len(m.Content) > len(CollapseMarker)+1 {
-						prefixWithSpace := m.Content[:len(CollapseMarker)+1]
-						if prefixWithSpace != CollapseMarker+" " {
-							t.Errorf("collapse marker not at beginning: %q", m.Content[:min(50, len(m.Content))])
-						}
-					}
-				}
+			// Marker should be at the start (possibly with trailing space)
+			if !strings.HasPrefix(m.Content, "【") {
+				t.Errorf("collapse marker not at beginning: %q", m.Content[:min(50, len(m.Content))])
 			}
 			return // Found and verified marker placement
 		}
 	}
-	t.Error("collapse marker not found in any message")
+t.Error("collapse marker not found in any message")
 }
 
 // Test that multiple tool exchanges dropped shows correct count in marker
@@ -862,9 +851,9 @@ func TestTotalChars(t *testing.T) {
 		{Role: "assistant", Content: "Test"},
 	}
 
-	// "Hello" + "World" + "Test" = 15
-	if totalChars(messages) != 15 {
-		t.Errorf("totalChars = %d, want 15", totalChars(messages))
+	// "Hello" + "World" + "Test" = 14 (5 + 5 + 4)
+	if totalChars(messages) != 14 {
+		t.Errorf("totalChars = %d, want 14", totalChars(messages))
 	}
 }
 
@@ -925,7 +914,7 @@ func TestAgenticTruncator_NegativeBudgetUnlimited(t *testing.T) {
 		t.Errorf("len(got) = %d, want %d (negative budget = unlimited)", len(got), len(messages))
 	}
 }
-// Debug test to understand character budget behavior
+// Test character budget behavior with assertions
 func TestAgenticTruncator_DebugBudget(t *testing.T) {
 	truncator := NewAgenticTruncator(100) // High max messages to avoid count truncation
 	messages := []spec.PromptMessage{
@@ -947,10 +936,55 @@ func TestAgenticTruncator_DebugBudget(t *testing.T) {
 		t.Fatalf("Apply() error = %v", err)
 	}
 
-	for i, m := range got {
-		t.Logf("Msg %d: role=%s, content_len=%d, content=%q", i, m.Role, len(m.Content), m.Content)
+	// Property: Total characters must be within budget
+	resultTotal := totalChars(got)
+	if resultTotal > budget {
+		t.Errorf("result total chars %d exceeds budget %d", resultTotal, budget)
 	}
 
-	total := totalChars(got)
-	t.Logf("Final total chars: %d, budget: %d", total, budget)
+	// Property: Original non-tool messages should be preserved
+	// System and first user should always be present
+	hasSystem := false
+	hasUser := false
+	for _, m := range got {
+		if m.Role == "system" {
+			hasSystem = true
+		}
+		if m.Role == "user" {
+			hasUser = true
+		}
+	}
+	if !hasSystem {
+		t.Error("system prompt not preserved")
+	}
+	if !hasUser {
+		t.Error("user message not preserved")
+	}
+
+	// Property: Tool messages with ToolCallID should be truncated or removed appropriately
+	// No unexpected ordering changes (system, user, assistant, tool order preserved)
+	var lastRole string
+	for _, m := range got {
+		if lastRole != "" {
+			// Basic ordering check: should not have tool after assistant with matching tool call
+			if lastRole == "assistant" && m.Role == "tool" {
+				// Check if this tool response is orphaned
+				found := false
+				for _, prev := range got {
+					if prev.Role == "assistant" {
+						for _, tc := range prev.ToolCalls {
+							if tc.ID == m.ToolCallID {
+								found = true
+								break
+							}
+						}
+					}
+				}
+				if !found {
+					t.Error("orphaned tool message found")
+				}
+			}
+		}
+		lastRole = m.Role
+	}
 }

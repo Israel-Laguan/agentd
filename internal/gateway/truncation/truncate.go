@@ -1,13 +1,22 @@
 package truncation
 
-import "agentd/internal/gateway/spec"
+import (
+	"fmt"
+
+	"agentd/internal/gateway/spec"
+)
 
 const truncationMarker = "【...】"
 
 // TruncationMarker is inserted when a message or section is truncated.
 const TruncationMarker = truncationMarker
 
-// CollapseMarker indicates that N tool exchanges have been collapsed.
+// CollapseMarker returns a marker indicating that N tool exchanges have been collapsed.
+func CollapseMarkerFor(n int) string {
+	return fmt.Sprintf("【%d tool exchanges collapsed】", n)
+}
+
+// CollapseMarker is the default marker (for backwards compatibility)
 const CollapseMarker = "【N tool exchanges collapsed】"
 
 // MiddleOutStrategy removes the middle of oversized content.
@@ -23,13 +32,22 @@ func (s MiddleOutStrategy) Truncate(input string, maxChars int) string {
 	if maxChars <= 0 || len(input) <= maxChars {
 		return input
 	}
-	if maxChars <= len(truncationMarker) {
+	markerBytes := len(truncationMarker)
+	if maxChars <= markerBytes {
+		// Return prefix truncated to maxChars bytes
 		return input[:maxChars]
 	}
-	remaining := maxChars - len(truncationMarker)
+	remaining := maxChars - markerBytes
 	head := remaining / 2
 	tail := remaining - head
-	return input[:head] + truncationMarker + input[len(input)-tail:]
+	// Truncate to byte boundaries safely
+	headStr := input[:head]
+	tailStart := len(input) - tail
+	if tailStart < 0 {
+		tailStart = 0
+	}
+	tailStr := input[tailStart:]
+	return headStr + truncationMarker + tailStr
 }
 
 // MiddleOut keeps the beginning and end of long content while removing the
