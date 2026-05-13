@@ -104,9 +104,9 @@ func TestExecuteAgenticTool_CapabilityRegistry(t *testing.T) {
 	w := &Worker{capabilities: registry}
 	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
 	toolToAdapter := map[string]string{"capability_tool": "fake"}
-	out := w.executeAgenticTool(context.Background(), ex, gateway.ToolCall{
+	out := w.DispatchTool(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{Name: "capability_tool", Arguments: `{"id":"1"}`},
-	}, toolToAdapter)
+	}, toolToAdapter, ex)
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v out=%s", err, out)
@@ -274,7 +274,7 @@ func TestProcessAgentic_CallsGatewayWithTools(t *testing.T) {
 	}
 }
 
-// TestProcessAgentic_ExecutesToolCalls verifies that executeAgenticTool correctly
+// TestProcessAgentic_ExecutesToolCalls verifies that DispatchTool correctly
 // handles tool execution for built-in tools (bash, read, write).
 // Validates: Requirements 5, 6.2
 func TestProcessAgentic_ExecutesToolCalls(t *testing.T) {
