@@ -233,18 +233,28 @@ func splitH2Sections(content string) map[string]string {
 			// Flush previous section
 			if currentHeading != "" {
 				// The body is from startOffset to the beginning of this heading
-				stopOffset := heading.Lines().At(0).Start - 3 // Adjust for "## " prefix
-				if stopOffset > startOffset {
-					sections[currentHeading] = strings.TrimSpace(string(source[startOffset:stopOffset]))
-				} else {
-					sections[currentHeading] = ""
+				if heading.Lines().Len() > 0 {
+					stopOffset := heading.Lines().At(0).Start
+					// Backtrack to find the start of the "## "
+					for stopOffset > startOffset && source[stopOffset-1] != '\n' {
+						stopOffset--
+					}
+					if stopOffset > startOffset {
+						sections[currentHeading] = strings.TrimSpace(string(source[startOffset:stopOffset]))
+					} else {
+						sections[currentHeading] = ""
+					}
 				}
 			}
 			// Extract heading text
 			currentHeading = strings.TrimSpace(string(heading.Text(source)))
 			// Set startOffset to the end of this heading node
 			if heading.Lines().Len() > 0 {
-				startOffset = heading.Lines().At(heading.Lines().Len()-1).Stop + 1
+				startOffset = heading.Lines().At(heading.Lines().Len()-1).Stop
+				// Move past the newline if exists
+				if startOffset < len(source) && source[startOffset] == '\n' {
+					startOffset++
+				}
 			}
 		}
 	}
