@@ -508,13 +508,6 @@ func (w *Worker) executeAgenticTool(ctx context.Context, sessionID string, toolE
 	return w.DispatchTool(ctx, sessionID, call, toolToAdapter, toolExec)
 }
 
-// executeAgenticToolWithProject is a project-aware variant of executeAgenticTool.
-func (w *Worker) executeAgenticToolWithProject(ctx context.Context, sessionID, projectID string, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
-	if toolExec == nil {
-		toolExec = w.toolExecutor
-	}
-	return w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExec)
-}
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := workerMessages(task, profile)

@@ -247,14 +247,18 @@ func TestAuditHook_ScrubsEventPayloads(t *testing.T) {
 
 	// TOOL_CALL payload should have scrubbed arguments
 	var callEvent ToolCallEvent
-	_ = json.Unmarshal([]byte(sink.events[0].Payload), &callEvent)
+	if err := json.Unmarshal([]byte(sink.events[0].Payload), &callEvent); err != nil {
+		t.Fatalf("unmarshal TOOL_CALL: %v", err)
+	}
 	if strings.Contains(callEvent.ArgumentsSummary, "sk-AAAA") {
 		t.Fatalf("arguments should be scrubbed: %q", callEvent.ArgumentsSummary)
 	}
 
 	// TOOL_RESULT payload should have scrubbed output
 	var resultEvent ToolResultEvent
-	_ = json.Unmarshal([]byte(sink.events[1].Payload), &resultEvent)
+	if err := json.Unmarshal([]byte(sink.events[1].Payload), &resultEvent); err != nil {
+		t.Fatalf("unmarshal TOOL_RESULT: %v", err)
+	}
 	if strings.Contains(resultEvent.OutputSummary, "sk-BBBB") {
 		t.Fatalf("output should be scrubbed: %q", resultEvent.OutputSummary)
 	}
