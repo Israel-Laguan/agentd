@@ -34,13 +34,18 @@ func TestAgenticTruncator_OrphanToolCallsMarkedAsCollapsed(t *testing.T) {
 			// Has tool_calls but no tool response - should not happen
 			t.Error("assistant message has tool_calls without corresponding tool response")
 		}
-		if m.Role == "assistant" && len(m.ToolCalls) == 0 {
-			// If no tool_calls, check if content has collapse marker when tool exchanges were truncated
-			if m.Content == "" {
-				continue
-			}
-			// This is expected behavior - collapsed tool calls should have marker in content
+	}
+
+	// Assert that a collapse marker exists (since messages were dropped)
+	found := false
+	for _, m := range got {
+		if containsCollapseMarker(m.Content) {
+			found = true
+			break
 		}
+	}
+	if !found {
+		t.Error("expected collapse marker when messages with tool_calls were truncated")
 	}
 }
 

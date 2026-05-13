@@ -167,6 +167,10 @@ func (t *AgenticTruncator) truncateSingleMessage(msg spec.PromptMessage, keep in
 		keep = 0
 	}
 	runes := []rune(msg.Content)
+	// Clamp keep to content length to avoid panic on short/empty content
+	if keep > len(runes) {
+		keep = len(runes)
+	}
 	truncatedContent := string(runes[:keep]) + TruncationMarker
 
 	return spec.PromptMessage{

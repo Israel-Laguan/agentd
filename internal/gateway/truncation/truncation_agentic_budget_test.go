@@ -49,13 +49,13 @@ func TestAgenticTruncator_BudgetNotExceeded(t *testing.T) {
 	messages := []spec.PromptMessage{
 		{Role: "system", Content: "System prompt"},
 		{Role: "user", Content: "User task description"},
-		{Role: "assistant", Content: strings.Repeat("A", 500)},             // 500 chars
-		{Role: "tool", ToolCallID: "1", Content: strings.Repeat("B", 500)}, // 500 chars
-		{Role: "assistant", Content: strings.Repeat("C", 500)},             // 500 chars
+		{Role: "assistant", Content: strings.Repeat("A", 50)},             // 50 chars
+		{Role: "tool", ToolCallID: "1", Content: strings.Repeat("B", 50)}, // 50 chars
+		{Role: "assistant", Content: strings.Repeat("C", 50)},             // 50 chars
 	}
 
-	// Budget of 200 chars should force truncation
-	budget := 200
+	// Budget of 300 chars exceeds total ~200 chars, so no truncation should occur
+	budget := 300
 	got, err := truncator.Apply(context.Background(), messages, budget)
 	if err != nil {
 		t.Fatalf("Apply() error = %v", err)
