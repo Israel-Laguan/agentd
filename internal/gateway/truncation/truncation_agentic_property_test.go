@@ -477,57 +477,79 @@ func generateRandomMessagesWithUser(r *rand.Rand, minCount, maxCount int) []spec
 
 // generateRandomMessagesWithToolExchanges generates messages with proper tool exchange pairs
 func generateRandomMessagesWithToolExchanges(r *rand.Rand, minCount, maxCount int) []spec.PromptMessage {
+	count := calculateMessageCount(r, minCount, maxCount)
+	messages := make([]spec.PromptMessage, 0, count)
+
+	addBaseMessages(r, &messages)
+	addToolExchanges(r, &messages)
+	addFinalAssistantIfNeeded(r, &messages, count)
+	padWithRandomMessages(r, &messages, count)
+
+	return messages
+}
+
+// calculateMessageCount determines the number of messages to generate
+func calculateMessageCount(r *rand.Rand, minCount, maxCount int) int {
 	count := r.Intn(maxCount-minCount) + minCount
 	if count < 4 {
 		count = 4
 	}
+	return count
+}
 
-	messages := make([]spec.PromptMessage, 0, count)
-
-	// Start with system and user
-	messages = append(messages, spec.PromptMessage{
+// addBaseMessages adds the initial system and user messages
+func addBaseMessages(r *rand.Rand, messages *[]spec.PromptMessage) {
+	*messages = append(*messages, spec.PromptMessage{
 		Role:    "system",
 		Content: randomContent(r, 10, 30),
 	})
-	messages = append(messages, spec.PromptMessage{
+	*messages = append(*messages, spec.PromptMessage{
 		Role:    "user",
 		Content: randomContent(r, 10, 30),
 	})
+}
 
-	// Add some tool exchanges
+// addToolExchanges adds assistant-tool call pairs
+func addToolExchanges(r *rand.Rand, messages *[]spec.PromptMessage) {
 	numExchanges := r.Intn(5) + 1 // 1 to 5 exchanges
 	for i := 0; i < numExchanges; i++ {
 		callID := fmt.Sprintf("call_%d", i)
-
-		// Assistant message with tool call
-		assistantMsg := spec.PromptMessage{
-			Role:    "assistant",
-			Content: randomContent(r, 5, 20),
-			ToolCalls: []spec.ToolCall{
-				{ID: callID, Type: "function", Function: spec.ToolCallFunction{Name: "func_" + fmt.Sprintf("%d", i)}},
-			},
-		}
-		messages = append(messages, assistantMsg)
-
-		// Tool response
-		toolMsg := spec.PromptMessage{
-			Role:       "tool",
-			ToolCallID: callID,
-			Content:    randomContent(r, 5, 30),
-		}
-		messages = append(messages, toolMsg)
+		addToolExchange(r, messages, callID, i)
 	}
+}
 
-	// Add final assistant message
-	if len(messages) < count {
-		messages = append(messages, spec.PromptMessage{
+// addToolExchange adds a single assistant-tool call pair
+func addToolExchange(r *rand.Rand, messages *[]spec.PromptMessage, callID string, index int) {
+	assistantMsg := spec.PromptMessage{
+		Role:    "assistant",
+		Content: randomContent(r, 5, 20),
+		ToolCalls: []spec.ToolCall{
+			{ID: callID, Type: "function", Function: spec.ToolCallFunction{Name: "func_" + fmt.Sprintf("%d", index)}},
+		},
+	}
+	*messages = append(*messages, assistantMsg)
+
+	toolMsg := spec.PromptMessage{
+		Role:       "tool",
+		ToolCallID: callID,
+		Content:    randomContent(r, 5, 30),
+	}
+	*messages = append(*messages, toolMsg)
+}
+
+// addFinalAssistantIfNeeded adds a final assistant message if needed
+func addFinalAssistantIfNeeded(r *rand.Rand, messages *[]spec.PromptMessage, targetCount int) {
+	if len(*messages) < targetCount {
+		*messages = append(*messages, spec.PromptMessage{
 			Role:    "assistant",
 			Content: randomContent(r, 5, 20),
 		})
 	}
+}
 
-	// Pad with more random messages if needed
-	for len(messages) < count {
+// padWithRandomMessages fills remaining space with random messages
+func padWithRandomMessages(r *rand.Rand, messages *[]spec.PromptMessage, targetCount int) {
+	for len(*messages) < targetCount {
 		role := []string{"assistant", "user", "tool"}[r.Intn(3)]
 		msg := spec.PromptMessage{
 			Role:    role,
@@ -536,10 +558,8 @@ func generateRandomMessagesWithToolExchanges(r *rand.Rand, minCount, maxCount in
 		if role == "tool" {
 			msg.ToolCallID = fmt.Sprintf("call_%d", r.Intn(100))
 		}
-		messages = append(messages, msg)
+		*messages = append(*messages, msg)
 	}
-
-	return messages
 }
 
 // randomContent generates random string content of random length between min and max
