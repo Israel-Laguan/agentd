@@ -23,6 +23,12 @@ type HookVerdict struct {
 	Veto bool
 	// Reason provides a human-readable explanation for the veto.
 	Reason string
+	// ShortCircuit is true when the hook supplies a cached or
+	// pre-computed result that should be returned directly, skipping
+	// both tool execution and post-hooks.
+	ShortCircuit bool
+	// Result carries the pre-computed value when ShortCircuit is set.
+	Result string
 }
 
 // HookContext carries contextual information for hook evaluation without
