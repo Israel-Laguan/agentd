@@ -34,7 +34,7 @@ func (p *mockProvider) Capabilities() providers.Capabilities {
 func TestExplicitProviderUnsupportedToolsError(t *testing.T) {
 	// Create a provider that doesn't support tools
 	provider := &mockProvider{
-		providerName: "anthropic",
+		providerName: "unsupported",
 		budget:       10000,
 		capabilities: providers.Capabilities{SupportsChatTools: false},
 	}
@@ -43,7 +43,7 @@ func TestExplicitProviderUnsupportedToolsError(t *testing.T) {
 
 	// Request with explicit provider that doesn't support tools
 	req := spec.AIRequest{
-		Provider: "anthropic",
+		Provider: "unsupported",
 		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
 		Tools:    []spec.ToolDefinition{{Name: "test_tool"}}, // Non-empty tools
 	}
@@ -55,8 +55,8 @@ func TestExplicitProviderUnsupportedToolsError(t *testing.T) {
 
 	// Check error message contains provider name and "tools"
 	errMsg := err.Error()
-	if !strings.Contains(errMsg, "anthropic") {
-		t.Errorf("error should contain provider name 'anthropic', got: %v", err)
+	if !strings.Contains(errMsg, "unsupported") {
+		t.Errorf("error should contain provider name 'unsupported', got: %v", err)
 	}
 	if !strings.Contains(errMsg, "tools") {
 		t.Errorf("error should contain 'tools', got: %v", err)
@@ -98,12 +98,12 @@ func TestOpenAIProviderWithTools(t *testing.T) {
 	}
 }
 
-// TestAnthropicProviderWithToolsFallback tests that non-OpenAI providers fall back
+// TestOllamaProviderWithToolsFallback tests that non-OpenAI providers fall back
 // to legacy JSON mode when tools are provided but provider doesn't support them
 // (this is for the case when provider is NOT explicitly specified)
-func TestAnthropicProviderWithToolsFallback(t *testing.T) {
+func TestOllamaProviderWithToolsFallback(t *testing.T) {
 	provider := &mockProvider{
-		providerName: "anthropic",
+		providerName: "ollama",
 		budget:       10000,
 		capabilities: providers.Capabilities{SupportsChatTools: false},
 	}
@@ -178,7 +178,7 @@ func TestExplicitProviderWithToolsSupport(t *testing.T) {
 // and no tools works normally
 func TestProviderWithoutExplicitAndNoTools(t *testing.T) {
 	provider := &mockProvider{
-		providerName: "anthropic",
+		providerName: "ollama",
 		budget:       10000,
 		capabilities: providers.Capabilities{SupportsChatTools: false},
 	}
@@ -193,6 +193,38 @@ func TestProviderWithoutExplicitAndNoTools(t *testing.T) {
 	resp, err := router.Generate(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify response is valid
+	if resp.Content != "ok" {
+		t.Errorf("expected content 'ok', got: %s", resp.Content)
+	}
+}
+
+// TestAnthropicProviderWithToolsSupport tests that Anthropic provider (supports tools) works correctly
+func TestAnthropicProviderWithToolsSupport(t *testing.T) {
+	provider := &mockProvider{
+		providerName: "anthropic",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: true},
+	}
+
+	router := NewRouter(provider).WithTruncation(truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}}, 12000)
+
+	req := spec.AIRequest{
+		Provider: "anthropic",
+		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
+		Tools:    []spec.ToolDefinition{{Name: "test_tool"}},
+	}
+
+	resp, err := router.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify tools were passed through to the provider
+	if len(provider.request.Tools) != 1 {
+		t.Errorf("expected 1 tool in request, got %d", len(provider.request.Tools))
 	}
 
 	// Verify response is valid

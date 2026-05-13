@@ -22,7 +22,7 @@ func TestProviderCapabilitiesMatrix(t *testing.T) {
 		{
 			name:              "anthropic",
 			backend:           NewAnthropic(spec.ProviderConfig{BaseURL: "https://api.anthropic.com", Model: "claude-test"}, nil),
-			supportsChatTools: false,
+			supportsChatTools: true,
 		},
 		{
 			name:              "ollama",

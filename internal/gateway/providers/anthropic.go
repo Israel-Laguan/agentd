@@ -57,6 +57,17 @@ func (a *Anthropic) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRe
 		Temperature: req.Temperature,
 	}
 
+	if len(req.Tools) > 0 {
+		body.Tools = make([]anthropicTool, len(req.Tools))
+		for i, t := range req.Tools {
+			body.Tools[i] = anthropicTool{
+				Name:        t.Name,
+				Description: t.Description,
+				InputSchema: t.Parameters,
+			}
+		}
+	}
+
 	data, err := a.post(ctx, body)
 	if err != nil {
 		return spec.AIResponse{}, err
@@ -79,7 +90,7 @@ func (a *Anthropic) post(ctx context.Context, body anthropicRequest) ([]byte, er
 
 // Capabilities implements Backend.
 func (a *Anthropic) Capabilities() Capabilities {
-	return Capabilities{SupportsChatTools: false}
+	return Capabilities{SupportsChatTools: true}
 }
 
 func splitSystemMessages(messages []spec.PromptMessage) (string, []anthropicMessage) {
@@ -115,14 +126,36 @@ type anthropicRequest struct {
 	System      string             `json:"system,omitempty"`
 	MaxTokens   int                `json:"max_tokens"`
 	Temperature float64            `json:"temperature"`
+	Tools       []anthropicTool    `json:"tools,omitempty"`
+}
+
+type anthropicTool struct {
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	InputSchema *spec.FunctionParameters `json:"input_schema"`
+}
+
+type anthropicContentBlock struct {
+	Type     string                       `json:"type"`
+	Text     *string                      `json:"text,omitempty"`
+	ToolUse  *anthropicToolUseBlock       `json:"tool_use,omitempty"`
+	ToolResult *anthropicToolResultBlock `json:"tool_result,omitempty"`
+}
+
+type anthropicToolUseBlock struct {
+	ID    string                 `json:"id"`
+	Name  string                 `json:"name"`
+	Input map[string]interface{} `json:"input"`
+}
+
+type anthropicToolResultBlock struct {
+	ToolUseID string `json:"tool_use_id"`
+	Content   string `json:"content"`
 }
 
 type anthropicResponse struct {
-	Content []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	} `json:"content"`
-	Usage struct {
+	Content []anthropicContentBlock `json:"content"`
+	Usage   struct {
 		InputTokens  int `json:"input_tokens"`
 		OutputTokens int `json:"output_tokens"`
 	} `json:"usage"`
@@ -135,10 +168,21 @@ func (r anthropicResponse) toAIResponse(defaultModel string) spec.AIResponse {
 		model = defaultModel
 	}
 	var content string
+	var toolCalls []spec.ToolCall
 	for _, c := range r.Content {
-		if c.Type == "text" {
-			content = c.Text
-			break
+		if c.Type == "text" && c.Text != nil {
+			content = *c.Text
+		}
+		if c.Type == "tool_use" && c.ToolUse != nil {
+			inputBytes, _ := json.Marshal(c.ToolUse.Input)
+			toolCalls = append(toolCalls, spec.ToolCall{
+				ID: c.ToolUse.ID,
+				Type: "tool_use",
+				Function: spec.ToolCallFunction{
+					Name:      c.ToolUse.Name,
+					Arguments: string(inputBytes),
+				},
+			})
 		}
 	}
 	return spec.AIResponse{
@@ -146,5 +190,6 @@ func (r anthropicResponse) toAIResponse(defaultModel string) spec.AIResponse {
 		TokenUsage:   r.Usage.InputTokens + r.Usage.OutputTokens,
 		ProviderUsed: string(spec.ProviderAnthropic),
 		ModelUsed:    model,
+		ToolCalls:    toolCalls,
 	}
 }
