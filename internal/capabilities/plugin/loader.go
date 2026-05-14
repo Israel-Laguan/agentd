@@ -218,6 +218,13 @@ func registerCapabilities(
 // for the given capability name. This is a hook point for Go plugin
 // loading via compiled adapter packages using the CapabilityAdapter
 // interface. Returns false if no adapter is available for the name.
+//
+// NOTE: This function is intentionally stubbed as of Task 20. Go-native
+// compiled adapter packages (using plugin/packages or similar) are not
+// yet required by any active capability type. Shell-based hooks and
+// MCP adapters handle all current use cases. When a use case for
+// compiled Go adapters emerges, implement registry lookup here and
+// wire the adapter factory into the build.
 func loadCapabilityAdapter(
 	_ Manifest, _ string,
 ) (capabilities.CapabilityAdapter, bool) {

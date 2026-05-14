@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -55,6 +56,9 @@ type Worker struct {
 	hooks               *HookChain
 	pluginMounter       PluginMounter
 	contextCfg          config.AgenticContextConfig
+	instructionLoader   *InstructionLoader
+	skillLoader         *SkillLoader
+	skillRouter         *SkillRouter
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -87,9 +91,15 @@ type WorkerOptions struct {
 	SandboxEnvAllowlist     []string
 	SandboxExtraEnv         []string
 	SandboxScrubPatterns    []string
-	Capabilities            *capabilities.Registry
-	Hooks                   *HookChain
-	PluginMounter           PluginMounter
+	Capabilities                *capabilities.Registry
+	Hooks                       *HookChain
+	PluginMounter               PluginMounter
+	InstructionsProjectFile     string
+	InstructionsUserPrefsPath   string
+	SkillsProjectDir            string
+	SkillsGlobalDir             string
+	SkillsThreshold             float64
+	SkillsTopK                  int
 }
 
 func NewWorker(
@@ -138,7 +148,7 @@ func NewWorker(
 	hooks.PrependPost(ScrubResultHook(scrubber))
 	hooks.RegisterPost(AuditHook(sink, scrubber))
 
-	return &Worker{
+	w := &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
 		heartbeatInterval:   opts.HeartbeatInterval,
@@ -159,6 +169,28 @@ func NewWorker(
 		pluginMounter:       opts.PluginMounter,
 		contextCfg:          opts.AgenticContext,
 	}
+
+	// Construct instruction hierarchy loader when project file is configured.
+	if opts.InstructionsProjectFile != "" || opts.InstructionsUserPrefsPath != "" {
+		w.instructionLoader = &InstructionLoader{
+			ProjectFile:         opts.InstructionsProjectFile,
+			UserPreferencesPath: opts.InstructionsUserPrefsPath,
+		}
+	}
+
+	// Construct skill loader and router when skill directories are configured.
+	if opts.SkillsProjectDir != "" || opts.SkillsGlobalDir != "" {
+		w.skillLoader = &SkillLoader{
+			ProjectDir: opts.SkillsProjectDir,
+			GlobalDir:  opts.SkillsGlobalDir,
+		}
+		w.skillRouter = &SkillRouter{
+			Threshold: opts.SkillsThreshold,
+			TopK:      opts.SkillsTopK,
+		}
+	}
+
+	return w
 }
 
 // Process handles task execution, supporting two modes:
@@ -311,182 +343,6 @@ func (w *Worker) isPermissionFailure(result sandbox.Result, err error) bool {
 	return failed && safety.DetectPermission(result.Stdout, result.Stderr).Detected
 }
 
-func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
-	cancelCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	w.registerCancel(task.ID, cancel)
-	defer w.deregisterCancel(task.ID)
-
-	// Create task-local ToolExecutor to avoid races with concurrent task executions
-	taskToolExecutor := NewToolExecutor(
-		w.sandbox,
-		project.WorkspacePath,
-		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
-		w.sandboxWallTimeout,
-	)
-
-	taskHooks, taskCaps := w.mountScopedPlugins(project, profile)
-
-	messages := w.seedMessages(ctx, task, profile)
-	messages = w.buildAgenticMessages(messages, profile)
-	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
-
-	iterationGuard := NewIterationGuard(w.maxToolIterations)
-	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
-	deadlineGuard := NewDeadlineGuard(cancelCtx)
-
-	// ContextManager is initialized lazily per task to handle its own cache/state
-	contextCfg := w.contextCfg
-	if contextCfg.RollingThresholdTurns <= 0 {
-		contextCfg.RollingThresholdTurns = config.DefaultRollingThresholdTurns
-	}
-	if contextCfg.KeepRecentTurns <= 0 {
-		contextCfg.KeepRecentTurns = config.DefaultKeepRecentTurns
-	}
-	if contextCfg.AnchorBudget <= 0 {
-		contextCfg.AnchorBudget = config.DefaultAnchorBudget
-	}
-	if contextCfg.WorkingBudget <= 0 {
-		contextCfg.WorkingBudget = config.DefaultWorkingBudget
-	}
-	if contextCfg.CompressedBudget <= 0 {
-		contextCfg.CompressedBudget = config.DefaultCompressedBudget
-	}
-
-	cm := NewContextManager(
-		contextCfg,
-		w.gateway,
-		task.AgentID,
-		task.ID,
-	)
-
-	for {
-		shouldContinue, err := w.processAgenticIteration(
-			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
-			iterationGuard, budgetGuard, deadlineGuard, cm,
-			taskHooks, taskCaps,
-		)
-		if err != nil {
-			return
-		}
-		if !shouldContinue {
-			return
-		}
-	}
-}
-
-func (w *Worker) processAgenticIteration(
-	ctx context.Context, task models.Task, profile models.AgentProfile,
-	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
-	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
-	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
-	deadlineGuard *DeadlineGuard, cm *ContextManager,
-	taskHooks *HookChain, _ *capabilities.Registry,
-) (bool, error) {
-	if err := deadlineGuard.BeforeIteration(); err != nil {
-		w.handleGatewayError(ctx, task, err)
-		return false, err
-	}
-
-	if err := iterationGuard.BeforeIteration(); err != nil {
-		w.handleIterationExceeded(ctx, task)
-		return false, err
-	}
-
-	// Ingest human corrections from task comments. Use ContextManager.ShouldPollComments
-	// to avoid listing all comments on every iteration.
-	// Poll interval chosen to balance responsiveness and DB load.
-	const commentPollInterval = 5 * time.Second
-	if cm.ShouldPollComments(commentPollInterval) {
-		w.ingestHumanCorrections(ctx, task.ID, cm)
-	}
-
-	// Replace legacy truncator with ContextManager
-	prepared, err := cm.PrepareContext(ctx, *messages)
-	if err != nil {
-		w.handleGatewayError(ctx, task, err)
-		return false, err
-	}
-	*messages = prepared
-
-	if iterationGuard.ShouldInjectFinalMessage() {
-		*messages = append(*messages, iterationGuard.FinalMessage())
-		iterationGuard.ResetAllowFinal()
-	}
-
-	if err := budgetGuard.BeforeCall(); err != nil {
-		w.handleGatewayError(ctx, task, err)
-		return false, err
-	}
-
-	req := gateway.AIRequest{
-		Messages:    *messages,
-		Temperature: profile.Temperature,
-		Tools:       tools,
-		AgentID:     task.AgentID,
-		Role:        gateway.RoleWorker,
-		TaskID:      task.ID,
-		Provider:    profile.Provider,
-		Model:       profile.Model,
-		MaxTokens:   profile.MaxTokens,
-	}
-	req = w.applyTuning(req, task, profile)
-
-	resp, err := w.gateway.Generate(ctx, req)
-	if err != nil {
-		w.handleGatewayError(ctx, task, err)
-		return false, err
-	}
-
-	budgetGuard.AfterCall(resp.TokenUsage)
-
-	*messages = append(*messages, gateway.PromptMessage{
-		Role:      "assistant",
-		Content:   resp.Content,
-		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
-	})
-
-	if len(resp.ToolCalls) == 0 {
-		w.commitText(ctx, task, resp.Content)
-		return false, nil
-	}
-
-	iterationGuard.AfterIteration(true)
-
-	for _, call := range resp.ToolCalls {
-		result := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, call, toolToAdapter, toolExecutor, taskHooks)
-
-		if detected := cm.CheckToolResult(result); len(detected) > 0 {
-			slog.Info("auto-detected context corrections",
-				"task_id", task.ID,
-				"count", len(detected),
-			)
-		}
-
-		*messages = append(*messages, gateway.PromptMessage{
-			Role:       "tool",
-			ToolCallID: call.ID,
-			Content:    result,
-		})
-	}
-
-	return true, nil
-}
-
-func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
-	tools := append([]gateway.ToolDefinition(nil), toolExecutor.Definitions()...)
-	tools = append(tools, DelegateToolDefinition())
-	if w.capabilities == nil {
-		return tools, nil
-	}
-	capabilityTools, toolToAdapter, err := w.capabilities.GetToolsAndAdapterIndex(ctx)
-	if err != nil {
-		slog.Warn("failed to get capability tools", "error", err)
-		return tools, nil
-	}
-	return append(tools, capabilityTools...), toolToAdapter
-}
-
 // DispatchTool is the single entry point for tool execution in the agentic loop.
 // It handles both built-in tools (bash, read, write) and capability tools (MCP).
 // Parameters:
@@ -526,7 +382,7 @@ func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, project
 	case toolNameBash, toolNameRead, toolNameWrite:
 		result = toolExecutor.Execute(ctx, call)
 	case toolNameDelegate:
-		result = w.executeDelegate(ctx, call, toolExecutor)
+		result = jsonErrorf("delegate tool not yet implemented")
 	default:
 		if w.capabilities == nil {
 			result = jsonErrorf("unknown tool: %s", call.Function.Name)
@@ -642,6 +498,91 @@ func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile 
 	}
 
 	return out
+}
+
+// assembleAgenticSystemPrompt builds the full layered system prompt for agentic
+// mode using the instruction hierarchy and skill router. It returns the initial
+// message list: [optional memory lessons, layered system prompt, user task].
+func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
+	builder := NewSystemPromptBuilder().
+		WithGlobal(agenticToolUseSystemText())
+
+	// 1. User preferences (lowest precedence, silently prepended)
+	if w.instructionLoader != nil {
+		if prefs, err := w.instructionLoader.LoadUserPreferences(); err != nil {
+			slog.Warn("failed to load user preferences", "error", err)
+		} else if prefs != nil {
+			builder.WithUserPreferences(prefs)
+		}
+	}
+
+	// 2. Project instructions from AGENTS.md
+	if w.instructionLoader != nil && project.WorkspacePath != "" {
+		instructions, err := w.instructionLoader.LoadProjectInstructions(project.WorkspacePath, profile.InstructionsPath)
+		if err != nil {
+			slog.Warn("failed to load project instructions", "workspace", project.WorkspacePath, "error", err)
+		} else if instructions != nil {
+			builder.WithProject(instructions)
+		}
+	}
+
+	// 3. Matched skills (injected between project and task level)
+	if w.skillLoader != nil && w.skillRouter != nil {
+		skills, err := w.skillLoader.LoadAll(project.WorkspacePath)
+		if err != nil {
+			slog.Warn("failed to load skills", "workspace", project.WorkspacePath, "error", err)
+		} else if len(skills) > 0 {
+			matched := w.skillRouter.Match(task.Description, skills)
+			for _, sk := range matched {
+				builder.AddSkillBlock(FormatSkillBlock(sk))
+			}
+			if len(matched) > 0 {
+				slog.Debug("injected matched skills into system prompt",
+					"task_id", task.ID,
+					"count", len(matched),
+				)
+			}
+		}
+	}
+
+	// 4. Task-level override (highest precedence)
+	if profile.SystemPrompt.Valid {
+		builder.WithTask(profile.SystemPrompt.String)
+	}
+
+	systemPrompt := builder.Build()
+
+	userMsg := gateway.PromptMessage{
+		Role:    "user",
+		Content: fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description),
+	}
+
+	var messages []gateway.PromptMessage
+
+	// Prepend memory lessons if available
+	if w.retriever != nil {
+		intent := task.Title + " " + task.Description
+		recalled := w.retriever.Recall(ctx, intent, task.ProjectID, "")
+		if lessons := memoryFormatLessons(recalled); lessons != "" {
+			messages = append(messages, gateway.PromptMessage{
+				Role:    "system",
+				Content: lessons,
+			})
+		}
+	}
+
+	messages = append(messages,
+		gateway.PromptMessage{Role: "system", Content: systemPrompt},
+		userMsg,
+	)
+
+	return messages
+}
+
+// executeDelegate handles delegate tool calls by routing to the subagent system.
+// Stubbed until full subagent wiring is complete.
+func (w *Worker) executeDelegate(ctx context.Context, call gateway.ToolCall, toolExecutor *ToolExecutor) string {
+	return jsonErrorf("delegate tool not yet implemented")
 }
 
 func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {

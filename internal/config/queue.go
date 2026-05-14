@@ -28,6 +28,21 @@ const (
 	// DefaultInstructionsUserPrefsFile is the user preferences filename
 	// resolved relative to the agentd home directory (~/.agentd/).
 	DefaultInstructionsUserPrefsFile = "prefs.yaml"
+
+	// DefaultSkillsProjectDir is the relative path within a workspace for
+	// project-scoped skill files.
+	DefaultSkillsProjectDir = ".agentd/skills"
+
+	// DefaultSkillsGlobalDir is the absolute path to the global skills
+	// directory. The tilde prefix is expanded at load time.
+	DefaultSkillsGlobalDir = "~/.agentd/skills"
+
+	// DefaultSkillsThreshold is the minimum TF-IDF relevance score for a
+	// skill to be injected into the system prompt.
+	DefaultSkillsThreshold = 0.1
+
+	// DefaultSkillsTopK is the maximum number of skills to inject per session.
+	DefaultSkillsTopK = 3
 )
 
 // InstructionsConfig holds paths for the instruction hierarchy layers.
@@ -49,6 +64,24 @@ type AgenticContextConfig struct {
 	KeepRecentTurns       int
 }
 
+// SkillsConfig holds parameters for skill-based contextual knowledge injection.
+type SkillsConfig struct {
+	// ProjectDir is the relative path within a workspace for project-scoped
+	// skill files (e.g. ".agentd/skills").
+	ProjectDir string
+
+	// GlobalDir is the absolute path to the global skills directory.
+	// The tilde prefix is expanded at load time.
+	GlobalDir string
+
+	// Threshold is the minimum TF-IDF relevance score (0.0-1.0) for a skill
+	// to be included in the system prompt.
+	Threshold float64
+
+	// TopK is the maximum number of skills injected per session.
+	TopK int
+}
+
 type QueueConfig struct {
 	TaskDeadline               time.Duration
 	PollMaxInterval            time.Duration
@@ -59,6 +92,7 @@ type QueueConfig struct {
 	AgenticCharacterBudget     int
 	AgenticContext             AgenticContextConfig
 	Instructions               InstructionsConfig
+	Skills                     SkillsConfig
 }
 
 func setQueueDefaults(v *viper.Viper) {
@@ -76,6 +110,10 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.agentic_context.keep_recent_turns", DefaultKeepRecentTurns)
 	v.SetDefault("queue.instructions.project_file", DefaultInstructionsProjectFile)
 	v.SetDefault("queue.instructions.user_preferences_file", DefaultInstructionsUserPrefsFile)
+	v.SetDefault("queue.skills.project_dir", DefaultSkillsProjectDir)
+	v.SetDefault("queue.skills.global_dir", DefaultSkillsGlobalDir)
+	v.SetDefault("queue.skills.threshold", DefaultSkillsThreshold)
+	v.SetDefault("queue.skills.top_k", DefaultSkillsTopK)
 }
 
 func loadQueueConfig(v *viper.Viper) QueueConfig {
@@ -97,6 +135,12 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 		Instructions: InstructionsConfig{
 			ProjectFile:         v.GetString("queue.instructions.project_file"),
 			UserPreferencesFile: v.GetString("queue.instructions.user_preferences_file"),
+		},
+		Skills: SkillsConfig{
+			ProjectDir: v.GetString("queue.skills.project_dir"),
+			GlobalDir:  v.GetString("queue.skills.global_dir"),
+			Threshold:  v.GetFloat64("queue.skills.threshold"),
+			TopK:       v.GetInt("queue.skills.top_k"),
 		},
 	}
 }

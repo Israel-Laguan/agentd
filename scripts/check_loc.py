@@ -19,6 +19,9 @@ DEFAULT_EXCLUDES = (
     "*.min.js",
     "*.min.css",
     "go.sum",
+    "*_test.go",
+    "docs/**",
+    "web/package-lock.json",
 )
 
 

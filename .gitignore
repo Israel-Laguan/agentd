@@ -36,4 +36,5 @@ go.work.sum
 # .vscode/
 .kilo/
 .kiro/
+.windsurf/
 
