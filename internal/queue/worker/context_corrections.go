@@ -43,8 +43,7 @@ func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) bool {
 
 func sameCorrection(a, b CorrectionRecord) bool {
 	return a.Contradiction == b.Contradiction &&
-		a.CorrectFact == b.CorrectFact &&
-		a.Source == b.Source
+		a.CorrectFact == b.CorrectFact
 }
 
 // MarkCommentCorrectionSeen records a task comment as processed for correction parsing.
@@ -64,7 +63,7 @@ func (cm *ContextManager) MarkCommentCorrectionSeen(c models.Comment) bool {
 
 func correctionCommentKey(c models.Comment) string {
 	if strings.TrimSpace(c.ID) != "" {
-		return "id:" + c.ID
+		return "id:" + c.ID + ":updated:" + c.UpdatedAt.UTC().Format(time.RFC3339Nano)
 	}
 	return fmt.Sprintf("fallback:%s:%s:%s:%s",
 		c.TaskID,
@@ -188,16 +187,22 @@ func ParseCorrectionComment(body string, source CorrectionSource) *CorrectionRec
 		return nil
 	}
 	content := strings.TrimPrefix(body, "[CORRECT]")
-	parts := strings.Split(content, ";")
-	var was, is string
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if strings.HasPrefix(p, "was:") {
-			was = strings.TrimSpace(strings.TrimPrefix(p, "was:"))
-		} else if strings.HasPrefix(p, "is:") {
-			is = strings.TrimSpace(strings.TrimPrefix(p, "is:"))
-		}
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "was:") {
+		return nil
 	}
+	content = strings.TrimSpace(strings.TrimPrefix(content, "was:"))
+	delimiter := "; is:"
+	idx := strings.Index(content, delimiter)
+	if idx < 0 {
+		delimiter = ";is:"
+		idx = strings.Index(content, delimiter)
+	}
+	if idx < 0 {
+		return nil
+	}
+	was := strings.TrimSpace(content[:idx])
+	is := strings.TrimSpace(content[idx+len(delimiter):])
 	if was == "" || is == "" {
 		return nil
 	}
@@ -248,22 +253,23 @@ func stripCorrectionMessages(messages []spec.PromptMessage) []spec.PromptMessage
 	return out
 }
 
-// CorrectionSnapshot returns all corrections accumulated during the session,
-// suitable for submission to durable agent memory.
-type CorrectionSnapshot struct {
-	AgentID     string             `json:"agent_id"`
-	TaskID      string             `json:"task_id"`
-	Corrections []CorrectionRecord `json:"corrections"`
-	CapturedAt  time.Time          `json:"captured_at"`
+func (cm *ContextManager) CommentHighWater() time.Time {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	return cm.commentHighWater
 }
 
-// SnapshotCorrections captures the current state of corrections for the session.
-func (cm *ContextManager) SnapshotCorrections() CorrectionSnapshot {
-	return CorrectionSnapshot{
-		AgentID:     cm.agentID,
-		TaskID:      cm.taskID,
-		Corrections: cm.Corrections(),
-		CapturedAt:  time.Now(),
+func (cm *ContextManager) AdvanceCommentHighWater(comments []models.Comment) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	for _, c := range comments {
+		mark := c.UpdatedAt
+		if mark.IsZero() || (!c.CreatedAt.IsZero() && c.CreatedAt.After(mark)) {
+			mark = c.CreatedAt
+		}
+		if mark.After(cm.commentHighWater) {
+			cm.commentHighWater = mark
+		}
 	}
 }
 

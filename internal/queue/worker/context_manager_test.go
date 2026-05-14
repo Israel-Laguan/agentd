@@ -322,6 +322,24 @@ func TestContextManager_InjectCorrection_DeduplicatesExactRecord(t *testing.T) {
 	}
 }
 
+func TestContextManager_InjectCorrection_DeduplicatesRenderedCorrection(t *testing.T) {
+	cm := newTestCM(nil)
+	if !cm.InjectCorrection(CorrectionRecord{
+		Contradiction: "old",
+		CorrectFact:   "new",
+		Source:        CorrectionSourceHuman,
+	}) {
+		t.Fatal("expected first correction insert")
+	}
+	if cm.InjectCorrection(CorrectionRecord{
+		Contradiction: "old",
+		CorrectFact:   "new",
+		Source:        CorrectionSourceTool,
+	}) {
+		t.Fatal("expected duplicate rendered correction to be skipped")
+	}
+}
+
 func TestContextManager_Messages_CompressedThenWorking(t *testing.T) {
 	cm := newTestCM([]spec.PromptMessage{
 		{Role: "user", Content: "working message"},
@@ -492,6 +510,57 @@ func TestPrepareContext_DoesNotAccumulateCorrectionMessages(t *testing.T) {
 	}
 }
 
+func TestEnforceBudget_ProtectsCorrectionMessages(t *testing.T) {
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task")
+	correction := CorrectionRecord{
+		Contradiction: "stale",
+		CorrectFact:   "current",
+		Source:        CorrectionSourceHuman,
+	}.FormatMessage()
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "system"},
+		{Role: "user", Content: "task"},
+		{Role: "system", Content: correction},
+		{Role: "assistant", Content: strings.Repeat("x", 1000)},
+	}
+
+	prepared := cm.enforceBudget(messages, len("system")+len("task")+len(correction))
+	if len(prepared) != 3 {
+		t.Fatalf("expected only fixed messages, got %#v", prepared)
+	}
+	if !IsCorrectionMessage(prepared[2].Content) {
+		t.Fatalf("expected protected correction, got %#v", prepared)
+	}
+}
+
+func TestEnforceBudget_ProtectsCorrectionMessagesWithSummary(t *testing.T) {
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task")
+	correction := CorrectionRecord{
+		Contradiction: "stale",
+		CorrectFact:   "current",
+		Source:        CorrectionSourceHuman,
+	}.FormatMessage()
+	summary := "PREVIOUS CONTEXT SUMMARY\n- old work"
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "system"},
+		{Role: "user", Content: "task"},
+		{Role: "system", Content: correction},
+		{Role: "system", Content: summary},
+		{Role: "assistant", Content: strings.Repeat("x", 1000)},
+	}
+
+	prepared := cm.enforceBudget(messages, len("system")+len("task")+len(correction)+len(summary))
+	if len(prepared) != 4 {
+		t.Fatalf("expected anchor, correction, and summary, got %#v", prepared)
+	}
+	if !IsCorrectionMessage(prepared[2].Content) {
+		t.Fatalf("expected protected correction, got %#v", prepared)
+	}
+	if !strings.HasPrefix(prepared[3].Content, "PREVIOUS CONTEXT SUMMARY") {
+		t.Fatalf("expected protected summary, got %#v", prepared)
+	}
+}
+
 func TestParseCorrectionComment(t *testing.T) {
 	tests := []struct {
 		name string
@@ -501,6 +570,7 @@ func TestParseCorrectionComment(t *testing.T) {
 		{"valid", "[CORRECT] was: old; is: new", true},
 		{"valid with leading whitespace", "  [CORRECT] was: old; is: new", true},
 		{"valid with semicolon", "[CORRECT] was: old ; is: new ", true},
+		{"valid values with semicolons", "[CORRECT] was: config=a;b; is: config=c;d", true},
 		{"invalid format", "just a comment", false},
 		{"missing is", "[CORRECT] was: old", false},
 	}
@@ -509,6 +579,12 @@ func TestParseCorrectionComment(t *testing.T) {
 			rec := ParseCorrectionComment(tt.body, CorrectionSourceHuman)
 			if (rec != nil) != tt.want {
 				t.Fatalf("ParseCorrectionComment() = %v, want %v", rec != nil, tt.want)
+			}
+			if tt.name == "valid values with semicolons" {
+				if rec.Contradiction != "config=a;b" || rec.CorrectFact != "config=c;d" {
+					t.Fatalf("unexpected semicolon record content: %+v", rec)
+				}
+				return
 			}
 			if tt.want && (rec.Contradiction != "old" || rec.CorrectFact != "new") {
 				t.Fatalf("unexpected record content: %+v", rec)
@@ -531,17 +607,5 @@ func TestContextManager_CheckToolResult_Deduplication(t *testing.T) {
 	detected2 := cm.CheckToolResult("version=2.0.0")
 	if len(detected2) != 0 {
 		t.Fatalf("expected 0 detections (dedup), got %d", len(detected2))
-	}
-}
-
-func TestSnapshotCorrections(t *testing.T) {
-	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent-123", "task-456")
-	cm.InjectHumanCorrection("old", "new")
-	snapshot := cm.SnapshotCorrections()
-	if snapshot.AgentID != "agent-123" || snapshot.TaskID != "task-456" {
-		t.Errorf("unexpected IDs in snapshot: %+v", snapshot)
-	}
-	if len(snapshot.Corrections) != 1 {
-		t.Errorf("expected 1 correction in snapshot, got %d", len(snapshot.Corrections))
 	}
 }

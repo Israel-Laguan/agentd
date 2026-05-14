@@ -20,9 +20,9 @@ import (
 func TestSystemStatus(t *testing.T) {
 	store := newTestStore()
 	handler := api.NewHandler(api.ServerDeps{
-		Store:     store,
-		Gateway:   newTestGateway(),
-		Bus:       bus.NewInProcess(),
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	resp := request(handler, http.MethodGet, "/api/v1/system/status", "")
@@ -33,9 +33,9 @@ func TestSystemStatus(t *testing.T) {
 func TestProjectsList(t *testing.T) {
 	store := newTestStore()
 	handler := api.NewHandler(api.ServerDeps{
-		Store:     store,
-		Gateway:   newTestGateway(),
-		Bus:       bus.NewInProcess(),
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	resp := request(handler, http.MethodGet, "/api/v1/projects", "")
@@ -53,9 +53,9 @@ func TestProjectsList(t *testing.T) {
 func TestAgentsList(t *testing.T) {
 	store := newTestStore()
 	handler := api.NewHandler(api.ServerDeps{
-		Store:     store,
-		Gateway:   newTestGateway(),
-		Bus:       bus.NewInProcess(),
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	resp := request(handler, http.MethodGet, "/api/v1/agents", "")
@@ -70,9 +70,9 @@ func TestAgentsList(t *testing.T) {
 func TestAgentsDefault(t *testing.T) {
 	store := newTestStore()
 	handler := api.NewHandler(api.ServerDeps{
-		Store:     store,
-		Gateway:   newTestGateway(),
-		Bus:       bus.NewInProcess(),
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	resp := request(handler, http.MethodGet, "/api/v1/agents/default", "")
@@ -87,9 +87,9 @@ func TestAgentsDefault(t *testing.T) {
 func TestAgentsQA(t *testing.T) {
 	store := newTestStore()
 	handler := api.NewHandler(api.ServerDeps{
-		Store:     store,
-		Gateway:   newTestGateway(),
-		Bus:       bus.NewInProcess(),
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	resp := request(handler, http.MethodGet, "/api/v1/agents/qa", "")
@@ -104,9 +104,9 @@ func TestAgentsQA(t *testing.T) {
 func TestAgentsResearcher(t *testing.T) {
 	store := newTestStore()
 	handler := api.NewHandler(api.ServerDeps{
-		Store:     store,
-		Gateway:   newTestGateway(),
-		Bus:       bus.NewInProcess(),
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	resp := request(handler, http.MethodGet, "/api/v1/agents/researcher", "")
@@ -121,9 +121,9 @@ func TestAgentsResearcher(t *testing.T) {
 func TestChatCompletion(t *testing.T) {
 	store := newTestStore()
 	handler := api.NewHandler(api.ServerDeps{
-		Store:     store,
-		Gateway:   newTestGateway(),
-		Bus:       bus.NewInProcess(),
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	body := `{"messages":[{"role":"user","content":"hello"}],"stream":false}`
@@ -138,9 +138,9 @@ func TestChatCompletion(t *testing.T) {
 func TestRapidStatusRequests(t *testing.T) {
 	store := newTestStore()
 	handler := api.NewHandler(api.ServerDeps{
-		Store:     store,
-		Gateway:   newTestGateway(),
-		Bus:       bus.NewInProcess(),
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	ok := 0
@@ -161,9 +161,9 @@ func TestRapidStatusRequests(t *testing.T) {
 func TestNotFound(t *testing.T) {
 	store := newTestStore()
 	handler := api.NewHandler(api.ServerDeps{
-		Store:     store,
-		Gateway:   newTestGateway(),
-		Bus:       bus.NewInProcess(),
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	resp := request(handler, http.MethodGet, "/api/v1/nonexistent", "")
@@ -254,7 +254,9 @@ func (s *testStore) UpdateTaskState(context.Context, string, time.Time, models.T
 func (s *testStore) UpdateTaskResult(context.Context, string, time.Time, models.TaskResult) (*models.Task, error) {
 	return &s.task, nil
 }
-func (s *testStore) ReconcileGhostTasks(context.Context, []int) ([]models.Task, error) { return nil, nil }
+func (s *testStore) ReconcileGhostTasks(context.Context, []int) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *testStore) ReconcileStaleTasks(context.Context, []int, time.Duration) ([]models.Task, error) {
 	return nil, nil
 }
@@ -282,19 +284,42 @@ func (s *testStore) ListComments(context.Context, string) ([]models.Comment, err
 	defer s.mu.Unlock()
 	return append([]models.Comment(nil), s.comments...), nil
 }
-func (s *testStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) { return nil, nil }
+func (s *testStore) ListCommentsSince(_ context.Context, _ string, since time.Time) ([]models.Comment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []models.Comment
+	for _, c := range s.comments {
+		if since.IsZero() || c.UpdatedAt.After(since) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+func (s *testStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) {
+	return nil, nil
+}
 func (s *testStore) MarkCommentProcessed(context.Context, string, string) error { return nil }
-func (s *testStore) AppendEvent(context.Context, models.Event) error { return nil }
-func (s *testStore) ListEventsByTask(context.Context, string) ([]models.Event, error) { return nil, nil }
-func (s *testStore) MarkEventsCurated(context.Context, string) error { return nil }
+func (s *testStore) AppendEvent(context.Context, models.Event) error            { return nil }
+func (s *testStore) ListEventsByTask(context.Context, string) ([]models.Event, error) {
+	return nil, nil
+}
+func (s *testStore) MarkEventsCurated(context.Context, string) error   { return nil }
 func (s *testStore) DeleteCuratedEvents(context.Context, string) error { return nil }
-func (s *testStore) ListCompletedTasksOlderThan(context.Context, time.Duration) ([]models.Task, error) { return nil, nil }
+func (s *testStore) ListCompletedTasksOlderThan(context.Context, time.Duration) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *testStore) RecordMemory(context.Context, models.Memory) error { return nil }
-func (s *testStore) ListMemories(context.Context, models.MemoryFilter) ([]models.Memory, error) { return nil, nil }
-func (s *testStore) RecallMemories(context.Context, models.RecallQuery) ([]models.Memory, error) { return nil, nil }
-func (s *testStore) TouchMemories(context.Context, []string) error { return nil }
+func (s *testStore) ListMemories(context.Context, models.MemoryFilter) ([]models.Memory, error) {
+	return nil, nil
+}
+func (s *testStore) RecallMemories(context.Context, models.RecallQuery) ([]models.Memory, error) {
+	return nil, nil
+}
+func (s *testStore) TouchMemories(context.Context, []string) error             { return nil }
 func (s *testStore) SupersedeMemories(context.Context, []string, string) error { return nil }
-func (s *testStore) ListUnsupersededMemories(context.Context) ([]models.Memory, error) { return nil, nil }
+func (s *testStore) ListUnsupersededMemories(context.Context) ([]models.Memory, error) {
+	return nil, nil
+}
 func (s *testStore) GetAgentProfile(_ context.Context, id string) (*models.AgentProfile, error) {
 	switch id {
 	case "default":
@@ -319,17 +344,19 @@ func (s *testStore) ListAgentProfiles(_ context.Context) ([]models.AgentProfile,
 func (s *testStore) DeleteAgentProfile(_ context.Context, id string) error {
 	return nil
 }
-func (s *testStore) AssignTaskAgent(context.Context, string, time.Time, string) (*models.Task, error) { return nil, nil }
-func (s *testStore) ListSettings(context.Context) ([]models.Setting, error) { return nil, nil }
+func (s *testStore) AssignTaskAgent(context.Context, string, time.Time, string) (*models.Task, error) {
+	return nil, nil
+}
+func (s *testStore) ListSettings(context.Context) ([]models.Setting, error)   { return nil, nil }
 func (s *testStore) GetSetting(context.Context, string) (string, bool, error) { return "", false, nil }
-func (s *testStore) SetSetting(context.Context, string, string) error { return nil }
+func (s *testStore) SetSetting(context.Context, string, string) error         { return nil }
 
 var _ models.KanbanStore = (*testStore)(nil)
 
 type testGateway struct {
-	scope    *gateway.ScopeAnalysis
-	intent   *gateway.IntentAnalysis
-	plan     *models.DraftPlan
+	scope  *gateway.ScopeAnalysis
+	intent *gateway.IntentAnalysis
+	plan   *models.DraftPlan
 }
 
 func newTestGateway() *testGateway { return &testGateway{} }

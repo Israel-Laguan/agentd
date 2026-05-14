@@ -132,6 +132,9 @@ type fullStore struct {
 }
 
 func (f fullStore) ListComments(context.Context, string) ([]models.Comment, error) { return nil, nil }
+func (f fullStore) ListCommentsSince(context.Context, string, time.Time) ([]models.Comment, error) {
+	return nil, nil
+}
 func (f fullStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) {
 	return nil, nil
 }

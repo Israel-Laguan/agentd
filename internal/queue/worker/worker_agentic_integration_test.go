@@ -594,6 +594,10 @@ func (m *mockAgenticStore) ListComments(context.Context, string) ([]models.Comme
 	return nil, nil
 }
 
+func (m *mockAgenticStore) ListCommentsSince(context.Context, string, time.Time) ([]models.Comment, error) {
+	return nil, nil
+}
+
 func (m *mockAgenticStore) GetProject(context.Context, string) (*models.Project, error) {
 	return &m.project, nil
 }

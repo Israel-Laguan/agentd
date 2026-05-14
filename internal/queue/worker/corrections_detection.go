@@ -3,6 +3,8 @@ package worker
 import (
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 type booleanFlip struct {
@@ -85,8 +87,15 @@ func isTokenBoundary(text string, idx int) bool {
 	if idx < 0 || idx >= len(text) {
 		return true
 	}
-	r := text[idx]
-	return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_')
+	start := idx
+	for start > 0 && !utf8.RuneStart(text[start]) {
+		start--
+	}
+	r, _ := utf8.DecodeRuneInString(text[start:])
+	if r == utf8.RuneError {
+		return true
+	}
+	return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_')
 }
 
 func formatBooleanFact(subject, value string) string {
@@ -101,8 +110,13 @@ func formatBooleanFact(subject, value string) string {
 func detectChangedPattern(originalFact, lowerFact, lowerOutput string, now time.Time) (CorrectionRecord, bool) {
 	patterns := []string{" changed to ", " updated to ", " is now "}
 	for _, p := range patterns {
-		if idx := strings.Index(lowerOutput, p); idx > 0 {
-			subject := strings.TrimSpace(lowerOutput[:idx])
+		for searchStart := 0; searchStart < len(lowerOutput); {
+			relIdx := strings.Index(lowerOutput[searchStart:], p)
+			if relIdx < 0 {
+				break
+			}
+			idx := searchStart + relIdx
+			subject := strings.TrimSpace(clauseBefore(lowerOutput, idx))
 			// If the output says "Port changed to 8080", check if fact contains "port".
 			if subject != "" && lastTokenIndex(lowerFact, subject) >= 0 {
 				newValue := trimChangedValue(lowerOutput[idx+len(p):])
@@ -115,9 +129,20 @@ func detectChangedPattern(originalFact, lowerFact, lowerOutput string, now time.
 					}, true
 				}
 			}
+			searchStart = idx + len(p)
 		}
 	}
 	return CorrectionRecord{}, false
+}
+
+func clauseBefore(text string, end int) string {
+	start := 0
+	for _, delimiter := range []string{"\n", ".", ";", ",", " and ", " but ", " or "} {
+		if idx := strings.LastIndex(text[:end], delimiter); idx >= 0 && idx+len(delimiter) > start {
+			start = idx + len(delimiter)
+		}
+	}
+	return text[start:end]
 }
 
 func trimChangedValue(value string) string {

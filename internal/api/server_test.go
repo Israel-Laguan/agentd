@@ -252,6 +252,17 @@ func (s *apiStore) ListComments(context.Context, string) ([]models.Comment, erro
 	defer s.mu.Unlock()
 	return append([]models.Comment(nil), s.comments...), nil
 }
+func (s *apiStore) ListCommentsSince(_ context.Context, _ string, since time.Time) ([]models.Comment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []models.Comment
+	for _, c := range s.comments {
+		if since.IsZero() || c.UpdatedAt.After(since) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
 func (s *apiStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) {
 	return nil, nil
 }

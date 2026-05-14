@@ -99,6 +99,10 @@ func (s *workerTestStore) ListComments(context.Context, string) ([]models.Commen
 	return nil, nil
 }
 
+func (s *workerTestStore) ListCommentsSince(context.Context, string, time.Time) ([]models.Comment, error) {
+	return nil, nil
+}
+
 func (s *workerTestStore) GetProject(context.Context, string) (*models.Project, error) {
 	return &s.project, nil
 }
