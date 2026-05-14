@@ -234,7 +234,7 @@ func TestCorrectionRecord_FormatMessage(t *testing.T) {
 	}
 }
 
-func TestContextManager_InjectCorrection_PrependsToWorkingZone(t *testing.T) {
+func TestContextManager_InjectCorrection_StoresForPreparedContext(t *testing.T) {
 	cm := newTestCM([]spec.PromptMessage{
 		{Role: "system", Content: "system prompt"},
 		{Role: "user", Content: "do the thing"},
@@ -245,14 +245,18 @@ func TestContextManager_InjectCorrection_PrependsToWorkingZone(t *testing.T) {
 		Source:        CorrectionSourceHuman,
 	})
 	msgs := cm.WorkingMessages()
-	if len(msgs) != 3 {
-		t.Fatalf("expected 3 messages, got %d", len(msgs))
+	if len(msgs) != 2 {
+		t.Fatalf("expected working messages to remain unchanged, got %d", len(msgs))
 	}
-	if !IsCorrectionMessage(msgs[0].Content) {
-		t.Fatalf("first message should be a correction, got %q", msgs[0].Content)
+	prepared, err := cm.PrepareContext(context.Background(), msgs)
+	if err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
 	}
-	if msgs[0].Role != "system" {
-		t.Fatalf("correction message should have role=system, got %q", msgs[0].Role)
+	if len(prepared) != 3 {
+		t.Fatalf("expected prepared context to include correction, got %d messages", len(prepared))
+	}
+	if !IsCorrectionMessage(prepared[2].Content) {
+		t.Fatalf("expected correction to be injected after anchor, got %q", prepared[2].Content)
 	}
 }
 
@@ -270,22 +274,28 @@ func TestContextManager_MultipleCorrections_NewestFirst(t *testing.T) {
 		CorrectFact:   "corrected-second",
 		Source:        CorrectionSourceHuman,
 	})
-	msgs := cm.WorkingMessages()
-	if len(msgs) != 3 {
-		t.Fatalf("expected 3 messages (2 corrections + 1 seed), got %d", len(msgs))
-	}
-	if !strings.Contains(msgs[0].Content, "second") {
-		t.Fatalf("newest correction should be first, got %q", msgs[0].Content)
-	}
-	if !strings.Contains(msgs[1].Content, "first") {
-		t.Fatalf("older correction should be second, got %q", msgs[1].Content)
-	}
 	corrections := cm.Corrections()
 	if len(corrections) != 2 {
 		t.Fatalf("expected 2 correction records, got %d", len(corrections))
 	}
 	if corrections[0].Contradiction != "second" {
 		t.Fatalf("corrections should be newest-first, got %q", corrections[0].Contradiction)
+	}
+	prepared, err := cm.PrepareContext(context.Background(), cm.WorkingMessages())
+	if err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	if len(prepared) != 3 {
+		t.Fatalf("expected prepared context to contain 2 corrections and 1 seed, got %d", len(prepared))
+	}
+	if prepared[0].Content != "hello" {
+		t.Fatalf("expected seed user message to remain anchor, got %q", prepared[0].Content)
+	}
+	if !strings.Contains(prepared[1].Content, "second") {
+		t.Fatalf("newest correction should be first after anchor, got %q", prepared[1].Content)
+	}
+	if !strings.Contains(prepared[2].Content, "first") {
+		t.Fatalf("older correction should be second after anchor, got %q", prepared[2].Content)
 	}
 }
 
@@ -316,9 +326,8 @@ func TestContextManager_InjectCorrection_DeduplicatesExactRecord(t *testing.T) {
 	if len(corrections) != 1 {
 		t.Fatalf("expected 1 deduplicated correction, got %d", len(corrections))
 	}
-	msgs := cm.WorkingMessages()
-	if len(msgs) != 1 {
-		t.Fatalf("expected 1 correction message, got %d", len(msgs))
+	if msgs := cm.WorkingMessages(); len(msgs) != 0 {
+		t.Fatalf("expected no rendered correction messages in working zone, got %d", len(msgs))
 	}
 }
 
@@ -375,12 +384,19 @@ func TestContextManager_CheckToolResult_DetectsContradiction(t *testing.T) {
 	if detected[0].Source != CorrectionSourceTool {
 		t.Fatalf("expected tool source, got %q", detected[0].Source)
 	}
-	msgs := cm.WorkingMessages()
-	if len(msgs) < 2 {
-		t.Fatalf("expected at least 2 messages after correction, got %d", len(msgs))
+	corrections := cm.Corrections()
+	if len(corrections) != 1 {
+		t.Fatalf("expected 1 stored correction, got %d", len(corrections))
 	}
-	if !IsCorrectionMessage(msgs[0].Content) {
-		t.Fatal("first working message should be a correction")
+	prepared, err := cm.PrepareContext(context.Background(), cm.WorkingMessages())
+	if err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	if len(prepared) < 2 {
+		t.Fatalf("expected prepared context to include correction and working message, got %d", len(prepared))
+	}
+	if !IsCorrectionMessage(prepared[1].Content) {
+		t.Fatalf("expected correction after anchor, got %q", prepared[1].Content)
 	}
 }
 
