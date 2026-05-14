@@ -85,6 +85,13 @@ agentic:
   tool_rate_limits:
     bash: 50
     default: 100
+  # Skill-based contextual knowledge injection.
+  # Skills are markdown documents loaded from the workspace or global directory
+  # and injected into the system prompt when they match the current task.
+  skills:
+    threshold: 0.1          # minimum TF-IDF relevance score (0.0–1.0)
+    top_k: 3                # max skills injected per session
+    global_path: "~/.agentd/skills"  # directory for user-global skill files
 
 # Sandbox command execution hardening.
 sandbox:

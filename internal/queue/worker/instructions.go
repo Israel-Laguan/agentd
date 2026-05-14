@@ -286,6 +286,7 @@ type SystemPromptBuilder struct {
 	project     *ProjectInstructions
 	taskPrompt  string
 	userPrefs   *UserPreferences
+	skillBlocks []string
 }
 
 // NewSystemPromptBuilder creates a builder with no layers set.
@@ -317,12 +318,22 @@ func (b *SystemPromptBuilder) WithUserPreferences(prefs *UserPreferences) *Syste
 	return b
 }
 
+// AddSkillBlock appends a pre-formatted skill block to the builder.
+// Skills are injected between project-level and task-level sections.
+func (b *SystemPromptBuilder) AddSkillBlock(block string) *SystemPromptBuilder {
+	if block != "" {
+		b.skillBlocks = append(b.skillBlocks, block)
+	}
+	return b
+}
+
 // Build assembles the final system prompt in precedence order:
 //  1. User preferences (base style, lowest precedence)
 //  2. Global (agentic tool-use foundation)
 //  3. Project (Hazards, Scope, Architecture, Conventions)
-//  4. Task-level SystemPrompt (highest precedence override)
-//  5. Resolution rule
+//  4. Matched skills (on-demand knowledge)
+//  5. Task-level SystemPrompt (highest precedence override)
+//  6. Resolution rule
 func (b *SystemPromptBuilder) Build() string {
 	var sections []string
 
@@ -354,12 +365,18 @@ func (b *SystemPromptBuilder) Build() string {
 		}
 	}
 
-	// 4. Task-level override — highest precedence content
+	// 4. Matched skills — on-demand knowledge blocks
+	if len(b.skillBlocks) > 0 {
+		sections = append(sections, "MATCHED SKILLS (contextual guidance):")
+		sections = append(sections, b.skillBlocks...)
+	}
+
+	// 5. Task-level override — highest precedence content
 	if b.taskPrompt != "" {
 		sections = append(sections, b.taskPrompt)
 	}
 
-	// 5. Resolution rule — always appended
+	// 6. Resolution rule — always appended
 	sections = append(sections, resolutionRule)
 
 	return strings.Join(sections, "\n\n")
