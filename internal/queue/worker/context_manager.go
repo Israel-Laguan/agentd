@@ -1,11 +1,14 @@
 package worker
 
 import (
+	"context"
 	"fmt"
-	"strings"
+	"hash/fnv"
 	"sync"
 	"time"
 
+	"agentd/internal/config"
+	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 )
 
@@ -13,12 +16,7 @@ import (
 type CorrectionSource string
 
 const (
-	// CorrectionSourceTool indicates the correction was auto-detected from a
-	// tool result that contradicts a fact in the compressed zone summary.
-	CorrectionSourceTool CorrectionSource = "tool_result"
-
-	// CorrectionSourceHuman indicates the correction was injected via the
-	// system message API by a human operator.
+	CorrectionSourceTool  CorrectionSource = "tool_result"
 	CorrectionSourceHuman CorrectionSource = "human"
 )
 
@@ -30,23 +28,30 @@ type CorrectionRecord struct {
 	Timestamp     time.Time        `json:"timestamp"`
 }
 
-// FormatMessage renders the correction as a prompt message suitable for
-// prepending to the working zone.
+// FormatMessage renders the correction as a prompt message.
 func (cr CorrectionRecord) FormatMessage() string {
 	return fmt.Sprintf(
 		"[CORRECTION] Earlier context may state: %q. The correct information is: %q.",
-		cr.Contradiction,
-		cr.CorrectFact,
+		cr.Contradiction, cr.CorrectFact,
 	)
 }
 
-// TurnSummary holds the compressed summary of a range of turns, including
-// the key facts that were established during those turns.
+// TurnSummary represents a structured summary of one or more conversation turns.
 type TurnSummary struct {
-	Summary           string   `json:"summary"`
+	Summary           string   `json:"summary,omitempty"`
+	DecisionsMade     []string `json:"decisions_made"`
 	FactsEstablished  []string `json:"facts_established"`
-	TurnRangeStart    int      `json:"turn_range_start"`
-	TurnRangeEnd      int      `json:"turn_range_end"`
+	WorkCompleted     []string `json:"work_completed"`
+	WorkRemaining     []string `json:"work_remaining"`
+	FilesModified     []string `json:"files_modified"`
+	ErrorsEncountered []string `json:"errors_encountered"`
+	TurnRangeStart    int      `json:"turn_range_start,omitempty"`
+	TurnRangeEnd      int      `json:"turn_range_end,omitempty"`
+}
+
+// Turn represents a logical interaction cycle.
+type Turn struct {
+	Messages []spec.PromptMessage
 }
 
 // ContextZone represents one logical zone of the structured context window.
@@ -54,10 +59,16 @@ type ContextZone struct {
 	Messages []spec.PromptMessage
 }
 
-// ContextManager manages structured context zones for the agentic loop.
-// It maintains a compressed zone (summarized history) and a working zone
-// (recent messages), with support for correction injection.
+// ContextManager handles partitioning of messages into context zones, applies
+// compression/truncation strategies, and supports correction injection.
 type ContextManager struct {
+	cfg             config.AgenticContextConfig
+	gateway         gateway.AIGateway
+	summarizedTurns map[uint64]bool
+	runningSummary  *TurnSummary
+	cacheMu         sync.RWMutex
+	agentID         string
+	taskID          string
 	mu              sync.Mutex
 	compressedZone  ContextZone
 	workingZone     ContextZone
@@ -73,137 +84,174 @@ func cloneTurnSummary(ts TurnSummary) TurnSummary {
 	return out
 }
 
-// NewContextManager returns a ContextManager initialised with the given
-// seed messages placed into the working zone.
-func NewContextManager(seed []spec.PromptMessage) *ContextManager {
+// NewContextManager creates a new ContextManager with the given configuration.
+func NewContextManager(cfg config.AgenticContextConfig, gw gateway.AIGateway, agentID, taskID string) *ContextManager {
 	return &ContextManager{
-		workingZone: ContextZone{
-			Messages: append([]spec.PromptMessage(nil), seed...),
-		},
+		cfg:             cfg,
+		gateway:         gw,
+		summarizedTurns: make(map[uint64]bool),
+		agentID:         agentID,
+		taskID:          taskID,
 	}
 }
 
-// InjectCorrection prepends a correction message to the working zone. When
-// multiple corrections are injected the newest correction appears first,
-// giving it the highest positional authority.
-func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+// PrepareContext partitions messages into zones and applies compression if needed.
+func (cm *ContextManager) PrepareContext(ctx context.Context, messages []spec.PromptMessage) ([]spec.PromptMessage, error) {
+	if len(messages) == 0 {
+		return messages, nil
+	}
+	anchor, remaining := cm.partitionAnchor(messages)
+	turns := cm.groupTurns(remaining)
 
-	if rec.Timestamp.IsZero() {
-		rec.Timestamp = time.Now()
+	var out []spec.PromptMessage
+	if len(turns) > cm.cfg.RollingThresholdTurns {
+		var err error
+		out, err = cm.applyRollingSummarization(ctx, anchor, turns)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		out = cm.flatten(anchor, turns)
 	}
 
-	// Store in reverse-chronological order (newest first).
-	cm.corrections = append([]CorrectionRecord{rec}, cm.corrections...)
+	totalBudget := cm.cfg.AnchorBudget + cm.cfg.WorkingBudget + cm.cfg.CompressedBudget
+	if totalBudget > 0 && totalChars(out) > totalBudget {
+		out = cm.enforceBudget(out, totalBudget)
+	}
+	return out, nil
+}
 
-	correctionMsg := spec.PromptMessage{
+func (cm *ContextManager) partitionAnchor(messages []spec.PromptMessage) ([]spec.PromptMessage, []spec.PromptMessage) {
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	anchorEnd := 0
+	for i, m := range messages {
+		if m.Role == "system" {
+			anchorEnd = i + 1
+		} else {
+			break
+		}
+	}
+	for i := anchorEnd; i < len(messages); i++ {
+		if messages[i].Role == "user" {
+			anchorEnd = i + 1
+			break
+		}
+	}
+	return messages[:anchorEnd], messages[anchorEnd:]
+}
+
+func (cm *ContextManager) groupTurns(messages []spec.PromptMessage) []Turn {
+	var turns []Turn
+	var currentTurn Turn
+	for _, m := range messages {
+		if m.Role == "assistant" && len(currentTurn.Messages) > 0 {
+			if cm.hasAssistant(currentTurn) {
+				turns = append(turns, currentTurn)
+				currentTurn = Turn{}
+			}
+		} else if m.Role == "user" && len(currentTurn.Messages) > 0 {
+			turns = append(turns, currentTurn)
+			currentTurn = Turn{}
+		}
+		currentTurn.Messages = append(currentTurn.Messages, m)
+	}
+	if len(currentTurn.Messages) > 0 {
+		turns = append(turns, currentTurn)
+	}
+	return turns
+}
+
+func (cm *ContextManager) hasAssistant(t Turn) bool {
+	for _, m := range t.Messages {
+		if m.Role == "assistant" {
+			return true
+		}
+	}
+	return false
+}
+
+func (cm *ContextManager) applyRollingSummarization(ctx context.Context, anchor []spec.PromptMessage, turns []Turn) ([]spec.PromptMessage, error) {
+	keepCount := cm.cfg.KeepRecentTurns
+	if keepCount >= len(turns) {
+		return cm.flatten(anchor, turns), nil
+	}
+	compressedTurns := turns[:len(turns)-keepCount]
+	workingTurns := turns[len(turns)-keepCount:]
+
+	summary, err := cm.summarizeTurns(ctx, compressedTurns)
+	if err != nil {
+		return nil, fmt.Errorf("summarize turns: %w", err)
+	}
+	summaryMsg := spec.PromptMessage{
 		Role:    "system",
-		Content: rec.FormatMessage(),
+		Content: cm.formatSummary(summary),
 	}
-
-	// Prepend to the working zone so the model sees corrections first.
-	cm.workingZone.Messages = append(
-		[]spec.PromptMessage{correctionMsg},
-		cm.workingZone.Messages...,
-	)
-}
-
-// InjectHumanCorrection is a convenience wrapper for manual (human-in-the-loop)
-// corrections received via the system message API.
-func (cm *ContextManager) InjectHumanCorrection(contradiction, correctFact string) {
-	cm.InjectCorrection(CorrectionRecord{
-		Contradiction: contradiction,
-		CorrectFact:   correctFact,
-		Source:        CorrectionSourceHuman,
-		Timestamp:     time.Now(),
-	})
-}
-
-// AddSummary appends a compressed turn summary and indexes its facts for
-// automatic contradiction detection.
-func (cm *ContextManager) AddSummary(ts TurnSummary) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	cm.summaries = append(cm.summaries, cloneTurnSummary(ts))
-
-	if ts.Summary != "" {
-		cm.compressedZone.Messages = append(cm.compressedZone.Messages, spec.PromptMessage{
-			Role:    "system",
-			Content: ts.Summary,
-		})
+	out := append([]spec.PromptMessage{}, anchor...)
+	out = append(out, summaryMsg)
+	for _, t := range workingTurns {
+		out = append(out, t.Messages...)
 	}
+	return out, nil
 }
 
-// AppendWorking adds a message to the tail of the working zone.
-func (cm *ContextManager) AppendWorking(msg spec.PromptMessage) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	cm.workingZone.Messages = append(cm.workingZone.Messages, msg)
+func (cm *ContextManager) summarizeTurns(ctx context.Context, turns []Turn) (TurnSummary, error) {
+	var newTurns []Turn
+	cm.cacheMu.RLock()
+	for _, t := range turns {
+		if !cm.summarizedTurns[cm.hashTurn(t)] {
+			newTurns = append(newTurns, t)
+		}
+	}
+	prev := cm.runningSummary
+	cm.cacheMu.RUnlock()
+
+	if len(newTurns) == 0 && prev != nil {
+		return *prev, nil
+	}
+	s, err := cm.generateSummary(ctx, newTurns)
+	if err != nil {
+		return TurnSummary{}, err
+	}
+	if prev != nil {
+		s = mergeSummaries(*prev, s)
+	}
+	cm.cacheMu.Lock()
+	for _, t := range newTurns {
+		cm.summarizedTurns[cm.hashTurn(t)] = true
+	}
+	cm.runningSummary = &s
+	cm.cacheMu.Unlock()
+	return s, nil
 }
 
-// WorkingMessages returns a snapshot of the current working zone messages.
-func (cm *ContextManager) WorkingMessages() []spec.PromptMessage {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	out := make([]spec.PromptMessage, len(cm.workingZone.Messages))
-	copy(out, cm.workingZone.Messages)
-	return out
+func (cm *ContextManager) hashTurn(t Turn) uint64 {
+	h := fnv.New64a()
+	for _, m := range t.Messages {
+		h.Write([]byte{0x1F})
+		h.Write([]byte(m.Role))
+		h.Write([]byte{0x00})
+		h.Write([]byte(m.Content))
+		h.Write([]byte{0x00})
+		h.Write([]byte{byte(len(m.ToolCalls))})
+		for _, tc := range m.ToolCalls {
+			h.Write([]byte(tc.ID))
+			h.Write([]byte{0x00})
+			h.Write([]byte(tc.Function.Name))
+			h.Write([]byte{0x00})
+			h.Write([]byte(tc.Function.Arguments))
+			h.Write([]byte{0x00})
+		}
+		h.Write([]byte(m.ToolCallID))
+	}
+	return h.Sum64()
 }
 
-// Corrections returns a snapshot of all injected corrections (newest first).
-func (cm *ContextManager) Corrections() []CorrectionRecord {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	out := make([]CorrectionRecord, len(cm.corrections))
-	copy(out, cm.corrections)
-	return out
-}
-
-// Summaries returns a snapshot of all compressed turn summaries.
-func (cm *ContextManager) Summaries() []TurnSummary {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	out := make([]TurnSummary, len(cm.summaries))
-	for i := range cm.summaries {
-		out[i] = cloneTurnSummary(cm.summaries[i])
+func (cm *ContextManager) flatten(anchor []spec.PromptMessage, turns []Turn) []spec.PromptMessage {
+	out := append([]spec.PromptMessage{}, anchor...)
+	for _, t := range turns {
+		out = append(out, t.Messages...)
 	}
 	return out
-}
-
-// Messages returns the full ordered message list: compressed zone followed
-// by working zone.
-func (cm *ContextManager) Messages() []spec.PromptMessage {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	total := len(cm.compressedZone.Messages) + len(cm.workingZone.Messages)
-	out := make([]spec.PromptMessage, 0, total)
-	out = append(out, cm.compressedZone.Messages...)
-	out = append(out, cm.workingZone.Messages...)
-	return out
-}
-
-// CheckToolResult examines a tool result for contradictions against facts
-// in the compressed zone summaries. Any detected contradictions are
-// automatically injected as corrections.
-func (cm *ContextManager) CheckToolResult(toolOutput string) []CorrectionRecord {
-	cm.mu.Lock()
-	summaries := make([]TurnSummary, len(cm.summaries))
-	copy(summaries, cm.summaries)
-	cm.mu.Unlock()
-
-	detected := DetectContradictions(summaries, toolOutput)
-	for _, rec := range detected {
-		cm.InjectCorrection(rec)
-	}
-	return detected
-}
-
-// correctionPrefix is the marker that identifies correction messages.
-const correctionPrefix = "[CORRECTION]"
-
-// IsCorrectionMessage returns true if the message content starts with the
-// correction prefix marker.
-func IsCorrectionMessage(content string) bool {
-	return strings.HasPrefix(strings.TrimSpace(content), correctionPrefix)
 }

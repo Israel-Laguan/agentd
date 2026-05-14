@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -311,18 +310,4 @@ func parseToolExitCode(result string) int {
 		return -1
 	}
 	return env.ExitCode
-}
-// totalChars counts the total character count in all message contents.
-// This is used to enforce character budget constraints during truncation.
-func totalChars(messages []gateway.PromptMessage) int {
-	total := 0
-	for _, m := range messages {
-		total += utf8.RuneCountInString(m.Content)
-		// Also count tool call function names and arguments
-		for _, tc := range m.ToolCalls {
-			total += utf8.RuneCountInString(tc.Function.Name)
-			total += utf8.RuneCountInString(tc.Function.Arguments)
-		}
-	}
-	return total
 }

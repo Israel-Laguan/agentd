@@ -15,6 +15,12 @@ const (
 	DefaultAgenticTruncationThreshold = 40
 	DefaultAgenticCharacterBudget = 0 // 0 = unlimited
 
+	DefaultAnchorBudget          = 10000
+	DefaultWorkingBudget         = 40000
+	DefaultCompressedBudget      = 10000
+	DefaultRollingThresholdTurns = 15
+	DefaultKeepRecentTurns       = 5
+
 	// DefaultInstructionsProjectFile is the convention file path relative to
 	// the project workspace for project-level agent instructions.
 	DefaultInstructionsProjectFile = ".agentd/AGENTS.md"
@@ -35,6 +41,14 @@ type InstructionsConfig struct {
 	UserPreferencesFile string
 }
 
+type AgenticContextConfig struct {
+	AnchorBudget          int
+	WorkingBudget         int
+	CompressedBudget      int
+	RollingThresholdTurns int
+	KeepRecentTurns       int
+}
+
 type QueueConfig struct {
 	TaskDeadline               time.Duration
 	PollMaxInterval            time.Duration
@@ -43,6 +57,7 @@ type QueueConfig struct {
 	AgenticTruncatorMax        int
 	AgenticTruncationThreshold int
 	AgenticCharacterBudget     int
+	AgenticContext             AgenticContextConfig
 	Instructions               InstructionsConfig
 }
 
@@ -54,6 +69,11 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.agentic_truncator_max", DefaultAgenticTruncatorMax)
 	v.SetDefault("queue.agentic_truncation_threshold", DefaultAgenticTruncationThreshold)
 	v.SetDefault("queue.agentic_character_budget", DefaultAgenticCharacterBudget)
+	v.SetDefault("queue.agentic_context.anchor_budget", DefaultAnchorBudget)
+	v.SetDefault("queue.agentic_context.working_budget", DefaultWorkingBudget)
+	v.SetDefault("queue.agentic_context.compressed_budget", DefaultCompressedBudget)
+	v.SetDefault("queue.agentic_context.rolling_threshold_turns", DefaultRollingThresholdTurns)
+	v.SetDefault("queue.agentic_context.keep_recent_turns", DefaultKeepRecentTurns)
 	v.SetDefault("queue.instructions.project_file", DefaultInstructionsProjectFile)
 	v.SetDefault("queue.instructions.user_preferences_file", DefaultInstructionsUserPrefsFile)
 }
@@ -67,6 +87,13 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 		AgenticTruncatorMax:        v.GetInt("queue.agentic_truncator_max"),
 		AgenticTruncationThreshold: v.GetInt("queue.agentic_truncation_threshold"),
 		AgenticCharacterBudget:     v.GetInt("queue.agentic_character_budget"),
+		AgenticContext: AgenticContextConfig{
+			AnchorBudget:          v.GetInt("queue.agentic_context.anchor_budget"),
+			WorkingBudget:         v.GetInt("queue.agentic_context.working_budget"),
+			CompressedBudget:      v.GetInt("queue.agentic_context.compressed_budget"),
+			RollingThresholdTurns: v.GetInt("queue.agentic_context.rolling_threshold_turns"),
+			KeepRecentTurns:       v.GetInt("queue.agentic_context.keep_recent_turns"),
+		},
 		Instructions: InstructionsConfig{
 			ProjectFile:         v.GetString("queue.instructions.project_file"),
 			UserPreferencesFile: v.GetString("queue.instructions.user_preferences_file"),
