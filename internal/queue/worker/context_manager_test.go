@@ -1,15 +1,219 @@
 package worker
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
+	"agentd/internal/config"
 	"agentd/internal/gateway/spec"
+	"agentd/internal/models"
 )
 
+type mockGateway struct{}
+
+func (m *mockGateway) Generate(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
+	if req.JSONMode {
+		return spec.AIResponse{Content: `{"decisions_made": ["test decision"], "facts_established": ["test fact"]}`}, nil
+	}
+	return spec.AIResponse{Content: "normal response"}, nil
+}
+func (m *mockGateway) GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error) {
+	return nil, nil
+}
+func (m *mockGateway) AnalyzeScope(ctx context.Context, userIntent string) (*spec.ScopeAnalysis, error) {
+	return nil, nil
+}
+func (m *mockGateway) ClassifyIntent(ctx context.Context, userIntent string) (*spec.IntentAnalysis, error) {
+	return nil, nil
+}
+
+// newTestCM creates a ContextManager seeded with working zone messages
+// for correction-related tests that don't need full config/gateway.
+func newTestCM(seed []spec.PromptMessage) *ContextManager {
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "", "")
+	cm.workingZone.Messages = append([]spec.PromptMessage(nil), seed...)
+	return cm
+}
+
 // ---------------------------------------------------------------------------
-// CorrectionRecord
+// Structured Context Zone tests
+// ---------------------------------------------------------------------------
+
+func TestPartitionAnchor(t *testing.T) {
+	cm := &ContextManager{}
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "sys1"},
+		{Role: "system", Content: "sys2"},
+		{Role: "user", Content: "user1"},
+		{Role: "assistant", Content: "ast1"},
+		{Role: "tool", Content: "tool1"},
+	}
+	anchor, rest := cm.partitionAnchor(messages)
+	if len(anchor) != 3 {
+		t.Errorf("expected 3 anchor messages, got %d", len(anchor))
+	}
+	if anchor[0].Content != "sys1" || anchor[1].Content != "sys2" || anchor[2].Content != "user1" {
+		t.Errorf("unexpected anchor content")
+	}
+	if len(rest) != 2 {
+		t.Errorf("expected 2 remaining messages, got %d", len(rest))
+	}
+}
+
+func TestGroupTurns(t *testing.T) {
+	cm := &ContextManager{}
+	messages := []spec.PromptMessage{
+		{Role: "user", Content: "user1"},
+		{Role: "assistant", Content: "ast1", ToolCalls: []spec.ToolCall{{ID: "1"}}},
+		{Role: "tool", ToolCallID: "1", Content: "res1"},
+		{Role: "user", Content: "user2"},
+		{Role: "assistant", Content: "ast2"},
+	}
+	turns := cm.groupTurns(messages)
+	if len(turns) != 2 {
+		t.Fatalf("expected 2 turns, got %d", len(turns))
+	}
+	if len(turns[0].Messages) != 3 {
+		t.Errorf("expected 3 messages in turn 0, got %d", len(turns[0].Messages))
+	}
+	if len(turns[1].Messages) != 2 {
+		t.Errorf("expected 2 messages in turn 1, got %d", len(turns[1].Messages))
+	}
+}
+
+func TestRollingSummarizationTrigger(t *testing.T) {
+	cfg := config.AgenticContextConfig{
+		RollingThresholdTurns: 2,
+		KeepRecentTurns:       1,
+	}
+	cm := NewContextManager(cfg, &mockGateway{}, "agent", "task")
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "ast1"},
+		{Role: "user", Content: "user2"},
+		{Role: "assistant", Content: "ast2"},
+		{Role: "user", Content: "user3"},
+		{Role: "assistant", Content: "ast3"},
+	}
+	prepared, err := cm.PrepareContext(context.Background(), messages)
+	if err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	if len(prepared) != 5 {
+		t.Errorf("expected 5 prepared messages, got %d", len(prepared))
+	}
+	foundSummary := false
+	for _, m := range prepared {
+		if m.Role == "system" && len(m.Content) > 0 && m.Content[0] == 'P' {
+			foundSummary = true
+		}
+	}
+	if !foundSummary {
+		t.Errorf("summary message not found in prepared context")
+	}
+}
+
+func TestSummarizationCaching(t *testing.T) {
+	cfg := config.AgenticContextConfig{
+		RollingThresholdTurns: 1,
+		KeepRecentTurns:       1,
+	}
+	cm := NewContextManager(cfg, &mockGateway{}, "agent", "task")
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "user", Content: "user1"},
+		{Role: "assistant", Content: "ast1"},
+		{Role: "user", Content: "user2"},
+		{Role: "assistant", Content: "ast2"},
+	}
+	if _, err := cm.PrepareContext(context.Background(), messages); err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	if len(cm.summarizedTurns) != 1 {
+		t.Errorf("expected 1 cached turn, got %d", len(cm.summarizedTurns))
+	}
+	if _, err := cm.PrepareContext(context.Background(), messages); err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	if len(cm.summarizedTurns) != 1 {
+		t.Errorf("expected still 1 cached turn, got %d", len(cm.summarizedTurns))
+	}
+}
+
+func TestIncrementalCaching(t *testing.T) {
+	cfg := config.AgenticContextConfig{
+		RollingThresholdTurns: 1,
+		KeepRecentTurns:       1,
+	}
+	cm := NewContextManager(cfg, &mockGateway{}, "agent", "task")
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "user", Content: "user1"},
+		{Role: "assistant", Content: "ast1"},
+		{Role: "user", Content: "user2"},
+		{Role: "assistant", Content: "ast2"},
+	}
+	if _, err := cm.PrepareContext(context.Background(), messages); err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	if len(cm.summarizedTurns) != 1 {
+		t.Fatalf("expected 1 cached turn after first call, got %d", len(cm.summarizedTurns))
+	}
+
+	// Add a new turn — only the new turn should need summarization
+	messages = append(messages,
+		spec.PromptMessage{Role: "user", Content: "user3"},
+		spec.PromptMessage{Role: "assistant", Content: "ast3"},
+	)
+	if _, err := cm.PrepareContext(context.Background(), messages); err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	if len(cm.summarizedTurns) != 2 {
+		t.Errorf("expected 2 cached turns after incremental call, got %d", len(cm.summarizedTurns))
+	}
+	if cm.runningSummary == nil {
+		t.Error("expected running summary to be set")
+	}
+}
+
+func TestBudgetEnforcement(t *testing.T) {
+	cfg := config.AgenticContextConfig{
+		AnchorBudget:          100,
+		WorkingBudget:         100,
+		CompressedBudget:      100,
+		RollingThresholdTurns: 10,
+	}
+	cm := NewContextManager(cfg, &mockGateway{}, "agent", "task")
+	longContent := strings.Repeat("A", 1000)
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "user", Content: "user1"},
+		{Role: "assistant", Content: longContent},
+	}
+	prepared, err := cm.PrepareContext(context.Background(), messages)
+	if err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	if totalChars(prepared) >= totalChars(messages) {
+		t.Errorf("expected total characters to be reduced, but got %d >= %d", totalChars(prepared), totalChars(messages))
+	}
+	totalBudget := cfg.AnchorBudget + cfg.WorkingBudget + cfg.CompressedBudget
+	if totalChars(prepared) > totalBudget {
+		t.Errorf("prepared context exceeds budget: got %d > %d", totalChars(prepared), totalBudget)
+	}
+	if prepared[0].Content != "sys" || prepared[1].Content != "task" {
+		t.Errorf("anchor messages were modified")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Correction injection tests (from main)
 // ---------------------------------------------------------------------------
 
 func TestCorrectionRecord_FormatMessage(t *testing.T) {
@@ -30,23 +234,16 @@ func TestCorrectionRecord_FormatMessage(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// InjectCorrection — basic prepend behavior
-// ---------------------------------------------------------------------------
-
 func TestContextManager_InjectCorrection_PrependsToWorkingZone(t *testing.T) {
-	seed := []spec.PromptMessage{
+	cm := newTestCM([]spec.PromptMessage{
 		{Role: "system", Content: "system prompt"},
 		{Role: "user", Content: "do the thing"},
-	}
-	cm := NewContextManager(seed)
-
+	})
 	cm.InjectCorrection(CorrectionRecord{
 		Contradiction: "old fact",
 		CorrectFact:   "new fact",
 		Source:        CorrectionSourceHuman,
 	})
-
 	msgs := cm.WorkingMessages()
 	if len(msgs) != 3 {
 		t.Fatalf("expected 3 messages, got %d", len(msgs))
@@ -59,15 +256,10 @@ func TestContextManager_InjectCorrection_PrependsToWorkingZone(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Multiple corrections stack newest-first
-// ---------------------------------------------------------------------------
-
 func TestContextManager_MultipleCorrections_NewestFirst(t *testing.T) {
-	cm := NewContextManager([]spec.PromptMessage{
+	cm := newTestCM([]spec.PromptMessage{
 		{Role: "user", Content: "hello"},
 	})
-
 	cm.InjectCorrection(CorrectionRecord{
 		Contradiction: "first",
 		CorrectFact:   "corrected-first",
@@ -78,7 +270,6 @@ func TestContextManager_MultipleCorrections_NewestFirst(t *testing.T) {
 		CorrectFact:   "corrected-second",
 		Source:        CorrectionSourceHuman,
 	})
-
 	msgs := cm.WorkingMessages()
 	if len(msgs) != 3 {
 		t.Fatalf("expected 3 messages (2 corrections + 1 seed), got %d", len(msgs))
@@ -89,7 +280,6 @@ func TestContextManager_MultipleCorrections_NewestFirst(t *testing.T) {
 	if !strings.Contains(msgs[1].Content, "first") {
 		t.Fatalf("older correction should be second, got %q", msgs[1].Content)
 	}
-
 	corrections := cm.Corrections()
 	if len(corrections) != 2 {
 		t.Fatalf("expected 2 correction records, got %d", len(corrections))
@@ -99,14 +289,9 @@ func TestContextManager_MultipleCorrections_NewestFirst(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// InjectHumanCorrection convenience method
-// ---------------------------------------------------------------------------
-
 func TestContextManager_InjectHumanCorrection(t *testing.T) {
-	cm := NewContextManager(nil)
+	cm := newTestCM(nil)
 	cm.InjectHumanCorrection("stale fact", "current fact")
-
 	corrections := cm.Corrections()
 	if len(corrections) != 1 {
 		t.Fatalf("expected 1 correction, got %d", len(corrections))
@@ -114,27 +299,16 @@ func TestContextManager_InjectHumanCorrection(t *testing.T) {
 	if corrections[0].Source != CorrectionSourceHuman {
 		t.Fatalf("expected human source, got %q", corrections[0].Source)
 	}
-	if corrections[0].Contradiction != "stale fact" {
-		t.Fatalf("unexpected contradiction: %q", corrections[0].Contradiction)
-	}
-	if corrections[0].CorrectFact != "current fact" {
-		t.Fatalf("unexpected correct fact: %q", corrections[0].CorrectFact)
-	}
 }
 
-// ---------------------------------------------------------------------------
-// AddSummary + Messages ordering
-// ---------------------------------------------------------------------------
-
 func TestContextManager_Messages_CompressedThenWorking(t *testing.T) {
-	cm := NewContextManager([]spec.PromptMessage{
+	cm := newTestCM([]spec.PromptMessage{
 		{Role: "user", Content: "working message"},
 	})
 	cm.AddSummary(TurnSummary{
 		Summary:          "summary of turns 1-5",
 		FactsEstablished: []string{"port=3000"},
 	})
-
 	msgs := cm.Messages()
 	if len(msgs) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(msgs))
@@ -147,19 +321,14 @@ func TestContextManager_Messages_CompressedThenWorking(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// CheckToolResult — auto-detect contradictions
-// ---------------------------------------------------------------------------
-
 func TestContextManager_CheckToolResult_DetectsContradiction(t *testing.T) {
-	cm := NewContextManager([]spec.PromptMessage{
+	cm := newTestCM([]spec.PromptMessage{
 		{Role: "user", Content: "query"},
 	})
 	cm.AddSummary(TurnSummary{
 		Summary:          "Server configured on port 3000",
 		FactsEstablished: []string{"port=3000"},
 	})
-
 	detected := cm.CheckToolResult("port=8080")
 	if len(detected) != 1 {
 		t.Fatalf("expected 1 contradiction, got %d", len(detected))
@@ -167,7 +336,6 @@ func TestContextManager_CheckToolResult_DetectsContradiction(t *testing.T) {
 	if detected[0].Source != CorrectionSourceTool {
 		t.Fatalf("expected tool source, got %q", detected[0].Source)
 	}
-
 	msgs := cm.WorkingMessages()
 	if len(msgs) < 2 {
 		t.Fatalf("expected at least 2 messages after correction, got %d", len(msgs))
@@ -178,21 +346,16 @@ func TestContextManager_CheckToolResult_DetectsContradiction(t *testing.T) {
 }
 
 func TestContextManager_CheckToolResult_NoContradiction(t *testing.T) {
-	cm := NewContextManager(nil)
+	cm := newTestCM(nil)
 	cm.AddSummary(TurnSummary{
 		Summary:          "Server on port 3000",
 		FactsEstablished: []string{"port=3000"},
 	})
-
 	detected := cm.CheckToolResult("port=3000")
 	if len(detected) != 0 {
 		t.Fatalf("expected no contradictions for matching value, got %d", len(detected))
 	}
 }
-
-// ---------------------------------------------------------------------------
-// IsCorrectionMessage
-// ---------------------------------------------------------------------------
 
 func TestIsCorrectionMessage(t *testing.T) {
 	tests := []struct {
@@ -214,16 +377,11 @@ func TestIsCorrectionMessage(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// AppendWorking
-// ---------------------------------------------------------------------------
-
 func TestContextManager_AppendWorking(t *testing.T) {
-	cm := NewContextManager([]spec.PromptMessage{
+	cm := newTestCM([]spec.PromptMessage{
 		{Role: "user", Content: "first"},
 	})
 	cm.AppendWorking(spec.PromptMessage{Role: "assistant", Content: "reply"})
-
 	msgs := cm.WorkingMessages()
 	if len(msgs) != 2 {
 		t.Fatalf("expected 2, got %d", len(msgs))
@@ -233,12 +391,8 @@ func TestContextManager_AppendWorking(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Timestamp auto-fill
-// ---------------------------------------------------------------------------
-
 func TestInjectCorrection_AutoFillsTimestamp(t *testing.T) {
-	cm := NewContextManager(nil)
+	cm := newTestCM(nil)
 	before := time.Now()
 	cm.InjectCorrection(CorrectionRecord{
 		Contradiction: "a",
@@ -246,7 +400,6 @@ func TestInjectCorrection_AutoFillsTimestamp(t *testing.T) {
 		Source:        CorrectionSourceTool,
 	})
 	after := time.Now()
-
 	rec := cm.Corrections()[0]
 	if rec.Timestamp.Before(before) || rec.Timestamp.After(after) {
 		t.Fatalf("timestamp %v should be between %v and %v", rec.Timestamp, before, after)

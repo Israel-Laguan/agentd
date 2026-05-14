@@ -13,7 +13,6 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/gateway/truncation"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/safety"
@@ -55,6 +54,7 @@ type Worker struct {
 	budgetTracker       spec.BudgetTracker
 	hooks               *HookChain
 	pluginMounter       PluginMounter
+	contextCfg          config.AgenticContextConfig
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -78,6 +78,7 @@ type WorkerOptions struct {
 	AgenticTruncatorMax     int
 	AgenticTruncationThresh int
 	AgenticCharacterBudget  int
+	AgenticContext          config.AgenticContextConfig
 	Canceller               *CancelRegistry
 	Tuner                   *planning.ParameterTuner
 	Retriever               MemoryRetriever
@@ -136,6 +137,7 @@ func NewWorker(
 	hooks := base.Clone()
 	hooks.PrependPost(ScrubResultHook(scrubber))
 	hooks.RegisterPost(AuditHook(sink, scrubber))
+
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
@@ -155,6 +157,7 @@ func NewWorker(
 		budgetTracker:       budgetTracker,
 		hooks:               hooks,
 		pluginMounter:       opts.PluginMounter,
+		contextCfg:          opts.AgenticContext,
 	}
 }
 
@@ -331,12 +334,36 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
 	deadlineGuard := NewDeadlineGuard(cancelCtx)
-	agenticTruncator := truncation.NewAgenticTruncator(w.truncatorMax)
+
+	// ContextManager is initialized lazily per task to handle its own cache/state
+	contextCfg := w.contextCfg
+	if contextCfg.RollingThresholdTurns <= 0 {
+		contextCfg.RollingThresholdTurns = config.DefaultRollingThresholdTurns
+	}
+	if contextCfg.KeepRecentTurns <= 0 {
+		contextCfg.KeepRecentTurns = config.DefaultKeepRecentTurns
+	}
+	if contextCfg.AnchorBudget <= 0 {
+		contextCfg.AnchorBudget = config.DefaultAnchorBudget
+	}
+	if contextCfg.WorkingBudget <= 0 {
+		contextCfg.WorkingBudget = config.DefaultWorkingBudget
+	}
+	if contextCfg.CompressedBudget <= 0 {
+		contextCfg.CompressedBudget = config.DefaultCompressedBudget
+	}
+
+	cm := NewContextManager(
+		contextCfg,
+		w.gateway,
+		task.AgentID,
+		task.ID,
+	)
 
 	for {
 		shouldContinue, err := w.processAgenticIteration(
 			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
-			iterationGuard, budgetGuard, deadlineGuard, agenticTruncator,
+			iterationGuard, budgetGuard, deadlineGuard, cm,
 			taskHooks, taskCaps,
 		)
 		if err != nil {
@@ -353,7 +380,7 @@ func (w *Worker) processAgenticIteration(
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
 	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
-	deadlineGuard *DeadlineGuard, agenticTruncator spec.Truncator,
+	deadlineGuard *DeadlineGuard, cm *ContextManager,
 	taskHooks *HookChain, _ *capabilities.Registry,
 ) (bool, error) {
 	if err := deadlineGuard.BeforeIteration(); err != nil {
@@ -366,14 +393,13 @@ func (w *Worker) processAgenticIteration(
 		return false, err
 	}
 
-	if len(*messages) > w.truncationThreshold || (w.characterBudget > 0 && totalChars(*messages) > w.characterBudget) {
-		var err error
-		*messages, err = agenticTruncator.Apply(ctx, *messages, w.characterBudget)
-		if err != nil {
-			w.handleGatewayError(ctx, task, err)
-			return false, err
-		}
+	// Replace legacy truncator with ContextManager
+	prepared, err := cm.PrepareContext(ctx, *messages)
+	if err != nil {
+		w.handleGatewayError(ctx, task, err)
+		return false, err
 	}
+	*messages = prepared
 
 	if iterationGuard.ShouldInjectFinalMessage() {
 		*messages = append(*messages, iterationGuard.FinalMessage())
