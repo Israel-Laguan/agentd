@@ -41,32 +41,40 @@ func (cm *ContextManager) enforceBudget(messages []spec.PromptMessage, totalBudg
 		return fixed
 	}
 
-	// Apply MiddleOut to messages in the working zone
+	// Apply MiddleOut to messages in the working zone, tracking a global remaining counter.
 	strategy := truncation.MiddleOutStrategy{}
-	truncatedWorking := make([]spec.PromptMessage, len(working))
+	truncatedWorking := make([]spec.PromptMessage, 0, len(working))
 
-	// Apportion budget roughly equally among working messages
 	if len(working) > 0 {
-		perMessageBudget := remainingBudget / len(working)
-		if perMessageBudget < 1 {
-			perMessageBudget = 1
-		}
-		for i, m := range working {
-			truncatedWorking[i] = m
-			if utf8.RuneCountInString(m.Content) > perMessageBudget {
-				truncatedWorking[i].Content = strategy.Truncate(m.Content, perMessageBudget)
+		remaining := remainingBudget
+		for _, m := range working {
+			if remaining <= 0 {
+				break
 			}
-			// Also truncate large tool call arguments to respect budget
-			if len(m.ToolCalls) > 0 {
-				tcCopy := make([]spec.ToolCall, len(m.ToolCalls))
-				copy(tcCopy, m.ToolCalls)
+			tm := m
+			if utf8.RuneCountInString(tm.Content) > remaining {
+				tm.Content = strategy.Truncate(tm.Content, remaining)
+			}
+			remaining -= utf8.RuneCountInString(tm.Content)
+
+			if len(tm.ToolCalls) > 0 && remaining > 0 {
+				tcCopy := make([]spec.ToolCall, len(tm.ToolCalls))
+				copy(tcCopy, tm.ToolCalls)
 				for j, tc := range tcCopy {
-					if utf8.RuneCountInString(tc.Function.Arguments) > perMessageBudget {
-						tcCopy[j].Function.Arguments = strategy.Truncate(tc.Function.Arguments, perMessageBudget)
+					remaining -= utf8.RuneCountInString(tc.Function.Name)
+					if remaining <= 0 {
+						tcCopy[j].Function.Arguments = ""
+						tcCopy = tcCopy[:j+1]
+						break
 					}
+					if utf8.RuneCountInString(tc.Function.Arguments) > remaining {
+						tcCopy[j].Function.Arguments = strategy.Truncate(tc.Function.Arguments, remaining)
+					}
+					remaining -= utf8.RuneCountInString(tcCopy[j].Function.Arguments)
 				}
-				truncatedWorking[i].ToolCalls = tcCopy
+				tm.ToolCalls = tcCopy
 			}
+			truncatedWorking = append(truncatedWorking, tm)
 		}
 	}
 
