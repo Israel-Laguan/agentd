@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"agentd/internal/gateway"
@@ -18,9 +19,12 @@ import (
 type subagentMockGateway struct {
 	responses []gateway.AIResponse
 	callIdx   int
+	mu        sync.Mutex
 }
 
 func (m *subagentMockGateway) Generate(_ context.Context, _ gateway.AIRequest) (gateway.AIResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.callIdx >= len(m.responses) {
 		return gateway.AIResponse{Content: "done"}, nil
 	}
