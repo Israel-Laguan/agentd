@@ -266,3 +266,16 @@ func (cm *ContextManager) SnapshotCorrections() CorrectionSnapshot {
 		CapturedAt:  time.Now(),
 	}
 }
+
+// ShouldPollComments atomically checks whether enough time has elapsed since
+// the last comment poll and updates the last poll timestamp if so.
+func (cm *ContextManager) ShouldPollComments(minInterval time.Duration) bool {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	now := time.Now()
+	if now.Sub(cm.lastCommentPoll) < minInterval {
+		return false
+	}
+	cm.lastCommentPoll = now
+	return true
+}

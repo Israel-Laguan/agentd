@@ -76,6 +76,7 @@ type ContextManager struct {
 	summaries       []TurnSummary
 	corrections     []CorrectionRecord
 	seenCorrections map[string]bool
+	lastCommentPoll time.Time
 }
 
 func cloneTurnSummary(ts TurnSummary) TurnSummary {
