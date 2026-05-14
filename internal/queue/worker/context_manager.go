@@ -78,8 +78,23 @@ type ContextManager struct {
 
 func cloneTurnSummary(ts TurnSummary) TurnSummary {
 	out := ts
+	if ts.DecisionsMade != nil {
+		out.DecisionsMade = append([]string(nil), ts.DecisionsMade...)
+	}
 	if ts.FactsEstablished != nil {
 		out.FactsEstablished = append([]string(nil), ts.FactsEstablished...)
+	}
+	if ts.WorkCompleted != nil {
+		out.WorkCompleted = append([]string(nil), ts.WorkCompleted...)
+	}
+	if ts.WorkRemaining != nil {
+		out.WorkRemaining = append([]string(nil), ts.WorkRemaining...)
+	}
+	if ts.FilesModified != nil {
+		out.FilesModified = append([]string(nil), ts.FilesModified...)
+	}
+	if ts.ErrorsEncountered != nil {
+		out.ErrorsEncountered = append([]string(nil), ts.ErrorsEncountered...)
 	}
 	return out
 }
