@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"agentd/internal/api"
@@ -74,16 +75,28 @@ func buildStartRuntime(cfg config.Config, store models.KanbanStore, deps runtime
 
 func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *queue.Worker {
 	workerRetriever := &memory.Retriever{Store: store, Cfg: cfg.Librarian}
+
+	userPrefsPath := ""
+	if cfg.Queue.Instructions.UserPreferencesFile != "" {
+		userPrefsPath = filepath.Join(cfg.HomeDir, cfg.Queue.Instructions.UserPreferencesFile)
+	}
+
 	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, queue.WorkerOptions{
-		Canceller:           deps.canceller,
-		Tuner:               queue.NewParameterTuner(cfg.Healing),
-		Retriever:           workerRetriever,
-		HeartbeatInterval:   cfg.Cron.Heartbeat,
-		SandboxWallTimeout:  cfg.Sandbox.WallTimeout,
-		SandboxEnvAllowlist: cfg.Sandbox.EnvAllowlist,
-		SandboxExtraEnv:     cfg.Sandbox.ExtraEnv,
-		SandboxScrubPatterns: cfg.Sandbox.ScrubPatterns,
-		AgenticContext:      cfg.Queue.AgenticContext,
+		Canceller:                 deps.canceller,
+		Tuner:                     queue.NewParameterTuner(cfg.Healing),
+		Retriever:                 workerRetriever,
+		HeartbeatInterval:         cfg.Cron.Heartbeat,
+		SandboxWallTimeout:        cfg.Sandbox.WallTimeout,
+		SandboxEnvAllowlist:       cfg.Sandbox.EnvAllowlist,
+		SandboxExtraEnv:           cfg.Sandbox.ExtraEnv,
+		SandboxScrubPatterns:      cfg.Sandbox.ScrubPatterns,
+		AgenticContext:            cfg.Queue.AgenticContext,
+		InstructionsProjectFile:   cfg.Queue.Instructions.ProjectFile,
+		InstructionsUserPrefsPath: userPrefsPath,
+		SkillsProjectDir:          cfg.Queue.Skills.ProjectDir,
+		SkillsGlobalDir:           cfg.Queue.Skills.GlobalDir,
+		SkillsThreshold:           cfg.Queue.Skills.Threshold,
+		SkillsTopK:                cfg.Queue.Skills.TopK,
 	})
 }
 

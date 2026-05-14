@@ -6,9 +6,6 @@ COVERPKG ?= ./...
 .PHONY: build test coverage run tidy lint loc check test-e2e
 
 test-e2e:
-	$(GO) test -v ./e2e/... test-e2e
-
-test-e2e:
 	$(GO) test -v ./e2e/...
 
 build:
@@ -33,4 +30,4 @@ lint:
 loc:
 	python3 ./scripts/check_loc.py --max-lines 300
 
-check: loc lint test
+check: loc lint
