@@ -133,7 +133,7 @@ func (pl *PluginLoader) readPluginDirs() ([]os.DirEntry, error) {
 	entries, err := os.ReadDir(pl.pluginsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if pl.scope != ScopeGlobal {
+			if pl.scope == ScopeProject {
 				return nil, nil
 			}
 			return nil, fmt.Errorf("%w: %s", ErrPluginDirNotFound, pl.pluginsDir)

@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"fmt"
 	"log/slog"
 	"path/filepath"
 	"sort"
@@ -33,7 +32,11 @@ func (pl *PluginLoader) LoadByNames(names []string) ([]LoadResult, error) {
 		dir := filepath.Join(pl.pluginsDir, entry.Name())
 		res, err := pl.loadOne(dir)
 		if err != nil {
-			return nil, fmt.Errorf("plugin %s: %w", entry.Name(), err)
+			slog.Warn("failed to load session plugin, skipping",
+				"plugin_dir", entry.Name(),
+				"error", err,
+			)
+			continue
 		}
 		if !wanted[res.Manifest.Name] {
 			continue

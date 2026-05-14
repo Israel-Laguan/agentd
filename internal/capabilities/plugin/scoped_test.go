@@ -48,12 +48,12 @@ func TestScopedLoader_ProjectScopeReturnsEmptyOnMissingDir(t *testing.T) {
 	assert.Empty(t, results)
 }
 
-func TestScopedLoader_SessionScopeReturnsEmptyOnMissingDir(t *testing.T) {
+func TestScopedLoader_SessionScopeErrorsOnMissingDir(t *testing.T) {
 	t.Parallel()
 	loader := NewScopedPluginLoader(filepath.Join(t.TempDir(), "nope"), ScopeSession)
-	results, err := loader.LoadAll()
-	require.NoError(t, err)
-	assert.Empty(t, results)
+	_, err := loader.LoadAll()
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrPluginDirNotFound))
 }
 
 func TestLoadByNames_SelectsMatchingPlugins(t *testing.T) {
