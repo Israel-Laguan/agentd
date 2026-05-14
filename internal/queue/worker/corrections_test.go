@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -108,6 +109,45 @@ func TestDetectContradictions_CaseInsensitive(t *testing.T) {
 	detected := DetectContradictions(summaries, "server is not running")
 	if len(detected) != 1 {
 		t.Fatalf("expected case-insensitive match, got %d contradictions", len(detected))
+	}
+}
+
+func TestDetectContradictions_BooleanFlip(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"feature is enabled"}},
+	}
+	detected := DetectContradictions(summaries, "The feature is disabled")
+	if len(detected) != 1 {
+		t.Fatalf("expected 1 contradiction for boolean flip, got %d", len(detected))
+	}
+	if !strings.Contains(detected[0].CorrectFact, "disabled") {
+		t.Fatalf("expected 'disabled' in correct fact, got %q", detected[0].CorrectFact)
+	}
+}
+
+func TestDetectContradictions_ChangedPattern(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"Port is 3000"}},
+	}
+	detected := DetectContradictions(summaries, "Port changed to 8080")
+	if len(detected) != 1 {
+		t.Fatalf("expected 1 contradiction for changed pattern, got %d", len(detected))
+	}
+	if !strings.Contains(detected[0].CorrectFact, "8080") {
+		t.Fatalf("expected '8080' in correct fact, got %q", detected[0].CorrectFact)
+	}
+}
+
+func TestDetectContradictions_ProseValueChange(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"The server runs on port 3000"}},
+	}
+	detected := DetectContradictions(summaries, "The server runs on port 8080")
+	if len(detected) != 1 {
+		t.Fatalf("expected 1 contradiction for prose value change, got %d", len(detected))
+	}
+	if !strings.Contains(detected[0].CorrectFact, "8080") {
+		t.Fatalf("expected '8080' in correct fact, got %q", detected[0].CorrectFact)
 	}
 }
 

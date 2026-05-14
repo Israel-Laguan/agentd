@@ -109,10 +109,69 @@ func (cm *ContextManager) CheckToolResult(toolOutput string) []CorrectionRecord 
 	cm.mu.Lock()
 	summaries := make([]TurnSummary, len(cm.summaries))
 	copy(summaries, cm.summaries)
-	cm.mu.Unlock()
-	detected := DetectContradictions(summaries, toolOutput)
-	for _, rec := range detected {
-		cm.InjectCorrection(rec)
+	existing := make(map[string]bool)
+	for _, c := range cm.corrections {
+		existing[c.Contradiction] = true
 	}
-	return detected
+	cm.mu.Unlock()
+
+	detected := DetectContradictions(summaries, toolOutput)
+	var unique []CorrectionRecord
+	for _, rec := range detected {
+		if !existing[rec.Contradiction] {
+			cm.InjectCorrection(rec)
+			unique = append(unique, rec)
+			existing[rec.Contradiction] = true
+		}
+	}
+	return unique
+}
+
+// ParseCorrectionComment attempts to extract a CorrectionRecord from a
+// human or reviewer comment. Expected format:
+//   [CORRECT] was: <old fact>; is: <new fact>
+// Returns nil if the comment doesn't match.
+func ParseCorrectionComment(body string, source CorrectionSource) *CorrectionRecord {
+	if !strings.HasPrefix(body, "[CORRECT]") {
+		return nil
+	}
+	content := strings.TrimPrefix(body, "[CORRECT]")
+	parts := strings.Split(content, ";")
+	var was, is string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if strings.HasPrefix(p, "was:") {
+			was = strings.TrimSpace(strings.TrimPrefix(p, "was:"))
+		} else if strings.HasPrefix(p, "is:") {
+			is = strings.TrimSpace(strings.TrimPrefix(p, "is:"))
+		}
+	}
+	if was == "" || is == "" {
+		return nil
+	}
+	return &CorrectionRecord{
+		Contradiction: was,
+		CorrectFact:   is,
+		Source:        source,
+		Timestamp:     time.Now(),
+	}
+}
+
+// CorrectionSnapshot returns all corrections accumulated during the session,
+// suitable for submission to durable agent memory.
+type CorrectionSnapshot struct {
+	AgentID     string             `json:"agent_id"`
+	TaskID      string             `json:"task_id"`
+	Corrections []CorrectionRecord `json:"corrections"`
+	CapturedAt  time.Time          `json:"captured_at"`
+}
+
+// SnapshotCorrections captures the current state of corrections for the session.
+func (cm *ContextManager) SnapshotCorrections() CorrectionSnapshot {
+	return CorrectionSnapshot{
+		AgentID:     cm.agentID,
+		TaskID:      cm.taskID,
+		Corrections: cm.Corrections(),
+		CapturedAt:  time.Now(),
+	}
 }

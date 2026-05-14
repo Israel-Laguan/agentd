@@ -393,6 +393,9 @@ func (w *Worker) processAgenticIteration(
 		return false, err
 	}
 
+	// Ingest human corrections from task comments
+	w.ingestHumanCorrections(ctx, task.ID, cm)
+
 	// Replace legacy truncator with ContextManager
 	prepared, err := cm.PrepareContext(ctx, *messages)
 	if err != nil {
@@ -447,6 +450,13 @@ func (w *Worker) processAgenticIteration(
 
 	for _, call := range resp.ToolCalls {
 		result := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, call, toolToAdapter, toolExecutor, taskHooks)
+
+		if detected := cm.CheckToolResult(result); len(detected) > 0 {
+			slog.Info("auto-detected context corrections",
+				"task_id", task.ID,
+				"count", len(detected),
+			)
+		}
 
 		*messages = append(*messages, gateway.PromptMessage{
 			Role:       "tool",
@@ -652,6 +662,23 @@ func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
 		}
 	}
 	return false
+}
+
+func (w *Worker) ingestHumanCorrections(ctx context.Context, taskID string, cm *ContextManager) {
+	comments, err := w.store.ListComments(ctx, taskID)
+	if err != nil {
+		slog.Warn("failed to list task comments for corrections", "task_id", taskID, "error", err)
+		return
+	}
+	for _, c := range comments {
+		if c.Author == models.CommentAuthorUser || c.Author == models.CommentAuthorFrontdesk || string(c.Author) == string(CorrectionSourceReviewer) {
+			if rec := ParseCorrectionComment(c.Body, CorrectionSource(c.Author)); rec != nil {
+				// InjectCorrection handles dedup internally if we want, or we can check here.
+				// For now, InjectCorrection is simple.
+				cm.InjectCorrection(*rec)
+			}
+		}
+	}
 }
 
 // SetSandbox swaps the executor used by integration tests that replace the sandbox.
