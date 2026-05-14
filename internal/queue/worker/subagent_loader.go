@@ -86,13 +86,13 @@ func (l *SubagentLoader) LoadByName(workspacePath, name string) (*SubagentDefini
 //	## Forbidden Tools
 //	- write
 //
-	//	## Max Iterations
-	//	30
-	//
-	//	## Context Budget
-	//	12000
-	//
-	//	## Output Schema
+//	## Max Iterations
+//	30
+//
+//	## Context Budget
+//	12000
+//
+//	## Output Schema
 //	<schema description>
 //
 //	## Termination Criteria

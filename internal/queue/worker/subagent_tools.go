@@ -58,8 +58,8 @@ func (d *SubagentDelegate) capabilityToolDefinitions(ctx context.Context) []gate
 	seen := make(map[string]bool)
 	appendTools := func(registry interface {
 		GetToolsAndAdapterIndex(context.Context) ([]gateway.ToolDefinition, map[string]string, error)
-	}) {
-		if registry == nil {
+	}, isNil bool) {
+		if isNil {
 			return
 		}
 		registryTools, _, err := registry.GetToolsAndAdapterIndex(ctx)
@@ -76,8 +76,8 @@ func (d *SubagentDelegate) capabilityToolDefinitions(ctx context.Context) []gate
 			tools = append(tools, tool)
 		}
 	}
-	appendTools(d.scopedCapabilities)
-	appendTools(d.capabilities)
+	appendTools(d.scopedCapabilities, d.scopedCapabilities == nil)
+	appendTools(d.capabilities, d.capabilities == nil)
 	return tools
 }
 
