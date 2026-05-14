@@ -88,7 +88,7 @@ export function ChatPanel({ messages, input, setInput, isTyping, draftPlan, hand
             <div className="space-y-1.5 mb-5">
               {draftPlan.tasks.map((t, i: number) => (
                 <div key={i} className="flex gap-3 p-2.5 bg-bg/30 border border-border rounded-lg group hover:border-text-dim/20 transition-colors">
-                  <span className="text-[10px] font-mono flex items-center justify-center text-text-dim group-hover:text-accent">0{i + 1}</span>
+                  <span className="text-[10px] font-mono flex items-center justify-center text-text-dim group-hover:text-accent">{String(i + 1).padStart(2, '0')}</span>
                   <div>
                     <h5 className="text-[11px] font-bold text-text uppercase tracking-tight">{t.title}</h5>
                     <p className="text-[10px] text-text-dim leading-tight">{t.description}</p>
@@ -118,15 +118,20 @@ export function ChatPanel({ messages, input, setInput, isTyping, draftPlan, hand
           aria-label="Chat input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            if (e.nativeEvent.isComposing || isTyping) return;
+            handleSend();
+          }}
           placeholder="Input organizational goal..."
           className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-3 text-text placeholder:text-text-dim/30"
         />
         <button
           type="button"
           aria-label="Send message"
-          onClick={handleSend}
-          className="h-9 px-4 bg-accent text-white rounded-lg flex items-center justify-center hover:bg-accent-hover transition-all mr-1 shadow-md"
+          onClick={() => !isTyping && handleSend()}
+          disabled={isTyping || !input.trim()}
+          className="h-9 px-4 bg-accent text-white rounded-lg flex items-center justify-center hover:bg-accent-hover transition-all mr-1 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Send size={16} />
         </button>

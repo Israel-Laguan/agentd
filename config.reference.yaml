@@ -131,7 +131,7 @@ queue:
   task_deadline: "10m"       # wall-clock timeout per worker task (the Reaper)
   poll_max_interval: "10s"   # adaptive backoff ceiling when no tasks are available
   max_tool_iterations: 10    # max tool-call iterations per agentic task (0 = unlimited)
-  token_budget: 0            # per-task token cap; 0 = unlimited (Danger A)
+  token_budget: 0            # worker-level per-task token cap; 0 = unlimited (Danger A). See also gateway.budget.tokens_per_task.
   agentic_truncator_max: 30  # max messages after truncation in agentic mode
   agentic_truncation_threshold: 40  # message count threshold triggering truncation
   agentic_character_budget: 0  # max characters (0 = unlimited) for agentic mode truncation

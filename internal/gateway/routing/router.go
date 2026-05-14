@@ -114,6 +114,13 @@ func (r *Router) recordBudget(taskID string, usage int) {
 	}
 }
 
+// errTruncation is a wrapper to distinguish truncation errors from provider errors
+// so that generateOnce can return them immediately instead of cascading.
+type errTruncation struct{ err error }
+
+func (e errTruncation) Error() string { return e.err.Error() }
+func (e errTruncation) Unwrap() error { return e.err }
+
 func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq spec.AIRequest, hasRequestedTools bool, selectedHasToolSupport bool) (spec.AIResponse, bool, error) {
 	req := baseReq
 	if hasRequestedTools && !p.Capabilities().SupportsChatTools {
@@ -127,7 +134,7 @@ func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq s
 	if !req.SkipTruncation {
 		messages, err := r.applyTruncation(ctx, req.Messages, p.MaxInputChars())
 		if err != nil {
-			return spec.AIResponse{}, false, err
+			return spec.AIResponse{}, false, errTruncation{err}
 		}
 		req.Messages = messages
 	}
@@ -148,16 +155,26 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 	req = r.applyRoleRouting(req)
 	hasRequestedTools := len(req.Tools) > 0
 	selectedHasToolSupport := hasRequestedTools && r.detectToolSupport(req)
+	matchedProvider := false
 	var providerErrs []error
 	for _, p := range r.providers {
 		if req.Provider != "" && req.Provider != string(p.Name()) {
 			continue
 		}
-		if req.Provider != "" && len(req.Tools) > 0 && !p.Capabilities().SupportsChatTools {
-			return spec.AIResponse{}, fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", req.Provider)
+		matchedProvider = true
+		// When an explicit provider is requested with tools but doesn't support them,
+		// skip it so the after-loop error fires. Legacy fallback only applies to
+		// non-explicit provider cascading.
+		if req.Provider != "" && hasRequestedTools && !p.Capabilities().SupportsChatTools {
+			continue
 		}
 		resp, ok, err := r.tryProvider(ctx, p, req, hasRequestedTools, selectedHasToolSupport)
 		if err != nil {
+			// Truncation errors are not provider-specific; return immediately.
+			var te errTruncation
+			if errors.As(err, &te) {
+				return spec.AIResponse{}, te.err
+			}
 			providerErrs = append(providerErrs, err)
 			continue
 		}
@@ -166,8 +183,15 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 			return resp, nil
 		}
 	}
+	// Explicit provider requested and found, but none support tools.
+	if req.Provider != "" && matchedProvider && hasRequestedTools && !selectedHasToolSupport {
+		return spec.AIResponse{}, fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", req.Provider)
+	}
 	if req.Provider != "" && len(providerErrs) == 0 {
 		return spec.AIResponse{}, fmt.Errorf("LLM provider %q is not configured", req.Provider)
+	}
+	if len(providerErrs) == 0 {
+		return spec.AIResponse{}, fmt.Errorf("%w: all providers skipped (tool mismatch or empty cascade)", models.ErrLLMUnreachable)
 	}
 	return spec.AIResponse{}, fmt.Errorf("%w: %v", models.ErrLLMUnreachable, errors.Join(providerErrs...))
 }

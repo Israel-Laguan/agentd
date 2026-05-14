@@ -25,10 +25,10 @@ func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *ToolEx
 
 	allTools := append([]gateway.ToolDefinition(nil), toolExec.Definitions()...)
 	allTools = append(allTools, d.capabilityToolDefinitions(context.Background())...)
-	if toolExplicitlyAllowed(toolNameDelegate, def) {
+	if d.depth+1 < MaxDelegationDepth && toolExplicitlyAllowed(toolNameDelegate, def) {
 		allTools = append(allTools, DelegateToolDefinition())
 	}
-	if toolExplicitlyAllowed(toolNameDelegateParallel, def) {
+	if d.depth+1 < MaxDelegationDepth && toolExplicitlyAllowed(toolNameDelegateParallel, def) {
 		allTools = append(allTools, DelegateParallelToolDefinition())
 	}
 
