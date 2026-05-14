@@ -54,11 +54,21 @@ type Worker struct {
 	tokenBudget         int
 	budgetTracker       spec.BudgetTracker
 	hooks               *HookChain
+	pluginMounter       PluginMounter
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
 type MemoryRetriever interface {
 	Recall(ctx context.Context, intent, projectID, userID string) []models.Memory
+}
+
+// PluginMounter loads and mounts plugins from a directory into a
+// HookChain and capabilities Registry. The worker calls this to
+// mount project-scoped plugins (from workspace directories) and
+// session-scoped plugins (by name from AgentProfile.Plugins).
+type PluginMounter interface {
+	MountProject(workspacePath string, chain *HookChain, registry *capabilities.Registry) error
+	MountSession(names []string, chain *HookChain, registry *capabilities.Registry) error
 }
 
 type WorkerOptions struct {
@@ -78,6 +88,7 @@ type WorkerOptions struct {
 	SandboxScrubPatterns    []string
 	Capabilities            *capabilities.Registry
 	Hooks                   *HookChain
+	PluginMounter           PluginMounter
 }
 
 func NewWorker(
@@ -143,6 +154,7 @@ func NewWorker(
 		tokenBudget:         opts.TokenBudget,
 		budgetTracker:       budgetTracker,
 		hooks:               hooks,
+		pluginMounter:       opts.PluginMounter,
 	}
 }
 
@@ -310,9 +322,11 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		w.sandboxWallTimeout,
 	)
 
+	taskHooks, taskCaps := w.mountScopedPlugins(project, profile)
+
 	messages := w.seedMessages(ctx, task, profile)
 	messages = w.buildAgenticMessages(messages, profile)
-	tools, toolToAdapter := w.agenticTools(ctx, taskToolExecutor)
+	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
@@ -323,6 +337,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		shouldContinue, err := w.processAgenticIteration(
 			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
 			iterationGuard, budgetGuard, deadlineGuard, agenticTruncator,
+			taskHooks, taskCaps,
 		)
 		if err != nil {
 			return
@@ -339,6 +354,7 @@ func (w *Worker) processAgenticIteration(
 	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
 	deadlineGuard *DeadlineGuard, agenticTruncator spec.Truncator,
+	taskHooks *HookChain, _ *capabilities.Registry,
 ) (bool, error) {
 	if err := deadlineGuard.BeforeIteration(); err != nil {
 		w.handleGatewayError(ctx, task, err)
@@ -404,7 +420,7 @@ func (w *Worker) processAgenticIteration(
 	iterationGuard.AfterIteration(true)
 
 	for _, call := range resp.ToolCalls {
-		result := w.dispatchToolWithProject(ctx, task.ID, task.ProjectID, call, toolToAdapter, toolExecutor)
+		result := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, call, toolToAdapter, toolExecutor, taskHooks)
 
 		*messages = append(*messages, gateway.PromptMessage{
 			Role:       "tool",
