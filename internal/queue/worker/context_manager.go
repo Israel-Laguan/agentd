@@ -134,6 +134,7 @@ func (cm *ContextManager) PrepareContext(ctx context.Context, messages []spec.Pr
 	if len(messages) == 0 {
 		return messages, nil
 	}
+	messages = stripCorrectionMessages(messages)
 	anchor, remaining := cm.partitionAnchor(messages)
 	turns := cm.groupTurns(remaining)
 
