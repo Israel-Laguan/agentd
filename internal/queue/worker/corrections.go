@@ -40,12 +40,114 @@ func DetectContradictions(summaries []TurnSummary, toolOutput string) []Correcti
 				continue
 			}
 
+			if rec, ok := detectBooleanFlip(fact, lowerFact, lower, now); ok {
+				corrections = append(corrections, rec)
+				continue
+			}
+
+			if rec, ok := detectChangedPattern(fact, lowerFact, lower, now); ok {
+				corrections = append(corrections, rec)
+				continue
+			}
+
 			if rec, ok := detectKeyValueConflict(fact, lowerFact, toolKV, now); ok {
+				corrections = append(corrections, rec)
+				continue
+			}
+
+			if rec, ok := detectProseValueChange(fact, lowerFact, lower, now); ok {
 				corrections = append(corrections, rec)
 			}
 		}
 	}
 	return corrections
+}
+
+var booleanFlips = map[string]string{
+	"enabled":  "disabled",
+	"disabled": "enabled",
+	"active":    "inactive",
+	"inactive":  "active",
+	"running":   "stopped",
+	"stopped":   "running",
+	"true":      "false",
+	"false":     "true",
+	"on":        "off",
+	"off":       "on",
+	"yes":       "no",
+	"no":        "yes",
+}
+
+func detectBooleanFlip(originalFact, lowerFact, lowerOutput string, now time.Time) (CorrectionRecord, bool) {
+	for k, v := range booleanFlips {
+		if strings.Contains(lowerFact, k) {
+			// If fact says X is enabled, and output says X is disabled
+			subject := strings.TrimSpace(strings.ReplaceAll(lowerFact, k, ""))
+			if subject != "" && strings.Contains(lowerOutput, subject) && strings.Contains(lowerOutput, v) {
+				return CorrectionRecord{
+					Contradiction: originalFact,
+					CorrectFact:   subject + " is " + v,
+					Source:        CorrectionSourceTool,
+					Timestamp:     now,
+				}, true
+			}
+		}
+	}
+	return CorrectionRecord{}, false
+}
+
+func detectChangedPattern(originalFact, lowerFact, lowerOutput string, now time.Time) (CorrectionRecord, bool) {
+	patterns := []string{" changed to ", " updated to ", " is now "}
+	for _, p := range patterns {
+		if idx := strings.Index(lowerOutput, p); idx > 0 {
+			subject := strings.TrimSpace(lowerOutput[:idx])
+			// If the output says "Port changed to 8080", check if fact contains "port"
+			if subject != "" && strings.Contains(lowerFact, subject) {
+				newValue := strings.TrimSpace(lowerOutput[idx+len(p):])
+				if newValue != "" {
+					return CorrectionRecord{
+						Contradiction: originalFact,
+						CorrectFact:   subject + " is " + newValue,
+						Source:        CorrectionSourceTool,
+						Timestamp:     now,
+					}, true
+				}
+			}
+		}
+	}
+	return CorrectionRecord{}, false
+}
+
+func detectProseValueChange(originalFact, lowerFact, lowerOutput string, now time.Time) (CorrectionRecord, bool) {
+	verbs := []string{" is ", " runs on ", " uses ", " at "}
+	for _, v := range verbs {
+		if idx := strings.Index(lowerFact, v); idx > 0 {
+			subject := strings.TrimSpace(lowerFact[:idx])
+			if subject == "" {
+				continue
+			}
+			// Check if output contains the subject and the same verb but different value
+			if strings.Contains(lowerOutput, subject+v) {
+				valIdx := strings.Index(lowerOutput, subject+v) + len(subject+v)
+				lineEnd := strings.Index(lowerOutput[valIdx:], "\n")
+				if lineEnd == -1 {
+					lineEnd = len(lowerOutput[valIdx:])
+				}
+				newVal := strings.TrimSpace(lowerOutput[valIdx : valIdx+lineEnd])
+				oldVal := strings.TrimSpace(lowerFact[idx+len(v):])
+
+				if newVal != "" && newVal != oldVal {
+					return CorrectionRecord{
+						Contradiction: originalFact,
+						CorrectFact:   subject + v + newVal,
+						Source:        CorrectionSourceTool,
+						Timestamp:     now,
+					}, true
+				}
+			}
+		}
+	}
+	return CorrectionRecord{}, false
 }
 
 // detectNegation checks whether the tool output contains a negation of the

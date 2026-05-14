@@ -405,3 +405,85 @@ func TestInjectCorrection_AutoFillsTimestamp(t *testing.T) {
 		t.Fatalf("timestamp %v should be between %v and %v", rec.Timestamp, before, after)
 	}
 }
+
+func TestPrepareContext_InjectionPosition(t *testing.T) {
+	cfg := config.AgenticContextConfig{
+		RollingThresholdTurns: 10,
+	}
+	cm := NewContextManager(cfg, nil, "agent", "task")
+	cm.InjectCorrection(CorrectionRecord{
+		Contradiction: "stale fact",
+		CorrectFact:   "new fact",
+		Source:        CorrectionSourceHuman,
+	})
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "primary prompt"},
+		{Role: "user", Content: "first task"},
+		{Role: "user", Content: "follow up"},
+	}
+	prepared, err := cm.PrepareContext(context.Background(), messages)
+	if err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	// Expected: [system(primary), user(first task), system(correction), user(follow up)]
+	// Wait, anchor is system + first user.
+	if len(prepared) != 4 {
+		t.Fatalf("expected 4 messages, got %d", len(prepared))
+	}
+	if !IsCorrectionMessage(prepared[2].Content) {
+		t.Fatalf("expected correction at index 2, got %q", prepared[2].Content)
+	}
+}
+
+func TestParseCorrectionComment(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"valid", "[CORRECT] was: old; is: new", true},
+		{"valid with semicolon", "[CORRECT] was: old ; is: new ", true},
+		{"invalid format", "just a comment", false},
+		{"missing is", "[CORRECT] was: old", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := ParseCorrectionComment(tt.body, CorrectionSourceHuman)
+			if (rec != nil) != tt.want {
+				t.Fatalf("ParseCorrectionComment() = %v, want %v", rec != nil, tt.want)
+			}
+			if tt.want && (rec.Contradiction != "old" || rec.CorrectFact != "new") {
+				t.Fatalf("unexpected record content: %+v", rec)
+			}
+		})
+	}
+}
+
+func TestContextManager_CheckToolResult_Deduplication(t *testing.T) {
+	cm := newTestCM(nil)
+	cm.AddSummary(TurnSummary{
+		FactsEstablished: []string{"version=1.0.0"},
+	})
+	// First call detects and injects
+	detected := cm.CheckToolResult("version=2.0.0")
+	if len(detected) != 1 {
+		t.Fatalf("expected 1 detection, got %d", len(detected))
+	}
+	// Second call should dedup
+	detected2 := cm.CheckToolResult("version=2.0.0")
+	if len(detected2) != 0 {
+		t.Fatalf("expected 0 detections (dedup), got %d", len(detected2))
+	}
+}
+
+func TestSnapshotCorrections(t *testing.T) {
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent-123", "task-456")
+	cm.InjectHumanCorrection("old", "new")
+	snapshot := cm.SnapshotCorrections()
+	if snapshot.AgentID != "agent-123" || snapshot.TaskID != "task-456" {
+		t.Errorf("unexpected IDs in snapshot: %+v", snapshot)
+	}
+	if len(snapshot.Corrections) != 1 {
+		t.Errorf("expected 1 correction in snapshot, got %d", len(snapshot.Corrections))
+	}
+}
