@@ -139,12 +139,18 @@ func (l *SkillLoader) LoadAll(workspacePath string) ([]*Skill, error) {
 // loadDir reads all .md files from dir, parses each as a skill, and returns
 // non-empty skills. Returns (nil, nil) when the directory does not exist.
 func (l *SkillLoader) loadDir(dir string) ([]*Skill, error) {
-	entries, err := os.ReadDir(dir)
+	expanded := dir
+	if strings.HasPrefix(dir, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			expanded = filepath.Join(home, dir[2:])
+		}
+	}
+	entries, err := os.ReadDir(expanded)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read skill directory %s: %w", dir, err)
+		return nil, fmt.Errorf("read skill directory %s: %w", expanded, err)
 	}
 
 	var skills []*Skill
@@ -153,10 +159,10 @@ func (l *SkillLoader) loadDir(dir string) ([]*Skill, error) {
 			continue
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
-			slog.Warn("skipping symlinked skill file", "path", filepath.Join(dir, entry.Name()))
+			slog.Warn("skipping symlinked skill file", "path", filepath.Join(expanded, entry.Name()))
 			continue
 		}
-		path := filepath.Join(dir, entry.Name())
+		path := filepath.Join(expanded, entry.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
 			slog.Warn("skipping unreadable skill file", "path", path, "error", err)

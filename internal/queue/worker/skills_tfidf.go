@@ -3,6 +3,7 @@ package worker
 import (
 	"math"
 	"strings"
+	"unicode"
 )
 
 // ---------------------------------------------------------------------------
@@ -64,7 +65,7 @@ func tokenize(text string) map[string]int {
 	tf := make(map[string]int)
 	lower := strings.ToLower(text)
 	for _, word := range strings.FieldsFunc(lower, func(r rune) bool {
-		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_')
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_')
 	}) {
 		if len(word) > 1 {
 			tf[word]++
