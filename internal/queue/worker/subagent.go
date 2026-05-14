@@ -202,12 +202,18 @@ func (d *SubagentDelegate) DelegateParallel(
 	temperature float64,
 	maxTokens int,
 ) []*SubagentResult {
+	const maxConcurrentDelegates = 8
 	results := make([]*SubagentResult, len(tasks))
 	done := make(chan struct{}, len(tasks))
+	sem := make(chan struct{}, maxConcurrentDelegates)
 
 	for i, task := range tasks {
 		go func(idx int, t ParallelTask) {
-			defer func() { done <- struct{}{} }()
+			sem <- struct{}{}
+			defer func() {
+				<-sem
+				done <- struct{}{}
+			}()
 			res, err := d.Delegate(ctx, t.Definition, t.Description, provider, model, temperature, maxTokens)
 			if err != nil {
 				results[idx] = &SubagentResult{
@@ -235,27 +241,33 @@ type ParallelTask struct {
 // buildToolSet creates the tool definitions available to the subagent,
 // applying allowed/forbidden filters from the definition.
 func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *ToolExecutor) []gateway.ToolDefinition {
+	normalizeSet := func(values []string) map[string]bool {
+		out := make(map[string]bool, len(values))
+		for _, v := range values {
+			key := strings.ToLower(strings.TrimSpace(v))
+			if key != "" {
+				out[key] = true
+			}
+		}
+		return out
+	}
+
 	allTools := toolExec.Definitions()
 
 	if len(def.AllowedTools) == 0 && len(def.ForbiddenTools) == 0 {
 		return allTools
 	}
 
-	allowed := make(map[string]bool)
-	for _, t := range def.AllowedTools {
-		allowed[t] = true
-	}
-	forbidden := make(map[string]bool)
-	for _, t := range def.ForbiddenTools {
-		forbidden[t] = true
-	}
+	allowed := normalizeSet(def.AllowedTools)
+	forbidden := normalizeSet(def.ForbiddenTools)
 
 	var filtered []gateway.ToolDefinition
 	for _, tool := range allTools {
-		if forbidden[tool.Name] {
+		name := strings.ToLower(tool.Name)
+		if forbidden[name] {
 			continue
 		}
-		if len(def.AllowedTools) > 0 && !allowed[tool.Name] {
+		if len(def.AllowedTools) > 0 && !allowed[name] {
 			continue
 		}
 		filtered = append(filtered, tool)
@@ -302,14 +314,15 @@ func (d *SubagentDelegate) executeTool(
 
 // isToolForbidden returns true if the tool is explicitly forbidden or not in the allowed list.
 func isToolForbidden(name string, def SubagentDefinition) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
 	for _, t := range def.ForbiddenTools {
-		if t == name {
+		if strings.ToLower(strings.TrimSpace(t)) == name {
 			return true
 		}
 	}
 	if len(def.AllowedTools) > 0 {
 		for _, t := range def.AllowedTools {
-			if t == name {
+			if strings.ToLower(strings.TrimSpace(t)) == name {
 				return false
 			}
 		}

@@ -349,6 +349,8 @@ func TestIsToolForbidden(t *testing.T) {
 		{"allowed only", "read", SubagentDefinition{AllowedTools: []string{"read"}}, false},
 		{"not allowed", "bash", SubagentDefinition{AllowedTools: []string{"read"}}, true},
 		{"both: forbidden wins", "bash", SubagentDefinition{AllowedTools: []string{"bash"}, ForbiddenTools: []string{"bash"}}, true},
+		{"case insensitive forbidden", "bash", SubagentDefinition{ForbiddenTools: []string{"Bash"}}, true},
+		{"case insensitive allowed", "Read", SubagentDefinition{AllowedTools: []string{"read"}}, false},
 	}
 
 	for _, tt := range tests {
