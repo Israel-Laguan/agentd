@@ -64,13 +64,13 @@ type SubagentResult struct {
 
 // SubagentDelegate creates and runs an isolated harness for a subagent.
 type SubagentDelegate struct {
-	gateway       gateway.AIGateway
-	sandbox       sandbox.Executor
-	workspacePath string
-	envVars       []string
-	wallTimeout   time.Duration
-	depth         int
-	capabilities  *capabilities.Registry
+	gateway            gateway.AIGateway
+	sandbox            sandbox.Executor
+	workspacePath      string
+	envVars            []string
+	wallTimeout        time.Duration
+	depth              int
+	capabilities       *capabilities.Registry
 	scopedCapabilities *capabilities.Registry
 }
 
@@ -143,7 +143,7 @@ func DelegateParallelToolDefinition() gateway.ToolDefinition {
 			Type: "object",
 			Properties: map[string]any{
 				"tasks": map[string]any{
-					"type": "array",
+					"type":        "array",
 					"description": "Subagent tasks to run concurrently",
 					"items": map[string]any{
 						"type": "object",

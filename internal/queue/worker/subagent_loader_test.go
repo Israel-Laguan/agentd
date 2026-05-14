@@ -30,6 +30,10 @@ Review code changes for style violations and potential bugs.
 
 15
 
+## Context Budget
+
+12000
+
 ## Output Schema
 
 JSON with fields: issues (array), summary (string)
@@ -56,6 +60,9 @@ Stop after reviewing all modified files or when iteration limit is reached.
 	}
 	if def.MaxIterations != 15 {
 		t.Fatalf("MaxIterations = %d, want 15", def.MaxIterations)
+	}
+	if def.ContextBudget != 12000 {
+		t.Fatalf("ContextBudget = %d, want 12000", def.ContextBudget)
 	}
 	if def.OutputSchema == "" {
 		t.Fatal("OutputSchema should not be empty")
