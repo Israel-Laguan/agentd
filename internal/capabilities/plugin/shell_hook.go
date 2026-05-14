@@ -130,7 +130,7 @@ func parseTimeout(raw string) time.Duration {
 		return defaultShellTimeout
 	}
 	d, err := time.ParseDuration(raw)
-	if err != nil {
+	if err != nil || d <= 0 {
 		return defaultShellTimeout
 	}
 	return d

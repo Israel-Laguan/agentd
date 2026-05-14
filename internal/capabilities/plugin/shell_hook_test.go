@@ -158,4 +158,6 @@ func TestParseTimeout(t *testing.T) {
 	assert.Equal(t, 5*time.Second, parseTimeout("5s"))
 	assert.Equal(t, defaultShellTimeout, parseTimeout(""))
 	assert.Equal(t, defaultShellTimeout, parseTimeout("invalid"))
+	assert.Equal(t, defaultShellTimeout, parseTimeout("0s"))
+	assert.Equal(t, defaultShellTimeout, parseTimeout("-1s"))
 }
