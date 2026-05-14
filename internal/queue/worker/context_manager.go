@@ -75,6 +75,7 @@ type ContextManager struct {
 	workingZone     ContextZone
 	summaries       []TurnSummary
 	corrections     []CorrectionRecord
+	seenCorrections map[string]bool
 }
 
 func cloneTurnSummary(ts TurnSummary) TurnSummary {
@@ -122,6 +123,7 @@ func NewContextManager(cfg config.AgenticContextConfig, gw gateway.AIGateway, ag
 		cfg:             cfg,
 		gateway:         gw,
 		summarizedTurns: make(map[uint64]bool),
+		seenCorrections: make(map[string]bool),
 		agentID:         agentID,
 		taskID:          taskID,
 	}
@@ -154,50 +156,6 @@ func (cm *ContextManager) PrepareContext(ctx context.Context, messages []spec.Pr
 		out = cm.enforceBudget(out, totalBudget)
 	}
 	return out, nil
-}
-
-// injectPendingCorrections inserts correction messages into the prepared
-// context right after the anchor zone (system prompt + first user message).
-// This gives corrections positional authority over compressed zone summaries
-// that may contain stale facts.
-func (cm *ContextManager) injectPendingCorrections(messages []spec.PromptMessage) []spec.PromptMessage {
-	cm.mu.Lock()
-	corrections := append([]CorrectionRecord(nil), cm.corrections...)
-	cm.mu.Unlock()
-
-	if len(corrections) == 0 {
-		return messages
-	}
-
-	// Find anchor boundary (end of system+first-user block)
-	anchorEnd := 0
-	foundUser := false
-	for i, m := range messages {
-		if m.Role == "system" {
-			anchorEnd = i + 1
-		} else if m.Role == "user" && !foundUser {
-			anchorEnd = i + 1
-			foundUser = true
-		} else {
-			break
-		}
-	}
-
-	// Build correction messages (already newest-first in cm.corrections)
-	corrMsgs := make([]spec.PromptMessage, 0, len(corrections))
-	for _, c := range corrections {
-		corrMsgs = append(corrMsgs, spec.PromptMessage{
-			Role:    "system",
-			Content: c.FormatMessage(),
-		})
-	}
-
-	// Splice: anchor + corrections + rest
-	out := make([]spec.PromptMessage, 0, len(messages)+len(corrMsgs))
-	out = append(out, messages[:anchorEnd]...)
-	out = append(out, corrMsgs...)
-	out = append(out, messages[anchorEnd:]...)
-	return out
 }
 
 func (cm *ContextManager) partitionAnchor(messages []spec.PromptMessage) ([]spec.PromptMessage, []spec.PromptMessage) {

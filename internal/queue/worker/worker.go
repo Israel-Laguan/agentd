@@ -569,7 +569,6 @@ func (w *Worker) executeAgenticTool(ctx context.Context, sessionID string, toolE
 	return w.DispatchTool(ctx, sessionID, call, toolToAdapter, toolExec)
 }
 
-
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := workerMessages(task, profile)
 	if w.retriever == nil {
@@ -671,13 +670,28 @@ func (w *Worker) ingestHumanCorrections(ctx context.Context, taskID string, cm *
 		return
 	}
 	for _, c := range comments {
-		if c.Author == models.CommentAuthorUser || c.Author == models.CommentAuthorFrontdesk || string(c.Author) == string(CorrectionSourceReviewer) {
-			if rec := ParseCorrectionComment(c.Body, CorrectionSource(c.Author)); rec != nil {
-				// InjectCorrection handles dedup internally if we want, or we can check here.
-				// For now, InjectCorrection is simple.
-				cm.InjectCorrection(*rec)
-			}
+		source, ok := correctionSourceForCommentAuthor(c.Author)
+		if !ok {
+			continue
 		}
+		if !cm.MarkCommentCorrectionSeen(c) {
+			continue
+		}
+		if rec := ParseCorrectionComment(c.Body, source); rec != nil {
+			cm.InjectCorrection(*rec)
+		}
+	}
+}
+
+func correctionSourceForCommentAuthor(author models.CommentAuthor) (CorrectionSource, bool) {
+	switch author {
+	case models.CommentAuthorUser, models.CommentAuthorFrontdesk:
+		return CorrectionSourceHuman, true
+	default:
+		if strings.EqualFold(string(author), string(CorrectionSourceReviewer)) {
+			return CorrectionSourceReviewer, true
+		}
+		return "", false
 	}
 }
 

@@ -301,6 +301,27 @@ func TestContextManager_InjectHumanCorrection(t *testing.T) {
 	}
 }
 
+func TestContextManager_InjectCorrection_DeduplicatesExactRecord(t *testing.T) {
+	cm := newTestCM(nil)
+	rec := CorrectionRecord{
+		Contradiction: "old",
+		CorrectFact:   "new",
+		Source:        CorrectionSourceHuman,
+	}
+	cm.InjectCorrection(rec)
+	rec.Timestamp = time.Now()
+	cm.InjectCorrection(rec)
+
+	corrections := cm.Corrections()
+	if len(corrections) != 1 {
+		t.Fatalf("expected 1 deduplicated correction, got %d", len(corrections))
+	}
+	msgs := cm.WorkingMessages()
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 correction message, got %d", len(msgs))
+	}
+}
+
 func TestContextManager_Messages_CompressedThenWorking(t *testing.T) {
 	cm := newTestCM([]spec.PromptMessage{
 		{Role: "user", Content: "working message"},
@@ -435,6 +456,42 @@ func TestPrepareContext_InjectionPosition(t *testing.T) {
 	}
 }
 
+func TestPrepareContext_DoesNotAccumulateCorrectionMessages(t *testing.T) {
+	cfg := config.AgenticContextConfig{
+		RollingThresholdTurns: 10,
+	}
+	cm := NewContextManager(cfg, nil, "agent", "task")
+	cm.InjectCorrection(CorrectionRecord{
+		Contradiction: "stale fact",
+		CorrectFact:   "new fact",
+		Source:        CorrectionSourceHuman,
+	})
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "primary prompt"},
+		{Role: "user", Content: "first task"},
+		{Role: "assistant", Content: "working"},
+	}
+
+	prepared, err := cm.PrepareContext(context.Background(), messages)
+	if err != nil {
+		t.Fatalf("PrepareContext failed: %v", err)
+	}
+	prepared, err = cm.PrepareContext(context.Background(), prepared)
+	if err != nil {
+		t.Fatalf("PrepareContext second call failed: %v", err)
+	}
+
+	var correctionCount int
+	for _, msg := range prepared {
+		if IsCorrectionMessage(msg.Content) {
+			correctionCount++
+		}
+	}
+	if correctionCount != 1 {
+		t.Fatalf("expected exactly 1 correction message, got %d in %#v", correctionCount, prepared)
+	}
+}
+
 func TestParseCorrectionComment(t *testing.T) {
 	tests := []struct {
 		name string
@@ -442,6 +499,7 @@ func TestParseCorrectionComment(t *testing.T) {
 		want bool
 	}{
 		{"valid", "[CORRECT] was: old; is: new", true},
+		{"valid with leading whitespace", "  [CORRECT] was: old; is: new", true},
 		{"valid with semicolon", "[CORRECT] was: old ; is: new ", true},
 		{"invalid format", "just a comment", false},
 		{"missing is", "[CORRECT] was: old", false},

@@ -125,6 +125,32 @@ func TestDetectContradictions_BooleanFlip(t *testing.T) {
 	}
 }
 
+func TestDetectContradictions_BooleanFlip_NoDuplicateVerb(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"the server is enabled"}},
+	}
+	detected := DetectContradictions(summaries, "The server is disabled")
+	if len(detected) != 1 {
+		t.Fatalf("expected 1 contradiction for boolean flip, got %d", len(detected))
+	}
+	if detected[0].CorrectFact != "the server is disabled" {
+		t.Fatalf("expected no duplicate verb, got %q", detected[0].CorrectFact)
+	}
+}
+
+func TestDetectContradictions_BooleanFlip_RemovesOnlyMatchedToken(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"running service is running"}},
+	}
+	detected := DetectContradictions(summaries, "Running service is stopped")
+	if len(detected) != 1 {
+		t.Fatalf("expected 1 contradiction for boolean flip, got %d", len(detected))
+	}
+	if detected[0].CorrectFact != "running service is stopped" {
+		t.Fatalf("expected first token to remain in subject, got %q", detected[0].CorrectFact)
+	}
+}
+
 func TestDetectContradictions_ChangedPattern(t *testing.T) {
 	summaries := []TurnSummary{
 		{FactsEstablished: []string{"Port is 3000"}},
@@ -135,6 +161,19 @@ func TestDetectContradictions_ChangedPattern(t *testing.T) {
 	}
 	if !strings.Contains(detected[0].CorrectFact, "8080") {
 		t.Fatalf("expected '8080' in correct fact, got %q", detected[0].CorrectFact)
+	}
+}
+
+func TestDetectContradictions_ChangedPattern_TrimsTrailingOutput(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"Version is 1.0.0"}},
+	}
+	detected := DetectContradictions(summaries, "Version updated to 2.0.0\nStarting service...")
+	if len(detected) != 1 {
+		t.Fatalf("expected 1 contradiction for changed pattern, got %d", len(detected))
+	}
+	if detected[0].CorrectFact != "version is 2.0.0" {
+		t.Fatalf("expected value bounded to first line, got %q", detected[0].CorrectFact)
 	}
 }
 

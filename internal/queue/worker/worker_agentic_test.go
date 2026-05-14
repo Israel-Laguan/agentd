@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"agentd/internal/capabilities"
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
@@ -351,7 +352,8 @@ func TestProcessAgentic_CommitsTextWhenNoToolCalls(t *testing.T) {
 
 // mockCommitStore implements models.KanbanStore to support commitText testing
 type mockCommitStore struct {
-	text *string
+	text     *string
+	comments []models.Comment
 }
 
 func (m *mockCommitStore) MarkTaskRunning(ctx context.Context, id string, t time.Time, pid int) (*models.Task, error) {
@@ -382,7 +384,7 @@ func (m *mockCommitStore) AddComment(ctx context.Context, c models.Comment) erro
 }
 
 func (m *mockCommitStore) ListComments(ctx context.Context, id string) ([]models.Comment, error) {
-	return nil, nil
+	return append([]models.Comment(nil), m.comments...), nil
 }
 
 func (m *mockCommitStore) GetProject(ctx context.Context, id string) (*models.Project, error) {
@@ -407,6 +409,84 @@ func (m *mockCommitStore) AppendEvent(ctx context.Context, e models.Event) error
 
 func (m *mockCommitStore) ListEventsByTask(ctx context.Context, id string) ([]models.Event, error) {
 	return nil, nil
+}
+
+func TestIngestHumanCorrections_DeduplicatesProcessedComments(t *testing.T) {
+	store := &mockCommitStore{
+		comments: []models.Comment{
+			{
+				BaseEntity: models.BaseEntity{ID: "comment-1"},
+				TaskID:     "task-1",
+				Author:     models.CommentAuthorUser,
+				Body:       "[CORRECT] was: old; is: new",
+			},
+		},
+	}
+	w := &Worker{store: store}
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
+
+	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+
+	corrections := cm.Corrections()
+	if len(corrections) != 1 {
+		t.Fatalf("expected 1 deduplicated correction, got %d", len(corrections))
+	}
+	if corrections[0].Source != CorrectionSourceHuman {
+		t.Fatalf("expected human source, got %q", corrections[0].Source)
+	}
+}
+
+func TestIngestHumanCorrections_MapsReviewerSource(t *testing.T) {
+	store := &mockCommitStore{
+		comments: []models.Comment{
+			{
+				BaseEntity: models.BaseEntity{ID: "comment-1"},
+				TaskID:     "task-1",
+				Author:     models.CommentAuthor("reviewer"),
+				Body:       "[CORRECT] was: old; is: reviewed",
+			},
+		},
+	}
+	w := &Worker{store: store}
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
+
+	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+
+	corrections := cm.Corrections()
+	if len(corrections) != 1 {
+		t.Fatalf("expected 1 correction, got %d", len(corrections))
+	}
+	if corrections[0].Source != CorrectionSourceReviewer {
+		t.Fatalf("expected reviewer source, got %q", corrections[0].Source)
+	}
+}
+
+func TestIngestHumanCorrections_SkipsUnknownAuthors(t *testing.T) {
+	store := &mockCommitStore{
+		comments: []models.Comment{
+			{
+				BaseEntity: models.BaseEntity{ID: "comment-1"},
+				TaskID:     "task-1",
+				Author:     models.CommentAuthorWorkerAgent,
+				Body:       "[CORRECT] was: old; is: new",
+			},
+			{
+				BaseEntity: models.BaseEntity{ID: "comment-2"},
+				TaskID:     "task-1",
+				Author:     models.CommentAuthor("UNKNOWN"),
+				Body:       "[CORRECT] was: old; is: newer",
+			},
+		},
+	}
+	w := &Worker{store: store}
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
+
+	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+
+	if got := len(cm.Corrections()); got != 0 {
+		t.Fatalf("expected unknown authors to be skipped, got %d corrections", got)
+	}
 }
 
 func (m *mockCommitStore) MarkEventsCurated(ctx context.Context, id string) error {
