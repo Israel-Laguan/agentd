@@ -146,3 +146,14 @@ librarian:
   preferences_top_k: 3             # max user preferences per recall
   dream_cluster_min_size: 3        # min cluster size for dream consolidation
   dream_similarity_threshold: 0.7  # Jaccard threshold for memory clustering
+
+# Plugin infrastructure.
+# Plugins are directories inside the configured path, each containing a
+# manifest.json that declares hooks, capabilities, and env requirements.
+# Load order is determined by numeric directory prefix (01-security/,
+# 02-observability/, 10-code-quality/) or by the manifest "priority" field.
+# A restart is required to pick up new or changed plugins.
+plugins:
+  enabled: false
+  path: "~/.agentd/plugins"          # directory scanned for plugin sub-directories
+  shell_hook_timeout: "3s"           # default timeout for shell-based hooks
