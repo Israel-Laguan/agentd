@@ -22,6 +22,7 @@ export function LogsPanel({ boardData }: LogsPanelProps) {
         </div>
         {boardData.tasks
           .flatMap(t => t.logs)
+          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
           .slice(-150)
           .map((log, i) => (
             <div

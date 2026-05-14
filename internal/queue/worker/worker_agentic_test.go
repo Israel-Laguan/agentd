@@ -146,6 +146,9 @@ func TestAgenticToolsIncludesExecutorAndCapabilityTools(t *testing.T) {
 	if !containsTool(tools, "capability_tool") {
 		t.Fatal("expected capability tool")
 	}
+	if !containsTool(tools, "delegate_parallel") {
+		t.Fatal("expected delegate_parallel tool")
+	}
 }
 
 type fakeCapabilityAdapter struct {
@@ -267,7 +270,7 @@ func TestProcessAgentic_CallsGatewayWithTools(t *testing.T) {
 		toolNames[tool.Name] = true
 	}
 
-	expectedTools := []string{"bash", "read", "write", "delegate"}
+	expectedTools := []string{"bash", "read", "write", "delegate", "delegate_parallel"}
 	for _, name := range expectedTools {
 		if !toolNames[name] {
 			t.Errorf("expected tool %q in agentic tools", name)

@@ -25,9 +25,9 @@ tidy:
 	$(GO) mod tidy
 
 lint:
-	$(GOLANGCI_LINT) run ./... --tests=false
+	$(GOLANGCI_LINT) run ./...
 
 loc:
 	python3 ./scripts/check_loc.py --max-lines 300
 
-check: loc lint
+check: loc lint test

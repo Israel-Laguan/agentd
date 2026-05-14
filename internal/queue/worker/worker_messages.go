@@ -106,7 +106,8 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 		if err != nil {
 			slog.Warn("failed to load skills", "workspace", project.WorkspacePath, "error", err)
 		} else if len(skills) > 0 {
-			matched := w.skillRouter.Match(task.Description, skills)
+			intent := task.Title + " " + task.Description
+			matched := w.skillRouter.Match(intent, skills)
 			for _, sk := range matched {
 				builder.AddSkillBlock(FormatSkillBlock(sk))
 			}
