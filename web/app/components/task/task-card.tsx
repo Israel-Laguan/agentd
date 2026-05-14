@@ -1,7 +1,17 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/types";
 import { TaskStatus } from "@/lib/types";
-import { AlertCircle, CheckCircle2, Clock, Loader2, MessageSquare, Play } from "lucide-react";
+import { 
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  GripVertical,
+  Loader2,
+  MessageSquare,
+  Play 
+} from "lucide-react";
+import { useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 interface TaskCardProps {
   task: {
@@ -10,9 +20,10 @@ interface TaskCardProps {
     description: string;
     status: TaskStatus;
   };
+  onClick: () => void;
 }
 
-export const TaskCard = ({ task }: TaskCardProps) => {
+export const TaskCard = ({ task, onClick }: TaskCardProps) => {
   const statusColors = {
     [TaskStatus.PENDING]: "bg-border/20 text-text-dim border-border",
     [TaskStatus.QUEUED]: "bg-blue/10 text-blue border-blue/20",
@@ -34,14 +45,42 @@ export const TaskCard = ({ task }: TaskCardProps) => {
   };
 
   const StatusIcon = Icons[task.status as TaskStatus] || AlertCircle;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    isDragging,
+  } = useDraggable({
+    id: task.id,
+  });
+  const style = {
+    transform: CSS.Translate.toString(transform),
+  };
 
   return (
-    <motion.div 
+    <motion.div
+      ref={setNodeRef}
+      style={style}
       layout
-      className="p-3 bg-panel border border-border rounded-md shadow-sm hover:border-text-dim/30 transition-all cursor-pointer group"
+      className={cn(
+        "p-3 bg-panel border border-border rounded-md shadow-sm hover:border-text-dim/30 transition-all cursor-pointer group",
+        isDragging && "opacity-50 ring-2 ring-blue z-50"
+      )}
+      onClick={onClick}
     >
       <div className="flex justify-between items-start mb-2 gap-2">
         <h4 className="text-[13px] font-medium text-text leading-tight group-hover:text-blue transition-colors">{task.title}</h4>
+        <button
+          ref={setActivatorNodeRef}
+          {...listeners}
+          {...attributes}
+          className="cursor-grab active:cursor-grabbing text-text-dim hover:text-text transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+  <GripVertical size={14} />
+</button>
         <div className={cn("shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", statusColors[task.status as TaskStatus])}>
           <StatusIcon size={10} className={task.status === TaskStatus.RUNNING ? "animate-spin" : ""} />
           {task.status}
