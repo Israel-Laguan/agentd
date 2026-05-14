@@ -27,6 +27,18 @@ func (s *FakeKanbanStore) ListComments(_ context.Context, taskID string) ([]mode
 	return out, nil
 }
 
+func (s *FakeKanbanStore) ListCommentsSince(_ context.Context, taskID string, since time.Time) ([]models.Comment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []models.Comment
+	for _, c := range s.comments {
+		if c.TaskID == taskID && (since.IsZero() || c.UpdatedAt.After(since)) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
 func (s *FakeKanbanStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) {
 	return nil, nil
 }

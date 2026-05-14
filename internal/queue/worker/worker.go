@@ -669,11 +669,12 @@ func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
 }
 
 func (w *Worker) ingestHumanCorrections(ctx context.Context, taskID string, cm *ContextManager) {
-	comments, err := w.store.ListComments(ctx, taskID)
+	comments, err := w.store.ListCommentsSince(ctx, taskID, cm.CommentHighWater())
 	if err != nil {
 		slog.Warn("failed to list task comments for corrections", "task_id", taskID, "error", err)
 		return
 	}
+	defer cm.AdvanceCommentHighWater(comments)
 	for _, c := range comments {
 		source, ok := correctionSourceForCommentAuthor(c.Author)
 		if !ok {

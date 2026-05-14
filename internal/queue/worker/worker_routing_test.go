@@ -122,6 +122,9 @@ func (s *routingTestStore) AddComment(context.Context, models.Comment) error { r
 func (s *routingTestStore) ListComments(context.Context, string) ([]models.Comment, error) {
 	return nil, nil
 }
+func (s *routingTestStore) ListCommentsSince(context.Context, string, time.Time) ([]models.Comment, error) {
+	return nil, nil
+}
 func (s *routingTestStore) GetProject(context.Context, string) (*models.Project, error) {
 	return &s.project, nil
 }

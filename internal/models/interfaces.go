@@ -63,6 +63,7 @@ type KanbanStore interface {
 	AppendTasksToProject(ctx context.Context, projectID, parentTaskID string, drafts []DraftTask) ([]Task, error)
 	AddComment(ctx context.Context, c Comment) error
 	ListComments(ctx context.Context, taskID string) ([]Comment, error)
+	ListCommentsSince(ctx context.Context, taskID string, since time.Time) ([]Comment, error)
 	ListUnprocessedHumanComments(ctx context.Context) ([]CommentRef, error)
 	MarkCommentProcessed(ctx context.Context, taskID, commentEventID string) error
 	AppendEvent(ctx context.Context, e Event) error

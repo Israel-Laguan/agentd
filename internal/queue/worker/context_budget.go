@@ -27,12 +27,27 @@ func (cm *ContextManager) enforceBudget(messages []spec.PromptMessage, totalBudg
 	var fixed []spec.PromptMessage
 	var working []spec.PromptMessage
 
+	correctionEnd := 0
+	for correctionEnd < len(rest) {
+		m := rest[correctionEnd]
+		if m.Role != "system" || !IsCorrectionMessage(m.Content) {
+			break
+		}
+		correctionEnd++
+	}
+
 	if summaryIdx != -1 {
-		fixed = append(anchor, rest[:summaryIdx+1]...)
-		working = rest[summaryIdx+1:]
+		fixed = append(anchor, rest[:correctionEnd]...)
+		if summaryIdx >= correctionEnd {
+			fixed = append(fixed, rest[summaryIdx])
+			working = append([]spec.PromptMessage{}, rest[correctionEnd:summaryIdx]...)
+			working = append(working, rest[summaryIdx+1:]...)
+		} else {
+			working = rest[correctionEnd:]
+		}
 	} else {
-		fixed = anchor
-		working = rest
+		fixed = append(anchor, rest[:correctionEnd]...)
+		working = rest[correctionEnd:]
 	}
 
 	fixedChars := totalChars(fixed)

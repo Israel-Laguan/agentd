@@ -352,8 +352,9 @@ func TestProcessAgentic_CommitsTextWhenNoToolCalls(t *testing.T) {
 
 // mockCommitStore implements models.KanbanStore to support commitText testing
 type mockCommitStore struct {
-	text     *string
-	comments []models.Comment
+	text          *string
+	comments      []models.Comment
+	listSinceArgs []time.Time
 }
 
 func (m *mockCommitStore) MarkTaskRunning(ctx context.Context, id string, t time.Time, pid int) (*models.Task, error) {
@@ -387,6 +388,17 @@ func (m *mockCommitStore) ListComments(ctx context.Context, id string) ([]models
 	return append([]models.Comment(nil), m.comments...), nil
 }
 
+func (m *mockCommitStore) ListCommentsSince(ctx context.Context, id string, since time.Time) ([]models.Comment, error) {
+	m.listSinceArgs = append(m.listSinceArgs, since)
+	var out []models.Comment
+	for _, c := range m.comments {
+		if since.IsZero() || c.UpdatedAt.After(since) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
 func (m *mockCommitStore) GetProject(ctx context.Context, id string) (*models.Project, error) {
 	return nil, nil
 }
@@ -412,10 +424,11 @@ func (m *mockCommitStore) ListEventsByTask(ctx context.Context, id string) ([]mo
 }
 
 func TestIngestHumanCorrections_DeduplicatesProcessedComments(t *testing.T) {
+	now := time.Now().UTC()
 	store := &mockCommitStore{
 		comments: []models.Comment{
 			{
-				BaseEntity: models.BaseEntity{ID: "comment-1"},
+				BaseEntity: models.BaseEntity{ID: "comment-1", UpdatedAt: now},
 				TaskID:     "task-1",
 				Author:     models.CommentAuthorUser,
 				Body:       "[CORRECT] was: old; is: new",
@@ -434,6 +447,42 @@ func TestIngestHumanCorrections_DeduplicatesProcessedComments(t *testing.T) {
 	}
 	if corrections[0].Source != CorrectionSourceHuman {
 		t.Fatalf("expected human source, got %q", corrections[0].Source)
+	}
+	if len(store.listSinceArgs) != 2 {
+		t.Fatalf("expected two since queries, got %d", len(store.listSinceArgs))
+	}
+	if !store.listSinceArgs[0].IsZero() {
+		t.Fatalf("expected first query from zero time, got %s", store.listSinceArgs[0])
+	}
+	if !store.listSinceArgs[1].Equal(now) {
+		t.Fatalf("expected second query from high-water mark %s, got %s", now, store.listSinceArgs[1])
+	}
+}
+
+func TestIngestHumanCorrections_ReprocessesEditedComment(t *testing.T) {
+	first := time.Now().UTC()
+	second := first.Add(time.Minute)
+	store := &mockCommitStore{
+		comments: []models.Comment{
+			{
+				BaseEntity: models.BaseEntity{ID: "comment-1", UpdatedAt: first},
+				TaskID:     "task-1",
+				Author:     models.CommentAuthorUser,
+				Body:       "[CORRECT] was: old; is: new",
+			},
+		},
+	}
+	w := &Worker{store: store}
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
+
+	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+	store.comments[0].Body = "[CORRECT] was: older; is: newer"
+	store.comments[0].UpdatedAt = second
+	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+
+	corrections := cm.Corrections()
+	if len(corrections) != 2 {
+		t.Fatalf("expected edited comment to produce second correction, got %d", len(corrections))
 	}
 }
 

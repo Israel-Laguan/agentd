@@ -63,20 +63,21 @@ type ContextZone struct {
 // ContextManager handles partitioning of messages into context zones, applies
 // compression/truncation strategies, and supports correction injection.
 type ContextManager struct {
-	cfg             config.AgenticContextConfig
-	gateway         gateway.AIGateway
-	summarizedTurns map[uint64]bool
-	runningSummary  *TurnSummary
-	cacheMu         sync.RWMutex
-	agentID         string
-	taskID          string
-	mu              sync.Mutex
-	compressedZone  ContextZone
-	workingZone     ContextZone
-	summaries       []TurnSummary
-	corrections     []CorrectionRecord
-	seenCorrections map[string]bool
-	lastCommentPoll time.Time
+	cfg              config.AgenticContextConfig
+	gateway          gateway.AIGateway
+	summarizedTurns  map[uint64]bool
+	runningSummary   *TurnSummary
+	cacheMu          sync.RWMutex
+	agentID          string
+	taskID           string
+	mu               sync.Mutex
+	compressedZone   ContextZone
+	workingZone      ContextZone
+	summaries        []TurnSummary
+	corrections      []CorrectionRecord
+	seenCorrections  map[string]bool
+	lastCommentPoll  time.Time
+	commentHighWater time.Time
 }
 
 func cloneTurnSummary(ts TurnSummary) TurnSummary {

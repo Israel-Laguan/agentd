@@ -220,6 +220,28 @@ func TestDetectContradictions_ChangedPattern_TrimsTrailingOutput(t *testing.T) {
 	}
 }
 
+func TestDetectContradictions_ChangedPattern_ScansMultipleChanges(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"Memory is 8gb"}},
+	}
+	detected := DetectContradictions(summaries, "Port changed to 8080. Memory changed to 16gb")
+	if len(detected) != 1 {
+		t.Fatalf("expected 1 contradiction for second changed pattern, got %d", len(detected))
+	}
+	if detected[0].CorrectFact != "memory is 16gb" {
+		t.Fatalf("unexpected correct fact: %q", detected[0].CorrectFact)
+	}
+}
+
+func TestLastTokenIndex_UnicodeBoundary(t *testing.T) {
+	if idx := lastTokenIndex("décafé", "café"); idx >= 0 {
+		t.Fatalf("expected no embedded unicode token match, got %d", idx)
+	}
+	if idx := lastTokenIndex("le café", "café"); idx < 0 {
+		t.Fatal("expected standalone unicode token match")
+	}
+}
+
 func TestDetectContradictions_ProseValueChange(t *testing.T) {
 	summaries := []TurnSummary{
 		{FactsEstablished: []string{"The server runs on port 3000"}},

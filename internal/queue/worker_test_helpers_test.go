@@ -189,6 +189,15 @@ func (s *workerStore) AddComment(_ context.Context, c models.Comment) error {
 func (s *workerStore) ListComments(context.Context, string) ([]models.Comment, error) {
 	return append([]models.Comment(nil), s.comments...), nil
 }
+func (s *workerStore) ListCommentsSince(_ context.Context, _ string, since time.Time) ([]models.Comment, error) {
+	var out []models.Comment
+	for _, c := range s.comments {
+		if since.IsZero() || c.UpdatedAt.After(since) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
 func (s *workerStore) GetProject(context.Context, string) (*models.Project, error) {
 	return &s.project, nil
 }

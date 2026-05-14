@@ -20,6 +20,18 @@ func (s *queueStore) ListComments(context.Context, string) ([]models.Comment, er
 	return append([]models.Comment(nil), s.comments...), nil
 }
 
+func (s *queueStore) ListCommentsSince(_ context.Context, _ string, since time.Time) ([]models.Comment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []models.Comment
+	for _, c := range s.comments {
+		if since.IsZero() || c.UpdatedAt.After(since) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
 func (s *queueStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) {
 	return nil, nil
 }
