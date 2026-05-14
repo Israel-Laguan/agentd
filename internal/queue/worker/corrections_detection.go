@@ -32,7 +32,7 @@ func detectBooleanFlip(originalFact, lowerFact, lowerOutput string, now time.Tim
 			if subject == "" {
 				continue
 			}
-			outIdx := strings.Index(lowerOutput, subject)
+			outIdx := lastTokenIndex(lowerOutput, subject)
 			if outIdx < 0 {
 				continue
 			}
@@ -147,13 +147,15 @@ func detectProseValueChange(originalFact, lowerFact, lowerOutput string, now tim
 			if subject == "" {
 				continue
 			}
-			if strings.Contains(lowerOutput, subject+v) {
-				valIdx := strings.Index(lowerOutput, subject+v) + len(subject+v)
+			phrase := subject + strings.TrimRight(v, " ")
+			matchIdx := lastTokenIndex(lowerOutput, phrase)
+			if matchIdx >= 0 {
+				valIdx := matchIdx + len(phrase)
 				lineEnd := strings.Index(lowerOutput[valIdx:], "\n")
 				if lineEnd == -1 {
 					lineEnd = len(lowerOutput[valIdx:])
 				}
-				newVal := trimChangedValue(lowerOutput[valIdx : valIdx+lineEnd])
+				newVal := trimChangedValue(strings.TrimSpace(lowerOutput[valIdx : valIdx+lineEnd]))
 				oldVal := strings.TrimSpace(lowerFact[idx+len(v):])
 
 				if newVal != "" && newVal != oldVal {

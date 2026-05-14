@@ -174,6 +174,16 @@ func TestDetectContradictions_BooleanFlip_DoesNotCrossCompoundClause(t *testing.
 	}
 }
 
+func TestDetectContradictions_BooleanFlip_RequiresSubjectBoundary(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"port is enabled"}},
+	}
+	detected := DetectContradictions(summaries, "Support is disabled")
+	if len(detected) != 0 {
+		t.Fatalf("expected no contradiction for embedded subject match, got %d", len(detected))
+	}
+}
+
 func TestDetectContradictions_ChangedPattern(t *testing.T) {
 	summaries := []TurnSummary{
 		{FactsEstablished: []string{"Port is 3000"}},
@@ -220,6 +230,16 @@ func TestDetectContradictions_ProseValueChange(t *testing.T) {
 	}
 	if !strings.Contains(detected[0].CorrectFact, "8080") {
 		t.Fatalf("expected '8080' in correct fact, got %q", detected[0].CorrectFact)
+	}
+}
+
+func TestDetectContradictions_ProseValueChange_RequiresSubjectBoundary(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"port uses tcp"}},
+	}
+	detected := DetectContradictions(summaries, "Support uses udp")
+	if len(detected) != 0 {
+		t.Fatalf("expected no contradiction for embedded subject match, got %d", len(detected))
 	}
 }
 
