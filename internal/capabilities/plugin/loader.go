@@ -19,20 +19,49 @@ type LoadResult struct {
 	Manifest  Manifest
 	PreHooks  []worker.PreHook
 	PostHooks []worker.PostHook
+	Scope     PluginScope
 }
+
+// PluginScope controls which activation level a plugin directory
+// represents. Global plugins apply to every session; project plugins
+// are loaded from a workspace-local directory and only apply to tasks
+// within that project; session plugins are activated by name from an
+// AgentProfile.
+type PluginScope string
+
+const (
+	// ScopeGlobal marks plugins loaded from the config-level directory.
+	ScopeGlobal PluginScope = "global"
+	// ScopeProject marks plugins loaded from a project workspace.
+	ScopeProject PluginScope = "project"
+	// ScopeSession marks plugins activated via AgentProfile.Plugins.
+	ScopeSession PluginScope = "session"
+)
 
 // PluginLoader scans a directory for plugin sub-directories, parses
 // their manifests, validates environment variables, and produces
 // hooks and capability registrations.
 type PluginLoader struct {
 	pluginsDir string
+	scope      PluginScope
 	envLookup  func(string) (string, bool)
 }
 
 // NewPluginLoader creates a PluginLoader that scans the given directory.
+// The loader defaults to ScopeGlobal.
 func NewPluginLoader(pluginsDir string) *PluginLoader {
 	return &PluginLoader{
 		pluginsDir: pluginsDir,
+		scope:      ScopeGlobal,
+		envLookup:  os.LookupEnv,
+	}
+}
+
+// NewScopedPluginLoader creates a PluginLoader with an explicit scope.
+func NewScopedPluginLoader(pluginsDir string, scope PluginScope) *PluginLoader {
+	return &PluginLoader{
+		pluginsDir: pluginsDir,
+		scope:      scope,
 		envLookup:  os.LookupEnv,
 	}
 }
@@ -54,6 +83,7 @@ func (pl *PluginLoader) LoadAll() ([]LoadResult, error) {
 		if err != nil {
 			return nil, fmt.Errorf("plugin %s: %w", entry.Name(), err)
 		}
+		res.Scope = pl.scope
 		results = append(results, res)
 	}
 
@@ -70,7 +100,13 @@ func (pl *PluginLoader) MountAll(
 	if err != nil {
 		return nil, err
 	}
+	return mountResults(results, pl.scope, chain, registry), nil
+}
 
+func mountResults(
+	results []LoadResult, scope PluginScope,
+	chain *worker.HookChain, registry *capabilities.Registry,
+) []Manifest {
 	var manifests []Manifest
 	for _, r := range results {
 		for _, h := range r.PreHooks {
@@ -84,18 +120,22 @@ func (pl *PluginLoader) MountAll(
 		slog.Info("plugin loaded",
 			"name", r.Manifest.Name,
 			"version", r.Manifest.Version,
+			"scope", string(scope),
 			"pre_hooks", len(r.PreHooks),
 			"post_hooks", len(r.PostHooks),
 			"capabilities", len(r.Manifest.Capabilities),
 		)
 	}
-	return manifests, nil
+	return manifests
 }
 
 func (pl *PluginLoader) readPluginDirs() ([]os.DirEntry, error) {
 	entries, err := os.ReadDir(pl.pluginsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
+			if pl.scope != ScopeGlobal {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("%w: %s", ErrPluginDirNotFound, pl.pluginsDir)
 		}
 		return nil, fmt.Errorf("read plugins directory: %w", err)
@@ -217,3 +257,5 @@ func dirPrefix(dir string) int {
 }
 
 const maxDirPrefix = 1<<31 - 1
+
+

@@ -99,7 +99,10 @@ type AgentProfile struct {
 	InstructionsPath string
 	// DryRun enables simulation mode. When true, tool calls return
 	// synthesized results without executing the real handler.
-	DryRun    bool
+	DryRun bool
+	// Plugins lists plugin names activated for sessions using this
+	// profile (session-scoped activation).
+	Plugins   []string
 	UpdatedAt time.Time
 }
 
