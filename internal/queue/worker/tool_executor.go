@@ -18,6 +18,7 @@ const (
 	toolNameRead     = "read"
 	toolNameWrite    = "write"
 	toolNameDelegate = "delegate"
+	toolNameDelegateParallel = "delegate_parallel"
 
 	defaultMaxToolReadFileBytes = 10 << 20 // 10 MiB
 )
@@ -277,5 +278,4 @@ func jsonErrorf(format string, args ...any) string {
 	}
 	return string(payload)
 }
-
 

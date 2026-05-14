@@ -86,10 +86,13 @@ func (l *SubagentLoader) LoadByName(workspacePath, name string) (*SubagentDefini
 //	## Forbidden Tools
 //	- write
 //
-//	## Max Iterations
-//	30
-//
-//	## Output Schema
+	//	## Max Iterations
+	//	30
+	//
+	//	## Context Budget
+	//	12000
+	//
+	//	## Output Schema
 //	<schema description>
 //
 //	## Termination Criteria
@@ -115,6 +118,8 @@ func parseSubagentMD(content, sourcePath string) *SubagentDefinition {
 			def.ForbiddenTools = parseToolList(trimmedBody)
 		case "max iterations":
 			def.MaxIterations = parseIntField(trimmedBody)
+		case "context budget":
+			def.ContextBudget = parseIntField(trimmedBody)
 		case "output schema":
 			def.OutputSchema = trimmedBody
 		case "termination criteria":

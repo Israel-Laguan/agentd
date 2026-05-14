@@ -73,6 +73,7 @@ func (w *Worker) dispatchToolWithHooks(
 	toolToAdapter map[string]string,
 	toolExecutor *ToolExecutor,
 	taskHooks *HookChain,
+	scopedCapabilities ...*capabilities.Registry,
 ) string {
 	hookCtx := HookContext{
 		ToolName:  call.Function.Name,
@@ -95,7 +96,7 @@ func (w *Worker) dispatchToolWithHooks(
 		}
 	}
 
-	result := w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor)
+	result := w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, firstCapabilityRegistry(scopedCapabilities))
 
 	if taskHooks != nil {
 		result = taskHooks.RunPost(hookCtx, result)

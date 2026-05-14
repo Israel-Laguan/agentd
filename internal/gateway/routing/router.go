@@ -101,64 +101,70 @@ func (r *Router) detectToolSupport(req spec.AIRequest) bool {
 	return false
 }
 
+func (r *Router) reserveBudget(taskID string) error {
+	if r.budget != nil && taskID != "" {
+		return r.budget.Reserve(taskID)
+	}
+	return nil
+}
+
+func (r *Router) recordBudget(taskID string, usage int) {
+	if r.budget != nil && taskID != "" {
+		r.budget.Add(taskID, usage)
+	}
+}
+
+func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq spec.AIRequest, hasRequestedTools bool, selectedHasToolSupport bool) (spec.AIResponse, bool, error) {
+	req := baseReq
+	if hasRequestedTools && !p.Capabilities().SupportsChatTools {
+		if selectedHasToolSupport {
+			return spec.AIResponse{}, false, nil
+		}
+		req.Tools = nil
+		req.JSONMode = true
+		slog.Warn("provider does not support tools, falling back to legacy mode", "provider", string(p.Name()))
+	}
+	if !req.SkipTruncation {
+		messages, err := r.applyTruncation(ctx, req.Messages, p.MaxInputChars())
+		if err != nil {
+			return spec.AIResponse{}, false, err
+		}
+		req.Messages = messages
+	}
+	resp, err := p.Generate(ctx, req)
+	if err != nil {
+		return spec.AIResponse{}, false, err
+	}
+	return resp, true, nil
+}
+
 func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
 	if len(r.providers) == 0 {
 		return spec.AIResponse{}, errors.New("no LLM providers configured")
 	}
-
-	if r.budget != nil && req.TaskID != "" {
-		if err := r.budget.Reserve(req.TaskID); err != nil {
-			return spec.AIResponse{}, err
-		}
+	if err := r.reserveBudget(req.TaskID); err != nil {
+		return spec.AIResponse{}, err
 	}
-
 	req = r.applyRoleRouting(req)
-
 	hasRequestedTools := len(req.Tools) > 0
 	selectedHasToolSupport := hasRequestedTools && r.detectToolSupport(req)
-
 	var providerErrs []error
 	for _, p := range r.providers {
 		if req.Provider != "" && req.Provider != string(p.Name()) {
 			continue
 		}
-
-		// Check if explicit provider doesn't support tools - return error instead of fallback
 		if req.Provider != "" && len(req.Tools) > 0 && !p.Capabilities().SupportsChatTools {
 			return spec.AIResponse{}, fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", req.Provider)
 		}
-
-		// Check if we need to fall back to legacy mode due to capability mismatch
-		providerReq := req
-		if hasRequestedTools && !p.Capabilities().SupportsChatTools {
-			if selectedHasToolSupport {
-				// Skip incapable providers while tool-capable candidates exist.
-				continue
-			}
-			// Create a copy to avoid mutating the original request
-			providerReq.Tools = nil
-			providerReq.JSONMode = true
-
-			// Log warning for fallback
-			slog.Warn("provider does not support tools, falling back to legacy mode",
-				"provider", string(p.Name()))
+		resp, ok, err := r.tryProvider(ctx, p, req, hasRequestedTools, selectedHasToolSupport)
+		if err != nil {
+			providerErrs = append(providerErrs, err)
+			continue
 		}
-
-		if !providerReq.SkipTruncation {
-			messages, err := r.applyTruncation(ctx, providerReq.Messages, p.MaxInputChars())
-			if err != nil {
-				return spec.AIResponse{}, err
-			}
-			providerReq.Messages = messages
-		}
-		resp, err := p.Generate(ctx, providerReq)
-		if err == nil {
-			if r.budget != nil && req.TaskID != "" {
-				r.budget.Add(req.TaskID, resp.TokenUsage)
-			}
+		if ok {
+			r.recordBudget(req.TaskID, resp.TokenUsage)
 			return resp, nil
 		}
-		providerErrs = append(providerErrs, err)
 	}
 	if req.Provider != "" && len(providerErrs) == 0 {
 		return spec.AIResponse{}, fmt.Errorf("LLM provider %q is not configured", req.Provider)

@@ -42,60 +42,10 @@ func (d *SubagentDelegate) Delegate(
 	var filesModified []string
 
 	for i := 0; i < maxIter; i++ {
-		req := gateway.AIRequest{
-			Messages:    messages,
-			Temperature: temperature,
-			Tools:       tools,
-			Provider:    provider,
-			Model:       model,
-			MaxTokens:   maxTokens,
-			Role:        gateway.RoleWorker,
-		}
-
-		resp, err := d.gateway.Generate(ctx, req)
-		if err != nil {
-			result.Status = SubagentStatusFailure
-			result.Error = fmt.Sprintf("gateway error: %v", err)
-			result.Iterations = i + 1
-			return result, nil
-		}
-
-		messages = append(messages, gateway.PromptMessage{
-			Role:      "assistant",
-			Content:   resp.Content,
-			ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
-		})
-
-		if len(resp.ToolCalls) == 0 {
-			result.Output = resp.Content
-			result.Iterations = i + 1
+		done := d.runSubagentStep(ctx, i, maxIter, &messages, tools, provider, model, temperature, maxTokens, result, toolsCalled, &filesModified, def, toolExec)
+		if done {
 			break
 		}
-
-		for _, call := range resp.ToolCalls {
-			toolsCalled[call.Function.Name] = struct{}{}
-			callResult := d.executeTool(ctx, call, def, toolExec)
-
-			if call.Function.Name == toolNameWrite {
-				if path := extractWritePath(call.Function.Arguments); path != "" {
-					filesModified = append(filesModified, path)
-				}
-			}
-
-			messages = append(messages, gateway.PromptMessage{
-				Role:       "tool",
-				ToolCallID: call.ID,
-				Content:    callResult,
-			})
-		}
-
-		if i == maxIter-1 {
-			result.Status = SubagentStatusTimeout
-			result.Error = "max iterations reached"
-			result.Output = messages[len(messages)-1].Content
-		}
-
-		result.Iterations = i + 1
 	}
 
 	for tool := range toolsCalled {
@@ -103,6 +53,78 @@ func (d *SubagentDelegate) Delegate(
 	}
 	result.FilesModified = filesModified
 	return result, nil
+}
+
+func (d *SubagentDelegate) runSubagentStep(
+	ctx context.Context, i, maxIter int,
+	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
+	provider, model string, temperature float64, maxTokens int,
+	result *SubagentResult, toolsCalled map[string]struct{}, filesModified *[]string,
+	def SubagentDefinition, toolExec *ToolExecutor,
+) bool {
+	requestMessages := enforceSubagentContextBudget(*messages, def.ContextBudget)
+	req := gateway.AIRequest{
+		Messages:    requestMessages,
+		Temperature: temperature,
+		Tools:       tools,
+		Provider:    provider,
+		Model:       model,
+		MaxTokens:   maxTokens,
+		Role:        gateway.RoleWorker,
+	}
+	resp, err := d.gateway.Generate(ctx, req)
+	if err != nil {
+		result.Status = SubagentStatusFailure
+		result.Error = fmt.Sprintf("gateway error: %v", err)
+		result.Iterations = i + 1
+		return true
+	}
+	*messages = append(*messages, gateway.PromptMessage{
+		Role:      "assistant",
+		Content:   resp.Content,
+		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
+	})
+	if len(resp.ToolCalls) == 0 {
+		result.Output = resp.Content
+		result.Iterations = i + 1
+		return true
+	}
+	for _, call := range resp.ToolCalls {
+		toolsCalled[call.Function.Name] = struct{}{}
+		callResult := d.executeTool(ctx, call, def, toolExec)
+		if call.Function.Name == toolNameWrite {
+			if path := extractWritePath(call.Function.Arguments); path != "" {
+				*filesModified = append(*filesModified, path)
+			}
+		}
+		*messages = append(*messages, gateway.PromptMessage{
+			Role:       "tool",
+			ToolCallID: call.ID,
+			Content:    callResult,
+		})
+	}
+	if i == maxIter-1 {
+		result.Status = SubagentStatusTimeout
+		result.Error = "max iterations reached"
+		result.Output = (*messages)[len(*messages)-1].Content
+	}
+	result.Iterations = i + 1
+	return false
+}
+
+func enforceSubagentContextBudget(messages []gateway.PromptMessage, budget int) []gateway.PromptMessage {
+	if budget <= 0 || totalChars(messages) <= budget {
+		return messages
+	}
+	if len(messages) <= 2 {
+		return messages
+	}
+	fixed := append([]gateway.PromptMessage(nil), messages[:2]...)
+	remaining := budget - totalChars(fixed)
+	if remaining <= 0 {
+		return fixed
+	}
+	return append(fixed, truncateWorkingMessages(messages[2:], remaining)...)
 }
 
 // DelegateParallel runs multiple subagent tasks concurrently and collects results.

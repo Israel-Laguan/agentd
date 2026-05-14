@@ -23,7 +23,14 @@ func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *ToolEx
 		return out
 	}
 
-	allTools := toolExec.Definitions()
+	allTools := append([]gateway.ToolDefinition(nil), toolExec.Definitions()...)
+	allTools = append(allTools, d.capabilityToolDefinitions(context.Background())...)
+	if toolExplicitlyAllowed(toolNameDelegate, def) {
+		allTools = append(allTools, DelegateToolDefinition())
+	}
+	if toolExplicitlyAllowed(toolNameDelegateParallel, def) {
+		allTools = append(allTools, DelegateParallelToolDefinition())
+	}
 
 	if len(def.AllowedTools) == 0 && len(def.ForbiddenTools) == 0 {
 		return allTools
@@ -44,6 +51,34 @@ func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *ToolEx
 		filtered = append(filtered, tool)
 	}
 	return filtered
+}
+
+func (d *SubagentDelegate) capabilityToolDefinitions(ctx context.Context) []gateway.ToolDefinition {
+	var tools []gateway.ToolDefinition
+	seen := make(map[string]bool)
+	appendTools := func(registry interface {
+		GetToolsAndAdapterIndex(context.Context) ([]gateway.ToolDefinition, map[string]string, error)
+	}) {
+		if registry == nil {
+			return
+		}
+		registryTools, _, err := registry.GetToolsAndAdapterIndex(ctx)
+		if err != nil {
+			slog.Warn("failed to get subagent capability tools", "error", err)
+			return
+		}
+		for _, tool := range registryTools {
+			key := strings.ToLower(strings.TrimSpace(tool.Name))
+			if key == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			tools = append(tools, tool)
+		}
+	}
+	appendTools(d.scopedCapabilities)
+	appendTools(d.capabilities)
+	return tools
 }
 
 // buildSystemPrompt constructs the subagent's system prompt from its definition.
@@ -80,7 +115,14 @@ func (d *SubagentDelegate) executeTool(
 	if isToolForbidden(call.Function.Name, def) {
 		return jsonErrorf("tool %q is not available to this subagent", call.Function.Name)
 	}
-	return toolExec.Execute(ctx, call)
+	switch call.Function.Name {
+	case toolNameBash, toolNameRead, toolNameWrite:
+		return toolExec.Execute(ctx, call)
+	case toolNameDelegate, toolNameDelegateParallel:
+		return jsonErrorf("%s", ErrDepthExceeded.Error())
+	default:
+		return executeCapabilityTool(ctx, call, nil, d.capabilities, d.scopedCapabilities)
+	}
 }
 
 // isToolForbidden returns true if the tool is explicitly forbidden or not in the allowed list.
@@ -98,6 +140,16 @@ func isToolForbidden(name string, def SubagentDefinition) bool {
 			}
 		}
 		return true
+	}
+	return false
+}
+
+func toolExplicitlyAllowed(name string, def SubagentDefinition) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for _, allowed := range def.AllowedTools {
+		if strings.ToLower(strings.TrimSpace(allowed)) == name {
+			return true
+		}
 	}
 	return false
 }
