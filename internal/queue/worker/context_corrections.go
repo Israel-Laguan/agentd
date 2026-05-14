@@ -17,6 +17,7 @@ func IsCorrectionMessage(content string) bool {
 }
 
 // InjectCorrection stores a correction record for later context injection.
+// It returns false when an equivalent correction has already been stored.
 func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) bool {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -258,8 +259,10 @@ func (cm *ContextManager) AdvanceCommentHighWater(comments []models.Comment) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	for _, c := range comments {
+		// ListCommentsSince uses a strict updated_at cursor, so advance with
+		// UpdatedAt unless only CreatedAt is available.
 		mark := c.UpdatedAt
-		if mark.IsZero() || (!c.CreatedAt.IsZero() && c.CreatedAt.After(mark)) {
+		if mark.IsZero() {
 			mark = c.CreatedAt
 		}
 		if mark.After(cm.commentHighWater) {

@@ -95,7 +95,7 @@ func isTokenBoundary(text string, idx int) bool {
 	if r == utf8.RuneError {
 		return true
 	}
-	return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_')
+	return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
 }
 
 func formatBooleanFact(subject, value string) string {
