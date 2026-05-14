@@ -85,7 +85,23 @@ func cloneTurnSummary(ts TurnSummary) TurnSummary {
 }
 
 // NewContextManager creates a new ContextManager with the given configuration.
+// Negative config values are clamped to zero to prevent slice OOB panics.
 func NewContextManager(cfg config.AgenticContextConfig, gw gateway.AIGateway, agentID, taskID string) *ContextManager {
+	if cfg.RollingThresholdTurns < 0 {
+		cfg.RollingThresholdTurns = 0
+	}
+	if cfg.KeepRecentTurns < 0 {
+		cfg.KeepRecentTurns = 0
+	}
+	if cfg.AnchorBudget < 0 {
+		cfg.AnchorBudget = 0
+	}
+	if cfg.WorkingBudget < 0 {
+		cfg.WorkingBudget = 0
+	}
+	if cfg.CompressedBudget < 0 {
+		cfg.CompressedBudget = 0
+	}
 	return &ContextManager{
 		cfg:             cfg,
 		gateway:         gw,
