@@ -151,6 +151,19 @@ func TestDetectContradictions_BooleanFlip_RemovesOnlyMatchedToken(t *testing.T) 
 	}
 }
 
+func TestDetectContradictions_BooleanFlip_NormalizesSubjectSpacing(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"flag is enabled for admin"}},
+	}
+	detected := DetectContradictions(summaries, "Flag is disabled for admin")
+	if len(detected) != 1 {
+		t.Fatalf("expected 1 contradiction for boolean flip, got %d", len(detected))
+	}
+	if detected[0].CorrectFact != "flag is disabled for admin" {
+		t.Fatalf("expected updated fact, got %q", detected[0].CorrectFact)
+	}
+}
+
 func TestDetectContradictions_BooleanFlip_DoesNotCrossCompoundClause(t *testing.T) {
 	summaries := []TurnSummary{
 		{FactsEstablished: []string{"feature is enabled"}},
@@ -171,6 +184,16 @@ func TestDetectContradictions_ChangedPattern(t *testing.T) {
 	}
 	if !strings.Contains(detected[0].CorrectFact, "8080") {
 		t.Fatalf("expected '8080' in correct fact, got %q", detected[0].CorrectFact)
+	}
+}
+
+func TestDetectContradictions_ChangedPattern_RequiresSubjectBoundary(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"support is enabled"}},
+	}
+	detected := DetectContradictions(summaries, "Port changed to 8080")
+	if len(detected) != 0 {
+		t.Fatalf("expected no contradiction for subject substring match, got %d", len(detected))
 	}
 }
 

@@ -28,7 +28,7 @@ var booleanFlips = []booleanFlip{
 func detectBooleanFlip(originalFact, lowerFact, lowerOutput string, now time.Time) (CorrectionRecord, bool) {
 	for _, flip := range booleanFlips {
 		if idx := lastTokenIndex(lowerFact, flip.from); idx >= 0 {
-			subject := strings.TrimSpace(lowerFact[:idx] + lowerFact[idx+len(flip.from):])
+			subject := strings.Join(strings.Fields(lowerFact[:idx]+lowerFact[idx+len(flip.from):]), " ")
 			if subject == "" {
 				continue
 			}
@@ -104,7 +104,7 @@ func detectChangedPattern(originalFact, lowerFact, lowerOutput string, now time.
 		if idx := strings.Index(lowerOutput, p); idx > 0 {
 			subject := strings.TrimSpace(lowerOutput[:idx])
 			// If the output says "Port changed to 8080", check if fact contains "port".
-			if subject != "" && strings.Contains(lowerFact, subject) {
+			if subject != "" && lastTokenIndex(lowerFact, subject) >= 0 {
 				newValue := trimChangedValue(lowerOutput[idx+len(p):])
 				if newValue != "" {
 					return CorrectionRecord{
