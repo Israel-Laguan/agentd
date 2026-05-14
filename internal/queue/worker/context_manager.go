@@ -65,6 +65,14 @@ type ContextManager struct {
 	corrections     []CorrectionRecord
 }
 
+func cloneTurnSummary(ts TurnSummary) TurnSummary {
+	out := ts
+	if ts.FactsEstablished != nil {
+		out.FactsEstablished = append([]string(nil), ts.FactsEstablished...)
+	}
+	return out
+}
+
 // NewContextManager returns a ContextManager initialised with the given
 // seed messages placed into the working zone.
 func NewContextManager(seed []spec.PromptMessage) *ContextManager {
@@ -117,7 +125,7 @@ func (cm *ContextManager) InjectHumanCorrection(contradiction, correctFact strin
 func (cm *ContextManager) AddSummary(ts TurnSummary) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	cm.summaries = append(cm.summaries, ts)
+	cm.summaries = append(cm.summaries, cloneTurnSummary(ts))
 
 	if ts.Summary != "" {
 		cm.compressedZone.Messages = append(cm.compressedZone.Messages, spec.PromptMessage{
@@ -157,7 +165,9 @@ func (cm *ContextManager) Summaries() []TurnSummary {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	out := make([]TurnSummary, len(cm.summaries))
-	copy(out, cm.summaries)
+	for i := range cm.summaries {
+		out[i] = cloneTurnSummary(cm.summaries[i])
+	}
 	return out
 }
 
