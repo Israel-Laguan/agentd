@@ -80,7 +80,7 @@ func (s *Store) ListComments(ctx context.Context, taskID string) ([]models.Comme
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, task_id, payload, created_at, updated_at
 		FROM events
-		WHERE task_id = ? AND type = ?
+		WHERE task_id = ? AND type = ? AND updated_at NOT LIKE 'CURATED:%'
 		ORDER BY created_at`, taskID, models.EventTypeComment)
 	if err != nil {
 		return nil, fmt.Errorf("list comments: %w", err)
@@ -93,7 +93,7 @@ func (s *Store) ListCommentsSince(ctx context.Context, taskID string, since time
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, task_id, payload, created_at, updated_at
 		FROM events
-		WHERE task_id = ? AND type = ? AND updated_at > ?
+		WHERE task_id = ? AND type = ? AND updated_at > ? AND updated_at NOT LIKE 'CURATED:%'
 		ORDER BY updated_at, created_at`, taskID, models.EventTypeComment, formatTime(since.UTC()))
 	if err != nil {
 		return nil, fmt.Errorf("list comments since: %w", err)

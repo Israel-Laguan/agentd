@@ -76,6 +76,14 @@ func TestListCommentsAndEventsRoundTrip(t *testing.T) {
 	if err := store.MarkEventsCurated(ctx, task.ID); err != nil {
 		t.Fatalf("MarkEventsCurated: %v", err)
 	}
+	comments, err = store.ListComments(ctx, task.ID)
+	if err != nil || len(comments) != 0 {
+		t.Fatalf("ListComments after curation: %v %#v", err, comments)
+	}
+	comments, err = store.ListCommentsSince(ctx, task.ID, time.Time{})
+	if err != nil || len(comments) != 0 {
+		t.Fatalf("ListCommentsSince after curation: %v %#v", err, comments)
+	}
 	if err := store.DeleteCuratedEvents(ctx, task.ID); err != nil {
 		t.Fatalf("DeleteCuratedEvents: %v", err)
 	}
