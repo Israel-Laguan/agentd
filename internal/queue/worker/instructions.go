@@ -277,7 +277,7 @@ func splitH2Sections(content string) map[string]string {
 
 // resolutionRule is appended to every assembled prompt so the model knows
 // how to resolve conflicting instructions across layers.
-const resolutionRule = "If instructions at different levels conflict, task-level overrides project-level, which overrides global, which overrides user-preferences."
+const resolutionRule = "If instructions at different levels conflict, task-level overrides matched-skills, matched-skills override project-level, which overrides global, which overrides user-preferences."
 
 // SystemPromptBuilder assembles the final system prompt by layering
 // instructions from multiple scopes in a deterministic order.
