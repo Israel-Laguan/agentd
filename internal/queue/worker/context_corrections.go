@@ -16,7 +16,7 @@ func IsCorrectionMessage(content string) bool {
 	return strings.HasPrefix(strings.TrimSpace(content), correctionPrefix)
 }
 
-// InjectCorrection prepends a correction message to the working zone.
+// InjectCorrection stores a correction record for later context injection.
 func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) bool {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -30,14 +30,6 @@ func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) bool {
 		rec.Timestamp = time.Now()
 	}
 	cm.corrections = append([]CorrectionRecord{rec}, cm.corrections...)
-	correctionMsg := spec.PromptMessage{
-		Role:    "system",
-		Content: rec.FormatMessage(),
-	}
-	cm.workingZone.Messages = append(
-		[]spec.PromptMessage{correctionMsg},
-		cm.workingZone.Messages...,
-	)
 	return true
 }
 
@@ -179,6 +171,9 @@ func hasCorrection(records []CorrectionRecord, rec CorrectionRecord) bool {
 // human or reviewer comment. Expected format:
 //
 //	[CORRECT] was: <old fact>; is: <new fact>
+//
+// The first "; is:" or ";is:" delimiter separates the old and new facts; if
+// the old fact itself contains that delimiter, the format is ambiguous.
 //
 // Returns nil if the comment doesn't match.
 func ParseCorrectionComment(body string, source CorrectionSource) *CorrectionRecord {

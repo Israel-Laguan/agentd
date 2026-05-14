@@ -151,13 +151,13 @@ func TestDetectContradictions_BooleanFlip_RemovesOnlyMatchedToken(t *testing.T) 
 	}
 }
 
-func TestDetectContradictions_BooleanFlip_NormalizesSubjectSpacing(t *testing.T) {
+func TestDetectContradictions_ProseValueChange_MidFactBooleanToken(t *testing.T) {
 	summaries := []TurnSummary{
 		{FactsEstablished: []string{"flag is enabled for admin"}},
 	}
 	detected := DetectContradictions(summaries, "Flag is disabled for admin")
 	if len(detected) != 1 {
-		t.Fatalf("expected 1 contradiction for boolean flip, got %d", len(detected))
+		t.Fatalf("expected 1 contradiction for prose value change, got %d", len(detected))
 	}
 	if detected[0].CorrectFact != "flag is disabled for admin" {
 		t.Fatalf("expected updated fact, got %q", detected[0].CorrectFact)
