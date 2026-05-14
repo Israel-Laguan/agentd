@@ -93,7 +93,7 @@ func execScript(
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", script) //nolint:gosec // plugin scripts are admin-configured
-	cmd.Env = append(cmd.Environ(), env...)
+	cmd.Env = env
 	cmd.WaitDelay = 500 * time.Millisecond
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

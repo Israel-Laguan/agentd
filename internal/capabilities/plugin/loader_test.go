@@ -168,7 +168,8 @@ func TestPluginLoader_OrderByPriority(t *testing.T) {
 }
 
 func TestPluginLoader_DirNotFound(t *testing.T) {
-	loader := NewPluginLoader("/nonexistent/path")
+	missingDir := filepath.Join(t.TempDir(), "does-not-exist")
+	loader := NewPluginLoader(missingDir)
 	_, err := loader.LoadAll()
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrPluginDirNotFound))
