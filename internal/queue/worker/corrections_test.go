@@ -151,6 +151,16 @@ func TestDetectContradictions_BooleanFlip_RemovesOnlyMatchedToken(t *testing.T) 
 	}
 }
 
+func TestDetectContradictions_BooleanFlip_DoesNotCrossCompoundClause(t *testing.T) {
+	summaries := []TurnSummary{
+		{FactsEstablished: []string{"feature is enabled"}},
+	}
+	detected := DetectContradictions(summaries, "Feature is enabled and logging is disabled")
+	if len(detected) != 0 {
+		t.Fatalf("expected no contradiction from unrelated clause, got %d", len(detected))
+	}
+}
+
 func TestDetectContradictions_ChangedPattern(t *testing.T) {
 	summaries := []TurnSummary{
 		{FactsEstablished: []string{"Port is 3000"}},

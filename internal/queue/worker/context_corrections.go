@@ -17,13 +17,13 @@ func IsCorrectionMessage(content string) bool {
 }
 
 // InjectCorrection prepends a correction message to the working zone.
-func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) {
+func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) bool {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	for _, existing := range cm.corrections {
 		if sameCorrection(existing, rec) {
-			return
+			return false
 		}
 	}
 	if rec.Timestamp.IsZero() {
@@ -38,6 +38,7 @@ func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) {
 		[]spec.PromptMessage{correctionMsg},
 		cm.workingZone.Messages...,
 	)
+	return true
 }
 
 func sameCorrection(a, b CorrectionRecord) bool {
@@ -75,7 +76,7 @@ func correctionCommentKey(c models.Comment) string {
 
 // InjectHumanCorrection is a convenience wrapper for manual corrections.
 func (cm *ContextManager) InjectHumanCorrection(contradiction, correctFact string) {
-	cm.InjectCorrection(CorrectionRecord{
+	_ = cm.InjectCorrection(CorrectionRecord{
 		Contradiction: contradiction,
 		CorrectFact:   correctFact,
 		Source:        CorrectionSourceHuman,
@@ -158,9 +159,10 @@ func (cm *ContextManager) CheckToolResult(toolOutput string) []CorrectionRecord 
 		if hasCorrection(existing, rec) {
 			continue
 		}
-		cm.InjectCorrection(rec)
-		unique = append(unique, rec)
-		existing = append(existing, rec)
+		if cm.InjectCorrection(rec) {
+			unique = append(unique, rec)
+			existing = append(existing, rec)
+		}
 	}
 	return unique
 }
