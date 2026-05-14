@@ -152,6 +152,10 @@ func (l *SkillLoader) loadDir(dir string) ([]*Skill, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 			continue
 		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			slog.Warn("skipping symlinked skill file", "path", filepath.Join(dir, entry.Name()))
+			continue
+		}
 		path := filepath.Join(dir, entry.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -202,10 +206,21 @@ func (r *SkillRouter) Match(taskDescription string, skills []*Skill) []*Skill {
 	}
 	threshold := r.Threshold
 
-	// Build corpus: task description + all WhenApplies sections.
-	corpus := make([]string, 0, len(skills)+1)
-	corpus = append(corpus, taskDescription)
+	// Filter out nil entries to prevent panics.
+	filtered := make([]*Skill, 0, len(skills))
 	for _, sk := range skills {
+		if sk != nil {
+			filtered = append(filtered, sk)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+
+	// Build corpus: task description + all non-nil WhenApplies sections.
+	corpus := make([]string, 0, len(filtered)+1)
+	corpus = append(corpus, taskDescription)
+	for _, sk := range filtered {
 		corpus = append(corpus, sk.WhenApplies)
 	}
 
@@ -214,7 +229,7 @@ func (r *SkillRouter) Match(taskDescription string, skills []*Skill) []*Skill {
 	// Score each skill against the task description.
 	taskVec := tfidf.vector(0)
 	var scored []scoredSkill
-	for i, sk := range skills {
+	for i, sk := range filtered {
 		docVec := tfidf.vector(i + 1)
 		sim := cosineSimilarity(taskVec, docVec)
 		if sim >= threshold {

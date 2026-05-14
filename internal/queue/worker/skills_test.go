@@ -280,6 +280,31 @@ func TestSkillRouter_Match_NoSkills(t *testing.T) {
 	}
 }
 
+func TestSkillRouter_Match_NilInSlice(t *testing.T) {
+	skills := []*Skill{
+		nil,
+		{Name: "Valid", WhenApplies: "testing"},
+		nil,
+	}
+	router := &SkillRouter{TopK: 3, Threshold: 0.0}
+	matched := router.Match("testing", skills)
+	if len(matched) != 1 {
+		t.Fatalf("expected 1 match (nil entries filtered), got %d", len(matched))
+	}
+	if matched[0].Name != "Valid" {
+		t.Fatalf("expected Valid, got %q", matched[0].Name)
+	}
+}
+
+func TestSkillRouter_Match_AllNil(t *testing.T) {
+	skills := []*Skill{nil, nil}
+	router := &SkillRouter{TopK: 3, Threshold: 0.0}
+	matched := router.Match("testing", skills)
+	if len(matched) != 0 {
+		t.Fatalf("expected 0 matches for all-nil skills, got %d", len(matched))
+	}
+}
+
 func TestSkillRouter_Match_DefaultTopK(t *testing.T) {
 	router := &SkillRouter{} // TopK=0 → defaults to 3
 	skills := []*Skill{
