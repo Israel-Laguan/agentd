@@ -454,6 +454,10 @@ func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, project
 	if w.hooks != nil {
 		if verdict := w.hooks.RunPre(hookCtx); verdict.ShortCircuit {
 			return verdict.Result
+		} else if verdict.Veto && verdict.Result != "" {
+			result := verdict.Result
+			result = w.hooks.RunPost(hookCtx, result)
+			return result
 		} else if verdict.Veto {
 			return jsonErrorf("tool call vetoed: %s", verdict.Reason)
 		}

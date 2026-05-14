@@ -97,7 +97,10 @@ type AgentProfile struct {
 	// InstructionsPath overrides the default project instructions file path
 	// (e.g., ".agentd/AGENTS.md"). When empty, the loader uses the config default.
 	InstructionsPath string
-	UpdatedAt        time.Time
+	// DryRun enables simulation mode. When true, tool calls return
+	// synthesized results without executing the real handler.
+	DryRun    bool
+	UpdatedAt time.Time
 }
 
 // Memory stores lessons learned globally or per project.
