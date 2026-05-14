@@ -393,8 +393,13 @@ func (w *Worker) processAgenticIteration(
 		return false, err
 	}
 
-	// Ingest human corrections from task comments
-	w.ingestHumanCorrections(ctx, task.ID, cm)
+	// Ingest human corrections from task comments. Use ContextManager.ShouldPollComments
+	// to avoid listing all comments on every iteration.
+	// Poll interval chosen to balance responsiveness and DB load.
+	const commentPollInterval = 5 * time.Second
+	if cm.ShouldPollComments(commentPollInterval) {
+		w.ingestHumanCorrections(ctx, task.ID, cm)
+	}
 
 	// Replace legacy truncator with ContextManager
 	prepared, err := cm.PrepareContext(ctx, *messages)
