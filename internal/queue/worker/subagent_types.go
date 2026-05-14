@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
 )
@@ -35,6 +36,8 @@ type SubagentDefinition struct {
 	ForbiddenTools []string `json:"forbidden_tools,omitempty"`
 	// MaxIterations caps the subagent's tool loop. Zero uses a default of 20.
 	MaxIterations int `json:"max_iterations,omitempty"`
+	// ContextBudget caps the subagent prompt context by character count. Zero means unlimited.
+	ContextBudget int `json:"context_budget,omitempty"`
 	// OutputSchema describes the expected structure of the subagent's output.
 	OutputSchema string `json:"output_schema,omitempty"`
 	// TerminationCriteria describes when the subagent should stop.
@@ -67,6 +70,8 @@ type SubagentDelegate struct {
 	envVars       []string
 	wallTimeout   time.Duration
 	depth         int
+	capabilities  *capabilities.Registry
+	scopedCapabilities *capabilities.Registry
 }
 
 // NewSubagentDelegate constructs a delegate at the given depth.
@@ -86,6 +91,14 @@ func NewSubagentDelegate(
 		wallTimeout:   wallTimeout,
 		depth:         depth,
 	}
+}
+
+// WithCapabilities configures the global and scoped capability registries used
+// by the delegate when exposing and executing MCP/capability tools.
+func (d *SubagentDelegate) WithCapabilities(global, scoped *capabilities.Registry) *SubagentDelegate {
+	d.capabilities = global
+	d.scopedCapabilities = scoped
+	return d
 }
 
 // ErrDepthExceeded is returned when a delegation attempt exceeds MaxDelegationDepth.
@@ -120,8 +133,45 @@ func DelegateToolDefinition() gateway.ToolDefinition {
 	}
 }
 
+// DelegateParallelToolDefinition returns the tool definition for running
+// independent subagent tasks concurrently.
+func DelegateParallelToolDefinition() gateway.ToolDefinition {
+	return gateway.ToolDefinition{
+		Name:        toolNameDelegateParallel,
+		Description: "Delegate independent bounded sub-tasks to specialized subagents concurrently. Returns structured results in input order.",
+		Parameters: &gateway.FunctionParameters{
+			Type: "object",
+			Properties: map[string]any{
+				"tasks": map[string]any{
+					"type": "array",
+					"description": "Subagent tasks to run concurrently",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"subagent": map[string]any{
+								"type":        "string",
+								"description": "Name of the subagent definition to use",
+							},
+							"task": map[string]any{
+								"type":        "string",
+								"description": "Description of the sub-task to delegate",
+							},
+						},
+						"required": []string{"subagent", "task"},
+					},
+				},
+			},
+			Required: []string{"tasks"},
+		},
+	}
+}
+
 // delegateArgs holds the parsed arguments for the delegate tool call.
 type delegateArgs struct {
 	Subagent string `json:"subagent"`
 	Task     string `json:"task"`
+}
+
+type delegateParallelArgs struct {
+	Tasks []delegateArgs `json:"tasks"`
 }

@@ -2,12 +2,8 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"agentd/internal/capabilities"
@@ -102,14 +98,7 @@ type WorkerOptions struct {
 	SkillsTopK                  int
 }
 
-func NewWorker(
-	store models.KanbanStore,
-	gw gateway.AIGateway,
-	sb sandbox.Executor,
-	breaker *safety.CircuitBreaker,
-	sink models.EventSink,
-	opts WorkerOptions,
-) *Worker {
+func normalizeOpts(opts WorkerOptions) WorkerOptions {
 	if opts.MaxRetries < 1 {
 		opts.MaxRetries = DefaultMaxRetries
 	}
@@ -137,6 +126,37 @@ func NewWorker(
 	if opts.AgenticCharacterBudget < 0 {
 		opts.AgenticCharacterBudget = config.DefaultAgenticCharacterBudget
 	}
+	return opts
+}
+
+func (w *Worker) setupOptionalLoaders(opts WorkerOptions) {
+	if opts.InstructionsProjectFile != "" || opts.InstructionsUserPrefsPath != "" {
+		w.instructionLoader = &InstructionLoader{
+			ProjectFile:         opts.InstructionsProjectFile,
+			UserPreferencesPath: opts.InstructionsUserPrefsPath,
+		}
+	}
+	if opts.SkillsProjectDir != "" || opts.SkillsGlobalDir != "" {
+		w.skillLoader = &SkillLoader{
+			ProjectDir: opts.SkillsProjectDir,
+			GlobalDir:  opts.SkillsGlobalDir,
+		}
+		w.skillRouter = &SkillRouter{
+			Threshold: opts.SkillsThreshold,
+			TopK:      opts.SkillsTopK,
+		}
+	}
+}
+
+func NewWorker(
+	store models.KanbanStore,
+	gw gateway.AIGateway,
+	sb sandbox.Executor,
+	breaker *safety.CircuitBreaker,
+	sink models.EventSink,
+	opts WorkerOptions,
+) *Worker {
+	opts = normalizeOpts(opts)
 	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
 	var budgetTracker spec.BudgetTracker
 	if opts.TokenBudget > 0 {
@@ -169,27 +189,7 @@ func NewWorker(
 		pluginMounter:       opts.PluginMounter,
 		contextCfg:          opts.AgenticContext,
 	}
-
-	// Construct instruction hierarchy loader when project file is configured.
-	if opts.InstructionsProjectFile != "" || opts.InstructionsUserPrefsPath != "" {
-		w.instructionLoader = &InstructionLoader{
-			ProjectFile:         opts.InstructionsProjectFile,
-			UserPreferencesPath: opts.InstructionsUserPrefsPath,
-		}
-	}
-
-	// Construct skill loader and router when skill directories are configured.
-	if opts.SkillsProjectDir != "" || opts.SkillsGlobalDir != "" {
-		w.skillLoader = &SkillLoader{
-			ProjectDir: opts.SkillsProjectDir,
-			GlobalDir:  opts.SkillsGlobalDir,
-		}
-		w.skillRouter = &SkillRouter{
-			Threshold: opts.SkillsThreshold,
-			TopK:      opts.SkillsTopK,
-		}
-	}
-
+	w.setupOptionalLoaders(opts)
 	return w
 }
 
@@ -255,361 +255,3 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	w.commit(ctx, task, result, runErr)
 }
 
-func (w *Worker) heartbeatLoop(ctx context.Context, taskID string) {
-	ticker := time.NewTicker(w.heartbeatInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := w.store.UpdateTaskHeartbeat(ctx, taskID); err != nil && ctx.Err() == nil {
-				slog.Error("task heartbeat update failed", "task_id", taskID, "error", err)
-			}
-		}
-	}
-}
-
-func (w *Worker) registerCancel(taskID string, cancel context.CancelFunc) {
-	if w.canceller != nil {
-		w.canceller.Register(taskID, cancel)
-	}
-}
-
-func (w *Worker) deregisterCancel(taskID string) {
-	if w.canceller != nil {
-		w.canceller.Deregister(taskID)
-	}
-}
-
-func (w *Worker) loadContext(
-	ctx context.Context,
-	task models.Task,
-) (*models.Project, *models.AgentProfile, error) {
-	project, err := w.store.GetProject(ctx, task.ProjectID)
-	if err != nil {
-		return nil, nil, err
-	}
-	profile, err := w.store.GetAgentProfile(ctx, task.AgentID)
-	return project, profile, err
-}
-
-func (w *Worker) command(ctx context.Context, task models.Task, profile models.AgentProfile) (workerResponse, error) {
-	messages := w.seedMessages(ctx, task, profile)
-	req := gateway.AIRequest{
-		Messages:    messages,
-		Temperature: profile.Temperature,
-		JSONMode:    true,
-		AgentID:     task.AgentID,
-		Role:        gateway.RoleWorker,
-		TaskID:      task.ID,
-		Provider:    profile.Provider,
-		Model:       profile.Model,
-		MaxTokens:   profile.MaxTokens,
-	}
-	// Legacy JSON command mode does not execute tool calls; do not advertise tools here.
-	req = w.applyTuning(req, task, profile)
-	resp, err := gateway.GenerateJSON[workerResponse](ctx, w.gateway, req)
-	if err != nil {
-		return workerResponse{}, err
-	}
-	return resp, nil
-}
-
-func (w *Worker) applyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile) gateway.AIRequest {
-	if w.tuner == nil || task.RetryCount <= 0 {
-		return req
-	}
-	action := w.tuner.ForAttempt(task.RetryCount, profile)
-	if action.Type != planning.HealingActionTune {
-		return req
-	}
-	req = w.tuner.Apply(req, action)
-	if action.Overrides.Compress {
-		req.Messages = append(req.Messages, gateway.PromptMessage{
-			Role:    "user",
-			Content: "Previous attempts failed. Minimize assumptions, reduce variables, and return the smallest safe next command.",
-		})
-	}
-	return req
-}
-
-func (w *Worker) isPromptHang(result sandbox.Result, err error) bool {
-	return result.TimedOut && errors.Is(err, models.ErrExecutionTimeout) && safety.DetectPrompt(result.Stdout, result.Stderr).Detected
-}
-
-func (w *Worker) isPermissionFailure(result sandbox.Result, err error) bool {
-	failed := err != nil || !result.Success
-	return failed && safety.DetectPermission(result.Stdout, result.Stderr).Detected
-}
-
-// DispatchTool is the single entry point for tool execution in the agentic loop.
-// It handles both built-in tools (bash, read, write) and capability tools (MCP).
-// Parameters:
-//   - ctx: Context for cancellation and timeouts
-//   - call: The tool call from the AI response
-//   - toolToAdapter: Map of tool names to adapter names for MCP tools
-//
-// Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
-func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
-	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor)
-}
-
-func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
-	hookCtx := HookContext{
-		ToolName:  call.Function.Name,
-		Args:      call.Function.Arguments,
-		CallID:    call.ID,
-		SessionID: sessionID,
-		ProjectID: projectID,
-		Timestamp: time.Now(),
-	}
-
-	if w.hooks != nil {
-		if verdict := w.hooks.RunPre(hookCtx); verdict.ShortCircuit {
-			return verdict.Result
-		} else if verdict.Veto && verdict.Result != "" {
-			result := verdict.Result
-			result = w.hooks.RunPost(hookCtx, result)
-			return result
-		} else if verdict.Veto {
-			return jsonErrorf("tool call vetoed: %s", verdict.Reason)
-		}
-	}
-
-	var result string
-	switch call.Function.Name {
-	case toolNameBash, toolNameRead, toolNameWrite:
-		result = toolExecutor.Execute(ctx, call)
-	case toolNameDelegate:
-		result = jsonErrorf("delegate tool not yet implemented")
-	default:
-		if w.capabilities == nil {
-			result = jsonErrorf("unknown tool: %s", call.Function.Name)
-		} else if adapterName, ok := toolToAdapter[call.Function.Name]; !ok {
-			result = jsonErrorf("unknown tool: %s", call.Function.Name)
-		} else {
-			var args map[string]any
-			if strings.TrimSpace(call.Function.Arguments) != "" {
-				if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
-					result = jsonErrorf("invalid arguments: %v", err)
-				}
-			}
-			if result == "" {
-				if args == nil {
-					args = map[string]any{}
-				}
-				out, err := w.capabilities.CallTool(ctx, adapterName, call.Function.Name, args)
-				if err != nil {
-					result = jsonErrorf("capability tool failed: %v", err)
-				} else {
-					encoded, err := json.Marshal(out)
-					if err != nil {
-						result = jsonErrorf("capability tool result encode failed: %v", err)
-					} else {
-						result = string(encoded)
-					}
-				}
-			}
-		}
-	}
-
-	if w.hooks != nil {
-		result = w.hooks.RunPost(hookCtx, result)
-	}
-
-	return result
-}
-
-// executeAgenticTool is a wrapper around DispatchTool for backward compatibility.
-// Use DispatchTool directly instead.
-func (w *Worker) executeAgenticTool(ctx context.Context, sessionID string, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
-	if toolExec == nil {
-		toolExec = w.toolExecutor
-	}
-	return w.DispatchTool(ctx, sessionID, call, toolToAdapter, toolExec)
-}
-
-func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
-	messages := workerMessages(task, profile)
-	if w.retriever == nil {
-		return messages
-	}
-	intent := task.Title + " " + task.Description
-	recalled := w.retriever.Recall(ctx, intent, task.ProjectID, "")
-	if lessons := memoryFormatLessons(recalled); lessons != "" {
-		return append([]gateway.PromptMessage{{Role: "system", Content: lessons}}, messages...)
-	}
-	return messages
-}
-
-func agenticToolUseSystemText() string {
-	return `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
-When you need to execute a command, use the bash tool.
-When you need to read a file, use the read tool.
-When you need to create or modify a file, use the write tool.
-Return your response as plain text when the task is complete, or use tools to continue working.`
-}
-
-func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile models.AgentProfile) []gateway.PromptMessage {
-	toolUse := agenticToolUseSystemText()
-	primary := toolUse
-	if profile.SystemPrompt.Valid {
-		primary = strings.TrimSpace(profile.SystemPrompt.String) + "\n\n" + toolUse
-	}
-
-	out := make([]gateway.PromptMessage, 0, len(messages)+1)
-	replacedCore := false
-
-	for _, m := range messages {
-		if m.Role != "system" {
-			out = append(out, m)
-			continue
-		}
-		if isMemoryLessonsSystem(m.Content) {
-			out = append(out, m)
-			continue
-		}
-		if isLegacyJSONCommandSystemPrompt(m.Content) {
-			if !replacedCore {
-				out = append(out, gateway.PromptMessage{Role: "system", Content: primary})
-				replacedCore = true
-			}
-			continue
-		}
-		if !replacedCore {
-			out = append(out, gateway.PromptMessage{Role: "system", Content: primary})
-			replacedCore = true
-			continue
-		}
-	}
-
-	if !replacedCore {
-		insertIdx := len(out)
-		for i, message := range out {
-			if message.Role == "user" {
-				insertIdx = i
-				break
-			}
-		}
-		out = append(out, gateway.PromptMessage{})
-		copy(out[insertIdx+1:], out[insertIdx:])
-		out[insertIdx] = gateway.PromptMessage{Role: "system", Content: primary}
-	}
-
-	return out
-}
-
-// assembleAgenticSystemPrompt builds the full layered system prompt for agentic
-// mode using the instruction hierarchy and skill router. It returns the initial
-// message list: [optional memory lessons, layered system prompt, user task].
-func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	builder := NewSystemPromptBuilder().
-		WithGlobal(agenticToolUseSystemText())
-
-	// 1. User preferences (lowest precedence, silently prepended)
-	if w.instructionLoader != nil {
-		if prefs, err := w.instructionLoader.LoadUserPreferences(); err != nil {
-			slog.Warn("failed to load user preferences", "error", err)
-		} else if prefs != nil {
-			builder.WithUserPreferences(prefs)
-		}
-	}
-
-	// 2. Project instructions from AGENTS.md
-	if w.instructionLoader != nil && project.WorkspacePath != "" {
-		instructions, err := w.instructionLoader.LoadProjectInstructions(project.WorkspacePath, profile.InstructionsPath)
-		if err != nil {
-			slog.Warn("failed to load project instructions", "workspace", project.WorkspacePath, "error", err)
-		} else if instructions != nil {
-			builder.WithProject(instructions)
-		}
-	}
-
-	// 3. Matched skills (injected between project and task level)
-	if w.skillLoader != nil && w.skillRouter != nil {
-		skills, err := w.skillLoader.LoadAll(project.WorkspacePath)
-		if err != nil {
-			slog.Warn("failed to load skills", "workspace", project.WorkspacePath, "error", err)
-		} else if len(skills) > 0 {
-			matched := w.skillRouter.Match(task.Description, skills)
-			for _, sk := range matched {
-				builder.AddSkillBlock(FormatSkillBlock(sk))
-			}
-			if len(matched) > 0 {
-				slog.Debug("injected matched skills into system prompt",
-					"task_id", task.ID,
-					"count", len(matched),
-				)
-			}
-		}
-	}
-
-	// 4. Task-level override (highest precedence)
-	if profile.SystemPrompt.Valid {
-		builder.WithTask(profile.SystemPrompt.String)
-	}
-
-	systemPrompt := builder.Build()
-
-	userMsg := gateway.PromptMessage{
-		Role:    "user",
-		Content: fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description),
-	}
-
-	var messages []gateway.PromptMessage
-
-	// Prepend memory lessons if available
-	if w.retriever != nil {
-		intent := task.Title + " " + task.Description
-		recalled := w.retriever.Recall(ctx, intent, task.ProjectID, "")
-		if lessons := memoryFormatLessons(recalled); lessons != "" {
-			messages = append(messages, gateway.PromptMessage{
-				Role:    "system",
-				Content: lessons,
-			})
-		}
-	}
-
-	messages = append(messages,
-		gateway.PromptMessage{Role: "system", Content: systemPrompt},
-		userMsg,
-	)
-
-	return messages
-}
-
-// executeDelegate handles delegate tool calls by routing to the subagent system.
-// Stubbed until full subagent wiring is complete.
-func (w *Worker) executeDelegate(ctx context.Context, call gateway.ToolCall, toolExecutor *ToolExecutor) string {
-	return jsonErrorf("delegate tool not yet implemented")
-}
-
-func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {
-	result := sandbox.Result{
-		Success: true,
-		Stdout:  content,
-	}
-	w.commit(ctx, task, result, nil)
-}
-
-func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) {
-	payload := "task exceeded maximum tool iterations without producing a final result"
-	w.handleAgentFailure(ctx, task, payload)
-}
-
-// providerSupportsAgentic returns true if the provider supports agentic mode
-// (tool round-tripping with message accumulation).
-func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
-	for _, p := range agenticProviders {
-		if strings.EqualFold(profile.Provider, string(p)) {
-			return true
-		}
-	}
-	return false
-}
-
-// SetSandbox swaps the executor used by integration tests that replace the sandbox.
-func (w *Worker) SetSandbox(sb sandbox.Executor) {
-	w.sandbox = sb
-}
