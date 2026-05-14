@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	toolNameBash  = "bash"
-	toolNameRead  = "read"
-	toolNameWrite = "write"
+	toolNameBash     = "bash"
+	toolNameRead     = "read"
+	toolNameWrite    = "write"
+	toolNameDelegate = "delegate"
 
 	defaultMaxToolReadFileBytes = 10 << 20 // 10 MiB
 )

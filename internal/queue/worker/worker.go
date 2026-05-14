@@ -460,6 +460,7 @@ func (w *Worker) processAgenticIteration(
 
 func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
 	tools := append([]gateway.ToolDefinition(nil), toolExecutor.Definitions()...)
+	tools = append(tools, DelegateToolDefinition())
 	if w.capabilities == nil {
 		return tools, nil
 	}
@@ -509,6 +510,8 @@ func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, project
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
 		result = toolExecutor.Execute(ctx, call)
+	case toolNameDelegate:
+		result = w.executeDelegate(ctx, call, toolExecutor)
 	default:
 		if w.capabilities == nil {
 			result = jsonErrorf("unknown tool: %s", call.Function.Name)
