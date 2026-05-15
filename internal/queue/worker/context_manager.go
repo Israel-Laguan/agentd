@@ -78,6 +78,7 @@ type ContextManager struct {
 	seenCorrections  map[string]bool
 	lastCommentPoll  time.Time
 	commentHighWater time.Time
+	goalTracker      *GoalTracker
 }
 
 func cloneTurnSummary(ts TurnSummary) TurnSummary {
@@ -219,6 +220,8 @@ func (cm *ContextManager) applyRollingSummarization(ctx context.Context, anchor 
 	}
 	compressedTurns := turns[:len(turns)-keepCount]
 	workingTurns := turns[len(turns)-keepCount:]
+
+	compressedTurns, workingTurns = cm.goalAwarePartition(compressedTurns, workingTurns)
 
 	summary, err := cm.summarizeTurns(ctx, compressedTurns)
 	if err != nil {
