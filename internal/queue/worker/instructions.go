@@ -151,12 +151,7 @@ func splitH2Sections(content string) map[string]string {
 				}
 			}
 			// Extract heading text
-			var headingText string
-			if heading.Lines().Len() > 0 {
-				line := heading.Lines().At(0)
-				headingText = strings.TrimSpace(string(source[line.Start:line.Stop]))
-			}
-			currentHeading = headingText
+			currentHeading = strings.TrimSpace(string(heading.Text(source)))
 			// Set startOffset to the end of this heading node
 			if heading.Lines().Len() > 0 {
 				startOffset = heading.Lines().At(heading.Lines().Len()-1).Stop

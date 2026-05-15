@@ -1,7 +1,9 @@
 "use client";
 
+import React from "react";
 import { motion } from "framer-motion";
-import { cn, TaskStatus, Task, Project } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { TaskStatus, Task, Project } from '@/lib/types';
 import { TaskCard } from "@/app/components/task-card";
 
 interface BoardPanelProps {
@@ -9,6 +11,25 @@ interface BoardPanelProps {
 }
 
 export function BoardPanel({ boardData }: BoardPanelProps) {
+  const tasksByStatus = React.useMemo(() => {
+    const groups: Record<TaskStatus, Task[]> = {
+      [TaskStatus.PENDING]: [],
+      [TaskStatus.QUEUED]: [],
+      [TaskStatus.RUNNING]: [],
+      [TaskStatus.COMPLETED]: [],
+      [TaskStatus.FAILED]: [],
+      [TaskStatus.BLOCKED]: [],
+      [TaskStatus.IN_CONSIDERATION]: []
+    };
+    for (const task of boardData.tasks) {
+      groups[task.status].push(task);
+    }
+    for (const status in groups) {
+      groups[status as TaskStatus].sort((a, b) => b.updatedAt - a.updatedAt);
+    }
+    return groups;
+  }, [boardData.tasks]);
+
   return (
     <motion.div
       key="board"
@@ -38,17 +59,13 @@ export function BoardPanel({ boardData }: BoardPanelProps) {
                 "text-[10px] font-bold uppercase tracking-[0.2em]",
                 status === TaskStatus.RUNNING ? "text-blue" : "text-text-dim"
               )}>{status}</h3>
-              <span className="text-[9px] font-mono bg-border/40 px-1.5 rounded text-text-dim">{boardData.tasks.filter(t => t.status === status).length}</span>
+              <span className="text-[9px] font-mono bg-border/40 px-1.5 rounded text-text-dim">{tasksByStatus[status].length}</span>
             </div>
             <div className="space-y-3 px-0.5">
-              {boardData.tasks
-                .filter(t => t.status === status)
-                .sort((a,b) => b.updatedAt - a.updatedAt)
-                .map(task => (
-                  <TaskCard key={task.id} task={task} />
-                ))
-              }
-              {boardData.tasks.filter(t => t.status === status).length === 0 && (
+              {tasksByStatus[status].map(task => (
+                <TaskCard key={task.id} task={task} />
+              ))}
+              {tasksByStatus[status].length === 0 && (
                 <div className="h-24 border border-dashed border-border/50 rounded-md flex items-center justify-center bg-bg/20">
                   <span className="text-[9px] font-bold text-text-dim/30 uppercase tracking-widest">Idle</span>
                 </div>

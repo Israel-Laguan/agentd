@@ -9,17 +9,25 @@ import (
 	"agentd/internal/models"
 )
 
-func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
-	messages := workerMessages(task, profile)
+func taskIntent(task models.Task) string {
+	return task.Title + " " + task.Description
+}
+
+func (w *Worker) prependMemoryLessons(ctx context.Context, intent string, projectID string, messages []gateway.PromptMessage) []gateway.PromptMessage {
 	if w.retriever == nil {
 		return messages
 	}
-	intent := task.Title + " " + task.Description
-	recalled := w.retriever.Recall(ctx, intent, task.ProjectID, "")
+	recalled := w.retriever.Recall(ctx, intent, projectID, "")
 	if lessons := memoryFormatLessons(recalled); lessons != "" {
 		return append([]gateway.PromptMessage{{Role: "system", Content: lessons}}, messages...)
 	}
 	return messages
+}
+
+func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
+	messages := workerMessages(task, profile)
+	intent := taskIntent(task)
+	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
 func agenticToolUseSystemText() string {
@@ -56,7 +64,7 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 		if err != nil {
 			slog.Warn("failed to load skills", "workspace", project.WorkspacePath, "error", err)
 		} else if len(skills) > 0 {
-			intent := task.Title + " " + task.Description
+			intent := taskIntent(task)
 			matched := w.skillRouter.Match(intent, skills)
 			for _, sk := range matched {
 				builder.AddSkillBlock(FormatSkillBlock(sk))
@@ -78,17 +86,10 @@ func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Ta
 		Role:    "user",
 		Content: fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description),
 	}
-	var messages []gateway.PromptMessage
-	if w.retriever != nil {
-		intent := task.Title + " " + task.Description
-		recalled := w.retriever.Recall(ctx, intent, task.ProjectID, "")
-		if lessons := memoryFormatLessons(recalled); lessons != "" {
-			messages = append(messages, gateway.PromptMessage{Role: "system", Content: lessons})
-		}
-	}
-	messages = append(messages,
+	messages := []gateway.PromptMessage{
 		gateway.PromptMessage{Role: "system", Content: systemPrompt},
 		userMsg,
-	)
-	return messages
+	}
+	intent := taskIntent(task)
+	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
 }

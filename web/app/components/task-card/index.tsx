@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { cn } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { TaskStatus } from "@/lib/types";
 import { AlertCircle, CheckCircle2, Clock, Loader2, MessageSquare, Play } from "lucide-react";
 
