@@ -36,8 +36,9 @@ type Task struct {
 	LastHeartbeat *time.Time
 	RetryCount    int
 	TokenUsage    int
-	DependsOn     []string
-	Logs          string
+	SuccessCriteria []string
+	DependsOn       []string
+	Logs            string
 }
 
 // TaskResult is the durable outcome reported by a worker after running a task.

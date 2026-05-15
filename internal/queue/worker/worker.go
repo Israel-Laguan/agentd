@@ -360,10 +360,16 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		task.ID,
 	)
 
+	goalTracker := NewGoalTracker(w.sink, task.ID, task.ProjectID)
+	if g := GoalFromTask(task); g != nil {
+		goalTracker.SetGoal(*g)
+		cm.SetGoalTracker(goalTracker)
+	}
+
 	for {
 		shouldContinue, err := w.processAgenticIteration(
 			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
-			iterationGuard, budgetGuard, deadlineGuard, cm,
+			iterationGuard, budgetGuard, deadlineGuard, cm, goalTracker,
 			taskHooks, taskCaps,
 		)
 		if err != nil {
@@ -380,7 +386,7 @@ func (w *Worker) processAgenticIteration(
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
 	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
-	deadlineGuard *DeadlineGuard, cm *ContextManager,
+	deadlineGuard *DeadlineGuard, cm *ContextManager, goalTracker *GoalTracker,
 	taskHooks *HookChain, _ *capabilities.Registry,
 ) (bool, error) {
 	if err := deadlineGuard.BeforeIteration(); err != nil {
@@ -468,6 +474,14 @@ func (w *Worker) processAgenticIteration(
 			ToolCallID: call.ID,
 			Content:    result,
 		})
+	}
+
+	if goalTracker != nil {
+		completed, blocked := parseGoalProgress(resp.Content)
+		if stalled := goalTracker.AfterTurn(ctx, completed, blocked); stalled {
+			w.handleGoalStalled(ctx, task, goalTracker)
+			return false, nil
+		}
 	}
 
 	return true, nil

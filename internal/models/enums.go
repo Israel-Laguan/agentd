@@ -157,6 +157,7 @@ const (
 	EventTypeHeartbeatReconcile    EventType = "HEARTBEAT_RECONCILE"
 	EventTypeToolCall              EventType = "TOOL_CALL"
 	EventTypeToolResult            EventType = "TOOL_RESULT"
+	EventTypeGoalStalled           EventType = "GOAL_STALLED"
 )
 
 // CommentAuthor identifies the actor that produced a comment.
