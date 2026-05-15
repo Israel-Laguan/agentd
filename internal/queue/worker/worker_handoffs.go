@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
@@ -10,6 +11,35 @@ import (
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
 )
+
+// HITLMessage is the structured envelope for all human-in-the-loop
+// messages. Humans who trust the agent can act on the header alone
+// (Summary + Action + Urgency); the Detail section provides
+// supporting context for those who need it.
+type HITLMessage struct {
+	Summary string
+	Action  string
+	Urgency string
+	Detail  string
+}
+
+// FormatForHuman renders a HITLMessage into a scannable text block.
+// The header (summary, required action, urgency) is separated from
+// the detail section so humans can decide quickly.
+func FormatForHuman(msg HITLMessage) string {
+	var b strings.Builder
+	b.WriteString("## Summary\n")
+	b.WriteString(msg.Summary)
+	b.WriteString("\n\n## Required Action\n")
+	b.WriteString(msg.Action)
+	b.WriteString("\n\n## Urgency\n")
+	b.WriteString(msg.Urgency)
+	if msg.Detail != "" {
+		b.WriteString("\n\n---\n\n## Detail\n")
+		b.WriteString(msg.Detail)
+	}
+	return b.String()
+}
 
 func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err error) {
 	if safety.ClassifiesAsBreakerFailure(err) {
@@ -128,4 +158,27 @@ func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, act
 		return
 	}
 	w.emit(ctx, task, "HEALING_HANDOFF", truncate(description, 1000))
+}
+
+// createReviewHandoff blocks the task with a HUMAN subtask so a human
+// can review the agent's draft output before the task is marked
+// complete. Review feedback re-enters the loop as task-level context.
+func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draftOutput string) {
+	description := FormatForHuman(HITLMessage{
+		Summary: "Review required before task completion",
+		Action:  "Review the draft output below. Mark this subtask COMPLETED to approve, or add a comment with feedback and mark FAILED to request changes.",
+		Urgency: "blocking",
+		Detail:  truncate(draftOutput, 2000),
+	})
+
+	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
+		Title:       "Review required: draft output pending approval",
+		Description: description,
+		Assignee:    models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		w.emit(ctx, task, "ERROR", err.Error())
+		return
+	}
+	w.emit(ctx, task, "REVIEW_HANDOFF", truncate(draftOutput, 1000))
 }

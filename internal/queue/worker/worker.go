@@ -327,6 +327,11 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	taskHooks, taskCaps := w.mountScopedPlugins(project, profile)
 
+	if len(profile.GatedTools) > 0 {
+		handler := NewBlockingApprovalHandler(w.store, w.sink)
+		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler, w.store, w.sink))
+	}
+
 	messages := w.seedMessages(ctx, task, profile)
 	messages = w.buildAgenticMessages(messages, profile)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
@@ -447,7 +452,7 @@ func (w *Worker) processAgenticIteration(
 	})
 
 	if len(resp.ToolCalls) == 0 {
-		w.commitText(ctx, task, resp.Content)
+		w.commitTextWithProfile(ctx, task, resp.Content, &profile)
 		return false, nil
 	}
 
@@ -645,6 +650,14 @@ func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile 
 }
 
 func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {
+	w.commitTextWithProfile(ctx, task, content, nil)
+}
+
+func (w *Worker) commitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
+	if profile != nil && profile.RequireReview {
+		w.createReviewHandoff(ctx, task, content)
+		return
+	}
 	result := sandbox.Result{
 		Success: true,
 		Stdout:  content,
