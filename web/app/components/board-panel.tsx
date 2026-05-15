@@ -52,9 +52,16 @@ export function BoardPanel({ boardData }: BoardPanelProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
         {[
-          TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.COMPLETED, TaskStatus.FAILED].map(status => (
+          TaskStatus.PENDING,
+          TaskStatus.QUEUED,
+          TaskStatus.RUNNING,
+          TaskStatus.BLOCKED,
+          TaskStatus.IN_CONSIDERATION,
+          TaskStatus.COMPLETED,
+          TaskStatus.FAILED,
+        ].map(status => (
           <div key={status} className="flex flex-col gap-3 min-w-[240px]">
             <div className="flex justify-between items-center px-1 py-1.5 border-b border-border shadow-[0_1px_0_var(--color-bg)]">
               <h3 className={cn(
