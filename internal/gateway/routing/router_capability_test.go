@@ -2,12 +2,14 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/gateway/truncation"
+	"agentd/internal/models"
 )
 
 // mockProvider implements providers.Backend for capability tests
@@ -16,12 +18,16 @@ type mockProvider struct {
 	budget       int
 	request      spec.AIRequest
 	capabilities providers.Capabilities
+	err          error
 }
 
 func (p *mockProvider) Name() spec.Provider        { return spec.Provider(p.providerName) }
 func (p *mockProvider) MaxInputChars() int         { return p.budget }
 func (p *mockProvider) Generate(_ context.Context, req spec.AIRequest) (spec.AIResponse, error) {
 	p.request = req
+	if p.err != nil {
+		return spec.AIResponse{}, p.err
+	}
 	return spec.AIResponse{Content: "ok", ProviderUsed: string(p.providerName)}, nil
 }
 func (p *mockProvider) Capabilities() providers.Capabilities {
@@ -230,5 +236,78 @@ func TestAnthropicProviderWithToolsSupport(t *testing.T) {
 	// Verify response is valid
 	if resp.Content != "ok" {
 		t.Errorf("expected content 'ok', got: %s", resp.Content)
+	}
+}
+
+// TestExplicitProviderUnsupportedToolsWithOtherProvider tests that when an explicit
+// provider doesn't support tools but another provider does, the correct tool-mismatch
+// error is returned (not "not configured").
+func TestExplicitProviderUnsupportedToolsWithOtherProvider(t *testing.T) {
+	ollama := &mockProvider{
+		providerName: "ollama",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: false},
+	}
+	openai := &mockProvider{
+		providerName: "openai",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: true},
+	}
+
+	router := NewRouter(ollama, openai).WithTruncation(truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}}, 12000)
+
+	req := spec.AIRequest{
+		Provider: "ollama",
+		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
+		Tools:    []spec.ToolDefinition{{Name: "test_tool"}},
+	}
+
+	_, err := router.Generate(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error for explicit unsupported provider, got nil")
+	}
+
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "ollama") {
+		t.Errorf("error should contain provider name 'ollama', got: %v", err)
+	}
+	if !strings.Contains(errMsg, "tools") {
+		t.Errorf("error should contain 'tools', got: %v", err)
+	}
+}
+
+// TestMixedProvidersAllSkippedOrFailed tests that when no explicit provider is given,
+// non-tool providers are skipped and tool-provider failures cascade into ErrLLMUnreachable.
+func TestMixedProvidersAllSkippedOrFailed(t *testing.T) {
+	ollama := &mockProvider{
+		providerName: "ollama",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: false},
+	}
+	openai := &mockProvider{
+		providerName: "openai",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: true},
+		err:          errors.New("openai connection refused"),
+	}
+
+	router := NewRouter(ollama, openai).WithTruncation(truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}}, 12000)
+
+	req := spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
+		Tools:    []spec.ToolDefinition{{Name: "test_tool"}},
+	}
+
+	_, err := router.Generate(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error when all providers fail, got nil")
+	}
+
+	if !errors.Is(err, models.ErrLLMUnreachable) {
+		t.Errorf("expected ErrLLMUnreachable, got: %v", err)
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "openai connection refused") {
+		t.Errorf("error should contain provider error, got: %v", err)
 	}
 }

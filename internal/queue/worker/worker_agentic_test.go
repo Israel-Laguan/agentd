@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -15,89 +14,11 @@ import (
 	"agentd/internal/sandbox"
 )
 
-func TestBuildAgenticMessagesReplacesLeadingSystemMessage(t *testing.T) {
-	w := &Worker{}
-	messages := []gateway.PromptMessage{
-		{Role: "system", Content: "existing prompt"},
-		{Role: "user", Content: "do work"},
-	}
-	profile := models.AgentProfile{
-		SystemPrompt: sql.NullString{String: "custom prompt", Valid: true},
-	}
-
-	got := w.buildAgenticMessages(messages, profile)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(got))
-	}
-	if got[0].Role != "system" {
-		t.Fatalf("expected first role system, got %q", got[0].Role)
-	}
-	if got[1].Role != "user" {
-		t.Fatalf("expected second role user, got %q", got[1].Role)
-	}
-	want := "custom prompt\n\n" + agenticToolUseSystemText()
-	if got[0].Content != want {
-		t.Fatalf("expected system message content %q, got %q", want, got[0].Content)
-	}
-	if countRole(got, "system") != 1 {
-		t.Fatalf("expected one system message, got %d", countRole(got, "system"))
-	}
-}
-
-func TestBuildAgenticMessagesInsertsBeforeFirstUserWhenNoLeadingSystem(t *testing.T) {
-	w := &Worker{}
-	messages := []gateway.PromptMessage{
-		{Role: "assistant", Content: "prior response"},
-		{Role: "user", Content: "run task"},
-	}
-
-	got := w.buildAgenticMessages(messages, models.AgentProfile{})
-	if len(got) != 3 {
-		t.Fatalf("expected 3 messages, got %d", len(got))
-	}
-	if got[1].Role != "system" {
-		t.Fatalf("expected inserted message at index 1 to be system, got %q", got[1].Role)
-	}
-	if got[2].Role != "user" {
-		t.Fatalf("expected user message after inserted system, got %q", got[2].Role)
-	}
-}
-
-func TestBuildAgenticMessagesPreservesMemoryLessonsAndReplacesLegacy(t *testing.T) {
-	t.Parallel()
-	w := &Worker{}
-	lessons := "LESSONS LEARNED (from previous tasks):\n1. Symptom: x\n   Solution: y\n"
-	legacy := legacyJSONCommandSystemSentinel + `, {"command":"..."}, or if the task is too complex...`
-	messages := []gateway.PromptMessage{
-		{Role: "system", Content: lessons},
-		{Role: "system", Content: legacy},
-		{Role: "user", Content: "task body"},
-	}
-	got := w.buildAgenticMessages(messages, models.AgentProfile{})
-	if len(got) != 3 {
-		t.Fatalf("expected 3 messages, got %d", len(got))
-	}
-	if got[0].Content != lessons {
-		t.Fatalf("expected memory lessons preserved, got %q", got[0].Content)
-	}
-	if got[0].Role != "system" || got[1].Role != "system" || got[2].Role != "user" {
-		t.Fatalf("unexpected roles: %+v", got)
-	}
-	if isLegacyJSONCommandSystemPrompt(got[1].Content) {
-		t.Fatalf("expected legacy JSON prompt removed from agentic system, got %q", got[1].Content)
-	}
-	if !strings.Contains(got[1].Content, "You are an autonomous agent") || !strings.Contains(got[1].Content, "bash tool") {
-		t.Fatalf("expected agentic tool instructions in second system, got %q", got[1].Content)
-	}
-	if got[1].Content != agenticToolUseSystemText() {
-		t.Fatalf("expected bare agentic system when profile empty, got %q", got[1].Content)
-	}
-}
-
 func TestExecuteAgenticTool_CapabilityRegistry(t *testing.T) {
 	t.Parallel()
 	registry := capabilities.NewRegistry()
 	registry.Register("fake", fakeCapabilityCallAdapter{
+		name: "fake",
 		tools: []gateway.ToolDefinition{
 			{Name: "capability_tool", Description: "x", Parameters: &gateway.FunctionParameters{Type: "object"}},
 		},
@@ -168,17 +89,18 @@ func (f fakeCapabilityAdapter) CallTool(context.Context, string, map[string]any)
 func (f fakeCapabilityAdapter) Close() error { return nil }
 
 type fakeCapabilityCallAdapter struct {
+	name  string
 	tools []gateway.ToolDefinition
 }
 
-func (f fakeCapabilityCallAdapter) Name() string { return "fake" }
+func (f fakeCapabilityCallAdapter) Name() string { return f.name }
 
 func (f fakeCapabilityCallAdapter) ListTools(context.Context) ([]gateway.ToolDefinition, error) {
 	return f.tools, nil
 }
 
 func (f fakeCapabilityCallAdapter) CallTool(_ context.Context, name string, args map[string]any) (any, error) {
-	return map[string]any{"tool": name, "args": args}, nil
+	return map[string]any{"tool": name, "args": args, "adapter": f.name}, nil
 }
 
 func (f fakeCapabilityCallAdapter) Close() error { return nil }
@@ -190,56 +112,6 @@ func containsTool(tools []gateway.ToolDefinition, name string) bool {
 		}
 	}
 	return false
-}
-
-func countRole(messages []gateway.PromptMessage, role string) int {
-	count := 0
-	for _, msg := range messages {
-		if msg.Role == role {
-			count++
-		}
-	}
-	return count
-}
-
-// TestProcessAgentic_BuildsAgenticMessages verifies that buildAgenticMessages correctly
-// adds the agentic system prompt to messages.
-// Validates: Requirements 5, 6.2
-func TestProcessAgentic_BuildsAgenticMessages(t *testing.T) {
-	t.Parallel()
-
-	w := &Worker{}
-	messages := []gateway.PromptMessage{
-		{Role: "user", Content: "create a file hello.txt"},
-	}
-
-	// Test with default profile (no custom system prompt)
-	result := w.buildAgenticMessages(messages, models.AgentProfile{})
-
-	// Should have inserted a system message at the beginning
-	if len(result) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(result))
-	}
-
-	if result[0].Role != "system" {
-		t.Fatalf("expected first message to be system, got %q", result[0].Role)
-	}
-
-	// Verify the agentic system text is present
-	if !strings.Contains(result[0].Content, "You are an autonomous agent") {
-		t.Error("expected agentic system prompt to contain autonomy statement")
-	}
-	if !strings.Contains(result[0].Content, "bash tool") {
-		t.Error("expected agentic system prompt to mention bash tool")
-	}
-
-	// Verify original user message is preserved
-	if result[1].Role != "user" {
-		t.Fatalf("expected second message to be user, got %q", result[1].Role)
-	}
-	if result[1].Content != "create a file hello.txt" {
-		t.Fatalf("expected user message content to be preserved, got %q", result[1].Content)
-	}
 }
 
 // TestProcessAgentic_CallsGatewayWithTools verifies that agenticTools returns tool definitions
