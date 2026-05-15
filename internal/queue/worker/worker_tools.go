@@ -61,6 +61,9 @@ func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, project
 	case toolNameDelegateParallel:
 		result = w.executeDelegateParallel(ctx, call, toolExecutor, scopedCapabilities)
 	default:
+		// Capability tools: never gate on toolToAdapter here; it is only a hint inside
+		// executeCapabilityTool. Scoped-then-global resolution (and nil index) is covered
+		// by TestDispatchTool_ScopedCapabilityWithoutAdapterIndex.
 		result = executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
 	}
 

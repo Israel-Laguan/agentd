@@ -1,5 +1,6 @@
 export enum TaskStatus {
   PENDING = 'PENDING',
+  READY = 'READY',
   QUEUED = 'QUEUED',
   RUNNING = 'RUNNING',
   COMPLETED = 'COMPLETED',
