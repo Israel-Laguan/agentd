@@ -128,12 +128,34 @@ func hydrateConfig(cfg Config, v *viper.Viper) (Config, error) {
 	cfg.Heartbeat = loadHeartbeatConfig(v)
 	cfg.Librarian = loadLibrarianConfig(v)
 	cfg.Queue = loadQueueConfig(v)
+	cfg.Queue.Skills.GlobalDir = resolveSkillsGlobalDir(cfg.HomeDir, cfg.Queue.Skills.GlobalDir)
 	cron, err := LoadCron(cfg.CronPath)
 	if err != nil {
 		return Config{}, err
 	}
 	cfg.Cron = cron
 	return cfg, nil
+}
+
+// resolveSkillsGlobalDir normalizes queue.skills.global_dir after viper read.
+// Empty input returns empty. A "~/..." prefix is expanded with os.UserHomeDir
+// (for backward-compatible configs). Absolute paths are returned unchanged.
+// Any other value is joined with homeDir (the default is the "skills" segment).
+func resolveSkillsGlobalDir(homeDir, raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "~/") {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return raw
+		}
+		return filepath.Join(userHome, raw[2:])
+	}
+	if filepath.IsAbs(raw) {
+		return raw
+	}
+	return filepath.Join(homeDir, raw)
 }
 
 // ResolveHome returns the agentd home directory from explicit input,

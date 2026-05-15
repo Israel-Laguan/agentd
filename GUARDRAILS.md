@@ -8,6 +8,10 @@ Created: 2026-05-09
 Total Signs: 10
 Protocol: [guardrails.md](https://guardrails.md/#protocol)
 
+## Subagent delegation tools
+
+Subagents do not receive `delegate` or `delegate_parallel` unless those tool names are explicitly listed in the subagent’s allowed-tools configuration (parent workers in agentic mode always have them). Delegation from subagents is intentionally opt-in.
+
 ---
 
 ## SIGN #1: models layer boundary
