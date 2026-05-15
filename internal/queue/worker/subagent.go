@@ -112,6 +112,8 @@ func (d *SubagentDelegate) runSubagentStep(
 	return false
 }
 
+// enforceSubagentContextBudget keeps the first two messages (system + user) and
+// truncates the rest with the same middle-out strategy as ContextManager (see truncateWorkingMessages).
 func enforceSubagentContextBudget(messages []gateway.PromptMessage, budget int) []gateway.PromptMessage {
 	if budget <= 0 || totalChars(messages) <= budget {
 		return messages

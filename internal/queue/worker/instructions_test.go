@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseAgentsMD_FormattedHeadings(t *testing.T) {
-	content := "# Agent Instructions\n\n" + `## *Architecture*
+	content := "# Agent Instructions\n\n" + `## **Architecture**
 Use ports and adapters.
 
 ## [Known Hazards](https://example.test/hazards)
