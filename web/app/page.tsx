@@ -61,7 +61,7 @@ export default function Page() {
   }, []);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (isTyping || !input.trim()) return;
     const userMsg: ChatMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMsg]);
     setInput('');

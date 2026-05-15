@@ -60,16 +60,17 @@ func (m *subagentMockGateway) ClassifyIntent(_ context.Context, _ string) (*spec
 type subagentTaskGateway struct{}
 
 func (subagentTaskGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
-	if len(req.Messages) < 2 {
+	if len(req.Messages) == 0 {
 		return gateway.AIResponse{Content: "missing task"}, nil
 	}
-	switch req.Messages[1].Content {
+	task := req.Messages[len(req.Messages)-1].Content
+	switch task {
 	case "first task":
 		return gateway.AIResponse{Content: "first"}, nil
 	case "second task":
 		return gateway.AIResponse{Content: "second"}, nil
 	default:
-		return gateway.AIResponse{Content: req.Messages[1].Content}, nil
+		return gateway.AIResponse{Content: task}, nil
 	}
 }
 
@@ -199,10 +200,12 @@ func TestSubagentDelegate_CapabilityToolExecutesScopedRegistryFirst(t *testing.T
 
 	global := capabilities.NewRegistry()
 	global.Register("global", fakeCapabilityCallAdapter{
+		name:  "global",
 		tools: []gateway.ToolDefinition{{Name: "capability_tool"}},
 	})
 	scoped := capabilities.NewRegistry()
 	scoped.Register("scoped", fakeCapabilityCallAdapter{
+		name:  "scoped",
 		tools: []gateway.ToolDefinition{{Name: "capability_tool"}},
 	})
 
@@ -228,6 +231,9 @@ func TestSubagentDelegate_CapabilityToolExecutesScopedRegistryFirst(t *testing.T
 	args, _ := payload["args"].(map[string]any)
 	if args["id"] != "scoped" {
 		t.Fatalf("expected scoped capability call args, got %#v", payload)
+	}
+	if payload["adapter"] != "scoped" {
+		t.Fatalf("expected scoped adapter, got %#v", payload)
 	}
 }
 
@@ -342,6 +348,94 @@ func TestSubagentDelegate_DepthZeroAllowed(t *testing.T) {
 	}
 	if result.Status != SubagentStatusSuccess {
 		t.Fatalf("expected success, got %s", result.Status)
+	}
+}
+
+func TestSubagentDelegate_NestedDelegation(t *testing.T) {
+	oldMax := MaxDelegationDepth
+	MaxDelegationDepth = 2
+	defer func() { MaxDelegationDepth = oldMax }()
+
+	workspace := t.TempDir()
+	subagentDir := filepath.Join(workspace, ".agentd", "subagents")
+	if err := os.MkdirAll(subagentDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Nested definition
+	nestedContent := `# Subagent: nested
+
+## Purpose
+
+do the actual work
+`
+	if err := os.WriteFile(filepath.Join(subagentDir, "nested.md"), []byte(nestedContent), 0644); err != nil {
+		t.Fatalf("write nested def: %v", err)
+	}
+
+	gw := &subagentMockGateway{
+		responses: []gateway.AIResponse{
+			{
+				ToolCalls: []gateway.ToolCall{
+					{ID: "1", Type: "function", Function: gateway.ToolCallFunction{
+						Name:      "delegate",
+						Arguments: `{"subagent":"nested","task":"do nested work"}`,
+					}},
+				},
+			},
+			{Content: "nested done"},
+			{Content: "parent complete"},
+		},
+	}
+
+	parentDef := SubagentDefinition{
+		Name:         "parent",
+		Purpose:      "delegate to nested",
+		AllowedTools: []string{"delegate"},
+	}
+
+	delegate := NewSubagentDelegate(gw, nil, workspace, nil, 0, 0)
+	result, err := delegate.Delegate(context.Background(), parentDef, "parent task", "", "", 0.2, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != SubagentStatusSuccess {
+		t.Fatalf("expected success, got %s: %s", result.Status, result.Error)
+	}
+	if !strings.Contains(result.Output, "parent complete") {
+		t.Errorf("expected output to contain 'parent complete', got: %s", result.Output)
+	}
+
+	requests := gw.requestSnapshot()
+	if len(requests) != 3 {
+		t.Fatalf("expected 3 gateway calls (parent, nested, parent-final), got %d", len(requests))
+	}
+}
+
+func TestSubagentDelegate_ExecuteToolDepthExceeded(t *testing.T) {
+	t.Parallel()
+
+	delegate := NewSubagentDelegate(nil, nil, t.TempDir(), nil, 0, 0)
+	toolExec := NewToolExecutor(nil, t.TempDir(), nil, 0)
+
+	def := SubagentDefinition{
+		Name:         "test",
+		Purpose:      "test",
+		AllowedTools: []string{"delegate"},
+	}
+
+	call := gateway.ToolCall{
+		ID:   "1",
+		Type: "function",
+		Function: gateway.ToolCallFunction{
+			Name:      "delegate",
+			Arguments: `{"subagent":"nested","task":"do something"}`,
+		},
+	}
+
+	result := delegate.executeTool(context.Background(), call, def, toolExec)
+	if !strings.Contains(result, "depth exceeded") {
+		t.Errorf("expected depth exceeded error, got: %s", result)
 	}
 }
 

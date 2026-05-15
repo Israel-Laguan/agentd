@@ -118,8 +118,85 @@ func (d *SubagentDelegate) executeTool(
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
 		return toolExec.Execute(ctx, call)
-	case toolNameDelegate, toolNameDelegateParallel:
-		return jsonErrorf("%s", ErrDepthExceeded.Error())
+	case toolNameDelegate:
+		if d.depth+1 >= MaxDelegationDepth {
+			return jsonErrorf("%s", ErrDepthExceeded.Error())
+		}
+		var args delegateArgs
+		if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
+			return jsonErrorf("invalid delegate arguments: %v", err)
+		}
+		if args.Subagent == "" {
+			return jsonErrorf("subagent name is required")
+		}
+		if args.Task == "" {
+			return jsonErrorf("task description is required")
+		}
+		loader := &SubagentLoader{}
+		subDef, err := loader.LoadByName(d.workspacePath, args.Subagent)
+		if err != nil {
+			return jsonErrorf("failed to load subagent definition: %v", err)
+		}
+		child := NewSubagentDelegate(
+			d.gateway,
+			d.sandbox,
+			d.workspacePath,
+			d.envVars,
+			d.wallTimeout,
+			d.depth+1,
+		).WithCapabilities(d.capabilities, d.scopedCapabilities)
+		result, err := child.Delegate(ctx, *subDef, args.Task, "", "", 0.2, 0)
+		if err != nil {
+			return jsonErrorf("delegation failed: %v", err)
+		}
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return jsonErrorf("failed to encode subagent result: %v", err)
+		}
+		return string(encoded)
+	case toolNameDelegateParallel:
+		if d.depth+1 >= MaxDelegationDepth {
+			return jsonErrorf("%s", ErrDepthExceeded.Error())
+		}
+		var args delegateParallelArgs
+		if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
+			return jsonErrorf("invalid delegate_parallel arguments: %v", err)
+		}
+		if len(args.Tasks) == 0 {
+			return jsonErrorf("delegate_parallel requires at least one task")
+		}
+		loader := &SubagentLoader{}
+		tasks := make([]ParallelTask, 0, len(args.Tasks))
+		for i, task := range args.Tasks {
+			if task.Subagent == "" {
+				return jsonErrorf("task %d subagent name is required", i)
+			}
+			if task.Task == "" {
+				return jsonErrorf("task %d description is required", i)
+			}
+			subDef, err := loader.LoadByName(d.workspacePath, task.Subagent)
+			if err != nil {
+				return jsonErrorf("failed to load subagent definition for task %d: %v", i, err)
+			}
+			tasks = append(tasks, ParallelTask{
+				Definition:  *subDef,
+				Description: task.Task,
+			})
+		}
+		child := NewSubagentDelegate(
+			d.gateway,
+			d.sandbox,
+			d.workspacePath,
+			d.envVars,
+			d.wallTimeout,
+			d.depth+1,
+		).WithCapabilities(d.capabilities, d.scopedCapabilities)
+		results := child.DelegateParallel(ctx, tasks, "", "", 0.2, 0)
+		encoded, err := json.Marshal(results)
+		if err != nil {
+			return jsonErrorf("failed to encode subagent results: %v", err)
+		}
+		return string(encoded)
 	default:
 		return executeCapabilityTool(ctx, call, nil, d.capabilities, d.scopedCapabilities)
 	}

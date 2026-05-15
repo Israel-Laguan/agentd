@@ -11,7 +11,7 @@ import (
 
 // MaxDelegationDepth is the harness-enforced limit on delegation nesting.
 // Depth=1 means a parent can delegate but a subagent cannot.
-const MaxDelegationDepth = 1
+var MaxDelegationDepth = 1
 
 // SubagentStatus represents the terminal state of a subagent execution.
 type SubagentStatus string
