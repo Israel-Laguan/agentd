@@ -34,16 +34,17 @@ type ClarificationInterface interface {
 
 // BlockingClarificationHandler implements ClarificationInterface by
 // creating a HUMAN subtask and blocking the parent task until the
-// subtask is resolved.
+// subtask is resolved. Event emission is left to the caller
+// (e.g. RequestClarificationFromAgent) which has access to the
+// worker's emit helper and can populate ProjectID/TaskID.
 type BlockingClarificationHandler struct {
 	store models.KanbanStore
-	sink  models.EventSink
 }
 
 // NewBlockingClarificationHandler returns a handler that suspends the
 // session by blocking the task with a HUMAN subtask.
-func NewBlockingClarificationHandler(store models.KanbanStore, sink models.EventSink) *BlockingClarificationHandler {
-	return &BlockingClarificationHandler{store: store, sink: sink}
+func NewBlockingClarificationHandler(store models.KanbanStore) *BlockingClarificationHandler {
+	return &BlockingClarificationHandler{store: store}
 }
 
 // RequestClarification creates a HUMAN subtask for the clarification
@@ -70,14 +71,6 @@ func (h *BlockingClarificationHandler) RequestClarification(ctx context.Context,
 
 	if len(subtasks) == 0 {
 		return ClarificationResponse{}, fmt.Errorf("no clarification subtask created")
-	}
-
-	if h.sink != nil {
-		_ = h.sink.Emit(ctx, models.Event{
-			ProjectID: "",
-			Type:      "CLARIFICATION_REQUESTED",
-			Payload:   truncate(detail, 1000),
-		})
 	}
 
 	return ClarificationResponse{}, nil
@@ -108,7 +101,7 @@ func (w *Worker) RequestClarificationFromAgent(
 	options []string,
 	contextSummary string,
 ) error {
-	handler := NewBlockingClarificationHandler(w.store, w.sink)
+	handler := NewBlockingClarificationHandler(w.store)
 	msg := ClarificationMessage{
 		Question:       question,
 		Options:        options,

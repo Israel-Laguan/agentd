@@ -46,9 +46,9 @@ func TestApprovalGateHook_AllowsUngatedTool(t *testing.T) {
 	}
 }
 
-func TestApprovalGateHook_BlocksGatedTool_Approved(t *testing.T) {
+func TestApprovalGateHook_SuspendsGatedTool(t *testing.T) {
 	t.Parallel()
-	handler := &stubApprovalHandler{approved: true}
+	handler := &stubApprovalHandler{approved: false}
 	hook := ApprovalGateHook([]string{"deploy", "write_config"}, handler, nil, nil)
 
 	verdict, err := hook.Fn(HookContext{
@@ -60,8 +60,11 @@ func TestApprovalGateHook_BlocksGatedTool_Approved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if verdict.Veto {
-		t.Fatal("approved tool call should not be vetoed")
+	if !verdict.Veto {
+		t.Fatal("gated tool should always be vetoed (suspension pattern)")
+	}
+	if !strings.Contains(verdict.Result, "paused pending human approval") {
+		t.Fatalf("result should indicate suspension, got %q", verdict.Result)
 	}
 	if handler.called != 1 {
 		t.Fatalf("handler.called = %d, want 1", handler.called)
@@ -96,7 +99,7 @@ func TestApprovalGateHook_BlocksGatedTool_Rejected(t *testing.T) {
 	}
 }
 
-func TestApprovalGateHook_RejectedNoReason(t *testing.T) {
+func TestApprovalGateHook_SuspendedNoReason(t *testing.T) {
 	t.Parallel()
 	handler := &stubApprovalHandler{approved: false, reason: ""}
 	hook := ApprovalGateHook([]string{"deploy"}, handler, nil, nil)
@@ -111,10 +114,10 @@ func TestApprovalGateHook_RejectedNoReason(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !verdict.Veto {
-		t.Fatal("rejected tool call should be vetoed")
+		t.Fatal("gated tool should be vetoed")
 	}
-	if !strings.Contains(verdict.Result, "no reason provided") {
-		t.Fatalf("result should mention 'no reason provided', got %q", verdict.Result)
+	if !strings.Contains(verdict.Result, "paused pending human approval") {
+		t.Fatalf("result should indicate suspension, got %q", verdict.Result)
 	}
 }
 

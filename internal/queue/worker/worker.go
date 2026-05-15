@@ -220,6 +220,10 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.handlePermissionFailure(ctx, task, command, result)
 		return
 	}
+	if profile.RequireReview && runErr == nil && result.Success {
+		w.createReviewHandoff(ctx, task, resultPayload(result))
+		return
+	}
 	w.commit(ctx, task, result, runErr)
 }
 
@@ -328,6 +332,9 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	taskHooks, taskCaps := w.mountScopedPlugins(project, profile)
 
 	if len(profile.GatedTools) > 0 {
+		if taskHooks == nil {
+			taskHooks = NewHookChain()
+		}
 		handler := NewBlockingApprovalHandler(w.store, w.sink)
 		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler, w.store, w.sink))
 	}

@@ -36,9 +36,12 @@ type ApprovalHandler interface {
 const DefaultApprovalTimeout = 30 * time.Minute
 
 // ApprovalGateHook returns a PreHook that intercepts gated tools and
-// blocks until a human approves or rejects the call. When rejected,
-// the rejection reason is returned as the tool result so the LLM can
-// adjust its approach.
+// suspends the task by creating a HUMAN subtask for approval. The hook
+// always vetoes the tool call: if the handler successfully creates the
+// approval subtask the task is BLOCKED and the agentic loop stops; if
+// the handler returns an explicit rejection the reason is fed back to
+// the LLM. When the human later marks the subtask COMPLETED or FAILED
+// the task is unblocked and the agentic loop resumes.
 func ApprovalGateHook(gatedTools []string, handler ApprovalHandler, store models.KanbanStore, sink models.EventSink) PreHook {
 	toolSet := make(map[string]struct{}, len(gatedTools))
 	for _, t := range gatedTools {
@@ -65,6 +68,11 @@ func ApprovalGateHook(gatedTools []string, handler ApprovalHandler, store models
 				RequestedAt: ctx.Timestamp,
 			}
 
+			// Note: HookContext does not carry a context.Context so we
+			// use Background here. This is safe because the handler
+			// returns immediately after creating the subtask (suspension
+			// pattern). If the handler is later changed to poll, thread
+			// a context.Context through HookContext.
 			resp, err := handler.RequestApproval(context.Background(), req)
 			if err != nil {
 				return HookVerdict{
@@ -73,18 +81,17 @@ func ApprovalGateHook(gatedTools []string, handler ApprovalHandler, store models
 				}, nil
 			}
 
-			if !resp.Approved {
-				reason := resp.Reason
-				if reason == "" {
-					reason = "no reason provided"
-				}
+			if resp.Reason != "" {
 				return HookVerdict{
 					Veto:   true,
-					Result: formatRejection(ctx.ToolName, reason),
+					Result: formatRejection(ctx.ToolName, resp.Reason),
 				}, nil
 			}
 
-			return HookVerdict{}, nil
+			return HookVerdict{
+				Veto:   true,
+				Result: fmt.Sprintf("Tool call %q paused pending human approval. The task is now BLOCKED until a human reviews and approves.", ctx.ToolName),
+			}, nil
 		},
 	}
 }
@@ -99,7 +106,10 @@ func formatRejection(tool, reason string) string {
 }
 
 // BlockingApprovalHandler implements ApprovalHandler by creating a
-// HUMAN subtask via the KanbanStore and polling for its completion.
+// HUMAN subtask via the KanbanStore. It follows the suspension pattern
+// (like BlockingClarificationHandler): the handler creates the subtask
+// and returns immediately with Approved=false, causing the hook to
+// veto the tool call and leave the task BLOCKED.
 type BlockingApprovalHandler struct {
 	store models.KanbanStore
 	sink  models.EventSink
@@ -112,8 +122,9 @@ func NewBlockingApprovalHandler(store models.KanbanStore, sink models.EventSink)
 	return &BlockingApprovalHandler{store: store, sink: sink}
 }
 
-// RequestApproval creates a HUMAN subtask for the approval and blocks
-// until the subtask is completed or the context is cancelled.
+// RequestApproval creates a HUMAN subtask for the approval and returns
+// immediately with Approved=false. The parent task moves to BLOCKED;
+// when the human marks the subtask COMPLETED or FAILED the task resumes.
 func (h *BlockingApprovalHandler) RequestApproval(ctx context.Context, req ApprovalRequest) (ApprovalResponse, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -138,7 +149,7 @@ func (h *BlockingApprovalHandler) RequestApproval(ctx context.Context, req Appro
 		return ApprovalResponse{}, fmt.Errorf("no approval subtask created")
 	}
 
-	return ApprovalResponse{Approved: true}, nil
+	return ApprovalResponse{Approved: false}, nil
 }
 
 func truncateApprovalArgs(args string) string {
