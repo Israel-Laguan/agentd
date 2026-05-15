@@ -79,7 +79,7 @@ export default function Page() {
         setDraftPlan(data.plan);
       }
   
-    } catch (e) {
+    } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting to the system core. Please try again." }]);
     } finally {
       setIsTyping(false);

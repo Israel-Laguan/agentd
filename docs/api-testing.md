@@ -333,3 +333,11 @@ go test -v ./internal/api/...
 ```
 
 **Expected Results**: All tests pass (10/10 for e2e, all API route tests pass).
+
+**Stale cache workaround**: If you see inconsistent or stale test results after switching branches, use an isolated Go cache:
+
+```bash
+env GOCACHE=/tmp/agentd-go-cache go test -v ./internal/...
+```
+
+Or use the Makefile target (`make test`) which applies this automatically.
