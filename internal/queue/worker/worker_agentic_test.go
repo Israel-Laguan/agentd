@@ -42,6 +42,44 @@ func TestExecuteAgenticTool_CapabilityRegistry(t *testing.T) {
 	}
 }
 
+func TestDispatchTool_ScopedCapabilityWithoutAdapterIndex(t *testing.T) {
+	t.Parallel()
+	scopedRegistry := capabilities.NewRegistry()
+	scopedRegistry.Register("scoped_fake", fakeCapabilityCallAdapter{
+		name: "scoped_fake",
+		tools: []gateway.ToolDefinition{
+			{Name: "scoped_tool", Description: "x", Parameters: &gateway.FunctionParameters{Type: "object"}},
+		},
+	})
+
+	w := &Worker{capabilities: capabilities.NewRegistry()} // Empty global registry
+	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+
+	// Build a tool call for the scoped tool
+	call := gateway.ToolCall{
+		ID: "call_1",
+		Function: gateway.ToolCallFunction{
+			Name:      "scoped_tool",
+			Arguments: `{"key":"val"}`,
+		},
+	}
+
+	// Dispatch with NO toolToAdapter index (simulating dynamic registration)
+	out := w.dispatchToolWithProject(context.Background(), "session-1", "project-1", call, nil, ex, scopedRegistry)
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("failed to parse result: %v (out=%s)", err, out)
+	}
+
+	if payload["adapter"] != "scoped_fake" {
+		t.Errorf("expected scoped_fake adapter, got %v", payload["adapter"])
+	}
+	if payload["tool"] != "scoped_tool" {
+		t.Errorf("expected scoped_tool name, got %v", payload["tool"])
+	}
+}
+
 func TestAgenticToolsIncludesExecutorAndCapabilityTools(t *testing.T) {
 	registry := capabilities.NewRegistry()
 	registry.Register("fake", fakeCapabilityAdapter{

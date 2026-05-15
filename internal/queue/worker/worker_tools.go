@@ -61,11 +61,7 @@ func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, project
 	case toolNameDelegateParallel:
 		result = w.executeDelegateParallel(ctx, call, toolExecutor, scopedCapabilities)
 	default:
-		if _, ok := toolToAdapter[call.Function.Name]; !ok {
-			result = jsonErrorf("unknown tool: %s", call.Function.Name)
-		} else {
-			result = executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
-		}
+		result = executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
 	}
 
 	if w.hooks != nil {
