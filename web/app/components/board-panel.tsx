@@ -22,7 +22,9 @@ export function BoardPanel({ boardData }: BoardPanelProps) {
       [TaskStatus.IN_CONSIDERATION]: []
     };
     for (const task of boardData.tasks) {
-      groups[task.status].push(task);
+      if (groups[task.status]) {
+        groups[task.status].push(task);
+      }
     }
     for (const status in groups) {
       groups[status as TaskStatus].sort((a, b) => b.updatedAt - a.updatedAt);
