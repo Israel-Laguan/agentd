@@ -17,7 +17,7 @@ func (d *SubagentDelegate) Delegate(
 	temperature float64,
 	maxTokens int,
 ) (*SubagentResult, error) {
-	if d.depth >= MaxDelegationDepth {
+	if d.depth >= d.delegationDepthLimit() {
 		return nil, ErrDepthExceeded
 	}
 

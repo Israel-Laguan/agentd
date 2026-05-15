@@ -291,7 +291,7 @@ func TestNewWorker_RegistersScrubAndAuditHooks(t *testing.T) {
 	}
 
 	result := w.dispatchToolWithProject(
-		context.Background(), "task-int", "proj-int", call, nil, executor,
+		context.Background(), "task-int", "proj-int", call, nil, executor, nil,
 	)
 
 	// Result should be scrubbed (ScrubResultHook runs first)
@@ -345,7 +345,7 @@ func TestAuditHook_DispatchToolEmitsConsistently(t *testing.T) {
 		ID:       "call_b",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo b"}`},
 	}
-	w.dispatchToolWithProject(context.Background(), "task-b", "proj-b", call2, nil, executor)
+	w.dispatchToolWithProject(context.Background(), "task-b", "proj-b", call2, nil, executor, nil)
 
 	// Both should emit TOOL_CALL + TOOL_RESULT = 4 events total
 	if len(sink.events) != 4 {
@@ -465,7 +465,7 @@ func TestErrorPathsRunThroughPostHooks(t *testing.T) {
 		ID:       "call_unknown",
 		Function: gateway.ToolCallFunction{Name: "nonexistent", Arguments: `{}`},
 	}
-	result := w.dispatchToolWithProject(context.Background(), "task-err", "proj-err", call, nil, executor)
+	result := w.dispatchToolWithProject(context.Background(), "task-err", "proj-err", call, nil, executor, nil)
 
 	// Result should contain error message
 	if !strings.Contains(result, "unknown tool") {

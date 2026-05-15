@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 )
 
@@ -25,10 +26,10 @@ func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *ToolEx
 
 	allTools := append([]gateway.ToolDefinition(nil), toolExec.Definitions()...)
 	allTools = append(allTools, d.capabilityToolDefinitions(context.Background())...)
-	if d.depth+1 < MaxDelegationDepth && toolExplicitlyAllowed(toolNameDelegate, def) {
+	if d.depth+1 < d.delegationDepthLimit() && toolExplicitlyAllowed(toolNameDelegate, def) {
 		allTools = append(allTools, DelegateToolDefinition())
 	}
-	if d.depth+1 < MaxDelegationDepth && toolExplicitlyAllowed(toolNameDelegateParallel, def) {
+	if d.depth+1 < d.delegationDepthLimit() && toolExplicitlyAllowed(toolNameDelegateParallel, def) {
 		allTools = append(allTools, DelegateParallelToolDefinition())
 	}
 
@@ -56,9 +57,7 @@ func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *ToolEx
 func (d *SubagentDelegate) capabilityToolDefinitions(ctx context.Context) []gateway.ToolDefinition {
 	var tools []gateway.ToolDefinition
 	seen := make(map[string]bool)
-	appendTools := func(registry interface {
-		GetToolsAndAdapterIndex(context.Context) ([]gateway.ToolDefinition, map[string]string, error)
-	}) {
+	appendTools := func(registry *capabilities.Registry) {
 		if registry == nil {
 			return
 		}
@@ -128,7 +127,7 @@ func (d *SubagentDelegate) executeTool(
 }
 
 func (d *SubagentDelegate) runDelegate(ctx context.Context, call gateway.ToolCall) string {
-	if d.depth+1 >= MaxDelegationDepth {
+	if d.depth+1 >= d.delegationDepthLimit() {
 		return jsonErrorf("%s", ErrDepthExceeded.Error())
 	}
 	var args delegateArgs
@@ -153,7 +152,8 @@ func (d *SubagentDelegate) runDelegate(ctx context.Context, call gateway.ToolCal
 		d.envVars,
 		d.wallTimeout,
 		d.depth+1,
-	).WithCapabilities(d.capabilities, d.scopedCapabilities)
+	).withMaxDelegationDepth(d.delegationDepthLimit()).
+		WithCapabilities(d.capabilities, d.scopedCapabilities)
 	result, err := child.Delegate(ctx, *subDef, args.Task, "", "", 0.2, 0)
 	if err != nil {
 		return jsonErrorf("delegation failed: %v", err)
@@ -166,7 +166,7 @@ func (d *SubagentDelegate) runDelegate(ctx context.Context, call gateway.ToolCal
 }
 
 func (d *SubagentDelegate) runDelegateParallel(ctx context.Context, call gateway.ToolCall) string {
-	if d.depth+1 >= MaxDelegationDepth {
+	if d.depth+1 >= d.delegationDepthLimit() {
 		return jsonErrorf("%s", ErrDepthExceeded.Error())
 	}
 	var args delegateParallelArgs
@@ -201,7 +201,8 @@ func (d *SubagentDelegate) runDelegateParallel(ctx context.Context, call gateway
 		d.envVars,
 		d.wallTimeout,
 		d.depth+1,
-	).WithCapabilities(d.capabilities, d.scopedCapabilities)
+	).withMaxDelegationDepth(d.delegationDepthLimit()).
+		WithCapabilities(d.capabilities, d.scopedCapabilities)
 	results := child.DelegateParallel(ctx, tasks, "", "", 0.2, 0)
 	encoded, err := json.Marshal(results)
 	if err != nil {

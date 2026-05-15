@@ -12,6 +12,8 @@ import (
 
 // DispatchTool is the single entry point for tool execution in the agentic loop.
 // It handles both built-in tools (bash, read, write) and capability tools (MCP).
+// It intentionally does not accept project-scoped capability registries; scoped
+// tools are available through the internal agentic dispatch path.
 // Parameters:
 //   - ctx: Context for cancellation and timeouts
 //   - call: The tool call from the AI response
@@ -19,10 +21,10 @@ import (
 //
 // Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
 func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
-	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor)
+	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil)
 }
 
-func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities ...*capabilities.Registry) string {
+func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) string {
 	hookCtx := HookContext{
 		ToolName:  call.Function.Name,
 		Args:      call.Function.Arguments,
@@ -45,19 +47,18 @@ func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, project
 	}
 
 	var result string
-	scopedCaps := firstCapabilityRegistry(scopedCapabilities)
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
 		result = toolExecutor.Execute(ctx, call)
 	case toolNameDelegate:
-		result = w.executeDelegateWithCapabilities(ctx, call, toolExecutor, scopedCaps)
+		result = w.executeDelegateWithCapabilities(ctx, call, toolExecutor, scopedCapabilities)
 	case toolNameDelegateParallel:
-		result = w.executeDelegateParallel(ctx, call, toolExecutor, scopedCaps)
+		result = w.executeDelegateParallel(ctx, call, toolExecutor, scopedCapabilities)
 	default:
 		if _, ok := toolToAdapter[call.Function.Name]; !ok {
 			result = jsonErrorf("unknown tool: %s", call.Function.Name)
 		} else {
-			result = executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCaps)
+			result = executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
 		}
 	}
 
@@ -174,13 +175,19 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 	return string(encoded)
 }
 
-func firstCapabilityRegistry(registries []*capabilities.Registry) *capabilities.Registry {
-	if len(registries) == 0 {
-		return nil
-	}
-	return registries[0]
-}
-
+// executeCapabilityTool routes a capability (MCP) tool call to the correct registry.
+//
+// It uses resolveCapabilityRoute to check the scoped registry first, then falls back
+// to the global registry. This means that if both registries provide the same tool,
+// the scoped version wins — the intended behavior for project-scoped plugins.
+//
+// Historical context: In earlier iterations of processAgenticIteration, the taskCaps
+// parameter was declared as _ *capabilities.Registry (unused). Scoped capability
+// tools were advertised to the LLM via agenticToolsWithExtras, but they could not
+// actually be executed because dispatchToolWithProject always called w.capabilities.CallTool
+// directly, bypassing any scoped registry. Now the scoped registry is wired through
+// handleAgenticToolCalls → dispatchToolWithHooks → dispatchToolWithProject, so
+// scoped tools are both advertised and executable.
 func executeCapabilityTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string, global, scoped *capabilities.Registry) string {
 	args, err := parseCapabilityArgs(call.Function.Arguments)
 	if err != nil {
