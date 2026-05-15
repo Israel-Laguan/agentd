@@ -66,3 +66,14 @@ export interface DraftPlan {
   description: string;
   tasks: DraftPlanTask[];
 };
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  message: string;
+  createdAt: string;
+  author: {
+    id: string;
+    name: string;
+  };
+};

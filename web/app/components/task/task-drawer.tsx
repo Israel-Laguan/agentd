@@ -4,6 +4,7 @@ import { Task, TaskStatus } from "@/lib/types";
 import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import { CommentPanel } from "../comment/comment-panel";
 
 interface TaskDrawerProps {
   task: Task;
@@ -31,7 +32,7 @@ export function TaskDrawer({ task, onClose }: TaskDrawerProps) {
     }
   }, [task]);
 
-  if (!task) return null;
+if (!task) return null;
 
   return (
     <AnimatePresence>
@@ -135,6 +136,11 @@ export function TaskDrawer({ task, onClose }: TaskDrawerProps) {
               <p className="text-xs text-text-dim">
                 {new Date(task.updatedAt).toLocaleString()}
               </p>
+            </div>
+
+            {/* COMMENTS */}
+            <div className="pt-4 border-t border-border">
+              <CommentPanel taskId={task.id} />
             </div>
           </div>
         </motion.div>
