@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { TaskStatus } from "@/lib/types";
-import { AlertCircle, CheckCircle2, Clock, Loader2, MessageSquare, Play } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Loader2, MessageSquare, Play, Zap } from "lucide-react";
 
 interface TaskCardProps {
   task: {
@@ -15,6 +15,7 @@ interface TaskCardProps {
 export const TaskCard = ({ task }: TaskCardProps) => {
   const statusColors = {
     [TaskStatus.PENDING]: "bg-border/20 text-text-dim border-border",
+    [TaskStatus.READY]: "bg-green-500/10 text-green-400 border-green-500/20",
     [TaskStatus.QUEUED]: "bg-blue/10 text-blue border-blue/20",
     [TaskStatus.RUNNING]: "bg-blue/10 text-blue border-blue shadow-[0_0_10px_rgba(88,166,255,0.15)]",
     [TaskStatus.COMPLETED]: "bg-accent/10 text-accent border-accent/20",
@@ -25,6 +26,7 @@ export const TaskCard = ({ task }: TaskCardProps) => {
 
   const Icons = {
     [TaskStatus.PENDING]: Clock,
+    [TaskStatus.READY]: Zap,
     [TaskStatus.QUEUED]: Loader2,
     [TaskStatus.RUNNING]: Play,
     [TaskStatus.COMPLETED]: CheckCircle2,
@@ -53,8 +55,9 @@ export const TaskCard = ({ task }: TaskCardProps) => {
             <div 
               className={cn(
                 "h-full transition-all duration-700",
-                task.status === TaskStatus.COMPLETED ? "w-full bg-accent" : 
-                task.status === TaskStatus.RUNNING ? "w-2/3 bg-blue animate-pulse" : "w-0"
+                task.status === TaskStatus.COMPLETED ? "w-full bg-accent" :
+                task.status === TaskStatus.RUNNING ? "w-2/3 bg-blue animate-pulse" :
+                task.status === TaskStatus.READY ? "w-1/3 bg-green-500/60" : "w-0"
               )}
             />
          </div>

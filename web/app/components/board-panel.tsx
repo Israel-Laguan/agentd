@@ -14,6 +14,7 @@ export function BoardPanel({ boardData }: BoardPanelProps) {
   const tasksByStatus = React.useMemo(() => {
     const groups: Record<TaskStatus, Task[]> = {
       [TaskStatus.PENDING]: [],
+      [TaskStatus.READY]: [],
       [TaskStatus.QUEUED]: [],
       [TaskStatus.RUNNING]: [],
       [TaskStatus.COMPLETED]: [],
@@ -52,9 +53,10 @@ export function BoardPanel({ boardData }: BoardPanelProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
         {[
           TaskStatus.PENDING,
+          TaskStatus.READY,
           TaskStatus.QUEUED,
           TaskStatus.RUNNING,
           TaskStatus.BLOCKED,
@@ -66,7 +68,8 @@ export function BoardPanel({ boardData }: BoardPanelProps) {
             <div className="flex justify-between items-center px-1 py-1.5 border-b border-border shadow-[0_1px_0_var(--color-bg)]">
               <h3 className={cn(
                 "text-[10px] font-bold uppercase tracking-[0.2em]",
-                status === TaskStatus.RUNNING ? "text-blue" : "text-text-dim"
+                status === TaskStatus.RUNNING ? "text-blue" :
+                status === TaskStatus.READY ? "text-green-400" : "text-text-dim"
               )}>{status}</h3>
               <span className="text-[9px] font-mono bg-border/40 px-1.5 rounded text-text-dim">{tasksByStatus[status].length}</span>
             </div>

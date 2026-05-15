@@ -96,7 +96,7 @@ Create a project from a draft plan.
 List tasks for a project with optional filters.
 
 **Query Parameters**:
-- `state` - Filter by state (comma-separated): `PENDING`, `READY`, `RUNNING`, `BLOCKED`, `COMPLETED`, `FAILED`, `IN_CONSIDERATION`
+- `state` - Filter by state (comma-separated): `PENDING`, `READY`, `QUEUED`, `RUNNING`, `BLOCKED`, `COMPLETED`, `FAILED`, `IN_CONSIDERATION`
 - `assignee` - Filter by assignee: `HUMAN`, `SYSTEM`, or agent ID
 - `limit` - Maximum results (default: 50)
 - `offset` - Pagination offset
