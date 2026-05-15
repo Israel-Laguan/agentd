@@ -91,7 +91,7 @@ agentic:
   skills:
     threshold: 0.1          # minimum TF-IDF relevance score (0.0–1.0)
     top_k: 3                # max skills injected per session
-    global_path: "~/.agentd/skills"  # directory for user-global skill files
+    global_path: "skills"   # illustrative; see queue.skills.global_dir (relative to agentd home)
 
 # Sandbox command execution hardening.
 sandbox:
@@ -146,7 +146,7 @@ queue:
     user_preferences_file: "prefs.yaml"   # user preferences (relative to ~/.agentd/)
   skills:
     project_dir: ".agentd/skills"        # project-scoped skills (relative to workspace)
-    global_dir: "~/.agentd/skills"       # global skills directory
+    global_dir: "skills"                 # global skills dir: relative to agentd home (home / AGENTD_HOME); absolute or "~/..." also allowed
     threshold: 0.1                        # minimum TF-IDF relevance score (0.0-1.0)
     top_k: 3                            # max skills injected per session
 

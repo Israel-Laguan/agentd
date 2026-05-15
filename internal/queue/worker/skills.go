@@ -92,7 +92,7 @@ type SkillLoader struct {
 	ProjectDir string
 
 	// GlobalDir is the absolute path to the global skills directory
-	// (e.g., "~/.agentd/skills/").
+	// (resolved by config before the worker runs; may still start with "~/" when constructed in tests).
 	GlobalDir string
 }
 

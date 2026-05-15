@@ -33,9 +33,10 @@ const (
 	// project-scoped skill files.
 	DefaultSkillsProjectDir = ".agentd/skills"
 
-	// DefaultSkillsGlobalDir is the absolute path to the global skills
-	// directory. The tilde prefix is expanded at load time.
-	DefaultSkillsGlobalDir = "~/.agentd/skills"
+	// DefaultSkillsGlobalDir is the path segment under the agentd home
+	// directory for user-global skills (resolved to <home>/skills at config
+	// load). Absolute paths and "~/..." overrides are still supported.
+	DefaultSkillsGlobalDir = "skills"
 
 	// DefaultSkillsThreshold is the minimum TF-IDF relevance score for a
 	// skill to be injected into the system prompt.
@@ -70,8 +71,9 @@ type SkillsConfig struct {
 	// skill files (e.g. ".agentd/skills").
 	ProjectDir string
 
-	// GlobalDir is the absolute path to the global skills directory.
-	// The tilde prefix is expanded at load time.
+	// GlobalDir is the resolved absolute path to the global skills directory
+	// after config load (relative values are joined with agentd home; "~/..."
+	// uses the user home directory; absolute paths are unchanged).
 	GlobalDir string
 
 	// Threshold is the minimum TF-IDF relevance score (0.0-1.0) for a skill

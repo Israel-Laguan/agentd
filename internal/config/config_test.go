@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -134,6 +135,67 @@ func TestLoad_WithMissingConfig(t *testing.T) {
 	if cfg.API.Address != defaultAPIAddress {
 		t.Errorf("API.Address = %v, want %v", cfg.API.Address, defaultAPIAddress)
 	}
+	wantSkills := filepath.Join(homeDir, DefaultSkillsGlobalDir)
+	if cfg.Queue.Skills.GlobalDir != wantSkills {
+		t.Errorf("Queue.Skills.GlobalDir = %q, want %q", cfg.Queue.Skills.GlobalDir, wantSkills)
+	}
+}
+
+func TestLoad_SkillsGlobalDir_ExplicitAbsolute(t *testing.T) {
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	abs := filepath.Join(t.TempDir(), "explicit-global-skills")
+	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+	body := fmt.Sprintf("queue:\n  skills:\n    global_dir: %q\n", filepath.ToSlash(abs))
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Queue.Skills.GlobalDir != abs {
+		t.Fatalf("Queue.Skills.GlobalDir = %q, want %q", cfg.Queue.Skills.GlobalDir, abs)
+	}
+}
+
+func TestResolveSkillsGlobalDir(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "agentd-home")
+	t.Run("empty", func(t *testing.T) {
+		if got := resolveSkillsGlobalDir(home, ""); got != "" {
+			t.Errorf("resolveSkillsGlobalDir() = %q, want empty", got)
+		}
+	})
+	t.Run("relative_default", func(t *testing.T) {
+		got := resolveSkillsGlobalDir(home, DefaultSkillsGlobalDir)
+		want := filepath.Join(home, DefaultSkillsGlobalDir)
+		if got != want {
+			t.Errorf("resolveSkillsGlobalDir() = %q, want %q", got, want)
+		}
+	})
+	t.Run("nested_relative", func(t *testing.T) {
+		got := resolveSkillsGlobalDir(home, filepath.Join("nested", "skills"))
+		want := filepath.Join(home, "nested", "skills")
+		if got != want {
+			t.Errorf("resolveSkillsGlobalDir() = %q, want %q", got, want)
+		}
+	})
+	t.Run("absolute", func(t *testing.T) {
+		abs := filepath.Join(t.TempDir(), "abs-skills-only")
+		if got := resolveSkillsGlobalDir(home, abs); got != abs {
+			t.Errorf("resolveSkillsGlobalDir() = %q, want %q", got, abs)
+		}
+	})
+	t.Run("tilde_prefix", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		got := resolveSkillsGlobalDir(home, "~/.agentd/skills")
+		want := filepath.Join(os.Getenv("HOME"), ".agentd", "skills")
+		if got != want {
+			t.Errorf("resolveSkillsGlobalDir() = %q, want %q", got, want)
+		}
+	})
 }
 
 func TestIsConfigNotFound(t *testing.T) {
