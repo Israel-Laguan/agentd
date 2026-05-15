@@ -14,6 +14,12 @@ import (
 // It handles both built-in tools (bash, read, write) and capability tools (MCP).
 // It intentionally does not accept project-scoped capability registries; scoped
 // tools are available through the internal agentic dispatch path.
+//
+// Backward-compatibility note: This public API does not forward scoped
+// capabilities. External callers (e.g. tests using DispatchTool directly) will
+// not have access to project-scoped capability tools. Callers that need scoped
+// capabilities must use the internal path via dispatchToolWithHooks ->
+// dispatchToolWithProject, which is what the agentic loop uses.
 // Parameters:
 //   - ctx: Context for cancellation and timeouts
 //   - call: The tool call from the AI response

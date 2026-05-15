@@ -41,6 +41,12 @@ Return your response as plain text when the task is complete, or use tools to co
 // assembleAgenticSystemPrompt builds the full layered system prompt for agentic
 // mode using the instruction hierarchy and skill router. It returns the initial
 // message list: [optional memory lessons, layered system prompt, user task].
+//
+// This replaces the old buildAgenticMessages which modified an existing message
+// list in-place. The new implementation builds messages from scratch via
+// SystemPromptBuilder, separately prepends memory lessons, and appends a user
+// message. The legacy seedMessages path is still used by the non-agentic
+// command() path in worker_support.go.
 func (w *Worker) buildSystemPromptContent(task models.Task, project models.Project, profile models.AgentProfile) string {
 	builder := NewSystemPromptBuilder().
 		WithGlobal(agenticToolUseSystemText())
