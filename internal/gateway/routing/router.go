@@ -88,19 +88,6 @@ func (r *Router) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	return r.generateOnce(ctx, req)
 }
 
-// detectToolSupport scans the provider list for tool support among selected providers.
-func (r *Router) detectToolSupport(req spec.AIRequest) bool {
-	for _, p := range r.providers {
-		if req.Provider != "" && req.Provider != string(p.Name()) {
-			continue
-		}
-		if p.Capabilities().SupportsChatTools {
-			return true
-		}
-	}
-	return false
-}
-
 func (r *Router) reserveBudget(taskID string) error {
 	if r.budget != nil && taskID != "" {
 		return r.budget.Reserve(taskID)
@@ -145,18 +132,8 @@ func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq s
 	return resp, true, nil
 }
 
-func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
-	if len(r.providers) == 0 {
-		return spec.AIResponse{}, errors.New("no LLM providers configured")
-	}
-	if err := r.reserveBudget(req.TaskID); err != nil {
-		return spec.AIResponse{}, err
-	}
-	req = r.applyRoleRouting(req)
+func (r *Router) selectCandidateProviders(req spec.AIRequest) (candidates []providers.Backend, matchedProvider bool, selectedHasToolSupport bool) {
 	hasRequestedTools := len(req.Tools) > 0
-	selectedHasToolSupport := hasRequestedTools && r.detectToolSupport(req)
-	matchedProvider := false
-	var providerErrs []error
 	for _, p := range r.providers {
 		if req.Provider != "" && req.Provider != string(p.Name()) {
 			continue
@@ -168,6 +145,40 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 		if req.Provider != "" && hasRequestedTools && !p.Capabilities().SupportsChatTools {
 			continue
 		}
+		candidates = append(candidates, p)
+		if p.Capabilities().SupportsChatTools {
+			selectedHasToolSupport = true
+		}
+	}
+	return candidates, matchedProvider, selectedHasToolSupport
+}
+
+func decideTerminalError(req spec.AIRequest, matchedProvider, selectedHasToolSupport bool, providerErrs []error) error {
+	hasRequestedTools := len(req.Tools) > 0
+	if req.Provider != "" && matchedProvider && hasRequestedTools && !selectedHasToolSupport {
+		return fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", req.Provider)
+	}
+	if req.Provider != "" && len(providerErrs) == 0 {
+		return fmt.Errorf("LLM provider %q is not configured", req.Provider)
+	}
+	if len(providerErrs) == 0 {
+		return fmt.Errorf("%w: all providers skipped (tool mismatch or empty cascade)", models.ErrLLMUnreachable)
+	}
+	return fmt.Errorf("%w: %v", models.ErrLLMUnreachable, errors.Join(providerErrs...))
+}
+
+func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
+	if len(r.providers) == 0 {
+		return spec.AIResponse{}, errors.New("no LLM providers configured")
+	}
+	if err := r.reserveBudget(req.TaskID); err != nil {
+		return spec.AIResponse{}, err
+	}
+	req = r.applyRoleRouting(req)
+	candidates, matchedProvider, selectedHasToolSupport := r.selectCandidateProviders(req)
+	hasRequestedTools := len(req.Tools) > 0
+	var providerErrs []error
+	for _, p := range candidates {
 		resp, ok, err := r.tryProvider(ctx, p, req, hasRequestedTools, selectedHasToolSupport)
 		if err != nil {
 			// Truncation errors are not provider-specific; return immediately.
@@ -183,17 +194,7 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 			return resp, nil
 		}
 	}
-	// Explicit provider requested and found, but none support tools.
-	if req.Provider != "" && matchedProvider && hasRequestedTools && !selectedHasToolSupport {
-		return spec.AIResponse{}, fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", req.Provider)
-	}
-	if req.Provider != "" && len(providerErrs) == 0 {
-		return spec.AIResponse{}, fmt.Errorf("LLM provider %q is not configured", req.Provider)
-	}
-	if len(providerErrs) == 0 {
-		return spec.AIResponse{}, fmt.Errorf("%w: all providers skipped (tool mismatch or empty cascade)", models.ErrLLMUnreachable)
-	}
-	return spec.AIResponse{}, fmt.Errorf("%w: %v", models.ErrLLMUnreachable, errors.Join(providerErrs...))
+	return spec.AIResponse{}, decideTerminalError(req, matchedProvider, selectedHasToolSupport, providerErrs)
 }
 
 func (r *Router) applyRoleRouting(req spec.AIRequest) spec.AIRequest {

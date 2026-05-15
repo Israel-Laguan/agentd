@@ -11,11 +11,15 @@ test-e2e:
 build:
 	$(GO) build -o bin/agentd ./cmd/agentd
 
+# Use an isolated GOCACHE to avoid stale-build artefacts when switching branches
+# or when the global cache becomes inconsistent (observed repeatedly in CI/dev).
+TEST_ENV = env GOCACHE=/tmp/agentd-go-cache
+
 test:
-	$(GO) test -v -race -cover ./...
+	$(TEST_ENV) $(GO) test -v -race -cover ./...
 
 coverage:
-	$(GO) test -v -race -covermode=atomic -coverpkg=$(COVERPKG) -coverprofile=coverage.out ./...
+	$(TEST_ENV) $(GO) test -v -race -covermode=atomic -coverpkg=$(COVERPKG) -coverprofile=coverage.out ./...
 	$(GO) tool cover -html=coverage.out
 
 run:

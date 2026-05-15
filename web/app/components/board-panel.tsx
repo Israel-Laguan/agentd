@@ -1,6 +1,5 @@
 "use client";
 
-import { LayoutDashboard } from 'lucide-react';
 import { motion } from "framer-motion";
 import { cn, TaskStatus, Task, Project } from '@/lib/types';
 import { TaskCard } from "@/app/components/task-card";
