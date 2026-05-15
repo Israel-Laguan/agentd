@@ -123,11 +123,14 @@ func parseAgentsMD(content string) *ProjectInstructions {
 // headingText extracts the plain text from a goldmark heading node.
 func headingText(heading *ast.Heading, source []byte) string {
 	var b strings.Builder
-	for child := heading.FirstChild(); child != nil; child = child.NextSibling() {
-		if textNode, ok := child.(*ast.Text); ok {
-			b.Write(textNode.Value(source))
+	_ = ast.Walk(heading, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if entering {
+			if textNode, ok := node.(*ast.Text); ok {
+				b.Write(textNode.Value(source))
+			}
 		}
-	}
+		return ast.WalkContinue, nil
+	})
 	return strings.TrimSpace(b.String())
 }
 

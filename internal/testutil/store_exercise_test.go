@@ -43,7 +43,7 @@ func TestFakeKanbanStore_ProjectsAndTasks(t *testing.T) {
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListProjects: %v %d", err, len(list))
 	}
-	_, created, err := s.EnsureProjectTask(ctx, proj.ID, models.DraftTask{Title: "dup"})
+	_, created, err := s.EnsureProjectTask(ctx, proj.ID, models.DraftTask{Title: "T2"})
 	if err != nil || created {
 		t.Fatalf("EnsureProjectTask dup: created=%v err=%v", created, err)
 	}
@@ -59,6 +59,41 @@ func TestFakeKanbanStore_ProjectsAndTasks(t *testing.T) {
 
 func TestFakeKanbanStore_TaskLifecycle(t *testing.T) {
 	ctx, s, proj, tasks := exerciseStoreSetup(t)
+	runBasicTaskLifecycle(t, ctx, s)
+
+	runningID := tasks[1].ID
+	rt, err := s.GetTask(ctx, runningID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	_, err = s.MarkTaskRunning(ctx, runningID, rt.UpdatedAt, 5555)
+	if err != nil {
+		t.Fatalf("MarkTaskRunning: %v", err)
+	}
+	rt2, err := s.GetTask(ctx, runningID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	_, err = s.UpdateTaskState(ctx, runningID, rt2.UpdatedAt, models.TaskStateReady)
+	if err != nil {
+		t.Fatalf("UpdateTaskState: %v", err)
+	}
+	rt3, err := s.GetTask(ctx, runningID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	_, subs, err := s.BlockTaskWithSubtasks(ctx, runningID, rt3.UpdatedAt, []models.DraftTask{{Title: "sub"}})
+	if err != nil || len(subs) != 1 {
+		t.Fatalf("BlockTaskWithSubtasks: %v %#v", err, subs)
+	}
+	_, err = s.AppendTasksToProject(ctx, proj.ID, runningID, []models.DraftTask{{Title: "appended"}})
+	if err != nil {
+		t.Fatalf("AppendTasksToProject: %v", err)
+	}
+}
+
+func runBasicTaskLifecycle(t *testing.T, ctx context.Context, s *FakeKanbanStore) {
+	t.Helper()
 	claimed, err := s.ClaimNextReadyTasks(ctx, 10)
 	if err != nil || len(claimed) < 1 {
 		t.Fatalf("ClaimNextReadyTasks: %v", err)
@@ -102,35 +137,6 @@ func TestFakeKanbanStore_TaskLifecycle(t *testing.T) {
 	_, err = s.ReconcileStaleTasks(ctx, []int{9999}, time.Minute)
 	if err != nil {
 		t.Fatalf("ReconcileStaleTasks: %v", err)
-	}
-	runningID := tasks[1].ID
-	rt, err := s.GetTask(ctx, runningID)
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	_, err = s.MarkTaskRunning(ctx, runningID, rt.UpdatedAt, 5555)
-	if err != nil {
-		t.Fatalf("MarkTaskRunning: %v", err)
-	}
-	rt2, err := s.GetTask(ctx, runningID)
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	_, err = s.UpdateTaskState(ctx, runningID, rt2.UpdatedAt, models.TaskStateReady)
-	if err != nil {
-		t.Fatalf("UpdateTaskState: %v", err)
-	}
-	rt3, err := s.GetTask(ctx, runningID)
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	_, subs, err := s.BlockTaskWithSubtasks(ctx, runningID, rt3.UpdatedAt, []models.DraftTask{{Title: "sub"}})
-	if err != nil || len(subs) != 1 {
-		t.Fatalf("BlockTaskWithSubtasks: %v %#v", err, subs)
-	}
-	_, err = s.AppendTasksToProject(ctx, proj.ID, runningID, []models.DraftTask{{Title: "appended"}})
-	if err != nil {
-		t.Fatalf("AppendTasksToProject: %v", err)
 	}
 }
 

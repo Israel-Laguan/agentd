@@ -74,7 +74,7 @@ def main() -> int:
             violations.append((line_count, rel_path, limit))
 
     if not violations:
-        print(f"LOC check passed: no tracked files exceed their limits.")
+        print("LOC check passed: no tracked files exceed their limits.")
         return 0
 
     print(f"LOC check failed: {len(violations)} file(s) exceed their limits:")
