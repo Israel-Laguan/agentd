@@ -2,7 +2,8 @@
 
 import { MessageSquare, CheckCircle2, ChevronRight, Send } from 'lucide-react';
 import { motion } from "framer-motion";
-import { cn, ChatMessage, DraftPlan } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { ChatMessage, DraftPlan } from '@/lib/types';
 
 interface ChatPanelProps {
   messages: ChatMessage[];

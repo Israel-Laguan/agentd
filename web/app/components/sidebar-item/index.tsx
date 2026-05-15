@@ -1,4 +1,4 @@
-import { cn } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface SidebarItemProps {
   icon: React.ComponentType<{ size: number; className?: string }>;

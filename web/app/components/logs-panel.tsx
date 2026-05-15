@@ -1,7 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { cn, Task, Project } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { Task, Project } from '@/lib/types';
 
 interface LogsPanelProps {
   boardData: { projects: Project[], tasks: Task[] };
