@@ -37,6 +37,7 @@ type Config struct {
 	Heartbeat   HeartbeatConfig
 	Librarian   LibrarianConfig
 	Queue       QueueConfig
+	Channel     ChannelConfig
 	Cron        CronSchedule
 }
 
@@ -98,6 +99,7 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	setHeartbeatDefaults(v)
 	setLibrarianDefaults(v)
 	setQueueDefaults(v)
+	setChannelDefaults(v)
 	return v
 }
 
@@ -131,6 +133,7 @@ func hydrateConfig(cfg Config, v *viper.Viper) (Config, error) {
 	cfg.Librarian = loadLibrarianConfig(v)
 	cfg.Queue = loadQueueConfig(v)
 	cfg.Queue.Skills.GlobalDir = resolveSkillsGlobalDir(cfg.HomeDir, cfg.Queue.Skills.GlobalDir)
+	cfg.Channel = loadChannelConfig(v)
 	cron, err := LoadCron(cfg.CronPath)
 	if err != nil {
 		return Config{}, err

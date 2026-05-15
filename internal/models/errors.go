@@ -20,4 +20,8 @@ var (
 	ErrAgentProfileNotFound   = errors.New("agent profile not found")
 	ErrAgentProfileProtected  = errors.New("agent profile is protected")
 	ErrAgentProfileInUse      = errors.New("agent profile in use by tasks")
+	ErrMessageTooLarge        = errors.New("message exceeds max size")
+	ErrMessageInvalid         = errors.New("invalid inbound message")
+	ErrChannelRateLimited     = errors.New("channel rate limit exceeded")
+	ErrDispatchNack           = errors.New("dispatch nacked")
 )

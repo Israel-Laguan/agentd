@@ -79,7 +79,18 @@ func (d *Daemon) dispatch(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	var nacked int
 	for _, task := range tasks {
+		if d.channel != nil {
+			msg := TaskToInbound(task)
+			result := d.channel.Admit(msg)
+			if result.Disposition == Nack {
+				nacked++
+				slog.Warn("dispatch nack", "task_id", task.ID, "error", result.Err)
+				d.nackTask(ctx, task)
+				continue
+			}
+		}
 		if !d.sem.Acquire(ctx) {
 			return len(tasks), ctx.Err()
 		}
@@ -97,7 +108,7 @@ func (d *Daemon) dispatch(ctx context.Context) (int, error) {
 			d.worker.Process(runCtx, task)
 		}()
 	}
-	return len(tasks), nil
+	return len(tasks) - nacked, nil
 }
 
 func (d *Daemon) processComments(ctx context.Context) error {

@@ -1,0 +1,39 @@
+package config
+
+import "github.com/spf13/viper"
+
+const (
+	// DefaultMaxMessageSize is the default upper bound (bytes) for an
+	// inbound message payload before it is rejected at the channel
+	// boundary. 0 = unlimited.
+	DefaultMaxMessageSize = 1048576
+
+	// DefaultChannelRateLimit is the default maximum submissions per
+	// session within the rate window. 0 = unlimited.
+	DefaultChannelRateLimit = 0
+
+	// DefaultChannelRateWindow is the default sliding window (seconds)
+	// for the per-session rate limiter.
+	DefaultChannelRateWindow = 60
+)
+
+// ChannelConfig holds channel-level security and validation settings.
+type ChannelConfig struct {
+	MaxMessageSize int
+	RateLimit      int
+	RateWindow     int
+}
+
+func setChannelDefaults(v *viper.Viper) {
+	v.SetDefault("channel.max_message_size", DefaultMaxMessageSize)
+	v.SetDefault("channel.rate_limit", DefaultChannelRateLimit)
+	v.SetDefault("channel.rate_window", DefaultChannelRateWindow)
+}
+
+func loadChannelConfig(v *viper.Viper) ChannelConfig {
+	return ChannelConfig{
+		MaxMessageSize: v.GetInt("channel.max_message_size"),
+		RateLimit:      v.GetInt("channel.rate_limit"),
+		RateWindow:     v.GetInt("channel.rate_window"),
+	}
+}
