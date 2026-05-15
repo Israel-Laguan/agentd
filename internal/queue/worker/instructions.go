@@ -120,6 +120,17 @@ func parseAgentsMD(content string) *ProjectInstructions {
 	return pi
 }
 
+// headingText extracts the plain text from a goldmark heading node.
+func headingText(heading *ast.Heading, source []byte) string {
+	var b strings.Builder
+	for child := heading.FirstChild(); child != nil; child = child.NextSibling() {
+		if textNode, ok := child.(*ast.Text); ok {
+			b.Write(textNode.Value(source))
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
 // splitH2Sections parses markdown text and returns a map of H2 heading → body.
 // It uses goldmark for robust parsing, ensuring headers inside code blocks are ignored.
 func splitH2Sections(content string) map[string]string {
@@ -135,27 +146,20 @@ func splitH2Sections(content string) map[string]string {
 	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
 		if heading, ok := n.(*ast.Heading); ok && heading.Level == 2 {
 			// Flush previous section
-			if currentHeading != "" {
-				// The body is from startOffset to the beginning of this heading
-				if heading.Lines().Len() > 0 {
-					stopOffset := heading.Lines().At(0).Start
-					// Backtrack to find the start of the "## "
-					for stopOffset > startOffset && source[stopOffset-1] != '\n' {
-						stopOffset--
-					}
-					if stopOffset > startOffset {
-						sections[currentHeading] = strings.TrimSpace(string(source[startOffset:stopOffset]))
-					} else {
-						sections[currentHeading] = ""
-					}
+			if currentHeading != "" && heading.Lines().Len() > 0 {
+				stopOffset := heading.Lines().At(0).Start
+				for stopOffset > startOffset && source[stopOffset-1] != '\n' {
+					stopOffset--
+				}
+				if stopOffset > startOffset {
+					sections[currentHeading] = strings.TrimSpace(string(source[startOffset:stopOffset]))
+				} else {
+					sections[currentHeading] = ""
 				}
 			}
-			// Extract heading text
-			currentHeading = strings.TrimSpace(string(heading.Text(source)))
-			// Set startOffset to the end of this heading node
+			currentHeading = headingText(heading, source)
 			if heading.Lines().Len() > 0 {
-				startOffset = heading.Lines().At(heading.Lines().Len()-1).Stop
-				// Move past the newline if exists
+				startOffset = heading.Lines().At(heading.Lines().Len() - 1).Stop
 				if startOffset < len(source) && source[startOffset] == '\n' {
 					startOffset++
 				}

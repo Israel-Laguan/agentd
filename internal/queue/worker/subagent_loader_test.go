@@ -3,15 +3,36 @@ package worker
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+func assertEqual[T comparable](t *testing.T, field string, got, want T) {
+	t.Helper()
+	if got != want {
+		t.Fatalf("%s = %v, want %v", field, got, want)
+	}
+}
+
+func assertNotEmpty(t *testing.T, field, got string) {
+	t.Helper()
+	if got == "" {
+		t.Fatalf("%s should not be empty", field)
+	}
+}
+
+func assertSlice(t *testing.T, field string, got, want []string) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("%s = %v, want %v", field, got, want)
+	}
+}
 
 // ---------------------------------------------------------------------------
 // parseSubagentMD
 // ---------------------------------------------------------------------------
 
-func TestParseSubagentMD_FullDocument(t *testing.T) {
-	content := `# Subagent: Code Reviewer
+const fullSubagentDoc = `# Subagent: Code Reviewer
 
 ## Purpose
 
@@ -42,37 +63,18 @@ JSON with fields: issues (array), summary (string)
 
 Stop after reviewing all modified files or when iteration limit is reached.
 `
-	def := parseSubagentMD(content, "/tmp/reviewer.md")
-	if def.Name != "Code Reviewer" {
-		t.Fatalf("Name = %q, want %q", def.Name, "Code Reviewer")
-	}
-	if def.Purpose == "" {
-		t.Fatal("Purpose should not be empty")
-	}
-	if len(def.AllowedTools) != 2 {
-		t.Fatalf("AllowedTools = %v, want [read, bash]", def.AllowedTools)
-	}
-	if def.AllowedTools[0] != "read" || def.AllowedTools[1] != "bash" {
-		t.Fatalf("AllowedTools = %v, want [read, bash]", def.AllowedTools)
-	}
-	if len(def.ForbiddenTools) != 1 || def.ForbiddenTools[0] != "write" {
-		t.Fatalf("ForbiddenTools = %v, want [write]", def.ForbiddenTools)
-	}
-	if def.MaxIterations != 15 {
-		t.Fatalf("MaxIterations = %d, want 15", def.MaxIterations)
-	}
-	if def.ContextBudget != 12000 {
-		t.Fatalf("ContextBudget = %d, want 12000", def.ContextBudget)
-	}
-	if def.OutputSchema == "" {
-		t.Fatal("OutputSchema should not be empty")
-	}
-	if def.TerminationCriteria == "" {
-		t.Fatal("TerminationCriteria should not be empty")
-	}
-	if def.SourcePath != "/tmp/reviewer.md" {
-		t.Fatalf("SourcePath = %q, want %q", def.SourcePath, "/tmp/reviewer.md")
-	}
+
+func TestParseSubagentMD_FullDocument(t *testing.T) {
+	def := parseSubagentMD(fullSubagentDoc, "/tmp/reviewer.md")
+	assertEqual(t, "Name", def.Name, "Code Reviewer")
+	assertNotEmpty(t, "Purpose", def.Purpose)
+	assertSlice(t, "AllowedTools", def.AllowedTools, []string{"read", "bash"})
+	assertSlice(t, "ForbiddenTools", def.ForbiddenTools, []string{"write"})
+	assertEqual(t, "MaxIterations", def.MaxIterations, 15)
+	assertEqual(t, "ContextBudget", def.ContextBudget, 12000)
+	assertNotEmpty(t, "OutputSchema", def.OutputSchema)
+	assertNotEmpty(t, "TerminationCriteria", def.TerminationCriteria)
+	assertEqual(t, "SourcePath", def.SourcePath, "/tmp/reviewer.md")
 }
 
 func TestParseSubagentMD_Empty(t *testing.T) {

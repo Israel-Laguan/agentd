@@ -220,6 +220,11 @@ func parseCapabilityArgs(argsJSON string) (map[string]any, error) {
 	return args, nil
 }
 
+// resolveCapabilityRoute decides which capability registry should handle a tool call.
+// The scoped registry is checked first so that project-scoped plugins take priority
+// over global ones when both provide the same tool. This was not wired in earlier
+// iterations (taskCaps was unused), so scoped tools were advertised to the LLM but
+// could not actually be executed.
 func resolveCapabilityRoute(ctx context.Context, toolName, adapterHint string, global, scoped *capabilities.Registry) (*capabilities.Registry, string) {
 	if registry, adapterName := resolveCapabilityInRegistry(ctx, toolName, adapterHint, scoped); registry != nil {
 		return registry, adapterName
