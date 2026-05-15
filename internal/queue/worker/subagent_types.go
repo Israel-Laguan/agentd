@@ -11,7 +11,7 @@ import (
 
 // MaxDelegationDepth is the harness-enforced limit on delegation nesting.
 // Depth=1 means a parent can delegate but a subagent cannot.
-var MaxDelegationDepth = 1
+const MaxDelegationDepth = 1
 
 // SubagentStatus represents the terminal state of a subagent execution.
 type SubagentStatus string
@@ -70,6 +70,7 @@ type SubagentDelegate struct {
 	envVars            []string
 	wallTimeout        time.Duration
 	depth              int
+	maxDelegationDepth int
 	capabilities       *capabilities.Registry
 	scopedCapabilities *capabilities.Registry
 }
@@ -91,6 +92,18 @@ func NewSubagentDelegate(
 		wallTimeout:   wallTimeout,
 		depth:         depth,
 	}
+}
+
+func (d *SubagentDelegate) delegationDepthLimit() int {
+	if d.maxDelegationDepth > 0 {
+		return d.maxDelegationDepth
+	}
+	return MaxDelegationDepth
+}
+
+func (d *SubagentDelegate) withMaxDelegationDepth(maxDepth int) *SubagentDelegate {
+	d.maxDelegationDepth = maxDepth
+	return d
 }
 
 // WithCapabilities configures the global and scoped capability registries used

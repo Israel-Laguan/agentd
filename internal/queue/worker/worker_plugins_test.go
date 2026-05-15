@@ -132,7 +132,7 @@ func TestDispatchToolWithHooks_NilHooksPassesThrough(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "unknown-tool"},
 	}
 	result := w.dispatchToolWithHooks(
-		t.Context(), "s1", "p1", call, nil, nil, nil,
+		t.Context(), "s1", "p1", call, nil, nil, nil, nil,
 	)
 	assert.Contains(t, result, "error")
 }
@@ -154,7 +154,7 @@ func TestDispatchToolWithHooks_PreHookVeto(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash"},
 	}
 	result := w.dispatchToolWithHooks(
-		t.Context(), "s1", "p1", call, nil, nil, taskHooks,
+		t.Context(), "s1", "p1", call, nil, nil, taskHooks, nil,
 	)
 	assert.Contains(t, result, "vetoed")
 }
@@ -175,7 +175,7 @@ func TestDispatchToolWithHooks_PostHookModifiesResult(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "unknown-tool"},
 	}
 	result := w.dispatchToolWithHooks(
-		t.Context(), "s1", "p1", call, nil, nil, taskHooks,
+		t.Context(), "s1", "p1", call, nil, nil, taskHooks, nil,
 	)
 	assert.Contains(t, result, "[tagged]")
 }
@@ -193,14 +193,14 @@ func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
 	})
 
 	call := gateway.ToolCall{
-		ID:       "c1",
+		ID: "c1",
 		Function: gateway.ToolCallFunction{
 			Name:      "bash",
 			Arguments: `{"command":"ls"}`,
 		},
 	}
 	result := w.dispatchToolWithHooks(
-		t.Context(), "s1", "p1", call, nil, nil, taskHooks,
+		t.Context(), "s1", "p1", call, nil, nil, taskHooks, nil,
 	)
 	assert.Equal(t, "cached", result)
 }
@@ -236,7 +236,7 @@ func TestDispatchToolWithHooks_HookContextFields(t *testing.T) {
 	}
 
 	_ = w.dispatchToolWithHooks(
-		t.Context(), "sess-1", "proj-1", call, nil, nil, taskHooks,
+		t.Context(), "sess-1", "proj-1", call, nil, nil, taskHooks, nil,
 	)
 
 	assert.Equal(t, "bash", captured.ToolName)
