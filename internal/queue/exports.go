@@ -92,3 +92,7 @@ type Semaphore = safety.Semaphore
 type ParameterTuner = planning.ParameterTuner
 
 var NewParameterTuner = planning.NewParameterTuner
+
+type ChannelGateExport = ChannelGate
+
+var NewChannelGateExport = NewChannelGate
