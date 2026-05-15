@@ -2,11 +2,8 @@ version: "2"
 
 run:
   timeout: 5m
-  skip-dirs:
-    - web/node_modules
 
 linters:
-  default: none
   enable:
     - errcheck
     - cyclop
@@ -14,6 +11,9 @@ linters:
     - govet
     - funlen
     - depguard
+  exclusions:
+    paths:
+      - web/node_modules
   settings:
     cyclop:
       max-complexity: 15
@@ -24,9 +24,6 @@ linters:
       rules:
         - name: function-length
           arguments: [100, 60]
-        - name: file-length-limit
-          arguments:
-            - max: 300
     depguard:
       rules:
         no-outward-model-deps:

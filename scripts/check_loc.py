@@ -19,9 +19,12 @@ DEFAULT_EXCLUDES = (
     "*.min.js",
     "*.min.css",
     "go.sum",
-    "*_test.go",
-    "docs/**",
     "web/package-lock.json",
+)
+
+CATEGORY_LIMITS = (
+    ("*_test.go", 500),
+    ("docs/**", 400),
 )
 
 
@@ -41,13 +44,20 @@ def tracked_files() -> list[str]:
     return [entry for entry in output.decode("utf-8", errors="replace").split("\0") if entry]
 
 
+def max_lines_for(path: str, default: int) -> int:
+    for pattern, limit in CATEGORY_LIMITS:
+        if fnmatch.fnmatch(path, pattern):
+            return limit
+    return default
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--max-lines", type=int, default=300)
     args = parser.parse_args()
 
     root = pathlib.Path.cwd()
-    violations: list[tuple[int, str]] = []
+    violations: list[tuple[int, str, int]] = []
 
     for rel_path in tracked_files():
         if is_excluded(rel_path, DEFAULT_EXCLUDES):
@@ -59,16 +69,17 @@ def main() -> int:
         if b"\x00" in raw:
             continue
         line_count = count_lines(raw)
-        if line_count > args.max_lines:
-            violations.append((line_count, rel_path))
+        limit = max_lines_for(rel_path, args.max_lines)
+        if line_count > limit:
+            violations.append((line_count, rel_path, limit))
 
     if not violations:
-        print(f"LOC check passed: no tracked files exceed {args.max_lines} lines.")
+        print(f"LOC check passed: no tracked files exceed their limits.")
         return 0
 
-    print(f"LOC check failed: {len(violations)} file(s) exceed {args.max_lines} lines:")
-    for lines, rel_path in sorted(violations, reverse=True):
-        print(f"  {lines:4d}  {rel_path}")
+    print(f"LOC check failed: {len(violations)} file(s) exceed their limits:")
+    for lines, rel_path, limit in sorted(violations, reverse=True):
+        print(f"  {lines:4d}/{limit:4d}  {rel_path}")
     return 1
 
 

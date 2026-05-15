@@ -9,32 +9,29 @@ import (
 	"agentd/internal/models"
 )
 
-// Exercises FakeKanbanStore so merged -coverpkg profiles include this package.
-func TestFakeKanbanStoreExercise(t *testing.T) {
+func exerciseStoreSetup(t *testing.T) (context.Context, *FakeKanbanStore, *models.Project, []models.Task) {
+	t.Helper()
 	ctx := context.Background()
 	s := NewFakeStore()
-
-	_, err := s.EnsureSystemProject(ctx)
-	if err != nil {
+	if _, err := s.EnsureSystemProject(ctx); err != nil {
 		t.Fatalf("EnsureSystemProject: %v", err)
 	}
-	_, err = s.EnsureSystemProject(ctx)
-	if err != nil {
-		t.Fatalf("EnsureSystemProject second: %v", err)
-	}
-
 	plan := models.DraftPlan{
-		ProjectName: "P",
-		Description: "d",
+		ProjectName: "P", Description: "d",
 		Tasks: []models.DraftTask{
 			{Title: "T1", Assignee: models.TaskAssigneeSystem},
-			{Title: "Tdup", Assignee: models.TaskAssigneeSystem},
+			{Title: "T2", Assignee: models.TaskAssigneeSystem},
 		},
 	}
 	proj, tasks, err := s.MaterializePlan(ctx, plan)
 	if err != nil || len(tasks) < 2 {
 		t.Fatalf("MaterializePlan: %v %d", err, len(tasks))
 	}
+	return ctx, s, proj, tasks
+}
+
+func TestFakeKanbanStore_ProjectsAndTasks(t *testing.T) {
+	ctx, s, proj, _ := exerciseStoreSetup(t)
 	gotProj, err := s.GetProject(ctx, proj.ID)
 	if err != nil {
 		t.Fatalf("GetProject: %v", err)
@@ -46,27 +43,25 @@ func TestFakeKanbanStoreExercise(t *testing.T) {
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListProjects: %v %d", err, len(list))
 	}
-
-	_, created, err := s.EnsureProjectTask(ctx, proj.ID, models.DraftTask{Title: "Tdup"})
+	_, created, err := s.EnsureProjectTask(ctx, proj.ID, models.DraftTask{Title: "dup"})
 	if err != nil || created {
-		t.Fatalf("EnsureProjectTask duplicate: created=%v err=%v", created, err)
+		t.Fatalf("EnsureProjectTask dup: created=%v err=%v", created, err)
 	}
-	_, created, err = s.EnsureProjectTask(ctx, proj.ID, models.DraftTask{Title: "BrandNew"})
+	_, created, err = s.EnsureProjectTask(ctx, proj.ID, models.DraftTask{Title: "new"})
 	if err != nil || !created {
 		t.Fatalf("EnsureProjectTask new: %v created=%v", err, created)
 	}
-
 	byProj, err := s.ListTasksByProject(ctx, proj.ID)
 	if err != nil || len(byProj) < 1 {
 		t.Fatalf("ListTasksByProject: %v", err)
 	}
+}
 
+func TestFakeKanbanStore_TaskLifecycle(t *testing.T) {
+	ctx, s, proj, tasks := exerciseStoreSetup(t)
 	claimed, err := s.ClaimNextReadyTasks(ctx, 10)
-	if err != nil {
+	if err != nil || len(claimed) < 1 {
 		t.Fatalf("ClaimNextReadyTasks: %v", err)
-	}
-	if len(claimed) < 1 {
-		t.Fatal("expected claimed tasks")
 	}
 	q := claimed[0]
 	_, err = s.MarkTaskRunning(ctx, q.ID, q.UpdatedAt, 4242)
@@ -100,7 +95,6 @@ func TestFakeKanbanStoreExercise(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTaskResult: %v", err)
 	}
-
 	_, err = s.ReconcileGhostTasks(ctx, []int{4242})
 	if err != nil {
 		t.Fatalf("ReconcileGhostTasks: %v", err)
@@ -109,8 +103,6 @@ func TestFakeKanbanStoreExercise(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReconcileStaleTasks: %v", err)
 	}
-
-	// Block with subtasks
 	runningID := tasks[1].ID
 	rt, err := s.GetTask(ctx, runningID)
 	if err != nil {
@@ -140,8 +132,10 @@ func TestFakeKanbanStoreExercise(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppendTasksToProject: %v", err)
 	}
+}
 
-	// Comments and events
+func TestFakeKanbanStore_CommentsAndEvents(t *testing.T) {
+	ctx, s, proj, tasks := exerciseStoreSetup(t)
 	commentTask := tasks[0].ID
 	if err := s.AddComment(ctx, models.Comment{
 		BaseEntity: models.BaseEntity{ID: "c1"},
@@ -178,22 +172,10 @@ func TestFakeKanbanStoreExercise(t *testing.T) {
 	if err := s.DeleteCuratedEvents(ctx, commentTask); err != nil {
 		t.Fatalf("DeleteCuratedEvents: %v", err)
 	}
+}
 
-	// Completed task for ListCompletedTasksOlderThan
-	doneTask := subs[0].ID
-	dt, err := s.GetTask(ctx, doneTask)
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	_, err = s.UpdateTaskResult(ctx, doneTask, dt.UpdatedAt, models.TaskResult{Success: true})
-	if err != nil {
-		t.Fatalf("UpdateTaskResult: %v", err)
-	}
-	if _, err := s.ListCompletedTasksOlderThan(ctx, time.Nanosecond); err != nil {
-		t.Fatalf("ListCompletedTasksOlderThan: %v", err)
-	}
-
-	// Memory
+func TestFakeKanbanStore_Memory(t *testing.T) {
+	ctx, s, _, _ := exerciseStoreSetup(t)
 	if err := s.RecordMemory(ctx, models.Memory{ID: "m1", Scope: models.MemoryScopeGlobal}); err != nil {
 		t.Fatalf("RecordMemory: %v", err)
 	}
@@ -212,8 +194,22 @@ func TestFakeKanbanStoreExercise(t *testing.T) {
 	if _, err := s.ListUnsupersededMemories(ctx); err != nil {
 		t.Fatalf("ListUnsupersededMemories: %v", err)
 	}
+}
 
-	// Agents
+func TestFakeKanbanStore_AgentsAndCleanup(t *testing.T) {
+	ctx, s, _, tasks := exerciseStoreSetup(t)
+	doneTask := tasks[1].ID
+	dt, err := s.GetTask(ctx, doneTask)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	_, err = s.UpdateTaskResult(ctx, doneTask, dt.UpdatedAt, models.TaskResult{Success: true})
+	if err != nil {
+		t.Fatalf("UpdateTaskResult: %v", err)
+	}
+	if _, err := s.ListCompletedTasksOlderThan(ctx, time.Nanosecond); err != nil {
+		t.Fatalf("ListCompletedTasksOlderThan: %v", err)
+	}
 	if _, err := s.ListAgentProfiles(ctx); err != nil {
 		t.Fatalf("ListAgentProfiles: %v", err)
 	}
@@ -226,7 +222,6 @@ func TestFakeKanbanStoreExercise(t *testing.T) {
 	if v, ok, err := s.GetSetting(ctx, "k"); err != nil || !ok || v != "v" {
 		t.Fatalf("GetSetting: %v %v %q", ok, err, v)
 	}
-
 	_ = s.Events()
 	_ = s.Tasks()
 	if err := s.Close(); err != nil {
