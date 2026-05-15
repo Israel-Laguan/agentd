@@ -108,6 +108,13 @@ type errTruncation struct{ err error }
 func (e errTruncation) Error() string { return e.err.Error() }
 func (e errTruncation) Unwrap() error { return e.err }
 
+// tryProvider attempts a single provider and returns (response, ok, error).
+//   - ok=true, err=nil: success; the caller should use the response.
+//   - ok=false, err=nil: the provider was skipped without error (e.g. a non-tool
+//     provider when a tool-capable candidate exists). The caller should continue
+//     to the next candidate and NOT accumulate an error.
+//   - ok=false, err!=nil: provider failure; the caller may aggregate the error
+//     and continue cascading.
 func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq spec.AIRequest, hasRequestedTools bool, selectedHasToolSupport bool) (spec.AIResponse, bool, error) {
 	req := baseReq
 	if hasRequestedTools && !p.Capabilities().SupportsChatTools {
