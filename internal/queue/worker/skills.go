@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"agentd/internal/paths"
 )
 
 // ---------------------------------------------------------------------------
@@ -92,7 +94,7 @@ type SkillLoader struct {
 	ProjectDir string
 
 	// GlobalDir is the absolute path to the global skills directory
-	// (resolved by config before the worker runs; may still start with "~/" when constructed in tests).
+	// (resolved by config before the worker runs; tilde prefixes are expanded in loadDir via paths.ExpandTildePrefix).
 	GlobalDir string
 }
 
@@ -139,12 +141,7 @@ func (l *SkillLoader) LoadAll(workspacePath string) ([]*Skill, error) {
 // loadDir reads all .md files from dir, parses each as a skill, and returns
 // non-empty skills. Returns (nil, nil) when the directory does not exist.
 func (l *SkillLoader) loadDir(dir string) ([]*Skill, error) {
-	expanded := dir
-	if strings.HasPrefix(dir, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			expanded = filepath.Join(home, dir[2:])
-		}
-	}
+	expanded := paths.ExpandTildePrefix(dir)
 	entries, err := os.ReadDir(expanded)
 	if os.IsNotExist(err) {
 		return nil, nil
