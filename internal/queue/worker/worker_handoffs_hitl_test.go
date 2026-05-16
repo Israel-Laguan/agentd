@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agentd/internal/models"
+	"agentd/internal/testutil"
 )
 
 // --- FormatForHuman ---
@@ -66,17 +67,18 @@ func TestFormatForHuman_NoDetail(t *testing.T) {
 
 func TestCreateReviewHandoff_CreatesSubtask(t *testing.T) {
 	t.Parallel()
-	store := &reviewMockStore{}
+	store := &reviewMockStore{FakeKanbanStore: testutil.NewFakeStore()}
 	sink := &mockEventSink{}
 	w := &Worker{store: store, sink: sink}
 
-	task := models.Task{
-		BaseEntity: models.BaseEntity{
-			ID:        "task-review-1",
-			UpdatedAt: time.Now(),
-		},
-		ProjectID: "proj-1",
+	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "review-test",
+		Tasks: []models.DraftTask{{Title: "task-review-1", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
 	}
+	task := tasks[0]
 
 	w.createReviewHandoff(context.Background(), task, "Here is my draft output")
 
@@ -114,17 +116,18 @@ func TestCreateReviewHandoff_CreatesSubtask(t *testing.T) {
 
 func TestCreateReviewHandoff_StoreError(t *testing.T) {
 	t.Parallel()
-	store := &reviewMockStore{err: errMockBlock}
+	store := &reviewMockStore{FakeKanbanStore: testutil.NewFakeStore(), err: errMockBlock}
 	sink := &mockEventSink{}
 	w := &Worker{store: store, sink: sink}
 
-	task := models.Task{
-		BaseEntity: models.BaseEntity{
-			ID:        "task-review-err",
-			UpdatedAt: time.Now(),
-		},
-		ProjectID: "proj-1",
+	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "review-err",
+		Tasks: []models.DraftTask{{Title: "task-review-err", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
 	}
+	task := tasks[0]
 
 	w.createReviewHandoff(context.Background(), task, "draft")
 
@@ -145,10 +148,14 @@ func TestCreateReviewHandoff_StoreError(t *testing.T) {
 var errMockBlock = models.ErrStateConflict
 
 type reviewMockStore struct {
-	models.KanbanStore
+	*testutil.FakeKanbanStore
 	blockCalled bool
 	subtasks    []models.DraftTask
 	err         error
+}
+
+func (s *reviewMockStore) AddComment(ctx context.Context, c models.Comment) error {
+	return s.FakeKanbanStore.AddComment(ctx, c)
 }
 
 func (s *reviewMockStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, subtasks []models.DraftTask) (*models.Task, []models.Task, error) {

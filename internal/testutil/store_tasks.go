@@ -214,6 +214,7 @@ func (s *FakeKanbanStore) BlockTaskWithSubtasks(_ context.Context, id string, _ 
 			Assignee:    d.Assignee,
 		}
 		s.tasks[child.ID] = child
+		s.childParents[id] = append(s.childParents[id], child.ID)
 		children = append(children, child)
 	}
 	return &t, children, nil

@@ -12,6 +12,15 @@ import (
 )
 
 func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
+	if profile.RequireReview {
+		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
+			w.emit(ctx, task, "ERROR", err.Error())
+			return
+		} else if done {
+			return
+		}
+	}
+
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w.registerCancel(task.ID, cancel)
@@ -31,7 +40,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		if taskHooks == nil {
 			taskHooks = NewHookChain()
 		}
-		handler := NewBlockingApprovalHandler(w.store, w.sink)
+		handler := NewBlockingApprovalHandler(w.store)
 		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
 	}
 
@@ -109,9 +118,9 @@ func (w *Worker) handleAgenticToolCalls(
 	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
 	cm *ContextManager,
-) {
+) bool {
 	for _, call := range resp.ToolCalls {
-		result := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, task.UpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
+		result, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, task.UpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
 		if detected := cm.CheckToolResult(result); len(detected) > 0 {
 			slog.Info("auto-detected context corrections",
 				"task_id", task.ID,
@@ -123,7 +132,11 @@ func (w *Worker) handleAgenticToolCalls(
 			ToolCallID: call.ID,
 			Content:    result,
 		})
+		if suspended {
+			return true
+		}
 	}
+	return false
 }
 
 func (w *Worker) processAgenticIteration(
@@ -179,7 +192,9 @@ func (w *Worker) processAgenticIteration(
 		return false, nil
 	}
 	iterationGuard.AfterIteration(true)
-	w.handleAgenticToolCalls(ctx, task, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps, cm)
+	if w.handleAgenticToolCalls(ctx, task, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps, cm) {
+		return false, nil
+	}
 	return true, nil
 }
 

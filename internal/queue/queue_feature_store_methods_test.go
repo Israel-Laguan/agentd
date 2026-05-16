@@ -194,6 +194,16 @@ func (s *queueStore) BlockTaskWithSubtasks(_ context.Context, id string, _ time.
 	return parent, children, nil
 }
 
+func (s *queueStore) ListChildTasks(_ context.Context, _ string) ([]models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]models.Task(nil), s.children...), nil
+}
+
+func (s *queueStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *queueStore) AppendTasksToProject(context.Context, string, string, []models.DraftTask) ([]models.Task, error) {
 	return nil, nil
 }

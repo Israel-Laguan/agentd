@@ -38,6 +38,7 @@ func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, project
 		SessionID: sessionID,
 		ProjectID: projectID,
 		Timestamp: time.Now(),
+		ExecCtx:   ctx,
 	}
 
 	if w.hooks != nil {

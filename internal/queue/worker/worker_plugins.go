@@ -75,7 +75,7 @@ func (w *Worker) dispatchToolWithHooks(
 	toolExecutor *ToolExecutor,
 	taskHooks *HookChain,
 	scopedCapabilities *capabilities.Registry,
-) string {
+) (string, bool) {
 	hookCtx := HookContext{
 		ToolName:      call.Function.Name,
 		Args:          call.Function.Arguments,
@@ -84,17 +84,18 @@ func (w *Worker) dispatchToolWithHooks(
 		ProjectID:     projectID,
 		Timestamp:     time.Now(),
 		TaskUpdatedAt: taskUpdatedAt,
+		ExecCtx:       ctx,
 	}
 
 	if taskHooks != nil {
 		if verdict := taskHooks.RunPre(hookCtx); verdict.ShortCircuit {
-			return verdict.Result
+			return verdict.Result, verdict.Suspend
 		} else if verdict.Veto && verdict.Result != "" {
 			result := verdict.Result
 			result = taskHooks.RunPost(hookCtx, result)
-			return result
+			return result, verdict.Suspend
 		} else if verdict.Veto {
-			return jsonErrorf("tool call vetoed by scoped plugin: %s", verdict.Reason)
+			return jsonErrorf("tool call vetoed by scoped plugin: %s", verdict.Reason), verdict.Suspend
 		}
 	}
 
@@ -103,5 +104,5 @@ func (w *Worker) dispatchToolWithHooks(
 	if taskHooks != nil {
 		result = taskHooks.RunPost(hookCtx, result)
 	}
-	return result
+	return result, false
 }

@@ -264,18 +264,6 @@ func (w *Worker) commitText(ctx context.Context, task models.Task, content strin
 	w.commitTextWithProfile(ctx, task, content, nil)
 }
 
-func (w *Worker) commitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
-	if profile != nil && profile.RequireReview {
-		w.createReviewHandoff(ctx, task, content)
-		return
-	}
-	result := sandbox.Result{
-		Success: true,
-		Stdout:  content,
-	}
-	w.commit(ctx, task, result, nil)
-}
-
 func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) {
 	payload := "task exceeded maximum tool iterations without producing a final result"
 	w.handleAgentFailure(ctx, task, payload)

@@ -123,6 +123,14 @@ func (s *routingTestStore) AppendTasksToProject(context.Context, string, string,
 func (s *routingTestStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, _ []models.DraftTask) (*models.Task, []models.Task, error) {
 	return &s.task, nil, nil
 }
+
+func (s *routingTestStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *routingTestStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *routingTestStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) {
 	return nil, nil
 }

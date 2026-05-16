@@ -131,10 +131,11 @@ func TestDispatchToolWithHooks_NilHooksPassesThrough(t *testing.T) {
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "unknown-tool"},
 	}
-	result := w.dispatchToolWithHooks(
+	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, nil, nil,
 	)
 	assert.Contains(t, result, "error")
+	assert.False(t, suspended)
 }
 
 func TestDispatchToolWithHooks_PreHookVeto(t *testing.T) {
@@ -153,10 +154,11 @@ func TestDispatchToolWithHooks_PreHookVeto(t *testing.T) {
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "bash"},
 	}
-	result := w.dispatchToolWithHooks(
+	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Contains(t, result, "vetoed")
+	assert.False(t, suspended)
 }
 
 func TestDispatchToolWithHooks_PostHookModifiesResult(t *testing.T) {
@@ -174,10 +176,11 @@ func TestDispatchToolWithHooks_PostHookModifiesResult(t *testing.T) {
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "unknown-tool"},
 	}
-	result := w.dispatchToolWithHooks(
+	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Contains(t, result, "[tagged]")
+	assert.False(t, suspended)
 }
 
 func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
@@ -199,10 +202,11 @@ func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
 			Arguments: `{"command":"ls"}`,
 		},
 	}
-	result := w.dispatchToolWithHooks(
+	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Equal(t, "cached", result)
+	assert.False(t, suspended)
 }
 
 func TestAgenticToolsWithExtras_NilExtra(t *testing.T) {
@@ -236,7 +240,7 @@ func TestDispatchToolWithHooks_HookContextFields(t *testing.T) {
 	}
 
 	taskUpdatedAt := time.Now()
-	_ = w.dispatchToolWithHooks(
+	_, _ = w.dispatchToolWithHooks(
 		t.Context(), "sess-1", "proj-1", taskUpdatedAt, call, nil, nil, taskHooks, nil,
 	)
 

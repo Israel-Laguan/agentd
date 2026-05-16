@@ -288,6 +288,14 @@ func (m *mockAgenticStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ 
 	return &m.task, nil, nil
 }
 
+func (m *mockAgenticStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (m *mockAgenticStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockAgenticStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) {
 	return nil, nil
 }
