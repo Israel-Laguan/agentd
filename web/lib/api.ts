@@ -9,7 +9,7 @@ const USE_MOCK = true;
 
 // ---------------- BOARD ----------------
 export async function getBoard() {
-  if (USE_MOCK) return mockBoard;
+  if (USE_MOCK) return structuredClone(mockBoard);
 
   const res = await fetch(`${API}/api/v1/projects`);
   if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);

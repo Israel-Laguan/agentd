@@ -22,11 +22,13 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
   const committedTitleRef = useRef(task?.title ?? "");
   const committedDescriptionRef = useRef(task?.description ?? "");
   const committedStatusRef = useRef<TaskStatus>(task?.status || TaskStatus.PENDING);
+  const suppressBlurSaveRef = useRef(false);
 
   // Synchronize local state when the task prop changes (review-requested pattern).
   /* eslint-disable */
   useLayoutEffect(() => {
     if (!task) return;
+    suppressBlurSaveRef.current = true;
     setTitle(task.title ?? "");
     setDescription(task.description ?? "");
     setStatus(task.status || TaskStatus.PENDING);
@@ -35,6 +37,9 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
     committedTitleRef.current = task.title ?? "";
     committedDescriptionRef.current = task.description ?? "";
     committedStatusRef.current = task.status || TaskStatus.PENDING;
+    queueMicrotask(() => {
+      suppressBlurSaveRef.current = false;
+    });
   }, [task]);
   /* eslint-enable */
 
@@ -99,7 +104,9 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                   onChange={(e) => setTitle(e.target.value)}
                   onBlur={() => {
                     setIsEditingTitle(false);
-                    handleSave({ title }).catch(() => {});
+                    if (!suppressBlurSaveRef.current) {
+                      handleSave({ title }).catch(() => {});
+                    }
                   }}
                   autoFocus
                   className="w-full text-sm text-text bg-bg border border-border rounded px-2 py-1"
@@ -133,7 +140,9 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                   onChange={(e) => setDescription(e.target.value)}
                   onBlur={() => {
                     setIsEditingDescription(false);
-                    handleSave({ description }).catch(() => {});
+                    if (!suppressBlurSaveRef.current) {
+                      handleSave({ description }).catch(() => {});
+                    }
                   }}
                   autoFocus
                   className="w-full text-sm text-text-dim bg-bg border border-border rounded px-2 py-1 min-h-[100px]"
