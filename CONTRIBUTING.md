@@ -32,7 +32,7 @@ make check       # run full quality gate (loc + lint + test)
 | `make test` | Run race-enabled tests for all packages |
 | `make coverage` | Run tests with coverage report |
 | `make lint` | Run `golangci-lint` (includes `depguard`, `cyclop`, `funlen`, `revive`) |
-| `make loc` | Check file line counts (max 300) |
+| `make loc` | Check tracked file line counts: 300 default, 500 for `*_test.go`, 400 under `docs/` (see [`docs/guardrails.md`](docs/guardrails.md) / [`GUARDRAILS.md`](GUARDRAILS.md)) |
 | `make check` | `loc` + `lint` + `test` (full quality gate) |
 | `make tidy` | Run `go mod tidy` |
 
