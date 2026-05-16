@@ -7,6 +7,14 @@ import (
 	"agentd/internal/models"
 )
 
+// hitlChildFailsOnTimeout reports whether reconcile should transition a child to FAILED.
+// Mirrors internal/kanban failHITLBlockedTask: skip COMPLETED, FAILED, and FAILED_REQUIRES_HUMAN.
+func hitlChildFailsOnTimeout(state models.TaskState) bool {
+	return state != models.TaskStateCompleted &&
+		state != models.TaskStateFailed &&
+		state != models.TaskStateFailedRequiresHuman
+}
+
 func (s *FakeKanbanStore) ListChildTasks(_ context.Context, parentID string) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -55,7 +63,7 @@ func (s *FakeKanbanStore) ReconcileExpiredBlockedTasks(_ context.Context, now ti
 		expired = append(expired, t)
 		for _, childID := range s.childParents[id] {
 			child, ok := s.tasks[childID]
-			if !ok || child.State == models.TaskStateCompleted || child.State == models.TaskStateFailed {
+			if !ok || !hitlChildFailsOnTimeout(child.State) {
 				continue
 			}
 			child.State = models.TaskStateFailed
