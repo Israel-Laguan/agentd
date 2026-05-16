@@ -3,7 +3,7 @@
 import { Task, TaskStatus } from "@/lib/types";
 import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CommentPanel } from "../comment/comment-panel";
 
 interface TaskDrawerProps {
@@ -19,9 +19,32 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [status, setStatus] = useState<TaskStatus>(task?.status || TaskStatus.PENDING);
 
+  const lastTaskIdRef = useRef<string | undefined>(task?.id);
+  if (lastTaskIdRef.current !== task?.id) {
+    lastTaskIdRef.current = task?.id;
+    setTitle(task?.title ?? "");
+    setDescription(task?.description ?? "");
+    setStatus(task?.status || TaskStatus.PENDING);
+    setIsEditingTitle(false);
+    setIsEditingDescription(false);
+  }
+
   const handleSave = async (patch: Partial<Task>) => {
     if (!task || !onUpdateTask) return;
-    await onUpdateTask(task.id, patch);
+
+    const prevTitle = title;
+    const prevDescription = description;
+    const prevStatus = status;
+
+    try {
+      await onUpdateTask(task.id, patch);
+    } catch (err) {
+      setTitle(prevTitle);
+      setDescription(prevDescription);
+      setStatus(prevStatus);
+      console.error("Failed to save task:", err);
+      throw err;
+    }
   };
 
   return (

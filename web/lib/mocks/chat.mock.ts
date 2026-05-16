@@ -7,7 +7,7 @@ export async function mockChat(
 
   return {
     message: {
-      id: `mock-${Date.now()}`,
+      id: `mock-${crypto.randomUUID()}`,
       role: "assistant",
       content: `Mock response to: ${message}`,
     },

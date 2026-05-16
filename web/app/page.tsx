@@ -1,7 +1,7 @@
 "use client";
 
 import { DragEndEvent } from "@dnd-kit/core";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { LayoutDashboard } from 'lucide-react';
 import { AnimatePresence } from "framer-motion";
 import {
@@ -27,6 +27,18 @@ export default function Page() {
   const [draftPlan, setDraftPlan] = useState<DraftPlan | null>(null);
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleNewIntake = useCallback(() => {
+    setActiveTab('chat');
+    setMessages([]);
+    setDraftPlan(null);
+    setInput('');
+    setSelectedTask(null);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -80,6 +92,10 @@ export default function Page() {
 
     const newStatus = over.id as TaskStatus;
 
+    const currentTask = localTasks.find((t) => t.id === taskId);
+    const prevStatus = currentTask?.status;
+    const prevUpdatedAt = currentTask?.updatedAt;
+
     setLocalTasks((tasks) =>
       tasks.map((task) =>
         task.id === taskId
@@ -94,6 +110,19 @@ export default function Page() {
 
     updateTask(taskId, { status: newStatus, updatedAt: Date.now() }).catch((err) => {
       console.error("Failed to persist task status", err);
+      if (prevStatus !== undefined && prevUpdatedAt !== undefined) {
+        setLocalTasks((tasks) =>
+          tasks.map((task) =>
+            task.id === taskId
+              ? {
+                  ...task,
+                  status: prevStatus,
+                  updatedAt: prevUpdatedAt,
+                }
+              : task
+          )
+        );
+      }
     });
   };
 
@@ -113,7 +142,7 @@ export default function Page() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        <Header onNewIntake={() => setSelectedTask(null)} />
+        <Header onStartNewIntake={handleNewIntake} />
 
         <div className="flex-1 overflow-y-auto p-6 md:p-8">
           <AnimatePresence mode="wait">
@@ -124,6 +153,11 @@ export default function Page() {
                 draftPlan={draftPlan}
                 setDraftPlan={setDraftPlan}
                 setActiveTab={setActiveTab}
+                input={input}
+                setInput={setInput}
+                isTyping={isTyping}
+                setIsTyping={setIsTyping}
+                inputRef={inputRef}
               />
             )}
 
@@ -154,7 +188,6 @@ export default function Page() {
       {/* Persistent System Footer */}
       <Footer />
       <TaskDrawer
-        key={selectedTask?.id}
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
         onUpdateTask={handleUpdateTask}

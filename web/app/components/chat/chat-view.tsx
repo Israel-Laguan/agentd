@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
 
 function createMessageId() {
@@ -22,6 +21,11 @@ interface ChatViewProps {
   draftPlan: DraftPlan | null;
   setDraftPlan: React.Dispatch<React.SetStateAction<DraftPlan | null>>;
   setActiveTab: (tab: string) => void;
+  input: string;
+  setInput: (v: string) => void;
+  isTyping: boolean;
+  setIsTyping: (v: boolean) => void;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 export function ChatView({
@@ -30,9 +34,12 @@ export function ChatView({
   draftPlan,
   setDraftPlan,
   setActiveTab,
+  input,
+  setInput,
+  isTyping,
+  setIsTyping,
+  inputRef,
 }: ChatViewProps) {
-  const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -47,14 +54,15 @@ export function ChatView({
       const data = await sendChat(userMsg.content);
 
       const assistant =
-        data?.message ??
-        (data?.choices?.[0]?.message?.content
+        data?.message
+          ? { ...data.message, id: data.message.id ?? createMessageId() }
+          : data?.choices?.[0]?.message?.content
           ? {
               id: createMessageId(),
               role: "assistant",
               content: data.choices[0].message.content,
             }
-          : null);
+          : null;
 
       if (assistant) setMessages((p) => [...p, assistant]);
       if (data.plan) setDraftPlan(data.plan);
@@ -126,6 +134,7 @@ export function ChatView({
         setValue={setInput}
         onSend={handleSend}
         isTyping={isTyping}
+        inputRef={inputRef}
       />
     </motion.div>
   );
