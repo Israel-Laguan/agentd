@@ -103,10 +103,11 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if err := recovery.BootReconcile(ctx, d.store, d.probe, d.sink); err != nil {
 		return err
 	}
-	d.wg.Add(6)
+	d.wg.Add(7)
 	go d.taskLoop(ctx)
 	go d.intakeLoop(ctx)
 	go d.heartbeatReconcileLoop(ctx)
+	go d.queuedReconcileLoop(ctx)
 	go d.diskWatchdogLoop(ctx)
 	go d.memoryCuratorLoop(ctx)
 	go d.dreamLoop(ctx)

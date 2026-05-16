@@ -27,7 +27,7 @@ func (s *queueScenario) readyTasks(_ context.Context, count int) error {
 
 func (s *queueScenario) daemonTicks(ctx context.Context) error {
 	before := s.store.count(models.TaskStateQueued) + s.store.count(models.TaskStateRunning)
-	if _, err := s.daemon.dispatch(ctx); err != nil {
+	if _, _, err := s.daemon.dispatch(ctx); err != nil {
 		return err
 	}
 	s.lastQueued = s.store.count(models.TaskStateQueued) + s.store.count(models.TaskStateRunning) - before
@@ -46,7 +46,7 @@ func (s *queueScenario) semaphoreAvailable(_ context.Context, want int) error {
 
 func (s *queueScenario) nextTickIgnores(ctx context.Context, _ int) error {
 	before := s.store.count(models.TaskStateQueued) + s.store.count(models.TaskStateRunning)
-	if _, err := s.daemon.dispatch(ctx); err != nil {
+	if _, _, err := s.daemon.dispatch(ctx); err != nil {
 		return err
 	}
 	after := s.store.count(models.TaskStateQueued) + s.store.count(models.TaskStateRunning)
@@ -88,7 +88,7 @@ func (s *queueScenario) gatewayUnreachable(context.Context) error {
 
 func (s *queueScenario) threeWorkersFailOutage(ctx context.Context) error {
 	s.store.seed(3, models.TaskStateReady)
-	_, err := s.daemon.dispatch(ctx)
+	_, _, err := s.daemon.dispatch(ctx)
 	return err
 }
 
@@ -401,7 +401,7 @@ func (s *daemonSafetyScenario) readyFastSandbox(_ context.Context, count int) er
 }
 
 func (s *daemonSafetyScenario) dispatchOnce(context.Context) error {
-	_, err := s.daemon.dispatch(context.Background())
+	_, _, err := s.daemon.dispatch(context.Background())
 	return err
 }
 
@@ -466,7 +466,7 @@ func (s *daemonSafetyScenario) setPollIntervals(_ context.Context, baseRaw, ceil
 
 func (s *daemonSafetyScenario) dispatchEmptyN(_ context.Context, n int) error {
 	for range n {
-		s.curDelay = s.daemon.nextDispatchDelay(s.curDelay, 0)
+		s.curDelay = s.daemon.nextDispatchDelay(s.curDelay, 0, 0)
 		s.delays = append(s.delays, s.curDelay)
 	}
 	return nil
@@ -499,7 +499,7 @@ func (s *daemonSafetyScenario) backoffTo(_ context.Context, raw string) error {
 }
 
 func (s *daemonSafetyScenario) dispatchWithClaim(_ context.Context, _ int) error {
-	s.curDelay = s.daemon.nextDispatchDelay(s.curDelay, 1)
+	s.curDelay = s.daemon.nextDispatchDelay(s.curDelay, 1, 0)
 	return nil
 }
 
@@ -545,7 +545,7 @@ func (s *daemonSafetyScenario) workerPanics(context.Context) error {
 
 func (s *daemonSafetyScenario) dispatchNTasks(_ context.Context, n int) error {
 	s.store.seed(n, models.TaskStateReady)
-	_, err := s.daemon.dispatch(context.Background())
+	_, _, err := s.daemon.dispatch(context.Background())
 	return err
 }
 
