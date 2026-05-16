@@ -41,6 +41,15 @@ func TestChannelConfigOverride(t *testing.T) {
 	}
 }
 
+func TestLoadChannelDefaults_EnablesGate(t *testing.T) {
+	v := viper.New()
+	setChannelDefaults(v)
+	cfg := loadChannelConfig(v)
+	if !ChannelGateEnabled(cfg) {
+		t.Fatal("viper defaults should enable channel gate")
+	}
+}
+
 func TestChannelGateEnabled(t *testing.T) {
 	if ChannelGateEnabled(ChannelConfig{}) {
 		t.Fatal("empty config should not enable channel gate")
