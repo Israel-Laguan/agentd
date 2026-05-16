@@ -11,6 +11,31 @@ import (
 	"agentd/internal/testutil"
 )
 
+func TestFindLatestApprovalSubtask_ExactTitleOnly(t *testing.T) {
+	t.Parallel()
+	older := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	newer := older.Add(time.Hour)
+	children := []models.Task{
+		{
+			BaseEntity: models.BaseEntity{ID: "deploy-prod", UpdatedAt: newer},
+			Title:      approvalSubtaskTitle("deploy-prod"),
+			State:      models.TaskStateCompleted,
+		},
+		{
+			BaseEntity: models.BaseEntity{ID: "deploy", UpdatedAt: older},
+			Title:      approvalSubtaskTitle("deploy"),
+			State:      models.TaskStateCompleted,
+		},
+	}
+	got := findLatestApprovalSubtask(children, "deploy")
+	if got == nil {
+		t.Fatal("expected deploy approval subtask")
+	}
+	if got.ID != "deploy" {
+		t.Fatalf("got subtask %q, want deploy (not deploy-prod prefix match)", got.ID)
+	}
+}
+
 func TestPrependReviewRejectionFeedback_InjectsOnce(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()

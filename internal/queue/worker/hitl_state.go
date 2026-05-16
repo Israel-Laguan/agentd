@@ -112,8 +112,22 @@ func findLatestChildByTitlePrefix(children []models.Task, prefix string) *models
 	return latest
 }
 
+func findLatestChildByExactTitle(children []models.Task, title string) *models.Task {
+	var latest *models.Task
+	for i := range children {
+		child := &children[i]
+		if child.Title != title {
+			continue
+		}
+		if latest == nil || child.UpdatedAt.After(latest.UpdatedAt) {
+			latest = child
+		}
+	}
+	return latest
+}
+
 func findLatestApprovalSubtask(children []models.Task, toolName string) *models.Task {
-	return findLatestChildByTitlePrefix(children, approvalSubtaskTitle(toolName))
+	return findLatestChildByExactTitle(children, approvalSubtaskTitle(toolName))
 }
 
 func findLatestReviewSubtask(children []models.Task) *models.Task {
