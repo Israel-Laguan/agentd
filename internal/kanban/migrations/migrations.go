@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	currentSchemaVersion = 7
+	currentSchemaVersion = 8
 	schemaVersionKey     = "schema_version"
 )
 
@@ -22,43 +22,41 @@ func Run(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	slog.Debug("schema version detected", "version", version)
-	if version < 2 {
-		if err := migrateToV2(ctx, db); err != nil {
-			return err
-		}
-		slog.Debug("migration v2 applied")
+	migrations := []struct {
+		version int
+		run     func(context.Context, *sql.DB) error
+	}{
+		{2, migrateToV2},
+		{3, migrateToV3},
+		{4, migrateToV4},
+		{5, migrateToV5},
+		{6, migrateToV6},
+		{7, migrateToV7},
+		{8, migrateToV8},
 	}
-	if version < 3 {
-		if err := migrateToV3(ctx, db); err != nil {
+	for _, migration := range migrations {
+		if err := applyMigration(ctx, db, version, migration.version, migration.run); err != nil {
 			return err
 		}
-		slog.Debug("migration v3 applied")
-	}
-	if version < 4 {
-		if err := migrateToV4(ctx, db); err != nil {
-			return err
-		}
-		slog.Debug("migration v4 applied")
-	}
-	if version < 5 {
-		if err := migrateToV5(ctx, db); err != nil {
-			return err
-		}
-		slog.Debug("migration v5 applied")
-	}
-	if version < 6 {
-		if err := migrateToV6(ctx, db); err != nil {
-			return err
-		}
-		slog.Debug("migration v6 applied")
-	}
-	if version < 7 {
-		if err := migrateToV7(ctx, db); err != nil {
-			return err
-		}
-		slog.Debug("migration v7 applied")
 	}
 	slog.Debug("schema migration complete", "version", currentSchemaVersion)
+	return nil
+}
+
+func applyMigration(
+	ctx context.Context,
+	db *sql.DB,
+	fromVersion int,
+	toVersion int,
+	run func(context.Context, *sql.DB) error,
+) error {
+	if fromVersion >= toVersion {
+		return nil
+	}
+	if err := run(ctx, db); err != nil {
+		return err
+	}
+	slog.Debug("migration applied", "version", toVersion)
 	return nil
 }
 
@@ -77,8 +75,6 @@ func schemaVersion(ctx context.Context, db *sql.DB) (int, error) {
 	}
 	return 1, nil
 }
-
-
 
 func setSchemaVersion(ctx context.Context, db *sql.DB, version int) error {
 	_, err := db.ExecContext(ctx, `
@@ -247,4 +243,24 @@ func migrateToV7(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return setSchemaVersion(ctx, db, 7)
+}
+
+func migrateToV8(ctx context.Context, db *sql.DB) error {
+	exists, err := tableExists(ctx, db, "tasks")
+	if err != nil {
+		return fmt.Errorf("check tasks table for schema migration v8: %w", err)
+	}
+	if !exists {
+		return setSchemaVersion(ctx, db, 8)
+	}
+	has, err := tableHasColumn(ctx, db, "tasks", "success_criteria")
+	if err != nil {
+		return fmt.Errorf("check tasks.success_criteria column: %w", err)
+	}
+	if !has {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tasks ADD COLUMN success_criteria TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(success_criteria))`); err != nil {
+			return fmt.Errorf("add tasks.success_criteria column: %w", err)
+		}
+	}
+	return setSchemaVersion(ctx, db, 8)
 }

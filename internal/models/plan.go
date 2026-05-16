@@ -77,11 +77,12 @@ type DraftTask struct {
 	// ReferenceID is the proposal-aligned ID and maps to JSON ref_id.
 	ReferenceID string `json:"ref_id,omitempty"`
 	// TempID remains for backward compatibility with existing tests and stores.
-	TempID      string       `json:"temp_id,omitempty"`
-	Title       string       `json:"title"`
-	Description string       `json:"description"`
-	Assignee    TaskAssignee `json:"assignee"`
-	DependsOn   []string     `json:"depends_on,omitempty"`
+	TempID          string       `json:"temp_id,omitempty"`
+	Title           string       `json:"title"`
+	Description     string       `json:"description"`
+	Assignee        TaskAssignee `json:"assignee"`
+	DependsOn       []string     `json:"depends_on,omitempty"`
+	SuccessCriteria []string     `json:"success_criteria,omitempty"`
 }
 
 // UnmarshalJSON accepts both proposal snake_case and legacy camel-case keys.

@@ -44,13 +44,18 @@ func (g *AgentGoal) IsStalled(threshold int) bool {
 // MarkCompleted adds criteria to the completed set, de-duplicating
 // against already-completed entries.
 func (g *AgentGoal) MarkCompleted(criteria []string) {
+	allowed := g.successCriteriaSet()
 	seen := make(map[string]struct{}, len(g.CompletedCriteria))
 	for _, c := range g.CompletedCriteria {
 		seen[c] = struct{}{}
 	}
+	var completed []string
 	for _, c := range criteria {
 		c = strings.TrimSpace(c)
 		if c == "" {
+			continue
+		}
+		if _, ok := allowed[c]; !ok {
 			continue
 		}
 		if _, ok := seen[c]; ok {
@@ -58,13 +63,15 @@ func (g *AgentGoal) MarkCompleted(criteria []string) {
 		}
 		seen[c] = struct{}{}
 		g.CompletedCriteria = append(g.CompletedCriteria, c)
+		completed = append(completed, c)
 	}
-	g.removeFromBlocked(criteria)
+	g.removeFromBlocked(completed)
 }
 
 // MarkBlocked adds criteria to the blocked set, de-duplicating and
 // excluding any criteria that are already completed.
 func (g *AgentGoal) MarkBlocked(criteria []string) {
+	allowed := g.successCriteriaSet()
 	completed := make(map[string]struct{}, len(g.CompletedCriteria))
 	for _, c := range g.CompletedCriteria {
 		completed[c] = struct{}{}
@@ -78,6 +85,9 @@ func (g *AgentGoal) MarkBlocked(criteria []string) {
 		if c == "" {
 			continue
 		}
+		if _, ok := allowed[c]; !ok {
+			continue
+		}
 		if _, ok := completed[c]; ok {
 			continue
 		}
@@ -87,6 +97,16 @@ func (g *AgentGoal) MarkBlocked(criteria []string) {
 		seen[c] = struct{}{}
 		g.BlockedCriteria = append(g.BlockedCriteria, c)
 	}
+}
+
+func (g *AgentGoal) successCriteriaSet() map[string]struct{} {
+	allowed := make(map[string]struct{}, len(g.SuccessCriteria))
+	for _, c := range g.SuccessCriteria {
+		if v := strings.TrimSpace(c); v != "" {
+			allowed[v] = struct{}{}
+		}
+	}
+	return allowed
 }
 
 func (g *AgentGoal) removeFromBlocked(criteria []string) {
@@ -167,9 +187,9 @@ func (gt *GoalTracker) Goal() *AgentGoal {
 // stall conditions. Returns true if the goal is stalled.
 func (gt *GoalTracker) AfterTurn(ctx context.Context, completed, blocked []string) bool {
 	gt.mu.Lock()
-	defer gt.mu.Unlock()
 
 	if gt.goal == nil {
+		gt.mu.Unlock()
 		return false
 	}
 
@@ -177,22 +197,32 @@ func (gt *GoalTracker) AfterTurn(ctx context.Context, completed, blocked []strin
 	gt.goal.MarkCompleted(completed)
 	gt.goal.MarkBlocked(blocked)
 
-	if gt.goal.IsStalled(gt.stallThreshold) {
-		gt.emitStalled(ctx)
-		return true
+	stalled := gt.goal.IsStalled(gt.stallThreshold)
+	var payload string
+	var turnsActive int
+	var progress float64
+	if stalled {
+		payload = gt.stallPayload()
+		turnsActive = gt.goal.TurnsActive
+		progress = gt.goal.ProgressRatio()
 	}
-	return false
+	gt.mu.Unlock()
+
+	if !stalled {
+		return false
+	}
+	gt.emitStalled(ctx, payload, turnsActive, progress)
+	return true
 }
 
-func (gt *GoalTracker) emitStalled(ctx context.Context) {
+func (gt *GoalTracker) emitStalled(ctx context.Context, payload string, turnsActive int, progress float64) {
 	if gt.sink == nil {
 		return
 	}
-	payload := gt.stallPayload()
 	slog.Warn("goal stalled",
 		"task_id", gt.taskID,
-		"turns_active", gt.goal.TurnsActive,
-		"progress", gt.goal.ProgressRatio(),
+		"turns_active", turnsActive,
+		"progress", progress,
 	)
 	_ = gt.sink.Emit(ctx, models.Event{
 		ProjectID: gt.projectID,
@@ -241,8 +271,24 @@ func GoalFromTask(task models.Task) *AgentGoal {
 	if len(task.SuccessCriteria) == 0 {
 		return nil
 	}
+	seen := make(map[string]struct{}, len(task.SuccessCriteria))
+	criteria := make([]string, 0, len(task.SuccessCriteria))
+	for _, c := range task.SuccessCriteria {
+		v := strings.TrimSpace(c)
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		criteria = append(criteria, v)
+	}
+	if len(criteria) == 0 {
+		return nil
+	}
 	return &AgentGoal{
 		Description:     task.Description,
-		SuccessCriteria: append([]string(nil), task.SuccessCriteria...),
+		SuccessCriteria: append([]string(nil), criteria...),
 	}
 }

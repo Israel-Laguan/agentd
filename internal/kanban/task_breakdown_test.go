@@ -13,7 +13,7 @@ func TestBlockTaskWithSubtasksCreatesReadyChildrenAndBlocksParent(t *testing.T) 
 	parent := seedTestTask(t, store, "parent", models.TaskStateRunning)
 
 	blocked, children, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{
-		{Title: "child one", Description: "first child"},
+		{Title: "child one", Description: "first child", SuccessCriteria: []string{"child one done"}},
 		{Title: "child two", Description: "second child", Assignee: models.TaskAssigneeHuman},
 	})
 	if err != nil {
@@ -30,6 +30,9 @@ func TestBlockTaskWithSubtasksCreatesReadyChildrenAndBlocksParent(t *testing.T) 
 	}
 	if children[1].Assignee != models.TaskAssigneeHuman {
 		t.Fatalf("child assignee = %s, want HUMAN", children[1].Assignee)
+	}
+	if len(children[0].SuccessCriteria) != 1 || children[0].SuccessCriteria[0] != "child one done" {
+		t.Fatalf("child success criteria = %v, want [child one done]", children[0].SuccessCriteria)
 	}
 	assertRelationCount(t, store, parent.ID, 2)
 }

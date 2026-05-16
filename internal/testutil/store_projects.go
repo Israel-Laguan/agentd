@@ -81,13 +81,14 @@ func (s *FakeKanbanStore) EnsureProjectTask(_ context.Context, projectID string,
 		}
 	}
 	task := models.Task{
-		BaseEntity:  models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-		ProjectID:   projectID,
-		AgentID:     "default",
-		Title:       draft.Title,
-		Description: draft.Description,
-		Assignee:    draft.Assignee,
-		State:       models.TaskStateReady,
+		BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+		ProjectID:       projectID,
+		AgentID:         "default",
+		Title:           draft.Title,
+		Description:     draft.Description,
+		Assignee:        draft.Assignee,
+		State:           models.TaskStateReady,
+		SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
 	}
 	s.tasks[task.ID] = task
 	return &task, true, nil

@@ -103,12 +103,13 @@ func readySubtask(projectID string, draft models.DraftTask, now time.Time) model
 		assignee = models.TaskAssigneeSystem
 	}
 	return models.Task{
-		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
-		ProjectID:   projectID,
-		AgentID:     defaultAgentID,
-		Title:       strings.TrimSpace(draft.Title),
-		Description: strings.TrimSpace(draft.Description),
-		State:       models.TaskStateReady,
-		Assignee:    assignee,
+		BaseEntity:      models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
+		ProjectID:       projectID,
+		AgentID:         defaultAgentID,
+		Title:           strings.TrimSpace(draft.Title),
+		Description:     strings.TrimSpace(draft.Description),
+		State:           models.TaskStateReady,
+		Assignee:        assignee,
+		SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
 	}
 }

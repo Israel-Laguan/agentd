@@ -113,10 +113,10 @@ func (w *Worker) createPermissionHandoff(ctx context.Context, task models.Task, 
 	w.emit(ctx, task, "PERMISSION_HANDOFF", truncate(payload, 1000))
 }
 
-func (w *Worker) handleGoalStalled(ctx context.Context, task models.Task, gt *GoalTracker) {
+func (w *Worker) handleGoalStalled(ctx context.Context, task models.Task, gt *GoalTracker) error {
 	goal := gt.Goal()
 	if goal == nil {
-		return
+		return nil
 	}
 	description := fmt.Sprintf(
 		"The agent's goal has stalled after %d turns with %.0f%% progress.\n\nCompleted: %d/%d criteria\nBlocked: %d criteria\n\nBlocked criteria:\n%s",
@@ -134,9 +134,10 @@ func (w *Worker) handleGoalStalled(ctx context.Context, task models.Task, gt *Go
 	}})
 	if err != nil {
 		w.emit(ctx, task, "ERROR", err.Error())
-		return
+		return err
 	}
 	w.emit(ctx, task, string(models.EventTypeGoalStalled), truncate(description, 1000))
+	return nil
 }
 
 func formatCriteria(criteria []string) string {

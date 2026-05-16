@@ -25,10 +25,12 @@ CREATE TABLE IF NOT EXISTS tasks (
     last_heartbeat TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
     token_usage INTEGER NOT NULL DEFAULT 0,
+    success_criteria TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     CHECK (retry_count >= 0),
-    CHECK (token_usage >= 0)
+    CHECK (token_usage >= 0),
+    CHECK (json_valid(success_criteria))
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS task_relations (

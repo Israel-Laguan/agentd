@@ -181,13 +181,14 @@ func (s *FakeKanbanStore) BlockTaskWithSubtasks(_ context.Context, id string, _ 
 	children := make([]models.Task, 0, len(drafts))
 	for _, d := range drafts {
 		child := models.Task{
-			BaseEntity:  models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-			ProjectID:   t.ProjectID,
-			AgentID:     "default",
-			Title:       d.Title,
-			Description: d.Description,
-			State:       models.TaskStateReady,
-			Assignee:    d.Assignee,
+			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+			ProjectID:       t.ProjectID,
+			AgentID:         "default",
+			Title:           d.Title,
+			Description:     d.Description,
+			State:           models.TaskStateReady,
+			Assignee:        d.Assignee,
+			SuccessCriteria: append([]string(nil), d.SuccessCriteria...),
 		}
 		s.tasks[child.ID] = child
 		children = append(children, child)
@@ -201,13 +202,14 @@ func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, _ s
 	var created []models.Task
 	for _, d := range drafts {
 		task := models.Task{
-			BaseEntity:  models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-			ProjectID:   projectID,
-			AgentID:     "default",
-			Title:       d.Title,
-			Description: d.Description,
-			State:       models.TaskStateReady,
-			Assignee:    d.Assignee,
+			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+			ProjectID:       projectID,
+			AgentID:         "default",
+			Title:           d.Title,
+			Description:     d.Description,
+			State:           models.TaskStateReady,
+			Assignee:        d.Assignee,
+			SuccessCriteria: append([]string(nil), d.SuccessCriteria...),
 		}
 		s.tasks[task.ID] = task
 		created = append(created, task)

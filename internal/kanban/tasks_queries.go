@@ -13,7 +13,7 @@ import (
 func selectTaskSQL() string {
 	return `
 		SELECT id, project_id, agent_id, title, description, state, assignee,
-		       os_process_id, started_at, completed_at, last_heartbeat, retry_count, token_usage, created_at, updated_at
+		       os_process_id, started_at, completed_at, last_heartbeat, retry_count, token_usage, success_criteria, created_at, updated_at
 		FROM tasks`
 }
 

@@ -2,24 +2,40 @@ package kanban
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"agentd/internal/models"
 )
 
 func insertTask(ctx context.Context, tx sqlExecutor, tempID string, task models.Task) error {
-	_, err := tx.ExecContext(ctx, `
+	successCriteria, err := encodeSuccessCriteria(task.SuccessCriteria)
+	if err != nil {
+		return fmt.Errorf("encode success criteria for task %q: %w", tempID, err)
+	}
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO tasks (
 			id, project_id, agent_id, title, description, state, assignee,
-			os_process_id, started_at, completed_at, last_heartbeat, retry_count, token_usage, created_at, updated_at
+			os_process_id, started_at, completed_at, last_heartbeat, retry_count, token_usage, success_criteria, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, task.ProjectID, task.AgentID, task.Title, task.Description, string(task.State), string(task.Assignee),
-		nil, nil, nil, nil, task.RetryCount, task.TokenUsage, formatTime(task.CreatedAt), formatTime(task.UpdatedAt))
+		nil, nil, nil, nil, task.RetryCount, task.TokenUsage, successCriteria, formatTime(task.CreatedAt), formatTime(task.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert task %q: %w", tempID, err)
 	}
 	return nil
+}
+
+func encodeSuccessCriteria(criteria []string) (string, error) {
+	if criteria == nil {
+		criteria = []string{}
+	}
+	data, err := json.Marshal(criteria)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 func insertRelations(ctx context.Context, tx sqlExecutor, plan models.DraftPlan, taskIDs map[string]string) error {

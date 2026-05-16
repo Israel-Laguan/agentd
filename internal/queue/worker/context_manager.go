@@ -222,17 +222,17 @@ func (cm *ContextManager) applyRollingSummarization(ctx context.Context, anchor 
 	workingTurns := turns[len(turns)-keepCount:]
 
 	compressedTurns, workingTurns = cm.goalAwarePartition(compressedTurns, workingTurns)
+	cm.reconcileSummaryState(compressedTurns)
+	if len(compressedTurns) == 0 {
+		return cm.flatten(anchor, workingTurns), nil
+	}
 
 	summary, err := cm.summarizeTurns(ctx, compressedTurns)
 	if err != nil {
 		return nil, fmt.Errorf("summarize turns: %w", err)
 	}
-	summaryMsg := spec.PromptMessage{
-		Role:    "system",
-		Content: cm.formatSummary(summary),
-	}
 	out := append([]spec.PromptMessage{}, anchor...)
-	out = append(out, summaryMsg)
+	out = append(out, spec.PromptMessage{Role: "system", Content: cm.formatSummary(summary)})
 	for _, t := range workingTurns {
 		out = append(out, t.Messages...)
 	}

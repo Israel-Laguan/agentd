@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -10,15 +11,16 @@ import (
 )
 
 type taskScanValues struct {
-	task          *models.Task
-	createdAt     string
-	updatedAt     string
-	state         string
-	assignee      string
-	startedAt     sql.NullString
-	completedAt   sql.NullString
-	lastHeartbeat sql.NullString
-	osPID         sql.NullInt64
+	task            *models.Task
+	createdAt       string
+	updatedAt       string
+	state           string
+	assignee        string
+	startedAt       sql.NullString
+	completedAt     sql.NullString
+	lastHeartbeat   sql.NullString
+	osPID           sql.NullInt64
+	successCriteria string
 }
 
 func scanTaskValues(row scanner, values *taskScanValues) error {
@@ -26,7 +28,7 @@ func scanTaskValues(row scanner, values *taskScanValues) error {
 	err := row.Scan(
 		&t.ID, &t.ProjectID, &t.AgentID, &t.Title, &t.Description, &values.state, &values.assignee,
 		&values.osPID, &values.startedAt, &values.completedAt, &values.lastHeartbeat, &t.RetryCount, &t.TokenUsage,
-		&values.createdAt, &values.updatedAt,
+		&values.successCriteria, &values.createdAt, &values.updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return models.ErrTaskNotFound
@@ -49,6 +51,9 @@ func (v *taskScanValues) apply() error {
 	}
 	if err := applyOptionalTime(v.lastHeartbeat, &v.task.LastHeartbeat); err != nil {
 		return err
+	}
+	if err := json.Unmarshal([]byte(v.successCriteria), &v.task.SuccessCriteria); err != nil {
+		return fmt.Errorf("decode success criteria: %w", err)
 	}
 	return applyEntityTimes(v.task, v.createdAt, v.updatedAt)
 }

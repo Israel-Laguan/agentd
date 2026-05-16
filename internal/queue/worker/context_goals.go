@@ -17,10 +17,13 @@ func (cm *ContextManager) SetGoalTracker(gt *GoalTracker) {
 // criteria are pulled into the working set for retention. When no
 // GoalTracker is attached, the original split is returned unchanged.
 func (cm *ContextManager) goalAwarePartition(compressed, working []Turn) ([]Turn, []Turn) {
-	if cm.goalTracker == nil {
+	cm.mu.Lock()
+	goalTracker := cm.goalTracker
+	cm.mu.Unlock()
+	if goalTracker == nil {
 		return compressed, working
 	}
-	goal := cm.goalTracker.Goal()
+	goal := goalTracker.Goal()
 	if goal == nil || len(goal.SuccessCriteria) == 0 {
 		return compressed, working
 	}
@@ -57,6 +60,28 @@ func (cm *ContextManager) goalAwarePartition(compressed, working []Turn) ([]Turn
 	finalCompressed := append(keepCompressed, promoteToCompressed...)
 	finalWorking := append(retainFromCompressed, keepWorking...)
 	return finalCompressed, finalWorking
+}
+
+func (cm *ContextManager) reconcileSummaryState(compressedTurns []Turn) {
+	current := make(map[uint64]struct{}, len(compressedTurns))
+	for _, t := range compressedTurns {
+		current[cm.hashTurn(t)] = struct{}{}
+	}
+
+	cm.cacheMu.Lock()
+	defer cm.cacheMu.Unlock()
+	if len(current) == 0 {
+		cm.summarizedTurns = make(map[uint64]bool)
+		cm.runningSummary = nil
+		return
+	}
+	for hash := range cm.summarizedTurns {
+		if _, ok := current[hash]; !ok {
+			cm.summarizedTurns = make(map[uint64]bool)
+			cm.runningSummary = nil
+			return
+		}
+	}
 }
 
 // turnMentionsCriteria checks whether any message in the turn references

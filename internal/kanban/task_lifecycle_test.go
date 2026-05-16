@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"agentd/internal/models"
@@ -61,6 +62,36 @@ func TestAppendTasksToProjectAndCommentIntake(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireUnprocessedComments(t, store, ctx, 0)
+}
+
+func TestSuccessCriteriaPersistThroughTaskCreationPaths(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	project, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "criteria",
+		Tasks: []models.DraftTask{{
+			TempID:          "a",
+			Title:           "A",
+			SuccessCriteria: []string{"tests pass", "lint clean"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tasks[0].SuccessCriteria; !reflect.DeepEqual(got, []string{"tests pass", "lint clean"}) {
+		t.Fatalf("materialized success criteria = %v", got)
+	}
+
+	added, err := store.AppendTasksToProject(ctx, project.ID, tasks[0].ID, []models.DraftTask{{
+		Title:           "B",
+		SuccessCriteria: []string{"reviewed"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := added[0].SuccessCriteria; !reflect.DeepEqual(got, []string{"reviewed"}) {
+		t.Fatalf("appended success criteria = %v", got)
+	}
 }
 
 func requireUnprocessedComments(

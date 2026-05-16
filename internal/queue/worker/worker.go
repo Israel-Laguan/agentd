@@ -327,8 +327,9 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	taskHooks, taskCaps := w.mountScopedPlugins(project, profile)
 
+	goal := GoalFromTask(task)
 	messages := w.seedMessages(ctx, task, profile)
-	messages = w.buildAgenticMessages(messages, profile)
+	messages = w.buildAgenticMessages(messages, profile, goal)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
@@ -361,8 +362,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	)
 
 	goalTracker := NewGoalTracker(w.sink, task.ID, task.ProjectID)
-	if g := GoalFromTask(task); g != nil {
-		goalTracker.SetGoal(*g)
+	if goal != nil {
+		goalTracker.SetGoal(*goal)
 		cm.SetGoalTracker(goalTracker)
 	}
 
@@ -453,6 +454,10 @@ func (w *Worker) processAgenticIteration(
 	})
 
 	if len(resp.ToolCalls) == 0 {
+		stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
+		if stalled || stallErr != nil {
+			return false, stallErr
+		}
 		w.commitText(ctx, task, resp.Content)
 		return false, nil
 	}
@@ -476,15 +481,26 @@ func (w *Worker) processAgenticIteration(
 		})
 	}
 
-	if goalTracker != nil {
-		completed, blocked := parseGoalProgress(resp.Content)
-		if stalled := goalTracker.AfterTurn(ctx, completed, blocked); stalled {
-			w.handleGoalStalled(ctx, task, goalTracker)
-			return false, nil
-		}
+	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
+	if stalled || stallErr != nil {
+		return false, stallErr
 	}
 
 	return true, nil
+}
+
+func (w *Worker) handleGoalProgress(ctx context.Context, task models.Task, goalTracker *GoalTracker, content string) (bool, error) {
+	if goalTracker == nil {
+		return false, nil
+	}
+	completed, blocked := parseGoalProgress(content)
+	if stalled := goalTracker.AfterTurn(ctx, completed, blocked); stalled {
+		if err := w.handleGoalStalled(ctx, task, goalTracker); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
@@ -601,16 +617,23 @@ func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile mod
 	return messages
 }
 
-func agenticToolUseSystemText() string {
-	return `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
+func agenticToolUseSystemText(goal ...*AgentGoal) string {
+	text := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
 When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.`
+	if len(goal) == 0 || goal[0] == nil {
+		return text
+	}
+	return text + `
+When a success criterion becomes complete, include a line exactly like [COMPLETED] criterion text.
+When a success criterion is blocked, include a line exactly like [BLOCKED] criterion text.
+Use the exact criterion text from the task success criteria.`
 }
 
-func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile models.AgentProfile) []gateway.PromptMessage {
-	toolUse := agenticToolUseSystemText()
+func (w *Worker) buildAgenticMessages(messages []gateway.PromptMessage, profile models.AgentProfile, goal ...*AgentGoal) []gateway.PromptMessage {
+	toolUse := agenticToolUseSystemText(goal...)
 	primary := toolUse
 	if profile.SystemPrompt.Valid {
 		primary = strings.TrimSpace(profile.SystemPrompt.String) + "\n\n" + toolUse
