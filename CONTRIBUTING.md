@@ -54,3 +54,4 @@ make check       # run full quality gate (loc + lint + test)
 - Describe the "why" in the PR body, not just the "what."
 - Reference any relevant architectural invariants or guardrails affected by the change.
 - Ensure `make check` passes on the PR branch.
+- Reviewers: see [`REVIEW.md`](REVIEW.md) for the verification checklist (build, lint, tests, cache troubleshooting).
