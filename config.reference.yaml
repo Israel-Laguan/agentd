@@ -181,6 +181,10 @@ queue:
     global_dir: "skills"                 # global skills dir: relative to agentd home (home / AGENTD_HOME); absolute or "~/..." also allowed
     threshold: 0.1                        # minimum TF-IDF relevance score (0.0-1.0)
     top_k: 3                            # max skills injected per session
+  hitl:
+    # Prompt/permission/healing/provider handoffs use this reconcile deadline.
+    # Approval, review, and clarification handoffs use the 30m approval path instead.
+    legacy_handoff_timeout: "168h"
 
 # Heartbeat reconciliation.
 heartbeat:

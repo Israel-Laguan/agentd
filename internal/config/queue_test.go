@@ -35,6 +35,17 @@ func TestQueueConfigOverride_QueuedReconcileAfter(t *testing.T) {
 	}
 }
 
+func TestQueueConfigOverride_LegacyHandoffTimeout(t *testing.T) {
+	v := viper.New()
+	setQueueDefaults(v)
+	v.Set("queue.hitl.legacy_handoff_timeout", "48h")
+	cfg := loadQueueConfig(v)
+
+	if cfg.HITL.LegacyHandoffTimeout != 48*time.Hour {
+		t.Fatalf("LegacyHandoffTimeout = %v, want 48h", cfg.HITL.LegacyHandoffTimeout)
+	}
+}
+
 func TestQueueConfig_Defaults(t *testing.T) {
 	cfg := QueueConfig{
 		TaskDeadline:    DefaultTaskDeadline,

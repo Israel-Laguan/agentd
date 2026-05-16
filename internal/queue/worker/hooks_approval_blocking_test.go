@@ -68,7 +68,7 @@ func TestBlockingApprovalHandler_GrantsCompletedApprovalDespiteExpiredComments(t
 	if err := store.AddComment(context.Background(), models.Comment{
 		TaskID: parent.ID,
 		Author: models.CommentAuthorWorkerAgent,
-		Body:   hitlExpiresAtPrefix + expired.UTC().Format(time.RFC3339),
+		Body:   models.HITLExpiresAtCommentPrefix + expired.UTC().Format(time.RFC3339),
 	}); err != nil {
 		t.Fatalf("add expiry comment: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestBlockingApprovalHandler_RejectionAllowsNewApprovalSubtask(t *testing.T)
 	}
 	var approvalCount int
 	for _, child := range children {
-		if strings.HasPrefix(child.Title, approvalSubtaskTitlePrefix) {
+		if strings.HasPrefix(child.Title, models.HITLSubtaskTitleApproveTool) {
 			approvalCount++
 		}
 	}

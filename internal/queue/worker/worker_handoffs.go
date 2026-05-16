@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -58,7 +59,7 @@ func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err e
 }
 
 func (w *Worker) recordLegacyHandoffExpiry(ctx context.Context, task models.Task) bool {
-	if err := recordHITLExpiry(ctx, w.store, task.ID, time.Now().Add(LegacyHandoffTimeout)); err != nil {
+	if err := recordHITLExpiry(ctx, w.store, task.ID, time.Now().Add(w.legacyHandoffTimeout)); err != nil {
 		w.emit(ctx, task, "ERROR", err.Error())
 		return false
 	}
@@ -74,7 +75,7 @@ func (w *Worker) createProviderExhaustedHandoff(ctx context.Context, task models
 		return
 	}
 	_, _, blockErr := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title:       "Manual review required: AI providers unavailable",
+		Title:       models.HITLSubtaskTitleManualReview + " AI providers unavailable",
 		Description: description,
 		Assignee:    models.TaskAssigneeHuman,
 	}})
@@ -124,7 +125,7 @@ func (w *Worker) createPromptHandoff(ctx context.Context, task models.Task, payl
 		return
 	}
 	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title:       "Manual action required: command waiting for input",
+		Title:       models.HITLSubtaskTitleManualAction + " command waiting for input",
 		Description: "The worker detected an interactive prompt and could not safely recover automatically.\n\n" + truncate(payload, 1500),
 		Assignee:    models.TaskAssigneeHuman,
 	}})
@@ -147,7 +148,7 @@ func (w *Worker) createPermissionHandoff(ctx context.Context, task models.Task, 
 		return
 	}
 	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title: "Manual action required: privileged command",
+		Title: models.HITLSubtaskTitleManualAction + " privileged command",
 		Description: "The worker detected a command that requires host privileges. " +
 			"Please run the required command on the host machine with appropriate privileges and mark this task Complete.\n\n" +
 			truncate(payload, 1500),
@@ -170,7 +171,7 @@ func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, act
 		return
 	}
 	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title:       "Manual review required: self-healing failed",
+		Title:       models.HITLSubtaskTitleManualReview + " self-healing failed",
 		Description: description,
 		Assignee:    models.TaskAssigneeHuman,
 	}})
@@ -185,6 +186,11 @@ func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, act
 // can review the agent's draft output before the task is marked
 // complete. Review feedback re-enters the loop as task-level context.
 func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draftOutput string) {
+	if fresh, err := w.store.GetTask(ctx, task.ID); err != nil {
+		slog.Warn("failed to refresh task version for review handoff", "task_id", task.ID, "error", err)
+	} else {
+		task = *fresh
+	}
 	if err := persistDraftReviewComment(ctx, w.store, task.ID, draftOutput); err != nil {
 		w.emit(ctx, task, "ERROR", err.Error())
 		return
@@ -202,7 +208,7 @@ func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draf
 	})
 
 	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title:       "Review required: draft output pending approval",
+		Title:       models.HITLSubtaskTitleReview + " draft output pending approval",
 		Description: description,
 		Assignee:    models.TaskAssigneeHuman,
 	}})

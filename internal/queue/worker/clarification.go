@@ -67,7 +67,7 @@ func (h *BlockingClarificationHandler) RequestClarification(ctx context.Context,
 	}
 
 	_, subtasks, err := h.store.BlockTaskWithSubtasks(ctx, msg.TaskID, msg.TaskUpdatedAt, []models.DraftTask{{
-		Title:       "Clarification required: " + truncate(msg.Question, 80),
+		Title:       models.HITLSubtaskTitleClarification + truncate(msg.Question, 80),
 		Description: description,
 		Assignee:    models.TaskAssigneeHuman,
 	}})

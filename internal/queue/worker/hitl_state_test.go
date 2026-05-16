@@ -52,7 +52,7 @@ func TestPrependReviewRejectionFeedback_InjectsOnce(t *testing.T) {
 	parent := tasks[0]
 
 	_, children, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
-		Title:    reviewSubtaskTitlePrefix + " draft output pending approval",
+		Title:    models.HITLSubtaskTitleReview + " draft output pending approval",
 		Assignee: models.TaskAssigneeHuman,
 	}})
 	if err != nil {
@@ -91,7 +91,7 @@ func TestCreatePromptHandoff_RecordsLegacyExpiry(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
 	sink := &mockEventSink{}
-	w := &Worker{store: store, sink: sink}
+	w := NewWorker(store, nil, nil, nil, sink, WorkerOptions{})
 	ctx := context.Background()
 
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
@@ -114,10 +114,10 @@ func TestCreatePromptHandoff_RecordsLegacyExpiry(t *testing.T) {
 	var expiry time.Time
 	var found bool
 	for _, c := range comments {
-		if !strings.HasPrefix(c.Body, hitlExpiresAtPrefix) {
+		if !strings.HasPrefix(c.Body, models.HITLExpiresAtCommentPrefix) {
 			continue
 		}
-		raw := strings.TrimPrefix(c.Body, hitlExpiresAtPrefix)
+		raw := strings.TrimPrefix(c.Body, models.HITLExpiresAtCommentPrefix)
 		parsed, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
 			continue
@@ -130,8 +130,8 @@ func TestCreatePromptHandoff_RecordsLegacyExpiry(t *testing.T) {
 		t.Fatal("expected legacy handoff expiry comment")
 	}
 	expiry = expiry.UTC().Truncate(time.Second)
-	wantMin := before.Add(LegacyHandoffTimeout).UTC().Truncate(time.Second)
-	wantMax := after.Add(LegacyHandoffTimeout).UTC().Truncate(time.Second)
+	wantMin := before.Add(w.legacyHandoffTimeout).UTC().Truncate(time.Second)
+	wantMax := after.Add(w.legacyHandoffTimeout).UTC().Truncate(time.Second)
 	if expiry.Before(wantMin) || expiry.After(wantMax) {
 		t.Fatalf("expiry = %s, want in [%s, %s]", expiry, wantMin, wantMax)
 	}
@@ -224,7 +224,7 @@ func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing
 	}
 	var review *models.Task
 	for i := range children {
-		if strings.HasPrefix(children[i].Title, reviewSubtaskTitlePrefix) {
+		if strings.HasPrefix(children[i].Title, models.HITLSubtaskTitleReview) {
 			review = &children[i]
 			break
 		}
@@ -305,7 +305,7 @@ func TestProcess_LegacyRequireReview_FinalizesApprovedReview(t *testing.T) {
 	}
 	var review *models.Task
 	for i := range children {
-		if strings.HasPrefix(children[i].Title, reviewSubtaskTitlePrefix) {
+		if strings.HasPrefix(children[i].Title, models.HITLSubtaskTitleReview) {
 			review = &children[i]
 			break
 		}
@@ -380,7 +380,7 @@ func TestProcess_LegacyRequireReview_InjectsRejectionFeedback(t *testing.T) {
 	}
 	var review *models.Task
 	for i := range children {
-		if strings.HasPrefix(children[i].Title, reviewSubtaskTitlePrefix) {
+		if strings.HasPrefix(children[i].Title, models.HITLSubtaskTitleReview) {
 			review = &children[i]
 			break
 		}
