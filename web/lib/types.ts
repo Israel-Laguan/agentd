@@ -42,7 +42,7 @@ export interface WorkforceState {
 }
 
 export interface ChatMessage {
-  id?: string;
+  id: string;
   role: 'user' | 'assistant';
   content: string;
 }
