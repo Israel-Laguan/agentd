@@ -16,7 +16,8 @@ export function CommentPanel({ taskId }: { taskId: string }) {
   // ---------------- LOAD ----------------
   useEffect(() => {
     async function load() {
-      const data = await fetchTaskComments();
+      if (!taskId) return;
+      const data = await fetchTaskComments(taskId);
       setComments(data || []);
     }
     load();

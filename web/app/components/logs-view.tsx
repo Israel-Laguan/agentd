@@ -26,6 +26,7 @@ export function LogsView({ tasks }: LogsViewProps) {
 
         {tasks
           .flatMap((t) => t.logs)
+          .sort((a, b) => a.timestamp - b.timestamp)
           .slice(-150)
           .map((log, i) => (
             <div
