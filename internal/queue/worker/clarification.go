@@ -61,6 +61,11 @@ func (h *BlockingClarificationHandler) RequestClarification(ctx context.Context,
 		Detail:  detail,
 	})
 
+	expiresAt := time.Now().Add(DefaultApprovalTimeout)
+	if err := recordHITLExpiry(ctx, h.store, msg.TaskID, expiresAt); err != nil {
+		return ClarificationResponse{}, fmt.Errorf("record clarification expiry: %w", err)
+	}
+
 	_, subtasks, err := h.store.BlockTaskWithSubtasks(ctx, msg.TaskID, msg.TaskUpdatedAt, []models.DraftTask{{
 		Title:       "Clarification required: " + truncate(msg.Question, 80),
 		Description: description,
@@ -102,6 +107,11 @@ func (w *Worker) RequestClarificationFromAgent(
 	options []string,
 	contextSummary string,
 ) error {
+	if strings.TrimSpace(question) == "" {
+		err := fmt.Errorf("clarification question cannot be empty")
+		w.emit(ctx, task, "ERROR", err.Error())
+		return err
+	}
 	handler := NewBlockingClarificationHandler(w.store)
 	msg := ClarificationMessage{
 		Question:       question,

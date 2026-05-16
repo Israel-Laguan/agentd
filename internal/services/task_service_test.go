@@ -125,6 +125,14 @@ func (m *minimalStore) ReconcileStaleTasks(context.Context, []int, time.Duration
 func (m *minimalStore) BlockTaskWithSubtasks(context.Context, string, time.Time, []models.DraftTask) (*models.Task, []models.Task, error) {
 	return nil, nil, nil
 }
+
+func (m *minimalStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (m *minimalStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) ([]models.Task, error) {
+	return nil, nil
+}
 func (m *minimalStore) AppendTasksToProject(context.Context, string, string, []models.DraftTask) ([]models.Task, error) {
 	return nil, nil
 }

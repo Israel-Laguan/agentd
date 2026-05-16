@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"agentd/internal/models"
+	"agentd/internal/testutil"
 )
 
 // --- stubApprovalHandler ---
@@ -67,6 +68,9 @@ func TestApprovalGateHook_SuspendsGatedTool(t *testing.T) {
 	}
 	if !strings.Contains(verdict.Result, "paused pending human approval") {
 		t.Fatalf("result should indicate suspension, got %q", verdict.Result)
+	}
+	if !verdict.Suspend {
+		t.Fatal("blocked approval should set Suspend=true")
 	}
 	if handler.called != 1 {
 		t.Fatalf("handler.called = %d, want 1", handler.called)
@@ -230,36 +234,34 @@ func TestFormatRejection_ContainsToolAndReason(t *testing.T) {
 // --- BlockingApprovalHandler ---
 
 type approvalMockStore struct {
-	models.KanbanStore
+	*testutil.FakeKanbanStore
 	expectedUpdatedAt time.Time
 	blockCalled       bool
 }
 
-func (s *approvalMockStore) BlockTaskWithSubtasks(_ context.Context, _ string, expectedUpdatedAt time.Time, subtasks []models.DraftTask) (*models.Task, []models.Task, error) {
+func (s *approvalMockStore) BlockTaskWithSubtasks(ctx context.Context, id string, expectedUpdatedAt time.Time, subtasks []models.DraftTask) (*models.Task, []models.Task, error) {
 	s.blockCalled = true
 	s.expectedUpdatedAt = expectedUpdatedAt
-	created := make([]models.Task, len(subtasks))
-	for i, d := range subtasks {
-		created[i] = models.Task{
-			BaseEntity: models.BaseEntity{ID: "sub-" + d.Title},
-			Title:      d.Title,
-			Assignee:   d.Assignee,
-		}
-	}
-	return &models.Task{}, created, nil
+	return s.FakeKanbanStore.BlockTaskWithSubtasks(ctx, id, expectedUpdatedAt, subtasks)
 }
 
 func TestBlockingApprovalHandler_ReturnsNotApproved(t *testing.T) {
 	t.Parallel()
-	store := &approvalMockStore{}
-	handler := NewBlockingApprovalHandler(store, nil)
+	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}
+	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	handler := NewBlockingApprovalHandler(store)
 
-	taskUpdatedAt := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
 	resp, err := handler.RequestApproval(context.Background(), ApprovalRequest{
 		ToolName:      "deploy",
 		Arguments:     `{"target":"prod"}`,
-		TaskID:        "task-1",
-		TaskUpdatedAt: taskUpdatedAt,
+		TaskID:        parent.ID,
+		TaskUpdatedAt: parent.UpdatedAt,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -270,23 +272,71 @@ func TestBlockingApprovalHandler_ReturnsNotApproved(t *testing.T) {
 	if !store.blockCalled {
 		t.Fatal("expected BlockTaskWithSubtasks to be called")
 	}
-	if !store.expectedUpdatedAt.Equal(taskUpdatedAt) {
-		t.Fatalf("expectedUpdatedAt = %v, want %v", store.expectedUpdatedAt, taskUpdatedAt)
+	if !store.expectedUpdatedAt.Equal(parent.UpdatedAt) {
+		t.Fatalf("expectedUpdatedAt = %v, want %v", store.expectedUpdatedAt, parent.UpdatedAt)
+	}
+}
+
+func TestBlockingApprovalHandler_GrantsCompletedApproval(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	_, created, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: approvalSubtaskTitle("deploy"), Assignee: models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	if len(created) != 1 {
+		t.Fatalf("expected 1 subtask, got %d", len(created))
+	}
+	if _, err := store.UpdateTaskState(context.Background(), created[0].ID, created[0].UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete approval subtask: %v", err)
+	}
+
+	handler := NewBlockingApprovalHandler(store)
+	resp, err := handler.RequestApproval(context.Background(), ApprovalRequest{
+		ToolName: "deploy", TaskID: parent.ID, TaskUpdatedAt: parent.UpdatedAt,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.Approved {
+		t.Fatal("expected Approved=true for completed approval subtask")
+	}
+	children, err := store.ListChildTasks(context.Background(), parent.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	if len(children) != 1 {
+		t.Fatalf("expected 1 approval subtask, got %d", len(children))
 	}
 }
 
 func TestBlockingApprovalHandler_SuspendsViaHook(t *testing.T) {
 	t.Parallel()
-	taskUpdatedAt := time.Now()
-	store := &approvalMockStore{}
-	handler := NewBlockingApprovalHandler(store, nil)
+	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}
+	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	handler := NewBlockingApprovalHandler(store)
 	hook := ApprovalGateHook([]string{"deploy"}, handler)
 
 	verdict, err := hook.Fn(HookContext{
 		ToolName:      "deploy",
 		Args:          `{}`,
-		SessionID:     "task-1",
-		TaskUpdatedAt: taskUpdatedAt,
+		SessionID:     parent.ID,
+		TaskUpdatedAt: parent.UpdatedAt,
 		Timestamp:     time.Now(),
 	})
 	if err != nil {
@@ -298,7 +348,10 @@ func TestBlockingApprovalHandler_SuspendsViaHook(t *testing.T) {
 	if !strings.Contains(verdict.Result, "paused pending human approval") {
 		t.Fatalf("result = %q", verdict.Result)
 	}
-	if !store.expectedUpdatedAt.Equal(taskUpdatedAt) {
-		t.Fatalf("expectedUpdatedAt = %v, want %v", store.expectedUpdatedAt, taskUpdatedAt)
+	if !verdict.Suspend {
+		t.Fatal("expected Suspend=true")
+	}
+	if !store.expectedUpdatedAt.Equal(parent.UpdatedAt) {
+		t.Fatalf("expectedUpdatedAt = %v, want %v", store.expectedUpdatedAt, parent.UpdatedAt)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
@@ -164,6 +165,15 @@ func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, act
 // can review the agent's draft output before the task is marked
 // complete. Review feedback re-enters the loop as task-level context.
 func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draftOutput string) {
+	if err := persistDraftReviewComment(ctx, w.store, task.ID, draftOutput); err != nil {
+		w.emit(ctx, task, "ERROR", err.Error())
+		return
+	}
+	expiresAt := time.Now().Add(DefaultApprovalTimeout)
+	if err := recordHITLExpiry(ctx, w.store, task.ID, expiresAt); err != nil {
+		w.emit(ctx, task, "ERROR", err.Error())
+		return
+	}
 	description := FormatForHuman(HITLMessage{
 		Summary: "Review required before task completion",
 		Action:  "Review the draft output below. Mark this subtask COMPLETED to approve, or add a comment with feedback and mark FAILED to request changes.",

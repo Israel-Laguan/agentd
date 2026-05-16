@@ -189,6 +189,14 @@ func (s *workerTestStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ t
 	return &models.Task{}, nil, nil
 }
 
+func (s *workerTestStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *workerTestStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *workerTestStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) {
 	return nil, nil
 }

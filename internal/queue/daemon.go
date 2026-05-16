@@ -107,11 +107,12 @@ func (d *Daemon) Start(ctx context.Context) error {
 		return err
 	}
 	logDaemonError("orphaned queued reconcile failed", d.reconcileOrphanedQueued(ctx))
-	d.wg.Add(7)
+	d.wg.Add(8)
 	go d.taskLoop(ctx)
 	go d.intakeLoop(ctx)
 	go d.heartbeatReconcileLoop(ctx)
 	go d.queuedReconcileLoop(ctx)
+	go d.hitlTimeoutLoop(ctx)
 	go d.diskWatchdogLoop(ctx)
 	go d.memoryCuratorLoop(ctx)
 	go d.dreamLoop(ctx)

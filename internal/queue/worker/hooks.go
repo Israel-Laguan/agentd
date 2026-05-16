@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"sync"
@@ -29,6 +30,9 @@ type HookVerdict struct {
 	ShortCircuit bool
 	// Result carries the pre-computed value when ShortCircuit is set.
 	Result string
+	// Suspend is true when the hook blocked the parent task for human
+	// review; the agentic loop must stop without further LLM calls.
+	Suspend bool
 }
 
 // HookContext carries contextual information for hook evaluation without
@@ -41,6 +45,7 @@ type HookContext struct {
 	ProjectID     string
 	Timestamp     time.Time
 	TaskUpdatedAt time.Time // persisted task version for optimistic locking
+	ExecCtx       context.Context
 }
 
 // PreHook is evaluated before tool execution. Returning a veto verdict
