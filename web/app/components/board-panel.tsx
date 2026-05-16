@@ -19,6 +19,7 @@ export function BoardPanel({ boardData }: BoardPanelProps) {
       [TaskStatus.RUNNING]: [],
       [TaskStatus.COMPLETED]: [],
       [TaskStatus.FAILED]: [],
+      [TaskStatus.FAILED_REQUIRES_HUMAN]: [],
       [TaskStatus.BLOCKED]: [],
       [TaskStatus.IN_CONSIDERATION]: []
     };
@@ -53,7 +54,7 @@ export function BoardPanel({ boardData }: BoardPanelProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-9 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
         {[
           TaskStatus.PENDING,
           TaskStatus.READY,
@@ -63,13 +64,16 @@ export function BoardPanel({ boardData }: BoardPanelProps) {
           TaskStatus.IN_CONSIDERATION,
           TaskStatus.COMPLETED,
           TaskStatus.FAILED,
+          TaskStatus.FAILED_REQUIRES_HUMAN,
         ].map(status => (
           <div key={status} className="flex flex-col gap-3 min-w-[240px]">
             <div className="flex justify-between items-center px-1 py-1.5 border-b border-border shadow-[0_1px_0_var(--color-bg)]">
               <h3 className={cn(
                 "text-[10px] font-bold uppercase tracking-[0.2em]",
                 status === TaskStatus.RUNNING ? "text-blue" :
-                status === TaskStatus.READY ? "text-green-400" : "text-text-dim"
+                status === TaskStatus.READY ? "text-green-400" :
+                status === TaskStatus.FAILED || status === TaskStatus.FAILED_REQUIRES_HUMAN ? "text-error" :
+                "text-text-dim"
               )}>{status}</h3>
               <span className="text-[9px] font-mono bg-border/40 px-1.5 rounded text-text-dim">{tasksByStatus[status].length}</span>
             </div>

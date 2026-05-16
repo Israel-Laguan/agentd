@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { TaskStatus } from "@/lib/types";
-import { AlertCircle, CheckCircle2, Clock, Loader2, MessageSquare, Play, Zap } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Loader2, MessageSquare, Play, User, Zap } from "lucide-react";
 
 interface TaskCardProps {
   task: {
@@ -20,6 +20,7 @@ export const TaskCard = ({ task }: TaskCardProps) => {
     [TaskStatus.RUNNING]: "bg-blue/10 text-blue border-blue shadow-[0_0_10px_rgba(88,166,255,0.15)]",
     [TaskStatus.COMPLETED]: "bg-accent/10 text-accent border-accent/20",
     [TaskStatus.FAILED]: "bg-error/10 text-error border-error/20",
+    [TaskStatus.FAILED_REQUIRES_HUMAN]: "bg-error/20 text-error border-error/40",
     [TaskStatus.BLOCKED]: "bg-warning/10 text-warning border-warning/20",
     [TaskStatus.IN_CONSIDERATION]: "bg-purple-500/10 text-purple-400 border-purple-500/20",
   };
@@ -31,6 +32,7 @@ export const TaskCard = ({ task }: TaskCardProps) => {
     [TaskStatus.RUNNING]: Play,
     [TaskStatus.COMPLETED]: CheckCircle2,
     [TaskStatus.FAILED]: AlertCircle,
+    [TaskStatus.FAILED_REQUIRES_HUMAN]: User,
     [TaskStatus.BLOCKED]: AlertCircle,
     [TaskStatus.IN_CONSIDERATION]: MessageSquare,
   };
