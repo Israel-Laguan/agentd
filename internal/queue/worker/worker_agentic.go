@@ -27,6 +27,14 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	taskHooks, taskCaps := w.mountScopedPlugins(project, profile)
 
+	if len(profile.GatedTools) > 0 {
+		if taskHooks == nil {
+			taskHooks = NewHookChain()
+		}
+		handler := NewBlockingApprovalHandler(w.store, w.sink)
+		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
+	}
+
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 
@@ -103,7 +111,7 @@ func (w *Worker) handleAgenticToolCalls(
 	cm *ContextManager,
 ) {
 	for _, call := range resp.ToolCalls {
-		result := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
+		result := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, task.UpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
 		if detected := cm.CheckToolResult(result); len(detected) > 0 {
 			slog.Info("auto-detected context corrections",
 				"task_id", task.ID,
@@ -167,7 +175,7 @@ func (w *Worker) processAgenticIteration(
 		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
 	})
 	if len(resp.ToolCalls) == 0 {
-		w.commitText(ctx, task, resp.Content)
+		w.commitTextWithProfile(ctx, task, resp.Content, &profile)
 		return false, nil
 	}
 	iterationGuard.AfterIteration(true)

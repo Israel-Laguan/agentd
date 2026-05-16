@@ -69,6 +69,7 @@ func (w *Worker) agenticToolsWithExtras(
 func (w *Worker) dispatchToolWithHooks(
 	ctx context.Context,
 	sessionID, projectID string,
+	taskUpdatedAt time.Time,
 	call gateway.ToolCall,
 	toolToAdapter map[string]string,
 	toolExecutor *ToolExecutor,
@@ -76,12 +77,13 @@ func (w *Worker) dispatchToolWithHooks(
 	scopedCapabilities *capabilities.Registry,
 ) string {
 	hookCtx := HookContext{
-		ToolName:  call.Function.Name,
-		Args:      call.Function.Arguments,
-		CallID:    call.ID,
-		SessionID: sessionID,
-		ProjectID: projectID,
-		Timestamp: time.Now(),
+		ToolName:      call.Function.Name,
+		Args:          call.Function.Arguments,
+		CallID:        call.ID,
+		SessionID:     sessionID,
+		ProjectID:     projectID,
+		Timestamp:     time.Now(),
+		TaskUpdatedAt: taskUpdatedAt,
 	}
 
 	if taskHooks != nil {

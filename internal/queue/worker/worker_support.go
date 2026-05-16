@@ -261,6 +261,14 @@ func (w *Worker) isPermissionFailure(result sandbox.Result, err error) bool {
 }
 
 func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {
+	w.commitTextWithProfile(ctx, task, content, nil)
+}
+
+func (w *Worker) commitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
+	if profile != nil && profile.RequireReview {
+		w.createReviewHandoff(ctx, task, content)
+		return
+	}
 	result := sandbox.Result{
 		Success: true,
 		Stdout:  content,

@@ -34,12 +34,13 @@ type HookVerdict struct {
 // HookContext carries contextual information for hook evaluation without
 // coupling hooks to internal types.
 type HookContext struct {
-	ToolName  string
-	Args      string
-	CallID    string
-	SessionID string
-	ProjectID string
-	Timestamp time.Time
+	ToolName      string
+	Args          string
+	CallID        string
+	SessionID     string
+	ProjectID     string
+	Timestamp     time.Time
+	TaskUpdatedAt time.Time // persisted task version for optimistic locking
 }
 
 // PreHook is evaluated before tool execution. Returning a veto verdict
