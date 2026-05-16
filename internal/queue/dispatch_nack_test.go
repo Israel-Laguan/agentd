@@ -35,12 +35,15 @@ func TestDispatch_RateLimitedTaskStaysQueued(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	claimed, err := daemon.dispatch(ctx)
+	dispatched, nacked, err := daemon.dispatch(ctx)
 	if err != nil {
 		t.Fatalf("dispatch() error = %v", err)
 	}
-	if claimed != 0 {
-		t.Fatalf("claimed = %d, want 0", claimed)
+	if dispatched != 0 {
+		t.Fatalf("dispatched = %d, want 0", dispatched)
+	}
+	if nacked != 1 {
+		t.Fatalf("nacked = %d, want 1", nacked)
 	}
 	after, err := store.GetTask(ctx, "task-0")
 	if err != nil {
@@ -73,12 +76,15 @@ func TestDispatch_InvalidTaskMarkedFailed(t *testing.T) {
 		MaxWorkers: 1, TaskInterval: time.Hour, Channel: gate, Probe: StaticPIDProbe{},
 	})
 
-	claimed, err := daemon.dispatch(context.Background())
+	dispatched, nacked, err := daemon.dispatch(context.Background())
 	if err != nil {
 		t.Fatalf("dispatch() error = %v", err)
 	}
-	if claimed != 0 {
-		t.Fatalf("claimed = %d, want 0", claimed)
+	if dispatched != 0 {
+		t.Fatalf("dispatched = %d, want 0", dispatched)
+	}
+	if nacked != 1 {
+		t.Fatalf("nacked = %d, want 1", nacked)
 	}
 	task, err := store.GetTask(context.Background(), "task-0")
 	if err != nil {
@@ -123,8 +129,55 @@ func TestDispatch_EarlyReturnSubtractsNacked(t *testing.T) {
 		MaxWorkers: 2, TaskInterval: time.Hour, Channel: gate, Probe: StaticPIDProbe{},
 	})
 
-	claimed, err := daemon.dispatch(ctx)
-	if claimed != 1 {
-		t.Fatalf("claimed = %d, want 1 (2 tasks - 1 nacked), err=%v", claimed, err)
+	dispatched, nacked, err := daemon.dispatch(ctx)
+	if nacked != 1 {
+		t.Fatalf("nacked = %d, want 1", nacked)
+	}
+	switch {
+	case err != nil:
+		if dispatched != 0 {
+			t.Fatalf("dispatched = %d, want 0 when dispatch returns early: %v", dispatched, err)
+		}
+	case dispatched != 1:
+		t.Fatalf("dispatched = %d, want 1 when semaphore acquired before cancel", dispatched)
+	}
+}
+
+func TestDispatch_NoBackoffWhenAllNacked(t *testing.T) {
+	store := newQueueStore()
+	store.seed(1, models.TaskStateReady)
+
+	gate := NewChannelGate(config.ChannelConfig{
+		MaxMessageSize: 1024,
+		RateLimit:      1,
+		RateWindow:     60,
+	})
+	task, err := store.GetTask(context.Background(), "task-0")
+	if err != nil {
+		t.Fatalf("GetTask() error = %v", err)
+	}
+	if r := gate.Admit(TaskToInbound(*task)); r.Disposition != Ack {
+		t.Fatalf("pre-admit should ack: %v", r.Err)
+	}
+
+	daemon := NewDaemon(store, nil, nil, nil, nil, DaemonOptions{
+		MaxWorkers:   1,
+		TaskInterval: time.Second,
+		Channel:      gate,
+		Probe:        StaticPIDProbe{},
+	})
+
+	_, nacked, err := daemon.dispatch(context.Background())
+	if err != nil {
+		t.Fatalf("dispatch() error = %v", err)
+	}
+	if nacked != 1 {
+		t.Fatalf("nacked = %d, want 1", nacked)
+	}
+
+	delay := daemon.taskInterval
+	delay = daemon.nextDispatchDelay(delay, 0, 1)
+	if delay != daemon.taskInterval {
+		t.Fatalf("delay after all-nack = %s, want base %s (no backoff)", delay, daemon.taskInterval)
 	}
 }

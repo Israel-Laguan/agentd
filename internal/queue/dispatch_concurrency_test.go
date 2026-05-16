@@ -52,11 +52,11 @@ func TestDispatchConcurrencyCapIsRespected(t *testing.T) {
 func dispatchAll(t *testing.T, daemon *Daemon, store *queueStore) {
 	t.Helper()
 	for store.count("READY")+store.count("QUEUED") > 0 {
-		claimed, err := daemon.dispatch(context.Background())
+		dispatched, _, err := daemon.dispatch(context.Background())
 		if err != nil {
 			t.Fatalf("dispatch() error = %v", err)
 		}
-		if claimed == 0 {
+		if dispatched == 0 {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}

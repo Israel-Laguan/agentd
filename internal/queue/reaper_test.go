@@ -25,12 +25,12 @@ func TestReaperCancelsWorkerAfterDeadline(t *testing.T) {
 		Probe: StaticPIDProbe{},
 	})
 
-	claimed, err := daemon.dispatch(context.Background())
+	dispatched, _, err := daemon.dispatch(context.Background())
 	if err != nil {
 		t.Fatalf("dispatch() error = %v", err)
 	}
-	if claimed != 1 {
-		t.Fatalf("claimed = %d, want 1", claimed)
+	if dispatched != 1 {
+		t.Fatalf("dispatched = %d, want 1", dispatched)
 	}
 
 	select {
@@ -63,12 +63,12 @@ func TestReaperDoesNotCancelFastWorker(t *testing.T) {
 		Probe: StaticPIDProbe{},
 	})
 
-	claimed, err := daemon.dispatch(context.Background())
+	dispatched, _, err := daemon.dispatch(context.Background())
 	if err != nil {
 		t.Fatalf("dispatch() error = %v", err)
 	}
-	if claimed != 1 {
-		t.Fatalf("claimed = %d, want 1", claimed)
+	if dispatched != 1 {
+		t.Fatalf("dispatched = %d, want 1", dispatched)
 	}
 
 	waitSemaphore(t, daemon.sem, 1, 5*time.Second)

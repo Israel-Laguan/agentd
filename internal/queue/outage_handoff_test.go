@@ -18,7 +18,7 @@ func TestOutageHandoffCreatesHumanTaskWithDebugContext(t *testing.T) {
 	daemon := NewDaemon(store, nil, nil, breaker, sink, DaemonOptions{MaxWorkers: 1, HandoffAfter: time.Minute})
 	*now = (*now).Add(2 * time.Minute)
 
-	if _, err := daemon.dispatch(ctx); err != nil {
+	if _, _, err := daemon.dispatch(ctx); err != nil {
 		t.Fatalf("dispatch() error = %v", err)
 	}
 	projects, err := store.ListProjects(ctx)
@@ -57,10 +57,10 @@ func TestOutageHandoffDeduplicatesOpenTask(t *testing.T) {
 	daemon := NewDaemon(store, nil, nil, breaker, sink, DaemonOptions{MaxWorkers: 1, HandoffAfter: time.Minute})
 	*now = (*now).Add(2 * time.Minute)
 
-	if _, err := daemon.dispatch(ctx); err != nil {
+	if _, _, err := daemon.dispatch(ctx); err != nil {
 		t.Fatalf("first dispatch() error = %v", err)
 	}
-	if _, err := daemon.dispatch(ctx); err != nil {
+	if _, _, err := daemon.dispatch(ctx); err != nil {
 		t.Fatalf("second dispatch() error = %v", err)
 	}
 	projects, err := store.ListProjects(ctx)

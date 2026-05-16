@@ -137,7 +137,7 @@ func (s *queueScenario) workerRunningSandbox(ctx context.Context) error {
 	s.store.seed(1, models.TaskStateReady)
 	s.sandbox = &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
 	s.rebuild(1)
-	go func() { _, _ = s.daemon.dispatch(s.ctx) }()
+	go func() { _, _, _ = s.daemon.dispatch(s.ctx) }()
 	select {
 	case <-s.sandbox.started:
 		return nil

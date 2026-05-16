@@ -130,7 +130,7 @@ disk:
 # Enforced before any message reaches the worker loop.
 channel:
   max_message_size: 1048576    # bytes; 0 = unlimited. Reject payloads above this threshold.
-  rate_limit: 0                # max task admissions per task within rate_window (queue path keys session_id to task ID); 0 = unlimited.
+  rate_limit: 0                # max task admissions per task within rate_window (queue path keys session_id to task ID); 0 = unlimited. When 0, dispatch-time channel validation and rate limiting are disabled.
   rate_window: 60              # sliding window (seconds) for per-session rate limiting.
 
 # Queue daemon.
