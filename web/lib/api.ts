@@ -77,9 +77,8 @@ export async function updateTask(
   if (USE_MOCK) {
     const task = mockBoard.tasks.find((t) => t.id === id);
     if (!task) throw new Error("Task not found");
-    const cloned = structuredClone(task);
-    Object.assign(cloned, updates, { updatedAt: Date.now() });
-    return cloned;
+    Object.assign(task, updates, { updatedAt: Date.now() });
+    return structuredClone(task);
   }
 
   const res = await fetch(`${API}/api/v1/tasks/${id}`, {

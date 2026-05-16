@@ -35,6 +35,7 @@ describe('API (mock mode)', () => {
     const updated = await updateTask(original.id, { status: TaskStatus.COMPLETED });
     expect(updated.status).toBe(TaskStatus.COMPLETED);
     expect(updated.id).toBe(original.id);
+    expect(mockBoard.tasks[0].status).toBe(TaskStatus.COMPLETED);
   });
 
   it('fetchTaskComments filters by taskId', async () => {
