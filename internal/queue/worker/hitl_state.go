@@ -13,7 +13,8 @@ import (
 
 const (
 	hitlExpiresAtPrefix             = "agentd:hitl:expires-at:"
-	hitlApprovalUsedPrefix          = "agentd:hitl:approval-used:"
+	hitlApprovalUsedPrefix            = "agentd:hitl:approval-used:"
+	hitlApprovalRejectionUsedPrefix   = "agentd:hitl:approval-rejection-used:"
 	hitlDraftReviewCommentPrefix    = "agentd:hitl:draft-review\n"
 	hitlReviewUsedPrefix            = "agentd:hitl:review-used:"
 	hitlReviewRejectionUsedPrefix   = "agentd:hitl:review-rejection-used:"
@@ -76,6 +77,24 @@ func markApprovalUsed(ctx context.Context, store models.KanbanStore, parentID, s
 		TaskID: parentID,
 		Author: models.CommentAuthorWorkerAgent,
 		Body:   hitlApprovalUsedPrefix + subtaskID,
+	})
+}
+
+func isApprovalRejectionConsumed(comments []models.Comment, subtaskID string) bool {
+	marker := hitlApprovalRejectionUsedPrefix + subtaskID
+	for _, c := range comments {
+		if strings.HasPrefix(c.Body, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func markApprovalRejectionUsed(ctx context.Context, store models.KanbanStore, parentID, subtaskID string) error {
+	return store.AddComment(ctx, models.Comment{
+		TaskID: parentID,
+		Author: models.CommentAuthorWorkerAgent,
+		Body:   hitlApprovalRejectionUsedPrefix + subtaskID,
 	})
 }
 
