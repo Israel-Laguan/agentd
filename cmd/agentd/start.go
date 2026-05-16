@@ -130,12 +130,13 @@ func buildDreamer(store models.KanbanStore, deps runtimeDeps, cfg config.Config)
 }
 
 func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontdesk.IntakeProcessor, deps runtimeDeps, cfg config.Config, startOpts *startOptions) *queue.Daemon {
-	queuedReconcileAfter := time.Duration(config.NormalizedRateWindow(cfg.Channel)) * time.Second
+	queuedReconcileAfter := cfg.Queue.TaskDeadline
+	if cfg.Channel.RateLimit > 0 {
+		queuedReconcileAfter = time.Duration(config.NormalizedRateWindow(cfg.Channel)) * time.Second
+	}
 	var ch queue.Channel
 	if cfg.Channel.RateLimit > 0 {
 		ch = queue.NewChannelGate(cfg.Channel)
-	} else {
-		queuedReconcileAfter = 0
 	}
 	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{
 		MaxWorkers:           startOpts.workers,

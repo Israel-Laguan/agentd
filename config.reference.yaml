@@ -135,7 +135,7 @@ channel:
 
 # Queue daemon.
 queue:
-  task_deadline: "10m"       # wall-clock timeout per worker task (the Reaper)
+  task_deadline: "10m"       # wall-clock timeout per worker task (the Reaper); also min age for orphaned QUEUED recovery when channel.rate_limit is 0
   poll_max_interval: "10s"   # adaptive backoff ceiling when no tasks are available
   max_tool_iterations: 10    # max tool-call iterations per agentic task (0 = unlimited)
   token_budget: 0            # worker-level per-task token cap; 0 = unlimited (Danger A). See also gateway.budget.tokens_per_task.
