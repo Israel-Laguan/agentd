@@ -82,6 +82,12 @@ func TestCreateReviewHandoff_CreatesSubtask(t *testing.T) {
 
 	w.createReviewHandoff(context.Background(), task, "Here is my draft output")
 
+	if store.blockTaskID != task.ID {
+		t.Fatalf("BlockTaskWithSubtasks taskID = %q, want %q", store.blockTaskID, task.ID)
+	}
+	if !store.blockAt.Equal(task.UpdatedAt) {
+		t.Fatalf("BlockTaskWithSubtasks updatedAt = %s, want %s", store.blockAt, task.UpdatedAt)
+	}
 	if !store.blockCalled {
 		t.Fatal("expected BlockTaskWithSubtasks to be called")
 	}
@@ -131,6 +137,13 @@ func TestCreateReviewHandoff_StoreError(t *testing.T) {
 
 	w.createReviewHandoff(context.Background(), task, "draft")
 
+	if store.blockTaskID != task.ID {
+		t.Fatalf("BlockTaskWithSubtasks taskID = %q, want %q", store.blockTaskID, task.ID)
+	}
+	if !store.blockAt.Equal(task.UpdatedAt) {
+		t.Fatalf("BlockTaskWithSubtasks updatedAt = %s, want %s", store.blockAt, task.UpdatedAt)
+	}
+
 	found := false
 	for _, ev := range sink.events {
 		if ev.Type == "ERROR" {
@@ -150,6 +163,8 @@ var errMockBlock = models.ErrStateConflict
 type reviewMockStore struct {
 	*testutil.FakeKanbanStore
 	blockCalled bool
+	blockTaskID string
+	blockAt     time.Time
 	subtasks    []models.DraftTask
 	err         error
 }
@@ -158,8 +173,10 @@ func (s *reviewMockStore) AddComment(ctx context.Context, c models.Comment) erro
 	return s.FakeKanbanStore.AddComment(ctx, c)
 }
 
-func (s *reviewMockStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, subtasks []models.DraftTask) (*models.Task, []models.Task, error) {
+func (s *reviewMockStore) BlockTaskWithSubtasks(_ context.Context, taskID string, at time.Time, subtasks []models.DraftTask) (*models.Task, []models.Task, error) {
 	s.blockCalled = true
+	s.blockTaskID = taskID
+	s.blockAt = at
 	s.subtasks = subtasks
 	if s.err != nil {
 		return nil, nil, s.err

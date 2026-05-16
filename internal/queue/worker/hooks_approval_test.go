@@ -277,6 +277,46 @@ func TestBlockingApprovalHandler_ReturnsNotApproved(t *testing.T) {
 	}
 }
 
+func TestBlockingApprovalHandler_GrantsCompletedApprovalDespiteExpiredComments(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	expired := time.Now().Add(-time.Minute)
+	if err := store.AddComment(context.Background(), models.Comment{
+		TaskID: parent.ID,
+		Author: models.CommentAuthorWorkerAgent,
+		Body:   hitlExpiresAtPrefix + expired.UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("add expiry comment: %v", err)
+	}
+	_, created, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: approvalSubtaskTitle("deploy"), Assignee: models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	if _, err := store.UpdateTaskState(context.Background(), created[0].ID, created[0].UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete approval subtask: %v", err)
+	}
+
+	handler := NewBlockingApprovalHandler(store)
+	resp, err := handler.RequestApproval(context.Background(), ApprovalRequest{
+		ToolName: "deploy", TaskID: parent.ID, TaskUpdatedAt: parent.UpdatedAt,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.Approved {
+		t.Fatal("expected Approved=true for completed approval despite expired comments")
+	}
+}
+
 func TestBlockingApprovalHandler_GrantsCompletedApproval(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
