@@ -81,13 +81,13 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
           {/* header */}
           <div className="p-4 border-b border-border flex justify-between items-center">
             <h2 className="text-sm font-bold text-text">Task Details</h2>
-            <button onClick={onClose}>
+            <button onClick={onClose} aria-label="Close task drawer">
               <X size={16} />
             </button>
           </div>
 
           {/* content */}
-          <div className="p-4 space-y-5 overflow-y-auto">
+          <div className="flex-1 p-4 space-y-5 overflow-y-auto">
 
             {/* TITLE (editable) */}
             <div>
