@@ -112,7 +112,13 @@ func (w *Worker) handleAgenticToolCalls(
 	cm *ContextManager,
 ) bool {
 	for _, call := range resp.ToolCalls {
-		result, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, task.UpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
+		taskUpdatedAt := task.UpdatedAt
+		if fresh, err := w.store.GetTask(ctx, task.ID); err != nil {
+			slog.Warn("failed to refresh task version for tool dispatch", "task_id", task.ID, "error", err)
+		} else {
+			taskUpdatedAt = fresh.UpdatedAt
+		}
+		result, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
 		if detected := cm.CheckToolResult(result); len(detected) > 0 {
 			slog.Info("auto-detected context corrections",
 				"task_id", task.ID,

@@ -12,6 +12,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 func TestExecuteAgenticTool_CapabilityRegistry(t *testing.T) {
@@ -298,6 +299,65 @@ func TestIngestHumanCorrections_MapsReviewerSource(t *testing.T) {
 	}
 	if corrections[0].Source != CorrectionSourceReviewer {
 		t.Fatalf("expected reviewer source, got %q", corrections[0].Source)
+	}
+}
+
+type refreshedTaskStore struct {
+	*testutil.FakeKanbanStore
+	freshUpdatedAt    time.Time
+	capturedUpdatedAt time.Time
+}
+
+func (s *refreshedTaskStore) GetTask(ctx context.Context, id string) (*models.Task, error) {
+	task, err := s.FakeKanbanStore.GetTask(ctx, id)
+	if err != nil || task == nil {
+		return task, err
+	}
+	task.UpdatedAt = s.freshUpdatedAt
+	return task, nil
+}
+
+func (s *refreshedTaskStore) BlockTaskWithSubtasks(ctx context.Context, id string, expectedUpdatedAt time.Time, subtasks []models.DraftTask) (*models.Task, []models.Task, error) {
+	s.capturedUpdatedAt = expectedUpdatedAt
+	return s.FakeKanbanStore.BlockTaskWithSubtasks(ctx, id, expectedUpdatedAt, subtasks)
+}
+
+func TestHandleAgenticToolCalls_RefreshesTaskUpdatedAt(t *testing.T) {
+	t.Parallel()
+	store := &refreshedTaskStore{FakeKanbanStore: testutil.NewFakeStore()}
+	ctx := context.Background()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	store.freshUpdatedAt = parent.UpdatedAt.Add(time.Hour)
+
+	staleTask := parent
+	staleTask.UpdatedAt = parent.UpdatedAt.Add(-time.Hour)
+
+	handler := NewBlockingApprovalHandler(store)
+	taskHooks := NewHookChain()
+	taskHooks.RegisterPre(ApprovalGateHook([]string{"deploy"}, handler))
+
+	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	w := &Worker{store: store}
+	resp := gateway.AIResponse{
+		ToolCalls: []gateway.ToolCall{{
+			ID:       "call-1",
+			Function: gateway.ToolCallFunction{Name: "deploy", Arguments: `{}`},
+		}},
+	}
+	var messages []gateway.PromptMessage
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", parent.ID)
+
+	if suspended := w.handleAgenticToolCalls(ctx, staleTask, resp, &messages, nil, ex, taskHooks, nil, cm); !suspended {
+		t.Fatal("expected approval gate to suspend agentic loop")
+	}
+	if !store.capturedUpdatedAt.Equal(store.freshUpdatedAt) {
+		t.Fatalf("BlockTaskWithSubtasks updatedAt = %v, want refreshed %v", store.capturedUpdatedAt, store.freshUpdatedAt)
 	}
 }
 
