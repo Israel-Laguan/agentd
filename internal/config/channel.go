@@ -3,9 +3,11 @@ package config
 import "github.com/spf13/viper"
 
 const (
-	// DefaultMaxMessageSize is the default upper bound (bytes) for an
-	// inbound message payload before it is rejected at the channel
-	// boundary. 0 = unlimited.
+	// DefaultMaxMessageSize is the viper default (bytes) for channel.max_message_size
+	// and matches the recommended value in config.reference.yaml. It is applied on
+	// every config load, including when no channel: section exists in the user's YAML,
+	// which enables dispatch-time validation via ChannelGateEnabled. Set
+	// channel.max_message_size to 0 in config to disable size enforcement.
 	DefaultMaxMessageSize = 1048576
 
 	// DefaultChannelRateLimit is the default maximum submissions per
@@ -26,6 +28,9 @@ type ChannelConfig struct {
 
 // ChannelGateEnabled reports whether dispatch-time channel validation should run.
 // The gate is active when rate limiting or a positive max message size is configured.
+// A zero-value ChannelConfig disables the gate; loaded config from viper after
+// setChannelDefaults typically has MaxMessageSize == DefaultMaxMessageSize and
+// enables the gate even without an explicit channel: block in the user's YAML.
 func ChannelGateEnabled(c ChannelConfig) bool {
 	return c.RateLimit > 0 || c.MaxMessageSize > 0
 }

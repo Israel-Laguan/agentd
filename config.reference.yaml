@@ -127,7 +127,14 @@ disk:
   free_threshold_percent: 10.0
 
 # Channel-level security and validation.
-# Enforced before any message reaches the worker loop.
+# Enforced at dispatch before a claimed task reaches the worker loop.
+#
+# Upgrade note: agentd applies viper defaults even when this block is absent from
+# ~/.agentd/config.yaml (max_message_size defaults to 1048576). That enables the
+# channel gate on upgrade—structural validation plus a 1MB payload cap; rate_limit
+# stays off unless you set it. Tasks with both empty title and description are
+# rejected to FAILED at dispatch. To keep pre-upgrade behavior (no dispatch gate),
+# set both max_message_size and rate_limit to 0 in your config.
 channel:
   max_message_size: 1048576    # bytes; 0 = unlimited. Reject payloads above this threshold when > 0.
   rate_limit: 0                # max task admissions per task within rate_window (queue path keys session_id to task ID); 0 = unlimited. Dispatch-time validation runs when max_message_size > 0 and/or rate_limit > 0; set both to 0 to disable the channel gate.
