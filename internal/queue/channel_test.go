@@ -258,8 +258,8 @@ func TestTaskToInbound(t *testing.T) {
 		Description: "do things",
 	}
 	msg := TaskToInbound(task)
-	if msg.SessionID != "proj-1" {
-		t.Fatalf("SessionID = %q, want proj-1", msg.SessionID)
+	if msg.SessionID != "task-1" {
+		t.Fatalf("SessionID = %q, want task-1", msg.SessionID)
 	}
 	if msg.TurnID != "task-1" {
 		t.Fatalf("TurnID = %q, want task-1", msg.TurnID)
@@ -272,5 +272,30 @@ func TestTaskToInbound(t *testing.T) {
 	}
 	if msg.ReceivedAt != now {
 		t.Fatalf("ReceivedAt mismatch")
+	}
+}
+
+func TestTaskToInbound_RateLimitPerTask(t *testing.T) {
+	now := time.Now()
+	g := NewChannelGate(config.ChannelConfig{
+		MaxMessageSize: 1024,
+		RateLimit:      1,
+		RateWindow:     60,
+	})
+	task1 := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "task-1", UpdatedAt: now},
+		ProjectID:   "proj-1",
+		Description: "first",
+	}
+	task2 := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "task-2", UpdatedAt: now},
+		ProjectID:   "proj-1",
+		Description: "second",
+	}
+	if r := g.Admit(TaskToInbound(task1)); r.Disposition != Ack {
+		t.Fatalf("task-1 should ack: %v", r.Err)
+	}
+	if r := g.Admit(TaskToInbound(task2)); r.Disposition != Ack {
+		t.Fatalf("task-2 should ack (per-task rate limit): %v", r.Err)
 	}
 }
