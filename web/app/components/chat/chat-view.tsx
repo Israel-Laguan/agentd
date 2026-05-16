@@ -113,8 +113,8 @@ export function ChatView({
           <ChatEmptyState setInput={setInput} />
         )}
 
-        {messages.map((m) => (
-          <ChatMessageView key={m.id} message={m} />
+        {messages.map((m, i) => (
+          <ChatMessageView key={m.id ?? i} message={m} />
         ))}
 
         {isTyping && <ChatTyping />}
