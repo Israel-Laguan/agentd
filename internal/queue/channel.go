@@ -105,11 +105,19 @@ func NewChannelGate(cfg config.ChannelConfig) *ChannelGate {
 
 // Validate checks structural and size constraints without mutating state.
 func (g *ChannelGate) Validate(msg InboundMessage) error {
-	if strings.TrimSpace(msg.SessionID) == "" {
+	sessionID := strings.TrimSpace(msg.SessionID)
+	if sessionID == "" {
 		return fmt.Errorf("%w: session_id is required", models.ErrMessageInvalid)
 	}
-	if strings.TrimSpace(msg.TurnID) == "" {
+	if sessionID != msg.SessionID {
+		return fmt.Errorf("%w: session_id must not include surrounding whitespace", models.ErrMessageInvalid)
+	}
+	turnID := strings.TrimSpace(msg.TurnID)
+	if turnID == "" {
 		return fmt.Errorf("%w: turn_id is required", models.ErrMessageInvalid)
+	}
+	if turnID != msg.TurnID {
+		return fmt.Errorf("%w: turn_id must not include surrounding whitespace", models.ErrMessageInvalid)
 	}
 	if !msg.Role.Valid() {
 		return fmt.Errorf("%w: role %q is not recognized", models.ErrMessageInvalid, msg.Role)
@@ -137,7 +145,7 @@ func (g *ChannelGate) Admit(msg InboundMessage) DispatchResult {
 			Err:         fmt.Errorf("%w: %w", models.ErrDispatchNack, err),
 		}
 	}
-	if err := g.checkRate(strings.TrimSpace(msg.SessionID)); err != nil {
+	if err := g.checkRate(msg.SessionID); err != nil {
 		return DispatchResult{
 			Disposition: Nack,
 			Err:         fmt.Errorf("%w: %w", models.ErrDispatchNack, err),

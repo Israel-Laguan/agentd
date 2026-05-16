@@ -34,7 +34,9 @@ func TestValidate_MissingFields(t *testing.T) {
 		patch func(*InboundMessage)
 	}{
 		{"missing session_id", func(m *InboundMessage) { m.SessionID = "" }},
+		{"whitespace session_id", func(m *InboundMessage) { m.SessionID = " sess-1 " }},
 		{"missing turn_id", func(m *InboundMessage) { m.TurnID = "" }},
+		{"whitespace turn_id", func(m *InboundMessage) { m.TurnID = " turn-1 " }},
 		{"invalid role", func(m *InboundMessage) { m.Role = "bogus" }},
 		{"empty content", func(m *InboundMessage) { m.Content = "   " }},
 		{"zero received_at", func(m *InboundMessage) { m.ReceivedAt = time.Time{} }},
@@ -141,7 +143,7 @@ func TestAdmit_NackPreservesValidationCause(t *testing.T) {
 	}
 }
 
-func TestAdmit_RateLimitCanonicalizesSessionID(t *testing.T) {
+func TestAdmit_NackOnWhitespaceSessionID(t *testing.T) {
 	g := NewChannelGate(config.ChannelConfig{
 		MaxMessageSize: 1024,
 		RateLimit:      1,
@@ -156,10 +158,10 @@ func TestAdmit_RateLimitCanonicalizesSessionID(t *testing.T) {
 	msg.TurnID = "turn-2"
 	r2 := g.Admit(msg)
 	if r2.Disposition != Nack {
-		t.Fatal("whitespace-padded session should share rate bucket and nack")
+		t.Fatal("whitespace-padded session_id should be rejected at validation")
 	}
-	if !errors.Is(r2.Err, models.ErrChannelRateLimited) {
-		t.Fatalf("expected ErrChannelRateLimited, got: %v", r2.Err)
+	if !errors.Is(r2.Err, models.ErrMessageInvalid) {
+		t.Fatalf("expected ErrMessageInvalid, got: %v", r2.Err)
 	}
 }
 
@@ -198,7 +200,7 @@ func TestAdmit_RateLimitDisabled(t *testing.T) {
 	})
 	msg := validMsg()
 	for i := range 100 {
-		msg.TurnID = "turn-" + string(rune('A'+i))
+		msg.TurnID = fmt.Sprintf("turn-%d", i)
 		r := g.Admit(msg)
 		if r.Disposition != Ack {
 			t.Fatalf("request %d should ack with unlimited rate: %v", i, r.Err)
