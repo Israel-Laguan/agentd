@@ -50,9 +50,9 @@ func finishTaskResultSideEffects(ctx context.Context, tx *immediateTx, id string
 		if err := unlockReadyChildren(ctx, tx, id, now); err != nil {
 			return err
 		}
-		if err := unblockBlockedParentsWhenChildrenResolved(ctx, tx, id, now); err != nil {
-			return err
-		}
+	}
+	if err := unblockBlockedParentsWhenChildrenResolved(ctx, tx, id, now); err != nil {
+		return err
 	}
 	if strings.TrimSpace(result.Payload) == "" {
 		return nil
