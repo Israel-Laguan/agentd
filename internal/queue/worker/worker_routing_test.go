@@ -188,6 +188,10 @@ func (s *routingTestStore) ClaimNextReadyTasks(context.Context, int) ([]models.T
 func (s *routingTestStore) ReconcileGhostTasks(context.Context, []int) ([]models.Task, error) {
 	return nil, nil
 }
+func (s *routingTestStore) ReconcileOrphanedQueued(context.Context, time.Duration) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *routingTestStore) ReconcileStaleTasks(_ context.Context, _ []int, _ time.Duration) ([]models.Task, error) {
 	return nil, nil
 }

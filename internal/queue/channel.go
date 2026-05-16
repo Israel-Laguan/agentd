@@ -2,6 +2,8 @@ package queue
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -135,13 +137,13 @@ func (g *ChannelGate) Admit(msg InboundMessage) DispatchResult {
 	if err := g.Validate(msg); err != nil {
 		return DispatchResult{
 			Disposition: Nack,
-			Err:         fmt.Errorf("%w: %v", models.ErrDispatchNack, err),
+			Err:         fmt.Errorf("%w: %w", models.ErrDispatchNack, err),
 		}
 	}
 	if err := g.checkRate(msg.SessionID); err != nil {
 		return DispatchResult{
 			Disposition: Nack,
-			Err:         fmt.Errorf("%w: %v", models.ErrDispatchNack, err),
+			Err:         fmt.Errorf("%w: %w", models.ErrDispatchNack, err),
 		}
 	}
 	return DispatchResult{Disposition: Ack}
@@ -210,12 +212,35 @@ func TaskToInbound(t models.Task) InboundMessage {
 	}
 }
 
-// nackTask transitions a rejected task back to READY so it becomes eligible
-// for redelivery on the next dispatch cycle.
-func (d *Daemon) nackTask(ctx context.Context, task models.Task) {
-	_, err := d.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateReady)
-	if err != nil {
-		slog.Error("nack: failed to release task", "task_id", task.ID, "error", err)
+// classifyDispatchNack reports whether a dispatch nack is transient (rate limit)
+// and should be retried after the channel rate window, vs permanent failure.
+func classifyDispatchNack(err error) bool {
+	return errors.Is(err, models.ErrChannelRateLimited)
+}
+
+// deferRateLimited leaves a rate-limited task in QUEUED so it is not immediately
+// re-claimed; ReconcileOrphanedQueued releases it to READY after minAge.
+func (d *Daemon) deferRateLimited(_ context.Context, task models.Task) {
+	slog.Debug("dispatch deferred rate limited", "task_id", task.ID)
+}
+
+// failDispatchRejected moves a permanently rejected task to FAILED.
+func (d *Daemon) failDispatchRejected(ctx context.Context, task models.Task, err error) {
+	_, updateErr := d.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateFailed)
+	if updateErr != nil {
+		slog.Error("dispatch reject: failed to mark task failed", "task_id", task.ID, "error", updateErr)
+		return
+	}
+	if d.sink != nil {
+		emitErr := d.sink.Emit(ctx, models.Event{
+			ProjectID: task.ProjectID,
+			TaskID:    sql.NullString{String: task.ID, Valid: true},
+			Type:      models.EventTypeFailure,
+			Payload:   err.Error(),
+		})
+		if emitErr != nil {
+			slog.Error("dispatch reject: failed to emit event", "task_id", task.ID, "error", emitErr)
+		}
 	}
 }
 

@@ -219,6 +219,10 @@ func (s *workerTestStore) ReconcileGhostTasks(context.Context, []int) ([]models.
 	return nil, nil
 }
 
+func (s *workerTestStore) ReconcileOrphanedQueued(context.Context, time.Duration) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *workerTestStore) ReconcileStaleTasks(_ context.Context, _ []int, _ time.Duration) ([]models.Task, error) {
 	return nil, nil
 }

@@ -714,6 +714,10 @@ func (m *mockAgenticStore) ReconcileGhostTasks(context.Context, []int) ([]models
 	return nil, nil
 }
 
+func (m *mockAgenticStore) ReconcileOrphanedQueued(context.Context, time.Duration) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockAgenticStore) ReconcileStaleTasks(_ context.Context, _ []int, _ time.Duration) ([]models.Task, error) {
 	return nil, nil
 }

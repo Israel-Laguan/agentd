@@ -262,6 +262,10 @@ func (s *workerStore) ClaimNextReadyTasks(context.Context, int) ([]models.Task, 
 func (s *workerStore) ReconcileGhostTasks(context.Context, []int) ([]models.Task, error) {
 	return nil, nil
 }
+func (s *workerStore) ReconcileOrphanedQueued(context.Context, time.Duration) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *workerStore) ReconcileStaleTasks(context.Context, []int, time.Duration) ([]models.Task, error) {
 	return nil, nil
 }

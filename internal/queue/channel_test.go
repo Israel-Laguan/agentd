@@ -123,6 +123,22 @@ func TestAdmit_RateLimit(t *testing.T) {
 	if !errors.Is(r3.Err, models.ErrDispatchNack) {
 		t.Fatalf("expected ErrDispatchNack, got: %v", r3.Err)
 	}
+	if !errors.Is(r3.Err, models.ErrChannelRateLimited) {
+		t.Fatalf("expected ErrChannelRateLimited, got: %v", r3.Err)
+	}
+}
+
+func TestAdmit_NackPreservesValidationCause(t *testing.T) {
+	g := NewChannelGate(config.ChannelConfig{MaxMessageSize: 5})
+	msg := validMsg()
+	msg.Content = "this is way too long"
+	result := g.Admit(msg)
+	if result.Disposition != Nack {
+		t.Fatal("expected Nack for oversized message")
+	}
+	if !errors.Is(result.Err, models.ErrMessageTooLarge) {
+		t.Fatalf("expected ErrMessageTooLarge, got: %v", result.Err)
+	}
 }
 
 func TestAdmit_RateLimitIsolatesSessions(t *testing.T) {

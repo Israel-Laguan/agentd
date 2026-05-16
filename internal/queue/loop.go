@@ -75,6 +75,10 @@ func (d *Daemon) dispatch(ctx context.Context) (int, error) {
 	if available <= 0 {
 		return 0, nil
 	}
+	if d.channel != nil && d.queuedReconcileAfter > 0 {
+		_, reconcileErr := d.store.ReconcileOrphanedQueued(ctx, d.queuedReconcileAfter)
+		logDaemonError("orphaned queued reconcile failed", reconcileErr)
+	}
 	tasks, err := d.store.ClaimNextReadyTasks(ctx, available)
 	if err != nil {
 		return 0, err
@@ -87,12 +91,16 @@ func (d *Daemon) dispatch(ctx context.Context) (int, error) {
 			if result.Disposition == Nack {
 				nacked++
 				slog.Warn("dispatch nack", "task_id", task.ID, "error", result.Err)
-				d.nackTask(ctx, task)
+				if classifyDispatchNack(result.Err) {
+					d.deferRateLimited(ctx, task)
+				} else {
+					d.failDispatchRejected(ctx, task, result.Err)
+				}
 				continue
 			}
 		}
 		if !d.sem.Acquire(ctx) {
-			return len(tasks), ctx.Err()
+			return len(tasks) - nacked, ctx.Err()
 		}
 		d.wg.Add(1)
 		go func() {

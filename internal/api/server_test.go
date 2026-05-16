@@ -225,6 +225,10 @@ func (s *apiStore) UpdateTaskResult(context.Context, string, time.Time, models.T
 func (s *apiStore) ReconcileGhostTasks(context.Context, []int) ([]models.Task, error) {
 	return nil, nil
 }
+func (s *apiStore) ReconcileOrphanedQueued(context.Context, time.Duration) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *apiStore) ReconcileStaleTasks(context.Context, []int, time.Duration) ([]models.Task, error) {
 	return nil, nil
 }
