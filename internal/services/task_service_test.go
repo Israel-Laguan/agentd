@@ -115,6 +115,10 @@ func (m *minimalStore) UpdateTaskHeartbeat(context.Context, string) error { retu
 func (m *minimalStore) IncrementRetryCount(context.Context, string, time.Time) (*models.Task, error) {
 	return nil, nil
 }
+func (m *minimalStore) ReconcileOrphanedQueued(context.Context, time.Duration) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *minimalStore) ReconcileStaleTasks(context.Context, []int, time.Duration) ([]models.Task, error) {
 	return nil, nil
 }

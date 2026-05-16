@@ -114,6 +114,29 @@ func (s *queueStore) ReconcileGhostTasks(_ context.Context, alivePIDs []int) ([]
 	return recovered, nil
 }
 
+func (s *queueStore) ReconcileOrphanedQueued(_ context.Context, minAge time.Duration) ([]models.Task, error) {
+	if minAge <= 0 {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cutoff := time.Now().UTC().Add(-minAge)
+	var recovered []models.Task
+	for i := range s.tasks {
+		if s.tasks[i].State != models.TaskStateQueued || s.tasks[i].StartedAt != nil {
+			continue
+		}
+		if !s.tasks[i].UpdatedAt.Before(cutoff) {
+			continue
+		}
+		s.tasks[i].State = models.TaskStateReady
+		s.tasks[i].OSProcessID = nil
+		s.tasks[i].LastHeartbeat = nil
+		recovered = append(recovered, s.tasks[i])
+	}
+	return recovered, nil
+}
+
 func (s *queueStore) ReconcileStaleTasks(_ context.Context, alivePIDs []int, staleThreshold time.Duration) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

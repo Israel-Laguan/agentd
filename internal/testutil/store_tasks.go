@@ -140,6 +140,30 @@ func (s *FakeKanbanStore) ReconcileGhostTasks(_ context.Context, alivePIDs []int
 	return recovered, nil
 }
 
+func (s *FakeKanbanStore) ReconcileOrphanedQueued(_ context.Context, minAge time.Duration) ([]models.Task, error) {
+	if minAge <= 0 {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cutoff := now().Add(-minAge)
+	var recovered []models.Task
+	for id, t := range s.tasks {
+		if t.State != models.TaskStateQueued || t.StartedAt != nil {
+			continue
+		}
+		if !t.UpdatedAt.Before(cutoff) {
+			continue
+		}
+		t.State = models.TaskStateReady
+		t.OSProcessID = nil
+		t.LastHeartbeat = nil
+		s.tasks[id] = t
+		recovered = append(recovered, t)
+	}
+	return recovered, nil
+}
+
 func (s *FakeKanbanStore) ReconcileStaleTasks(_ context.Context, alivePIDs []int, stale time.Duration) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

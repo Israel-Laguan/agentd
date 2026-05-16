@@ -59,6 +59,7 @@ type KanbanStore interface {
 	UpdateTaskResult(ctx context.Context, id string, expectedUpdatedAt time.Time, result TaskResult) (*Task, error)
 	ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]Task, error)
 	ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleThreshold time.Duration) ([]Task, error)
+	ReconcileOrphanedQueued(ctx context.Context, minAge time.Duration) ([]Task, error)
 	BlockTaskWithSubtasks(ctx context.Context, taskID string, expectedUpdatedAt time.Time, subtasks []DraftTask) (*Task, []Task, error)
 	AppendTasksToProject(ctx context.Context, projectID, parentTaskID string, drafts []DraftTask) ([]Task, error)
 	AddComment(ctx context.Context, c Comment) error

@@ -547,6 +547,10 @@ func (m *mockCommitStore) ReconcileStaleTasks(ctx context.Context, alivePIDs []i
 	return nil, nil
 }
 
+func (m *mockCommitStore) ReconcileOrphanedQueued(context.Context, time.Duration) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockCommitStore) AppendTasksToProject(ctx context.Context, projectID, parentTaskID string, drafts []models.DraftTask) ([]models.Task, error) {
 	return nil, nil
 }

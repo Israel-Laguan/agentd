@@ -158,3 +158,38 @@ func (s *Store) ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleT
 		return recovered, commitTx(tx, "stale task reconciliation")
 	})
 }
+
+func (s *Store) ReconcileOrphanedQueued(ctx context.Context, minAge time.Duration) ([]models.Task, error) {
+	if minAge <= 0 {
+		return nil, nil
+	}
+	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+		tx, err := beginImmediate(ctx, s.db)
+		if err != nil {
+			return nil, fmt.Errorf("begin orphaned queued reconciliation: %w", err)
+		}
+		defer rollbackUnlessCommitted(tx)
+
+		now := utcNow()
+		staleBefore := now.Add(-minAge)
+		orphaned, err := selectOrphanedQueuedTasks(ctx, tx, staleBefore)
+		if err != nil {
+			return nil, err
+		}
+		if len(orphaned) == 0 {
+			return nil, commitTx(tx, "empty orphaned queued reconciliation")
+		}
+		ids := make([]string, 0, len(orphaned))
+		for _, task := range orphaned {
+			ids = append(ids, task.ID)
+		}
+		if err := resetGhostTasks(ctx, tx, orphaned, ids, now); err != nil {
+			return nil, err
+		}
+		recovered, err := selectTasksByIDs(ctx, tx, ids)
+		if err != nil {
+			return nil, err
+		}
+		return recovered, commitTx(tx, "orphaned queued reconciliation")
+	})
+}

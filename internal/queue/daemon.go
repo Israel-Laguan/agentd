@@ -45,6 +45,7 @@ type Daemon struct {
 	dreamEvery           time.Duration
 	dreamSchedule        cron.Schedule
 	channel              Channel
+	queuedReconcileAfter time.Duration
 	wg                   sync.WaitGroup
 }
 
@@ -69,6 +70,7 @@ type DaemonOptions struct {
 	DreamEvery           time.Duration
 	DreamSchedule        cron.Schedule
 	Channel              Channel
+	QueuedReconcileAfter time.Duration
 }
 
 func NewDaemon(
@@ -92,7 +94,8 @@ func NewDaemon(
 		librarian: opts.Librarian, dreamer: opts.Dreamer,
 		curatorEvery: opts.CuratorEvery, curatorSchedule: opts.CuratorSchedule,
 		dreamEvery: opts.DreamEvery, dreamSchedule: opts.DreamSchedule,
-		channel: opts.Channel,
+		channel:              opts.Channel,
+		queuedReconcileAfter: opts.QueuedReconcileAfter,
 	}
 }
 
