@@ -7,11 +7,13 @@ export function ChatInput({
   setValue,
   onSend,
   isTyping,
+  inputRef,
 }: {
   value: string;
   setValue: (v: string) => void;
   onSend: () => void;
   isTyping: boolean;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
   return (
     <div className="p-1 px-1.5 bg-panel border border-border rounded-xl shadow-2xl flex items-center gap-2 backdrop-blur-sm">
@@ -20,6 +22,7 @@ export function ChatInput({
       </div>
 
       <input
+        ref={inputRef}
         type="text"
         aria-label="Chat input"
         value={value}

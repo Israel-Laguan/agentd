@@ -15,12 +15,21 @@ export function CommentPanel({ taskId }: { taskId: string }) {
 
   // ---------------- LOAD ----------------
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       if (!taskId) return;
-      const data = await fetchTaskComments(taskId);
-      setComments(data || []);
+      try {
+        const data = await fetchTaskComments(taskId);
+        if (!cancelled) setComments(data || []);
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) setComments([]);
+      }
     }
     load();
+    return () => {
+      cancelled = true;
+    };
   }, [taskId]);
 
   // ---------------- AUTO SCROLL ----------------

@@ -44,6 +44,10 @@ export async function postApprovePlan() {
     method: "POST",
   });
 
+  if (!res.ok) {
+    throw new Error(`Failed to approve plan: ${res.status}`);
+  }
+
   return res.json();
 }
 

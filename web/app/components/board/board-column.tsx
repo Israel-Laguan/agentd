@@ -36,6 +36,10 @@ export function BoardColumn({
             "text-[10px] font-bold uppercase tracking-[0.2em]",
             status === TaskStatus.RUNNING
               ? "text-blue"
+              : status === TaskStatus.READY
+              ? "text-green-400"
+              : status === TaskStatus.FAILED || status === TaskStatus.FAILED_REQUIRES_HUMAN
+              ? "text-error"
               : "text-text-dim"
           )}
         >
