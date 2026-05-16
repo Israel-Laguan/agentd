@@ -45,6 +45,8 @@ const (
 
 	// DefaultSkillsTopK is the maximum number of skills to inject per session.
 	DefaultSkillsTopK = 3
+
+	DefaultLegacyHandoffTimeout = 7 * 24 * time.Hour
 )
 
 // InstructionsConfig holds paths for the instruction hierarchy layers.
@@ -85,6 +87,10 @@ type SkillsConfig struct {
 	TopK int
 }
 
+type HITLConfig struct {
+	LegacyHandoffTimeout time.Duration
+}
+
 type QueueConfig struct {
 	TaskDeadline               time.Duration
 	QueuedReconcileAfter       time.Duration
@@ -97,6 +103,7 @@ type QueueConfig struct {
 	AgenticContext             AgenticContextConfig
 	Instructions               InstructionsConfig
 	Skills                     SkillsConfig
+	HITL                       HITLConfig
 }
 
 func setQueueDefaults(v *viper.Viper) {
@@ -119,6 +126,7 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.skills.global_dir", DefaultSkillsGlobalDir)
 	v.SetDefault("queue.skills.threshold", DefaultSkillsThreshold)
 	v.SetDefault("queue.skills.top_k", DefaultSkillsTopK)
+	v.SetDefault("queue.hitl.legacy_handoff_timeout", DefaultLegacyHandoffTimeout.String())
 }
 
 func loadQueueConfig(v *viper.Viper) QueueConfig {
@@ -147,6 +155,9 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 			GlobalDir:  v.GetString("queue.skills.global_dir"),
 			Threshold:  v.GetFloat64("queue.skills.threshold"),
 			TopK:       v.GetInt("queue.skills.top_k"),
+		},
+		HITL: HITLConfig{
+			LegacyHandoffTimeout: v.GetDuration("queue.hitl.legacy_handoff_timeout"),
 		},
 	}
 }

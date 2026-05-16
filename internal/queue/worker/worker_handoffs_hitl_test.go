@@ -136,6 +136,34 @@ func TestCreateReviewHandoff_CreatesSubtask(t *testing.T) {
 	}
 }
 
+func TestCreateReviewHandoff_RefreshesTaskUpdatedAt(t *testing.T) {
+	t.Parallel()
+	store := &reviewRefreshedMockStore{reviewMockStore: reviewMockStore{FakeKanbanStore: testutil.NewFakeStore()}}
+	w := NewWorker(store, nil, nil, nil, nil, WorkerOptions{})
+
+	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "review-refresh",
+		Tasks:       []models.DraftTask{{Title: "task-review-refresh", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	store.freshUpdatedAt = parent.UpdatedAt.Add(time.Hour)
+
+	staleTask := parent
+	staleTask.UpdatedAt = parent.UpdatedAt.Add(-time.Hour)
+
+	w.createReviewHandoff(context.Background(), staleTask, "draft output")
+
+	if !store.blockCalled {
+		t.Fatal("expected BlockTaskWithSubtasks to be called")
+	}
+	if !store.blockAt.Equal(store.freshUpdatedAt) {
+		t.Fatalf("BlockTaskWithSubtasks updatedAt = %v, want refreshed %v", store.blockAt, store.freshUpdatedAt)
+	}
+}
+
 func TestCreateReviewHandoff_StoreError(t *testing.T) {
 	t.Parallel()
 	store := &reviewMockStore{FakeKanbanStore: testutil.NewFakeStore(), err: errMockBlock}
@@ -187,6 +215,20 @@ type reviewMockStore struct {
 
 func (s *reviewMockStore) AddComment(ctx context.Context, c models.Comment) error {
 	return s.FakeKanbanStore.AddComment(ctx, c)
+}
+
+type reviewRefreshedMockStore struct {
+	reviewMockStore
+	freshUpdatedAt time.Time
+}
+
+func (s *reviewRefreshedMockStore) GetTask(ctx context.Context, id string) (*models.Task, error) {
+	task, err := s.FakeKanbanStore.GetTask(ctx, id)
+	if err != nil || task == nil {
+		return task, err
+	}
+	task.UpdatedAt = s.freshUpdatedAt
+	return task, nil
 }
 
 func (s *reviewMockStore) BlockTaskWithSubtasks(_ context.Context, taskID string, at time.Time, subtasks []models.DraftTask) (*models.Task, []models.Task, error) {

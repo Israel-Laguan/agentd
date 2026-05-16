@@ -81,7 +81,7 @@ func (s *FakeKanbanStore) hitlExpiryLocked(taskID string) (time.Time, bool) {
 		if c.TaskID != taskID {
 			continue
 		}
-		const prefix = "agentd:hitl:expires-at:"
+		prefix := models.HITLExpiresAtCommentPrefix
 		if len(c.Body) < len(prefix) || c.Body[:len(prefix)] != prefix {
 			continue
 		}

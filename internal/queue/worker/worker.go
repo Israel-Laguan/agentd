@@ -27,34 +27,35 @@ var agenticProviders = []spec.Provider{
 }
 
 type Worker struct {
-	store               models.KanbanStore
-	gateway             gateway.AIGateway
-	sandbox             sandbox.Executor
-	breaker             *safety.CircuitBreaker
-	sink                models.EventSink
-	canceller           *CancelRegistry
-	tuner               *planning.ParameterTuner
-	retriever           MemoryRetriever
-	heartbeatInterval   time.Duration
-	sandboxWallTimeout  time.Duration
-	sandboxEnvAllowlist []string
-	sandboxExtraEnv     []string
-	sandboxScrubber     sandbox.Scrubber
-	maxRetries          int
-	maxToolIterations   int
-	truncatorMax        int
-	truncationThreshold int
-	characterBudget     int
-	toolExecutor        *ToolExecutor
-	capabilities        *capabilities.Registry
-	tokenBudget         int
-	budgetTracker       spec.BudgetTracker
-	hooks               *HookChain
-	pluginMounter       PluginMounter
-	contextCfg          config.AgenticContextConfig
-	instructionLoader   *InstructionLoader
-	skillLoader         *SkillLoader
-	skillRouter         *SkillRouter
+	store                models.KanbanStore
+	gateway              gateway.AIGateway
+	sandbox              sandbox.Executor
+	breaker              *safety.CircuitBreaker
+	sink                 models.EventSink
+	canceller            *CancelRegistry
+	tuner                *planning.ParameterTuner
+	retriever            MemoryRetriever
+	heartbeatInterval    time.Duration
+	sandboxWallTimeout   time.Duration
+	sandboxEnvAllowlist  []string
+	sandboxExtraEnv      []string
+	sandboxScrubber      sandbox.Scrubber
+	maxRetries           int
+	maxToolIterations    int
+	truncatorMax         int
+	truncationThreshold  int
+	characterBudget      int
+	toolExecutor         *ToolExecutor
+	capabilities         *capabilities.Registry
+	tokenBudget          int
+	budgetTracker        spec.BudgetTracker
+	hooks                *HookChain
+	pluginMounter        PluginMounter
+	contextCfg           config.AgenticContextConfig
+	instructionLoader    *InstructionLoader
+	skillLoader          *SkillLoader
+	skillRouter          *SkillRouter
+	legacyHandoffTimeout time.Duration
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -72,30 +73,31 @@ type PluginMounter interface {
 }
 
 type WorkerOptions struct {
-	MaxRetries              int
-	MaxToolIterations       int
-	TokenBudget             int
-	AgenticTruncatorMax     int
-	AgenticTruncationThresh int
-	AgenticCharacterBudget  int
-	AgenticContext          config.AgenticContextConfig
-	Canceller               *CancelRegistry
-	Tuner                   *planning.ParameterTuner
-	Retriever               MemoryRetriever
-	HeartbeatInterval       time.Duration
-	SandboxWallTimeout      time.Duration
-	SandboxEnvAllowlist     []string
-	SandboxExtraEnv         []string
-	SandboxScrubPatterns    []string
-	Capabilities                *capabilities.Registry
-	Hooks                       *HookChain
-	PluginMounter               PluginMounter
-	InstructionsProjectFile     string
-	InstructionsUserPrefsPath   string
-	SkillsProjectDir            string
-	SkillsGlobalDir             string
-	SkillsThreshold             float64
-	SkillsTopK                  int
+	MaxRetries                int
+	MaxToolIterations         int
+	TokenBudget               int
+	AgenticTruncatorMax       int
+	AgenticTruncationThresh   int
+	AgenticCharacterBudget    int
+	AgenticContext            config.AgenticContextConfig
+	Canceller                 *CancelRegistry
+	Tuner                     *planning.ParameterTuner
+	Retriever                 MemoryRetriever
+	HeartbeatInterval         time.Duration
+	SandboxWallTimeout        time.Duration
+	SandboxEnvAllowlist       []string
+	SandboxExtraEnv           []string
+	SandboxScrubPatterns      []string
+	Capabilities              *capabilities.Registry
+	Hooks                     *HookChain
+	PluginMounter             PluginMounter
+	InstructionsProjectFile   string
+	InstructionsUserPrefsPath string
+	SkillsProjectDir          string
+	SkillsGlobalDir           string
+	SkillsThreshold           float64
+	SkillsTopK                int
+	LegacyHandoffTimeout      time.Duration
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -125,6 +127,9 @@ func normalizeOpts(opts WorkerOptions) WorkerOptions {
 	}
 	if opts.AgenticCharacterBudget < 0 {
 		opts.AgenticCharacterBudget = config.DefaultAgenticCharacterBudget
+	}
+	if opts.LegacyHandoffTimeout <= 0 {
+		opts.LegacyHandoffTimeout = config.DefaultLegacyHandoffTimeout
 	}
 	return opts
 }
@@ -171,23 +176,24 @@ func NewWorker(
 	w := &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
-		heartbeatInterval:   opts.HeartbeatInterval,
-		sandboxWallTimeout:  opts.SandboxWallTimeout,
-		sandboxEnvAllowlist: append([]string(nil), opts.SandboxEnvAllowlist...),
-		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
-		sandboxScrubber:     scrubber,
-		maxRetries:          opts.MaxRetries,
-		maxToolIterations:   opts.MaxToolIterations,
-		truncatorMax:        opts.AgenticTruncatorMax,
-		truncationThreshold: opts.AgenticTruncationThresh,
-		characterBudget:     opts.AgenticCharacterBudget,
-		toolExecutor:        NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
-		capabilities:        opts.Capabilities,
-		tokenBudget:         opts.TokenBudget,
-		budgetTracker:       budgetTracker,
-		hooks:               hooks,
-		pluginMounter:       opts.PluginMounter,
-		contextCfg:          opts.AgenticContext,
+		heartbeatInterval:    opts.HeartbeatInterval,
+		sandboxWallTimeout:   opts.SandboxWallTimeout,
+		sandboxEnvAllowlist:  append([]string(nil), opts.SandboxEnvAllowlist...),
+		sandboxExtraEnv:      append([]string(nil), opts.SandboxExtraEnv...),
+		sandboxScrubber:      scrubber,
+		maxRetries:           opts.MaxRetries,
+		maxToolIterations:    opts.MaxToolIterations,
+		truncatorMax:         opts.AgenticTruncatorMax,
+		truncationThreshold:  opts.AgenticTruncationThresh,
+		characterBudget:      opts.AgenticCharacterBudget,
+		toolExecutor:         NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
+		capabilities:         opts.Capabilities,
+		tokenBudget:          opts.TokenBudget,
+		budgetTracker:        budgetTracker,
+		hooks:                hooks,
+		pluginMounter:        opts.PluginMounter,
+		contextCfg:           opts.AgenticContext,
+		legacyHandoffTimeout: opts.LegacyHandoffTimeout,
 	}
 	w.setupOptionalLoaders(opts)
 	return w
@@ -266,4 +272,3 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	}
 	w.commit(ctx, task, result, runErr)
 }
-

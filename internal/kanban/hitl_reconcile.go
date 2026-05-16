@@ -11,10 +11,7 @@ import (
 	"agentd/internal/models"
 )
 
-const (
-	hitlExpiresAtPrefix     = "agentd:hitl:expires-at:"
-	hitlTimeoutEventPayload = "human-in-the-loop request timed out"
-)
+const hitlTimeoutEventPayload = "human-in-the-loop request timed out"
 
 // ReconcileExpiredBlockedTasks transitions BLOCKED parents past their HITL
 // deadline to FAILED_REQUIRES_HUMAN and fails open human subtasks.
@@ -94,10 +91,10 @@ func selectHITLExpiry(ctx context.Context, tx *immediateTx, taskID string) (time
 			return time.Time{}, false, fmt.Errorf("scan comment event: %w", err)
 		}
 		_, body := splitCommentPayload(payload)
-		if !strings.HasPrefix(body, hitlExpiresAtPrefix) {
+		if !strings.HasPrefix(body, models.HITLExpiresAtCommentPrefix) {
 			continue
 		}
-		raw := strings.TrimPrefix(body, hitlExpiresAtPrefix)
+		raw := strings.TrimPrefix(body, models.HITLExpiresAtCommentPrefix)
 		t, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
 			continue

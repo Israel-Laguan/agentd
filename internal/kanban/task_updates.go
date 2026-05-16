@@ -61,7 +61,10 @@ func finishTaskResultSideEffects(ctx context.Context, tx *immediateTx, id string
 }
 
 func unblockBlockedParentsWhenChildrenResolved(ctx context.Context, tx *immediateTx, childID string, now time.Time) error {
-	_, err := tx.ExecContext(ctx, `
+	resolvedSQL, resolvedArgs := childResolvedConditionSQL("child")
+	args := []any{models.TaskStateReady, formatTime(now), models.TaskStateBlocked, childID}
+	args = append(args, resolvedArgs...)
+	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
 		UPDATE tasks
 		SET state = ?, updated_at = ?
 		WHERE state = ?
@@ -75,10 +78,8 @@ func unblockBlockedParentsWhenChildrenResolved(ctx context.Context, tx *immediat
 		    FROM task_relations tr
 		    JOIN tasks child ON child.id = tr.child_task_id
 		    WHERE tr.parent_task_id = tasks.id
-		      AND child.state NOT IN (?, ?)
-		  )`,
-		models.TaskStateReady, formatTime(now), models.TaskStateBlocked, childID,
-		models.TaskStateCompleted, models.TaskStateFailed)
+		      AND NOT %s
+		  )`, resolvedSQL), args...)
 	if err != nil {
 		return fmt.Errorf("unblock resolved task parents: %w", err)
 	}

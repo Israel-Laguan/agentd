@@ -8,8 +8,6 @@ import (
 	"agentd/internal/models"
 )
 
-const hitlExpiresAtPrefix = "agentd:hitl:expires-at:"
-
 func seedHITLParent(t *testing.T, store *FakeKanbanStore, ctx context.Context, name string) models.Task {
 	t.Helper()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
@@ -37,7 +35,7 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_FailsParentPastExpiry(t *t
 	if err := store.AddComment(ctx, models.Comment{
 		TaskID: parent.ID,
 		Author: models.CommentAuthorWorkerAgent,
-		Body:   hitlExpiresAtPrefix + expired.UTC().Format(time.RFC3339),
+		Body:   models.HITLExpiresAtCommentPrefix + expired.UTC().Format(time.RFC3339),
 	}); err != nil {
 		t.Fatalf("add expiry comment: %v", err)
 	}
@@ -116,7 +114,7 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_SkipsBlockedWithOnlyTermin
 	if err := store.AddComment(ctx, models.Comment{
 		TaskID: parent.ID,
 		Author: models.CommentAuthorWorkerAgent,
-		Body:   hitlExpiresAtPrefix + expired.UTC().Format(time.RFC3339),
+		Body:   models.HITLExpiresAtCommentPrefix + expired.UTC().Format(time.RFC3339),
 	}); err != nil {
 		t.Fatalf("add expiry comment: %v", err)
 	}
@@ -163,7 +161,7 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_PreservesFailedRequiresHum
 	if err := store.AddComment(ctx, models.Comment{
 		TaskID: parent.ID,
 		Author: models.CommentAuthorWorkerAgent,
-		Body:   hitlExpiresAtPrefix + expired.UTC().Format(time.RFC3339),
+		Body:   models.HITLExpiresAtCommentPrefix + expired.UTC().Format(time.RFC3339),
 	}); err != nil {
 		t.Fatalf("add expiry comment: %v", err)
 	}

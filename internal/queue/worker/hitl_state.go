@@ -12,28 +12,22 @@ import (
 )
 
 const (
-	hitlExpiresAtPrefix             = "agentd:hitl:expires-at:"
-	hitlApprovalUsedPrefix            = "agentd:hitl:approval-used:"
-	hitlApprovalRejectionUsedPrefix   = "agentd:hitl:approval-rejection-used:"
+	hitlApprovalUsedPrefix          = "agentd:hitl:approval-used:"
+	hitlApprovalRejectionUsedPrefix = "agentd:hitl:approval-rejection-used:"
 	hitlDraftReviewCommentPrefix    = "agentd:hitl:draft-review\n"
 	hitlReviewUsedPrefix            = "agentd:hitl:review-used:"
 	hitlReviewRejectionUsedPrefix   = "agentd:hitl:review-rejection-used:"
-
-	LegacyHandoffTimeout = 7 * 24 * time.Hour
-
-	approvalSubtaskTitlePrefix = "Approve tool call: "
-	reviewSubtaskTitlePrefix   = "Review required:"
 )
 
 func approvalSubtaskTitle(toolName string) string {
-	return approvalSubtaskTitlePrefix + toolName
+	return models.HITLSubtaskTitleApproveTool + toolName
 }
 
 func recordHITLExpiry(ctx context.Context, store models.KanbanStore, taskID string, expiresAt time.Time) error {
 	return store.AddComment(ctx, models.Comment{
 		TaskID: taskID,
 		Author: models.CommentAuthorWorkerAgent,
-		Body:   hitlExpiresAtPrefix + expiresAt.UTC().Format(time.RFC3339),
+		Body:   models.HITLExpiresAtCommentPrefix + expiresAt.UTC().Format(time.RFC3339),
 	})
 }
 
@@ -41,10 +35,10 @@ func parseHITLExpiry(comments []models.Comment) (time.Time, bool) {
 	var latest time.Time
 	var found bool
 	for _, c := range comments {
-		if !strings.HasPrefix(c.Body, hitlExpiresAtPrefix) {
+		if !strings.HasPrefix(c.Body, models.HITLExpiresAtCommentPrefix) {
 			continue
 		}
-		raw := strings.TrimPrefix(c.Body, hitlExpiresAtPrefix)
+		raw := strings.TrimPrefix(c.Body, models.HITLExpiresAtCommentPrefix)
 		t, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
 			continue
@@ -131,7 +125,7 @@ func findLatestApprovalSubtask(children []models.Task, toolName string) *models.
 }
 
 func findLatestReviewSubtask(children []models.Task) *models.Task {
-	return findLatestChildByTitlePrefix(children, reviewSubtaskTitlePrefix)
+	return findLatestChildByTitlePrefix(children, models.HITLSubtaskTitleReview)
 }
 
 func isReviewConsumed(comments []models.Comment, subtaskID string) bool {

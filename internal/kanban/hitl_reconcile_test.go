@@ -18,7 +18,7 @@ func TestReconcileExpiredBlockedTasks_FailsParentPastExpiry(t *testing.T) {
 	if err := store.AddComment(ctx, models.Comment{
 		TaskID: parent.ID,
 		Author: models.CommentAuthorWorkerAgent,
-		Body:   hitlExpiresAtPrefix + expired.UTC().Format(time.RFC3339),
+		Body:   models.HITLExpiresAtCommentPrefix + expired.UTC().Format(time.RFC3339),
 	}); err != nil {
 		t.Fatalf("add expiry comment: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestReconcileExpiredBlockedTasks_SkipsBlockedWithOnlyTerminalChildren(t *te
 	if err := store.AddComment(ctx, models.Comment{
 		TaskID: parent.ID,
 		Author: models.CommentAuthorWorkerAgent,
-		Body:   hitlExpiresAtPrefix + expired.UTC().Format(time.RFC3339),
+		Body:   models.HITLExpiresAtCommentPrefix + expired.UTC().Format(time.RFC3339),
 	}); err != nil {
 		t.Fatalf("add expiry comment: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestReconcileExpiredBlockedTasks_PreservesFailedRequiresHumanChild(t *testi
 	if err := store.AddComment(ctx, models.Comment{
 		TaskID: parent.ID,
 		Author: models.CommentAuthorWorkerAgent,
-		Body:   hitlExpiresAtPrefix + expired.UTC().Format(time.RFC3339),
+		Body:   models.HITLExpiresAtCommentPrefix + expired.UTC().Format(time.RFC3339),
 	}); err != nil {
 		t.Fatalf("add expiry comment: %v", err)
 	}

@@ -117,8 +117,29 @@ func TestBlockedParentResumesWhenChildFailsViaUpdateTaskResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get parent: %v", err)
 	}
-	if parentAfter.State != models.TaskStateReady {
-		t.Fatalf("parent state = %s, want READY", parentAfter.State)
+	if parentAfter.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", parentAfter.State)
+	}
+}
+
+func TestBlockedParentStaysBlockedWhenNonHITLChildFails(t *testing.T) {
+	store := newTestStore(t)
+	parent := seedTestTask(t, store, "parent-non-hitl-fail", models.TaskStateRunning)
+	blocked, children, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: "worker breakdown child",
+	}})
+	if err != nil {
+		t.Fatalf("BlockTaskWithSubtasks() error = %v", err)
+	}
+	if _, err := store.UpdateTaskState(context.Background(), children[0].ID, children[0].UpdatedAt, models.TaskStateFailed); err != nil {
+		t.Fatalf("fail child: %v", err)
+	}
+	parentAfter, err := store.GetTask(context.Background(), blocked.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if parentAfter.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", parentAfter.State)
 	}
 }
 
@@ -159,8 +180,8 @@ func TestBlockedParentResumesWhenChildrenMixSuccessAndFailureViaUpdateTaskResult
 	if err != nil {
 		t.Fatalf("get parent after all children: %v", err)
 	}
-	if parentAfterAll.State != models.TaskStateReady {
-		t.Fatalf("parent state after all children = %s, want READY", parentAfterAll.State)
+	if parentAfterAll.State != models.TaskStateBlocked {
+		t.Fatalf("parent state after all children = %s, want BLOCKED", parentAfterAll.State)
 	}
 }
 
