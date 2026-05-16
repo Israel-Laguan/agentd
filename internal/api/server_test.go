@@ -235,6 +235,14 @@ func (s *apiStore) ReconcileStaleTasks(context.Context, []int, time.Duration) ([
 func (s *apiStore) BlockTaskWithSubtasks(context.Context, string, time.Time, []models.DraftTask) (*models.Task, []models.Task, error) {
 	return &s.task, nil, nil
 }
+
+func (s *apiStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *apiStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *apiStore) AppendTasksToProject(context.Context, string, string, []models.DraftTask) ([]models.Task, error) {
 	return nil, nil
 }

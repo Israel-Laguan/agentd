@@ -85,6 +85,20 @@ agentic:
   tool_rate_limits:
     bash: 50
     default: 100
+  # Approval gates for high-stakes tool calls.
+  # Tools listed here require explicit human approval before execution.
+  # The agent pauses and sends a structured approval request via a HUMAN subtask.
+  approval_gates:
+    enabled: false
+    tools: []                    # e.g., ["deploy", "write_config", "run_migration"]
+    timeout: "30m"               # max wait for human decision before timing out
+
+  # Review loop configuration.
+  # When enabled on an agent profile, the agent sends its final output
+  # for human review before marking the task complete.
+  review:
+    enabled: false               # default; override per-profile via AgentProfile.RequireReview
+
   # Skill-based contextual knowledge injection.
   # Skills are markdown documents loaded from the workspace or global directory
   # and injected into the system prompt when they match the current task.

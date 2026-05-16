@@ -14,23 +14,25 @@ import (
 // FakeKanbanStore is an in-memory models.KanbanStore for cross-package tests
 // that need a board without importing internal/kanban.
 type FakeKanbanStore struct {
-	mu       sync.Mutex
-	projects map[string]models.Project
-	tasks    map[string]models.Task
-	events   []models.Event
-	comments []models.Comment
-	memories []models.Memory
-	profiles map[string]models.AgentProfile
-	settings map[string]string
-	nextSeq  int
+	mu           sync.Mutex
+	projects     map[string]models.Project
+	tasks        map[string]models.Task
+	childParents map[string][]string
+	events       []models.Event
+	comments     []models.Comment
+	memories     []models.Memory
+	profiles     map[string]models.AgentProfile
+	settings     map[string]string
+	nextSeq      int
 }
 
 var _ models.KanbanStore = (*FakeKanbanStore)(nil)
 
 func NewFakeStore() *FakeKanbanStore {
 	return &FakeKanbanStore{
-		projects: make(map[string]models.Project),
-		tasks:    make(map[string]models.Task),
+		projects:     make(map[string]models.Project),
+		tasks:        make(map[string]models.Task),
+		childParents: make(map[string][]string),
 		profiles: map[string]models.AgentProfile{
 			"default": {ID: "default", Temperature: 0.2, SystemPrompt: sql.NullString{String: "Return JSON.", Valid: true}},
 		},

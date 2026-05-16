@@ -213,6 +213,7 @@ func (w *Worker) loadContext(
 
 func (w *Worker) command(ctx context.Context, task models.Task, profile models.AgentProfile) (workerResponse, error) {
 	messages := w.seedMessages(ctx, task, profile)
+	messages = w.prependReviewRejectionFeedback(ctx, task, messages)
 	req := gateway.AIRequest{
 		Messages:    messages,
 		Temperature: profile.Temperature,
@@ -261,11 +262,7 @@ func (w *Worker) isPermissionFailure(result sandbox.Result, err error) bool {
 }
 
 func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {
-	result := sandbox.Result{
-		Success: true,
-		Stdout:  content,
-	}
-	w.commit(ctx, task, result, nil)
+	w.commitTextWithProfile(ctx, task, content, nil)
 }
 
 func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) {

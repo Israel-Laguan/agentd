@@ -27,7 +27,16 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	taskHooks, taskCaps := w.mountScopedPlugins(project, profile)
 
+	if len(profile.GatedTools) > 0 {
+		if taskHooks == nil {
+			taskHooks = NewHookChain()
+		}
+		handler := NewBlockingApprovalHandler(w.store)
+		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
+	}
+
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
+	messages = w.prependReviewRejectionFeedback(ctx, task, messages)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
@@ -101,9 +110,9 @@ func (w *Worker) handleAgenticToolCalls(
 	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
 	cm *ContextManager,
-) {
+) bool {
 	for _, call := range resp.ToolCalls {
-		result := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
+		result, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, task.UpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
 		if detected := cm.CheckToolResult(result); len(detected) > 0 {
 			slog.Info("auto-detected context corrections",
 				"task_id", task.ID,
@@ -115,7 +124,11 @@ func (w *Worker) handleAgenticToolCalls(
 			ToolCallID: call.ID,
 			Content:    result,
 		})
+		if suspended {
+			return true
+		}
 	}
+	return false
 }
 
 func (w *Worker) processAgenticIteration(
@@ -167,11 +180,13 @@ func (w *Worker) processAgenticIteration(
 		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
 	})
 	if len(resp.ToolCalls) == 0 {
-		w.commitText(ctx, task, resp.Content)
+		w.commitTextWithProfile(ctx, task, resp.Content, &profile)
 		return false, nil
 	}
 	iterationGuard.AfterIteration(true)
-	w.handleAgenticToolCalls(ctx, task, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps, cm)
+	if w.handleAgenticToolCalls(ctx, task, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps, cm) {
+		return false, nil
+	}
 	return true, nil
 }
 

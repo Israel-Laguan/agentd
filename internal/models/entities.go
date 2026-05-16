@@ -100,6 +100,12 @@ type AgentProfile struct {
 	// DryRun enables simulation mode. When true, tool calls return
 	// synthesized results without executing the real handler.
 	DryRun bool
+	// RequireReview when true sends the task result for human review
+	// before marking the task complete.
+	RequireReview bool
+	// GatedTools lists tool names that require human approval before
+	// execution (e.g., "deploy", "write_config", "run_migration").
+	GatedTools []string
 	// Plugins lists plugin names activated for sessions using this
 	// profile (session-scoped activation).
 	Plugins   []string
