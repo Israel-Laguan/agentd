@@ -35,3 +35,15 @@ func IsHITLSubtaskTitle(title string) bool {
 	}
 	return false
 }
+
+// ChildResolvedForParentUnblock mirrors kanban childResolvedConditionSQL: a child
+// is resolved for parent-unblock when COMPLETED, or FAILED on a HITL subtask title.
+func ChildResolvedForParentUnblock(state TaskState, title string) bool {
+	if state == TaskStateCompleted {
+		return true
+	}
+	if state == TaskStateFailed {
+		return IsHITLSubtaskTitle(title)
+	}
+	return false
+}

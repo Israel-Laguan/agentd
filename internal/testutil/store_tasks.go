@@ -120,7 +120,7 @@ func (s *FakeKanbanStore) UpdateTaskResult(_ context.Context, id string, _ time.
 	}
 	t.UpdatedAt = now()
 	s.tasks[id] = t
-	// Mirrors finishTaskResultSideEffects: unblock parents on any terminal result (COMPLETED or FAILED).
+	// Mirrors finishTaskResultSideEffects: try parent unblock (HITL-aware child resolution).
 	s.unblockBlockedParentsLocked(id)
 	return &t, nil
 }
@@ -147,7 +147,7 @@ func (s *FakeKanbanStore) unblockBlockedParentsLocked(childID string) {
 			if !ok {
 				continue
 			}
-			if child.State != models.TaskStateCompleted && child.State != models.TaskStateFailed {
+			if !models.ChildResolvedForParentUnblock(child.State, child.Title) {
 				allResolved = false
 				break
 			}
