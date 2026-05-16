@@ -61,5 +61,21 @@ export const mockBoard: { tasks: Task[] } = {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     },
+    {
+      id: "t5",
+      projectId: "p1",
+      title: "Retry exhausted worker task",
+      description: "Evicted after max retries; needs operator review",
+      status: TaskStatus.FAILED_REQUIRES_HUMAN,
+      dependsOn: ["t4"],
+      logs: [
+        {
+          message: "poison pill: max retries exceeded",
+          timestamp: Date.now(),
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    },
   ],
 };
