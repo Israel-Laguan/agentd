@@ -20,7 +20,7 @@ const (
 	MessageRoleSystem MessageRole = "system"
 )
 
-// ValidRole reports whether r is a recognized message role.
+// Valid reports whether r is a recognized message role.
 func (r MessageRole) Valid() bool {
 	switch r {
 	case MessageRoleUser, MessageRoleSystem:
@@ -73,8 +73,9 @@ type ChannelGate struct {
 	rateLimit      int
 	rateWindow     time.Duration
 
-	mu       sync.Mutex
-	sessions map[string]*sessionWindow
+	mu        sync.Mutex
+	sessions  map[string]*sessionWindow
+	lastSweep time.Time
 }
 
 type sessionWindow struct {
@@ -83,10 +84,22 @@ type sessionWindow struct {
 
 // NewChannelGate creates a ChannelGate from the loaded configuration.
 func NewChannelGate(cfg config.ChannelConfig) *ChannelGate {
+	maxMessageSize := cfg.MaxMessageSize
+	if maxMessageSize < 0 {
+		maxMessageSize = 0
+	}
+	rateLimit := cfg.RateLimit
+	if rateLimit < 0 {
+		rateLimit = 0
+	}
+	rateWindow := cfg.RateWindow
+	if rateLimit > 0 && rateWindow <= 0 {
+		rateWindow = config.DefaultChannelRateWindow
+	}
 	return &ChannelGate{
-		maxMessageSize: cfg.MaxMessageSize,
-		rateLimit:      cfg.RateLimit,
-		rateWindow:     time.Duration(cfg.RateWindow) * time.Second,
+		maxMessageSize: maxMessageSize,
+		rateLimit:      rateLimit,
+		rateWindow:     time.Duration(rateWindow) * time.Second,
 		sessions:       make(map[string]*sessionWindow),
 	}
 }
@@ -144,6 +157,16 @@ func (g *ChannelGate) checkRate(sessionID string) error {
 	now := time.Now()
 	cutoff := now.Add(-g.rateWindow)
 
+	if g.lastSweep.IsZero() || now.Sub(g.lastSweep) >= g.rateWindow {
+		for sid, win := range g.sessions {
+			win.timestamps = pruneOld(win.timestamps, cutoff)
+			if len(win.timestamps) == 0 {
+				delete(g.sessions, sid)
+			}
+		}
+		g.lastSweep = now
+	}
+
 	sw, ok := g.sessions[sessionID]
 	if !ok {
 		sw = &sessionWindow{}
@@ -172,11 +195,15 @@ func pruneOld(ts []time.Time, cutoff time.Time) []time.Time {
 // TaskToInbound converts a claimed Task into the canonical InboundMessage
 // so the channel gate can validate it before worker handoff.
 func TaskToInbound(t models.Task) InboundMessage {
+	content := strings.TrimSpace(t.Description)
+	if content == "" {
+		content = strings.TrimSpace(t.Title)
+	}
 	return InboundMessage{
 		SessionID:  t.ProjectID,
 		TurnID:     t.ID,
 		Role:       MessageRoleSystem,
-		Content:    t.Description,
+		Content:    content,
 		ReceivedAt: t.UpdatedAt,
 	}
 }

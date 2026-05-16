@@ -2,6 +2,7 @@ package queue
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -181,6 +182,71 @@ func TestMessageRole_Valid(t *testing.T) {
 		if got := tt.role.Valid(); got != tt.want {
 			t.Errorf("MessageRole(%q).Valid() = %v, want %v", tt.role, got, tt.want)
 		}
+	}
+}
+
+func TestNewChannelGate_NormalizesRateWindow(t *testing.T) {
+	g := NewChannelGate(config.ChannelConfig{
+		RateLimit:  1,
+		RateWindow: 0,
+	})
+	want := time.Duration(config.DefaultChannelRateWindow) * time.Second
+	if g.rateWindow != want {
+		t.Fatalf("rateWindow = %v, want %v", g.rateWindow, want)
+	}
+}
+
+func sessionCount(g *ChannelGate) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return len(g.sessions)
+}
+
+func TestCheckRate_EvictsStaleSessions(t *testing.T) {
+	g := NewChannelGate(config.ChannelConfig{
+		MaxMessageSize: 1024,
+		RateLimit:      1,
+		RateWindow:     1,
+	})
+	msg := validMsg()
+	for i := range 50 {
+		msg.SessionID = fmt.Sprintf("sess-%d", i)
+		msg.TurnID = fmt.Sprintf("turn-%d", i)
+		if r := g.Admit(msg); r.Disposition != Ack {
+			t.Fatalf("admit %d: %v", i, r.Err)
+		}
+	}
+	if n := sessionCount(g); n != 50 {
+		t.Fatalf("sessions = %d, want 50 before sweep", n)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	msg.SessionID = "sess-fresh"
+	msg.TurnID = "turn-fresh"
+	if r := g.Admit(msg); r.Disposition != Ack {
+		t.Fatalf("post-sleep admit: %v", r.Err)
+	}
+	if n := sessionCount(g); n != 1 {
+		t.Fatalf("sessions = %d, want 1 after sweep", n)
+	}
+}
+
+func TestTaskToInbound_FallsBackToTitle(t *testing.T) {
+	now := time.Now()
+	task := models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-1", UpdatedAt: now},
+		ProjectID:  "proj-1",
+		Title:      "Do X",
+	}
+	msg := TaskToInbound(task)
+	if msg.Content != "Do X" {
+		t.Fatalf("Content = %q, want Do X", msg.Content)
+	}
+	g := NewChannelGate(config.ChannelConfig{MaxMessageSize: 1024})
+	if err := g.Validate(msg); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if r := g.Admit(msg); r.Disposition != Ack {
+		t.Fatalf("admit: %v", r.Err)
 	}
 }
 
