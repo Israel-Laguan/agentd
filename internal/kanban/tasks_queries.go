@@ -132,7 +132,7 @@ func selectGhostTasks(ctx context.Context, q sqlQueryer, alivePIDs []int) ([]mod
 
 func selectOrphanedQueuedTasks(ctx context.Context, q sqlQueryer, staleBefore time.Time) ([]models.Task, error) {
 	query := selectTaskSQL() + `
-		WHERE state = ? AND started_at IS NULL AND updated_at < ?
+		WHERE state = ? AND updated_at < ?
 		ORDER BY created_at`
 	rows, err := q.QueryContext(ctx, query, models.TaskStateQueued, formatTime(staleBefore))
 	if err != nil {

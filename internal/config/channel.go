@@ -24,6 +24,17 @@ type ChannelConfig struct {
 	RateWindow     int
 }
 
+// NormalizedRateWindow returns the effective rate window in seconds.
+// When rate limiting is enabled and the configured window is non-positive,
+// DefaultChannelRateWindow is used (same semantics as ChannelGate).
+func NormalizedRateWindow(c ChannelConfig) int {
+	rateWindow := c.RateWindow
+	if c.RateLimit > 0 && rateWindow <= 0 {
+		rateWindow = DefaultChannelRateWindow
+	}
+	return rateWindow
+}
+
 func setChannelDefaults(v *viper.Viper) {
 	v.SetDefault("channel.max_message_size", DefaultMaxMessageSize)
 	v.SetDefault("channel.rate_limit", DefaultChannelRateLimit)

@@ -40,3 +40,15 @@ func TestChannelConfigOverride(t *testing.T) {
 		t.Fatalf("RateWindow = %d, want 30", cfg.RateWindow)
 	}
 }
+
+func TestNormalizedRateWindow(t *testing.T) {
+	if got := NormalizedRateWindow(ChannelConfig{RateLimit: 0, RateWindow: 0}); got != 0 {
+		t.Fatalf("unlimited limit: got %d, want 0", got)
+	}
+	if got := NormalizedRateWindow(ChannelConfig{RateLimit: 5, RateWindow: 30}); got != 30 {
+		t.Fatalf("positive window: got %d, want 30", got)
+	}
+	if got := NormalizedRateWindow(ChannelConfig{RateLimit: 5, RateWindow: 0}); got != DefaultChannelRateWindow {
+		t.Fatalf("zero window with limit: got %d, want %d", got, DefaultChannelRateWindow)
+	}
+}

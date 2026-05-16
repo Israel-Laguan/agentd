@@ -130,7 +130,7 @@ func buildDreamer(store models.KanbanStore, deps runtimeDeps, cfg config.Config)
 }
 
 func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontdesk.IntakeProcessor, deps runtimeDeps, cfg config.Config, startOpts *startOptions) *queue.Daemon {
-	queuedReconcileAfter := time.Duration(cfg.Channel.RateWindow) * time.Second
+	queuedReconcileAfter := time.Duration(config.NormalizedRateWindow(cfg.Channel)) * time.Second
 	if cfg.Channel.RateLimit <= 0 {
 		queuedReconcileAfter = 0
 	}
