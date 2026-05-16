@@ -97,6 +97,73 @@ func TestBlockedParentResumesAfterHITLChildFailed(t *testing.T) {
 	}
 }
 
+func TestBlockedParentResumesWhenChildFailsViaUpdateTaskResult(t *testing.T) {
+	store := newTestStore(t)
+	parent := seedTestTask(t, store, "parent-result-fail", models.TaskStateRunning)
+	blocked, children, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: "worker child",
+	}})
+	if err != nil {
+		t.Fatalf("BlockTaskWithSubtasks() error = %v", err)
+	}
+	running, err := store.UpdateTaskState(context.Background(), children[0].ID, children[0].UpdatedAt, models.TaskStateRunning)
+	if err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+	if _, err := store.UpdateTaskResult(context.Background(), running.ID, running.UpdatedAt, models.TaskResult{Success: false, Payload: "worker error"}); err != nil {
+		t.Fatalf("fail child via UpdateTaskResult: %v", err)
+	}
+	parentAfter, err := store.GetTask(context.Background(), blocked.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if parentAfter.State != models.TaskStateReady {
+		t.Fatalf("parent state = %s, want READY", parentAfter.State)
+	}
+}
+
+func TestBlockedParentResumesWhenChildrenMixSuccessAndFailureViaUpdateTaskResult(t *testing.T) {
+	store := newTestStore(t)
+	parent := seedTestTask(t, store, "parent-mixed-results", models.TaskStateRunning)
+	blocked, children, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{
+		{Title: "child one"},
+		{Title: "child two"},
+	})
+	if err != nil {
+		t.Fatalf("BlockTaskWithSubtasks() error = %v", err)
+	}
+
+	firstRunning, err := store.UpdateTaskState(context.Background(), children[0].ID, children[0].UpdatedAt, models.TaskStateRunning)
+	if err != nil {
+		t.Fatalf("start first child: %v", err)
+	}
+	if _, err := store.UpdateTaskResult(context.Background(), firstRunning.ID, firstRunning.UpdatedAt, models.TaskResult{Success: true}); err != nil {
+		t.Fatalf("complete first child: %v", err)
+	}
+	parentAfterOne, err := store.GetTask(context.Background(), blocked.ID)
+	if err != nil {
+		t.Fatalf("get parent after one child: %v", err)
+	}
+	if parentAfterOne.State != models.TaskStateBlocked {
+		t.Fatalf("parent state after one child = %s, want BLOCKED", parentAfterOne.State)
+	}
+
+	secondRunning, err := store.UpdateTaskState(context.Background(), children[1].ID, children[1].UpdatedAt, models.TaskStateRunning)
+	if err != nil {
+		t.Fatalf("start second child: %v", err)
+	}
+	if _, err := store.UpdateTaskResult(context.Background(), secondRunning.ID, secondRunning.UpdatedAt, models.TaskResult{Success: false, Payload: "worker error"}); err != nil {
+		t.Fatalf("fail second child: %v", err)
+	}
+	parentAfterAll, err := store.GetTask(context.Background(), blocked.ID)
+	if err != nil {
+		t.Fatalf("get parent after all children: %v", err)
+	}
+	if parentAfterAll.State != models.TaskStateReady {
+		t.Fatalf("parent state after all children = %s, want READY", parentAfterAll.State)
+	}
+}
+
 func TestBlockedParentStaysBlockedWhileChildOpen(t *testing.T) {
 	store := newTestStore(t)
 	parent := seedTestTask(t, store, "parent-partial", models.TaskStateRunning)
