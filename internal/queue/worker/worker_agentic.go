@@ -12,16 +12,6 @@ import (
 )
 
 func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
-	if profile.RequireReview {
-		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
-			w.emit(ctx, task, "ERROR", err.Error())
-			w.failHard(ctx, task, err)
-			return
-		} else if done {
-			return
-		}
-	}
-
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w.registerCancel(task.ID, cancel)

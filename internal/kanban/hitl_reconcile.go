@@ -56,6 +56,7 @@ func (s *Store) ReconcileExpiredBlockedTasks(ctx context.Context, now time.Time)
 }
 
 func selectBlockedParentsWithOpenChildren(ctx context.Context, tx *immediateTx) ([]models.Task, error) {
+	// Open children include FAILED_REQUIRES_HUMAN; parent timeout cascades over nested HITL.
 	rows, err := tx.QueryContext(ctx, selectTaskSQL()+`
 		WHERE state = ?
 		  AND EXISTS (

@@ -77,7 +77,9 @@ func TestCreatePromptHandoff_RecordsLegacyExpiry(t *testing.T) {
 	}
 	task := tasks[0]
 
+	before := time.Now()
 	w.createPromptHandoff(ctx, task, "interactive prompt detected")
+	after := time.Now()
 
 	comments, err := store.ListComments(ctx, task.ID)
 	if err != nil {
@@ -101,9 +103,84 @@ func TestCreatePromptHandoff_RecordsLegacyExpiry(t *testing.T) {
 	if !found {
 		t.Fatal("expected legacy handoff expiry comment")
 	}
-	wantMin := time.Now().Add(LegacyHandoffTimeout - time.Hour)
-	wantMax := time.Now().Add(LegacyHandoffTimeout + time.Hour)
+	expiry = expiry.UTC().Truncate(time.Second)
+	wantMin := before.Add(LegacyHandoffTimeout).UTC().Truncate(time.Second)
+	wantMax := after.Add(LegacyHandoffTimeout).UTC().Truncate(time.Second)
 	if expiry.Before(wantMin) || expiry.After(wantMax) {
-		t.Fatalf("expiry = %s, want roughly %s", expiry, time.Now().Add(LegacyHandoffTimeout))
+		t.Fatalf("expiry = %s, want in [%s, %s]", expiry, wantMin, wantMax)
+	}
+}
+
+func TestProcess_LegacyRequireReview_FinalizesApprovedReview(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+
+	profile, err := store.GetAgentProfile(ctx, "default")
+	if err != nil {
+		t.Fatalf("get profile: %v", err)
+	}
+	profile.RequireReview = true
+	profile.AgenticMode = false
+	if err := store.UpsertAgentProfile(ctx, *profile); err != nil {
+		t.Fatalf("upsert profile: %v", err)
+	}
+
+	gw := &routingTestGateway{}
+	sb := &routingTestSandbox{}
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "legacy-review-finalize",
+		Tasks:       []models.DraftTask{{Title: "task-review-finalize", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	task := tasks[0]
+
+	w.createReviewHandoff(ctx, task, "approved draft output")
+
+	children, err := store.ListChildTasks(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	var review *models.Task
+	for i := range children {
+		if strings.HasPrefix(children[i].Title, reviewSubtaskTitlePrefix) {
+			review = &children[i]
+			break
+		}
+	}
+	if review == nil {
+		t.Fatal("expected review subtask")
+	}
+	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete review: %v", err)
+	}
+
+	parent, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	queued, err := store.UpdateTaskState(ctx, parent.ID, parent.UpdatedAt, models.TaskStateQueued)
+	if err != nil {
+		t.Fatalf("requeue parent: %v", err)
+	}
+
+	w.Process(ctx, *queued)
+
+	final, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get final parent: %v", err)
+	}
+	if final.State != models.TaskStateCompleted {
+		t.Fatalf("parent state = %s, want COMPLETED", final.State)
+	}
+	if sb.execCount != 0 {
+		t.Fatalf("sandbox executions = %d, want 0 (approved review should not re-run command)", sb.execCount)
+	}
+	if len(gw.requests) != 0 {
+		t.Fatalf("gateway requests = %d, want 0", len(gw.requests))
 	}
 }
