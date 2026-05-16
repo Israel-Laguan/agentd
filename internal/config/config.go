@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"agentd/internal/paths"
+
 	"github.com/spf13/viper"
 )
 
@@ -138,19 +140,15 @@ func hydrateConfig(cfg Config, v *viper.Viper) (Config, error) {
 }
 
 // resolveSkillsGlobalDir normalizes queue.skills.global_dir after viper read.
-// Empty input returns empty. A "~/..." prefix is expanded with os.UserHomeDir
-// (for backward-compatible configs). Absolute paths are returned unchanged.
-// Any other value is joined with homeDir (the default is the "skills" segment).
+// Empty input returns empty. A "~/..." prefix is expanded via paths.ExpandTildePrefix
+// (UserHomeDir, then HOME, then USERPROFILE; unchanged if none resolve).
+// Absolute paths are returned unchanged. Any other value is joined with homeDir.
 func resolveSkillsGlobalDir(homeDir, raw string) string {
 	if raw == "" {
 		return ""
 	}
 	if strings.HasPrefix(raw, "~/") {
-		userHome, err := os.UserHomeDir()
-		if err != nil {
-			return raw
-		}
-		return filepath.Join(userHome, raw[2:])
+		return paths.ExpandTildePrefix(raw)
 	}
 	if filepath.IsAbs(raw) {
 		return raw
