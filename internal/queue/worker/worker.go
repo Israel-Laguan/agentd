@@ -261,7 +261,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		return
 	}
 	if profile.RequireReview && runErr == nil && result.Success {
-		w.createReviewHandoff(ctx, task, resultPayload(result))
+		w.createReviewHandoff(ctx, task, result.Stdout)
 		return
 	}
 	w.commit(ctx, task, result, runErr)

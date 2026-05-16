@@ -8,6 +8,7 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
 
@@ -133,6 +134,138 @@ func TestCreatePromptHandoff_RecordsLegacyExpiry(t *testing.T) {
 	wantMax := after.Add(LegacyHandoffTimeout).UTC().Truncate(time.Second)
 	if expiry.Before(wantMin) || expiry.After(wantMax) {
 		t.Fatalf("expiry = %s, want in [%s, %s]", expiry, wantMin, wantMax)
+	}
+}
+
+type captureResultStore struct {
+	*testutil.FakeKanbanStore
+	lastResult *models.TaskResult
+}
+
+func (s *captureResultStore) UpdateTaskResult(ctx context.Context, id string, expected time.Time, result models.TaskResult) (*models.Task, error) {
+	s.lastResult = &result
+	return s.FakeKanbanStore.UpdateTaskResult(ctx, id, expected, result)
+}
+
+type stdoutReviewSandbox struct {
+	execCount int
+	result    sandbox.Result
+}
+
+func (s *stdoutReviewSandbox) Execute(_ context.Context, _ sandbox.Payload) (sandbox.Result, error) {
+	s.execCount++
+	return s.result, nil
+}
+
+func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing.T) {
+	t.Parallel()
+	store := &captureResultStore{FakeKanbanStore: testutil.NewFakeStore()}
+	ctx := context.Background()
+
+	profile, err := store.GetAgentProfile(ctx, "default")
+	if err != nil {
+		t.Fatalf("get profile: %v", err)
+	}
+	profile.RequireReview = true
+	profile.AgenticMode = false
+	if err := store.UpsertAgentProfile(ctx, *profile); err != nil {
+		t.Fatalf("upsert profile: %v", err)
+	}
+
+	sbResult := sandbox.Result{
+		Success:  true,
+		ExitCode: 0,
+		Stdout:   "clean output\n",
+		Duration: 1500 * time.Millisecond,
+	}
+	sb := &stdoutReviewSandbox{result: sbResult}
+	w := NewWorker(store, &routingTestGateway{}, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "legacy-review-stdout",
+		Tasks:       []models.DraftTask{{Title: "task-review-stdout", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	task := tasks[0]
+	queued, err := store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateQueued)
+	if err != nil {
+		t.Fatalf("queue task: %v", err)
+	}
+
+	w.Process(ctx, *queued)
+
+	blocked, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get blocked parent: %v", err)
+	}
+	if blocked.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED after first Process", blocked.State)
+	}
+	comments, err := store.ListComments(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("list comments: %v", err)
+	}
+	draft, ok := findLatestDraftReview(comments)
+	if !ok {
+		t.Fatal("expected draft review comment")
+	}
+	if strings.Contains(draft, "exit=") {
+		t.Fatalf("draft should be raw stdout, got %q", draft)
+	}
+	if !strings.Contains(draft, "clean output") {
+		t.Fatalf("draft = %q, want clean sandbox stdout", draft)
+	}
+
+	children, err := store.ListChildTasks(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	var review *models.Task
+	for i := range children {
+		if strings.HasPrefix(children[i].Title, reviewSubtaskTitlePrefix) {
+			review = &children[i]
+			break
+		}
+	}
+	if review == nil {
+		t.Fatal("expected review subtask")
+	}
+	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete review: %v", err)
+	}
+
+	parent, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	requeued, err := store.UpdateTaskState(ctx, parent.ID, parent.UpdatedAt, models.TaskStateQueued)
+	if err != nil {
+		t.Fatalf("requeue parent: %v", err)
+	}
+
+	w.Process(ctx, *requeued)
+
+	final, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get final parent: %v", err)
+	}
+	if final.State != models.TaskStateCompleted {
+		t.Fatalf("parent state = %s, want COMPLETED", final.State)
+	}
+	if store.lastResult == nil {
+		t.Fatal("expected committed task result")
+	}
+	wantPayload := resultPayload(sandbox.Result{Success: true, Stdout: sbResult.Stdout})
+	if store.lastResult.Payload != wantPayload {
+		t.Fatalf("committed payload = %q, want %q", store.lastResult.Payload, wantPayload)
+	}
+	if strings.Count(store.lastResult.Payload, "exit=") != 1 {
+		t.Fatalf("committed payload should have a single metadata prefix, got %q", store.lastResult.Payload)
+	}
+	if sb.execCount != 1 {
+		t.Fatalf("sandbox executions = %d, want 1", sb.execCount)
 	}
 }
 
