@@ -12,6 +12,7 @@ import {
 } from "@/lib/types";
 
 import { BoardColumn } from "./board-column";
+import { useMemo } from "react";
 
 interface BoardViewProps {
   tasks: Task[];
@@ -24,6 +25,31 @@ export function BoardView({
   onDragEnd,
   onTaskClick,
 }: BoardViewProps) {
+  
+  const groupedTasks = useMemo(() => {
+  const groups: Record<TaskStatus, Task[]> = {
+    [TaskStatus.PENDING]: [],
+    [TaskStatus.QUEUED]: [],
+    [TaskStatus.RUNNING]: [],
+    [TaskStatus.COMPLETED]: [],
+    [TaskStatus.FAILED]: [],
+    [TaskStatus.BLOCKED]: [],
+    [TaskStatus.IN_CONSIDERATION]: [],
+  };
+
+  for (const task of tasks) {
+    groups[task.status].push(task);
+  }
+
+  // sort each group once
+  Object.keys(groups).forEach((key) => {
+    groups[key as TaskStatus].sort(
+      (a, b) => b.updatedAt - a.updatedAt
+    );
+  });
+
+  return groups;
+}, [tasks]);
   return (
     <motion.div
       key="board"
@@ -71,9 +97,7 @@ export function BoardView({
             <BoardColumn
               key={status}
               status={status}
-              tasks={tasks
-                .filter(t => t.status === status)
-                .sort((a, b) => b.updatedAt - a.updatedAt)}
+              tasks={groupedTasks[status]}
               onTaskClick={onTaskClick}
             />
           ))}

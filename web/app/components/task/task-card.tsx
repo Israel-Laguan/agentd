@@ -71,16 +71,23 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
       onClick={onClick}
     >
       <div className="flex justify-between items-start mb-2 gap-2">
-        <h4 className="text-[13px] font-medium text-text leading-tight group-hover:text-blue transition-colors">{task.title}</h4>
+       <div className="flex items-center gap-2">
         <button
+          type="button"
           ref={setActivatorNodeRef}
           {...listeners}
           {...attributes}
-          className="cursor-grab active:cursor-grabbing text-text-dim hover:text-text transition-colors"
           onClick={(e) => e.stopPropagation()}
+          className="cursor-grab active:cursor-grabbing text-text-dim hover:text-text transition-colors"
         >
-  <GripVertical size={14} />
-</button>
+          <GripVertical size={16} />
+        </button>
+
+        <h4 className="text-[13px] font-medium text-text leading-tight group-hover:text-blue transition-colors">
+          {task.title}
+        </h4>
+      </div>
+
         <div className={cn("shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", statusColors[task.status as TaskStatus])}>
           <StatusIcon size={10} className={task.status === TaskStatus.RUNNING ? "animate-spin" : ""} />
           {task.status}

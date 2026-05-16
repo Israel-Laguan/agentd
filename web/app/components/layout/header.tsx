@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 
-export const Header = () => {
+export const Header = ({ onNewIntake }: { onNewIntake: () => void }) => {
     return (
          <header className="h-12 border-b border-border bg-panel px-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -14,7 +14,11 @@ export const Header = () => {
           
           <div className="flex items-center gap-3">
              <div className="text-[10px] text-text-dim font-mono hidden md:block">~/.agentd/projects/</div>
-             <button className="px-3 py-1 text-[11px] font-bold text-white bg-accent rounded hover:bg-accent-hover transition-all flex items-center gap-1.5 shadow-sm">
+             <button
+              type="button"
+              onClick={onNewIntake}
+              className="px-3 py-1 text-[11px] font-bold text-white bg-accent rounded hover:bg-accent-hover transition-all flex items-center gap-1.5 shadow-sm"
+            >
                 <Plus size={14} /> NEW INTAKE
              </button>
           </div>

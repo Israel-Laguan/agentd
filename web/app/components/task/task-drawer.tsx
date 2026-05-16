@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { CommentPanel } from "../comment/comment-panel";
 
 interface TaskDrawerProps {
-  task: Task;
+  task: Task | null;
   onClose: () => void;
 }
 
@@ -16,7 +16,7 @@ export function TaskDrawer({ task, onClose }: TaskDrawerProps) {
   const [description, setDescription] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
-  const [status, setStatus] = useState<TaskStatus>();
+  const [status, setStatus] = useState<TaskStatus>(task?.status || TaskStatus.PENDING);
   const lastTaskIdRef = useRef<string | null>(null);
 
   // sync when task changes
@@ -108,7 +108,7 @@ if (!task) return null;
 
             {/* STATUS */}
             <div>
-              {/* <label className="text-[10px] text-text-dim pr-2">Status</label> */}
+              <label className="text-[10px] text-text-dim pr-2">Status</label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as TaskStatus)}

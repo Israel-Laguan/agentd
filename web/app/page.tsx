@@ -41,7 +41,15 @@ export default function Page() {
         setWorkforce(workforce);
 
         setLocalTasks(prev =>
-          prev.length === 0 ? board.tasks : prev
+          prev.length === 0 
+            ? board.tasks 
+            : board.tasks.map((serverTask: Task) => {
+                // Preserve local changes that are newer than server data
+                const localTask = prev.find(t => t.id === serverTask.id);
+                return localTask && localTask.updatedAt > serverTask.updatedAt
+                  ? localTask
+                  : serverTask;
+              })
         );
       } catch (e) {
         console.error("Polling failed", e);
@@ -65,28 +73,34 @@ export default function Page() {
   console.log("selectedTask changed:", selectedTask);
 }, [selectedTask]);
   
-  const handleDragEnd = (
-    event: DragEndEvent
-  ) => {
-    const { active, over } = event;
 
-    if (!over) return;
+const handleDragEnd = (event: DragEndEvent) => {
+  const { active, over } = event;
 
-    const taskId = active.id as string;
-    const newStatus = over.id as TaskStatus;
+  if (!over) return;
 
-    setLocalTasks(tasks =>
-      tasks.map(task =>
-        task.id === taskId
-          ? {
-              ...task,
-              status: newStatus,
-              updatedAt: Date.now(),
-            }
-          : task
-      )
-    );
-  };  
+  const taskId = active.id as string;
+
+  const isValidStatus = Object.values(TaskStatus).includes(
+    over.id as TaskStatus
+  );
+
+  if (!isValidStatus) return;
+
+  const newStatus = over.id as TaskStatus;
+
+  setLocalTasks((tasks) =>
+    tasks.map((task) =>
+      task.id === taskId
+        ? {
+            ...task,
+            status: newStatus,
+            updatedAt: Date.now(),
+          }
+        : task
+    )
+  );
+};
 
   return (
     <div className="flex h-screen bg-bg font-sans text-text selection:bg-blue selection:text-bg">
@@ -95,7 +109,7 @@ export default function Page() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        <Header />
+        <Header onNewIntake={() => setSelectedTask(null)} />
 
         <div className="flex-1 overflow-y-auto p-6 md:p-8">
           <AnimatePresence mode="wait">
@@ -105,6 +119,7 @@ export default function Page() {
                 setMessages={setMessages}
                 draftPlan={draftPlan}
                 setDraftPlan={setDraftPlan}
+                setActiveTab={setActiveTab}
               />
             )}
 
@@ -117,7 +132,7 @@ export default function Page() {
             )}
 
             {activeTab === 'logs' && (
-             <LogsView tasks={boardData.tasks} />
+             <LogsView tasks={localTasks} />
             )}
 
             {/* Other tabs placeholder */}

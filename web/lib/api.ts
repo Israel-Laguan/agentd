@@ -72,7 +72,6 @@ export async function addTaskComment(
 ) {
   if (USE_MOCK) {
     return {
-      ...mockTaskComments,
       id: crypto.randomUUID(),
       taskId: id,
       author: {

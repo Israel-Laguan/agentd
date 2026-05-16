@@ -12,17 +12,21 @@ import { DraftPlanView } from "./draft-plan-view";
 import { ChatTyping } from "./chat-typing";
 import { ChatEmptyState } from "./chat-empty-state";
 
+interface ChatViewProps {
+  messages: ChatMessage[];
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  draftPlan: DraftPlan | null;
+  setDraftPlan: React.Dispatch<React.SetStateAction<DraftPlan | null>>;
+  setActiveTab: (tab: string) => void;
+}
+
 export function ChatView({
   messages,
   setMessages,
   draftPlan,
   setDraftPlan,
-}: {
-  messages: ChatMessage[];
-  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
-  draftPlan: DraftPlan | null;
-  setDraftPlan: React.Dispatch<React.SetStateAction<DraftPlan | null>>;
-}) {
+  setActiveTab,
+}: ChatViewProps) {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
@@ -49,24 +53,38 @@ export function ChatView({
 
       if (assistant) setMessages((p) => [...p, assistant]);
       if (data.plan) setDraftPlan(data.plan);
+    } catch (error) {
+        console.error("Failed to send message:", error);
+        setMessages((p) => [
+          ...p,
+          {
+            id: `msg-${Date.now()}`,
+            role: "assistant",
+            content: "Sorry, I encountered an error processing your request. Please try again.",
+          },
+        ]) 
     } finally {
-      setIsTyping(false);
+        setIsTyping(false);
     }
   };
 
   const approvePlan = async () => {
-    await postApprovePlan();
-    setDraftPlan(null);
-
-    setMessages((p) => [
-      ...p,
-      {
-        role: "assistant",
-        content: "The workforce has been deployed. You can track progress on the board.",
-      },
-    ]);
+    try {
+      await postApprovePlan();
+      setDraftPlan(null);
+      setMessages((p) => [
+        ...p,
+        {
+          id: `msg-${Date.now()}`,
+          role: "assistant",
+          content: "The workforce has been deployed. You can track progress on the board.",
+        },
+      ]);
+      setActiveTab("board");
+    } catch (e) {
+      console.error(e);
+    }
   };
-
   return (
     <motion.div
         key="chat"
@@ -82,7 +100,7 @@ export function ChatView({
         )}
 
         {messages.map((m, i) => (
-          <ChatMessageView key={i} message={m} />
+          <ChatMessageView key={m.id} message={m} />
         ))}
 
         {isTyping && <ChatTyping />}
