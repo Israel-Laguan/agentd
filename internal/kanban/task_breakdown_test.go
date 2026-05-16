@@ -76,6 +76,49 @@ func TestBlockedParentResumesAfterAllChildrenComplete(t *testing.T) {
 	}
 }
 
+func TestBlockedParentResumesAfterHITLChildFailed(t *testing.T) {
+	store := newTestStore(t)
+	parent := seedTestTask(t, store, "parent-hitl-fail", models.TaskStateRunning)
+	blocked, children, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: "Approve tool call: deploy", Assignee: models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("BlockTaskWithSubtasks() error = %v", err)
+	}
+	if _, err := store.UpdateTaskState(context.Background(), children[0].ID, children[0].UpdatedAt, models.TaskStateFailed); err != nil {
+		t.Fatalf("fail approval child: %v", err)
+	}
+	parentAfter, err := store.GetTask(context.Background(), blocked.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if parentAfter.State != models.TaskStateReady {
+		t.Fatalf("parent state = %s, want READY", parentAfter.State)
+	}
+}
+
+func TestBlockedParentStaysBlockedWhileChildOpen(t *testing.T) {
+	store := newTestStore(t)
+	parent := seedTestTask(t, store, "parent-partial", models.TaskStateRunning)
+	blocked, children, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{
+		{Title: "child one"},
+		{Title: "child two", Assignee: models.TaskAssigneeHuman},
+	})
+	if err != nil {
+		t.Fatalf("BlockTaskWithSubtasks() error = %v", err)
+	}
+	if _, err := store.UpdateTaskState(context.Background(), children[0].ID, children[0].UpdatedAt, models.TaskStateFailed); err != nil {
+		t.Fatalf("fail first child: %v", err)
+	}
+	parentAfter, err := store.GetTask(context.Background(), blocked.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if parentAfter.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", parentAfter.State)
+	}
+}
+
 func assertRelationCount(t *testing.T, store *Store, parentID string, want int) {
 	t.Helper()
 	var got int

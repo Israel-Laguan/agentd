@@ -50,7 +50,7 @@ func finishTaskResultSideEffects(ctx context.Context, tx *immediateTx, id string
 		if err := unlockReadyChildren(ctx, tx, id, now); err != nil {
 			return err
 		}
-		if err := unblockReadyParents(ctx, tx, id, now); err != nil {
+		if err := unblockBlockedParentsWhenChildrenResolved(ctx, tx, id, now); err != nil {
 			return err
 		}
 	}
@@ -60,7 +60,7 @@ func finishTaskResultSideEffects(ctx context.Context, tx *immediateTx, id string
 	return appendTaskResultEvent(ctx, tx, id, result.Payload, now)
 }
 
-func unblockReadyParents(ctx context.Context, tx *immediateTx, childID string, now time.Time) error {
+func unblockBlockedParentsWhenChildrenResolved(ctx context.Context, tx *immediateTx, childID string, now time.Time) error {
 	_, err := tx.ExecContext(ctx, `
 		UPDATE tasks
 		SET state = ?, updated_at = ?
@@ -75,11 +75,12 @@ func unblockReadyParents(ctx context.Context, tx *immediateTx, childID string, n
 		    FROM task_relations tr
 		    JOIN tasks child ON child.id = tr.child_task_id
 		    WHERE tr.parent_task_id = tasks.id
-		      AND child.state != ?
+		      AND child.state NOT IN (?, ?)
 		  )`,
-		models.TaskStateReady, formatTime(now), models.TaskStateBlocked, childID, models.TaskStateCompleted)
+		models.TaskStateReady, formatTime(now), models.TaskStateBlocked, childID,
+		models.TaskStateCompleted, models.TaskStateFailed)
 	if err != nil {
-		return fmt.Errorf("unblock completed task parents: %w", err)
+		return fmt.Errorf("unblock resolved task parents: %w", err)
 	}
 	return nil
 }

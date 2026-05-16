@@ -100,6 +100,9 @@ func (s *FakeKanbanStore) UpdateTaskState(_ context.Context, id string, _ time.T
 	t.OSProcessID = nil
 	t.UpdatedAt = now()
 	s.tasks[id] = t
+	if next == models.TaskStateCompleted || next == models.TaskStateFailed {
+		s.unblockBlockedParentsLocked(id)
+	}
 	return &t, nil
 }
 
@@ -117,7 +120,45 @@ func (s *FakeKanbanStore) UpdateTaskResult(_ context.Context, id string, _ time.
 	}
 	t.UpdatedAt = now()
 	s.tasks[id] = t
+	s.unblockBlockedParentsLocked(id)
 	return &t, nil
+}
+
+func (s *FakeKanbanStore) unblockBlockedParentsLocked(childID string) {
+	for parentID, childIDs := range s.childParents {
+		found := false
+		for _, cid := range childIDs {
+			if cid == childID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+		parent, ok := s.tasks[parentID]
+		if !ok || parent.State != models.TaskStateBlocked {
+			continue
+		}
+		allResolved := true
+		for _, cid := range childIDs {
+			child, ok := s.tasks[cid]
+			if !ok {
+				continue
+			}
+			if child.State != models.TaskStateCompleted && child.State != models.TaskStateFailed {
+				allResolved = false
+				break
+			}
+		}
+		if !allResolved {
+			continue
+		}
+		parent.State = models.TaskStateReady
+		parent.OSProcessID = nil
+		parent.UpdatedAt = now()
+		s.tasks[parentID] = parent
+	}
 }
 
 func (s *FakeKanbanStore) ReconcileGhostTasks(_ context.Context, alivePIDs []int) ([]models.Task, error) {

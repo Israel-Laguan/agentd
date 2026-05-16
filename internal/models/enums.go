@@ -47,9 +47,10 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 		TaskStateInConsideration:     {},
 	},
 	TaskStateBlocked: {
-		TaskStateReady:           {},
-		TaskStateInConsideration: {},
-		TaskStateFailed:          {},
+		TaskStateReady:               {},
+		TaskStateInConsideration:     {},
+		TaskStateFailed:              {},
+		TaskStateFailedRequiresHuman: {},
 	},
 	TaskStateFailed: {
 		TaskStateReady:               {},

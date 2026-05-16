@@ -18,6 +18,9 @@ func TestTaskStateValidAndTransitions(t *testing.T) {
 	if TaskState("INVALID").CanTransitionTo(TaskStateReady) {
 		t.Fatal("INVALID state should not transition to anything")
 	}
+	if !TaskStateBlocked.CanTransitionTo(TaskStateFailedRequiresHuman) {
+		t.Fatal("BLOCKED should transition to FAILED_REQUIRES_HUMAN")
+	}
 }
 
 func TestTaskRelationTypeValidIncludesDependsOn(t *testing.T) {
