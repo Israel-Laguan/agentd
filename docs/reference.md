@@ -129,6 +129,7 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 | `gateway.truncator.policy` | `middle_out` | Default truncation policy for outbound LLM requests. |
 | `gateway.truncator.max_input_chars` | _(configured)_ | Default input character budget for the truncator. |
 | `queue.task_deadline` | `10m` | Wall-clock timeout per dispatched worker task (the Reaper). |
+| `queue.queued_reconcile_after` | `10m` | Minimum age of a QUEUED claim before orphan recovery resets it to READY. Independent of `task_deadline`. Set to `0` to disable. |
 | `queue.poll_max_interval` | `10s` | Adaptive backoff ceiling when no tasks are available. |
 | `sandbox.inactivity_timeout` | `60s` | Max stdout/stderr silence before sandbox timeout triggers. |
 | `sandbox.wall_timeout` | `10m` | Max wall-clock execution time for each sandbox command payload. |

@@ -8,13 +8,16 @@ import (
 	"agentd/internal/models"
 )
 
-func TestNormalizeDaemonOptions_QueuedReconcileDefaultsToTaskDeadline(t *testing.T) {
+func TestNormalizeDaemonOptions_QueuedReconcileIndependentOfTaskDeadline(t *testing.T) {
 	daemon := NewDaemon(nil, nil, nil, nil, nil, DaemonOptions{
-		TaskDeadline: 3 * time.Minute,
+		TaskDeadline: time.Minute,
 		Probe:        StaticPIDProbe{},
 	})
-	if daemon.queuedReconcileAfter != 3*time.Minute {
-		t.Fatalf("queuedReconcileAfter = %s, want 3m", daemon.queuedReconcileAfter)
+	if daemon.queuedReconcileAfter != 0 {
+		t.Fatalf("queuedReconcileAfter = %s, want 0 (unset; not inherited from task deadline)", daemon.queuedReconcileAfter)
+	}
+	if daemon.taskDeadline != time.Minute {
+		t.Fatalf("taskDeadline = %s, want 1m", daemon.taskDeadline)
 	}
 }
 

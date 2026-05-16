@@ -8,6 +8,7 @@ import (
 
 const (
 	DefaultTaskDeadline            = 10 * time.Minute
+	DefaultQueuedReconcileAfter    = 10 * time.Minute
 	DefaultPollMaxInterval         = 10 * time.Second
 	DefaultMaxToolIterations       = 10
 	DefaultTokenBudget             = 0
@@ -86,6 +87,7 @@ type SkillsConfig struct {
 
 type QueueConfig struct {
 	TaskDeadline               time.Duration
+	QueuedReconcileAfter       time.Duration
 	PollMaxInterval            time.Duration
 	MaxToolIterations          int
 	TokenBudget                int
@@ -99,6 +101,7 @@ type QueueConfig struct {
 
 func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.task_deadline", DefaultTaskDeadline.String())
+	v.SetDefault("queue.queued_reconcile_after", DefaultQueuedReconcileAfter.String())
 	v.SetDefault("queue.poll_max_interval", DefaultPollMaxInterval.String())
 	v.SetDefault("queue.max_tool_iterations", DefaultMaxToolIterations)
 	v.SetDefault("queue.token_budget", DefaultTokenBudget)
@@ -121,6 +124,7 @@ func setQueueDefaults(v *viper.Viper) {
 func loadQueueConfig(v *viper.Viper) QueueConfig {
 	return QueueConfig{
 		TaskDeadline:               v.GetDuration("queue.task_deadline"),
+		QueuedReconcileAfter:       v.GetDuration("queue.queued_reconcile_after"),
 		PollMaxInterval:            v.GetDuration("queue.poll_max_interval"),
 		MaxToolIterations:          v.GetInt("queue.max_tool_iterations"),
 		TokenBudget:                v.GetInt("queue.token_budget"),
