@@ -64,6 +64,14 @@ func (d *Daemon) heartbeatReconcileLoop(ctx context.Context) {
 	}
 }
 
+func (d *Daemon) reconcileOrphanedQueued(ctx context.Context) error {
+	if d.queuedReconcileAfter <= 0 {
+		return nil
+	}
+	_, err := d.store.ReconcileOrphanedQueued(ctx, d.queuedReconcileAfter)
+	return err
+}
+
 func (d *Daemon) queuedReconcileLoop(ctx context.Context) {
 	defer d.wg.Done()
 	if d.queuedReconcileAfter <= 0 {
@@ -80,8 +88,7 @@ func (d *Daemon) queuedReconcileLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_, reconcileErr := d.store.ReconcileOrphanedQueued(ctx, d.queuedReconcileAfter)
-			logDaemonError("orphaned queued reconcile failed", reconcileErr)
+			logDaemonError("orphaned queued reconcile failed", d.reconcileOrphanedQueued(ctx))
 		}
 	}
 }

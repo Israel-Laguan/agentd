@@ -103,6 +103,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if err := recovery.BootReconcile(ctx, d.store, d.probe, d.sink); err != nil {
 		return err
 	}
+	logDaemonError("orphaned queued reconcile failed", d.reconcileOrphanedQueued(ctx))
 	d.wg.Add(7)
 	go d.taskLoop(ctx)
 	go d.intakeLoop(ctx)
@@ -147,6 +148,9 @@ func normalizeIntervals(opts *DaemonOptions) {
 	}
 	if opts.TaskDeadline <= 0 {
 		opts.TaskDeadline = 10 * time.Minute
+	}
+	if opts.QueuedReconcileAfter <= 0 {
+		opts.QueuedReconcileAfter = opts.TaskDeadline
 	}
 	if opts.IntakeInterval <= 0 {
 		opts.IntakeInterval = config.DefaultCronSchedule.Intake
