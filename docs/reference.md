@@ -17,7 +17,7 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 
 | Feature | Description | Feature File |
 | --- | --- | --- |
-| User-editable cron | The daemon reads `<home>/agentd.crontab` for background job schedules. Standard 5-field entries and `@every <duration>` sub-minute entries are supported. | [`cron_schedule.feature`](../cmd/agentd/features/cron_schedule.feature) |
+| User-editable cron | The daemon reads `<home>/agentd.crontab` for background job schedules. Recognized jobs include `task-dispatch`, `intake`, `heartbeat`, `disk-watchdog`, `hitl-reconcile` (default `@every 1m`), `memory-curator`, and `dream`. Standard 5-field entries and `@every <duration>` sub-minute entries are supported. | [`cron_schedule.feature`](../cmd/agentd/features/cron_schedule.feature) |
 | Prompt recovery | Timed-out sandbox executions are scanned for interactive prompt patterns. Allowlisted commands get a one-shot non-interactive retry; unrecoverable prompts create a HUMAN task. | [`prompt_recovery.feature`](../internal/queue/features/prompt_recovery.feature) |
 | Permission detection | `sudo` is blocked before execution. Failed commands with permission-like output create a HUMAN child task for the privileged host action. | [`permission_detection.feature`](../internal/queue/features/permission_detection.feature) |
 | Worker self-breakdown | Workers can return `{too_complex: true, subtasks: [...]}`. The parent moves to `BLOCKED`, child tasks are created, and the parent returns to `READY` after all children complete. | [`task_dependencies.feature`](../internal/kanban/features/task_dependencies.feature) |

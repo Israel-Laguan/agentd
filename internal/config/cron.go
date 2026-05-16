@@ -20,12 +20,14 @@ const defaultCronFile = `# agentd.crontab - schedule for agentd background jobs.
 #   intake           process unprocessed HUMAN comments
 #   heartbeat        refresh RUNNING task heartbeats
 #   disk-watchdog    alert on low free disk
+#   hitl-reconcile   fail BLOCKED tasks past HITL deadline
 #   memory-curator   archive logs / ingest memories
 
 @every 3s       task-dispatch
 @every 5s       intake
 @every 30s      heartbeat
 */10 * * * *    disk-watchdog
+@every 1m       hitl-reconcile
 0 * * * *       memory-curator
 `
 
@@ -44,6 +46,7 @@ type CronSchedule struct {
 	Intake        time.Duration
 	Heartbeat     time.Duration
 	DiskWatchdog  CronJob
+	HITLReconcile CronJob
 	MemoryCurator CronJob
 	Dream         CronJob
 }
@@ -54,6 +57,7 @@ var DefaultCronSchedule = CronSchedule{
 	Intake:        5 * time.Second,
 	Heartbeat:     30 * time.Second,
 	DiskWatchdog:  CronJob{Name: "disk-watchdog", Spec: "*/10 * * * *"},
+	HITLReconcile: CronJob{Name: "hitl-reconcile", Spec: "@every 1m"},
 	MemoryCurator: CronJob{Name: "memory-curator", Spec: "0 * * * *"},
 	Dream:         CronJob{Name: "dream", Spec: "0 3 * * *"},
 }
@@ -109,6 +113,8 @@ func WriteDefaultCron(path string) error {
 
 func setDefaultCronSchedules(schedule *CronSchedule) {
 	schedule.DiskWatchdog.Schedule = mustParseCron(DefaultCronSchedule.DiskWatchdog.Spec)
+	schedule.HITLReconcile.Schedule = mustParseCron(DefaultCronSchedule.HITLReconcile.Spec)
+	schedule.HITLReconcile.Every = time.Minute
 	schedule.MemoryCurator.Schedule = mustParseCron(DefaultCronSchedule.MemoryCurator.Spec)
 	schedule.Dream.Schedule = mustParseCron(DefaultCronSchedule.Dream.Spec)
 }
@@ -166,6 +172,9 @@ func applyCronJob(schedule *CronSchedule, job CronJob) error {
 	case "disk-watchdog":
 		warnDuplicateCron(schedule.DiskWatchdog, job)
 		schedule.DiskWatchdog = job
+	case "hitl-reconcile":
+		warnDuplicateCron(schedule.HITLReconcile, job)
+		schedule.HITLReconcile = job
 	case "memory-curator":
 		warnDuplicateCron(schedule.MemoryCurator, job)
 		schedule.MemoryCurator = job

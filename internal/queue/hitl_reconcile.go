@@ -8,16 +8,31 @@ import (
 
 func (d *Daemon) hitlTimeoutLoop(ctx context.Context) {
 	defer d.wg.Done()
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
 	for {
+		wait := d.nextHITLReconcileDelay(time.Now())
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			logDaemonError("hitl timeout reconcile failed", d.reconcileHITLTimeouts(ctx))
 		}
 	}
+}
+
+func (d *Daemon) nextHITLReconcileDelay(now time.Time) time.Duration {
+	if d.hitlReconcileEvery > 0 {
+		return d.hitlReconcileEvery
+	}
+	if d.hitlReconcileSchedule == nil {
+		return time.Minute
+	}
+	next := d.hitlReconcileSchedule.Next(now)
+	if !next.After(now) {
+		return time.Minute
+	}
+	return next.Sub(now)
 }
 
 func (d *Daemon) reconcileHITLTimeouts(ctx context.Context) error {

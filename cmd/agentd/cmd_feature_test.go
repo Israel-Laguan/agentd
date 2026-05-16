@@ -120,7 +120,7 @@ func (s *cliScenario) cronContainsDefaults(context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, entry := range []string{"task-dispatch", "intake", "heartbeat", "disk-watchdog", "memory-curator"} {
+	for _, entry := range []string{"task-dispatch", "intake", "heartbeat", "disk-watchdog", "hitl-reconcile", "memory-curator"} {
 		if !bytes.Contains(content, []byte(entry)) {
 			return fmt.Errorf("crontab missing %q", entry)
 		}

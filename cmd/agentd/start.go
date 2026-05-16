@@ -149,6 +149,8 @@ func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontde
 		HandoffAfter:         cfg.Breaker.HandoffAfter,
 		DiskWatchdogEvery:    cfg.Cron.DiskWatchdog.Every,
 		DiskWatchdogSchedule: cfg.Cron.DiskWatchdog.Schedule,
+		HITLReconcileEvery:   cfg.Cron.HITLReconcile.Every,
+		HITLReconcileSchedule: cfg.Cron.HITLReconcile.Schedule,
 		DiskFreeThreshold:    cfg.Disk.FreeThresholdPercent,
 		DiskCheckPath:        cfg.HomeDir,
 		Librarian:            buildLibrarian(store, deps, cfg),

@@ -108,6 +108,22 @@ func TestCreateReviewHandoff_CreatesSubtask(t *testing.T) {
 		t.Fatalf("subtask description should contain draft output reference")
 	}
 
+	comments, err := store.ListComments(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("list comments: %v", err)
+	}
+	var draftSaved bool
+	for _, c := range comments {
+		if strings.HasPrefix(c.Body, hitlDraftReviewCommentPrefix) &&
+			strings.Contains(c.Body, "Here is my draft output") {
+			draftSaved = true
+			break
+		}
+	}
+	if !draftSaved {
+		t.Fatal("expected draft review comment on parent task")
+	}
+
 	found := false
 	for _, ev := range sink.events {
 		if ev.Type == "REVIEW_HANDOFF" {

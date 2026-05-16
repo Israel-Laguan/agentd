@@ -23,6 +23,9 @@ func TestLoadCronMissingFileReturnsDefaults(t *testing.T) {
 	if got.DiskWatchdog.Schedule == nil {
 		t.Fatal("DiskWatchdog.Schedule is nil")
 	}
+	if got.HITLReconcile.Schedule == nil {
+		t.Fatal("HITLReconcile.Schedule is nil")
+	}
 	if got.MemoryCurator.Schedule == nil {
 		t.Fatal("MemoryCurator.Schedule is nil")
 	}
@@ -39,6 +42,12 @@ func TestLoadCronParsesDefaultFile(t *testing.T) {
 	assertDefaultIntervals(t, got)
 	if got.DiskWatchdog.Spec != "*/10 * * * *" {
 		t.Fatalf("DiskWatchdog.Spec = %q", got.DiskWatchdog.Spec)
+	}
+	if got.HITLReconcile.Spec != "@every 1m" {
+		t.Fatalf("HITLReconcile.Spec = %q", got.HITLReconcile.Spec)
+	}
+	if got.HITLReconcile.Every != time.Minute {
+		t.Fatalf("HITLReconcile.Every = %s, want 1m", got.HITLReconcile.Every)
 	}
 	if got.MemoryCurator.Spec != "0 * * * *" {
 		t.Fatalf("MemoryCurator.Spec = %q", got.MemoryCurator.Spec)

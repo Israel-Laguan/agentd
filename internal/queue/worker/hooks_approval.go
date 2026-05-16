@@ -37,7 +37,10 @@ type ApprovalHandler interface {
 const DefaultApprovalTimeout = 30 * time.Minute
 
 // ApprovalGateHook returns a PreHook that intercepts gated tools and
-// routes them through ApprovalHandler. Three outcomes:
+// routes them through ApprovalHandler. HookContext.ExecCtx must be set
+// (dispatchToolWithHooks does this) so approval I/O respects cancellation.
+//
+// Three outcomes:
 //
 //   - Approved=true: the tool call proceeds (no veto).
 //   - Approved=false with non-empty Reason: veto with formatted rejection;
@@ -151,6 +154,8 @@ func (h *BlockingApprovalHandler) RequestApproval(ctx context.Context, req Appro
 		return ApprovalResponse{}, fmt.Errorf("list task comments: %w", err)
 	}
 
+	// Resolve completed/failed subtasks before expiry: a human decision outranks
+	// the HITL deadline (see TestBlockingApprovalHandler_GrantsCompletedApprovalDespiteExpiredComments).
 	if resp, ok, err := h.resolveExistingApproval(ctx, req, comments); err != nil || ok {
 		return resp, err
 	}

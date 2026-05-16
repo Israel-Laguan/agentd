@@ -154,6 +154,9 @@ channel:
   rate_limit: 0                # max task admissions per task within rate_window (queue path keys session_id to task ID); 0 = unlimited. Dispatch-time validation runs when max_message_size > 0 and/or rate_limit > 0; set both to 0 to disable the channel gate.
   rate_window: 60              # sliding window (seconds) for per-session rate limiting.
 
+# Background job schedules live in <home>/agentd.crontab (not this file).
+# Example: @every 1m hitl-reconcile  — fail BLOCKED tasks past HITL deadline.
+
 # Queue daemon.
 queue:
   task_deadline: "10m"             # wall-clock timeout per worker task (the Reaper)
