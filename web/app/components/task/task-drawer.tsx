@@ -99,7 +99,7 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                   onChange={(e) => setTitle(e.target.value)}
                   onBlur={() => {
                     setIsEditingTitle(false);
-                    handleSave({ title });
+                    handleSave({ title }).catch(() => {});
                   }}
                   autoFocus
                   className="w-full text-sm text-text bg-bg border border-border rounded px-2 py-1"
@@ -133,7 +133,7 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                   onChange={(e) => setDescription(e.target.value)}
                   onBlur={() => {
                     setIsEditingDescription(false);
-                    handleSave({ description });
+                    handleSave({ description }).catch(() => {});
                   }}
                   autoFocus
                   className="w-full text-sm text-text-dim bg-bg border border-border rounded px-2 py-1 min-h-[100px]"
@@ -165,7 +165,7 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                 onChange={(e) => {
                   const s = e.target.value as TaskStatus;
                   setStatus(s);
-                  handleSave({ status: s });
+                  handleSave({ status: s }).catch(() => {});
                 }}
                 className="mt-1 text-sm text-text bg-bg border border-border rounded px-2 py-1"
               >
