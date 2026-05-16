@@ -35,6 +35,8 @@ type Daemon struct {
 	handoffAfter         time.Duration
 	diskWatchdogEvery    time.Duration
 	diskWatchdogSchedule cron.Schedule
+	hitlReconcileEvery   time.Duration
+	hitlReconcileSchedule cron.Schedule
 	diskFreeThreshold    float64
 	diskCheckPath        string
 	diskStat             func(string) (float64, error)
@@ -61,6 +63,8 @@ type DaemonOptions struct {
 	HandoffAfter         time.Duration
 	DiskWatchdogEvery    time.Duration
 	DiskWatchdogSchedule cron.Schedule
+	HITLReconcileEvery   time.Duration
+	HITLReconcileSchedule cron.Schedule
 	DiskFreeThreshold    float64
 	DiskCheckPath        string
 	Probe                safety.PIDProbe
@@ -91,6 +95,7 @@ func NewDaemon(
 		taskDeadline: opts.TaskDeadline, intakeEvery: opts.IntakeInterval,
 		heartbeatInterval: opts.HeartbeatInterval, staleAfter: opts.StaleAfter, handoffAfter: opts.HandoffAfter,
 		diskWatchdogEvery: opts.DiskWatchdogEvery, diskWatchdogSchedule: opts.DiskWatchdogSchedule,
+		hitlReconcileEvery: opts.HITLReconcileEvery, hitlReconcileSchedule: opts.HITLReconcileSchedule,
 		diskFreeThreshold: opts.DiskFreeThreshold, diskCheckPath: opts.DiskCheckPath,
 		diskStat:  safety.DiskFreePercent,
 		librarian: opts.Librarian, dreamer: opts.Dreamer,
@@ -127,6 +132,7 @@ func normalizeDaemonOptions(opts DaemonOptions) DaemonOptions {
 	normalizeWorkerOptions(&opts)
 	normalizeIntervals(&opts)
 	normalizeDiskOptions(&opts)
+	normalizeHITLReconcileOptions(&opts)
 	normalizeMemorySchedules(&opts)
 	if opts.Probe == nil {
 		opts.Probe = safety.GopsutilProbe{}
@@ -176,6 +182,12 @@ func normalizeDiskOptions(opts *DaemonOptions) {
 	}
 	if opts.DiskCheckPath == "" {
 		opts.DiskCheckPath = "."
+	}
+}
+
+func normalizeHITLReconcileOptions(opts *DaemonOptions) {
+	if opts.HITLReconcileSchedule == nil {
+		opts.HITLReconcileSchedule = config.DefaultCronSchedule.HITLReconcile.Schedule
 	}
 }
 

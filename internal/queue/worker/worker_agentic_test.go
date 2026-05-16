@@ -322,6 +322,75 @@ func (s *refreshedTaskStore) BlockTaskWithSubtasks(ctx context.Context, id strin
 	return s.FakeKanbanStore.BlockTaskWithSubtasks(ctx, id, expectedUpdatedAt, subtasks)
 }
 
+func TestHandleAgenticToolCalls_ResumesAfterApproval(t *testing.T) {
+	t.Parallel()
+	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}
+	ctx := context.Background()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+
+	handler := NewBlockingApprovalHandler(store)
+	taskHooks := NewHookChain()
+	taskHooks.RegisterPre(ApprovalGateHook([]string{"deploy"}, handler))
+
+	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	w := &Worker{store: store}
+	resp := gateway.AIResponse{
+		ToolCalls: []gateway.ToolCall{{
+			ID:       "call-1",
+			Function: gateway.ToolCallFunction{Name: "deploy", Arguments: `{}`},
+		}},
+	}
+	var messages []gateway.PromptMessage
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", parent.ID)
+
+	if suspended := w.handleAgenticToolCalls(ctx, parent, resp, &messages, nil, ex, taskHooks, nil, cm); !suspended {
+		t.Fatal("expected approval gate to suspend on first tool call")
+	}
+	if !store.blockCalled {
+		t.Fatal("expected BlockTaskWithSubtasks on first gated tool call")
+	}
+
+	children, err := store.ListChildTasks(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	if len(children) != 1 {
+		t.Fatalf("approval subtasks = %d, want 1", len(children))
+	}
+	if _, err := store.UpdateTaskState(ctx, children[0].ID, children[0].UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete approval subtask: %v", err)
+	}
+
+	parentAfter, err := store.GetTask(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("get parent after approval: %v", err)
+	}
+	if parentAfter.State != models.TaskStateReady {
+		t.Fatalf("parent state = %s, want READY after approval", parentAfter.State)
+	}
+
+	store.blockCalled = false
+	resumed := *parentAfter
+	if suspended := w.handleAgenticToolCalls(ctx, resumed, resp, &messages, nil, ex, taskHooks, nil, cm); suspended {
+		t.Fatal("expected tool to proceed after human approval, not suspend again")
+	}
+	if store.blockCalled {
+		t.Fatal("expected no second BlockTaskWithSubtasks after completed approval")
+	}
+	if len(messages) == 0 {
+		t.Fatal("expected tool result appended to messages")
+	}
+	if strings.Contains(messages[len(messages)-1].Content, "paused pending human approval") {
+		t.Fatalf("tool result should not re-block: %q", messages[len(messages)-1].Content)
+	}
+}
+
 func TestHandleAgenticToolCalls_RefreshesTaskUpdatedAt(t *testing.T) {
 	t.Parallel()
 	store := &refreshedTaskStore{FakeKanbanStore: testutil.NewFakeStore()}

@@ -133,3 +133,57 @@ func TestReconcileExpiredBlockedTasks_SkipsBlockedWithOnlyTerminalChildren(t *te
 		t.Fatalf("parent state = %s, want READY", after.State)
 	}
 }
+
+func TestReconcileExpiredBlockedTasks_PreservesFailedRequiresHumanChild(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	parent := seedTestTask(t, store, "hitl-nested-frh", models.TaskStateRunning)
+
+	expired := time.Now().Add(-time.Minute)
+	if err := store.AddComment(ctx, models.Comment{
+		TaskID: parent.ID,
+		Author: models.CommentAuthorWorkerAgent,
+		Body:   hitlExpiresAtPrefix + expired.UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("add expiry comment: %v", err)
+	}
+
+	blocked, children, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title:       "Approve tool call: deploy",
+		Description: "review",
+		Assignee:    models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	child, err := store.GetTask(ctx, children[0].ID)
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if _, err := store.UpdateTaskState(ctx, child.ID, child.UpdatedAt, models.TaskStateFailedRequiresHuman); err != nil {
+		t.Fatalf("set child FAILED_REQUIRES_HUMAN: %v", err)
+	}
+
+	failed, err := store.ReconcileExpiredBlockedTasks(ctx, time.Now())
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if len(failed) != 1 {
+		t.Fatalf("expired tasks = %d, want 1", len(failed))
+	}
+	afterParent, err := store.GetTask(ctx, blocked.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if afterParent.State != models.TaskStateFailedRequiresHuman {
+		t.Fatalf("parent state = %s, want FAILED_REQUIRES_HUMAN", afterParent.State)
+	}
+	afterChild, err := store.GetTask(ctx, child.ID)
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if afterChild.State != models.TaskStateFailedRequiresHuman {
+		t.Fatalf("child state = %s, want FAILED_REQUIRES_HUMAN (not downgraded)", afterChild.State)
+	}
+}

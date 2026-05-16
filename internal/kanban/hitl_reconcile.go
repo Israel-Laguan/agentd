@@ -56,7 +56,8 @@ func (s *Store) ReconcileExpiredBlockedTasks(ctx context.Context, now time.Time)
 }
 
 func selectBlockedParentsWithOpenChildren(ctx context.Context, tx *immediateTx) ([]models.Task, error) {
-	// Open children include FAILED_REQUIRES_HUMAN; parent timeout cascades over nested HITL.
+	// Open children include FAILED_REQUIRES_HUMAN so a parent past deadline can still
+	// reconcile; failHITLBlockedTask leaves those children unchanged (see child UPDATE).
 	rows, err := tx.QueryContext(ctx, selectTaskSQL()+`
 		WHERE state = ?
 		  AND EXISTS (
@@ -127,9 +128,9 @@ func failHITLBlockedTask(ctx context.Context, tx *immediateTx, parentID string, 
 		  SELECT child_task_id
 		  FROM task_relations
 		  WHERE parent_task_id = ?
-		) AND state NOT IN (?, ?)`,
+		) AND state NOT IN (?, ?, ?)`,
 		models.TaskStateFailed, formatTime(now), parentID,
-		models.TaskStateCompleted, models.TaskStateFailed); err != nil {
+		models.TaskStateCompleted, models.TaskStateFailed, models.TaskStateFailedRequiresHuman); err != nil {
 		return fmt.Errorf("fail open hitl children: %w", err)
 	}
 	parent, err := selectTaskByID(ctx, tx, parentID)

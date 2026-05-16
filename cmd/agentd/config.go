@@ -67,6 +67,9 @@ func writeCronConfig(out interface {
 	if err := writeFormat(out, "cron.disk-watchdog=%s\n", cfg.Cron.DiskWatchdog.Spec); err != nil {
 		return err
 	}
+	if err := writeFormat(out, "cron.hitl-reconcile=%s\n", cfg.Cron.HITLReconcile.Spec); err != nil {
+		return err
+	}
 	if err := writeFormat(out, "cron.memory-curator=%s\n", cfg.Cron.MemoryCurator.Spec); err != nil {
 		return err
 	}
