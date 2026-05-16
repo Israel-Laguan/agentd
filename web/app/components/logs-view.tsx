@@ -1,14 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { cn } from '@/lib/utils';
-import { Task, Project } from '@/lib/types';
+import { Task } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-interface LogsPanelProps {
-  boardData: { projects: Project[], tasks: Task[] };
+interface LogsViewProps {
+  tasks: Task[];
 }
 
-export function LogsPanel({ boardData }: LogsPanelProps) {
+export function LogsView({ tasks }: LogsViewProps) {
   return (
     <motion.div
       key="logs"
@@ -17,13 +17,15 @@ export function LogsPanel({ boardData }: LogsPanelProps) {
       className="h-full flex flex-col font-mono"
     >
       <div className="flex-1 bg-bg border border-border rounded-xl p-6 overflow-y-auto text-[11px] leading-relaxed shadow-inner">
+
+        {/* HEADER (unchanged) */}
         <div className="mb-4 text-text-dim/40 italic flex justify-between items-center border-b border-border pb-2">
           <span>agentd Kernel View - Task Execution Stream</span>
           <span className="animate-pulse">● System Live</span>
         </div>
-        {boardData.tasks
-          .flatMap(t => t.logs)
-          .sort((a, b) => a.timestamp - b.timestamp)
+
+        {tasks
+          .flatMap((t) => t.logs)
           .slice(-150)
           .map((log, i) => (
             <div
@@ -37,16 +39,20 @@ export function LogsPanel({ boardData }: LogsPanelProps) {
               <span
                 className={cn(
                   "flex-1",
-                  log.message.startsWith('[SYSTEM]') ? "text-blue" :
-                  log.message.startsWith('[AGENT]') ? "text-text" :
-                  log.message.startsWith('[ERROR]') ? "text-error font-bold" :
-                  "text-text-dim"
+                  log.message.startsWith("[SYSTEM]")
+                    ? "text-blue"
+                    : log.message.startsWith("[AGENT]")
+                    ? "text-text"
+                    : log.message.startsWith("[ERROR]")
+                    ? "text-error font-bold"
+                    : "text-text-dim"
                 )}
               >
                 {log.message}
               </span>
             </div>
           ))}
+
         <div className="h-4" />
       </div>
     </motion.div>
