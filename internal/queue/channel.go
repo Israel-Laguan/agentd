@@ -47,11 +47,11 @@ type InboundMessage struct {
 type Disposition int
 
 const (
-	// Ack means the message was accepted and forwarded to the loop.
-	Ack Disposition = iota
 	// Nack means the message was rejected; it may be retried or routed
-	// to a dead-letter path.
-	Nack
+	// to a dead-letter path. Zero value is Nack so unset Disposition fails closed.
+	Nack Disposition = iota
+	// Ack means the message was accepted and forwarded to the loop.
+	Ack
 )
 
 // DispatchResult carries the outcome of a single message admission.
@@ -94,10 +94,7 @@ func NewChannelGate(cfg config.ChannelConfig) *ChannelGate {
 	if rateLimit < 0 {
 		rateLimit = 0
 	}
-	rateWindow := cfg.RateWindow
-	if rateLimit > 0 && rateWindow <= 0 {
-		rateWindow = config.DefaultChannelRateWindow
-	}
+	rateWindow := config.NormalizedRateWindow(cfg)
 	return &ChannelGate{
 		maxMessageSize: maxMessageSize,
 		rateLimit:      rateLimit,
@@ -140,7 +137,7 @@ func (g *ChannelGate) Admit(msg InboundMessage) DispatchResult {
 			Err:         fmt.Errorf("%w: %w", models.ErrDispatchNack, err),
 		}
 	}
-	if err := g.checkRate(msg.SessionID); err != nil {
+	if err := g.checkRate(strings.TrimSpace(msg.SessionID)); err != nil {
 		return DispatchResult{
 			Disposition: Nack,
 			Err:         fmt.Errorf("%w: %w", models.ErrDispatchNack, err),

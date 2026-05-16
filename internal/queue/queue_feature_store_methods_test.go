@@ -123,7 +123,7 @@ func (s *queueStore) ReconcileOrphanedQueued(_ context.Context, minAge time.Dura
 	cutoff := time.Now().UTC().Add(-minAge)
 	var recovered []models.Task
 	for i := range s.tasks {
-		if s.tasks[i].State != models.TaskStateQueued || s.tasks[i].StartedAt != nil {
+		if s.tasks[i].State != models.TaskStateQueued {
 			continue
 		}
 		if !s.tasks[i].UpdatedAt.Before(cutoff) {

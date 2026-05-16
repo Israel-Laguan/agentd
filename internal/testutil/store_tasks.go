@@ -149,7 +149,7 @@ func (s *FakeKanbanStore) ReconcileOrphanedQueued(_ context.Context, minAge time
 	cutoff := now().Add(-minAge)
 	var recovered []models.Task
 	for id, t := range s.tasks {
-		if t.State != models.TaskStateQueued || t.StartedAt != nil {
+		if t.State != models.TaskStateQueued {
 			continue
 		}
 		if !t.UpdatedAt.Before(cutoff) {

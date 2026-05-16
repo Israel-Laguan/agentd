@@ -141,6 +141,28 @@ func TestAdmit_NackPreservesValidationCause(t *testing.T) {
 	}
 }
 
+func TestAdmit_RateLimitCanonicalizesSessionID(t *testing.T) {
+	g := NewChannelGate(config.ChannelConfig{
+		MaxMessageSize: 1024,
+		RateLimit:      1,
+		RateWindow:     60,
+	})
+	msg := validMsg()
+	msg.SessionID = "s1"
+	if r := g.Admit(msg); r.Disposition != Ack {
+		t.Fatalf("first admit should ack: %v", r.Err)
+	}
+	msg.SessionID = " s1 "
+	msg.TurnID = "turn-2"
+	r2 := g.Admit(msg)
+	if r2.Disposition != Nack {
+		t.Fatal("whitespace-padded session should share rate bucket and nack")
+	}
+	if !errors.Is(r2.Err, models.ErrChannelRateLimited) {
+		t.Fatalf("expected ErrChannelRateLimited, got: %v", r2.Err)
+	}
+}
+
 func TestAdmit_RateLimitIsolatesSessions(t *testing.T) {
 	g := NewChannelGate(config.ChannelConfig{
 		MaxMessageSize: 1024,

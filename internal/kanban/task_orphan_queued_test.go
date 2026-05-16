@@ -77,3 +77,38 @@ func TestReconcileOrphanedQueuedSkipsRecentClaim(t *testing.T) {
 		t.Fatalf("state = %s, want QUEUED", task.State)
 	}
 }
+
+func TestReconcileOrphanedQueuedResetsStaleClaimWithStartedAt(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "orphan-queued-started",
+		Tasks:       []models.DraftTask{{TempID: "a", Title: "A"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan() error = %v", err)
+	}
+	taskID := tasks[0].ID
+
+	if _, err := store.ClaimNextReadyTasks(ctx, 1); err != nil {
+		t.Fatalf("ClaimNextReadyTasks() error = %v", err)
+	}
+
+	staleAt := time.Now().UTC().Add(-2 * time.Minute)
+	startedAt := time.Now().UTC().Add(-10 * time.Minute)
+	if _, err := store.db.ExecContext(ctx, `
+		UPDATE tasks SET updated_at = ?, started_at = ?, state = ? WHERE id = ?`,
+		formatTime(staleAt), formatTime(startedAt), models.TaskStateQueued, taskID); err != nil {
+		t.Fatalf("simulate re-queued task with started_at: %v", err)
+	}
+
+	recovered, err := store.ReconcileOrphanedQueued(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("ReconcileOrphanedQueued() error = %v", err)
+	}
+	if len(recovered) != 1 {
+		t.Fatalf("recovered = %d, want 1", len(recovered))
+	}
+	assertTaskReadyWithoutHeartbeat(t, store, ctx, taskID)
+}

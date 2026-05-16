@@ -75,7 +75,7 @@ func (d *Daemon) dispatch(ctx context.Context) (int, error) {
 	if available <= 0 {
 		return 0, nil
 	}
-	if d.channel != nil && d.queuedReconcileAfter > 0 {
+	if d.queuedReconcileAfter > 0 {
 		_, reconcileErr := d.store.ReconcileOrphanedQueued(ctx, d.queuedReconcileAfter)
 		logDaemonError("orphaned queued reconcile failed", reconcileErr)
 	}
