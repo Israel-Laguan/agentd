@@ -252,6 +252,10 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.handlePermissionFailure(ctx, task, command, result)
 		return
 	}
+	if profile.RequireReview && runErr == nil && result.Success {
+		w.createReviewHandoff(ctx, task, resultPayload(result))
+		return
+	}
 	w.commit(ctx, task, result, runErr)
 }
 
