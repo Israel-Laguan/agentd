@@ -11,9 +11,9 @@ test-e2e:
 build:
 	$(GO) build -o bin/agentd ./cmd/agentd
 
-# Use an isolated GOCACHE to avoid stale-build artefacts when switching branches
-# or when the global cache becomes inconsistent (observed repeatedly in CI/dev).
-TEST_ENV = env GOCACHE=/tmp/agentd-go-cache
+# Use a workspace-local GOCACHE to avoid stale-build artefacts when switching branches
+# or when the global cache becomes inconsistent, without sharing /tmp across concurrent jobs.
+TEST_ENV = env GOCACHE=$(CURDIR)/.gocache
 
 test:
 	$(TEST_ENV) $(GO) test -v -race -cover ./...
