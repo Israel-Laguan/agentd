@@ -5,21 +5,21 @@ COVERPKG ?= ./...
 
 .PHONY: build test coverage run tidy lint loc check test-e2e
 
+# Workspace-local GOCACHE for all compile/lint/test paths to avoid stale-build
+# artefacts when switching branches or when the global cache becomes inconsistent.
+GO_ENV = env GOCACHE=$(CURDIR)/.gocache
+
 test-e2e:
-	$(GO) test -v ./e2e/...
+	$(GO_ENV) $(GO) test -v ./e2e/...
 
 build:
-	$(GO) build -o bin/agentd ./cmd/agentd
-
-# Use a workspace-local GOCACHE to avoid stale-build artefacts when switching branches
-# or when the global cache becomes inconsistent, without sharing /tmp across concurrent jobs.
-TEST_ENV = env GOCACHE=$(CURDIR)/.gocache
+	$(GO_ENV) $(GO) build -o bin/agentd ./cmd/agentd
 
 test:
-	$(TEST_ENV) $(GO) test -v -race -cover ./...
+	$(GO_ENV) $(GO) test -v -race -cover ./...
 
 coverage:
-	$(TEST_ENV) $(GO) test -v -race -covermode=atomic -coverpkg=$(COVERPKG) -coverprofile=coverage.out ./...
+	$(GO_ENV) $(GO) test -v -race -covermode=atomic -coverpkg=$(COVERPKG) -coverprofile=coverage.out ./...
 	$(GO) tool cover -html=coverage.out
 
 run:
@@ -29,7 +29,7 @@ tidy:
 	$(GO) mod tidy
 
 lint:
-	$(GOLANGCI_LINT) run ./...
+	$(GO_ENV) $(GOLANGCI_LINT) run ./...
 
 loc:
 	python3 ./scripts/check_loc.py --max-lines 300

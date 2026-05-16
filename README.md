@@ -87,6 +87,7 @@ Run spawned agents under a non-sudoer system user. `agentd` blocks commands that
 | [`docs/guardrails.md`](docs/guardrails.md) | Size limits, layer boundaries, quality workflow (human-facing) |
 | [`docs/phase1-skeleton.md`](docs/phase1-skeleton.md) | Phase 1 hardening baseline contract |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute |
+| [`REVIEW.md`](REVIEW.md) | PR review checklist (build, lint, tests, Go cache) |
 | [`STYLEGUIDE.md`](STYLEGUIDE.md) | Coding conventions and style guide |
 
 ## Maintenance Scripts
