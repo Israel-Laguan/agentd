@@ -100,6 +100,7 @@ export default function Page() {
     const currentTask = localTasks.find((t) => t.id === taskId);
     const prevStatus = currentTask?.status;
     const prevUpdatedAt = currentTask?.updatedAt;
+    const now = Date.now();
 
     setLocalTasks((tasks) =>
       tasks.map((task) =>
@@ -107,18 +108,18 @@ export default function Page() {
           ? {
               ...task,
               status: newStatus,
-              updatedAt: Date.now(),
+              updatedAt: now,
             }
           : task
       )
     );
     setSelectedTask((prev) =>
       prev?.id === taskId
-        ? { ...prev, status: newStatus, updatedAt: Date.now() }
+        ? { ...prev, status: newStatus, updatedAt: now }
         : prev
     );
 
-    updateTask(taskId, { status: newStatus, updatedAt: Date.now() }).catch((err) => {
+    updateTask(taskId, { status: newStatus, updatedAt: now }).catch((err) => {
       console.error("Failed to persist task status", err);
       if (prevStatus !== undefined && prevUpdatedAt !== undefined) {
         setLocalTasks((tasks) =>

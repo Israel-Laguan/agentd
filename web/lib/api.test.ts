@@ -1,11 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { getBoard, getWorkforce, sendChat, updateTask, fetchTaskComments, addTaskComment } from './api';
 import { mockBoard } from './mocks/board.mock';
 import { mockWorkforce } from './mocks/workforce.mock';
 import { mockTaskComments } from './mocks/mock-task-comment';
 import { TaskStatus } from './types';
 
+const initialTasks = structuredClone(mockBoard.tasks);
+const initialComments = structuredClone(mockTaskComments);
+
 describe('API (mock mode)', () => {
+  beforeEach(() => {
+    mockBoard.tasks.splice(0, mockBoard.tasks.length, ...structuredClone(initialTasks));
+    mockTaskComments.splice(0, mockTaskComments.length, ...structuredClone(initialComments));
+  });
+
   it('getBoard returns mock board', async () => {
     const board = await getBoard();
     expect(board).toEqual(mockBoard);
@@ -31,6 +39,7 @@ describe('API (mock mode)', () => {
 
   it('fetchTaskComments filters by taskId', async () => {
     const comments = await fetchTaskComments('t1');
+    expect(comments.length).toBeGreaterThan(0);
     expect(comments.every((c: { taskId: string }) => c.taskId === 't1')).toBe(true);
   });
 

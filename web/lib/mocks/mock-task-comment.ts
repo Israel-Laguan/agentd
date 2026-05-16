@@ -1,7 +1,7 @@
 export const mockTaskComments = [
   {
     id: "c1",
-    taskId: "task-1",
+    taskId: "t1",
     message: "Initial implementation completed.",
     createdAt: new Date().toISOString(),
     author: {
@@ -11,7 +11,7 @@ export const mockTaskComments = [
   },
   {
     id: "c2",
-    taskId: "task-1",
+    taskId: "t1",
     message: "Need API review before merge.",
     createdAt: new Date().toISOString(),
     author: {
@@ -21,7 +21,7 @@ export const mockTaskComments = [
   },
   {
     id: "c3",
-    taskId: "task-1",
+    taskId: "t1",
     message: "Waiting for QA verification.",
     createdAt: new Date().toISOString(),
     author: {
