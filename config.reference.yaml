@@ -129,8 +129,8 @@ disk:
 # Channel-level security and validation.
 # Enforced before any message reaches the worker loop.
 channel:
-  max_message_size: 1048576    # bytes; 0 = unlimited. Reject payloads above this threshold.
-  rate_limit: 0                # max task admissions per task within rate_window (queue path keys session_id to task ID); 0 = unlimited. When 0, dispatch-time channel validation and rate limiting are disabled.
+  max_message_size: 1048576    # bytes; 0 = unlimited. Reject payloads above this threshold when > 0.
+  rate_limit: 0                # max task admissions per task within rate_window (queue path keys session_id to task ID); 0 = unlimited. Dispatch-time validation runs when max_message_size > 0 and/or rate_limit > 0; set both to 0 to disable the channel gate.
   rate_window: 60              # sliding window (seconds) for per-session rate limiting.
 
 # Queue daemon.

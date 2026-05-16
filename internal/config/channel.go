@@ -24,6 +24,12 @@ type ChannelConfig struct {
 	RateWindow     int
 }
 
+// ChannelGateEnabled reports whether dispatch-time channel validation should run.
+// The gate is active when rate limiting or a positive max message size is configured.
+func ChannelGateEnabled(c ChannelConfig) bool {
+	return c.RateLimit > 0 || c.MaxMessageSize > 0
+}
+
 // NormalizedRateWindow returns the effective rate window in seconds.
 // When rate limiting is enabled and the configured window is non-positive,
 // DefaultChannelRateWindow is used (same semantics as ChannelGate).
