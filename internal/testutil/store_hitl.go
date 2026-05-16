@@ -28,6 +28,20 @@ func (s *FakeKanbanStore) ReconcileExpiredBlockedTasks(_ context.Context, now ti
 		if t.State != models.TaskStateBlocked {
 			continue
 		}
+		hasOpenChild := false
+		for _, childID := range s.childParents[id] {
+			child, ok := s.tasks[childID]
+			if !ok {
+				continue
+			}
+			if child.State != models.TaskStateCompleted && child.State != models.TaskStateFailed {
+				hasOpenChild = true
+				break
+			}
+		}
+		if !hasOpenChild {
+			continue
+		}
 		deadline, ok := s.hitlExpiryLocked(id)
 		if !ok {
 			continue

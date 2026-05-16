@@ -213,6 +213,14 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	ctx = gateway.WithHouseRules(ctx, models.LoadHouseRules(ctx, w.store))
 	stopHeartbeat := w.startHeartbeat(ctx, task.ID)
 	defer stopHeartbeat()
+	if profile.RequireReview {
+		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
+			w.failHard(ctx, task, err)
+			return
+		} else if done {
+			return
+		}
+	}
 	if planning.IsPhasePlanningTask(task.Title) {
 		w.handlePhasePlanning(ctx, task, *project)
 		return
