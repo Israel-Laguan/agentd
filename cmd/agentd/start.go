@@ -135,7 +135,7 @@ func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontde
 		queuedReconcileAfter = time.Duration(config.NormalizedRateWindow(cfg.Channel)) * time.Second
 	}
 	var ch queue.Channel
-	if cfg.Channel.RateLimit > 0 {
+	if config.ChannelGateEnabled(cfg.Channel) {
 		ch = queue.NewChannelGate(cfg.Channel)
 	}
 	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{

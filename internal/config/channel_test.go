@@ -41,6 +41,21 @@ func TestChannelConfigOverride(t *testing.T) {
 	}
 }
 
+func TestChannelGateEnabled(t *testing.T) {
+	if ChannelGateEnabled(ChannelConfig{}) {
+		t.Fatal("empty config should not enable channel gate")
+	}
+	if !ChannelGateEnabled(ChannelConfig{MaxMessageSize: 512}) {
+		t.Fatal("max message size alone should enable channel gate")
+	}
+	if !ChannelGateEnabled(ChannelConfig{RateLimit: 1}) {
+		t.Fatal("rate limit alone should enable channel gate")
+	}
+	if ChannelGateEnabled(ChannelConfig{MaxMessageSize: 0, RateLimit: 0}) {
+		t.Fatal("both zero should disable channel gate")
+	}
+}
+
 func TestNormalizedRateWindow(t *testing.T) {
 	if got := NormalizedRateWindow(ChannelConfig{RateLimit: 0, RateWindow: 0}); got != 0 {
 		t.Fatalf("unlimited limit: got %d, want 0", got)
