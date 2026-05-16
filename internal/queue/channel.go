@@ -224,9 +224,38 @@ func classifyDispatchNack(err error) bool {
 }
 
 // deferRateLimited leaves a rate-limited task in QUEUED so it is not immediately
-// re-claimed; ReconcileOrphanedQueued releases it to READY after minAge.
-func (d *Daemon) deferRateLimited(_ context.Context, task models.Task) {
-	slog.Debug("dispatch deferred rate limited", "task_id", task.ID)
+// re-claimed, then moves it back to READY after the channel rate window so it can
+// be retried without shortening the global orphaned-queued reconcile threshold.
+func (d *Daemon) deferRateLimited(ctx context.Context, task models.Task) {
+	if d.rateLimitedRequeueAfter <= 0 {
+		slog.Debug("dispatch deferred rate limited", "task_id", task.ID)
+		return
+	}
+	after := d.rateLimitedRequeueAfter
+	taskID := task.ID
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		timer := time.NewTimer(after)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			current, err := d.store.GetTask(ctx, taskID)
+			if err != nil {
+				slog.Error("rate limit defer: get task failed", "task_id", taskID, "error", err)
+				return
+			}
+			if current.State != models.TaskStateQueued {
+				return
+			}
+			if _, err := d.store.UpdateTaskState(ctx, taskID, current.UpdatedAt, models.TaskStateReady); err != nil {
+				slog.Error("rate limit defer: requeue failed", "task_id", taskID, "error", err)
+			}
+		}
+	}()
+	slog.Debug("dispatch deferred rate limited", "task_id", task.ID, "requeue_after", after)
 }
 
 // failDispatchRejected moves a permanently rejected task to FAILED.
