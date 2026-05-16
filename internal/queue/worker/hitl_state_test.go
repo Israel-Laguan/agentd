@@ -184,3 +184,89 @@ func TestProcess_LegacyRequireReview_FinalizesApprovedReview(t *testing.T) {
 		t.Fatalf("gateway requests = %d, want 0", len(gw.requests))
 	}
 }
+
+func TestProcess_LegacyRequireReview_InjectsRejectionFeedback(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+
+	profile, err := store.GetAgentProfile(ctx, "default")
+	if err != nil {
+		t.Fatalf("get profile: %v", err)
+	}
+	profile.RequireReview = true
+	profile.AgenticMode = false
+	profile.Provider = "ollama"
+	if err := store.UpsertAgentProfile(ctx, *profile); err != nil {
+		t.Fatalf("upsert profile: %v", err)
+	}
+
+	gw := &routingTestGateway{}
+	sb := &routingTestSandbox{}
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "legacy-review-reject",
+		Tasks:       []models.DraftTask{{Title: "task-review-reject", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	task := tasks[0]
+
+	w.createReviewHandoff(ctx, task, "first draft output")
+
+	children, err := store.ListChildTasks(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	var review *models.Task
+	for i := range children {
+		if strings.HasPrefix(children[i].Title, reviewSubtaskTitlePrefix) {
+			review = &children[i]
+			break
+		}
+	}
+	if review == nil {
+		t.Fatal("expected review subtask")
+	}
+	const rejectionComment = "Please add error handling"
+	if err := store.AddComment(ctx, models.Comment{
+		TaskID: review.ID,
+		Author: models.CommentAuthorUser,
+		Body:   rejectionComment,
+	}); err != nil {
+		t.Fatalf("add rejection comment: %v", err)
+	}
+	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateFailed); err != nil {
+		t.Fatalf("fail review subtask: %v", err)
+	}
+
+	parent, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	queued, err := store.UpdateTaskState(ctx, parent.ID, parent.UpdatedAt, models.TaskStateQueued)
+	if err != nil {
+		t.Fatalf("requeue parent: %v", err)
+	}
+
+	w.Process(ctx, *queued)
+
+	if len(gw.requests) != 1 {
+		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
+	}
+	var foundFeedback bool
+	for _, msg := range gw.requests[0].Messages {
+		if strings.Contains(msg.Content, rejectionComment) {
+			foundFeedback = true
+			break
+		}
+	}
+	if !foundFeedback {
+		t.Fatalf("gateway messages missing rejection feedback %q", rejectionComment)
+	}
+	if sb.execCount != 1 {
+		t.Fatalf("sandbox executions = %d, want 1", sb.execCount)
+	}
+}

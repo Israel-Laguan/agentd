@@ -359,6 +359,116 @@ func TestBlockingApprovalHandler_GrantsCompletedApproval(t *testing.T) {
 	}
 }
 
+func TestBlockingApprovalHandler_RejectionConsumedOnce(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	_, created, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: approvalSubtaskTitle("deploy"), Assignee: models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	approval := created[0]
+	const rejectionReason = "too risky for production"
+	if err := store.AddComment(ctx, models.Comment{
+		TaskID: approval.ID,
+		Author: models.CommentAuthorUser,
+		Body:   rejectionReason,
+	}); err != nil {
+		t.Fatalf("add rejection comment: %v", err)
+	}
+	if _, err := store.UpdateTaskState(ctx, approval.ID, approval.UpdatedAt, models.TaskStateFailed); err != nil {
+		t.Fatalf("fail approval subtask: %v", err)
+	}
+
+	handler := NewBlockingApprovalHandler(store)
+	req := ApprovalRequest{
+		ToolName: "deploy", Arguments: `{"target":"prod"}`, TaskID: parent.ID, TaskUpdatedAt: parent.UpdatedAt,
+	}
+
+	first, err := handler.RequestApproval(ctx, req)
+	if err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	if first.Approved {
+		t.Fatal("expected Approved=false after rejection")
+	}
+	if first.Reason != rejectionReason {
+		t.Fatalf("first reason = %q, want %q", first.Reason, rejectionReason)
+	}
+
+	second, err := handler.RequestApproval(ctx, req)
+	if err != nil {
+		t.Fatalf("second request: %v", err)
+	}
+	if second.Approved {
+		t.Fatal("expected Approved=false (suspension) on second request")
+	}
+	if second.Reason != "" {
+		t.Fatalf("second reason = %q, want empty (fall through to new approval, not stale rejection)", second.Reason)
+	}
+}
+
+func TestBlockingApprovalHandler_RejectionAllowsNewApprovalSubtask(t *testing.T) {
+	t.Parallel()
+	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}
+	ctx := context.Background()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	_, created, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: approvalSubtaskTitle("deploy"), Assignee: models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	if _, err := store.UpdateTaskState(ctx, created[0].ID, created[0].UpdatedAt, models.TaskStateFailed); err != nil {
+		t.Fatalf("fail approval subtask: %v", err)
+	}
+
+	handler := NewBlockingApprovalHandler(store)
+	req := ApprovalRequest{
+		ToolName: "deploy", Arguments: `{"target":"staging"}`, TaskID: parent.ID, TaskUpdatedAt: parent.UpdatedAt,
+	}
+
+	if _, err := handler.RequestApproval(ctx, req); err != nil {
+		t.Fatalf("consume rejection: %v", err)
+	}
+	store.blockCalled = false
+
+	if _, err := handler.RequestApproval(ctx, req); err != nil {
+		t.Fatalf("request new approval: %v", err)
+	}
+	if !store.blockCalled {
+		t.Fatal("expected BlockTaskWithSubtasks for new approval after rejection consumed")
+	}
+	children, err := store.ListChildTasks(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	var approvalCount int
+	for _, child := range children {
+		if strings.HasPrefix(child.Title, approvalSubtaskTitlePrefix) {
+			approvalCount++
+		}
+	}
+	if approvalCount != 2 {
+		t.Fatalf("approval subtasks = %d, want 2 (original failed + new pending)", approvalCount)
+	}
+}
+
 func TestBlockingApprovalHandler_SuspendsViaHook(t *testing.T) {
 	t.Parallel()
 	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}

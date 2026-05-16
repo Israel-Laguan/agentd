@@ -178,9 +178,15 @@ func (h *BlockingApprovalHandler) resolveExistingApproval(
 		}
 		return ApprovalResponse{Approved: true}, true, nil
 	case models.TaskStateFailed:
+		if isApprovalRejectionConsumed(comments, latest.ID) {
+			return ApprovalResponse{}, false, nil
+		}
 		reason := rejectionReasonFromSubtask(ctx, h.store, latest.ID)
 		if reason == "" {
 			reason = "human rejected the tool call"
+		}
+		if err := markApprovalRejectionUsed(ctx, h.store, req.TaskID, latest.ID); err != nil {
+			return ApprovalResponse{}, true, fmt.Errorf("mark approval rejection used: %w", err)
 		}
 		return ApprovalResponse{Approved: false, Reason: reason}, true, nil
 	case models.TaskStateReady, models.TaskStateRunning, models.TaskStateQueued:
