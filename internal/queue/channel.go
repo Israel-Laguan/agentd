@@ -194,13 +194,15 @@ func pruneOld(ts []time.Time, cutoff time.Time) []time.Time {
 
 // TaskToInbound converts a claimed Task into the canonical InboundMessage
 // so the channel gate can validate it before worker handoff.
+// SessionID is the task ID so channel rate limits apply per task, not per
+// project (aligned with worker hook SessionID).
 func TaskToInbound(t models.Task) InboundMessage {
 	content := strings.TrimSpace(t.Description)
 	if content == "" {
 		content = strings.TrimSpace(t.Title)
 	}
 	return InboundMessage{
-		SessionID:  t.ProjectID,
+		SessionID:  t.ID,
 		TurnID:     t.ID,
 		Role:       MessageRoleSystem,
 		Content:    content,
