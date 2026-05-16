@@ -9,6 +9,46 @@ import (
 	"agentd/internal/models"
 )
 
+func TestTaskStateQueued_CanTransitionToFailed(t *testing.T) {
+	if !models.TaskStateQueued.CanTransitionTo(models.TaskStateFailed) {
+		t.Fatal("QUEUED -> FAILED must be valid for permanent dispatch reject")
+	}
+}
+
+func TestDeferRateLimited_ReleasesToReadyAfterWindow(t *testing.T) {
+	store := newQueueStore()
+	now := time.Now().UTC()
+	store.tasks = []models.Task{{
+		BaseEntity: models.BaseEntity{ID: "task-0", CreatedAt: now, UpdatedAt: now},
+		ProjectID:  "project", AgentID: "default",
+		Title: "rate limited", State: models.TaskStateQueued, Assignee: models.TaskAssigneeSystem,
+	}}
+
+	daemon := NewDaemon(store, nil, nil, nil, nil, DaemonOptions{
+		RateLimitedRequeueAfter: 20 * time.Millisecond,
+		Probe:                   StaticPIDProbe{},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	daemon.deferRateLimited(ctx, store.tasks[0])
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		task, err := store.GetTask(ctx, "task-0")
+		if err != nil {
+			t.Fatalf("GetTask() error = %v", err)
+		}
+		if task.State == models.TaskStateReady {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("state = %s, want READY after rate limit window", task.State)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestDispatch_RateLimitedTaskStaysQueued(t *testing.T) {
 	store := newQueueStore()
 	store.seed(1, models.TaskStateReady)

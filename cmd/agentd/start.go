@@ -130,9 +130,9 @@ func buildDreamer(store models.KanbanStore, deps runtimeDeps, cfg config.Config)
 }
 
 func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontdesk.IntakeProcessor, deps runtimeDeps, cfg config.Config, startOpts *startOptions) *queue.Daemon {
-	queuedReconcileAfter := cfg.Queue.TaskDeadline
+	var rateLimitedRequeueAfter time.Duration
 	if cfg.Channel.RateLimit > 0 {
-		queuedReconcileAfter = time.Duration(config.NormalizedRateWindow(cfg.Channel)) * time.Second
+		rateLimitedRequeueAfter = time.Duration(config.NormalizedRateWindow(cfg.Channel)) * time.Second
 	}
 	var ch queue.Channel
 	if config.ChannelGateEnabled(cfg.Channel) {
@@ -157,8 +157,9 @@ func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontde
 		CuratorSchedule:      cfg.Cron.MemoryCurator.Schedule,
 		DreamEvery:           cfg.Cron.Dream.Every,
 		DreamSchedule:        cfg.Cron.Dream.Schedule,
-		Channel:              ch,
-		QueuedReconcileAfter: queuedReconcileAfter,
+		Channel:                  ch,
+		QueuedReconcileAfter:     cfg.Queue.TaskDeadline,
+		RateLimitedRequeueAfter:  rateLimitedRequeueAfter,
 	})
 }
 
