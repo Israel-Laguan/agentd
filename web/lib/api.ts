@@ -99,7 +99,7 @@ export async function addTaskComment(
   message: string
 ) {
   if (USE_MOCK) {
-    return {
+    const comment = {
       id: crypto.randomUUID(),
       taskId: id,
       author: {
@@ -109,6 +109,8 @@ export async function addTaskComment(
       message,
       createdAt: new Date().toISOString(),
     };
+    mockTaskComments.push(comment);
+    return comment;
   }
 
   const res = await fetch(

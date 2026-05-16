@@ -59,6 +59,11 @@ export default function Page() {
                   : serverTask;
               })
         );
+        setSelectedTask(prev => {
+          if (!prev) return prev;
+          const fresh = board.tasks.find((t: Task) => t.id === prev.id);
+          return fresh && fresh.updatedAt > prev.updatedAt ? fresh : prev;
+        });
       } catch (e) {
         console.error("Polling failed", e);
       }
@@ -107,6 +112,11 @@ export default function Page() {
           : task
       )
     );
+    setSelectedTask((prev) =>
+      prev?.id === taskId
+        ? { ...prev, status: newStatus, updatedAt: Date.now() }
+        : prev
+    );
 
     updateTask(taskId, { status: newStatus, updatedAt: Date.now() }).catch((err) => {
       console.error("Failed to persist task status", err);
@@ -122,6 +132,11 @@ export default function Page() {
               : task
           )
         );
+        setSelectedTask((prev) =>
+          prev?.id === taskId
+            ? { ...prev, status: prevStatus, updatedAt: prevUpdatedAt }
+            : prev
+        );
       }
     });
   };
@@ -130,8 +145,10 @@ export default function Page() {
     try {
       const updated = await updateTask(id, patch);
       setLocalTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      setSelectedTask((prev) => (prev?.id === id ? updated : prev));
     } catch (err) {
       console.error("Failed to update task", err);
+      throw err;
     }
   };
 

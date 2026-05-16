@@ -3,7 +3,7 @@
 import { Task, TaskStatus } from "@/lib/types";
 import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRef, useState } from "react";
+import { useRef, useState, useLayoutEffect } from "react";
 import { CommentPanel } from "../comment/comment-panel";
 
 interface TaskDrawerProps {
@@ -19,29 +19,37 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [status, setStatus] = useState<TaskStatus>(task?.status || TaskStatus.PENDING);
 
-  const lastTaskIdRef = useRef<string | undefined>(task?.id);
-  if (lastTaskIdRef.current !== task?.id) {
-    lastTaskIdRef.current = task?.id;
-    setTitle(task?.title ?? "");
-    setDescription(task?.description ?? "");
-    setStatus(task?.status || TaskStatus.PENDING);
+  const committedTitleRef = useRef(task?.title ?? "");
+  const committedDescriptionRef = useRef(task?.description ?? "");
+  const committedStatusRef = useRef<TaskStatus>(task?.status || TaskStatus.PENDING);
+
+  // Synchronize local state when the task prop changes (review-requested pattern).
+  /* eslint-disable */
+  useLayoutEffect(() => {
+    if (!task) return;
+    setTitle(task.title ?? "");
+    setDescription(task.description ?? "");
+    setStatus(task.status || TaskStatus.PENDING);
     setIsEditingTitle(false);
     setIsEditingDescription(false);
-  }
+    committedTitleRef.current = task.title ?? "";
+    committedDescriptionRef.current = task.description ?? "";
+    committedStatusRef.current = task.status || TaskStatus.PENDING;
+  }, [task]);
+  /* eslint-enable */
 
   const handleSave = async (patch: Partial<Task>) => {
     if (!task || !onUpdateTask) return;
 
-    const prevTitle = title;
-    const prevDescription = description;
-    const prevStatus = status;
-
     try {
       await onUpdateTask(task.id, patch);
+      if (patch.title !== undefined) committedTitleRef.current = patch.title;
+      if (patch.description !== undefined) committedDescriptionRef.current = patch.description;
+      if (patch.status !== undefined) committedStatusRef.current = patch.status;
     } catch (err) {
-      setTitle(prevTitle);
-      setDescription(prevDescription);
-      setStatus(prevStatus);
+      setTitle(committedTitleRef.current);
+      setDescription(committedDescriptionRef.current);
+      setStatus(committedStatusRef.current);
       console.error("Failed to save task:", err);
       throw err;
     }
@@ -98,8 +106,17 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                 />
               ) : (
                 <p
-                  className="text-sm text-text font-medium cursor-text"
+                  className="text-sm text-text font-medium cursor-text focus:outline-none focus:ring-2 focus:ring-accent rounded px-1 -mx-1"
                   onClick={() => setIsEditingTitle(true)}
+                  tabIndex={0}
+                  role="button"
+                  aria-label="Edit title"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setIsEditingTitle(true);
+                    }
+                  }}
                 >
                   {title}
                 </p>
@@ -123,8 +140,17 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                 />
               ) : (
                 <p
-                  className="text-sm text-text-dim cursor-text whitespace-pre-wrap"
+                  className="text-sm text-text-dim cursor-text whitespace-pre-wrap focus:outline-none focus:ring-2 focus:ring-accent rounded px-1 -mx-1"
                   onClick={() => setIsEditingDescription(true)}
+                  tabIndex={0}
+                  role="button"
+                  aria-label="Edit description"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setIsEditingDescription(true);
+                    }
+                  }}
                 >
                   {description}
                 </p>
