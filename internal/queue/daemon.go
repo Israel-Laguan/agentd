@@ -152,9 +152,6 @@ func normalizeIntervals(opts *DaemonOptions) {
 	if opts.TaskDeadline <= 0 {
 		opts.TaskDeadline = 10 * time.Minute
 	}
-	if opts.QueuedReconcileAfter <= 0 {
-		opts.QueuedReconcileAfter = opts.TaskDeadline
-	}
 	if opts.IntakeInterval <= 0 {
 		opts.IntakeInterval = config.DefaultCronSchedule.Intake
 	}

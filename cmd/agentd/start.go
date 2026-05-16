@@ -158,7 +158,7 @@ func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontde
 		DreamEvery:           cfg.Cron.Dream.Every,
 		DreamSchedule:        cfg.Cron.Dream.Schedule,
 		Channel:                  ch,
-		QueuedReconcileAfter:     cfg.Queue.TaskDeadline,
+		QueuedReconcileAfter:     cfg.Queue.QueuedReconcileAfter,
 		RateLimitedRequeueAfter:  rateLimitedRequeueAfter,
 	})
 }
