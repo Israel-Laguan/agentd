@@ -7,6 +7,7 @@ export async function mockChat(
 
   return {
     message: {
+      id: `mock-${Date.now()}`,
       role: "assistant",
       content: `Mock response to: ${message}`,
     },

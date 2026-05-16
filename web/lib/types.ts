@@ -42,6 +42,7 @@ export interface WorkforceState {
 }
 
 export interface ChatMessage {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
 }
@@ -60,4 +61,15 @@ export interface DraftPlan {
   name: string;
   description: string;
   tasks: DraftPlanTask[];
+};
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  message: string;
+  createdAt: string;
+  author: {
+    id: string;
+    name: string;
+  };
 };
