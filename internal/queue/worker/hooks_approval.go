@@ -37,12 +37,15 @@ type ApprovalHandler interface {
 const DefaultApprovalTimeout = 30 * time.Minute
 
 // ApprovalGateHook returns a PreHook that intercepts gated tools and
-// suspends the task by creating a HUMAN subtask for approval. The hook
-// always vetoes the tool call: if the handler successfully creates the
-// approval subtask the task is BLOCKED and the agentic loop stops; if
-// the handler returns an explicit rejection the reason is fed back to
-// the LLM. When the human later marks the subtask COMPLETED or FAILED
-// the task is unblocked and the agentic loop resumes.
+// routes them through ApprovalHandler. Three outcomes:
+//
+//   - Approved=true: the tool call proceeds (no veto).
+//   - Approved=false with non-empty Reason: veto with formatted rejection;
+//     Suspend is false so the agentic loop continues and the LLM can adjust.
+//   - Approved=false with empty Reason: veto with Suspend=true after creating
+//     a HUMAN approval subtask; the parent is BLOCKED and the loop stops
+//     until a human marks the subtask COMPLETED or FAILED (parent unblocks
+//     to READY when all children are terminal).
 func ApprovalGateHook(gatedTools []string, handler ApprovalHandler) PreHook {
 	toolSet := make(map[string]struct{}, len(gatedTools))
 	for _, t := range gatedTools {

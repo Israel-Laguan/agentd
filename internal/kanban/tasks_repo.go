@@ -77,7 +77,24 @@ func (s *Store) UpdateTaskState(
 		if !current.State.CanTransitionTo(next) {
 			return nil, fmt.Errorf("%w: %s -> %s", models.ErrInvalidStateTransition, current.State, next)
 		}
-		return s.updateTaskState(ctx, current, expectedUpdatedAt, next)
+		tx, err := beginImmediate(ctx, s.db)
+		if err != nil {
+			return nil, fmt.Errorf("begin task state update: %w", err)
+		}
+		defer rollbackUnlessCommitted(tx)
+
+		now := utcNow()
+		if err := updateTaskStateInTx(ctx, tx, current, expectedUpdatedAt, next, now); err != nil {
+			return nil, err
+		}
+		if err := finishTaskStateSideEffects(ctx, tx, id, next, now); err != nil {
+			return nil, err
+		}
+		task, err := selectTaskByID(ctx, tx, id)
+		if err != nil {
+			return nil, err
+		}
+		return task, commitTx(tx, "task state update")
 	})
 }
 

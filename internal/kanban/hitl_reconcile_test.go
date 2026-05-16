@@ -9,7 +9,6 @@ import (
 )
 
 func TestReconcileExpiredBlockedTasks_FailsParentPastExpiry(t *testing.T) {
-	t.Parallel()
 	store := newTestStore(t)
 	ctx := context.Background()
 
@@ -53,7 +52,6 @@ func TestReconcileExpiredBlockedTasks_FailsParentPastExpiry(t *testing.T) {
 }
 
 func TestReconcileExpiredBlockedTasks_SkipsBlockedWithoutExpiry(t *testing.T) {
-	t.Parallel()
 	store := newTestStore(t)
 	ctx := context.Background()
 
@@ -90,7 +88,6 @@ func TestReconcileExpiredBlockedTasks_SkipsBlockedWithoutExpiry(t *testing.T) {
 }
 
 func TestReconcileExpiredBlockedTasks_SkipsBlockedWithOnlyTerminalChildren(t *testing.T) {
-	t.Parallel()
 	store := newTestStore(t)
 	ctx := context.Background()
 
@@ -132,7 +129,7 @@ func TestReconcileExpiredBlockedTasks_SkipsBlockedWithOnlyTerminalChildren(t *te
 	if err != nil {
 		t.Fatalf("get parent: %v", err)
 	}
-	if after.State != models.TaskStateBlocked {
-		t.Fatalf("parent state = %s, want BLOCKED", after.State)
+	if after.State != models.TaskStateReady {
+		t.Fatalf("parent state = %s, want READY", after.State)
 	}
 }
