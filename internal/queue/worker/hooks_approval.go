@@ -147,12 +147,12 @@ func (h *BlockingApprovalHandler) RequestApproval(ctx context.Context, req Appro
 	if err != nil {
 		return ApprovalResponse{}, fmt.Errorf("list task comments: %w", err)
 	}
-	if hitlExpired(comments, time.Now()) {
-		return ApprovalResponse{}, fmt.Errorf("approval timed out")
-	}
 
 	if resp, ok, err := h.resolveExistingApproval(ctx, req, comments); err != nil || ok {
 		return resp, err
+	}
+	if hitlExpired(comments, time.Now()) {
+		return ApprovalResponse{}, fmt.Errorf("approval timed out")
 	}
 	return h.blockForApproval(ctx, req, timeout)
 }

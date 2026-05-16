@@ -57,11 +57,22 @@ func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err e
 	w.handleAgentFailure(ctx, task, fmt.Sprintf("gateway error: %v", err))
 }
 
+func (w *Worker) recordLegacyHandoffExpiry(ctx context.Context, task models.Task) bool {
+	if err := recordHITLExpiry(ctx, w.store, task.ID, time.Now().Add(LegacyHandoffTimeout)); err != nil {
+		w.emit(ctx, task, "ERROR", err.Error())
+		return false
+	}
+	return true
+}
+
 func (w *Worker) createProviderExhaustedHandoff(ctx context.Context, task models.Task, err error) {
 	description := fmt.Sprintf(
 		"All configured AI providers failed and the circuit breaker is open. Human review is required before this task can continue.\n\nLast gateway error:\n%s",
 		truncate(err.Error(), 1500),
 	)
+	if !w.recordLegacyHandoffExpiry(ctx, task) {
+		return
+	}
 	_, _, blockErr := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
 		Title:       "Manual review required: AI providers unavailable",
 		Description: description,
@@ -109,6 +120,9 @@ func (w *Worker) handlePromptRecovery(
 }
 
 func (w *Worker) createPromptHandoff(ctx context.Context, task models.Task, payload string) {
+	if !w.recordLegacyHandoffExpiry(ctx, task) {
+		return
+	}
 	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
 		Title:       "Manual action required: command waiting for input",
 		Description: "The worker detected an interactive prompt and could not safely recover automatically.\n\n" + truncate(payload, 1500),
@@ -129,6 +143,9 @@ func (w *Worker) handlePermissionFailure(ctx context.Context, task models.Task, 
 }
 
 func (w *Worker) createPermissionHandoff(ctx context.Context, task models.Task, payload string) {
+	if !w.recordLegacyHandoffExpiry(ctx, task) {
+		return
+	}
 	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
 		Title: "Manual action required: privileged command",
 		Description: "The worker detected a command that requires host privileges. " +
@@ -149,6 +166,9 @@ func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, act
 		action.Reason,
 		truncate(payload, 1500),
 	)
+	if !w.recordLegacyHandoffExpiry(ctx, task) {
+		return
+	}
 	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
 		Title:       "Manual review required: self-healing failed",
 		Description: description,

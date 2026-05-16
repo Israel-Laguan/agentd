@@ -22,9 +22,7 @@ func (s *Store) ListTasksByProject(ctx context.Context, projectID string) ([]mod
 }
 
 func (s *Store) ListChildTasks(ctx context.Context, parentID string) ([]models.Task, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT tasks.id, tasks.project_id, tasks.agent_id, tasks.title, tasks.description, tasks.state, tasks.assignee,
-		       tasks.os_process_id, tasks.started_at, tasks.completed_at, tasks.last_heartbeat, tasks.retry_count, tasks.token_usage, tasks.created_at, tasks.updated_at
+	rows, err := s.db.QueryContext(ctx, taskSelectColumns("tasks")+`
 		FROM tasks
 		INNER JOIN task_relations tr ON tr.child_task_id = tasks.id
 		WHERE tr.parent_task_id = ?

@@ -30,7 +30,7 @@ func (s *FakeKanbanStore) ReconcileExpiredBlockedTasks(_ context.Context, now ti
 		}
 		deadline, ok := s.hitlExpiryLocked(id)
 		if !ok {
-			deadline = t.UpdatedAt.Add(30 * time.Minute)
+			continue
 		}
 		if !now.After(deadline) {
 			continue

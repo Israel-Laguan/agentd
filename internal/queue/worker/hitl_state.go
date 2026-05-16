@@ -6,15 +6,19 @@ import (
 	"strings"
 	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
 
 const (
-	hitlExpiresAtPrefix          = "agentd:hitl:expires-at:"
-	hitlApprovalUsedPrefix       = "agentd:hitl:approval-used:"
-	hitlDraftReviewCommentPrefix = "agentd:hitl:draft-review\n"
-	hitlReviewUsedPrefix         = "agentd:hitl:review-used:"
+	hitlExpiresAtPrefix             = "agentd:hitl:expires-at:"
+	hitlApprovalUsedPrefix          = "agentd:hitl:approval-used:"
+	hitlDraftReviewCommentPrefix    = "agentd:hitl:draft-review\n"
+	hitlReviewUsedPrefix            = "agentd:hitl:review-used:"
+	hitlReviewRejectionUsedPrefix   = "agentd:hitl:review-rejection-used:"
+
+	LegacyHandoffTimeout = 7 * 24 * time.Hour
 
 	approvalSubtaskTitlePrefix = "Approve tool call: "
 	reviewSubtaskTitlePrefix   = "Review required:"
@@ -113,6 +117,71 @@ func markReviewUsed(ctx context.Context, store models.KanbanStore, parentID, sub
 		Author: models.CommentAuthorWorkerAgent,
 		Body:   hitlReviewUsedPrefix + subtaskID,
 	})
+}
+
+func isReviewRejectionConsumed(comments []models.Comment, subtaskID string) bool {
+	marker := hitlReviewRejectionUsedPrefix + subtaskID
+	for _, c := range comments {
+		if strings.HasPrefix(c.Body, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func markReviewRejectionUsed(ctx context.Context, store models.KanbanStore, parentID, subtaskID string) error {
+	return store.AddComment(ctx, models.Comment{
+		TaskID: parentID,
+		Author: models.CommentAuthorWorkerAgent,
+		Body:   hitlReviewRejectionUsedPrefix + subtaskID,
+	})
+}
+
+func latestFailedReviewRejection(
+	ctx context.Context,
+	store models.KanbanStore,
+	taskID string,
+	comments []models.Comment,
+) (reason string, subtaskID string, ok bool) {
+	children, err := store.ListChildTasks(ctx, taskID)
+	if err != nil {
+		return "", "", false
+	}
+	review := findLatestReviewSubtask(children)
+	if review == nil || review.State != models.TaskStateFailed {
+		return "", "", false
+	}
+	if isReviewRejectionConsumed(comments, review.ID) {
+		return "", "", false
+	}
+	reason = rejectionReasonFromSubtask(ctx, store, review.ID)
+	if reason == "" {
+		reason = "human rejected the draft"
+	}
+	return reason, review.ID, true
+}
+
+func (w *Worker) prependReviewRejectionFeedback(
+	ctx context.Context,
+	task models.Task,
+	messages []gateway.PromptMessage,
+) []gateway.PromptMessage {
+	comments, err := w.store.ListComments(ctx, task.ID)
+	if err != nil {
+		return messages
+	}
+	reason, subtaskID, ok := latestFailedReviewRejection(ctx, w.store, task.ID, comments)
+	if !ok {
+		return messages
+	}
+	if err := markReviewRejectionUsed(ctx, w.store, task.ID, subtaskID); err != nil {
+		return messages
+	}
+	feedback := fmt.Sprintf(
+		"Human review rejected your previous draft. Feedback: %s. Revise your output accordingly.",
+		reason,
+	)
+	return append(messages, gateway.PromptMessage{Role: "user", Content: feedback})
 }
 
 func findLatestDraftReview(comments []models.Comment) (string, bool) {

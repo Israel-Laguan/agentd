@@ -6,14 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"agentd/internal/models"
-
 	"github.com/google/uuid"
+
+	"agentd/internal/models"
 )
 
 const (
 	hitlExpiresAtPrefix     = "agentd:hitl:expires-at:"
-	defaultHITLTimeout      = 30 * time.Minute
 	hitlTimeoutEventPayload = "human-in-the-loop request timed out"
 )
 
@@ -38,7 +37,7 @@ func (s *Store) ReconcileExpiredBlockedTasks(ctx context.Context, now time.Time)
 				return nil, err
 			}
 			if !ok {
-				expiresAt = parent.UpdatedAt.Add(defaultHITLTimeout)
+				continue
 			}
 			if !now.After(expiresAt) {
 				continue
@@ -64,8 +63,8 @@ func selectBlockedParentsWithOpenChildren(ctx context.Context, tx *immediateTx) 
 		    FROM task_relations tr
 		    JOIN tasks child ON child.id = tr.child_task_id
 		    WHERE tr.parent_task_id = tasks.id
-		      AND child.state != ?
-		  )`, models.TaskStateBlocked, models.TaskStateCompleted)
+		      AND child.state NOT IN (?, ?)
+		  )`, models.TaskStateBlocked, models.TaskStateCompleted, models.TaskStateFailed)
 	if err != nil {
 		return nil, fmt.Errorf("select blocked parents: %w", err)
 	}

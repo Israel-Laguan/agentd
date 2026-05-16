@@ -51,3 +51,40 @@ func TestReconcileExpiredBlockedTasks_FailsParentPastExpiry(t *testing.T) {
 		t.Fatalf("parent state = %s, want FAILED_REQUIRES_HUMAN", after.State)
 	}
 }
+
+func TestReconcileExpiredBlockedTasks_SkipsBlockedWithoutExpiry(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	parent := seedTestTask(t, store, "hitl-no-expiry", models.TaskStateRunning)
+
+	blocked, _, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title:       "Manual review required: AI providers unavailable",
+		Description: "review",
+		Assignee:    models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+
+	afterBlock, err := store.GetTask(ctx, blocked.ID)
+	if err != nil {
+		t.Fatalf("get blocked parent: %v", err)
+	}
+
+	failed, err := store.ReconcileExpiredBlockedTasks(ctx, afterBlock.UpdatedAt.Add(31*time.Minute))
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if len(failed) != 0 {
+		t.Fatalf("expired tasks = %d, want 0", len(failed))
+	}
+	after, err := store.GetTask(ctx, blocked.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if after.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", after.State)
+	}
+}

@@ -11,6 +11,7 @@ func (w *Worker) commitTextWithProfile(ctx context.Context, task models.Task, co
 	if profile != nil && profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
 			w.emit(ctx, task, "ERROR", err.Error())
+			w.failHard(ctx, task, err)
 			return
 		} else if done {
 			return

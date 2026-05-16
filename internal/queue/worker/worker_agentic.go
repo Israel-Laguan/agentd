@@ -15,6 +15,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	if profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
 			w.emit(ctx, task, "ERROR", err.Error())
+			w.failHard(ctx, task, err)
 			return
 		} else if done {
 			return
@@ -45,6 +46,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	}
 
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
+	messages = w.prependReviewRejectionFeedback(ctx, task, messages)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
