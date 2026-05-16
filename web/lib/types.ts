@@ -53,6 +53,7 @@ export interface ChatResponse {
 }
 
 interface DraftPlanTask {
+  id?: string;
   title: string;
   description: string;
 };

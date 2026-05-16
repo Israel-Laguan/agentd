@@ -17,10 +17,12 @@ export async function mockChat(
       description: "Generated execution plan",
       tasks: [
         {
+          id: crypto.randomUUID(),
           title: "Design architecture",
           description: "Define system structure",
         },
         {
+          id: crypto.randomUUID(),
           title: "Build frontend",
           description: "Create Kanban UI",
         },

@@ -47,15 +47,44 @@ export async function postApprovePlan() {
   return res.json();
 }
 
-export async function fetchTaskComments() {
+export async function fetchTaskComments(taskId: string) {
   if (USE_MOCK) {
-    return mockTaskComments;
+    return mockTaskComments.filter((c: { taskId: string }) => c.taskId === taskId);
   }
 
-  const res = await fetch("/api/v1/tasks/comments");
+  const res = await fetch(`${API}/api/v1/tasks/${taskId}/comments`);
 
   if (!res.ok) {
     throw new Error("Failed to fetch comments");
+  }
+
+  return res.json();
+}
+
+export async function updateTask(
+  id: string,
+  updates: Partial<{
+    title: string;
+    description: string;
+    status: string;
+    updatedAt: number;
+  }>
+) {
+  if (USE_MOCK) {
+    const task = mockBoard.tasks.find((t) => t.id === id);
+    if (!task) throw new Error("Task not found");
+    Object.assign(task, updates, { updatedAt: Date.now() });
+    return task;
+  }
+
+  const res = await fetch(`${API}/api/v1/tasks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to update task");
   }
 
   return res.json();

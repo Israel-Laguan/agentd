@@ -32,7 +32,7 @@ export function DraftPlanView({
 
       <div className="space-y-1.5 mb-5">
         {plan.tasks.map((t, i: number) => (
-          <div key={i} className="flex gap-3 p-2.5 bg-bg/30 border border-border rounded-lg group hover:border-text-dim/20 transition-colors">
+          <div key={t.id ?? i} className="flex gap-3 p-2.5 bg-bg/30 border border-border rounded-lg group hover:border-text-dim/20 transition-colors">
             <span className="text-[10px] font-mono flex items-center justify-center text-text-dim group-hover:text-accent">{String(i + 1).padStart(2, '0')}</span>
             <div>
               <h5 className="text-[11px] font-bold text-text uppercase tracking-tight">{t.title}</h5>

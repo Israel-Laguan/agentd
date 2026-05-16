@@ -1,10 +1,11 @@
+import { Dispatch, SetStateAction } from "react";
 import { MessageSquare, LayoutDashboard, Users, BookOpen, Terminal, Settings } from "lucide-react";
 import { SidebarItem } from "@/app/components/sidebar-item";
 import { motion } from "framer-motion";
 
 interface SidebarProps {
     activeTab: string;
-    setActiveTab: React.Dispatch<React.SetStateAction<string>>;
+    setActiveTab: Dispatch<SetStateAction<string>>;
     workforce: {
         activeWorkers: number;
         maxWorkers: number;

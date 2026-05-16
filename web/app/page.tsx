@@ -11,7 +11,7 @@ import {
   ChatMessage,
   DraftPlan,
 } from '@/lib/types';
-import { getBoard, getWorkforce } from "@/lib/api";
+import { getBoard, getWorkforce, updateTask } from "@/lib/api";
 import { BoardView } from "@/app/components/board/board-view";
 import { ChatView } from "@/app/components/chat/chat-view";
 import { LogsView } from "@/app/components/logs-view";
@@ -91,6 +91,19 @@ export default function Page() {
           : task
       )
     );
+
+    updateTask(taskId, { status: newStatus, updatedAt: Date.now() }).catch((err) => {
+      console.error("Failed to persist task status", err);
+    });
+  };
+
+  const handleUpdateTask = async (id: string, patch: Partial<Task>) => {
+    try {
+      const updated = await updateTask(id, patch);
+      setLocalTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    } catch (err) {
+      console.error("Failed to update task", err);
+    }
   };
 
   return (
@@ -141,8 +154,10 @@ export default function Page() {
       {/* Persistent System Footer */}
       <Footer />
       <TaskDrawer
+        key={selectedTask?.id}
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
+        onUpdateTask={handleUpdateTask}
       />
     </div>
   );

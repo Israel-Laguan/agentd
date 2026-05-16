@@ -80,6 +80,8 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
        <div className="flex items-center gap-2">
         <button
           type="button"
+          aria-label="Drag task"
+          title="Drag task"
           ref={setActivatorNodeRef}
           {...listeners}
           {...attributes}

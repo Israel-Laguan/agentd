@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 
+function createMessageId() {
+  return globalThis.crypto?.randomUUID?.() ?? `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 import { ChatMessage, DraftPlan } from "@/lib/types";
 import { sendChat, postApprovePlan } from "@/lib/api";
 
@@ -33,7 +37,7 @@ export function ChatView({
   const handleSend = async () => {
     if (!input.trim()) return;
 
-    const userMsg = { id: `msg-${Date.now()}`, role: "user", content: input } as ChatMessage;
+    const userMsg = { id: createMessageId(), role: "user", content: input } as ChatMessage;
 
     setMessages((p) => [...p, userMsg]);
     setInput("");
@@ -46,7 +50,7 @@ export function ChatView({
         data?.message ??
         (data?.choices?.[0]?.message?.content
           ? {
-              id: `msg-${Date.now()}`,
+              id: createMessageId(),
               role: "assistant",
               content: data.choices[0].message.content,
             }
@@ -59,7 +63,7 @@ export function ChatView({
       setMessages((p) => [
         ...p,
         {
-          id: `msg-${Date.now()}`,
+          id: createMessageId(),
           role: "assistant",
           content: "Sorry, I encountered an error processing your request. Please try again.",
         },
@@ -76,7 +80,7 @@ export function ChatView({
       setMessages((p) => [
         ...p,
         {
-          id: `msg-${Date.now()}`,
+          id: createMessageId(),
           role: "assistant",
           content: "The workforce has been deployed. You can track progress on the board.",
         },
