@@ -79,7 +79,7 @@ func (w *Worker) enrichBuilderProjectInstructions(builder *SystemPromptBuilder, 
 }
 
 func (w *Worker) enrichBuilderMatchedSkills(builder *SystemPromptBuilder, task models.Task, project models.Project) {
-	if w.skillLoader == nil || w.skillRouter == nil || project.WorkspacePath == "" {
+	if w.skillLoader == nil || w.skillRouter == nil {
 		return
 	}
 	skills, err := w.skillLoader.LoadAll(project.WorkspacePath)

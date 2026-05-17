@@ -169,6 +169,32 @@ Run tests, build, deploy
 	}
 }
 
+func TestBuildSystemPromptContent_GlobalSkillsEmptyWorkspace(t *testing.T) {
+	globalDir := t.TempDir()
+	skillContent := "# Skill: Logging\n\n## When This Applies\n\nlogging, observability\n\n## The Procedure\n\nUse structured logs\n"
+	if err := os.WriteFile(filepath.Join(globalDir, "logging.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := &Worker{
+		skillLoader: &SkillLoader{GlobalDir: globalDir},
+		skillRouter: &SkillRouter{Threshold: 0.0, TopK: 3},
+	}
+	task := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "t1"},
+		Title:       "Add logging",
+		Description: "Improve observability with structured logging",
+	}
+
+	prompt := w.buildSystemPromptContent(task, models.Project{}, models.AgentProfile{})
+	if !strings.Contains(prompt, "=== Skill: Logging ===") {
+		t.Fatalf("missing global skill in prompt: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Use structured logs") {
+		t.Fatal("missing skill procedure in prompt")
+	}
+}
+
 func TestAssembleAgenticSystemPrompt_WithMemoryLessons(t *testing.T) {
 	w := &Worker{
 		retriever: &mockMemoryRetriever{
