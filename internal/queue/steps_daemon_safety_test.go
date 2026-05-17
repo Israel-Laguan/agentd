@@ -23,8 +23,9 @@ type daemonSafetyScenario struct {
 	daemon  *Daemon
 	sink    *queueSink
 
-	delays   []time.Duration
-	curDelay time.Duration
+	delays      []time.Duration
+	curDelay    time.Duration
+	dispatchErr error
 }
 
 func newDaemonSafetyScenario() *daemonSafetyScenario {
@@ -236,10 +237,22 @@ func (s *daemonSafetyScenario) workerPanics(context.Context) error {
 func (s *daemonSafetyScenario) dispatchNTasks(_ context.Context, n int) error {
 	s.store.seed(n, models.TaskStateReady)
 	_, _, err := s.daemon.dispatch(context.Background())
-	return err
+	s.dispatchErr = err
+	if err != nil {
+		return err
+	}
+	return waitFor(func() bool {
+		return s.daemon.sem.Available() == s.daemon.sem.Capacity()
+	}, "dispatch goroutine completion after panic")
 }
 
 func (s *daemonSafetyScenario) noPanicPropagated(context.Context) error {
+	if s.dispatchErr != nil {
+		return fmt.Errorf("dispatch returned error: %v", s.dispatchErr)
+	}
+	if !s.sink.containsType("PANIC") {
+		return fmt.Errorf("expected PANIC event from recovered worker panic")
+	}
 	return nil
 }
 

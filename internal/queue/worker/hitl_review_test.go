@@ -129,6 +129,9 @@ func assertLegacyReviewCommittedStdout(t *testing.T, store *captureResultStore, 
 	if store.lastResult.Payload != wantPayload {
 		t.Fatalf("committed payload = %q, want %q", store.lastResult.Payload, wantPayload)
 	}
+	if strings.Count(store.lastResult.Payload, "exit=") != 1 {
+		t.Fatalf("committed payload should have a single metadata prefix, got %q", store.lastResult.Payload)
+	}
 	if sb.execCount != 1 {
 		t.Fatalf("sandbox executions = %d, want 1", sb.execCount)
 	}

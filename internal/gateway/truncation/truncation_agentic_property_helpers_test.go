@@ -12,9 +12,16 @@ import (
 // Helper Functions for Property Tests
 // ============================================================================
 
+func safeSpan(min, max int) int {
+	if max <= min {
+		return 1
+	}
+	return max - min
+}
+
 // generateRandomMessages generates a random message list with the specified count
 func generateRandomMessages(r *rand.Rand, minCount, maxCount int) []spec.PromptMessage {
-	count := r.Intn(maxCount-minCount) + minCount
+	count := r.Intn(safeSpan(minCount, maxCount)) + minCount
 	if count < 2 {
 		count = 2
 	}
@@ -92,7 +99,7 @@ func generateRandomMessagesWithToolExchanges(r *rand.Rand, minCount, maxCount in
 	messages := make([]spec.PromptMessage, 0, count)
 
 	addBaseMessages(r, &messages)
-	addToolExchanges(r, &messages)
+	addToolExchanges(r, &messages, count)
 	addFinalAssistantIfNeeded(r, &messages, count)
 	padWithRandomMessages(r, &messages, count)
 
@@ -101,7 +108,7 @@ func generateRandomMessagesWithToolExchanges(r *rand.Rand, minCount, maxCount in
 
 // calculateMessageCount determines the number of messages to generate
 func calculateMessageCount(r *rand.Rand, minCount, maxCount int) int {
-	count := r.Intn(maxCount-minCount) + minCount
+	count := r.Intn(safeSpan(minCount, maxCount)) + minCount
 	if count < 4 {
 		count = 4
 	}
@@ -120,9 +127,16 @@ func addBaseMessages(r *rand.Rand, messages *[]spec.PromptMessage) {
 	})
 }
 
-// addToolExchanges adds assistant-tool call pairs
-func addToolExchanges(r *rand.Rand, messages *[]spec.PromptMessage) {
+// addToolExchanges adds assistant-tool call pairs without exceeding targetCount.
+func addToolExchanges(r *rand.Rand, messages *[]spec.PromptMessage, targetCount int) {
+	maxExchanges := (targetCount - len(*messages)) / 2
+	if maxExchanges <= 0 {
+		return
+	}
 	numExchanges := r.Intn(5) + 1 // 1 to 5 exchanges
+	if numExchanges > maxExchanges {
+		numExchanges = maxExchanges
+	}
 	for i := 0; i < numExchanges; i++ {
 		callID := fmt.Sprintf("call_%d", i)
 		addToolExchange(r, messages, callID, i)
@@ -161,15 +175,11 @@ func addFinalAssistantIfNeeded(r *rand.Rand, messages *[]spec.PromptMessage, tar
 // padWithRandomMessages fills remaining space with random messages
 func padWithRandomMessages(r *rand.Rand, messages *[]spec.PromptMessage, targetCount int) {
 	for len(*messages) < targetCount {
-		role := []string{"assistant", "user", "tool"}[r.Intn(3)]
-		msg := spec.PromptMessage{
+		role := []string{"assistant", "user"}[r.Intn(2)]
+		*messages = append(*messages, spec.PromptMessage{
 			Role:    role,
 			Content: randomContent(r, 5, 20),
-		}
-		if role == "tool" {
-			msg.ToolCallID = fmt.Sprintf("call_%d", r.Intn(100))
-		}
-		*messages = append(*messages, msg)
+		})
 	}
 }
 
@@ -179,7 +189,12 @@ func randomContent(r *rand.Rand, minLen, maxLen int) string {
 		"function", "call", "api", "request", "response", "parameter", "output", "input", "system", "user",
 		"assistant", "tool", "info", "debug", "log", "warning", "critical", "note", "summary", "detail"}
 
-	wordCount := r.Intn(maxLen/5-minLen/5) + minLen/5
+	minWords := minLen / 5
+	maxWords := maxLen / 5
+	if maxWords <= minWords {
+		maxWords = minWords + 1
+	}
+	wordCount := r.Intn(maxWords-minWords) + minWords
 	if wordCount < 1 {
 		wordCount = 1
 	}

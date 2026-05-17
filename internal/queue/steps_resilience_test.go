@@ -53,9 +53,9 @@ func (s *resilienceStore) EnsureSystemProject(_ context.Context) (*models.Projec
 }
 
 func (s *resilienceStore) EnsureProjectTask(_ context.Context, projectID string, draft models.DraftTask) (*models.Task, bool, error) {
-	for _, t := range s.systemTasks {
-		if t.Title == draft.Title {
-			return &t, false, nil
+	for i := range s.systemTasks {
+		if s.systemTasks[i].Title == draft.Title {
+			return &s.systemTasks[i], false, nil
 		}
 	}
 	task := models.Task{
