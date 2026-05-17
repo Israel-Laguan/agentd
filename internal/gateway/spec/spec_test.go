@@ -103,23 +103,39 @@ func assertMarshaledToolConversation(t *testing.T, parsed []map[string]any) {
 	if len(parsed) != 5 {
 		t.Fatalf("len(messages) = %d, want 5", len(parsed))
 	}
-	if parsed[0]["role"] != "system" || parsed[0]["content"] != "You are a helpful assistant." {
-		t.Errorf("system message = %v", parsed[0])
+	assertMarshaledSystemMessage(t, parsed[0])
+	assertMarshaledUserMessage(t, parsed[1])
+	assertMarshaledAssistantToolCallsMessage(t, parsed[2])
+	assertMarshaledToolResultMessage(t, parsed[3])
+	assertMarshaledFinalAssistantMessage(t, parsed[4])
+}
+
+func assertMarshaledSystemMessage(t *testing.T, msg map[string]any) {
+	t.Helper()
+	if msg["role"] != "system" || msg["content"] != "You are a helpful assistant." {
+		t.Errorf("system message = %v", msg)
 	}
-	if parsed[1]["role"] != "user" || parsed[1]["content"] != "What's the weather?" {
-		t.Errorf("user message = %v", parsed[1])
+}
+
+func assertMarshaledUserMessage(t *testing.T, msg map[string]any) {
+	t.Helper()
+	if msg["role"] != "user" || msg["content"] != "What's the weather?" {
+		t.Errorf("user message = %v", msg)
 	}
-	assistantWithToolCalls := parsed[2]
-	if assistantWithToolCalls["role"] != "assistant" {
-		t.Errorf("assistant role = %v", assistantWithToolCalls["role"])
+}
+
+func assertMarshaledAssistantToolCallsMessage(t *testing.T, msg map[string]any) {
+	t.Helper()
+	if msg["role"] != "assistant" {
+		t.Errorf("assistant role = %v", msg["role"])
 	}
-	contentVal, hasContent := assistantWithToolCalls["content"]
+	contentVal, hasContent := msg["content"]
 	if !hasContent || contentVal != "" {
 		t.Errorf("assistant with tool_calls should have empty string content, got %v", contentVal)
 	}
-	tc, ok := assistantWithToolCalls["tool_calls"].([]any)
+	tc, ok := msg["tool_calls"].([]any)
 	if !ok || len(tc) != 1 {
-		t.Fatalf("tool_calls = %v", assistantWithToolCalls["tool_calls"])
+		t.Fatalf("tool_calls = %v", msg["tool_calls"])
 	}
 	tcObj := tc[0].(map[string]any)
 	if tcObj["id"] != "call_abc" {
@@ -128,17 +144,24 @@ func assertMarshaledToolConversation(t *testing.T, parsed []map[string]any) {
 	if fn := tcObj["function"].(map[string]any); fn["name"] != "get_weather" {
 		t.Errorf("tool_call function name = %v", fn["name"])
 	}
-	toolMsg := parsed[3]
-	if toolMsg["role"] != "tool" {
-		t.Errorf("tool role = %v", toolMsg["role"])
+}
+
+func assertMarshaledToolResultMessage(t *testing.T, msg map[string]any) {
+	t.Helper()
+	if msg["role"] != "tool" {
+		t.Errorf("tool role = %v", msg["role"])
 	}
-	if toolMsg["tool_call_id"] != "call_abc" {
-		t.Errorf("tool_call_id = %v", toolMsg["tool_call_id"])
+	if msg["tool_call_id"] != "call_abc" {
+		t.Errorf("tool_call_id = %v", msg["tool_call_id"])
 	}
-	if _, hasToolCalls := toolMsg["tool_calls"]; hasToolCalls {
+	if _, hasToolCalls := msg["tool_calls"]; hasToolCalls {
 		t.Error("tool message should omit tool_calls")
 	}
-	if parsed[4]["role"] != "assistant" || parsed[4]["content"] != "It's sunny and 72°F in Boston." {
-		t.Errorf("final assistant message = %v", parsed[4])
+}
+
+func assertMarshaledFinalAssistantMessage(t *testing.T, msg map[string]any) {
+	t.Helper()
+	if msg["role"] != "assistant" || msg["content"] != "It's sunny and 72°F in Boston." {
+		t.Errorf("final assistant message = %v", msg)
 	}
 }
