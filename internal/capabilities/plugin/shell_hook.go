@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,7 @@ import (
 	"agentd/internal/queue/worker"
 )
 
-const defaultShellTimeout = 3 * time.Second
+const defaultShellTimeout = 10 * time.Second
 
 // ShellPreHook wraps a shell script as a PreHook. The script receives
 // context via environment variables (HOOK_TOOL, HOOK_ARGS,
@@ -93,7 +94,7 @@ func execScript(
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", script) //nolint:gosec // plugin scripts are admin-configured
-	cmd.Env = env
+	cmd.Env = append(os.Environ(), env...)
 	cmd.WaitDelay = 500 * time.Millisecond
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
