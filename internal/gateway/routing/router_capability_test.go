@@ -16,6 +16,7 @@ import (
 type mockProvider struct {
 	providerName string
 	budget       int
+	content      string
 	request      spec.AIRequest
 	capabilities providers.Capabilities
 	err          error
@@ -28,7 +29,11 @@ func (p *mockProvider) Generate(_ context.Context, req spec.AIRequest) (spec.AIR
 	if p.err != nil {
 		return spec.AIResponse{}, p.err
 	}
-	return spec.AIResponse{Content: "ok", ProviderUsed: string(p.providerName)}, nil
+	content := p.content
+	if content == "" {
+		content = "ok"
+	}
+	return spec.AIResponse{Content: content, ProviderUsed: string(p.providerName)}, nil
 }
 func (p *mockProvider) Capabilities() providers.Capabilities {
 	return p.capabilities

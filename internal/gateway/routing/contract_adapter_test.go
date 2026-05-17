@@ -11,7 +11,11 @@ import (
 )
 
 func TestGenerateText_trimsResponse(t *testing.T) {
-	router := NewRouter(&mockProvider{providerName: "openai", budget: 10000})
+	router := NewRouter(&mockProvider{
+		providerName: "openai",
+		budget:       10000,
+		content:      "  ok  \n",
+	})
 	text, err := router.GenerateText(context.Background(), "hello", 100)
 	if err != nil {
 		t.Fatalf("GenerateText() error = %v", err)
