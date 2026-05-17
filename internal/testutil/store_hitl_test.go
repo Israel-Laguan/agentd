@@ -40,7 +40,7 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_FailsParentPastExpiry(t *t
 		t.Fatalf("add expiry comment: %v", err)
 	}
 
-	blocked, _, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+	blocked, children, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
 		Title:       "Approve tool call: deploy",
 		Description: "review",
 		Assignee:    models.TaskAssigneeHuman,
@@ -65,6 +65,19 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_FailsParentPastExpiry(t *t
 	}
 	if after.State != models.TaskStateFailedRequiresHuman {
 		t.Fatalf("parent state = %s, want FAILED_REQUIRES_HUMAN", after.State)
+	}
+	if after.CompletedAt == nil {
+		t.Fatal("parent completed_at is nil, want set on HITL timeout")
+	}
+	afterChild, err := store.GetTask(ctx, children[0].ID)
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if afterChild.State != models.TaskStateFailed {
+		t.Fatalf("child state = %s, want FAILED", afterChild.State)
+	}
+	if afterChild.CompletedAt == nil {
+		t.Fatal("child completed_at is nil, want set on HITL timeout")
 	}
 }
 
@@ -181,6 +194,10 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_PreservesFailedRequiresHum
 	if _, err := store.UpdateTaskState(ctx, child.ID, child.UpdatedAt, models.TaskStateFailedRequiresHuman); err != nil {
 		t.Fatalf("set child FAILED_REQUIRES_HUMAN: %v", err)
 	}
+	beforeReconcile, err := store.GetTask(ctx, child.ID)
+	if err != nil {
+		t.Fatalf("get child before reconcile: %v", err)
+	}
 
 	failed, err := store.ReconcileExpiredBlockedTasks(ctx, time.Now())
 	if err != nil {
@@ -196,11 +213,21 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_PreservesFailedRequiresHum
 	if afterParent.State != models.TaskStateFailedRequiresHuman {
 		t.Fatalf("parent state = %s, want FAILED_REQUIRES_HUMAN", afterParent.State)
 	}
+	if afterParent.CompletedAt == nil {
+		t.Fatal("parent completed_at is nil, want set on HITL timeout")
+	}
 	afterChild, err := store.GetTask(ctx, child.ID)
 	if err != nil {
 		t.Fatalf("get child: %v", err)
 	}
 	if afterChild.State != models.TaskStateFailedRequiresHuman {
 		t.Fatalf("child state = %s, want FAILED_REQUIRES_HUMAN (not downgraded)", afterChild.State)
+	}
+	if (beforeReconcile.CompletedAt == nil) != (afterChild.CompletedAt == nil) {
+		t.Fatal("child completed_at presence changed during reconcile")
+	}
+	if beforeReconcile.CompletedAt != nil && afterChild.CompletedAt != nil &&
+		!beforeReconcile.CompletedAt.Equal(*afterChild.CompletedAt) {
+		t.Fatalf("child completed_at = %v, want unchanged %v", afterChild.CompletedAt, beforeReconcile.CompletedAt)
 	}
 }
