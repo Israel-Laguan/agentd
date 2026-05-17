@@ -28,6 +28,9 @@ jobs:
   go:
     name: Go
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       GOLANGCI_LINT_VERSION: v2.11.4
     steps:
@@ -43,46 +46,117 @@ jobs:
           python-version: "3.12"
 
       - name: Verify go.mod is tidy
+        id: gomod_check
+        continue-on-error: true
         run: ./scripts/verify_gomod.sh
+
+      - name: Enforce go.mod tidy
+        if: steps.gomod_check.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let detail = 'go.mod not tidy. Run make tidy locally and commit go.mod and go.sum.';
+            const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+            if (summaryPath && fs.existsSync(summaryPath)) {
+              detail += '\n\nSee the job Summary tab for details.';
+            }
+            core.setFailed(detail);
 
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 
       - name: LOC check
         id: loc_check
+        continue-on-error: true
         run: make loc
         env:
           GITHUB_ACTIONS: true
 
-      - name: Report LOC failure
-        if: failure() && steps.loc_check.outcome == 'failure'
-        run: |
-          ./scripts/ci_report_failure.sh "LOC check failed" \
-            "One or more files exceed LOC limits. See annotations or the LOC check step log."
+      - name: Enforce LOC check
+        if: steps.loc_check.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let detail = 'One or more files exceed LOC limits.';
+            const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+            if (summaryPath && fs.existsSync(summaryPath)) {
+              detail += '\n\nSee the job Summary tab for the file table.';
+            }
+            core.setFailed(detail);
 
       - name: Register golangci-lint problem matcher
         run: echo "::add-matcher::.github/golangci-lint-matcher.json"
 
       - name: Lint
         id: lint
+        continue-on-error: true
         run: make lint
 
       - name: Remove golangci-lint problem matcher
         if: always()
         run: echo "::remove-matcher owner=golangci-lint::"
 
-      - name: Report lint failure
-        if: failure() && steps.lint.outcome == 'failure'
-        run: |
-          ./scripts/ci_report_failure.sh "golangci-lint failed" \
-            "Lint reported issues. See annotations or the Lint step log for details."
+      - name: Enforce lint
+        if: steps.lint.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.setFailed(
+              'golangci-lint failed. See file annotations and the Lint step log for details.'
+            );
 
       - name: Test
         id: test
+        continue-on-error: true
         run: make test
 
-      - name: Report test failure
-        if: failure() && steps.test.outcome == 'failure'
-        run: |
-          ./scripts/ci_report_failure.sh "Go tests failed" \
-            "Tests failed. Open the Test step log for package and assertion details."
+      - name: Enforce tests
+        if: steps.test.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.setFailed(
+              'Go tests failed. Open the Test step log for package and assertion details.'
+            );
+
+      - name: Comment CI failure on PR
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- ci-go-failure -->';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let body = `${marker}\n## CI (Go) failed\n\n[Workflow run](${runUrl})\n\n`;
+            const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+            if (summaryPath && fs.existsSync(summaryPath)) {
+              body += fs.readFileSync(summaryPath, 'utf8');
+            } else {
+              body += 'See the failed workflow run for details.';
+            }
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }

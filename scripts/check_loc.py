@@ -84,13 +84,15 @@ def emit_github_annotations(violations: list[tuple[int, str, int]]) -> None:
     sorted_violations = sorted(violations, reverse=True)
     for lines, rel_path, limit in sorted_violations[:MAX_GITHUB_ANNOTATIONS]:
         print(
-            f"::error file={rel_path},line=1::LOC {lines}/{limit}: file exceeds limit",
+            f"::error file={rel_path},line=1,endLine=1,title=LOC limit exceeded::"
+            f"LOC {lines}/{limit} — file exceeds limit",
             flush=True,
         )
     remaining = len(sorted_violations) - MAX_GITHUB_ANNOTATIONS
     if remaining > 0:
         print(
-            f"::error::LOC check failed: {len(sorted_violations)} file(s) exceed limits "
+            f"::error title=LOC check failed::LOC check failed — "
+            f"{len(sorted_violations)} file(s) exceed limits "
             f"({remaining} more not shown as annotations; see step log)",
             flush=True,
         )
