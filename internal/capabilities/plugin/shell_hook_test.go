@@ -161,3 +161,31 @@ func TestParseTimeout(t *testing.T) {
 	assert.Equal(t, defaultShellTimeout, parseTimeout("0s"))
 	assert.Equal(t, defaultShellTimeout, parseTimeout("-1s"))
 }
+
+func TestShellPreHook_DoesNotInheritProcessSecrets(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "super-secret")
+
+	dir := t.TempDir()
+	writeScript(t, dir, "no-leak.sh", `#!/bin/sh
+if [ -n "$OPENAI_API_KEY" ]; then
+  echo "leaked"
+  exit 1
+fi
+exit 0
+`)
+
+	entry := HookEntry{
+		Name:   "no-leak",
+		Script: "no-leak.sh",
+		Policy: "fail_closed",
+	}
+	hook := ShellPreHook(entry, dir)
+
+	verdict, err := hook.Fn(worker.HookContext{
+		ToolName:  "bash",
+		SessionID: "s1",
+		Timestamp: time.Now(),
+	})
+	require.NoError(t, err)
+	assert.False(t, verdict.Veto)
+}

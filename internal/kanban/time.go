@@ -11,13 +11,14 @@ func utcNow() time.Time { return time.Now().UTC().Round(0) }
 func formatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 
 func parseTime(value string) (time.Time, error) {
-	if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err == nil {
 		return parsed.UTC(), nil
 	}
-	if parsed, err := time.Parse("2006-01-02 15:04:05", value); err == nil {
+	if parsed, err2 := time.Parse("2006-01-02 15:04:05", value); err2 == nil {
 		return parsed.UTC(), nil
 	}
-	return time.Time{}, fmt.Errorf("parse timestamp %q: unsupported format", value)
+	return time.Time{}, fmt.Errorf("parse timestamp %q: %w", value, err)
 }
 
 func nullableTime(t *time.Time) any {
