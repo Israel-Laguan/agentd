@@ -30,6 +30,7 @@ func TestFindLatestApprovalSubtask_ExactTitleOnly(t *testing.T) {
 	got := findLatestApprovalSubtask(children, "deploy")
 	if got == nil {
 		t.Fatal("expected deploy approval subtask")
+		return
 	}
 	if got.ID != "deploy" {
 		t.Fatalf("got subtask %q, want deploy (not deploy-prod prefix match)", got.ID)

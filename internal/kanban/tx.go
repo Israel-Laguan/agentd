@@ -15,10 +15,6 @@ type sqlQueryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-type rowsAffected interface {
-	RowsAffected() (int64, error)
-}
-
 type immediateTx struct {
 	conn *sql.Conn
 	done bool

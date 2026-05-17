@@ -105,6 +105,7 @@ func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing
 	}
 	if review == nil {
 		t.Fatal("expected review subtask")
+		return
 	}
 	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
 		t.Fatalf("complete review: %v", err)
@@ -189,6 +190,7 @@ func TestProcess_LegacyRequireReview_FinalizesApprovedReview(t *testing.T) {
 	}
 	if review == nil {
 		t.Fatal("expected review subtask")
+		return
 	}
 	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
 		t.Fatalf("complete review: %v", err)
@@ -264,6 +266,7 @@ func TestProcess_LegacyRequireReview_InjectsRejectionFeedback(t *testing.T) {
 	}
 	if review == nil {
 		t.Fatal("expected review subtask")
+		return
 	}
 	const rejectionComment = "Please add error handling"
 	if err := store.AddComment(ctx, models.Comment{
@@ -380,6 +383,7 @@ func TestTryFinalizeApprovedReview_RefreshesTaskBeforeCommit(t *testing.T) {
 	}
 	if review == nil {
 		t.Fatal("expected review subtask")
+		return
 	}
 	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
 		t.Fatalf("complete review: %v", err)
