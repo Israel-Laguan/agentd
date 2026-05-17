@@ -18,7 +18,7 @@ import (
 func TestToolCallPrecedesToolResult(t *testing.T) {
 	iterations := 150
 
-	property := func(seq ToolCallSequence, rnd *rand.Rand) bool {
+	property := func(seq ToolCallSequence, _ *rand.Rand) bool {
 		sink := &mockEventSink{}
 		w := &Worker{
 			sink:            sink,
@@ -88,7 +88,7 @@ func TestToolCallPrecedesToolResult(t *testing.T) {
 func TestToolCallIDMatching(t *testing.T) {
 	iterations := 150
 
-	property := func(seq ToolCallSequence, rnd *rand.Rand) bool {
+	property := func(seq ToolCallSequence, _ *rand.Rand) bool {
 		sink := &mockEventSink{}
 		w := &Worker{
 			sink:            sink,
