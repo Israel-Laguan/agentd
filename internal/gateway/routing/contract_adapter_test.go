@@ -64,8 +64,8 @@ func TestGenerateStructuredJSON_validationFailure(t *testing.T) {
 	})
 	var out invalidPayload
 	err := router.GenerateStructuredJSON(context.Background(), "prompt", &out)
-	if err == nil {
-		t.Fatal("GenerateStructuredJSON() error = nil, want validation error")
+	if !errors.Is(err, models.ErrInvalidJSONResponse) {
+		t.Fatalf("GenerateStructuredJSON() error = %v, want ErrInvalidJSONResponse", err)
 	}
 }
 
@@ -146,6 +146,9 @@ func TestGenerate_skipTruncation(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
+	}
+	if len(p.request.Messages) == 0 {
+		t.Fatal("provider request has no messages")
 	}
 	if p.request.Messages[0].Content != long {
 		t.Fatalf("message was truncated")
