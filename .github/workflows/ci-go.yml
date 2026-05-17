@@ -56,7 +56,9 @@ jobs:
 
       - name: Report LOC failure
         if: failure() && steps.loc_check.outcome == 'failure'
-        run: echo "::error::LOC check failed. See annotations above or the LOC check step log for file list."
+        run: |
+          ./scripts/ci_report_failure.sh "LOC check failed" \
+            "One or more files exceed LOC limits. See annotations or the LOC check step log."
 
       - name: Register golangci-lint problem matcher
         run: echo "::add-matcher::.github/golangci-lint-matcher.json"
@@ -71,7 +73,9 @@ jobs:
 
       - name: Report lint failure
         if: failure() && steps.lint.outcome == 'failure'
-        run: echo "::error::golangci-lint failed. See annotations above or the Lint step log for details."
+        run: |
+          ./scripts/ci_report_failure.sh "golangci-lint failed" \
+            "Lint reported issues. See annotations or the Lint step log for details."
 
       - name: Test
         id: test
@@ -79,4 +83,6 @@ jobs:
 
       - name: Report test failure
         if: failure() && steps.test.outcome == 'failure'
-        run: echo "::error::Go tests failed. Open the Test step log for package and assertion details."
+        run: |
+          ./scripts/ci_report_failure.sh "Go tests failed" \
+            "Tests failed. Open the Test step log for package and assertion details."
