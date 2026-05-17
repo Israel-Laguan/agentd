@@ -64,145 +64,139 @@ func TestAppendTasksToProjectAndCommentIntake(t *testing.T) {
 	requireUnprocessedComments(t, store, ctx, 0)
 }
 
-func TestSuccessCriteriaPersistThroughTaskCreationPaths(t *testing.T) {
+func TestSuccessCriteria_materializeAndAppend(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
-
-	t.Run("materialize and append non-empty", func(t *testing.T) {
-		project, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-			ProjectName: "criteria",
-			Tasks: []models.DraftTask{{
-				TempID:          "a",
-				Title:           "A",
-				SuccessCriteria: []string{"tests pass", "lint clean"},
-			}},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := tasks[0].SuccessCriteria; !reflect.DeepEqual(got, []string{"tests pass", "lint clean"}) {
-			t.Fatalf("materialized success criteria = %v", got)
-		}
-
-		added, err := store.AppendTasksToProject(ctx, project.ID, tasks[0].ID, []models.DraftTask{{
-			Title:           "B",
-			SuccessCriteria: []string{"reviewed"},
-		}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := added[0].SuccessCriteria; !reflect.DeepEqual(got, []string{"reviewed"}) {
-			t.Fatalf("appended success criteria = %v", got)
-		}
+	project, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "criteria",
+		Tasks: []models.DraftTask{{
+			TempID: "a", Title: "A", SuccessCriteria: []string{"tests pass", "lint clean"},
+		}},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tasks[0].SuccessCriteria; !reflect.DeepEqual(got, []string{"tests pass", "lint clean"}) {
+		t.Fatalf("materialized success criteria = %v", got)
+	}
+	added, err := store.AppendTasksToProject(ctx, project.ID, tasks[0].ID, []models.DraftTask{{
+		Title: "B", SuccessCriteria: []string{"reviewed"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := added[0].SuccessCriteria; !reflect.DeepEqual(got, []string{"reviewed"}) {
+		t.Fatalf("appended success criteria = %v", got)
+	}
+}
 
-	t.Run("nil and empty criteria materialize to zero-length", func(t *testing.T) {
-		for name, draft := range map[string]models.DraftTask{
-			"nil":   {TempID: "nil", Title: "nil criteria"},
-			"empty": {TempID: "empty", Title: "empty criteria", SuccessCriteria: []string{}},
-		} {
-			t.Run(name, func(t *testing.T) {
-				_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-					ProjectName: "criteria-" + name,
-					Tasks:       []models.DraftTask{draft},
-				})
-				if err != nil {
-					t.Fatal(err)
-				}
-				assertZeroSuccessCriteria(t, tasks[0].SuccessCriteria)
+func TestSuccessCriteria_nilAndEmptyMaterialize(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	for name, draft := range map[string]models.DraftTask{
+		"nil":   {TempID: "nil", Title: "nil criteria"},
+		"empty": {TempID: "empty", Title: "empty criteria", SuccessCriteria: []string{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+				ProjectName: "criteria-" + name, Tasks: []models.DraftTask{draft},
 			})
-		}
-	})
-
-	t.Run("nil and empty criteria append to zero-length", func(t *testing.T) {
-		project, parent, err := store.MaterializePlan(ctx, models.DraftPlan{
-			ProjectName: "criteria-append-empty",
-			Tasks:       []models.DraftTask{{TempID: "parent", Title: "parent"}},
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertZeroSuccessCriteria(t, tasks[0].SuccessCriteria)
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		for name, draft := range map[string]models.DraftTask{
-			"nil":   {Title: "nil append"},
-			"empty": {Title: "empty append", SuccessCriteria: []string{}},
-		} {
-			t.Run(name, func(t *testing.T) {
-				added, err := store.AppendTasksToProject(ctx, project.ID, parent[0].ID, []models.DraftTask{draft})
-				if err != nil {
-					t.Fatal(err)
-				}
-				assertZeroSuccessCriteria(t, added[0].SuccessCriteria)
-			})
-		}
-	})
+	}
+}
 
-	t.Run("mutating draft slice after append does not affect persisted task", func(t *testing.T) {
-		project, parent, err := store.MaterializePlan(ctx, models.DraftPlan{
-			ProjectName: "criteria-append-independence",
-			Tasks:       []models.DraftTask{{TempID: "parent", Title: "parent"}},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		draft := models.DraftTask{Title: "child", SuccessCriteria: []string{"reviewed"}}
-		added, err := store.AppendTasksToProject(ctx, project.ID, parent[0].ID, []models.DraftTask{draft})
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := []string{"reviewed"}
-		if got := added[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
-			t.Fatalf("before draft mutation: got %v, want %v", got, want)
-		}
-		draft.SuccessCriteria[0] = "mutated"
-		draft.SuccessCriteria = append(draft.SuccessCriteria, "extra")
-		if got := added[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
-			t.Fatalf("after draft mutation: got %v, want %v", got, want)
-		}
+func TestSuccessCriteria_nilAndEmptyAppend(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	project, parent, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "criteria-append-empty",
+		Tasks:       []models.DraftTask{{TempID: "parent", Title: "parent"}},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, draft := range map[string]models.DraftTask{
+		"nil":   {Title: "nil append"},
+		"empty": {Title: "empty append", SuccessCriteria: []string{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			added, err := store.AppendTasksToProject(ctx, project.ID, parent[0].ID, []models.DraftTask{draft})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertZeroSuccessCriteria(t, added[0].SuccessCriteria)
+		})
+	}
+}
 
-	t.Run("mutating draft slice after materialize does not affect persisted task", func(t *testing.T) {
-		draft := models.DraftTask{
-			TempID:          "a",
-			Title:           "A",
-			SuccessCriteria: []string{"tests pass", "lint clean"},
-		}
-		_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-			ProjectName: "criteria-materialize-independence",
-			Tasks:       []models.DraftTask{draft},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := []string{"tests pass", "lint clean"}
-		if got := tasks[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
-			t.Fatalf("before draft mutation: got %v, want %v", got, want)
-		}
-		draft.SuccessCriteria[0] = "mutated"
-		draft.SuccessCriteria = append(draft.SuccessCriteria, "extra")
-		if got := tasks[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
-			t.Fatalf("after draft mutation: got %v, want %v", got, want)
-		}
+func TestSuccessCriteria_appendDraftMutationIndependent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	project, parent, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "criteria-append-independence",
+		Tasks:       []models.DraftTask{{TempID: "parent", Title: "parent"}},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft := models.DraftTask{Title: "child", SuccessCriteria: []string{"reviewed"}}
+	added, err := store.AppendTasksToProject(ctx, project.ID, parent[0].ID, []models.DraftTask{draft})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"reviewed"}
+	if got := added[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
+		t.Fatalf("before draft mutation: got %v, want %v", got, want)
+	}
+	draft.SuccessCriteria[0] = "mutated"
+	draft.SuccessCriteria = append(draft.SuccessCriteria, "extra")
+	if got := added[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
+		t.Fatalf("after draft mutation: got %v, want %v", got, want)
+	}
+}
 
-	t.Run("mutating draft field after creation does not affect persisted task", func(t *testing.T) {
-		draft := models.DraftTask{
-			TempID:          "a",
-			Title:           "A",
-			SuccessCriteria: []string{"tests pass"},
-		}
-		_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-			ProjectName: "criteria-field-independence",
-			Tasks:       []models.DraftTask{draft},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := []string{"tests pass"}
-		draft.SuccessCriteria = []string{"replaced"}
-		if got := tasks[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
-			t.Fatalf("after replacing draft field: got %v, want %v", got, want)
-		}
+func TestSuccessCriteria_materializeDraftMutationIndependent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	draft := models.DraftTask{
+		TempID: "a", Title: "A", SuccessCriteria: []string{"tests pass", "lint clean"},
+	}
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "criteria-materialize-independence", Tasks: []models.DraftTask{draft},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"tests pass", "lint clean"}
+	if got := tasks[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
+		t.Fatalf("before draft mutation: got %v, want %v", got, want)
+	}
+	draft.SuccessCriteria[0] = "mutated"
+	draft.SuccessCriteria = append(draft.SuccessCriteria, "extra")
+	if got := tasks[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
+		t.Fatalf("after draft mutation: got %v, want %v", got, want)
+	}
+}
+
+func TestSuccessCriteria_fieldReplacementIndependent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	draft := models.DraftTask{TempID: "a", Title: "A", SuccessCriteria: []string{"tests pass"}}
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "criteria-field-independence", Tasks: []models.DraftTask{draft},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"tests pass"}
+	draft.SuccessCriteria = []string{"replaced"}
+	if got := tasks[0].SuccessCriteria; !reflect.DeepEqual(got, want) {
+		t.Fatalf("after replacing draft field: got %v, want %v", got, want)
+	}
 }
 
 func assertZeroSuccessCriteria(t *testing.T, got []string) {

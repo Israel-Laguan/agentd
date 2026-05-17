@@ -210,77 +210,42 @@ func TestMCPAdapter_Close_WithSession(t *testing.T) {
 	assert.ErrorIs(t, a.Close(), want)
 }
 
-func TestConvertInputSchema(t *testing.T) {
-	tests := []struct {
+func convertInputSchemaCases() []struct {
+	name     string
+	input    any
+	expected *gateway.FunctionParameters
+} {
+	return []struct {
 		name     string
 		input    any
 		expected *gateway.FunctionParameters
 	}{
-		{
-			name:     "nil input",
-			input:    nil,
-			expected: nil,
-		},
-		{
-			name:     "non-map input",
-			input:    "invalid",
-			expected: nil,
-		},
-		{
-			name: "map with properties and required",
-			input: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"repo":  map[string]any{"type": "string"},
-					"issue": map[string]any{"type": "integer"},
-				},
-				"required": []any{"repo"},
+		{name: "nil input", input: nil},
+		{name: "non-map input", input: "invalid"},
+		{name: "map with properties and required", input: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"repo": map[string]any{"type": "string"}, "issue": map[string]any{"type": "integer"},
 			},
-			expected: &gateway.FunctionParameters{
-				Type: "object",
-				Properties: map[string]any{
-					"repo":  map[string]any{"type": "string"},
-					"issue": map[string]any{"type": "integer"},
-				},
-				Required: []string{"repo"},
+			"required": []any{"repo"},
+		}, expected: &gateway.FunctionParameters{
+			Type: "object",
+			Properties: map[string]any{
+				"repo": map[string]any{"type": "string"}, "issue": map[string]any{"type": "integer"},
 			},
-		},
-		{
-			name: "map without properties",
-			input: map[string]any{
-				"type": "object",
-			},
-			expected: &gateway.FunctionParameters{
-				Type:       "object",
-				Properties: map[string]any{},
-			},
-		},
-		{
-			name: "map with empty properties",
-			input: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
-			},
-			expected: &gateway.FunctionParameters{
-				Type:       "object",
-				Properties: map[string]any{},
-			},
-		},
-		{
-			name: "map with required but not string",
-			input: map[string]any{
-				"type":     "object",
-				"required": []any{123, 456},
-			},
-			expected: &gateway.FunctionParameters{
-				Type:       "object",
-				Properties: map[string]any{},
-				Required:   nil,
-			},
-		},
+			Required: []string{"repo"},
+		}},
+		{name: "map without properties", input: map[string]any{"type": "object"},
+			expected: &gateway.FunctionParameters{Type: "object", Properties: map[string]any{}}},
+		{name: "map with empty properties", input: map[string]any{"type": "object", "properties": map[string]any{}},
+			expected: &gateway.FunctionParameters{Type: "object", Properties: map[string]any{}}},
+		{name: "map with required but not string", input: map[string]any{"type": "object", "required": []any{123, 456}},
+			expected: &gateway.FunctionParameters{Type: "object", Properties: map[string]any{}}},
 	}
+}
 
-	for _, tt := range tests {
+func TestConvertInputSchema(t *testing.T) {
+	for _, tt := range convertInputSchemaCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			result := convertInputSchema(tt.input)
 			if tt.expected == nil {

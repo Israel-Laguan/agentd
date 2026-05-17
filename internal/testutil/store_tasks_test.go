@@ -58,65 +58,62 @@ func TestFakeKanbanStore_TerminalStatesSetCompletedAt(t *testing.T) {
 	ctx := context.Background()
 	store := NewFakeStore()
 
+	t.Run("UpdateTaskState_completed", func(t *testing.T) {
+		task := seedMaterializedTask(t, store, ctx, "completed-at-state", "task-state")
+		running, err := store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, 1)
+		if err != nil {
+			t.Fatalf("mark running: %v", err)
+		}
+		completed, err := store.UpdateTaskState(ctx, running.ID, running.UpdatedAt, models.TaskStateCompleted)
+		if err != nil {
+			t.Fatalf("complete via UpdateTaskState: %v", err)
+		}
+		if completed.CompletedAt == nil {
+			t.Fatal("UpdateTaskState COMPLETED: CompletedAt is nil, want set")
+		}
+	})
+
+	t.Run("UpdateTaskResult_success", func(t *testing.T) {
+		task := seedMaterializedTask(t, store, ctx, "completed-at-result", "task-result")
+		running, err := store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, 1)
+		if err != nil {
+			t.Fatalf("mark running: %v", err)
+		}
+		finished, err := store.UpdateTaskResult(ctx, running.ID, running.UpdatedAt, models.TaskResult{Success: true})
+		if err != nil {
+			t.Fatalf("complete via UpdateTaskResult: %v", err)
+		}
+		if finished.CompletedAt == nil {
+			t.Fatal("UpdateTaskResult success: CompletedAt is nil, want set")
+		}
+	})
+
+	t.Run("non_terminal_clears_completed_at", func(t *testing.T) {
+		task := seedMaterializedTask(t, store, ctx, "completed-at-clear", "task-clear")
+		done, err := store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateCompleted)
+		if err != nil {
+			t.Fatalf("complete task: %v", err)
+		}
+		ready, err := store.UpdateTaskState(ctx, done.ID, done.UpdatedAt, models.TaskStateReady)
+		if err != nil {
+			t.Fatalf("requeue task: %v", err)
+		}
+		if ready.CompletedAt != nil {
+			t.Fatalf("non-terminal UpdateTaskState: CompletedAt = %v, want nil", ready.CompletedAt)
+		}
+	})
+}
+
+func seedMaterializedTask(t *testing.T, store *FakeKanbanStore, ctx context.Context, projectName, title string) models.Task {
+	t.Helper()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "completed-at-state",
-		Tasks:       []models.DraftTask{{Title: "task-state", Description: "work"}},
+		ProjectName: projectName,
+		Tasks:       []models.DraftTask{{Title: title, Description: "work"}},
 	})
 	if err != nil {
 		t.Fatalf("materialize plan: %v", err)
 	}
-	task := tasks[0]
-	running, err := store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, 1)
-	if err != nil {
-		t.Fatalf("mark running: %v", err)
-	}
-	completed, err := store.UpdateTaskState(ctx, running.ID, running.UpdatedAt, models.TaskStateCompleted)
-	if err != nil {
-		t.Fatalf("complete via UpdateTaskState: %v", err)
-	}
-	if completed.CompletedAt == nil {
-		t.Fatal("UpdateTaskState COMPLETED: CompletedAt is nil, want set")
-	}
-
-	_, tasks, err = store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "completed-at-result",
-		Tasks:       []models.DraftTask{{Title: "task-result", Description: "work"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	task = tasks[0]
-	running, err = store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, 1)
-	if err != nil {
-		t.Fatalf("mark running: %v", err)
-	}
-	finished, err := store.UpdateTaskResult(ctx, running.ID, running.UpdatedAt, models.TaskResult{Success: true})
-	if err != nil {
-		t.Fatalf("complete via UpdateTaskResult: %v", err)
-	}
-	if finished.CompletedAt == nil {
-		t.Fatal("UpdateTaskResult success: CompletedAt is nil, want set")
-	}
-
-	_, tasks, err = store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "completed-at-clear",
-		Tasks:       []models.DraftTask{{Title: "task-clear", Description: "work"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	task = tasks[0]
-	done, err := store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateCompleted)
-	if err != nil {
-		t.Fatalf("complete task: %v", err)
-	}
-	ready, err := store.UpdateTaskState(ctx, done.ID, done.UpdatedAt, models.TaskStateReady)
-	if err != nil {
-		t.Fatalf("requeue task: %v", err)
-	}
-	if ready.CompletedAt != nil {
-		t.Fatalf("non-terminal UpdateTaskState: CompletedAt = %v, want nil", ready.CompletedAt)
-	}
+	return tasks[0]
 }
 
 func seedRunningParent(t *testing.T, store *FakeKanbanStore, ctx context.Context, name string) models.Task {

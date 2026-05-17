@@ -67,10 +67,17 @@ func TestFormatForHuman_NoDetail(t *testing.T) {
 
 func TestCreateReviewHandoff_CreatesSubtask(t *testing.T) {
 	t.Parallel()
+	store, sink, w, task := setupReviewHandoffFixture(t)
+	const draft = "Here is my draft output"
+	w.createReviewHandoff(context.Background(), task, draft)
+	assertReviewHandoffCreated(t, store, sink, task, draft)
+}
+
+func setupReviewHandoffFixture(t *testing.T) (*reviewMockStore, *mockEventSink, *Worker, models.Task) {
+	t.Helper()
 	store := &reviewMockStore{FakeKanbanStore: testutil.NewFakeStore()}
 	sink := &mockEventSink{}
 	w := &Worker{store: store, sink: sink}
-
 	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
 		ProjectName: "review-test",
 		Tasks:       []models.DraftTask{{Title: "task-review-1", Description: "work"}},
@@ -78,62 +85,61 @@ func TestCreateReviewHandoff_CreatesSubtask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("materialize plan: %v", err)
 	}
-	task := tasks[0]
+	return store, sink, w, tasks[0]
+}
 
-	w.createReviewHandoff(context.Background(), task, "Here is my draft output")
+func assertReviewHandoffCreated(t *testing.T, store *reviewMockStore, sink *mockEventSink, task models.Task, draft string) {
+	t.Helper()
+	assertReviewBlockTask(t, store, task)
+	assertReviewSubtask(t, store.subtasks[0])
+	assertReviewDraftComment(t, store, task.ID, draft)
+	assertReviewHandoffEvent(t, sink)
+}
 
-	if store.blockTaskID != task.ID {
-		t.Fatalf("BlockTaskWithSubtasks taskID = %q, want %q", store.blockTaskID, task.ID)
-	}
-	if !store.blockAt.Equal(task.UpdatedAt) {
-		t.Fatalf("BlockTaskWithSubtasks updatedAt = %s, want %s", store.blockAt, task.UpdatedAt)
-	}
-	if !store.blockCalled {
-		t.Fatal("expected BlockTaskWithSubtasks to be called")
+func assertReviewBlockTask(t *testing.T, store *reviewMockStore, task models.Task) {
+	t.Helper()
+	if store.blockTaskID != task.ID || !store.blockAt.Equal(task.UpdatedAt) || !store.blockCalled {
+		t.Fatalf("block mismatch: id=%q at=%s called=%v", store.blockTaskID, store.blockAt, store.blockCalled)
 	}
 	if len(store.subtasks) != 1 {
 		t.Fatalf("expected 1 subtask, got %d", len(store.subtasks))
 	}
-	sub := store.subtasks[0]
+}
+
+func assertReviewSubtask(t *testing.T, sub models.DraftTask) {
+	t.Helper()
 	if sub.Assignee != models.TaskAssigneeHuman {
 		t.Fatalf("subtask assignee = %q, want HUMAN", sub.Assignee)
 	}
-	if !strings.Contains(sub.Title, "Review required") {
-		t.Fatalf("subtask title = %q, should contain 'Review required'", sub.Title)
+	for _, want := range []string{"Review required", "Review required before task completion", "draft output"} {
+		if !strings.Contains(sub.Title+sub.Description, want) {
+			t.Fatalf("subtask missing %q: title=%q desc=%q", want, sub.Title, sub.Description)
+		}
 	}
-	if !strings.Contains(sub.Description, "Review required before task completion") {
-		t.Fatalf("subtask description should contain structured header, got %q", sub.Description)
-	}
-	if !strings.Contains(sub.Description, "draft output") {
-		t.Fatalf("subtask description should contain draft output reference")
-	}
+}
 
-	comments, err := store.ListComments(context.Background(), task.ID)
+func assertReviewDraftComment(t *testing.T, store *reviewMockStore, taskID, draft string) {
+	t.Helper()
+	comments, err := store.ListComments(context.Background(), taskID)
 	if err != nil {
 		t.Fatalf("list comments: %v", err)
 	}
-	var draftSaved bool
 	for _, c := range comments {
-		if strings.HasPrefix(c.Body, hitlDraftReviewCommentPrefix) &&
-			strings.Contains(c.Body, "Here is my draft output") {
-			draftSaved = true
-			break
+		if strings.HasPrefix(c.Body, hitlDraftReviewCommentPrefix) && strings.Contains(c.Body, draft) {
+			return
 		}
 	}
-	if !draftSaved {
-		t.Fatal("expected draft review comment on parent task")
-	}
+	t.Fatal("expected draft review comment on parent task")
+}
 
-	found := false
+func assertReviewHandoffEvent(t *testing.T, sink *mockEventSink) {
+	t.Helper()
 	for _, ev := range sink.events {
 		if ev.Type == "REVIEW_HANDOFF" {
-			found = true
-			break
+			return
 		}
 	}
-	if !found {
-		t.Fatal("expected REVIEW_HANDOFF event to be emitted")
-	}
+	t.Fatal("expected REVIEW_HANDOFF event to be emitted")
 }
 
 func TestCreateReviewHandoff_RefreshesTaskUpdatedAt(t *testing.T) {

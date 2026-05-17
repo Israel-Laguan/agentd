@@ -322,30 +322,9 @@ func (s *refreshedTaskStore) BlockTaskWithSubtasks(ctx context.Context, id strin
 
 func TestHandleAgenticToolCalls_ResumesAfterApproval(t *testing.T) {
 	t.Parallel()
-	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}
+	store, w, parent, resp, ex, taskHooks, cm := setupApprovalResumeFixture(t)
 	ctx := context.Background()
-	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	parent := tasks[0]
-
-	handler := NewBlockingApprovalHandler(store)
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(ApprovalGateHook([]string{"deploy"}, handler))
-
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
-	w := &Worker{store: store}
-	resp := gateway.AIResponse{
-		ToolCalls: []gateway.ToolCall{{
-			ID:       "call-1",
-			Function: gateway.ToolCallFunction{Name: "deploy", Arguments: `{}`},
-		}},
-	}
 	var messages []gateway.PromptMessage
-	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", parent.ID)
 
 	if suspended := w.handleAgenticToolCalls(ctx, parent, resp, &messages, nil, ex, taskHooks, nil, cm); !suspended {
 		t.Fatal("expected approval gate to suspend on first tool call")
@@ -353,17 +332,7 @@ func TestHandleAgenticToolCalls_ResumesAfterApproval(t *testing.T) {
 	if !store.blockCalled {
 		t.Fatal("expected BlockTaskWithSubtasks on first gated tool call")
 	}
-
-	children, err := store.ListChildTasks(ctx, parent.ID)
-	if err != nil {
-		t.Fatalf("list children: %v", err)
-	}
-	if len(children) != 1 {
-		t.Fatalf("approval subtasks = %d, want 1", len(children))
-	}
-	if _, err := store.UpdateTaskState(ctx, children[0].ID, children[0].UpdatedAt, models.TaskStateCompleted); err != nil {
-		t.Fatalf("complete approval subtask: %v", err)
-	}
+	completeApprovalSubtask(t, store, ctx, parent.ID)
 
 	parentAfter, err := store.GetTask(ctx, parent.ID)
 	if err != nil {
@@ -374,10 +343,52 @@ func TestHandleAgenticToolCalls_ResumesAfterApproval(t *testing.T) {
 	}
 
 	store.blockCalled = false
-	resumed := *parentAfter
-	if suspended := w.handleAgenticToolCalls(ctx, resumed, resp, &messages, nil, ex, taskHooks, nil, cm); suspended {
+	if suspended := w.handleAgenticToolCalls(ctx, *parentAfter, resp, &messages, nil, ex, taskHooks, nil, cm); suspended {
 		t.Fatal("expected tool to proceed after human approval, not suspend again")
 	}
+	assertApprovalResumed(t, store, messages)
+}
+
+func setupApprovalResumeFixture(t *testing.T) (
+	*approvalMockStore, *Worker, models.Task, gateway.AIResponse, *ToolExecutor, *HookChain, *ContextManager,
+) {
+	t.Helper()
+	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}
+	ctx := context.Background()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	handler := NewBlockingApprovalHandler(store)
+	taskHooks := NewHookChain()
+	taskHooks.RegisterPre(ApprovalGateHook([]string{"deploy"}, handler))
+	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	resp := gateway.AIResponse{ToolCalls: []gateway.ToolCall{{
+		ID: "call-1", Function: gateway.ToolCallFunction{Name: "deploy", Arguments: `{}`},
+	}}}
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", parent.ID)
+	return store, &Worker{store: store}, parent, resp, ex, taskHooks, cm
+}
+
+func completeApprovalSubtask(t *testing.T, store *approvalMockStore, ctx context.Context, parentID string) {
+	t.Helper()
+	children, err := store.ListChildTasks(ctx, parentID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	if len(children) != 1 {
+		t.Fatalf("approval subtasks = %d, want 1", len(children))
+	}
+	if _, err := store.UpdateTaskState(ctx, children[0].ID, children[0].UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete approval subtask: %v", err)
+	}
+}
+
+func assertApprovalResumed(t *testing.T, store *approvalMockStore, messages []gateway.PromptMessage) {
+	t.Helper()
 	if store.blockCalled {
 		t.Fatal("expected no second BlockTaskWithSubtasks after completed approval")
 	}

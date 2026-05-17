@@ -210,45 +210,31 @@ func TestSubagentDelegate_DepthZeroAllowed(t *testing.T) {
 
 func TestSubagentResult_StructuredFields(t *testing.T) {
 	t.Parallel()
-
-	sb := &fakeSandbox{
-		result: sandbox.Result{Success: true, Stdout: "output"},
-	}
-
-	gw := &subagentMockGateway{
-		responses: []gateway.AIResponse{
-			{
-				ToolCalls: []gateway.ToolCall{
-					{ID: "1", Type: "function", Function: gateway.ToolCallFunction{
-						Name:      "bash",
-						Arguments: `{"command":"ls"}`,
-					}},
-				},
-			},
-			{
-				ToolCalls: []gateway.ToolCall{
-					{ID: "2", Type: "function", Function: gateway.ToolCallFunction{
-						Name:      "write",
-						Arguments: `{"path":"out.txt","content":"hello"}`,
-					}},
-				},
-			},
-			{Content: "all done"},
-		},
-	}
-
-	def := SubagentDefinition{
-		Name:    "full",
-		Purpose: "do everything",
-	}
-
-	dir := t.TempDir()
-	delegate := NewSubagentDelegate(gw, sb, dir, nil, 0, 0)
-	result, err := delegate.Delegate(context.Background(), def, "run tasks", "", "", 0.2, 0)
+	delegate := newSubagentStructuredFieldsDelegate(t)
+	result, err := delegate.Delegate(context.Background(), SubagentDefinition{Name: "full", Purpose: "do everything"}, "run tasks", "", "", 0.2, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	assertSubagentStructuredResult(t, *result)
+}
 
+func newSubagentStructuredFieldsDelegate(t *testing.T) *SubagentDelegate {
+	t.Helper()
+	gw := &subagentMockGateway{responses: []gateway.AIResponse{
+		{ToolCalls: []gateway.ToolCall{{ID: "1", Type: "function", Function: gateway.ToolCallFunction{
+			Name: "bash", Arguments: `{"command":"ls"}`,
+		}}}},
+		{ToolCalls: []gateway.ToolCall{{ID: "2", Type: "function", Function: gateway.ToolCallFunction{
+			Name: "write", Arguments: `{"path":"out.txt","content":"hello"}`,
+		}}}},
+		{Content: "all done"},
+	}}
+	sb := &fakeSandbox{result: sandbox.Result{Success: true, Stdout: "output"}}
+	return NewSubagentDelegate(gw, sb, t.TempDir(), nil, 0, 0)
+}
+
+func assertSubagentStructuredResult(t *testing.T, result SubagentResult) {
+	t.Helper()
 	if result.Status != SubagentStatusSuccess {
 		t.Fatalf("expected success, got %s: %s", result.Status, result.Error)
 	}
@@ -264,8 +250,6 @@ func TestSubagentResult_StructuredFields(t *testing.T) {
 	if len(result.ToolsCalled) < 2 {
 		t.Fatalf("expected at least 2 tools called, got %v", result.ToolsCalled)
 	}
-
-	// Verify JSON marshaling roundtrips
 	data, err := json.Marshal(result)
 	if err != nil {
 		t.Fatalf("failed to marshal result: %v", err)

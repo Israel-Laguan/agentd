@@ -31,87 +31,78 @@ func (s *stdoutReviewSandbox) Execute(_ context.Context, _ sandbox.Payload) (san
 	return s.result, nil
 }
 
-func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing.T) {
-	t.Parallel()
-	store := &captureResultStore{FakeKanbanStore: testutil.NewFakeStore()}
-	ctx := context.Background()
-
+func setupLegacyReviewProfile(t *testing.T, store models.KanbanStore, ctx context.Context, provider string) {
+	t.Helper()
 	profile, err := store.GetAgentProfile(ctx, "default")
 	if err != nil {
 		t.Fatalf("get profile: %v", err)
 	}
 	profile.RequireReview = true
 	profile.AgenticMode = false
+	if provider != "" {
+		profile.Provider = provider
+	}
 	if err := store.UpsertAgentProfile(ctx, *profile); err != nil {
 		t.Fatalf("upsert profile: %v", err)
 	}
+}
 
-	sbResult := sandbox.Result{
-		Success:  true,
-		ExitCode: 0,
-		Stdout:   "clean output\n",
-		Duration: 1500 * time.Millisecond,
-	}
+func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing.T) {
+	t.Parallel()
+	store := &captureResultStore{FakeKanbanStore: testutil.NewFakeStore()}
+	ctx := context.Background()
+	setupLegacyReviewProfile(t, store, ctx, "")
+
+	sbResult := sandbox.Result{Success: true, ExitCode: 0, Stdout: "clean output\n", Duration: 1500 * time.Millisecond}
 	sb := &stdoutReviewSandbox{result: sbResult}
 	w := NewWorker(store, &routingTestGateway{}, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
-
-	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "legacy-review-stdout",
-		Tasks:       []models.DraftTask{{Title: "task-review-stdout", Description: "work"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	task := tasks[0]
+	task := materializeLegacyReviewTask(t, store, ctx, "legacy-review-stdout", "task-review-stdout")
 	queued, err := store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateQueued)
 	if err != nil {
 		t.Fatalf("queue task: %v", err)
 	}
 
 	w.Process(ctx, *queued)
+	assertLegacyReviewDraftRawStdout(t, store, ctx, task.ID, sbResult.Stdout)
+	completeReviewSubtask(t, store, ctx, task.ID)
+	requeued := requeueParentTask(t, store, ctx, task.ID)
+	w.Process(ctx, requeued)
+	assertLegacyReviewCommittedStdout(t, store, ctx, task.ID, sb, sbResult)
+}
 
-	blocked, err := store.GetTask(ctx, task.ID)
+func materializeLegacyReviewTask(t *testing.T, store models.KanbanStore, ctx context.Context, project, title string) models.Task {
+	t.Helper()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: project, Tasks: []models.DraftTask{{Title: title, Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	return tasks[0]
+}
+
+func assertLegacyReviewDraftRawStdout(t *testing.T, store models.KanbanStore, ctx context.Context, taskID, stdout string) {
+	t.Helper()
+	blocked, err := store.GetTask(ctx, taskID)
 	if err != nil {
 		t.Fatalf("get blocked parent: %v", err)
 	}
 	if blocked.State != models.TaskStateBlocked {
-		t.Fatalf("parent state = %s, want BLOCKED after first Process", blocked.State)
+		t.Fatalf("parent state = %s, want BLOCKED", blocked.State)
 	}
-	comments, err := store.ListComments(ctx, task.ID)
+	comments, err := store.ListComments(ctx, taskID)
 	if err != nil {
 		t.Fatalf("list comments: %v", err)
 	}
 	draft, ok := findLatestDraftReview(comments)
-	if !ok {
-		t.Fatal("expected draft review comment")
+	if !ok || strings.Contains(draft, "exit=") || !strings.Contains(draft, strings.TrimSpace(stdout)) {
+		t.Fatalf("draft = %q, want raw stdout containing %q", draft, strings.TrimSpace(stdout))
 	}
-	if strings.Contains(draft, "exit=") {
-		t.Fatalf("draft should be raw stdout, got %q", draft)
-	}
-	if !strings.Contains(draft, "clean output") {
-		t.Fatalf("draft = %q, want clean sandbox stdout", draft)
-	}
+}
 
-	children, err := store.ListChildTasks(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("list children: %v", err)
-	}
-	var review *models.Task
-	for i := range children {
-		if strings.HasPrefix(children[i].Title, models.HITLSubtaskTitleReview) {
-			review = &children[i]
-			break
-		}
-	}
-	if review == nil {
-		t.Fatal("expected review subtask")
-		return
-	}
-	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
-		t.Fatalf("complete review: %v", err)
-	}
-
-	parent, err := store.GetTask(ctx, task.ID)
+func requeueParentTask(t *testing.T, store models.KanbanStore, ctx context.Context, taskID string) models.Task {
+	t.Helper()
+	parent, err := store.GetTask(ctx, taskID)
 	if err != nil {
 		t.Fatalf("get parent: %v", err)
 	}
@@ -119,10 +110,12 @@ func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing
 	if err != nil {
 		t.Fatalf("requeue parent: %v", err)
 	}
+	return *requeued
+}
 
-	w.Process(ctx, *requeued)
-
-	final, err := store.GetTask(ctx, task.ID)
+func assertLegacyReviewCommittedStdout(t *testing.T, store *captureResultStore, ctx context.Context, taskID string, sb *stdoutReviewSandbox, sbResult sandbox.Result) {
+	t.Helper()
+	final, err := store.GetTask(ctx, taskID)
 	if err != nil {
 		t.Fatalf("get final parent: %v", err)
 	}
@@ -132,15 +125,9 @@ func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing
 	if store.lastResult == nil {
 		t.Fatal("expected committed task result")
 	}
-	// Comment round-trip trims trailing whitespace on the stored body (see models.SplitCommentPayload).
-	// Approved-review commit uses draft stdout only (no sandbox duration metadata).
-	approvedStdout := strings.TrimSpace(sbResult.Stdout)
-	wantPayload := resultPayload(sandbox.Result{Success: true, Stdout: approvedStdout})
+	wantPayload := resultPayload(sandbox.Result{Success: true, Stdout: strings.TrimSpace(sbResult.Stdout)})
 	if store.lastResult.Payload != wantPayload {
 		t.Fatalf("committed payload = %q, want %q", store.lastResult.Payload, wantPayload)
-	}
-	if strings.Count(store.lastResult.Payload, "exit=") != 1 {
-		t.Fatalf("committed payload should have a single metadata prefix, got %q", store.lastResult.Payload)
 	}
 	if sb.execCount != 1 {
 		t.Fatalf("sandbox executions = %d, want 1", sb.execCount)
@@ -151,62 +138,15 @@ func TestProcess_LegacyRequireReview_FinalizesApprovedReview(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
 	ctx := context.Background()
-
-	profile, err := store.GetAgentProfile(ctx, "default")
-	if err != nil {
-		t.Fatalf("get profile: %v", err)
-	}
-	profile.RequireReview = true
-	profile.AgenticMode = false
-	if err := store.UpsertAgentProfile(ctx, *profile); err != nil {
-		t.Fatalf("upsert profile: %v", err)
-	}
-
+	setupLegacyReviewProfile(t, store, ctx, "")
 	gw := &routingTestGateway{}
 	sb := &routingTestSandbox{}
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
-
-	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "legacy-review-finalize",
-		Tasks:       []models.DraftTask{{Title: "task-review-finalize", Description: "work"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	task := tasks[0]
-
+	task := materializeLegacyReviewTask(t, store, ctx, "legacy-review-finalize", "task-review-finalize")
 	w.createReviewHandoff(ctx, task, "approved draft output")
-
-	children, err := store.ListChildTasks(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("list children: %v", err)
-	}
-	var review *models.Task
-	for i := range children {
-		if strings.HasPrefix(children[i].Title, models.HITLSubtaskTitleReview) {
-			review = &children[i]
-			break
-		}
-	}
-	if review == nil {
-		t.Fatal("expected review subtask")
-		return
-	}
-	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
-		t.Fatalf("complete review: %v", err)
-	}
-
-	parent, err := store.GetTask(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("get parent: %v", err)
-	}
-	queued, err := store.UpdateTaskState(ctx, parent.ID, parent.UpdatedAt, models.TaskStateQueued)
-	if err != nil {
-		t.Fatalf("requeue parent: %v", err)
-	}
-
-	w.Process(ctx, *queued)
-
+	completeReviewSubtask(t, store, ctx, task.ID)
+	queued := requeueParentTask(t, store, ctx, task.ID)
+	w.Process(ctx, queued)
 	final, err := store.GetTask(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("get final parent: %v", err)
@@ -214,99 +154,63 @@ func TestProcess_LegacyRequireReview_FinalizesApprovedReview(t *testing.T) {
 	if final.State != models.TaskStateCompleted {
 		t.Fatalf("parent state = %s, want COMPLETED", final.State)
 	}
-	if sb.execCount != 0 {
-		t.Fatalf("sandbox executions = %d, want 0 (approved review should not re-run command)", sb.execCount)
+	if sb.execCount != 0 || len(gw.requests) != 0 {
+		t.Fatalf("sandbox=%d gateway=%d, want no re-run", sb.execCount, len(gw.requests))
 	}
-	if len(gw.requests) != 0 {
-		t.Fatalf("gateway requests = %d, want 0", len(gw.requests))
+}
+
+func failReviewWithComment(t *testing.T, store models.KanbanStore, ctx context.Context, parentID, comment string) {
+	t.Helper()
+	review := findReviewSubtask(t, store, ctx, parentID)
+	if err := store.AddComment(ctx, models.Comment{TaskID: review.ID, Author: models.CommentAuthorUser, Body: comment}); err != nil {
+		t.Fatalf("add rejection comment: %v", err)
 	}
+	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateFailed); err != nil {
+		t.Fatalf("fail review subtask: %v", err)
+	}
+}
+
+func findReviewSubtask(t *testing.T, store models.KanbanStore, ctx context.Context, parentID string) models.Task {
+	t.Helper()
+	children, err := store.ListChildTasks(ctx, parentID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	for _, child := range children {
+		if strings.HasPrefix(child.Title, models.HITLSubtaskTitleReview) {
+			return child
+		}
+	}
+	t.Fatal("expected review subtask")
+	return models.Task{}
 }
 
 func TestProcess_LegacyRequireReview_InjectsRejectionFeedback(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
 	ctx := context.Background()
-
-	profile, err := store.GetAgentProfile(ctx, "default")
-	if err != nil {
-		t.Fatalf("get profile: %v", err)
-	}
-	profile.RequireReview = true
-	profile.AgenticMode = false
-	profile.Provider = "ollama"
-	if err := store.UpsertAgentProfile(ctx, *profile); err != nil {
-		t.Fatalf("upsert profile: %v", err)
-	}
-
+	setupLegacyReviewProfile(t, store, ctx, "ollama")
 	gw := &routingTestGateway{}
 	sb := &routingTestSandbox{}
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
-
-	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "legacy-review-reject",
-		Tasks:       []models.DraftTask{{Title: "task-review-reject", Description: "work"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	task := tasks[0]
-
-	w.createReviewHandoff(ctx, task, "first draft output")
-
-	children, err := store.ListChildTasks(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("list children: %v", err)
-	}
-	var review *models.Task
-	for i := range children {
-		if strings.HasPrefix(children[i].Title, models.HITLSubtaskTitleReview) {
-			review = &children[i]
-			break
-		}
-	}
-	if review == nil {
-		t.Fatal("expected review subtask")
-		return
-	}
+	task := materializeLegacyReviewTask(t, store, ctx, "legacy-review-reject", "task-review-reject")
 	const rejectionComment = "Please add error handling"
-	if err := store.AddComment(ctx, models.Comment{
-		TaskID: review.ID,
-		Author: models.CommentAuthorUser,
-		Body:   rejectionComment,
-	}); err != nil {
-		t.Fatalf("add rejection comment: %v", err)
-	}
-	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateFailed); err != nil {
-		t.Fatalf("fail review subtask: %v", err)
-	}
-
-	parent, err := store.GetTask(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("get parent: %v", err)
-	}
-	queued, err := store.UpdateTaskState(ctx, parent.ID, parent.UpdatedAt, models.TaskStateQueued)
-	if err != nil {
-		t.Fatalf("requeue parent: %v", err)
-	}
-
-	w.Process(ctx, *queued)
-
+	w.createReviewHandoff(ctx, task, "first draft output")
+	failReviewWithComment(t, store, ctx, task.ID, rejectionComment)
+	queued := requeueParentTask(t, store, ctx, task.ID)
+	w.Process(ctx, queued)
 	if len(gw.requests) != 1 {
 		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
 	}
-	var foundFeedback bool
 	for _, msg := range gw.requests[0].Messages {
 		if strings.Contains(msg.Content, rejectionComment) {
-			foundFeedback = true
-			break
+			if sb.execCount != 1 {
+				t.Fatalf("sandbox executions = %d, want 1", sb.execCount)
+			}
+			return
 		}
 	}
-	if !foundFeedback {
-		t.Fatalf("gateway messages missing rejection feedback %q", rejectionComment)
-	}
-	if sb.execCount != 1 {
-		t.Fatalf("sandbox executions = %d, want 1", sb.execCount)
-	}
+	t.Fatalf("gateway messages missing rejection feedback %q", rejectionComment)
 }
 
 // bumpOnCommentStore bumps the parent task's UpdatedAt on AddComment to simulate
@@ -347,47 +251,9 @@ func (s *strictUpdateResultStore) UpdateTaskResult(ctx context.Context, id strin
 
 func TestTryFinalizeApprovedReview_RefreshesTaskBeforeCommit(t *testing.T) {
 	t.Parallel()
-	base := testutil.NewFakeStore()
-	store := &strictUpdateResultStore{
-		bumpOnCommentStore: &bumpOnCommentStore{FakeKanbanStore: base},
-	}
+	store, w, parent := setupFinalizeReviewRefreshFixture(t)
 	ctx := context.Background()
-
-	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "finalize-refresh",
-		Tasks:       []models.DraftTask{{Title: "parent", Description: "work"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	parent := tasks[0]
-	running, err := store.MarkTaskRunning(ctx, parent.ID, parent.UpdatedAt, 1)
-	if err != nil {
-		t.Fatalf("mark running: %v", err)
-	}
-	store.bumpParentID = parent.ID
-
-	w := &Worker{store: store}
-	w.createReviewHandoff(ctx, *running, "approved draft output")
-
-	children, err := store.ListChildTasks(ctx, parent.ID)
-	if err != nil {
-		t.Fatalf("list children: %v", err)
-	}
-	var review *models.Task
-	for i := range children {
-		if strings.HasPrefix(children[i].Title, models.HITLSubtaskTitleReview) {
-			review = &children[i]
-			break
-		}
-	}
-	if review == nil {
-		t.Fatal("expected review subtask")
-		return
-	}
-	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
-		t.Fatalf("complete review: %v", err)
-	}
+	completeReviewSubtask(t, store, ctx, parent.ID)
 
 	current, err := store.GetTask(ctx, parent.ID)
 	if err != nil {
@@ -412,5 +278,36 @@ func TestTryFinalizeApprovedReview_RefreshesTaskBeforeCommit(t *testing.T) {
 	}
 	if final.State != models.TaskStateCompleted {
 		t.Fatalf("parent state = %s, want COMPLETED", final.State)
+	}
+}
+
+func setupFinalizeReviewRefreshFixture(t *testing.T) (*strictUpdateResultStore, *Worker, models.Task) {
+	t.Helper()
+	base := testutil.NewFakeStore()
+	store := &strictUpdateResultStore{bumpOnCommentStore: &bumpOnCommentStore{FakeKanbanStore: base}}
+	ctx := context.Background()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "finalize-refresh",
+		Tasks:       []models.DraftTask{{Title: "parent", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	running, err := store.MarkTaskRunning(ctx, parent.ID, parent.UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	store.bumpParentID = parent.ID
+	w := &Worker{store: store}
+	w.createReviewHandoff(ctx, *running, "approved draft output")
+	return store, w, parent
+}
+
+func completeReviewSubtask(t *testing.T, store models.KanbanStore, ctx context.Context, parentID string) {
+	t.Helper()
+	review := findReviewSubtask(t, store, ctx, parentID)
+	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete review: %v", err)
 	}
 }

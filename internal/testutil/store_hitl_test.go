@@ -167,37 +167,7 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_SkipsBlockedWithOnlyTermin
 func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_PreservesFailedRequiresHumanChild(t *testing.T) {
 	store := NewFakeStore()
 	ctx := context.Background()
-
-	parent := seedHITLParent(t, store, ctx, "hitl-nested-frh")
-
-	expired := time.Now().Add(-time.Minute)
-	if err := store.AddComment(ctx, models.Comment{
-		TaskID: parent.ID,
-		Author: models.CommentAuthorWorkerAgent,
-		Body:   models.HITLExpiresAtCommentPrefix + expired.UTC().Format(time.RFC3339),
-	}); err != nil {
-		t.Fatalf("add expiry comment: %v", err)
-	}
-
-	blocked, children, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
-		Title:       "Approve tool call: deploy",
-		Description: "review",
-		Assignee:    models.TaskAssigneeHuman,
-	}})
-	if err != nil {
-		t.Fatalf("block: %v", err)
-	}
-	child, err := store.GetTask(ctx, children[0].ID)
-	if err != nil {
-		t.Fatalf("get child: %v", err)
-	}
-	if _, err := store.UpdateTaskState(ctx, child.ID, child.UpdatedAt, models.TaskStateFailedRequiresHuman); err != nil {
-		t.Fatalf("set child FAILED_REQUIRES_HUMAN: %v", err)
-	}
-	beforeReconcile, err := store.GetTask(ctx, child.ID)
-	if err != nil {
-		t.Fatalf("get child before reconcile: %v", err)
-	}
+	blocked, child, beforeReconcile := setupExpiredBlockedWithFRHChild(t, store, ctx, "hitl-nested-frh")
 
 	failed, err := store.ReconcileExpiredBlockedTasks(ctx, time.Now())
 	if err != nil {
@@ -206,7 +176,49 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_PreservesFailedRequiresHum
 	if len(failed) != 1 {
 		t.Fatalf("expired tasks = %d, want 1", len(failed))
 	}
-	afterParent, err := store.GetTask(ctx, blocked.ID)
+	assertReconcilePreservesFRHChild(t, store, ctx, blocked.ID, child.ID, beforeReconcile)
+}
+
+func setupExpiredBlockedWithFRHChild(
+	t *testing.T, store *FakeKanbanStore, ctx context.Context, name string,
+) (blocked models.Task, child models.Task, beforeReconcile models.Task) {
+	t.Helper()
+	parent := seedHITLParent(t, store, ctx, name)
+	expired := time.Now().Add(-time.Minute)
+	if err := store.AddComment(ctx, models.Comment{
+		TaskID: parent.ID,
+		Author: models.CommentAuthorWorkerAgent,
+		Body:   models.HITLExpiresAtCommentPrefix + expired.UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("add expiry comment: %v", err)
+	}
+	blockedPtr, children, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: "Approve tool call: deploy", Description: "review", Assignee: models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	childPtr, err := store.GetTask(ctx, children[0].ID)
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	child = *childPtr
+	if _, err := store.UpdateTaskState(ctx, child.ID, child.UpdatedAt, models.TaskStateFailedRequiresHuman); err != nil {
+		t.Fatalf("set child FAILED_REQUIRES_HUMAN: %v", err)
+	}
+	beforePtr, err := store.GetTask(ctx, child.ID)
+	if err != nil {
+		t.Fatalf("get child before reconcile: %v", err)
+	}
+	return *blockedPtr, child, *beforePtr
+}
+
+func assertReconcilePreservesFRHChild(
+	t *testing.T, store *FakeKanbanStore, ctx context.Context,
+	parentID, childID string, beforeReconcile models.Task,
+) {
+	t.Helper()
+	afterParent, err := store.GetTask(ctx, parentID)
 	if err != nil {
 		t.Fatalf("get parent: %v", err)
 	}
@@ -216,7 +228,7 @@ func TestFakeKanbanStore_ReconcileExpiredBlockedTasks_PreservesFailedRequiresHum
 	if afterParent.CompletedAt == nil {
 		t.Fatal("parent completed_at is nil, want set on HITL timeout")
 	}
-	afterChild, err := store.GetTask(ctx, child.ID)
+	afterChild, err := store.GetTask(ctx, childID)
 	if err != nil {
 		t.Fatalf("get child: %v", err)
 	}

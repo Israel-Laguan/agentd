@@ -73,81 +73,68 @@ func askTestServer(t *testing.T, materialized *bool) *httptest.Server {
 	return server
 }
 
-func TestDecodeDraft(t *testing.T) {
+func decodeDraftSuccessBody(t *testing.T) string {
+	t.Helper()
 	plan := models.DraftPlan{ProjectName: "app", Tasks: []models.DraftTask{{TempID: "1", Title: "t"}}}
-	planJSON, _ := json.Marshal(plan)
-	successBody, _ := json.Marshal(struct {
+	planJSON, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(struct {
 		Choices []struct {
 			Message gateway.PromptMessage `json:"message"`
 		} `json:"choices"`
 	}{Choices: []struct {
 		Message gateway.PromptMessage `json:"message"`
 	}{{Message: gateway.PromptMessage{Role: "assistant", Content: string(planJSON)}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
 
-	tests := []struct {
+func TestDecodeDraft(t *testing.T) {
+	for _, tt := range []struct {
 		name    string
 		status  int
 		body    string
 		wantErr string
 	}{
-		{
-			name:   "success",
-			status: http.StatusOK,
-			body:   string(successBody),
-		},
-		{
-			name:    "not found",
-			status:  http.StatusNotFound,
-			body:    `{"choices":[]}`,
-			wantErr: "draft request failed",
-		},
-		{
-			name:    "bad json",
-			status:  http.StatusOK,
-			body:    `{invalid`,
-			wantErr: "",
-		},
-		{
-			name:    "clarification kind",
-			status:  http.StatusOK,
-			body:    `{"choices":[{"message":{"role":"assistant","content":"{\"kind\":\"feasibility_clarification\"}"}}]}`,
-			wantErr: "feasibility_clarification",
-		},
-		{
-			name:    "empty choices",
-			status:  http.StatusOK,
-			body:    `{"choices":[]}`,
-			wantErr: "draft request failed",
-		},
-	}
-
-	for _, tt := range tests {
+		{name: "success", status: http.StatusOK, body: decodeDraftSuccessBody(t)},
+		{name: "not found", status: http.StatusNotFound, body: `{"choices":[]}`, wantErr: "draft request failed"},
+		{name: "bad json", status: http.StatusOK, body: `{invalid`},
+		{name: "clarification kind", status: http.StatusOK, body: `{"choices":[{"message":{"role":"assistant","content":"{\"kind\":\"feasibility_clarification\"}"}}]}`, wantErr: "feasibility_clarification"},
+		{name: "empty choices", status: http.StatusOK, body: `{"choices":[]}`, wantErr: "draft request failed"},
+	} {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			rec.Code = tt.status
-			rec.Body.WriteString(tt.body)
-			resp := rec.Result()
-
-			got, err := decodeDraft(resp)
-			if tt.wantErr == "" && tt.name == "success" {
-				if err != nil {
-					t.Fatalf("decodeDraft() error = %v", err)
-				}
-				if got.ProjectName != "app" {
-					t.Fatalf("plan = %+v", got)
-				}
-				return
-			}
-			if tt.wantErr == "" && tt.name == "bad json" {
-				if err == nil {
-					t.Fatal("decodeDraft() error = nil, want decode error")
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("decodeDraft() error = %v, want containing %q", err, tt.wantErr)
-			}
+			runDecodeDraftCase(t, tt.name, tt.status, tt.body, tt.wantErr)
 		})
+	}
+}
+
+func runDecodeDraftCase(t *testing.T, name string, status int, body, wantErr string) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	rec.Code = status
+	rec.Body.WriteString(body)
+	got, err := decodeDraft(rec.Result())
+	if wantErr == "" && name == "success" {
+		if err != nil {
+			t.Fatalf("decodeDraft() error = %v", err)
+		}
+		if got.ProjectName != "app" {
+			t.Fatalf("plan = %+v", got)
+		}
+		return
+	}
+	if wantErr == "" && name == "bad json" {
+		if err == nil {
+			t.Fatal("decodeDraft() error = nil, want decode error")
+		}
+		return
+	}
+	if err == nil || !strings.Contains(err.Error(), wantErr) {
+		t.Fatalf("decodeDraft() error = %v, want containing %q", err, wantErr)
 	}
 }
 

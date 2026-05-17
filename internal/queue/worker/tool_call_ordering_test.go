@@ -16,68 +16,52 @@ import (
 //
 // This property test runs 150 iterations (> 100 as required) with random tool call sequences.
 func TestToolCallPrecedesToolResult(t *testing.T) {
-	iterations := 150
+	runPropertyTest(t, "ToolCallPrecedesToolResult", 150, toolCallPrecedesToolResultProperty)
+}
 
-	property := func(seq ToolCallSequence, _ *rand.Rand) bool {
-		sink := &mockEventSink{}
-		w := &Worker{
-			sink:            sink,
-			sandboxScrubber: nil,
-		}
-
-		task := models.Task{
-			BaseEntity: models.BaseEntity{ID: "task-test-123"},
-			ProjectID:  "proj-test-456",
-		}
-
-		ctx := context.Background()
-
-		for _, call := range seq.Calls {
-			w.emitToolCall(ctx, task, call)
-			w.emitToolResult(ctx, task, call, `{"Success":true}`, 100)
-		}
-
-		callPositions := make(map[string]int)
-
-		for i, ev := range sink.events {
-			switch ev.Type {
-			case models.EventTypeToolCall:
-				callID := extractCallID(ev.Payload)
-				callPositions[callID] = i
-			case models.EventTypeToolResult:
-				callID := extractCallID(ev.Payload)
-				if pos, ok := callPositions[callID]; !ok {
-					return false
-				} else if i <= pos {
-					return false
-				}
+func toolCallPrecedesToolResultProperty(seq ToolCallSequence, _ *rand.Rand) bool {
+	sink := emitToolEventsForSequence(seq)
+	callPositions := make(map[string]int)
+	for i, ev := range sink.events {
+		switch ev.Type {
+		case models.EventTypeToolCall:
+			callPositions[extractCallID(ev.Payload)] = i
+		case models.EventTypeToolResult:
+			callID := extractCallID(ev.Payload)
+			pos, ok := callPositions[callID]
+			if !ok || i <= pos {
+				return false
 			}
 		}
-
-		expectedEvents := len(seq.Calls) * 2
-		if len(sink.events) != expectedEvents {
-			return false
-		}
-
-		toolCallCount := 0
-		toolResultCount := 0
-		for _, ev := range sink.events {
-			switch ev.Type {
-			case models.EventTypeToolCall:
-				toolCallCount++
-			case models.EventTypeToolResult:
-				toolResultCount++
-			}
-		}
-
-		if toolCallCount != len(seq.Calls) || toolResultCount != len(seq.Calls) {
-			return false
-		}
-
-		return true
 	}
+	if len(sink.events) != len(seq.Calls)*2 {
+		return false
+	}
+	var toolCallCount, toolResultCount int
+	for _, ev := range sink.events {
+		switch ev.Type {
+		case models.EventTypeToolCall:
+			toolCallCount++
+		case models.EventTypeToolResult:
+			toolResultCount++
+		}
+	}
+	return toolCallCount == len(seq.Calls) && toolResultCount == len(seq.Calls)
+}
 
-	runPropertyTest(t, "ToolCallPrecedesToolResult", iterations, property)
+func emitToolEventsForSequence(seq ToolCallSequence) *mockEventSink {
+	sink := &mockEventSink{}
+	w := &Worker{sink: sink}
+	task := models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-test-123"},
+		ProjectID:  "proj-test-456",
+	}
+	ctx := context.Background()
+	for _, call := range seq.Calls {
+		w.emitToolCall(ctx, task, call)
+		w.emitToolResult(ctx, task, call, `{"Success":true}`, 100)
+	}
+	return sink
 }
 
 // TestToolCallIDMatching tests Property 2: Call ID Matching.
