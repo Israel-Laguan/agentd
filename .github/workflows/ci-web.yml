@@ -36,5 +36,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Report lint failure
+        if: failure() && steps.Lint.outcome == 'failure'
+        run: echo "::error::Web lint failed. Open the Lint step log for ESLint details."
+
       - name: Test
         run: npm test -- --run
+
+      - name: Report test failure
+        if: failure() && steps.Test.outcome == 'failure'
+        run: echo "::error::Web tests failed. Open the Test step log for failure details."
