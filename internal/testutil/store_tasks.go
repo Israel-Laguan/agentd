@@ -89,6 +89,15 @@ func (s *FakeKanbanStore) IncrementRetryCount(_ context.Context, id string, _ ti
 	return &t, nil
 }
 
+func terminalCompletedAt(next models.TaskState, ts time.Time) *time.Time {
+	switch next {
+	case models.TaskStateCompleted, models.TaskStateFailed, models.TaskStateFailedRequiresHuman:
+		return &ts
+	default:
+		return nil
+	}
+}
+
 func (s *FakeKanbanStore) UpdateTaskState(_ context.Context, id string, _ time.Time, next models.TaskState) (*models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -96,9 +105,11 @@ func (s *FakeKanbanStore) UpdateTaskState(_ context.Context, id string, _ time.T
 	if !ok {
 		return nil, models.ErrTaskNotFound
 	}
+	ts := now()
 	t.State = next
 	t.OSProcessID = nil
-	t.UpdatedAt = now()
+	t.CompletedAt = terminalCompletedAt(next, ts)
+	t.UpdatedAt = ts
 	s.tasks[id] = t
 	if next == models.TaskStateCompleted || next == models.TaskStateFailed {
 		s.unblockBlockedParentsLocked(id)
@@ -113,12 +124,14 @@ func (s *FakeKanbanStore) UpdateTaskResult(_ context.Context, id string, _ time.
 	if !ok {
 		return nil, models.ErrTaskNotFound
 	}
+	ts := now()
 	if result.Success {
 		t.State = models.TaskStateCompleted
 	} else {
 		t.State = models.TaskStateFailed
 	}
-	t.UpdatedAt = now()
+	t.CompletedAt = &ts
+	t.UpdatedAt = ts
 	s.tasks[id] = t
 	// Mirrors finishTaskResultSideEffects: try parent unblock (HITL-aware child resolution).
 	s.unblockBlockedParentsLocked(id)
