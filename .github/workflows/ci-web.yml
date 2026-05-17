@@ -34,15 +34,17 @@ jobs:
         run: npm ci
 
       - name: Lint
+        id: lint
         run: npm run lint
 
       - name: Report lint failure
-        if: failure() && steps.Lint.outcome == 'failure'
+        if: failure() && steps.lint.outcome == 'failure'
         run: echo "::error::Web lint failed. Open the Lint step log for ESLint details."
 
       - name: Test
+        id: test
         run: npm test -- --run
 
       - name: Report test failure
-        if: failure() && steps.Test.outcome == 'failure'
+        if: failure() && steps.test.outcome == 'failure'
         run: echo "::error::Web tests failed. Open the Test step log for failure details."
