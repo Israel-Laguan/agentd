@@ -58,6 +58,56 @@ Use the exact criterion text from the task success criteria.`
 // SystemPromptBuilder, separately prepends memory lessons, and appends a user
 // message. The legacy seedMessages path is still used by the non-agentic
 // command() path in worker_support.go.
+func (w *Worker) enrichBuilderUserPreferences(builder *SystemPromptBuilder) {
+	if w.instructionLoader == nil {
+		return
+	}
+	prefs, err := w.instructionLoader.LoadUserPreferences()
+	if err != nil {
+		slog.Warn("failed to load user preferences", "error", err)
+		return
+	}
+	if prefs != nil {
+		builder.WithUserPreferences(prefs)
+	}
+}
+
+func (w *Worker) enrichBuilderProjectInstructions(builder *SystemPromptBuilder, project models.Project, profile models.AgentProfile) {
+	if w.instructionLoader == nil || project.WorkspacePath == "" {
+		return
+	}
+	instructions, err := w.instructionLoader.LoadProjectInstructions(project.WorkspacePath, profile.InstructionsPath)
+	if err != nil {
+		slog.Warn("failed to load project instructions", "workspace", project.WorkspacePath, "error", err)
+		return
+	}
+	if instructions != nil {
+		builder.WithProject(instructions)
+	}
+}
+
+func (w *Worker) enrichBuilderMatchedSkills(builder *SystemPromptBuilder, task models.Task, project models.Project) {
+	if w.skillLoader == nil || w.skillRouter == nil {
+		return
+	}
+	skills, err := w.skillLoader.LoadAll(project.WorkspacePath)
+	if err != nil {
+		slog.Warn("failed to load skills", "workspace", project.WorkspacePath, "error", err)
+		return
+	}
+	if len(skills) == 0 {
+		return
+	}
+	intent := taskIntent(task)
+	matched := w.skillRouter.Match(intent, skills)
+	for _, sk := range matched {
+		builder.AddSkillBlock(FormatSkillBlock(sk))
+	}
+	if len(matched) > 0 {
+		slog.Debug("injected matched skills into system prompt", "task_id", task.ID, "count", len(matched))
+	}
+}
+
 func (w *Worker) buildSystemPromptContent(task models.Task, project models.Project, profile models.AgentProfile) string {
 	var goal *AgentGoal
 	if g := GoalFromTask(task); g != nil {
@@ -65,36 +115,9 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 	}
 	builder := NewSystemPromptBuilder().
 		WithGlobal(agenticToolUseSystemText(goal))
-	if w.instructionLoader != nil {
-		if prefs, err := w.instructionLoader.LoadUserPreferences(); err != nil {
-			slog.Warn("failed to load user preferences", "error", err)
-		} else if prefs != nil {
-			builder.WithUserPreferences(prefs)
-		}
-	}
-	if w.instructionLoader != nil && project.WorkspacePath != "" {
-		instructions, err := w.instructionLoader.LoadProjectInstructions(project.WorkspacePath, profile.InstructionsPath)
-		if err != nil {
-			slog.Warn("failed to load project instructions", "workspace", project.WorkspacePath, "error", err)
-		} else if instructions != nil {
-			builder.WithProject(instructions)
-		}
-	}
-	if w.skillLoader != nil && w.skillRouter != nil {
-		skills, err := w.skillLoader.LoadAll(project.WorkspacePath)
-		if err != nil {
-			slog.Warn("failed to load skills", "workspace", project.WorkspacePath, "error", err)
-		} else if len(skills) > 0 {
-			intent := taskIntent(task)
-			matched := w.skillRouter.Match(intent, skills)
-			for _, sk := range matched {
-				builder.AddSkillBlock(FormatSkillBlock(sk))
-			}
-			if len(matched) > 0 {
-				slog.Debug("injected matched skills into system prompt", "task_id", task.ID, "count", len(matched))
-			}
-		}
-	}
+	w.enrichBuilderUserPreferences(builder)
+	w.enrichBuilderProjectInstructions(builder, project, profile)
+	w.enrichBuilderMatchedSkills(builder, task, project)
 	if profile.SystemPrompt.Valid {
 		builder.WithTask(profile.SystemPrompt.String)
 	}

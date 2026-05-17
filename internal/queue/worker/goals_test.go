@@ -151,6 +151,7 @@ func TestGoalFromTask_NormalizesCriteria(t *testing.T) {
 	g := GoalFromTask(task)
 	if g == nil {
 		t.Fatal("expected non-nil goal")
+		return
 	}
 	if !reflect.DeepEqual(g.SuccessCriteria, []string{"pass tests", "lint clean"}) {
 		t.Fatalf("criteria = %v, want [pass tests lint clean]", g.SuccessCriteria)

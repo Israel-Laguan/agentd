@@ -60,11 +60,7 @@ func TestArgumentsSummaryLengthBound(t *testing.T) {
 			}
 		}
 
-		if len(sink.events) != len(seq.Calls) {
-			return false
-		}
-
-		return true
+		return len(sink.events) == len(seq.Calls)
 	}
 
 	runPropertyTest(t, "ArgumentsSummaryLengthBound", iterations, property)
