@@ -137,11 +137,18 @@ func assertMarshaledAssistantToolCallsMessage(t *testing.T, msg map[string]any) 
 	if !ok || len(tc) != 1 {
 		t.Fatalf("tool_calls = %v", msg["tool_calls"])
 	}
-	tcObj := tc[0].(map[string]any)
+	tcObj, ok := tc[0].(map[string]any)
+	if !ok {
+		t.Fatalf("tool_calls[0] is not an object: %T", tc[0])
+	}
 	if tcObj["id"] != "call_abc" {
 		t.Errorf("tool_call id = %v", tcObj["id"])
 	}
-	if fn := tcObj["function"].(map[string]any); fn["name"] != "get_weather" {
+	fn, ok := tcObj["function"].(map[string]any)
+	if !ok {
+		t.Fatalf("tool_call.function is not an object: %T", tcObj["function"])
+	}
+	if fn["name"] != "get_weather" {
 		t.Errorf("tool_call function name = %v", fn["name"])
 	}
 }
