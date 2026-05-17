@@ -110,7 +110,7 @@ func scanComments(rows *sql.Rows) ([]models.Comment, error) {
 		if err := rows.Scan(&comment.ID, &comment.TaskID, &payload, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan comment: %w", err)
 		}
-		author, body := splitCommentPayload(payload)
+		author, body := models.SplitCommentPayload(payload)
 		comment.Author, comment.Body = models.NormalizeCommentAuthor(author), body
 		comment.Content = comment.Body
 		created, err := parseTime(createdAt)
@@ -129,14 +129,6 @@ func scanComments(rows *sql.Rows) ([]models.Comment, error) {
 		return nil, fmt.Errorf("iterate comments: %w", err)
 	}
 	return comments, nil
-}
-
-func splitCommentPayload(payload string) (string, string) {
-	author, body, ok := strings.Cut(payload, ":")
-	if !ok {
-		return "", strings.TrimSpace(payload)
-	}
-	return strings.TrimSpace(author), strings.TrimSpace(body)
 }
 
 func (s *Store) ListEventsByTask(ctx context.Context, taskID string) ([]models.Event, error) {

@@ -117,10 +117,11 @@ func (s *FakeKanbanStore) ReconcileExpiredBlockedTasks(_ context.Context, now ti
 func (s *FakeKanbanStore) hitlExpiryLocked(taskID string) (time.Time, bool) {
 	var latest time.Time
 	var found bool
-	for _, c := range s.comments {
-		if c.TaskID != taskID {
+	for _, stored := range s.comments {
+		if stored.TaskID != taskID {
 			continue
 		}
+		c := decodeCommentPayload(stored)
 		prefix := models.HITLExpiresAtCommentPrefix
 		if len(c.Body) < len(prefix) || c.Body[:len(prefix)] != prefix {
 			continue

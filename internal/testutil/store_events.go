@@ -3,15 +3,66 @@ package testutil
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"agentd/internal/models"
+
+	"github.com/google/uuid"
 )
+
+// commentPayloadAtRest mirrors kanban events.payload ("author: body").
+type commentPayloadAtRest struct {
+	models.Comment
+	payload string
+}
+
+func normalizeCommentInput(c models.Comment) models.Comment {
+	if c.ID == "" {
+		c.ID = uuid.NewString()
+	}
+	if strings.TrimSpace(c.Body) == "" {
+		c.Body = strings.TrimSpace(c.Content)
+	}
+	now := now()
+	if c.CreatedAt.IsZero() {
+		c.CreatedAt = now
+	}
+	if c.UpdatedAt.IsZero() {
+		c.UpdatedAt = now
+	}
+	return c
+}
+
+func encodeCommentPayload(c models.Comment) commentPayloadAtRest {
+	c = normalizeCommentInput(c)
+	author := models.NormalizeCommentAuthor(string(c.Author))
+	return commentPayloadAtRest{
+		Comment: models.Comment{
+			BaseEntity: models.BaseEntity{
+				ID:        c.ID,
+				CreatedAt: c.CreatedAt,
+				UpdatedAt: c.UpdatedAt,
+			},
+			TaskID: c.TaskID,
+		},
+		payload: models.FormatCommentPayload(author, c.Body),
+	}
+}
+
+func decodeCommentPayload(stored commentPayloadAtRest) models.Comment {
+	author, body := models.SplitCommentPayload(stored.payload)
+	c := stored.Comment
+	c.Author = models.NormalizeCommentAuthor(author)
+	c.Body = body
+	c.Content = body
+	return c
+}
 
 func (s *FakeKanbanStore) AddComment(_ context.Context, c models.Comment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.comments = append(s.comments, c)
+	s.comments = append(s.comments, encodeCommentPayload(c))
 	return nil
 }
 
@@ -21,7 +72,7 @@ func (s *FakeKanbanStore) ListComments(_ context.Context, taskID string) ([]mode
 	var out []models.Comment
 	for _, c := range s.comments {
 		if c.TaskID == taskID {
-			out = append(out, c)
+			out = append(out, decodeCommentPayload(c))
 		}
 	}
 	return out, nil
@@ -33,7 +84,7 @@ func (s *FakeKanbanStore) ListCommentsSince(_ context.Context, taskID string, si
 	var out []models.Comment
 	for _, c := range s.comments {
 		if c.TaskID == taskID && (since.IsZero() || c.UpdatedAt.After(since)) {
-			out = append(out, c)
+			out = append(out, decodeCommentPayload(c))
 		}
 	}
 	return out, nil

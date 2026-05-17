@@ -4,7 +4,7 @@ import "strings"
 
 // HITLExpiresAtCommentPrefix is stored in worker-agent comment bodies so the
 // kanban HITL reconcile loop can read expiry from COMMENT events (payload is
-// "author: body"; kanban strips the author via splitCommentPayload).
+// "author: body"; kanban strips the author via SplitCommentPayload).
 const HITLExpiresAtCommentPrefix = "agentd:hitl:expires-at:"
 
 // HITL subtask title prefixes for HUMAN subtasks created by worker handoffs
