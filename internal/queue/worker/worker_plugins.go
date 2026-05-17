@@ -91,9 +91,12 @@ func (w *Worker) dispatchToolWithHooks(
 		if verdict := taskHooks.RunPre(hookCtx); verdict.ShortCircuit {
 			return verdict.Result, verdict.Suspend
 		} else if verdict.Veto && verdict.Result != "" {
+			if verdict.Suspend {
+				return verdict.Result, true
+			}
 			result := verdict.Result
 			result = taskHooks.RunPost(hookCtx, result)
-			return result, verdict.Suspend
+			return result, false
 		} else if verdict.Veto {
 			return jsonErrorf("tool call vetoed by scoped plugin: %s", verdict.Reason), verdict.Suspend
 		}

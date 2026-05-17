@@ -428,3 +428,108 @@ func TestProcess_LegacyRequireReview_InjectsRejectionFeedback(t *testing.T) {
 		t.Fatalf("sandbox executions = %d, want 1", sb.execCount)
 	}
 }
+
+// bumpOnCommentStore bumps the parent task's UpdatedAt on AddComment to simulate
+// store side effects between markReviewUsed and commit.
+type bumpOnCommentStore struct {
+	*testutil.FakeKanbanStore
+	bumpParentID string
+}
+
+func (s *bumpOnCommentStore) AddComment(ctx context.Context, c models.Comment) error {
+	if err := s.FakeKanbanStore.AddComment(ctx, c); err != nil {
+		return err
+	}
+	if c.TaskID != s.bumpParentID {
+		return nil
+	}
+	_, err := s.FakeKanbanStore.IncrementRetryCount(ctx, c.TaskID, time.Time{})
+	return err
+}
+
+// strictUpdateResultStore enforces optimistic locking on UpdateTaskResult.
+type strictUpdateResultStore struct {
+	*bumpOnCommentStore
+	capturedExpected time.Time
+}
+
+func (s *strictUpdateResultStore) UpdateTaskResult(ctx context.Context, id string, expected time.Time, result models.TaskResult) (*models.Task, error) {
+	s.capturedExpected = expected
+	task, err := s.bumpOnCommentStore.GetTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !task.UpdatedAt.Equal(expected) {
+		return nil, models.ErrStateConflict
+	}
+	return s.bumpOnCommentStore.UpdateTaskResult(ctx, id, expected, result)
+}
+
+func TestTryFinalizeApprovedReview_RefreshesTaskBeforeCommit(t *testing.T) {
+	t.Parallel()
+	base := testutil.NewFakeStore()
+	store := &strictUpdateResultStore{
+		bumpOnCommentStore: &bumpOnCommentStore{FakeKanbanStore: base},
+	}
+	ctx := context.Background()
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "finalize-refresh",
+		Tasks:       []models.DraftTask{{Title: "parent", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	running, err := store.MarkTaskRunning(ctx, parent.ID, parent.UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	store.bumpParentID = parent.ID
+
+	w := &Worker{store: store}
+	w.createReviewHandoff(ctx, *running, "approved draft output")
+
+	children, err := store.ListChildTasks(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	var review *models.Task
+	for i := range children {
+		if strings.HasPrefix(children[i].Title, models.HITLSubtaskTitleReview) {
+			review = &children[i]
+			break
+		}
+	}
+	if review == nil {
+		t.Fatal("expected review subtask")
+	}
+	if _, err := store.UpdateTaskState(ctx, review.ID, review.UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete review: %v", err)
+	}
+
+	current, err := store.GetTask(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	stale := *current
+	stale.UpdatedAt = current.UpdatedAt.Add(-time.Hour)
+
+	done, err := w.tryFinalizeApprovedReview(ctx, stale)
+	if err != nil {
+		t.Fatalf("tryFinalizeApprovedReview: %v", err)
+	}
+	if !done {
+		t.Fatal("expected finalization to complete")
+	}
+	if store.capturedExpected.Equal(stale.UpdatedAt) {
+		t.Fatalf("UpdateTaskResult used stale UpdatedAt %v", stale.UpdatedAt)
+	}
+	final, err := store.GetTask(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("get final parent: %v", err)
+	}
+	if final.State != models.TaskStateCompleted {
+		t.Fatalf("parent state = %s, want COMPLETED", final.State)
+	}
+}

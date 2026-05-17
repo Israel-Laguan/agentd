@@ -278,7 +278,11 @@ func (w *Worker) tryFinalizeApprovedReview(ctx context.Context, task models.Task
 	if err := markReviewUsed(ctx, w.store, task.ID, review.ID); err != nil {
 		return false, err
 	}
+	fresh, err := w.store.GetTask(ctx, task.ID)
+	if err != nil {
+		return false, fmt.Errorf("refresh task for approved review commit: %w", err)
+	}
 	result := sandbox.Result{Success: true, Stdout: draft}
-	w.commit(ctx, task, result, nil)
+	w.commit(ctx, *fresh, result, nil)
 	return true, nil
 }
