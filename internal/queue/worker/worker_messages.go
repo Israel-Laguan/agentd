@@ -36,10 +36,14 @@ When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.`
-	if len(goal) == 0 || goal[0] == nil {
+	if len(goal) == 0 || goal[0] == nil || len(goal[0].SuccessCriteria) == 0 {
 		return text
 	}
-	return text + `
+	criteria := "\nTask success criteria:\n"
+	for _, c := range goal[0].SuccessCriteria {
+		criteria += fmt.Sprintf("- %s\n", c)
+	}
+	return text + criteria + `
 When a success criterion becomes complete, include a line exactly like [COMPLETED] criterion text.
 When a success criterion is blocked, include a line exactly like [BLOCKED] criterion text.
 Use the exact criterion text from the task success criteria.`
