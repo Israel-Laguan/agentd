@@ -4,11 +4,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"agentd/internal/capabilities"
-	"agentd/internal/queue/worker"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"agentd/internal/capabilities"
+	"agentd/internal/queue/worker"
 )
 
 func TestMounter_MountProject_LoadsFromWorkspace(t *testing.T) {

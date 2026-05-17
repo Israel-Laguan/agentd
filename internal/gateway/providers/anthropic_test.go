@@ -156,7 +156,7 @@ func TestAnthropicToolCalls_ParsesToolCalls(t *testing.T) {
 		Tools: []spec.ToolDefinition{{
 			Name:        "get_weather",
 			Description: "Get weather for a location",
-			Parameters: &spec.FunctionParameters{},
+			Parameters:  &spec.FunctionParameters{},
 		}},
 	})
 	if err != nil {

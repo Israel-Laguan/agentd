@@ -8,12 +8,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cucumber/godog"
+
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
-
-	"github.com/cucumber/godog"
 )
 
 func TestWorkerAgenticModeFeatures(t *testing.T) {
@@ -53,7 +53,6 @@ func (h *testLogHandler) Handle(_ context.Context, r slog.Record) error {
 }
 func (h *testLogHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
 func (h *testLogHandler) WithGroup(_ string) slog.Handler      { return h }
-
 
 func initializeWorkerScenario(sc *godog.ScenarioContext) {
 	state := &workerScenario{}

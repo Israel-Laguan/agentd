@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"agentd/internal/api/httpx"
 	"agentd/internal/models"
 	"agentd/internal/services"
-
-	"github.com/google/uuid"
 )
 
 // AgentHandler exposes CRUD endpoints over the AgentProfile registry. The

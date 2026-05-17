@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agentd/internal/paths"
-
 	"github.com/spf13/viper"
+
+	"agentd/internal/paths"
 )
 
 const (

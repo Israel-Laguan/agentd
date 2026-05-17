@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	openai "github.com/openai/openai-go/v3"
+
 	"agentd/internal/api"
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
 	"agentd/internal/gateway"
-
-	openai "github.com/openai/openai-go/v3"
 )
 
 // TestChatCompletionRoundTripsThroughOpenAITypes verifies the response

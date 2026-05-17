@@ -1,10 +1,10 @@
 package main
 
 import (
+	"github.com/spf13/cobra"
+
 	"agentd/internal/config"
 	"agentd/internal/kanban"
-
-	"github.com/spf13/cobra"
 )
 
 func newConfigCommand(opts *rootOptions) *cobra.Command {

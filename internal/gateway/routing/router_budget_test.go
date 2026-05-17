@@ -28,7 +28,7 @@ type captureProvider struct {
 }
 
 func (p *captureProvider) Name() spec.Provider { return spec.Provider(p.providerName) }
-func (p *captureProvider) MaxInputChars() int   { return p.budget }
+func (p *captureProvider) MaxInputChars() int  { return p.budget }
 func (p *captureProvider) Generate(_ context.Context, req spec.AIRequest) (spec.AIResponse, error) {
 	p.request = req
 	return spec.AIResponse{Content: "ok", ProviderUsed: string(p.providerName)}, nil

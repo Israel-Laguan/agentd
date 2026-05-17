@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"agentd/internal/capabilities"
-	"agentd/internal/queue/worker"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"agentd/internal/capabilities"
+	"agentd/internal/queue/worker"
 )
 
 func seedPlugin(t *testing.T, base, dirName, manifest string) {

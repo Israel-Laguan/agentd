@@ -1,9 +1,9 @@
 package main
 
 import (
-	"agentd/internal/models"
-
 	"github.com/spf13/cobra"
+
+	"agentd/internal/models"
 )
 
 func newCommentCommand(opts *rootOptions) *cobra.Command {

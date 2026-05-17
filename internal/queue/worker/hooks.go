@@ -75,10 +75,10 @@ type SessionStartHook struct {
 // HookChain is the central registry for pre-tool, post-tool, and
 // session-start hooks. All methods are safe for concurrent use.
 type HookChain struct {
-	mu            sync.RWMutex
-	preHooks      []PreHook
-	postHooks     []PostHook
-	sessionHooks  []SessionStartHook
+	mu           sync.RWMutex
+	preHooks     []PreHook
+	postHooks    []PostHook
+	sessionHooks []SessionStartHook
 }
 
 // NewHookChain returns a HookChain with empty hook lists.

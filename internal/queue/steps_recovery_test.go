@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cucumber/godog"
+
 	"agentd/internal/config"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
-
-	"github.com/cucumber/godog"
 )
 
 // --- Queue scenario steps (retries, ghost recovery, graceful shutdown) ---

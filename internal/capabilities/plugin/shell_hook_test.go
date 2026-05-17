@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"agentd/internal/queue/worker"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"agentd/internal/queue/worker"
 )
 
 func writeScript(t *testing.T, dir, name, content string) string {

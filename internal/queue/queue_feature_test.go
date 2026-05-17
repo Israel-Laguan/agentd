@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"agentd/internal/sandbox"
-
 	"github.com/cucumber/godog"
+
+	"agentd/internal/sandbox"
 )
 
 func TestQueueFeatures(t *testing.T) {

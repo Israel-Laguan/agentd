@@ -158,10 +158,10 @@ func TestFormatFileReferenceIntent(t *testing.T) {
 			wantContains: []string{"test intent", "[agentd file reference]", "name: a.txt", "path: /path/a.txt", "name: b.txt", "path: /path/b.txt"},
 		},
 		{
-			name:         "with empty name ref",
-			intent:       "test intent",
-			refs:         []FileRef{{Name: "", Path: "/path/c.txt"}},
-			wantContains: []string{"test intent", "[agentd file reference]", "path: /path/c.txt"},
+			name:            "with empty name ref",
+			intent:          "test intent",
+			refs:            []FileRef{{Name: "", Path: "/path/c.txt"}},
+			wantContains:    []string{"test intent", "[agentd file reference]", "path: /path/c.txt"},
 			wantNotContains: []string{"name:"},
 		},
 	}

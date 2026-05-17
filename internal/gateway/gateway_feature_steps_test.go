@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cucumber/godog"
+
 	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
-
-	"github.com/cucumber/godog"
 )
 
 type gatewayScenario struct {

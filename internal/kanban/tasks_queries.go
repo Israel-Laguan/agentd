@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"agentd/internal/models"
-
 	"github.com/google/uuid"
+
+	"agentd/internal/models"
 )
 
 func taskSelectColumns(table string) string {

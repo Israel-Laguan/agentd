@@ -46,4 +46,3 @@ func finishTaskStateSideEffects(ctx context.Context, tx *immediateTx, id string,
 		return nil
 	}
 }
-

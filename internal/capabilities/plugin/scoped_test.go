@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"agentd/internal/capabilities"
-	"agentd/internal/queue/worker"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"agentd/internal/capabilities"
+	"agentd/internal/queue/worker"
 )
 
 func TestNewScopedPluginLoader_SetsScope(t *testing.T) {

@@ -6,9 +6,9 @@ import (
 	"errors"
 	"net/http"
 
-	"agentd/internal/gateway"
-
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"agentd/internal/gateway"
 )
 
 type AuthConfig struct {

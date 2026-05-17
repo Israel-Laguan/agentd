@@ -11,14 +11,14 @@ import (
 
 // ApprovalRequest describes a pending human approval for a gated tool.
 type ApprovalRequest struct {
-	ToolName       string        `json:"tool_name"`
-	Arguments      string        `json:"arguments"`
-	Rationale      string        `json:"rationale"`
-	Timeout        time.Duration `json:"timeout"`
-	TaskID         string        `json:"task_id"`
-	TaskUpdatedAt  time.Time     `json:"task_updated_at"`
-	RequestedAt    time.Time     `json:"requested_at"`
-	CallID         string        `json:"call_id"`
+	ToolName      string        `json:"tool_name"`
+	Arguments     string        `json:"arguments"`
+	Rationale     string        `json:"rationale"`
+	Timeout       time.Duration `json:"timeout"`
+	TaskID        string        `json:"task_id"`
+	TaskUpdatedAt time.Time     `json:"task_updated_at"`
+	RequestedAt   time.Time     `json:"requested_at"`
+	CallID        string        `json:"call_id"`
 }
 
 // ApprovalResponse carries the human decision on an approval request.

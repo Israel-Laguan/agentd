@@ -264,5 +264,3 @@ func dirPrefix(dir string) int {
 }
 
 const maxDirPrefix = 1<<31 - 1
-
-

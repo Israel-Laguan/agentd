@@ -58,8 +58,8 @@ type fakeSuccessExecutor struct{}
 
 func (fakeSuccessExecutor) Execute(ctx context.Context, payload sandbox.Payload) (sandbox.Result, error) {
 	return sandbox.Result{
-		Success: true,
-		Stdout:  "hello world",
+		Success:  true,
+		Stdout:   "hello world",
 		ExitCode: 0,
 	}, nil
 }

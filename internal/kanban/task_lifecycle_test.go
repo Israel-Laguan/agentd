@@ -98,8 +98,8 @@ func TestSuccessCriteriaPersistThroughTaskCreationPaths(t *testing.T) {
 
 	t.Run("nil and empty criteria materialize to zero-length", func(t *testing.T) {
 		for name, draft := range map[string]models.DraftTask{
-			"nil":    {TempID: "nil", Title: "nil criteria"},
-			"empty":  {TempID: "empty", Title: "empty criteria", SuccessCriteria: []string{}},
+			"nil":   {TempID: "nil", Title: "nil criteria"},
+			"empty": {TempID: "empty", Title: "empty criteria", SuccessCriteria: []string{}},
 		} {
 			t.Run(name, func(t *testing.T) {
 				_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{

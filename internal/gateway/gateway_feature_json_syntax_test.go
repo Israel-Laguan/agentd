@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"agentd/internal/models"
-
 	"github.com/cucumber/godog"
+
+	"agentd/internal/models"
 )
 
 const (

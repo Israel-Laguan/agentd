@@ -7,14 +7,14 @@ import (
 )
 
 const (
-	DefaultTaskDeadline            = 10 * time.Minute
-	DefaultQueuedReconcileAfter    = 10 * time.Minute
-	DefaultPollMaxInterval         = 10 * time.Second
-	DefaultMaxToolIterations       = 10
-	DefaultTokenBudget             = 0
-	DefaultAgenticTruncatorMax     = 30
+	DefaultTaskDeadline               = 10 * time.Minute
+	DefaultQueuedReconcileAfter       = 10 * time.Minute
+	DefaultPollMaxInterval            = 10 * time.Second
+	DefaultMaxToolIterations          = 10
+	DefaultTokenBudget                = 0
+	DefaultAgenticTruncatorMax        = 30
 	DefaultAgenticTruncationThreshold = 40
-	DefaultAgenticCharacterBudget = 0 // 0 = unlimited
+	DefaultAgenticCharacterBudget     = 0 // 0 = unlimited
 
 	DefaultAnchorBudget          = 10000
 	DefaultWorkingBudget         = 40000

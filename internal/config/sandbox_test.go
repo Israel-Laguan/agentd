@@ -74,7 +74,7 @@ func TestSandboxConfig_Custom(t *testing.T) {
 			AddressSpaceBytes: 1024 * 1024 * 1024,
 			CPUSeconds:        300,
 			OpenFiles:         512,
-			Processes:        128,
+			Processes:         128,
 		},
 	}
 	if cfg.InactivityTimeout != 30*time.Second {

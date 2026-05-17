@@ -90,13 +90,13 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 	type alias DraftTask
 	var raw struct {
 		alias
-		TempIDLegacy      string       `json:"TempID"`
-		ReferenceIDLegacy string       `json:"ReferenceID"`
-		TitleLegacy       string       `json:"Title"`
-		DescriptionLegacy string       `json:"Description"`
-		AssigneeLegacy    TaskAssignee `json:"Assignee"`
-		DependsOnLegacy         []string `json:"DependsOn"`
-		SuccessCriteriaLegacy []string `json:"SuccessCriteria"`
+		TempIDLegacy          string       `json:"TempID"`
+		ReferenceIDLegacy     string       `json:"ReferenceID"`
+		TitleLegacy           string       `json:"Title"`
+		DescriptionLegacy     string       `json:"Description"`
+		AssigneeLegacy        TaskAssignee `json:"Assignee"`
+		DependsOnLegacy       []string     `json:"DependsOn"`
+		SuccessCriteriaLegacy []string     `json:"SuccessCriteria"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err

@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-
-	"github.com/spf13/cobra"
 )
 
 type askOptions struct {

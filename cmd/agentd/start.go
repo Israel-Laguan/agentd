@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"agentd/internal/api"
 	"agentd/internal/config"
 	"agentd/internal/frontdesk"
@@ -17,8 +19,6 @@ import (
 	"agentd/internal/models"
 	"agentd/internal/queue"
 	"agentd/internal/services"
-
-	"github.com/spf13/cobra"
 )
 
 func newStartCommand(opts *rootOptions) *cobra.Command {
@@ -140,29 +140,29 @@ func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontde
 		ch = queue.NewChannelGate(cfg.Channel)
 	}
 	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{
-		MaxWorkers:           startOpts.workers,
-		TaskInterval:         cfg.Cron.TaskDispatch,
-		MaxTaskInterval:      cfg.Queue.PollMaxInterval,
-		TaskDeadline:         cfg.Queue.TaskDeadline,
-		IntakeInterval:       cfg.Cron.Intake,
-		HeartbeatInterval:    cfg.Cron.Heartbeat,
-		StaleAfter:           cfg.Heartbeat.StaleAfter,
-		HandoffAfter:         cfg.Breaker.HandoffAfter,
-		DiskWatchdogEvery:    cfg.Cron.DiskWatchdog.Every,
-		DiskWatchdogSchedule: cfg.Cron.DiskWatchdog.Schedule,
-		HITLReconcileEvery:   cfg.Cron.HITLReconcile.Every,
-		HITLReconcileSchedule: cfg.Cron.HITLReconcile.Schedule,
-		DiskFreeThreshold:    cfg.Disk.FreeThresholdPercent,
-		DiskCheckPath:        cfg.HomeDir,
-		Librarian:            buildLibrarian(store, deps, cfg),
-		Dreamer:              buildDreamer(store, deps, cfg),
-		CuratorEvery:         cfg.Cron.MemoryCurator.Every,
-		CuratorSchedule:      cfg.Cron.MemoryCurator.Schedule,
-		DreamEvery:           cfg.Cron.Dream.Every,
-		DreamSchedule:        cfg.Cron.Dream.Schedule,
-		Channel:                  ch,
-		QueuedReconcileAfter:     cfg.Queue.QueuedReconcileAfter,
-		RateLimitedRequeueAfter:  rateLimitedRequeueAfter,
+		MaxWorkers:              startOpts.workers,
+		TaskInterval:            cfg.Cron.TaskDispatch,
+		MaxTaskInterval:         cfg.Queue.PollMaxInterval,
+		TaskDeadline:            cfg.Queue.TaskDeadline,
+		IntakeInterval:          cfg.Cron.Intake,
+		HeartbeatInterval:       cfg.Cron.Heartbeat,
+		StaleAfter:              cfg.Heartbeat.StaleAfter,
+		HandoffAfter:            cfg.Breaker.HandoffAfter,
+		DiskWatchdogEvery:       cfg.Cron.DiskWatchdog.Every,
+		DiskWatchdogSchedule:    cfg.Cron.DiskWatchdog.Schedule,
+		HITLReconcileEvery:      cfg.Cron.HITLReconcile.Every,
+		HITLReconcileSchedule:   cfg.Cron.HITLReconcile.Schedule,
+		DiskFreeThreshold:       cfg.Disk.FreeThresholdPercent,
+		DiskCheckPath:           cfg.HomeDir,
+		Librarian:               buildLibrarian(store, deps, cfg),
+		Dreamer:                 buildDreamer(store, deps, cfg),
+		CuratorEvery:            cfg.Cron.MemoryCurator.Every,
+		CuratorSchedule:         cfg.Cron.MemoryCurator.Schedule,
+		DreamEvery:              cfg.Cron.Dream.Every,
+		DreamSchedule:           cfg.Cron.Dream.Schedule,
+		Channel:                 ch,
+		QueuedReconcileAfter:    cfg.Queue.QueuedReconcileAfter,
+		RateLimitedRequeueAfter: rateLimitedRequeueAfter,
 	})
 }
 

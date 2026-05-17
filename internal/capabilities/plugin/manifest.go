@@ -11,13 +11,13 @@ import (
 // environment variable requirements. It is parsed from manifest.json
 // inside each plugin directory.
 type Manifest struct {
-	Name         string       `json:"name"`
-	Version      string       `json:"version"`
-	Priority     int          `json:"priority"`
-	Hooks        HookSpecs    `json:"hooks"`
-	Capabilities []string     `json:"capabilities"`
-	Env          EnvSpec      `json:"env"`
-	Dir          string       `json:"-"`
+	Name         string    `json:"name"`
+	Version      string    `json:"version"`
+	Priority     int       `json:"priority"`
+	Hooks        HookSpecs `json:"hooks"`
+	Capabilities []string  `json:"capabilities"`
+	Env          EnvSpec   `json:"env"`
+	Dir          string    `json:"-"`
 }
 
 // HookSpecs declares the hook scripts or identifiers a plugin provides.

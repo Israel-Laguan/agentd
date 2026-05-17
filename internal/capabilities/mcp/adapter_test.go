@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"agentd/internal/gateway"
-
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"agentd/internal/gateway"
 )
 
 func TestNewMCPAdapter_EmptyServerURL(t *testing.T) {

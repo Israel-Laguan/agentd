@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/robfig/cron/v3"
+
 	"agentd/internal/config"
 	"agentd/internal/frontdesk"
 	"agentd/internal/memory"
@@ -14,66 +16,64 @@ import (
 	"agentd/internal/queue/recovery"
 	"agentd/internal/queue/safety"
 	qw "agentd/internal/queue/worker"
-
-	"github.com/robfig/cron/v3"
 )
 
 type Daemon struct {
-	store                models.KanbanStore
-	worker               *qw.Worker
-	intake               *frontdesk.IntakeProcessor
-	breaker              *safety.CircuitBreaker
-	sem                  *safety.Semaphore
-	probe                safety.PIDProbe
-	sink                 models.EventSink
-	taskInterval         time.Duration
-	maxTaskInterval      time.Duration
-	taskDeadline         time.Duration
-	intakeEvery          time.Duration
-	heartbeatInterval    time.Duration
-	staleAfter           time.Duration
-	handoffAfter         time.Duration
-	diskWatchdogEvery    time.Duration
-	diskWatchdogSchedule cron.Schedule
-	hitlReconcileEvery   time.Duration
-	hitlReconcileSchedule cron.Schedule
-	diskFreeThreshold    float64
-	diskCheckPath        string
-	diskStat             func(string) (float64, error)
-	librarian            *memory.Librarian
-	dreamer              *memory.DreamAgent
-	curatorEvery         time.Duration
-	curatorSchedule      cron.Schedule
-	dreamEvery           time.Duration
-	dreamSchedule        cron.Schedule
-	channel                  Channel
-	queuedReconcileAfter     time.Duration
-	rateLimitedRequeueAfter  time.Duration
-	wg                       sync.WaitGroup
+	store                   models.KanbanStore
+	worker                  *qw.Worker
+	intake                  *frontdesk.IntakeProcessor
+	breaker                 *safety.CircuitBreaker
+	sem                     *safety.Semaphore
+	probe                   safety.PIDProbe
+	sink                    models.EventSink
+	taskInterval            time.Duration
+	maxTaskInterval         time.Duration
+	taskDeadline            time.Duration
+	intakeEvery             time.Duration
+	heartbeatInterval       time.Duration
+	staleAfter              time.Duration
+	handoffAfter            time.Duration
+	diskWatchdogEvery       time.Duration
+	diskWatchdogSchedule    cron.Schedule
+	hitlReconcileEvery      time.Duration
+	hitlReconcileSchedule   cron.Schedule
+	diskFreeThreshold       float64
+	diskCheckPath           string
+	diskStat                func(string) (float64, error)
+	librarian               *memory.Librarian
+	dreamer                 *memory.DreamAgent
+	curatorEvery            time.Duration
+	curatorSchedule         cron.Schedule
+	dreamEvery              time.Duration
+	dreamSchedule           cron.Schedule
+	channel                 Channel
+	queuedReconcileAfter    time.Duration
+	rateLimitedRequeueAfter time.Duration
+	wg                      sync.WaitGroup
 }
 
 type DaemonOptions struct {
-	MaxWorkers           int
-	TaskInterval         time.Duration
-	MaxTaskInterval      time.Duration
-	TaskDeadline         time.Duration
-	IntakeInterval       time.Duration
-	HeartbeatInterval    time.Duration
-	StaleAfter           time.Duration
-	HandoffAfter         time.Duration
-	DiskWatchdogEvery    time.Duration
-	DiskWatchdogSchedule cron.Schedule
-	HITLReconcileEvery   time.Duration
-	HITLReconcileSchedule cron.Schedule
-	DiskFreeThreshold    float64
-	DiskCheckPath        string
-	Probe                safety.PIDProbe
-	Librarian            *memory.Librarian
-	Dreamer              *memory.DreamAgent
-	CuratorEvery         time.Duration
-	CuratorSchedule      cron.Schedule
-	DreamEvery           time.Duration
-	DreamSchedule        cron.Schedule
+	MaxWorkers              int
+	TaskInterval            time.Duration
+	MaxTaskInterval         time.Duration
+	TaskDeadline            time.Duration
+	IntakeInterval          time.Duration
+	HeartbeatInterval       time.Duration
+	StaleAfter              time.Duration
+	HandoffAfter            time.Duration
+	DiskWatchdogEvery       time.Duration
+	DiskWatchdogSchedule    cron.Schedule
+	HITLReconcileEvery      time.Duration
+	HITLReconcileSchedule   cron.Schedule
+	DiskFreeThreshold       float64
+	DiskCheckPath           string
+	Probe                   safety.PIDProbe
+	Librarian               *memory.Librarian
+	Dreamer                 *memory.DreamAgent
+	CuratorEvery            time.Duration
+	CuratorSchedule         cron.Schedule
+	DreamEvery              time.Duration
+	DreamSchedule           cron.Schedule
 	Channel                 Channel
 	QueuedReconcileAfter    time.Duration
 	RateLimitedRequeueAfter time.Duration

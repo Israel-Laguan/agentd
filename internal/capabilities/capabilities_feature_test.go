@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"agentd/internal/gateway"
-
 	"github.com/cucumber/godog"
+
+	"agentd/internal/gateway"
 )
 
 // capabilitiesScenario is used by godog via reflection.

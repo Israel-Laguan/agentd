@@ -73,7 +73,7 @@ func TestCreateReviewHandoff_CreatesSubtask(t *testing.T) {
 
 	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
 		ProjectName: "review-test",
-		Tasks: []models.DraftTask{{Title: "task-review-1", Description: "work"}},
+		Tasks:       []models.DraftTask{{Title: "task-review-1", Description: "work"}},
 	})
 	if err != nil {
 		t.Fatalf("materialize plan: %v", err)
@@ -172,7 +172,7 @@ func TestCreateReviewHandoff_StoreError(t *testing.T) {
 
 	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
 		ProjectName: "review-err",
-		Tasks: []models.DraftTask{{Title: "task-review-err", Description: "work"}},
+		Tasks:       []models.DraftTask{{Title: "task-review-err", Description: "work"}},
 	})
 	if err != nil {
 		t.Fatalf("materialize plan: %v", err)

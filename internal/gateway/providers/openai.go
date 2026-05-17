@@ -83,25 +83,25 @@ func (o *OpenAI) Capabilities() Capabilities {
 }
 
 type openAIRequest struct {
-	Model          string                  `json:"model"`
-	Messages       []spec.PromptMessage    `json:"messages"`
-	Temperature    float64                 `json:"temperature"`
-	MaxTokens      int                     `json:"max_tokens,omitempty"`
-	ResponseFormat map[string]string       `json:"response_format,omitempty"`
-	Tools          []openAITool            `json:"tools,omitempty"`
+	Model          string               `json:"model"`
+	Messages       []spec.PromptMessage `json:"messages"`
+	Temperature    float64              `json:"temperature"`
+	MaxTokens      int                  `json:"max_tokens,omitempty"`
+	ResponseFormat map[string]string    `json:"response_format,omitempty"`
+	Tools          []openAITool         `json:"tools,omitempty"`
 }
 
 type openAITool struct {
-	Type     string               `json:"type"`
-	Function spec.ToolDefinition  `json:"function"`
+	Type     string              `json:"type"`
+	Function spec.ToolDefinition `json:"function"`
 }
 
 type openAIResponse struct {
 	Choices []struct {
 		Message struct {
-			Role             string        `json:"role"`
-			Content          *string       `json:"content"`
-			ReasoningContent *string       `json:"reasoning_content"`
+			Role             string           `json:"role"`
+			Content          *string          `json:"content"`
+			ReasoningContent *string          `json:"reasoning_content"`
 			ToolCalls        []openAIToolCall `json:"tool_calls"`
 		} `json:"message"`
 	} `json:"choices"`
@@ -139,8 +139,8 @@ func (r openAIResponse) toAIResponse(defaultModel string) spec.AIResponse {
 			toolCalls = make([]spec.ToolCall, len(msg.ToolCalls))
 			for i, tc := range msg.ToolCalls {
 				toolCalls[i] = spec.ToolCall{
-					ID:       tc.ID,
-					Type:     tc.Type,
+					ID:   tc.ID,
+					Type: tc.Type,
 					Function: spec.ToolCallFunction{
 						Name:      tc.Function.Name,
 						Arguments: tc.Function.Arguments,

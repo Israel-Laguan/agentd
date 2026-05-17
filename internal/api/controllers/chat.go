@@ -17,13 +17,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"agentd/internal/api/httpx"
 	"agentd/internal/frontdesk"
 	"agentd/internal/gateway"
 	"agentd/internal/memory"
 	"agentd/internal/models"
-
-	"github.com/google/uuid"
 )
 
 // ChatHandler implements the OpenAI-compatible chat completions endpoint.

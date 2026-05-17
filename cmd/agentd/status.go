@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 
-	"agentd/internal/models"
-
 	"github.com/spf13/cobra"
+
+	"agentd/internal/models"
 )
 
 func newStatusCommand(opts *rootOptions) *cobra.Command {

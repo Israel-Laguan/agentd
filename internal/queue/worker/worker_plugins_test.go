@@ -4,12 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // stubMounter is a test double for PluginMounter.

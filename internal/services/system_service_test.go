@@ -13,16 +13,16 @@ import (
 )
 
 type stubBreaker struct {
-	state        string
-	failCount    int
-	open         time.Duration
-	lastErr      error
+	state     string
+	failCount int
+	open      time.Duration
+	lastErr   error
 }
 
-func (b stubBreaker) State() string                  { return b.state }
-func (b stubBreaker) FailureCount() int              { return b.failCount }
-func (b stubBreaker) OpenDuration() time.Duration    { return b.open }
-func (b stubBreaker) LastError() error             { return b.lastErr }
+func (b stubBreaker) State() string               { return b.state }
+func (b stubBreaker) FailureCount() int           { return b.failCount }
+func (b stubBreaker) OpenDuration() time.Duration { return b.open }
+func (b stubBreaker) LastError() error            { return b.lastErr }
 
 func TestSystemServiceSnapshotNoSummarizer(t *testing.T) {
 	svc := &services.SystemService{

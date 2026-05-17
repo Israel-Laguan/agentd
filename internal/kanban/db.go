@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"agentd/internal/kanban/migrations"
-
 	_ "modernc.org/sqlite"
+
+	"agentd/internal/kanban/migrations"
 )
 
 //go:embed db/schema.sql
