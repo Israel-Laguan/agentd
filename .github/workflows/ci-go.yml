@@ -41,16 +41,37 @@ jobs:
           python-version: "3.12"
 
       - name: Verify go.mod is tidy
-        run: make tidy && git diff --exit-code go.mod go.sum
+        run: ./scripts/verify_gomod.sh
 
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 
       - name: LOC check
         run: make loc
+        env:
+          GITHUB_ACTIONS: true
+
+      - name: Report LOC failure
+        if: failure() && steps.LOC_check.outcome == 'failure'
+        run: echo "::error::LOC check failed. See annotations above or the LOC check step log for file list."
+
+      - name: Register golangci-lint problem matcher
+        run: echo "::add-matcher::.github/golangci-lint-matcher.json"
 
       - name: Lint
         run: make lint
 
+      - name: Remove golangci-lint problem matcher
+        if: always()
+        run: echo "::remove-matcher owner=golangci-lint::"
+
+      - name: Report lint failure
+        if: failure() && steps.Lint.outcome == 'failure'
+        run: echo "::error::golangci-lint failed. See annotations above or the Lint step log for details."
+
       - name: Test
         run: make test
+
+      - name: Report test failure
+        if: failure() && steps.Test.outcome == 'failure'
+        run: echo "::error::Go tests failed. Open the Test step log for package and assertion details."

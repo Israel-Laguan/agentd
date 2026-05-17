@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import os
 import pathlib
 import subprocess
 import sys
+
+MAX_GITHUB_ANNOTATIONS = 10
 
 
 DEFAULT_EXCLUDES = (
@@ -51,6 +54,24 @@ def max_lines_for(path: str, default: int) -> int:
     return default
 
 
+def emit_github_annotations(violations: list[tuple[int, str, int]]) -> None:
+    if not os.environ.get("GITHUB_ACTIONS"):
+        return
+    sorted_violations = sorted(violations, reverse=True)
+    for lines, rel_path, limit in sorted_violations[:MAX_GITHUB_ANNOTATIONS]:
+        print(
+            f"::error file={rel_path},line=1::LOC {lines}/{limit}: file exceeds limit",
+            flush=True,
+        )
+    remaining = len(sorted_violations) - MAX_GITHUB_ANNOTATIONS
+    if remaining > 0:
+        print(
+            f"::error::LOC check failed: {len(sorted_violations)} file(s) exceed limits "
+            f"({remaining} more not shown as annotations; see step log)",
+            flush=True,
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--max-lines", type=int, default=300)
@@ -80,6 +101,7 @@ def main() -> int:
     print(f"LOC check failed: {len(violations)} file(s) exceed their limits:")
     for lines, rel_path, limit in sorted(violations, reverse=True):
         print(f"  {lines:4d}/{limit:4d}  {rel_path}")
+    emit_github_annotations(violations)
     return 1
 
 
