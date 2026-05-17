@@ -67,6 +67,9 @@ func TestPaginatedProjectsAndTasks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListTasks filtered: %v", err)
 		}
+		if len(filtered.Data) == 0 {
+			t.Fatal("expected at least one filtered task")
+		}
 		for _, task := range filtered.Data {
 			if task.ProjectID != pid {
 				t.Fatalf("task project = %s, want %s", task.ProjectID, pid)

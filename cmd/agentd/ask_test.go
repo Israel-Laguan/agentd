@@ -186,8 +186,10 @@ func TestApproved(t *testing.T) {
 }
 
 func TestMaterializePlan_SendsToken(t *testing.T) {
-	var gotToken string
+	var gotToken, gotMethod, gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
 		gotToken = r.Header.Get("X-Agentd-Materialize-Token")
 		w.WriteHeader(http.StatusCreated)
 	}))
@@ -204,6 +206,12 @@ func TestMaterializePlan_SendsToken(t *testing.T) {
 	}
 	if gotToken != "secret-token" {
 		t.Fatalf("token = %q, want secret-token", gotToken)
+	}
+	if gotMethod != http.MethodPost {
+		t.Fatalf("method = %q, want %q", gotMethod, http.MethodPost)
+	}
+	if gotPath != "/api/v1/projects/materialize" {
+		t.Fatalf("path = %q, want %q", gotPath, "/api/v1/projects/materialize")
 	}
 }
 

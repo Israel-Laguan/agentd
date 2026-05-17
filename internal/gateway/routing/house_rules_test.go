@@ -39,7 +39,10 @@ func TestRouterGenerateJSONInjectsHouseRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClassifyIntent: %v", err)
 	}
-	if p.lastReq == nil || !strings.Contains(p.lastReq.Messages[0].Content, "POSIX sh only.") {
+	if p.lastReq == nil || len(p.lastReq.Messages) == 0 {
+		t.Fatalf("house rules missing from JSON flow: %#v", p.lastReq)
+	}
+	if !strings.Contains(p.lastReq.Messages[0].Content, "POSIX sh only.") {
 		t.Fatalf("house rules missing from JSON flow: %#v", p.lastReq)
 	}
 }
