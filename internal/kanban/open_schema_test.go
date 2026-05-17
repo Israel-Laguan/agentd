@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -19,8 +20,14 @@ func TestOpenBootstrapsCurrentSchemaVersion(t *testing.T) {
 	if err := db.QueryRow(`SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "7" {
-		t.Fatalf("schema version = %q, want 7", version)
+	if version != "8" {
+		t.Fatalf("schema version = %q, want 8", version)
+	}
+
+	var successCriteria string
+	err = db.QueryRow(`SELECT success_criteria FROM tasks LIMIT 0`).Scan(&successCriteria)
+	if err != nil && err != sql.ErrNoRows {
+		t.Fatalf("query success_criteria column: %v", err)
 	}
 }
 

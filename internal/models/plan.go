@@ -77,11 +77,12 @@ type DraftTask struct {
 	// ReferenceID is the proposal-aligned ID and maps to JSON ref_id.
 	ReferenceID string `json:"ref_id,omitempty"`
 	// TempID remains for backward compatibility with existing tests and stores.
-	TempID      string       `json:"temp_id,omitempty"`
-	Title       string       `json:"title"`
-	Description string       `json:"description"`
-	Assignee    TaskAssignee `json:"assignee"`
-	DependsOn   []string     `json:"depends_on,omitempty"`
+	TempID          string       `json:"temp_id,omitempty"`
+	Title           string       `json:"title"`
+	Description     string       `json:"description"`
+	Assignee        TaskAssignee `json:"assignee"`
+	DependsOn       []string     `json:"depends_on,omitempty"`
+	SuccessCriteria []string     `json:"success_criteria,omitempty"`
 }
 
 // UnmarshalJSON accepts both proposal snake_case and legacy camel-case keys.
@@ -94,7 +95,8 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 		TitleLegacy       string       `json:"Title"`
 		DescriptionLegacy string       `json:"Description"`
 		AssigneeLegacy    TaskAssignee `json:"Assignee"`
-		DependsOnLegacy   []string     `json:"DependsOn"`
+		DependsOnLegacy         []string `json:"DependsOn"`
+		SuccessCriteriaLegacy []string `json:"SuccessCriteria"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -117,6 +119,9 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 	}
 	if len(d.DependsOn) == 0 && len(raw.DependsOnLegacy) > 0 {
 		d.DependsOn = raw.DependsOnLegacy
+	}
+	if len(d.SuccessCriteria) == 0 && len(raw.SuccessCriteriaLegacy) > 0 {
+		d.SuccessCriteria = append([]string(nil), raw.SuccessCriteriaLegacy...)
 	}
 	return nil
 }

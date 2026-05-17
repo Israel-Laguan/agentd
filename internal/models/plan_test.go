@@ -150,6 +150,27 @@ func TestDraftTask_UnmarshalJSON_Legacy(t *testing.T) {
 	}
 }
 
+func TestDraftTask_UnmarshalJSON_SuccessCriteria(t *testing.T) {
+	t.Run("snake_case", func(t *testing.T) {
+		var task DraftTask
+		if err := json.Unmarshal([]byte(`{"title":"t","success_criteria":["tests pass"]}`), &task); err != nil {
+			t.Fatalf("UnmarshalJSON() error = %v", err)
+		}
+		if len(task.SuccessCriteria) != 1 || task.SuccessCriteria[0] != "tests pass" {
+			t.Fatalf("SuccessCriteria = %v, want [tests pass]", task.SuccessCriteria)
+		}
+	})
+	t.Run("legacy camelCase", func(t *testing.T) {
+		var task DraftTask
+		if err := json.Unmarshal([]byte(`{"Title":"t","SuccessCriteria":["lint clean"]}`), &task); err != nil {
+			t.Fatalf("UnmarshalJSON() error = %v", err)
+		}
+		if len(task.SuccessCriteria) != 1 || task.SuccessCriteria[0] != "lint clean" {
+			t.Fatalf("SuccessCriteria = %v, want [lint clean]", task.SuccessCriteria)
+		}
+	})
+}
+
 func TestDraftTask_ID(t *testing.T) {
 	tests := []struct {
 		name string

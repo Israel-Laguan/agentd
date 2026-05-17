@@ -66,6 +66,7 @@ type mockCommitStore struct {
 	text          *string
 	comments      []models.Comment
 	listSinceArgs []time.Time
+	blockErr      error
 }
 
 func (m *mockCommitStore) MarkTaskRunning(ctx context.Context, id string, t time.Time, pid int) (*models.Task, error) {
@@ -239,6 +240,9 @@ func (m *mockCommitStore) AppendTasksToProject(ctx context.Context, projectID, p
 }
 
 func (m *mockCommitStore) BlockTaskWithSubtasks(ctx context.Context, taskID string, t time.Time, subtasks []models.DraftTask) (*models.Task, []models.Task, error) {
+	if m.blockErr != nil {
+		return nil, nil, m.blockErr
+	}
 	return nil, nil, nil
 }
 

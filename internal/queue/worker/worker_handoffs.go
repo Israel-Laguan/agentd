@@ -161,6 +161,44 @@ func (w *Worker) createPermissionHandoff(ctx context.Context, task models.Task, 
 	w.emit(ctx, task, "PERMISSION_HANDOFF", truncate(payload, 1000))
 }
 
+func (w *Worker) handleGoalStalled(ctx context.Context, task models.Task, gt *GoalTracker) error {
+	goal := gt.Goal()
+	if goal == nil {
+		return nil
+	}
+	description := fmt.Sprintf(
+		"The agent's goal has stalled after %d turns with %.0f%% progress.\n\nCompleted: %d/%d criteria\nBlocked: %d criteria\n\nBlocked criteria:\n%s",
+		goal.TurnsActive,
+		goal.ProgressRatio()*100,
+		len(goal.CompletedCriteria),
+		len(goal.SuccessCriteria),
+		len(goal.BlockedCriteria),
+		formatCriteria(goal.BlockedCriteria),
+	)
+	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
+		Title:       "Goal stalled: manual review required",
+		Description: description,
+		Assignee:    models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		w.emit(ctx, task, "ERROR", err.Error())
+		return err
+	}
+	w.emit(ctx, task, string(models.EventTypeGoalStalled), truncate(description, 1000))
+	return nil
+}
+
+func formatCriteria(criteria []string) string {
+	if len(criteria) == 0 {
+		return "(none)"
+	}
+	var b strings.Builder
+	for _, c := range criteria {
+		fmt.Fprintf(&b, "- %s\n", c)
+	}
+	return b.String()
+}
+
 func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, action planning.HealingAction, payload string) {
 	description := fmt.Sprintf(
 		"The worker exhausted automatic self-healing actions and needs human review.\n\nReason: %s\n\nLast failure:\n%s",

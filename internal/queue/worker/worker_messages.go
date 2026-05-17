@@ -30,12 +30,19 @@ func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile mod
 	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
-func agenticToolUseSystemText() string {
-	return `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
+func agenticToolUseSystemText(goal ...*AgentGoal) string {
+	text := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
 When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.`
+	if len(goal) == 0 || goal[0] == nil {
+		return text
+	}
+	return text + `
+When a success criterion becomes complete, include a line exactly like [COMPLETED] criterion text.
+When a success criterion is blocked, include a line exactly like [BLOCKED] criterion text.
+Use the exact criterion text from the task success criteria.`
 }
 
 // assembleAgenticSystemPrompt builds the full layered system prompt for agentic
@@ -48,8 +55,12 @@ Return your response as plain text when the task is complete, or use tools to co
 // message. The legacy seedMessages path is still used by the non-agentic
 // command() path in worker_support.go.
 func (w *Worker) buildSystemPromptContent(task models.Task, project models.Project, profile models.AgentProfile) string {
+	var goal *AgentGoal
+	if g := GoalFromTask(task); g != nil {
+		goal = g
+	}
 	builder := NewSystemPromptBuilder().
-		WithGlobal(agenticToolUseSystemText())
+		WithGlobal(agenticToolUseSystemText(goal))
 	if w.instructionLoader != nil {
 		if prefs, err := w.instructionLoader.LoadUserPreferences(); err != nil {
 			slog.Warn("failed to load user preferences", "error", err)

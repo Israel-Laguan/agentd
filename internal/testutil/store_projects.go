@@ -19,13 +19,14 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 	tasks := make([]models.Task, 0, len(plan.Tasks))
 	for _, draft := range plan.Tasks {
 		task := models.Task{
-			BaseEntity:  models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-			ProjectID:   project.ID,
-			AgentID:     "default",
-			Title:       draft.Title,
-			Description: draft.Description,
-			State:       models.TaskStateReady,
-			Assignee:    draft.Assignee,
+			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+			ProjectID:       project.ID,
+			AgentID:         "default",
+			Title:           draft.Title,
+			Description:     draft.Description,
+			State:           models.TaskStateReady,
+			Assignee:        draft.Assignee,
+			SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
 		}
 		if task.Assignee == "" {
 			task.Assignee = models.TaskAssigneeSystem
@@ -81,13 +82,14 @@ func (s *FakeKanbanStore) EnsureProjectTask(_ context.Context, projectID string,
 		}
 	}
 	task := models.Task{
-		BaseEntity:  models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-		ProjectID:   projectID,
-		AgentID:     "default",
-		Title:       draft.Title,
-		Description: draft.Description,
-		Assignee:    draft.Assignee,
-		State:       models.TaskStateReady,
+		BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+		ProjectID:       projectID,
+		AgentID:         "default",
+		Title:           draft.Title,
+		Description:     draft.Description,
+		Assignee:        draft.Assignee,
+		State:           models.TaskStateReady,
+		SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
 	}
 	s.tasks[task.ID] = task
 	return &task, true, nil
