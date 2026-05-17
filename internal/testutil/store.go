@@ -19,7 +19,7 @@ type FakeKanbanStore struct {
 	tasks        map[string]models.Task
 	childParents map[string][]string
 	events       []models.Event
-	comments     []models.Comment
+	comments     []commentPayloadAtRest
 	memories     []models.Memory
 	profiles     map[string]models.AgentProfile
 	settings     map[string]string

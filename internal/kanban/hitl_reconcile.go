@@ -90,7 +90,7 @@ func selectHITLExpiry(ctx context.Context, tx *immediateTx, taskID string) (time
 		if err := rows.Scan(&payload, &createdAt); err != nil {
 			return time.Time{}, false, fmt.Errorf("scan comment event: %w", err)
 		}
-		_, body := splitCommentPayload(payload)
+		_, body := models.SplitCommentPayload(payload)
 		if !strings.HasPrefix(body, models.HITLExpiresAtCommentPrefix) {
 			continue
 		}

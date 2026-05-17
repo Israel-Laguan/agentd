@@ -131,7 +131,10 @@ func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing
 	if store.lastResult == nil {
 		t.Fatal("expected committed task result")
 	}
-	wantPayload := resultPayload(sandbox.Result{Success: true, Stdout: sbResult.Stdout})
+	// Comment round-trip trims trailing whitespace on the stored body (see models.SplitCommentPayload).
+	// Approved-review commit uses draft stdout only (no sandbox duration metadata).
+	approvedStdout := strings.TrimSpace(sbResult.Stdout)
+	wantPayload := resultPayload(sandbox.Result{Success: true, Stdout: approvedStdout})
 	if store.lastResult.Payload != wantPayload {
 		t.Fatalf("committed payload = %q, want %q", store.lastResult.Payload, wantPayload)
 	}
