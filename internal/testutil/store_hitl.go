@@ -57,8 +57,10 @@ func (s *FakeKanbanStore) ReconcileExpiredBlockedTasks(_ context.Context, now ti
 		if !now.After(deadline) {
 			continue
 		}
+		completed := now.UTC()
 		t.State = models.TaskStateFailedRequiresHuman
-		t.UpdatedAt = now.UTC()
+		t.CompletedAt = &completed
+		t.UpdatedAt = completed
 		s.tasks[id] = t
 		expired = append(expired, t)
 		for _, childID := range s.childParents[id] {
@@ -67,7 +69,8 @@ func (s *FakeKanbanStore) ReconcileExpiredBlockedTasks(_ context.Context, now ti
 				continue
 			}
 			child.State = models.TaskStateFailed
-			child.UpdatedAt = now.UTC()
+			child.CompletedAt = &completed
+			child.UpdatedAt = completed
 			s.tasks[childID] = child
 		}
 	}

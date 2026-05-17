@@ -113,20 +113,20 @@ func selectHITLExpiry(ctx context.Context, tx *immediateTx, taskID string) (time
 func failHITLBlockedTask(ctx context.Context, tx *immediateTx, parentID string, now time.Time) error {
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks
-		SET state = ?, os_process_id = NULL, updated_at = ?
+		SET state = ?, os_process_id = NULL, completed_at = ?, updated_at = ?
 		WHERE id = ? AND state = ?`,
-		models.TaskStateFailedRequiresHuman, formatTime(now), parentID, models.TaskStateBlocked); err != nil {
+		models.TaskStateFailedRequiresHuman, formatTime(now), formatTime(now), parentID, models.TaskStateBlocked); err != nil {
 		return fmt.Errorf("fail blocked parent: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks
-		SET state = ?, updated_at = ?
+		SET state = ?, completed_at = ?, updated_at = ?
 		WHERE id IN (
 		  SELECT child_task_id
 		  FROM task_relations
 		  WHERE parent_task_id = ?
 		) AND state NOT IN (?, ?, ?)`,
-		models.TaskStateFailed, formatTime(now), parentID,
+		models.TaskStateFailed, formatTime(now), formatTime(now), parentID,
 		models.TaskStateCompleted, models.TaskStateFailed, models.TaskStateFailedRequiresHuman); err != nil {
 		return fmt.Errorf("fail open hitl children: %w", err)
 	}
