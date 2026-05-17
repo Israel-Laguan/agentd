@@ -87,7 +87,7 @@ func TestHandleGoalStalledPropagatesBlockError(t *testing.T) {
 	w := &Worker{store: &mockCommitStore{blockErr: blockErr}}
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123", UpdatedAt: time.Now()}, ProjectID: "project-123"}
 	gt := NewGoalTracker(task.ID, task.ProjectID)
-	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: 11})
+	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: DefaultStallThreshold + 1})
 
 	if err := w.handleGoalStalled(context.Background(), task, gt); !errors.Is(err, blockErr) {
 		t.Fatalf("handleGoalStalled() error = %v, want %v", err, blockErr)
@@ -101,7 +101,7 @@ func TestHandleGoalStalled_RefreshesTaskUpdatedAt(t *testing.T) {
 	staleAt := time.Now().Add(-time.Hour)
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123", UpdatedAt: staleAt}, ProjectID: "project-123"}
 	gt := NewGoalTracker(task.ID, task.ProjectID)
-	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: 11})
+	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: DefaultStallThreshold + 1})
 
 	if err := w.handleGoalStalled(context.Background(), task, gt); err != nil {
 		t.Fatalf("handleGoalStalled() error = %v", err)

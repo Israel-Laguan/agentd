@@ -33,6 +33,16 @@ func TestParseGoalProgress(t *testing.T) {
 			content:       "[COMPLETED] a\n[COMPLETED] b",
 			wantCompleted: []string{"a", "b"},
 		},
+		{
+			name:        "blocked lowercase",
+			content:     "[blocked] API key",
+			wantBlocked: []string{"API key"},
+		},
+		{
+			name:          "completed mixed case",
+			content:       "[Completed] pass tests",
+			wantCompleted: []string{"pass tests"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

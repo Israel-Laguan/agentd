@@ -9,8 +9,10 @@ import (
 )
 
 // DefaultStallThreshold is the number of turns with < 10% progress
-// before a goal is considered stalled.
-const DefaultStallThreshold = 10
+// before a goal is considered stalled. It is intentionally above
+// config.DefaultMaxToolIterations (10) so a full tool-heavy burst is
+// less likely to trigger a stall handoff before progress markers appear.
+const DefaultStallThreshold = 25
 
 // AgentGoal is a structured description of the desired end state that
 // persists across all turns and against which progress can be measured.
@@ -207,15 +209,21 @@ func (gt *GoalTracker) AfterTurn(_ context.Context, completed, blocked []string)
 //	[BLOCKED] criterion text
 func parseGoalProgress(content string) (completed, blocked []string) {
 	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
-		if after, ok := strings.CutPrefix(line, "[COMPLETED]"); ok {
-			if v := strings.TrimSpace(after); v != "" {
-				completed = append(completed, v)
+		trimmed := strings.TrimSpace(line)
+		for _, marker := range []string{"[COMPLETED]", "[BLOCKED]"} {
+			if len(trimmed) < len(marker) || !strings.EqualFold(trimmed[:len(marker)], marker) {
+				continue
 			}
-		} else if after, ok := strings.CutPrefix(line, "[BLOCKED]"); ok {
-			if v := strings.TrimSpace(after); v != "" {
+			v := strings.TrimSpace(trimmed[len(marker):])
+			if v == "" {
+				continue
+			}
+			if marker == "[COMPLETED]" {
+				completed = append(completed, v)
+			} else {
 				blocked = append(blocked, v)
 			}
+			break
 		}
 	}
 	return completed, blocked
