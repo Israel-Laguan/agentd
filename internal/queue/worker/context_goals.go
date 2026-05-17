@@ -3,7 +3,22 @@ package worker
 import (
 	"regexp"
 	"strings"
+	"sync"
 )
+
+var criterionRegexpCache sync.Map // map[string]*regexp.Regexp
+
+func criterionBoundaryRegexp(criterion string) (*regexp.Regexp, error) {
+	if v, ok := criterionRegexpCache.Load(criterion); ok {
+		return v.(*regexp.Regexp), nil
+	}
+	re, err := regexp.Compile(`(?i)\b` + regexp.QuoteMeta(criterion) + `\b`)
+	if err != nil {
+		return nil, err
+	}
+	actual, _ := criterionRegexpCache.LoadOrStore(criterion, re)
+	return actual.(*regexp.Regexp), nil
+}
 
 // SetGoalTracker attaches a GoalTracker so compression can expand the
 // working suffix to retain turns that mention blocked criteria.
@@ -77,25 +92,23 @@ func messageMentionsCriterion(content, criterion string) bool {
 	if criterion == "" {
 		return false
 	}
-	lower := strings.ToLower(content)
-	for _, prefix := range []string{"[completed] ", "[blocked] "} {
-		if idx := strings.Index(lower, prefix); idx >= 0 {
-			after := strings.TrimSpace(content[idx+len(prefix):])
-			if len(after) >= len(criterion) {
-				lineEnd := strings.IndexByte(after, '\n')
-				if lineEnd < 0 {
-					lineEnd = len(after)
-				}
-				line := strings.TrimSpace(after[:lineEnd])
-				if strings.EqualFold(line, criterion) {
-					return true
-				}
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		for _, marker := range []string{"[COMPLETED]", "[BLOCKED]"} {
+			if len(trimmed) < len(marker) {
+				continue
+			}
+			if !strings.EqualFold(trimmed[:len(marker)], marker) {
+				continue
+			}
+			rest := strings.TrimSpace(trimmed[len(marker):])
+			if strings.EqualFold(rest, criterion) {
+				return true
 			}
 		}
 	}
-	pattern := `(?i)\b` + regexp.QuoteMeta(criterion) + `\b`
-	matched, err := regexp.MatchString(pattern, content)
-	return err == nil && matched
+	re, err := criterionBoundaryRegexp(criterion)
+	return err == nil && re.MatchString(content)
 }
 
 // turnMentionsCriteria checks whether any message in the turn references

@@ -60,6 +60,18 @@ func TestMessageMentionsCriterion(t *testing.T) {
 		{name: "substring false positive", content: "running testing suite", criterion: "test", want: false},
 		{name: "case insensitive word", content: "PASS TESTS done", criterion: "pass tests", want: true},
 		{name: "no match", content: "unrelated content", criterion: "pass tests", want: false},
+		{
+			name:      "unicode prefix before marker line",
+			content:   "İ\n[COMPLETED] pass tests",
+			criterion: "pass tests",
+			want:      true,
+		},
+		{
+			name:      "mid-line marker ignored",
+			content:   "prefix [COMPLETED] passtests",
+			criterion: "pass tests",
+			want:      false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
