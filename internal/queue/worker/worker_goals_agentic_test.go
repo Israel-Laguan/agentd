@@ -28,6 +28,9 @@ func TestBuildSystemPromptContentAddsGoalInstructionsOnlyWithGoal(t *testing.T) 
 		SuccessCriteria: []string{"a"},
 	}
 	withGoal := w.buildSystemPromptContent(withCriteria, project, models.AgentProfile{})
+	if !strings.Contains(withGoal, "- a\n") {
+		t.Fatalf("missing success criterion in prompt: %q", withGoal)
+	}
 	if !strings.Contains(withGoal, "[COMPLETED] criterion text") {
 		t.Fatalf("missing completed marker instructions: %q", withGoal)
 	}
@@ -43,7 +46,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 		gateway: &sequenceGateway{responses: []gateway.AIResponse{{Content: "[COMPLETED] a\nfinal response"}}},
 	}
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123"}, ProjectID: "project-123", AgentID: "agent-123"}
-	goalTracker := NewGoalTracker(nil, task.ID, task.ProjectID)
+	goalTracker := NewGoalTracker(task.ID, task.ProjectID)
 	goalTracker.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}})
 	cm := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, w.gateway, task.AgentID, task.ID)
 	messages := []gateway.PromptMessage{{Role: "user", Content: "do work"}}
@@ -83,10 +86,47 @@ func TestHandleGoalStalledPropagatesBlockError(t *testing.T) {
 	blockErr := errors.New("block failed")
 	w := &Worker{store: &mockCommitStore{blockErr: blockErr}}
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123", UpdatedAt: time.Now()}, ProjectID: "project-123"}
-	gt := NewGoalTracker(nil, task.ID, task.ProjectID)
+	gt := NewGoalTracker(task.ID, task.ProjectID)
 	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: 11})
 
 	if err := w.handleGoalStalled(context.Background(), task, gt); !errors.Is(err, blockErr) {
 		t.Fatalf("handleGoalStalled() error = %v, want %v", err, blockErr)
 	}
+}
+
+func TestHandleGoalStalled_RefreshesTaskUpdatedAt(t *testing.T) {
+	freshAt := time.Now().Add(time.Hour)
+	store := &goalStallRefreshedStore{freshUpdatedAt: freshAt}
+	w := &Worker{store: store}
+	staleAt := time.Now().Add(-time.Hour)
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123", UpdatedAt: staleAt}, ProjectID: "project-123"}
+	gt := NewGoalTracker(task.ID, task.ProjectID)
+	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: 11})
+
+	if err := w.handleGoalStalled(context.Background(), task, gt); err != nil {
+		t.Fatalf("handleGoalStalled() error = %v", err)
+	}
+	if !store.blockCalled {
+		t.Fatal("expected BlockTaskWithSubtasks to be called")
+	}
+	if !store.blockAt.Equal(freshAt) {
+		t.Fatalf("BlockTaskWithSubtasks updatedAt = %v, want refreshed %v", store.blockAt, freshAt)
+	}
+}
+
+type goalStallRefreshedStore struct {
+	mockCommitStore
+	freshUpdatedAt time.Time
+	blockAt        time.Time
+	blockCalled    bool
+}
+
+func (s *goalStallRefreshedStore) GetTask(_ context.Context, id string) (*models.Task, error) {
+	return &models.Task{BaseEntity: models.BaseEntity{ID: id, UpdatedAt: s.freshUpdatedAt}}, nil
+}
+
+func (s *goalStallRefreshedStore) BlockTaskWithSubtasks(_ context.Context, _ string, at time.Time, _ []models.DraftTask) (*models.Task, []models.Task, error) {
+	s.blockCalled = true
+	s.blockAt = at
+	return nil, nil, nil
 }

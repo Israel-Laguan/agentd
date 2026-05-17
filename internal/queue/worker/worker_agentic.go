@@ -69,7 +69,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	)
 
 	goal := GoalFromTask(task)
-	goalTracker := NewGoalTracker(w.sink, task.ID, task.ProjectID)
+	goalTracker := NewGoalTracker(task.ID, task.ProjectID)
 	if goal != nil {
 		goalTracker.SetGoal(*goal)
 		cm.SetGoalTracker(goalTracker)
@@ -195,6 +195,9 @@ func (w *Worker) processAgenticIteration(
 	if len(resp.ToolCalls) == 0 {
 		stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
 		if stalled || stallErr != nil {
+			if stallErr != nil {
+				w.handleGatewayError(ctx, task, stallErr)
+			}
 			return false, stallErr
 		}
 		w.commitTextWithProfile(ctx, task, resp.Content, &profile)
@@ -207,6 +210,9 @@ func (w *Worker) processAgenticIteration(
 
 	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
 	if stalled || stallErr != nil {
+		if stallErr != nil {
+			w.handleGatewayError(ctx, task, stallErr)
+		}
 		return false, stallErr
 	}
 

@@ -142,7 +142,7 @@ func WithStallThreshold(threshold int) GoalTrackerOption {
 }
 
 // NewGoalTracker creates a GoalTracker for the given task.
-func NewGoalTracker(_ models.EventSink, taskID, projectID string, opts ...GoalTrackerOption) *GoalTracker {
+func NewGoalTracker(taskID, projectID string, opts ...GoalTrackerOption) *GoalTracker {
 	gt := &GoalTracker{
 		stallThreshold: DefaultStallThreshold,
 		taskID:         taskID,
@@ -159,7 +159,12 @@ func NewGoalTracker(_ models.EventSink, taskID, projectID string, opts ...GoalTr
 func (gt *GoalTracker) SetGoal(goal AgentGoal) {
 	gt.mu.Lock()
 	defer gt.mu.Unlock()
-	gt.goal = &goal
+	snap := goal
+	snap.SuccessCriteria = append([]string(nil), goal.SuccessCriteria...)
+	snap.Constraints = append([]string(nil), goal.Constraints...)
+	snap.CompletedCriteria = append([]string(nil), goal.CompletedCriteria...)
+	snap.BlockedCriteria = append([]string(nil), goal.BlockedCriteria...)
+	gt.goal = &snap
 }
 
 // Goal returns a snapshot of the current goal, or nil if none is set.

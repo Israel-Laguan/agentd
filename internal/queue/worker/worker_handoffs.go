@@ -175,6 +175,11 @@ func (w *Worker) handleGoalStalled(ctx context.Context, task models.Task, gt *Go
 		len(goal.BlockedCriteria),
 		formatCriteria(goal.BlockedCriteria),
 	)
+	if fresh, err := w.store.GetTask(ctx, task.ID); err != nil {
+		slog.Warn("failed to refresh task version for goal stall handoff", "task_id", task.ID, "error", err)
+	} else if fresh != nil {
+		task = *fresh
+	}
 	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
 		Title:       "Goal stalled: manual review required",
 		Description: description,

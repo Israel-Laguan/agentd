@@ -47,46 +47,96 @@ func TestParseGoalProgress(t *testing.T) {
 	}
 }
 
-func TestGoalAwarePartition_CompletedCompressedFirst(t *testing.T) {
+func TestMessageMentionsCriterion(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		criterion string
+		want      bool
+	}{
+		{name: "marker completed", content: "[COMPLETED] pass tests", criterion: "pass tests", want: true},
+		{name: "marker blocked case insensitive", content: "[blocked] API key", criterion: "API key", want: true},
+		{name: "word boundary", content: "need to pass tests today", criterion: "pass tests", want: true},
+		{name: "substring false positive", content: "running testing suite", criterion: "test", want: false},
+		{name: "case insensitive word", content: "PASS TESTS done", criterion: "pass tests", want: true},
+		{name: "no match", content: "unrelated content", criterion: "pass tests", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := messageMentionsCriterion(tt.content, tt.criterion); got != tt.want {
+				t.Fatalf("messageMentionsCriterion(%q, %q) = %v, want %v", tt.content, tt.criterion, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGoalAwarePartition_BlockedExpandsWorkingSuffix(t *testing.T) {
 	cm := &ContextManager{}
-	gt := NewGoalTracker(nil, "task-1", "project-1")
+	gt := NewGoalTracker("task-1", "project-1")
 	gt.SetGoal(AgentGoal{
-		SuccessCriteria:   []string{"criterion-A", "criterion-B"},
-		CompletedCriteria: []string{"criterion-A"},
-		BlockedCriteria:   []string{"criterion-B"},
+		SuccessCriteria: []string{"criterion-A", "criterion-B"},
+		BlockedCriteria: []string{"criterion-B"},
 	})
 	cm.SetGoalTracker(gt)
 
-	compressed := []Turn{
+	turns := []Turn{
+		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "turn-1"}}},
 		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "working on criterion-B"}}},
-		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "unrelated turn"}}},
-	}
-	working := []Turn{
 		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "solved criterion-A already"}}},
 		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "still investigating"}}},
 	}
 
-	newCompressed, newWorking := cm.goalAwarePartition(compressed, working)
+	newCompressed, newWorking := cm.goalAwarePartition(turns, 2)
 
 	if !turnsContainContent(newWorking, "working on criterion-B") {
 		t.Fatal("blocked-criteria turn should be retained in working zone")
 	}
-	if !turnsContainContent(newCompressed, "solved criterion-A already") {
-		t.Fatal("completed-criteria-only turn should be promoted to compressed zone")
+	if turnsContainContent(newCompressed, "working on criterion-B") {
+		t.Fatal("blocked-criteria turn should not remain in compressed zone")
+	}
+	if !turnsContainContent(newWorking, "solved criterion-A already") {
+		t.Fatal("completed-only turn in working should stay in working zone")
 	}
 	if len(newCompressed)+len(newWorking) != 4 {
 		t.Fatalf("total turns = %d, want 4", len(newCompressed)+len(newWorking))
 	}
 }
 
+func TestGoalAwarePartition_PreservesChronology(t *testing.T) {
+	cm := &ContextManager{}
+	gt := NewGoalTracker("task-1", "project-1")
+	gt.SetGoal(AgentGoal{
+		SuccessCriteria: []string{"criterion-B"},
+		BlockedCriteria: []string{"criterion-B"},
+	})
+	cm.SetGoalTracker(gt)
+
+	turns := []Turn{
+		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "turn-1"}}},
+		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "turn-2 criterion-B"}}},
+		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "turn-3"}}},
+		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "turn-4"}}},
+	}
+
+	compressed, working := cm.goalAwarePartition(turns, 2)
+	merged := append(compressed, working...)
+	for i, want := range []string{"turn-1", "turn-2 criterion-B", "turn-3", "turn-4"} {
+		if !turnsContainContent([]Turn{merged[i]}, want) {
+			t.Fatalf("turn %d content = %q, want %q", i, merged[i].Messages[0].Content, want)
+		}
+	}
+}
+
 func TestGoalAwarePartition_NoTracker(t *testing.T) {
 	cm := &ContextManager{}
-	compressed := []Turn{{Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}}}}
-	working := []Turn{{Messages: []spec.PromptMessage{{Role: "assistant", Content: "hello"}}}}
+	turns := []Turn{
+		{Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}}},
+		{Messages: []spec.PromptMessage{{Role: "assistant", Content: "hello"}}},
+	}
 
-	c, w := cm.goalAwarePartition(compressed, working)
+	c, w := cm.goalAwarePartition(turns, 1)
 	if len(c) != 1 || len(w) != 1 {
-		t.Fatal("should return unchanged when no goal tracker")
+		t.Fatal("should return unchanged split when no goal tracker")
 	}
 }
 

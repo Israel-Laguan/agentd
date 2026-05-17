@@ -218,10 +218,8 @@ func (cm *ContextManager) applyRollingSummarization(ctx context.Context, anchor 
 	if keepCount >= len(turns) {
 		return cm.flatten(anchor, turns), nil
 	}
-	compressedTurns := turns[:len(turns)-keepCount]
-	workingTurns := turns[len(turns)-keepCount:]
-
-	compressedTurns, workingTurns = cm.goalAwarePartition(compressedTurns, workingTurns)
+	splitIdx := len(turns) - keepCount
+	compressedTurns, workingTurns := cm.goalAwarePartition(turns, splitIdx)
 	cm.reconcileSummaryState(compressedTurns)
 	if len(compressedTurns) == 0 {
 		return cm.flatten(anchor, workingTurns), nil

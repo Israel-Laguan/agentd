@@ -6,7 +6,7 @@ import (
 )
 
 func TestGoalTracker_AfterTurn_StallDetection(t *testing.T) {
-	gt := NewGoalTracker(nil, "task-1", "project-1", WithStallThreshold(3))
+	gt := NewGoalTracker("task-1", "project-1", WithStallThreshold(3))
 	gt.SetGoal(AgentGoal{
 		SuccessCriteria: []string{"a", "b", "c"},
 	})
@@ -22,7 +22,7 @@ func TestGoalTracker_AfterTurn_StallDetection(t *testing.T) {
 }
 
 func TestGoalTracker_AfterTurn_DefaultThreshold(t *testing.T) {
-	gt := NewGoalTracker(nil, "task-1", "project-1")
+	gt := NewGoalTracker("task-1", "project-1")
 	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}})
 
 	for i := 0; i < DefaultStallThreshold; i++ {
@@ -36,7 +36,7 @@ func TestGoalTracker_AfterTurn_DefaultThreshold(t *testing.T) {
 }
 
 func TestGoalTracker_AfterTurn_ProgressPreventsStall(t *testing.T) {
-	gt := NewGoalTracker(nil, "task-1", "project-1", WithStallThreshold(3))
+	gt := NewGoalTracker("task-1", "project-1", WithStallThreshold(3))
 	gt.SetGoal(AgentGoal{
 		SuccessCriteria: []string{"a", "b", "c"},
 	})
@@ -50,7 +50,7 @@ func TestGoalTracker_AfterTurn_ProgressPreventsStall(t *testing.T) {
 }
 
 func TestGoalTracker_AfterTurn_IgnoresUnknownCriteria(t *testing.T) {
-	gt := NewGoalTracker(nil, "task-1", "project-1")
+	gt := NewGoalTracker("task-1", "project-1")
 	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a", "b"}})
 
 	if stalled := gt.AfterTurn(context.Background(), []string{"x"}, []string{"y"}); stalled {
@@ -66,14 +66,14 @@ func TestGoalTracker_AfterTurn_IgnoresUnknownCriteria(t *testing.T) {
 }
 
 func TestGoalTracker_AfterTurn_NilGoal(t *testing.T) {
-	gt := NewGoalTracker(nil, "task-1", "project-1")
+	gt := NewGoalTracker("task-1", "project-1")
 	if stalled := gt.AfterTurn(context.Background(), []string{"a"}, nil); stalled {
 		t.Fatal("should not stall with nil goal")
 	}
 }
 
 func TestGoalTracker_Goal_ReturnsSnapshot(t *testing.T) {
-	gt := NewGoalTracker(nil, "task-1", "project-1")
+	gt := NewGoalTracker("task-1", "project-1")
 	gt.SetGoal(AgentGoal{
 		SuccessCriteria: []string{"a"},
 	})
@@ -82,5 +82,16 @@ func TestGoalTracker_Goal_ReturnsSnapshot(t *testing.T) {
 	original := gt.Goal()
 	if len(original.SuccessCriteria) != 1 {
 		t.Fatal("mutation leaked through snapshot")
+	}
+}
+
+func TestGoalTracker_SetGoal_IsolatesMutation(t *testing.T) {
+	gt := NewGoalTracker("task-1", "project-1")
+	goal := AgentGoal{SuccessCriteria: []string{"a"}}
+	gt.SetGoal(goal)
+	goal.SuccessCriteria = append(goal.SuccessCriteria, "mutated")
+	stored := gt.Goal()
+	if len(stored.SuccessCriteria) != 1 || stored.SuccessCriteria[0] != "a" {
+		t.Fatalf("mutation leaked through SetGoal: %v", stored.SuccessCriteria)
 	}
 }
