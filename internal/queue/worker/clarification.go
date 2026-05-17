@@ -61,11 +61,6 @@ func (h *BlockingClarificationHandler) RequestClarification(ctx context.Context,
 		Detail:  detail,
 	})
 
-	expiresAt := time.Now().Add(DefaultApprovalTimeout)
-	if err := recordHITLExpiry(ctx, h.store, msg.TaskID, expiresAt); err != nil {
-		return ClarificationResponse{}, fmt.Errorf("record clarification expiry: %w", err)
-	}
-
 	_, subtasks, err := h.store.BlockTaskWithSubtasks(ctx, msg.TaskID, msg.TaskUpdatedAt, []models.DraftTask{{
 		Title:       models.HITLSubtaskTitleClarification + truncate(msg.Question, 80),
 		Description: description,
@@ -73,6 +68,9 @@ func (h *BlockingClarificationHandler) RequestClarification(ctx context.Context,
 	}})
 	if err != nil {
 		return ClarificationResponse{}, fmt.Errorf("create clarification subtask: %w", err)
+	}
+	if err := recordHITLExpiry(ctx, h.store, msg.TaskID, time.Now().Add(DefaultApprovalTimeout)); err != nil {
+		return ClarificationResponse{}, fmt.Errorf("record clarification expiry: %w", err)
 	}
 
 	if len(subtasks) == 0 {

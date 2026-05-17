@@ -138,43 +138,6 @@ func (s *FakeKanbanStore) UpdateTaskResult(_ context.Context, id string, _ time.
 	return &t, nil
 }
 
-func (s *FakeKanbanStore) unblockBlockedParentsLocked(childID string) {
-	for parentID, childIDs := range s.childParents {
-		found := false
-		for _, cid := range childIDs {
-			if cid == childID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			continue
-		}
-		parent, ok := s.tasks[parentID]
-		if !ok || parent.State != models.TaskStateBlocked {
-			continue
-		}
-		allResolved := true
-		for _, cid := range childIDs {
-			child, ok := s.tasks[cid]
-			if !ok {
-				continue
-			}
-			if !models.ChildResolvedForParentUnblock(child.State, child.Title) {
-				allResolved = false
-				break
-			}
-		}
-		if !allResolved {
-			continue
-		}
-		parent.State = models.TaskStateReady
-		parent.OSProcessID = nil
-		parent.UpdatedAt = now()
-		s.tasks[parentID] = parent
-	}
-}
-
 func (s *FakeKanbanStore) ReconcileGhostTasks(_ context.Context, alivePIDs []int) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -211,14 +211,14 @@ func (h *BlockingApprovalHandler) blockForApproval(ctx context.Context, req Appr
 		Urgency: "blocking",
 		Detail:  fmt.Sprintf("Tool: %s\nArguments: %s\nRationale: %s\nCallID: %s", req.ToolName, truncateApprovalArgs(req.Arguments), req.Rationale, req.CallID),
 	})
-	if err := recordHITLExpiry(ctx, h.store, req.TaskID, time.Now().Add(timeout)); err != nil {
-		return ApprovalResponse{}, fmt.Errorf("record approval expiry: %w", err)
-	}
 	_, subtasks, err := h.store.BlockTaskWithSubtasks(ctx, req.TaskID, req.TaskUpdatedAt, []models.DraftTask{{
 		Title: approvalSubtaskTitle(req.ToolName), Description: description, Assignee: models.TaskAssigneeHuman,
 	}})
 	if err != nil {
 		return ApprovalResponse{}, fmt.Errorf("create approval subtask: %w", err)
+	}
+	if err := recordHITLExpiry(ctx, h.store, req.TaskID, time.Now().Add(timeout)); err != nil {
+		return ApprovalResponse{}, fmt.Errorf("record approval expiry: %w", err)
 	}
 	if len(subtasks) == 0 {
 		return ApprovalResponse{}, fmt.Errorf("no approval subtask created")

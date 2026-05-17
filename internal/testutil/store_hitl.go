@@ -28,6 +28,43 @@ func (s *FakeKanbanStore) ListChildTasks(_ context.Context, parentID string) ([]
 	return out, nil
 }
 
+func (s *FakeKanbanStore) unblockBlockedParentsLocked(childID string) {
+	for parentID, childIDs := range s.childParents {
+		found := false
+		for _, cid := range childIDs {
+			if cid == childID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+		parent, ok := s.tasks[parentID]
+		if !ok || parent.State != models.TaskStateBlocked {
+			continue
+		}
+		allResolved := true
+		for _, cid := range childIDs {
+			child, ok := s.tasks[cid]
+			if !ok {
+				continue
+			}
+			if !models.ChildResolvedForParentUnblock(child.State, child.Title) {
+				allResolved = false
+				break
+			}
+		}
+		if !allResolved {
+			continue
+		}
+		parent.State = models.TaskStateReady
+		parent.OSProcessID = nil
+		parent.UpdatedAt = now()
+		s.tasks[parentID] = parent
+	}
+}
+
 func (s *FakeKanbanStore) ReconcileExpiredBlockedTasks(_ context.Context, now time.Time) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
