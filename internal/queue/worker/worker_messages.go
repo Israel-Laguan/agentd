@@ -49,15 +49,7 @@ When a success criterion is blocked, include a line exactly like [BLOCKED] crite
 Use the exact criterion text from the task success criteria.`
 }
 
-// assembleAgenticSystemPrompt builds the full layered system prompt for agentic
-// mode using the instruction hierarchy and skill router. It returns the initial
-// message list: [optional memory lessons, layered system prompt, user task].
-//
-// This replaces the old buildAgenticMessages which modified an existing message
-// list in-place. The new implementation builds messages from scratch via
-// SystemPromptBuilder, separately prepends memory lessons, and appends a user
-// message. The legacy seedMessages path is still used by the non-agentic
-// command() path in worker_support.go.
+// enrichBuilderUserPreferences loads user-level instructions into the system prompt builder.
 func (w *Worker) enrichBuilderUserPreferences(builder *SystemPromptBuilder) {
 	if w.instructionLoader == nil {
 		return
@@ -87,7 +79,7 @@ func (w *Worker) enrichBuilderProjectInstructions(builder *SystemPromptBuilder, 
 }
 
 func (w *Worker) enrichBuilderMatchedSkills(builder *SystemPromptBuilder, task models.Task, project models.Project) {
-	if w.skillLoader == nil || w.skillRouter == nil {
+	if w.skillLoader == nil || w.skillRouter == nil || project.WorkspacePath == "" {
 		return
 	}
 	skills, err := w.skillLoader.LoadAll(project.WorkspacePath)
@@ -124,6 +116,15 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 	return builder.Build()
 }
 
+// assembleAgenticSystemPrompt builds the full layered system prompt for agentic
+// mode using the instruction hierarchy and skill router. It returns the initial
+// message list: [optional memory lessons, layered system prompt, user task].
+//
+// This replaces the old buildAgenticMessages which modified an existing message
+// list in-place. The new implementation builds messages from scratch via
+// SystemPromptBuilder, separately prepends memory lessons, and appends a user
+// message. The legacy seedMessages path is still used by the non-agentic
+// command() path in worker_support.go.
 func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	systemPrompt := w.buildSystemPromptContent(task, project, profile)
 	userMsg := gateway.PromptMessage{

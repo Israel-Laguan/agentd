@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -63,6 +64,7 @@ type promptSandbox struct {
 	retryUsed   bool
 	callCount   int
 	lastCommand string
+	lastErr     error
 	sudoBlocked bool
 }
 
@@ -70,15 +72,19 @@ func (s *promptSandbox) Execute(_ context.Context, p sandbox.Payload) (sandbox.R
 	s.callCount++
 	s.lastCommand = p.Command
 	if s.sudoBlocked {
-		return sandbox.Result{}, models.ErrSandboxViolation
+		s.lastErr = models.ErrSandboxViolation
+		return sandbox.Result{}, s.lastErr
 	}
 	if s.callCount > 1 && s.retryUsed {
+		s.lastErr = s.retryErr
 		return s.retryResult, s.retryErr
 	}
 	if s.callCount > 1 {
 		s.retryUsed = true
+		s.lastErr = s.retryErr
 		return s.retryResult, s.retryErr
 	}
+	s.lastErr = s.err
 	return s.result, s.err
 }
 
@@ -217,6 +223,12 @@ func (s *promptPermScenario) sandboxReceivesCommand(context.Context) error {
 }
 
 func (s *promptPermScenario) sandboxRejectsSudo(context.Context) error {
+	if !errors.Is(s.sandbox.lastErr, models.ErrSandboxViolation) {
+		return fmt.Errorf("sandbox err = %v, want %v", s.sandbox.lastErr, models.ErrSandboxViolation)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(s.sandbox.lastCommand), "sudo") {
+		return fmt.Errorf("sandbox command = %q, want sudo-prefixed command", s.sandbox.lastCommand)
+	}
 	return nil
 }
 
@@ -243,6 +255,10 @@ func (s *promptPermScenario) failedSandboxWithPermissionDenied(context.Context) 
 }
 
 func (s *promptPermScenario) sandboxOutputContainsPermission(_ context.Context, pattern string) error {
+	combined := s.sandbox.result.Stdout + "\n" + s.sandbox.result.Stderr
+	if !strings.Contains(combined, pattern) {
+		return fmt.Errorf("sandbox output missing %q in %q", pattern, combined)
+	}
 	return nil
 }
 
@@ -275,7 +291,13 @@ func (s *promptPermScenario) successfulSandboxWithPermissionText(context.Context
 	return nil
 }
 
-func (s *promptPermScenario) permissionTextInNonErrorContext(_ context.Context, _ string) error {
+func (s *promptPermScenario) permissionTextInNonErrorContext(_ context.Context, pattern string) error {
+	if !s.sandbox.result.Success {
+		return fmt.Errorf("sandbox result should be successful for non-error context")
+	}
+	if !strings.Contains(s.sandbox.result.Stdout, pattern) {
+		return fmt.Errorf("stdout missing %q in %q", pattern, s.sandbox.result.Stdout)
+	}
 	return nil
 }
 

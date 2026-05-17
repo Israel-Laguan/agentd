@@ -248,7 +248,9 @@ func assertOpenAIParsedToolCalls(t *testing.T, resp spec.AIResponse) {
 		resp.ToolCalls[0].Function.Arguments != `{"location":"Boston","unit":"celsius"}` {
 		t.Errorf("ToolCalls[0] = %+v", resp.ToolCalls[0])
 	}
-	if resp.ToolCalls[1].ID != "call_xyz789" || resp.ToolCalls[1].Function.Name != "get_time" {
+	if resp.ToolCalls[1].ID != "call_xyz789" || resp.ToolCalls[1].Type != "function" ||
+		resp.ToolCalls[1].Function.Name != "get_time" ||
+		resp.ToolCalls[1].Function.Arguments != `{"timezone":"UTC"}` {
 		t.Errorf("ToolCalls[1] = %+v", resp.ToolCalls[1])
 	}
 }

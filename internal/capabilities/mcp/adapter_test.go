@@ -251,6 +251,7 @@ func TestConvertInputSchema(t *testing.T) {
 			if tt.expected == nil {
 				assert.Nil(t, result)
 			} else {
+				require.NotNil(t, result)
 				assert.Equal(t, tt.expected.Type, result.Type)
 				assert.Equal(t, tt.expected.Properties, result.Properties)
 				assert.Equal(t, tt.expected.Required, result.Required)

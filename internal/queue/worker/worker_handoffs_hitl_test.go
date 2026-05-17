@@ -91,7 +91,7 @@ func setupReviewHandoffFixture(t *testing.T) (*reviewMockStore, *mockEventSink, 
 func assertReviewHandoffCreated(t *testing.T, store *reviewMockStore, sink *mockEventSink, task models.Task, draft string) {
 	t.Helper()
 	assertReviewBlockTask(t, store, task)
-	assertReviewSubtask(t, store.subtasks[0])
+	assertReviewSubtask(t, store.subtasks[0], draft)
 	assertReviewDraftComment(t, store, task.ID, draft)
 	assertReviewHandoffEvent(t, sink)
 }
@@ -106,12 +106,12 @@ func assertReviewBlockTask(t *testing.T, store *reviewMockStore, task models.Tas
 	}
 }
 
-func assertReviewSubtask(t *testing.T, sub models.DraftTask) {
+func assertReviewSubtask(t *testing.T, sub models.DraftTask, draft string) {
 	t.Helper()
 	if sub.Assignee != models.TaskAssigneeHuman {
 		t.Fatalf("subtask assignee = %q, want HUMAN", sub.Assignee)
 	}
-	for _, want := range []string{"Review required", "Review required before task completion", "draft output"} {
+	for _, want := range []string{"Review required", "Review required before task completion", draft} {
 		if !strings.Contains(sub.Title+sub.Description, want) {
 			t.Fatalf("subtask missing %q: title=%q desc=%q", want, sub.Title, sub.Description)
 		}

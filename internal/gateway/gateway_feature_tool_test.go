@@ -2,7 +2,10 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 
 	"github.com/cucumber/godog"
 
@@ -39,11 +42,26 @@ func (s *gatewayScenario) toolMockProvider(_ context.Context) error {
 }
 
 func (s *gatewayScenario) toolGenerateWithJSONModeAndTools(_ context.Context) error {
-	provs := make([]providers.Backend, len(s.providers))
-	for i, p := range s.providers {
-		provs[i] = p
-	}
-	s.router = NewRouter(provs...)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.lastHTTPBody = reqBody
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"model": "gpt-test",
+			"choices": []map[string]any{{
+				"message": PromptMessage{Role: "assistant", Content: `{"result":"ok"}`},
+			}},
+			"usage": map[string]int{"total_tokens": 4},
+		})
+	}))
+	defer srv.Close()
+
+	openai := NewOpenAI(ProviderConfig{BaseURL: srv.URL + "/v1", Model: "gpt-test"}, srv.Client())
+	s.router = NewRouter(openai)
 	s.toolReq = AIRequest{
 		Messages: []PromptMessage{{Role: "user", Content: "test"}},
 		JSONMode: true,
@@ -199,6 +217,13 @@ func (s *gatewayScenario) toolReqHasTools(_ context.Context) error {
 	if s.aiErr != nil {
 		return fmt.Errorf("Generate() error = %v", s.aiErr)
 	}
+	if s.lastHTTPBody != nil {
+		tools, ok := s.lastHTTPBody["tools"].([]any)
+		if !ok || len(tools) == 0 {
+			return fmt.Errorf("tools not present in downstream HTTP request")
+		}
+		return nil
+	}
 	var provider *fakeProvider
 	for _, p := range s.providers {
 		if p.providerName == s.aiResp.ProviderUsed {
@@ -238,6 +263,16 @@ func (s *gatewayScenario) toolContentEmpty(_ context.Context) error {
 func (s *gatewayScenario) toolReqNoResponseFormat(_ context.Context) error {
 	if s.aiErr != nil {
 		return fmt.Errorf("Generate() error = %v", s.aiErr)
+	}
+	if s.lastHTTPBody != nil {
+		if _, ok := s.lastHTTPBody["response_format"]; ok {
+			return fmt.Errorf("expected response_format to be omitted")
+		}
+		tools, ok := s.lastHTTPBody["tools"].([]any)
+		if !ok || len(tools) == 0 {
+			return fmt.Errorf("expected tools in downstream HTTP request")
+		}
+		return nil
 	}
 	var provider *fakeProvider
 	for _, p := range s.providers {

@@ -66,7 +66,7 @@ func (s *gatewayScenario) providerUsed(_ context.Context, want string) error {
 	if s.aiErr != nil {
 		return fmt.Errorf("Generate() error = %v", s.aiErr)
 	}
-	if s.aiResp.ProviderUsed != want {
+	if s.aiResp.ProviderUsed != strings.ToLower(want) {
 		return fmt.Errorf("ProviderUsed = %q, want %q", s.aiResp.ProviderUsed, want)
 	}
 	return nil

@@ -42,7 +42,7 @@ jobs:
         run: npm run lint
 
       - name: Enforce lint
-        if: steps.lint.outcome == 'failure'
+        if: always() && steps.lint.outcome == 'failure'
         uses: actions/github-script@v7
         with:
           script: |
@@ -52,11 +52,12 @@ jobs:
 
       - name: Test
         id: test
+        if: always()
         continue-on-error: true
         run: npm test -- --run
 
       - name: Enforce tests
-        if: steps.test.outcome == 'failure'
+        if: always() && steps.test.outcome == 'failure'
         uses: actions/github-script@v7
         with:
           script: |
