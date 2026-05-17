@@ -144,12 +144,18 @@ func assertMarshaledAssistantToolCallsMessage(t *testing.T, msg map[string]any) 
 	if tcObj["id"] != "call_abc" {
 		t.Errorf("tool_call id = %v", tcObj["id"])
 	}
+	if tcObj["type"] != "function" {
+		t.Errorf("tool_call type = %v", tcObj["type"])
+	}
 	fn, ok := tcObj["function"].(map[string]any)
 	if !ok {
 		t.Fatalf("tool_call.function is not an object: %T", tcObj["function"])
 	}
 	if fn["name"] != "get_weather" {
 		t.Errorf("tool_call function name = %v", fn["name"])
+	}
+	if fn["arguments"] != `{"location":"Boston"}` {
+		t.Errorf("tool_call function arguments = %v", fn["arguments"])
 	}
 }
 
@@ -160,6 +166,9 @@ func assertMarshaledToolResultMessage(t *testing.T, msg map[string]any) {
 	}
 	if msg["tool_call_id"] != "call_abc" {
 		t.Errorf("tool_call_id = %v", msg["tool_call_id"])
+	}
+	if msg["content"] != `{"temp":72,"conditions":"sunny"}` {
+		t.Errorf("tool content = %v", msg["content"])
 	}
 	if _, hasToolCalls := msg["tool_calls"]; hasToolCalls {
 		t.Error("tool message should omit tool_calls")
