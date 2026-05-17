@@ -7,12 +7,30 @@ import (
 	"agentd/internal/models"
 )
 
-func TestPaginatedProjectsAndTasks(t *testing.T) {
-	store := newTestStore(t)
-	ctx := context.Background()
-
-	_, _, err := store.MaterializePlan(ctx, samplePlan())
+func testPaginatedProjects(t *testing.T, store *Store, ctx context.Context) {
+	t.Helper()
+	page1, err := store.ListProjectsPage(ctx, models.PaginationParams{Limit: 1, Offset: 0})
 	if err != nil {
+		t.Fatalf("ListProjectsPage: %v", err)
+	}
+	if len(page1.Data) != 1 || page1.Total < 2 || !page1.HasNext {
+		t.Fatalf("page1 = %+v", page1)
+	}
+	page2, err := store.ListProjectsPage(ctx, models.PaginationParams{Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatalf("ListProjectsPage page2: %v", err)
+	}
+	if len(page2.Data) != 1 {
+		t.Fatalf("page2 = %+v", page2)
+	}
+	if _, err := store.ListProjectsPage(ctx, models.PaginationParams{Limit: 1, SortBy: "not_a_column", Order: "ASC"}); err != nil {
+		t.Fatalf("invalid sort: %v", err)
+	}
+}
+
+func seedPaginatedProjects(t *testing.T, store *Store, ctx context.Context) models.Project {
+	t.Helper()
+	if _, _, err := store.MaterializePlan(ctx, samplePlan()); err != nil {
 		t.Fatalf("MaterializePlan 1: %v", err)
 	}
 	plan2 := samplePlan()
@@ -21,30 +39,16 @@ func TestPaginatedProjectsAndTasks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MaterializePlan 2: %v", err)
 	}
+	return *proj2
+}
+
+func TestPaginatedProjectsAndTasks(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	proj2 := seedPaginatedProjects(t, store, ctx)
 
 	t.Run("projects", func(t *testing.T) {
-		page1, err := store.ListProjectsPage(ctx, models.PaginationParams{Limit: 1, Offset: 0})
-		if err != nil {
-			t.Fatalf("ListProjectsPage: %v", err)
-		}
-		if len(page1.Data) != 1 || page1.Total < 2 || !page1.HasNext {
-			t.Fatalf("page1 = %+v", page1)
-		}
-		page2, err := store.ListProjectsPage(ctx, models.PaginationParams{Limit: 1, Offset: 1})
-		if err != nil {
-			t.Fatalf("ListProjectsPage page2: %v", err)
-		}
-		if len(page2.Data) != 1 {
-			t.Fatalf("page2 = %+v", page2)
-		}
-		_, err = store.ListProjectsPage(ctx, models.PaginationParams{
-			Limit:  1,
-			SortBy: "not_a_column",
-			Order:  "ASC",
-		})
-		if err != nil {
-			t.Fatalf("invalid sort: %v", err)
-		}
+		testPaginatedProjects(t, store, ctx)
 	})
 
 	t.Run("tasks", func(t *testing.T) {

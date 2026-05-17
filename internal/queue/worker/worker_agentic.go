@@ -12,28 +12,11 @@ import (
 )
 
 func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
-	cancelCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	w.registerCancel(task.ID, cancel)
-	defer w.deregisterCancel(task.ID)
+	cancelCtx, cleanup := w.setupAgenticCancel(ctx, task.ID)
+	defer cleanup()
 
-	// Create task-local ToolExecutor to avoid races with concurrent task executions
-	taskToolExecutor := NewToolExecutor(
-		w.sandbox,
-		project.WorkspacePath,
-		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
-		w.sandboxWallTimeout,
-	)
-
-	taskHooks, taskCaps := w.mountScopedPlugins(project, profile)
-
-	if len(profile.GatedTools) > 0 {
-		if taskHooks == nil {
-			taskHooks = NewHookChain()
-		}
-		handler := NewBlockingApprovalHandler(w.store)
-		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
-	}
+	taskToolExecutor := w.newAgenticTaskToolExecutor(project)
+	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
 
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
 	messages = w.prependReviewRejectionFeedback(ctx, task, messages)
@@ -42,8 +25,54 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
 	deadlineGuard := NewDeadlineGuard(cancelCtx)
+	cm, goalTracker := w.newAgenticContextManager(task)
 
-	// ContextManager is initialized lazily per task to handle its own cache/state
+	for {
+		shouldContinue, err := w.processAgenticIteration(
+			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
+			iterationGuard, budgetGuard, deadlineGuard, cm, goalTracker,
+			taskHooks, taskCaps,
+		)
+		if err != nil {
+			return
+		}
+		if !shouldContinue {
+			return
+		}
+	}
+}
+
+func (w *Worker) setupAgenticCancel(ctx context.Context, taskID string) (context.Context, func()) {
+	cancelCtx, cancel := context.WithCancel(ctx)
+	w.registerCancel(taskID, cancel)
+	return cancelCtx, func() {
+		cancel()
+		w.deregisterCancel(taskID)
+	}
+}
+
+func (w *Worker) newAgenticTaskToolExecutor(project models.Project) *ToolExecutor {
+	return NewToolExecutor(
+		w.sandbox,
+		project.WorkspacePath,
+		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
+		w.sandboxWallTimeout,
+	)
+}
+
+func (w *Worker) mountAgenticHooks(project models.Project, profile models.AgentProfile) (*HookChain, *capabilities.Registry) {
+	taskHooks, taskCaps := w.mountScopedPlugins(project, profile)
+	if len(profile.GatedTools) > 0 {
+		if taskHooks == nil {
+			taskHooks = NewHookChain()
+		}
+		handler := NewBlockingApprovalHandler(w.store)
+		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
+	}
+	return taskHooks, taskCaps
+}
+
+func (w *Worker) newAgenticContextManager(task models.Task) (*ContextManager, *GoalTracker) {
 	contextCfg := w.contextCfg
 	if contextCfg.RollingThresholdTurns <= 0 {
 		contextCfg.RollingThresholdTurns = config.DefaultRollingThresholdTurns
@@ -74,20 +103,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		goalTracker.SetGoal(*goal)
 		cm.SetGoalTracker(goalTracker)
 	}
-
-	for {
-		shouldContinue, err := w.processAgenticIteration(
-			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
-			iterationGuard, budgetGuard, deadlineGuard, cm, goalTracker,
-			taskHooks, taskCaps,
-		)
-		if err != nil {
-			return
-		}
-		if !shouldContinue {
-			return
-		}
-	}
+	return cm, goalTracker
 }
 
 func (w *Worker) prepareAgenticIteration(
@@ -169,40 +185,19 @@ func (w *Worker) processAgenticIteration(
 		return false, err
 	}
 
-	req := gateway.AIRequest{
-		Messages:    *messages,
-		Temperature: profile.Temperature,
-		Tools:       tools,
-		AgentID:     task.AgentID,
-		Role:        gateway.RoleWorker,
-		TaskID:      task.ID,
-		Provider:    profile.Provider,
-		Model:       profile.Model,
-		MaxTokens:   profile.MaxTokens,
-	}
-	req = w.applyTuning(req, task, profile)
+	req := w.buildAgenticRequest(task, profile, *messages, tools)
 	resp, err := w.gateway.Generate(ctx, req)
 	if err != nil {
 		w.handleGatewayError(ctx, task, err)
 		return false, err
 	}
 	budgetGuard.AfterCall(resp.TokenUsage)
-	*messages = append(*messages, gateway.PromptMessage{
-		Role:      "assistant",
-		Content:   resp.Content,
-		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
-	})
+	appendAssistantMessage(messages, resp)
+
 	if len(resp.ToolCalls) == 0 {
-		stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
-		if stalled || stallErr != nil {
-			if stallErr != nil {
-				w.handleGatewayError(ctx, task, stallErr)
-			}
-			return false, stallErr
-		}
-		w.commitTextWithProfile(ctx, task, resp.Content, &profile)
-		return false, nil
+		return w.finishAgenticTurnNoTools(ctx, task, profile, resp.Content, goalTracker)
 	}
+
 	iterationGuard.AfterIteration(true)
 	if w.handleAgenticToolCalls(ctx, task, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps, cm) {
 		return false, nil
@@ -217,6 +212,47 @@ func (w *Worker) processAgenticIteration(
 	}
 
 	return true, nil
+}
+
+func (w *Worker) buildAgenticRequest(
+	task models.Task, profile models.AgentProfile,
+	messages []gateway.PromptMessage, tools []gateway.ToolDefinition,
+) gateway.AIRequest {
+	req := gateway.AIRequest{
+		Messages:    messages,
+		Temperature: profile.Temperature,
+		Tools:       tools,
+		AgentID:     task.AgentID,
+		Role:        gateway.RoleWorker,
+		TaskID:      task.ID,
+		Provider:    profile.Provider,
+		Model:       profile.Model,
+		MaxTokens:   profile.MaxTokens,
+	}
+	return w.applyTuning(req, task, profile)
+}
+
+func appendAssistantMessage(messages *[]gateway.PromptMessage, resp gateway.AIResponse) {
+	*messages = append(*messages, gateway.PromptMessage{
+		Role:      "assistant",
+		Content:   resp.Content,
+		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
+	})
+}
+
+func (w *Worker) finishAgenticTurnNoTools(
+	ctx context.Context, task models.Task, profile models.AgentProfile,
+	content string, goalTracker *GoalTracker,
+) (bool, error) {
+	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, content)
+	if stalled || stallErr != nil {
+		if stallErr != nil {
+			w.handleGatewayError(ctx, task, stallErr)
+		}
+		return false, stallErr
+	}
+	w.commitTextWithProfile(ctx, task, content, &profile)
+	return false, nil
 }
 
 func (w *Worker) handleGoalProgress(ctx context.Context, task models.Task, goalTracker *GoalTracker, content string) (bool, error) {

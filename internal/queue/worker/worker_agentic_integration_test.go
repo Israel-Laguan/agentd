@@ -17,109 +17,62 @@ import (
 // second response with plain text (final result).
 // Validates: Task 07 acceptance criteria - Integration-style test with mock gateway
 // returning a sequence: first response tool_calls, second response plain text.
-func TestAgenticLoop_IntegrationWithMockGateway(t *testing.T) {
-	t.Parallel()
-
-	// Create a mock gateway that returns a sequence of responses
-	mockGateway := &sequenceGateway{
-		responses: []gateway.AIResponse{
-			{
-				// First call: response with tool_calls (bash command)
-				Content: "I'll execute a command to check the current directory.",
-				ToolCalls: []gateway.ToolCall{
-					{
-						ID:   "call_abc123",
-						Type: "function",
-						Function: gateway.ToolCallFunction{
-							Name:      "bash",
-							Arguments: `{"command": "pwd"}`,
-						},
-					},
-				},
-				TokenUsage:   100,
-				ProviderUsed: "openai",
-				ModelUsed:    "gpt-4",
-			},
-			{
-				// Second call: response with plain text (final result)
-				Content:      "I have completed the task. The current working directory is /home/user.",
-				ToolCalls:    nil,
-				TokenUsage:   50,
-				ProviderUsed: "openai",
-				ModelUsed:    "gpt-4",
-			},
+func integrationSequenceResponses() []gateway.AIResponse {
+	return []gateway.AIResponse{
+		{
+			Content: "I'll execute a command to check the current directory.",
+			ToolCalls: []gateway.ToolCall{{
+				ID: "call_abc123", Type: "function",
+				Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command": "pwd"}`},
+			}},
+			TokenUsage: 100, ProviderUsed: "openai", ModelUsed: "gpt-4",
+		},
+		{
+			Content:      "I have completed the task. The current working directory is /home/user.",
+			TokenUsage:   50,
+			ProviderUsed: "openai",
+			ModelUsed:    "gpt-4",
 		},
 	}
+}
 
-	// Create a mock sandbox that executes bash commands
-	mockSandbox := &mockAgenticSandbox{
-		results: map[string]sandbox.Result{
-			"pwd": {Success: true, ExitCode: 0, Stdout: "/home/user\n", Stderr: ""},
-		},
-	}
-
-	// Create mock store
+func newAgenticIntegrationWorker(
+	t *testing.T, gw *sequenceGateway, sb *mockAgenticSandbox, maxIter int,
+) (*mockAgenticStore, *Worker, models.Task) {
+	t.Helper()
 	store := &mockAgenticStore{}
-
-	// Create worker with mocked dependencies
-	w := NewWorker(
-		store,
-		mockGateway,
-		mockSandbox,
-		nil,
-		nil,
-		WorkerOptions{
-			MaxToolIterations: 10,
-		},
-	)
-
-	// Create a test task
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: maxIter})
 	task := models.Task{
 		BaseEntity: models.BaseEntity{ID: "task-integration-test"},
-		ProjectID:  "project-1",
-		AgentID:    "agent-1",
-		Title:      "Check current directory",
-		State:      models.TaskStateQueued,
+		ProjectID:  "project-1", AgentID: "agent-1",
+		Title: "Check current directory", State: models.TaskStateQueued,
 	}
+	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
+	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: "/tmp/test-workspace"}
+	return store, w, task
+}
 
-	profile := models.AgentProfile{
-		ID:          "agent-1",
-		Provider:    "openai",
-		Model:       "gpt-4",
-		AgenticMode: true,
-	}
-	store.profile = profile
-	store.project = models.Project{
-		BaseEntity:    models.BaseEntity{ID: "project-1"},
-		WorkspacePath: "/tmp/test-workspace",
-	}
-
-	// Process the task (this will call processAgentic internally)
+func TestAgenticLoop_IntegrationWithMockGateway(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: integrationSequenceResponses()}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"pwd": {Success: true, ExitCode: 0, Stdout: "/home/user\n"},
+	}}
+	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
 	w.Process(context.Background(), task)
+	assertAgenticIntegrationOutcome(t, gw, store)
+}
 
-	// Verify the gateway was called twice (tool call + final response)
-	if mockGateway.callCount != 2 {
-		t.Errorf("expected 2 gateway calls, got %d", mockGateway.callCount)
+func assertAgenticIntegrationOutcome(t *testing.T, gw *sequenceGateway, store *mockAgenticStore) {
+	t.Helper()
+	if gw.callCount != 2 {
+		t.Errorf("expected 2 gateway calls, got %d", gw.callCount)
 	}
-
-	// Verify first request had tools
-	if len(mockGateway.requests) < 1 {
-		t.Fatal("expected at least 1 gateway request")
-	}
-	if len(mockGateway.requests[0].Tools) == 0 {
+	if len(gw.requests) < 1 || len(gw.requests[0].Tools) == 0 {
 		t.Error("first gateway request should include tool definitions")
 	}
-
-	// Verify iteration counter works - first iteration had tool calls
-	if mockGateway.callCount < 1 {
-		t.Error("gateway should have been called at least once")
-	}
-
-	// Verify the final result was committed
-	if store.committedResult == nil {
-		t.Error("expected a result to be committed")
-	} else if !store.committedResult.Success {
-		t.Error("expected successful result")
+	if store.committedResult == nil || !store.committedResult.Success {
+		t.Error("expected successful committed result")
 	}
 }
 
@@ -128,67 +81,41 @@ func TestAgenticLoop_IntegrationWithMockGateway(t *testing.T) {
 // Validates: Task 07 - Worker respects max iterations
 func TestAgenticLoop_MaxIterationsRespected(t *testing.T) {
 	t.Parallel()
+	gw, store, w, task := newMaxIterationsAgenticFixture(t)
+	w.Process(context.Background(), task)
+	assertMaxIterationsOutcome(t, gw, store)
+}
 
-	// Create a mock gateway that returns exactly 4 tool calls (more than max iterations)
-	// This will cause the iteration guard to trigger after 3 iterations
-	alwaysToolCallsGateway := &maxIterationsGateway{
-		callCount: 0,
-	}
-
-	// Create mock sandbox
-	mockSandbox := &mockAgenticSandbox{
-		results: map[string]sandbox.Result{
-			"echo 1": {Success: true, ExitCode: 0, Stdout: "1\n", Stderr: ""},
-			"echo 2": {Success: true, ExitCode: 0, Stdout: "2\n", Stderr: ""},
-			"echo 3": {Success: true, ExitCode: 0, Stdout: "3\n", Stderr: ""},
-		},
-	}
-
+func newMaxIterationsAgenticFixture(t *testing.T) (*maxIterationsGateway, *mockAgenticStore, *Worker, models.Task) {
+	t.Helper()
+	gw := &maxIterationsGateway{}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"echo 1": {Success: true, ExitCode: 0, Stdout: "1\n"},
+		"echo 2": {Success: true, ExitCode: 0, Stdout: "2\n"},
+		"echo 3": {Success: true, ExitCode: 0, Stdout: "3\n"},
+	}}
 	store := &mockAgenticStore{}
-
-	// Create worker with max iterations = 3
-	w := NewWorker(
-		store,
-		alwaysToolCallsGateway,
-		mockSandbox,
-		nil,
-		nil,
-		WorkerOptions{
-			MaxToolIterations: 3,
-		},
-	)
-
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 3})
 	task := models.Task{
 		BaseEntity: models.BaseEntity{ID: "task-max-iter"},
-		ProjectID:  "project-1",
-		AgentID:    "agent-1",
-		Title:      "Test max iterations",
-		State:      models.TaskStateQueued,
+		ProjectID:  "project-1", AgentID: "agent-1",
+		Title: "Test max iterations", State: models.TaskStateQueued,
 	}
+	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
+	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: "/tmp/test-workspace"}
+	return gw, store, w, task
+}
 
-	profile := models.AgentProfile{
-		ID:          "agent-1",
-		Provider:    "openai",
-		Model:       "gpt-4",
-		AgenticMode: true,
+func assertMaxIterationsOutcome(t *testing.T, gw *maxIterationsGateway, store *mockAgenticStore) {
+	t.Helper()
+	if gw.callCount != 3 {
+		t.Errorf("expected 3 gateway calls, got %d", gw.callCount)
 	}
-	store.profile = profile
-	store.project = models.Project{
-		BaseEntity:    models.BaseEntity{ID: "project-1"},
-		WorkspacePath: "/tmp/test-workspace",
-	}
-
-	w.Process(context.Background(), task)
-
-	if alwaysToolCallsGateway.callCount != 3 {
-		t.Errorf("expected 3 gateway calls before iteration guard stopped the loop, got %d", alwaysToolCallsGateway.callCount)
-	}
-
 	if store.task.RetryCount != 1 {
-		t.Errorf("expected task retry count incremented after max iterations, got %d", store.task.RetryCount)
+		t.Errorf("expected retry count 1, got %d", store.task.RetryCount)
 	}
 	if store.task.State != models.TaskStateReady {
-		t.Errorf("expected task requeued after max iterations, got state %q", store.task.State)
+		t.Errorf("expected READY, got %q", store.task.State)
 	}
 }
 
@@ -225,96 +152,46 @@ func (m *maxIterationsGateway) ClassifyIntent(ctx context.Context, userIntent st
 // Validates: Task 07 - First iteration executes tool, appends tool result message
 func TestAgenticLoop_AppendsToolResultMessages(t *testing.T) {
 	t.Parallel()
-
-	// Gateway sequence: tool call -> final response
-	mockGateway := &sequenceGateway{
-		responses: []gateway.AIResponse{
-			{
-				Content: "Let me run a command.",
-				ToolCalls: []gateway.ToolCall{
-					{ID: "call_test", Type: "function", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command": "ls"}`}},
-				},
-			},
-			{
-				Content:      "I see the files in the directory.",
-				ToolCalls:    nil,
-				TokenUsage:   50,
-				ProviderUsed: "openai",
-			},
-		},
-	}
-
-	mockSandbox := &mockAgenticSandbox{
-		results: map[string]sandbox.Result{
-			"ls": {Success: true, ExitCode: 0, Stdout: "file1.txt\nfile2.txt\n", Stderr: ""},
-		},
-	}
-
-	store := &mockAgenticStore{}
-
-	w := NewWorker(
-		store,
-		mockGateway,
-		mockSandbox,
-		nil,
-		nil,
-		WorkerOptions{MaxToolIterations: 5},
-	)
-
-	task := models.Task{
-		BaseEntity: models.BaseEntity{ID: "task-tool-results"},
-		ProjectID:  "project-1",
-		AgentID:    "agent-1",
-		Title:      "List files",
-		State:      models.TaskStateQueued,
-	}
-
-	profile := models.AgentProfile{
-		ID:          "agent-1",
-		Provider:    "openai",
-		Model:       "gpt-4",
-		AgenticMode: true,
-	}
-	store.profile = profile
-	store.project = models.Project{
-		BaseEntity:    models.BaseEntity{ID: "project-1"},
-		WorkspacePath: "/tmp/test-workspace",
-	}
-
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		{Content: "Let me run a command.", ToolCalls: []gateway.ToolCall{{
+			ID: "call_test", Type: "function",
+			Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command": "ls"}`},
+		}}},
+		{Content: "I see the files in the directory.", TokenUsage: 50, ProviderUsed: "openai"},
+	}}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"ls": {Success: true, ExitCode: 0, Stdout: "file1.txt\nfile2.txt\n"},
+	}}
+	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 5)
+	task.ID = "task-tool-results"
+	task.Title = "List files"
 	w.Process(context.Background(), task)
+	assertToolResultMessagesAppended(t, gw, sb, store)
+}
 
-	// Verify two gateway calls (tool + final)
-	if mockGateway.callCount != 2 {
-		t.Errorf("expected 2 gateway calls, got %d", mockGateway.callCount)
+func assertToolResultMessagesAppended(t *testing.T, gw *sequenceGateway, sb *mockAgenticSandbox, store *mockAgenticStore) {
+	t.Helper()
+	if gw.callCount != 2 {
+		t.Errorf("expected 2 gateway calls, got %d", gw.callCount)
 	}
-
-	// Verify sandbox was called once (for the tool execution)
-	if mockSandbox.executionCount != 1 {
-		t.Errorf("expected 1 sandbox execution, got %d", mockSandbox.executionCount)
+	if sb.executionCount != 1 {
+		t.Errorf("expected 1 sandbox execution, got %d", sb.executionCount)
 	}
-
-	// Verify result was committed
 	if store.committedResult == nil {
 		t.Error("expected a result to be committed")
 	}
-
-	// Verify second gateway request includes tool-result message(s)
-	if len(mockGateway.requests) < 2 {
-		t.Fatalf("expected at least 2 gateway requests, got %d", len(mockGateway.requests))
+	if len(gw.requests) < 2 {
+		t.Fatalf("expected at least 2 gateway requests, got %d", len(gw.requests))
 	}
-	foundToolMessage := false
-	for _, msg := range mockGateway.requests[1].Messages {
+	for _, msg := range gw.requests[1].Messages {
 		if msg.Role == "tool" {
-			foundToolMessage = true
 			if !strings.Contains(msg.Content, "file1.txt") {
-				t.Errorf("expected tool message content to contain sandbox output 'file1.txt', got %q", msg.Content)
+				t.Errorf("expected tool message with sandbox output, got %q", msg.Content)
 			}
-			break
+			return
 		}
 	}
-	if !foundToolMessage {
-		t.Error("expected second gateway request to include a tool-result message with role 'tool'")
-	}
+	t.Error("expected second gateway request to include a tool-result message")
 }
 
 func TestAgenticLoop_InvokesCapabilityRegistryAndAccumulatesMessages(t *testing.T) {

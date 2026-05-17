@@ -59,61 +59,65 @@ func ApprovalGateHook(gatedTools []string, handler ApprovalHandler) PreHook {
 		Name:   "approval-gate",
 		Policy: FailClosed,
 		Fn: func(ctx HookContext) (HookVerdict, error) {
-			if len(toolSet) == 0 {
-				return HookVerdict{}, nil
-			}
-			if _, gated := toolSet[ctx.ToolName]; !gated {
-				return HookVerdict{}, nil
-			}
-
-			req := ApprovalRequest{
-				ToolName:      ctx.ToolName,
-				Arguments:     ctx.Args,
-				Rationale:     fmt.Sprintf("Tool %q requires human approval before execution.", ctx.ToolName),
-				Timeout:       DefaultApprovalTimeout,
-				TaskID:        ctx.SessionID,
-				TaskUpdatedAt: ctx.TaskUpdatedAt,
-				RequestedAt:   ctx.Timestamp,
-				CallID:        ctx.CallID,
-			}
-
-			if handler == nil {
-				return HookVerdict{
-					Veto:   true,
-					Reason: "approval handler not configured",
-				}, nil
-			}
-
-			execCtx := ctx.ExecCtx
-			if execCtx == nil {
-				execCtx = context.Background()
-			}
-			resp, err := handler.RequestApproval(execCtx, req)
-			if err != nil {
-				return HookVerdict{
-					Veto:   true,
-					Reason: fmt.Sprintf("approval request failed: %v", err),
-				}, nil
-			}
-
-			if resp.Approved {
-				return HookVerdict{}, nil
-			}
-
-			if resp.Reason != "" {
-				return HookVerdict{
-					Veto:   true,
-					Result: formatRejection(ctx.ToolName, resp.Reason),
-				}, nil
-			}
-
-			return HookVerdict{
-				Veto:    true,
-				Suspend: true,
-				Result:  fmt.Sprintf("Tool call %q paused pending human approval. The task is now BLOCKED until a human reviews and approves.", ctx.ToolName),
-			}, nil
+			return evalApprovalGate(ctx, toolSet, handler)
 		},
 	}
+}
+
+func evalApprovalGate(ctx HookContext, toolSet map[string]struct{}, handler ApprovalHandler) (HookVerdict, error) {
+	if len(toolSet) == 0 {
+		return HookVerdict{}, nil
+	}
+	if _, gated := toolSet[ctx.ToolName]; !gated {
+		return HookVerdict{}, nil
+	}
+
+	req := ApprovalRequest{
+		ToolName:      ctx.ToolName,
+		Arguments:     ctx.Args,
+		Rationale:     fmt.Sprintf("Tool %q requires human approval before execution.", ctx.ToolName),
+		Timeout:       DefaultApprovalTimeout,
+		TaskID:        ctx.SessionID,
+		TaskUpdatedAt: ctx.TaskUpdatedAt,
+		RequestedAt:   ctx.Timestamp,
+		CallID:        ctx.CallID,
+	}
+
+	if handler == nil {
+		return HookVerdict{
+			Veto:   true,
+			Reason: "approval handler not configured",
+		}, nil
+	}
+
+	execCtx := ctx.ExecCtx
+	if execCtx == nil {
+		execCtx = context.Background()
+	}
+	resp, err := handler.RequestApproval(execCtx, req)
+	if err != nil {
+		return HookVerdict{
+			Veto:   true,
+			Reason: fmt.Sprintf("approval request failed: %v", err),
+		}, nil
+	}
+
+	if resp.Approved {
+		return HookVerdict{}, nil
+	}
+
+	if resp.Reason != "" {
+		return HookVerdict{
+			Veto:   true,
+			Result: formatRejection(ctx.ToolName, resp.Reason),
+		}, nil
+	}
+
+	return HookVerdict{
+		Veto:    true,
+		Suspend: true,
+		Result:  fmt.Sprintf("Tool call %q paused pending human approval. The task is now BLOCKED until a human reviews and approves.", ctx.ToolName),
+	}, nil
 }
 
 // formatRejection produces a human-readable rejection message that the

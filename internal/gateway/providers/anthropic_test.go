@@ -115,27 +115,19 @@ func TestAnthropicSystemMessageFlattening(t *testing.T) {
 	}
 }
 
-func TestAnthropicToolCalls_ParsesToolCalls(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func newAnthropicToolCallsTestServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(anthropicResponse{
 			Content: []anthropicContentBlock{
-				{
-					Type: "tool_use",
-					ToolUse: &anthropicToolUseBlock{
-						ID:    "call_abc123",
-						Name:  "get_weather",
-						Input: map[string]interface{}{"location": "Boston", "unit": "celsius"},
-					},
-				},
-				{
-					Type: "tool_use",
-					ToolUse: &anthropicToolUseBlock{
-						ID:    "call_xyz789",
-						Name:  "get_time",
-						Input: map[string]interface{}{"timezone": "UTC"},
-					},
-				},
+				{Type: "tool_use", ToolUse: &anthropicToolUseBlock{
+					ID: "call_abc123", Name: "get_weather",
+					Input: map[string]interface{}{"location": "Boston", "unit": "celsius"},
+				}},
+				{Type: "tool_use", ToolUse: &anthropicToolUseBlock{
+					ID: "call_xyz789", Name: "get_time",
+					Input: map[string]interface{}{"timezone": "UTC"},
+				}},
 			},
 			Usage: struct {
 				InputTokens  int `json:"input_tokens"`
@@ -144,64 +136,51 @@ func TestAnthropicToolCalls_ParsesToolCalls(t *testing.T) {
 			Model: "claude-3-haiku",
 		})
 	}))
+}
+
+func TestAnthropicToolCalls_ParsesToolCalls(t *testing.T) {
+	srv := newAnthropicToolCallsTestServer()
 	defer srv.Close()
-
-	a := NewAnthropic(spec.ProviderConfig{
-		BaseURL: srv.URL,
-		Model:   "claude-3-haiku",
-	}, srv.Client())
-
+	a := NewAnthropic(spec.ProviderConfig{BaseURL: srv.URL, Model: "claude-3-haiku"}, srv.Client())
 	resp, err := a.Generate(context.Background(), spec.AIRequest{
 		Messages: []spec.PromptMessage{{Role: "user", Content: "What's the weather and time?"}},
-		Tools: []spec.ToolDefinition{{
-			Name:        "get_weather",
-			Description: "Get weather for a location",
-			Parameters:  &spec.FunctionParameters{},
-		}},
+		Tools:    []spec.ToolDefinition{{Name: "get_weather", Description: "Get weather", Parameters: &spec.FunctionParameters{}}},
 	})
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
 	}
+	assertAnthropicParsedToolCalls(t, resp)
+}
 
+func assertAnthropicParsedToolCalls(t *testing.T, resp spec.AIResponse) {
+	t.Helper()
 	if len(resp.ToolCalls) != 2 {
 		t.Fatalf("ToolCalls length = %d, want 2", len(resp.ToolCalls))
 	}
+	if resp.ToolCalls[0].ID != "call_abc123" || resp.ToolCalls[0].Function.Name != "get_weather" {
+		t.Errorf("ToolCalls[0] = %+v", resp.ToolCalls[0])
+	}
+	assertJSONArgs(t, resp.ToolCalls[0].Function.Arguments, `{"location":"Boston","unit":"celsius"}`)
+	if resp.ToolCalls[1].ID != "call_xyz789" || resp.ToolCalls[1].Function.Name != "get_time" {
+		t.Errorf("ToolCalls[1] = %+v", resp.ToolCalls[1])
+	}
+	assertJSONArgs(t, resp.ToolCalls[1].Function.Arguments, `{"timezone":"UTC"}`)
+}
 
-	if resp.ToolCalls[0].ID != "call_abc123" {
-		t.Errorf("ToolCalls[0].ID = %q, want %q", resp.ToolCalls[0].ID, "call_abc123")
+func assertJSONArgs(t *testing.T, gotJSON, wantJSON string) {
+	t.Helper()
+	var got, want map[string]interface{}
+	if err := json.Unmarshal([]byte(gotJSON), &got); err != nil {
+		t.Errorf("unmarshal got: %v", err)
+		return
 	}
-	if resp.ToolCalls[0].Function.Name != "get_weather" {
-		t.Errorf("ToolCalls[0].Function.Name = %q, want %q", resp.ToolCalls[0].Function.Name, "get_weather")
+	if err := json.Unmarshal([]byte(wantJSON), &want); err != nil {
+		t.Fatalf("unmarshal want: %v", err)
 	}
-	// Use JSON unmarshal for robust comparison (brittle to key ordering)
-	var gotArgs, wantArgs map[string]interface{}
-	if err := json.Unmarshal([]byte(resp.ToolCalls[0].Function.Arguments), &gotArgs); err != nil {
-		t.Errorf("Failed to unmarshal ToolCalls[0].Function.Arguments: %v", err)
-	}
-	if err := json.Unmarshal([]byte(`{"location":"Boston","unit":"celsius"}`), &wantArgs); err != nil {
-		t.Fatalf("Failed to unmarshal expected arguments: %v", err)
-	}
-	if gotArgs["location"] != wantArgs["location"] || gotArgs["unit"] != wantArgs["unit"] {
-		t.Errorf("ToolCalls[0] arguments = %v, want %v", gotArgs, wantArgs)
-	}
-
-	if resp.ToolCalls[1].ID != "call_xyz789" {
-		t.Errorf("ToolCalls[1].ID = %q, want %q", resp.ToolCalls[1].ID, "call_xyz789")
-	}
-	if resp.ToolCalls[1].Function.Name != "get_time" {
-		t.Errorf("ToolCalls[1].Function.Name = %q, want %q", resp.ToolCalls[1].Function.Name, "get_time")
-	}
-	// Verify arguments using JSON unmarshal for robust comparison
-	gotArgs = nil
-	wantArgs = nil
-	if err := json.Unmarshal([]byte(resp.ToolCalls[1].Function.Arguments), &gotArgs); err != nil {
-		t.Errorf("Failed to unmarshal ToolCalls[1].Function.Arguments: %v", err)
-	}
-	if err := json.Unmarshal([]byte(`{"timezone":"UTC"}`), &wantArgs); err != nil {
-		t.Fatalf("Failed to unmarshal expected arguments: %v", err)
-	}
-	if gotArgs["timezone"] != wantArgs["timezone"] {
-		t.Errorf("ToolCalls[1].Function.Arguments timezone = %v, want %v", gotArgs["timezone"], wantArgs["timezone"])
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("arg %q = %v, want %v", k, got[k], v)
+		}
 	}
 }
 
@@ -244,17 +223,15 @@ func TestAnthropicToolCalls_WithTextContent(t *testing.T) {
 	}
 }
 
-func TestAnthropicTools_Serialization(t *testing.T) {
-	var receivedBody anthropicRequest
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(&receivedBody); err != nil {
+func newAnthropicToolsTestServer(t *testing.T, receivedBody *anthropicRequest) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(receivedBody); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(anthropicResponse{
-			Content: []anthropicContentBlock{
-				{Type: "text", Text: stringPtr("result")},
-			},
+			Content: []anthropicContentBlock{{Type: "text", Text: stringPtr("result")}},
 			Usage: struct {
 				InputTokens  int `json:"input_tokens"`
 				OutputTokens int `json:"output_tokens"`
@@ -262,12 +239,14 @@ func TestAnthropicTools_Serialization(t *testing.T) {
 			Model: "claude-3-haiku",
 		})
 	}))
+}
+
+func TestAnthropicTools_Serialization(t *testing.T) {
+	var receivedBody anthropicRequest
+	srv := newAnthropicToolsTestServer(t, &receivedBody)
 	defer srv.Close()
 
-	a := NewAnthropic(spec.ProviderConfig{
-		BaseURL: srv.URL,
-		Model:   "claude-3-haiku",
-	}, srv.Client())
+	a := NewAnthropic(spec.ProviderConfig{BaseURL: srv.URL, Model: "claude-3-haiku"}, srv.Client())
 
 	_, err := a.Generate(context.Background(), spec.AIRequest{
 		Messages: []spec.PromptMessage{{Role: "user", Content: "What's the weather?"}},

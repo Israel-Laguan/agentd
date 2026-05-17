@@ -6,21 +6,8 @@ import (
 	"testing"
 )
 
-func TestExpandTildePrefix(t *testing.T) {
-	t.Parallel()
-	t.Run("non_tilde", func(t *testing.T) {
-		t.Parallel()
-		in := filepath.Join("a", "b", "c")
-		if got := ExpandTildePrefix(in); got != in {
-			t.Errorf("ExpandTildePrefix(%q) = %q, want unchanged", in, got)
-		}
-	})
-	t.Run("empty", func(t *testing.T) {
-		t.Parallel()
-		if got := ExpandTildePrefix(""); got != "" {
-			t.Errorf("ExpandTildePrefix(\"\") = %q, want empty", got)
-		}
-	})
+func testExpandTildeHomeResolution(t *testing.T) {
+	t.Helper()
 	t.Run("userHomeDir_success", func(t *testing.T) {
 		t.Parallel()
 		userHome := func() (string, error) { return "/home/u", nil }
@@ -70,4 +57,22 @@ func TestExpandTildePrefix(t *testing.T) {
 			t.Errorf("got %q, want %q", got, in)
 		}
 	})
+}
+
+func TestExpandTildePrefix(t *testing.T) {
+	t.Parallel()
+	t.Run("non_tilde", func(t *testing.T) {
+		t.Parallel()
+		in := filepath.Join("a", "b", "c")
+		if got := ExpandTildePrefix(in); got != in {
+			t.Errorf("ExpandTildePrefix(%q) = %q, want unchanged", in, got)
+		}
+	})
+	t.Run("empty", func(t *testing.T) {
+		t.Parallel()
+		if got := ExpandTildePrefix(""); got != "" {
+			t.Errorf("ExpandTildePrefix(\"\") = %q, want empty", got)
+		}
+	})
+	testExpandTildeHomeResolution(t)
 }

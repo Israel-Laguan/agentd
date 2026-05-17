@@ -71,10 +71,8 @@ func TestAssembleAgenticSystemPrompt_WithTaskSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestAssembleAgenticSystemPrompt_WithInstructions(t *testing.T) {
-	dir := t.TempDir()
-
-	// Write AGENTS.md
+func writeInstructionFixtures(t *testing.T, dir string) string {
+	t.Helper()
 	agentsMD := `# Agent Instructions
 
 ## Architecture
@@ -89,61 +87,38 @@ Never commit secrets.
 ## Agent Scope
 Backend services only.
 `
-	agentsPath := filepath.Join(dir, "AGENTS.md")
-	if err := os.WriteFile(agentsPath, []byte(agentsMD), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	// Write user preferences
 	prefsPath := filepath.Join(dir, "prefs.yaml")
-	prefsContent := `preferences:
-  style_guide: "Use American English"`
-	if err := os.WriteFile(prefsPath, []byte(prefsContent), 0o644); err != nil {
+	if err := os.WriteFile(prefsPath, []byte(`preferences:
+  style_guide: "Use American English"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return prefsPath
+}
 
-	w := &Worker{
-		instructionLoader: &InstructionLoader{
-			ProjectFile:         "AGENTS.md",
-			UserPreferencesPath: prefsPath,
-		},
-	}
-
-	task := models.Task{
-		BaseEntity:  models.BaseEntity{ID: "t1"},
-		Title:       "Fix bug",
-		Description: "Fix the login bug",
-	}
-	project := models.Project{WorkspacePath: dir}
-	profile := models.AgentProfile{}
-
-	messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
-
+func TestAssembleAgenticSystemPrompt_WithInstructions(t *testing.T) {
+	dir := t.TempDir()
+	prefsPath := writeInstructionFixtures(t, dir)
+	w := &Worker{instructionLoader: &InstructionLoader{ProjectFile: "AGENTS.md", UserPreferencesPath: prefsPath}}
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t1"}, Title: "Fix bug", Description: "Fix the login bug"}
+	messages := w.assembleAgenticSystemPrompt(context.Background(), task, models.Project{WorkspacePath: dir}, models.AgentProfile{})
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}
+	assertInstructionPromptContent(t, messages[0].Content)
+}
 
-	content := messages[0].Content
-
-	// User preferences should appear
-	if !strings.Contains(content, "Use American English") {
-		t.Fatal("missing user preferences in prompt")
-	}
-
-	// Project instructions should appear
-	if !strings.Contains(content, "hexagonal architecture") {
-		t.Fatal("missing architecture section from AGENTS.md")
-	}
-	if !strings.Contains(content, "write tests first") {
-		t.Fatal("missing conventions section from AGENTS.md")
-	}
-	if !strings.Contains(content, "Never commit secrets") {
-		t.Fatal("missing known hazards section from AGENTS.md")
-	}
-
-	// Resolution rule should appear
-	if !strings.Contains(content, "task-level overrides matched-skills") {
-		t.Fatal("missing resolution rule")
+func assertInstructionPromptContent(t *testing.T, content string) {
+	t.Helper()
+	for _, want := range []string{
+		"Use American English", "hexagonal architecture", "write tests first",
+		"Never commit secrets", "task-level overrides matched-skills",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("missing %q in prompt", want)
+		}
 	}
 }
 

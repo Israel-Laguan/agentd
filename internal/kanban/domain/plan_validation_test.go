@@ -22,92 +22,51 @@ func TestValidateTaskCap(t *testing.T) {
 	}
 }
 
-func TestNormalizeDraftPlan(t *testing.T) {
-	tests := []struct {
+func normalizeDraftPlanCases() []struct {
+	name    string
+	plan    models.DraftPlan
+	wantErr bool
+	errIs   error
+} {
+	return []struct {
 		name    string
 		plan    models.DraftPlan
 		wantErr bool
 		errIs   error
 	}{
-		{
-			name: "valid plan",
-			plan: models.DraftPlan{
-				ProjectName: "Test Project",
-				Tasks: []models.DraftTask{
-					{Title: "Task 1", ReferenceID: "t1"},
-					{Title: "Task 2", ReferenceID: "t2", DependsOn: []string{"t1"}},
-				},
+		{name: "valid plan", plan: models.DraftPlan{
+			ProjectName: "Test Project",
+			Tasks: []models.DraftTask{
+				{Title: "Task 1", ReferenceID: "t1"},
+				{Title: "Task 2", ReferenceID: "t2", DependsOn: []string{"t1"}},
 			},
-			wantErr: false,
-		},
-		{
-			name: "empty project name",
-			plan: models.DraftPlan{
-				ProjectName: "  ",
-				Tasks: []models.DraftTask{
-					{Title: "Task 1"},
-				},
+		}},
+		{name: "empty project name", plan: models.DraftPlan{
+			ProjectName: "  ", Tasks: []models.DraftTask{{Title: "Task 1"}},
+		}, wantErr: true, errIs: models.ErrInvalidDraftPlan},
+		{name: "no tasks", plan: models.DraftPlan{ProjectName: "Test Project"}, wantErr: true, errIs: models.ErrInvalidDraftPlan},
+		{name: "task missing title", plan: models.DraftPlan{
+			ProjectName: "Test Project", Tasks: []models.DraftTask{{Title: ""}},
+		}, wantErr: true, errIs: models.ErrInvalidDraftPlan},
+		{name: "duplicate task id", plan: models.DraftPlan{
+			ProjectName: "Test Project",
+			Tasks: []models.DraftTask{
+				{Title: "Task 1", ReferenceID: "t1"},
+				{Title: "Task 2", ReferenceID: "t1"},
 			},
-			wantErr: true,
-			errIs:   models.ErrInvalidDraftPlan,
-		},
-		{
-			name: "no tasks",
-			plan: models.DraftPlan{
-				ProjectName: "Test Project",
-				Tasks:       []models.DraftTask{},
-			},
-			wantErr: true,
-			errIs:   models.ErrInvalidDraftPlan,
-		},
-		{
-			name: "task missing title",
-			plan: models.DraftPlan{
-				ProjectName: "Test Project",
-				Tasks: []models.DraftTask{
-					{Title: ""},
-				},
-			},
-			wantErr: true,
-			errIs:   models.ErrInvalidDraftPlan,
-		},
-		{
-			name: "duplicate task id",
-			plan: models.DraftPlan{
-				ProjectName: "Test Project",
-				Tasks: []models.DraftTask{
-					{Title: "Task 1", ReferenceID: "t1"},
-					{Title: "Task 2", ReferenceID: "t1"},
-				},
-			},
-			wantErr: true,
-			errIs:   models.ErrInvalidDraftPlan,
-		},
-		{
-			name: "unknown dependency",
-			plan: models.DraftPlan{
-				ProjectName: "Test Project",
-				Tasks: []models.DraftTask{
-					{Title: "Task 1", ReferenceID: "t1", DependsOn: []string{"unknown"}},
-				},
-			},
-			wantErr: true,
-			errIs:   models.ErrInvalidDraftPlan,
-		},
-		{
-			name: "invalid assignee",
-			plan: models.DraftPlan{
-				ProjectName: "Test Project",
-				Tasks: []models.DraftTask{
-					{Title: "Task 1", Assignee: "invalid"},
-				},
-			},
-			wantErr: true,
-			errIs:   models.ErrInvalidDraftPlan,
-		},
+		}, wantErr: true, errIs: models.ErrInvalidDraftPlan},
+		{name: "unknown dependency", plan: models.DraftPlan{
+			ProjectName: "Test Project",
+			Tasks:       []models.DraftTask{{Title: "Task 1", ReferenceID: "t1", DependsOn: []string{"unknown"}}},
+		}, wantErr: true, errIs: models.ErrInvalidDraftPlan},
+		{name: "invalid assignee", plan: models.DraftPlan{
+			ProjectName: "Test Project", Tasks: []models.DraftTask{{Title: "Task 1", Assignee: "invalid"}},
+		}, wantErr: true, errIs: models.ErrInvalidDraftPlan},
 	}
+}
 
-	for _, tt := range tests {
+func TestNormalizeDraftPlan(t *testing.T) {
+	for _, tt := range normalizeDraftPlanCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NormalizeDraftPlan(tt.plan)
 			if (err != nil) != tt.wantErr {
@@ -144,67 +103,42 @@ func TestNormalizeDraftPlan_Defaults(t *testing.T) {
 	}
 }
 
-func TestValidateDAG(t *testing.T) {
-	tests := []struct {
+func validateDAGCases() []struct {
+	name    string
+	plan    models.DraftPlan
+	wantErr bool
+} {
+	return []struct {
 		name    string
 		plan    models.DraftPlan
 		wantErr bool
 	}{
-		{
-			name: "linear",
-			plan: models.DraftPlan{
-				Tasks: []models.DraftTask{
-					{ReferenceID: "t1"},
-					{ReferenceID: "t2", DependsOn: []string{"t1"}},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "circular self",
-			plan: models.DraftPlan{
-				Tasks: []models.DraftTask{
-					{ReferenceID: "t1", DependsOn: []string{"t1"}},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "circular simple",
-			plan: models.DraftPlan{
-				Tasks: []models.DraftTask{
-					{ReferenceID: "t1", DependsOn: []string{"t2"}},
-					{ReferenceID: "t2", DependsOn: []string{"t1"}},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "circular complex",
-			plan: models.DraftPlan{
-				Tasks: []models.DraftTask{
-					{ReferenceID: "t1", DependsOn: []string{"t3"}},
-					{ReferenceID: "t2", DependsOn: []string{"t1"}},
-					{ReferenceID: "t3", DependsOn: []string{"t2"}},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "diamond",
-			plan: models.DraftPlan{
-				Tasks: []models.DraftTask{
-					{ReferenceID: "t1"},
-					{ReferenceID: "t2", DependsOn: []string{"t1"}},
-					{ReferenceID: "t3", DependsOn: []string{"t1"}},
-					{ReferenceID: "t4", DependsOn: []string{"t2", "t3"}},
-				},
-			},
-			wantErr: false,
-		},
+		{name: "linear", plan: models.DraftPlan{Tasks: []models.DraftTask{
+			{ReferenceID: "t1"}, {ReferenceID: "t2", DependsOn: []string{"t1"}},
+		}}},
+		{name: "circular self", plan: models.DraftPlan{Tasks: []models.DraftTask{
+			{ReferenceID: "t1", DependsOn: []string{"t1"}},
+		}}, wantErr: true},
+		{name: "circular simple", plan: models.DraftPlan{Tasks: []models.DraftTask{
+			{ReferenceID: "t1", DependsOn: []string{"t2"}},
+			{ReferenceID: "t2", DependsOn: []string{"t1"}},
+		}}, wantErr: true},
+		{name: "circular complex", plan: models.DraftPlan{Tasks: []models.DraftTask{
+			{ReferenceID: "t1", DependsOn: []string{"t3"}},
+			{ReferenceID: "t2", DependsOn: []string{"t1"}},
+			{ReferenceID: "t3", DependsOn: []string{"t2"}},
+		}}, wantErr: true},
+		{name: "diamond", plan: models.DraftPlan{Tasks: []models.DraftTask{
+			{ReferenceID: "t1"},
+			{ReferenceID: "t2", DependsOn: []string{"t1"}},
+			{ReferenceID: "t3", DependsOn: []string{"t1"}},
+			{ReferenceID: "t4", DependsOn: []string{"t2", "t3"}},
+		}}},
 	}
+}
 
-	for _, tt := range tests {
+func TestValidateDAG(t *testing.T) {
+	for _, tt := range validateDAGCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateDAG(tt.plan)
 			if (err != nil) != tt.wantErr {

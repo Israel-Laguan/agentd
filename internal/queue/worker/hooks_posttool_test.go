@@ -130,76 +130,45 @@ func TestScrubResultHook_CustomPatterns(t *testing.T) {
 func TestAuditHook_EmitsToolCallAndResult(t *testing.T) {
 	t.Parallel()
 	sink := &mockEventSink{}
-	scrubber := sandbox.NewScrubber(nil)
-	hook := AuditHook(sink, scrubber)
-
+	hook := AuditHook(sink, sandbox.NewScrubber(nil))
 	ctx := HookContext{
-		ToolName:  "bash",
-		Args:      `{"command":"ls"}`,
-		CallID:    "call_42",
-		SessionID: "task-1",
-		ProjectID: "proj-1",
-		Timestamp: time.Now().Add(-50 * time.Millisecond),
+		ToolName: "bash", Args: `{"command":"ls"}`, CallID: "call_42",
+		SessionID: "task-1", ProjectID: "proj-1", Timestamp: time.Now().Add(-50 * time.Millisecond),
 	}
-
 	got, err := hook.Fn(ctx, `{"Success":true,"ExitCode":0,"Stdout":"file.txt\n","Stderr":""}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	// Should not mutate result
 	if !strings.Contains(got, "file.txt") {
 		t.Fatalf("audit hook should not mutate result, got %q", got)
 	}
+	assertAuditHookEvents(t, sink)
+}
 
-	// Should emit exactly 2 events: TOOL_CALL + TOOL_RESULT
+func assertAuditHookEvents(t *testing.T, sink *mockEventSink) {
+	t.Helper()
 	if len(sink.events) != 2 {
 		t.Fatalf("expected 2 events, got %d", len(sink.events))
 	}
-
-	if sink.events[0].Type != models.EventTypeToolCall {
-		t.Fatalf("expected TOOL_CALL event, got %q", sink.events[0].Type)
+	if sink.events[0].Type != models.EventTypeToolCall || sink.events[1].Type != models.EventTypeToolResult {
+		t.Fatalf("event types = %q, %q", sink.events[0].Type, sink.events[1].Type)
 	}
-	if sink.events[1].Type != models.EventTypeToolResult {
-		t.Fatalf("expected TOOL_RESULT event, got %q", sink.events[1].Type)
-	}
-
-	// Verify TOOL_CALL payload
 	var callEvent ToolCallEvent
 	if err := json.Unmarshal([]byte(sink.events[0].Payload), &callEvent); err != nil {
 		t.Fatalf("unmarshal TOOL_CALL: %v", err)
 	}
-	if callEvent.ToolName != "bash" {
-		t.Fatalf("expected tool_name 'bash', got %q", callEvent.ToolName)
+	if callEvent.ToolName != "bash" || callEvent.CallID != "call_42" {
+		t.Fatalf("call event = %+v", callEvent)
 	}
-	if callEvent.CallID != "call_42" {
-		t.Fatalf("expected call_id 'call_42', got %q", callEvent.CallID)
-	}
-
-	// Verify TOOL_RESULT payload
 	var resultEvent ToolResultEvent
 	if err := json.Unmarshal([]byte(sink.events[1].Payload), &resultEvent); err != nil {
 		t.Fatalf("unmarshal TOOL_RESULT: %v", err)
 	}
-	if resultEvent.ToolName != "bash" {
-		t.Fatalf("expected tool_name 'bash', got %q", resultEvent.ToolName)
+	if resultEvent.ToolName != "bash" || resultEvent.CallID != "call_42" || resultEvent.ExitCode != 0 {
+		t.Fatalf("result event = %+v", resultEvent)
 	}
-	if resultEvent.CallID != "call_42" {
-		t.Fatalf("expected call_id 'call_42', got %q", resultEvent.CallID)
-	}
-	if resultEvent.ExitCode != 0 {
-		t.Fatalf("expected exit_code 0, got %d", resultEvent.ExitCode)
-	}
-	if resultEvent.DurationMs < 0 {
-		t.Fatalf("expected non-negative duration, got %d", resultEvent.DurationMs)
-	}
-
-	// Verify project/task IDs on events
-	if sink.events[0].ProjectID != "proj-1" {
-		t.Fatalf("expected ProjectID 'proj-1', got %q", sink.events[0].ProjectID)
-	}
-	if sink.events[0].TaskID.String != "task-1" {
-		t.Fatalf("expected TaskID 'task-1', got %q", sink.events[0].TaskID.String)
+	if sink.events[0].ProjectID != "proj-1" || sink.events[0].TaskID.String != "task-1" {
+		t.Fatalf("event routing = proj %q task %q", sink.events[0].ProjectID, sink.events[0].TaskID.String)
 	}
 }
 

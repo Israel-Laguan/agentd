@@ -71,22 +71,22 @@ func assertGlobalMemory(t *testing.T, ctx context.Context, store *Store) {
 func TestMemoryFTSLifecycle(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
+	memID := seedRebootMemory(t, store, ctx)
+	newID := recordMergedMemory(t, store, ctx)
+	assertMemorySuperseded(t, store, ctx, memID, newID)
+	assertMemoryNoOps(t, store, ctx, newID)
+}
 
+func seedRebootMemory(t *testing.T, store *Store, ctx context.Context) string {
+	t.Helper()
 	m := models.Memory{
-		Scope: models.MemoryScopeGlobal,
-		Symptom: sql.NullString{
-			String: "daemon reboot interrupted tasks",
-			Valid:  true,
-		},
-		Solution: sql.NullString{
-			String: "reset task after startup",
-			Valid:  true,
-		},
+		Scope:    models.MemoryScopeGlobal,
+		Symptom:  sql.NullString{String: "daemon reboot interrupted tasks", Valid: true},
+		Solution: sql.NullString{String: "reset task after startup", Valid: true},
 	}
 	if err := store.RecordMemory(ctx, m); err != nil {
 		t.Fatalf("RecordMemory: %v", err)
 	}
-
 	recalled, err := store.RecallMemories(ctx, models.RecallQuery{Intent: "reboot interrupted"})
 	if err != nil {
 		t.Fatalf("RecallMemories: %v", err)
@@ -94,22 +94,18 @@ func TestMemoryFTSLifecycle(t *testing.T) {
 	if len(recalled) == 0 {
 		t.Fatal("RecallMemories returned no matches")
 	}
-	memID := recalled[0].ID
-
-	if err := store.TouchMemories(ctx, []string{memID}); err != nil {
+	if err := store.TouchMemories(ctx, []string{recalled[0].ID}); err != nil {
 		t.Fatalf("TouchMemories: %v", err)
 	}
+	return recalled[0].ID
+}
 
+func recordMergedMemory(t *testing.T, store *Store, ctx context.Context) string {
+	t.Helper()
 	newMem := models.Memory{
-		Scope: models.MemoryScopeGlobal,
-		Symptom: sql.NullString{
-			String: "daemon reboot interrupted tasks",
-			Valid:  true,
-		},
-		Solution: sql.NullString{
-			String: "merged recovery guidance",
-			Valid:  true,
-		},
+		Scope:    models.MemoryScopeGlobal,
+		Symptom:  sql.NullString{String: "daemon reboot interrupted tasks", Valid: true},
+		Solution: sql.NullString{String: "merged recovery guidance", Valid: true},
 	}
 	if err := store.RecordMemory(ctx, newMem); err != nil {
 		t.Fatalf("RecordMemory merge target: %v", err)
@@ -118,19 +114,20 @@ func TestMemoryFTSLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListUnsupersededMemories: %v", err)
 	}
-	var newID string
 	for _, mem := range all {
 		if mem.Solution.String == "merged recovery guidance" {
-			newID = mem.ID
+			return mem.ID
 		}
 	}
-	if newID == "" {
-		t.Fatal("merge target memory not found")
-	}
+	t.Fatal("merge target memory not found")
+	return ""
+}
+
+func assertMemorySuperseded(t *testing.T, store *Store, ctx context.Context, memID, newID string) {
+	t.Helper()
 	if err := store.SupersedeMemories(ctx, []string{memID}, newID); err != nil {
 		t.Fatalf("SupersedeMemories: %v", err)
 	}
-
 	active, err := store.ListUnsupersededMemories(ctx)
 	if err != nil {
 		t.Fatalf("ListUnsupersededMemories after supersede: %v", err)
@@ -140,7 +137,10 @@ func TestMemoryFTSLifecycle(t *testing.T) {
 			t.Fatalf("superseded memory still active: %+v", mem)
 		}
 	}
+}
 
+func assertMemoryNoOps(t *testing.T, store *Store, ctx context.Context, newID string) {
+	t.Helper()
 	if got, err := store.RecallMemories(ctx, models.RecallQuery{Intent: ""}); err != nil || got != nil {
 		t.Fatalf("empty intent: got=%v err=%v", got, err)
 	}

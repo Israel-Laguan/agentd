@@ -243,7 +243,11 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 			"provider", profile.Provider,
 		)
 	}
-	response, err := w.command(ctx, task, *profile)
+	w.runLegacyTask(ctx, task, *project, *profile)
+}
+
+func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
+	response, err := w.command(ctx, task, profile)
 	if err != nil {
 		w.handleGatewayError(ctx, task, err)
 		return
@@ -257,9 +261,9 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	w.registerCancel(task.ID, cancel)
 	defer w.deregisterCancel(task.ID)
 	command := response.Command
-	result, runErr := w.sandbox.Execute(execCtx, w.payload(task, *project, command))
+	result, runErr := w.sandbox.Execute(execCtx, w.payload(task, project, command))
 	if w.isPromptHang(result, runErr) {
-		w.handlePromptRecovery(ctx, task, *project, command, result)
+		w.handlePromptRecovery(ctx, task, project, command, result)
 		return
 	}
 	if w.isPermissionFailure(result, runErr) {
