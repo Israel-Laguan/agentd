@@ -12,6 +12,25 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func TestInitVerbosePrintsConfig(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".agentd")
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"--home", home, "--verbose", "init"})
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("agentd init error = %v", err)
+	}
+	out := output.String()
+	for _, expect := range []string{"home=", "db_path=", "api.address=", "cron.path="} {
+		if !strings.Contains(out, expect) {
+			t.Errorf("verbose output missing %q\n%s", expect, out)
+		}
+	}
+}
+
 func TestInitCreatesHomeDatabaseAndWAL(t *testing.T) {
 	home := filepath.Join(t.TempDir(), ".agentd")
 	cmd := newRootCommand()

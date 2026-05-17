@@ -10,8 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+
+	"github.com/spf13/cobra"
 )
 
 func TestAskApprovesDraftedPlan(t *testing.T) {
@@ -68,6 +71,140 @@ func askTestServer(t *testing.T, materialized *bool) *httptest.Server {
 	}))
 	t.Cleanup(server.Close)
 	return server
+}
+
+func TestDecodeDraft(t *testing.T) {
+	plan := models.DraftPlan{ProjectName: "app", Tasks: []models.DraftTask{{TempID: "1", Title: "t"}}}
+	planJSON, _ := json.Marshal(plan)
+	successBody, _ := json.Marshal(struct {
+		Choices []struct {
+			Message gateway.PromptMessage `json:"message"`
+		} `json:"choices"`
+	}{Choices: []struct {
+		Message gateway.PromptMessage `json:"message"`
+	}{{Message: gateway.PromptMessage{Role: "assistant", Content: string(planJSON)}}}})
+
+	tests := []struct {
+		name    string
+		status  int
+		body    string
+		wantErr string
+	}{
+		{
+			name:   "success",
+			status: http.StatusOK,
+			body:   string(successBody),
+		},
+		{
+			name:    "not found",
+			status:  http.StatusNotFound,
+			body:    `{"choices":[]}`,
+			wantErr: "draft request failed",
+		},
+		{
+			name:    "bad json",
+			status:  http.StatusOK,
+			body:    `{invalid`,
+			wantErr: "",
+		},
+		{
+			name:    "clarification kind",
+			status:  http.StatusOK,
+			body:    `{"choices":[{"message":{"role":"assistant","content":"{\"kind\":\"feasibility_clarification\"}"}}]}`,
+			wantErr: "feasibility_clarification",
+		},
+		{
+			name:    "empty choices",
+			status:  http.StatusOK,
+			body:    `{"choices":[]}`,
+			wantErr: "draft request failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			rec.Code = tt.status
+			rec.Body.WriteString(tt.body)
+			resp := rec.Result()
+
+			got, err := decodeDraft(resp)
+			if tt.wantErr == "" && tt.name == "success" {
+				if err != nil {
+					t.Fatalf("decodeDraft() error = %v", err)
+				}
+				if got.ProjectName != "app" {
+					t.Fatalf("plan = %+v", got)
+				}
+				return
+			}
+			if tt.wantErr == "" && tt.name == "bad json" {
+				if err == nil {
+					t.Fatal("decodeDraft() error = nil, want decode error")
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("decodeDraft() error = %v, want containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestApproved(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    bool
+		wantErr bool
+	}{
+		{name: "yes default", input: "\n", want: true},
+		{name: "y", input: "y\n", want: true},
+		{name: "yes", input: "yes\n", want: true},
+		{name: "no", input: "n\n", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.SetIn(strings.NewReader(tt.input))
+			got, err := approved(cmd)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("approved() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("approved() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("approved() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMaterializePlan_SendsToken(t *testing.T) {
+	var gotToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotToken = r.Header.Get("X-Agentd-Materialize-Token")
+		w.WriteHeader(http.StatusCreated)
+	}))
+	t.Cleanup(server.Close)
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	cfg := config.Config{API: config.APIConfig{MaterializeToken: "secret-token"}}
+	plan := models.DraftPlan{ProjectName: "p"}
+	if err := materializePlan(cmd, server.Client(), server.URL, cfg, plan); err != nil {
+		t.Fatalf("materializePlan() error = %v", err)
+	}
+	if gotToken != "secret-token" {
+		t.Fatalf("token = %q, want secret-token", gotToken)
+	}
 }
 
 func writeAskCompletion(t *testing.T, w http.ResponseWriter, plan models.DraftPlan) {

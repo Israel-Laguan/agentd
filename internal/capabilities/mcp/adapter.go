@@ -16,10 +16,16 @@ type AuthConfig struct {
 	Token string `json:"token"`
 }
 
+type mcpSession interface {
+	ListTools(context.Context, *mcp.ListToolsParams) (*mcp.ListToolsResult, error)
+	CallTool(context.Context, *mcp.CallToolParams) (*mcp.CallToolResult, error)
+	Close() error
+}
+
 type MCPAdapter struct {
 	name    string
 	client  *mcp.Client
-	session *mcp.ClientSession
+	session mcpSession
 }
 
 func NewMCPAdapter(ctx context.Context, name, serverURL string, auth *AuthConfig) (*MCPAdapter, error) {

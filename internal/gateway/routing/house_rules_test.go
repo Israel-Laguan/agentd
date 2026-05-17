@@ -9,6 +9,41 @@ import (
 	"agentd/internal/gateway/spec"
 )
 
+func TestMergeHouseRulesIntoMessages_noSystemMessage(t *testing.T) {
+	rules := "Use tabs."
+	msgs := []spec.PromptMessage{{Role: "user", Content: "Hi"}}
+	out := mergeHouseRulesIntoMessages(msgs, rules)
+	if len(out) != 2 || out[0].Role != "system" {
+		t.Fatalf("messages = %#v", out)
+	}
+	if !strings.Contains(out[0].Content, rules) {
+		t.Fatalf("system = %q", out[0].Content)
+	}
+}
+
+func TestWithHouseRules_emptyNoOp(t *testing.T) {
+	ctx := WithHouseRules(context.Background(), "  ")
+	if HouseRulesFromContext(ctx) != "" {
+		t.Fatal("expected empty house rules")
+	}
+}
+
+func TestRouterGenerateJSONInjectsHouseRules(t *testing.T) {
+	p := &captureHouseRulesProvider{
+		providerName: "openai",
+		resp:         spec.AIResponse{Content: `{"intent":"ambiguous","reason":"x"}`, ProviderUsed: "openai"},
+	}
+	router := NewRouter(p)
+	ctx := WithHouseRules(context.Background(), "POSIX sh only.")
+	_, err := router.ClassifyIntent(ctx, "hello")
+	if err != nil {
+		t.Fatalf("ClassifyIntent: %v", err)
+	}
+	if p.lastReq == nil || !strings.Contains(p.lastReq.Messages[0].Content, "POSIX sh only.") {
+		t.Fatalf("house rules missing from JSON flow: %#v", p.lastReq)
+	}
+}
+
 func TestMergeHouseRulesIntoMessagesPrependsToSystem(t *testing.T) {
 	rules := "Use tabs; never sudo."
 	msgs := []spec.PromptMessage{
