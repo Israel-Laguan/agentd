@@ -54,6 +54,30 @@ def max_lines_for(path: str, default: int) -> int:
     return default
 
 
+def emit_step_summary(violations: list[tuple[int, str, int]]) -> None:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not summary_path:
+        return
+    sorted_violations = sorted(violations, reverse=True)
+    lines = [
+        "### LOC check failed",
+        "",
+        f"{len(sorted_violations)} file(s) exceed their limits:",
+        "",
+        "| Lines | Limit | File |",
+        "| ---: | ---: | --- |",
+    ]
+    for line_count, rel_path, limit in sorted_violations[:MAX_GITHUB_ANNOTATIONS]:
+        lines.append(f"| {line_count} | {limit} | `{rel_path}` |")
+    remaining = len(sorted_violations) - MAX_GITHUB_ANNOTATIONS
+    if remaining > 0:
+        lines.append("")
+        lines.append(f"_{remaining} more file(s) not shown; see step log._")
+    lines.append("")
+    with open(summary_path, "a", encoding="utf-8") as summary_file:
+        summary_file.write("\n".join(lines))
+
+
 def emit_github_annotations(violations: list[tuple[int, str, int]]) -> None:
     if not os.environ.get("GITHUB_ACTIONS"):
         return
@@ -102,6 +126,7 @@ def main() -> int:
     for lines, rel_path, limit in sorted(violations, reverse=True):
         print(f"  {lines:4d}/{limit:4d}  {rel_path}")
     emit_github_annotations(violations)
+    emit_step_summary(violations)
     return 1
 
 

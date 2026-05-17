@@ -39,7 +39,10 @@ jobs:
 
       - name: Report lint failure
         if: failure() && steps.lint.outcome == 'failure'
-        run: echo "::error::Web lint failed. Open the Lint step log for ESLint details."
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./scripts/ci_report_failure.sh "Web lint failed" \
+            "ESLint reported issues. Open the Lint step log for details."
 
       - name: Test
         id: test
@@ -47,4 +50,7 @@ jobs:
 
       - name: Report test failure
         if: failure() && steps.test.outcome == 'failure'
-        run: echo "::error::Web tests failed. Open the Test step log for failure details."
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./scripts/ci_report_failure.sh "Web tests failed" \
+            "Tests failed. Open the Test step log for failure details."
