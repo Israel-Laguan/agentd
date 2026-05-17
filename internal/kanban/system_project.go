@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"agentd/internal/models"
-
 	"github.com/google/uuid"
+
+	"agentd/internal/models"
 )
 
 const (

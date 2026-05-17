@@ -76,29 +76,29 @@ func TestStreamPublishesAndCleansUp(t *testing.T) {
 
 func TestEventName(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		eventType string
-		want    string
+		want      string
 	}{
 		{
-			name:     "EventTypeToolCall maps to tool_called",
+			name:      "EventTypeToolCall maps to tool_called",
 			eventType: "TOOL_CALL",
-			want:     "tool_called",
+			want:      "tool_called",
 		},
 		{
-			name:     "EventTypeToolResult maps to tool_result",
+			name:      "EventTypeToolResult maps to tool_result",
 			eventType: "TOOL_RESULT",
-			want:     "tool_result",
+			want:      "tool_result",
 		},
 		{
-			name:     "unknown event type returns lowercase version",
+			name:      "unknown event type returns lowercase version",
 			eventType: "UNKNOWN_EVENT",
-			want:     "unknown_event",
+			want:      "unknown_event",
 		},
 		{
-			name:     "empty event type returns empty string",
+			name:      "empty event type returns empty string",
 			eventType: "",
-			want:     "",
+			want:      "",
 		},
 	}
 

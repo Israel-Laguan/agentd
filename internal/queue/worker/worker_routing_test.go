@@ -85,7 +85,6 @@ func TestProviderSupportsAgentic_ReturnsFalseForOtherProviders(t *testing.T) {
 	}
 }
 
-
 // newRoutingTest creates a Worker with mock dependencies for routing tests.
 func newRoutingTest(profile models.AgentProfile) (*Worker, *routingTestStore, *routingTestGateway, *routingTestSandbox) {
 	store := &routingTestStore{

@@ -55,9 +55,9 @@ func TestErrMultipleApprovedScopes(t *testing.T) {
 
 func TestPlanner_Defaults(t *testing.T) {
 	p := Planner{
-		Gateway:    nil,
-		Budget:     12000,
-		Truncator:  nil,
+		Gateway:   nil,
+		Budget:    12000,
+		Truncator: nil,
 	}
 	if p.Budget != 12000 {
 		t.Errorf("Budget = %v, want 12000", p.Budget)
@@ -66,9 +66,9 @@ func TestPlanner_Defaults(t *testing.T) {
 
 func TestPlanner_CanCreateWithGateway(t *testing.T) {
 	p := Planner{
-		Gateway:    &mockGateway{},
-		Budget:     12000,
-		Truncator:  nil,
+		Gateway:   &mockGateway{},
+		Budget:    12000,
+		Truncator: nil,
 	}
 	if p.Gateway == nil {
 		t.Error("Gateway should not be nil")

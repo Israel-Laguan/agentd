@@ -11,13 +11,13 @@ import (
 )
 
 type taskScanValues struct {
-	task          *models.Task
-	createdAt     string
-	updatedAt     string
-	state         string
-	assignee      string
-	startedAt     sql.NullString
-	completedAt   sql.NullString
+	task            *models.Task
+	createdAt       string
+	updatedAt       string
+	state           string
+	assignee        string
+	startedAt       sql.NullString
+	completedAt     sql.NullString
 	lastHeartbeat   sql.NullString
 	osPID           sql.NullInt64
 	successCriteria string

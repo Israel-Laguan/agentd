@@ -32,8 +32,8 @@ func TestGatewayConfig_Defaults(t *testing.T) {
 
 func TestGatewayConfig_ProviderConfigs(t *testing.T) {
 	cfg := GatewayConfig{
-		Order:    []string{"openai", "anthropic"},
-		OpenAI:   gateway.ProviderConfig{Type: "openai", APIKey: "key1"},
+		Order:     []string{"openai", "anthropic"},
+		OpenAI:    gateway.ProviderConfig{Type: "openai", APIKey: "key1"},
 		Anthropic: gateway.ProviderConfig{Type: "anthropic", APIKey: "key2"},
 	}
 	configs := cfg.ProviderConfigs()

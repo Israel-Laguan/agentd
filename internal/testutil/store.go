@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"agentd/internal/models"
-
 	"github.com/google/uuid"
+
+	"agentd/internal/models"
 )
 
 // FakeKanbanStore is an in-memory models.KanbanStore for cross-package tests

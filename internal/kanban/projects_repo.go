@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"agentd/internal/kanban/domain"
 	"agentd/internal/models"
-
-	"github.com/google/uuid"
 )
 
 func (s *Store) MaterializePlan(ctx context.Context, plan models.DraftPlan) (*models.Project, []models.Task, error) {

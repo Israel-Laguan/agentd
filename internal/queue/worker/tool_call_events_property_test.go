@@ -285,27 +285,27 @@ func TestEventOrderingWithVaryingCallCounts(t *testing.T) {
 				w.emitToolResult(ctx, task, call, `{"Success":true}`, 100)
 			}
 
-// Verify ordering
-		callPositions := make(map[string]int)
-		for i, ev := range sink.events {
-			switch ev.Type {
-			case models.EventTypeToolCall:
-				callID := extractCallID(ev.Payload)
-				callPositions[callID] = i
-			case models.EventTypeToolResult:
-				callID := extractCallID(ev.Payload)
-				pos, ok := callPositions[callID]
-				if !ok {
-					t.Errorf("No TOOL_CALL found for call_id %s", callID)
-					return
-				}
-				if i <= pos {
-					t.Errorf("TOOL_RESULT at index %d should be after TOOL_CALL at index %d for call_id %s",
-						i, pos, callID)
-					return
+			// Verify ordering
+			callPositions := make(map[string]int)
+			for i, ev := range sink.events {
+				switch ev.Type {
+				case models.EventTypeToolCall:
+					callID := extractCallID(ev.Payload)
+					callPositions[callID] = i
+				case models.EventTypeToolResult:
+					callID := extractCallID(ev.Payload)
+					pos, ok := callPositions[callID]
+					if !ok {
+						t.Errorf("No TOOL_CALL found for call_id %s", callID)
+						return
+					}
+					if i <= pos {
+						t.Errorf("TOOL_RESULT at index %d should be after TOOL_CALL at index %d for call_id %s",
+							i, pos, callID)
+						return
+					}
 				}
 			}
-		}
 
 			// Verify event counts
 			if len(sink.events) != count*2 {
@@ -397,12 +397,12 @@ func randomString(rnd *rand.Rand, length int) string {
 		'_', '-',
 		// Multibyte Unicode characters (e.g., accented letters, emoji)
 		'é', 'ñ', 'ü', 'ö', 'ä', 'ß', 'ø', 'å', // Latin-1 Supplement
-		'€', '£', '¥', '©', '®', '™',           // Symbols
+		'€', '£', '¥', '©', '®', '™', // Symbols
 		// Emoji (each is a multibyte rune - encode as string and convert to runes)
 	}
 	// Append emoji from string literals (can't be rune literals)
 	emojiSet := []rune("😀🎉🚀💡⚡🔥")
-	
+
 	result := make([]rune, length)
 	for i := 0; i < length; i++ {
 		if rnd.Intn(10) < 7 { // 70% ASCII

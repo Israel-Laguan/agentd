@@ -131,15 +131,15 @@ type anthropicRequest struct {
 }
 
 type anthropicTool struct {
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
+	Name        string                   `json:"name"`
+	Description string                   `json:"description"`
 	InputSchema *spec.FunctionParameters `json:"input_schema"`
 }
 
 type anthropicContentBlock struct {
-	Type     string                       `json:"type"`
-	Text     *string                      `json:"text,omitempty"`
-	ToolUse  *anthropicToolUseBlock       `json:"tool_use,omitempty"`
+	Type       string                    `json:"type"`
+	Text       *string                   `json:"text,omitempty"`
+	ToolUse    *anthropicToolUseBlock    `json:"tool_use,omitempty"`
 	ToolResult *anthropicToolResultBlock `json:"tool_result,omitempty"`
 }
 
@@ -181,7 +181,7 @@ func (r anthropicResponse) toAIResponse(defaultModel string) spec.AIResponse {
 				inputBytes = []byte("{}")
 			}
 			toolCalls = append(toolCalls, spec.ToolCall{
-				ID: c.ToolUse.ID,
+				ID:   c.ToolUse.ID,
 				Type: "tool_use",
 				Function: spec.ToolCallFunction{
 					Name:      c.ToolUse.Name,

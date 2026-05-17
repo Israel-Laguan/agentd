@@ -10,10 +10,10 @@ func TestAgenticIterationSafetyFeatures(t *testing.T) {
 	suite := godog.TestSuite{
 		ScenarioInitializer: initializeAgenticIterationScenario,
 		Options: &godog.Options{
-			Format:    "pretty",
-			Paths:     []string{"features_agentic/agentic_iteration_safety.feature"},
-			TestingT:  t,
-			Strict:    true,
+			Format:   "pretty",
+			Paths:    []string{"features_agentic/agentic_iteration_safety.feature"},
+			TestingT: t,
+			Strict:   true,
 		},
 	}
 	if suite.Run() != 0 {

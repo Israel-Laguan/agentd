@@ -450,4 +450,3 @@ func (m *sequenceGateway) AnalyzeScope(ctx context.Context, userIntent string) (
 func (m *sequenceGateway) ClassifyIntent(ctx context.Context, userIntent string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
-

@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-
-	"github.com/spf13/cobra"
 )
 
 func TestAskApprovesDraftedPlan(t *testing.T) {

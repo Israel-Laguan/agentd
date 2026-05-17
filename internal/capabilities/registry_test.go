@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"agentd/internal/gateway"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"agentd/internal/gateway"
 )
 
 type mockAdapter struct {

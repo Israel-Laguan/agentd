@@ -3,10 +3,10 @@ package main
 import (
 	"log/slog"
 
+	"github.com/spf13/cobra"
+
 	"agentd/internal/config"
 	"agentd/internal/kanban"
-
-	"github.com/spf13/cobra"
 )
 
 func newInitCommand(opts *rootOptions) *cobra.Command {

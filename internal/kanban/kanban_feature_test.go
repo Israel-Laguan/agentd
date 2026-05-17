@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"agentd/internal/models"
-
 	"github.com/cucumber/godog"
+
+	"agentd/internal/models"
 )
 
 func TestKanbanFeatures(t *testing.T) {

@@ -14,7 +14,7 @@ type jsonResponseProvider struct {
 }
 
 func (p *jsonResponseProvider) Name() spec.Provider { return spec.Provider(p.providerName) }
-func (p *jsonResponseProvider) MaxInputChars() int { return 100000 }
+func (p *jsonResponseProvider) MaxInputChars() int  { return 100000 }
 func (p *jsonResponseProvider) Generate(_ context.Context, _ spec.AIRequest) (spec.AIResponse, error) {
 	return spec.AIResponse{Content: p.content, ProviderUsed: p.providerName}, nil
 }

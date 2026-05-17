@@ -74,11 +74,11 @@ func (o *Ollama) Capabilities() Capabilities {
 }
 
 type ollamaRequest struct {
-	Model       string                `json:"model"`
+	Model       string               `json:"model"`
 	Messages    []spec.PromptMessage `json:"messages"`
-	Temperature float64               `json:"temperature"`
-	Format      string                `json:"format,omitempty"`
-	Stream      bool                  `json:"stream"`
+	Temperature float64              `json:"temperature"`
+	Format      string               `json:"format,omitempty"`
+	Stream      bool                 `json:"stream"`
 }
 
 type ollamaResponse struct {

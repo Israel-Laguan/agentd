@@ -156,8 +156,8 @@ func TestOpenAITools_WithJSONMode_OmitsResponseFormat(t *testing.T) {
 	}, srv.Client())
 
 	_, err := o.Generate(context.Background(), spec.AIRequest{
-		Messages:  []spec.PromptMessage{{Role: "user", Content: "What's the weather?"}},
-		JSONMode:  true,
+		Messages: []spec.PromptMessage{{Role: "user", Content: "What's the weather?"}},
+		JSONMode: true,
 		Tools: []spec.ToolDefinition{{
 			Name:        "get_weather",
 			Description: "Get weather for a location",
@@ -192,9 +192,9 @@ func TestOpenAIJSONMode_WithoutTools_SetsResponseFormat(t *testing.T) {
 	}, srv.Client())
 
 	_, err := o.Generate(context.Background(), spec.AIRequest{
-		Messages:  []spec.PromptMessage{{Role: "user", Content: "Return JSON"}},
-		JSONMode:  true,
-		Tools:     nil,
+		Messages: []spec.PromptMessage{{Role: "user", Content: "Return JSON"}},
+		JSONMode: true,
+		Tools:    nil,
 	})
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)

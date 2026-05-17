@@ -4,9 +4,9 @@ import (
 	"os"
 	"time"
 
-	"agentd/internal/gateway"
-
 	"github.com/spf13/viper"
+
+	"agentd/internal/gateway"
 )
 
 type AuthConfig struct {
@@ -24,16 +24,16 @@ type CapabilityManifest struct {
 }
 
 type GatewayConfig struct {
-	Order         []string
-	OpenAI        gateway.ProviderConfig
-	Anthropic     gateway.ProviderConfig
-	Ollama        gateway.ProviderConfig
-	LlamaCpp      gateway.ProviderConfig
-	Horde         gateway.ProviderConfig
-	Truncation    TruncationConfig
-	Truncator     TruncatorConfig
+	Order            []string
+	OpenAI           gateway.ProviderConfig
+	Anthropic        gateway.ProviderConfig
+	Ollama           gateway.ProviderConfig
+	LlamaCpp         gateway.ProviderConfig
+	Horde            gateway.ProviderConfig
+	Truncation       TruncationConfig
+	Truncator        TruncatorConfig
 	MaxTasksPerPhase int
-	Capabilities []CapabilityManifest `json:"-"`
+	Capabilities     []CapabilityManifest `json:"-"`
 }
 
 type TruncationConfig struct {
@@ -134,7 +134,7 @@ func loadGatewayConfig(v *viper.Viper) GatewayConfig {
 			MaxInputChars: v.GetInt("gateway.truncator.max_input_chars"),
 		},
 		MaxTasksPerPhase: v.GetInt("gateway.max_tasks_per_phase"),
-		Capabilities:    loadCapabilities(v),
+		Capabilities:     loadCapabilities(v),
 	}
 }
 

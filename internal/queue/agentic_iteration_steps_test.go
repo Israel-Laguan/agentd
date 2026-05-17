@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cucumber/godog"
+
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
-
-	"github.com/cucumber/godog"
 )
 
 type agenticIterationScenario struct {
@@ -31,12 +31,12 @@ type agenticIterationScenario struct {
 	completed        bool
 	resultContent    string
 
-	gw             *iterationGateway
-	store          *iterationStore
-	sandbox        *iterationSandbox
-	workerOpts     worker.WorkerOptions
-	budgetTracker  *gateway.InMemoryBudgetTracker
-	budgetGuard    *worker.BudgetGuard
+	gw            *iterationGateway
+	store         *iterationStore
+	sandbox       *iterationSandbox
+	workerOpts    worker.WorkerOptions
+	budgetTracker *gateway.InMemoryBudgetTracker
+	budgetGuard   *worker.BudgetGuard
 }
 
 type iterationGateway struct {
@@ -66,8 +66,8 @@ func (g *iterationGateway) Generate(ctx context.Context, req gateway.AIRequest) 
 
 	if toolCalls {
 		return gateway.AIResponse{
-			Content:   g.content,
-			ToolCalls: []gateway.ToolCall{{ID: "call-1", Function: gateway.ToolCallFunction{Name: "bash", Arguments: "{\"command\":\"echo test\"}"}}},
+			Content:    g.content,
+			ToolCalls:  []gateway.ToolCall{{ID: "call-1", Function: gateway.ToolCallFunction{Name: "bash", Arguments: "{\"command\":\"echo test\"}"}}},
 			TokenUsage: g.tokens,
 		}, g.err
 	}

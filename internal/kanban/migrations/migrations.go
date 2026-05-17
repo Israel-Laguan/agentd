@@ -76,8 +76,6 @@ func schemaVersion(ctx context.Context, db *sql.DB) (int, error) {
 	return 1, nil
 }
 
-
-
 func setSchemaVersion(ctx context.Context, db *sql.DB, version int) error {
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO settings (key, value, updated_at)

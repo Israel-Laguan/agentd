@@ -24,21 +24,21 @@ type Project struct {
 // Task is the durable unit of work moved by the Kanban state machine.
 type Task struct {
 	BaseEntity
-	ProjectID     string
-	AgentID       string
-	Title         string
-	Description   string
-	State         TaskState
-	Assignee      TaskAssignee
-	OSProcessID   *int
-	StartedAt     *time.Time
-	CompletedAt   *time.Time
-	LastHeartbeat *time.Time
-	RetryCount        int
-	TokenUsage        int
-	SuccessCriteria   []string
-	DependsOn         []string
-	Logs              string
+	ProjectID       string
+	AgentID         string
+	Title           string
+	Description     string
+	State           TaskState
+	Assignee        TaskAssignee
+	OSProcessID     *int
+	StartedAt       *time.Time
+	CompletedAt     *time.Time
+	LastHeartbeat   *time.Time
+	RetryCount      int
+	TokenUsage      int
+	SuccessCriteria []string
+	DependsOn       []string
+	Logs            string
 }
 
 // TaskResult is the durable outcome reported by a worker after running a task.

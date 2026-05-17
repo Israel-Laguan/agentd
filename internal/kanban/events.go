@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"agentd/internal/models"
-
 	"github.com/google/uuid"
+
+	"agentd/internal/models"
 )
 
 func (s *Store) AddComment(ctx context.Context, c models.Comment) error {

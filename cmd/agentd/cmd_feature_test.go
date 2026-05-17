@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"agentd/internal/config"
-
 	"github.com/cucumber/godog"
+
+	"agentd/internal/config"
 )
 
 func TestCLIFeatures(t *testing.T) {

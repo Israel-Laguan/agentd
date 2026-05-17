@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"agentd/internal/models"
-
 	"github.com/google/uuid"
+
+	"agentd/internal/models"
 )
 
 func (s *Store) ListUnprocessedHumanComments(ctx context.Context) ([]models.CommentRef, error) {

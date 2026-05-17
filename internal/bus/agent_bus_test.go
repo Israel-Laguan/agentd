@@ -12,7 +12,7 @@ import (
 func TestAgentBridge_PublishAgentUpdated_NilBus(t *testing.T) {
 	bridge := AgentBridge{Bus: nil}
 	bridge.PublishAgentUpdated(context.Background(), models.AgentProfile{
-		ID: "test",
+		ID:   "test",
 		Name: "Test Agent",
 	})
 }
@@ -21,13 +21,13 @@ func TestAgentBridge_PublishAgentUpdated_WithBus(t *testing.T) {
 	mb := NewInProcess()
 	bridge := AgentBridge{Bus: mb}
 	bridge.PublishAgentUpdated(context.Background(), models.AgentProfile{
-		ID:           "test",
-		Name:         "Test Agent",
-		Provider:     "openai",
-		Model:        "gpt-4",
-		Temperature:  0.7,
-		Role:         "default",
-		MaxTokens:    4096,
+		ID:          "test",
+		Name:        "Test Agent",
+		Provider:    "openai",
+		Model:       "gpt-4",
+		Temperature: 0.7,
+		Role:        "default",
+		MaxTokens:   4096,
 	})
 }
 
@@ -69,9 +69,9 @@ func TestTaskBridge_PublishTaskAssigned_WithBus(t *testing.T) {
 	bridge := TaskBridge{Bus: mb}
 	bridge.PublishTaskAssigned(context.Background(), models.Task{
 		BaseEntity: models.BaseEntity{ID: "task-1"},
-		ProjectID: "proj-1",
-		AgentID:   "agent-1",
-		State:     models.TaskStatePending,
+		ProjectID:  "proj-1",
+		AgentID:    "agent-1",
+		State:      models.TaskStatePending,
 	})
 }
 
@@ -85,9 +85,9 @@ func TestTaskBridge_PublishTaskSplit_WithBus(t *testing.T) {
 	bridge := TaskBridge{Bus: mb}
 	bridge.PublishTaskSplit(context.Background(), models.Task{
 		BaseEntity: models.BaseEntity{ID: "parent-1"},
-		ProjectID: "proj-1",
-		AgentID:   "agent-1",
-		State:     models.TaskStateRunning,
+		ProjectID:  "proj-1",
+		AgentID:    "agent-1",
+		State:      models.TaskStateRunning,
 	}, []models.Task{
 		{BaseEntity: models.BaseEntity{ID: "child-1"}},
 		{BaseEntity: models.BaseEntity{ID: "child-2"}},

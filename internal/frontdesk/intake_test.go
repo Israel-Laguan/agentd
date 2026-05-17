@@ -32,7 +32,9 @@ func (g *stubIntakeGateway) ClassifyIntent(context.Context, string) (*gateway.In
 	return &gateway.IntentAnalysis{}, nil
 }
 
-func (g *stubIntakeGateway) GenerateText(context.Context, string, int) (string, error) { return "", nil }
+func (g *stubIntakeGateway) GenerateText(context.Context, string, int) (string, error) {
+	return "", nil
+}
 
 func (g *stubIntakeGateway) GenerateStructuredJSON(_ context.Context, _ string, target interface{}) error {
 	if p, ok := target.(*models.DraftPlan); ok {
@@ -72,7 +74,7 @@ func TestIntakeProcessorUsesContractAdapter(t *testing.T) {
 	store := testutil.NewFakeStore()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "P", Description: "d",
-		Tasks:         []models.DraftTask{{Title: "work"}},
+		Tasks: []models.DraftTask{{Title: "work"}},
 	})
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
@@ -117,7 +119,7 @@ func TestIntakeProcessorEmitWithSink(t *testing.T) {
 	store := testutil.NewFakeStore()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "P3", Description: "d",
-		Tasks:       []models.DraftTask{{Title: "sink"}},
+		Tasks: []models.DraftTask{{Title: "sink"}},
 	})
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
@@ -143,7 +145,7 @@ func TestIntakeProcessorGeneratePlanFallback(t *testing.T) {
 	store := testutil.NewFakeStore()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "P2", Description: "d",
-		Tasks:       []models.DraftTask{{Title: "t2"}},
+		Tasks: []models.DraftTask{{Title: "t2"}},
 	})
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
@@ -166,7 +168,9 @@ type stubPlanOnlyGW struct{ out *models.DraftPlan }
 func (*stubPlanOnlyGW) Generate(context.Context, gateway.AIRequest) (gateway.AIResponse, error) {
 	return gateway.AIResponse{}, nil
 }
-func (g *stubPlanOnlyGW) GeneratePlan(context.Context, string) (*models.DraftPlan, error) { return g.out, nil }
+func (g *stubPlanOnlyGW) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
+	return g.out, nil
+}
 func (*stubPlanOnlyGW) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
 	return &gateway.ScopeAnalysis{}, nil
 }

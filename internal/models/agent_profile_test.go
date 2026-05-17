@@ -19,12 +19,12 @@ func TestAgentProfile_DefaultAgenticModeIsFalse(t *testing.T) {
 // configured (Requirements 2.1, 7)
 func TestAgentProfile_AgenticModeCanBeSet(t *testing.T) {
 	profile := AgentProfile{
-		ID:           "test-agent",
-		Name:         "Test Agent",
-		Provider:     "openai",
-		Model:        "gpt-4",
-		Temperature:  0.7,
-		AgenticMode:  true,
+		ID:          "test-agent",
+		Name:        "Test Agent",
+		Provider:    "openai",
+		Model:       "gpt-4",
+		Temperature: 0.7,
+		AgenticMode: true,
 	}
 
 	if !profile.AgenticMode {

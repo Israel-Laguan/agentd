@@ -111,7 +111,6 @@ func TestAgenticToolsIncludesExecutorAndCapabilityTools(t *testing.T) {
 	}
 }
 
-
 // TestProcessAgentic_CallsGatewayWithTools verifies that agenticTools returns tool definitions
 // including both executor tools and capability tools.
 // Validates: Requirements 5, 6.2
@@ -180,7 +179,6 @@ func TestProcessAgentic_ExecutesToolCalls(t *testing.T) {
 		t.Errorf("expected result to contain 'hello', got %q", result)
 	}
 }
-
 
 // TestProcessAgentic_CommitsTextWhenNoToolCalls verifies that the agentic loop
 // commits text when the response contains no tool calls.
@@ -456,4 +454,3 @@ func TestIngestHumanCorrections_SkipsUnknownAuthors(t *testing.T) {
 		t.Fatalf("expected unknown authors to be skipped, got %d corrections", got)
 	}
 }
-

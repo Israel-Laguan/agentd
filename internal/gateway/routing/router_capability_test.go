@@ -22,8 +22,8 @@ type mockProvider struct {
 	err          error
 }
 
-func (p *mockProvider) Name() spec.Provider        { return spec.Provider(p.providerName) }
-func (p *mockProvider) MaxInputChars() int         { return p.budget }
+func (p *mockProvider) Name() spec.Provider { return spec.Provider(p.providerName) }
+func (p *mockProvider) MaxInputChars() int  { return p.budget }
 func (p *mockProvider) Generate(_ context.Context, req spec.AIRequest) (spec.AIResponse, error) {
 	p.request = req
 	if p.err != nil {

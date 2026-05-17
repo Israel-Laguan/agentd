@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/spf13/cobra"
+
 	"agentd/internal/config"
 	"agentd/internal/kanban"
 	"agentd/internal/models"
-
-	"github.com/spf13/cobra"
 )
 
 type projectOptions struct {

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"agentd/internal/models"
-
 	"github.com/google/uuid"
+
+	"agentd/internal/models"
 )
 
 // commentPayloadAtRest mirrors kanban events.payload ("author: body").

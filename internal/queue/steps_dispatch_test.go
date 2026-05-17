@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cucumber/godog"
+
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
-
-	"github.com/cucumber/godog"
 )
 
 // --- Queue scenario steps (dispatch, breaker, outage) ---

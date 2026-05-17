@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"agentd/internal/kanban"
 	"agentd/internal/models"
-
-	"github.com/spf13/cobra"
 )
 
 func TestStatusPrintsTaskStateCounts(t *testing.T) {

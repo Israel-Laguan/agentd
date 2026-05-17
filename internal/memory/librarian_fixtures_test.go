@@ -18,11 +18,11 @@ import (
 
 type fakeStore struct {
 	models.KanbanStore
-	events          []models.Event
-	recordedMemory  *models.Memory
-	curated         bool
-	deletedCurated  bool
-	project         *models.Project
+	events         []models.Event
+	recordedMemory *models.Memory
+	curated        bool
+	deletedCurated bool
+	project        *models.Project
 }
 
 func (s *fakeStore) ListEventsByTask(_ context.Context, _ string) ([]models.Event, error) {

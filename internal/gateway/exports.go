@@ -17,24 +17,24 @@ const TruncationMarker = truncation.TruncationMarker
 
 // Wire types (spec).
 type (
-	PromptMessage       = spec.PromptMessage
-	Role                = spec.Role
-	RoleTarget          = spec.RoleTarget
-	AIRequest           = spec.AIRequest
-	AIResponse          = spec.AIResponse
-	ProviderConfig      = spec.ProviderConfig
-	Provider            = spec.Provider
-	AIGateway           = spec.AIGateway
-	ContractAdapter     = spec.ContractAdapter
-	Truncator           = spec.Truncator
-	ScopeAnalysis       = spec.ScopeAnalysis
-	ScopeOption         = spec.ScopeOption
-	IntentAnalysis      = spec.IntentAnalysis
-	BudgetTracker       = spec.BudgetTracker
-	ToolDefinition      = spec.ToolDefinition
-	ToolCall            = spec.ToolCall
-	ToolCallFunction    = spec.ToolCallFunction
-	FunctionParameters  = spec.FunctionParameters
+	PromptMessage      = spec.PromptMessage
+	Role               = spec.Role
+	RoleTarget         = spec.RoleTarget
+	AIRequest          = spec.AIRequest
+	AIResponse         = spec.AIResponse
+	ProviderConfig     = spec.ProviderConfig
+	Provider           = spec.Provider
+	AIGateway          = spec.AIGateway
+	ContractAdapter    = spec.ContractAdapter
+	Truncator          = spec.Truncator
+	ScopeAnalysis      = spec.ScopeAnalysis
+	ScopeOption        = spec.ScopeOption
+	IntentAnalysis     = spec.IntentAnalysis
+	BudgetTracker      = spec.BudgetTracker
+	ToolDefinition     = spec.ToolDefinition
+	ToolCall           = spec.ToolCall
+	ToolCallFunction   = spec.ToolCallFunction
+	FunctionParameters = spec.FunctionParameters
 )
 
 // Role constants.
@@ -72,8 +72,8 @@ const (
 
 // Strategy types.
 type (
-	MiddleOutStrategy = truncation.MiddleOutStrategy
-	HeadTailStrategy  = truncation.HeadTailStrategy
+	MiddleOutStrategy  = truncation.MiddleOutStrategy
+	HeadTailStrategy   = truncation.HeadTailStrategy
 	TruncationStrategy = truncation.TruncationStrategy
 	StrategyTruncator  = truncation.StrategyTruncator
 	SummarizeTruncator = truncation.SummarizeTruncator

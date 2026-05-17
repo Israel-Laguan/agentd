@@ -1,9 +1,6 @@
 package sandbox
 
 import (
-	"agentd/internal/bus"
-	"agentd/internal/models"
-	"agentd/internal/testutil"
 	"context"
 	"errors"
 	"os"
@@ -11,6 +8,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agentd/internal/bus"
+	"agentd/internal/models"
+	"agentd/internal/testutil"
 )
 
 func TestBashExecutorCapturesStdout(t *testing.T) {

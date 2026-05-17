@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cucumber/godog"
+
 	"agentd/internal/config"
 	"agentd/internal/models"
-
-	"github.com/cucumber/godog"
 )
 
 func TestMemoryFeatures(t *testing.T) {
