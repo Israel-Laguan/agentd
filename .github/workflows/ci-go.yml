@@ -1,0 +1,56 @@
+name: CI (Go)
+
+on:
+  push:
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - ".golangci.yml"
+      - "scripts/**"
+      - ".github/workflows/ci-go.yml"
+  pull_request:
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - ".golangci.yml"
+      - "scripts/**"
+      - ".github/workflows/ci-go.yml"
+
+concurrency:
+  group: ci-go-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify go.mod is tidy
+        run: make tidy && git diff --exit-code go.mod go.sum
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+      - name: LOC check
+        run: make loc
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
