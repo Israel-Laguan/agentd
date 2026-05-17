@@ -40,3 +40,31 @@ func TestSettingsUpsertRoundTrip(t *testing.T) {
 		t.Fatalf("GetSetting alpha after update: ok=%v v=%q err=%v", ok, v, err)
 	}
 }
+
+func TestListSettingsRoundTrip(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	if err := store.SetSetting(ctx, "alpha", "one"); err != nil {
+		t.Fatalf("SetSetting alpha: %v", err)
+	}
+	if err := store.SetSetting(ctx, "beta", "two"); err != nil {
+		t.Fatalf("SetSetting beta: %v", err)
+	}
+	settings, err := store.ListSettings(ctx)
+	if err != nil {
+		t.Fatalf("ListSettings: %v", err)
+	}
+	keys := map[string]string{}
+	for _, s := range settings {
+		if s.Key == "schema_version" {
+			continue
+		}
+		keys[s.Key] = s.Value
+		if s.UpdatedAt.IsZero() {
+			t.Fatalf("setting %s has zero UpdatedAt", s.Key)
+		}
+	}
+	if len(keys) != 2 || keys["alpha"] != "one" || keys["beta"] != "two" {
+		t.Fatalf("settings = %#v", keys)
+	}
+}
