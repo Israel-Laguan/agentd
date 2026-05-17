@@ -13,9 +13,9 @@ import (
 func taskSelectColumns(table string) string {
 	return fmt.Sprintf(`
 		SELECT %s.id, %s.project_id, %s.agent_id, %s.title, %s.description, %s.state, %s.assignee,
-		       %s.os_process_id, %s.started_at, %s.completed_at, %s.last_heartbeat, %s.retry_count, %s.token_usage, %s.created_at, %s.updated_at`,
+		       %s.os_process_id, %s.started_at, %s.completed_at, %s.last_heartbeat, %s.retry_count, %s.token_usage, %s.success_criteria, %s.created_at, %s.updated_at`,
 		table, table, table, table, table, table, table,
-		table, table, table, table, table, table, table, table)
+		table, table, table, table, table, table, table, table, table)
 }
 
 func selectTaskSQL() string {

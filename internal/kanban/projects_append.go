@@ -64,13 +64,14 @@ func appendedTask(projectID string, draft models.DraftTask, nowTime time.Time) m
 		assignee = models.TaskAssigneeSystem
 	}
 	return models.Task{
-		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: nowTime, UpdatedAt: nowTime},
-		ProjectID:   projectID,
-		AgentID:     defaultAgentID,
-		Title:       strings.TrimSpace(draft.Title),
-		Description: strings.TrimSpace(draft.Description),
-		State:       models.TaskStatePending,
-		Assignee:    assignee,
+		BaseEntity:      models.BaseEntity{ID: uuid.NewString(), CreatedAt: nowTime, UpdatedAt: nowTime},
+		ProjectID:       projectID,
+		AgentID:         defaultAgentID,
+		Title:           strings.TrimSpace(draft.Title),
+		Description:     strings.TrimSpace(draft.Description),
+		State:           models.TaskStatePending,
+		Assignee:        assignee,
+		SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
 	}
 }
 

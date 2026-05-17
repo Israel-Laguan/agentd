@@ -102,13 +102,20 @@ func TestMigrateToV4AllowsFailedRequiresHumanState(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "7" {
-		t.Fatalf("schema version = %q, want 7", version)
+	if version != "8" {
+		t.Fatalf("schema version = %q, want 8", version)
 	}
 
 	var completedAt sql.NullString
 	if err := db.QueryRowContext(ctx, `SELECT completed_at FROM tasks WHERE id = 'task'`).Scan(&completedAt); err != nil {
 		t.Fatalf("read completed_at column: %v", err)
+	}
+	var successCriteria string
+	if err := db.QueryRowContext(ctx, `SELECT success_criteria FROM tasks WHERE id = 'task'`).Scan(&successCriteria); err != nil {
+		t.Fatalf("read success_criteria column: %v", err)
+	}
+	if successCriteria != "[]" {
+		t.Fatalf("success_criteria = %q, want []", successCriteria)
 	}
 }
 

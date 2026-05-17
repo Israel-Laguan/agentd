@@ -34,10 +34,11 @@ type Task struct {
 	StartedAt     *time.Time
 	CompletedAt   *time.Time
 	LastHeartbeat *time.Time
-	RetryCount    int
-	TokenUsage    int
-	DependsOn     []string
-	Logs          string
+	RetryCount        int
+	TokenUsage        int
+	SuccessCriteria   []string
+	DependsOn         []string
+	Logs              string
 }
 
 // TaskResult is the durable outcome reported by a worker after running a task.

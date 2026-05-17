@@ -68,10 +68,17 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		task.ID,
 	)
 
+	goal := GoalFromTask(task)
+	goalTracker := NewGoalTracker(w.sink, task.ID, task.ProjectID)
+	if goal != nil {
+		goalTracker.SetGoal(*goal)
+		cm.SetGoalTracker(goalTracker)
+	}
+
 	for {
 		shouldContinue, err := w.processAgenticIteration(
 			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
-			iterationGuard, budgetGuard, deadlineGuard, cm,
+			iterationGuard, budgetGuard, deadlineGuard, cm, goalTracker,
 			taskHooks, taskCaps,
 		)
 		if err != nil {
@@ -142,7 +149,7 @@ func (w *Worker) processAgenticIteration(
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
 	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
-	deadlineGuard *DeadlineGuard, cm *ContextManager,
+	deadlineGuard *DeadlineGuard, cm *ContextManager, goalTracker *GoalTracker,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
 ) (bool, error) {
 	if err := deadlineGuard.BeforeIteration(); err != nil {
@@ -186,6 +193,10 @@ func (w *Worker) processAgenticIteration(
 		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
 	})
 	if len(resp.ToolCalls) == 0 {
+		stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
+		if stalled || stallErr != nil {
+			return false, stallErr
+		}
 		w.commitTextWithProfile(ctx, task, resp.Content, &profile)
 		return false, nil
 	}
@@ -193,7 +204,27 @@ func (w *Worker) processAgenticIteration(
 	if w.handleAgenticToolCalls(ctx, task, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps, cm) {
 		return false, nil
 	}
+
+	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
+	if stalled || stallErr != nil {
+		return false, stallErr
+	}
+
 	return true, nil
+}
+
+func (w *Worker) handleGoalProgress(ctx context.Context, task models.Task, goalTracker *GoalTracker, content string) (bool, error) {
+	if goalTracker == nil || goalTracker.Goal() == nil {
+		return false, nil
+	}
+	completed, blocked := parseGoalProgress(content)
+	if stalled := goalTracker.AfterTurn(ctx, completed, blocked); stalled {
+		if err := w.handleGoalStalled(ctx, task, goalTracker); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
