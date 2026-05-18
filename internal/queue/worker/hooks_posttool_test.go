@@ -192,6 +192,46 @@ func TestAuditHook_FailOpenPolicy(t *testing.T) {
 	}
 }
 
+// cancelAwareEventSink returns ctx.Err() when the context is already canceled,
+// mimicking store.AppendEvent behavior on a canceled tool context.
+type cancelAwareEventSink struct {
+	events []models.Event
+}
+
+func (m *cancelAwareEventSink) Emit(ctx context.Context, ev models.Event) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	m.events = append(m.events, ev)
+	return nil
+}
+
+func TestAuditHook_EmitsWhenExecCtxCanceled(t *testing.T) {
+	t.Parallel()
+	sink := &cancelAwareEventSink{}
+	hook := AuditHook(sink, nil)
+
+	execCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"ls"}`,
+		CallID:    "call_canceled",
+		SessionID: "task-1",
+		ProjectID: "proj-1",
+		Timestamp: time.Now(),
+		ExecCtx:   execCtx,
+	}
+	_, err := hook.Fn(ctx, `{"Success":true,"ExitCode":0}`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sink.events) != 2 {
+		t.Fatalf("expected 2 audit events despite canceled ExecCtx, got %d", len(sink.events))
+	}
+}
+
 func TestAuditHook_ScrubsEventPayloads(t *testing.T) {
 	t.Parallel()
 	sink := &mockEventSink{}
@@ -480,6 +520,10 @@ func TestAuditHook_ClassifiedBashErrorExitCode(t *testing.T) {
 
 	if tr.Status != ToolStatusError {
 		t.Fatalf("expected error status, got %s", tr.Status)
+	}
+	forCtx := tr.ForContext()
+	if !strings.Contains(forCtx, "command not found") {
+		t.Fatalf("ForContext() = %q, want stderr in model context", forCtx)
 	}
 	if len(sink.events) != 2 {
 		t.Fatalf("expected 2 audit events, got %d", len(sink.events))

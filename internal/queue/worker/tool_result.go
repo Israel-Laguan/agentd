@@ -171,17 +171,23 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	}
 	if err := json.Unmarshal([]byte(trimmed), &env); err == nil {
 		if env.FatalError != "" {
-			return FatalResult(callID, env.FatalError, elapsedMs)
+			tr := FatalResult(callID, env.FatalError, elapsedMs)
+			tr.Content = raw
+			return tr
 		}
 		if env.Status == "timeout" {
 			return TimeoutResult(callID, elapsedMs)
 		}
 		if env.Error != "" {
-			return NonRetryableErrorResult(callID, env.Error, "", elapsedMs)
+			tr := NonRetryableErrorResult(callID, env.Error, "", elapsedMs)
+			tr.Content = raw
+			return tr
 		}
 		if env.Success != nil && !*env.Success {
 			msg := fmt.Sprintf("command failed with exit code %d", env.ExitCode)
-			return NonRetryableErrorResult(callID, msg, "", elapsedMs)
+			tr := NonRetryableErrorResult(callID, msg, "", elapsedMs)
+			tr.Content = raw
+			return tr
 		}
 	} else {
 		if strings.HasPrefix(trimmed, `{"FatalError"`) {

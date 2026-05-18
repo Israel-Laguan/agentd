@@ -23,9 +23,9 @@ func AuditHook(sink models.EventSink, scrubber sandbox.Scrubber) PostHook {
 			if sink == nil {
 				return result, nil
 			}
-			emitCtx := ctx.ExecCtx
-			if emitCtx == nil {
-				emitCtx = context.Background()
+			emitCtx := context.Background()
+			if ctx.ExecCtx != nil {
+				emitCtx = context.WithoutCancel(ctx.ExecCtx)
 			}
 			emitToolCallHook(emitCtx, sink, ctx, scrubber)
 			durationMs := time.Since(ctx.Timestamp).Milliseconds()

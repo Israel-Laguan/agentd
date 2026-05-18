@@ -287,8 +287,8 @@ func TestAgenticLoop_ToolErrorStringStillContinuesToFinalResponse(t *testing.T) 
 	if mockSandbox.executionCount != 1 {
 		t.Fatalf("expected one sandbox call, got %d", mockSandbox.executionCount)
 	}
-	if !requestContainsToolResult(mockGateway.requests[1], "call_fail", "command failed with exit code 1") {
-		t.Fatalf("expected second request to include tool error string, got %#v", mockGateway.requests[1].Messages)
+	if !requestContainsToolResult(mockGateway.requests[1], "call_fail", "boom") {
+		t.Fatalf("expected second request to include tool stderr in context, got %#v", mockGateway.requests[1].Messages)
 	}
 	if store.committedResult == nil || !store.committedResult.Success {
 		t.Fatalf("expected final response committed after tool error, got %#v", store.committedResult)
