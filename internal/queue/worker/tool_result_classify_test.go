@@ -339,6 +339,33 @@ func TestClassifyBuiltinToolResult_BashSandboxFailure(t *testing.T) {
 	}
 }
 
+func TestClassifyPrecomputedReadResult_ErrorShapedFileContent(t *testing.T) {
+	t.Parallel()
+	raw := `{"error":"cached api failure"}`
+	tr := classifyPrecomputedReadResult("c1", raw, 10)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("Status = %s, want success for error-shaped file content", tr.Status)
+	}
+	if tr.Content != raw {
+		t.Fatalf("Content = %q, want raw preserved", tr.Content)
+	}
+	if strings.Contains(tr.ForContext(), "[ERROR]") {
+		t.Fatalf("ForContext() = %q, want unprefixed file content", tr.ForContext())
+	}
+}
+
+func TestClassifyPrecomputedReadResult_PrefixedToolError(t *testing.T) {
+	t.Parallel()
+	raw := toolErrorPrefix + `{"error":"stat failed: no such file"}`
+	tr := classifyPrecomputedReadResult("c1", raw, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+	if tr.Error == nil || tr.Error.Message != "stat failed: no such file" {
+		t.Fatalf("Error.Message = %v, want stat failed", tr.Error)
+	}
+}
+
 func TestClassifyPrecomputedToolResult_BashFatalEnvelope(t *testing.T) {
 	t.Parallel()
 	tr := classifyPrecomputedToolResult("c1", toolNameBash, `{"FatalError":"sandbox crash"}`, 10)

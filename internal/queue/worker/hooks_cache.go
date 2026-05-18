@@ -116,8 +116,21 @@ func CacheStoreHook(cache *ResultCache) PostHook {
 				return result, nil
 			}
 			key := cacheKey(ctx.ToolName, ctx.Args)
-			cache.set(key, result)
+			cache.set(key, cacheStoredPayload(ctx, result))
 			return result, nil
 		},
 	}
+}
+
+// cacheStoredPayload tags failed tool results with toolErrorPrefix before caching so
+// cache hits classify the same as live execution. Successful reads may contain
+// arbitrary JSON (including single-key {"error":...} fixtures) and are stored as-is.
+func cacheStoredPayload(ctx HookContext, result string) string {
+	if !ctx.ResultStatusSet || ctx.ResultStatus == ToolStatusSuccess {
+		return result
+	}
+	if isToolErrorPayload(result) {
+		return result
+	}
+	return toolErrorPrefix + result
 }
