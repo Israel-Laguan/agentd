@@ -170,5 +170,5 @@ var retryablePatterns = []string{
 	"deadline exceeded",
 	"service unavailable",
 	"too many requests",
-	"eof",
+	"unexpected eof",
 }
