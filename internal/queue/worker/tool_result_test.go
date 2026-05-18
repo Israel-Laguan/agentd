@@ -216,6 +216,9 @@ func TestClassifyRawResult_JSONError(t *testing.T) {
 	if tr.Error == nil || tr.Error.Message != "file not found" {
 		t.Fatalf("Error.Message = %v, want file not found", tr.Error)
 	}
+	if tr.Retryable {
+		t.Fatal("JSON error results should be non-retryable by default")
+	}
 }
 
 func TestClassifyRawResult_JSONFatal(t *testing.T) {
@@ -266,5 +269,38 @@ func TestClassifyRawResult_MalformedJSONWithFatalPrefix(t *testing.T) {
 	tr := classifyRawResult("c1", `{"FatalError":broken`, 10)
 	if tr.Status != ToolStatusFatal {
 		t.Fatalf("Status = %s, want fatal", tr.Status)
+	}
+}
+
+func TestForContext_UsesContentNotErrorMessage(t *testing.T) {
+	t.Parallel()
+	tr := NonRetryableErrorResult("c1", "original secret", "", 10)
+	tr.Content = "scrubbed content"
+	got := tr.ForContext()
+	want := "[ERROR] scrubbed content"
+	if got != want {
+		t.Fatalf("ForContext() = %q, want %q (should use Content, not Error.Message)", got, want)
+	}
+}
+
+func TestForContext_VetoedUsesContentNotErrorMessage(t *testing.T) {
+	t.Parallel()
+	tr := VetoedResult("c1", "original reason")
+	tr.Content = "scrubbed reason"
+	got := tr.ForContext()
+	want := "[POLICY] Tool call blocked: scrubbed reason"
+	if got != want {
+		t.Fatalf("ForContext() = %q, want %q (should use Content, not Error.Message)", got, want)
+	}
+}
+
+func TestForContext_FatalUsesContentNotErrorMessage(t *testing.T) {
+	t.Parallel()
+	tr := FatalResult("c1", "original crash", 10)
+	tr.Content = "scrubbed crash"
+	got := tr.ForContext()
+	want := "[FATAL] Tool execution failed unrecoverably: scrubbed crash"
+	if got != want {
+		t.Fatalf("ForContext() = %q, want %q (should use Content, not Error.Message)", got, want)
 	}
 }
