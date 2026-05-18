@@ -46,6 +46,7 @@ type Worker struct {
 	truncationThreshold  int
 	characterBudget      int
 	toolExecutor         *ToolExecutor
+	toolTimeouts         config.ToolTimeoutsConfig
 	capabilities         *capabilities.Registry
 	tokenBudget          int
 	budgetTracker        spec.BudgetTracker
@@ -98,6 +99,7 @@ type WorkerOptions struct {
 	SkillsThreshold           float64
 	SkillsTopK                int
 	LegacyHandoffTimeout      time.Duration
+	ToolTimeouts              config.ToolTimeoutsConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -187,6 +189,7 @@ func NewWorker(
 		truncationThreshold:  opts.AgenticTruncationThresh,
 		characterBudget:      opts.AgenticCharacterBudget,
 		toolExecutor:         NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
+		toolTimeouts:         opts.ToolTimeouts,
 		capabilities:         opts.Capabilities,
 		tokenBudget:          opts.TokenBudget,
 		budgetTracker:        budgetTracker,
