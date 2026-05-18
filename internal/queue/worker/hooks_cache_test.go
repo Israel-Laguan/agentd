@@ -387,11 +387,45 @@ func TestCacheHooks_ShortCircuitSkipsPostHooks(t *testing.T) {
 	}
 
 	tr := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("expected success status, got %s", tr.Status)
+	}
 	if tr.Content != "from-cache" {
 		t.Fatalf("expected from-cache, got %q", tr.Content)
 	}
 	if postRan {
 		t.Fatal("post-hooks should not run on cache hit")
+	}
+}
+
+func TestCacheHooks_CachedReadErrorClassified(t *testing.T) {
+	t.Parallel()
+
+	cachedErr := `{"error":"stat failed: no such file"}`
+	rc := NewResultCache(map[string]bool{"read": true})
+	args := `{"path":"missing.txt"}`
+	rc.set(cacheKey("read", args), cachedErr)
+
+	hc := NewHookChain()
+	hc.RegisterPre(CacheLookupHook(rc))
+
+	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	w := &Worker{
+		toolExecutor: executor,
+		hooks:        hc,
+	}
+
+	call := gateway.ToolCall{
+		ID:       "call_err",
+		Function: gateway.ToolCallFunction{Name: "read", Arguments: args},
+	}
+
+	tr := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("expected error status for cached error payload, got %s", tr.Status)
+	}
+	if tr.Content != cachedErr {
+		t.Fatalf("content = %q, want %q", tr.Content, cachedErr)
 	}
 }
 
