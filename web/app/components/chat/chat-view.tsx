@@ -32,6 +32,8 @@ interface ChatViewProps {
   isTyping: boolean;
   setIsTyping: (v: boolean) => void;
   inputRef?: React.RefObject<HTMLInputElement | null>;
+  chatSettings: ChatSettings;
+  setChatSettings: React.Dispatch<React.SetStateAction<ChatSettings>>;
 }
 
 export function ChatView({
@@ -45,14 +47,11 @@ export function ChatView({
   isTyping,
   setIsTyping,
   inputRef,
+  chatSettings,
+  setChatSettings
 }: ChatViewProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [chatSettings, setChatSettings] =
-    useState<ChatSettings>({
-      provider: "openai",
-      model: "gpt-4o",
-      effort: "medium",
-  });
+  
   const [draftSettings, setDraftSettings] =
   useState(chatSettings);
 
@@ -66,7 +65,7 @@ export function ChatView({
     setIsTyping(true);
 
     try {
-      const data = await sendChat(userMsg.content);
+      const data = await sendChat(userMsg.content, chatSettings);
 
       const assistant =
         data?.message

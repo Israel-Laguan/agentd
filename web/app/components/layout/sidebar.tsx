@@ -27,7 +27,6 @@ export const Sidebar = ({ activeTab, setActiveTab, workforce }: SidebarProps) =>
             <SidebarItem icon={Users} label="Digital Workers" active={activeTab === 'workforce'} onClick={() => setActiveTab('workforce')} />
             <SidebarItem icon={BookOpen} label="Knowledge Index" active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')} />
             <SidebarItem icon={Terminal} label="System Kernel" active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} />
-            <SidebarItem icon={Settings} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
           </nav>
         </div>
 
