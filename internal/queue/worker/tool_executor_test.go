@@ -30,10 +30,6 @@ func TestToolExecutor_UnknownTool_ReturnsValidJSON(t *testing.T) {
 }
 
 func TestToolExecutor_Read_RejectsOversizedFile(t *testing.T) {
-	prev := maxToolReadFileBytes
-	maxToolReadFileBytes = 8
-	t.Cleanup(func() { maxToolReadFileBytes = prev })
-
 	dir := t.TempDir()
 	path := filepath.Join(dir, "big.txt")
 	if err := os.WriteFile(path, []byte("123456789"), 0644); err != nil {
@@ -41,6 +37,7 @@ func TestToolExecutor_Read_RejectsOversizedFile(t *testing.T) {
 	}
 
 	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex.maxReadBytes = 8
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
 			Name:      toolNameRead,
@@ -252,17 +249,75 @@ func TestToolExecutor_Write_ValidationFailure(t *testing.T) {
 
 func TestToolExecutor_Write_ValidationFailure_MissingContent(t *testing.T) {
 	t.Parallel()
-	registry := SchemaRegistryFromDefinitions(NewToolExecutor(nil, t.TempDir(), nil, 0).Definitions())
-	hook := SchemaValidationHook(registry)
-	verdict, err := hook.Fn(HookContext{ToolName: toolNameWrite, Args: `{"path":"foo.txt"}`})
+	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	out := ex.Execute(context.Background(), gateway.ToolCall{
+		Function: gateway.ToolCallFunction{
+			Name:      toolNameWrite,
+			Arguments: `{"path":"foo.txt"}`,
+		},
+	})
+	var payload map[string]string
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if payload["error"] == "" {
+		t.Fatalf("expected error, got %q", out)
+	}
+	if !strings.Contains(payload["error"], "content") {
+		t.Fatalf("expected error to mention content, got %q", payload["error"])
+	}
+}
+
+func TestToolExecutor_Write_AllowsEmptyContent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ex := NewToolExecutor(nil, dir, nil, 0)
+	out := ex.Execute(context.Background(), gateway.ToolCall{
+		Function: gateway.ToolCallFunction{
+			Name:      toolNameWrite,
+			Arguments: `{"path":"empty.txt","content":""}`,
+		},
+	})
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if payload["error"] != nil {
+		t.Fatalf("unexpected error: %v", payload["error"])
+	}
+	content, err := os.ReadFile(filepath.Join(dir, "empty.txt"))
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if !verdict.Veto {
-		t.Fatal("expected veto for missing content")
+	if len(content) != 0 {
+		t.Fatalf("expected empty file, got %q", content)
 	}
-	if !strings.Contains(verdict.Reason, "content") {
-		t.Fatalf("expected reason to mention content, got %q", verdict.Reason)
+}
+
+func TestToolExecutor_Read_CancelledContext(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file.txt")
+	if err := os.WriteFile(path, []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ex := NewToolExecutor(nil, dir, nil, 0)
+	out := ex.Execute(ctx, gateway.ToolCall{
+		Function: gateway.ToolCallFunction{
+			Name:      toolNameRead,
+			Arguments: `{"path": "file.txt"}`,
+		},
+	})
+	var payload map[string]string
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if payload["error"] == "" {
+		t.Fatalf("expected cancellation error, got %q", out)
 	}
 }
 
@@ -329,6 +384,41 @@ func TestToolExecutor_Read_PathJail_Symlink(t *testing.T) {
 	}
 	if payload["error"] == "" {
 		t.Fatalf("expected error for symlink escape, got %q", out)
+	}
+}
+
+func TestToolExecutor_Write_PathJail_SymlinkParent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "secret.txt")
+	if err := os.WriteFile(outsideFile, []byte("untouched"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideDir, filepath.Join(dir, "evil")); err != nil {
+		t.Fatal(err)
+	}
+
+	ex := NewToolExecutor(nil, dir, nil, 0)
+	out := ex.Execute(context.Background(), gateway.ToolCall{
+		Function: gateway.ToolCallFunction{
+			Name:      toolNameWrite,
+			Arguments: `{"path": "evil/new.txt", "content": "pwned"}`,
+		},
+	})
+	var payload map[string]string
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if payload["error"] == "" {
+		t.Fatalf("expected error for symlink parent escape, got %q", out)
+	}
+	content, err := os.ReadFile(outsideFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "untouched" {
+		t.Fatalf("outside file was modified: %q", content)
 	}
 }
 
