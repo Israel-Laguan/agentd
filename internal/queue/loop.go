@@ -124,7 +124,7 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 			}
 		}
 		if !d.sem.Acquire(ctx) {
-			return dispatched, nacked, ctx.Err()
+			return dispatched, nacked, nil
 		}
 		dispatched++
 		d.wg.Add(1)
