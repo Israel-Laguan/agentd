@@ -88,7 +88,7 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 		tr = classifyDelegateRawResult(call.ID, raw, time.Since(start).Milliseconds())
 	default:
 		raw := executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
-		tr = classifyRawResult(call.ID, raw, time.Since(start).Milliseconds())
+		tr = classifyCapabilityRawResult(call.ID, raw, time.Since(start).Milliseconds())
 	}
 
 	if w.hooks != nil {

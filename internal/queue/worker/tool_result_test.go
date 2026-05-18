@@ -62,7 +62,28 @@ func TestForContext_Timeout(t *testing.T) {
 	t.Parallel()
 	tr := TimeoutResult("c1", 5000)
 	got := tr.ForContext()
-	want := "[TIMEOUT] Tool did not respond within 5000ms"
+	want := "[TIMEOUT] tool did not respond within 5000ms"
+	if got != want {
+		t.Fatalf("ForContext() = %q, want %q", got, want)
+	}
+}
+
+func TestForContext_TimeoutUsesMutatedContent(t *testing.T) {
+	t.Parallel()
+	tr := TimeoutResult("c1", 5000)
+	tr.Content = "scrubbed timeout message"
+	got := tr.ForContext()
+	want := "[TIMEOUT] scrubbed timeout message"
+	if got != want {
+		t.Fatalf("ForContext() = %q, want %q (should use Content, not ElapsedMs fallback)", got, want)
+	}
+}
+
+func TestForContext_TimeoutEmptyContentFallback(t *testing.T) {
+	t.Parallel()
+	tr := ToolResult{CallID: "c1", Status: ToolStatusTimeout, ElapsedMs: 3000}
+	got := tr.ForContext()
+	want := "[TIMEOUT] Tool did not respond within 3000ms"
 	if got != want {
 		t.Fatalf("ForContext() = %q, want %q", got, want)
 	}
@@ -314,6 +335,20 @@ func TestClassifyDelegateRawResult_SubagentFailure(t *testing.T) {
 	}
 }
 
+func TestClassifyDelegateRawResult_SubagentTimeout(t *testing.T) {
+	t.Parallel()
+	tr := classifyDelegateRawResult("c1", `{"status":"timeout","error":"max iterations reached","iterations":20}`, 10)
+	if tr.Status != ToolStatusTimeout {
+		t.Fatalf("Status = %s, want timeout", tr.Status)
+	}
+	if tr.Content != "max iterations reached" {
+		t.Fatalf("Content = %q, want max iterations reached", tr.Content)
+	}
+	if !tr.Retryable {
+		t.Error("Retryable = false, want true")
+	}
+}
+
 func TestClassifyDelegateRawResult_ParallelWithFailure(t *testing.T) {
 	t.Parallel()
 	raw := `[{"status":"success","output":"ok","iterations":1},{"status":"failure","error":"parallel fail","iterations":1}]`
@@ -323,6 +358,38 @@ func TestClassifyDelegateRawResult_ParallelWithFailure(t *testing.T) {
 	}
 	if tr.Error == nil || tr.Error.Message != "parallel fail" {
 		t.Fatalf("Error.Message = %v, want parallel fail", tr.Error)
+	}
+}
+
+func TestClassifyCapabilityRawResult_JSONErrorEnvelope(t *testing.T) {
+	t.Parallel()
+	tr := classifyCapabilityRawResult("c1", `{"error":"unknown tool: x"}`, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+}
+
+func TestClassifyCapabilityRawResult_ArbitraryJSON(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{"multi_key_error", `{"error":"no matches","items":[]}`},
+		{"status_timeout", `{"status":"timeout"}`},
+		{"success_false", `{"Success":false,"ExitCode":1}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tr := classifyCapabilityRawResult("c1", tc.raw, 10)
+			if tr.Status != ToolStatusSuccess {
+				t.Fatalf("Status = %s, want success", tr.Status)
+			}
+			if tr.Content != tc.raw {
+				t.Fatalf("Content = %q, want raw preserved %q", tr.Content, tc.raw)
+			}
+		})
 	}
 }
 
