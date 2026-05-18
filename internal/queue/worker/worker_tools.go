@@ -76,22 +76,9 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 	}
 
 	bodyStart := time.Now()
-	runAttempt := func(attemptCtx context.Context) ToolResult {
-		toolCtx, cancel := context.WithTimeout(attemptCtx, timeout)
-		defer cancel()
-		tr := w.runToolBody(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, bodyStart)
-		if toolCtx.Err() == context.DeadlineExceeded && attemptCtx.Err() == nil {
-			return augmentTransientRetryable(timeoutToolResult(call.ID, timeout))
-		}
-		return augmentTransientRetryable(tr)
-	}
-
-	var tr ToolResult
-	if retry && w.toolRetrier != nil {
-		tr = w.toolRetrier.Execute(ctx, runAttempt)
-	} else {
-		tr = runAttempt(ctx)
-	}
+	tr := w.executeToolWithRetry(ctx, call.ID, timeout, retry, func(toolCtx context.Context) ToolResult {
+		return w.runToolBody(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, bodyStart)
+	})
 
 	if w.hooks != nil {
 		hookCtx.ResultStatus = tr.Status
