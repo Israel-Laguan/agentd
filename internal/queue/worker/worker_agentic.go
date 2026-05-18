@@ -159,7 +159,6 @@ func (w *Worker) handleAgenticToolCalls(
 			slog.Info("auto-detected context corrections", "task_id", task.ID, "count", len(detected))
 		}
 		*messages = append(*messages, gateway.PromptMessage{Role: "tool", ToolCallID: call.ID, Content: contextContent})
-		w.emitToolResult(ctx, task, call, tr)
 		if tr.Status == ToolStatusFatal {
 			w.handleAgentFailure(ctx, task, contextContent)
 			return true
