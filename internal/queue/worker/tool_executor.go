@@ -23,7 +23,7 @@ const (
 
 	defaultMaxToolReadFileBytes = 10 << 20 // 10 MiB
 
-	// toolErrorPrefix marks strings from jsonErrorf so classifiers can tell
+	// toolErrorPrefix marks strings from jsonErrorf and sandboxFailureJSON so classifiers can tell
 	// tool failures apart from file contents or command stdout that happen to
 	// be single-key {"error":"..."} JSON.
 	toolErrorPrefix = "\x1eagentd/tool-error\x1e"
@@ -246,9 +246,9 @@ func sandboxFailureJSON(result sandbox.Result) string {
 		"Stderr":   result.Stderr,
 	})
 	if err != nil {
-		return `{"error":"failed to encode sandbox failure payload"}`
+		return toolErrorPrefix + `{"error":"failed to encode sandbox failure payload"}`
 	}
-	return string(payload)
+	return toolErrorPrefix + string(payload)
 }
 
 func jsonErrorf(format string, args ...any) string {

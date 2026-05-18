@@ -26,9 +26,8 @@ func classifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64
 
 // classifyBuiltinToolResult classifies built-in tool (bash, read, write) output.
 // Read and write success paths return raw file bytes or {"success":true}; bash
-// success returns raw stdout. Sandbox envelope heuristics (FatalError, Success:false,
-// error) apply only when the payload matches a known producer shape, not arbitrary
-// JSON that happens to include those keys.
+// success returns raw stdout. Sandbox and jsonErrorf failures use toolErrorPrefix
+// so arbitrary command stdout is never inferred from JSON shape alone.
 func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
 	if isToolErrorPayload(raw) {
@@ -44,9 +43,6 @@ func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) To
 		}
 		return SuccessResult(callID, raw, elapsedMs)
 	case toolNameBash:
-		if shouldClassifyBashEnvelope(trimmed) {
-			return classifyRawResult(callID, trimmed, elapsedMs)
-		}
 		return SuccessResult(callID, raw, elapsedMs)
 	default:
 		return classifyRawResult(callID, raw, elapsedMs)
@@ -65,35 +61,6 @@ func classifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResu
 		return classifyRawResult(callID, trimmed, elapsedMs)
 	}
 	return SuccessResult(callID, raw, elapsedMs)
-}
-
-// shouldClassifyBashEnvelope reports whether raw is a known sandbox/jsonErrorf
-// failure payload rather than arbitrary command stdout.
-func shouldClassifyBashEnvelope(trimmed string) bool {
-	if isSandboxFailureEnvelope(trimmed) {
-		return true
-	}
-	// Prefix heuristics apply only to malformed JSON from jsonErrorf/sandboxFailureJSON.
-	if err := json.Unmarshal([]byte(trimmed), &struct{}{}); err != nil {
-		return hasMalformedSandboxErrorPrefix(trimmed)
-	}
-	return false
-}
-
-func isSandboxFailureEnvelope(raw string) bool {
-	var env struct {
-		Success *bool `json:"Success"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &env); err != nil {
-		return strings.HasPrefix(strings.TrimSpace(raw), `{"Success":false`)
-	}
-	return env.Success != nil && !*env.Success
-}
-
-func hasMalformedSandboxErrorPrefix(trimmed string) bool {
-	return strings.HasPrefix(trimmed, `{"error"`) ||
-		strings.HasPrefix(trimmed, `{"FatalError"`) ||
-		strings.HasPrefix(trimmed, `{"Success":false`)
 }
 
 // classifyRawResult inspects a raw tool output string and returns a
