@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +22,11 @@ const (
 	toolNameDelegateParallel = "delegate_parallel"
 
 	defaultMaxToolReadFileBytes = 10 << 20 // 10 MiB
+
+	// toolErrorPrefix marks strings from jsonErrorf so classifiers can tell
+	// tool failures apart from file contents or command stdout that happen to
+	// be single-key {"error":"..."} JSON.
+	toolErrorPrefix = "\x1eagentd/tool-error\x1e"
 )
 
 type ToolExecutor struct {
@@ -120,7 +126,7 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string) string 
 	}
 
 	if args.Command == "" {
-		return `{"error": "command is required"}`
+		return jsonErrorf("command is required")
 	}
 
 	payload := sandbox.Payload{
@@ -166,7 +172,7 @@ func (t *ToolExecutor) executeRead(ctx context.Context, argsJSON string) string 
 	}
 
 	if args.Path == "" {
-		return `{"error": "path is required"}`
+		return jsonErrorf("path is required")
 	}
 
 	fullPath, err := t.resolvePath(args.Path, false)
@@ -209,10 +215,10 @@ func (t *ToolExecutor) executeWrite(ctx context.Context, argsJSON string) string
 	}
 
 	if args.Path == "" {
-		return `{"error": "path is required"}`
+		return jsonErrorf("path is required")
 	}
 	if args.Content == nil {
-		return `{"error": "content is required"}`
+		return jsonErrorf("content is required")
 	}
 
 	fullPath, err := t.resolvePath(args.Path, true)
@@ -250,7 +256,15 @@ func jsonErrorf(format string, args ...any) string {
 		"error": fmt.Sprintf(format, args...),
 	})
 	if err != nil {
-		return `{"error":"failed to encode error payload"}`
+		return toolErrorPrefix + `{"error":"failed to encode error payload"}`
 	}
-	return string(payload)
+	return toolErrorPrefix + string(payload)
+}
+
+func isToolErrorPayload(raw string) bool {
+	return strings.HasPrefix(raw, toolErrorPrefix)
+}
+
+func stripToolErrorPrefix(raw string) string {
+	return strings.TrimPrefix(raw, toolErrorPrefix)
 }

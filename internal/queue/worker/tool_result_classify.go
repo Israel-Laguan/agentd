@@ -13,7 +13,9 @@ func classifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64
 	case toolNameBash:
 		// Hooks may inject sandbox transport JSON (e.g. {"FatalError":...}) for bash.
 		return classifyRawResult(callID, raw, elapsedMs)
-	case toolNameRead, toolNameWrite:
+	case toolNameRead:
+		return classifyPrecomputedReadResult(callID, raw, elapsedMs)
+	case toolNameWrite:
 		return classifyBuiltinToolResult(callID, toolName, raw, elapsedMs)
 	case toolNameDelegate, toolNameDelegateParallel:
 		return classifyDelegateRawResult(callID, raw, elapsedMs)
@@ -29,8 +31,14 @@ func classifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64
 // JSON that happens to include those keys.
 func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
+	if isToolErrorPayload(raw) {
+		return classifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+	}
 	switch toolName {
-	case toolNameRead, toolNameWrite:
+	case toolNameRead:
+		// Success returns arbitrary file bytes; never infer failure from content shape.
+		return SuccessResult(callID, raw, elapsedMs)
+	case toolNameWrite:
 		if isJSONErrorEnvelope(trimmed) {
 			return classifyRawResult(callID, trimmed, elapsedMs)
 		}
@@ -45,10 +53,24 @@ func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) To
 	}
 }
 
+// classifyPrecomputedReadResult classifies hook/cache read results. It keeps the
+// jsonErrorf envelope heuristic for cache entries stored before toolErrorPrefix
+// existed, but live reads never use that heuristic (see classifyBuiltinToolResult).
+func classifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResult {
+	trimmed := strings.TrimSpace(raw)
+	if isToolErrorPayload(raw) {
+		return classifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+	}
+	if isJSONErrorEnvelope(trimmed) {
+		return classifyRawResult(callID, trimmed, elapsedMs)
+	}
+	return SuccessResult(callID, raw, elapsedMs)
+}
+
 // shouldClassifyBashEnvelope reports whether raw is a known sandbox/jsonErrorf
 // failure payload rather than arbitrary command stdout.
 func shouldClassifyBashEnvelope(trimmed string) bool {
-	if isJSONErrorEnvelope(trimmed) || isSandboxFailureEnvelope(trimmed) {
+	if isSandboxFailureEnvelope(trimmed) {
 		return true
 	}
 	// Prefix heuristics apply only to malformed JSON from jsonErrorf/sandboxFailureJSON.
@@ -130,6 +152,9 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 // applying sandbox-style heuristics to arbitrary JSON payloads.
 func classifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
+	if isToolErrorPayload(raw) {
+		return classifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+	}
 	if isJSONErrorEnvelope(trimmed) {
 		return classifyRawResult(callID, trimmed, elapsedMs)
 	}
@@ -151,6 +176,9 @@ func isJSONErrorEnvelope(raw string) bool {
 // without applying sandbox-style heuristics to SubagentResult JSON.
 func classifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
+	if isToolErrorPayload(raw) {
+		return classifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+	}
 	if isJSONErrorEnvelope(trimmed) {
 		return classifyRawResult(callID, trimmed, elapsedMs)
 	}

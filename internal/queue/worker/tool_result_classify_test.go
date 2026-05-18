@@ -251,9 +251,48 @@ func TestClassifyBuiltinToolResult_ReadArbitraryJSON(t *testing.T) {
 	}
 }
 
-func TestClassifyBuiltinToolResult_ReadJSONErrorEnvelope(t *testing.T) {
+func TestClassifyBuiltinToolResult_ReadJSONErrorEnvelopeIsSuccess(t *testing.T) {
 	t.Parallel()
-	tr := classifyBuiltinToolResult("c1", toolNameRead, `{"error":"file not found"}`, 10)
+	raw := `{"error":"file not found"}`
+	tr := classifyBuiltinToolResult("c1", toolNameRead, raw, 10)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("Status = %s, want success (file content, not tool error)", tr.Status)
+	}
+	if tr.Content != raw {
+		t.Fatalf("Content = %q, want raw file bytes preserved", tr.Content)
+	}
+	if strings.Contains(tr.ForContext(), "[ERROR]") {
+		t.Fatalf("ForContext() = %q, want unprefixed file content", tr.ForContext())
+	}
+}
+
+func TestClassifyBuiltinToolResult_ReadPrefixedToolError(t *testing.T) {
+	t.Parallel()
+	raw := jsonErrorf("file not found")
+	tr := classifyBuiltinToolResult("c1", toolNameRead, raw, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+	if tr.Error == nil || tr.Error.Message != "file not found" {
+		t.Fatalf("Error.Message = %v, want file not found", tr.Error)
+	}
+}
+
+func TestClassifyBuiltinToolResult_BashStdoutJSONErrorEnvelope(t *testing.T) {
+	t.Parallel()
+	raw := `{"error":"some text"}`
+	tr := classifyBuiltinToolResult("c1", toolNameBash, raw, 10)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("Status = %s, want success (stdout, not tool error)", tr.Status)
+	}
+	if tr.Content != raw {
+		t.Fatalf("Content = %q, want raw stdout preserved", tr.Content)
+	}
+}
+
+func TestClassifyBuiltinToolResult_BashPrefixedToolError(t *testing.T) {
+	t.Parallel()
+	tr := classifyBuiltinToolResult("c1", toolNameBash, jsonErrorf("execution failed: boom"), 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}

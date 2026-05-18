@@ -23,7 +23,7 @@ func TestToolExecutor_UnknownTool_ReturnsValidJSON(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: `weird"name`, Arguments: `{}`},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v\nout=%s", err, out)
 	}
 	if payload["error"] == "" {
@@ -47,7 +47,7 @@ func TestToolExecutor_Read_RejectsOversizedFile(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -90,7 +90,7 @@ func TestToolExecutor_Bash_ValidationFailure(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -120,7 +120,7 @@ func TestToolExecutor_Bash_PathJail(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v\nout=%s", err, out)
 	}
 	if payload["error"] == "" {
@@ -138,7 +138,7 @@ func TestToolExecutor_Bash_SandboxFailure(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -166,6 +166,34 @@ func TestToolExecutor_Read_Success(t *testing.T) {
 	}
 }
 
+func TestToolExecutor_Read_ErrorShapedFileContent_ClassifiedAsSuccess(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	content := `{"error":"cached api failure"}`
+	path := filepath.Join(dir, "response.json")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ex := NewToolExecutor(nil, dir, nil, 0)
+	raw := ex.Execute(context.Background(), gateway.ToolCall{
+		Function: gateway.ToolCallFunction{
+			Name:      toolNameRead,
+			Arguments: `{"path": "response.json"}`,
+		},
+	})
+	if raw != content {
+		t.Fatalf("raw = %q, want file bytes %q", raw, content)
+	}
+	tr := classifyBuiltinToolResult("c1", toolNameRead, raw, 0)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("Status = %s, want success for error-shaped file content", tr.Status)
+	}
+	if tr.ForContext() != content {
+		t.Fatalf("ForContext() = %q, want raw content without [ERROR] prefix", tr.ForContext())
+	}
+}
+
 func TestToolExecutor_Read_ValidationFailure(t *testing.T) {
 	t.Parallel()
 	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
@@ -176,7 +204,7 @@ func TestToolExecutor_Read_ValidationFailure(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -203,7 +231,7 @@ func TestToolExecutor_Read_RejectsFIFO(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -225,7 +253,7 @@ func TestToolExecutor_Read_PathJail(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -244,7 +272,7 @@ func TestToolExecutor_Write_Success(t *testing.T) {
 		},
 	})
 	var payload map[string]any
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] != nil {
@@ -271,7 +299,7 @@ func TestToolExecutor_Write_ValidationFailure(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -289,7 +317,7 @@ func TestToolExecutor_Write_ValidationFailure_MissingContent(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -311,7 +339,7 @@ func TestToolExecutor_Write_AllowsEmptyContent(t *testing.T) {
 		},
 	})
 	var payload map[string]any
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] != nil {
@@ -345,7 +373,7 @@ func TestToolExecutor_Read_CancelledContext(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -384,7 +412,7 @@ func TestToolExecutor_Write_PathJail(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -411,7 +439,7 @@ func TestToolExecutor_Read_PathJail_Symlink(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -439,7 +467,7 @@ func TestToolExecutor_Write_PathJail_SymlinkParent(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -476,7 +504,7 @@ func TestToolExecutor_Write_PathJail_Symlink(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {

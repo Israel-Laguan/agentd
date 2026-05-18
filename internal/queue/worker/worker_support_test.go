@@ -72,7 +72,7 @@ func TestEmitToolResultExplicitJSONFailures(t *testing.T) {
 		name   string
 		result string
 	}{
-		{name: "error", result: `{"error":"boom"}`},
+		{name: "error", result: jsonErrorf("boom")},
 		{name: "fatal", result: `{"FatalError":"boom"}`},
 		{name: "success false", result: `{"Success":false,"ExitCode":1}`},
 	}

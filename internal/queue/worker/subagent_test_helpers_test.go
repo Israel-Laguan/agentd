@@ -94,7 +94,7 @@ func (f *fakeSandbox) Execute(_ context.Context, _ sandbox.Payload) (sandbox.Res
 
 func isErrorJSON(s string) bool {
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(s), &payload); err != nil {
+	if err := json.Unmarshal([]byte(stripToolErrorPrefix(s)), &payload); err != nil {
 		return false
 	}
 	_, ok := payload["error"]
