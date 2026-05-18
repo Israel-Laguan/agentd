@@ -280,6 +280,52 @@ func TestClassifyRawResult_MalformedJSONWithLeadingWhitespace(t *testing.T) {
 	}
 }
 
+func TestClassifyDelegateRawResult_JSONErrorEnvelope(t *testing.T) {
+	t.Parallel()
+	tr := classifyDelegateRawResult("c1", `{"error":"delegation failed: boom"}`, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+	if tr.Error == nil || tr.Error.Message != "delegation failed: boom" {
+		t.Fatalf("Error.Message = %v, want delegation failed: boom", tr.Error)
+	}
+}
+
+func TestClassifyDelegateRawResult_SubagentSuccess(t *testing.T) {
+	t.Parallel()
+	raw := `{"status":"success","output":"done","iterations":2}`
+	tr := classifyDelegateRawResult("c1", raw, 10)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("Status = %s, want success", tr.Status)
+	}
+	if tr.Content != raw {
+		t.Fatalf("Content = %q, want raw JSON preserved", tr.Content)
+	}
+}
+
+func TestClassifyDelegateRawResult_SubagentFailure(t *testing.T) {
+	t.Parallel()
+	tr := classifyDelegateRawResult("c1", `{"status":"failure","error":"task failed","iterations":1}`, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+	if tr.Error == nil || tr.Error.Message != "task failed" {
+		t.Fatalf("Error.Message = %v, want task failed", tr.Error)
+	}
+}
+
+func TestClassifyDelegateRawResult_ParallelWithFailure(t *testing.T) {
+	t.Parallel()
+	raw := `[{"status":"success","output":"ok","iterations":1},{"status":"failure","error":"parallel fail","iterations":1}]`
+	tr := classifyDelegateRawResult("c1", raw, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+	if tr.Error == nil || tr.Error.Message != "parallel fail" {
+		t.Fatalf("Error.Message = %v, want parallel fail", tr.Error)
+	}
+}
+
 func TestForContext_UsesContentNotErrorMessage(t *testing.T) {
 	t.Parallel()
 	tr := NonRetryableErrorResult("c1", "original secret", "", 10)
