@@ -353,26 +353,35 @@ func TestClassifyDelegateRawResult_SubagentSuccess(t *testing.T) {
 
 func TestClassifyDelegateRawResult_SubagentFailure(t *testing.T) {
 	t.Parallel()
-	tr := classifyDelegateRawResult("c1", `{"status":"failure","error":"task failed","iterations":1}`, 10)
+	raw := `{"status":"failure","error":"task failed","iterations":1}`
+	tr := classifyDelegateRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
 	if tr.Error == nil || tr.Error.Message != "task failed" {
 		t.Fatalf("Error.Message = %v, want task failed", tr.Error)
 	}
+	if tr.Content != raw {
+		t.Fatalf("Content = %q, want raw JSON preserved", tr.Content)
+	}
 }
 
 func TestClassifyDelegateRawResult_SubagentTimeout(t *testing.T) {
 	t.Parallel()
-	tr := classifyDelegateRawResult("c1", `{"status":"timeout","error":"max iterations reached","iterations":20}`, 10)
+	raw := `{"status":"timeout","error":"max iterations reached","iterations":20}`
+	tr := classifyDelegateRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusTimeout {
 		t.Fatalf("Status = %s, want timeout", tr.Status)
 	}
-	if tr.Content != "max iterations reached" {
-		t.Fatalf("Content = %q, want max iterations reached", tr.Content)
+	if tr.Content != raw {
+		t.Fatalf("Content = %q, want raw JSON preserved", tr.Content)
 	}
 	if !tr.Retryable {
 		t.Error("Retryable = false, want true")
+	}
+	got := tr.ForContext()
+	if !strings.Contains(got, "iterations") {
+		t.Fatalf("ForContext() = %q, want structured JSON in model context", got)
 	}
 }
 
@@ -385,6 +394,9 @@ func TestClassifyDelegateRawResult_ParallelWithFailure(t *testing.T) {
 	}
 	if tr.Error == nil || tr.Error.Message != "parallel fail" {
 		t.Fatalf("Error.Message = %v, want parallel fail", tr.Error)
+	}
+	if tr.Content != raw {
+		t.Fatalf("Content = %q, want full batch JSON preserved", tr.Content)
 	}
 }
 

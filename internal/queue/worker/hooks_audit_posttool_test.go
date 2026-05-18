@@ -127,7 +127,7 @@ func TestAuditHook_ScrubsEventPayloads(t *testing.T) {
 	secretArgs := `{"command":"export API_KEY=sk-AAAAAAAAAAAAAAAAAAAAAA"}`
 	secretResult := "output with token=sk-BBBBBBBBBBBBBBBBBBBBBB"
 
-	_, _ = hook.Fn(HookContext{
+	_, err := hook.Fn(HookContext{
 		ToolName:  "bash",
 		Args:      secretArgs,
 		CallID:    "call_secret",
@@ -135,6 +135,9 @@ func TestAuditHook_ScrubsEventPayloads(t *testing.T) {
 		ProjectID: "proj-2",
 		Timestamp: time.Now(),
 	}, secretResult)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if len(sink.events) != 2 {
 		t.Fatalf("expected 2 events, got %d", len(sink.events))
