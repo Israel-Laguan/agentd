@@ -159,6 +159,52 @@ func TestDispatchTool_NoTimeout_FastTool(t *testing.T) {
 	}
 }
 
+// TestDispatchToolWithHooks_Timeout verifies that the production agentic path
+// (dispatchToolWithHooks → dispatchToolWithProject) also enforces per-tool
+// timeouts, not just the public DispatchTool entry point.
+func TestDispatchToolWithHooks_Timeout(t *testing.T) {
+	t.Parallel()
+	sb := &slowSandbox{delay: 5 * time.Second}
+	executor := NewToolExecutor(sb, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+
+	w := &Worker{
+		toolExecutor: executor,
+		toolTimeouts: config.ToolTimeoutsConfig{
+			Defaults: map[string]time.Duration{
+				"bash": 50 * time.Millisecond,
+			},
+		},
+	}
+
+	call := gateway.ToolCall{
+		ID:       "call_hooks",
+		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sleep 10"}`},
+	}
+
+	result, suspend := w.dispatchToolWithHooks(
+		context.Background(), "s1", "p1", time.Now(),
+		call, nil, executor, nil, nil,
+	)
+
+	if suspend {
+		t.Fatal("expected suspend=false")
+	}
+
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("failed to parse result JSON: %v", err)
+	}
+	if parsed["status"] != "timeout" {
+		t.Fatalf("status = %q, want \"timeout\"", parsed["status"])
+	}
+	if !strings.HasPrefix(parsed["error"], "[TIMEOUT]") {
+		t.Fatalf("error should start with [TIMEOUT], got %q", parsed["error"])
+	}
+	if !strings.Contains(parsed["error"], "bash") {
+		t.Fatalf("error should mention tool name, got %q", parsed["error"])
+	}
+}
+
 func TestDispatchTool_Timeout_DistinguishableFromError(t *testing.T) {
 	t.Parallel()
 	sb := &slowSandbox{delay: 5 * time.Second}
