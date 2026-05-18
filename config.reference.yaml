@@ -195,6 +195,15 @@ queue:
     delegate: "10m"
     delegate_parallel: "10m"
     default: "30s"
+  # Tool-level retry configuration.
+  # Transient tool failures (timeouts, network errors) are retried transparently
+  # with exponential backoff + jitter. The model never sees intermediate failures.
+  # Only tools listed in tools are eligible; others are never retried.
+  tool_retries:
+    max_attempts: 3        # total attempts per tool call (1 = no retry)
+    base_delay: "200ms"    # base delay between retries (Go duration string)
+    max_delay: "5s"        # ceiling for exponential backoff (Go duration string)
+    tools: ["read"]        # allowlisted tool names safe to retry
 
 # Heartbeat reconciliation.
 heartbeat:
