@@ -99,6 +99,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		SkillsThreshold:           cfg.Queue.Skills.Threshold,
 		SkillsTopK:                cfg.Queue.Skills.TopK,
 		LegacyHandoffTimeout:      cfg.Queue.HITL.LegacyHandoffTimeout,
+		ToolTimeouts:              cfg.Queue.ToolTimeouts,
 	})
 }
 

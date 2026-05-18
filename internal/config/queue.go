@@ -60,6 +60,11 @@ const (
 
 	// DefaultWriteToolTimeout is the default timeout for write tool calls.
 	DefaultWriteToolTimeout = 10 * time.Second
+
+	// DefaultDelegateToolTimeout is the default timeout for delegate tool
+	// calls. Delegation spawns sub-agents that run full agentic loops, so
+	// the timeout must be generous (aligned with the task deadline).
+	DefaultDelegateToolTimeout = 10 * time.Minute
 )
 
 // InstructionsConfig holds paths for the instruction hierarchy layers.
@@ -163,6 +168,8 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.tool_timeouts.bash", DefaultBashToolTimeout.String())
 	v.SetDefault("queue.tool_timeouts.read", DefaultReadToolTimeout.String())
 	v.SetDefault("queue.tool_timeouts.write", DefaultWriteToolTimeout.String())
+	v.SetDefault("queue.tool_timeouts.delegate", DefaultDelegateToolTimeout.String())
+	v.SetDefault("queue.tool_timeouts.delegate_parallel", DefaultDelegateToolTimeout.String())
 	v.SetDefault("queue.tool_timeouts.default", DefaultToolTimeout.String())
 }
 
@@ -201,7 +208,7 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 }
 
 func loadToolTimeoutsConfig(v *viper.Viper) ToolTimeoutsConfig {
-	knownKeys := []string{"bash", "read", "write", "default"}
+	knownKeys := []string{"bash", "read", "write", "delegate", "delegate_parallel", "default"}
 	result := ToolTimeoutsConfig{Defaults: make(map[string]time.Duration, len(knownKeys))}
 	for _, k := range knownKeys {
 		if d := v.GetDuration("queue.tool_timeouts." + k); d > 0 {
