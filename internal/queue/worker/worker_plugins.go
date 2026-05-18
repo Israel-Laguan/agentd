@@ -110,7 +110,7 @@ func (w *Worker) dispatchToolWithHooks(
 		}
 	}
 
-	tr := w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
+	tr := w.dispatchToolWithProjectWithRetry(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
 
 	if taskHooks != nil {
 		hookCtx.ResultStatus = tr.Status
@@ -138,4 +138,24 @@ func (w *Worker) runDispatchPostHooks(hookCtx HookContext, tr ToolResult, taskHo
 		content = taskHooks.RunPost(hookCtx, content)
 	}
 	return content
+}
+
+// dispatchToolWithProjectWithRetry wraps dispatchToolWithProject with the
+// RetryingExecutor for allowlisted tools. Pre/post hooks run once in the
+// caller; only the core dispatch is retried.
+func (w *Worker) dispatchToolWithProjectWithRetry(
+	ctx context.Context,
+	sessionID, projectID string,
+	call gateway.ToolCall,
+	toolToAdapter map[string]string,
+	toolExecutor *ToolExecutor,
+	scopedCapabilities *capabilities.Registry,
+) ToolResult {
+	if w.toolRetrier == nil || !w.toolRetries.Allows(call.Function.Name) {
+		return w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
+	}
+	return w.toolRetrier.Execute(ctx, func(innerCtx context.Context) ToolResult {
+		tr := w.dispatchToolWithProject(innerCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
+		return augmentTransientRetryable(tr)
+	})
 }

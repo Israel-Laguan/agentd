@@ -65,6 +65,16 @@ const (
 	// calls. Delegation spawns sub-agents that run full agentic loops, so
 	// the timeout must be generous (aligned with the task deadline).
 	DefaultDelegateToolTimeout = 10 * time.Minute
+
+	// DefaultToolRetryMaxAttempts is the default number of retry attempts
+	// for tool-level transient failures.
+	DefaultToolRetryMaxAttempts = 3
+
+	// DefaultToolRetryBaseDelay is the base delay between tool retry attempts.
+	DefaultToolRetryBaseDelay = 200 * time.Millisecond
+
+	// DefaultToolRetryMaxDelay is the ceiling for exponential backoff.
+	DefaultToolRetryMaxDelay = 5 * time.Second
 )
 
 // InstructionsConfig holds paths for the instruction hierarchy layers.
@@ -128,6 +138,23 @@ func (c ToolTimeoutsConfig) Lookup(toolName string, fallback time.Duration) time
 	return fallback
 }
 
+// ToolRetriesConfig controls tool-level retry behaviour for transient errors.
+type ToolRetriesConfig struct {
+	MaxAttempts int
+	BaseDelay   time.Duration
+	MaxDelay    time.Duration
+	Tools       map[string]struct{}
+}
+
+// Allows reports whether transparent retries are enabled for the given tool.
+func (c ToolRetriesConfig) Allows(toolName string) bool {
+	if len(c.Tools) == 0 {
+		return false
+	}
+	_, ok := c.Tools[toolName]
+	return ok
+}
+
 type QueueConfig struct {
 	TaskDeadline               time.Duration
 	QueuedReconcileAfter       time.Duration
@@ -142,6 +169,7 @@ type QueueConfig struct {
 	Skills                     SkillsConfig
 	HITL                       HITLConfig
 	ToolTimeouts               ToolTimeoutsConfig
+	ToolRetries                ToolRetriesConfig
 }
 
 func setQueueDefaults(v *viper.Viper) {
@@ -171,6 +199,10 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.tool_timeouts.delegate", DefaultDelegateToolTimeout.String())
 	v.SetDefault("queue.tool_timeouts.delegate_parallel", DefaultDelegateToolTimeout.String())
 	v.SetDefault("queue.tool_timeouts.default", DefaultToolTimeout.String())
+	v.SetDefault("queue.tool_retries.max_attempts", DefaultToolRetryMaxAttempts)
+	v.SetDefault("queue.tool_retries.base_delay", DefaultToolRetryBaseDelay.String())
+	v.SetDefault("queue.tool_retries.max_delay", DefaultToolRetryMaxDelay.String())
+	v.SetDefault("queue.tool_retries.tools", []string{"read"})
 }
 
 func loadQueueConfig(v *viper.Viper) QueueConfig {
@@ -204,7 +236,24 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 			LegacyHandoffTimeout: v.GetDuration("queue.hitl.legacy_handoff_timeout"),
 		},
 		ToolTimeouts: loadToolTimeoutsConfig(v),
+		ToolRetries:  loadToolRetriesConfig(v),
 	}
+}
+
+func loadToolRetriesConfig(v *viper.Viper) ToolRetriesConfig {
+	cfg := ToolRetriesConfig{
+		MaxAttempts: v.GetInt("queue.tool_retries.max_attempts"),
+		BaseDelay:   v.GetDuration("queue.tool_retries.base_delay"),
+		MaxDelay:    v.GetDuration("queue.tool_retries.max_delay"),
+	}
+	tools := v.GetStringSlice("queue.tool_retries.tools")
+	if len(tools) > 0 {
+		cfg.Tools = make(map[string]struct{}, len(tools))
+		for _, name := range tools {
+			cfg.Tools[name] = struct{}{}
+		}
+	}
+	return cfg
 }
 
 func loadToolTimeoutsConfig(v *viper.Viper) ToolTimeoutsConfig {
