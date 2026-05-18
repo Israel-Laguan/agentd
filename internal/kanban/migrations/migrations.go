@@ -279,7 +279,7 @@ func migrateToV9(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("check agent_profiles.agentic_mode column: %w", err)
 	}
 	if !has {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE agent_profiles ADD COLUMN agentic_mode INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE agent_profiles ADD COLUMN agentic_mode INTEGER NOT NULL DEFAULT 0 CHECK (agentic_mode IN (0, 1))`); err != nil {
 			return fmt.Errorf("add agent_profiles.agentic_mode column: %w", err)
 		}
 	}
