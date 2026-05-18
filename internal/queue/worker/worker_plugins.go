@@ -89,8 +89,12 @@ func (w *Worker) dispatchToolWithHooks(
 
 	if taskHooks != nil {
 		if verdict := taskHooks.RunPre(hookCtx); verdict.ShortCircuit {
+			// Intentionally skips post-hooks (audit, scrub). Hooks that need
+			// observability should use Veto+Result without ShortCircuit; see DryRunHook.
 			return classifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0), verdict.Suspend
 		} else if verdict.Veto && verdict.Result != "" {
+			// Suspend controls agentic loop pause and status: substitute answers
+			// continue as Success; human-review gates surface as Vetoed.
 			if verdict.Suspend {
 				tr := VetoedResult(call.ID, verdict.Result)
 				tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
