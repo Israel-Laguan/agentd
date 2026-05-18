@@ -66,7 +66,7 @@ func TestDispatchTool_ScopedCapabilityWithoutAdapterIndex(t *testing.T) {
 	}
 
 	// Dispatch with NO toolToAdapter index (simulating dynamic registration)
-	tr := w.dispatchToolWithProject(context.Background(), "session-1", "project-1", call, nil, ex, scopedRegistry)
+	tr := w.dispatchToolWithProject(context.Background(), "session-1", "project-1", call, nil, ex, scopedRegistry, false)
 
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(tr.Content), &payload); err != nil {

@@ -59,18 +59,22 @@ func (r *RetryingExecutor) Execute(ctx context.Context, fn RetryDispatchFunc) To
 			break
 		}
 		delay := r.backoff(attempt)
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
 			return result
-		case <-time.After(delay):
+		case <-timer.C:
 		}
 	}
 	return result
 }
 
-// backoff computes exponential delay with full jitter for the given
-// zero-based attempt index: min(MaxDelay, BaseDelay * 2^attempt) * rand.
-func (r *RetryingExecutor) backoff(attempt int) time.Duration {
+// backoffCap returns the exponential cap for the given zero-based attempt:
+// min(MaxDelay, BaseDelay * 2^attempt).
+func (r *RetryingExecutor) backoffCap(attempt int) time.Duration {
 	cap := r.cfg.MaxDelay
 	delay := r.cfg.BaseDelay
 	for i := 0; i < attempt; i++ {
@@ -88,11 +92,23 @@ func (r *RetryingExecutor) backoff(attempt int) time.Duration {
 	if delay > cap {
 		delay = cap
 	}
+	return delay
+}
+
+// backoff computes exponential delay with full jitter for the given
+// zero-based attempt index: uniform in [0, backoffCap(attempt)].
+func (r *RetryingExecutor) backoff(attempt int) time.Duration {
+	delay := r.backoffCap(attempt)
 	if delay <= 0 {
 		return 0
 	}
+	n := int64(delay)
+	if n == 1<<63-1 {
+		//nolint:gosec // jitter does not need crypto/rand
+		return time.Duration(rand.Int63n(n))
+	}
 	//nolint:gosec // jitter does not need crypto/rand
-	return time.Duration(rand.Int63n(int64(delay) + 1))
+	return time.Duration(rand.Int63n(n + 1))
 }
 
 // shouldRetry reports whether the executor should re-invoke the tool.
