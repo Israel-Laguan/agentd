@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	currentSchemaVersion = 8
+	currentSchemaVersion = 9
 	schemaVersionKey     = "schema_version"
 )
 
@@ -33,6 +33,7 @@ func Run(ctx context.Context, db *sql.DB) error {
 		{6, migrateToV6},
 		{7, migrateToV7},
 		{8, migrateToV8},
+		{9, migrateToV9},
 	}
 	for _, migration := range migrations {
 		if err := applyMigration(ctx, db, version, migration.version, migration.run); err != nil {
@@ -263,4 +264,24 @@ func migrateToV8(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return setSchemaVersion(ctx, db, 8)
+}
+
+func migrateToV9(ctx context.Context, db *sql.DB) error {
+	exists, err := tableExists(ctx, db, "agent_profiles")
+	if err != nil {
+		return fmt.Errorf("check agent_profiles table for schema migration v9: %w", err)
+	}
+	if !exists {
+		return setSchemaVersion(ctx, db, 9)
+	}
+	has, err := tableHasColumn(ctx, db, "agent_profiles", "agentic_mode")
+	if err != nil {
+		return fmt.Errorf("check agent_profiles.agentic_mode column: %w", err)
+	}
+	if !has {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE agent_profiles ADD COLUMN agentic_mode INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("add agent_profiles.agentic_mode column: %w", err)
+		}
+	}
+	return setSchemaVersion(ctx, db, 9)
 }
