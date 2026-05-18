@@ -28,7 +28,7 @@ import (
 //
 // Returns a structured ToolResult describing the outcome.
 func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) ToolResult {
-	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil)
+	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil, false)
 }
 
 // timeoutToolResult returns a structured ToolResult for a timed-out tool.
@@ -36,19 +36,19 @@ func timeoutToolResult(callID string, timeout time.Duration) ToolResult {
 	return TimeoutResult(callID, timeout.Milliseconds())
 }
 
-func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) ToolResult {
+func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, retry bool) ToolResult {
 	timeout := w.toolTimeouts.Lookup(call.Function.Name, config.DefaultToolTimeout)
 	toolCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	result := w.executeToolCore(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
+	result := w.executeToolCore(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, retry)
 	if toolCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
 		return timeoutToolResult(call.ID, timeout)
 	}
 	return result
 }
 
-func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) ToolResult {
+func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, retry bool) ToolResult {
 	start := time.Now()
 	hookCtx := HookContext{
 		ToolName:  call.Function.Name,
@@ -82,19 +82,13 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 	}
 
 	var tr ToolResult
-	switch call.Function.Name {
-	case toolNameBash, toolNameRead, toolNameWrite:
-		raw := toolExecutor.Execute(ctx, call)
-		tr = classifyBuiltinToolResult(call.ID, call.Function.Name, raw, time.Since(start).Milliseconds())
-	case toolNameDelegate:
-		raw := w.executeDelegateWithCapabilities(ctx, call, toolExecutor, scopedCapabilities)
-		tr = classifyDelegateRawResult(call.ID, raw, time.Since(start).Milliseconds())
-	case toolNameDelegateParallel:
-		raw := w.executeDelegateParallel(ctx, call, toolExecutor, scopedCapabilities)
-		tr = classifyDelegateRawResult(call.ID, raw, time.Since(start).Milliseconds())
-	default:
-		raw := executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
-		tr = classifyCapabilityRawResult(call.ID, raw, time.Since(start).Milliseconds())
+	if retry && w.toolRetrier != nil && w.toolRetries.Allows(call.Function.Name) {
+		tr = w.toolRetrier.Execute(ctx, func(innerCtx context.Context) ToolResult {
+			bodyStart := time.Now()
+			return augmentTransientRetryable(w.runToolBody(innerCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, bodyStart))
+		})
+	} else {
+		tr = w.runToolBody(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, start)
 	}
 
 	if w.hooks != nil {

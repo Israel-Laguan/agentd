@@ -83,27 +83,36 @@ func TestRetryingExecutor_SuccessfulRetry(t *testing.T) {
 	}
 }
 
-func TestRetryingExecutor_BackoffIncreases(t *testing.T) {
+func TestRetryingExecutor_BackoffCapIncreases(t *testing.T) {
 	executor := NewRetryingExecutor(RetryConfig{
-		MaxAttempts: 4,
-		BaseDelay:   10 * time.Millisecond,
-		MaxDelay:    1 * time.Second,
+		BaseDelay: 10 * time.Millisecond,
+		MaxDelay:  1 * time.Second,
 	})
 
-	var timestamps []time.Time
-	executor.Execute(context.Background(), func(_ context.Context) ToolResult {
-		timestamps = append(timestamps, time.Now())
-		return TimeoutResult("c1", 100)
-	})
-
-	if len(timestamps) != 4 {
-		t.Fatalf("expected 4 timestamps, got %d", len(timestamps))
+	cap0 := executor.backoffCap(0)
+	cap1 := executor.backoffCap(1)
+	cap2 := executor.backoffCap(2)
+	if cap0 >= cap1 || cap1 >= cap2 {
+		t.Fatalf("expected increasing caps: %v, %v, %v", cap0, cap1, cap2)
 	}
+	if cap2 > executor.cfg.MaxDelay {
+		t.Fatalf("cap %v exceeds MaxDelay %v", cap2, executor.cfg.MaxDelay)
+	}
+}
 
-	for i := 1; i < len(timestamps); i++ {
-		gap := timestamps[i].Sub(timestamps[i-1])
-		if gap <= 0 {
-			t.Fatalf("expected a retry delay between attempt %d and %d, got %v", i-1, i, gap)
+func TestRetryingExecutor_BackoffWithinCap(t *testing.T) {
+	executor := NewRetryingExecutor(RetryConfig{
+		BaseDelay: 10 * time.Millisecond,
+		MaxDelay:  1 * time.Second,
+	})
+
+	for attempt := 0; attempt < 4; attempt++ {
+		cap := executor.backoffCap(attempt)
+		for i := 0; i < 50; i++ {
+			d := executor.backoff(attempt)
+			if d < 0 || d > cap {
+				t.Fatalf("attempt %d: backoff %v outside [0, %v]", attempt, d, cap)
+			}
 		}
 	}
 }
