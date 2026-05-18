@@ -89,7 +89,7 @@ func (w *Worker) dispatchToolWithHooks(
 
 	if taskHooks != nil {
 		if verdict := taskHooks.RunPre(hookCtx); verdict.ShortCircuit {
-			return SuccessResult(call.ID, verdict.Result, 0), verdict.Suspend
+			return classifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0), verdict.Suspend
 		} else if verdict.Veto && verdict.Result != "" {
 			if verdict.Suspend {
 				return VetoedResult(call.ID, verdict.Result), true

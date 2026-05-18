@@ -156,6 +156,19 @@ func FatalResult(callID, message string, elapsedMs int64) ToolResult {
 	}
 }
 
+// classifyPrecomputedToolResult classifies a hook-supplied result (cache hit,
+// short-circuit) using the same rules as the normal execution path for that tool.
+func classifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
+	switch toolName {
+	case toolNameBash, toolNameRead, toolNameWrite:
+		return classifyRawResult(callID, raw, elapsedMs)
+	case toolNameDelegate, toolNameDelegateParallel:
+		return classifyDelegateRawResult(callID, raw, elapsedMs)
+	default:
+		return classifyCapabilityRawResult(callID, raw, elapsedMs)
+	}
+}
+
 // classifyRawResult inspects a raw tool output string and returns a
 // typed ToolResult. It uses the same JSON-envelope heuristics that
 // parseToolExitCode relied on, so callers that previously examined the
