@@ -138,7 +138,7 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string) string 
 	}
 
 	if !result.Success {
-		return jsonErrorf("command failed with exit code %d: %s %s", result.ExitCode, result.Stdout, result.Stderr)
+		return sandboxFailureJSON(result)
 	}
 
 	output := result.Stdout
@@ -230,6 +230,19 @@ func (t *ToolExecutor) executeWrite(ctx context.Context, argsJSON string) string
 	}
 
 	return `{"success": true}`
+}
+
+func sandboxFailureJSON(result sandbox.Result) string {
+	payload, err := json.Marshal(map[string]any{
+		"Success":  false,
+		"ExitCode": result.ExitCode,
+		"Stdout":   result.Stdout,
+		"Stderr":   result.Stderr,
+	})
+	if err != nil {
+		return `{"error":"failed to encode sandbox failure payload"}`
+	}
+	return string(payload)
 }
 
 func jsonErrorf(format string, args ...any) string {

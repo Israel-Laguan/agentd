@@ -130,6 +130,32 @@ func TestForContext_FatalEmptyMessage(t *testing.T) {
 	}
 }
 
+func TestToolResultExitCode(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		tr   ToolResult
+		want int
+	}{
+		{"success", SuccessResult("c1", "ok", 0), 0},
+		{
+			"bash_failure",
+			classifyRawResult("c1", `{"Success":false,"ExitCode":127}`, 0),
+			127,
+		},
+		{"vetoed", VetoedResult("c1", "blocked"), -1},
+		{"error_no_code", NonRetryableErrorResult("c1", "fail", "", 0), -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := toolResultExitCode(tt.tr); got != tt.want {
+				t.Fatalf("toolResultExitCode() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSuccessResult_Fields(t *testing.T) {
 	t.Parallel()
 	tr := SuccessResult("call-1", "output", 42)
@@ -274,6 +300,9 @@ func TestClassifyRawResult_JSONSuccessFalse(t *testing.T) {
 	}
 	if tr.Error == nil || !strings.Contains(tr.Error.Message, "exit code 1") {
 		t.Fatalf("Error.Message = %v, want exit code summary", tr.Error)
+	}
+	if !tr.ExitCodeSet || tr.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, ExitCodeSet = %v, want 1/true", tr.ExitCode, tr.ExitCodeSet)
 	}
 }
 

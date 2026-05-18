@@ -61,7 +61,12 @@ func emitToolCallHook(ctx context.Context, sink models.EventSink, hctx HookConte
 func emitToolResultHook(ctx context.Context, sink models.EventSink, hctx HookContext, result string, durationMs int64, scrubber sandbox.Scrubber) {
 	var exitCode int
 	if hctx.ResultStatusSet {
-		exitCode = toolResultExitCode(ToolResult{Status: hctx.ResultStatus, Content: result})
+		tr := ToolResult{Status: hctx.ResultStatus, Content: result}
+		if hctx.ResultExitCodeSet {
+			tr.ExitCode = hctx.ResultExitCode
+			tr.ExitCodeSet = true
+		}
+		exitCode = toolResultExitCode(tr)
 	} else {
 		exitCode = parseToolExitCode(result)
 	}
