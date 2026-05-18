@@ -69,6 +69,7 @@ func (r *RetryingExecutor) Execute(ctx context.Context, fn RetryDispatchFunc) To
 		case <-timer.C:
 		}
 	}
+	result.Retryable = false
 	return result
 }
 
