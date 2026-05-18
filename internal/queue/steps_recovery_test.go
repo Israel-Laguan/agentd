@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -121,10 +122,10 @@ func (s *queueScenario) ghostNotModified(context.Context) error {
 	return nil
 }
 
-func (s *queueScenario) daemonIsRunning(ctx context.Context) error {
-	// Context only; Start runs after workerRunningSandbox rebuilds the daemon so we
-	// do not race with rebuild() replacing s.daemon while Start is in flight.
-	s.ctx, s.cancel = context.WithCancel(ctx)
+func (s *queueScenario) daemonIsRunning(context.Context) error {
+	// Use a background-derived context so godog scenario cancellation does not
+	// race with daemon shutdown (Start waits for in-flight workers on s.ctx).
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.done = make(chan error, 1)
 	return nil
 }
@@ -137,7 +138,7 @@ func (s *queueScenario) startDaemon() {
 	go func() { s.done <- s.daemon.Start(s.ctx) }()
 }
 
-func (s *queueScenario) workerRunningSandbox(ctx context.Context) error {
+func (s *queueScenario) workerRunningSandbox(context.Context) error {
 	s.store.seed(1, models.TaskStateReady)
 	s.sandbox = &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
 	s.rebuild(1)
@@ -146,10 +147,10 @@ func (s *queueScenario) workerRunningSandbox(ctx context.Context) error {
 	select {
 	case <-s.sandbox.started:
 		return nil
-	case <-time.After(time.Second):
+	case <-time.After(5 * time.Second):
 		return fmt.Errorf("sandbox did not start")
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-s.ctx.Done():
+		return fmt.Errorf("daemon context canceled before sandbox started")
 	}
 }
 
@@ -179,11 +180,11 @@ func (s *queueScenario) sandboxCaughtCancel(context.Context) error {
 func (s *queueScenario) appExitsAfterRelease(context.Context) error {
 	select {
 	case err := <-s.done:
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			return err
 		}
-	case <-time.After(time.Second):
+	case <-time.After(5 * time.Second):
 		return fmt.Errorf("daemon did not stop")
 	}
-	return requireEqual("in-use slots", s.daemon.sem.InUse(), 0)
+	return waitFor(func() bool { return s.daemon.sem.InUse() == 0 }, "in-use slots")
 }

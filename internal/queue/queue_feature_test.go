@@ -105,6 +105,15 @@ type queueScenario struct {
 }
 
 func (s *queueScenario) reset() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	if s.done != nil {
+		select {
+		case <-s.done:
+		case <-time.After(5 * time.Second):
+		}
+	}
 	s.store = newQueueStore()
 	s.breaker = NewCircuitBreaker()
 	s.now = time.Now().UTC()
