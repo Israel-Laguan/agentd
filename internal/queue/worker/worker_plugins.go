@@ -89,14 +89,16 @@ func (w *Worker) dispatchToolWithHooks(
 
 	if taskHooks != nil {
 		if verdict := taskHooks.RunPre(hookCtx); verdict.ShortCircuit {
-			return SuccessResult(call.ID, verdict.Result, 0), verdict.Suspend
+			return classifyRawResult(call.ID, verdict.Result, 0), verdict.Suspend
 		} else if verdict.Veto && verdict.Result != "" {
 			if verdict.Suspend {
 				return VetoedResult(call.ID, verdict.Result), true
 			}
-			result := verdict.Result
-			result = taskHooks.RunPost(hookCtx, result)
-			return SuccessResult(call.ID, result, 0), false
+			tr := SuccessResult(call.ID, verdict.Result, 0)
+			hookCtx.ResultStatus = tr.Status
+			hookCtx.ResultStatusSet = true
+			tr.Content = taskHooks.RunPost(hookCtx, tr.Content)
+			return tr, false
 		} else if verdict.Veto {
 			return VetoedResult(call.ID, verdict.Reason), verdict.Suspend
 		}
@@ -105,6 +107,8 @@ func (w *Worker) dispatchToolWithHooks(
 	tr := w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
 
 	if taskHooks != nil {
+		hookCtx.ResultStatus = tr.Status
+		hookCtx.ResultStatusSet = true
 		tr.Content = taskHooks.RunPost(hookCtx, tr.Content)
 	}
 	return tr, false

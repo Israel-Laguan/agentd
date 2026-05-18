@@ -272,6 +272,14 @@ func TestClassifyRawResult_MalformedJSONWithFatalPrefix(t *testing.T) {
 	}
 }
 
+func TestClassifyRawResult_MalformedJSONWithLeadingWhitespace(t *testing.T) {
+	t.Parallel()
+	tr := classifyRawResult("c1", "\n {\"error\":broken", 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+}
+
 func TestForContext_UsesContentNotErrorMessage(t *testing.T) {
 	t.Parallel()
 	tr := NonRetryableErrorResult("c1", "original secret", "", 10)
