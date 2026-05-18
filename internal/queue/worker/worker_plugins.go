@@ -96,7 +96,7 @@ func (w *Worker) dispatchToolWithHooks(
 			}
 			result := verdict.Result
 			result = taskHooks.RunPost(hookCtx, result)
-			return VetoedResult(call.ID, result), false
+			return SuccessResult(call.ID, result, 0), false
 		} else if verdict.Veto {
 			return VetoedResult(call.ID, verdict.Reason), verdict.Suspend
 		}
