@@ -192,3 +192,58 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	}
 	return SuccessResult(callID, raw, elapsedMs)
 }
+
+// isJSONErrorEnvelope reports whether raw is a single-key {"error":"..."} payload
+// produced by jsonErrorf.
+func isJSONErrorEnvelope(raw string) bool {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &m); err != nil {
+		return false
+	}
+	_, hasError := m["error"]
+	return hasError && len(m) == 1
+}
+
+// classifyDelegateRawResult classifies delegate and delegate_parallel string results
+// without applying sandbox-style heuristics to SubagentResult JSON.
+func classifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
+	trimmed := strings.TrimSpace(raw)
+	if isJSONErrorEnvelope(trimmed) {
+		return classifyRawResult(callID, trimmed, elapsedMs)
+	}
+	if strings.HasPrefix(trimmed, "[") {
+		var batch []SubagentResult
+		if err := json.Unmarshal([]byte(trimmed), &batch); err == nil && len(batch) > 0 {
+			return classifySubagentBatch(callID, raw, batch, elapsedMs)
+		}
+	}
+	var sr SubagentResult
+	if err := json.Unmarshal([]byte(trimmed), &sr); err == nil && sr.Status != "" {
+		return subagentResultToToolResult(callID, raw, sr, elapsedMs)
+	}
+	return SuccessResult(callID, raw, elapsedMs)
+}
+
+func classifySubagentBatch(callID, raw string, batch []SubagentResult, elapsedMs int64) ToolResult {
+	for _, sr := range batch {
+		if sr.Status != SubagentStatusSuccess {
+			return subagentResultToToolResult(callID, raw, sr, elapsedMs)
+		}
+	}
+	return SuccessResult(callID, raw, elapsedMs)
+}
+
+func subagentResultToToolResult(callID, raw string, sr SubagentResult, elapsedMs int64) ToolResult {
+	switch sr.Status {
+	case SubagentStatusSuccess:
+		return SuccessResult(callID, raw, elapsedMs)
+	case SubagentStatusFailure, SubagentStatusTimeout:
+		msg := sr.Error
+		if msg == "" {
+			msg = "subagent " + string(sr.Status)
+		}
+		return NonRetryableErrorResult(callID, msg, "", elapsedMs)
+	default:
+		return SuccessResult(callID, raw, elapsedMs)
+	}
+}
