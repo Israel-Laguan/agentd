@@ -14,6 +14,9 @@ func NewSemaphore(limit int) *Semaphore {
 }
 
 func (s *Semaphore) Acquire(ctx context.Context) bool {
+	if err := ctx.Err(); err != nil {
+		return false
+	}
 	select {
 	case s.ch <- struct{}{}:
 		return true

@@ -170,16 +170,14 @@ func TestDispatch_EarlyReturnSubtractsNacked(t *testing.T) {
 	})
 
 	dispatched, nacked, err := daemon.dispatch(ctx)
+	if err != nil {
+		t.Fatalf("dispatch() error = %v", err)
+	}
 	if nacked != 1 {
 		t.Fatalf("nacked = %d, want 1", nacked)
 	}
-	switch {
-	case err != nil:
-		if dispatched != 0 {
-			t.Fatalf("dispatched = %d, want 0 when dispatch returns early: %v", dispatched, err)
-		}
-	case dispatched != 1:
-		t.Fatalf("dispatched = %d, want 1 when semaphore acquired before cancel", dispatched)
+	if dispatched != 0 {
+		t.Fatalf("dispatched = %d, want 0 when context is canceled before acquire", dispatched)
 	}
 }
 

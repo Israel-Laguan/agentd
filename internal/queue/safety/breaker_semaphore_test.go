@@ -82,3 +82,12 @@ func TestSemaphoreCapacity(t *testing.T) {
 		t.Fatalf("available=%d, want 1", sem.Available())
 	}
 }
+
+func TestSemaphoreAcquireCanceledContext(t *testing.T) {
+	sem := NewSemaphore(2)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if sem.Acquire(ctx) {
+		t.Fatal("Acquire on canceled context should return false")
+	}
+}
