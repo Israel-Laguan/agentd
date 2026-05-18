@@ -108,14 +108,11 @@ func messagesToOpenAI(msgs []spec.PromptMessage) []openAIMessage {
 			ToolCalls:  m.ToolCalls,
 			ToolCallID: m.ToolCallID,
 		}
-		switch {
-		case m.Role == "assistant" && len(m.ToolCalls) > 0 && m.Content == "":
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 && m.Content == "" {
 			om.Content = nil
-		case m.Content != "":
+		} else {
 			content := m.Content
 			om.Content = &content
-		default:
-			om.Content = nil
 		}
 		out[i] = om
 	}

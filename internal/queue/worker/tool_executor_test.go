@@ -6,7 +6,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -179,6 +181,36 @@ func TestToolExecutor_Read_ValidationFailure(t *testing.T) {
 	}
 	if payload["error"] == "" {
 		t.Fatalf("expected error, got %q", out)
+	}
+}
+
+func TestToolExecutor_Read_RejectsFIFO(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("FIFO not supported on Windows")
+	}
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "pipe")
+	if err := syscall.Mkfifo(fifo, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	ex := NewToolExecutor(nil, dir, nil, 0)
+	out := ex.Execute(context.Background(), gateway.ToolCall{
+		Function: gateway.ToolCallFunction{
+			Name:      toolNameRead,
+			Arguments: `{"path": "pipe"}`,
+		},
+	})
+	var payload map[string]string
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if payload["error"] == "" {
+		t.Fatalf("expected error for FIFO, got %q", out)
+	}
+	if !strings.Contains(payload["error"], "not a regular file") {
+		t.Fatalf("expected not a regular file error, got %q", payload["error"])
 	}
 }
 
@@ -412,6 +444,9 @@ func TestToolExecutor_Write_PathJail_SymlinkParent(t *testing.T) {
 	}
 	if payload["error"] == "" {
 		t.Fatalf("expected error for symlink parent escape, got %q", out)
+	}
+	if _, err := os.Stat(filepath.Join(outsideDir, "new.txt")); !os.IsNotExist(err) {
+		t.Fatalf("outside file was created or modified via symlink parent: %v", err)
 	}
 	content, err := os.ReadFile(outsideFile)
 	if err != nil {

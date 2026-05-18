@@ -9,6 +9,18 @@ import (
 	"strings"
 )
 
+func (t *ToolExecutor) getWorkspaceRoot() (string, error) {
+	t.workspaceRootOnce.Do(func() {
+		root, err := filepath.EvalSymlinks(t.workspacePath)
+		if err != nil {
+			t.workspaceRootErr = fmt.Errorf("workspace path is invalid: %w", err)
+			return
+		}
+		t.workspaceRoot = filepath.Clean(root)
+	})
+	return t.workspaceRoot, t.workspaceRootErr
+}
+
 func (t *ToolExecutor) resolvePath(relPath string, forWrite bool) (string, error) {
 	clean := filepath.Clean(relPath)
 	if clean == "." || clean == "" {
@@ -18,11 +30,10 @@ func (t *ToolExecutor) resolvePath(relPath string, forWrite bool) (string, error
 		return "", fmt.Errorf("absolute paths are not allowed")
 	}
 
-	workspaceRoot, err := filepath.EvalSymlinks(t.workspacePath)
+	workspaceRoot, err := t.getWorkspaceRoot()
 	if err != nil {
-		return "", fmt.Errorf("workspace path is invalid: %w", err)
+		return "", err
 	}
-	workspaceRoot = filepath.Clean(workspaceRoot)
 
 	candidate := filepath.Clean(filepath.Join(t.workspacePath, clean))
 
@@ -106,6 +117,14 @@ func readFileWithContext(ctx context.Context, path string, maxBytes int64) ([]by
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("not a regular file")
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
