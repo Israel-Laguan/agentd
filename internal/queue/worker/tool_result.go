@@ -179,7 +179,7 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
 	var env struct {
 		Success    *bool  `json:"Success"`
-		ExitCode   int    `json:"ExitCode"`
+		ExitCode   *int   `json:"ExitCode"`
 		Error      string `json:"error"`
 		FatalError string `json:"FatalError"`
 		Status     string `json:"status"`
@@ -199,11 +199,14 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 			return tr
 		}
 		if env.Success != nil && !*env.Success {
-			msg := fmt.Sprintf("command failed with exit code %d", env.ExitCode)
+			msg := "command failed"
 			tr := NonRetryableErrorResult(callID, msg, "", elapsedMs)
 			tr.Content = raw
-			tr.ExitCode = env.ExitCode
-			tr.ExitCodeSet = true
+			if env.ExitCode != nil {
+				tr.Error.Message = fmt.Sprintf("command failed with exit code %d", *env.ExitCode)
+				tr.ExitCode = *env.ExitCode
+				tr.ExitCodeSet = true
+			}
 			return tr
 		}
 	} else {

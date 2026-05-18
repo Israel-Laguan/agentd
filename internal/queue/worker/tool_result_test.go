@@ -143,6 +143,11 @@ func TestToolResultExitCode(t *testing.T) {
 			classifyRawResult("c1", `{"Success":false,"ExitCode":127}`, 0),
 			127,
 		},
+		{
+			"bash_failure_no_exit_code",
+			classifyRawResult("c1", `{"Success":false}`, 0),
+			-1,
+		},
 		{"vetoed", VetoedResult("c1", "blocked"), -1},
 		{"error_no_code", NonRetryableErrorResult("c1", "fail", "", 0), -1},
 	}
@@ -303,6 +308,31 @@ func TestClassifyRawResult_JSONSuccessFalse(t *testing.T) {
 	}
 	if !tr.ExitCodeSet || tr.ExitCode != 1 {
 		t.Fatalf("ExitCode = %d, ExitCodeSet = %v, want 1/true", tr.ExitCode, tr.ExitCodeSet)
+	}
+}
+
+func TestClassifyRawResult_JSONSuccessFalseNoExitCode(t *testing.T) {
+	t.Parallel()
+	raw := `{"Success":false}`
+	tr := classifyRawResult("c1", raw, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+	if tr.ExitCodeSet {
+		t.Fatalf("ExitCodeSet = true, want false when ExitCode is absent")
+	}
+	if got := toolResultExitCode(tr); got != -1 {
+		t.Fatalf("toolResultExitCode() = %d, want -1", got)
+	}
+	if tr.Error == nil || tr.Error.Message != "command failed" {
+		t.Fatalf("Error.Message = %v, want generic failure message", tr.Error)
+	}
+}
+
+func TestParseToolExitCode_SuccessFalseNoExitCode(t *testing.T) {
+	t.Parallel()
+	if got := parseToolExitCode(`{"Success":false}`); got != -1 {
+		t.Fatalf("parseToolExitCode() = %d, want -1", got)
 	}
 }
 

@@ -134,7 +134,7 @@ func (w *Worker) emit(ctx context.Context, task models.Task, kind, payload strin
 // toolExecEnvelope is used to parse tool execution results from JSON.
 type toolExecEnvelope struct {
 	Success    *bool  `json:"Success"`
-	ExitCode   int    `json:"ExitCode"`
+	ExitCode   *int   `json:"ExitCode"`
 	Stdout     string `json:"Stdout"`
 	Stderr     string `json:"Stderr"`
 	Error      string `json:"error"`
@@ -170,9 +170,15 @@ func parseToolExitCode(result string) int {
 		return -1
 	}
 	if env.Success != nil && !*env.Success {
-		return env.ExitCode
+		if env.ExitCode != nil {
+			return *env.ExitCode
+		}
+		return -1
 	}
-	return env.ExitCode
+	if env.ExitCode != nil {
+		return *env.ExitCode
+	}
+	return 0
 }
 
 func (w *Worker) heartbeatLoop(ctx context.Context, taskID string) {
