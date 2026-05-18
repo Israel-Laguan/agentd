@@ -204,7 +204,11 @@ func emitStepSummary(violations []violation) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "checkloc: close summary file: %v\n", err)
+		}
+	}()
 	_, _ = f.WriteString(strings.Join(lines, "\n") + "\n")
 }
 
