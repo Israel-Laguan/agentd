@@ -62,7 +62,7 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 
 	if w.hooks != nil {
 		if verdict := w.hooks.RunPre(hookCtx); verdict.ShortCircuit {
-			return classifyRawResult(call.ID, verdict.Result, time.Since(start).Milliseconds())
+			return SuccessResult(call.ID, verdict.Result, time.Since(start).Milliseconds())
 		} else if verdict.Veto && verdict.Result != "" {
 			result := verdict.Result
 			tr := SuccessResult(call.ID, result, time.Since(start).Milliseconds())
