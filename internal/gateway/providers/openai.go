@@ -47,7 +47,7 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	}
 	body := openAIRequest{
 		Model:       model,
-		Messages:    req.Messages,
+		Messages:    messagesToOpenAI(req.Messages),
 		Temperature: req.Temperature,
 		MaxTokens:   req.MaxTokens,
 	}
@@ -83,12 +83,43 @@ func (o *OpenAI) Capabilities() Capabilities {
 }
 
 type openAIRequest struct {
-	Model          string               `json:"model"`
-	Messages       []spec.PromptMessage `json:"messages"`
-	Temperature    float64              `json:"temperature"`
-	MaxTokens      int                  `json:"max_tokens,omitempty"`
-	ResponseFormat map[string]string    `json:"response_format,omitempty"`
-	Tools          []openAITool         `json:"tools,omitempty"`
+	Model          string          `json:"model"`
+	Messages       []openAIMessage `json:"messages"`
+	Temperature    float64         `json:"temperature"`
+	MaxTokens      int             `json:"max_tokens,omitempty"`
+	ResponseFormat map[string]string `json:"response_format,omitempty"`
+	Tools          []openAITool    `json:"tools,omitempty"`
+}
+
+type openAIMessage struct {
+	Role       string          `json:"role"`
+	Content    *string         `json:"content,omitempty"`
+	Name       string          `json:"name,omitempty"`
+	ToolCalls  []spec.ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string          `json:"tool_call_id,omitempty"`
+}
+
+func messagesToOpenAI(msgs []spec.PromptMessage) []openAIMessage {
+	out := make([]openAIMessage, len(msgs))
+	for i, m := range msgs {
+		om := openAIMessage{
+			Role:       m.Role,
+			Name:       m.Name,
+			ToolCalls:  m.ToolCalls,
+			ToolCallID: m.ToolCallID,
+		}
+		switch {
+		case m.Role == "assistant" && len(m.ToolCalls) > 0 && m.Content == "":
+			om.Content = nil
+		case m.Content != "":
+			content := m.Content
+			om.Content = &content
+		default:
+			om.Content = nil
+		}
+		out[i] = om
+	}
+	return out
 }
 
 type openAITool struct {
