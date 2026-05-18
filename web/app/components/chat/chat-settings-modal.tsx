@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 
 export interface ChatSettings {
-  provider: string;
+  provider: "openai" | "anthropic" | "local";
   model: string;
   effort: "low" | "medium" | "high";
 }
@@ -16,6 +16,12 @@ interface ChatSettingsModalProps {
   setSettings: React.Dispatch<React.SetStateAction<ChatSettings>>;
   onSave: (settings: ChatSettings) => void;
 }
+const PROVIDER_MODELS = {
+  openai: ["gpt-4o", "gpt-4.1"],
+  anthropic: ["claude-3.5-sonnet"],
+  local: ["llama-3", "mistral"],
+} as const;
+
 
 export function ChatSettingsModal({
   open,
@@ -24,7 +30,10 @@ export function ChatSettingsModal({
   setSettings,
   onSave,
 }: ChatSettingsModalProps) {
-  
+
+  const availableModels =
+  PROVIDER_MODELS[settings.provider as keyof typeof PROVIDER_MODELS];
+
   return (
     <AnimatePresence>
       {open && (
@@ -70,18 +79,23 @@ export function ChatSettingsModal({
             <div className="p-4 space-y-5">
               {/* Provider */}
               <div className="space-y-1">
-                <label className="text-[11px] text-text-dim uppercase tracking-wider">
+                <label htmlFor="provider-select" className="text-[11px] text-text-dim uppercase tracking-wider">
                   Provider
                 </label>
 
                 <select
+                  id="provider-select"
                   value={settings.provider}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const provider =
+                      e.target.value as ChatSettings["provider"];
+
                     setSettings(prev => ({
                       ...prev,
-                      provider: e.target.value,
-                    }))
-                  }
+                      provider,
+                      model: PROVIDER_MODELS[provider][0],
+                    }));
+                  }}
                   className="w-full bg-bg border border-border rounded-md px-3 py-2 text-sm outline-none"
                 >
                   <option value="openai">OpenAI</option>
@@ -92,11 +106,12 @@ export function ChatSettingsModal({
 
               {/* Model */}
               <div className="space-y-1">
-                <label className="text-[11px] text-text-dim uppercase tracking-wider">
+                <label htmlFor="model-select" className="text-[11px] text-text-dim uppercase tracking-wider">
                   Model
                 </label>
 
                 <select
+                  id="model-select"
                   value={settings.model}
                   onChange={(e) =>
                     setSettings(prev => ({
@@ -106,11 +121,14 @@ export function ChatSettingsModal({
                   }
                   className="w-full bg-bg border border-border rounded-md px-3 py-2 text-sm outline-none"
                 >
-                  <option value="gpt-4o">GPT-4o</option>
-                  <option value="gpt-4.1">GPT-4.1</option>
-                  <option value="claude-3.5-sonnet">
-                    Claude 3.5 Sonnet
-                  </option>
+                  {availableModels.map((model) => (
+                    <option
+                      key={model}
+                      value={model}
+                    >
+                      {model}
+                    </option>
+                  ))}
                 </select>
               </div>
 

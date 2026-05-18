@@ -19,6 +19,7 @@ import { Footer } from "@/app/components/layout/footer";
 import { Header } from "@/app/components/layout/header";
 import { Sidebar } from "./components/layout/sidebar";
 import { TaskDrawer } from "@/app/components/task/task-drawer";
+import { ChatSettings } from "./components/chat/chat-settings-modal";
 
 export default function Page() {
   const [activeTab, setActiveTab] = useState('chat');
@@ -29,6 +30,12 @@ export default function Page() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [chatSettings, setChatSettings] =
+    useState<ChatSettings>({
+      provider: "openai",
+      model: "gpt-4o",
+      effort: "medium",
+  });
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleNewIntake = useCallback(() => {
@@ -180,6 +187,8 @@ export default function Page() {
                 isTyping={isTyping}
                 setIsTyping={setIsTyping}
                 inputRef={inputRef}
+                chatSettings={chatSettings}
+                setChatSettings={setChatSettings}
               />
             )}
 

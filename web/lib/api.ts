@@ -3,6 +3,7 @@ import { mockWorkforce } from "@/lib/mocks/workforce.mock";
 import { mockChat } from "@/lib/mocks/chat.mock";
 import { mockApprovePlan } from "@/lib/mocks/plan.mock";
 import { mockTaskComments } from "@/lib/mocks/mock-task-comment";
+import { ChatSettings } from "@/app/components/chat/chat-settings-modal";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 const USE_MOCK = true;
@@ -25,13 +26,13 @@ export async function getWorkforce() {
 }
 
 // ---------------- CHAT ----------------
-export async function sendChat(message: string) {
+export async function sendChat(message: string, settings: ChatSettings) {
   if (USE_MOCK) return mockChat(message);
 
   const res = await fetch(`${API}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, settings }),
   });
 
   return res.json();
