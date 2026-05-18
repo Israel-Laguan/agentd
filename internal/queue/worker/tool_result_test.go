@@ -2,6 +2,8 @@ package worker
 
 import (
 	"testing"
+
+	"agentd/internal/sandbox"
 )
 
 func TestToolStatus_String(t *testing.T) {
@@ -139,12 +141,12 @@ func TestToolResultExitCode(t *testing.T) {
 		{"success", SuccessResult("c1", "ok", 0), 0},
 		{
 			"bash_failure",
-			classifyBuiltinToolResult("c1", toolNameBash, `{"Success":false,"ExitCode":127}`, 0),
+			classifyBuiltinToolResult("c1", toolNameBash, sandboxFailureJSON(sandbox.Result{ExitCode: 127}), 0),
 			127,
 		},
 		{
 			"bash_failure_no_exit_code",
-			classifyBuiltinToolResult("c1", toolNameBash, `{"Success":false}`, 0),
+			classifyBuiltinToolResult("c1", toolNameBash, sandboxFailureJSON(sandbox.Result{}), 0),
 			-1,
 		},
 		{"vetoed", VetoedResult("c1", "blocked"), -1},

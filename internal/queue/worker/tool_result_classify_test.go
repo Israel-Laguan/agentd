@@ -3,6 +3,8 @@ package worker
 import (
 	"strings"
 	"testing"
+
+	"agentd/internal/sandbox"
 )
 
 func TestClassifyRawResult_SuccessPlainText(t *testing.T) {
@@ -306,6 +308,7 @@ func TestClassifyBuiltinToolResult_BashStdoutArbitraryJSON(t *testing.T) {
 	}{
 		{"fatal_error_key", `{"FatalError":"crash"}`},
 		{"multi_key_error", `{"error":"invalid_grant","error_description":"token expired"}`},
+		{"success_false", `{"Success":false}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -323,7 +326,10 @@ func TestClassifyBuiltinToolResult_BashStdoutArbitraryJSON(t *testing.T) {
 
 func TestClassifyBuiltinToolResult_BashSandboxFailure(t *testing.T) {
 	t.Parallel()
-	raw := `{"Success":false,"ExitCode":127,"Stdout":"","Stderr":"not found"}`
+	raw := sandboxFailureJSON(sandbox.Result{
+		ExitCode: 127,
+		Stderr:   "not found",
+	})
 	tr := classifyBuiltinToolResult("c1", toolNameBash, raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
