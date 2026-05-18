@@ -263,11 +263,27 @@ func TestDispatchToolWithHooks_NonAllowlistedNoRetry(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo ok"}`},
 	}
 
-	_, _ = w.dispatchToolWithHooks(
+	tr, suspended := w.dispatchToolWithHooks(
 		context.Background(), "s1", "p1", time.Now(), call, nil, w.toolExecutor, nil, nil,
 	)
 
+	if suspended {
+		t.Fatal("expected suspend=false")
+	}
 	if sb.callCount() != 1 {
 		t.Fatalf("expected 1 sandbox call without retry, got %d", sb.callCount())
+	}
+	if tr.Status != ToolStatusError {
+		t.Fatalf("status = %s, want error", tr.Status)
+	}
+	if tr.Retryable {
+		t.Fatal("non-allowlisted tool should not have Retryable=true")
+	}
+	forCtx := tr.ForContext()
+	if !strings.Contains(forCtx, "[ERROR]") {
+		t.Fatalf("ForContext() = %q, want [ERROR] prefix", forCtx)
+	}
+	if strings.Contains(forCtx, "[RETRYABLE ERROR]") {
+		t.Fatalf("ForContext() = %q, want [ERROR] not [RETRYABLE ERROR] for non-retry tool", forCtx)
 	}
 }
