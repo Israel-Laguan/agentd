@@ -54,6 +54,13 @@ func TestRetryingExecutor_RetryableExhaustsAttempts(t *testing.T) {
 	if !strings.Contains(result.Content, "connection refused") {
 		t.Fatalf("unexpected content: %s", result.Content)
 	}
+	if result.Retryable {
+		t.Fatal("expected Retryable=false after exhaustion")
+	}
+	got := result.ForContext()
+	if strings.Contains(got, "[RETRYABLE ERROR]") {
+		t.Fatalf("ForContext() = %q, want [ERROR] after exhaustion", got)
+	}
 }
 
 func TestRetryingExecutor_SuccessfulRetry(t *testing.T) {
@@ -173,8 +180,8 @@ func TestRetryingExecutor_SingleAttemptNoRetry(t *testing.T) {
 	if atomic.LoadInt32(&calls) != 1 {
 		t.Fatalf("expected 1 call with MaxAttempts=1, got %d", calls)
 	}
-	if !result.Retryable {
-		t.Fatal("expected retryable result")
+	if result.Retryable {
+		t.Fatal("expected Retryable=false after exhaustion with MaxAttempts=1")
 	}
 }
 
