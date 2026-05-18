@@ -134,7 +134,7 @@ func TestDispatchToolWithHooks_NilHooksPassesThrough(t *testing.T) {
 	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, nil, nil,
 	)
-	assert.Contains(t, result, "error")
+	assert.Contains(t, result.Content, "unknown tool")
 	assert.False(t, suspended)
 }
 
@@ -157,7 +157,7 @@ func TestDispatchToolWithHooks_PreHookVeto(t *testing.T) {
 	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
-	assert.Contains(t, result, "vetoed")
+	assert.Equal(t, ToolStatusVetoed, result.Status)
 	assert.False(t, suspended)
 }
 
@@ -179,7 +179,7 @@ func TestDispatchToolWithHooks_PostHookModifiesResult(t *testing.T) {
 	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
-	assert.Contains(t, result, "[tagged]")
+	assert.Contains(t, result.Content, "[tagged]")
 	assert.False(t, suspended)
 }
 
@@ -205,7 +205,7 @@ func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
 	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
-	assert.Equal(t, "cached", result)
+	assert.Equal(t, "cached", result.Content)
 	assert.False(t, suspended)
 }
 
@@ -234,7 +234,7 @@ func TestDispatchToolWithHooks_SuspendSkipsPostHooks(t *testing.T) {
 	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
-	assert.Equal(t, "pause message", result)
+	assert.Equal(t, "pause message", result.Content)
 	assert.True(t, suspended)
 }
 
@@ -263,7 +263,7 @@ func TestDispatchToolWithHooks_VetoResultRunsPostHooks(t *testing.T) {
 	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
-	assert.Equal(t, "rejected [tagged]", result)
+	assert.Equal(t, "rejected [tagged]", result.Content)
 	assert.False(t, suspended)
 }
 

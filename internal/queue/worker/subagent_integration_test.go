@@ -168,7 +168,7 @@ Help with a bounded task.
 	w := &Worker{gateway: gw}
 	toolExec := NewToolExecutor(nil, dir, nil, 0)
 
-	result := w.DispatchTool(context.Background(), "session", gateway.ToolCall{
+	tr := w.DispatchTool(context.Background(), "session", gateway.ToolCall{
 		ID:   "delegate-call",
 		Type: "function",
 		Function: gateway.ToolCallFunction{
@@ -177,12 +177,12 @@ Help with a bounded task.
 		},
 	}, nil, toolExec)
 
-	if strings.Contains(result, "hidden intermediate") {
-		t.Fatalf("parent-visible delegate result leaked subagent transcript: %s", result)
+	if strings.Contains(tr.Content, "hidden intermediate") {
+		t.Fatalf("parent-visible delegate result leaked subagent transcript: %s", tr.Content)
 	}
 	var payload SubagentResult
-	if err := json.Unmarshal([]byte(result), &payload); err != nil {
-		t.Fatalf("invalid delegate JSON: %v out=%s", err, result)
+	if err := json.Unmarshal([]byte(tr.Content), &payload); err != nil {
+		t.Fatalf("invalid delegate JSON: %v out=%s", err, tr.Content)
 	}
 	if payload.Status != SubagentStatusSuccess || payload.Output != "final answer" {
 		t.Fatalf("unexpected delegate result: %+v", payload)

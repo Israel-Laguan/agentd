@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -46,20 +45,14 @@ func TestDispatchTool_Timeout_ReturnsTypedResult(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sleep 10"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
 
-	var parsed map[string]string
-	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
-		t.Fatalf("failed to parse result JSON: %v", err)
+	if tr.Status != ToolStatusTimeout {
+		t.Fatalf("status = %s, want timeout", tr.Status)
 	}
-	if parsed["status"] != "timeout" {
-		t.Fatalf("status = %q, want \"timeout\"", parsed["status"])
-	}
-	if !strings.HasPrefix(parsed["error"], "[TIMEOUT]") {
-		t.Fatalf("error should start with [TIMEOUT], got %q", parsed["error"])
-	}
-	if !strings.Contains(parsed["error"], "bash") {
-		t.Fatalf("error should mention tool name, got %q", parsed["error"])
+	forCtx := tr.ForContext()
+	if !strings.HasPrefix(forCtx, "[TIMEOUT]") {
+		t.Fatalf("ForContext should start with [TIMEOUT], got %q", forCtx)
 	}
 }
 
@@ -84,19 +77,15 @@ func TestDispatchTool_Timeout_PerToolOverridesDefault(t *testing.T) {
 	}
 
 	start := time.Now()
-	result := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
 	elapsed := time.Since(start)
 
 	if elapsed > 2*time.Second {
 		t.Fatalf("per-tool timeout (50ms) should have fired, but elapsed %v", elapsed)
 	}
 
-	var parsed map[string]string
-	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
-		t.Fatalf("failed to parse result JSON: %v", err)
-	}
-	if parsed["status"] != "timeout" {
-		t.Fatalf("status = %q, want \"timeout\"", parsed["status"])
+	if tr.Status != ToolStatusTimeout {
+		t.Fatalf("status = %s, want timeout", tr.Status)
 	}
 }
 
@@ -119,14 +108,10 @@ func TestDispatchTool_Timeout_DefaultApplies(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sleep 10"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
 
-	var parsed map[string]string
-	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
-		t.Fatalf("failed to parse result JSON: %v", err)
-	}
-	if parsed["status"] != "timeout" {
-		t.Fatalf("default timeout should have fired; status = %q", parsed["status"])
+	if tr.Status != ToolStatusTimeout {
+		t.Fatalf("default timeout should have fired; status = %s", tr.Status)
 	}
 }
 
@@ -150,12 +135,12 @@ func TestDispatchTool_NoTimeout_FastTool(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hello"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "s1", call, nil, executor)
-	if strings.Contains(result, "[TIMEOUT]") {
-		t.Fatalf("fast tool should not timeout, got %q", result)
+	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	if tr.Status == ToolStatusTimeout {
+		t.Fatalf("fast tool should not timeout, got status %s", tr.Status)
 	}
-	if !strings.Contains(result, "hello") {
-		t.Fatalf("expected output 'hello', got %q", result)
+	if !strings.Contains(tr.Content, "hello") {
+		t.Fatalf("expected output 'hello', got %q", tr.Content)
 	}
 }
 
@@ -181,7 +166,7 @@ func TestDispatchToolWithHooks_Timeout(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sleep 10"}`},
 	}
 
-	result, suspend := w.dispatchToolWithHooks(
+	tr, suspend := w.dispatchToolWithHooks(
 		context.Background(), "s1", "p1", time.Now(),
 		call, nil, executor, nil, nil,
 	)
@@ -190,18 +175,12 @@ func TestDispatchToolWithHooks_Timeout(t *testing.T) {
 		t.Fatal("expected suspend=false")
 	}
 
-	var parsed map[string]string
-	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
-		t.Fatalf("failed to parse result JSON: %v", err)
+	if tr.Status != ToolStatusTimeout {
+		t.Fatalf("status = %s, want timeout", tr.Status)
 	}
-	if parsed["status"] != "timeout" {
-		t.Fatalf("status = %q, want \"timeout\"", parsed["status"])
-	}
-	if !strings.HasPrefix(parsed["error"], "[TIMEOUT]") {
-		t.Fatalf("error should start with [TIMEOUT], got %q", parsed["error"])
-	}
-	if !strings.Contains(parsed["error"], "bash") {
-		t.Fatalf("error should mention tool name, got %q", parsed["error"])
+	forCtx := tr.ForContext()
+	if !strings.HasPrefix(forCtx, "[TIMEOUT]") {
+		t.Fatalf("ForContext should start with [TIMEOUT], got %q", forCtx)
 	}
 }
 
@@ -224,7 +203,7 @@ func TestDispatchTool_Timeout_DistinguishableFromError(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sleep 10"}`},
 	}
 
-	timeoutResult := w.DispatchTool(context.Background(), "s1", timeoutCall, nil, executor)
+	timeoutTR := w.DispatchTool(context.Background(), "s1", timeoutCall, nil, executor)
 
 	errSB := &mockExecSandbox{result: sandbox.Result{
 		Success: false, ExitCode: 1,
@@ -241,28 +220,20 @@ func TestDispatchTool_Timeout_DistinguishableFromError(t *testing.T) {
 		ID:       "call_2",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"bad"}`},
 	}
-	errorResult := w2.DispatchTool(context.Background(), "s1", errorCall, nil, errExecutor)
+	errorTR := w2.DispatchTool(context.Background(), "s1", errorCall, nil, errExecutor)
 
-	var tRes map[string]string
-	if err := json.Unmarshal([]byte(timeoutResult), &tRes); err != nil {
-		t.Fatalf("timeout result not valid JSON: %v", err)
+	if timeoutTR.Status != ToolStatusTimeout {
+		t.Fatalf("timeout result should have status=timeout, got %s", timeoutTR.Status)
 	}
-
-	var eRes map[string]string
-	if err := json.Unmarshal([]byte(errorResult), &eRes); err != nil {
-		t.Fatalf("error result not valid JSON: %v", err)
-	}
-
-	if tRes["status"] != "timeout" {
-		t.Fatalf("timeout result should have status=timeout, got %q", tRes["status"])
-	}
-	if eRes["status"] == "timeout" {
+	if errorTR.Status == ToolStatusTimeout {
 		t.Fatal("error result should NOT have status=timeout")
 	}
-	if !strings.HasPrefix(tRes["error"], "[TIMEOUT]") {
-		t.Fatalf("timeout error should start with [TIMEOUT], got %q", tRes["error"])
+	timeoutCtx := timeoutTR.ForContext()
+	if !strings.HasPrefix(timeoutCtx, "[TIMEOUT]") {
+		t.Fatalf("timeout ForContext should start with [TIMEOUT], got %q", timeoutCtx)
 	}
-	if strings.HasPrefix(eRes["error"], "[TIMEOUT]") {
-		t.Fatal("error result should NOT start with [TIMEOUT]")
+	errorCtx := errorTR.ForContext()
+	if strings.HasPrefix(errorCtx, "[TIMEOUT]") {
+		t.Fatal("error ForContext should NOT start with [TIMEOUT]")
 	}
 }

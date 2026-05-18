@@ -34,11 +34,11 @@ func TestDispatchTool_PreHookVeto(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hi"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
-	if !strings.Contains(result, "vetoed") {
-		t.Fatalf("expected vetoed result, got %q", result)
+	tr := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
+	if tr.Status != ToolStatusVetoed {
+		t.Fatalf("expected vetoed status, got %s", tr.Status)
 	}
-	if strings.Contains(result, "should not run") {
+	if strings.Contains(tr.Content, "should not run") {
 		t.Fatal("tool should not have executed after veto")
 	}
 }
@@ -67,9 +67,9 @@ func TestDispatchTool_PostHookMutation(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hello"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
-	if !strings.Contains(result, "[hooked]") {
-		t.Fatalf("expected post-hook annotation, got %q", result)
+	tr := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
+	if !strings.Contains(tr.Content, "[hooked]") {
+		t.Fatalf("expected post-hook annotation, got %q", tr.Content)
 	}
 }
 
@@ -88,9 +88,9 @@ func TestDispatchTool_NilHooksNoChange(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hello"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
-	if !strings.Contains(result, "hello") {
-		t.Fatalf("expected result to contain 'hello', got %q", result)
+	tr := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
+	if !strings.Contains(tr.Content, "hello") {
+		t.Fatalf("expected result to contain 'hello', got %q", tr.Content)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestDispatchTool_SessionIDPropagated(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo ok"}`},
 	}
 
-	w.DispatchTool(context.Background(), "task-42", call, nil, executor)
+	_ = w.DispatchTool(context.Background(), "task-42", call, nil, executor)
 	if captured != "task-42" {
 		t.Fatalf("expected SessionID 'task-42', got %q", captured)
 	}
@@ -137,9 +137,9 @@ func TestDispatchTool_EmptyHooksNoChange(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hello"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
-	if !strings.Contains(result, "hello") {
-		t.Fatalf("expected result to contain 'hello', got %q", result)
+	tr := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
+	if !strings.Contains(tr.Content, "hello") {
+		t.Fatalf("expected result to contain 'hello', got %q", tr.Content)
 	}
 }
 

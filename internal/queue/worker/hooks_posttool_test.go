@@ -101,12 +101,12 @@ func TestScrubResultHook_ScrubsBeforeModelContext(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo key"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
-	if strings.Contains(result, "sk-AAAA") {
-		t.Fatalf("expected scrubbed result before model context, got %q", result)
+	tr := w.DispatchTool(context.Background(), "test-session", call, nil, executor)
+	if strings.Contains(tr.Content, "sk-AAAA") {
+		t.Fatalf("expected scrubbed result before model context, got %q", tr.Content)
 	}
-	if !strings.Contains(result, "[REDACTED]") {
-		t.Fatalf("expected [REDACTED] in result, got %q", result)
+	if !strings.Contains(tr.Content, "[REDACTED]") {
+		t.Fatalf("expected [REDACTED] in result, got %q", tr.Content)
 	}
 }
 
@@ -259,13 +259,13 @@ func TestNewWorker_RegistersScrubAndAuditHooks(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"cat secret"}`},
 	}
 
-	result := w.dispatchToolWithProject(
+	tr := w.dispatchToolWithProject(
 		context.Background(), "task-int", "proj-int", call, nil, executor, nil,
 	)
 
 	// Result should be scrubbed (ScrubResultHook runs first)
-	if strings.Contains(result, "sk-AAAA") {
-		t.Fatalf("result entering model context should be scrubbed: %q", result)
+	if strings.Contains(tr.Content, "sk-AAAA") {
+		t.Fatalf("result entering model context should be scrubbed: %q", tr.Content)
 	}
 
 	// Audit events should be emitted (AuditHook runs second)
@@ -307,14 +307,14 @@ func TestAuditHook_DispatchToolEmitsConsistently(t *testing.T) {
 		ID:       "call_a",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo a"}`},
 	}
-	w.DispatchTool(context.Background(), "task-a", call1, nil, executor)
+	_ = w.DispatchTool(context.Background(), "task-a", call1, nil, executor)
 
 	// Call through dispatchToolWithProject
 	call2 := gateway.ToolCall{
 		ID:       "call_b",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo b"}`},
 	}
-	w.dispatchToolWithProject(context.Background(), "task-b", "proj-b", call2, nil, executor, nil)
+	_ = w.dispatchToolWithProject(context.Background(), "task-b", "proj-b", call2, nil, executor, nil)
 
 	// Both should emit TOOL_CALL + TOOL_RESULT = 4 events total
 	if len(sink.events) != 4 {
@@ -434,11 +434,11 @@ func TestErrorPathsRunThroughPostHooks(t *testing.T) {
 		ID:       "call_unknown",
 		Function: gateway.ToolCallFunction{Name: "nonexistent", Arguments: `{}`},
 	}
-	result := w.dispatchToolWithProject(context.Background(), "task-err", "proj-err", call, nil, executor, nil)
+	tr := w.dispatchToolWithProject(context.Background(), "task-err", "proj-err", call, nil, executor, nil)
 
 	// Result should contain error message
-	if !strings.Contains(result, "unknown tool") {
-		t.Fatalf("expected unknown tool error, got %q", result)
+	if !strings.Contains(tr.Content, "unknown tool") {
+		t.Fatalf("expected unknown tool error, got %q", tr.Content)
 	}
 
 	// Audit events should still fire (error path goes through RunPost)
