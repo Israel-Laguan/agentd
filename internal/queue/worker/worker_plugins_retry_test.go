@@ -10,6 +10,7 @@ import (
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
+	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
 
@@ -153,6 +154,42 @@ func TestDispatchToolWithHooks_RetryExhaustion(t *testing.T) {
 	}
 	if !strings.Contains(tr.Content, "connection refused") {
 		t.Fatalf("expected last attempt error, got %q", tr.Content)
+	}
+}
+
+func TestDispatchToolWithHooks_RetryAuditsOnce(t *testing.T) {
+	t.Parallel()
+	sb := &flakySandbox{failCount: 1}
+	sink := &mockEventSink{}
+	w := retryTestWorker(t, sb, "bash")
+	w.hooks.RegisterPost(AuditHook(sink, nil))
+
+	call := gateway.ToolCall{
+		ID:       "c1",
+		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo ok"}`},
+	}
+
+	tr, suspended := w.dispatchToolWithHooks(
+		context.Background(), "s1", "p1", time.Now(), call, nil, w.toolExecutor, nil, nil,
+	)
+
+	if suspended {
+		t.Fatal("expected suspend=false")
+	}
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("status = %s, want success", tr.Status)
+	}
+	if sb.callCount() != 2 {
+		t.Fatalf("expected 2 sandbox calls, got %d", sb.callCount())
+	}
+	if len(sink.events) != 2 {
+		t.Fatalf("expected 2 audit events (one logical dispatch), got %d", len(sink.events))
+	}
+	if sink.events[0].Type != models.EventTypeToolCall {
+		t.Fatalf("first event should be TOOL_CALL, got %q", sink.events[0].Type)
+	}
+	if sink.events[1].Type != models.EventTypeToolResult {
+		t.Fatalf("second event should be TOOL_RESULT, got %q", sink.events[1].Type)
 	}
 }
 
