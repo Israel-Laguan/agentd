@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,14 +24,12 @@ const (
 	defaultMaxToolReadFileBytes = 10 << 20 // 10 MiB
 )
 
-// maxToolReadFileBytes caps read tool file size to avoid loading huge files into memory (tests may override).
-var maxToolReadFileBytes = int64(defaultMaxToolReadFileBytes)
-
 type ToolExecutor struct {
 	sandbox       sandbox.Executor
 	workspacePath string
 	envVars       []string
 	wallTimeout   time.Duration
+	maxReadBytes  int64
 }
 
 func NewToolExecutor(sb sandbox.Executor, workspacePath string, envVars []string, wallTimeout time.Duration) *ToolExecutor {
@@ -39,6 +38,7 @@ func NewToolExecutor(sb sandbox.Executor, workspacePath string, envVars []string
 		workspacePath: workspacePath,
 		envVars:       envVars,
 		wallTimeout:   wallTimeout,
+		maxReadBytes:  defaultMaxToolReadFileBytes,
 	}
 }
 
@@ -47,7 +47,7 @@ func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall) strin
 	case toolNameBash:
 		return t.executeBash(ctx, call.Function.Arguments)
 	case toolNameRead:
-		return t.executeRead(call.Function.Arguments)
+		return t.executeRead(ctx, call.Function.Arguments)
 	case toolNameWrite:
 		return t.executeWrite(call.Function.Arguments)
 	default:
@@ -152,7 +152,11 @@ type readArgs struct {
 	Path string `json:"path"`
 }
 
-func (t *ToolExecutor) executeRead(argsJSON string) string {
+func (t *ToolExecutor) executeRead(ctx context.Context, argsJSON string) string {
+	if err := ctx.Err(); err != nil {
+		return jsonErrorf("read cancelled: %v", err)
+	}
+
 	var args readArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return jsonErrorf("invalid arguments: %v", err)
@@ -171,12 +175,15 @@ func (t *ToolExecutor) executeRead(argsJSON string) string {
 	if err != nil {
 		return jsonErrorf("stat failed: %v", err)
 	}
-	if info.Size() > maxToolReadFileBytes {
-		return jsonErrorf("file too large: %d bytes (max %d)", info.Size(), maxToolReadFileBytes)
+	if info.Size() > t.maxReadBytes {
+		return jsonErrorf("file too large: %d bytes (max %d)", info.Size(), t.maxReadBytes)
 	}
 
-	content, err := os.ReadFile(fullPath)
+	content, err := readFileWithContext(ctx, fullPath, t.maxReadBytes)
 	if err != nil {
+		if ctx.Err() != nil {
+			return jsonErrorf("read cancelled: %v", ctx.Err())
+		}
 		return jsonErrorf("read failed: %v", err)
 	}
 
@@ -184,8 +191,8 @@ func (t *ToolExecutor) executeRead(argsJSON string) string {
 }
 
 type writeArgs struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
+	Path    string  `json:"path"`
+	Content *string `json:"content"`
 }
 
 func (t *ToolExecutor) executeWrite(argsJSON string) string {
@@ -196,6 +203,9 @@ func (t *ToolExecutor) executeWrite(argsJSON string) string {
 
 	if args.Path == "" {
 		return `{"error": "path is required"}`
+	}
+	if args.Content == nil {
+		return `{"error": "content is required"}`
 	}
 
 	fullPath, err := t.resolvePath(args.Path, true)
@@ -208,7 +218,7 @@ func (t *ToolExecutor) executeWrite(argsJSON string) string {
 		return jsonErrorf("create directory failed: %v", err)
 	}
 
-	if err := os.WriteFile(fullPath, []byte(args.Content), 0644); err != nil {
+	if err := os.WriteFile(fullPath, []byte(*args.Content), 0644); err != nil {
 		return jsonErrorf("write failed: %v", err)
 	}
 
@@ -293,6 +303,41 @@ func isWithinRoot(root, candidate string) bool {
 		return false
 	}
 	return rel == "." || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "..")
+}
+
+// contextReader wraps an io.Reader and returns ctx.Err() on Read when cancelled.
+type contextReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (cr *contextReader) Read(p []byte) (int, error) {
+	if err := cr.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return cr.r.Read(p)
+}
+
+func readFileWithContext(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	limited := io.LimitReader(f, maxBytes+1)
+	cr := &contextReader{ctx: ctx, r: limited}
+	data, err := io.ReadAll(cr)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("file exceeds max size %d", maxBytes)
+	}
+	return data, nil
 }
 
 func jsonErrorf(format string, args ...any) string {
