@@ -272,7 +272,7 @@ func TestAuditHook_ClassifiedBashErrorExitCode(t *testing.T) {
 	if err := json.Unmarshal([]byte(sink.events[1].Payload), &resultEvent); err != nil {
 		t.Fatalf("unmarshal TOOL_RESULT: %v", err)
 	}
-	if resultEvent.ExitCode != -1 {
-		t.Fatalf("ExitCode = %d, want -1 for classified bash error", resultEvent.ExitCode)
+	if resultEvent.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1 for classified bash error", resultEvent.ExitCode)
 	}
 }

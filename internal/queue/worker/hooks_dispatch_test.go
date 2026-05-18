@@ -2,11 +2,13 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"agentd/internal/gateway"
+	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
 
@@ -217,5 +219,107 @@ func TestHookChain_NilFn_SessionStart_FailClosed(t *testing.T) {
 	err := hc.RunSessionStart(HookContext{SessionID: "s1", Timestamp: time.Now()})
 	if err == nil {
 		t.Fatal("nil Fn with FailClosed should return error")
+	}
+}
+
+func TestDispatchTool_VetoedRunsAuditHook(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{}
+	hc := NewHookChain()
+	hc.RegisterPre(PreHook{
+		Name:   "deny",
+		Policy: FailOpen,
+		Fn: func(HookContext) (HookVerdict, error) {
+			return HookVerdict{Veto: true, Reason: "policy blocked"}, nil
+		},
+	})
+
+	mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "never run", Success: true}}
+	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+
+	w := NewWorker(&mockAgenticStore{}, nil, mockSB, nil, sink, WorkerOptions{Hooks: hc})
+
+	call := gateway.ToolCall{
+		ID:       "call_veto",
+		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hi"}`},
+	}
+
+	tr := w.DispatchTool(context.Background(), "task-veto", call, nil, executor)
+	if tr.Status != ToolStatusVetoed {
+		t.Fatalf("expected vetoed status, got %s", tr.Status)
+	}
+	if !strings.Contains(tr.Content, "policy blocked") {
+		t.Fatalf("content = %q, want veto reason", tr.Content)
+	}
+	if len(sink.events) != 2 {
+		t.Fatalf("expected 2 audit events, got %d", len(sink.events))
+	}
+	if sink.events[0].Type != models.EventTypeToolCall || sink.events[1].Type != models.EventTypeToolResult {
+		t.Fatalf("event types = %q, %q", sink.events[0].Type, sink.events[1].Type)
+	}
+
+	var resultEvent ToolResultEvent
+	if err := json.Unmarshal([]byte(sink.events[1].Payload), &resultEvent); err != nil {
+		t.Fatalf("unmarshal TOOL_RESULT: %v", err)
+	}
+	if resultEvent.ExitCode != -1 {
+		t.Fatalf("ExitCode = %d, want -1 for vetoed call", resultEvent.ExitCode)
+	}
+}
+
+func TestDispatchToolWithHooks_VetoedRunsAuditHook(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{}
+	taskHooks := NewHookChain()
+	taskHooks.RegisterPre(PreHook{
+		Name:   "deny",
+		Policy: FailOpen,
+		Fn: func(HookContext) (HookVerdict, error) {
+			return HookVerdict{Veto: true, Reason: "task policy blocked"}, nil
+		},
+	})
+
+	mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "never run", Success: true}}
+	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+
+	w := NewWorker(&mockAgenticStore{}, nil, mockSB, nil, sink, WorkerOptions{})
+
+	call := gateway.ToolCall{
+		ID:       "call_task_veto",
+		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hi"}`},
+	}
+
+	tr, suspended := w.dispatchToolWithHooks(
+		context.Background(),
+		"task-veto-hooks",
+		"proj-veto-hooks",
+		time.Now(),
+		call,
+		nil,
+		executor,
+		taskHooks,
+		nil,
+	)
+	if tr.Status != ToolStatusVetoed {
+		t.Fatalf("expected vetoed status, got %s", tr.Status)
+	}
+	if suspended {
+		t.Fatal("expected non-suspend veto")
+	}
+	if len(sink.events) != 2 {
+		t.Fatalf("expected 2 audit events, got %d", len(sink.events))
+	}
+
+	var resultEvent ToolResultEvent
+	if err := json.Unmarshal([]byte(sink.events[1].Payload), &resultEvent); err != nil {
+		t.Fatalf("unmarshal TOOL_RESULT: %v", err)
+	}
+	if resultEvent.ExitCode != -1 {
+		t.Fatalf("ExitCode = %d, want -1 for vetoed call", resultEvent.ExitCode)
+	}
+	if !strings.Contains(resultEvent.OutputSummary, "task policy blocked") {
+		t.Fatalf("output summary = %q, want veto reason", resultEvent.OutputSummary)
 	}
 }

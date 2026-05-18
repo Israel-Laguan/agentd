@@ -166,8 +166,11 @@ func parseToolExitCode(result string) int {
 		return 0
 	}
 	// Successfully parsed JSON
-	if env.Error != "" || env.FatalError != "" || (env.Success != nil && !*env.Success) {
+	if env.Error != "" || env.FatalError != "" {
 		return -1
+	}
+	if env.Success != nil && !*env.Success {
+		return env.ExitCode
 	}
 	return env.ExitCode
 }

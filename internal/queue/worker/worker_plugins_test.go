@@ -210,7 +210,7 @@ func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
 	assert.False(t, suspended)
 }
 
-func TestDispatchToolWithHooks_SuspendSkipsPostHooks(t *testing.T) {
+func TestDispatchToolWithHooks_SuspendRunsPostHooks(t *testing.T) {
 	t.Parallel()
 	w := &Worker{hooks: NewHookChain()}
 	taskHooks := NewHookChain()
@@ -235,7 +235,7 @@ func TestDispatchToolWithHooks_SuspendSkipsPostHooks(t *testing.T) {
 	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
-	assert.Equal(t, "pause message", result.Content)
+	assert.Equal(t, "pause message [scrubbed]", result.Content)
 	assert.True(t, suspended)
 }
 

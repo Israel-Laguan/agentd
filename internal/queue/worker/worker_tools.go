@@ -71,7 +71,11 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 			tr.Content = w.hooks.RunPost(hookCtx, tr.Content)
 			return tr
 		} else if verdict.Veto {
-			return VetoedResult(call.ID, verdict.Reason)
+			tr := VetoedResult(call.ID, verdict.Reason)
+			hookCtx.ResultStatus = tr.Status
+			hookCtx.ResultStatusSet = true
+			tr.Content = w.hooks.RunPost(hookCtx, tr.Content)
+			return tr
 		}
 	}
 
@@ -94,6 +98,8 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 	if w.hooks != nil {
 		hookCtx.ResultStatus = tr.Status
 		hookCtx.ResultStatusSet = true
+		hookCtx.ResultExitCode = tr.ExitCode
+		hookCtx.ResultExitCodeSet = tr.ExitCodeSet
 		tr.Content = w.hooks.RunPost(hookCtx, tr.Content)
 	}
 
