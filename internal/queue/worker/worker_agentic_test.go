@@ -465,3 +465,28 @@ func TestIngestHumanCorrections_SkipsUnknownAuthors(t *testing.T) {
 		t.Fatalf("expected unknown authors to be skipped, got %d corrections", got)
 	}
 }
+
+func TestAgenticLoop_MessageHistoryGrowsAcrossIterations(t *testing.T) {
+	t.Parallel()
+
+	gw := &sequenceGateway{responses: integrationSequenceResponses()}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"pwd": {Success: true, ExitCode: 0, Stdout: "/home/user\n"},
+	}}
+	_, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
+	w.Process(context.Background(), task)
+
+	if len(gw.requests) < 2 {
+		t.Fatalf("expected at least 2 gateway requests, got %d", len(gw.requests))
+	}
+	if len(gw.requests[1].Messages) <= len(gw.requests[0].Messages) {
+		t.Fatalf("second request messages = %d, want > first request %d",
+			len(gw.requests[1].Messages), len(gw.requests[0].Messages))
+	}
+	if !requestContainsAssistantToolCall(gw.requests[1], "call_abc123") {
+		t.Fatalf("second request missing assistant message with tool_calls call_abc123: %#v", gw.requests[1].Messages)
+	}
+	if !requestContainsToolResult(gw.requests[1], "call_abc123", "/home/user") {
+		t.Fatalf("second request missing tool result for call_abc123: %#v", gw.requests[1].Messages)
+	}
+}

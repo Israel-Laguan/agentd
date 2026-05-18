@@ -119,12 +119,24 @@ func (w *Worker) prepareAgenticIteration(
 	if err != nil {
 		return err
 	}
+	prepared, err = w.applyAgenticTruncation(ctx, prepared)
+	if err != nil {
+		return err
+	}
 	*messages = prepared
 	if iterationGuard.ShouldInjectFinalMessage() {
 		*messages = append(*messages, iterationGuard.FinalMessage())
 		iterationGuard.ResetAllowFinal()
 	}
 	return nil
+}
+
+func (w *Worker) applyAgenticTruncation(ctx context.Context, messages []gateway.PromptMessage) ([]gateway.PromptMessage, error) {
+	if len(messages) <= w.truncationThreshold {
+		return messages, nil
+	}
+	trunc := gateway.NewAgenticTruncator(w.truncatorMax)
+	return trunc.Apply(ctx, messages, w.characterBudget)
 }
 
 func (w *Worker) handleAgenticToolCalls(

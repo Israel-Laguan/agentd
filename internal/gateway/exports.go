@@ -87,6 +87,7 @@ var (
 	NewRouter            = routing.NewRouter
 	NewRouterFromConfigs = routing.NewRouterFromConfigs
 	NewTruncator         = truncation.NewTruncator
+	NewAgenticTruncator  = truncation.NewAgenticTruncator
 )
 
 // House rules (routing).
