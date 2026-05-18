@@ -48,6 +48,16 @@ const (
 
 	DefaultLegacyHandoffTimeout = 7 * 24 * time.Hour
 
+	// DefaultToolRetryMaxAttempts is the default number of retry attempts
+	// for tool-level transient failures.
+	DefaultToolRetryMaxAttempts = 3
+
+	// DefaultToolRetryBaseDelay is the base delay between tool retry attempts.
+	DefaultToolRetryBaseDelay = 200 * time.Millisecond
+
+	// DefaultToolRetryMaxDelay is the ceiling for exponential backoff.
+	DefaultToolRetryMaxDelay = 5 * time.Second
+
 	// DefaultToolTimeout is the fallback timeout for any tool without an
 	// explicit entry in ToolTimeouts.
 	DefaultToolTimeout = 30 * time.Second
@@ -109,6 +119,13 @@ type HITLConfig struct {
 	LegacyHandoffTimeout time.Duration
 }
 
+// ToolRetriesConfig controls tool-level retry behaviour for transient errors.
+type ToolRetriesConfig struct {
+	MaxAttempts int
+	BaseDelay   time.Duration
+	MaxDelay    time.Duration
+}
+
 // ToolTimeoutsConfig maps tool names to per-tool timeout durations.
 // The special key "default" sets the fallback for unlisted tools.
 type ToolTimeoutsConfig struct {
@@ -142,6 +159,7 @@ type QueueConfig struct {
 	Skills                     SkillsConfig
 	HITL                       HITLConfig
 	ToolTimeouts               ToolTimeoutsConfig
+	ToolRetries                ToolRetriesConfig
 }
 
 func setQueueDefaults(v *viper.Viper) {
@@ -171,6 +189,9 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.tool_timeouts.delegate", DefaultDelegateToolTimeout.String())
 	v.SetDefault("queue.tool_timeouts.delegate_parallel", DefaultDelegateToolTimeout.String())
 	v.SetDefault("queue.tool_timeouts.default", DefaultToolTimeout.String())
+	v.SetDefault("queue.tool_retries.max_attempts", DefaultToolRetryMaxAttempts)
+	v.SetDefault("queue.tool_retries.base_delay", DefaultToolRetryBaseDelay.String())
+	v.SetDefault("queue.tool_retries.max_delay", DefaultToolRetryMaxDelay.String())
 }
 
 func loadQueueConfig(v *viper.Viper) QueueConfig {
@@ -204,6 +225,11 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 			LegacyHandoffTimeout: v.GetDuration("queue.hitl.legacy_handoff_timeout"),
 		},
 		ToolTimeouts: loadToolTimeoutsConfig(v),
+		ToolRetries: ToolRetriesConfig{
+			MaxAttempts: v.GetInt("queue.tool_retries.max_attempts"),
+			BaseDelay:   v.GetDuration("queue.tool_retries.base_delay"),
+			MaxDelay:    v.GetDuration("queue.tool_retries.max_delay"),
+		},
 	}
 }
 

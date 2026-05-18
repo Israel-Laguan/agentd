@@ -109,3 +109,32 @@ func (w *Worker) dispatchToolWithHooks(
 	}
 	return result, false
 }
+
+// dispatchWithRetry wraps dispatchToolWithHooks with the RetryingExecutor,
+// transparently retrying tool calls that return transient errors.
+// The model never sees intermediate retry failures.
+func (w *Worker) dispatchWithRetry(
+	ctx context.Context,
+	sessionID, projectID string,
+	taskUpdatedAt time.Time,
+	call gateway.ToolCall,
+	toolToAdapter map[string]string,
+	toolExecutor *ToolExecutor,
+	taskHooks *HookChain,
+	scopedCapabilities *capabilities.Registry,
+) (string, bool) {
+	if w.toolRetrier == nil {
+		return w.dispatchToolWithHooks(ctx, sessionID, projectID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, scopedCapabilities)
+	}
+
+	var suspended bool
+	tr := w.toolRetrier.Execute(ctx, func(innerCtx context.Context) ToolResult {
+		result, susp := w.dispatchToolWithHooks(innerCtx, sessionID, projectID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, scopedCapabilities)
+		suspended = susp
+		if susp {
+			return ToolResult{Output: result, Retryable: false}
+		}
+		return classifyResult(result)
+	})
+	return tr.Output, suspended
+}

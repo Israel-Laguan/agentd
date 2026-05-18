@@ -153,7 +153,7 @@ func (w *Worker) handleAgenticToolCalls(
 		} else {
 			taskUpdatedAt = fresh.UpdatedAt
 		}
-		result, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
+		result, suspended := w.dispatchWithRetry(ctx, task.ID, task.ProjectID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
 		if detected := cm.CheckToolResult(result); len(detected) > 0 {
 			slog.Info("auto-detected context corrections",
 				"task_id", task.ID,

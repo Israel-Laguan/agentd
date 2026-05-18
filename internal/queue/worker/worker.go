@@ -47,6 +47,7 @@ type Worker struct {
 	characterBudget      int
 	toolExecutor         *ToolExecutor
 	toolTimeouts         config.ToolTimeoutsConfig
+	toolRetrier          *RetryingExecutor
 	capabilities         *capabilities.Registry
 	tokenBudget          int
 	budgetTracker        spec.BudgetTracker
@@ -100,6 +101,7 @@ type WorkerOptions struct {
 	SkillsTopK                int
 	LegacyHandoffTimeout      time.Duration
 	ToolTimeouts              config.ToolTimeoutsConfig
+	ToolRetries               config.ToolRetriesConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -192,6 +194,11 @@ func NewWorker(
 		characterBudget:      opts.AgenticCharacterBudget,
 		toolExecutor:         toolExecutor,
 		toolTimeouts:         opts.ToolTimeouts,
+		toolRetrier: NewRetryingExecutor(RetryConfig{
+			MaxAttempts: opts.ToolRetries.MaxAttempts,
+			BaseDelay:   opts.ToolRetries.BaseDelay,
+			MaxDelay:    opts.ToolRetries.MaxDelay,
+		}),
 		capabilities:         opts.Capabilities,
 		tokenBudget:          opts.TokenBudget,
 		budgetTracker:        budgetTracker,

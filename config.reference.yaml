@@ -99,6 +99,14 @@ agentic:
   review:
     enabled: false               # default; override per-profile via AgentProfile.RequireReview
 
+  # Tool-level retry configuration.
+  # Transient tool failures (timeouts, network errors) are retried transparently
+  # with exponential backoff + jitter. The model never sees intermediate failures.
+  tool_retries:
+    max_attempts: 3        # total attempts per tool call (1 = no retry)
+    base_delay_ms: 200     # base delay between retries (milliseconds)
+    max_delay_ms: 5000     # ceiling for exponential backoff (milliseconds)
+
   # Skill-based contextual knowledge injection.
   # Skills are markdown documents loaded from the workspace or global directory
   # and injected into the system prompt when they match the current task.
