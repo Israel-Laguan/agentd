@@ -90,7 +90,11 @@ func TestEmitToolResultExplicitJSONFailures(t *testing.T) {
 				Function: gateway.ToolCallFunction{Name: "bash"},
 			}
 
-					w.emitToolResult(context.Background(), task, call, classifyRawResult(call.ID, tc.result, 25))
+			tr := classifyBuiltinToolResult(call.ID, toolNameBash, tc.result, 25)
+			if tc.name == "fatal" {
+				tr = classifyPrecomputedToolResult(call.ID, toolNameBash, tc.result, 25)
+			}
+			w.emitToolResult(context.Background(), task, call, tr)
 
 			if len(sink.events) != 1 {
 				t.Fatalf("events = %d, want 1", len(sink.events))

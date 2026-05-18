@@ -223,6 +223,85 @@ func TestClassifyCapabilityRawResult_JSONErrorEnvelope(t *testing.T) {
 	}
 }
 
+func TestClassifyBuiltinToolResult_ReadArbitraryJSON(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{"fatal_error_key", `{"FatalError":"crash"}`},
+		{"multi_key_error", `{"error":"invalid_grant","error_description":"token expired"}`},
+		{"success_false", `{"Success":false,"ExitCode":1}`},
+		{"status_timeout", `{"status":"timeout"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tr := classifyBuiltinToolResult("c1", toolNameRead, tc.raw, 10)
+			if tr.Status != ToolStatusSuccess {
+				t.Fatalf("Status = %s, want success", tr.Status)
+			}
+			if tr.Content != tc.raw {
+				t.Fatalf("Content = %q, want raw preserved %q", tr.Content, tc.raw)
+			}
+			if strings.Contains(tr.ForContext(), "[ERROR]") || strings.Contains(tr.ForContext(), "[FATAL]") {
+				t.Fatalf("ForContext() = %q, want unprefixed file content", tr.ForContext())
+			}
+		})
+	}
+}
+
+func TestClassifyBuiltinToolResult_ReadJSONErrorEnvelope(t *testing.T) {
+	t.Parallel()
+	tr := classifyBuiltinToolResult("c1", toolNameRead, `{"error":"file not found"}`, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+}
+
+func TestClassifyBuiltinToolResult_BashStdoutArbitraryJSON(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{"fatal_error_key", `{"FatalError":"crash"}`},
+		{"multi_key_error", `{"error":"invalid_grant","error_description":"token expired"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tr := classifyBuiltinToolResult("c1", toolNameBash, tc.raw, 10)
+			if tr.Status != ToolStatusSuccess {
+				t.Fatalf("Status = %s, want success", tr.Status)
+			}
+			if tr.Content != tc.raw {
+				t.Fatalf("Content = %q, want raw preserved %q", tr.Content, tc.raw)
+			}
+		})
+	}
+}
+
+func TestClassifyBuiltinToolResult_BashSandboxFailure(t *testing.T) {
+	t.Parallel()
+	raw := `{"Success":false,"ExitCode":127,"Stdout":"","Stderr":"not found"}`
+	tr := classifyBuiltinToolResult("c1", toolNameBash, raw, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+	if !tr.ExitCodeSet || tr.ExitCode != 127 {
+		t.Fatalf("ExitCode = %d, ExitCodeSet = %v, want 127/true", tr.ExitCode, tr.ExitCodeSet)
+	}
+}
+
+func TestClassifyPrecomputedToolResult_BashFatalEnvelope(t *testing.T) {
+	t.Parallel()
+	tr := classifyPrecomputedToolResult("c1", toolNameBash, `{"FatalError":"sandbox crash"}`, 10)
+	if tr.Status != ToolStatusFatal {
+		t.Fatalf("Status = %s, want fatal", tr.Status)
+	}
+}
+
 func TestClassifyCapabilityRawResult_ArbitraryJSON(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
