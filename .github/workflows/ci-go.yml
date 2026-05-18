@@ -44,10 +44,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Verify go.mod is tidy
         id: gomod_check
         continue-on-error: true

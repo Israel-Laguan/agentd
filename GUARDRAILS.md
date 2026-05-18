@@ -27,7 +27,7 @@ Subagents do not receive `delegate` or `delegate_parallel` unless those tool nam
 
 **Trigger:** Creating or editing any Go file
 **Instruction:**
-- Files must not exceed 300 lines; test files (*_test.go) allow 500 lines and paths matching `docs/**` allow 400 lines (enforced by scripts/check_loc.py).
+- Files must not exceed 300 lines; test files (*_test.go) allow 500 lines and paths matching `docs/**` allow 400 lines (enforced by `make loc` / `scripts/checkloc`).
 - Functions must not exceed 60 lines and 40 statements (enforced by `funlen` / `revive`).
 - Cyclomatic complexity must not exceed 15 (enforced by `cyclop`).
 - If you hit these limits, split by behavior — extract helpers, move logic to a new file, or introduce a focused package.

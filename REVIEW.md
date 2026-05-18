@@ -24,7 +24,7 @@ Run these on the PR branch. Order is fastest-fail first; `make check` is the req
 | --- | --- | --- |
 | Deps | `make tidy` | `go.mod` / `go.sum` are consistent |
 | Compile | `make build` | `cmd/agentd` builds to `bin/agentd` |
-| LOC | `make loc` | File size limits ([`scripts/check_loc.py`](scripts/check_loc.py): 300 default, 500 for `*_test.go`, 400 under `docs/`) |
+| LOC | `make loc` | File size limits ([`scripts/checkloc`](scripts/checkloc): 300 default, 500 for `*_test.go`, 400 under `docs/`) |
 | Lint | `make lint` | `golangci-lint` + [`depguard`](.golangci.yml) architecture rules |
 | Tests | `make test` | Race-enabled tests for `./...` |
 | Full gate | `make check` | `loc` + `lint` + `test` (required before merge) |

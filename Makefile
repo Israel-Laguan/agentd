@@ -32,6 +32,6 @@ lint:
 	$(GO_ENV) $(GOLANGCI_LINT) run ./...
 
 loc:
-	python3 ./scripts/check_loc.py --max-lines 300
+	$(GO) run ./scripts/checkloc --max-lines 300
 
 check: loc lint test
