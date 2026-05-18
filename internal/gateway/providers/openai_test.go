@@ -143,3 +143,47 @@ func TestMessagesToOpenAI_AssistantToolCallsOmitsEmptyContent(t *testing.T) {
 		t.Fatal("expected tool_calls key")
 	}
 }
+
+func TestMessagesToOpenAI_ToolResultEmptyContent(t *testing.T) {
+	t.Parallel()
+	msgs := marshalOpenAIMessages(t, []spec.PromptMessage{
+		{
+			Role:       "tool",
+			ToolCallID: "call_abc",
+			Content:    "",
+		},
+	})
+	if len(msgs) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(msgs))
+	}
+	msg := msgs[0]
+	if msg["role"] != "tool" {
+		t.Fatalf("role = %v, want tool", msg["role"])
+	}
+	if _, has := msg["content"]; !has {
+		t.Fatal("tool message with empty content must include content key")
+	}
+	if msg["content"] != "" {
+		t.Fatalf("content = %v, want empty string", msg["content"])
+	}
+}
+
+func TestMessagesToOpenAI_UserEmptyContent(t *testing.T) {
+	t.Parallel()
+	msgs := marshalOpenAIMessages(t, []spec.PromptMessage{
+		{Role: "user", Content: ""},
+	})
+	if len(msgs) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(msgs))
+	}
+	msg := msgs[0]
+	if msg["role"] != "user" {
+		t.Fatalf("role = %v, want user", msg["role"])
+	}
+	if _, has := msg["content"]; !has {
+		t.Fatal("user message with empty content must include content key")
+	}
+	if msg["content"] != "" {
+		t.Fatalf("content = %v, want empty string", msg["content"])
+	}
+}

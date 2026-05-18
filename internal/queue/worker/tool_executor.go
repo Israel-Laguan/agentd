@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"agentd/internal/gateway"
@@ -28,6 +29,10 @@ type ToolExecutor struct {
 	envVars       []string
 	wallTimeout   time.Duration
 	maxReadBytes  int64
+
+	workspaceRoot     string
+	workspaceRootErr  error
+	workspaceRootOnce sync.Once
 }
 
 func NewToolExecutor(sb sandbox.Executor, workspacePath string, envVars []string, wallTimeout time.Duration) *ToolExecutor {
@@ -47,7 +52,7 @@ func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall) strin
 	case toolNameRead:
 		return t.executeRead(ctx, call.Function.Arguments)
 	case toolNameWrite:
-		return t.executeWrite(call.Function.Arguments)
+		return t.executeWrite(ctx, call.Function.Arguments)
 	default:
 		return jsonErrorf("unknown tool: %s", call.Function.Name)
 	}
@@ -193,7 +198,11 @@ type writeArgs struct {
 	Content *string `json:"content"`
 }
 
-func (t *ToolExecutor) executeWrite(argsJSON string) string {
+func (t *ToolExecutor) executeWrite(ctx context.Context, argsJSON string) string {
+	if err := ctx.Err(); err != nil {
+		return jsonErrorf("write cancelled: %v", err)
+	}
+
 	var args writeArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return jsonErrorf("invalid arguments: %v", err)
