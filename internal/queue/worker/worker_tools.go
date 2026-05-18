@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -27,58 +26,50 @@ import (
 //   - call: The tool call from the AI response
 //   - toolToAdapter: Map of tool names to adapter names for MCP tools
 //
-// Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
-func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
+// Returns a structured ToolResult describing the outcome.
+func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) ToolResult {
 	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil)
 }
 
-// timeoutResult returns a JSON payload with status "timeout" that is
-// distinguishable from execution errors. The model sees a clear
-// [TIMEOUT] prefix so retry logic can differentiate the two.
-func timeoutResult(toolName string, timeout time.Duration) string {
+// timeoutToolResult returns a structured ToolResult for a timed-out tool.
+func timeoutToolResult(callID, toolName string, timeout time.Duration) ToolResult {
 	ms := timeout.Milliseconds()
-	payload, err := json.Marshal(map[string]string{
-		"status": "timeout",
-		"error":  fmt.Sprintf("[TIMEOUT] Tool '%s' did not respond within %dms", toolName, ms),
-	})
-	if err != nil {
-		return fmt.Sprintf(`{"status":"timeout","error":"[TIMEOUT] Tool '%s' timed out"}`, toolName)
-	}
-	return string(payload)
+	return TimeoutResult(callID, ms)
 }
 
-func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) string {
+func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) ToolResult {
 	timeout := w.toolTimeouts.Lookup(call.Function.Name, config.DefaultToolTimeout)
 	toolCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	result := w.executeToolCore(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
 	if toolCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
-		return timeoutResult(call.Function.Name, timeout)
+		return timeoutToolResult(call.ID, call.Function.Name, timeout)
 	}
 	return result
 }
 
-func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) string {
+func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) ToolResult {
+	start := time.Now()
 	hookCtx := HookContext{
 		ToolName:  call.Function.Name,
 		Args:      call.Function.Arguments,
 		CallID:    call.ID,
 		SessionID: sessionID,
 		ProjectID: projectID,
-		Timestamp: time.Now(),
+		Timestamp: start,
 		ExecCtx:   ctx,
 	}
 
 	if w.hooks != nil {
 		if verdict := w.hooks.RunPre(hookCtx); verdict.ShortCircuit {
-			return verdict.Result
+			return SuccessResult(call.ID, verdict.Result, time.Since(start).Milliseconds())
 		} else if verdict.Veto && verdict.Result != "" {
 			result := verdict.Result
 			result = w.hooks.RunPost(hookCtx, result)
-			return result
+			return VetoedResult(call.ID, result)
 		} else if verdict.Veto {
-			return jsonErrorf("tool call vetoed: %s", verdict.Reason)
+			return VetoedResult(call.ID, verdict.Reason)
 		}
 	}
 
@@ -97,16 +88,19 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 		result = executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
 	}
 
+	elapsed := time.Since(start).Milliseconds()
+	tr := classifyRawResult(call.ID, result, elapsed)
+
 	if w.hooks != nil {
-		result = w.hooks.RunPost(hookCtx, result)
+		tr.Content = w.hooks.RunPost(hookCtx, tr.Content)
 	}
 
-	return result
+	return tr
 }
 
 // executeAgenticTool is a wrapper around DispatchTool for backward compatibility.
 // Use DispatchTool directly instead.
-func (w *Worker) executeAgenticTool(ctx context.Context, sessionID string, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) string {
+func (w *Worker) executeAgenticTool(ctx context.Context, sessionID string, toolExec *ToolExecutor, call gateway.ToolCall, toolToAdapter map[string]string) ToolResult {
 	if toolExec == nil {
 		toolExec = w.toolExecutor
 	}

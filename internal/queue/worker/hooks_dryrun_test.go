@@ -131,12 +131,12 @@ func TestDispatchTool_DryRun_SkipsExecution(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hi"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "s1", call, nil, executor)
-	if strings.Contains(result, "REAL EXECUTION") {
+	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	if strings.Contains(tr.Content, "REAL EXECUTION") {
 		t.Fatal("dry-run should not execute the real sandbox")
 	}
-	if !strings.Contains(result, "(simulated)") {
-		t.Fatalf("expected simulated result, got %q", result)
+	if !strings.Contains(tr.Content, "(simulated)") {
+		t.Fatalf("expected simulated result, got %q", tr.Content)
 	}
 }
 
@@ -164,12 +164,12 @@ func TestDispatchTool_DryRun_PostHooksStillFire(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "read", Arguments: `{"path":"f.txt"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
 	if !postHookRan {
 		t.Fatal("post-hooks should fire during dry-run")
 	}
-	if !strings.Contains(result, "[audited]") {
-		t.Fatalf("expected post-hook annotation, got %q", result)
+	if !strings.Contains(tr.Content, "[audited]") {
+		t.Fatalf("expected post-hook annotation, got %q", tr.Content)
 	}
 }
 
@@ -187,12 +187,12 @@ func TestDispatchTool_DryRun_Disabled_ExecutesNormally(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hello"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "s1", call, nil, executor)
-	if strings.Contains(result, "(simulated)") {
+	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	if strings.Contains(tr.Content, "(simulated)") {
 		t.Fatal("disabled dry-run should execute normally")
 	}
-	if !strings.Contains(result, "real output") {
-		t.Fatalf("expected real output, got %q", result)
+	if !strings.Contains(tr.Content, "real output") {
+		t.Fatalf("expected real output, got %q", tr.Content)
 	}
 }
 
@@ -223,9 +223,9 @@ func TestDispatchTool_DryRun_AllToolTypes(t *testing.T) {
 				Function: gateway.ToolCallFunction{Name: tt.name, Arguments: tt.args},
 			}
 
-			result := w.DispatchTool(context.Background(), "s1", call, nil, executor)
-			if !strings.Contains(result, tt.contains) {
-				t.Fatalf("expected result to contain %q, got %q", tt.contains, result)
+			tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+			if !strings.Contains(tr.Content, tt.contains) {
+				t.Fatalf("expected result to contain %q, got %q", tt.contains, tr.Content)
 			}
 		})
 	}

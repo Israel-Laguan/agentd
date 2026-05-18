@@ -27,12 +27,12 @@ func TestExecuteAgenticTool_CapabilityRegistry(t *testing.T) {
 	w := &Worker{capabilities: registry}
 	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
 	toolToAdapter := map[string]string{"capability_tool": "fake"}
-	out := w.executeAgenticTool(context.Background(), "", ex, gateway.ToolCall{
+	tr := w.executeAgenticTool(context.Background(), "", ex, gateway.ToolCall{
 		Function: gateway.ToolCallFunction{Name: "capability_tool", Arguments: `{"id":"1"}`},
 	}, toolToAdapter)
 	var payload map[string]any
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
-		t.Fatalf("invalid JSON: %v out=%s", err, out)
+	if err := json.Unmarshal([]byte(tr.Content), &payload); err != nil {
+		t.Fatalf("invalid JSON: %v out=%s", err, tr.Content)
 	}
 	if payload["tool"] != "capability_tool" {
 		t.Fatalf("expected tool name in payload, got %#v", payload)
@@ -66,11 +66,11 @@ func TestDispatchTool_ScopedCapabilityWithoutAdapterIndex(t *testing.T) {
 	}
 
 	// Dispatch with NO toolToAdapter index (simulating dynamic registration)
-	out := w.dispatchToolWithProject(context.Background(), "session-1", "project-1", call, nil, ex, scopedRegistry)
+	tr := w.dispatchToolWithProject(context.Background(), "session-1", "project-1", call, nil, ex, scopedRegistry)
 
 	var payload map[string]any
-	if err := json.Unmarshal([]byte(out), &payload); err != nil {
-		t.Fatalf("failed to parse result: %v (out=%s)", err, out)
+	if err := json.Unmarshal([]byte(tr.Content), &payload); err != nil {
+		t.Fatalf("failed to parse result: %v (out=%s)", err, tr.Content)
 	}
 
 	if payload["adapter"] != "scoped_fake" {
@@ -172,11 +172,11 @@ func TestProcessAgentic_ExecutesToolCalls(t *testing.T) {
 	}
 
 	// Use DispatchTool as the single entry point for tool execution
-	result := w.DispatchTool(context.Background(), "", bashCall, nil, w.toolExecutor)
+	tr := w.DispatchTool(context.Background(), "", bashCall, nil, w.toolExecutor)
 
 	// The result should contain the output
-	if !strings.Contains(result, "hello") {
-		t.Errorf("expected result to contain 'hello', got %q", result)
+	if !strings.Contains(tr.Content, "hello") {
+		t.Errorf("expected result to contain 'hello', got %q", tr.Content)
 	}
 }
 
