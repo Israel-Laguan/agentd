@@ -158,6 +158,7 @@ func TestDispatchToolWithHooks_PreHookVeto(t *testing.T) {
 		t.Context(), "s1", "p1", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Equal(t, ToolStatusVetoed, result.Status)
+	assert.Equal(t, "denied", result.Content)
 	assert.False(t, suspended)
 }
 

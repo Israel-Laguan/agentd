@@ -452,3 +452,44 @@ func TestErrorPathsRunThroughPostHooks(t *testing.T) {
 		t.Fatalf("expected TOOL_RESULT, got %q", sink.events[1].Type)
 	}
 }
+
+func TestAuditHook_ClassifiedBashErrorExitCode(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{}
+	mockSB := &mockExecSandbox{result: sandbox.Result{
+		Success: false, ExitCode: 1,
+		Stdout: "", Stderr: "command not found",
+	}}
+
+	w := NewWorker(
+		&mockAgenticStore{},
+		nil,
+		mockSB,
+		nil,
+		sink,
+		WorkerOptions{MaxToolIterations: 5},
+	)
+
+	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	call := gateway.ToolCall{
+		ID:       "call_bash_err",
+		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"bad"}`},
+	}
+	tr := w.dispatchToolWithProject(context.Background(), "task-bash-err", "proj-bash-err", call, nil, executor, nil)
+
+	if tr.Status != ToolStatusError {
+		t.Fatalf("expected error status, got %s", tr.Status)
+	}
+	if len(sink.events) != 2 {
+		t.Fatalf("expected 2 audit events, got %d", len(sink.events))
+	}
+
+	var resultEvent ToolResultEvent
+	if err := json.Unmarshal([]byte(sink.events[1].Payload), &resultEvent); err != nil {
+		t.Fatalf("unmarshal TOOL_RESULT: %v", err)
+	}
+	if resultEvent.ExitCode != -1 {
+		t.Fatalf("ExitCode = %d, want -1 for classified bash error", resultEvent.ExitCode)
+	}
+}
