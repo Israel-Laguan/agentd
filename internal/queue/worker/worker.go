@@ -170,8 +170,10 @@ func NewWorker(
 		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
 	}
 	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
+	toolExecutor := NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout)
 	base := resolveHooks(opts.Hooks)
 	hooks := base.Clone()
+	hooks.RegisterPre(SchemaValidationHook(SchemaRegistryFromDefinitions(toolExecutor.Definitions())))
 	hooks.PrependPost(ScrubResultHook(scrubber))
 	hooks.RegisterPost(AuditHook(sink, scrubber))
 
@@ -188,7 +190,7 @@ func NewWorker(
 		truncatorMax:         opts.AgenticTruncatorMax,
 		truncationThreshold:  opts.AgenticTruncationThresh,
 		characterBudget:      opts.AgenticCharacterBudget,
-		toolExecutor:         NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout),
+		toolExecutor:         toolExecutor,
 		toolTimeouts:         opts.ToolTimeouts,
 		capabilities:         opts.Capabilities,
 		tokenBudget:          opts.TokenBudget,
