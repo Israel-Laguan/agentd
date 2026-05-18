@@ -66,29 +66,27 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 		} else if verdict.Veto && verdict.Result != "" {
 			result := verdict.Result
 			result = w.hooks.RunPost(hookCtx, result)
-			return VetoedResult(call.ID, result)
+			return SuccessResult(call.ID, result, time.Since(start).Milliseconds())
 		} else if verdict.Veto {
 			return VetoedResult(call.ID, verdict.Reason)
 		}
 	}
 
-	var result string
+	var tr ToolResult
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
-		result = toolExecutor.Execute(ctx, call)
+		raw := toolExecutor.Execute(ctx, call)
+		tr = classifyRawResult(call.ID, raw, time.Since(start).Milliseconds())
 	case toolNameDelegate:
-		result = w.executeDelegateWithCapabilities(ctx, call, toolExecutor, scopedCapabilities)
+		raw := w.executeDelegateWithCapabilities(ctx, call, toolExecutor, scopedCapabilities)
+		tr = SuccessResult(call.ID, raw, time.Since(start).Milliseconds())
 	case toolNameDelegateParallel:
-		result = w.executeDelegateParallel(ctx, call, toolExecutor, scopedCapabilities)
+		raw := w.executeDelegateParallel(ctx, call, toolExecutor, scopedCapabilities)
+		tr = SuccessResult(call.ID, raw, time.Since(start).Milliseconds())
 	default:
-		// Capability tools: never gate on toolToAdapter here; it is only a hint inside
-		// executeCapabilityTool. Scoped-then-global resolution (and nil index) is covered
-		// by TestDispatchTool_ScopedCapabilityWithoutAdapterIndex.
-		result = executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
+		raw := executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
+		tr = SuccessResult(call.ID, raw, time.Since(start).Milliseconds())
 	}
-
-	elapsed := time.Since(start).Milliseconds()
-	tr := classifyRawResult(call.ID, result, elapsed)
 
 	if w.hooks != nil {
 		tr.Content = w.hooks.RunPost(hookCtx, tr.Content)
