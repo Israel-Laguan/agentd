@@ -66,7 +66,11 @@ func (r ToolResult) ForContext() string {
 	case ToolStatusVetoed:
 		return fmt.Sprintf("[POLICY] Tool call blocked: %s", r.Content)
 	case ToolStatusTimeout:
-		return fmt.Sprintf("[TIMEOUT] Tool did not respond within %dms", r.ElapsedMs)
+		msg := strings.TrimSpace(r.Content)
+		if msg == "" {
+			msg = fmt.Sprintf("Tool did not respond within %dms", r.ElapsedMs)
+		}
+		return fmt.Sprintf("[TIMEOUT] %s", msg)
 	case ToolStatusFatal:
 		if r.Content != "" {
 			return fmt.Sprintf("[FATAL] Tool execution failed unrecoverably: %s", r.Content)
@@ -193,6 +197,16 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	return SuccessResult(callID, raw, elapsedMs)
 }
 
+// classifyCapabilityRawResult classifies MCP capability tool output without
+// applying sandbox-style heuristics to arbitrary JSON payloads.
+func classifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
+	trimmed := strings.TrimSpace(raw)
+	if isJSONErrorEnvelope(trimmed) {
+		return classifyRawResult(callID, trimmed, elapsedMs)
+	}
+	return SuccessResult(callID, raw, elapsedMs)
+}
+
 // isJSONErrorEnvelope reports whether raw is a single-key {"error":"..."} payload
 // produced by jsonErrorf.
 func isJSONErrorEnvelope(raw string) bool {
@@ -237,7 +251,15 @@ func subagentResultToToolResult(callID, raw string, sr SubagentResult, elapsedMs
 	switch sr.Status {
 	case SubagentStatusSuccess:
 		return SuccessResult(callID, raw, elapsedMs)
-	case SubagentStatusFailure, SubagentStatusTimeout:
+	case SubagentStatusTimeout:
+		msg := sr.Error
+		if msg == "" {
+			msg = "subagent timeout"
+		}
+		tr := TimeoutResult(callID, elapsedMs)
+		tr.Content = msg
+		return tr
+	case SubagentStatusFailure:
 		msg := sr.Error
 		if msg == "" {
 			msg = "subagent " + string(sr.Status)
