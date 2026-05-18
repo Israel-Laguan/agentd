@@ -271,19 +271,17 @@ func subagentResultToToolResult(callID, raw string, sr SubagentResult, elapsedMs
 	case SubagentStatusSuccess:
 		return SuccessResult(callID, raw, elapsedMs)
 	case SubagentStatusTimeout:
-		msg := sr.Error
-		if msg == "" {
-			msg = "subagent timeout"
-		}
 		tr := TimeoutResult(callID, elapsedMs)
-		tr.Content = msg
+		tr.Content = raw
 		return tr
 	case SubagentStatusFailure:
 		msg := sr.Error
 		if msg == "" {
 			msg = "subagent " + string(sr.Status)
 		}
-		return NonRetryableErrorResult(callID, msg, "", elapsedMs)
+		tr := NonRetryableErrorResult(callID, msg, "", elapsedMs)
+		tr.Content = raw
+		return tr
 	default:
 		return SuccessResult(callID, raw, elapsedMs)
 	}
