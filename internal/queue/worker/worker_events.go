@@ -148,6 +148,9 @@ func toolResultExitCode(tr ToolResult) int {
 		return 0
 	}
 	if tr.ExitCodeSet {
+		if tr.ExitCode == 0 && tr.Status != ToolStatusSuccess {
+			return -1
+		}
 		return tr.ExitCode
 	}
 	switch tr.Status {
