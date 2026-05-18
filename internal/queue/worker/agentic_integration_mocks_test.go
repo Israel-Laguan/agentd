@@ -114,6 +114,20 @@ func requestContainsToolResult(req gateway.AIRequest, toolCallID, contentSubstri
 	return false
 }
 
+func requestContainsAssistantToolCall(req gateway.AIRequest, callID string) bool {
+	for _, message := range req.Messages {
+		if message.Role != "assistant" {
+			continue
+		}
+		for _, tc := range message.ToolCalls {
+			if tc.ID == callID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (m *mockAgenticStore) MarkTaskRunning(_ context.Context, id string, _ time.Time, pid int) (*models.Task, error) {
 	m.task.ID = id
 	m.task.State = models.TaskStateRunning
