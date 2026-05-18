@@ -64,27 +64,19 @@ func (r ToolResult) ForContext() string {
 	case ToolStatusSuccess:
 		return r.Content
 	case ToolStatusVetoed:
-		reason := r.Content
-		if r.Error != nil {
-			reason = r.Error.Message
-		}
-		return fmt.Sprintf("[POLICY] Tool call blocked: %s", reason)
+		return fmt.Sprintf("[POLICY] Tool call blocked: %s", r.Content)
 	case ToolStatusTimeout:
 		return fmt.Sprintf("[TIMEOUT] Tool did not respond within %dms", r.ElapsedMs)
 	case ToolStatusFatal:
-		if r.Error != nil && r.Error.Message != "" {
-			return fmt.Sprintf("[FATAL] Tool execution failed unrecoverably: %s", r.Error.Message)
+		if r.Content != "" {
+			return fmt.Sprintf("[FATAL] Tool execution failed unrecoverably: %s", r.Content)
 		}
 		return "[FATAL] Tool execution failed unrecoverably"
 	case ToolStatusError:
-		msg := r.Content
-		if r.Error != nil {
-			msg = r.Error.Message
-		}
 		if r.Retryable {
-			return fmt.Sprintf("[RETRYABLE ERROR] %s", msg)
+			return fmt.Sprintf("[RETRYABLE ERROR] %s", r.Content)
 		}
-		return fmt.Sprintf("[ERROR] %s", msg)
+		return fmt.Sprintf("[ERROR] %s", r.Content)
 	default:
 		return r.Content
 	}
@@ -180,7 +172,7 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 			return TimeoutResult(callID, elapsedMs)
 		}
 		if env.Error != "" {
-			return ErrorResult(callID, env.Error, "", elapsedMs)
+			return NonRetryableErrorResult(callID, env.Error, "", elapsedMs)
 		}
 		if env.Success != nil && !*env.Success {
 			msg := fmt.Sprintf("command failed with exit code %d", env.ExitCode)
@@ -191,7 +183,7 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 			return FatalResult(callID, raw, elapsedMs)
 		}
 		if strings.HasPrefix(raw, `{"error"`) {
-			return ErrorResult(callID, raw, "", elapsedMs)
+			return NonRetryableErrorResult(callID, raw, "", elapsedMs)
 		}
 		if strings.HasPrefix(raw, `{"Success":false`) {
 			return NonRetryableErrorResult(callID, raw, "", elapsedMs)

@@ -32,9 +32,8 @@ func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gatewa
 }
 
 // timeoutToolResult returns a structured ToolResult for a timed-out tool.
-func timeoutToolResult(callID, toolName string, timeout time.Duration) ToolResult {
-	ms := timeout.Milliseconds()
-	return TimeoutResult(callID, ms)
+func timeoutToolResult(callID string, timeout time.Duration) ToolResult {
+	return TimeoutResult(callID, timeout.Milliseconds())
 }
 
 func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) ToolResult {
@@ -44,7 +43,7 @@ func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, project
 
 	result := w.executeToolCore(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
 	if toolCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
-		return timeoutToolResult(call.ID, call.Function.Name, timeout)
+		return timeoutToolResult(call.ID, timeout)
 	}
 	return result
 }
