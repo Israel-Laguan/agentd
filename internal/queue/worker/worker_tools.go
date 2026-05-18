@@ -75,9 +75,8 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 		}
 	}
 
-	bodyStart := time.Now()
 	tr := w.executeToolWithRetry(ctx, call.ID, timeout, retry, func(toolCtx context.Context) ToolResult {
-		return w.runToolBody(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, bodyStart)
+		return w.runToolBody(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
 	})
 
 	if w.hooks != nil {

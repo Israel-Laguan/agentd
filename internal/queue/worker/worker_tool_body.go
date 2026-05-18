@@ -8,7 +8,8 @@ import (
 	"agentd/internal/gateway"
 )
 
-func (w *Worker) runToolBody(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, start time.Time) ToolResult {
+func (w *Worker) runToolBody(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) ToolResult {
+	start := time.Now()
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
 		raw := toolExecutor.Execute(ctx, call)
