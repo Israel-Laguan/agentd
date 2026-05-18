@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 )
 
 func (t *ToolExecutor) getWorkspaceRoot() (string, error) {
@@ -113,23 +115,34 @@ func (cr *contextReader) Read(p []byte) (int, error) {
 	return cr.r.Read(p)
 }
 
-func readFileWithContext(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+func readFileWithContext(ctx context.Context, path string, maxBytes int64, preInfo os.FileInfo) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	info, err := os.Stat(path)
+	if preInfo != nil && preInfo.Size() > maxBytes {
+		return nil, fmt.Errorf("file exceeds max size %d", maxBytes)
+	}
+
+	openFlags := os.O_RDONLY
+	if runtime.GOOS != "windows" {
+		openFlags |= syscall.O_NONBLOCK
+	}
+	f, err := os.OpenFile(path, openFlags, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	info, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("not a regular file")
 	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
+	if info.Size() > maxBytes {
+		return nil, fmt.Errorf("file exceeds max size %d", maxBytes)
 	}
-	defer func() { _ = f.Close() }()
 
 	limited := io.LimitReader(f, maxBytes+1)
 	cr := &contextReader{ctx: ctx, r: limited}

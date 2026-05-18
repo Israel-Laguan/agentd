@@ -182,7 +182,7 @@ func (t *ToolExecutor) executeRead(ctx context.Context, argsJSON string) string 
 		return jsonErrorf("file too large: %d bytes (max %d)", info.Size(), t.maxReadBytes)
 	}
 
-	content, err := readFileWithContext(ctx, fullPath, t.maxReadBytes)
+	content, err := readFileWithContext(ctx, fullPath, t.maxReadBytes, info)
 	if err != nil {
 		if ctx.Err() != nil {
 			return jsonErrorf("read cancelled: %v", ctx.Err())
