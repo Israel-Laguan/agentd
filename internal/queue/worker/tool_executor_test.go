@@ -359,16 +359,16 @@ func TestDispatchTool_SchemaValidation_UnknownArgument(t *testing.T) {
 	executor := NewToolExecutor(mockSB, t.TempDir(), nil, 0)
 	w := NewWorker(nil, nil, mockSB, nil, nil, WorkerOptions{})
 
-	out := w.DispatchTool(context.Background(), "test-session", gateway.ToolCall{
+	tr := w.DispatchTool(context.Background(), "test-session", gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
 			Name:      toolNameBash,
 			Arguments: `{"command":"echo hi","extra":"val"}`,
 		},
 	}, nil, executor)
-	if !strings.Contains(out, "vetoed") {
-		t.Fatalf("expected schema veto, got %q", out)
+	if tr.Status != ToolStatusVetoed {
+		t.Fatalf("expected schema veto, got status %s content %q", tr.Status, tr.Content)
 	}
-	if strings.Contains(out, "hello world") {
+	if strings.Contains(tr.Content, "hello world") {
 		t.Fatal("tool should not have executed after schema veto")
 	}
 }

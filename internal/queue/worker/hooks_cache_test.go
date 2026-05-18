@@ -270,13 +270,13 @@ func TestCacheHooks_ConsecutiveReadsReturnCached(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "read", Arguments: `{"path":"test.txt"}`},
 	}
 
-	result1 := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
+	tr1 := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
 
 	call.ID = "call_2"
-	result2 := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
+	tr2 := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
 
-	if result1 != result2 {
-		t.Fatalf("expected identical results:\n  first:  %q\n  second: %q", result1, result2)
+	if tr1.Content != tr2.Content {
+		t.Fatalf("expected identical results:\n  first:  %q\n  second: %q", tr1.Content, tr2.Content)
 	}
 	// read does not go through the sandbox (it uses os.ReadFile directly),
 	// so we verify via the cache: second call must hit the cache and skip
@@ -311,10 +311,10 @@ func TestCacheHooks_BashNeverCached(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hi"}`},
 	}
 
-	w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
+	_ = w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
 
 	call.ID = "call_2"
-	w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
+	_ = w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
 
 	if len(rc.entries) != 0 {
 		t.Fatal("bash results should never be stored in cache")
@@ -386,9 +386,9 @@ func TestCacheHooks_ShortCircuitSkipsPostHooks(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "read", Arguments: `{"path":"cached.txt"}`},
 	}
 
-	result := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
-	if result != "from-cache" {
-		t.Fatalf("expected from-cache, got %q", result)
+	tr := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
+	if tr.Content != "from-cache" {
+		t.Fatalf("expected from-cache, got %q", tr.Content)
 	}
 	if postRan {
 		t.Fatal("post-hooks should not run on cache hit")

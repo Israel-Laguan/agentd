@@ -94,47 +94,43 @@ func truncateToMax(input string, maxLength int) string {
 	return string(runes[:truncLen]) + truncationSuffix
 }
 
-// emitToolResult emits a TOOL_RESULT event with the tool name, call ID, exit code, duration,
-// output summary, and byte counts. It applies truncation to the output_summary to
-// maxOutputSummaryLength (1000 characters).
-func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gateway.ToolCall, result string, durationMs int64) {
+// emitToolResult emits a TOOL_RESULT event from a structured ToolResult.
+func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gateway.ToolCall, tr ToolResult) {
 	if w.sink == nil {
 		return
 	}
 
-	exitCode := parseToolExitCode(result)
-	outputSummary := result
+	exitCode := toolResultExitCode(tr)
+	outputSummary := tr.Content
 
 	// Scrub output_summary before truncation
 	if w.sandboxScrubber != nil {
 		outputSummary = w.sandboxScrubber.Scrub(outputSummary)
 	}
-	// Truncate output_summary to maxOutputSummaryLength (1000 characters)
 	outputSummary = truncateToMax(outputSummary, maxOutputSummaryLength)
 
 	var stdoutBytes, stderrBytes int
-	if env, err := parseToolEnv(result); err == nil && env != nil {
+	if env, err := parseToolEnv(tr.Content); err == nil && env != nil {
 		if env.Stdout != "" || env.Stderr != "" || env.Success != nil {
 			stdoutBytes = len(env.Stdout)
 			stderrBytes = len(env.Stderr)
 		} else {
-			stdoutBytes = len(result)
+			stdoutBytes = len(tr.Content)
 		}
 	} else {
-		stdoutBytes = len(result)
+		stdoutBytes = len(tr.Content)
 	}
 
 	event := ToolResultEvent{
 		ToolName:      call.Function.Name,
 		CallID:        call.ID,
 		ExitCode:      exitCode,
-		DurationMs:    durationMs,
+		DurationMs:    tr.ElapsedMs,
 		OutputSummary: outputSummary,
 		StdoutBytes:   stdoutBytes,
 		StderrBytes:   stderrBytes,
 	}
 
-	// Use JSON marshaling to ensure proper escaping and structural integrity
 	eventData, _ := json.Marshal(event)
 	payload := string(eventData)
 
@@ -144,4 +140,16 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 		Type:      models.EventTypeToolResult,
 		Payload:   payload,
 	})
+}
+
+// toolResultExitCode maps a ToolResult status to a conventional exit code.
+func toolResultExitCode(tr ToolResult) int {
+	switch tr.Status {
+	case ToolStatusSuccess:
+		return 0
+	case ToolStatusError, ToolStatusTimeout, ToolStatusVetoed, ToolStatusFatal:
+		return -1
+	default:
+		return parseToolExitCode(tr.Content)
+	}
 }

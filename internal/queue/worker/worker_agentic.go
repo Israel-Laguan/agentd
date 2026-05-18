@@ -153,18 +153,17 @@ func (w *Worker) handleAgenticToolCalls(
 		} else {
 			taskUpdatedAt = fresh.UpdatedAt
 		}
-		result, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
-		if detected := cm.CheckToolResult(result); len(detected) > 0 {
-			slog.Info("auto-detected context corrections",
-				"task_id", task.ID,
-				"count", len(detected),
-			)
+		tr, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
+		contextContent := tr.ForContext()
+		if detected := cm.CheckToolResult(contextContent); len(detected) > 0 {
+			slog.Info("auto-detected context corrections", "task_id", task.ID, "count", len(detected))
 		}
-		*messages = append(*messages, gateway.PromptMessage{
-			Role:       "tool",
-			ToolCallID: call.ID,
-			Content:    result,
-		})
+		*messages = append(*messages, gateway.PromptMessage{Role: "tool", ToolCallID: call.ID, Content: contextContent})
+		w.emitToolResult(ctx, task, call, tr)
+		if tr.Status == ToolStatusFatal {
+			w.handleAgentFailure(ctx, task, contextContent)
+			return true
+		}
 		if suspended {
 			return true
 		}

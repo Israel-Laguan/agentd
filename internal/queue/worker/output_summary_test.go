@@ -36,7 +36,7 @@ func TestOutputSummaryLengthBound(t *testing.T) {
 
 		for _, call := range seq.Calls {
 			output := generateRandomOutput(rnd)
-			w.emitToolResult(ctx, task, call, output, 100)
+			w.emitToolResult(ctx, task, call, SuccessResult(call.ID, output, 100))
 		}
 
 		for _, ev := range sink.events {

@@ -43,7 +43,7 @@ func TestEmitToolResultValidJSONWithoutSuccessIsSuccessfulOutput(t *testing.T) {
 	}
 	result := `{"answer":42}`
 
-	w.emitToolResult(context.Background(), task, call, result, 25)
+	w.emitToolResult(context.Background(), task, call, SuccessResult(call.ID, result, 25))
 
 	if len(sink.events) != 1 {
 		t.Fatalf("events = %d, want 1", len(sink.events))
@@ -90,7 +90,7 @@ func TestEmitToolResultExplicitJSONFailures(t *testing.T) {
 				Function: gateway.ToolCallFunction{Name: "bash"},
 			}
 
-			w.emitToolResult(context.Background(), task, call, tc.result, 25)
+					w.emitToolResult(context.Background(), task, call, classifyRawResult(call.ID, tc.result, 25))
 
 			if len(sink.events) != 1 {
 				t.Fatalf("events = %d, want 1", len(sink.events))
@@ -120,7 +120,7 @@ func TestEmitToolResultJSONEnvelopeByteCounts(t *testing.T) {
 	}
 	result := `{"Success":true,"ExitCode":0,"Stdout":"hello","Stderr":"warn"}`
 
-	w.emitToolResult(context.Background(), task, call, result, 25)
+	w.emitToolResult(context.Background(), task, call, SuccessResult(call.ID, result, 25))
 
 	if len(sink.events) != 1 {
 		t.Fatalf("events = %d, want 1", len(sink.events))
