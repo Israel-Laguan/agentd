@@ -9,6 +9,7 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 )
 
 func TestTruncateToMaxMultibyteInput(t *testing.T) {
@@ -74,7 +75,7 @@ func TestEmitToolResultExplicitJSONFailures(t *testing.T) {
 	}{
 		{name: "error", result: jsonErrorf("boom")},
 		{name: "fatal", result: `{"FatalError":"boom"}`},
-		{name: "success false", result: `{"Success":false,"ExitCode":1}`},
+		{name: "success false", result: sandboxFailureJSON(sandbox.Result{ExitCode: 1})},
 	}
 
 	for _, tc := range tests {
