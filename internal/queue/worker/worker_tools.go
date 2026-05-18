@@ -82,13 +82,13 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 		tr = classifyRawResult(call.ID, raw, time.Since(start).Milliseconds())
 	case toolNameDelegate:
 		raw := w.executeDelegateWithCapabilities(ctx, call, toolExecutor, scopedCapabilities)
-		tr = SuccessResult(call.ID, raw, time.Since(start).Milliseconds())
+		tr = classifyDelegateRawResult(call.ID, raw, time.Since(start).Milliseconds())
 	case toolNameDelegateParallel:
 		raw := w.executeDelegateParallel(ctx, call, toolExecutor, scopedCapabilities)
-		tr = SuccessResult(call.ID, raw, time.Since(start).Milliseconds())
+		tr = classifyDelegateRawResult(call.ID, raw, time.Since(start).Milliseconds())
 	default:
 		raw := executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities)
-		tr = SuccessResult(call.ID, raw, time.Since(start).Milliseconds())
+		tr = classifyRawResult(call.ID, raw, time.Since(start).Milliseconds())
 	}
 
 	if w.hooks != nil {
