@@ -30,12 +30,12 @@ export default function Page() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [chatSettings, setChatSettings] =
-    useState<ChatSettings>({
-      provider: "openai",
-      model: "gpt-4o",
-      effort: "medium",
-  });
+  const DefaultChatSettings: ChatSettings = {
+    provider: "openai",
+    model: "gpt-4o",
+    effort: "medium",
+  };
+  const [chatSettings, setChatSettings] = useState<ChatSettings>(DefaultChatSettings);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleNewIntake = useCallback(() => {
@@ -44,6 +44,7 @@ export default function Page() {
     setDraftPlan(null);
     setInput('');
     setSelectedTask(null);
+    setChatSettings(DefaultChatSettings);
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
