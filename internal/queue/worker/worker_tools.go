@@ -3,10 +3,12 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
 	"agentd/internal/capabilities"
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 )
 
@@ -27,7 +29,30 @@ import (
 //
 // Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
 func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
-	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil)
+	timeout := w.toolTimeouts.Lookup(call.Function.Name, config.DefaultToolTimeout)
+	toolCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	result := w.dispatchToolWithProject(toolCtx, sessionID, "", call, toolToAdapter, toolExecutor, nil)
+	if toolCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+		return timeoutResult(call.Function.Name, timeout)
+	}
+	return result
+}
+
+// timeoutResult returns a JSON payload with status "timeout" that is
+// distinguishable from execution errors. The model sees a clear
+// [TIMEOUT] prefix so retry logic can differentiate the two.
+func timeoutResult(toolName string, timeout time.Duration) string {
+	ms := timeout.Milliseconds()
+	payload, err := json.Marshal(map[string]string{
+		"status": "timeout",
+		"error":  fmt.Sprintf("[TIMEOUT] Tool '%s' did not respond within %dms", toolName, ms),
+	})
+	if err != nil {
+		return fmt.Sprintf(`{"status":"timeout","error":"[TIMEOUT] Tool '%s' timed out"}`, toolName)
+	}
+	return string(payload)
 }
 
 func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) string {
