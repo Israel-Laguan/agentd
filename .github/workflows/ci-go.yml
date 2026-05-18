@@ -1,7 +1,10 @@
 name: CI (Go)
 
 on:
+  # Run on push only for the default branch so feature-branch pushes do not
+  # duplicate the pull_request check (same commit would report two "Go" statuses).
   push:
+    branches: [main]
     paths:
       - "**/*.go"
       - "go.mod"
