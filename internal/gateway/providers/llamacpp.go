@@ -47,7 +47,7 @@ func (l *LlamaCpp) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRes
 	}
 	body := openAIRequest{
 		Model:       model,
-		Messages:    req.Messages,
+		Messages:    messagesToOpenAI(req.Messages),
 		Temperature: req.Temperature,
 		MaxTokens:   req.MaxTokens,
 	}

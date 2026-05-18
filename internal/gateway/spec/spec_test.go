@@ -129,9 +129,10 @@ func assertMarshaledAssistantToolCallsMessage(t *testing.T, msg map[string]any) 
 	if msg["role"] != "assistant" {
 		t.Errorf("assistant role = %v", msg["role"])
 	}
-	contentVal, hasContent := msg["content"]
-	if !hasContent || contentVal != "" {
-		t.Errorf("assistant with tool_calls should have empty string content, got %v", contentVal)
+	if contentVal, hasContent := msg["content"]; hasContent {
+		if contentVal != nil {
+			t.Errorf("assistant with tool_calls should omit content or use null, got %v", contentVal)
+		}
 	}
 	tc, ok := msg["tool_calls"].([]any)
 	if !ok || len(tc) != 1 {
