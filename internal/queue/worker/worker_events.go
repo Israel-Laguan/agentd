@@ -144,9 +144,13 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 
 // toolResultExitCode maps a ToolResult status to a conventional exit code.
 func toolResultExitCode(tr ToolResult) int {
-	switch tr.Status {
-	case ToolStatusSuccess:
+	if tr.Status == ToolStatusSuccess {
 		return 0
+	}
+	if tr.ExitCodeSet {
+		return tr.ExitCode
+	}
+	switch tr.Status {
 	case ToolStatusError, ToolStatusTimeout, ToolStatusVetoed, ToolStatusFatal:
 		return -1
 	default:

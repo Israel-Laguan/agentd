@@ -92,15 +92,17 @@ func (w *Worker) dispatchToolWithHooks(
 			return classifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0), verdict.Suspend
 		} else if verdict.Veto && verdict.Result != "" {
 			if verdict.Suspend {
-				return VetoedResult(call.ID, verdict.Result), true
+				tr := VetoedResult(call.ID, verdict.Result)
+				tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
+				return tr, true
 			}
 			tr := SuccessResult(call.ID, verdict.Result, 0)
-			hookCtx.ResultStatus = tr.Status
-			hookCtx.ResultStatusSet = true
-			tr.Content = taskHooks.RunPost(hookCtx, tr.Content)
+			tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
 			return tr, false
 		} else if verdict.Veto {
-			return VetoedResult(call.ID, verdict.Reason), verdict.Suspend
+			tr := VetoedResult(call.ID, verdict.Reason)
+			tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
+			return tr, verdict.Suspend
 		}
 	}
 
@@ -109,7 +111,27 @@ func (w *Worker) dispatchToolWithHooks(
 	if taskHooks != nil {
 		hookCtx.ResultStatus = tr.Status
 		hookCtx.ResultStatusSet = true
+		hookCtx.ResultExitCode = tr.ExitCode
+		hookCtx.ResultExitCodeSet = tr.ExitCodeSet
 		tr.Content = taskHooks.RunPost(hookCtx, tr.Content)
 	}
 	return tr, false
+}
+
+// runDispatchPostHooks runs worker-level then task-scoped post-hooks.
+// Used when task pre-hooks veto before executeToolCore (which would normally
+// run worker post-hooks including audit).
+func (w *Worker) runDispatchPostHooks(hookCtx HookContext, tr ToolResult, taskHooks *HookChain) string {
+	hookCtx.ResultStatus = tr.Status
+	hookCtx.ResultStatusSet = true
+	hookCtx.ResultExitCode = tr.ExitCode
+	hookCtx.ResultExitCodeSet = tr.ExitCodeSet
+	content := tr.Content
+	if w.hooks != nil {
+		content = w.hooks.RunPost(hookCtx, content)
+	}
+	if taskHooks != nil {
+		content = taskHooks.RunPost(hookCtx, content)
+	}
+	return content
 }

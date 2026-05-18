@@ -46,11 +46,13 @@ type HookContext struct {
 	Timestamp     time.Time
 	TaskUpdatedAt time.Time // persisted task version for optimistic locking
 	ExecCtx       context.Context
-	// ResultStatus and ResultStatusSet are populated by the dispatch layer
-	// before RunPost so post-hooks (e.g. AuditHook) can derive exit codes from
-	// the classified ToolResult instead of re-parsing plain-text content.
-	ResultStatus    ToolStatus
-	ResultStatusSet bool
+	// ResultStatus, ResultExitCode, and their Set flags are populated by the
+	// dispatch layer before RunPost so post-hooks (e.g. AuditHook) can derive
+	// exit codes from the classified ToolResult instead of re-parsing content.
+	ResultStatus       ToolStatus
+	ResultStatusSet    bool
+	ResultExitCode     int
+	ResultExitCodeSet  bool
 }
 
 // PreHook is evaluated before tool execution. Returning a veto verdict

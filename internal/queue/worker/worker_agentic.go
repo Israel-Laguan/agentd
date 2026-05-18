@@ -159,6 +159,8 @@ func (w *Worker) handleAgenticToolCalls(
 			slog.Info("auto-detected context corrections", "task_id", task.ID, "count", len(detected))
 		}
 		*messages = append(*messages, gateway.PromptMessage{Role: "tool", ToolCallID: call.ID, Content: contextContent})
+		// Sandbox fatal errors ({"FatalError":...}) abort the agentic loop and enter
+		// the healing/retry path; the model does not get another turn to recover.
 		if tr.Status == ToolStatusFatal {
 			w.handleAgentFailure(ctx, task, contextContent)
 			return true

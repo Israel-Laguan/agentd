@@ -272,7 +272,7 @@ func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
 		t.Fatalf("second request missing tool response for call_1: %#v", gw.requests[1].Messages)
 		return
 	}
-	if !strings.Contains(toolMessage.Content, "exit code 1") || !strings.Contains(toolMessage.Content, "command failed") {
+	if !strings.Contains(toolMessage.Content, `"ExitCode":1`) || !strings.Contains(toolMessage.Content, "command failed") {
 		t.Fatalf("tool message = %q, want exit code and stderr details", toolMessage.Content)
 	}
 	if !strings.Contains(store.result.Payload, "Task completed") {

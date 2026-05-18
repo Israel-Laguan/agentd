@@ -100,8 +100,12 @@ func TestEmitToolResultExplicitJSONFailures(t *testing.T) {
 			if err := json.Unmarshal([]byte(sink.events[0].Payload), &event); err != nil {
 				t.Fatalf("unmarshal payload: %v", err)
 			}
-			if event.ExitCode != -1 {
-				t.Fatalf("ExitCode = %d, want -1", event.ExitCode)
+			wantExit := -1
+			if tc.name == "success false" {
+				wantExit = 1
+			}
+			if event.ExitCode != wantExit {
+				t.Fatalf("ExitCode = %d, want %d", event.ExitCode, wantExit)
 			}
 		})
 	}
