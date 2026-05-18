@@ -55,6 +55,17 @@ func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall) strin
 	}
 }
 
+// SchemaRegistryFromDefinitions builds a tool-name → parameters map for SchemaValidationHook.
+func SchemaRegistryFromDefinitions(defs []gateway.ToolDefinition) map[string]*gateway.FunctionParameters {
+	registry := make(map[string]*gateway.FunctionParameters, len(defs))
+	for _, def := range defs {
+		if def.Parameters != nil {
+			registry[def.Name] = def.Parameters
+		}
+	}
+	return registry
+}
+
 func (t *ToolExecutor) Definitions() []gateway.ToolDefinition {
 	return []gateway.ToolDefinition{
 		{
@@ -229,7 +240,22 @@ func (t *ToolExecutor) resolvePath(relPath string, forWrite bool) (string, error
 		if !isWithinRoot(workspaceRoot, parentReal) {
 			return "", fmt.Errorf("path escapes workspace")
 		}
-		return candidate, nil
+		_, statErr := os.Lstat(candidate)
+		if statErr == nil {
+			targetReal, err := filepath.EvalSymlinks(candidate)
+			if err != nil {
+				return "", fmt.Errorf("failed to resolve path: %w", err)
+			}
+			targetReal = filepath.Clean(targetReal)
+			if !isWithinRoot(workspaceRoot, targetReal) {
+				return "", fmt.Errorf("path escapes workspace")
+			}
+			return targetReal, nil
+		}
+		if os.IsNotExist(statErr) {
+			return candidate, nil
+		}
+		return "", fmt.Errorf("failed to stat path: %w", statErr)
 	}
 
 	targetReal, err := filepath.EvalSymlinks(candidate)
