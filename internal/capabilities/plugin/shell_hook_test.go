@@ -40,6 +40,26 @@ func TestShellPreHook_Allow(t *testing.T) {
 	assert.False(t, verdict.Veto)
 }
 
+func TestShellPreHook_RespectsShebang(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "bash_only.sh", "#!/usr/bin/env bash\n[[ -n \"$BASH_VERSION\" ]] && exit 0\necho 'not bash'\nexit 1\n")
+
+	entry := HookEntry{
+		Name:   "bash-shebang",
+		Script: "bash_only.sh",
+		Policy: "fail_closed",
+	}
+	hook := ShellPreHook(entry, dir)
+
+	verdict, err := hook.Fn(worker.HookContext{
+		ToolName:  "bash",
+		SessionID: "s1",
+		Timestamp: time.Now(),
+	})
+	require.NoError(t, err)
+	assert.False(t, verdict.Veto, "shebang must dispatch to bash, not /bin/sh parsing the file")
+}
+
 func TestShellPreHook_Veto(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, "deny.sh", "#!/bin/sh\necho 'blocked by policy'\nexit 1\n")
