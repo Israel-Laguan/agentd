@@ -99,6 +99,15 @@ agentic:
   review:
     enabled: false               # default; override per-profile via AgentProfile.RequireReview
 
+  # Per-tool dispatch timeouts.
+  # Keys are tool names; the special "default" key applies to unlisted tools.
+  # Values are Go duration strings (e.g. "30s", "1m").
+  tool_timeouts:
+    bash: "60s"
+    read: "10s"
+    write: "10s"
+    default: "30s"
+
   # Skill-based contextual knowledge injection.
   # Skills are markdown documents loaded from the workspace or global directory
   # and injected into the system prompt when they match the current task.
