@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -75,7 +75,7 @@ func check(defaultMax int) ([]violation, error) {
 		if excluded(relPath, defaultExcludes) {
 			continue
 		}
-		fullPath := path.Join(root, relPath)
+		fullPath := filepath.Join(root, relPath)
 		info, err := os.Stat(fullPath)
 		if err != nil || !info.Mode().IsRegular() {
 			continue
