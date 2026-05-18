@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -260,12 +261,38 @@ func TestClassifyRawResult_JSONTimeout(t *testing.T) {
 
 func TestClassifyRawResult_JSONSuccessFalse(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", `{"Success":false,"ExitCode":1}`, 10)
+	raw := `{"Success":false,"ExitCode":1}`
+	tr := classifyRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
 	if tr.Retryable {
 		t.Fatal("non-retryable error should have Retryable=false")
+	}
+	if tr.Content != raw {
+		t.Fatalf("Content = %q, want raw JSON preserved %q", tr.Content, raw)
+	}
+	if tr.Error == nil || !strings.Contains(tr.Error.Message, "exit code 1") {
+		t.Fatalf("Error.Message = %v, want exit code summary", tr.Error)
+	}
+}
+
+func TestClassifyRawResult_JSONSuccessFalsePreservesStdoutStderr(t *testing.T) {
+	t.Parallel()
+	raw := `{"Success":false,"ExitCode":1,"Stdout":"partial output","Stderr":"boom"}`
+	tr := classifyRawResult("c1", raw, 10)
+	if tr.Status != ToolStatusError {
+		t.Fatalf("Status = %s, want error", tr.Status)
+	}
+	if tr.Content != raw {
+		t.Fatalf("Content = %q, want raw JSON preserved", tr.Content)
+	}
+	got := tr.ForContext()
+	if !strings.Contains(got, "boom") {
+		t.Fatalf("ForContext() = %q, want stderr in model context", got)
+	}
+	if !strings.Contains(got, "partial output") {
+		t.Fatalf("ForContext() = %q, want stdout in model context", got)
 	}
 }
 
