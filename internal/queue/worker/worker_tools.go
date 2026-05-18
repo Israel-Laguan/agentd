@@ -28,7 +28,8 @@ import (
 //
 // Returns a structured ToolResult describing the outcome.
 func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) ToolResult {
-	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil, false)
+	retry := w.toolRetrier != nil && w.toolRetries.Allows(call.Function.Name)
+	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil, retry)
 }
 
 // timeoutToolResult returns a structured ToolResult for a timed-out tool.
@@ -38,17 +39,10 @@ func timeoutToolResult(callID string, timeout time.Duration) ToolResult {
 
 func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, retry bool) ToolResult {
 	timeout := w.toolTimeouts.Lookup(call.Function.Name, config.DefaultToolTimeout)
-	toolCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	result := w.executeToolCore(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, retry)
-	if toolCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
-		return timeoutToolResult(call.ID, timeout)
-	}
-	return result
+	return w.executeToolCore(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, timeout, retry)
 }
 
-func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, retry bool) ToolResult {
+func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, timeout time.Duration, retry bool) ToolResult {
 	start := time.Now()
 	hookCtx := HookContext{
 		ToolName:  call.Function.Name,
@@ -81,14 +75,22 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 		}
 	}
 
+	bodyStart := time.Now()
+	runAttempt := func(attemptCtx context.Context) ToolResult {
+		toolCtx, cancel := context.WithTimeout(attemptCtx, timeout)
+		defer cancel()
+		tr := w.runToolBody(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, bodyStart)
+		if toolCtx.Err() == context.DeadlineExceeded && attemptCtx.Err() == nil {
+			return augmentTransientRetryable(timeoutToolResult(call.ID, timeout))
+		}
+		return augmentTransientRetryable(tr)
+	}
+
 	var tr ToolResult
-	if retry && w.toolRetrier != nil && w.toolRetries.Allows(call.Function.Name) {
-		tr = w.toolRetrier.Execute(ctx, func(innerCtx context.Context) ToolResult {
-			bodyStart := time.Now()
-			return augmentTransientRetryable(w.runToolBody(innerCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, bodyStart))
-		})
+	if retry && w.toolRetrier != nil {
+		tr = w.toolRetrier.Execute(ctx, runAttempt)
 	} else {
-		tr = w.runToolBody(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, start)
+		tr = runAttempt(ctx)
 	}
 
 	if w.hooks != nil {

@@ -44,6 +44,35 @@ func (f *flakySandbox) callCount() int {
 	return f.calls
 }
 
+// timeoutThenOKSandbox blocks until cancelled on the first call (simulating
+// a tool that exceeds its per-attempt timeout), then succeeds immediately.
+type timeoutThenOKSandbox struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (s *timeoutThenOKSandbox) Execute(ctx context.Context, _ sandbox.Payload) (sandbox.Result, error) {
+	s.mu.Lock()
+	s.calls++
+	n := s.calls
+	s.mu.Unlock()
+	if n == 1 {
+		select {
+		case <-ctx.Done():
+			return sandbox.Result{}, ctx.Err()
+		case <-time.After(5 * time.Second):
+			return sandbox.Result{Stdout: "late\n", Success: true}, nil
+		}
+	}
+	return sandbox.Result{Stdout: "ok\n", Success: true}, nil
+}
+
+func (s *timeoutThenOKSandbox) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls
+}
+
 func retryTestWorker(t *testing.T, sb sandbox.Executor, allowTools ...string) *Worker {
 	t.Helper()
 	tools := make(map[string]struct{}, len(allowTools))
@@ -190,6 +219,37 @@ func TestDispatchToolWithHooks_RetryAuditsOnce(t *testing.T) {
 	}
 	if sink.events[1].Type != models.EventTypeToolResult {
 		t.Fatalf("second event should be TOOL_RESULT, got %q", sink.events[1].Type)
+	}
+}
+
+func TestDispatchToolWithHooks_TimeoutRetry(t *testing.T) {
+	t.Parallel()
+	sb := &timeoutThenOKSandbox{}
+	w := retryTestWorker(t, sb, "bash")
+	w.toolTimeouts = config.ToolTimeoutsConfig{
+		Defaults: map[string]time.Duration{"bash": 50 * time.Millisecond},
+	}
+
+	call := gateway.ToolCall{
+		ID:       "c1",
+		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sleep 10"}`},
+	}
+
+	tr, suspended := w.dispatchToolWithHooks(
+		context.Background(), "s1", "p1", time.Now(), call, nil, w.toolExecutor, nil, nil,
+	)
+
+	if suspended {
+		t.Fatal("expected suspend=false")
+	}
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("status = %s, want success after timeout retry", tr.Status)
+	}
+	if !strings.Contains(tr.Content, "ok") {
+		t.Fatalf("expected success output, got %q", tr.Content)
+	}
+	if sb.callCount() != 2 {
+		t.Fatalf("expected 2 sandbox calls (timeout then success), got %d", sb.callCount())
 	}
 }
 
