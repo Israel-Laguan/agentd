@@ -97,10 +97,11 @@ type queueScenario struct {
 	sink       *queueSink
 	now        time.Time
 	maxRetries int
-	ctx        context.Context
-	cancel     context.CancelFunc
-	done       chan error
-	lastQueued int
+	ctx           context.Context
+	cancel        context.CancelFunc
+	done          chan error
+	daemonStarted bool
+	lastQueued    int
 }
 
 func (s *queueScenario) reset() {
@@ -112,6 +113,10 @@ func (s *queueScenario) reset() {
 	s.sandbox = &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
 	s.sink = &queueSink{}
 	s.maxRetries = DefaultWorkerMaxRetries
+	s.ctx = nil
+	s.cancel = nil
+	s.done = nil
+	s.daemonStarted = false
 	s.rebuild(2)
 }
 

@@ -122,16 +122,26 @@ func (s *queueScenario) ghostNotModified(context.Context) error {
 }
 
 func (s *queueScenario) daemonIsRunning(ctx context.Context) error {
+	// Context only; Start runs after workerRunningSandbox rebuilds the daemon so we
+	// do not race with rebuild() replacing s.daemon while Start is in flight.
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	s.done = make(chan error, 1)
-	go func() { s.done <- s.daemon.Start(s.ctx) }()
 	return nil
+}
+
+func (s *queueScenario) startDaemon() {
+	if s.daemonStarted {
+		return
+	}
+	s.daemonStarted = true
+	go func() { s.done <- s.daemon.Start(s.ctx) }()
 }
 
 func (s *queueScenario) workerRunningSandbox(ctx context.Context) error {
 	s.store.seed(1, models.TaskStateReady)
 	s.sandbox = &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
 	s.rebuild(1)
+	s.startDaemon()
 	go func() { _, _, _ = s.daemon.dispatch(s.ctx) }()
 	select {
 	case <-s.sandbox.started:
