@@ -156,7 +156,11 @@ export default function Page() {
   return (
     <div className="flex h-screen bg-bg font-sans text-text selection:bg-blue selection:text-bg">
       {/* Sidebar */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} workforce={workforce} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        workforce={workforce} 
+      />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
