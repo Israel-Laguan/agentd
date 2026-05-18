@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -398,10 +400,66 @@ func TestCacheHooks_ShortCircuitSkipsPostHooks(t *testing.T) {
 	}
 }
 
+func TestCacheStoreHook_PrefixesNonSuccessResult(t *testing.T) {
+	t.Parallel()
+	rc := NewResultCache(map[string]bool{"read": true})
+	hook := CacheStoreHook(rc)
+
+	ctx := HookContext{
+		ToolName:        "read",
+		Args:            `{"path":"missing.txt"}`,
+		Timestamp:       time.Now(),
+		ResultStatus:    ToolStatusError,
+		ResultStatusSet: true,
+	}
+	payload := `{"error":"stat failed: no such file"}`
+	_, err := hook.Fn(ctx, payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	key := cacheKey("read", `{"path":"missing.txt"}`)
+	cached, ok := rc.get(key)
+	if !ok {
+		t.Fatal("expected cached result")
+	}
+	if !isToolErrorPayload(cached) {
+		t.Fatalf("cached error should be prefixed, got %q", cached)
+	}
+	if stripToolErrorPrefix(cached) != payload {
+		t.Fatalf("cached = %q, want prefixed %q", cached, payload)
+	}
+}
+
+func TestCacheStoreHook_DoesNotPrefixSuccessResult(t *testing.T) {
+	t.Parallel()
+	rc := NewResultCache(map[string]bool{"read": true})
+	hook := CacheStoreHook(rc)
+
+	content := `{"error":"cached api failure"}`
+	ctx := HookContext{
+		ToolName:        "read",
+		Args:            `{"path":"response.json"}`,
+		Timestamp:       time.Now(),
+		ResultStatus:    ToolStatusSuccess,
+		ResultStatusSet: true,
+	}
+	_, err := hook.Fn(ctx, content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	key := cacheKey("read", `{"path":"response.json"}`)
+	cached, ok := rc.get(key)
+	if !ok || cached != content {
+		t.Fatalf("success payload stored as-is, got (%q, %v)", cached, ok)
+	}
+}
+
 func TestCacheHooks_CachedReadErrorClassified(t *testing.T) {
 	t.Parallel()
 
-	cachedErr := `{"error":"stat failed: no such file"}`
+	cachedErr := toolErrorPrefix + `{"error":"stat failed: no such file"}`
 	rc := NewResultCache(map[string]bool{"read": true})
 	args := `{"path":"missing.txt"}`
 	rc.set(cacheKey("read", args), cachedErr)
@@ -424,8 +482,53 @@ func TestCacheHooks_CachedReadErrorClassified(t *testing.T) {
 	if tr.Status != ToolStatusError {
 		t.Fatalf("expected error status for cached error payload, got %s", tr.Status)
 	}
-	if tr.Content != cachedErr {
-		t.Fatalf("content = %q, want %q", tr.Content, cachedErr)
+	if tr.Content != stripToolErrorPrefix(cachedErr) {
+		t.Fatalf("content = %q, want %q", tr.Content, stripToolErrorPrefix(cachedErr))
+	}
+}
+
+func TestCacheHooks_CachedReadErrorShapedFileContentIsSuccess(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `{"error":"cached api failure"}`
+	path := filepath.Join(dir, "response.json")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	rc := NewResultCache(map[string]bool{"read": true})
+	hc := NewHookChain()
+	hc.RegisterPre(CacheLookupHook(rc))
+	hc.RegisterPost(CacheStoreHook(rc))
+
+	executor := NewToolExecutor(nil, dir, nil, 0)
+	w := &Worker{
+		toolExecutor: executor,
+		hooks:        hc,
+	}
+
+	args := `{"path":"response.json"}`
+	call := gateway.ToolCall{
+		ID:       "call_1",
+		Function: gateway.ToolCallFunction{Name: "read", Arguments: args},
+	}
+
+	tr1 := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
+	if tr1.Status != ToolStatusSuccess {
+		t.Fatalf("first read Status = %s, want success", tr1.Status)
+	}
+	if tr1.ForContext() != content {
+		t.Fatalf("first ForContext() = %q, want raw file content", tr1.ForContext())
+	}
+
+	call.ID = "call_2"
+	tr2 := w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
+	if tr2.Status != ToolStatusSuccess {
+		t.Fatalf("cached read Status = %s, want success", tr2.Status)
+	}
+	if tr2.ForContext() != content {
+		t.Fatalf("cached ForContext() = %q, want raw file content without [ERROR]", tr2.ForContext())
 	}
 }
 

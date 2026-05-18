@@ -49,16 +49,14 @@ func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) To
 	}
 }
 
-// classifyPrecomputedReadResult classifies hook/cache read results. It keeps the
-// jsonErrorf envelope heuristic for cache entries stored before toolErrorPrefix
-// existed, but live reads never use that heuristic (see classifyBuiltinToolResult).
+// classifyPrecomputedReadResult classifies hook/cache read results. Errors are
+// distinguished by toolErrorPrefix (set by CacheStoreHook); file content that
+// happens to be a single-key {"error":...} JSON object is treated as success,
+// matching classifyBuiltinToolResult for live reads.
 func classifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
 	if isToolErrorPayload(raw) {
 		return classifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
-	}
-	if isJSONErrorEnvelope(trimmed) {
-		return classifyRawResult(callID, trimmed, elapsedMs)
 	}
 	return SuccessResult(callID, raw, elapsedMs)
 }
