@@ -83,7 +83,7 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
 		raw := toolExecutor.Execute(ctx, call)
-		tr = classifyRawResult(call.ID, raw, time.Since(start).Milliseconds())
+		tr = classifyBuiltinToolResult(call.ID, call.Function.Name, raw, time.Since(start).Milliseconds())
 	case toolNameDelegate:
 		raw := w.executeDelegateWithCapabilities(ctx, call, toolExecutor, scopedCapabilities)
 		tr = classifyDelegateRawResult(call.ID, raw, time.Since(start).Milliseconds())

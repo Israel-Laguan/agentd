@@ -139,12 +139,12 @@ func TestToolResultExitCode(t *testing.T) {
 		{"success", SuccessResult("c1", "ok", 0), 0},
 		{
 			"bash_failure",
-			classifyRawResult("c1", `{"Success":false,"ExitCode":127}`, 0),
+			classifyBuiltinToolResult("c1", toolNameBash, `{"Success":false,"ExitCode":127}`, 0),
 			127,
 		},
 		{
 			"bash_failure_no_exit_code",
-			classifyRawResult("c1", `{"Success":false}`, 0),
+			classifyBuiltinToolResult("c1", toolNameBash, `{"Success":false}`, 0),
 			-1,
 		},
 		{"vetoed", VetoedResult("c1", "blocked"), -1},
