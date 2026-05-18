@@ -29,15 +29,7 @@ import (
 //
 // Returns the tool execution result as a string (JSON-encoded for MCP tools, direct for built-in tools).
 func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) string {
-	timeout := w.toolTimeouts.Lookup(call.Function.Name, config.DefaultToolTimeout)
-	toolCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	result := w.dispatchToolWithProject(toolCtx, sessionID, "", call, toolToAdapter, toolExecutor, nil)
-	if toolCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
-		return timeoutResult(call.Function.Name, timeout)
-	}
-	return result
+	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil)
 }
 
 // timeoutResult returns a JSON payload with status "timeout" that is
@@ -56,6 +48,18 @@ func timeoutResult(toolName string, timeout time.Duration) string {
 }
 
 func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) string {
+	timeout := w.toolTimeouts.Lookup(call.Function.Name, config.DefaultToolTimeout)
+	toolCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	result := w.executeToolCore(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
+	if toolCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+		return timeoutResult(call.Function.Name, timeout)
+	}
+	return result
+}
+
+func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) string {
 	hookCtx := HookContext{
 		ToolName:  call.Function.Name,
 		Args:      call.Function.Arguments,
