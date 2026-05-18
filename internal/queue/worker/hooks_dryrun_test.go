@@ -132,6 +132,12 @@ func TestDispatchTool_DryRun_SkipsExecution(t *testing.T) {
 	}
 
 	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("expected success status for transparent dry-run, got %s", tr.Status)
+	}
+	if tr.ForContext() != tr.Content {
+		t.Fatalf("ForContext() should not add policy prefix, got %q", tr.ForContext())
+	}
 	if strings.Contains(tr.Content, "REAL EXECUTION") {
 		t.Fatal("dry-run should not execute the real sandbox")
 	}
@@ -165,6 +171,12 @@ func TestDispatchTool_DryRun_PostHooksStillFire(t *testing.T) {
 	}
 
 	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("expected success status for transparent dry-run, got %s", tr.Status)
+	}
+	if tr.ForContext() != tr.Content {
+		t.Fatalf("ForContext() should not add policy prefix, got %q", tr.ForContext())
+	}
 	if !postHookRan {
 		t.Fatal("post-hooks should fire during dry-run")
 	}
@@ -188,6 +200,9 @@ func TestDispatchTool_DryRun_Disabled_ExecutesNormally(t *testing.T) {
 	}
 
 	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("expected success status, got %s", tr.Status)
+	}
 	if strings.Contains(tr.Content, "(simulated)") {
 		t.Fatal("disabled dry-run should execute normally")
 	}
@@ -224,6 +239,12 @@ func TestDispatchTool_DryRun_AllToolTypes(t *testing.T) {
 			}
 
 			tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
+			if tr.Status != ToolStatusSuccess {
+				t.Fatalf("expected success status for transparent dry-run, got %s", tr.Status)
+			}
+			if tr.ForContext() != tr.Content {
+				t.Fatalf("ForContext() should not add policy prefix, got %q", tr.ForContext())
+			}
 			if !strings.Contains(tr.Content, tt.contains) {
 				t.Fatalf("expected result to contain %q, got %q", tt.contains, tr.Content)
 			}

@@ -62,11 +62,14 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 
 	if w.hooks != nil {
 		if verdict := w.hooks.RunPre(hookCtx); verdict.ShortCircuit {
-			return SuccessResult(call.ID, verdict.Result, time.Since(start).Milliseconds())
+			return classifyRawResult(call.ID, verdict.Result, time.Since(start).Milliseconds())
 		} else if verdict.Veto && verdict.Result != "" {
 			result := verdict.Result
-			result = w.hooks.RunPost(hookCtx, result)
-			return SuccessResult(call.ID, result, time.Since(start).Milliseconds())
+			tr := SuccessResult(call.ID, result, time.Since(start).Milliseconds())
+			hookCtx.ResultStatus = tr.Status
+			hookCtx.ResultStatusSet = true
+			tr.Content = w.hooks.RunPost(hookCtx, tr.Content)
+			return tr
 		} else if verdict.Veto {
 			return VetoedResult(call.ID, verdict.Reason)
 		}
@@ -89,6 +92,8 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 	}
 
 	if w.hooks != nil {
+		hookCtx.ResultStatus = tr.Status
+		hookCtx.ResultStatusSet = true
 		tr.Content = w.hooks.RunPost(hookCtx, tr.Content)
 	}
 

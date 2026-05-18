@@ -157,6 +157,7 @@ func FatalResult(callID, message string, elapsedMs int64) ToolResult {
 // parseToolExitCode relied on, so callers that previously examined the
 // string can now switch on ToolResult.Status instead.
 func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
+	trimmed := strings.TrimSpace(raw)
 	var env struct {
 		Success    *bool  `json:"Success"`
 		ExitCode   int    `json:"ExitCode"`
@@ -164,7 +165,7 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 		FatalError string `json:"FatalError"`
 		Status     string `json:"status"`
 	}
-	if err := json.Unmarshal([]byte(raw), &env); err == nil {
+	if err := json.Unmarshal([]byte(trimmed), &env); err == nil {
 		if env.FatalError != "" {
 			return FatalResult(callID, env.FatalError, elapsedMs)
 		}
@@ -179,13 +180,13 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 			return NonRetryableErrorResult(callID, msg, "", elapsedMs)
 		}
 	} else {
-		if strings.HasPrefix(raw, `{"FatalError"`) {
+		if strings.HasPrefix(trimmed, `{"FatalError"`) {
 			return FatalResult(callID, raw, elapsedMs)
 		}
-		if strings.HasPrefix(raw, `{"error"`) {
+		if strings.HasPrefix(trimmed, `{"error"`) {
 			return NonRetryableErrorResult(callID, raw, "", elapsedMs)
 		}
-		if strings.HasPrefix(raw, `{"Success":false`) {
+		if strings.HasPrefix(trimmed, `{"Success":false`) {
 			return NonRetryableErrorResult(callID, raw, "", elapsedMs)
 		}
 	}

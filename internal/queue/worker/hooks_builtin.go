@@ -226,7 +226,12 @@ func emitToolCallHook(ctx context.Context, sink models.EventSink, hctx HookConte
 
 // emitToolResultHook emits a TOOL_RESULT event via the sink using HookContext.
 func emitToolResultHook(ctx context.Context, sink models.EventSink, hctx HookContext, result string, durationMs int64, scrubber sandbox.Scrubber) {
-	exitCode := parseToolExitCode(result)
+	var exitCode int
+	if hctx.ResultStatusSet {
+		exitCode = toolResultExitCode(ToolResult{Status: hctx.ResultStatus, Content: result})
+	} else {
+		exitCode = parseToolExitCode(result)
+	}
 	outputSummary := result
 	if scrubber != nil {
 		outputSummary = scrubber.Scrub(outputSummary)
