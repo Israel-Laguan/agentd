@@ -13,7 +13,8 @@ import (
 // PromptMessage follows the common chat completion message shape.
 type PromptMessage struct {
 	Role       string     `json:"role"`
-	Content    string     `json:"content"`
+	Content    string     `json:"content,omitempty"`
+	Name       string     `json:"name,omitempty"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 }

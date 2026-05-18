@@ -255,6 +255,120 @@ func assertOpenAIParsedToolCalls(t *testing.T, resp spec.AIResponse) {
 	}
 }
 
+func openAIToolConversationMessages() []spec.PromptMessage {
+	return []spec.PromptMessage{
+		{Role: "system", Content: "You are a helpful assistant."},
+		{Role: "user", Content: "What's the weather?"},
+		{Role: "assistant", ToolCalls: []spec.ToolCall{{ID: "call_abc", Type: "function", Function: spec.ToolCallFunction{
+			Name: "get_weather", Arguments: `{"location":"Boston"}`,
+		}}}},
+		{Role: "tool", ToolCallID: "call_abc", Content: `{"temp":72,"conditions":"sunny"}`},
+		{Role: "assistant", Content: "It's sunny and 72°F in Boston."},
+	}
+}
+
+func TestOpenAIRequest_ToolConversationOmitsAssistantContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		messages, ok := reqBody["messages"].([]any)
+		if !ok || len(messages) != 5 {
+			t.Fatalf("messages = %v, want 5 messages", reqBody["messages"])
+		}
+		assistant, ok := messages[2].(map[string]any)
+		if !ok {
+			t.Fatalf("messages[2] is not an object: %T", messages[2])
+		}
+		if assistant["role"] != "assistant" {
+			t.Errorf("messages[2].role = %v, want assistant", assistant["role"])
+		}
+		if content, hasContent := assistant["content"]; hasContent && content != nil {
+			t.Errorf("assistant with tool_calls should omit content or use null, got %v", content)
+		}
+		tc, ok := assistant["tool_calls"].([]any)
+		if !ok || len(tc) != 1 {
+			t.Fatalf("tool_calls = %v", assistant["tool_calls"])
+		}
+		toolMsg, ok := messages[3].(map[string]any)
+		if !ok {
+			t.Fatalf("messages[3] is not an object: %T", messages[3])
+		}
+		if toolMsg["role"] != "tool" {
+			t.Errorf("messages[3].role = %v, want tool", toolMsg["role"])
+		}
+		if toolMsg["tool_call_id"] != "call_abc" {
+			t.Errorf("tool_call_id = %v, want call_abc", toolMsg["tool_call_id"])
+		}
+		if toolMsg["content"] != `{"temp":72,"conditions":"sunny"}` {
+			t.Errorf("tool content = %v", toolMsg["content"])
+		}
+		writeOpenAIJSON(t, w, openAIResponseBody("done", "gpt-test"))
+	}))
+	defer srv.Close()
+
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "gpt-test",
+	}, srv.Client())
+
+	_, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: openAIToolConversationMessages(),
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+}
+
+func TestOpenAIResponse_UnmarshalAssistantToolCallsSnippet(t *testing.T) {
+	raw := `{
+		"model": "gpt-4",
+		"choices": [{
+			"message": {
+				"role": "assistant",
+				"content": null,
+				"tool_calls": [{
+					"id": "call_abc123",
+					"type": "function",
+					"function": {
+						"name": "get_weather",
+						"arguments": "{\"location\":\"Boston\"}"
+					}
+				}]
+			}
+		}],
+		"usage": {"total_tokens": 42}
+	}`
+	var decoded openAIResponse
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if len(decoded.Choices) != 1 {
+		t.Fatalf("len(choices) = %d, want 1", len(decoded.Choices))
+	}
+	msg := decoded.Choices[0].Message
+	if msg.Role != "assistant" {
+		t.Errorf("role = %q, want assistant", msg.Role)
+	}
+	if msg.Content != nil {
+		t.Errorf("content = %v, want nil", msg.Content)
+	}
+	if len(msg.ToolCalls) != 1 {
+		t.Fatalf("len(tool_calls) = %d, want 1", len(msg.ToolCalls))
+	}
+	tc := msg.ToolCalls[0]
+	if tc.ID != "call_abc123" || tc.Type != "function" ||
+		tc.Function.Name != "get_weather" ||
+		tc.Function.Arguments != `{"location":"Boston"}` {
+		t.Errorf("tool_call = %+v", tc)
+	}
+	resp := decoded.toAIResponse("gpt-4")
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].ID != "call_abc123" {
+		t.Errorf("toAIResponse ToolCalls = %+v", resp.ToolCalls)
+	}
+}
+
 func TestOpenAIToolCalls_EmptyWhenAbsent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
