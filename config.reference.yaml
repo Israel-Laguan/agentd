@@ -192,6 +192,8 @@ queue:
     bash: "60s"
     read: "10s"
     write: "10s"
+    delegate: "10m"
+    delegate_parallel: "10m"
     default: "30s"
 
 # Heartbeat reconciliation.
