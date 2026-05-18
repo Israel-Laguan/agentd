@@ -23,7 +23,7 @@ func TestAgentProfileLifecycle(t *testing.T) {
 	}
 	custom := models.AgentProfile{
 		ID: "researcher", Name: "Researcher", Provider: "ollama", Model: "llama3",
-		Temperature: 0.7, Role: "RESEARCH", MaxTokens: 2048,
+		Temperature: 0.7, Role: "RESEARCH", MaxTokens: 2048, AgenticMode: true,
 	}
 	if err := store.UpsertAgentProfile(ctx, custom); err != nil {
 		t.Fatalf("seed researcher: %v", err)
@@ -35,6 +35,9 @@ func TestAgentProfileLifecycle(t *testing.T) {
 	}
 	if got.Role != "RESEARCH" || got.MaxTokens != 2048 || got.Provider != "ollama" {
 		t.Fatalf("got = %+v", got)
+	}
+	if !got.AgenticMode {
+		t.Fatalf("AgenticMode = false, want true")
 	}
 
 	list, err := store.ListAgentProfiles(ctx)
