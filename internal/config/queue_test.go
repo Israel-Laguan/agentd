@@ -110,7 +110,7 @@ func agenticCharacterBudgetCompatCases() []agenticCharacterBudgetCompatCase {
 			set: func(v *viper.Viper) {
 				v.Set("queue.agentic_truncation_threshold", 40)
 			},
-			want:     40,
+			want:     DefaultAgenticCharacterBudget,
 			wantWarn: true,
 		},
 		{
@@ -153,6 +153,21 @@ func TestQueueConfig_AgenticCharacterBudgetCompat(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			runAgenticCharacterBudgetCompatCase(t, tc)
 		})
+	}
+}
+
+func TestLoadAgenticCharacterBudget_LegacyInheritsGateway(t *testing.T) {
+	t.Parallel()
+
+	v := viper.New()
+	setQueueDefaults(v)
+	v.Set(queueKeyAgenticTruncationThreshold, 40)
+
+	if got := loadAgenticCharacterBudget(v); got != 0 {
+		t.Fatalf("loadAgenticCharacterBudget() = %d, want 0 (legacy message count ignored)", got)
+	}
+	if got := EffectiveAgenticCharacterBudget(loadAgenticCharacterBudget(v), 12000); got != 12000 {
+		t.Fatalf("EffectiveAgenticCharacterBudget() = %d, want 12000 (inherit gateway)", got)
 	}
 }
 
