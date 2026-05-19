@@ -34,20 +34,33 @@ func TestCredentialDetectionHook_BlocksOpenAIKey(t *testing.T) {
 func TestCredentialDetectionHook_BlocksBearerToken(t *testing.T) {
 	t.Parallel()
 	hook := CredentialDetectionHook()
-	bearerValue := "Bearer " + strings.Repeat("A", 24)
-	ctx := HookContext{
-		ToolName:  "bash",
-		Args:      fmt.Sprintf(`{"authorization":"%s"}`, bearerValue),
-		CallID:    "call-2",
-		SessionID: "sess-2",
-		Timestamp: time.Now(),
+	cases := []struct {
+		name  string
+		token string
+	}{
+		{"long", strings.Repeat("A", 24)},
+		{"short_hyphenated", "secret-token"},
+		{"short_alphanumeric", "abc12345"},
 	}
-	verdict, err := hook.Fn(ctx)
-	if err != nil {
-		t.Fatalf("hook returned error: %v", err)
-	}
-	if !verdict.Veto {
-		t.Fatal("expected veto for bearer token")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			bearerValue := "Bearer " + tc.token
+			ctx := HookContext{
+				ToolName:  "bash",
+				Args:      fmt.Sprintf(`{"authorization":"%s"}`, bearerValue),
+				CallID:    "call-2-" + tc.name,
+				SessionID: "sess-2",
+				Timestamp: time.Now(),
+			}
+			verdict, err := hook.Fn(ctx)
+			if err != nil {
+				t.Fatalf("hook returned error: %v", err)
+			}
+			if !verdict.Veto {
+				t.Fatal("expected veto for bearer token")
+			}
+		})
 	}
 }
 
