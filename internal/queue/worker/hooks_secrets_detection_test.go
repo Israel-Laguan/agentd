@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -33,9 +34,10 @@ func TestCredentialDetectionHook_BlocksOpenAIKey(t *testing.T) {
 func TestCredentialDetectionHook_BlocksBearerToken(t *testing.T) {
 	t.Parallel()
 	hook := CredentialDetectionHook()
+	bearerValue := "Bearer " + strings.Repeat("A", 24)
 	ctx := HookContext{
 		ToolName:  "bash",
-		Args:      `{"token":"eyJhbGciOiJIUzI1NiJ9.eyJ0ZXN0IjoiZGF0YSJ9.abc123"}`,
+		Args:      fmt.Sprintf(`{"authorization":"%s"}`, bearerValue),
 		CallID:    "call-2",
 		SessionID: "sess-2",
 		Timestamp: time.Now(),
@@ -46,6 +48,25 @@ func TestCredentialDetectionHook_BlocksBearerToken(t *testing.T) {
 	}
 	if !verdict.Veto {
 		t.Fatal("expected veto for bearer token")
+	}
+}
+
+func TestCredentialDetectionHook_AllowsBearerAuthenticationPhrase(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"echo 'This API uses bearer authentication'"}`,
+		CallID:    "call-2b",
+		SessionID: "sess-2b",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if verdict.Veto {
+		t.Fatalf("unexpected veto for bearer authentication phrase: %s", verdict.Reason)
 	}
 }
 
@@ -217,9 +238,10 @@ func TestCredentialDetectionHook_EmptyArgs(t *testing.T) {
 func TestCredentialDetectionHook_BlocksSlackToken(t *testing.T) {
 	t.Parallel()
 	hook := CredentialDetectionHook()
+	slackToken := "xoxb-" + strings.Repeat("1", 10) + "-" + strings.Repeat("a", 10)
 	ctx := HookContext{
 		ToolName:  "bash",
-		Args:      `{"command":"curl 'https://slack.com/api/chat.postMessage?token=xoxb-1234567890-abcdefghij'"}`,
+		Args:      fmt.Sprintf(`{"command":"curl 'https://slack.com/api/chat.postMessage?token=%s'"}`, slackToken),
 		CallID:    "call-9",
 		SessionID: "sess-9",
 		Timestamp: time.Now(),

@@ -24,6 +24,11 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	cancelCtx, cleanup := w.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
+	if err := w.runSessionStart(cancelCtx, task, project); err != nil {
+		w.failHard(cancelCtx, task, err)
+		return
+	}
+
 	taskToolExecutor := w.newAgenticTaskToolExecutor(project)
 	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
 

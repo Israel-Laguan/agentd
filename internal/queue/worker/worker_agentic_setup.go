@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"time"
 
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
@@ -24,6 +25,18 @@ func (w *Worker) newAgenticTaskToolExecutor(project models.Project) *ToolExecuto
 		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
 		w.sandboxWallTimeout,
 	)
+}
+
+func (w *Worker) runSessionStart(ctx context.Context, task models.Task, project models.Project) error {
+	if w.hooks == nil {
+		return nil
+	}
+	return w.hooks.RunSessionStart(HookContext{
+		SessionID: task.ID,
+		ProjectID: project.ID,
+		Timestamp: time.Now(),
+		ExecCtx:   ctx,
+	})
 }
 
 func (w *Worker) mountAgenticHooks(project models.Project, profile models.AgentProfile) (*HookChain, *capabilities.Registry) {
