@@ -188,36 +188,24 @@ func TestInjectionResistanceHook_IntegrationViaHookChain(t *testing.T) {
 	}
 }
 
-func TestInjectionResistanceHook_WrapsBeforeAudit(t *testing.T) {
-	t.Parallel()
-
+func newInjectionTestWorker(t *testing.T) (*Worker, *ToolExecutor, *mockEventSink, map[string]string) {
+	t.Helper()
 	sink := &mockEventSink{}
-	mockSB := &mockExecSandbox{result: sandbox.Result{
-		Stdout:  "external api response\n",
-		Success: true,
-	}}
-
+	mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "external api response\n", Success: true}}
 	registry := capabilities.NewRegistry()
 	registry.Register("fake", fakeCapabilityCallAdapter{
-		name: "fake",
-		tools: []gateway.ToolDefinition{
-			{Name: "capability_tool", Description: "x", Parameters: &gateway.FunctionParameters{Type: "object"}},
-		},
+		name:  "fake",
+		tools: []gateway.ToolDefinition{{Name: "capability_tool", Description: "x", Parameters: &gateway.FunctionParameters{Type: "object"}}},
 	})
-
-	w := NewWorker(
-		&mockAgenticStore{},
-		nil,
-		mockSB,
-		nil,
-		sink,
-		WorkerOptions{Capabilities: registry, MaxToolIterations: 5},
-	)
-
+	w := NewWorker(&mockAgenticStore{}, nil, mockSB, nil, sink, WorkerOptions{Capabilities: registry, MaxToolIterations: 5})
 	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
-	toolToAdapter := map[string]string{"capability_tool": "fake"}
+	return w, executor, sink, map[string]string{"capability_tool": "fake"}
+}
 
-	// External capability tool should be wrapped before audit
+func TestInjectionResistanceHook_WrapsCapabilityBeforeAudit(t *testing.T) {
+	t.Parallel()
+	w, executor, sink, toolToAdapter := newInjectionTestWorker(t)
+
 	capCall := gateway.ToolCall{
 		ID:       "call_cap",
 		Function: gateway.ToolCallFunction{Name: "capability_tool", Arguments: `{"id":"1"}`},
@@ -229,9 +217,8 @@ func TestInjectionResistanceHook_WrapsBeforeAudit(t *testing.T) {
 	if !strings.Contains(tr.Content, "capability_tool") {
 		t.Fatalf("wrapped result should preserve payload: %q", tr.Content)
 	}
-
 	if len(sink.events) != 2 {
-		t.Fatalf("expected 2 audit events for capability_tool, got %d", len(sink.events))
+		t.Fatalf("expected 2 audit events, got %d", len(sink.events))
 	}
 	if sink.events[1].Type != models.EventTypeToolResult {
 		t.Fatalf("second event should be TOOL_RESULT, got %q", sink.events[1].Type)
@@ -243,13 +230,17 @@ func TestInjectionResistanceHook_WrapsBeforeAudit(t *testing.T) {
 	if !strings.Contains(resultEvent.OutputSummary, "<external_content") {
 		t.Fatalf("audit should see wrapped content, got %q", resultEvent.OutputSummary)
 	}
+}
 
-	// Built-in tool should not be wrapped
+func TestInjectionResistanceHook_SkipsBuiltinBeforeAudit(t *testing.T) {
+	t.Parallel()
+	w, executor, _, _ := newInjectionTestWorker(t)
+
 	bashCall := gateway.ToolCall{
 		ID:       "call_bash",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo test"}`},
 	}
-	tr = w.DispatchTool(context.Background(), "test-session", bashCall, nil, executor)
+	tr := w.DispatchTool(context.Background(), "test-session", bashCall, nil, executor)
 	if strings.Contains(tr.Content, "<external_content") {
 		t.Fatalf("bash result should not be wrapped: %q", tr.Content)
 	}
