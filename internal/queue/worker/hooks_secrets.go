@@ -15,7 +15,8 @@ var credentialPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)sk-[A-Za-z0-9]{20,}`),                                                      // OpenAI-style API key
 	regexp.MustCompile(`(?i)["']?(?:api[_-]?key|apikey)["']?\s*[:=]\s*["']?[^"',\s]{8,}`),             // generic api_key / "api_key": "..."
 	regexp.MustCompile(`(?i)["']?\b(?:secret|token|password|passwd|credential)\b["']?\s*[:=]\s*["']?[^"',\s]{8,}`), // generic secret/token/password assignments
-	regexp.MustCompile(`(?i)bearer\s+[A-Za-z0-9\-._~+/]{20,}=*`),                                      // Bearer token
+	// Bearer token: long opaque values, or shorter tokens with digits/specials (avoids prose like "bearer authentication").
+	regexp.MustCompile(`(?i)bearer\s+(?:[A-Za-z0-9\-._~+/]{16,}|[A-Za-z0-9\-._~+/]{7}[0-9][A-Za-z0-9\-._~+/]*|[A-Za-z0-9\-._~+/]*[\-._~+/][A-Za-z0-9\-._~+/]*)=*`),
 	regexp.MustCompile(`ghp_[A-Za-z0-9]{36,}`),                                                       // GitHub PAT
 	regexp.MustCompile(`gho_[A-Za-z0-9]{36,}`),                                                       // GitHub OAuth
 	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`),                                                // GitHub fine-grained PAT
