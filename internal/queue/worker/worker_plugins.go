@@ -93,35 +93,13 @@ func (w *Worker) dispatchToolWithHooks(
 		hookCtx.TokenCountBefore = w.budgetTracker.Usage(sessionID)
 	}
 
-	var callEnv []string
-	if taskHooks != nil {
-		verdict := taskHooks.RunPre(hookCtx)
-		if verdict.ShortCircuit {
-			// Intentionally skips post-hooks (audit, scrub). Hooks that need
-			// observability should use Veto+Result without ShortCircuit; see DryRunHook.
-			return classifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0), verdict.Suspend
-		} else if verdict.Veto && verdict.Result != "" {
-			// Suspend controls agentic loop pause and status: substitute answers
-			// continue as Success; human-review gates surface as Vetoed.
-			if verdict.Suspend {
-				tr := VetoedResult(call.ID, verdict.Result)
-				tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
-				return tr, true
-			}
-			tr := SuccessResult(call.ID, verdict.Result, 0)
-			tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
-			return tr, false
-		} else if verdict.Veto {
-			tr := VetoedResult(call.ID, verdict.Reason)
-			tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
-			return tr, verdict.Suspend
-		} else if len(verdict.Env) > 0 {
-			callEnv = append(callEnv, verdict.Env...)
-		}
+	tr, suspended, callEnv, handled := w.applyTaskPreHooks(hookCtx, call, taskHooks)
+	if handled {
+		return tr, suspended
 	}
 
 	retry := w.toolRetrier != nil && w.toolRetries.Allows(call.Function.Name)
-	tr := w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, retry, callEnv, &hookCtx)
+	tr = w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, retry, callEnv, &hookCtx)
 
 	if taskHooks != nil {
 		hookCtx.ResultStatus = tr.Status
@@ -132,6 +110,44 @@ func (w *Worker) dispatchToolWithHooks(
 	}
 	w.finalizeDispatchAudit(hookCtx, tr)
 	return tr, false
+}
+
+// applyTaskPreHooks runs task-scoped pre-hooks. When handled is true, tr and suspended are final.
+func (w *Worker) applyTaskPreHooks(
+	hookCtx HookContext,
+	call gateway.ToolCall,
+	taskHooks *HookChain,
+) (tr ToolResult, suspended bool, callEnv []string, handled bool) {
+	if taskHooks == nil {
+		return ToolResult{}, false, nil, false
+	}
+	verdict := taskHooks.RunPre(hookCtx)
+	if verdict.ShortCircuit {
+		// Intentionally skips post-hooks (audit, scrub). Hooks that need
+		// observability should use Veto+Result without ShortCircuit; see DryRunHook.
+		return classifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0), verdict.Suspend, nil, true
+	}
+	if verdict.Veto && verdict.Result != "" {
+		// Suspend controls agentic loop pause and status: substitute answers
+		// continue as Success; human-review gates surface as Vetoed.
+		if verdict.Suspend {
+			tr = VetoedResult(call.ID, verdict.Result)
+			tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
+			return tr, true, nil, true
+		}
+		tr = SuccessResult(call.ID, verdict.Result, 0)
+		tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
+		return tr, false, nil, true
+	}
+	if verdict.Veto {
+		tr = VetoedResult(call.ID, verdict.Reason)
+		tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
+		return tr, verdict.Suspend, nil, true
+	}
+	if len(verdict.Env) > 0 {
+		callEnv = append(callEnv, verdict.Env...)
+	}
+	return ToolResult{}, false, callEnv, false
 }
 
 // runDispatchPostHooks runs worker-level then task-scoped post-hooks.
