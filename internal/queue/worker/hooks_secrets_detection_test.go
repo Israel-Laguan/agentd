@@ -64,22 +64,33 @@ func TestCredentialDetectionHook_BlocksBearerToken(t *testing.T) {
 	}
 }
 
-func TestCredentialDetectionHook_AllowsBearerAuthenticationPhrase(t *testing.T) {
+func TestCredentialDetectionHook_AllowsShortBearerLikePhrases(t *testing.T) {
 	t.Parallel()
 	hook := CredentialDetectionHook()
-	ctx := HookContext{
-		ToolName:  "bash",
-		Args:      `{"command":"echo 'This API uses bearer authentication'"}`,
-		CallID:    "call-2b",
-		SessionID: "sess-2b",
-		Timestamp: time.Now(),
+	cases := []struct {
+		name string
+		args string
+	}{
+		{"authentication_phrase", `{"command":"echo 'This API uses bearer authentication'"}`},
+		{"dotted_abbreviation", `{"note":"docs mention Bearer x.y scheme"}`},
 	}
-	verdict, err := hook.Fn(ctx)
-	if err != nil {
-		t.Fatalf("hook returned error: %v", err)
-	}
-	if verdict.Veto {
-		t.Fatalf("unexpected veto for bearer authentication phrase: %s", verdict.Reason)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			verdict, err := hook.Fn(HookContext{
+				ToolName:  "bash",
+				Args:      tc.args,
+				CallID:    "call-2c-" + tc.name,
+				SessionID: "sess-2c",
+				Timestamp: time.Now(),
+			})
+			if err != nil {
+				t.Fatalf("hook returned error: %v", err)
+			}
+			if verdict.Veto {
+				t.Fatalf("unexpected veto for %s: %s", tc.name, verdict.Reason)
+			}
+		})
 	}
 }
 
