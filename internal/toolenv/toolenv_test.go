@@ -1,6 +1,9 @@
 package toolenv
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestCredentialValue_LastWins(t *testing.T) {
 	t.Parallel()
@@ -11,6 +14,20 @@ func TestCredentialValue_LastWins(t *testing.T) {
 	}
 	if got := CredentialValue(env); got != "second" {
 		t.Fatalf("CredentialValue() = %q, want second", got)
+	}
+}
+
+func TestFrom_DefensiveCopy(t *testing.T) {
+	t.Parallel()
+	ctx := With(context.Background(), []string{CredentialEnvKey + "=secret", "TRACE=1"})
+	got := From(ctx)
+	if len(got) != 2 {
+		t.Fatalf("From() len = %d, want 2", len(got))
+	}
+	got[0] = "mutated=1"
+	again := From(ctx)
+	if again[0] != CredentialEnvKey+"=secret" {
+		t.Fatalf("From() after mutation = %q, want original value preserved", again[0])
 	}
 }
 

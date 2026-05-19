@@ -172,6 +172,7 @@ type authTransport struct {
 }
 
 func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
 	req.Header.Set("Authorization", t.Authorization)
 	return http.DefaultTransport.RoundTrip(req)
 }
@@ -190,6 +191,7 @@ func (t *contextAuthTransport) RoundTrip(req *http.Request) (*http.Response, err
 		}
 	}
 	if auth != "" {
+		req = req.Clone(req.Context())
 		req.Header.Set("Authorization", auth)
 	}
 	return http.DefaultTransport.RoundTrip(req)

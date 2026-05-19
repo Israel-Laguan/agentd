@@ -10,6 +10,9 @@ type AgenticConfig struct {
 	ExternalTools []string
 	// ToolCredentials maps tool names to environment variable names holding credentials.
 	ToolCredentials map[string]string
+	// DisableCredentialDetection skips CredentialDetectionHook when true.
+	// Disabling reduces defense-in-depth; secrets in tool args may reach logs/context.
+	DisableCredentialDetection bool
 }
 
 func setAgenticDefaults(v *viper.Viper) {
@@ -18,7 +21,8 @@ func setAgenticDefaults(v *viper.Viper) {
 
 func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 	return AgenticConfig{
-		ExternalTools:   v.GetStringSlice("agentic.external_tools"),
-		ToolCredentials: v.GetStringMapString("agentic.tool_credentials"),
+		ExternalTools:              v.GetStringSlice("agentic.external_tools"),
+		ToolCredentials:            v.GetStringMapString("agentic.tool_credentials"),
+		DisableCredentialDetection: v.GetBool("agentic.disable_credential_detection"),
 	}
 }
