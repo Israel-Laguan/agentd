@@ -321,8 +321,8 @@ func TestAgenticLoop_InvokesCapabilityRegistryAndAccumulatesMessages(t *testing.
 	if !requestContainsTool(mockGateway.requests[0], "noop") {
 		t.Fatalf("expected first request to advertise noop tool")
 	}
-	if !requestContainsToolResult(mockGateway.requests[1], "call_noop", `"ok":true`) {
-		t.Fatalf("expected second request to include noop tool result, got %#v", mockGateway.requests[1].Messages)
+	if !requestContainsToolResult(mockGateway.requests[1], "call_noop", "<external_content") {
+		t.Fatalf("expected second request to include wrapped noop tool result, got %#v", mockGateway.requests[1].Messages)
 	}
 }
 
