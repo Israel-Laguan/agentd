@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agentd/internal/gateway"
+	"agentd/internal/models"
 )
 
 func TestNewWorker_CredentialDetectionBlocksArgs(t *testing.T) {
@@ -66,7 +67,41 @@ func TestNewWorker_DisableCredentialDetection_SkipsHook(t *testing.T) {
 	if suspended {
 		t.Fatal("expected suspend=false")
 	}
-	if tr.Status == ToolStatusVetoed {
-		t.Fatalf("status = %s, want success when credential detection disabled", tr.Status)
+	if tr.Status != ToolStatusSuccess {
+		t.Fatalf("status = %s, want %s when credential detection disabled", tr.Status, ToolStatusSuccess)
+	}
+}
+
+func TestWorker_runSessionStart_FailsOnMissingCredential(t *testing.T) {
+	envKey := "TEST_MISSING_" + strings.ReplaceAll(t.Name(), "/", "_")
+	t.Setenv(envKey, "")
+
+	w := NewWorker(nil, nil, &fakeSuccessExecutor{}, nil, nil, WorkerOptions{
+		ToolCredentials: map[string]string{"github": envKey},
+	})
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-session-start"}}
+	project := models.Project{BaseEntity: models.BaseEntity{ID: "proj-session-start"}}
+
+	err := w.runSessionStart(context.Background(), task, project)
+	if err == nil {
+		t.Fatal("runSessionStart() = nil, want error for missing credential")
+	}
+	if !strings.Contains(err.Error(), "github") {
+		t.Fatalf("error %q does not mention tool name", err.Error())
+	}
+}
+
+func TestWorker_runSessionStart_SucceedsWhenCredentialsPresent(t *testing.T) {
+	const envKey = "TEST_PRESENT_SESSION_START"
+	t.Setenv(envKey, "present-value")
+
+	w := NewWorker(nil, nil, &fakeSuccessExecutor{}, nil, nil, WorkerOptions{
+		ToolCredentials: map[string]string{"github": envKey},
+	})
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-session-start-ok"}}
+	project := models.Project{BaseEntity: models.BaseEntity{ID: "proj-session-start-ok"}}
+
+	if err := w.runSessionStart(context.Background(), task, project); err != nil {
+		t.Fatalf("runSessionStart() = %v, want nil", err)
 	}
 }
