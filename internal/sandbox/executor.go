@@ -86,8 +86,12 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	defer stopWallTimeout()
 	output := newCommandOutput(e.maxLogBytes(), e.scrubber())
 	output.start(execCtx, e.Sink, payload, stdout, stderr)
-	waitErr := waitCommand(cmd, timedOut, e.killGrace())
+	waitDone := make(chan error, 1)
+	go func() {
+		waitDone <- waitCommand(cmd, timedOut, e.killGrace())
+	}()
 	output.wg.Wait()
+	waitErr := <-waitDone
 	result := output.result(cmd, started, hasTimedOut(timedOut))
 	return result, finishError(waitErr, result.TimedOut)
 }

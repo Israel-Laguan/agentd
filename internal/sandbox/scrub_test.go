@@ -24,6 +24,18 @@ func TestScrubberHonorsCustomPattern(t *testing.T) {
 	}
 }
 
+func TestScrubberMasksExecutorFixtureLine(t *testing.T) {
+	s := NewScrubber([]string{`custom-secret-[A-Za-z0-9]+`})
+	const line = "sk-1234567890123456789012345678901234567890 custom-secret-abc123"
+	got := s.Scrub(line)
+	if strings.Contains(got, "sk-123456") || strings.Contains(got, "custom-secret-") {
+		t.Fatalf("Scrub() leaked secret: %q", got)
+	}
+	if !strings.Contains(got, "[REDACTED]") {
+		t.Fatalf("Scrub() = %q, want [REDACTED]", got)
+	}
+}
+
 func TestScrubberLeavesNormalLineUntouched(t *testing.T) {
 	s := NewScrubber(nil)
 	const input = "build complete"
