@@ -108,6 +108,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		LegacyHandoffTimeout:      cfg.Queue.HITL.LegacyHandoffTimeout,
 		ToolTimeouts:              cfg.Queue.ToolTimeouts,
 		ToolRetries:               cfg.Queue.ToolRetries,
+		ExternalTools:             cfg.Agentic.ExternalTools,
 	})
 }
 
