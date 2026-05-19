@@ -28,7 +28,7 @@ func TestNewWorker_CredentialDetectionBlocksArgs(t *testing.T) {
 	executor := NewToolExecutor(&fakeSuccessExecutor{}, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
 
 	tr, suspended := w.dispatchToolWithHooks(
-		context.Background(), "sess-wiring", "proj-wiring", time.Now(),
+		context.Background(), "sess-wiring", "proj-wiring", "", time.Now(),
 		call, nil, executor, nil, nil,
 	)
 	if suspended {
@@ -61,7 +61,7 @@ func TestNewWorker_DisableCredentialDetection_SkipsHook(t *testing.T) {
 	executor := NewToolExecutor(&fakeSuccessExecutor{}, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
 
 	tr, suspended := w.dispatchToolWithHooks(
-		context.Background(), "sess-wiring-disable", "proj-wiring-disable", time.Now(),
+		context.Background(), "sess-wiring-disable", "proj-wiring-disable", "", time.Now(),
 		call, nil, executor, nil, nil,
 	)
 	if suspended {

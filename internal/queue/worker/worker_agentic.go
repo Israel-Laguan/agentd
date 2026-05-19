@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -41,11 +42,12 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	deadlineGuard := NewDeadlineGuard(cancelCtx)
 	cm, goalTracker := w.newAgenticContextManager(task)
 
-	for {
+	for turnIndex := 0; ; turnIndex++ {
+		turnID := fmt.Sprintf("%s:%d", task.ID, turnIndex)
 		shouldContinue, err := w.processAgenticIteration(
 			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
 			iterationGuard, budgetGuard, deadlineGuard, cm, goalTracker,
-			taskHooks, taskCaps,
+			taskHooks, taskCaps, turnID,
 		)
 		if err != nil {
 			return
@@ -87,7 +89,7 @@ func (w *Worker) applyAgenticTruncation(ctx context.Context, messages []gateway.
 }
 
 func (w *Worker) handleAgenticToolCalls(
-	ctx context.Context, task models.Task,
+	ctx context.Context, task models.Task, turnID string,
 	resp gateway.AIResponse, messages *[]gateway.PromptMessage,
 	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
@@ -100,7 +102,7 @@ func (w *Worker) handleAgenticToolCalls(
 		} else {
 			taskUpdatedAt = fresh.UpdatedAt
 		}
-		tr, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
+		tr, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
 		contextContent := tr.ForContext()
 		if detected := cm.CheckToolResult(contextContent); len(detected) > 0 {
 			slog.Info("auto-detected context corrections", "task_id", task.ID, "count", len(detected))
@@ -126,6 +128,7 @@ func (w *Worker) processAgenticIteration(
 	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
 	deadlineGuard *DeadlineGuard, cm *ContextManager, goalTracker *GoalTracker,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
+	turnID string,
 ) (bool, error) {
 	if err := deadlineGuard.BeforeIteration(); err != nil {
 		w.handleGatewayError(ctx, task, err)
@@ -139,6 +142,19 @@ func (w *Worker) processAgenticIteration(
 		w.handleGatewayError(ctx, task, err)
 		return false, err
 	}
+	goalProgress := 0.0
+	if goalTracker != nil {
+		if g := goalTracker.Goal(); g != nil {
+			goalProgress = g.ProgressRatio()
+		}
+	}
+	w.recordTurnSnapshot(
+		task.ID, turnID,
+		len(*messages),
+		budgetGuard.Usage(),
+		toolNamesFromDefinitions(tools),
+		goalProgress,
+	)
 	if err := budgetGuard.BeforeCall(); err != nil {
 		w.handleGatewayError(ctx, task, err)
 		return false, err
@@ -160,7 +176,7 @@ func (w *Worker) processAgenticIteration(
 	}
 
 	iterationGuard.AfterIteration(true)
-	if w.handleAgenticToolCalls(ctx, task, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps, cm) {
+	if w.handleAgenticToolCalls(ctx, task, turnID, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps, cm) {
 		return false, nil
 	}
 

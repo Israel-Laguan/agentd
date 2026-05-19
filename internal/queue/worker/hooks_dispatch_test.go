@@ -295,6 +295,7 @@ func TestDispatchToolWithHooks_VetoedRunsAuditHook(t *testing.T) {
 		context.Background(),
 		"task-veto-hooks",
 		"proj-veto-hooks",
+		"",
 		time.Now(),
 		call,
 		nil,

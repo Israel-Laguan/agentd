@@ -66,7 +66,7 @@ func TestDispatchTool_ScopedCapabilityWithoutAdapterIndex(t *testing.T) {
 	}
 
 	// Dispatch with NO toolToAdapter index (simulating dynamic registration)
-	tr := w.dispatchToolWithProject(context.Background(), "session-1", "project-1", call, nil, ex, scopedRegistry, false, nil)
+	tr := w.dispatchToolWithProject(context.Background(), "session-1", "project-1", call, nil, ex, scopedRegistry, false, nil, nil)
 
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(tr.Content), &payload); err != nil {
@@ -326,7 +326,7 @@ func TestHandleAgenticToolCalls_ResumesAfterApproval(t *testing.T) {
 	ctx := context.Background()
 	var messages []gateway.PromptMessage
 
-	if suspended := w.handleAgenticToolCalls(ctx, parent, resp, &messages, nil, ex, taskHooks, nil, cm); !suspended {
+	if suspended := w.handleAgenticToolCalls(ctx, parent, "", resp, &messages, nil, ex, taskHooks, nil, cm); !suspended {
 		t.Fatal("expected approval gate to suspend on first tool call")
 	}
 	if !store.blockCalled {
@@ -343,7 +343,7 @@ func TestHandleAgenticToolCalls_ResumesAfterApproval(t *testing.T) {
 	}
 
 	store.blockCalled = false
-	if suspended := w.handleAgenticToolCalls(ctx, *parentAfter, resp, &messages, nil, ex, taskHooks, nil, cm); suspended {
+	if suspended := w.handleAgenticToolCalls(ctx, *parentAfter, "", resp, &messages, nil, ex, taskHooks, nil, cm); suspended {
 		t.Fatal("expected tool to proceed after human approval, not suspend again")
 	}
 	assertApprovalResumed(t, store, messages)
@@ -431,7 +431,7 @@ func TestHandleAgenticToolCalls_RefreshesTaskUpdatedAt(t *testing.T) {
 	var messages []gateway.PromptMessage
 	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", parent.ID)
 
-	if suspended := w.handleAgenticToolCalls(ctx, staleTask, resp, &messages, nil, ex, taskHooks, nil, cm); !suspended {
+	if suspended := w.handleAgenticToolCalls(ctx, staleTask, "", resp, &messages, nil, ex, taskHooks, nil, cm); !suspended {
 		t.Fatal("expected approval gate to suspend agentic loop")
 	}
 	if !store.capturedUpdatedAt.Equal(store.freshUpdatedAt) {

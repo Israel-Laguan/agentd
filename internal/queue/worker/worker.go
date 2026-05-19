@@ -52,6 +52,7 @@ type Worker struct {
 	skillRouter          *SkillRouter
 	legacyHandoffTimeout time.Duration
 	externalTools        map[string]struct{}
+	auditLogger          *AuditLogger
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -98,6 +99,7 @@ type WorkerOptions struct {
 	ExternalTools             []string
 	ToolCredentials              map[string]string
 	DisableCredentialDetection     bool
+	Audit                          config.AuditConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -196,6 +198,7 @@ func NewWorker(
 		contextCfg:           opts.AgenticContext,
 		legacyHandoffTimeout: opts.LegacyHandoffTimeout,
 		externalTools:        externalToolsSet(opts.ExternalTools),
+		auditLogger:          newAuditLogger(opts.Audit),
 	}
 	w.setupOptionalLoaders(opts)
 	return w
