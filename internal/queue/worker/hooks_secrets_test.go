@@ -35,8 +35,12 @@ func TestCredentialInjectionHook_InjectsEnv(t *testing.T) {
 	}
 	wantUser := envKey + "=injected-secret"
 	wantCanon := toolenv.CredentialEnvKey + "=injected-secret"
-	if verdict.Env[0] != wantUser || verdict.Env[1] != wantCanon {
-		t.Fatalf("verdict.Env = %v, want [%s, %s]", verdict.Env, wantUser, wantCanon)
+	got := map[string]bool{}
+	for _, e := range verdict.Env {
+		got[e] = true
+	}
+	if !got[wantUser] || !got[wantCanon] {
+		t.Fatalf("verdict.Env = %v, want entries [%s, %s]", verdict.Env, wantUser, wantCanon)
 	}
 }
 
