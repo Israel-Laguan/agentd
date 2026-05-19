@@ -137,8 +137,9 @@ const (
 	queueKeyAgenticTruncationThreshold = "queue.agentic_truncation_threshold" // deprecated
 )
 
-// loadAgenticCharacterBudget reads queue.agentic_character_budget, falling back to the
-// deprecated queue.agentic_truncation_threshold only when the new key is unset.
+// loadAgenticCharacterBudget reads queue.agentic_character_budget.
+// When only the deprecated queue.agentic_truncation_threshold is set (message count),
+// it logs a warning and returns 0 so the gateway truncator max_input_chars is inherited.
 func loadAgenticCharacterBudget(v *viper.Viper) int {
 	if v.IsSet(queueKeyAgenticCharacterBudget) {
 		if v.IsSet(queueKeyAgenticTruncationThreshold) {
@@ -155,9 +156,9 @@ func loadAgenticCharacterBudget(v *viper.Viper) int {
 			"old_key", queueKeyAgenticTruncationThreshold,
 			"new_key", queueKeyAgenticCharacterBudget,
 			"value", legacy,
-			"note", "legacy key was message count; new key is character count",
+			"note", "legacy key was message count; new key is character count; value ignored",
 		)
-		return legacy
+		return DefaultAgenticCharacterBudget
 	}
 	return DefaultAgenticCharacterBudget
 }

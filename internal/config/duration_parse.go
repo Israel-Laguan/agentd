@@ -45,5 +45,9 @@ func scaleBareNumber(n float64, unit, fallback time.Duration) time.Duration {
 	if n <= 0 || math.IsNaN(n) || math.IsInf(n, 0) {
 		return fallback
 	}
-	return time.Duration(n * float64(unit))
+	scaled := n * float64(unit)
+	if scaled <= 0 || math.IsNaN(scaled) || math.IsInf(scaled, 0) || scaled > float64(math.MaxInt64) {
+		return fallback
+	}
+	return time.Duration(scaled)
 }
