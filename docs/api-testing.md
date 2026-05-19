@@ -219,17 +219,28 @@ List all agent profiles.
       "temperature": 0.2,
       "system_prompt": "Suggest one safe shell command...",
       "role": "CODE_GEN",
-      "max_tokens": 1024
+      "max_tokens": 1024,
+      "agentic_mode": false
     }
   ]
 }
 ```
+
+`agentic_mode` (boolean, default `false`) enables the inner agentic worker loop with tool round-tripping. When `true` and the provider supports agentic mode, tasks use `processAgentic`; otherwise the worker falls back to legacy single-shot JSON execution with a warning log.
 
 **Test Coverage**: `e2e/http_test.go:53`
 
 ### GET /api/v1/agents/{id}
 
 Get a specific agent profile.
+
+### POST /api/v1/agents
+
+Create an agent profile. Optional `agentic_mode` (boolean, default `false`).
+
+### PATCH /api/v1/agents/{id}
+
+Sparse update. Set `agentic_mode` to `true` or `false` to enable or disable agentic worker behavior for that profile.
 
 **Test Coverage**:
 - `default` agent: `e2e/http_test.go:70`
