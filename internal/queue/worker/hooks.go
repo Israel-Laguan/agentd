@@ -117,10 +117,11 @@ func (hc *HookChain) RegisterSessionStart(h SessionStartHook) {
 	hc.sessionHooks = append(hc.sessionHooks, h)
 }
 
-// RunPre executes every registered PreHook in order. It short-circuits
-// on the first veto verdict. If a hook returns an error, the failure
-// policy determines the outcome: FailClosed treats the error as a veto,
-// FailOpen logs it and continues.
+// RunPre executes every registered PreHook in order, accumulating Env from
+// each hook into acc. It returns early on Veto, ShortCircuit, or Suspend;
+// on early return, acc.Env is merged into verdict.Env before returning.
+// If a hook returns an error, the failure policy determines the outcome:
+// FailClosed treats the error as a veto, FailOpen logs it and continues.
 func (hc *HookChain) RunPre(ctx HookContext) HookVerdict {
 	hc.mu.RLock()
 	hooks := append([]PreHook(nil), hc.preHooks...)

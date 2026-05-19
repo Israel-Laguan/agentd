@@ -1,6 +1,14 @@
 package toolenv
 
-import "context"
+import (
+	"context"
+	"strings"
+)
+
+// CredentialEnvKey is the well-known env var name adapters use to read the
+// injected credential value. CredentialInjectionHook sets this in addition to
+// any user-configured env var from tool_credentials config.
+const CredentialEnvKey = "AGENTD_TOOL_CREDENTIAL"
 
 type ctxKey struct{}
 
@@ -17,4 +25,16 @@ func With(ctx context.Context, env []string) context.Context {
 func From(ctx context.Context) []string {
 	v, _ := ctx.Value(ctxKey{}).([]string)
 	return v
+}
+
+// CredentialValue returns the value of CredentialEnvKey from env, scanning
+// from the end so the most recent override wins. Returns "" if unset.
+func CredentialValue(env []string) string {
+	prefix := CredentialEnvKey + "="
+	for i := len(env) - 1; i >= 0; i-- {
+		if strings.HasPrefix(env[i], prefix) {
+			return env[i][len(prefix):]
+		}
+	}
+	return ""
 }

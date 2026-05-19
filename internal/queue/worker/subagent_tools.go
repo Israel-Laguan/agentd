@@ -124,7 +124,7 @@ func (d *SubagentDelegate) executeTool(
 	case toolNameDelegateParallel:
 		return d.runDelegateParallel(ctx, call)
 	default:
-		raw := executeCapabilityTool(ctx, call, nil, d.capabilities, d.scopedCapabilities, nil)
+		raw := executeCapabilityTool(ctx, call, nil, d.capabilities, d.scopedCapabilities, d.callEnv)
 		return applyInjectionResistance(call.Function.Name, raw, d.externalTools, ToolStatusSuccess, true)
 	}
 }
@@ -157,7 +157,8 @@ func (d *SubagentDelegate) runDelegate(ctx context.Context, call gateway.ToolCal
 		d.depth+1,
 	).withMaxDelegationDepth(d.delegationDepthLimit()).
 		WithCapabilities(d.capabilities, d.scopedCapabilities).
-		WithExternalTools(d.externalTools)
+		WithExternalTools(d.externalTools).
+		WithCallEnv(d.callEnv)
 	result, err := child.Delegate(ctx, *subDef, args.Task, "", "", 0.2, 0)
 	if err != nil {
 		return jsonErrorf("delegation failed: %v", err)
@@ -207,7 +208,8 @@ func (d *SubagentDelegate) runDelegateParallel(ctx context.Context, call gateway
 		d.depth+1,
 	).withMaxDelegationDepth(d.delegationDepthLimit()).
 		WithCapabilities(d.capabilities, d.scopedCapabilities).
-		WithExternalTools(d.externalTools)
+		WithExternalTools(d.externalTools).
+		WithCallEnv(d.callEnv)
 	results := child.DelegateParallel(ctx, tasks, "", "", 0.2, 0)
 	encoded, err := json.Marshal(results)
 	if err != nil {
