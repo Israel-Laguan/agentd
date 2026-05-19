@@ -86,3 +86,25 @@ func TestToolTimeoutsOverride_Viper(t *testing.T) {
 		t.Fatalf("read timeout should still be default, got %v", got)
 	}
 }
+
+func TestToolTimeoutsBareNumeric_Viper(t *testing.T) {
+	v := viper.New()
+	setQueueDefaults(v)
+	v.Set("queue.tool_timeouts.bash", 120)
+	cfg := loadQueueConfig(v)
+
+	if got := cfg.ToolTimeouts.Lookup("bash", 0); got != 120*time.Second {
+		t.Fatalf("bash timeout = %v, want 120s", got)
+	}
+}
+
+func TestToolTimeoutsDurationString_Viper(t *testing.T) {
+	v := viper.New()
+	setQueueDefaults(v)
+	v.Set("queue.tool_timeouts.bash", "90s")
+	cfg := loadQueueConfig(v)
+
+	if got := cfg.ToolTimeouts.Lookup("bash", 0); got != 90*time.Second {
+		t.Fatalf("bash timeout = %v, want 90s", got)
+	}
+}

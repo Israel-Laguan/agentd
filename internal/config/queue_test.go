@@ -102,7 +102,8 @@ func agenticCharacterBudgetCompatCases() []agenticCharacterBudgetCompatCase {
 				v.Set("queue.agentic_character_budget", 0)
 				v.Set("queue.agentic_truncation_threshold", 40)
 			},
-			want: 0,
+			want:     0,
+			wantWarn: true,
 		},
 		{
 			name: "legacy only",
@@ -118,7 +119,8 @@ func agenticCharacterBudgetCompatCases() []agenticCharacterBudgetCompatCase {
 				v.Set("queue.agentic_character_budget", 100)
 				v.Set("queue.agentic_truncation_threshold", 40)
 			},
-			want: 100,
+			want:     100,
+			wantWarn: true,
 		},
 	}
 }
@@ -139,9 +141,10 @@ func runAgenticCharacterBudgetCompatCase(t *testing.T, tc agenticCharacterBudget
 	if cfg.AgenticCharacterBudget != tc.want {
 		t.Fatalf("AgenticCharacterBudget = %d, want %d", cfg.AgenticCharacterBudget, tc.want)
 	}
-	hasWarn := strings.Contains(buf.String(), "deprecated config key")
+	hasWarn := strings.Contains(buf.String(), "deprecated config key") ||
+		strings.Contains(buf.String(), "both config keys set")
 	if hasWarn != tc.wantWarn {
-		t.Fatalf("deprecated warning logged = %v, want %v; log: %q", hasWarn, tc.wantWarn, buf.String())
+		t.Fatalf("warning logged = %v, want %v; log: %q", hasWarn, tc.wantWarn, buf.String())
 	}
 }
 
