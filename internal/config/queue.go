@@ -141,6 +141,12 @@ const (
 // deprecated queue.agentic_truncation_threshold only when the new key is unset.
 func loadAgenticCharacterBudget(v *viper.Viper) int {
 	if v.IsSet(queueKeyAgenticCharacterBudget) {
+		if v.IsSet(queueKeyAgenticTruncationThreshold) {
+			slog.Warn("both config keys set; deprecated key ignored",
+				"old_key", queueKeyAgenticTruncationThreshold,
+				"new_key", queueKeyAgenticCharacterBudget,
+			)
+		}
 		return v.GetInt(queueKeyAgenticCharacterBudget)
 	}
 	if v.IsSet(queueKeyAgenticTruncationThreshold) {
@@ -149,6 +155,7 @@ func loadAgenticCharacterBudget(v *viper.Viper) int {
 			"old_key", queueKeyAgenticTruncationThreshold,
 			"new_key", queueKeyAgenticCharacterBudget,
 			"value", legacy,
+			"note", "legacy key was message count; new key is character count",
 		)
 		return legacy
 	}

@@ -45,8 +45,8 @@ func setToolRetryDefaults(v *viper.Viper) {
 func loadToolRetriesConfig(v *viper.Viper) ToolRetriesConfig {
 	cfg := ToolRetriesConfig{
 		MaxAttempts: v.GetInt("queue.tool_retries.max_attempts"),
-		BaseDelay:   v.GetDuration("queue.tool_retries.base_delay"),
-		MaxDelay:    v.GetDuration("queue.tool_retries.max_delay"),
+		BaseDelay:   parseViperDuration(v, "queue.tool_retries.base_delay", DefaultToolRetryBaseDelay, time.Millisecond),
+		MaxDelay:    parseViperDuration(v, "queue.tool_retries.max_delay", DefaultToolRetryMaxDelay, time.Millisecond),
 	}
 	tools := v.GetStringSlice("queue.tool_retries.tools")
 	if len(tools) > 0 {
