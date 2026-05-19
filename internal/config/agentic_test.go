@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -75,8 +76,9 @@ func TestLoadAgenticConfig_Audit(t *testing.T) {
 func TestResolveAuditPath_Relative(t *testing.T) {
 	t.Parallel()
 	got := ResolveAuditPath("/home/agentd", "audit.jsonl")
-	if got != "/home/agentd/audit.jsonl" {
-		t.Fatalf("ResolveAuditPath = %q, want /home/agentd/audit.jsonl", got)
+	want := filepath.Join("/home/agentd", "audit.jsonl")
+	if got != want {
+		t.Fatalf("ResolveAuditPath = %q, want %q", got, want)
 	}
 }
 
