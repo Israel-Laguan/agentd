@@ -99,6 +99,13 @@ agentic:
     tools: []                    # e.g., ["deploy", "write_config", "run_migration"]
     timeout: "30m"               # max wait for human decision before timing out
 
+  # External tool names for prompt-injection resistance.
+  # Results from these tools are wrapped in <external_content> tags so the
+  # model treats them as untrusted data. When empty (default), all non-builtin
+  # tools (i.e. any MCP / capability tool) are treated as external.
+  # Explicitly listing names limits wrapping to only those tools.
+  external_tools: []             # e.g., ["web_fetch", "read_url", "search"]
+
   # Review loop configuration.
   # When enabled on an agent profile, the agent sends its final output
   # for human review before marking the task complete.

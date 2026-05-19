@@ -35,7 +35,9 @@ func agenticToolUseSystemText(goal ...*AgentGoal) string {
 When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
-Return your response as plain text when the task is complete, or use tools to continue working.`
+Return your response as plain text when the task is complete, or use tools to continue working.
+
+` + externalContentInstruction
 	if len(goal) == 0 || goal[0] == nil || len(goal[0].SuccessCriteria) == 0 {
 		return text
 	}
