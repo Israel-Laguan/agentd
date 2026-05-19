@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
@@ -86,6 +87,43 @@ func TestAgenticLoop_MaxIterationsRespected(t *testing.T) {
 	assertMaxIterationsOutcome(t, gw, store)
 }
 
+// TestAgenticLoop_GraceFinalIterationCompletesAfterWrapUp verifies that after
+// the tool-iteration cap, the worker injects a wrap-up user message and allows
+// one more gateway call that can finish without further tools.
+func TestAgenticLoop_GraceFinalIterationCompletesAfterWrapUp(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{
+		responses: []gateway.AIResponse{
+			{
+				Content: "Running a command.",
+				ToolCalls: []gateway.ToolCall{{
+					ID: "call_1", Type: "function",
+					Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command": "echo once"}`},
+				}},
+			},
+			{Content: "Done after grace wrap-up."},
+		},
+	}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"echo once": {Success: true, ExitCode: 0, Stdout: "once\n"},
+	}}
+	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 1)
+	w.Process(context.Background(), task)
+
+	if gw.callCount != 2 {
+		t.Fatalf("expected 2 gateway calls (1 tool + 1 grace), got %d", gw.callCount)
+	}
+	if len(gw.requests) < 2 || !requestContainsUserMessage(gw.requests[1], iterationExceededMessage) {
+		t.Fatalf("grace request should include wrap-up user message, got %#v", gw.requests)
+	}
+	if store.committedResult == nil || !store.committedResult.Success {
+		t.Fatalf("expected successful commit after grace final text, got %#v", store.committedResult)
+	}
+	if !strings.Contains(store.committedResult.Payload, "Done after grace wrap-up") {
+		t.Fatalf("committed payload = %q, want grace final text", store.committedResult.Payload)
+	}
+}
+
 func newMaxIterationsAgenticFixture(t *testing.T) (*maxIterationsGateway, *mockAgenticStore, *Worker, models.Task) {
 	t.Helper()
 	gw := &maxIterationsGateway{}
@@ -108,8 +146,15 @@ func newMaxIterationsAgenticFixture(t *testing.T) (*maxIterationsGateway, *mockA
 
 func assertMaxIterationsOutcome(t *testing.T, gw *maxIterationsGateway, store *mockAgenticStore) {
 	t.Helper()
-	if gw.callCount != 3 {
-		t.Errorf("expected 3 gateway calls, got %d", gw.callCount)
+	// Three tool iterations at the cap, then one grace gateway call with the wrap-up user message.
+	if gw.callCount != 4 {
+		t.Errorf("expected 4 gateway calls (3 capped tool rounds + 1 grace), got %d", gw.callCount)
+	}
+	if len(gw.requests) < 4 {
+		t.Fatalf("expected at least 4 recorded requests, got %d", len(gw.requests))
+	}
+	if !requestContainsUserMessage(gw.requests[3], iterationExceededMessage) {
+		t.Errorf("grace request should include wrap-up user message, got %#v", gw.requests[3].Messages)
 	}
 	if store.task.RetryCount != 1 {
 		t.Errorf("expected retry count 1, got %d", store.task.RetryCount)
@@ -123,9 +168,11 @@ func assertMaxIterationsOutcome(t *testing.T, gw *maxIterationsGateway, store *m
 // keeps requesting tool execution (used for testing max iterations)
 type maxIterationsGateway struct {
 	callCount int
+	requests  []gateway.AIRequest
 }
 
 func (m *maxIterationsGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	m.requests = append(m.requests, req)
 	m.callCount++
 	return gateway.AIResponse{
 		Content: fmt.Sprintf("Executing tool %d", m.callCount),
@@ -257,6 +304,67 @@ func TestAgenticLoop_InvokesCapabilityRegistryAndAccumulatesMessages(t *testing.
 	}
 }
 
+// TestAgenticLoop_BudgetExceededRequeues verifies token budget enforcement through
+// the full Process → processAgentic path (not only BudgetGuard unit tests).
+func TestAgenticLoop_BudgetExceededRequeues(t *testing.T) {
+	t.Parallel()
+	gw := &tokenUsageGateway{tokensPerCall: 60}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"echo budget": {Success: true, ExitCode: 0, Stdout: "ok\n"},
+	}}
+	store := &mockAgenticStore{}
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{
+		MaxToolIterations: 10,
+		TokenBudget:       100,
+	})
+	task := models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-budget"},
+		ProjectID:  "project-1", AgentID: "agent-1",
+		Title: "Budget test", State: models.TaskStateQueued,
+	}
+	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
+	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: "/tmp/test-workspace"}
+
+	w.Process(context.Background(), task)
+
+	if gw.callCount != 2 {
+		t.Fatalf("expected 2 gateway calls before budget block, got %d", gw.callCount)
+	}
+	if store.task.RetryCount != 1 {
+		t.Fatalf("RetryCount = %d, want 1 (outer retry)", store.task.RetryCount)
+	}
+	if store.task.State != models.TaskStateReady {
+		t.Fatalf("state = %q, want READY after budget failure", store.task.State)
+	}
+	if store.committedResult != nil {
+		t.Fatal("expected no successful commit on budget exhaustion")
+	}
+}
+
+// TestAgenticLoop_DeadlineExpiredBeforeIteration verifies deadline guard through Process.
+func TestAgenticLoop_DeadlineExpiredBeforeIteration(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	gw := &sequenceGateway{responses: integrationSequenceResponses()}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"pwd": {Success: true, ExitCode: 0, Stdout: "/home/user\n"},
+	}}
+	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
+	w.Process(ctx, task)
+
+	if gw.callCount != 0 {
+		t.Fatalf("expected no gateway calls when deadline already expired, got %d", gw.callCount)
+	}
+	if store.task.RetryCount != 1 {
+		t.Fatalf("RetryCount = %d, want 1", store.task.RetryCount)
+	}
+	if store.task.State != models.TaskStateReady {
+		t.Fatalf("state = %q, want READY", store.task.State)
+	}
+}
+
 func TestAgenticLoop_ToolErrorStringStillContinuesToFinalResponse(t *testing.T) {
 	t.Parallel()
 
@@ -293,6 +401,42 @@ func TestAgenticLoop_ToolErrorStringStillContinuesToFinalResponse(t *testing.T) 
 	if store.committedResult == nil || !store.committedResult.Success {
 		t.Fatalf("expected final response committed after tool error, got %#v", store.committedResult)
 	}
+}
+
+// tokenUsageGateway always returns tool calls with a fixed token usage per call.
+type tokenUsageGateway struct {
+	tokensPerCall int
+	callCount     int
+	requests      []gateway.AIRequest
+}
+
+func (g *tokenUsageGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	g.requests = append(g.requests, req)
+	g.callCount++
+	return gateway.AIResponse{
+		Content: "Running tool",
+		ToolCalls: []gateway.ToolCall{{
+			ID:   fmt.Sprintf("call_%d", g.callCount),
+			Type: "function",
+			Function: gateway.ToolCallFunction{
+				Name:      "bash",
+				Arguments: `{"command": "echo budget"}`,
+			},
+		}},
+		TokenUsage: g.tokensPerCall,
+	}, nil
+}
+
+func (g *tokenUsageGateway) GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error) {
+	return nil, nil
+}
+
+func (g *tokenUsageGateway) AnalyzeScope(ctx context.Context, userIntent string) (*gateway.ScopeAnalysis, error) {
+	return nil, nil
+}
+
+func (g *tokenUsageGateway) ClassifyIntent(ctx context.Context, userIntent string) (*gateway.IntentAnalysis, error) {
+	return nil, nil
 }
 
 // sequenceGateway is a mock gateway that returns a predefined sequence of responses.

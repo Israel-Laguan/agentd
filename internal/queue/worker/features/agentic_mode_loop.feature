@@ -23,5 +23,5 @@ Feature: Agentic mode inner loop with tool calling
     And the maximum tool retries is set to 1
     And the gateway always returns tool calls
     When the worker processes a task
-    Then the worker shall stop after 3 iterations
+    Then the worker shall stop after 3 tool iterations plus one grace gateway call
     And the worker shall commit a failure result
