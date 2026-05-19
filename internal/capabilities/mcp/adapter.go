@@ -167,16 +167,6 @@ func convertInputSchema(schema any) *gateway.FunctionParameters {
 	return params
 }
 
-type authTransport struct {
-	Authorization string
-}
-
-func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.Header.Set("Authorization", t.Authorization)
-	return http.DefaultTransport.RoundTrip(req)
-}
-
 // contextAuthTransport applies per-call credentials from toolenv on the request
 // context, falling back to the adapter default auth from connect-time config.
 type contextAuthTransport struct {
