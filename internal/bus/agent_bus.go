@@ -25,6 +25,7 @@ func (b AgentBridge) PublishAgentUpdated(ctx context.Context, profile models.Age
 		ID: profile.ID, Name: profile.Name, Provider: profile.Provider,
 		Model: profile.Model, Temperature: profile.Temperature,
 		Role: profile.Role, MaxTokens: profile.MaxTokens,
+		AgenticMode: profile.AgenticMode,
 	}
 	if profile.SystemPrompt.Valid {
 		payload.SystemPrompt = profile.SystemPrompt.String
@@ -57,6 +58,7 @@ type agentSignalPayload struct {
 	SystemPrompt string  `json:"system_prompt,omitempty"`
 	Role         string  `json:"role"`
 	MaxTokens    int     `json:"max_tokens"`
+	AgenticMode  bool    `json:"agentic_mode"`
 }
 
 // TaskBridge publishes manager-loop signals (assign, split, retry) to the

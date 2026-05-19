@@ -122,6 +122,7 @@ func TestAgentSignalPayload_JSON(t *testing.T) {
 		Role:         "default",
 		MaxTokens:    4096,
 		SystemPrompt: "You are helpful",
+		AgenticMode:  true,
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -129,6 +130,13 @@ func TestAgentSignalPayload_JSON(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Error("data should not be empty")
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if decoded["agentic_mode"] != true {
+		t.Fatalf("agentic_mode = %v, want true", decoded["agentic_mode"])
 	}
 }
 

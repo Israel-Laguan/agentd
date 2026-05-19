@@ -39,6 +39,7 @@ type AgentPatch struct {
 	SystemPrompt *string
 	Role         *string
 	MaxTokens    *int
+	AgenticMode  *bool
 }
 
 // List returns all known agent profiles.
@@ -151,5 +152,8 @@ func applyPatch(profile *models.AgentProfile, patch AgentPatch) {
 	}
 	if patch.MaxTokens != nil && *patch.MaxTokens >= 0 {
 		profile.MaxTokens = *patch.MaxTokens
+	}
+	if patch.AgenticMode != nil {
+		profile.AgenticMode = *patch.AgenticMode
 	}
 }

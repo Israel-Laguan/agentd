@@ -114,6 +114,99 @@ func TestAgentHandler_Patch(t *testing.T) {
 	}
 }
 
+func TestAgentHandler_CreateWithAgenticMode(t *testing.T) {
+	h := agentTestHandler()
+	body := `{"id":"agentic-agent","name":"Agentic Agent","provider":"openai","model":"gpt-4","agentic_mode":true}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Create code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var createResp struct {
+		Data struct {
+			AgenticMode bool `json:"agentic_mode"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &createResp); err != nil {
+		t.Fatal(err)
+	}
+	if !createResp.Data.AgenticMode {
+		t.Fatal("expected agentic_mode true in create response")
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/agentic-agent", nil)
+	getReq.SetPathValue("id", "agentic-agent")
+	getRec := httptest.NewRecorder()
+	h.Get(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("Get code = %d body = %s", getRec.Code, getRec.Body.String())
+	}
+	var getResp struct {
+		Data struct {
+			AgenticMode bool `json:"agentic_mode"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &getResp); err != nil {
+		t.Fatal(err)
+	}
+	if !getResp.Data.AgenticMode {
+		t.Fatal("expected agentic_mode true after create")
+	}
+}
+
+func TestAgentHandler_PatchAgenticMode(t *testing.T) {
+	h := agentTestHandler()
+	seedAgent(t, h)
+
+	patchBody := `{"agentic_mode": true}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/test-agent", strings.NewReader(patchBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "test-agent")
+	rec := httptest.NewRecorder()
+	h.Patch(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Patch enable code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var patchResp struct {
+		Data struct {
+			AgenticMode bool `json:"agentic_mode"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &patchResp); err != nil {
+		t.Fatal(err)
+	}
+	if !patchResp.Data.AgenticMode {
+		t.Fatal("expected agentic_mode true after patch")
+	}
+
+	disableBody := `{"agentic_mode": false}`
+	disableReq := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/test-agent", strings.NewReader(disableBody))
+	disableReq.Header.Set("Content-Type", "application/json")
+	disableReq.SetPathValue("id", "test-agent")
+	disableRec := httptest.NewRecorder()
+	h.Patch(disableRec, disableReq)
+	if disableRec.Code != http.StatusOK {
+		t.Fatalf("Patch disable code = %d body = %s", disableRec.Code, disableRec.Body.String())
+	}
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/test-agent", nil)
+	getReq.SetPathValue("id", "test-agent")
+	getRec := httptest.NewRecorder()
+	h.Get(getRec, getReq)
+	var getResp struct {
+		Data struct {
+			AgenticMode bool `json:"agentic_mode"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &getResp); err != nil {
+		t.Fatal(err)
+	}
+	if getResp.Data.AgenticMode {
+		t.Fatal("expected agentic_mode false after disable patch")
+	}
+}
+
 func TestAgentHandler_Delete(t *testing.T) {
 	h := agentTestHandler()
 	seedAgent(t, h)
