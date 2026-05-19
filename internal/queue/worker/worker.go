@@ -35,9 +35,8 @@ type Worker struct {
 	sandboxScrubber      sandbox.Scrubber
 	maxRetries           int
 	maxToolIterations    int
-	truncatorMax         int
-	truncationThreshold  int
-	characterBudget      int
+	truncatorMax    int
+	characterBudget int
 	toolExecutor         *ToolExecutor
 	toolTimeouts         config.ToolTimeoutsConfig
 	toolRetries          config.ToolRetriesConfig
@@ -72,9 +71,8 @@ type WorkerOptions struct {
 	MaxRetries                int
 	MaxToolIterations         int
 	TokenBudget               int
-	AgenticTruncatorMax       int
-	AgenticTruncationThresh   int
-	AgenticCharacterBudget    int
+	AgenticTruncatorMax    int
+	AgenticCharacterBudget int
 	AgenticContext            config.AgenticContextConfig
 	Canceller                 *CancelRegistry
 	Tuner                     *planning.ParameterTuner
@@ -119,9 +117,6 @@ func normalizeOpts(opts WorkerOptions) WorkerOptions {
 	}
 	if opts.AgenticTruncatorMax <= 0 {
 		opts.AgenticTruncatorMax = config.DefaultAgenticTruncatorMax
-	}
-	if opts.AgenticTruncationThresh <= 0 {
-		opts.AgenticTruncationThresh = config.DefaultAgenticTruncationThreshold
 	}
 	if opts.AgenticCharacterBudget < 0 {
 		opts.AgenticCharacterBudget = config.DefaultAgenticCharacterBudget
@@ -183,9 +178,8 @@ func NewWorker(
 		sandboxScrubber:      scrubber,
 		maxRetries:           opts.MaxRetries,
 		maxToolIterations:    opts.MaxToolIterations,
-		truncatorMax:         opts.AgenticTruncatorMax,
-		truncationThreshold:  opts.AgenticTruncationThresh,
-		characterBudget:      opts.AgenticCharacterBudget,
+		truncatorMax:    opts.AgenticTruncatorMax,
+		characterBudget: opts.AgenticCharacterBudget,
 		toolExecutor:         toolExecutor,
 		toolTimeouts:         opts.ToolTimeouts,
 		toolRetries:          opts.ToolRetries,

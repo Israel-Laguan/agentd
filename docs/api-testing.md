@@ -234,6 +234,11 @@ List all agent profiles.
 
 Get a specific agent profile.
 
+**Test Coverage**:
+- `default` agent: `e2e/http_test.go:70`
+- `qa` agent: `e2e/http_test.go:87`
+- `researcher` agent: `e2e/http_test.go:104`
+
 ### POST /api/v1/agents
 
 Create an agent profile. Optional `agentic_mode` (boolean, default `false`).
@@ -241,11 +246,6 @@ Create an agent profile. Optional `agentic_mode` (boolean, default `false`).
 ### PATCH /api/v1/agents/{id}
 
 Sparse update. Set `agentic_mode` to `true` or `false` to enable or disable agentic worker behavior for that profile.
-
-**Test Coverage**:
-- `default` agent: `e2e/http_test.go:70`
-- `qa` agent: `e2e/http_test.go:87`
-- `researcher` agent: `e2e/http_test.go:104`
 
 ---
 
