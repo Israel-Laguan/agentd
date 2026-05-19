@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
@@ -45,6 +46,70 @@ func setupLegacyReviewProfile(t *testing.T, store models.KanbanStore, ctx contex
 	if err := store.UpsertAgentProfile(ctx, *profile); err != nil {
 		t.Fatalf("upsert profile: %v", err)
 	}
+}
+
+func setupAgenticReviewProfile(t *testing.T, store models.KanbanStore, ctx context.Context) {
+	t.Helper()
+	profile, err := store.GetAgentProfile(ctx, "default")
+	if err != nil {
+		t.Fatalf("get profile: %v", err)
+	}
+	profile.RequireReview = true
+	profile.AgenticMode = true
+	profile.Provider = "openai"
+	if err := store.UpsertAgentProfile(ctx, *profile); err != nil {
+		t.Fatalf("upsert profile: %v", err)
+	}
+}
+
+func TestProcess_AgenticRequireReview_CreatesReviewHandoff(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+	setupAgenticReviewProfile(t, store, ctx)
+
+	gw := &sequenceGateway{
+		responses: []gateway.AIResponse{
+			{Content: "agentic draft output for human review"},
+		},
+	}
+	sb := &mockAgenticSandbox{}
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
+	task := materializeLegacyReviewTask(t, store, ctx, "agentic-review", "task-agentic-review")
+	queued, err := store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateQueued)
+	if err != nil {
+		t.Fatalf("queue task: %v", err)
+	}
+
+	w.Process(ctx, *queued)
+
+	parent, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if parent.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", parent.State)
+	}
+	if sb.executionCount != 0 {
+		t.Fatalf("sandbox executions = %d, want 0 (final text only)", sb.executionCount)
+	}
+	if gw.callCount != 1 {
+		t.Fatalf("gateway calls = %d, want 1", gw.callCount)
+	}
+	draft, ok := findLatestDraftReviewFromStore(t, store, ctx, task.ID)
+	if !ok || !strings.Contains(draft, "agentic draft output") {
+		t.Fatalf("draft = %q, want agentic final text", draft)
+	}
+	_ = findReviewSubtask(t, store, ctx, task.ID)
+}
+
+func findLatestDraftReviewFromStore(t *testing.T, store models.KanbanStore, ctx context.Context, taskID string) (string, bool) {
+	t.Helper()
+	comments, err := store.ListComments(ctx, taskID)
+	if err != nil {
+		t.Fatalf("list comments: %v", err)
+	}
+	return findLatestDraftReview(comments)
 }
 
 func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing.T) {

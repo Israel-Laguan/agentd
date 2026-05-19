@@ -128,6 +128,15 @@ func requestContainsAssistantToolCall(req gateway.AIRequest, callID string) bool
 	return false
 }
 
+func requestContainsUserMessage(req gateway.AIRequest, contentSubstring string) bool {
+	for _, message := range req.Messages {
+		if message.Role == "user" && strings.Contains(message.Content, contentSubstring) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *mockAgenticStore) MarkTaskRunning(_ context.Context, id string, _ time.Time, pid int) (*models.Task, error) {
 	m.task.ID = id
 	m.task.State = models.TaskStateRunning

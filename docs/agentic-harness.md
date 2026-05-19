@@ -81,7 +81,7 @@ type AgentProfile struct {
 | `AgenticMode` | Provider | Behavior |
 |---------------|----------|----------|
 | `false` (default) | any | Legacy single-shot JSON mode: one LLM call, one sandbox execution |
-| `true` | `openai` | Agentic mode: inner loop with tool calling, multiple sandbox executions |
+| `true` | `openai`, `anthropic` | Agentic mode: inner loop with tool calling; shell via `bash` tool only |
 | `true` | other | Falls back to legacy mode with a warning log |
 
 ### Enabling agentic mode
@@ -89,11 +89,31 @@ type AgentProfile struct {
 To enable agentic mode for a profile:
 
 1. Set `AgenticMode: true` on the `AgentProfile`
-2. Use an OpenAI-compatible provider (currently the only supported provider)
+2. Use a provider that supports tool round-tripping (`openai` or `anthropic` today)
 
 The worker checks `profile.AgenticMode` at task processing time and routes to either:
 - Legacy path: `command()` → single sandbox run
 - Agentic path: `processAgentic()` → inner loop with tool calling
+
+## Sandbox model in agentic mode
+
+Agentic and legacy modes use the same hardened [`BashExecutor`](../internal/sandbox/executor.go), but **orchestration differs**:
+
+| Step | Legacy (`AgenticMode: false`) | Agentic (`AgenticMode: true`) |
+| --- | --- | --- |
+| LLM contract | One `GenerateJSON` → `command` string | Repeated `Generate` with `tools` until no `tool_calls` |
+| Shell execution | One `sandbox.Execute` for the JSON `command` | Only via the **`bash` tool** (and `read` / `write` for files) inside the inner loop |
+| Task completion | Sandbox stdout/stderr → task result | Final assistant **text** → `commitTextWithProfile` (no extra sandbox run for that text) |
+
+**Rules:**
+
+1. Agentic mode **never** runs the legacy bare-command sandbox path (`runLegacyTask` / `command()`).
+2. Each `bash` tool invocation is a separate sandbox execution (subject to hooks, timeouts, and scrubbing).
+3. Non-empty final assistant text without further `tool_calls` closes the task; it is stored as the task result payload, not executed as a shell command.
+
+## Conversation persistence across BLOCKED → READY
+
+The inner loop accumulates `PromptMessage` history **in memory** for one `Worker.Process` call. If a gated tool suspends the loop (approval gate → task `BLOCKED`), a later `Process` after the human unblocks the parent **rebuilds** messages from [`assembleAgenticSystemPrompt`](../internal/queue/worker/worker_messages.go). Prior assistant/tool turns from the suspended attempt are **not** restored automatically; the model must re-issue tool calls or continue from the fresh system + user seed. Persisting partial transcripts is planned follow-up work (see roadmap task 11).
 
 ## How concepts map in agentd today
 
