@@ -13,7 +13,7 @@ const (
 	DefaultMaxToolIterations          = 10
 	DefaultTokenBudget                = 0
 	DefaultAgenticTruncatorMax    = 30
-	DefaultAgenticCharacterBudget = 0 // 0 = unlimited
+	DefaultAgenticCharacterBudget = 0 // 0 = inherit gateway.truncator.max_input_chars at daemon startup
 
 	DefaultAnchorBudget          = 10000
 	DefaultWorkingBudget         = 40000
@@ -161,7 +161,7 @@ type QueueConfig struct {
 	MaxToolIterations          int
 	TokenBudget                int
 	AgenticTruncatorMax    int
-	AgenticCharacterBudget int
+	AgenticCharacterBudget int // 0 = inherit gateway.truncator.max_input_chars (see EffectiveAgenticCharacterBudget)
 	AgenticContext             AgenticContextConfig
 	Instructions               InstructionsConfig
 	Skills                     SkillsConfig
@@ -234,6 +234,18 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 		ToolTimeouts: loadToolTimeoutsConfig(v),
 		ToolRetries:  loadToolRetriesConfig(v),
 	}
+}
+
+// EffectiveAgenticCharacterBudget returns the character cap for agentic truncation.
+// When agenticBudget is 0, inherits gatewayTruncatorMaxInputChars (typically gateway.truncator.max_input_chars).
+func EffectiveAgenticCharacterBudget(agenticBudget, gatewayTruncatorMaxInputChars int) int {
+	if agenticBudget > 0 {
+		return agenticBudget
+	}
+	if gatewayTruncatorMaxInputChars > 0 {
+		return gatewayTruncatorMaxInputChars
+	}
+	return 0
 }
 
 func loadToolRetriesConfig(v *viper.Viper) ToolRetriesConfig {
