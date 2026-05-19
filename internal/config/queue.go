@@ -47,34 +47,6 @@ const (
 	DefaultSkillsTopK = 3
 
 	DefaultLegacyHandoffTimeout = 7 * 24 * time.Hour
-
-	// DefaultToolTimeout is the fallback timeout for any tool without an
-	// explicit entry in ToolTimeouts.
-	DefaultToolTimeout = 30 * time.Second
-
-	// DefaultBashToolTimeout is the default timeout for bash tool calls.
-	DefaultBashToolTimeout = 60 * time.Second
-
-	// DefaultReadToolTimeout is the default timeout for read tool calls.
-	DefaultReadToolTimeout = 10 * time.Second
-
-	// DefaultWriteToolTimeout is the default timeout for write tool calls.
-	DefaultWriteToolTimeout = 10 * time.Second
-
-	// DefaultDelegateToolTimeout is the default timeout for delegate tool
-	// calls. Delegation spawns sub-agents that run full agentic loops, so
-	// the timeout must be generous (aligned with the task deadline).
-	DefaultDelegateToolTimeout = 10 * time.Minute
-
-	// DefaultToolRetryMaxAttempts is the default number of retry attempts
-	// for tool-level transient failures.
-	DefaultToolRetryMaxAttempts = 3
-
-	// DefaultToolRetryBaseDelay is the base delay between tool retry attempts.
-	DefaultToolRetryBaseDelay = 200 * time.Millisecond
-
-	// DefaultToolRetryMaxDelay is the ceiling for exponential backoff.
-	DefaultToolRetryMaxDelay = 5 * time.Second
 )
 
 // InstructionsConfig holds paths for the instruction hierarchy layers.
@@ -119,42 +91,6 @@ type HITLConfig struct {
 	LegacyHandoffTimeout time.Duration
 }
 
-// ToolTimeoutsConfig maps tool names to per-tool timeout durations.
-// The special key "default" sets the fallback for unlisted tools.
-type ToolTimeoutsConfig struct {
-	Defaults map[string]time.Duration
-}
-
-// Lookup returns the timeout for the given tool name. It checks for an
-// exact match first, then returns the "default" entry. If neither is
-// present it returns fallback.
-func (c ToolTimeoutsConfig) Lookup(toolName string, fallback time.Duration) time.Duration {
-	if d, ok := c.Defaults[toolName]; ok {
-		return d
-	}
-	if d, ok := c.Defaults["default"]; ok {
-		return d
-	}
-	return fallback
-}
-
-// ToolRetriesConfig controls tool-level retry behaviour for transient errors.
-type ToolRetriesConfig struct {
-	MaxAttempts int
-	BaseDelay   time.Duration
-	MaxDelay    time.Duration
-	Tools       map[string]struct{}
-}
-
-// Allows reports whether transparent retries are enabled for the given tool.
-func (c ToolRetriesConfig) Allows(toolName string) bool {
-	if len(c.Tools) == 0 {
-		return false
-	}
-	_, ok := c.Tools[toolName]
-	return ok
-}
-
 type QueueConfig struct {
 	TaskDeadline               time.Duration
 	QueuedReconcileAfter       time.Duration
@@ -192,16 +128,8 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.skills.threshold", DefaultSkillsThreshold)
 	v.SetDefault("queue.skills.top_k", DefaultSkillsTopK)
 	v.SetDefault("queue.hitl.legacy_handoff_timeout", DefaultLegacyHandoffTimeout.String())
-	v.SetDefault("queue.tool_timeouts.bash", DefaultBashToolTimeout.String())
-	v.SetDefault("queue.tool_timeouts.read", DefaultReadToolTimeout.String())
-	v.SetDefault("queue.tool_timeouts.write", DefaultWriteToolTimeout.String())
-	v.SetDefault("queue.tool_timeouts.delegate", DefaultDelegateToolTimeout.String())
-	v.SetDefault("queue.tool_timeouts.delegate_parallel", DefaultDelegateToolTimeout.String())
-	v.SetDefault("queue.tool_timeouts.default", DefaultToolTimeout.String())
-	v.SetDefault("queue.tool_retries.max_attempts", DefaultToolRetryMaxAttempts)
-	v.SetDefault("queue.tool_retries.base_delay", DefaultToolRetryBaseDelay.String())
-	v.SetDefault("queue.tool_retries.max_delay", DefaultToolRetryMaxDelay.String())
-	v.SetDefault("queue.tool_retries.tools", []string{"read"})
+	setToolTimeoutDefaults(v)
+	setToolRetryDefaults(v)
 }
 
 const (
@@ -271,40 +199,4 @@ func EffectiveAgenticCharacterBudget(agenticBudget, gatewayTruncatorMaxInputChar
 		return gatewayTruncatorMaxInputChars
 	}
 	return 0
-}
-
-func loadToolRetriesConfig(v *viper.Viper) ToolRetriesConfig {
-	cfg := ToolRetriesConfig{
-		MaxAttempts: v.GetInt("queue.tool_retries.max_attempts"),
-		BaseDelay:   v.GetDuration("queue.tool_retries.base_delay"),
-		MaxDelay:    v.GetDuration("queue.tool_retries.max_delay"),
-	}
-	tools := v.GetStringSlice("queue.tool_retries.tools")
-	if len(tools) > 0 {
-		cfg.Tools = make(map[string]struct{}, len(tools))
-		for _, name := range tools {
-			cfg.Tools[name] = struct{}{}
-		}
-	}
-	return cfg
-}
-
-func loadToolTimeoutsConfig(v *viper.Viper) ToolTimeoutsConfig {
-	knownKeys := []string{"bash", "read", "write", "delegate", "delegate_parallel", "default"}
-	result := ToolTimeoutsConfig{Defaults: make(map[string]time.Duration, len(knownKeys))}
-	for _, k := range knownKeys {
-		if d := v.GetDuration("queue.tool_timeouts." + k); d > 0 {
-			result.Defaults[k] = d
-		}
-	}
-	raw := v.GetStringMap("queue.tool_timeouts")
-	for k := range raw {
-		if _, exists := result.Defaults[k]; exists {
-			continue
-		}
-		if d := v.GetDuration("queue.tool_timeouts." + k); d > 0 {
-			result.Defaults[k] = d
-		}
-	}
-	return result
 }
