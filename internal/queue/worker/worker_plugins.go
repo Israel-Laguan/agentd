@@ -123,9 +123,9 @@ func (w *Worker) applyTaskPreHooks(
 	}
 	verdict := taskHooks.RunPre(hookCtx)
 	if verdict.ShortCircuit {
-		// Intentionally skips post-hooks (audit, scrub). Hooks that need
-		// observability should use Veto+Result without ShortCircuit; see DryRunHook.
-		return classifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0), verdict.Suspend, nil, true
+		tr = classifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0)
+		tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
+		return tr, verdict.Suspend, nil, true
 	}
 	if verdict.Veto && verdict.Result != "" {
 		// Suspend controls agentic loop pause and status: substitute answers

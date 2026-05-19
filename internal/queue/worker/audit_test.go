@@ -30,6 +30,19 @@ func TestHashArgs_Deterministic(t *testing.T) {
 	}
 }
 
+func TestFileAuditSink_CreatesParentDir(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	path := filepath.Join(base, "nested", "dir", "audit.jsonl")
+	sink := NewFileAuditSink(path)
+	if err := sink.WriteAudit(AuditRecord{ToolName: "bash", Timestamp: time.Now().UTC()}); err != nil {
+		t.Fatalf("WriteAudit: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("audit file not created: %v", err)
+	}
+}
+
 func TestFileAuditSink_ToolRecord(t *testing.T) {
 	t.Parallel()
 	path := filepathJoinTemp(t, "audit.jsonl")
