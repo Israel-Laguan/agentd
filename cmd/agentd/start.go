@@ -93,8 +93,11 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		SandboxScrubPatterns:      cfg.Sandbox.ScrubPatterns,
 		MaxToolIterations:         cfg.Queue.MaxToolIterations,
 		TokenBudget:               cfg.Queue.TokenBudget,
-		AgenticTruncatorMax:    cfg.Queue.AgenticTruncatorMax,
-		AgenticCharacterBudget: cfg.Queue.AgenticCharacterBudget,
+		AgenticTruncatorMax: cfg.Queue.AgenticTruncatorMax,
+		AgenticCharacterBudget: config.EffectiveAgenticCharacterBudget(
+			cfg.Queue.AgenticCharacterBudget,
+			cfg.Gateway.Truncator.MaxInputChars,
+		),
 		AgenticContext:            cfg.Queue.AgenticContext,
 		InstructionsProjectFile:   cfg.Queue.Instructions.ProjectFile,
 		InstructionsUserPrefsPath: userPrefsPath,
