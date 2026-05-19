@@ -15,6 +15,10 @@ api:
   materialize_token: ""
 
 # AI gateway.
+# Tool capability fallback: when a request includes tools but the selected provider
+# does not support chat tools, the router clears tools and sets JSON mode (cascade
+# only). An explicit profile Provider with unsupported tools returns an error.
+# Role-mapped providers (role_models) use cascade-style fallback, not that error.
 gateway:
   order: [openai, anthropic, ollama]
   max_tasks_per_phase: 7
@@ -49,7 +53,7 @@ gateway:
     poll_interval: "4s"
   budget:
     tokens_per_task: 50000 # per-task token cap; 0 = unlimited (Danger A)
-  role_models:             # Flow 6.3: specialized model routing
+  role_models:             # Flow 6.3: specialized model routing (wired via WithRoleRouting)
     chat:                  # high-reasoning model for planning/intent
       provider: ""         # empty = use default cascade order
       model: ""
@@ -57,7 +61,7 @@ gateway:
       provider: ""
       model: ""
     memory:                # cheap model for summarization/curation
-      provider: ""
+      provider: ""         # non-tool providers here still get JSON fallback when tools are sent
       model: ""
   truncator:
     policy: "head_tail" # head_tail | middle_out | summarize | reject
@@ -81,6 +85,8 @@ gateway:
 # The special "default" key applies to any tool without an explicit entry.
 # 0 or absent = unlimited.
 # Future extension: values may become objects with max_calls / window_seconds.
+# Agentic worker mode (per AgentProfile.agentic_mode). Unsupported providers
+# (see docs/provider-tool-calling.md) fall back to legacy JSON command execution.
 agentic:
   tool_rate_limits:
     bash: 50

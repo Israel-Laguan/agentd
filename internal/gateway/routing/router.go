@@ -148,8 +148,8 @@ func (r *Router) selectCandidateProviders(req spec.AIRequest) (candidates []prov
 		matchedProvider = true
 		// When an explicit provider is requested with tools but doesn't support them,
 		// skip it so the after-loop error fires. Legacy fallback only applies to
-		// non-explicit provider cascading.
-		if req.Provider != "" && hasRequestedTools && !p.Capabilities().SupportsChatTools {
+		// non-explicit provider cascading (including role-routed providers).
+		if req.Provider != "" && !req.ProviderFromRole && hasRequestedTools && !p.Capabilities().SupportsChatTools {
 			continue
 		}
 		candidates = append(candidates, p)
@@ -162,7 +162,7 @@ func (r *Router) selectCandidateProviders(req spec.AIRequest) (candidates []prov
 
 func decideTerminalError(req spec.AIRequest, matchedProvider, selectedHasToolSupport bool, providerErrs []error) error {
 	hasRequestedTools := len(req.Tools) > 0
-	if req.Provider != "" && matchedProvider && hasRequestedTools && !selectedHasToolSupport {
+	if req.Provider != "" && !req.ProviderFromRole && matchedProvider && hasRequestedTools && !selectedHasToolSupport {
 		return fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", req.Provider)
 	}
 	if req.Provider != "" && len(providerErrs) == 0 {
@@ -214,6 +214,7 @@ func (r *Router) applyRoleRouting(req spec.AIRequest) spec.AIRequest {
 	}
 	if req.Provider == "" && target.Provider != "" {
 		req.Provider = target.Provider
+		req.ProviderFromRole = true
 	}
 	if req.Model == "" && target.Model != "" {
 		req.Model = target.Model

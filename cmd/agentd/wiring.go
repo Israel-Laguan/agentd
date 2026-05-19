@@ -29,6 +29,9 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) runtimeDeps {
 	breaker := queue.NewCircuitBreaker()
 	gw := gateway.NewRouterFromConfigs(cfg.Gateway.ProviderConfigs()).
 		WithPhaseCap(cfg.Gateway.MaxTasksPerPhase)
+	if routes := cfg.Gateway.RoleRoutes(); routes != nil {
+		gw = gw.WithRoleRouting(routes)
+	}
 	gw.WithTruncation(cfg.Gateway.TruncatorImpl(gw, breaker), cfg.Gateway.Truncator.MaxInputChars)
 	sb := &sandbox.BashExecutor{
 		Root:        cfg.ProjectsDir,

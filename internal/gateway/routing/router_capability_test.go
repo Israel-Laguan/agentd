@@ -281,6 +281,115 @@ func TestExplicitProviderUnsupportedToolsWithOtherProvider(t *testing.T) {
 	}
 }
 
+// TestAllNonToolProviders_JSONFallbackOnFirst tests that when every configured
+// provider lacks tool support, the first provider receives JSON-mode fallback.
+func TestAllNonToolProviders_JSONFallbackOnFirst(t *testing.T) {
+	ollama := &mockProvider{
+		providerName: "ollama",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: false},
+	}
+	horde := &mockProvider{
+		providerName: "horde",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: false},
+	}
+
+	router := NewRouter(ollama, horde).WithTruncation(truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}}, 12000)
+
+	req := spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
+		Tools:    []spec.ToolDefinition{{Name: "test_tool"}},
+	}
+
+	resp, err := router.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Content != "ok" {
+		t.Fatalf("expected content ok, got %q", resp.Content)
+	}
+	if !ollama.request.JSONMode {
+		t.Error("expected JSONMode on first non-tool provider")
+	}
+	if len(ollama.request.Tools) != 0 {
+		t.Errorf("expected tools cleared on first provider, got %d", len(ollama.request.Tools))
+	}
+	if len(horde.request.Messages) > 0 {
+		t.Error("expected second provider not to be called after first succeeded")
+	}
+}
+
+// TestAllNonToolProviders_AllFail tests JSON fallback attempts when every
+// non-tool provider in the cascade returns an error.
+func TestAllNonToolProviders_AllFail(t *testing.T) {
+	ollama := &mockProvider{
+		providerName: "ollama",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: false},
+		err:          errors.New("ollama down"),
+	}
+	horde := &mockProvider{
+		providerName: "horde",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: false},
+		err:          errors.New("horde down"),
+	}
+
+	router := NewRouter(ollama, horde).WithTruncation(truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}}, 12000)
+
+	req := spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
+		Tools:    []spec.ToolDefinition{{Name: "test_tool"}},
+	}
+
+	_, err := router.Generate(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected error when all non-tool providers fail")
+	}
+	if !errors.Is(err, models.ErrLLMUnreachable) {
+		t.Errorf("expected ErrLLMUnreachable, got: %v", err)
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "ollama down") || !strings.Contains(errMsg, "horde down") {
+		t.Errorf("error should mention both provider failures, got: %v", err)
+	}
+}
+
+// TestRoleRoutingNonToolProviderWithToolsJSONFallback verifies that a role-mapped
+// non-tool provider still receives JSON fallback when tools are present.
+func TestRoleRoutingNonToolProviderWithToolsJSONFallback(t *testing.T) {
+	ollama := &mockProvider{
+		providerName: "ollama",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: false},
+	}
+	routes := map[spec.Role]spec.RoleTarget{
+		spec.RoleMemory: {Provider: "ollama", Model: "llama3:8b"},
+	}
+	router := NewRouter(ollama).WithRoleRouting(routes).WithTruncation(truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}}, 12000)
+
+	req := spec.AIRequest{
+		Role:     spec.RoleMemory,
+		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
+		Tools:    []spec.ToolDefinition{{Name: "test_tool"}},
+	}
+
+	resp, err := router.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Content != "ok" {
+		t.Fatalf("expected content ok, got %q", resp.Content)
+	}
+	if !ollama.request.JSONMode {
+		t.Error("expected JSONMode for role-routed non-tool provider with tools")
+	}
+	if len(ollama.request.Tools) != 0 {
+		t.Errorf("expected tools cleared, got %d", len(ollama.request.Tools))
+	}
+}
+
 // TestMixedProvidersAllSkippedOrFailed tests that when no explicit provider is given,
 // non-tool providers are skipped and tool-provider failures cascade into ErrLLMUnreachable.
 func TestMixedProvidersAllSkippedOrFailed(t *testing.T) {

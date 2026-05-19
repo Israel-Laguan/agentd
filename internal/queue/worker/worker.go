@@ -19,13 +19,6 @@ import (
 // DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
 
-// agenticProviders lists providers that support agentic mode
-// (tool round-tripping with message accumulation).
-var agenticProviders = []spec.Provider{
-	spec.ProviderOpenAI,
-	spec.ProviderAnthropic,
-}
-
 type Worker struct {
 	store                models.KanbanStore
 	gateway              gateway.AIGateway

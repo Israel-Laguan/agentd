@@ -78,6 +78,32 @@ func TestTruncationConfig_StrategyImpl_MiddleOut(t *testing.T) {
 	}
 }
 
+func TestGatewayConfig_RoleRoutes(t *testing.T) {
+	cfg := GatewayConfig{
+		RoleModels: RoleModelsConfig{
+			Chat:   RoleModelConfig{Provider: "openai", Model: "gpt-4o"},
+			Worker: RoleModelConfig{Provider: "anthropic"},
+			Memory: RoleModelConfig{},
+		},
+	}
+	routes := cfg.RoleRoutes()
+	if len(routes) != 2 {
+		t.Fatalf("RoleRoutes() length = %d, want 2", len(routes))
+	}
+	if routes[gateway.RoleChat].Provider != "openai" || routes[gateway.RoleChat].Model != "gpt-4o" {
+		t.Errorf("chat route = %+v", routes[gateway.RoleChat])
+	}
+	if routes[gateway.RoleWorker].Provider != "anthropic" {
+		t.Errorf("worker route = %+v", routes[gateway.RoleWorker])
+	}
+}
+
+func TestGatewayConfig_RoleRoutes_Empty(t *testing.T) {
+	if routes := (GatewayConfig{}).RoleRoutes(); routes != nil {
+		t.Fatalf("RoleRoutes() = %v, want nil", routes)
+	}
+}
+
 func TestDurationOrDefault(t *testing.T) {
 	if durationOrDefault(5*time.Second, 10*time.Second) != 5*time.Second {
 		t.Errorf("durationOrDefault(5s, 10s) = %v, want 5s", durationOrDefault(5*time.Second, 10*time.Second))
