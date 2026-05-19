@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/spf13/viper"
@@ -177,7 +178,8 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.max_tool_iterations", DefaultMaxToolIterations)
 	v.SetDefault("queue.token_budget", DefaultTokenBudget)
 	v.SetDefault("queue.agentic_truncator_max", DefaultAgenticTruncatorMax)
-	v.SetDefault("queue.agentic_character_budget", DefaultAgenticCharacterBudget)
+	// agentic_character_budget intentionally has no SetDefault so IsSet can distinguish
+	// explicit user config from the legacy agentic_truncation_threshold fallback.
 	v.SetDefault("queue.agentic_context.anchor_budget", DefaultAnchorBudget)
 	v.SetDefault("queue.agentic_context.working_budget", DefaultWorkingBudget)
 	v.SetDefault("queue.agentic_context.compressed_budget", DefaultCompressedBudget)
@@ -202,6 +204,29 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.tool_retries.tools", []string{"read"})
 }
 
+const (
+	queueKeyAgenticCharacterBudget     = "queue.agentic_character_budget"
+	queueKeyAgenticTruncationThreshold = "queue.agentic_truncation_threshold" // deprecated
+)
+
+// loadAgenticCharacterBudget reads queue.agentic_character_budget, falling back to the
+// deprecated queue.agentic_truncation_threshold only when the new key is unset.
+func loadAgenticCharacterBudget(v *viper.Viper) int {
+	if v.IsSet(queueKeyAgenticCharacterBudget) {
+		return v.GetInt(queueKeyAgenticCharacterBudget)
+	}
+	if v.IsSet(queueKeyAgenticTruncationThreshold) {
+		legacy := v.GetInt(queueKeyAgenticTruncationThreshold)
+		slog.Warn("deprecated config key; migrate to queue.agentic_character_budget",
+			"old_key", queueKeyAgenticTruncationThreshold,
+			"new_key", queueKeyAgenticCharacterBudget,
+			"value", legacy,
+		)
+		return legacy
+	}
+	return DefaultAgenticCharacterBudget
+}
+
 func loadQueueConfig(v *viper.Viper) QueueConfig {
 	return QueueConfig{
 		TaskDeadline:               v.GetDuration("queue.task_deadline"),
@@ -210,7 +235,7 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 		MaxToolIterations:          v.GetInt("queue.max_tool_iterations"),
 		TokenBudget:                v.GetInt("queue.token_budget"),
 		AgenticTruncatorMax:    v.GetInt("queue.agentic_truncator_max"),
-		AgenticCharacterBudget: v.GetInt("queue.agentic_character_budget"),
+		AgenticCharacterBudget: loadAgenticCharacterBudget(v),
 		AgenticContext: AgenticContextConfig{
 			AnchorBudget:          v.GetInt("queue.agentic_context.anchor_budget"),
 			WorkingBudget:         v.GetInt("queue.agentic_context.working_budget"),
