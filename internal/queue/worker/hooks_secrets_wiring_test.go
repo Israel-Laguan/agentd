@@ -40,3 +40,33 @@ func TestNewWorker_CredentialDetectionBlocksArgs(t *testing.T) {
 		t.Fatalf("veto reason %q should mention credential pattern", tr.Content)
 	}
 }
+
+func TestNewWorker_DisableCredentialDetection_SkipsHook(t *testing.T) {
+	const envKey = "TEST_WIRING_DISABLE_DETECTION"
+	t.Setenv(envKey, "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij")
+
+	w := NewWorker(nil, nil, &fakeSuccessExecutor{}, nil, nil, WorkerOptions{
+		ToolCredentials:              map[string]string{"github": envKey},
+		DisableCredentialDetection:     true,
+	})
+
+	call := gateway.ToolCall{
+		ID: "call-wiring-disable-1",
+		Function: gateway.ToolCallFunction{
+			Name:      "bash",
+			Arguments: `{"command":"git clone https://ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij@github.com/org/repo"}`,
+		},
+	}
+	executor := NewToolExecutor(&fakeSuccessExecutor{}, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+
+	tr, suspended := w.dispatchToolWithHooks(
+		context.Background(), "sess-wiring-disable", "proj-wiring-disable", time.Now(),
+		call, nil, executor, nil, nil,
+	)
+	if suspended {
+		t.Fatal("expected suspend=false")
+	}
+	if tr.Status == ToolStatusVetoed {
+		t.Fatalf("status = %s, want success when credential detection disabled", tr.Status)
+	}
+}

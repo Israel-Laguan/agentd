@@ -24,7 +24,10 @@ func With(ctx context.Context, env []string) context.Context {
 // From returns per-call env pairs previously attached with With.
 func From(ctx context.Context) []string {
 	v, _ := ctx.Value(ctxKey{}).([]string)
-	return v
+	if len(v) == 0 {
+		return nil
+	}
+	return append([]string(nil), v...)
 }
 
 // CredentialValue returns the value of CredentialEnvKey from env, scanning

@@ -62,6 +62,7 @@ func TestAuthTransport_SetsBearerHeader(t *testing.T) {
 	_ = resp.Body.Close()
 
 	assert.Equal(t, "Bearer secret-token", gotAuth)
+	assert.Empty(t, req.Header.Get("Authorization"), "transport must not mutate caller-owned request")
 }
 
 func TestContextAuthTransport_PerCallEnvOverridesDefault(t *testing.T) {
@@ -82,6 +83,7 @@ func TestContextAuthTransport_PerCallEnvOverridesDefault(t *testing.T) {
 	_ = resp.Body.Close()
 
 	assert.Equal(t, "Bearer per-call-secret", gotAuth)
+	assert.Empty(t, req.Header.Get("Authorization"), "transport must not mutate caller-owned request")
 }
 
 func TestContextAuthTransport_IgnoresNonCredentialEnvVars(t *testing.T) {
@@ -105,6 +107,7 @@ func TestContextAuthTransport_IgnoresNonCredentialEnvVars(t *testing.T) {
 	_ = resp.Body.Close()
 
 	assert.Equal(t, "Bearer real-secret", gotAuth)
+	assert.Empty(t, req.Header.Get("Authorization"), "transport must not mutate caller-owned request")
 }
 
 func TestContextAuthTransport_FallsBackToDefault(t *testing.T) {
@@ -124,6 +127,7 @@ func TestContextAuthTransport_FallsBackToDefault(t *testing.T) {
 	_ = resp.Body.Close()
 
 	assert.Equal(t, "Bearer default-token", gotAuth)
+	assert.Empty(t, req.Header.Get("Authorization"), "transport must not mutate caller-owned request")
 }
 
 type fakeSession struct {
