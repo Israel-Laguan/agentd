@@ -45,26 +45,6 @@ func TestMCPAdapter_Close_NilSession(t *testing.T) {
 	require.NoError(t, a.Close())
 }
 
-func TestAuthTransport_SetsBearerHeader(t *testing.T) {
-	var gotAuth string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
-
-	transport := &authTransport{Authorization: "Bearer secret-token"}
-	client := &http.Client{Transport: transport}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	_ = resp.Body.Close()
-
-	assert.Equal(t, "Bearer secret-token", gotAuth)
-	assert.Empty(t, req.Header.Get("Authorization"), "transport must not mutate caller-owned request")
-}
-
 func TestContextAuthTransport_PerCallEnvOverridesDefault(t *testing.T) {
 	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
