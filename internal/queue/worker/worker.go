@@ -178,6 +178,7 @@ func NewWorker(
 	hooks := base.Clone()
 	hooks.RegisterPre(SchemaValidationHook(SchemaRegistryFromDefinitions(toolExecutor.Definitions())))
 	hooks.PrependPost(ScrubResultHook(scrubber))
+	hooks.RegisterPost(InjectionResistanceHook(nil))
 	hooks.RegisterPost(AuditHook(sink, scrubber))
 
 	w := &Worker{
