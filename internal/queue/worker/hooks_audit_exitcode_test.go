@@ -29,7 +29,7 @@ func TestAuditHook_DelegateJSONErrorExitCode(t *testing.T) {
 		ID:       "call_delegate_err",
 		Function: gateway.ToolCallFunction{Name: "delegate", Arguments: `{}`},
 	}
-	tr := w.dispatchToolWithProject(context.Background(), "task-delegate-err", "proj-delegate-err", call, nil, executor, nil, false)
+	tr := w.dispatchToolWithProject(context.Background(), "task-delegate-err", "proj-delegate-err", call, nil, executor, nil, false, nil)
 
 	if tr.Status != ToolStatusError {
 		t.Fatalf("expected error status, got %s", tr.Status)
@@ -67,7 +67,7 @@ func TestAuditHook_CapabilityJSONErrorExitCode(t *testing.T) {
 		ID:       "call_cap_err",
 		Function: gateway.ToolCallFunction{Name: "nonexistent_capability", Arguments: `{}`},
 	}
-	tr := w.dispatchToolWithProject(context.Background(), "task-cap-err", "proj-cap-err", call, nil, executor, nil, false)
+	tr := w.dispatchToolWithProject(context.Background(), "task-cap-err", "proj-cap-err", call, nil, executor, nil, false, nil)
 
 	if tr.Status != ToolStatusError {
 		t.Fatalf("expected error status, got %s", tr.Status)
@@ -108,7 +108,7 @@ func TestAuditHook_BashExitCode127(t *testing.T) {
 		ID:       "call_bash_127",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"missing-cmd"}`},
 	}
-	tr := w.dispatchToolWithProject(context.Background(), "task-bash-127", "proj-bash-127", call, nil, executor, nil, false)
+	tr := w.dispatchToolWithProject(context.Background(), "task-bash-127", "proj-bash-127", call, nil, executor, nil, false, nil)
 
 	if tr.Status != ToolStatusError {
 		t.Fatalf("expected error status, got %s", tr.Status)

@@ -9,6 +9,7 @@ import (
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
+	"agentd/internal/toolenv"
 )
 
 // DispatchTool is the single entry point for tool execution in the agentic loop.
@@ -29,7 +30,7 @@ import (
 // Returns a structured ToolResult describing the outcome.
 func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor) ToolResult {
 	retry := w.toolRetrier != nil && w.toolRetries.Allows(call.Function.Name)
-	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil, retry)
+	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil, retry, nil)
 }
 
 // timeoutToolResult returns a structured ToolResult for a timed-out tool.
@@ -37,12 +38,12 @@ func timeoutToolResult(callID string, timeout time.Duration) ToolResult {
 	return TimeoutResult(callID, timeout.Milliseconds())
 }
 
-func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, retry bool) ToolResult {
+func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, retry bool, callEnv []string) ToolResult {
 	timeout := w.toolTimeouts.Lookup(call.Function.Name, config.DefaultToolTimeout)
-	return w.executeToolCore(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, timeout, retry)
+	return w.executeToolCore(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, timeout, retry, callEnv)
 }
 
-func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, timeout time.Duration, retry bool) ToolResult {
+func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, timeout time.Duration, retry bool, callEnv []string) ToolResult {
 	start := time.Now()
 	hookCtx := HookContext{
 		ToolName:  call.Function.Name,
@@ -72,11 +73,13 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 			hookCtx.ResultStatusSet = true
 			tr.Content = w.hooks.RunPost(hookCtx, tr.Content)
 			return tr
+		} else if len(verdict.Env) > 0 {
+			callEnv = append(callEnv, verdict.Env...)
 		}
 	}
 
 	tr := w.executeToolWithRetry(ctx, call.ID, timeout, retry, func(toolCtx context.Context) ToolResult {
-		return w.runToolBody(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities)
+		return w.runToolBody(toolCtx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, callEnv)
 	})
 
 	if w.hooks != nil {
@@ -101,10 +104,10 @@ func (w *Worker) executeAgenticTool(ctx context.Context, sessionID string, toolE
 
 // executeDelegate handles a delegate tool call from the parent agent.
 func (w *Worker) executeDelegate(ctx context.Context, call gateway.ToolCall, toolExecutor *ToolExecutor) string {
-	return w.executeDelegateWithCapabilities(ctx, call, toolExecutor, nil)
+	return w.executeDelegateWithCapabilities(ctx, call, toolExecutor, nil, nil)
 }
 
-func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gateway.ToolCall, toolExecutor *ToolExecutor, scopedCaps *capabilities.Registry) string {
+func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gateway.ToolCall, toolExecutor *ToolExecutor, scopedCaps *capabilities.Registry, callEnv []string) string {
 	var args delegateArgs
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
 		return jsonErrorf("invalid delegate arguments: %v", err)
@@ -126,7 +129,7 @@ func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gatew
 		w.gateway,
 		w.sandbox,
 		toolExecutor.workspacePath,
-		toolExecutor.envVars,
+		toolExecutor.BuildEnv(callEnv...),
 		toolExecutor.wallTimeout,
 		0, // depth=0: parent is delegating
 	).WithCapabilities(w.capabilities, scopedCaps).
@@ -152,7 +155,7 @@ func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gatew
 	return string(encoded)
 }
 
-func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolCall, toolExecutor *ToolExecutor, scopedCaps *capabilities.Registry) string {
+func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolCall, toolExecutor *ToolExecutor, scopedCaps *capabilities.Registry, callEnv []string) string {
 	var args delegateParallelArgs
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
 		return jsonErrorf("invalid delegate_parallel arguments: %v", err)
@@ -184,7 +187,7 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 		w.gateway,
 		w.sandbox,
 		toolExecutor.workspacePath,
-		toolExecutor.envVars,
+		toolExecutor.BuildEnv(callEnv...),
 		toolExecutor.wallTimeout,
 		0,
 	).WithCapabilities(w.capabilities, scopedCaps).
@@ -211,7 +214,7 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 // directly, bypassing any scoped registry. Now the scoped registry is wired through
 // handleAgenticToolCalls → dispatchToolWithHooks → dispatchToolWithProject, so
 // scoped tools are both advertised and executable.
-func executeCapabilityTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string, global, scoped *capabilities.Registry) string {
+func executeCapabilityTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string, global, scoped *capabilities.Registry, callEnv []string) string {
 	args, err := parseCapabilityArgs(call.Function.Arguments)
 	if err != nil {
 		return jsonErrorf("invalid arguments: %v", err)
@@ -225,7 +228,8 @@ func executeCapabilityTool(ctx context.Context, call gateway.ToolCall, toolToAda
 	if registry == nil {
 		return jsonErrorf("unknown tool: %s", call.Function.Name)
 	}
-	out, err := registry.CallTool(ctx, adapterName, call.Function.Name, args)
+	toolCtx := toolenv.With(ctx, callEnv)
+	out, err := registry.CallTool(toolCtx, adapterName, call.Function.Name, args)
 	if err != nil {
 		return jsonErrorf("capability tool failed: %v", err)
 	}

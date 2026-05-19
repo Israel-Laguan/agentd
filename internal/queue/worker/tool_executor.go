@@ -51,10 +51,10 @@ func NewToolExecutor(sb sandbox.Executor, workspacePath string, envVars []string
 	}
 }
 
-func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall) string {
+func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall, extraEnv ...string) string {
 	switch call.Function.Name {
 	case toolNameBash:
-		return t.executeBash(ctx, call.Function.Arguments)
+		return t.executeBash(ctx, call.Function.Arguments, extraEnv...)
 	case toolNameRead:
 		return t.executeRead(ctx, call.Function.Arguments)
 	case toolNameWrite:
@@ -119,7 +119,16 @@ type bashArgs struct {
 	Command string `json:"command"`
 }
 
-func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string) string {
+// BuildEnv returns a copy of the executor base environment merged with extra
+// KEY=VALUE pairs for a single tool call without mutating executor state.
+func (t *ToolExecutor) BuildEnv(extra ...string) []string {
+	out := make([]string, 0, len(t.envVars)+len(extra))
+	out = append(out, t.envVars...)
+	out = append(out, extra...)
+	return out
+}
+
+func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEnv ...string) string {
 	var args bashArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return jsonErrorf("invalid arguments: %v", err)
@@ -134,7 +143,7 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string) string 
 		ProjectID:     "",
 		WorkspacePath: t.workspacePath,
 		Command:       args.Command,
-		EnvVars:       t.envVars,
+		EnvVars:       t.BuildEnv(extraEnv...),
 		WallTimeout:   t.wallTimeout,
 	}
 

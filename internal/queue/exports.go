@@ -30,6 +30,14 @@ type WorkerOptions = qw.WorkerOptions
 
 var NewWorker = qw.NewWorker
 
+// ValidateToolCredentials checks that every mapped env var in toolCredentials is set.
+func ValidateToolCredentials(toolCredentials map[string]string) error {
+	if len(toolCredentials) == 0 {
+		return nil
+	}
+	return qw.NewEnvSecretStore(toolCredentials).Validate()
+}
+
 const DefaultWorkerMaxRetries = qw.DefaultMaxRetries
 
 type HealingAction = planning.HealingAction

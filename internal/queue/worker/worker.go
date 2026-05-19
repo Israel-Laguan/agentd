@@ -96,6 +96,7 @@ type WorkerOptions struct {
 	ToolTimeouts              config.ToolTimeoutsConfig
 	ToolRetries               config.ToolRetriesConfig
 	ExternalTools             []string
+	ToolCredentials           map[string]string
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -167,6 +168,12 @@ func NewWorker(
 	base := resolveHooks(opts.Hooks)
 	hooks := base.Clone()
 	hooks.RegisterPre(SchemaValidationHook(SchemaRegistryFromDefinitions(toolExecutor.Definitions())))
+	hooks.RegisterPre(CredentialDetectionHook())
+	if len(opts.ToolCredentials) > 0 {
+		store := NewEnvSecretStore(opts.ToolCredentials)
+		hooks.RegisterPre(CredentialInjectionHook(store))
+		hooks.RegisterSessionStart(CredentialValidationSessionHook(store))
+	}
 	hooks.PrependPost(ScrubResultHook(scrubber))
 	hooks.RegisterPost(InjectionResistanceHook(externalToolsSet(opts.ExternalTools)))
 	hooks.RegisterPost(AuditHook(sink, scrubber))
