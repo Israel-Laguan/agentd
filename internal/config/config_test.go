@@ -161,6 +161,46 @@ func TestLoad_SkillsGlobalDir_ExplicitAbsolute(t *testing.T) {
 	}
 }
 
+func TestLoad_AuditPath_ResolvesRelative(t *testing.T) {
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+	body := "agentic:\n  audit:\n    enabled: true\n"
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := filepath.Join(homeDir, "audit.jsonl")
+	if cfg.Agentic.Audit.Path != want {
+		t.Fatalf("Agentic.Audit.Path = %q, want %q", cfg.Agentic.Audit.Path, want)
+	}
+}
+
+func TestLoad_AuditPath_AbsoluteUnchanged(t *testing.T) {
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	abs := filepath.Join(t.TempDir(), "var", "log", "agentd", "audit.jsonl")
+	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+	body := fmt.Sprintf("agentic:\n  audit:\n    enabled: true\n    path: %q\n", filepath.ToSlash(abs))
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Agentic.Audit.Path != abs {
+		t.Fatalf("Agentic.Audit.Path = %q, want %q", cfg.Agentic.Audit.Path, abs)
+	}
+}
+
 func TestResolveSkillsGlobalDir(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "agentd-home")
 	t.Run("empty", func(t *testing.T) {
