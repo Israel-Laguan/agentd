@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -186,7 +185,7 @@ type contextAuthTransport struct {
 func (t *contextAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	auth := t.defaultAuth
 	if env := toolenv.From(req.Context()); len(env) > 0 {
-		if v := credentialValueFromEnv(env); v != "" {
+		if v := toolenv.CredentialValue(env); v != "" {
 			auth = "Bearer " + v
 		}
 	}
@@ -194,15 +193,4 @@ func (t *contextAuthTransport) RoundTrip(req *http.Request) (*http.Response, err
 		req.Header.Set("Authorization", auth)
 	}
 	return http.DefaultTransport.RoundTrip(req)
-}
-
-func credentialValueFromEnv(env []string) string {
-	for _, pair := range env {
-		if i := strings.IndexByte(pair, '='); i > 0 {
-			if val := pair[i+1:]; val != "" {
-				return val
-			}
-		}
-	}
-	return ""
 }

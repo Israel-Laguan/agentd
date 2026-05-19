@@ -74,6 +74,7 @@ type SubagentDelegate struct {
 	capabilities       *capabilities.Registry
 	scopedCapabilities *capabilities.Registry
 	externalTools      map[string]struct{}
+	callEnv            []string
 }
 
 // NewSubagentDelegate constructs a delegate at the given depth.
@@ -119,6 +120,17 @@ func (d *SubagentDelegate) WithCapabilities(global, scoped *capabilities.Registr
 // Nil means wrap all non-builtin tools (same default as the parent worker).
 func (d *SubagentDelegate) WithExternalTools(externalTools map[string]struct{}) *SubagentDelegate {
 	d.externalTools = externalTools
+	return d
+}
+
+// WithCallEnv sets per-call KEY=VALUE env pairs propagated to capability tools
+// (e.g. MCP auth via AGENTD_TOOL_CREDENTIAL). The slice is copied defensively.
+func (d *SubagentDelegate) WithCallEnv(env []string) *SubagentDelegate {
+	if len(env) == 0 {
+		d.callEnv = nil
+		return d
+	}
+	d.callEnv = append([]string(nil), env...)
 	return d
 }
 
