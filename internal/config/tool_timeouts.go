@@ -54,11 +54,28 @@ func setToolTimeoutDefaults(v *viper.Viper) {
 	v.SetDefault("queue.tool_timeouts.default", DefaultToolTimeout.String())
 }
 
+func defaultToolTimeout(k string) time.Duration {
+	switch k {
+	case "bash":
+		return DefaultBashToolTimeout
+	case "read":
+		return DefaultReadToolTimeout
+	case "write":
+		return DefaultWriteToolTimeout
+	case "delegate", "delegate_parallel":
+		return DefaultDelegateToolTimeout
+	default:
+		return DefaultToolTimeout
+	}
+}
+
 func loadToolTimeoutsConfig(v *viper.Viper) ToolTimeoutsConfig {
 	knownKeys := []string{"bash", "read", "write", "delegate", "delegate_parallel", "default"}
 	result := ToolTimeoutsConfig{Defaults: make(map[string]time.Duration, len(knownKeys))}
 	for _, k := range knownKeys {
-		if d := v.GetDuration("queue.tool_timeouts." + k); d > 0 {
+		key := "queue.tool_timeouts." + k
+		fallback := defaultToolTimeout(k)
+		if d := parseViperDuration(v, key, fallback, time.Second); d > 0 {
 			result.Defaults[k] = d
 		}
 	}
@@ -67,7 +84,8 @@ func loadToolTimeoutsConfig(v *viper.Viper) ToolTimeoutsConfig {
 		if _, exists := result.Defaults[k]; exists {
 			continue
 		}
-		if d := v.GetDuration("queue.tool_timeouts." + k); d > 0 {
+		key := "queue.tool_timeouts." + k
+		if d := parseViperDuration(v, key, 0, time.Second); d > 0 {
 			result.Defaults[k] = d
 		}
 	}
