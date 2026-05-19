@@ -51,6 +51,7 @@ type Worker struct {
 	skillLoader          *SkillLoader
 	skillRouter          *SkillRouter
 	legacyHandoffTimeout time.Duration
+	externalTools        map[string]struct{}
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -197,6 +198,7 @@ func NewWorker(
 		pluginMounter:        opts.PluginMounter,
 		contextCfg:           opts.AgenticContext,
 		legacyHandoffTimeout: opts.LegacyHandoffTimeout,
+		externalTools:        externalToolsSet(opts.ExternalTools),
 	}
 	w.setupOptionalLoaders(opts)
 	return w

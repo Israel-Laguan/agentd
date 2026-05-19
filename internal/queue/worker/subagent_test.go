@@ -144,7 +144,7 @@ func TestSubagentDelegate_ContextBudgetTruncatesWorkingHistory(t *testing.T) {
 		Name:          "budgeted",
 		Purpose:       "answer within budget",
 		AllowedTools:  []string{"read"},
-		ContextBudget: 180,
+		ContextBudget: 450, // includes fixed system prompt with external-content instruction
 	}
 
 	delegate := NewSubagentDelegate(gw, nil, t.TempDir(), nil, 0, 0)
