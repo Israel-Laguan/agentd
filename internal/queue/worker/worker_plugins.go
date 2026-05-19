@@ -87,8 +87,10 @@ func (w *Worker) dispatchToolWithHooks(
 		ExecCtx:       ctx,
 	}
 
+	var callEnv []string
 	if taskHooks != nil {
-		if verdict := taskHooks.RunPre(hookCtx); verdict.ShortCircuit {
+		verdict := taskHooks.RunPre(hookCtx)
+		if verdict.ShortCircuit {
 			// Intentionally skips post-hooks (audit, scrub). Hooks that need
 			// observability should use Veto+Result without ShortCircuit; see DryRunHook.
 			return classifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0), verdict.Suspend
@@ -107,11 +109,13 @@ func (w *Worker) dispatchToolWithHooks(
 			tr := VetoedResult(call.ID, verdict.Reason)
 			tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
 			return tr, verdict.Suspend
+		} else if len(verdict.Env) > 0 {
+			callEnv = append(callEnv, verdict.Env...)
 		}
 	}
 
 	retry := w.toolRetrier != nil && w.toolRetries.Allows(call.Function.Name)
-	tr := w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, retry)
+	tr := w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, retry, callEnv)
 
 	if taskHooks != nil {
 		hookCtx.ResultStatus = tr.Status

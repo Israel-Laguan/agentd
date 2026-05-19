@@ -211,7 +211,7 @@ Help with bounded tasks.
 				`{"subagent":"helper","task":"second task"}` +
 				`]}`,
 		},
-	}, toolExec, nil)
+	}, toolExec, nil, nil)
 
 	var payload []SubagentResult
 	if err := json.Unmarshal([]byte(result), &payload); err != nil {
@@ -237,7 +237,7 @@ func TestWorker_ExecuteDelegateParallel_InvalidArgs(t *testing.T) {
 			Name:      "delegate_parallel",
 			Arguments: `{"tasks":[]}`,
 		},
-	}, toolExec, nil)
+	}, toolExec, nil, nil)
 	if !isErrorJSON(result) {
 		t.Fatalf("expected error JSON for empty task list, got %q", result)
 	}
