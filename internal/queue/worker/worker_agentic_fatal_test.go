@@ -42,7 +42,7 @@ func TestHandleAgenticToolCalls_FatalAborts(t *testing.T) {
 
 	var messages []gateway.PromptMessage
 	suspended := w.handleAgenticToolCalls(
-		context.Background(), task, resp, &messages, nil, ex, taskHooks, nil, cm,
+		context.Background(), task, "", resp, &messages, nil, ex, taskHooks, nil, cm,
 	)
 	if !suspended {
 		t.Fatal("expected fatal tool result to suspend agentic loop")

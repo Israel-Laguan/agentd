@@ -56,6 +56,30 @@ func TestLoadAgenticConfig_DisableCredentialDetection(t *testing.T) {
 	}
 }
 
+func TestLoadAgenticConfig_Audit(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	v.Set("agentic.audit.enabled", true)
+	v.Set("agentic.audit.path", "/var/log/agentd/audit.jsonl")
+
+	cfg := loadAgenticConfig(v)
+	if !cfg.Audit.Enabled {
+		t.Fatal("Audit.Enabled = false, want true")
+	}
+	if cfg.Audit.Path != "/var/log/agentd/audit.jsonl" {
+		t.Fatalf("Audit.Path = %q, want absolute path", cfg.Audit.Path)
+	}
+}
+
+func TestResolveAuditPath_Relative(t *testing.T) {
+	t.Parallel()
+	got := ResolveAuditPath("/home/agentd", "audit.jsonl")
+	if got != "/home/agentd/audit.jsonl" {
+		t.Fatalf("ResolveAuditPath = %q, want /home/agentd/audit.jsonl", got)
+	}
+}
+
 func TestLoadAgenticConfig_Empty(t *testing.T) {
 	t.Parallel()
 	v := viper.New()
@@ -65,5 +89,8 @@ func TestLoadAgenticConfig_Empty(t *testing.T) {
 	}
 	if cfg.DisableCredentialDetection {
 		t.Fatal("DisableCredentialDetection = true, want false by default")
+	}
+	if cfg.Audit.Enabled {
+		t.Fatal("Audit.Enabled = true, want false by default")
 	}
 }

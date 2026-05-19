@@ -56,6 +56,14 @@ type HookContext struct {
 	ResultStatusSet    bool
 	ResultExitCode     int
 	ResultExitCodeSet  bool
+	// TurnID identifies the agentic loop iteration (taskID:turnIndex).
+	TurnID string
+	// Verdicts, when non-nil, collects hook outcome strings during RunPre/RunPost.
+	Verdicts *[]string
+	// TokenCountBefore is the session token budget usage at dispatch start.
+	TokenCountBefore int
+	// TokenCountAfter is set by the dispatch layer after hooks complete.
+	TokenCountAfter int
 }
 
 // PreHook is evaluated before tool execution. Returning a veto verdict
@@ -132,8 +140,10 @@ func (hc *HookChain) RunPre(ctx HookContext) HookVerdict {
 		if h.Fn == nil {
 			slog.Warn("pre-hook error", "hook", h.Name, "policy", policyLabel(h.Policy), "error", "nil hook callback")
 			if h.Policy == FailClosed {
+				appendPreVerdict(ctx, h.Name, "error")
 				return HookVerdict{Veto: true, Reason: "hook " + h.Name + " failed (fail_closed): nil hook callback"}
 			}
+			appendPreVerdict(ctx, h.Name, "error")
 			continue
 		}
 		verdict, err := h.Fn(ctx)
@@ -144,17 +154,21 @@ func (hc *HookChain) RunPre(ctx HookContext) HookVerdict {
 				"error", err,
 			)
 			if h.Policy == FailClosed {
+				appendPreVerdict(ctx, h.Name, "error")
 				return HookVerdict{Veto: true, Reason: "hook " + h.Name + " failed (fail_closed): " + err.Error()}
 			}
+			appendPreVerdict(ctx, h.Name, "error")
 			continue
 		}
 		if len(verdict.Env) > 0 {
 			acc.Env = append(acc.Env, verdict.Env...)
 		}
 		if verdict.Veto || verdict.ShortCircuit || verdict.Suspend {
+			appendPreVerdict(ctx, h.Name, preVerdictOutcome(verdict))
 			verdict.Env = append([]string(nil), acc.Env...)
 			return verdict
 		}
+		appendPreVerdict(ctx, h.Name, "pass")
 	}
 	return acc
 }
@@ -173,8 +187,10 @@ func (hc *HookChain) RunPost(ctx HookContext, result string) string {
 		if h.Fn == nil {
 			slog.Warn("post-hook error", "hook", h.Name, "policy", policyLabel(h.Policy), "error", "nil hook callback")
 			if h.Policy == FailClosed {
+				appendPostVerdict(ctx, h.Name, "error")
 				return "hook " + h.Name + " failed (fail_closed): nil hook callback"
 			}
+			appendPostVerdict(ctx, h.Name, "error")
 			continue
 		}
 		mutated, err := h.Fn(ctx, result)
@@ -185,10 +201,13 @@ func (hc *HookChain) RunPost(ctx HookContext, result string) string {
 				"error", err,
 			)
 			if h.Policy == FailClosed {
+				appendPostVerdict(ctx, h.Name, "error")
 				return "hook " + h.Name + " failed (fail_closed): " + err.Error()
 			}
+			appendPostVerdict(ctx, h.Name, "error")
 			continue
 		}
+		appendPostVerdict(ctx, h.Name, "pass")
 		result = mutated
 	}
 	return result
@@ -257,4 +276,31 @@ func policyLabel(p FailurePolicy) string {
 		return "fail_closed"
 	}
 	return "fail_open"
+}
+
+func appendPreVerdict(ctx HookContext, hookName, outcome string) {
+	if ctx.Verdicts == nil {
+		return
+	}
+	*ctx.Verdicts = append(*ctx.Verdicts, hookName+":"+outcome)
+}
+
+func appendPostVerdict(ctx HookContext, hookName, outcome string) {
+	if ctx.Verdicts == nil {
+		return
+	}
+	*ctx.Verdicts = append(*ctx.Verdicts, hookName+":"+outcome)
+}
+
+func preVerdictOutcome(v HookVerdict) string {
+	switch {
+	case v.ShortCircuit:
+		return "short_circuit"
+	case v.Suspend:
+		return "suspend"
+	case v.Veto:
+		return "veto"
+	default:
+		return "pass"
+	}
 }
