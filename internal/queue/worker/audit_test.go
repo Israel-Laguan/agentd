@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -240,5 +241,5 @@ func TestStructuredAuditHook_PassThrough(t *testing.T) {
 
 func filepathJoinTemp(t *testing.T, name string) string {
 	t.Helper()
-	return t.TempDir() + "/" + name
+	return filepath.Join(t.TempDir(), name)
 }

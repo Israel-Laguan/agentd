@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -87,10 +88,13 @@ func (s *FileAuditSink) appendJSON(v any) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
 
-	_, err = f.Write(data)
-	return err
+	_, writeErr := f.Write(data)
+	closeErr := f.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	return closeErr
 }
 
 // AuditLogger writes structured audit records when enabled.
@@ -138,7 +142,15 @@ func (l *AuditLogger) RecordToolDispatch(ctx HookContext, tr ToolResult, verdict
 		TokenCountAfter:  tokenAfter,
 		Timestamp:        time.Now().UTC(),
 	}
-	_ = l.sink.WriteAudit(rec)
+	if err := l.sink.WriteAudit(rec); err != nil {
+		slog.Warn("structured audit write failed",
+			"record_type", recordTypeToolDispatch,
+			"session_id", rec.SessionID,
+			"turn_id", rec.TurnID,
+			"tool_name", rec.ToolName,
+			"error", err,
+		)
+	}
 }
 
 // RecordTurnSnapshot writes a turn-boundary context snapshot.
@@ -147,7 +159,14 @@ func (l *AuditLogger) RecordTurnSnapshot(rec TurnSnapshotRecord) {
 		return
 	}
 	rec.Timestamp = time.Now().UTC()
-	_ = l.sink.WriteTurnSnapshot(rec)
+	if err := l.sink.WriteTurnSnapshot(rec); err != nil {
+		slog.Warn("structured audit write failed",
+			"record_type", recordTypeTurnSnapshot,
+			"session_id", rec.SessionID,
+			"turn_id", rec.TurnID,
+			"error", err,
+		)
+	}
 }
 
 // StructuredAuditHook returns a PostHook that records a tool dispatch audit entry.
@@ -194,11 +213,7 @@ func (w *Worker) recordToolDispatch(hookCtx HookContext, tr ToolResult, verdicts
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
 		return
 	}
-	tokenAfter := hookCtx.TokenCountAfter
-	if w.budgetTracker != nil && hookCtx.SessionID != "" {
-		tokenAfter = w.budgetTracker.Usage(hookCtx.SessionID)
-	}
-	w.auditLogger.RecordToolDispatch(hookCtx, tr, verdicts, tokenAfter)
+	w.auditLogger.RecordToolDispatch(hookCtx, tr, verdicts, hookCtx.TokenCountAfter)
 }
 
 func (w *Worker) recordTurnSnapshot(sessionID, turnID string, messageCount, tokenCount int, activeTools []string, goalProgress float64) {
