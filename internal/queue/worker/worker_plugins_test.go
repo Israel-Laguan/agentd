@@ -210,6 +210,35 @@ func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
 	assert.False(t, suspended)
 }
 
+func TestDispatchToolWithHooks_ShortCircuitRunsPostHooks(t *testing.T) {
+	t.Parallel()
+	w := &Worker{hooks: NewHookChain()}
+	taskHooks := NewHookChain()
+	taskHooks.RegisterPre(PreHook{
+		Name:   "shortcut",
+		Policy: FailOpen,
+		Fn: func(HookContext) (HookVerdict, error) {
+			return HookVerdict{Veto: true, ShortCircuit: true, Result: "cached"}, nil
+		},
+	})
+	taskHooks.RegisterPost(PostHook{
+		Name: "tagger",
+		Fn: func(_ HookContext, result string) (string, error) {
+			return result + " [scrubbed]", nil
+		},
+	})
+
+	call := gateway.ToolCall{
+		ID:       "c1",
+		Function: gateway.ToolCallFunction{Name: "read"},
+	}
+	result, suspended := w.dispatchToolWithHooks(
+		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
+	)
+	assert.Equal(t, "cached [scrubbed]", result.Content)
+	assert.False(t, suspended)
+}
+
 func TestDispatchToolWithHooks_SuspendRunsPostHooks(t *testing.T) {
 	t.Parallel()
 	w := &Worker{hooks: NewHookChain()}
