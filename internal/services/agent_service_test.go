@@ -115,6 +115,37 @@ func TestAgentServicePatch(t *testing.T) {
 	}
 }
 
+func TestAgentServicePatchAgenticMode(t *testing.T) {
+	store := testutil.NewFakeStore()
+	svc := services.NewAgentService(store, nil)
+
+	enable := true
+	_, err := svc.Patch(context.Background(), "default", services.AgentPatch{AgenticMode: &enable})
+	if err != nil {
+		t.Fatalf("Patch enable: %v", err)
+	}
+	got, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile: %v", err)
+	}
+	if !got.AgenticMode {
+		t.Fatal("expected AgenticMode true")
+	}
+
+	disable := false
+	_, err = svc.Patch(context.Background(), "default", services.AgentPatch{AgenticMode: &disable})
+	if err != nil {
+		t.Fatalf("Patch disable: %v", err)
+	}
+	got, err = store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile after disable: %v", err)
+	}
+	if got.AgenticMode {
+		t.Fatal("expected AgenticMode false after disable patch")
+	}
+}
+
 func TestAgentServiceDeleteProtectedAndBus(t *testing.T) {
 	store := testutil.NewFakeStore()
 	bus := &recordingAgentBus{}
