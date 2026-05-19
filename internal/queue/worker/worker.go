@@ -103,6 +103,7 @@ type WorkerOptions struct {
 	LegacyHandoffTimeout      time.Duration
 	ToolTimeouts              config.ToolTimeoutsConfig
 	ToolRetries               config.ToolRetriesConfig
+	ExternalTools             []string
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -178,7 +179,7 @@ func NewWorker(
 	hooks := base.Clone()
 	hooks.RegisterPre(SchemaValidationHook(SchemaRegistryFromDefinitions(toolExecutor.Definitions())))
 	hooks.PrependPost(ScrubResultHook(scrubber))
-	hooks.RegisterPost(InjectionResistanceHook(nil))
+	hooks.RegisterPost(InjectionResistanceHook(externalToolsSet(opts.ExternalTools)))
 	hooks.RegisterPost(AuditHook(sink, scrubber))
 
 	w := &Worker{
