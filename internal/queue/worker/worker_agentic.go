@@ -142,9 +142,6 @@ func (w *Worker) prepareAgenticIteration(
 }
 
 func (w *Worker) applyAgenticTruncation(ctx context.Context, messages []gateway.PromptMessage) ([]gateway.PromptMessage, error) {
-	if len(messages) <= w.truncationThreshold {
-		return messages, nil
-	}
 	trunc := gateway.NewAgenticTruncator(w.truncatorMax)
 	return trunc.Apply(ctx, messages, w.characterBudget)
 }
@@ -243,15 +240,16 @@ func (w *Worker) buildAgenticRequest(
 	messages []gateway.PromptMessage, tools []gateway.ToolDefinition,
 ) gateway.AIRequest {
 	req := gateway.AIRequest{
-		Messages:    messages,
-		Temperature: profile.Temperature,
-		Tools:       tools,
-		AgentID:     task.AgentID,
-		Role:        gateway.RoleWorker,
-		TaskID:      task.ID,
-		Provider:    profile.Provider,
-		Model:       profile.Model,
-		MaxTokens:   profile.MaxTokens,
+		Messages:       messages,
+		Temperature:    profile.Temperature,
+		Tools:          tools,
+		AgentID:        task.AgentID,
+		Role:           gateway.RoleWorker,
+		TaskID:         task.ID,
+		Provider:       profile.Provider,
+		Model:          profile.Model,
+		MaxTokens:      profile.MaxTokens,
+		SkipTruncation: true, // AgenticTruncator applied in prepareAgenticIteration
 	}
 	return w.applyTuning(req, task, profile)
 }
