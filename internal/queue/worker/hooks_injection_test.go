@@ -433,7 +433,7 @@ func TestIsExternalTool_BuiltinsAlwaysFalse(t *testing.T) {
 		if isExternalTool(name, nil) {
 			t.Errorf("builtin tool %q should not be external", name)
 		}
-		if isExternalTool(name, map[string]struct{}{"bash": {}}) {
+		if isExternalTool(name, map[string]struct{}{name: {}}) {
 			t.Errorf("builtin tool %q should not be external even when in explicit set", name)
 		}
 	}
