@@ -104,21 +104,28 @@ func TestInjectionResistanceHook_SkipsDelegate(t *testing.T) {
 func TestInjectionResistanceHook_SkipsErrorResults(t *testing.T) {
 	t.Parallel()
 	hook := InjectionResistanceHook(nil)
-	errorPrefixes := []string{
-		"[POLICY] Tool call blocked: not allowed",
-		"[TIMEOUT] tool did not respond within 5000ms",
-		"[FATAL] Tool execution failed unrecoverably",
-		"[ERROR] something went wrong",
-		"[RETRYABLE ERROR] transient failure",
+	cases := []struct {
+		status ToolStatus
+		input  string
+	}{
+		{ToolStatusVetoed, "Tool call blocked: not allowed"},
+		{ToolStatusTimeout, "tool did not respond within 5000ms"},
+		{ToolStatusFatal, "Tool execution failed unrecoverably"},
+		{ToolStatusError, "something went wrong"},
 	}
-	for _, input := range errorPrefixes {
-		ctx := HookContext{ToolName: "mcp_github", Timestamp: time.Now()}
-		got, err := hook.Fn(ctx, input)
-		if err != nil {
-			t.Fatalf("unexpected error for %q: %v", input, err)
+	for _, tc := range cases {
+		ctx := HookContext{
+			ToolName:        "mcp_github",
+			Timestamp:       time.Now(),
+			ResultStatus:    tc.status,
+			ResultStatusSet: true,
 		}
-		if got != input {
-			t.Fatalf("error result should not be wrapped: input=%q got=%q", input, got)
+		got, err := hook.Fn(ctx, tc.input)
+		if err != nil {
+			t.Fatalf("unexpected error for %v: %v", tc.status, err)
+		}
+		if got != tc.input {
+			t.Fatalf("error result should not be wrapped: status=%v input=%q got=%q", tc.status, tc.input, got)
 		}
 	}
 }
@@ -214,8 +221,8 @@ func TestInjectionResistanceHook_WrapsCapabilityBeforeAudit(t *testing.T) {
 	if !strings.Contains(tr.Content, "<external_content") {
 		t.Fatalf("capability_tool result should be wrapped: %q", tr.Content)
 	}
-	if !strings.Contains(tr.Content, "capability_tool") {
-		t.Fatalf("wrapped result should preserve payload: %q", tr.Content)
+	if !strings.Contains(tr.Content, `&#34;adapter&#34;:&#34;fake&#34;`) {
+		t.Fatalf("wrapped result should preserve capability payload: %q", tr.Content)
 	}
 	if len(sink.events) != 2 {
 		t.Fatalf("expected 2 audit events, got %d", len(sink.events))
@@ -231,6 +238,46 @@ func TestInjectionResistanceHook_WrapsCapabilityBeforeAudit(t *testing.T) {
 		t.Fatalf("audit should see wrapped content, got %q", resultEvent.OutputSummary)
 	}
 }
+
+func TestInjectionResistanceHook_SkipsCapabilityErrorBeforeAudit(t *testing.T) {
+	t.Parallel()
+	sink := &mockEventSink{}
+	registry := capabilities.NewRegistry()
+	registry.Register("fake", failingCapabilityCallAdapter{
+		tools: []gateway.ToolDefinition{{Name: "capability_tool", Description: "x", Parameters: &gateway.FunctionParameters{Type: "object"}}},
+	})
+	w := NewWorker(&mockAgenticStore{}, nil, &mockExecSandbox{}, nil, sink, WorkerOptions{Capabilities: registry, MaxToolIterations: 5})
+	executor := NewToolExecutor(&mockExecSandbox{}, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	toolToAdapter := map[string]string{"capability_tool": "fake"}
+
+	capCall := gateway.ToolCall{
+		ID:       "call_cap_err",
+		Function: gateway.ToolCallFunction{Name: "capability_tool", Arguments: `{}`},
+	}
+	tr := w.DispatchTool(context.Background(), "test-session", capCall, toolToAdapter, executor)
+	if tr.Status == ToolStatusSuccess {
+		t.Fatalf("expected error status, got success: %q", tr.Content)
+	}
+	if strings.Contains(tr.Content, "<external_content") {
+		t.Fatalf("capability error should not be wrapped: %q", tr.Content)
+	}
+}
+
+type failingCapabilityCallAdapter struct {
+	tools []gateway.ToolDefinition
+}
+
+func (f failingCapabilityCallAdapter) Name() string { return "fake" }
+
+func (f failingCapabilityCallAdapter) ListTools(context.Context) ([]gateway.ToolDefinition, error) {
+	return f.tools, nil
+}
+
+func (f failingCapabilityCallAdapter) CallTool(context.Context, string, map[string]any) (any, error) {
+	return nil, context.Canceled
+}
+
+func (f failingCapabilityCallAdapter) Close() error { return nil }
 
 func TestInjectionResistanceHook_SkipsBuiltinBeforeAudit(t *testing.T) {
 	t.Parallel()
@@ -322,31 +369,6 @@ func TestIsExternalTool_ExplicitSetFilters(t *testing.T) {
 	}
 	if isExternalTool("mcp_github", set) {
 		t.Fatal("tool not in explicit set should not be external")
-	}
-}
-
-// --- isErrorResult tests ---
-
-func TestIsErrorResult_DetectsAllPrefixes(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		input string
-		want  bool
-	}{
-		{"[POLICY] blocked", true},
-		{"[TIMEOUT] expired", true},
-		{"[FATAL] crashed", true},
-		{"[ERROR] failed", true},
-		{"[RETRYABLE ERROR] transient", true},
-		{"success output", false},
-		{"", false},
-		{"POLICY without brackets", false},
-	}
-	for _, tc := range cases {
-		got := isErrorResult(tc.input)
-		if got != tc.want {
-			t.Errorf("isErrorResult(%q) = %v, want %v", tc.input, got, tc.want)
-		}
 	}
 }
 

@@ -100,7 +100,9 @@ func (d *SubagentDelegate) buildSystemPrompt(def SubagentDefinition) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\nWhen done, provide your final answer as plain text without calling any further tools.")
+	b.WriteString("\n\n")
+	b.WriteString(externalContentInstruction)
+	b.WriteString("\n\nWhen done, provide your final answer as plain text without calling any further tools.")
 	return b.String()
 }
 
@@ -122,7 +124,8 @@ func (d *SubagentDelegate) executeTool(
 	case toolNameDelegateParallel:
 		return d.runDelegateParallel(ctx, call)
 	default:
-		return executeCapabilityTool(ctx, call, nil, d.capabilities, d.scopedCapabilities)
+		raw := executeCapabilityTool(ctx, call, nil, d.capabilities, d.scopedCapabilities)
+		return applyInjectionResistance(call.Function.Name, raw, d.externalTools, ToolStatusSuccess, true)
 	}
 }
 
@@ -153,7 +156,8 @@ func (d *SubagentDelegate) runDelegate(ctx context.Context, call gateway.ToolCal
 		d.wallTimeout,
 		d.depth+1,
 	).withMaxDelegationDepth(d.delegationDepthLimit()).
-		WithCapabilities(d.capabilities, d.scopedCapabilities)
+		WithCapabilities(d.capabilities, d.scopedCapabilities).
+		WithExternalTools(d.externalTools)
 	result, err := child.Delegate(ctx, *subDef, args.Task, "", "", 0.2, 0)
 	if err != nil {
 		return jsonErrorf("delegation failed: %v", err)
@@ -202,7 +206,8 @@ func (d *SubagentDelegate) runDelegateParallel(ctx context.Context, call gateway
 		d.wallTimeout,
 		d.depth+1,
 	).withMaxDelegationDepth(d.delegationDepthLimit()).
-		WithCapabilities(d.capabilities, d.scopedCapabilities)
+		WithCapabilities(d.capabilities, d.scopedCapabilities).
+		WithExternalTools(d.externalTools)
 	results := child.DelegateParallel(ctx, tasks, "", "", 0.2, 0)
 	encoded, err := json.Marshal(results)
 	if err != nil {
