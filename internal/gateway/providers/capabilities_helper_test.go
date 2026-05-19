@@ -11,8 +11,12 @@ func TestSupportsChatTools(t *testing.T) {
 	}{
 		{"openai", true},
 		{"OPENAI", true},
+		{" openai ", true},
+		{" OPENAI ", true},
 		{"anthropic", true},
 		{"Anthropic", true},
+		{" anthropic ", true},
+		{" Anthropic ", true},
 		{"ollama", false},
 		{"llamacpp", false},
 		{"horde", false},
