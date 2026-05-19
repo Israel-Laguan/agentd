@@ -17,14 +17,17 @@ func TestIterationGuard_BeforeIteration_AllowsFirstCall(t *testing.T) {
 
 func TestIterationGuard_BeforeIteration_BlocksAfterExceeded(t *testing.T) {
 	g := NewIterationGuard(2)
-	// First iteration
 	g.AfterIteration(true)
-	// Second iteration - exceeded but allows final call
 	g.AfterIteration(true)
-	// After final call, should block
+	if !g.ShouldInjectFinalMessage() {
+		t.Fatal("expected grace final message after cap")
+	}
+	if err := g.BeforeIteration(); err != nil {
+		t.Fatalf("expected grace iteration allowed, got %v", err)
+	}
 	g.ResetAllowFinal()
 	if err := g.BeforeIteration(); err == nil {
-		t.Fatal("expected error after iteration limit exceeded and final call used")
+		t.Fatal("expected error after iteration limit exceeded and grace call used")
 	}
 }
 

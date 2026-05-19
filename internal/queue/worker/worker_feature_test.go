@@ -126,7 +126,7 @@ func registerWorkerSteps(sc *godog.ScenarioContext, state *workerScenario) {
 	sc.Step(`^the worker shall append tool result messages to the conversation$`, state.verifyToolResultMessagesAppended)
 	sc.Step(`^the gateway returns a response without tool calls$`, state.verifyGatewayNoToolCalls)
 	sc.Step(`^the worker shall commit the final text as the task result$`, state.verifyFinalTextCommitted)
-	sc.Step(`^the worker shall stop after 3 iterations$`, state.verifyStoppedAfter3Iterations)
+	sc.Step(`^the worker shall stop after 3 tool iterations plus one grace gateway call$`, state.verifyStoppedAfter3IterationsWithGrace)
 	sc.Step(`^the worker shall commit a failure result$`, state.verifyFailureResult)
 }
 
@@ -343,10 +343,11 @@ func (s *workerScenario) verifyFinalTextCommitted(context.Context) error {
 	return nil
 }
 
-func (s *workerScenario) verifyStoppedAfter3Iterations(context.Context) error {
-	// The worker should stop after maxIterations gateway calls.
-	if s.gateway.callCount != s.maxIterations {
-		return fmt.Errorf("expected %d gateway calls (iteration cap), got %d", s.maxIterations, s.gateway.callCount)
+func (s *workerScenario) verifyStoppedAfter3IterationsWithGrace(context.Context) error {
+	// maxIterations tool rounds, then one grace gateway call before outer retry.
+	want := s.maxIterations + 1
+	if s.gateway.callCount != want {
+		return fmt.Errorf("expected %d gateway calls (%d tool rounds + grace), got %d", want, s.maxIterations, s.gateway.callCount)
 	}
 	return nil
 }

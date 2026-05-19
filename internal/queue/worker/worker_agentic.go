@@ -11,6 +11,16 @@ import (
 	"agentd/internal/models"
 )
 
+// processAgentic runs the inner agentic loop for a single task attempt.
+//
+// Sandbox model (explicit):
+//   - Agentic mode never uses the legacy path (GenerateJSON → one bare sandbox.Execute).
+//   - Shell access is only via the bash tool (and read/write tools) through ToolExecutor.
+//   - Final assistant text is committed via commitTextWithProfile without an extra sandbox run.
+//
+// Conversation state (messages) is held in memory for this Process invocation only.
+// If the task is BLOCKED (e.g. approval gate) and later returns to READY, Process
+// rebuilds messages from scratch; partial transcripts are not persisted yet.
 func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
 	cancelCtx, cleanup := w.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
@@ -206,6 +216,8 @@ func (w *Worker) processAgenticIteration(
 	budgetGuard.AfterCall(resp.TokenUsage)
 	appendAssistantMessage(messages, resp)
 
+	// When both Content and ToolCalls are present, tool_calls take precedence:
+	// the assistant Content is kept on the message, but the loop continues via tools.
 	if len(resp.ToolCalls) == 0 {
 		return w.finishAgenticTurnNoTools(ctx, task, profile, resp.Content, goalTracker)
 	}
