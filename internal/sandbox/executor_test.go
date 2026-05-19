@@ -162,14 +162,33 @@ func TestBashExecutorTruncatesLargeLogs(t *testing.T) {
 }
 
 func TestBashExecutorScrubsLogs(t *testing.T) {
-	exec, workspace := testExecutor(t, nil)
+	sink := &recordingSink{}
+	exec, workspace := testExecutor(t, sink)
 	exec.Scrubber = NewScrubber([]string{`custom-secret-[A-Za-z0-9]+`})
+	const secretLine = "sk-1234567890123456789012345678901234567890 custom-secret-abc123"
 	result, err := exec.Execute(
 		context.Background(),
-		testPayload(workspace, `echo "sk-1234567890123456789012345678901234567890 custom-secret-abc123"`),
+		testPayload(workspace, "printf '%s\\n' '"+secretLine+"'"),
 	)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(sink.events) == 0 {
+		t.Fatalf("expected LOG_CHUNK events, got none; result=%#v", result)
+	}
+	for _, evt := range sink.events {
+		if evt.Type != "LOG_CHUNK" {
+			t.Fatalf("event type = %q, want LOG_CHUNK", evt.Type)
+		}
+		if strings.Contains(evt.Payload, "sk-123456") || strings.Contains(evt.Payload, "custom-secret-") {
+			t.Fatalf("event leaked secret: %#v", evt)
+		}
+		if !strings.Contains(evt.Payload, "[REDACTED]") {
+			t.Fatalf("event payload = %q, want [REDACTED]", evt.Payload)
+		}
 	}
 	if strings.Contains(result.Stdout, "sk-123456") || strings.Contains(result.Stdout, "custom-secret-") {
 		t.Fatalf("Stdout leaked secret: %q", result.Stdout)
@@ -264,7 +283,7 @@ func testExecutor(t *testing.T, sink models.EventSink) (*BashExecutor, string) {
 	if err != nil {
 		t.Fatalf("EnsureProjectDir() error = %v", err)
 	}
-	return &BashExecutor{Root: root, Sink: sink, Inactivity: time.Second}, workspace
+	return &BashExecutor{Root: root, Sink: sink, Inactivity: 5 * time.Second}, workspace
 }
 
 func testPayload(workspace, command string) Payload {
