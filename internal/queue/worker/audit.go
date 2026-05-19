@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -83,6 +84,12 @@ func (s *FileAuditSink) appendJSON(v any) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if dir := filepath.Dir(s.path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
 
 	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
