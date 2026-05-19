@@ -72,6 +72,20 @@ func TestQueueConfig_Custom(t *testing.T) {
 	}
 }
 
+func TestEffectiveAgenticCharacterBudget(t *testing.T) {
+	t.Parallel()
+
+	if got := EffectiveAgenticCharacterBudget(5000, 12000); got != 5000 {
+		t.Fatalf("explicit budget = %d, want 5000", got)
+	}
+	if got := EffectiveAgenticCharacterBudget(0, 12000); got != 12000 {
+		t.Fatalf("inherit gateway = %d, want 12000", got)
+	}
+	if got := EffectiveAgenticCharacterBudget(0, 0); got != 0 {
+		t.Fatalf("both zero = %d, want 0", got)
+	}
+}
+
 func TestDefaultQueueValues(t *testing.T) {
 	if DefaultTaskDeadline != 10*time.Minute {
 		t.Errorf("DefaultTaskDeadline = %v, want 10m", DefaultTaskDeadline)

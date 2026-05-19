@@ -94,6 +94,26 @@ func TestApplyAgenticTruncation_OverMaxMessages(t *testing.T) {
 	}
 }
 
+func TestApplyAgenticTruncation_InheritedGatewayCharacterBudget(t *testing.T) {
+	t.Parallel()
+
+	const gatewayDefault = 12000
+	w := testTruncationWorker(t, 100, gatewayDefault)
+	in := []gateway.PromptMessage{
+		{Role: "system", Content: "system"},
+		{Role: "user", Content: "task"},
+		{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("z", 20000)},
+	}
+
+	got, err := w.applyAgenticTruncation(context.Background(), in)
+	if err != nil {
+		t.Fatalf("applyAgenticTruncation() error = %v", err)
+	}
+	if totalChars(got) > gatewayDefault {
+		t.Fatalf("totalChars(got) = %d, want <= %d (inherited gateway default)", totalChars(got), gatewayDefault)
+	}
+}
+
 func TestApplyAgenticTruncation_CharacterBudget(t *testing.T) {
 	t.Parallel()
 
