@@ -73,6 +73,7 @@ type SubagentDelegate struct {
 	maxDelegationDepth int
 	capabilities       *capabilities.Registry
 	scopedCapabilities *capabilities.Registry
+	externalTools      map[string]struct{}
 }
 
 // NewSubagentDelegate constructs a delegate at the given depth.
@@ -111,6 +112,13 @@ func (d *SubagentDelegate) withMaxDelegationDepth(maxDepth int) *SubagentDelegat
 func (d *SubagentDelegate) WithCapabilities(global, scoped *capabilities.Registry) *SubagentDelegate {
 	d.capabilities = global
 	d.scopedCapabilities = scoped
+	return d
+}
+
+// WithExternalTools configures which tools receive injection-resistance wrapping.
+// Nil means wrap all non-builtin tools (same default as the parent worker).
+func (d *SubagentDelegate) WithExternalTools(externalTools map[string]struct{}) *SubagentDelegate {
+	d.externalTools = externalTools
 	return d
 }
 
