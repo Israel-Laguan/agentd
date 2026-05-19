@@ -91,6 +91,10 @@ type AIRequest struct {
 	Model       string           `json:"model,omitempty"`
 	Role        Role             `json:"role,omitempty"`
 	TaskID      string           `json:"task_id,omitempty"`
+	// ProviderFromRole is set when applyRoleRouting injects Provider from
+	// gateway.role_models. Role-selected providers keep cascade-style tool
+	// fallback (JSON mode) instead of the explicit-provider error path.
+	ProviderFromRole bool `json:"-"`
 	// SkipTruncation is used by internal middleware calls, such as summarization,
 	// to avoid recursively applying the truncator to its own request.
 	SkipTruncation bool `json:"-"`

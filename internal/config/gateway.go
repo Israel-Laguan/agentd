@@ -23,6 +23,17 @@ type CapabilityManifest struct {
 	Auth      AuthConfig `json:"auth,omitempty"`
 }
 
+type RoleModelConfig struct {
+	Provider string `mapstructure:"provider"`
+	Model    string `mapstructure:"model"`
+}
+
+type RoleModelsConfig struct {
+	Chat   RoleModelConfig `mapstructure:"chat"`
+	Worker RoleModelConfig `mapstructure:"worker"`
+	Memory RoleModelConfig `mapstructure:"memory"`
+}
+
 type GatewayConfig struct {
 	Order            []string
 	OpenAI           gateway.ProviderConfig
@@ -30,6 +41,7 @@ type GatewayConfig struct {
 	Ollama           gateway.ProviderConfig
 	LlamaCpp         gateway.ProviderConfig
 	Horde            gateway.ProviderConfig
+	RoleModels       RoleModelsConfig
 	Truncation       TruncationConfig
 	Truncator        TruncatorConfig
 	MaxTasksPerPhase int
@@ -134,8 +146,33 @@ func loadGatewayConfig(v *viper.Viper) GatewayConfig {
 			MaxInputChars: v.GetInt("gateway.truncator.max_input_chars"),
 		},
 		MaxTasksPerPhase: v.GetInt("gateway.max_tasks_per_phase"),
+		RoleModels:       loadRoleModels(v),
 		Capabilities:     loadCapabilities(v),
 	}
+}
+
+func loadRoleModels(v *viper.Viper) RoleModelsConfig {
+	var models RoleModelsConfig
+	_ = v.UnmarshalKey("gateway.role_models", &models)
+	return models
+}
+
+// RoleRoutes returns non-empty role→provider/model overrides for the gateway router.
+func (c GatewayConfig) RoleRoutes() map[gateway.Role]gateway.RoleTarget {
+	routes := make(map[gateway.Role]gateway.RoleTarget)
+	addRoleRoute := func(role gateway.Role, m RoleModelConfig) {
+		if m.Provider == "" && m.Model == "" {
+			return
+		}
+		routes[role] = gateway.RoleTarget{Provider: m.Provider, Model: m.Model}
+	}
+	addRoleRoute(gateway.RoleChat, c.RoleModels.Chat)
+	addRoleRoute(gateway.RoleWorker, c.RoleModels.Worker)
+	addRoleRoute(gateway.RoleMemory, c.RoleModels.Memory)
+	if len(routes) == 0 {
+		return nil
+	}
+	return routes
 }
 
 func (c GatewayConfig) ProviderConfigs() []gateway.ProviderConfig {
