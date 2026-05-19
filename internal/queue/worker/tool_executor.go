@@ -268,3 +268,10 @@ func isToolErrorPayload(raw string) bool {
 func stripToolErrorPrefix(raw string) string {
 	return strings.TrimPrefix(raw, toolErrorPrefix)
 }
+
+// InjectEnv appends an environment variable pair (KEY=VALUE) to the
+// executor's env slice. Duplicate keys are allowed; later entries
+// override earlier ones at exec time (POSIX semantics).
+func (t *ToolExecutor) InjectEnv(pair string) {
+	t.envVars = append(t.envVars, pair)
+}

@@ -1,0 +1,432 @@
+package worker
+
+import (
+	"strings"
+	"testing"
+	"time"
+)
+
+// --- CredentialDetectionHook tests ---
+
+func TestCredentialDetectionHook_BlocksOpenAIKey(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"curl -H 'Authorization: Bearer sk-Abc123456789012345678901234567890123456789012345' https://api.openai.com"}`,
+		CallID:    "call-1",
+		SessionID: "sess-1",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if !verdict.Veto {
+		t.Fatal("expected veto for OpenAI key pattern")
+	}
+	if !strings.Contains(verdict.Reason, "credential pattern") {
+		t.Fatalf("reason %q does not mention credential pattern", verdict.Reason)
+	}
+}
+
+func TestCredentialDetectionHook_BlocksBearerToken(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"curl -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJ0ZXN0IjoiZGF0YSJ9.abc123' https://api.example.com"}`,
+		CallID:    "call-2",
+		SessionID: "sess-2",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if !verdict.Veto {
+		t.Fatal("expected veto for bearer token")
+	}
+}
+
+func TestCredentialDetectionHook_BlocksGitHubPAT(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"git clone https://ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij@github.com/org/repo"}`,
+		CallID:    "call-3",
+		SessionID: "sess-3",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if !verdict.Veto {
+		t.Fatal("expected veto for GitHub PAT")
+	}
+}
+
+func TestCredentialDetectionHook_BlocksAWSAccessKey(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"aws configure set aws_access_key_id AKIAIOSFODNN7EXAMPLE"}`,
+		CallID:    "call-4",
+		SessionID: "sess-4",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if !verdict.Veto {
+		t.Fatal("expected veto for AWS access key")
+	}
+}
+
+func TestCredentialDetectionHook_BlocksGenericAPIKey(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"export API_KEY=abcdef12345678901234"}`,
+		CallID:    "call-5",
+		SessionID: "sess-5",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if !verdict.Veto {
+		t.Fatal("expected veto for generic API key assignment")
+	}
+}
+
+func TestCredentialDetectionHook_BlocksPrivateKey(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "write",
+		Args:      `{"path":"id_rsa","content":"-----BEGIN RSA PRIVATE KEY-----\nMIIE..."}`,
+		CallID:    "call-6",
+		SessionID: "sess-6",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if !verdict.Veto {
+		t.Fatal("expected veto for private key")
+	}
+}
+
+func TestCredentialDetectionHook_AllowsSafeArgs(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"ls -la /home/user/project"}`,
+		CallID:    "call-7",
+		SessionID: "sess-7",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if verdict.Veto {
+		t.Fatalf("unexpected veto for safe command: %s", verdict.Reason)
+	}
+}
+
+func TestCredentialDetectionHook_EmptyArgs(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      "",
+		CallID:    "call-8",
+		SessionID: "sess-8",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if verdict.Veto {
+		t.Fatal("unexpected veto for empty args")
+	}
+}
+
+func TestCredentialDetectionHook_BlocksSlackToken(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"curl -H 'Authorization: Bearer xoxb-1234567890-abcdefghij' https://slack.com/api/chat.postMessage"}`,
+		CallID:    "call-9",
+		SessionID: "sess-9",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if !verdict.Veto {
+		t.Fatal("expected veto for Slack token")
+	}
+}
+
+// --- CredentialInjectionHook tests ---
+
+func TestCredentialInjectionHook_InjectsEnv(t *testing.T) {
+	const envKey = "TEST_INJECT_CRED_VALUE"
+	t.Setenv(envKey, "injected-secret")
+
+	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
+
+	hook := CredentialInjectionHook(store, executor)
+	ctx := HookContext{
+		ToolName:  "github",
+		Args:      `{"repo":"org/repo"}`,
+		CallID:    "call-inject-1",
+		SessionID: "sess-inject-1",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if verdict.Veto {
+		t.Fatalf("unexpected veto: %s", verdict.Reason)
+	}
+
+	found := false
+	for _, pair := range executor.envVars {
+		if pair == envKey+"=injected-secret" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected env var %s=injected-secret in executor envVars, got %v", envKey, executor.envVars)
+	}
+}
+
+func TestCredentialInjectionHook_SkipsUnmappedTool(t *testing.T) {
+	t.Parallel()
+	store := NewEnvSecretStore(map[string]string{"github": "GH_TOKEN"})
+	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
+
+	hook := CredentialInjectionHook(store, executor)
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"echo hello"}`,
+		CallID:    "call-inject-2",
+		SessionID: "sess-inject-2",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if verdict.Veto {
+		t.Fatalf("unexpected veto: %s", verdict.Reason)
+	}
+	if len(executor.envVars) != 0 {
+		t.Fatalf("expected no env injection for unmapped tool, got %v", executor.envVars)
+	}
+}
+
+func TestCredentialInjectionHook_NilStore(t *testing.T) {
+	t.Parallel()
+	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	hook := CredentialInjectionHook(nil, executor)
+	ctx := HookContext{
+		ToolName:  "github",
+		CallID:    "call-inject-3",
+		SessionID: "sess-inject-3",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if verdict.Veto {
+		t.Fatal("unexpected veto with nil store")
+	}
+}
+
+func TestCredentialInjectionHook_NilExecutor(t *testing.T) {
+	t.Parallel()
+	store := NewEnvSecretStore(map[string]string{"github": "GH_TOKEN"})
+	hook := CredentialInjectionHook(store, nil)
+	ctx := HookContext{
+		ToolName:  "github",
+		CallID:    "call-inject-4",
+		SessionID: "sess-inject-4",
+		Timestamp: time.Now(),
+	}
+	verdict, err := hook.Fn(ctx)
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+	if verdict.Veto {
+		t.Fatal("unexpected veto with nil executor")
+	}
+}
+
+// --- CredentialValidationSessionHook tests ---
+
+func TestCredentialValidationSessionHook_PassesWhenSet(t *testing.T) {
+	const envKey = "TEST_CRED_VALIDATION_OK"
+	t.Setenv(envKey, "present-value")
+
+	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	hook := CredentialValidationSessionHook(store)
+	err := hook.Fn(HookContext{})
+	if err != nil {
+		t.Fatalf("hook returned error: %v", err)
+	}
+}
+
+func TestCredentialValidationSessionHook_FailsWhenMissing(t *testing.T) {
+	t.Parallel()
+	store := NewEnvSecretStore(map[string]string{"github": "MISSING_VALIDATION_ENV_XYZ"})
+	hook := CredentialValidationSessionHook(store)
+	err := hook.Fn(HookContext{})
+	if err == nil {
+		t.Fatal("expected error for missing credential, got nil")
+	}
+	if !strings.Contains(err.Error(), "github") {
+		t.Fatalf("error %q does not mention tool name", err.Error())
+	}
+}
+
+func TestCredentialValidationSessionHook_NilStore(t *testing.T) {
+	t.Parallel()
+	hook := CredentialValidationSessionHook(nil)
+	err := hook.Fn(HookContext{})
+	if err != nil {
+		t.Fatalf("hook returned error with nil store: %v", err)
+	}
+}
+
+// --- Integration: detection + injection don't leak credentials ---
+
+func TestCredentials_NeverAppearInAuditPayload(t *testing.T) {
+	const envKey = "TEST_AUDIT_LEAK_CHECK"
+	t.Setenv(envKey, "super-secret-token-abc123")
+
+	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
+
+	injectionHook := CredentialInjectionHook(store, executor)
+	detectionHook := CredentialDetectionHook()
+
+	ctx := HookContext{
+		ToolName:  "github",
+		Args:      `{"repo":"org/repo"}`,
+		CallID:    "call-audit-1",
+		SessionID: "sess-audit-1",
+		Timestamp: time.Now(),
+	}
+
+	// Injection should succeed
+	verdict, err := injectionHook.Fn(ctx)
+	if err != nil || verdict.Veto {
+		t.Fatalf("injection hook failed: err=%v, veto=%v", err, verdict.Veto)
+	}
+
+	// Detection should pass because credential is not in args
+	verdict, err = detectionHook.Fn(ctx)
+	if err != nil || verdict.Veto {
+		t.Fatalf("detection hook falsely vetoed clean args: err=%v, reason=%s", err, verdict.Reason)
+	}
+
+	// Verify the credential is in the executor env (would be available to
+	// the tool handler) but NOT in the args string
+	if strings.Contains(ctx.Args, "super-secret-token-abc123") {
+		t.Fatal("credential leaked into tool arguments")
+	}
+	envFound := false
+	for _, pair := range executor.envVars {
+		if strings.Contains(pair, "super-secret-token-abc123") {
+			envFound = true
+			break
+		}
+	}
+	if !envFound {
+		t.Fatal("credential not found in executor env — injection failed")
+	}
+}
+
+// --- HookChain integration ---
+
+func TestHookChain_CredentialDetection_VetoesInChain(t *testing.T) {
+	t.Parallel()
+	hc := NewHookChain()
+	hc.RegisterPre(CredentialDetectionHook())
+
+	ctx := HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"curl -H 'Authorization: Bearer sk-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' https://api.openai.com"}`,
+		CallID:    "call-chain-1",
+		SessionID: "sess-chain-1",
+		Timestamp: time.Now(),
+	}
+	verdict := hc.RunPre(ctx)
+	if !verdict.Veto {
+		t.Fatal("chain RunPre did not veto credential in args")
+	}
+}
+
+func TestHookChain_CredentialDetection_PassesSafeArgs(t *testing.T) {
+	t.Parallel()
+	hc := NewHookChain()
+	hc.RegisterPre(CredentialDetectionHook())
+
+	ctx := HookContext{
+		ToolName:  "read",
+		Args:      `{"path":"README.md"}`,
+		CallID:    "call-chain-2",
+		SessionID: "sess-chain-2",
+		Timestamp: time.Now(),
+	}
+	verdict := hc.RunPre(ctx)
+	if verdict.Veto {
+		t.Fatalf("chain RunPre falsely vetoed: %s", verdict.Reason)
+	}
+}
+
+func TestHookChain_SessionStart_CredentialValidation(t *testing.T) {
+	const envKey = "TEST_SESSION_HOOK_CRED"
+	t.Setenv(envKey, "ok")
+
+	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	hc := NewHookChain()
+	hc.RegisterSessionStart(CredentialValidationSessionHook(store))
+
+	err := hc.RunSessionStart(HookContext{})
+	if err != nil {
+		t.Fatalf("RunSessionStart failed: %v", err)
+	}
+}
+
+func TestHookChain_SessionStart_FailsOnMissingCredential(t *testing.T) {
+	t.Parallel()
+	store := NewEnvSecretStore(map[string]string{"github": "TOTALLY_MISSING_ENV_FOR_TEST"})
+	hc := NewHookChain()
+	hc.RegisterSessionStart(CredentialValidationSessionHook(store))
+
+	err := hc.RunSessionStart(HookContext{})
+	if err == nil {
+		t.Fatal("RunSessionStart should have failed for missing credential")
+	}
+}

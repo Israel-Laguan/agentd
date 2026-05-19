@@ -91,6 +91,16 @@ agentic:
   tool_rate_limits:
     bash: 50
     default: 100
+  # Credential mapping for tool handlers that call external APIs.
+  # Keys are tool names; values are environment variable names holding the credential.
+  # Credentials are injected into the tool execution environment by the
+  # CredentialInjectionHook and are never exposed in tool arguments or model context.
+  # At startup, CredentialValidationSessionHook checks that every mapped env var is set.
+  # tool_credentials:
+  #   github: GITHUB_TOKEN
+  #   jira: JIRA_API_KEY
+  #   slack: SLACK_BOT_TOKEN
+
   # Approval gates for high-stakes tool calls.
   # Tools listed here require explicit human approval before execution.
   # The agent pauses and sends a structured approval request via a HUMAN subtask.
