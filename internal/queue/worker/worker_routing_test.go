@@ -368,9 +368,8 @@ func TestLegacyPath_NotAffectedByAgenticConfig(t *testing.T) {
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{
 		MaxRetries:              3,
 		MaxToolIterations:       50,
-		AgenticTruncatorMax:     30,     // Agentic config
-		AgenticTruncationThresh: 40,     // Agentic config
-		AgenticCharacterBudget:  100000, // Agentic config
+		AgenticTruncatorMax:    30,     // Agentic config
+		AgenticCharacterBudget: 100000, // Agentic config
 	})
 
 	w.Process(context.Background(), store.task)

@@ -194,6 +194,9 @@ func TestAgentHandler_PatchAgenticMode(t *testing.T) {
 	getReq.SetPathValue("id", "test-agent")
 	getRec := httptest.NewRecorder()
 	h.Get(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("Get after disable patch code = %d body = %s", getRec.Code, getRec.Body.String())
+	}
 	var getResp struct {
 		Data struct {
 			AgenticMode bool `json:"agentic_mode"`

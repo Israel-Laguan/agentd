@@ -12,9 +12,8 @@ const (
 	DefaultPollMaxInterval            = 10 * time.Second
 	DefaultMaxToolIterations          = 10
 	DefaultTokenBudget                = 0
-	DefaultAgenticTruncatorMax        = 30
-	DefaultAgenticTruncationThreshold = 40
-	DefaultAgenticCharacterBudget     = 0 // 0 = unlimited
+	DefaultAgenticTruncatorMax    = 30
+	DefaultAgenticCharacterBudget = 0 // 0 = unlimited
 
 	DefaultAnchorBudget          = 10000
 	DefaultWorkingBudget         = 40000
@@ -161,9 +160,8 @@ type QueueConfig struct {
 	PollMaxInterval            time.Duration
 	MaxToolIterations          int
 	TokenBudget                int
-	AgenticTruncatorMax        int
-	AgenticTruncationThreshold int
-	AgenticCharacterBudget     int
+	AgenticTruncatorMax    int
+	AgenticCharacterBudget int
 	AgenticContext             AgenticContextConfig
 	Instructions               InstructionsConfig
 	Skills                     SkillsConfig
@@ -179,7 +177,6 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.max_tool_iterations", DefaultMaxToolIterations)
 	v.SetDefault("queue.token_budget", DefaultTokenBudget)
 	v.SetDefault("queue.agentic_truncator_max", DefaultAgenticTruncatorMax)
-	v.SetDefault("queue.agentic_truncation_threshold", DefaultAgenticTruncationThreshold)
 	v.SetDefault("queue.agentic_character_budget", DefaultAgenticCharacterBudget)
 	v.SetDefault("queue.agentic_context.anchor_budget", DefaultAnchorBudget)
 	v.SetDefault("queue.agentic_context.working_budget", DefaultWorkingBudget)
@@ -212,9 +209,8 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 		PollMaxInterval:            v.GetDuration("queue.poll_max_interval"),
 		MaxToolIterations:          v.GetInt("queue.max_tool_iterations"),
 		TokenBudget:                v.GetInt("queue.token_budget"),
-		AgenticTruncatorMax:        v.GetInt("queue.agentic_truncator_max"),
-		AgenticTruncationThreshold: v.GetInt("queue.agentic_truncation_threshold"),
-		AgenticCharacterBudget:     v.GetInt("queue.agentic_character_budget"),
+		AgenticTruncatorMax:    v.GetInt("queue.agentic_truncator_max"),
+		AgenticCharacterBudget: v.GetInt("queue.agentic_character_budget"),
 		AgenticContext: AgenticContextConfig{
 			AnchorBudget:          v.GetInt("queue.agentic_context.anchor_budget"),
 			WorkingBudget:         v.GetInt("queue.agentic_context.working_budget"),
