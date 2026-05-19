@@ -133,7 +133,8 @@ func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gatew
 		toolExecutor.wallTimeout,
 		0, // depth=0: parent is delegating
 	).WithCapabilities(w.capabilities, scopedCaps).
-		WithExternalTools(w.externalTools)
+		WithExternalTools(w.externalTools).
+		WithCallEnv(callEnv)
 
 	result, err := delegate.Delegate(
 		ctx,
@@ -191,7 +192,8 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 		toolExecutor.wallTimeout,
 		0,
 	).WithCapabilities(w.capabilities, scopedCaps).
-		WithExternalTools(w.externalTools)
+		WithExternalTools(w.externalTools).
+		WithCallEnv(callEnv)
 
 	results := delegate.DelegateParallel(ctx, tasks, "", "", 0.2, 0)
 	encoded, err := json.Marshal(results)

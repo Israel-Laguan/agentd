@@ -74,7 +74,7 @@ func TestContextAuthTransport_PerCallEnvOverridesDefault(t *testing.T) {
 
 	transport := &contextAuthTransport{defaultAuth: "Bearer default-token"}
 	client := &http.Client{Transport: transport}
-	ctx := toolenv.With(context.Background(), []string{"GITHUB_TOKEN=per-call-secret"})
+	ctx := toolenv.With(context.Background(), []string{toolenv.CredentialEnvKey + "=per-call-secret"})
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
@@ -82,6 +82,29 @@ func TestContextAuthTransport_PerCallEnvOverridesDefault(t *testing.T) {
 	_ = resp.Body.Close()
 
 	assert.Equal(t, "Bearer per-call-secret", gotAuth)
+}
+
+func TestContextAuthTransport_IgnoresNonCredentialEnvVars(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	transport := &contextAuthTransport{defaultAuth: "Bearer default-token"}
+	client := &http.Client{Transport: transport}
+	ctx := toolenv.With(context.Background(), []string{
+		"TRACE=1",
+		toolenv.CredentialEnvKey + "=real-secret",
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.Equal(t, "Bearer real-secret", gotAuth)
 }
 
 func TestContextAuthTransport_FallsBackToDefault(t *testing.T) {

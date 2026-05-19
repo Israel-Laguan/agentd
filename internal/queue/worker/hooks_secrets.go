@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+
+	"agentd/internal/toolenv"
 )
 
 // credentialPatterns matches common secret formats that should never
@@ -82,7 +84,10 @@ func CredentialInjectionHook(store SecretStore) PreHook {
 			if !ok || envVar == "" {
 				return HookVerdict{}, nil
 			}
-			return HookVerdict{Env: []string{envVar + "=" + val}}, nil
+			return HookVerdict{Env: []string{
+				envVar + "=" + val,
+				toolenv.CredentialEnvKey + "=" + val,
+			}}, nil
 		},
 	}
 }
