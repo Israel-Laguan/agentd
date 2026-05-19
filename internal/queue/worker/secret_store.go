@@ -20,6 +20,14 @@ type SecretStore interface {
 
 	// RequiredTools returns the tool names that have credential mappings.
 	RequiredTools() []string
+
+	// EnvVar returns the environment variable name mapped to tool, or ("", false)
+	// if the tool has no mapping.
+	EnvVar(tool string) (string, bool)
+
+	// Validate checks that every required credential is present. Returns an error
+	// listing missing tools/env vars when any mapped credential is unset.
+	Validate() error
 }
 
 // ToolCredentialMapping maps a tool name to the environment variable
@@ -74,6 +82,14 @@ func (s *EnvSecretStore) Has(tool string) bool {
 	defer s.mu.RUnlock()
 	_, ok := s.mappings[tool]
 	return ok
+}
+
+// EnvVar returns the environment variable name mapped to tool.
+func (s *EnvSecretStore) EnvVar(tool string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	envVar, ok := s.mappings[tool]
+	return envVar, ok
 }
 
 // RequiredTools returns the tool names with credential mappings.

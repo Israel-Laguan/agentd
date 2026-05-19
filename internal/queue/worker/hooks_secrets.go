@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
-	"strings"
 )
 
 // credentialPatterns matches common secret formats that should never
@@ -60,48 +59,32 @@ func CredentialDetectionHook() PreHook {
 	}
 }
 
-// CredentialInjectionHook returns a PreHook that populates the tool's
-// execution environment with credentials from the SecretStore. The
-// credentials are injected as environment variable pairs (KEY=VALUE)
-// appended to the ToolExecutor's envVars so that tool handlers can
-// read them from their environment without the values ever appearing
-// in tool arguments.
+// CredentialInjectionHook returns a PreHook that supplies credentials from
+// the SecretStore as per-call environment variable pairs (KEY=VALUE) via
+// HookVerdict.Env. Values never appear in tool arguments or model context.
 //
 // The hook itself never vetoes; it is FailOpen because injection
 // failure should not block execution (the tool handler will fail with
 // a clear "missing credential" error from its own env lookup).
-func CredentialInjectionHook(store SecretStore, executor *ToolExecutor) PreHook {
+func CredentialInjectionHook(store SecretStore) PreHook {
 	return PreHook{
 		Name:   "credential-injection",
 		Policy: FailOpen,
 		Fn: func(ctx HookContext) (HookVerdict, error) {
-			if store == nil || executor == nil {
+			if store == nil {
 				return HookVerdict{}, nil
 			}
 			val, ok := store.Get(ctx.ToolName)
 			if !ok {
 				return HookVerdict{}, nil
 			}
-			envVar := envVarForTool(store, ctx.ToolName)
-			if envVar == "" {
+			envVar, ok := store.EnvVar(ctx.ToolName)
+			if !ok || envVar == "" {
 				return HookVerdict{}, nil
 			}
-			executor.InjectEnv(envVar + "=" + val)
-			return HookVerdict{}, nil
+			return HookVerdict{Env: []string{envVar + "=" + val}}, nil
 		},
 	}
-}
-
-// envVarForTool extracts the env var name from an EnvSecretStore for
-// a given tool. Falls back to empty string for non-EnvSecretStore
-// implementations.
-func envVarForTool(store SecretStore, tool string) string {
-	if es, ok := store.(*EnvSecretStore); ok {
-		es.mu.RLock()
-		defer es.mu.RUnlock()
-		return es.mappings[tool]
-	}
-	return strings.ToUpper(strings.ReplaceAll(tool, "-", "_")) + "_CREDENTIAL"
 }
 
 // CredentialValidationSessionHook returns a SessionStartHook that
@@ -116,11 +99,7 @@ func CredentialValidationSessionHook(store SecretStore) SessionStartHook {
 			if store == nil {
 				return nil
 			}
-			es, ok := store.(*EnvSecretStore)
-			if !ok {
-				return nil
-			}
-			return es.Validate()
+			return store.Validate()
 		},
 	}
 }

@@ -82,6 +82,10 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		userPrefsPath = filepath.Join(cfg.HomeDir, cfg.Queue.Instructions.UserPreferencesFile)
 	}
 
+	if err := queue.ValidateToolCredentials(cfg.Agentic.ToolCredentials); err != nil {
+		panic("agentic.tool_credentials: " + err.Error())
+	}
+
 	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, queue.WorkerOptions{
 		Canceller:                 deps.canceller,
 		Tuner:                     queue.NewParameterTuner(cfg.Healing),
@@ -108,6 +112,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		LegacyHandoffTimeout:      cfg.Queue.HITL.LegacyHandoffTimeout,
 		ToolTimeouts:              cfg.Queue.ToolTimeouts,
 		ToolRetries:               cfg.Queue.ToolRetries,
+		ToolCredentials:           cfg.Agentic.ToolCredentials,
 	})
 }
 

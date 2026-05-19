@@ -94,6 +94,7 @@ type WorkerOptions struct {
 	LegacyHandoffTimeout      time.Duration
 	ToolTimeouts              config.ToolTimeoutsConfig
 	ToolRetries               config.ToolRetriesConfig
+	ToolCredentials           map[string]string
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -167,6 +168,13 @@ func NewWorker(
 	hooks.RegisterPre(SchemaValidationHook(SchemaRegistryFromDefinitions(toolExecutor.Definitions())))
 	hooks.PrependPost(ScrubResultHook(scrubber))
 	hooks.RegisterPost(AuditHook(sink, scrubber))
+
+	if len(opts.ToolCredentials) > 0 {
+		store := NewEnvSecretStore(opts.ToolCredentials)
+		hooks.RegisterPre(CredentialDetectionHook())
+		hooks.RegisterPre(CredentialInjectionHook(store))
+		hooks.RegisterSessionStart(CredentialValidationSessionHook(store))
+	}
 
 	w := &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,

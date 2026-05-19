@@ -93,9 +93,12 @@ agentic:
     default: 100
   # Credential mapping for tool handlers that call external APIs.
   # Keys are tool names; values are environment variable names holding the credential.
-  # Credentials are injected into the tool execution environment by the
-  # CredentialInjectionHook and are never exposed in tool arguments or model context.
-  # At startup, CredentialValidationSessionHook checks that every mapped env var is set.
+  # CredentialInjectionHook injects mapped env vars into the per-call execution
+  # environment only; values are never exposed in tool arguments or model context.
+  # CredentialValidationSessionHook checks at startup that every mapped env var is set.
+  # CredentialDetectionHook scans tool arguments and vetoes calls that match
+  # credential-like patterns; this can block execution even when tool_credentials
+  # is configured. Do not place secrets in tool args.
   # tool_credentials:
   #   github: GITHUB_TOKEN
   #   jira: JIRA_API_KEY

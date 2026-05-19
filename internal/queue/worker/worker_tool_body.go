@@ -8,11 +8,11 @@ import (
 	"agentd/internal/gateway"
 )
 
-func (w *Worker) runToolBody(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry) ToolResult {
+func (w *Worker) runToolBody(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, callEnv []string) ToolResult {
 	start := time.Now()
 	switch call.Function.Name {
 	case toolNameBash, toolNameRead, toolNameWrite:
-		raw := toolExecutor.Execute(ctx, call)
+		raw := toolExecutor.Execute(ctx, call, callEnv...)
 		return classifyBuiltinToolResult(call.ID, call.Function.Name, raw, time.Since(start).Milliseconds())
 	case toolNameDelegate:
 		raw := w.executeDelegateWithCapabilities(ctx, call, toolExecutor, scopedCapabilities)

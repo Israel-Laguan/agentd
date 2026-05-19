@@ -189,9 +189,7 @@ func TestCredentialInjectionHook_InjectsEnv(t *testing.T) {
 	t.Setenv(envKey, "injected-secret")
 
 	store := NewEnvSecretStore(map[string]string{"github": envKey})
-	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
-
-	hook := CredentialInjectionHook(store, executor)
+	hook := CredentialInjectionHook(store)
 	ctx := HookContext{
 		ToolName:  "github",
 		Args:      `{"repo":"org/repo"}`,
@@ -206,25 +204,15 @@ func TestCredentialInjectionHook_InjectsEnv(t *testing.T) {
 	if verdict.Veto {
 		t.Fatalf("unexpected veto: %s", verdict.Reason)
 	}
-
-	found := false
-	for _, pair := range executor.envVars {
-		if pair == envKey+"=injected-secret" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected env var %s=injected-secret in executor envVars, got %v", envKey, executor.envVars)
+	if len(verdict.Env) != 1 || verdict.Env[0] != envKey+"=injected-secret" {
+		t.Fatalf("verdict.Env = %v, want [%s=injected-secret]", verdict.Env, envKey)
 	}
 }
 
 func TestCredentialInjectionHook_SkipsUnmappedTool(t *testing.T) {
 	t.Parallel()
 	store := NewEnvSecretStore(map[string]string{"github": "GH_TOKEN"})
-	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
-
-	hook := CredentialInjectionHook(store, executor)
+	hook := CredentialInjectionHook(store)
 	ctx := HookContext{
 		ToolName:  "bash",
 		Args:      `{"command":"echo hello"}`,
@@ -239,15 +227,14 @@ func TestCredentialInjectionHook_SkipsUnmappedTool(t *testing.T) {
 	if verdict.Veto {
 		t.Fatalf("unexpected veto: %s", verdict.Reason)
 	}
-	if len(executor.envVars) != 0 {
-		t.Fatalf("expected no env injection for unmapped tool, got %v", executor.envVars)
+	if len(verdict.Env) != 0 {
+		t.Fatalf("expected no env injection for unmapped tool, got %v", verdict.Env)
 	}
 }
 
 func TestCredentialInjectionHook_NilStore(t *testing.T) {
 	t.Parallel()
-	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
-	hook := CredentialInjectionHook(nil, executor)
+	hook := CredentialInjectionHook(nil)
 	ctx := HookContext{
 		ToolName:  "github",
 		CallID:    "call-inject-3",
@@ -263,10 +250,11 @@ func TestCredentialInjectionHook_NilStore(t *testing.T) {
 	}
 }
 
-func TestCredentialInjectionHook_NilExecutor(t *testing.T) {
-	t.Parallel()
-	store := NewEnvSecretStore(map[string]string{"github": "GH_TOKEN"})
-	hook := CredentialInjectionHook(store, nil)
+func TestCredentialInjectionHook_NoEnvWhenUnset(t *testing.T) {
+	const envKey = "TEST_INJECT_UNSET_CRED"
+	t.Setenv(envKey, "")
+	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	hook := CredentialInjectionHook(store)
 	ctx := HookContext{
 		ToolName:  "github",
 		CallID:    "call-inject-4",
@@ -278,7 +266,10 @@ func TestCredentialInjectionHook_NilExecutor(t *testing.T) {
 		t.Fatalf("hook returned error: %v", err)
 	}
 	if verdict.Veto {
-		t.Fatal("unexpected veto with nil executor")
+		t.Fatal("unexpected veto when credential env unset")
+	}
+	if len(verdict.Env) != 0 {
+		t.Fatalf("expected no env injection when unset, got %v", verdict.Env)
 	}
 }
 
@@ -297,8 +288,9 @@ func TestCredentialValidationSessionHook_PassesWhenSet(t *testing.T) {
 }
 
 func TestCredentialValidationSessionHook_FailsWhenMissing(t *testing.T) {
-	t.Parallel()
-	store := NewEnvSecretStore(map[string]string{"github": "MISSING_VALIDATION_ENV_XYZ"})
+	envKey := "TEST_MISSING_" + strings.ReplaceAll(t.Name(), "/", "_")
+	t.Setenv(envKey, "")
+	store := NewEnvSecretStore(map[string]string{"github": envKey})
 	hook := CredentialValidationSessionHook(store)
 	err := hook.Fn(HookContext{})
 	if err == nil {
@@ -325,10 +317,9 @@ func TestCredentials_NeverAppearInAuditPayload(t *testing.T) {
 	t.Setenv(envKey, "super-secret-token-abc123")
 
 	store := NewEnvSecretStore(map[string]string{"github": envKey})
-	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
-
-	injectionHook := CredentialInjectionHook(store, executor)
-	detectionHook := CredentialDetectionHook()
+	hc := NewHookChain()
+	hc.RegisterPre(CredentialInjectionHook(store))
+	hc.RegisterPre(CredentialDetectionHook())
 
 	ctx := HookContext{
 		ToolName:  "github",
@@ -338,33 +329,81 @@ func TestCredentials_NeverAppearInAuditPayload(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	// Injection should succeed
-	verdict, err := injectionHook.Fn(ctx)
-	if err != nil || verdict.Veto {
-		t.Fatalf("injection hook failed: err=%v, veto=%v", err, verdict.Veto)
+	verdict := hc.RunPre(ctx)
+	if verdict.Veto {
+		t.Fatalf("hook chain vetoed clean args: %s", verdict.Reason)
 	}
-
-	// Detection should pass because credential is not in args
-	verdict, err = detectionHook.Fn(ctx)
-	if err != nil || verdict.Veto {
-		t.Fatalf("detection hook falsely vetoed clean args: err=%v, reason=%s", err, verdict.Reason)
-	}
-
-	// Verify the credential is in the executor env (would be available to
-	// the tool handler) but NOT in the args string
 	if strings.Contains(ctx.Args, "super-secret-token-abc123") {
 		t.Fatal("credential leaked into tool arguments")
 	}
 	envFound := false
-	for _, pair := range executor.envVars {
+	for _, pair := range verdict.Env {
 		if strings.Contains(pair, "super-secret-token-abc123") {
 			envFound = true
 			break
 		}
 	}
 	if !envFound {
-		t.Fatal("credential not found in executor env — injection failed")
+		t.Fatalf("credential not found in per-call env, got %v", verdict.Env)
 	}
+}
+
+func TestCredentials_DoNotLeakAcrossToolCalls(t *testing.T) {
+	const githubKey = "TEST_ISOLATION_GITHUB_CRED"
+	const gitlabKey = "TEST_ISOLATION_GITLAB_CRED"
+	const secret = "super-secret-github-only"
+	t.Setenv(githubKey, secret)
+	t.Setenv(gitlabKey, "")
+
+	store := NewEnvSecretStore(map[string]string{
+		"github": githubKey,
+		"gitlab": gitlabKey,
+	})
+	hc := NewHookChain()
+	hc.RegisterPre(CredentialInjectionHook(store))
+	hc.RegisterPre(CredentialDetectionHook())
+
+	githubVerdict := hc.RunPre(HookContext{
+		ToolName:  "github",
+		Args:      `{"repo":"org/repo"}`,
+		CallID:    "call-iso-1",
+		SessionID: "sess-iso-1",
+		Timestamp: time.Now(),
+	})
+	if githubVerdict.Veto {
+		t.Fatalf("github hook vetoed: %s", githubVerdict.Reason)
+	}
+	if !envContains(githubVerdict.Env, secret) {
+		t.Fatalf("github env %v should contain secret", githubVerdict.Env)
+	}
+
+	gitlabVerdict := hc.RunPre(HookContext{
+		ToolName:  "gitlab",
+		Args:      `{"project":"org/proj"}`,
+		CallID:    "call-iso-2",
+		SessionID: "sess-iso-2",
+		Timestamp: time.Now(),
+	})
+	if gitlabVerdict.Veto {
+		t.Fatalf("gitlab hook vetoed: %s", gitlabVerdict.Reason)
+	}
+	if envContains(gitlabVerdict.Env, secret) {
+		t.Fatalf("gitlab env %v must not contain github secret", gitlabVerdict.Env)
+	}
+
+	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	if envContains(executor.envVars, secret) {
+		t.Fatal("github secret persisted on executor base envVars")
+	}
+}
+
+func envContains(env []string, secret string) bool {
+	for _, pair := range env {
+		if strings.Contains(pair, secret) {
+			return true
+		}
+	}
+	return false
 }
 
 // --- HookChain integration ---
@@ -420,8 +459,9 @@ func TestHookChain_SessionStart_CredentialValidation(t *testing.T) {
 }
 
 func TestHookChain_SessionStart_FailsOnMissingCredential(t *testing.T) {
-	t.Parallel()
-	store := NewEnvSecretStore(map[string]string{"github": "TOTALLY_MISSING_ENV_FOR_TEST"})
+	envKey := "TEST_MISSING_" + strings.ReplaceAll(t.Name(), "/", "_")
+	t.Setenv(envKey, "")
+	store := NewEnvSecretStore(map[string]string{"github": envKey})
 	hc := NewHookChain()
 	hc.RegisterSessionStart(CredentialValidationSessionHook(store))
 

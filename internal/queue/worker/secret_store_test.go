@@ -42,6 +42,18 @@ func TestEnvSecretStore_Get_NoMapping(t *testing.T) {
 	}
 }
 
+func TestEnvSecretStore_EnvVar(t *testing.T) {
+	t.Parallel()
+	store := NewEnvSecretStore(map[string]string{"github": "GH_TOKEN"})
+	envVar, ok := store.EnvVar("github")
+	if !ok || envVar != "GH_TOKEN" {
+		t.Fatalf("EnvVar(github) = (%q, %v), want (GH_TOKEN, true)", envVar, ok)
+	}
+	if _, ok := store.EnvVar("jira"); ok {
+		t.Fatal("EnvVar(jira) = true, want false")
+	}
+}
+
 func TestEnvSecretStore_Has(t *testing.T) {
 	t.Parallel()
 	store := NewEnvSecretStore(map[string]string{"github": "GH_TOKEN"})
@@ -106,6 +118,9 @@ func TestEnvSecretStore_NilMap(t *testing.T) {
 	}
 	if store.Has("anything") {
 		t.Fatal("Has on nil-map store returned true")
+	}
+	if _, ok := store.EnvVar("anything"); ok {
+		t.Fatal("EnvVar on nil-map store returned true")
 	}
 	if len(store.RequiredTools()) != 0 {
 		t.Fatal("RequiredTools on nil-map store returned non-empty")
