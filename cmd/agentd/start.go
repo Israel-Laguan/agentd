@@ -114,7 +114,8 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		ToolTimeouts:              cfg.Queue.ToolTimeouts,
 		ToolRetries:               cfg.Queue.ToolRetries,
 		ExternalTools:             cfg.Agentic.ExternalTools,
-		ToolCredentials:           cfg.Agentic.ToolCredentials,
+		ToolCredentials:              cfg.Agentic.ToolCredentials,
+		DisableCredentialDetection:     cfg.Agentic.DisableCredentialDetection,
 	})
 }
 

@@ -96,7 +96,8 @@ type WorkerOptions struct {
 	ToolTimeouts              config.ToolTimeoutsConfig
 	ToolRetries               config.ToolRetriesConfig
 	ExternalTools             []string
-	ToolCredentials           map[string]string
+	ToolCredentials              map[string]string
+	DisableCredentialDetection     bool
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -168,7 +169,9 @@ func NewWorker(
 	base := resolveHooks(opts.Hooks)
 	hooks := base.Clone()
 	hooks.RegisterPre(SchemaValidationHook(SchemaRegistryFromDefinitions(toolExecutor.Definitions())))
-	hooks.RegisterPre(CredentialDetectionHook())
+	if !opts.DisableCredentialDetection {
+		hooks.RegisterPre(CredentialDetectionHook())
+	}
 	if len(opts.ToolCredentials) > 0 {
 		store := NewEnvSecretStore(opts.ToolCredentials)
 		hooks.RegisterPre(CredentialInjectionHook(store))

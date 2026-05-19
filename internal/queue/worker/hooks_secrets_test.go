@@ -146,6 +146,38 @@ func TestCredentialDetectionHook_BlocksPrivateKey(t *testing.T) {
 	}
 }
 
+func TestCredentialDetectionHook_AllowsCompoundTokenFields(t *testing.T) {
+	t.Parallel()
+	hook := CredentialDetectionHook()
+	cases := []struct {
+		name string
+		args string
+	}{
+		{"access_token", `{"access_token":"next_page_cursor123"}`},
+		{"page_token", `{"page_token":"pagination_cursor_xyz"}`},
+		{"refresh_token", `{"refresh_token":"opaque_cursor_value"}`},
+		{"client_secret", `{"client_secret":"config_placeholder_not_real"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			verdict, err := hook.Fn(HookContext{
+				ToolName:  "mcp_tool",
+				Args:      tc.args,
+				CallID:    "call-compound-" + tc.name,
+				SessionID: "sess-compound",
+				Timestamp: time.Now(),
+			})
+			if err != nil {
+				t.Fatalf("hook returned error: %v", err)
+			}
+			if verdict.Veto {
+				t.Fatalf("unexpected veto for %s: %s", tc.name, verdict.Reason)
+			}
+		})
+	}
+}
+
 func TestCredentialDetectionHook_AllowsSafeArgs(t *testing.T) {
 	t.Parallel()
 	hook := CredentialDetectionHook()
@@ -417,9 +449,17 @@ func TestCredentials_DoNotLeakAcrossToolCalls(t *testing.T) {
 		t.Fatalf("gitlab env %v must not contain github secret", gitlabVerdict.Env)
 	}
 
-	executor := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	executor := NewToolExecutor(nil, t.TempDir(), []string{"BASE=1"}, 0)
+	githubEnv := executor.BuildEnv(githubVerdict.Env...)
+	if !envContains(githubEnv, secret) {
+		t.Fatalf("github BuildEnv %v should contain secret", githubEnv)
+	}
+	gitlabEnv := executor.BuildEnv(gitlabVerdict.Env...)
+	if envContains(gitlabEnv, secret) {
+		t.Fatalf("gitlab BuildEnv %v must not contain github secret", gitlabEnv)
+	}
 	if envContains(executor.envVars, secret) {
-		t.Fatal("github secret persisted on executor base envVars")
+		t.Fatalf("github secret leaked into executor base envVars: %v", executor.envVars)
 	}
 }
 

@@ -99,6 +99,7 @@ agentic:
   # CredentialDetectionHook scans tool arguments and vetoes calls that match
   # credential-like patterns; this can block execution even when tool_credentials
   # is configured. Do not place secrets in tool args.
+  # disable_credential_detection: true  # opt out (not recommended; secrets may reach logs/context)
   # bash and delegate tools receive merged env in subprocess/sandbox paths.
   # MCP capability tools receive per-call auth via request context (Bearer from injected env).
   # tool_credentials:

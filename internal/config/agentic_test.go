@@ -45,11 +45,25 @@ func TestLoadAgenticConfig_ToolCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadAgenticConfig_DisableCredentialDetection(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	v.Set("agentic.disable_credential_detection", true)
+
+	cfg := loadAgenticConfig(v)
+	if !cfg.DisableCredentialDetection {
+		t.Fatal("DisableCredentialDetection = false, want true")
+	}
+}
+
 func TestLoadAgenticConfig_Empty(t *testing.T) {
 	t.Parallel()
 	v := viper.New()
 	cfg := loadAgenticConfig(v)
 	if len(cfg.ToolCredentials) != 0 {
 		t.Fatalf("ToolCredentials = %v, want empty", cfg.ToolCredentials)
+	}
+	if cfg.DisableCredentialDetection {
+		t.Fatal("DisableCredentialDetection = true, want false by default")
 	}
 }
