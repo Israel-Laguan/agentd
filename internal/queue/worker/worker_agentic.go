@@ -121,26 +121,23 @@ func (w *Worker) handleAgenticToolCalls(
 	return false
 }
 
-func (w *Worker) processAgenticIteration(
-	ctx context.Context, task models.Task, profile models.AgentProfile,
+func (w *Worker) guardAgenticIteration(
+	ctx context.Context, task models.Task,
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
-	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
-	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
-	deadlineGuard *DeadlineGuard, cm *ContextManager, goalTracker *GoalTracker,
-	taskHooks *HookChain, taskCaps *capabilities.Registry,
-	turnID string,
-) (bool, error) {
+	iterationGuard *IterationGuard, budgetGuard *BudgetGuard, deadlineGuard *DeadlineGuard,
+	cm *ContextManager, goalTracker *GoalTracker, turnID string,
+) error {
 	if err := deadlineGuard.BeforeIteration(); err != nil {
 		w.handleGatewayError(ctx, task, err)
-		return false, err
+		return err
 	}
 	if err := iterationGuard.BeforeIteration(); err != nil {
 		w.handleIterationExceeded(ctx, task)
-		return false, err
+		return err
 	}
 	if err := w.prepareAgenticIteration(ctx, messages, iterationGuard, cm, task); err != nil {
 		w.handleGatewayError(ctx, task, err)
-		return false, err
+		return err
 	}
 	goalProgress := 0.0
 	if goalTracker != nil {
@@ -157,6 +154,21 @@ func (w *Worker) processAgenticIteration(
 	)
 	if err := budgetGuard.BeforeCall(); err != nil {
 		w.handleGatewayError(ctx, task, err)
+		return err
+	}
+	return nil
+}
+
+func (w *Worker) processAgenticIteration(
+	ctx context.Context, task models.Task, profile models.AgentProfile,
+	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
+	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
+	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
+	deadlineGuard *DeadlineGuard, cm *ContextManager, goalTracker *GoalTracker,
+	taskHooks *HookChain, taskCaps *capabilities.Registry,
+	turnID string,
+) (bool, error) {
+	if err := w.guardAgenticIteration(ctx, task, messages, tools, iterationGuard, budgetGuard, deadlineGuard, cm, goalTracker, turnID); err != nil {
 		return false, err
 	}
 
