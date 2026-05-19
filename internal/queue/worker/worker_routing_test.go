@@ -236,7 +236,7 @@ func TestRoutingDecision_AgenticModeTrue_ProviderNotSupported(t *testing.T) {
 				Model:       "claude-3",
 				AgenticMode: true,
 			}
-			w, store, gw, _ := newRoutingTest(profile)
+			w, store, gw, sb := newRoutingTest(profile)
 			w.Process(context.Background(), store.task)
 
 			// Fallback to legacy: should use JSONMode, no tools
@@ -248,6 +248,9 @@ func TestRoutingDecision_AgenticModeTrue_ProviderNotSupported(t *testing.T) {
 			}
 			if len(gw.requests[0].Tools) > 0 {
 				t.Errorf("expected no tools in legacy fallback for provider %q", tc.provider)
+			}
+			if sb.execCount != 1 {
+				t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)
 			}
 		})
 	}

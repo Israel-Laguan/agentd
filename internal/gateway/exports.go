@@ -98,11 +98,12 @@ var (
 
 // Providers.
 var (
-	NewOpenAI    = providers.NewOpenAI
-	NewAnthropic = providers.NewAnthropic
-	NewOllama    = providers.NewOllama
-	NewLlamaCpp  = providers.NewLlamaCpp
-	NewHorde     = providers.NewHorde
+	NewOpenAI         = providers.NewOpenAI
+	NewAnthropic      = providers.NewAnthropic
+	NewOllama         = providers.NewOllama
+	NewLlamaCpp       = providers.NewLlamaCpp
+	NewHorde          = providers.NewHorde
+	SupportsChatTools = providers.SupportsChatTools
 )
 
 // GenerateJSON re-exports generic JSON repair.
