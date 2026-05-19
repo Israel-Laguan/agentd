@@ -3,6 +3,7 @@ package worker
 import (
 	"fmt"
 	"html"
+	"strings"
 )
 
 // builtinToolNames lists tools that are part of the agentd core and
@@ -45,9 +46,13 @@ func externalToolsSet(names []string) map[string]struct{} {
 	}
 	m := make(map[string]struct{}, len(names))
 	for _, n := range names {
-		if n != "" {
-			m[n] = struct{}{}
+		name := strings.TrimSpace(n)
+		if name != "" {
+			m[name] = struct{}{}
 		}
+	}
+	if len(m) == 0 {
+		return nil
 	}
 	return m
 }
@@ -70,7 +75,7 @@ func applyInjectionResistance(toolName, result string, externalTools map[string]
 	if !isExternalTool(toolName, externalTools) {
 		return result
 	}
-	if statusSet && status != ToolStatusSuccess {
+	if statusSet && (status == ToolStatusVetoed || status == ToolStatusTimeout) {
 		return result
 	}
 	if isToolErrorPayload(result) {
@@ -81,8 +86,9 @@ func applyInjectionResistance(toolName, result string, externalTools map[string]
 
 // InjectionResistanceHook returns a PostHook that wraps results from
 // external (untrusted) tools in structural markers so the model treats
-// them as data rather than instructions. Built-in tool results and
-// non-success ToolResults are passed through unchanged.
+// them as data rather than instructions. Built-in tool results, vetoed
+// calls, and timeouts are passed through unchanged; external error and
+// fatal payloads are wrapped.
 //
 // The externalTools parameter is the set of tool names considered
 // external. When nil or empty, every non-builtin tool is treated as
