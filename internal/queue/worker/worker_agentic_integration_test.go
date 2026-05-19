@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -62,6 +63,58 @@ func TestAgenticLoop_IntegrationWithMockGateway(t *testing.T) {
 	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
 	w.Process(context.Background(), task)
 	assertAgenticIntegrationOutcome(t, gw, store)
+}
+
+// TestAgenticLoop_EmitsToolAuditEvents verifies that Process() through the
+// agentic inner loop emits TOOL_CALL and TOOL_RESULT via AuditHook.
+func TestAgenticLoop_EmitsToolAuditEvents(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: integrationSequenceResponses()}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"pwd": {Success: true, ExitCode: 0, Stdout: "/home/user\n"},
+	}}
+	sink := &mockEventSink{}
+	store := &mockAgenticStore{}
+	w := NewWorker(store, gw, sb, nil, sink, WorkerOptions{MaxToolIterations: 10})
+	task := models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-audit-events"},
+		ProjectID:  "project-1", AgentID: "agent-1",
+		Title: "Check current directory", State: models.TaskStateQueued,
+	}
+	store.task = task
+	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
+	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: "/tmp/test-workspace"}
+
+	w.Process(context.Background(), task)
+
+	if len(sink.events) != 2 {
+		t.Fatalf("expected 2 audit events, got %d", len(sink.events))
+	}
+	if sink.events[0].Type != models.EventTypeToolCall {
+		t.Fatalf("first event should be TOOL_CALL, got %q", sink.events[0].Type)
+	}
+	if sink.events[1].Type != models.EventTypeToolResult {
+		t.Fatalf("second event should be TOOL_RESULT, got %q", sink.events[1].Type)
+	}
+
+	var callEvent ToolCallEvent
+	if err := json.Unmarshal([]byte(sink.events[0].Payload), &callEvent); err != nil {
+		t.Fatalf("unmarshal TOOL_CALL: %v", err)
+	}
+	if callEvent.ToolName != "bash" || callEvent.CallID != "call_abc123" {
+		t.Fatalf("TOOL_CALL event = %+v, want tool_name=bash call_id=call_abc123", callEvent)
+	}
+
+	var resultEvent ToolResultEvent
+	if err := json.Unmarshal([]byte(sink.events[1].Payload), &resultEvent); err != nil {
+		t.Fatalf("unmarshal TOOL_RESULT: %v", err)
+	}
+	if resultEvent.ToolName != "bash" || resultEvent.CallID != "call_abc123" {
+		t.Fatalf("TOOL_RESULT event = %+v, want tool_name=bash call_id=call_abc123", resultEvent)
+	}
+	if sink.events[0].ProjectID != "project-1" || sink.events[0].TaskID.String != task.ID {
+		t.Fatalf("event routing = proj %q task %q", sink.events[0].ProjectID, sink.events[0].TaskID.String)
+	}
 }
 
 func assertAgenticIntegrationOutcome(t *testing.T, gw *sequenceGateway, store *mockAgenticStore) {
