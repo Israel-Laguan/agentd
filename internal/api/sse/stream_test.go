@@ -74,6 +74,59 @@ func TestStreamPublishesAndCleansUp(t *testing.T) {
 	}
 }
 
+func TestStreamPublishesToolCallEvent(t *testing.T) {
+	eventBus := bus.NewInProcess()
+	server := httptest.NewServer(Handler{Bus: eventBus, Hub: &Hub{}})
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	eventBus.Publish(context.Background(), bus.Signal{
+		Topic:   bus.GlobalTopic,
+		Type:    "TOOL_CALL",
+		Payload: `{"tool_name":"bash","call_id":"call_abc123"}`,
+	})
+
+	frameCh := make(chan string, 1)
+	go func() {
+		reader := bufio.NewReader(resp.Body)
+		var buf strings.Builder
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+			buf.WriteString(line)
+			if line == "\n" {
+				frameCh <- buf.String()
+				return
+			}
+		}
+	}()
+
+	select {
+	case frame := <-frameCh:
+		if !strings.Contains(frame, "event: tool_called") {
+			t.Fatalf("frame missing event line: %q", frame)
+		}
+		if !strings.Contains(frame, `"type":"TOOL_CALL"`) {
+			t.Fatalf("frame missing data line: %q", frame)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for SSE TOOL_CALL event")
+	}
+}
+
 func TestEventName(t *testing.T) {
 	tests := []struct {
 		name      string
