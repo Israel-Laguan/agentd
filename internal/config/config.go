@@ -136,6 +136,7 @@ func hydrateConfig(cfg Config, v *viper.Viper) (Config, error) {
 	cfg.Queue = loadQueueConfig(v)
 	cfg.Queue.Skills.GlobalDir = resolveSkillsGlobalDir(cfg.HomeDir, cfg.Queue.Skills.GlobalDir)
 	cfg.Agentic = loadAgenticConfig(v)
+	cfg.Agentic.Audit.Path = ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path)
 	cfg.Channel = loadChannelConfig(v)
 	cron, err := LoadCron(cfg.CronPath)
 	if err != nil {

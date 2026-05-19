@@ -45,6 +45,13 @@ func TestFileAuditSink_ToolRecord(t *testing.T) {
 	if err := sink.WriteAudit(rec); err != nil {
 		t.Fatalf("WriteAudit: %v", err)
 	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat audit file: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("audit file mode = %o, want 0600", info.Mode().Perm())
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read audit file: %v", err)
