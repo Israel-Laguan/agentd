@@ -1,6 +1,9 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,6 +72,74 @@ func TestQueueConfig_Custom(t *testing.T) {
 	}
 	if cfg.PollMaxInterval != 5*time.Second {
 		t.Errorf("PollMaxInterval = %v, want 5s", cfg.PollMaxInterval)
+	}
+}
+
+func TestQueueConfig_AgenticCharacterBudgetCompat(t *testing.T) {
+	tests := []struct {
+		name     string
+		set      func(*viper.Viper)
+		want     int
+		wantWarn bool
+	}{
+		{
+			name: "default",
+			set:  func(*viper.Viper) {},
+			want: DefaultAgenticCharacterBudget,
+		},
+		{
+			name: "new key explicit",
+			set: func(v *viper.Viper) {
+				v.Set("queue.agentic_character_budget", 5000)
+			},
+			want: 5000,
+		},
+		{
+			name: "new key explicit zero ignores legacy",
+			set: func(v *viper.Viper) {
+				v.Set("queue.agentic_character_budget", 0)
+				v.Set("queue.agentic_truncation_threshold", 40)
+			},
+			want: 0,
+		},
+		{
+			name: "legacy only",
+			set: func(v *viper.Viper) {
+				v.Set("queue.agentic_truncation_threshold", 40)
+			},
+			want:     40,
+			wantWarn: true,
+		},
+		{
+			name: "both set prefers new",
+			set: func(v *viper.Viper) {
+				v.Set("queue.agentic_character_budget", 100)
+				v.Set("queue.agentic_truncation_threshold", 40)
+			},
+			want: 100,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v := viper.New()
+			setQueueDefaults(v)
+			tc.set(v)
+
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+
+			cfg := loadQueueConfig(v)
+			if cfg.AgenticCharacterBudget != tc.want {
+				t.Fatalf("AgenticCharacterBudget = %d, want %d", cfg.AgenticCharacterBudget, tc.want)
+			}
+			hasWarn := strings.Contains(buf.String(), "deprecated config key")
+			if hasWarn != tc.wantWarn {
+				t.Fatalf("deprecated warning logged = %v, want %v; log: %q", hasWarn, tc.wantWarn, buf.String())
+			}
+		})
 	}
 }
 
