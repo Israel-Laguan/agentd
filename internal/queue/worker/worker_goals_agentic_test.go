@@ -66,6 +66,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 		goalTracker,
 		NewHookChain(),
 		nil,
+		"task-123:0",
 	)
 	if err != nil {
 		t.Fatalf("processAgenticIteration() error = %v", err)

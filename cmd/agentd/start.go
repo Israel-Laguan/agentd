@@ -116,6 +116,10 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		ExternalTools:             cfg.Agentic.ExternalTools,
 		ToolCredentials:              cfg.Agentic.ToolCredentials,
 		DisableCredentialDetection:     cfg.Agentic.DisableCredentialDetection,
+		Audit: config.AuditConfig{
+			Enabled: cfg.Agentic.Audit.Enabled,
+			Path:    config.ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path),
+		},
 	})
 }
 

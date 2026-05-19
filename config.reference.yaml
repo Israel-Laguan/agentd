@@ -115,6 +115,12 @@ agentic:
     tools: []                    # e.g., ["deploy", "write_config", "run_migration"]
     timeout: "30m"               # max wait for human decision before timing out
 
+  # Structured audit log (JSONL) for tool dispatches and turn-boundary snapshots.
+  # Arguments are hashed (sha256); raw args are never written to the audit file.
+  audit:
+    enabled: false
+    path: "audit.jsonl"          # relative to agentd home when not absolute
+
   # External tool names for prompt-injection resistance.
   # Results from these tools are wrapped in <external_content> tags so the
   # model treats them as untrusted data. When empty (default), all non-builtin

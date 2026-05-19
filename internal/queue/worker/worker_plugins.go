@@ -68,7 +68,7 @@ func (w *Worker) agenticToolsWithExtras(
 // runs task-scoped plugin hooks (pre and post) around the call.
 func (w *Worker) dispatchToolWithHooks(
 	ctx context.Context,
-	sessionID, projectID string,
+	sessionID, projectID, turnID string,
 	taskUpdatedAt time.Time,
 	call gateway.ToolCall,
 	toolToAdapter map[string]string,
@@ -76,15 +76,21 @@ func (w *Worker) dispatchToolWithHooks(
 	taskHooks *HookChain,
 	scopedCapabilities *capabilities.Registry,
 ) (ToolResult, bool) {
+	var verdicts []string
 	hookCtx := HookContext{
 		ToolName:      call.Function.Name,
 		Args:          call.Function.Arguments,
 		CallID:        call.ID,
 		SessionID:     sessionID,
 		ProjectID:     projectID,
+		TurnID:        turnID,
 		Timestamp:     time.Now(),
 		TaskUpdatedAt: taskUpdatedAt,
 		ExecCtx:       ctx,
+		Verdicts:      &verdicts,
+	}
+	if w.budgetTracker != nil && sessionID != "" {
+		hookCtx.TokenCountBefore = w.budgetTracker.Usage(sessionID)
 	}
 
 	var callEnv []string
@@ -115,7 +121,7 @@ func (w *Worker) dispatchToolWithHooks(
 	}
 
 	retry := w.toolRetrier != nil && w.toolRetries.Allows(call.Function.Name)
-	tr := w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, retry, callEnv)
+	tr := w.dispatchToolWithProject(ctx, sessionID, projectID, call, toolToAdapter, toolExecutor, scopedCapabilities, retry, callEnv, &hookCtx)
 
 	if taskHooks != nil {
 		hookCtx.ResultStatus = tr.Status
@@ -124,6 +130,7 @@ func (w *Worker) dispatchToolWithHooks(
 		hookCtx.ResultExitCodeSet = tr.ExitCodeSet
 		tr.Content = taskHooks.RunPost(hookCtx, tr.Content)
 	}
+	w.finalizeDispatchAudit(hookCtx, tr)
 	return tr, false
 }
 
@@ -142,6 +149,17 @@ func (w *Worker) runDispatchPostHooks(hookCtx HookContext, tr ToolResult, taskHo
 	if taskHooks != nil {
 		content = taskHooks.RunPost(hookCtx, content)
 	}
+	w.finalizeDispatchAudit(hookCtx, tr)
 	return content
 }
 
+func (w *Worker) finalizeDispatchAudit(hookCtx HookContext, tr ToolResult) {
+	if w.budgetTracker != nil && hookCtx.SessionID != "" {
+		hookCtx.TokenCountAfter = w.budgetTracker.Usage(hookCtx.SessionID)
+	}
+	var verdicts []string
+	if hookCtx.Verdicts != nil {
+		verdicts = *hookCtx.Verdicts
+	}
+	w.recordToolDispatch(hookCtx, tr, verdicts)
+}
