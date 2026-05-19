@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -38,6 +39,10 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 		return err
 	}
 	defer cleanup()
+
+	if err := queue.ValidateToolCredentials(cfg.Agentic.ToolCredentials); err != nil {
+		return fmt.Errorf("agentic.tool_credentials: %w", err)
+	}
 
 	store = store.WithCanceller(deps.canceller)
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
@@ -109,6 +114,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		ToolTimeouts:              cfg.Queue.ToolTimeouts,
 		ToolRetries:               cfg.Queue.ToolRetries,
 		ExternalTools:             cfg.Agentic.ExternalTools,
+		ToolCredentials:           cfg.Agentic.ToolCredentials,
 	})
 }
 

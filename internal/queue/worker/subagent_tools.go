@@ -124,7 +124,7 @@ func (d *SubagentDelegate) executeTool(
 	case toolNameDelegateParallel:
 		return d.runDelegateParallel(ctx, call)
 	default:
-		raw := executeCapabilityTool(ctx, call, nil, d.capabilities, d.scopedCapabilities)
+		raw := executeCapabilityTool(ctx, call, nil, d.capabilities, d.scopedCapabilities, nil)
 		return applyInjectionResistance(call.Function.Name, raw, d.externalTools, ToolStatusSuccess, true)
 	}
 }

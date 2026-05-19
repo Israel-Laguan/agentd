@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"agentd/internal/gateway"
+	"agentd/internal/toolenv"
 )
 
 type AuthConfig struct {
@@ -23,9 +25,10 @@ type mcpSession interface {
 }
 
 type MCPAdapter struct {
-	name    string
-	client  *mcp.Client
-	session mcpSession
+	name        string
+	client      *mcp.Client
+	session     mcpSession
+	defaultAuth string
 }
 
 func NewMCPAdapter(ctx context.Context, name, serverURL string, auth *AuthConfig) (*MCPAdapter, error) {
@@ -33,11 +36,12 @@ func NewMCPAdapter(ctx context.Context, name, serverURL string, auth *AuthConfig
 		return nil, errors.New("server_url is required")
 	}
 
-	httpClient := &http.Client{}
+	var defaultAuth string
 	if auth != nil && auth.Token != "" {
-		httpClient.Transport = &authTransport{
-			Authorization: "Bearer " + auth.Token,
-		}
+		defaultAuth = "Bearer " + auth.Token
+	}
+	httpClient := &http.Client{
+		Transport: &contextAuthTransport{defaultAuth: defaultAuth},
 	}
 
 	mcpClient := mcp.NewClient(&mcp.Implementation{
@@ -56,9 +60,10 @@ func NewMCPAdapter(ctx context.Context, name, serverURL string, auth *AuthConfig
 	}
 
 	return &MCPAdapter{
-		name:    name,
-		client:  mcpClient,
-		session: session,
+		name:        name,
+		client:      mcpClient,
+		session:     session,
+		defaultAuth: defaultAuth,
 	}, nil
 }
 
@@ -170,4 +175,34 @@ type authTransport struct {
 func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Authorization", t.Authorization)
 	return http.DefaultTransport.RoundTrip(req)
+}
+
+// contextAuthTransport applies per-call credentials from toolenv on the request
+// context, falling back to the adapter default auth from connect-time config.
+type contextAuthTransport struct {
+	defaultAuth string
+}
+
+func (t *contextAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	auth := t.defaultAuth
+	if env := toolenv.From(req.Context()); len(env) > 0 {
+		if v := credentialValueFromEnv(env); v != "" {
+			auth = "Bearer " + v
+		}
+	}
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func credentialValueFromEnv(env []string) string {
+	for _, pair := range env {
+		if i := strings.IndexByte(pair, '='); i > 0 {
+			if val := pair[i+1:]; val != "" {
+				return val
+			}
+		}
+	}
+	return ""
 }

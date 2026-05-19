@@ -33,6 +33,9 @@ type HookVerdict struct {
 	// Suspend is true when the hook blocked the parent task for human
 	// review; the agentic loop must stop without further LLM calls.
 	Suspend bool
+	// Env carries KEY=VALUE pairs to merge into the tool execution environment
+	// for this call only. RunPre accumulates Env from all pre-hooks.
+	Env []string
 }
 
 // HookContext carries contextual information for hook evaluation without
@@ -123,6 +126,7 @@ func (hc *HookChain) RunPre(ctx HookContext) HookVerdict {
 	hooks := append([]PreHook(nil), hc.preHooks...)
 	hc.mu.RUnlock()
 
+	var acc HookVerdict
 	for _, h := range hooks {
 		if h.Fn == nil {
 			slog.Warn("pre-hook error", "hook", h.Name, "policy", policyLabel(h.Policy), "error", "nil hook callback")
@@ -143,11 +147,15 @@ func (hc *HookChain) RunPre(ctx HookContext) HookVerdict {
 			}
 			continue
 		}
-		if verdict.Veto {
+		if len(verdict.Env) > 0 {
+			acc.Env = append(acc.Env, verdict.Env...)
+		}
+		if verdict.Veto || verdict.ShortCircuit || verdict.Suspend {
+			verdict.Env = append([]string(nil), acc.Env...)
 			return verdict
 		}
 	}
-	return HookVerdict{}
+	return acc
 }
 
 // RunPost executes every registered PostHook in order, threading the
