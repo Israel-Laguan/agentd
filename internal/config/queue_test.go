@@ -75,13 +75,15 @@ func TestQueueConfig_Custom(t *testing.T) {
 	}
 }
 
-func TestQueueConfig_AgenticCharacterBudgetCompat(t *testing.T) {
-	tests := []struct {
-		name     string
-		set      func(*viper.Viper)
-		want     int
-		wantWarn bool
-	}{
+type agenticCharacterBudgetCompatCase struct {
+	name     string
+	set      func(*viper.Viper)
+	want     int
+	wantWarn bool
+}
+
+func agenticCharacterBudgetCompatCases() []agenticCharacterBudgetCompatCase {
+	return []agenticCharacterBudgetCompatCase{
 		{
 			name: "default",
 			set:  func(*viper.Viper) {},
@@ -119,26 +121,34 @@ func TestQueueConfig_AgenticCharacterBudgetCompat(t *testing.T) {
 			want: 100,
 		},
 	}
+}
 
-	for _, tc := range tests {
+func runAgenticCharacterBudgetCompatCase(t *testing.T, tc agenticCharacterBudgetCompatCase) {
+	t.Helper()
+
+	v := viper.New()
+	setQueueDefaults(v)
+	tc.set(v)
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	cfg := loadQueueConfig(v)
+	if cfg.AgenticCharacterBudget != tc.want {
+		t.Fatalf("AgenticCharacterBudget = %d, want %d", cfg.AgenticCharacterBudget, tc.want)
+	}
+	hasWarn := strings.Contains(buf.String(), "deprecated config key")
+	if hasWarn != tc.wantWarn {
+		t.Fatalf("deprecated warning logged = %v, want %v; log: %q", hasWarn, tc.wantWarn, buf.String())
+	}
+}
+
+func TestQueueConfig_AgenticCharacterBudgetCompat(t *testing.T) {
+	for _, tc := range agenticCharacterBudgetCompatCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			v := viper.New()
-			setQueueDefaults(v)
-			tc.set(v)
-
-			var buf bytes.Buffer
-			prev := slog.Default()
-			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-			t.Cleanup(func() { slog.SetDefault(prev) })
-
-			cfg := loadQueueConfig(v)
-			if cfg.AgenticCharacterBudget != tc.want {
-				t.Fatalf("AgenticCharacterBudget = %d, want %d", cfg.AgenticCharacterBudget, tc.want)
-			}
-			hasWarn := strings.Contains(buf.String(), "deprecated config key")
-			if hasWarn != tc.wantWarn {
-				t.Fatalf("deprecated warning logged = %v, want %v; log: %q", hasWarn, tc.wantWarn, buf.String())
-			}
+			runAgenticCharacterBudgetCompatCase(t, tc)
 		})
 	}
 }
