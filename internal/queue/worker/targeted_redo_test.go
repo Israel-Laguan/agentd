@@ -111,6 +111,33 @@ not a list
 	}
 }
 
+func TestFormatPlanOutputForCommit(t *testing.T) {
+	t.Parallel()
+	plan := Plan{Steps: []PlanStep{
+		{ID: "analyze", OutputFormat: "text"},
+		{ID: "summarize", OutputFormat: "text"},
+	}}
+	marked := `<!-- step:analyze -->
+first body
+<!-- /step:analyze -->
+<!-- step:summarize -->
+second body
+<!-- /step:summarize -->
+`
+	got := formatPlanOutputForCommit(marked, plan)
+	if strings.Contains(got, "<!-- step:") {
+		t.Fatalf("expected no step markers, got %q", got)
+	}
+	want := "first body\n\nsecond body"
+	if got != want {
+		t.Fatalf("formatPlanOutputForCommit() = %q, want %q", got, want)
+	}
+	plain := "unmarked output"
+	if formatPlanOutputForCommit(plain, plan) != plain {
+		t.Fatalf("unmarked output should be returned unchanged")
+	}
+}
+
 type redoCountGateway struct {
 	redoCalls map[string]int
 	requests  []gateway.AIRequest

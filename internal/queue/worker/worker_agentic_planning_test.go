@@ -114,6 +114,15 @@ ok2
 	if !foundPlan {
 		t.Fatal("execute request missing injected plan in system prompt")
 	}
+	if store.committedResult == nil {
+		t.Fatal("expected committed result")
+	}
+	if strings.Contains(store.committedResult.Payload, "<!-- step:") {
+		t.Fatalf("committed payload should not contain step markers: %q", store.committedResult.Payload)
+	}
+	if !strings.Contains(store.committedResult.Payload, "ok") || !strings.Contains(store.committedResult.Payload, "ok2") {
+		t.Fatalf("committed payload = %q, want step bodies", store.committedResult.Payload)
+	}
 }
 
 func TestAgenticPlanning_TightTokenBudgetSkipsPlanPhase(t *testing.T) {
@@ -236,6 +245,9 @@ ok
 	}
 	if store.committedResult == nil || !strings.Contains(store.committedResult.Payload, "fixed summary") {
 		t.Fatalf("committed payload = %v, want repaired section", store.committedResult)
+	}
+	if strings.Contains(store.committedResult.Payload, "<!-- step:") {
+		t.Fatalf("committed payload should not contain step markers: %q", store.committedResult.Payload)
 	}
 }
 

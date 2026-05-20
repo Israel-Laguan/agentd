@@ -86,6 +86,24 @@ func extractSection(output, stepID string) (string, bool) {
 	return strings.TrimSpace(output[start : start+end]), true
 }
 
+// formatPlanOutputForCommit concatenates validated step bodies in plan order.
+// Internal HTML comment markers are omitted from the committed task result.
+func formatPlanOutputForCommit(output string, plan Plan) string {
+	var parts []string
+	for _, step := range plan.Steps {
+		if body, ok := extractSection(output, step.ID); ok {
+			body = strings.TrimSpace(body)
+			if body != "" {
+				parts = append(parts, body)
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return output
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 func replaceSection(output, stepID, newBody string) string {
 	open := fmt.Sprintf("<!-- step:%s -->", stepID)
 	close := fmt.Sprintf("<!-- /step:%s -->", stepID)
