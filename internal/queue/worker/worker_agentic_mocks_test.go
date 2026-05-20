@@ -81,13 +81,17 @@ func (m *mockCommitStore) IncrementRetryCount(ctx context.Context, id string, t 
 	return nil, nil
 }
 
-func (m *mockCommitStore) UpdateTaskDescription(_ context.Context, id string, _ time.Time, description string) (*models.Task, error) {
-	task, err := m.GetTask(context.Background(), id)
+func (m *mockCommitStore) UpdateTaskDescription(ctx context.Context, id string, _ time.Time, description string) (*models.Task, error) {
+	task, err := m.GetTask(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	task.Description = description
-	return task, nil
+	if task == nil {
+		return nil, models.ErrTaskNotFound
+	}
+	updated := *task
+	updated.Description = description
+	return &updated, nil
 }
 
 func (m *mockCommitStore) UpdateTaskState(ctx context.Context, id string, t time.Time, state models.TaskState) (*models.Task, error) {
