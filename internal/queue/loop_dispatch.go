@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 
 	"agentd/internal/models"
 )
@@ -18,7 +19,7 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 	if err != nil {
 		return 0, 0, err
 	}
-	for _, task := range tasks {
+	for i, task := range tasks {
 		nack, skip := d.dispatchAdmit(ctx, task)
 		if nack {
 			nacked++
@@ -30,12 +31,60 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 			continue
 		}
 		if !d.sem.Acquire(ctx) {
+			d.requeueUndispatchedClaims(ctx, tasks[i:])
 			return dispatched, nacked, nil
 		}
 		dispatched++
 		d.runDispatchedTask(ctx, task)
 	}
 	return dispatched, nacked, nil
+}
+
+func (d *Daemon) requeueUndispatchedClaims(ctx context.Context, tasks []models.Task) {
+	for _, task := range tasks {
+		d.requeueClaimedTask(ctx, task)
+	}
+}
+
+// failDispatchPanic marks a task FAILED after a panic in the dispatch goroutine.
+func (d *Daemon) failDispatchPanic(ctx context.Context, task models.Task, panicMsg string) {
+	current, err := d.store.GetTask(ctx, task.ID)
+	if err != nil {
+		slog.Error("dispatch panic: get task failed", "task_id", task.ID, "error", err)
+		return
+	}
+	if current.State != models.TaskStateRunning && current.State != models.TaskStateQueued {
+		return
+	}
+	if _, updateErr := d.store.UpdateTaskState(ctx, task.ID, current.UpdatedAt, models.TaskStateFailed); updateErr != nil {
+		slog.Error("dispatch panic: failed to mark task failed", "task_id", task.ID, "error", updateErr)
+		return
+	}
+	if d.sink != nil {
+		emitErr := d.sink.Emit(ctx, models.Event{
+			ProjectID: task.ProjectID,
+			TaskID:    sql.NullString{String: task.ID, Valid: true},
+			Type:      models.EventTypeFailure,
+			Payload:   "dispatch panic: " + panicMsg,
+		})
+		if emitErr != nil {
+			slog.Error("dispatch panic: failed to emit event", "task_id", task.ID, "error", emitErr)
+		}
+	}
+}
+
+func (d *Daemon) requeueClaimedTask(ctx context.Context, task models.Task) {
+	current, err := d.store.GetTask(ctx, task.ID)
+	if err != nil {
+		slog.Error("requeue claimed task: get task failed", "task_id", task.ID, "error", err)
+		return
+	}
+	if current.State != models.TaskStateQueued {
+		return
+	}
+	if _, err := d.store.UpdateTaskState(ctx, task.ID, current.UpdatedAt, models.TaskStateReady); err != nil {
+		slog.Error("requeue claimed task: update state failed", "task_id", task.ID, "error", err)
+	}
 }
 
 func (d *Daemon) dispatchAvailable(ctx context.Context) int {
@@ -99,7 +148,8 @@ func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task) {
 		defer d.sem.Release()
 		defer func() {
 			if r := recover(); r != nil {
-				slog.Error("dispatch goroutine panic", "task_id", task.ID, "panic", fmt.Sprint(r))
+				slog.Error("dispatch goroutine panic", "task_id", task.ID, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+				d.failDispatchPanic(ctx, task, fmt.Sprint(r))
 			}
 		}()
 		runCtx, cancel := context.WithTimeout(ctx, d.taskDeadline)

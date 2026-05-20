@@ -102,6 +102,42 @@ func isWithinRoot(root, candidate string) bool {
 	return rel == "." || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "..")
 }
 
+func evalWorkspaceRoot(workspacePath string) (string, error) {
+	root, err := filepath.EvalSymlinks(workspacePath)
+	if err != nil {
+		return "", fmt.Errorf("workspace path is invalid: %w", err)
+	}
+	return filepath.Clean(root), nil
+}
+
+// resolveWorkspaceFile resolves a workspace-relative path with symlink evaluation
+// and rejects paths that escape the workspace root.
+func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
+	clean := filepath.Clean(rel)
+	if clean == "." || clean == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	if filepath.IsAbs(clean) {
+		return "", fmt.Errorf("absolute paths are not allowed")
+	}
+
+	workspaceRoot, err := evalWorkspaceRoot(workspacePath)
+	if err != nil {
+		return "", err
+	}
+
+	candidate := filepath.Clean(filepath.Join(workspacePath, clean))
+	targetReal, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path: %w", err)
+	}
+	targetReal = filepath.Clean(targetReal)
+	if !isWithinRoot(workspaceRoot, targetReal) {
+		return "", fmt.Errorf("path escapes workspace")
+	}
+	return targetReal, nil
+}
+
 // contextReader wraps an io.Reader and returns ctx.Err() on Read when cancelled.
 type contextReader struct {
 	ctx context.Context

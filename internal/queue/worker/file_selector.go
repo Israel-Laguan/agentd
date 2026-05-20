@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"log/slog"
+	"math"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -35,18 +36,30 @@ func (s *FileSelector) Select(ctx context.Context, taskQuery string, docs []*Cac
 	}
 	queryVec, docVecs := s.embedVectors(ctx, taskQuery, docs)
 	scored := s.scoreDocs(docs, queryVec, docVecs, pinned)
-	return s.topScored(scored), nil
+	return s.topScored(scored, pinned), nil
 }
 
 func (s *FileSelector) embedVectors(ctx context.Context, taskQuery string, docs []*CachedDoc) (queryVec []float32, docVecs [][]float32) {
 	if s.embedder == nil || strings.TrimSpace(taskQuery) == "" {
 		return nil, nil
 	}
-	texts := make([]string, 0, len(docs)+1)
-	texts = append(texts, taskQuery)
-	for _, d := range docs {
-		texts = append(texts, firstNTokens(d.Markdown, embedSnippetTokens))
+
+	docVecs = make([][]float32, len(docs))
+	needEmbed := make([]int, 0, len(docs))
+	for i, d := range docs {
+		if len(d.Embedding) > 0 {
+			docVecs[i] = d.Embedding
+		} else {
+			needEmbed = append(needEmbed, i)
+		}
 	}
+
+	texts := make([]string, 0, len(needEmbed)+1)
+	texts = append(texts, taskQuery)
+	for _, i := range needEmbed {
+		texts = append(texts, firstNTokens(docs[i].Markdown, embedSnippetTokens))
+	}
+
 	vecs, embedErr := s.embedder.Embed(ctx, texts)
 	if embedErr != nil {
 		slog.Warn("file selector embedding failed, using path order", "error", embedErr)
@@ -55,7 +68,10 @@ func (s *FileSelector) embedVectors(ctx context.Context, taskQuery string, docs 
 	if len(vecs) != len(texts) {
 		return nil, nil
 	}
-	return vecs[0], vecs[1:]
+	for j, i := range needEmbed {
+		docVecs[i] = vecs[j+1]
+	}
+	return vecs[0], docVecs
 }
 
 func (s *FileSelector) scoreDocs(docs []*CachedDoc, queryVec []float32, docVecs [][]float32, pinned map[string]struct{}) []scoredDoc {
@@ -81,15 +97,27 @@ func (s *FileSelector) scoreDocs(docs []*CachedDoc, queryVec []float32, docVecs 
 	return scored
 }
 
-func (s *FileSelector) topScored(scored []scoredDoc) []*CachedDoc {
-	limit := s.topK
-	if limit > len(scored) {
-		limit = len(scored)
-	}
-	out := make([]*CachedDoc, 0, limit)
+func (s *FileSelector) topScored(scored []scoredDoc, pinned map[string]struct{}) []*CachedDoc {
+	out := make([]*CachedDoc, 0, len(scored))
 	seen := make(map[string]struct{})
+
 	for _, item := range scored {
-		if len(out) >= limit {
+		if pinned == nil {
+			continue
+		}
+		key := normalizePathKey(item.doc.Path)
+		if _, ok := pinned[key]; !ok {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, item.doc)
+	}
+
+	for _, item := range scored {
+		if len(out) >= s.topK {
 			break
 		}
 		key := normalizePathKey(item.doc.Path)
@@ -103,15 +131,11 @@ func (s *FileSelector) topScored(scored []scoredDoc) []*CachedDoc {
 }
 
 func cosineSimilarityFloat32(a, b []float32) float64 {
-	if len(a) == 0 || len(b) == 0 {
+	if len(a) == 0 || len(b) == 0 || len(a) != len(b) {
 		return 0
 	}
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
 	var dot, normA, normB float64
-	for i := 0; i < n; i++ {
+	for i := 0; i < len(a); i++ {
 		av := float64(a[i])
 		bv := float64(b[i])
 		dot += av * bv
@@ -121,18 +145,7 @@ func cosineSimilarityFloat32(a, b []float32) float64 {
 	if normA == 0 || normB == 0 {
 		return 0
 	}
-	return dot / (sqrt64(normA) * sqrt64(normB))
-}
-
-func sqrt64(x float64) float64 {
-	if x <= 0 {
-		return 0
-	}
-	z := x
-	for i := 0; i < 10; i++ {
-		z -= (z*z - x) / (2 * z)
-	}
-	return z
+	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
 }
 
 func normalizePathKey(p string) string {

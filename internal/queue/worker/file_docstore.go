@@ -8,7 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
+
+	"github.com/gofrs/flock"
 )
 
 // CachedDoc is a processed workspace document stored on disk.
@@ -41,6 +42,12 @@ func (s *DocStore) cachePath(hash string) string {
 
 func (s *DocStore) Get(hash string, size int64, mtime int64) (*CachedDoc, bool) {
 	path := s.cachePath(hash)
+	lock := flock.New(path + ".lock")
+	if err := lock.RLock(); err != nil {
+		return nil, false
+	}
+	defer func() { _ = lock.Unlock() }()
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, false
@@ -63,15 +70,17 @@ func (s *DocStore) Put(doc *CachedDoc) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	lock := flock.New(path + ".lock")
+	if err := lock.Lock(); err != nil {
+		return fmt.Errorf("lock cache file: %w", err)
+	}
+	defer func() { _ = lock.Unlock() }()
+
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
 	if err != nil {
 		return fmt.Errorf("open cache file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return fmt.Errorf("lock cache file: %w", err)
-	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:errcheck
 
 	data, err := json.Marshal(doc)
 	if err != nil {
