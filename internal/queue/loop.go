@@ -2,12 +2,7 @@ package queue
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
-	"log/slog"
 	"time"
-
-	"agentd/internal/models"
 )
 
 func (d *Daemon) taskLoop(ctx context.Context) {
@@ -94,76 +89,6 @@ func (d *Daemon) queuedReconcileLoop(ctx context.Context) {
 			logDaemonError("orphaned queued reconcile failed", d.reconcileOrphanedQueued(ctx))
 		}
 	}
-}
-
-func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err error) {
-	available := d.sem.Available()
-	if d.breaker != nil {
-		available = d.breaker.ProbeLimit(available)
-		if available <= 0 && d.breaker.OpenDuration() >= d.handoffAfter {
-			logDaemonError("outage handoff failed", d.checkOutageHandoff(ctx))
-		}
-	}
-	if available <= 0 {
-		return 0, 0, nil
-	}
-	tasks, err := d.store.ClaimNextReadyTasks(ctx, available)
-	if err != nil {
-		return 0, 0, err
-	}
-	for _, task := range tasks {
-		if d.channel != nil {
-			msg := TaskToInbound(task)
-			result := d.channel.Admit(msg)
-			if result.Disposition == Nack {
-				nacked++
-				slog.Warn("dispatch nack", "task_id", task.ID, "error", result.Err)
-				if classifyDispatchNack(result.Err) {
-					d.deferRateLimited(ctx, task)
-				} else {
-					d.failDispatchRejected(ctx, task, result.Err)
-				}
-				continue
-			}
-		}
-		if d.rollingLedger != nil && d.rollingLedger.Enabled() {
-			profile, profErr := d.store.GetAgentProfile(ctx, task.AgentID)
-			if profErr == nil {
-				projected := projectedTokensForTask(profile)
-				if d.rollingLedger.ShouldQueue(projected, d.rollingLedger.Limit()) {
-					wait := d.rollingLedger.EstimatedDrainWait(projected)
-					d.deferRollingBudget(ctx, task, wait)
-					if d.sink != nil {
-						_ = d.sink.Emit(ctx, models.Event{
-							ProjectID: task.ProjectID,
-							TaskID:    sql.NullString{String: task.ID, Valid: true},
-							Type:      "ROLLING_BUDGET_DEFER",
-							Payload:   fmt.Sprintf("deferred %s for rolling token budget", wait),
-						})
-					}
-					continue
-				}
-			}
-		}
-		if !d.sem.Acquire(ctx) {
-			return dispatched, nacked, nil
-		}
-		dispatched++
-		d.wg.Add(1)
-		go func(task models.Task) {
-			defer d.wg.Done()
-			defer d.sem.Release()
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("dispatch goroutine panic", "task_id", task.ID, "panic", fmt.Sprint(r))
-				}
-			}()
-			runCtx, cancel := context.WithTimeout(ctx, d.taskDeadline)
-			defer cancel()
-			d.worker.Process(runCtx, task)
-		}(task)
-	}
-	return dispatched, nacked, nil
 }
 
 func (d *Daemon) processComments(ctx context.Context) error {
