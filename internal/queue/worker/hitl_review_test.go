@@ -349,6 +349,52 @@ func TestTryFinalizeApprovedReview_RefreshesTaskBeforeCommit(t *testing.T) {
 	}
 }
 
+type failUpdateResultStore struct {
+	*testutil.FakeKanbanStore
+}
+
+func (s *failUpdateResultStore) UpdateTaskResult(context.Context, string, time.Time, models.TaskResult) (*models.Task, error) {
+	return nil, models.ErrStateConflict
+}
+
+func TestTryFinalizeApprovedReview_CommitFailureLeavesMarkerAbsent(t *testing.T) {
+	t.Parallel()
+	base := testutil.NewFakeStore()
+	store := &failUpdateResultStore{FakeKanbanStore: base}
+	ctx := context.Background()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "finalize-fail",
+		Tasks:       []models.DraftTask{{Title: "parent", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	running, err := store.MarkTaskRunning(ctx, parent.ID, parent.UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	w := &Worker{store: store}
+	w.createReviewHandoff(ctx, *running, "approved draft output")
+	completeReviewSubtask(t, store, ctx, parent.ID)
+
+	done, err := w.tryFinalizeApprovedReview(ctx, *running)
+	if err != nil {
+		t.Fatalf("tryFinalizeApprovedReview: %v", err)
+	}
+	if done {
+		t.Fatal("expected done=false when commit fails")
+	}
+	comments, err := store.ListComments(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("list comments: %v", err)
+	}
+	review := findReviewSubtask(t, store, ctx, parent.ID)
+	if isReviewConsumed(comments, review.ID) {
+		t.Fatal("review-used marker should not be written when commit fails")
+	}
+}
+
 func setupFinalizeReviewRefreshFixture(t *testing.T) (*strictUpdateResultStore, *Worker, models.Task) {
 	t.Helper()
 	base := testutil.NewFakeStore()

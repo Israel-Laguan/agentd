@@ -37,7 +37,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
 
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
-	messages = w.prependReviewRejectionFeedback(ctx, task, messages)
+	messages, pendingReviewRejectionID := w.prependReviewRejectionFeedback(ctx, task, messages)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
@@ -52,13 +52,20 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	for turnIndex := 0; ; turnIndex++ {
 		turnID := fmt.Sprintf("%s:%d", task.ID, turnIndex)
-		cont, result, report, err := w.processAgenticIteration(
+		cont, result, report, generated, err := w.processAgenticIteration(
 			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
 			iterationGuard, budgetGuard, deadlineGuard, ctxBudgetGuard, cm, goalTracker,
 			taskHooks, taskCaps, toolTracker, workPlan, turnID, turnIndex,
 		)
 		if err != nil {
 			return LoopResult{}, false
+		}
+		if generated && pendingReviewRejectionID != "" {
+			if markErr := markReviewRejectionUsed(cancelCtx, w.store, task.ID, pendingReviewRejectionID); markErr != nil {
+				slog.Warn("failed to mark review rejection as consumed", "task_id", task.ID, "subtask_id", pendingReviewRejectionID, "error", markErr)
+			} else {
+				pendingReviewRejectionID = ""
+			}
 		}
 		if report {
 			w.recordLoopResult(result)
@@ -197,22 +204,22 @@ func (w *Worker) processAgenticIteration(
 	cm *ContextManager, goalTracker *GoalTracker,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
 	toolTracker *toolFailureTracker, workPlan *Plan, turnID string, turnIndex int,
-) (continueLoop bool, result LoopResult, report bool, err error) {
+) (continueLoop bool, result LoopResult, report bool, generated bool, err error) {
 	if stop, guardErr := w.guardAgenticIteration(
 		ctx, task, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
 		ctxBudgetGuard, cm, goalTracker, turnID, turnIndex,
 	); stop != nil {
-		return false, *stop, true, nil
+		return false, *stop, true, false, nil
 	} else if guardErr != nil {
-		return false, LoopResult{}, false, guardErr
+		return false, LoopResult{}, false, false, guardErr
 	}
 
 	resp, stop, err := w.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex)
 	if stop != nil {
-		return false, *stop, true, nil
+		return false, *stop, true, false, nil
 	}
 	if err != nil {
-		return false, LoopResult{}, false, err
+		return false, LoopResult{}, false, false, err
 	}
 	budgetGuard.AfterCall(resp.TokenUsage)
 	if w.tokenUsageHook != nil && resp.TokenUsage > 0 {
@@ -221,14 +228,16 @@ func (w *Worker) processAgenticIteration(
 	appendAssistantMessage(messages, resp)
 
 	if len(resp.ToolCalls) == 0 {
-		return w.finishAgenticTurnNoTools(ctx, task, profile, resp.Content, workPlan, goalTracker, turnIndex, budgetGuard, ctxBudgetGuard, messages)
+		cont, res, rep, finErr := w.finishAgenticTurnNoTools(ctx, task, profile, resp.Content, workPlan, goalTracker, turnIndex, budgetGuard, ctxBudgetGuard, messages)
+		return cont, res, rep, true, finErr
 	}
 
-	return w.continueAgenticAfterTools(
+	cont, res, rep, finErr := w.continueAgenticAfterTools(
 		ctx, task, resp, messages, toolToAdapter, toolExecutor,
 		taskHooks, taskCaps, cm, goalTracker, toolTracker,
 		iterationGuard, budgetGuard, turnID, turnIndex,
 	)
+	return cont, res, rep, true, finErr
 }
 
 func (w *Worker) generateAgenticTurn(

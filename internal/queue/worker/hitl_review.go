@@ -81,23 +81,20 @@ func (w *Worker) prependReviewRejectionFeedback(
 	ctx context.Context,
 	task models.Task,
 	messages []gateway.PromptMessage,
-) []gateway.PromptMessage {
+) ([]gateway.PromptMessage, string) {
 	comments, err := w.store.ListComments(ctx, task.ID)
 	if err != nil {
-		return messages
+		return messages, ""
 	}
 	reason, subtaskID, ok := latestFailedReviewRejection(ctx, w.store, task.ID, comments)
 	if !ok {
-		return messages
-	}
-	if err := markReviewRejectionUsed(ctx, w.store, task.ID, subtaskID); err != nil {
-		return messages
+		return messages, ""
 	}
 	feedback := fmt.Sprintf(
 		"Human review rejected your previous draft. Feedback: %s. Revise your output accordingly.",
 		reason,
 	)
-	return append(messages, gateway.PromptMessage{Role: "user", Content: feedback})
+	return append(messages, gateway.PromptMessage{Role: "user", Content: feedback}), subtaskID
 }
 
 func findLatestDraftReview(comments []models.Comment) (string, bool) {
@@ -164,14 +161,16 @@ func (w *Worker) tryFinalizeApprovedReview(ctx context.Context, task models.Task
 	if !ok || strings.TrimSpace(draft) == "" {
 		return false, nil
 	}
-	if err := markReviewUsed(ctx, w.store, task.ID, review.ID); err != nil {
-		return false, err
-	}
 	fresh, err := w.store.GetTask(ctx, task.ID)
 	if err != nil {
 		return false, fmt.Errorf("refresh task for approved review commit: %w", err)
 	}
 	result := sandbox.Result{Success: true, Stdout: draft}
-	w.commit(ctx, *fresh, result, nil)
+	if !w.commitSucceeded(ctx, *fresh, result, nil) {
+		return false, nil
+	}
+	if err := markReviewUsed(ctx, w.store, task.ID, review.ID); err != nil {
+		return false, err
+	}
 	return true, nil
 }
