@@ -25,6 +25,17 @@ func TestToolFailureTracker_StreakAndReset(t *testing.T) {
 	}
 }
 
+func TestToolFailureTracker_ResetClearsStreak(t *testing.T) {
+	t.Parallel()
+	tr := newToolFailureTracker(3)
+	tr.Record("bash", ToolStatusError)
+	tr.Record("bash", ToolStatusError)
+	tr.reset()
+	if failed, n := tr.Record("bash", ToolStatusError); failed || n != 1 {
+		t.Fatalf("after reset: failed=%v n=%d, want streak 1", failed, n)
+	}
+}
+
 func TestToolFailureTracker_FatalImmediate(t *testing.T) {
 	t.Parallel()
 	tr := newToolFailureTracker(3)
