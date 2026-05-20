@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"time"
 
 	"agentd/internal/models"
 )
@@ -31,7 +32,9 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 			continue
 		}
 		if !d.sem.Acquire(ctx) {
-			d.requeueUndispatchedClaims(context.WithoutCancel(ctx), tasks[i:])
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			d.requeueUndispatchedClaims(cleanupCtx, tasks[i:])
 			return dispatched, nacked, nil
 		}
 		dispatched++
@@ -149,7 +152,9 @@ func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task) {
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Error("dispatch goroutine panic", "task_id", task.ID, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
-				d.failDispatchPanic(context.WithoutCancel(ctx), task, fmt.Sprint(r))
+				cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				d.failDispatchPanic(cleanupCtx, task, fmt.Sprint(r))
 			}
 		}()
 		runCtx, cancel := context.WithTimeout(ctx, d.taskDeadline)
