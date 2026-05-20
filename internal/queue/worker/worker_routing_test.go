@@ -7,6 +7,7 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/testutil"
 )
 
 // TestProviderSupportsAgentic_ReturnsTrueForSupportedProviders verifies that providerSupportsAgentic
@@ -92,7 +93,7 @@ func newRoutingTest(profile models.AgentProfile) (*Worker, *routingTestStore, *r
 			BaseEntity:  models.BaseEntity{ID: "task-routing"},
 			ProjectID:   "project-1",
 			AgentID:     "agent-1",
-			Description: AgenticTestTaskDescription(),
+			Description: testutil.AgenticTestTaskDescription(),
 			State:       models.TaskStateQueued,
 		},
 		project: models.Project{

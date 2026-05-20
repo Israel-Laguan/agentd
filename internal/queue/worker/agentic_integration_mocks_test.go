@@ -8,6 +8,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // mockAgenticSandbox executes commands and returns predefined results
@@ -50,7 +51,7 @@ func newMockAgenticStore(taskID string) *mockAgenticStore {
 			ProjectID:   "project-1",
 			AgentID:     "agent-1",
 			Title:       "Run agentic loop",
-			Description: AgenticTestTaskDescription(),
+			Description: testutil.AgenticTestTaskDescription(),
 			State:       models.TaskStateQueued,
 		},
 		project: models.Project{
