@@ -100,7 +100,7 @@ Rules:
 - output_format defaults to "text" when omitted
 - keep the plan minimal and actionable`
 
-func (w *Worker) buildPlanRequest(task models.Task, profile models.AgentProfile, planContext string) gateway.AIRequest {
+func (w *Worker) buildPlanRequest(task models.Task, planContext string) gateway.AIRequest {
 	return gateway.AIRequest{
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: planSystemPrompt},
@@ -115,18 +115,18 @@ func (w *Worker) buildPlanRequest(task models.Task, profile models.AgentProfile,
 }
 
 func (w *Worker) generatePlan(
-	ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile,
+	ctx context.Context, task models.Task, project models.Project,
 	budgetGuard *BudgetGuard,
 ) (*Plan, error) {
-	if budgetGuard != nil {
-		if err := budgetGuard.BeforeCall(); err != nil {
-			return nil, err
-		}
-	}
 	planContext := w.buildPlanContext(task, project)
-	req := w.buildPlanRequest(task, profile, planContext)
+	req := w.buildPlanRequest(task, planContext)
 	req.JSONMode = true
 	for attempt := 0; attempt < correction.MaxJSONAttempts; attempt++ {
+		if budgetGuard != nil {
+			if err := budgetGuard.BeforeCall(); err != nil {
+				return nil, err
+			}
+		}
 		resp, err := w.gateway.Generate(ctx, req)
 		if err != nil {
 			slog.Warn("agentic plan generation failed; continuing without plan",

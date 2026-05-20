@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -70,6 +71,46 @@ func TestReplaceSection_MissingCloseTag(t *testing.T) {
 	}
 }
 
+func TestReplaceSection_MissingCloseTag_PreservesLaterSections(t *testing.T) {
+	t.Parallel()
+	out := "<!-- step:x -->\nbroken\n<!-- step:y -->\ntail\n<!-- /step:y -->\n"
+	replaced := replaceSection(out, "x", "fixed")
+	body, ok := extractSection(replaced, "x")
+	if !ok || body != "fixed" {
+		t.Fatalf("replace x: body=%q ok=%v", body, ok)
+	}
+	bodyY, ok := extractSection(replaced, "y")
+	if !ok || bodyY != "tail" {
+		t.Fatalf("replace preserved y: body=%q ok=%v", bodyY, ok)
+	}
+}
+
+func TestValidateOutput_ListFormats(t *testing.T) {
+	t.Parallel()
+	validCases := []struct {
+		id   string
+		body string
+	}{
+		{"ordered", "1. first\n2. second"},
+		{"nested", "  - nested item"},
+	}
+	for _, tc := range validCases {
+		plan := Plan{Steps: []PlanStep{{ID: tc.id, OutputFormat: "list"}}}
+		out := fmt.Sprintf("<!-- step:%s -->\n%s\n<!-- /step:%s -->\n", tc.id, tc.body, tc.id)
+		if fail := ValidateOutput(out, plan); len(fail) != 0 {
+			t.Fatalf("%s list: failing %v", tc.id, fail)
+		}
+	}
+	plan := Plan{Steps: []PlanStep{{ID: "plain", OutputFormat: "list"}}}
+	plain := `<!-- step:plain -->
+not a list
+<!-- /step:plain -->
+`
+	if fail := ValidateOutput(plain, plan); len(fail) != 1 || fail[0].ID != "plain" {
+		t.Fatalf("plain text list fail = %v", fail)
+	}
+}
+
 type redoCountGateway struct {
 	redoCalls map[string]int
 	requests  []gateway.AIRequest
@@ -115,7 +156,7 @@ func TestRepairLoop_CapsAtThreePasses(t *testing.T) {
 	}
 	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
 	out := "<!-- step:only -->\n<!-- /step:only -->\n"
-	_ = w.repairOutputWithPlan(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, models.AgentProfile{}, plan, out, nil)
+	_ = w.repairOutputWithPlan(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, plan, out, nil)
 	if gw.redoCalls["only"] != 3 {
 		t.Fatalf("redo calls for step = %d, want 3", gw.redoCalls["only"])
 	}

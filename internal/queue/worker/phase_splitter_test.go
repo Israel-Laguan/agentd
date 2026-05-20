@@ -57,9 +57,6 @@ func TestPlan_Validate_RejectsInvalidStepID(t *testing.T) {
 	t.Parallel()
 	cases := []string{"bad id", "<!--", "UPPER", ""}
 	for _, id := range cases {
-		if id == "" {
-			continue
-		}
 		p := &Plan{Steps: []PlanStep{{ID: id, Action: "do"}}}
 		if err := p.Validate(); err == nil {
 			t.Fatalf("id %q: expected validation error", id)
