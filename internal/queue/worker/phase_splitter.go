@@ -116,9 +116,6 @@ func (w *Worker) generatePlan(
 	planContext := w.buildPlanContext(task, project)
 	req := w.buildPlanRequest(task, profile, planContext)
 	plan, err := gateway.GenerateJSON[Plan](ctx, w.gateway, req)
-	if budgetGuard != nil {
-		// GenerateJSON does not return token usage; best-effort skip AfterCall.
-	}
 	if err != nil {
 		slog.Warn("agentic plan generation failed; continuing without plan",
 			"task_id", task.ID, "error", err)
