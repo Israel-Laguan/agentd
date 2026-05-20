@@ -110,7 +110,7 @@ func (w *Worker) finishAgenticTurnNoTools(
 	}
 	if workPlan != nil {
 		content = w.repairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
-		content = formatPlanOutputForCommit(content, *workPlan)
+		content = preparePlanCommitContent(content, *workPlan)
 	}
 	w.commitTextWithProfile(ctx, task, content, &profile)
 	r := LoopResult{

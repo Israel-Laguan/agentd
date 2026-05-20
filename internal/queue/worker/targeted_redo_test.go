@@ -138,6 +138,66 @@ second body
 	}
 }
 
+func TestFormatPlanOutputForCommit_EmptyMarkedSections(t *testing.T) {
+	t.Parallel()
+	plan := Plan{Steps: []PlanStep{{ID: "a", OutputFormat: "text"}}}
+	marked := "<!-- step:a -->\n<!-- /step:a -->\n"
+	got := formatPlanOutputForCommit(marked, plan)
+	if strings.Contains(got, "<!-- step:") {
+		t.Fatalf("expected no step markers, got %q", got)
+	}
+	if got != "" {
+		t.Fatalf("formatPlanOutputForCommit() = %q, want empty string", got)
+	}
+}
+
+func TestPreparePlanCommitContent_ValidJoins(t *testing.T) {
+	t.Parallel()
+	plan := Plan{Steps: []PlanStep{
+		{ID: "analyze", OutputFormat: "text"},
+		{ID: "summarize", OutputFormat: "text"},
+	}}
+	marked := `<!-- step:analyze -->
+first body
+<!-- /step:analyze -->
+<!-- step:summarize -->
+second body
+<!-- /step:summarize -->
+`
+	got := preparePlanCommitContent(marked, plan)
+	if strings.Contains(got, "<!-- step:") {
+		t.Fatalf("expected no step markers, got %q", got)
+	}
+	want := "first body\n\nsecond body"
+	if got != want {
+		t.Fatalf("preparePlanCommitContent() = %q, want %q", got, want)
+	}
+}
+
+func TestPreparePlanCommitContent_InvalidStripsNotJoins(t *testing.T) {
+	t.Parallel()
+	plan := Plan{Steps: []PlanStep{
+		{ID: "a", OutputFormat: "text"},
+		{ID: "b", OutputFormat: "text"},
+	}}
+	marked := `<!-- step:a -->
+good body
+<!-- /step:a -->
+extra trailing text
+`
+	got := preparePlanCommitContent(marked, plan)
+	joined := formatPlanOutputForCommit(marked, plan)
+	if got == joined {
+		t.Fatalf("invalid plan should not use partial join: got %q, joined %q", got, joined)
+	}
+	if !strings.Contains(got, "good body") || !strings.Contains(got, "extra trailing text") {
+		t.Fatalf("stripped in-situ output = %q, want both body and trailing text", got)
+	}
+	if strings.Contains(got, "<!-- step:") {
+		t.Fatalf("expected no step markers, got %q", got)
+	}
+}
+
 type redoCountGateway struct {
 	redoCalls map[string]int
 	requests  []gateway.AIRequest
