@@ -69,6 +69,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 		NewHookChain(),
 		nil,
 		newToolFailureTracker(0),
+		nil,
 		"task-123:0",
 		0,
 	)

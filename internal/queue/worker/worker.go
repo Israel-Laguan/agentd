@@ -59,6 +59,7 @@ type Worker struct {
 	loopResultRecorder        func(LoopResult)
 	fileContextCfg            config.FileContextConfig
 	docStore                  *DocStore
+	planningCfg               config.AgenticPlanningConfig
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
