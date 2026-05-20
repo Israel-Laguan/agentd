@@ -4,12 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
+
+var orderedListLinePattern = regexp.MustCompile(`^\d+\.\s`)
+
+func isMarkdownListLine(trim string) bool {
+	if strings.HasPrefix(trim, "- ") || strings.HasPrefix(trim, "* ") || strings.HasPrefix(trim, "+ ") {
+		return true
+	}
+	return orderedListLinePattern.MatchString(trim)
+}
 
 func normalizeOutputFormat(format string) string {
 	f := strings.ToLower(strings.TrimSpace(format))
@@ -32,7 +42,7 @@ func validateStepBody(format, body string) error {
 	case "list":
 		for _, line := range strings.Split(body, "\n") {
 			trim := strings.TrimSpace(line)
-			if strings.HasPrefix(trim, "- ") || strings.HasPrefix(trim, "* ") {
+			if isMarkdownListLine(trim) {
 				return nil
 			}
 		}
@@ -87,14 +97,19 @@ func replaceSection(output, stepID, newBody string) string {
 	bodyStart := start + len(open)
 	endRel := strings.Index(output[bodyStart:], close)
 	if endRel < 0 {
-		return output[:start] + open + "\n" + strings.TrimSpace(newBody) + "\n" + close + "\n"
+		nextRel := strings.Index(output[bodyStart:], "<!-- step:")
+		if nextRel < 0 {
+			return output[:start] + open + "\n" + strings.TrimSpace(newBody) + "\n" + close + "\n"
+		}
+		next := bodyStart + nextRel
+		return output[:bodyStart] + "\n" + strings.TrimSpace(newBody) + "\n" + close + "\n" + output[next:]
 	}
 	bodyEnd := bodyStart + endRel
 	return output[:bodyStart] + "\n" + strings.TrimSpace(newBody) + "\n" + output[bodyEnd:]
 }
 
 func (w *Worker) buildRedoRequest(
-	task models.Task, profile models.AgentProfile, step PlanStep, errDesc, priorBody string,
+	task models.Task, step PlanStep, errDesc, priorBody string,
 ) gateway.AIRequest {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Repair ONLY step %q from the work plan.\n", step.ID)
@@ -125,7 +140,7 @@ func (w *Worker) buildRedoRequest(
 }
 
 func (w *Worker) repairSection(
-	ctx context.Context, task models.Task, profile models.AgentProfile,
+	ctx context.Context, task models.Task,
 	step PlanStep, errDesc, priorBody string, budgetGuard *BudgetGuard,
 ) (string, error) {
 	if budgetGuard != nil {
@@ -133,7 +148,7 @@ func (w *Worker) repairSection(
 			return "", err
 		}
 	}
-	req := w.buildRedoRequest(task, profile, step, errDesc, priorBody)
+	req := w.buildRedoRequest(task, step, errDesc, priorBody)
 	resp, err := w.gateway.Generate(ctx, req)
 	if err != nil {
 		return "", err
@@ -156,7 +171,7 @@ func stepValidationError(step PlanStep, output string) string {
 }
 
 func (w *Worker) repairOutputWithPlan(
-	ctx context.Context, task models.Task, profile models.AgentProfile, plan *Plan, output string,
+	ctx context.Context, task models.Task, plan *Plan, output string,
 	budgetGuard *BudgetGuard,
 ) string {
 	if plan == nil || w.planningCfg.ComplexityThreshold <= 0 {
@@ -176,7 +191,7 @@ func (w *Worker) repairOutputWithPlan(
 			}
 			errDesc := stepValidationError(step, output)
 			prior, _ := extractSection(output, step.ID)
-			newBody, err := w.repairSection(ctx, task, profile, step, errDesc, prior, budgetGuard)
+			newBody, err := w.repairSection(ctx, task, step, errDesc, prior, budgetGuard)
 			passes[step.ID]++
 			if err != nil {
 				continue
