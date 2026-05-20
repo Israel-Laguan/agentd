@@ -73,6 +73,22 @@ func TestIterationGuard_ResetAllowFinal(t *testing.T) {
 	}
 }
 
+func TestIterationGuard_ResetRestoresBudget(t *testing.T) {
+	g := NewIterationGuard(2)
+	g.AfterIteration(true)
+	g.AfterIteration(true)
+	if !g.IsExceeded() {
+		t.Fatal("precondition: guard should be exceeded")
+	}
+	g.reset()
+	if err := g.BeforeIteration(); err != nil {
+		t.Fatalf("expected iteration allowed after reset, got %v", err)
+	}
+	if g.IsExceeded() {
+		t.Fatal("should not be exceeded after reset")
+	}
+}
+
 func TestIterationGuard_NoToolCalls_DoesNotCount(t *testing.T) {
 	g := NewIterationGuard(2)
 	g.AfterIteration(false)

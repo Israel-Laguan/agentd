@@ -17,6 +17,71 @@ func testContextManager(t *testing.T) *ContextManager {
 	return NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent", "task")
 }
 
+func TestResolveEditContextManager_PerCallOverride(t *testing.T) {
+	t.Parallel()
+	editorCM := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-default", "task-default")
+	sessionCM := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-session", "task-session")
+
+	tests := []struct {
+		name      string
+		sessionCM *ContextManager
+		editorCM  *ContextManager
+		want      *ContextManager
+		wantFresh bool
+	}{
+		{"session overrides editor", sessionCM, editorCM, sessionCM, false},
+		{"editor when session nil", nil, editorCM, editorCM, false},
+		{"default when both nil", nil, nil, nil, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := resolveEditContextManager(tc.sessionCM, tc.editorCM)
+			if tc.wantFresh {
+				if got == nil {
+					t.Fatal("resolveEditContextManager() = nil, want non-nil default")
+				}
+				return
+			}
+			if got != tc.want {
+				t.Fatalf("resolveEditContextManager() = %p, want %p", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMessageEditor_Edit_PerCallCmOverride(t *testing.T) {
+	t.Parallel()
+	defaultCM := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-default", "task-default")
+	sessionCM := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-session", "task-session")
+	if resolveEditContextManager(sessionCM, defaultCM) != sessionCM {
+		t.Fatal("precondition: per-call cm must take precedence over editor default")
+	}
+	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, defaultCM)
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "user", Content: "clarify"},
+		{Role: "assistant", Content: "wrong"},
+		{Role: "assistant", Content: "later"},
+	}
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "revised clarify", sessionCM)
+	if err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("len(messages) = %d, want 3 (anchor + revised turn0)", len(messages))
+	}
+	if messages[2].Content != "revised clarify" {
+		t.Fatalf("turn0 user = %q, want revised clarify", messages[2].Content)
+	}
+	for _, m := range messages {
+		if m.Content == "later" || m.Content == "wrong" {
+			t.Fatalf("downstream content should be dropped, got %+v", messages)
+		}
+	}
+}
+
 func TestMessageEditor_Edit_TruncatesFromTurn(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)

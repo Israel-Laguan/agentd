@@ -37,9 +37,18 @@ func (s *agenticRewindState) apply(rewindTo int) (stagnation bool) {
 	return s.streak > maxRewindStreak
 }
 
-func (s *agenticRewindState) reset() {
-	s.lastTarget = -2
-	s.streak = 0
+func resetAgenticStateForRewind(in agenticTurnLoopInput) {
+	if in.toolTracker != nil {
+		in.toolTracker.reset()
+	}
+	if in.iterationGuard != nil {
+		in.iterationGuard.reset()
+	}
+	if in.goalTracker != nil {
+		if g := GoalFromTask(in.task); g != nil {
+			in.goalTracker.SetGoal(*g)
+		}
+	}
 }
 
 type agenticTurnLoopInput struct {
@@ -102,9 +111,9 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 				return r, true
 			}
 			turnIndex = rewindTo
+			resetAgenticStateForRewind(in)
 			continue
 		}
-		rewind.reset()
 		turnIndex++
 	}
 }
