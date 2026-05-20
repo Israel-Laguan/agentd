@@ -223,6 +223,10 @@ func (s *apiStore) IncrementRetryCount(context.Context, string, time.Time) (*mod
 func (s *apiStore) UpdateTaskState(context.Context, string, time.Time, models.TaskState) (*models.Task, error) {
 	return &s.task, nil
 }
+func (s *apiStore) UpdateTaskDescription(_ context.Context, _ string, _ time.Time, description string) (*models.Task, error) {
+	s.task.Description = description
+	return &s.task, nil
+}
 func (s *apiStore) UpdateTaskResult(context.Context, string, time.Time, models.TaskResult) (*models.Task, error) {
 	return &s.task, nil
 }

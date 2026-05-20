@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
 )
 
@@ -25,13 +27,33 @@ type fakeGateway struct {
 	nextToolCalls  []gateway.ToolCall
 }
 
+func (g *fakeGateway) isElicitorRequest(req gateway.AIRequest) bool {
+	if !req.JSONMode || req.Role != gateway.RoleMemory {
+		return false
+	}
+	for _, m := range req.Messages {
+		if m.Role == "system" && strings.Contains(m.Content, "pre-task ambiguity") {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *fakeGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.requests = append(g.requests, req)
+	if g.isElicitorRequest(req) {
+		return gateway.AIResponse{Content: `{"needs_clarification":false}`}, g.err
+	}
 	content := g.content
 	var toolCalls []gateway.ToolCall
-	requestNum := len(g.requests)
+	requestNum := 0
+	for _, r := range g.requests {
+		if !g.isElicitorRequest(r) {
+			requestNum++
+		}
+	}
 
 	if requestNum == 1 {
 		toolCalls = g.toolCalls
@@ -138,8 +160,11 @@ func newWorkerStore() *workerStore {
 	now := time.Now().UTC()
 	return &workerStore{
 		task: models.Task{
-			BaseEntity: models.BaseEntity{ID: "task", UpdatedAt: now},
-			ProjectID:  "project", AgentID: "default", State: models.TaskStateQueued,
+			BaseEntity:  models.BaseEntity{ID: "task", UpdatedAt: now},
+			ProjectID:   "project",
+			AgentID:     "default",
+			Description: worker.AgenticTestTaskDescription(),
+			State:       models.TaskStateQueued,
 		},
 		project: models.Project{BaseEntity: models.BaseEntity{ID: "project"}, WorkspacePath: "/tmp"},
 		profile: models.AgentProfile{ID: "default", Temperature: 0.2, SystemPrompt: sql.NullString{
@@ -166,6 +191,12 @@ func (s *workerStore) UpdateTaskHeartbeat(context.Context, string) error {
 
 func (s *workerStore) IncrementRetryCount(context.Context, string, time.Time) (*models.Task, error) {
 	s.task.RetryCount++
+	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
+	return &s.task, nil
+}
+
+func (s *workerStore) UpdateTaskDescription(_ context.Context, _ string, _ time.Time, description string) (*models.Task, error) {
+	s.task.Description = description
 	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
 	return &s.task, nil
 }

@@ -59,10 +59,11 @@ func initializeWorkerScenario(sc *godog.ScenarioContext) {
 	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 		state.store = &workerTestStore{
 			task: models.Task{
-				BaseEntity: models.BaseEntity{ID: "task-1"},
-				ProjectID:  "project-1",
-				AgentID:    "default",
-				State:      models.TaskStateQueued,
+				BaseEntity:  models.BaseEntity{ID: "task-1"},
+				ProjectID:   "project-1",
+				AgentID:     "default",
+				Description: worker.AgenticTestTaskDescription(),
+				State:       models.TaskStateQueued,
 			},
 			project: models.Project{
 				BaseEntity:    models.BaseEntity{ID: "project-1"},
