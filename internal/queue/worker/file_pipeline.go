@@ -101,24 +101,8 @@ func (p *FilePipeline) ingest(ctx context.Context, relPath, resolvedPath string,
 	size := info.Size()
 	mtime := info.ModTime().Unix()
 
-	if p.store != nil {
-		if cached, ok := p.store.Get(hash, size, mtime); ok {
-			doc := *cached
-			doc.Path = relPath
-			if embed && p.embedder != nil && len(doc.Embedding) == 0 {
-				snippet := firstNTokens(doc.Markdown, embedSnippetTokens)
-				vecs, embedErr := p.embedder.Embed(ctx, []string{snippet})
-				if embedErr != nil {
-					slog.Warn("file pipeline embed failed", "path", relPath, "error", embedErr)
-				} else if len(vecs) > 0 {
-					doc.Embedding = vecs[0]
-					if err := p.store.Put(&doc); err != nil {
-						slog.Warn("doc store put failed", "path", relPath, "error", err)
-					}
-				}
-			}
-			return &doc, nil
-		}
+	if doc, ok := p.ingestFromCache(ctx, relPath, hash, size, mtime, embed); ok {
+		return doc, nil
 	}
 
 	convertPath := resolvedPath
@@ -131,14 +115,8 @@ func (p *FilePipeline) ingest(ctx context.Context, relPath, resolvedPath string,
 	}
 
 	var embedding []float32
-	if embed && p.embedder != nil {
-		snippet := firstNTokens(markdown, embedSnippetTokens)
-		vecs, embedErr := p.embedder.Embed(ctx, []string{snippet})
-		if embedErr != nil {
-			slog.Warn("file pipeline embed failed", "path", relPath, "error", embedErr)
-		} else if len(vecs) > 0 {
-			embedding = vecs[0]
-		}
+	if embed {
+		embedding = p.embedMarkdown(ctx, relPath, markdown)
 	}
 
 	doc := &CachedDoc{
@@ -157,6 +135,52 @@ func (p *FilePipeline) ingest(ctx context.Context, relPath, resolvedPath string,
 		}
 	}
 	return doc, nil
+}
+
+func (p *FilePipeline) ingestFromCache(ctx context.Context, relPath, hash string, size, mtime int64, embed bool) (*CachedDoc, bool) {
+	if p.store == nil {
+		return nil, false
+	}
+	cached, ok := p.store.Get(hash, size, mtime)
+	if !ok {
+		return nil, false
+	}
+	doc := *cached
+	doc.Path = relPath
+	p.backfillEmbedding(ctx, relPath, &doc, embed)
+	return &doc, true
+}
+
+func (p *FilePipeline) backfillEmbedding(ctx context.Context, relPath string, doc *CachedDoc, embed bool) {
+	if !embed || len(doc.Embedding) > 0 {
+		return
+	}
+	embedding := p.embedMarkdown(ctx, relPath, doc.Markdown)
+	if embedding == nil {
+		return
+	}
+	doc.Embedding = embedding
+	if p.store != nil {
+		if err := p.store.Put(doc); err != nil {
+			slog.Warn("doc store put failed", "path", relPath, "error", err)
+		}
+	}
+}
+
+func (p *FilePipeline) embedMarkdown(ctx context.Context, relPath, markdown string) []float32 {
+	if p.embedder == nil {
+		return nil
+	}
+	snippet := firstNTokens(markdown, embedSnippetTokens)
+	vecs, err := p.embedder.Embed(ctx, []string{snippet})
+	if err != nil {
+		slog.Warn("file pipeline embed failed", "path", relPath, "error", err)
+		return nil
+	}
+	if len(vecs) == 0 {
+		return nil
+	}
+	return vecs[0]
 }
 
 func formatDocsForInjection(docs []*CachedDoc) string {
