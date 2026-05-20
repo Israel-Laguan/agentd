@@ -81,6 +81,8 @@ func (o *OpenAI) embeddingsURL() string {
 	return strings.TrimRight(o.cfg.BaseURL, "/") + "/embeddings"
 }
 
+var _ EmbedBackend = (*OpenAI)(nil)
+
 // Embed implements EmbedBackend using the OpenAI embeddings API.
 func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	if len(req.Input) == 0 {
@@ -91,10 +93,7 @@ func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedRe
 		ctx, cancel = context.WithTimeout(ctx, o.cfg.Timeout)
 		defer cancel()
 	}
-	model := o.cfg.Model
-	if req.Model != "" {
-		model = req.Model
-	}
+	model := req.Model
 	if model == "" {
 		model = "text-embedding-3-small"
 	}
@@ -110,17 +109,21 @@ func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedRe
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return spec.EmbedResponse{}, fmt.Errorf("decode openai embeddings: %w", err)
 	}
-	vectors := make([][]float32, len(decoded.Data))
+	vectors := make([][]float32, len(req.Input))
 	for _, item := range decoded.Data {
 		if item.Index < 0 || item.Index >= len(vectors) {
 			continue
 		}
 		vectors[item.Index] = item.Embedding
 	}
+	modelUsed := decoded.Model
+	if modelUsed == "" {
+		modelUsed = model
+	}
 	return spec.EmbedResponse{
 		Vectors:      vectors,
 		ProviderUsed: string(spec.ProviderOpenAI),
-		ModelUsed:    decoded.Model,
+		ModelUsed:    modelUsed,
 	}, nil
 }
 

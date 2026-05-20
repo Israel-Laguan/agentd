@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"agentd/internal/gateway"
 )
@@ -94,7 +95,8 @@ func TestFilePipeline_ProcessRead_CacheHit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := pipe.ProcessRead(context.Background(), rel, raw, info)
+	full := filepath.Join(workspace, rel)
+	first, err := pipe.ProcessRead(context.Background(), rel, full, raw, info)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +106,7 @@ func TestFilePipeline_ProcessRead_CacheHit(t *testing.T) {
 	if atomic.LoadInt32(&counter.calls) != 1 {
 		t.Fatalf("converter calls = %d, want 1", counter.calls)
 	}
-	second, err := pipe.ProcessRead(context.Background(), rel, raw, info)
+	second, err := pipe.ProcessRead(context.Background(), rel, full, raw, info)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,12 +208,138 @@ func TestFilePipeline_Process_TopKInjection(t *testing.T) {
 	}
 }
 
+func TestFilePipeline_Process_RejectsPathEscape(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	parent := filepath.Dir(workspace)
+	outside := filepath.Join(parent, "outside_escape_test.txt")
+	if err := os.WriteFile(outside, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(outside) })
+
+	pipe := NewFilePipeline(FilePipelineConfig{Workspace: workspace, TopK: 5})
+	_, err := pipe.Process(context.Background(), []string{"../outside_escape_test.txt"})
+	if err == nil {
+		t.Fatal("expected path escape error")
+	}
+	if !strings.Contains(err.Error(), "escapes workspace") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFilePipeline_CacheHitPreservesPath(t *testing.T) {
+	t.Parallel()
+	store, err := NewDocStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("same content")
+	hash := contentHash(content)
+	doc := &CachedDoc{
+		ContentHash: hash,
+		Path:        "first.txt",
+		Markdown:    "cached body",
+		SourceSize:  int64(len(content)),
+		SourceMtime: 100,
+	}
+	if err := store.Put(doc); err != nil {
+		t.Fatal(err)
+	}
+	pipe := NewFilePipeline(FilePipelineConfig{
+		Workspace: t.TempDir(),
+		Store:     store,
+	})
+	info := &fakeFileInfo{size: int64(len(content)), mtime: 100}
+	got, err := pipe.ingest(context.Background(), "second.txt", "", content, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Path != "second.txt" {
+		t.Fatalf("path = %q, want second.txt", got.Path)
+	}
+}
+
+type fakeFileInfo struct {
+	size  int64
+	mtime int64
+}
+
+func (f *fakeFileInfo) Name() string       { return "f" }
+func (f *fakeFileInfo) Size() int64        { return f.size }
+func (f *fakeFileInfo) Mode() os.FileMode  { return 0644 }
+func (f *fakeFileInfo) ModTime() time.Time { return time.Unix(f.mtime, 0) }
+func (f *fakeFileInfo) IsDir() bool        { return false }
+func (f *fakeFileInfo) Sys() any           { return nil }
+
+func TestDefaultConvertUsesRawBytes(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "note.txt")
+	raw := []byte("from-raw-bytes")
+	out, err := defaultConvert(context.Background(), path, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != string(raw) {
+		t.Fatalf("got %q, want raw bytes", out)
+	}
+}
+
+func TestFileSelector_PinnedExceedsTopK(t *testing.T) {
+	t.Parallel()
+	embedder := &fakeEmbedder{}
+	sel := NewFileSelector(embedder, 2)
+	pinned := map[string]struct{}{}
+	docs := make([]*CachedDoc, 0, 3)
+	for i := 0; i < 3; i++ {
+		p := filepath.Join("docs", "pin"+string(rune('a'+i))+".md")
+		pinned[normalizePathKey(p)] = struct{}{}
+		docs = append(docs, &CachedDoc{Path: p, Markdown: strings.Repeat("noise ", 50)})
+	}
+	selected, err := sel.Select(context.Background(), strings.Repeat("alpha ", 30), docs, pinned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 3 {
+		t.Fatalf("selected %d docs, want all 3 pinned", len(selected))
+	}
+}
+
 func TestParsePinnedPaths(t *testing.T) {
 	t.Parallel()
 	q := "do something\n\n[agentd file reference]\nname: spec.pdf\npath: uploads/spec.pdf\n"
 	got := ParsePinnedPaths(q)
 	if len(got) != 1 || got[0] != "uploads/spec.pdf" {
 		t.Fatalf("got %v", got)
+	}
+}
+
+type failingConverter struct{}
+
+func (failingConverter) convert(context.Context, string, []byte) (string, error) {
+	return "", os.ErrInvalid
+}
+
+func TestToolExecutor_Read_PipelineFallback(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	content := "raw-fallback-content"
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex.filePipeline = NewFilePipeline(FilePipelineConfig{
+		Workspace: dir,
+		Converter: NewFileConverterWith(failingConverter{}.convert),
+		TopK:      5,
+	})
+	out := ex.Execute(context.Background(), gatewayToolCallRead("note.txt"))
+	if strings.Contains(out, toolErrorPrefix) {
+		t.Fatalf("expected raw fallback, got error: %s", out)
+	}
+	if out != content {
+		t.Fatalf("got %q, want %q", out, content)
 	}
 }
 
