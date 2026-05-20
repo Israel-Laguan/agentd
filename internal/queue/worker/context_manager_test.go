@@ -94,11 +94,36 @@ func TestGroupTurns_AssistantAfterToolSameTurn(t *testing.T) {
 		{Role: "assistant", Content: "ast2"},
 	}
 	turns := cm.groupTurns(messages)
-	if len(turns) != 1 {
-		t.Fatalf("expected 1 turn, got %d", len(turns))
+	if len(turns) != 2 {
+		t.Fatalf("expected 2 turns, got %d", len(turns))
 	}
-	if len(turns[0].Messages) != 4 {
-		t.Fatalf("expected 4 messages in turn 0, got %d", len(turns[0].Messages))
+	if len(turns[0].Messages) != 3 {
+		t.Fatalf("expected 3 messages in turn 0, got %d", len(turns[0].Messages))
+	}
+	if len(turns[1].Messages) != 1 {
+		t.Fatalf("expected 1 message in turn 1, got %d", len(turns[1].Messages))
+	}
+}
+
+func TestGroupTurns_AgenticToolCycles(t *testing.T) {
+	cm := &ContextManager{}
+	messages := []spec.PromptMessage{
+		{Role: "user", Content: "user1"},
+		{Role: "assistant", Content: "ast1", ToolCalls: []spec.ToolCall{{ID: "1"}}},
+		{Role: "tool", ToolCallID: "1", Content: "res1"},
+		{Role: "assistant", Content: "ast2", ToolCalls: []spec.ToolCall{{ID: "2"}}},
+		{Role: "tool", ToolCallID: "2", Content: "res2"},
+		{Role: "assistant", Content: "ast3"},
+	}
+	turns := cm.groupTurns(messages)
+	if len(turns) != 3 {
+		t.Fatalf("expected 3 turns, got %d", len(turns))
+	}
+	wantLens := []int{3, 2, 1}
+	for i, want := range wantLens {
+		if len(turns[i].Messages) != want {
+			t.Errorf("turn %d: expected %d messages, got %d", i, want, len(turns[i].Messages))
+		}
 	}
 }
 

@@ -29,11 +29,25 @@ func (cm *ContextManager) partitionAnchor(messages []spec.PromptMessage) ([]spec
 	return messages[:anchorEnd], messages[anchorEnd:]
 }
 
+func (cm *ContextManager) hasAssistant(t Turn) bool {
+	for _, m := range t.Messages {
+		if m.Role == "assistant" {
+			return true
+		}
+	}
+	return false
+}
+
 func (cm *ContextManager) groupTurns(messages []spec.PromptMessage) []Turn {
 	var turns []Turn
 	var currentTurn Turn
 	for _, m := range messages {
-		if m.Role == "user" && len(currentTurn.Messages) > 0 {
+		if m.Role == "assistant" && len(currentTurn.Messages) > 0 {
+			if cm.hasAssistant(currentTurn) {
+				turns = append(turns, currentTurn)
+				currentTurn = Turn{}
+			}
+		} else if m.Role == "user" && len(currentTurn.Messages) > 0 {
 			turns = append(turns, currentTurn)
 			currentTurn = Turn{}
 		}
