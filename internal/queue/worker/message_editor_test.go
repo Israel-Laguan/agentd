@@ -111,6 +111,28 @@ func TestMessageEditor_Commit_AppendsOnly(t *testing.T) {
 	}
 }
 
+func TestMessageEditor_Edit_NoCheckpointOnValidationFailure(t *testing.T) {
+	t.Parallel()
+	cm := testContextManager(t)
+	store := NewMemoryCheckpointStore()
+	editor := NewMessageEditor(store, nil, cm)
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+	}
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "nope")
+	if err == nil {
+		t.Fatal("expected error when no post-anchor turns exist")
+	}
+	result, err := editor.Edit(context.Background(), "sess", "sess:1", &messages, EditAnchorUserTurn, "task v2")
+	if err != nil {
+		t.Fatalf("valid Edit: %v", err)
+	}
+	if result.CheckpointID != "sess:cp:1" {
+		t.Fatalf("checkpoint id = %q, want sess:cp:1 (failed edit must not consume an id)", result.CheckpointID)
+	}
+}
+
 func TestMessageEditor_Edit_RejectsInvalidTurnIndex(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)

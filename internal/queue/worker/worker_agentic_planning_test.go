@@ -50,7 +50,7 @@ func (g *planningSequenceGateway) Generate(_ context.Context, req gateway.AIRequ
 			}
 		}
 	}
-	if strings.Contains(user, "Revise the user task prompt") {
+	if strings.HasPrefix(user, "Revise the user task prompt") {
 		return gateway.AIResponse{Content: "revised task with clearer acceptance criteria"}, nil
 	}
 	if g.callCount >= len(g.responses) {
