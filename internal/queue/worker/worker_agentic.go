@@ -50,12 +50,13 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, budgetGuard)
 
-	for turnIndex := 0; ; turnIndex++ {
+	respecAttempts := 0
+	for turnIndex := 0; ; {
 		turnID := fmt.Sprintf("%s:%d", task.ID, turnIndex)
-		cont, result, report, _, err := w.processAgenticIteration(
+		cont, result, report, rewindTo, err := w.processAgenticIteration(
 			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
 			iterationGuard, budgetGuard, deadlineGuard, ctxBudgetGuard, cm, goalTracker,
-			taskHooks, taskCaps, toolTracker, workPlan, turnID, turnIndex,
+			taskHooks, taskCaps, toolTracker, workPlan, turnID, turnIndex, &respecAttempts,
 		)
 		if err != nil {
 			return LoopResult{}, false
@@ -67,6 +68,11 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		if !cont {
 			return LoopResult{}, false
 		}
+		if rewindTo >= 0 {
+			turnIndex = rewindTo
+			continue
+		}
+		turnIndex++
 	}
 }
 
@@ -197,32 +203,40 @@ func (w *Worker) processAgenticIteration(
 	cm *ContextManager, goalTracker *GoalTracker,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
 	toolTracker *toolFailureTracker, workPlan *Plan, turnID string, turnIndex int,
-) (continueLoop bool, result LoopResult, report bool, generated bool, err error) {
+	respecAttempts *int,
+) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
 	if stop, guardErr := w.guardAgenticIteration(
 		ctx, task, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
 		ctxBudgetGuard, cm, goalTracker, turnID, turnIndex,
 	); stop != nil {
-		return false, *stop, true, false, nil
+		return false, *stop, true, -1, nil
 	} else if guardErr != nil {
-		return false, LoopResult{}, false, false, guardErr
+		return false, LoopResult{}, false, -1, guardErr
 	}
 
 	resp, stop, err := w.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex)
 	if stop != nil {
-		return false, *stop, true, false, nil
+		return false, *stop, true, -1, nil
 	}
 	if err != nil {
-		return false, LoopResult{}, false, false, err
+		return false, LoopResult{}, false, -1, err
 	}
 	budgetGuard.AfterCall(resp.TokenUsage)
 	if w.tokenUsageHook != nil && resp.TokenUsage > 0 {
 		w.tokenUsageHook(resp.TokenUsage)
 	}
-	appendAssistantMessage(messages, resp)
+	if w.messageEditor != nil {
+		w.messageEditor.CommitAssistant(messages, resp)
+	} else {
+		appendAssistantMessage(messages, resp)
+	}
 
 	if len(resp.ToolCalls) == 0 {
-		cont, res, rep, finErr := w.finishAgenticTurnNoTools(ctx, task, profile, resp.Content, workPlan, goalTracker, turnIndex, budgetGuard, ctxBudgetGuard, messages)
-		return cont, res, rep, true, finErr
+		cont, res, rep, rewind, finErr := w.finishAgenticTurnNoTools(
+			ctx, task, profile, resp.Content, workPlan, goalTracker,
+			turnID, turnIndex, budgetGuard, ctxBudgetGuard, cm, messages, respecAttempts,
+		)
+		return cont, res, rep, rewind, finErr
 	}
 
 	cont, res, rep, finErr := w.continueAgenticAfterTools(
@@ -230,7 +244,7 @@ func (w *Worker) processAgenticIteration(
 		taskHooks, taskCaps, cm, goalTracker, toolTracker,
 		iterationGuard, budgetGuard, turnID, turnIndex,
 	)
-	return cont, res, rep, true, finErr
+	return cont, res, rep, -1, finErr
 }
 
 func (w *Worker) generateAgenticTurn(

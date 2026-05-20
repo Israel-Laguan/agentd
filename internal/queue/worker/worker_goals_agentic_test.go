@@ -45,6 +45,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 		store:   &mockCommitStore{text: &committedText},
 		gateway: &sequenceGateway{responses: []gateway.AIResponse{{Content: "[COMPLETED] a\nfinal response"}}},
 	}
+	w.messageEditor = NewMessageEditor(NewMemoryCheckpointStore(), nil, nil)
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123"}, ProjectID: "project-123", AgentID: "agent-123"}
 	goalTracker := NewGoalTracker(task.ID, task.ProjectID)
 	goalTracker.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}})
@@ -52,6 +53,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 	messages := []gateway.PromptMessage{{Role: "user", Content: "do work"}}
 
 	ctxBudget := NewContextBudgetGuard(60000, 0)
+	respecAttempts := 0
 	cont, result, report, _, err := w.processAgenticIteration(
 		context.Background(),
 		task,
@@ -72,6 +74,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 		nil,
 		"task-123:0",
 		0,
+		&respecAttempts,
 	)
 	if err != nil {
 		t.Fatalf("processAgenticIteration() error = %v", err)
