@@ -287,4 +287,10 @@ func TestAgenticPlanning_RedoCapAtThreePasses(t *testing.T) {
 	if redoCount != 3 {
 		t.Fatalf("redo gateway calls = %d, want 3", redoCount)
 	}
+	if store.committedResult == nil {
+		t.Fatal("expected committed result")
+	}
+	if strings.Contains(store.committedResult.Payload, "<!-- step:") {
+		t.Fatalf("committed payload should not contain step markers: %q", store.committedResult.Payload)
+	}
 }
