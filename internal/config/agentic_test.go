@@ -21,6 +21,35 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 	if cfg.ToolFailureStreak != DefaultToolFailureStreak {
 		t.Fatalf("ToolFailureStreak = %d, want %d", cfg.ToolFailureStreak, DefaultToolFailureStreak)
 	}
+	if cfg.Planning.ComplexityThreshold != 0 {
+		t.Fatalf("Planning.ComplexityThreshold = %d, want 0", cfg.Planning.ComplexityThreshold)
+	}
+	if cfg.Planning.MaxRedoPasses != DefaultPlanningMaxRedoPasses {
+		t.Fatalf("Planning.MaxRedoPasses = %d, want %d", cfg.Planning.MaxRedoPasses, DefaultPlanningMaxRedoPasses)
+	}
+	if cfg.Planning.PlanContextMaxChars != DefaultPlanContextMaxChars {
+		t.Fatalf("Planning.PlanContextMaxChars = %d, want %d", cfg.Planning.PlanContextMaxChars, DefaultPlanContextMaxChars)
+	}
+}
+
+func TestLoadAgenticConfig_PlanningOverride(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	v.Set("agentic.planning.complexity_threshold", 500)
+	v.Set("agentic.planning.max_redo_passes", 5)
+	v.Set("agentic.planning.plan_context_max_chars", 2000)
+
+	cfg := loadAgenticConfig(v)
+	if cfg.Planning.ComplexityThreshold != 500 {
+		t.Fatalf("ComplexityThreshold = %d, want 500", cfg.Planning.ComplexityThreshold)
+	}
+	if cfg.Planning.MaxRedoPasses != 5 {
+		t.Fatalf("MaxRedoPasses = %d, want 5", cfg.Planning.MaxRedoPasses)
+	}
+	if cfg.Planning.PlanContextMaxChars != 2000 {
+		t.Fatalf("PlanContextMaxChars = %d, want 2000", cfg.Planning.PlanContextMaxChars)
+	}
 }
 
 func TestAgenticExternalToolsOverride_Viper(t *testing.T) {

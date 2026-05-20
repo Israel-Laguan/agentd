@@ -156,6 +156,13 @@ agentic:
     cache_path: "file-cache"              # relative to agentd home
     embedding_model: "text-embedding-3-small"
 
+  # Two-phase plan→execute for complex agentic tasks (Task 38).
+  # complexity_threshold: 0 disables planning; e.g. 500 enables for long tasks.
+  planning:
+    complexity_threshold: 0
+    max_redo_passes: 3
+    plan_context_max_chars: 4000
+
 # Sandbox command execution hardening.
 sandbox:
   inactivity_timeout: "60s"
