@@ -40,7 +40,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	toolTracker := newToolFailureTracker(w.toolFailureStreak)
 
 	var workPlan *Plan
-	if w.shouldPlan(task) {
+	if w.shouldPlanWithBudget(task, budgetGuard) {
 		var planErr error
 		workPlan, planErr = w.generatePlan(cancelCtx, task, project, budgetGuard)
 		if planErr != nil {
