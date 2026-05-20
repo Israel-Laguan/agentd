@@ -48,17 +48,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	ctxBudgetGuard := NewContextBudgetGuard(contextBudget, w.contextWarningThreshold)
 	toolTracker := newToolFailureTracker(w.toolFailureStreak)
 
-	var workPlan *Plan
-	if w.shouldPlanWithBudget(task, budgetGuard) {
-		var planErr error
-		workPlan, planErr = w.generatePlan(cancelCtx, task, project, budgetGuard)
-		if planErr != nil {
-			slog.Warn("failed to generate work plan; continuing without plan", "task_id", task.ID, "error", planErr)
-		}
-		if planErr == nil && workPlan != nil {
-			messages = w.injectPlan(messages, workPlan)
-		}
-	}
+	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, budgetGuard)
 
 	for turnIndex := 0; ; turnIndex++ {
 		turnID := fmt.Sprintf("%s:%d", task.ID, turnIndex)
@@ -78,6 +68,24 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			return LoopResult{}, false
 		}
 	}
+}
+
+func (w *Worker) injectWorkPlanIfNeeded(
+	ctx context.Context, task models.Task, project models.Project,
+	messages []gateway.PromptMessage, budgetGuard *BudgetGuard,
+) ([]gateway.PromptMessage, *Plan) {
+	if !w.shouldPlanWithBudget(task, budgetGuard) {
+		return messages, nil
+	}
+	workPlan, planErr := w.generatePlan(ctx, task, project, budgetGuard)
+	if planErr != nil {
+		slog.Warn("failed to generate work plan; continuing without plan", "task_id", task.ID, "error", planErr)
+		return messages, nil
+	}
+	if workPlan != nil {
+		messages = w.injectPlan(messages, workPlan)
+	}
+	return messages, workPlan
 }
 
 func (w *Worker) guardAgenticIteration(
