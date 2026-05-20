@@ -46,11 +46,12 @@ type mockAgenticStore struct {
 func newMockAgenticStore(taskID string) *mockAgenticStore {
 	store := &mockAgenticStore{
 		task: models.Task{
-			BaseEntity: models.BaseEntity{ID: taskID},
-			ProjectID:  "project-1",
-			AgentID:    "agent-1",
-			Title:      "Run agentic loop",
-			State:      models.TaskStateQueued,
+			BaseEntity:  models.BaseEntity{ID: taskID},
+			ProjectID:   "project-1",
+			AgentID:     "agent-1",
+			Title:       "Run agentic loop",
+			Description: AgenticTestTaskDescription(),
+			State:       models.TaskStateQueued,
 		},
 		project: models.Project{
 			BaseEntity:    models.BaseEntity{ID: "project-1"},
@@ -154,6 +155,11 @@ func (m *mockAgenticStore) IncrementRetryCount(_ context.Context, _ string, _ ti
 
 func (m *mockAgenticStore) UpdateTaskState(_ context.Context, _ string, _ time.Time, next models.TaskState) (*models.Task, error) {
 	m.task.State = next
+	return &m.task, nil
+}
+
+func (m *mockAgenticStore) UpdateTaskDescription(_ context.Context, _ string, _ time.Time, description string) (*models.Task, error) {
+	m.task.Description = description
 	return &m.task, nil
 }
 

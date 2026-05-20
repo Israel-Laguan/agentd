@@ -2,6 +2,7 @@ package worker_test
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"agentd/internal/gateway"
@@ -27,6 +28,11 @@ func (s *workerTestStore) UpdateTaskHeartbeat(context.Context, string) error {
 
 func (s *workerTestStore) IncrementRetryCount(_ context.Context, _ string, _ time.Time) (*models.Task, error) {
 	s.task.RetryCount++
+	return &s.task, nil
+}
+
+func (s *workerTestStore) UpdateTaskDescription(_ context.Context, _ string, _ time.Time, description string) (*models.Task, error) {
+	s.task.Description = description
 	return &s.task, nil
 }
 
@@ -217,8 +223,23 @@ type workerTestGateway struct {
 	lastResponseToolCalls int  // Track tool calls count in the last response
 }
 
+func (g *workerTestGateway) isElicitorRequest(req gateway.AIRequest) bool {
+	if !req.JSONMode || req.Role != gateway.RoleMemory {
+		return false
+	}
+	for _, m := range req.Messages {
+		if m.Role == "system" && strings.Contains(m.Content, "pre-task ambiguity") {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *workerTestGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
 	g.requests = append(g.requests, req)
+	if g.isElicitorRequest(req) {
+		return gateway.AIResponse{Content: `{"needs_clarification":false}`}, g.err
+	}
 	g.callCount++
 
 	// Handle sequence: first call returns tool calls, second returns plain text

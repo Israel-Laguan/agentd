@@ -206,7 +206,7 @@ func TestWorkerAgenticModeExecutesToolAndContinuesLoop(t *testing.T) {
 		t.Fatalf("commands = %#v, want [echo hello]", sb.commands)
 	}
 	if len(gw.requests) != 2 {
-		t.Fatalf("gateway requests = %d, want 2", len(gw.requests))
+		t.Fatalf("gateway requests = %d, want 2 (tool + final)", len(gw.requests))
 	}
 }
 
@@ -229,7 +229,7 @@ func TestWorkerAgenticModeTerminatesLoopOnTextResponse(t *testing.T) {
 		t.Fatalf("payload = %v, want Final response text", store.result.Payload)
 	}
 	if len(gw.requests) != 1 {
-		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
+		t.Fatalf("gateway requests = %d, want 1 (final)", len(gw.requests))
 	}
 	if len(sb.commands) != 0 {
 		t.Fatalf("commands = %#v, want none", sb.commands)
@@ -258,7 +258,7 @@ func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
 		t.Fatalf("commands = %#v, want [false]", sb.commands)
 	}
 	if len(gw.requests) != 2 {
-		t.Fatalf("gateway requests = %d, want 2", len(gw.requests))
+		t.Fatalf("gateway requests = %d, want 2 (tool + final)", len(gw.requests))
 	}
 	var toolMessage *gateway.PromptMessage
 	for i := range gw.requests[1].Messages {

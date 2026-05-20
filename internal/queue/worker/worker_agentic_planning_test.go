@@ -21,9 +21,21 @@ type planningSequenceGateway struct {
 	redoBodies map[string]string
 }
 
+func (g *planningSequenceGateway) isPlanRequest(req gateway.AIRequest) bool {
+	if !req.JSONMode {
+		return false
+	}
+	for _, m := range req.Messages {
+		if m.Role == "system" && strings.Contains(m.Content, "task planner") {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *planningSequenceGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
 	g.requests = append(g.requests, req)
-	if req.JSONMode {
+	if g.isPlanRequest(req) {
 		return gateway.AIResponse{Content: g.planJSON}, nil
 	}
 	user := ""
@@ -89,7 +101,7 @@ ok2
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Complex",
-		Description: strings.Repeat("detail ", 80),
+		Description: strings.Repeat("detail ", 80) + "\n- must complete all plan steps\nAcceptance: committed output matches plan.",
 		State:       models.TaskStateQueued,
 	}
 	store.task = task
@@ -139,7 +151,7 @@ func TestAgenticPlanning_TightTokenBudgetSkipsPlanPhase(t *testing.T) {
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Complex",
-		Description: strings.Repeat("detail ", 80),
+		Description: strings.Repeat("detail ", 80) + "\n- must complete all plan steps\nAcceptance: committed output matches plan.",
 		State:       models.TaskStateQueued,
 	}
 	store.task = task
@@ -172,7 +184,7 @@ func TestAgenticPlanning_SimpleTaskSkipsPlanning(t *testing.T) {
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Hi",
-		Description: "short",
+		Description: AgenticTestTaskDescription(),
 		State:       models.TaskStateQueued,
 	}
 	store.task = task
@@ -213,7 +225,7 @@ ok
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Complex redo",
-		Description: strings.Repeat("x ", 120),
+		Description: strings.Repeat("x ", 120) + "\n- must complete all plan steps\nAcceptance: committed output matches plan.",
 		State:       models.TaskStateQueued,
 	}
 	store.task = task
@@ -268,7 +280,7 @@ func TestAgenticPlanning_RedoCapAtThreePasses(t *testing.T) {
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Cap",
-		Description: strings.Repeat("y ", 100),
+		Description: strings.Repeat("y ", 100) + "\n- must complete all plan steps\nAcceptance: committed output matches plan.",
 		State:       models.TaskStateQueued,
 	}
 	store.task = task

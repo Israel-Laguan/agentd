@@ -98,6 +98,19 @@ func terminalCompletedAt(next models.TaskState, ts time.Time) *time.Time {
 	}
 }
 
+func (s *FakeKanbanStore) UpdateTaskDescription(_ context.Context, id string, _ time.Time, description string) (*models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.tasks[id]
+	if !ok {
+		return nil, models.ErrTaskNotFound
+	}
+	t.Description = description
+	t.UpdatedAt = now()
+	s.tasks[id] = t
+	return &t, nil
+}
+
 func (s *FakeKanbanStore) UpdateTaskState(_ context.Context, id string, _ time.Time, next models.TaskState) (*models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

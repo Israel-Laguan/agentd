@@ -100,6 +100,16 @@ func (m *minimalStore) UpdateTaskState(_ context.Context, _ string, _ time.Time,
 	return &updated, nil
 }
 
+func (m *minimalStore) UpdateTaskDescription(_ context.Context, _ string, _ time.Time, description string) (*models.Task, error) {
+	if m.getTask == nil {
+		return nil, models.ErrTaskNotFound
+	}
+	updated := *m.getTask
+	updated.Description = description
+	m.getTask = &updated
+	return &updated, nil
+}
+
 func (m *minimalStore) MaterializePlan(context.Context, models.DraftPlan) (*models.Project, []models.Task, error) {
 	return nil, nil, nil
 }
