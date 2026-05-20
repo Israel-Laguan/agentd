@@ -57,8 +57,10 @@ func NewFilePipeline(cfg FilePipelineConfig) *FilePipeline {
 	}
 }
 
-func (p *FilePipeline) ProcessRead(ctx context.Context, relPath string, raw []byte, info os.FileInfo) (string, error) {
-	doc, err := p.ingest(ctx, relPath, raw, info)
+// ProcessRead converts and caches a single file. Selection (topK) is skipped
+// because the read tool always returns the requested file's content.
+func (p *FilePipeline) ProcessRead(ctx context.Context, relPath, resolvedPath string, raw []byte, info os.FileInfo) (string, error) {
+	doc, err := p.ingest(ctx, relPath, resolvedPath, raw, info)
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +70,7 @@ func (p *FilePipeline) ProcessRead(ctx context.Context, relPath string, raw []by
 func (p *FilePipeline) Process(ctx context.Context, relPaths []string) (string, error) {
 	docs := make([]*CachedDoc, 0, len(relPaths))
 	for _, rel := range relPaths {
-		full, err := filepath.Abs(filepath.Join(p.workspace, rel))
+		full, err := resolveWorkspaceFile(p.workspace, rel)
 		if err != nil {
 			return "", err
 		}
@@ -80,7 +82,7 @@ func (p *FilePipeline) Process(ctx context.Context, relPaths []string) (string, 
 		if err != nil {
 			return "", err
 		}
-		doc, err := p.ingest(ctx, rel, raw, info)
+		doc, err := p.ingest(ctx, rel, full, raw, info)
 		if err != nil {
 			return "", err
 		}
@@ -93,19 +95,24 @@ func (p *FilePipeline) Process(ctx context.Context, relPaths []string) (string, 
 	return formatDocsForInjection(selected), nil
 }
 
-func (p *FilePipeline) ingest(ctx context.Context, relPath string, raw []byte, info os.FileInfo) (*CachedDoc, error) {
+func (p *FilePipeline) ingest(ctx context.Context, relPath, resolvedPath string, raw []byte, info os.FileInfo) (*CachedDoc, error) {
 	hash := contentHash(raw)
 	size := info.Size()
 	mtime := info.ModTime().Unix()
 
 	if p.store != nil {
 		if cached, ok := p.store.Get(hash, size, mtime); ok {
-			return cached, nil
+			doc := *cached
+			doc.Path = relPath
+			return &doc, nil
 		}
 	}
 
-	fullPath := filepath.Join(p.workspace, relPath)
-	markdown, err := p.converter.convert(ctx, fullPath, raw)
+	convertPath := resolvedPath
+	if convertPath == "" {
+		convertPath = filepath.Join(p.workspace, relPath)
+	}
+	markdown, err := p.converter.convert(ctx, convertPath, raw)
 	if err != nil {
 		return nil, err
 	}

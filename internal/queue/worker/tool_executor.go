@@ -3,7 +3,9 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -207,9 +209,13 @@ func (t *ToolExecutor) executeRead(ctx context.Context, argsJSON string) string 
 	}
 
 	if t.filePipeline != nil {
-		markdown, pipeErr := t.filePipeline.ProcessRead(ctx, args.Path, content, info)
+		markdown, pipeErr := t.filePipeline.ProcessRead(ctx, args.Path, fullPath, content, info)
 		if pipeErr != nil {
-			return jsonErrorf("file pipeline: %v", pipeErr)
+			if ctx.Err() != nil || errors.Is(pipeErr, context.Canceled) || errors.Is(pipeErr, context.DeadlineExceeded) {
+				return jsonErrorf("read cancelled: %v", pipeErr)
+			}
+			slog.Warn("file pipeline failed, returning raw content", "path", args.Path, "error", pipeErr)
+			return string(content)
 		}
 		return markdown
 	}

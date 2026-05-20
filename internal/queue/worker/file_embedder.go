@@ -20,6 +20,9 @@ type GatewayEmbedder struct {
 }
 
 func (g *GatewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	if g == nil {
+		return nil, errors.New("embedder is nil")
+	}
 	if g.Gateway == nil {
 		return nil, errors.New("gateway is nil")
 	}

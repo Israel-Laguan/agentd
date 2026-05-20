@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/cucumber/godog v0.15.1
+	github.com/gofrs/flock v0.13.0
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.6.0
 	github.com/openai/openai-go/v3 v3.35.0

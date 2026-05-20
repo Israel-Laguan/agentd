@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -34,7 +33,7 @@ func NewFileConverterWith(fn ConverterFunc) *FileConverter {
 	return &FileConverter{convert: fn}
 }
 
-func defaultConvert(ctx context.Context, fullPath string, _ []byte) (string, error) {
+func defaultConvert(ctx context.Context, fullPath string, raw []byte) (string, error) {
 	ext := strings.ToLower(filepath.Ext(fullPath))
 	switch ext {
 	case ".pdf":
@@ -44,11 +43,7 @@ func defaultConvert(ctx context.Context, fullPath string, _ []byte) (string, err
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".tif":
 		return unsupportedImageMarker, nil
 	default:
-		data, err := os.ReadFile(fullPath)
-		if err != nil {
-			return "", err
-		}
-		return string(data), nil
+		return string(raw), nil
 	}
 }
 
@@ -59,6 +54,9 @@ func convertPDF(ctx context.Context, fullPath string) (string, error) {
 	cmd := exec.CommandContext(ctx, "pdftotext", "-layout", fullPath, "-")
 	out, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		return unsupportedPDFMarker, nil
 	}
 	text := strings.TrimSpace(string(out))

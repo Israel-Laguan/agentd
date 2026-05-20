@@ -155,8 +155,8 @@ func NewWorker(
 		fileContextCfg:          opts.FileContext,
 	}
 	if opts.FileContext.Enabled && opts.FileContextCachePath != "" {
-		if store, err := NewDocStore(opts.FileContextCachePath); err == nil {
-			w.docStore = store
+		if docStore, err := NewDocStore(opts.FileContextCachePath); err == nil {
+			w.docStore = docStore
 		} else {
 			slog.Warn("file context cache disabled", "error", err)
 		}
