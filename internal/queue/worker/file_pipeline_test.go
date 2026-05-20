@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,6 +47,24 @@ func (c *countingConverter) convert(_ context.Context, fullPath string, _ []byte
 	return "converted:" + filepath.Base(fullPath), nil
 }
 
+func TestConvertPDF_ContextCancelled(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("pdftotext"); err != nil {
+		t.Skip("pdftotext not installed")
+	}
+	dir := t.TempDir()
+	pdfPath := filepath.Join(dir, "doc.pdf")
+	if err := os.WriteFile(pdfPath, []byte("%PDF-1.4 fake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := convertPDF(ctx, pdfPath)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got err %v, want context.Canceled", err)
+	}
+}
+
 func TestFileConverter_PDFUsesPdftotextOrMarker(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -64,6 +83,35 @@ func TestFileConverter_PDFUsesPdftotextOrMarker(t *testing.T) {
 		if out != unsupportedPDFMarker {
 			t.Fatalf("expected unsupported marker without pdftotext, got %q", out)
 		}
+	}
+}
+
+func TestFilePipeline_ProcessRead_SkipsEmbedding(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	rel := "note.txt"
+	if err := os.WriteFile(filepath.Join(workspace, rel), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	embedder := &fakeEmbedder{}
+	pipe := NewFilePipeline(FilePipelineConfig{
+		Workspace: workspace,
+		Embedder:  embedder,
+		TopK:      5,
+	})
+	info, err := os.Stat(filepath.Join(workspace, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(workspace, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pipe.ProcessRead(context.Background(), rel, filepath.Join(workspace, rel), raw, info); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&embedder.calls) != 0 {
+		t.Fatalf("embedder calls = %d, want 0 for ProcessRead", embedder.calls)
 	}
 }
 
@@ -251,7 +299,7 @@ func TestFilePipeline_CacheHitPreservesPath(t *testing.T) {
 		Store:     store,
 	})
 	info := &fakeFileInfo{size: int64(len(content)), mtime: 100}
-	got, err := pipe.ingest(context.Background(), "second.txt", "", content, info)
+	got, err := pipe.ingest(context.Background(), "second.txt", "", content, info, false)
 	if err != nil {
 		t.Fatal(err)
 	}
