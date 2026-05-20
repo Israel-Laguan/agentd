@@ -36,7 +36,7 @@ func setupConsumeElicitationFixture(t *testing.T) (
 		t.Fatalf("record questions: %v", err)
 	}
 
-	_, children, err := store.BlockTaskWithSubtasks(ctx, running.ID, running.UpdatedAt, []models.DraftTask{{
+	blocked, children, err := store.BlockTaskWithSubtasks(ctx, running.ID, running.UpdatedAt, []models.DraftTask{{
 		Title:       models.HITLSubtaskTitleClarification + "Which bug?",
 		Description: "clarify",
 		Assignee:    models.TaskAssigneeHuman,
@@ -55,7 +55,11 @@ func setupConsumeElicitationFixture(t *testing.T) (
 	if _, err := store.UpdateTaskState(ctx, child.ID, child.UpdatedAt, models.TaskStateCompleted); err != nil {
 		t.Fatalf("complete child: %v", err)
 	}
+	current, err := store.GetTask(ctx, blocked.ID)
+	if err != nil {
+		t.Fatalf("get parent after child complete: %v", err)
+	}
 
 	w := &Worker{store: store}
-	return ctx, store, w, parent, running
+	return ctx, store, w, parent, current
 }

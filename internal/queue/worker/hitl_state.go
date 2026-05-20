@@ -121,24 +121,3 @@ func findLatestApprovalSubtask(children []models.Task, toolName string) *models.
 func findLatestReviewSubtask(children []models.Task) *models.Task {
 	return findLatestChildByTitlePrefix(children, models.HITLSubtaskTitleReview)
 }
-
-func findLatestClarificationSubtask(children []models.Task) *models.Task {
-	return findLatestChildByTitlePrefix(children, models.HITLSubtaskTitleClarification)
-}
-
-func findPendingClarificationSubtask(children []models.Task) *models.Task {
-	var pending *models.Task
-	for i := range children {
-		child := &children[i]
-		if !strings.HasPrefix(child.Title, models.HITLSubtaskTitleClarification) {
-			continue
-		}
-		if models.ChildResolvedForParentUnblock(child.State, child.Title) {
-			continue
-		}
-		if pending == nil || child.UpdatedAt.After(pending.UpdatedAt) {
-			pending = child
-		}
-	}
-	return pending
-}

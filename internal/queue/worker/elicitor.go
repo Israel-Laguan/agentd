@@ -94,25 +94,3 @@ func buildElicitationUserContent(task models.Task, project models.Project, fileC
 	}
 	return b.String()
 }
-
-func normalizeElicitationQuestions(questions []ElicitationQuestion) []ElicitationQuestion {
-	out := make([]ElicitationQuestion, 0, len(questions))
-	for _, q := range questions {
-		q.Question = strings.TrimSpace(q.Question)
-		if q.Question == "" {
-			continue
-		}
-		opts := make([]string, 0, len(q.Options))
-		for _, opt := range q.Options {
-			if opt = strings.TrimSpace(opt); opt != "" {
-				opts = append(opts, opt)
-			}
-		}
-		q.Options = opts
-		out = append(out, q)
-		if len(out) >= maxElicitationQuestions {
-			break
-		}
-	}
-	return out
-}
