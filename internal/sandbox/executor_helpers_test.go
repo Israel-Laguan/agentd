@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,10 +14,13 @@ import (
 )
 
 type recordingSink struct {
+	mu     sync.Mutex
 	events []models.Event
 }
 
 func (s *recordingSink) Emit(_ context.Context, evt models.Event) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.events = append(s.events, evt)
 	return nil
 }
