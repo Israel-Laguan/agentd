@@ -37,7 +37,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
 
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
-	messages, pendingReviewRejectionID := w.prependReviewRejectionFeedback(ctx, task, messages)
+	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
@@ -52,20 +52,13 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	for turnIndex := 0; ; turnIndex++ {
 		turnID := fmt.Sprintf("%s:%d", task.ID, turnIndex)
-		cont, result, report, generated, err := w.processAgenticIteration(
+		cont, result, report, _, err := w.processAgenticIteration(
 			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
 			iterationGuard, budgetGuard, deadlineGuard, ctxBudgetGuard, cm, goalTracker,
 			taskHooks, taskCaps, toolTracker, workPlan, turnID, turnIndex,
 		)
 		if err != nil {
 			return LoopResult{}, false
-		}
-		if generated && pendingReviewRejectionID != "" {
-			if markErr := markReviewRejectionUsed(cancelCtx, w.store, task.ID, pendingReviewRejectionID); markErr != nil {
-				slog.Warn("failed to mark review rejection as consumed", "task_id", task.ID, "subtask_id", pendingReviewRejectionID, "error", markErr)
-			} else {
-				pendingReviewRejectionID = ""
-			}
 		}
 		if report {
 			w.recordLoopResult(result)

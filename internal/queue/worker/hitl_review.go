@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -51,6 +52,21 @@ func markReviewRejectionUsed(ctx context.Context, store models.KanbanStore, pare
 		Author: models.CommentAuthorWorkerAgent,
 		Body:   hitlReviewRejectionUsedPrefix + subtaskID,
 	})
+}
+
+func markPendingReviewRejectionConsumed(ctx context.Context, store models.KanbanStore, taskID string) {
+	comments, err := store.ListComments(ctx, taskID)
+	if err != nil {
+		slog.Warn("failed to list comments for review rejection mark", "task_id", taskID, "error", err)
+		return
+	}
+	_, subtaskID, ok := latestFailedReviewRejection(ctx, store, taskID, comments)
+	if !ok {
+		return
+	}
+	if err := markReviewRejectionUsed(ctx, store, taskID, subtaskID); err != nil {
+		slog.Warn("failed to mark review rejection as consumed", "task_id", taskID, "subtask_id", subtaskID, "error", err)
+	}
 }
 
 func latestFailedReviewRejection(
@@ -170,7 +186,8 @@ func (w *Worker) tryFinalizeApprovedReview(ctx context.Context, task models.Task
 		return false, nil
 	}
 	if err := markReviewUsed(ctx, w.store, task.ID, review.ID); err != nil {
-		return false, err
+		slog.Warn("failed to mark review as consumed",
+			"task_id", task.ID, "subtask_id", review.ID, "error", err)
 	}
 	return true, nil
 }
