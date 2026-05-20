@@ -10,7 +10,6 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
