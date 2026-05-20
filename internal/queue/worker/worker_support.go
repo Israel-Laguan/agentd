@@ -222,7 +222,7 @@ func (w *Worker) loadContext(
 
 func (w *Worker) command(ctx context.Context, task models.Task, profile models.AgentProfile) (workerResponse, error) {
 	messages := w.seedMessages(ctx, task, profile)
-	messages, pendingReviewRejectionID := w.prependReviewRejectionFeedback(ctx, task, messages)
+	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
 	req := gateway.AIRequest{
 		Messages:    messages,
 		Temperature: profile.Temperature,
@@ -239,11 +239,6 @@ func (w *Worker) command(ctx context.Context, task models.Task, profile models.A
 	resp, err := gateway.GenerateJSON[workerResponse](ctx, w.gateway, req)
 	if err != nil {
 		return workerResponse{}, err
-	}
-	if pendingReviewRejectionID != "" {
-		if markErr := markReviewRejectionUsed(ctx, w.store, task.ID, pendingReviewRejectionID); markErr != nil {
-			slog.Warn("failed to mark review rejection as consumed", "task_id", task.ID, "subtask_id", pendingReviewRejectionID, "error", markErr)
-		}
 	}
 	return resp, nil
 }

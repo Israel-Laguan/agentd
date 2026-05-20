@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -253,6 +254,61 @@ func findReviewSubtask(t *testing.T, store models.KanbanStore, ctx context.Conte
 	return models.Task{}
 }
 
+func TestProcess_AgenticRequireReview_RejectionMarkedOnlyAfterDraft(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+	setupAgenticReviewProfile(t, store, ctx)
+
+	const rejectionComment = "Please add error handling"
+	const revisedDraft = "revised draft with error handling"
+	gw := &sequenceGateway{
+		responses: []gateway.AIResponse{
+			{
+				Content: "I'll check the workspace first.",
+				ToolCalls: []gateway.ToolCall{{
+					ID: "call_reject_1", Type: "function",
+					Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command": "pwd"}`},
+				}},
+			},
+			{Content: revisedDraft},
+		},
+	}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"pwd": {Success: true, ExitCode: 0, Stdout: "/tmp\n"},
+	}}
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
+	task := materializeLegacyReviewTask(t, store, ctx, "agentic-review-reject", "task-agentic-review-reject")
+	w.createReviewHandoff(ctx, task, "first draft output")
+	failReviewWithComment(t, store, ctx, task.ID, rejectionComment)
+	review := findReviewSubtask(t, store, ctx, task.ID)
+	queued := requeueParentTask(t, store, ctx, task.ID)
+
+	w.Process(ctx, queued)
+
+	if gw.callCount != 2 {
+		t.Fatalf("gateway calls = %d, want 2 (tool turn + final draft)", gw.callCount)
+	}
+	comments, err := store.ListComments(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("list comments: %v", err)
+	}
+	if !isReviewRejectionConsumed(comments, review.ID) {
+		t.Fatal("expected review-rejection-used marker after revised draft persisted")
+	}
+	draft, ok := findLatestDraftReview(comments)
+	if !ok || !strings.Contains(draft, revisedDraft) {
+		t.Fatalf("draft = %q, want revised draft containing %q", draft, revisedDraft)
+	}
+	parent, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if parent.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", parent.State)
+	}
+}
+
 func TestProcess_LegacyRequireReview_InjectsRejectionFeedback(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
@@ -355,6 +411,62 @@ type failUpdateResultStore struct {
 
 func (s *failUpdateResultStore) UpdateTaskResult(context.Context, string, time.Time, models.TaskResult) (*models.Task, error) {
 	return nil, models.ErrStateConflict
+}
+
+type failReviewUsedMarkerStore struct {
+	*testutil.FakeKanbanStore
+}
+
+func (s *failReviewUsedMarkerStore) AddComment(ctx context.Context, c models.Comment) error {
+	if strings.HasPrefix(c.Body, hitlReviewUsedPrefix) {
+		return errors.New("marker write failed")
+	}
+	return s.FakeKanbanStore.AddComment(ctx, c)
+}
+
+func TestTryFinalizeApprovedReview_MarkUsedFailureStillSucceeds(t *testing.T) {
+	t.Parallel()
+	base := testutil.NewFakeStore()
+	store := &failReviewUsedMarkerStore{FakeKanbanStore: base}
+	ctx := context.Background()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "finalize-marker-fail",
+		Tasks:       []models.DraftTask{{Title: "parent", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	parent := tasks[0]
+	running, err := store.MarkTaskRunning(ctx, parent.ID, parent.UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	w := &Worker{store: store}
+	w.createReviewHandoff(ctx, *running, "approved draft output")
+	completeReviewSubtask(t, store, ctx, parent.ID)
+
+	done, err := w.tryFinalizeApprovedReview(ctx, *running)
+	if err != nil {
+		t.Fatalf("tryFinalizeApprovedReview: %v", err)
+	}
+	if !done {
+		t.Fatal("expected done=true when commit succeeds despite marker failure")
+	}
+	final, err := store.GetTask(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("get final parent: %v", err)
+	}
+	if final.State != models.TaskStateCompleted {
+		t.Fatalf("parent state = %s, want COMPLETED", final.State)
+	}
+	comments, err := store.ListComments(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("list comments: %v", err)
+	}
+	review := findReviewSubtask(t, store, ctx, parent.ID)
+	if isReviewConsumed(comments, review.ID) {
+		t.Fatal("review-used marker should not be written when marker AddComment fails")
+	}
 }
 
 func TestTryFinalizeApprovedReview_CommitFailureLeavesMarkerAbsent(t *testing.T) {

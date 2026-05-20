@@ -238,6 +238,9 @@ func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draf
 		w.emit(ctx, task, "ERROR", err.Error())
 		return
 	}
+	if strings.TrimSpace(draftOutput) != "" {
+		markPendingReviewRejectionConsumed(ctx, w.store, task.ID)
+	}
 	description := FormatForHuman(HITLMessage{
 		Summary: "Review required before task completion",
 		Action:  "Review the draft output below. Mark this subtask COMPLETED to approve, or add a comment with feedback and mark FAILED to request changes.",
