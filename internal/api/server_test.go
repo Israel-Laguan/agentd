@@ -149,6 +149,10 @@ func (g *apiGateway) ClassifyIntent(_ context.Context, intent string) (*gateway.
 	}, nil
 }
 
+func (g *apiGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 type apiGateway struct {
 	scope              *gateway.ScopeAnalysis
 	scopeErr           error

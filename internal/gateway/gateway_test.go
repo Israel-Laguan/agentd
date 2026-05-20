@@ -241,6 +241,10 @@ func (*sequenceGateway) AnalyzeScope(context.Context, string) (*ScopeAnalysis, e
 func (*sequenceGateway) ClassifyIntent(context.Context, string) (*IntentAnalysis, error) {
 	return nil, nil
 }
+func (*sequenceGateway) Embed(context.Context, EmbedRequest) (EmbedResponse, error) {
+	return EmbedResponse{}, nil
+}
+
 
 type fakeProvider struct {
 	providerName string

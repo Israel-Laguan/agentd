@@ -92,6 +92,10 @@ func (g *fakeGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnaly
 func (g *fakeGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (g *fakeGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 
 type fakeBreaker struct{ open bool }
 
@@ -233,4 +237,7 @@ func (g *extractOnFinalGateway) AnalyzeScope(context.Context, string) (*gateway.
 }
 func (g *extractOnFinalGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
+}
+func (g *extractOnFinalGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
 }

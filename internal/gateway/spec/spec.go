@@ -177,9 +177,23 @@ type IntentAnalysis struct {
 	Reason string `json:"reason"`
 }
 
+// EmbedRequest is the provider-neutral input for embedding API calls.
+type EmbedRequest struct {
+	Input []string `json:"input"`
+	Model string   `json:"model,omitempty"`
+}
+
+// EmbedResponse holds embedding vectors aligned with EmbedRequest.Input order.
+type EmbedResponse struct {
+	Vectors      [][]float32 `json:"vectors"`
+	ProviderUsed string      `json:"provider_used"`
+	ModelUsed    string      `json:"model_used"`
+}
+
 // AIGateway abstracts provider fallback and JSON repair for model calls.
 type AIGateway interface {
 	Generate(ctx context.Context, req AIRequest) (AIResponse, error)
+	Embed(ctx context.Context, req EmbedRequest) (EmbedResponse, error)
 	GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error)
 	AnalyzeScope(ctx context.Context, userIntent string) (*ScopeAnalysis, error)
 	ClassifyIntent(ctx context.Context, userIntent string) (*IntentAnalysis, error)

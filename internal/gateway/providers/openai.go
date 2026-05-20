@@ -77,6 +77,68 @@ func (o *OpenAI) url() string {
 	return strings.TrimRight(o.cfg.BaseURL, "/") + "/chat/completions"
 }
 
+func (o *OpenAI) embeddingsURL() string {
+	return strings.TrimRight(o.cfg.BaseURL, "/") + "/embeddings"
+}
+
+// Embed implements EmbedBackend using the OpenAI embeddings API.
+func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
+	if len(req.Input) == 0 {
+		return spec.EmbedResponse{Vectors: nil}, nil
+	}
+	if o.cfg.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, o.cfg.Timeout)
+		defer cancel()
+	}
+	model := o.cfg.Model
+	if req.Model != "" {
+		model = req.Model
+	}
+	if model == "" {
+		model = "text-embedding-3-small"
+	}
+	body := openAIEmbedRequest{
+		Model: model,
+		Input: req.Input,
+	}
+	data, _, err := postJSON(ctx, o.client, o.embeddingsURL(), body, o.cfg.APIKey)
+	if err != nil {
+		return spec.EmbedResponse{}, err
+	}
+	var decoded openAIEmbedResponse
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return spec.EmbedResponse{}, fmt.Errorf("decode openai embeddings: %w", err)
+	}
+	vectors := make([][]float32, len(decoded.Data))
+	for _, item := range decoded.Data {
+		if item.Index < 0 || item.Index >= len(vectors) {
+			continue
+		}
+		vectors[item.Index] = item.Embedding
+	}
+	return spec.EmbedResponse{
+		Vectors:      vectors,
+		ProviderUsed: string(spec.ProviderOpenAI),
+		ModelUsed:    decoded.Model,
+	}, nil
+}
+
+type openAIEmbedRequest struct {
+	Model string   `json:"model"`
+	Input []string `json:"input"`
+}
+
+type openAIEmbedResponse struct {
+	Data  []openAIEmbedData `json:"data"`
+	Model string            `json:"model"`
+}
+
+type openAIEmbedData struct {
+	Index     int       `json:"index"`
+	Embedding []float32 `json:"embedding"`
+}
+
 // Capabilities implements Backend.
 func (o *OpenAI) Capabilities() Capabilities {
 	return Capabilities{SupportsChatTools: true}

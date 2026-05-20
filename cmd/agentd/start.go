@@ -129,6 +129,8 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 		ContextWarningThreshold: cfg.Agentic.ContextWarningThreshold,
 		ToolFailureStreak:       cfg.Agentic.ToolFailureStreak,
 		TokenUsageHook:          tokenHook,
+		FileContext:               cfg.Agentic.FileContext,
+		FileContextCachePath: config.ResolveFileContextCachePath(cfg.HomeDir, cfg.Agentic.FileContext.CachePath),
 	})
 }
 

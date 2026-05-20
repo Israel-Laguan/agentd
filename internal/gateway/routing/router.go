@@ -88,6 +88,26 @@ func (r *Router) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	return r.generateOnce(ctx, req)
 }
 
+// Embed implements spec.AIGateway by delegating to the first EmbedBackend provider.
+func (r *Router) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
+	var errs []error
+	for _, p := range r.providers {
+		eb, ok := p.(providers.EmbedBackend)
+		if !ok {
+			continue
+		}
+		resp, err := eb.Embed(ctx, req)
+		if err == nil {
+			return resp, nil
+		}
+		errs = append(errs, err)
+	}
+	if len(errs) == 0 {
+		return spec.EmbedResponse{}, fmt.Errorf("no embedding provider configured")
+	}
+	return spec.EmbedResponse{}, errors.Join(errs...)
+}
+
 func (r *Router) reserveBudget(taskID string) error {
 	if r.budget != nil && taskID != "" {
 		return r.budget.Reserve(taskID)

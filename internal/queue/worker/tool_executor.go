@@ -35,6 +35,7 @@ type ToolExecutor struct {
 	envVars       []string
 	wallTimeout   time.Duration
 	maxReadBytes  int64
+	filePipeline  *FilePipeline
 
 	workspaceRoot     string
 	workspaceRootErr  error
@@ -203,6 +204,14 @@ func (t *ToolExecutor) executeRead(ctx context.Context, argsJSON string) string 
 			return jsonErrorf("read cancelled: %v", ctx.Err())
 		}
 		return jsonErrorf("read failed: %v", err)
+	}
+
+	if t.filePipeline != nil {
+		markdown, pipeErr := t.filePipeline.ProcessRead(ctx, args.Path, content, info)
+		if pipeErr != nil {
+			return jsonErrorf("file pipeline: %v", pipeErr)
+		}
+		return markdown
 	}
 
 	return string(content)

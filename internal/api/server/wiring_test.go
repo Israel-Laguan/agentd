@@ -32,6 +32,10 @@ func (stubGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnaly
 	return &gateway.IntentAnalysis{}, nil
 }
 
+func (stubGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 func TestNewHandlerGETProjectsSmoke(t *testing.T) {
 	store := testutil.NewFakeStore()
 	h := server.NewHandler(server.ServerDeps{

@@ -32,6 +32,10 @@ func (g *stubIntakeGateway) ClassifyIntent(context.Context, string) (*gateway.In
 	return &gateway.IntentAnalysis{}, nil
 }
 
+func (g *stubIntakeGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 func (g *stubIntakeGateway) GenerateText(context.Context, string, int) (string, error) {
 	return "", nil
 }
@@ -176,4 +180,7 @@ func (*stubPlanOnlyGW) AnalyzeScope(context.Context, string) (*gateway.ScopeAnal
 }
 func (*stubPlanOnlyGW) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return &gateway.IntentAnalysis{}, nil
+}
+func (*stubPlanOnlyGW) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
 }

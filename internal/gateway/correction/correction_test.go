@@ -41,6 +41,10 @@ func (g *seqFakeGW) AnalyzeScope(context.Context, string) (*spec.ScopeAnalysis, 
 func (g *seqFakeGW) ClassifyIntent(context.Context, string) (*spec.IntentAnalysis, error) {
 	return nil, errors.New("not used")
 }
+func (g *seqFakeGW) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
+	return spec.NoopEmbed(ctx, req)
+}
+
 
 type simplePayload struct {
 	Name string `json:"name"`

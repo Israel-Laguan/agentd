@@ -35,6 +35,8 @@ type (
 	ToolCall           = spec.ToolCall
 	ToolCallFunction   = spec.ToolCallFunction
 	FunctionParameters = spec.FunctionParameters
+	EmbedRequest       = spec.EmbedRequest
+	EmbedResponse      = spec.EmbedResponse
 )
 
 // Role constants.

@@ -57,6 +57,8 @@ type Worker struct {
 	toolFailureStreak         int
 	tokenUsageHook            func(int)
 	loopResultRecorder        func(LoopResult)
+	fileContextCfg            config.FileContextConfig
+	docStore                  *DocStore
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -107,6 +109,8 @@ type WorkerOptions struct {
 	ContextWarningThreshold        float64
 	ToolFailureStreak              int
 	TokenUsageHook                 func(int)
+	FileContext          config.FileContextConfig
+	FileContextCachePath string
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -209,6 +213,14 @@ func NewWorker(
 		contextWarningThreshold: opts.ContextWarningThreshold,
 		toolFailureStreak:       opts.ToolFailureStreak,
 		tokenUsageHook:          opts.TokenUsageHook,
+		fileContextCfg:          opts.FileContext,
+	}
+	if opts.FileContext.Enabled && opts.FileContextCachePath != "" {
+		if store, err := NewDocStore(opts.FileContextCachePath); err == nil {
+			w.docStore = store
+		} else {
+			slog.Warn("file context cache disabled", "error", err)
+		}
 	}
 	w.setupOptionalLoaders(opts)
 	return w

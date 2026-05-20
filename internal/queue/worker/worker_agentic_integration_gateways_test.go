@@ -37,6 +37,10 @@ func (m *maxIterationsGateway) AnalyzeScope(ctx context.Context, userIntent stri
 func (m *maxIterationsGateway) ClassifyIntent(ctx context.Context, userIntent string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (m *maxIterationsGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 
 // tokenUsageGateway always returns tool calls with a fixed token usage per call.
 type tokenUsageGateway struct {
@@ -73,6 +77,9 @@ func (g *tokenUsageGateway) AnalyzeScope(ctx context.Context, userIntent string)
 func (g *tokenUsageGateway) ClassifyIntent(ctx context.Context, userIntent string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (g *tokenUsageGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
 
 // sequenceGateway is a mock gateway that returns a predefined sequence of responses.
 // Used for testing the agentic loop that requires multiple gateway calls.
@@ -105,4 +112,7 @@ func (m *sequenceGateway) AnalyzeScope(ctx context.Context, userIntent string) (
 
 func (m *sequenceGateway) ClassifyIntent(ctx context.Context, userIntent string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
+}
+func (m *sequenceGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
 }

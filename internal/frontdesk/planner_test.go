@@ -114,6 +114,10 @@ func (m *mockGateway) ClassifyIntent(ctx context.Context, intent string) (*spec.
 	return &spec.IntentAnalysis{Intent: "plan_request"}, nil
 }
 
+func (m *mockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
+	return spec.NoopEmbed(ctx, req)
+}
+
 func (m *mockGateway) GenerateText(ctx context.Context, prompt string, limit int) (string, error) {
 	return "", nil
 }

@@ -11,6 +11,9 @@ import (
 const (
 	DefaultContextWarningThreshold = 0.85
 	DefaultToolFailureStreak       = 3
+	DefaultFileContextTopK         = 5
+	DefaultFileContextCachePath    = "file-cache"
+	DefaultFileContextEmbedModel   = "text-embedding-3-small"
 )
 
 type AgenticConfig struct {
@@ -30,6 +33,16 @@ type AgenticConfig struct {
 	DisableCredentialDetection bool
 	// Audit configures structured JSONL audit logging for tool dispatches.
 	Audit AuditConfig
+	// FileContext configures smart file preprocessing for the read tool.
+	FileContext FileContextConfig
+}
+
+// FileContextConfig controls convert/cache/select pipeline for workspace files.
+type FileContextConfig struct {
+	Enabled        bool
+	TopK           int
+	CachePath      string
+	EmbeddingModel string
 }
 
 // AuditConfig controls the structured audit log file separate from the SSE event stream.
@@ -44,6 +57,10 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.external_tools", []string{})
 	v.SetDefault("agentic.audit.enabled", false)
 	v.SetDefault("agentic.audit.path", "audit.jsonl")
+	v.SetDefault("agentic.file_context.enabled", false)
+	v.SetDefault("agentic.file_context.top_k", DefaultFileContextTopK)
+	v.SetDefault("agentic.file_context.cache_path", DefaultFileContextCachePath)
+	v.SetDefault("agentic.file_context.embedding_model", DefaultFileContextEmbedModel)
 }
 
 func loadAgenticConfig(v *viper.Viper) AgenticConfig {
@@ -61,6 +78,28 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 			Enabled: v.GetBool("agentic.audit.enabled"),
 			Path:    v.GetString("agentic.audit.path"),
 		},
+		FileContext: loadFileContextConfig(v),
+	}
+}
+
+func loadFileContextConfig(v *viper.Viper) FileContextConfig {
+	topK := v.GetInt("agentic.file_context.top_k")
+	if topK <= 0 {
+		topK = DefaultFileContextTopK
+	}
+	cachePath := v.GetString("agentic.file_context.cache_path")
+	if cachePath == "" {
+		cachePath = DefaultFileContextCachePath
+	}
+	model := v.GetString("agentic.file_context.embedding_model")
+	if model == "" {
+		model = DefaultFileContextEmbedModel
+	}
+	return FileContextConfig{
+		Enabled:        v.GetBool("agentic.file_context.enabled"),
+		TopK:           topK,
+		CachePath:      cachePath,
+		EmbeddingModel: model,
 	}
 }
 
@@ -68,6 +107,17 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 func ResolveAuditPath(homeDir, raw string) string {
 	if raw == "" {
 		raw = "audit.jsonl"
+	}
+	if filepath.IsAbs(raw) {
+		return raw
+	}
+	return filepath.Join(homeDir, raw)
+}
+
+// ResolveFileContextCachePath returns the absolute file-context cache directory.
+func ResolveFileContextCachePath(homeDir, raw string) string {
+	if raw == "" {
+		raw = DefaultFileContextCachePath
 	}
 	if filepath.IsAbs(raw) {
 		return raw

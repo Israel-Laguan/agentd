@@ -66,6 +66,10 @@ func (*fakeGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysi
 func (*fakeGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (*fakeGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 
 func (s *recordingSink) hasEvent(kind string) bool {
 	for _, event := range s.events {
