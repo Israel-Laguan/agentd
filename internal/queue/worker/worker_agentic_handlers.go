@@ -101,33 +101,35 @@ func (w *Worker) finishAgenticTurnNoTools(
 	turnID string, turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
 	cm *ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
 ) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
+	if workPlan != nil {
+		if w.planningCfg.ComplexityThreshold > 0 {
+			content = w.repairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
+			failing := ValidateOutput(content, *workPlan)
+			if len(failing) > 0 && respecAttempts != nil && *respecAttempts < 1 && w.messageEditor != nil {
+				msgsForRespec := messagesWithoutLastAssistant(*messages)
+				newContent, respecErr := w.generateRespecifiedUserTurn(
+					ctx, task, workPlan, failing, msgsForRespec, cm, budgetGuard,
+				)
+				if respecErr == nil {
+					_, editErr := w.messageEditor.Edit(
+						ctx, task.ID, turnID, messages, EditAnchorUserTurn, newContent,
+					)
+					if editErr == nil {
+						*respecAttempts++
+						// In-session structural repair: rewind and re-run without committing broken output.
+						return true, LoopResult{}, false, 0, nil
+					}
+				}
+			}
+		}
+		content = preparePlanCommitContent(content, *workPlan)
+	}
 	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, content)
 	if stalled || stallErr != nil {
 		if stallErr != nil {
 			w.handleGatewayError(ctx, task, stallErr)
 		}
-		return false, LoopResult{}, false, -1, stallErr
-	}
-	if workPlan != nil && w.planningCfg.ComplexityThreshold > 0 {
-		content = w.repairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
-		failing := ValidateOutput(content, *workPlan)
-		if len(failing) > 0 && respecAttempts != nil && *respecAttempts < 1 && w.messageEditor != nil {
-			popLastAssistantMessage(messages)
-			newContent, respecErr := w.generateRespecifiedUserTurn(
-				ctx, task, workPlan, failing, *messages, cm, budgetGuard,
-			)
-			if respecErr == nil {
-				_, editErr := w.messageEditor.Edit(
-					ctx, task.ID, turnID, messages, EditAnchorUserTurn, newContent,
-				)
-				if editErr == nil {
-					*respecAttempts++
-					// In-session structural repair: rewind and re-run without committing broken output.
-					return true, LoopResult{}, false, 0, nil
-				}
-			}
-		}
-		content = preparePlanCommitContent(content, *workPlan)
+		return false, LoopResult{}, false, rewindNone, stallErr
 	}
 	w.commitTextWithProfile(ctx, task, content, &profile)
 	r := LoopResult{
@@ -137,17 +139,24 @@ func (w *Worker) finishAgenticTurnNoTools(
 			"", "", "",
 		),
 	}
-	return false, r, true, -1, nil
+	return false, r, true, rewindNone, nil
 }
 
-func popLastAssistantMessage(messages *[]gateway.PromptMessage) {
-	if messages == nil || len(*messages) == 0 {
-		return
+// messagesWithoutLastAssistant returns a copy of messages omitting a trailing assistant
+// message, used for respec input without mutating the live conversation slice.
+func messagesWithoutLastAssistant(messages []gateway.PromptMessage) []gateway.PromptMessage {
+	if len(messages) == 0 {
+		return nil
 	}
-	last := len(*messages) - 1
-	if (*messages)[last].Role == "assistant" {
-		*messages = (*messages)[:last]
+	last := len(messages) - 1
+	if messages[last].Role != "assistant" {
+		out := make([]gateway.PromptMessage, len(messages))
+		copy(out, messages)
+		return out
 	}
+	out := make([]gateway.PromptMessage, last)
+	copy(out, messages[:last])
+	return out
 }
 
 func (w *Worker) handleGoalProgress(ctx context.Context, task models.Task, goalTracker *GoalTracker, content string) (bool, error) {
