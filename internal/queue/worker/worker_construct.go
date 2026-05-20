@@ -84,6 +84,17 @@ func normalizeOpts(opts WorkerOptions) WorkerOptions {
 	return opts
 }
 
+func (w *Worker) setupFileContext(opts WorkerOptions) {
+	if !opts.FileContext.Enabled || opts.FileContextCachePath == "" {
+		return
+	}
+	if docStore, err := NewDocStore(opts.FileContextCachePath); err == nil {
+		w.docStore = docStore
+	} else {
+		slog.Warn("file context cache disabled", "error", err)
+	}
+}
+
 func (w *Worker) setupOptionalLoaders(opts WorkerOptions) {
 	if opts.InstructionsProjectFile != "" || opts.InstructionsUserPrefsPath != "" {
 		w.instructionLoader = &InstructionLoader{
@@ -156,13 +167,7 @@ func NewWorker(
 		fileContextCfg:          opts.FileContext,
 		planningCfg:             opts.Planning,
 	}
-	if opts.FileContext.Enabled && opts.FileContextCachePath != "" {
-		if docStore, err := NewDocStore(opts.FileContextCachePath); err == nil {
-			w.docStore = docStore
-		} else {
-			slog.Warn("file context cache disabled", "error", err)
-		}
-	}
+	w.setupFileContext(opts)
 	w.setupOptionalLoaders(opts)
 	return w
 }
