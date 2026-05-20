@@ -31,7 +31,7 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 			continue
 		}
 		if !d.sem.Acquire(ctx) {
-			d.requeueUndispatchedClaims(ctx, tasks[i:])
+			d.requeueUndispatchedClaims(context.WithoutCancel(ctx), tasks[i:])
 			return dispatched, nacked, nil
 		}
 		dispatched++
@@ -149,7 +149,7 @@ func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task) {
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Error("dispatch goroutine panic", "task_id", task.ID, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
-				d.failDispatchPanic(ctx, task, fmt.Sprint(r))
+				d.failDispatchPanic(context.WithoutCancel(ctx), task, fmt.Sprint(r))
 			}
 		}()
 		runCtx, cancel := context.WithTimeout(ctx, d.taskDeadline)
