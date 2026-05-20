@@ -25,7 +25,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		return LoopResult{}, false
 	}
 
-	taskToolExecutor := w.newAgenticTaskToolExecutor(project)
+	taskToolExecutor := w.newAgenticTaskToolExecutor(project, task)
 	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
 
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)

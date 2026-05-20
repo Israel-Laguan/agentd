@@ -14,6 +14,11 @@ type Backend interface {
 	Capabilities() Capabilities
 }
 
+// EmbedBackend supports embedding API calls (OpenAI-compatible providers).
+type EmbedBackend interface {
+	Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error)
+}
+
 // Capabilities represents the capabilities of a provider.
 type Capabilities struct {
 	SupportsChatTools bool

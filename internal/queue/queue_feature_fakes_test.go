@@ -29,6 +29,10 @@ func (*queueGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalys
 func (*queueGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (*queueGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 
 type queueSandbox struct {
 	result      sandbox.Result

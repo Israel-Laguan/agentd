@@ -155,6 +155,10 @@ func (g *routingTestGateway) AnalyzeScope(context.Context, string) (*gateway.Sco
 func (g *routingTestGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (g *routingTestGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 
 // routingTestSandbox records executions.
 type routingTestSandbox struct {

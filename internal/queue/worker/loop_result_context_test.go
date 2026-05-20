@@ -78,3 +78,7 @@ func (g *summarizeTrackingGateway) AnalyzeScope(ctx context.Context, s string) (
 func (g *summarizeTrackingGateway) ClassifyIntent(ctx context.Context, s string) (*spec.IntentAnalysis, error) {
 	return nil, nil
 }
+func (g *summarizeTrackingGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
+	return spec.NoopEmbed(ctx, req)
+}
+

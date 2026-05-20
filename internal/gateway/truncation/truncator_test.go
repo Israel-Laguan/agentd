@@ -88,6 +88,10 @@ func (g *summaryGateway) AnalyzeScope(context.Context, string) (*spec.ScopeAnaly
 func (g *summaryGateway) ClassifyIntent(context.Context, string) (*spec.IntentAnalysis, error) {
 	return nil, nil
 }
+func (g *summaryGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
+	return spec.NoopEmbed(ctx, req)
+}
+
 
 type openBreaker struct{}
 

@@ -219,6 +219,10 @@ func (g *memGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalys
 func (g *memGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (g *memGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 
 type memBreaker struct{ open bool }
 
