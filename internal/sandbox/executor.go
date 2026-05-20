@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"agentd/internal/models"
@@ -66,32 +67,37 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	}
 	timedOut := make(chan struct{})
 	var timeoutOnce sync.Once
-	processID := 0
+	var processID atomic.Int32
 	markTimedOut := func() {
 		timeoutOnce.Do(func() {
 			close(timedOut)
 			cancel()
-			if processID > 0 {
-				_ = terminateProcessGroup(processID, e.killGrace())
+			if pid := processID.Load(); pid > 0 {
+				_ = terminateProcessGroup(int(pid), e.killGrace())
 			}
 		})
 	}
-	if err := cmd.Start(); err != nil {
-		return Result{}, fmt.Errorf("start command: %w", err)
-	}
-	processID = cmd.Process.Pid
 	stdout = e.watch(stdout, markTimedOut)
 	stderr = e.watch(stderr, markTimedOut)
 	stopWallTimeout := e.startWallTimeout(payload, markTimedOut)
 	defer stopWallTimeout()
 	output := newCommandOutput(e.maxLogBytes(), e.scrubber())
 	output.start(execCtx, e.Sink, payload, stdout, stderr)
+	if err := cmd.Start(); err != nil {
+		cancel()
+		output.wg.Wait()
+		return Result{}, fmt.Errorf("start command: %w", err)
+	}
+	processID.Store(int32(cmd.Process.Pid))
 	waitDone := make(chan error, 1)
 	go func() {
 		waitDone <- waitCommand(cmd, timedOut, e.killGrace())
 	}()
-	output.wg.Wait()
 	waitErr := <-waitDone
+	output.wg.Wait()
+	if drainErr := output.drainError(); drainErr != nil {
+		return Result{}, fmt.Errorf("drain output: %w", drainErr)
+	}
 	result := output.result(cmd, started, hasTimedOut(timedOut))
 	return result, finishError(waitErr, result.TimedOut)
 }
@@ -160,10 +166,12 @@ func hasTimedOut(ch <-chan struct{}) bool {
 }
 
 type commandOutput struct {
-	stdout *headTailBuffer
-	stderr *headTailBuffer
-	scrub  Scrubber
-	wg     sync.WaitGroup
+	stdout   *headTailBuffer
+	stderr   *headTailBuffer
+	scrub    Scrubber
+	wg       sync.WaitGroup
+	drainMu  sync.Mutex
+	drainErr error
 }
 
 func newCommandOutput(limit int, scrubber Scrubber) commandOutput {
@@ -197,6 +205,29 @@ func (o *commandOutput) scan(
 		buf.WriteString(line + "\n")
 		emitLine(ctx, sink, payload, eventType, line)
 	}
+	if err := scanner.Err(); err != nil && !isBenignDrainErr(err) {
+		o.recordDrainErr(fmt.Errorf("read stream: %w", err))
+	}
+}
+
+func isBenignDrainErr(err error) bool {
+	if err == nil || errors.Is(err, io.EOF) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "file already closed") || strings.Contains(msg, "broken pipe")
+}
+
+func (o *commandOutput) recordDrainErr(err error) {
+	o.drainMu.Lock()
+	defer o.drainMu.Unlock()
+	o.drainErr = errors.Join(o.drainErr, err)
+}
+
+func (o *commandOutput) drainError() error {
+	o.drainMu.Lock()
+	defer o.drainMu.Unlock()
+	return o.drainErr
 }
 
 func (o *commandOutput) result(cmd *exec.Cmd, started time.Time, timedOut bool) Result {
