@@ -17,6 +17,7 @@ import (
 const (
 	recordTypeToolDispatch = "tool_dispatch"
 	recordTypeTurnSnapshot = "turn_snapshot"
+	recordTypeHistoryEdit  = "history_edit"
 )
 
 // AuditRecord is a structured audit entry for a single tool dispatch.
@@ -33,6 +34,20 @@ type AuditRecord struct {
 	TokenCountBefore int       `json:"token_count_before"`
 	TokenCountAfter  int       `json:"token_count_after"`
 	Timestamp        time.Time `json:"timestamp"`
+}
+
+// HistoryEditRecord captures a turn-level history rewrite for observability.
+// New content is hashed rather than stored in full to avoid leaking secrets.
+type HistoryEditRecord struct {
+	RecordType      string    `json:"record_type"`
+	SessionID       string    `json:"session_id"`
+	TurnID          string    `json:"turn_id"`
+	TurnIndex       int       `json:"turn_index"`
+	CheckpointID    string    `json:"checkpoint_id"`
+	MessagesBefore  int       `json:"messages_before"`
+	MessagesAfter   int       `json:"messages_after"`
+	NewContentHash  string    `json:"new_content_hash"`
+	Timestamp       time.Time `json:"timestamp"`
 }
 
 // TurnSnapshotRecord captures lightweight context metadata at a turn boundary
@@ -52,6 +67,7 @@ type TurnSnapshotRecord struct {
 type AuditSink interface {
 	WriteAudit(AuditRecord) error
 	WriteTurnSnapshot(TurnSnapshotRecord) error
+	WriteHistoryEdit(HistoryEditRecord) error
 }
 
 // FileAuditSink appends JSON lines to a file.
@@ -72,6 +88,11 @@ func (s *FileAuditSink) WriteAudit(rec AuditRecord) error {
 
 func (s *FileAuditSink) WriteTurnSnapshot(rec TurnSnapshotRecord) error {
 	rec.RecordType = recordTypeTurnSnapshot
+	return s.appendJSON(rec)
+}
+
+func (s *FileAuditSink) WriteHistoryEdit(rec HistoryEditRecord) error {
+	rec.RecordType = recordTypeHistoryEdit
 	return s.appendJSON(rec)
 }
 
@@ -155,6 +176,22 @@ func (l *AuditLogger) RecordToolDispatch(ctx HookContext, tr ToolResult, verdict
 			"session_id", rec.SessionID,
 			"turn_id", rec.TurnID,
 			"tool_name", rec.ToolName,
+			"error", err,
+		)
+	}
+}
+
+// RecordHistoryEdit writes a history edit audit record.
+func (l *AuditLogger) RecordHistoryEdit(rec HistoryEditRecord) {
+	if !l.Enabled() {
+		return
+	}
+	rec.Timestamp = time.Now().UTC()
+	if err := l.sink.WriteHistoryEdit(rec); err != nil {
+		slog.Warn("structured audit write failed",
+			"record_type", recordTypeHistoryEdit,
+			"session_id", rec.SessionID,
+			"turn_id", rec.TurnID,
 			"error", err,
 		)
 	}

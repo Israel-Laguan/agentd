@@ -1,0 +1,176 @@
+package worker
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"agentd/internal/config"
+	"agentd/internal/gateway"
+)
+
+func testContextManager(t *testing.T) *ContextManager {
+	t.Helper()
+	return NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent", "task")
+}
+
+func TestMessageEditor_Edit_TruncatesFromTurn(t *testing.T) {
+	t.Parallel()
+	cm := testContextManager(t)
+	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, cm)
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "user", Content: "clarify"},
+		{Role: "assistant", Content: "wrong"},
+		{Role: "assistant", Content: "later"},
+	}
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "revised clarify")
+	if err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("len(messages) = %d, want 3 (anchor + revised turn0)", len(messages))
+	}
+	if messages[2].Content != "revised clarify" {
+		t.Fatalf("turn0 user = %q, want revised clarify", messages[2].Content)
+	}
+	for _, m := range messages {
+		if m.Content == "later" || m.Content == "wrong" {
+			t.Fatalf("downstream content should be dropped, got %+v", messages)
+		}
+	}
+}
+
+func TestMessageEditor_Edit_RewritesUserContent(t *testing.T) {
+	t.Parallel()
+	cm := testContextManager(t)
+	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, cm)
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "original task"},
+		{Role: "assistant", Content: "bad"},
+	}
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, EditAnchorUserTurn, "new task spec")
+	if err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	if messages[1].Content != "new task spec" {
+		t.Fatalf("anchor user content = %q, want new task spec", messages[1].Content)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("len(messages) = %d, want anchor only after anchor edit", len(messages))
+	}
+}
+
+func TestMessageEditor_Edit_CheckpointsBeforeMutate(t *testing.T) {
+	t.Parallel()
+	cm := testContextManager(t)
+	store := NewMemoryCheckpointStore()
+	editor := NewMessageEditor(store, nil, cm)
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "stale"},
+	}
+	result, err := editor.Edit(context.Background(), "sess-1", "sess-1:0", &messages, EditAnchorUserTurn, "task v2")
+	if err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	if result.CheckpointID == "" {
+		t.Fatal("expected checkpoint id")
+	}
+	if result.MessagesBefore != 3 || result.MessagesAfter != 2 {
+		t.Fatalf("before/after = %d/%d, want 3/2", result.MessagesBefore, result.MessagesAfter)
+	}
+	cp, err := store.Get(context.Background(), result.CheckpointID)
+	if err != nil {
+		t.Fatalf("Get checkpoint: %v", err)
+	}
+	if len(cp.Messages) != 3 {
+		t.Fatalf("checkpoint message count = %d, want 3", len(cp.Messages))
+	}
+	if cp.Messages[2].Content != "stale" {
+		t.Fatalf("checkpoint should preserve pre-edit history, last = %q", cp.Messages[2].Content)
+	}
+}
+
+func TestMessageEditor_Commit_AppendsOnly(t *testing.T) {
+	t.Parallel()
+	editor := NewMessageEditor(nil, nil, nil)
+	messages := []gateway.PromptMessage{{Role: "user", Content: "hi"}}
+	editor.Commit(&messages, gateway.PromptMessage{Role: "assistant", Content: "ok"})
+	if len(messages) != 2 {
+		t.Fatalf("len = %d, want 2", len(messages))
+	}
+	if messages[1].Role != "assistant" || messages[1].Content != "ok" {
+		t.Fatalf("committed = %+v", messages[1])
+	}
+}
+
+func TestMessageEditor_Edit_RejectsInvalidTurnIndex(t *testing.T) {
+	t.Parallel()
+	cm := testContextManager(t)
+	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, cm)
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+	}
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "nope")
+	if err == nil {
+		t.Fatal("expected error when no post-anchor turns exist")
+	}
+	if !strings.Contains(err.Error(), "turn index") {
+		t.Fatalf("error = %v, want turn index error", err)
+	}
+}
+
+func TestMessageEditor_Edit_RejectsAssistantOnlyTurn(t *testing.T) {
+	t.Parallel()
+	cm := testContextManager(t)
+	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, cm)
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "only assistant in rest"},
+	}
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "nope")
+	if err == nil {
+		t.Fatal("expected error for assistant-only editable turn")
+	}
+}
+
+func TestMessageEditor_Edit_AuditRecord(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	logger := NewAuditLogger(NewFileAuditSink(path), true)
+	cm := testContextManager(t)
+	editor := NewMessageEditor(NewMemoryCheckpointStore(), logger, cm)
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "x"},
+	}
+	_, err := editor.Edit(context.Background(), "sess", "turn-1", &messages, EditAnchorUserTurn, "new")
+	if err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read audit: %v", err)
+	}
+	line := string(data)
+	if !strings.Contains(line, "history_edit") {
+		t.Fatalf("audit line missing history_edit: %q", line)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &rec); err != nil {
+		t.Fatalf("unmarshal audit: %v", err)
+	}
+	if rec["new_content_hash"] == nil || rec["new_content_hash"] == "" {
+		t.Fatalf("missing new_content_hash in %v", rec)
+	}
+}

@@ -195,6 +195,42 @@ func TestRecordTurnSnapshot_Metadata(t *testing.T) {
 	}
 }
 
+func TestFileAuditSink_HistoryEdit(t *testing.T) {
+	t.Parallel()
+	path := filepathJoinTemp(t, "audit-edit.jsonl")
+	sink := NewFileAuditSink(path)
+	rec := HistoryEditRecord{
+		SessionID:      "sess-edit",
+		TurnID:         "sess-edit:0",
+		TurnIndex:      EditAnchorUserTurn,
+		CheckpointID:   "sess-edit:cp:1",
+		MessagesBefore: 5,
+		MessagesAfter:  2,
+		NewContentHash: hashArgs("revised"),
+		Timestamp:      time.Now().UTC(),
+	}
+	if err := sink.WriteHistoryEdit(rec); err != nil {
+		t.Fatalf("WriteHistoryEdit: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read audit: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(data))), &parsed); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if parsed["record_type"] != recordTypeHistoryEdit {
+		t.Fatalf("record_type = %v, want %q", parsed["record_type"], recordTypeHistoryEdit)
+	}
+	if parsed["checkpoint_id"] != "sess-edit:cp:1" {
+		t.Fatalf("checkpoint_id = %v", parsed["checkpoint_id"])
+	}
+	if strings.Contains(string(data), "revised") {
+		t.Fatal("audit must not store raw revised content")
+	}
+}
+
 func TestDispatchToolWithHooks_WritesStructuredAudit(t *testing.T) {
 	t.Parallel()
 	path := filepathJoinTemp(t, "audit-dispatch.jsonl")
