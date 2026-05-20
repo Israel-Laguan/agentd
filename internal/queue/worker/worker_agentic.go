@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"time"
 
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
@@ -60,91 +58,6 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	}
 }
 
-func (w *Worker) prepareAgenticIteration(
-	ctx context.Context, messages *[]gateway.PromptMessage,
-	iterationGuard *IterationGuard, cm *ContextManager,
-	ctxBudgetGuard *ContextBudgetGuard, task models.Task,
-) (contextExhausted bool, err error) {
-	const commentPollInterval = 5 * time.Second
-	if cm.ShouldPollComments(commentPollInterval) {
-		w.ingestHumanCorrections(ctx, task.ID, cm)
-	}
-
-	chars := totalChars(*messages)
-	warn, preExhausted := ctxBudgetGuard.Check(chars)
-	if preExhausted {
-		return true, nil
-	}
-
-	var prepared []gateway.PromptMessage
-	if warn {
-		prepared, err = cm.PrepareContextForceSummarize(ctx, *messages)
-	} else {
-		prepared, err = cm.PrepareContext(ctx, *messages)
-	}
-	if err != nil {
-		return false, err
-	}
-	prepared, err = w.applyAgenticTruncation(ctx, prepared)
-	if err != nil {
-		return false, err
-	}
-	*messages = prepared
-
-	if _, exhausted := ctxBudgetGuard.Check(totalChars(*messages)); exhausted {
-		return true, nil
-	}
-
-	if iterationGuard.ShouldInjectFinalMessage() {
-		*messages = append(*messages, iterationGuard.FinalMessage())
-		iterationGuard.ResetAllowFinal()
-	}
-	return false, nil
-}
-
-func (w *Worker) applyAgenticTruncation(ctx context.Context, messages []gateway.PromptMessage) ([]gateway.PromptMessage, error) {
-	trunc := gateway.NewAgenticTruncator(w.truncatorMax)
-	return trunc.Apply(ctx, messages, w.characterBudget)
-}
-
-func (w *Worker) handleAgenticToolCalls(
-	ctx context.Context, task models.Task, turnID string,
-	resp gateway.AIResponse, messages *[]gateway.PromptMessage,
-	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
-	taskHooks *HookChain, taskCaps *capabilities.Registry,
-	cm *ContextManager, toolTracker *toolFailureTracker,
-	turnIndex int, budgetGuard *BudgetGuard,
-) (abort bool, result LoopResult, report bool) {
-	for _, call := range resp.ToolCalls {
-		taskUpdatedAt := task.UpdatedAt
-		if fresh, err := w.store.GetTask(ctx, task.ID); err != nil {
-			slog.Warn("failed to refresh task version for tool dispatch", "task_id", task.ID, "error", err)
-		} else {
-			taskUpdatedAt = fresh.UpdatedAt
-		}
-		tr, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
-		contextContent := tr.ForContext()
-		if detected := cm.CheckToolResult(contextContent); len(detected) > 0 {
-			slog.Info("auto-detected context corrections", "task_id", task.ID, "count", len(detected))
-		}
-		*messages = append(*messages, gateway.PromptMessage{Role: "tool", ToolCallID: call.ID, Content: contextContent})
-
-		if failed, _ := toolTracker.Record(call.Function.Name, tr.Status); failed || tr.Status == ToolStatusFatal {
-			return true, LoopResult{
-				Status: LoopToolFailure,
-				Meta: w.buildLoopMeta(
-					turnIndex, budgetGuard.Usage(), totalChars(*messages), 0,
-					contextContent, call.Function.Name, "",
-				),
-			}, true
-		}
-		if suspended {
-			return true, LoopResult{}, false
-		}
-	}
-	return false, LoopResult{}, false
-}
-
 func (w *Worker) guardAgenticIteration(
 	ctx context.Context, task models.Task,
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
@@ -156,6 +69,25 @@ func (w *Worker) guardAgenticIteration(
 		w.handleGatewayError(ctx, task, err)
 		return nil, err
 	}
+	if stop, err := w.guardIterationAndBudget(
+		ctx, task, messages, iterationGuard, budgetGuard, ctxBudgetGuard, cm, turnIndex,
+	); stop != nil || err != nil {
+		return stop, err
+	}
+	w.recordAgenticTurnSnapshot(task.ID, turnID, messages, tools, budgetGuard, goalTracker)
+	if err := budgetGuard.BeforeCall(); err != nil {
+		return w.guardBudgetBeforeCall(ctx, task, messages, budgetGuard, ctxBudgetGuard, turnIndex, err)
+	}
+	return nil, nil
+}
+
+func (w *Worker) guardIterationAndBudget(
+	ctx context.Context, task models.Task,
+	messages *[]gateway.PromptMessage,
+	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
+	ctxBudgetGuard *ContextBudgetGuard, cm *ContextManager,
+	turnIndex int,
+) (*LoopResult, error) {
 	if err := iterationGuard.BeforeIteration(); err != nil {
 		r := LoopResult{
 			Status: LoopTurnLimitExceeded,
@@ -181,6 +113,13 @@ func (w *Worker) guardAgenticIteration(
 		}
 		return &r, errContextBudget
 	}
+	return nil, nil
+}
+
+func (w *Worker) recordAgenticTurnSnapshot(
+	taskID, turnID string, messages *[]gateway.PromptMessage,
+	tools []gateway.ToolDefinition, budgetGuard *BudgetGuard, goalTracker *GoalTracker,
+) {
 	goalProgress := 0.0
 	if goalTracker != nil {
 		if g := goalTracker.Goal(); g != nil {
@@ -188,27 +127,30 @@ func (w *Worker) guardAgenticIteration(
 		}
 	}
 	w.recordTurnSnapshot(
-		task.ID, turnID,
+		taskID, turnID,
 		len(*messages),
 		budgetGuard.Usage(),
 		toolNamesFromDefinitions(tools),
 		goalProgress,
 	)
-	if err := budgetGuard.BeforeCall(); err != nil {
-		if budgetGuard.IsBudgetExceeded(err) {
-			r := LoopResult{
-				Status: LoopBudgetExhausted,
-				Meta: w.buildLoopMeta(
-					turnIndex, budgetGuard.Usage(), totalChars(*messages), ctxBudgetGuard.TotalBudget(),
-					err.Error(), "", "token",
-				),
-			}
-			return &r, err
+}
+
+func (w *Worker) guardBudgetBeforeCall(
+	ctx context.Context, task models.Task, messages *[]gateway.PromptMessage,
+	budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard, turnIndex int, err error,
+) (*LoopResult, error) {
+	if budgetGuard.IsBudgetExceeded(err) {
+		r := LoopResult{
+			Status: LoopBudgetExhausted,
+			Meta: w.buildLoopMeta(
+				turnIndex, budgetGuard.Usage(), totalChars(*messages), ctxBudgetGuard.TotalBudget(),
+				err.Error(), "", "token",
+			),
 		}
-		w.handleGatewayError(ctx, task, err)
-		return nil, err
+		return &r, err
 	}
-	return nil, nil
+	w.handleGatewayError(ctx, task, err)
+	return nil, err
 }
 
 var (
@@ -235,20 +177,11 @@ func (w *Worker) processAgenticIteration(
 		return false, LoopResult{}, false, guardErr
 	}
 
-	req := w.buildAgenticRequest(task, profile, *messages, tools)
-	resp, err := w.gateway.Generate(ctx, req)
+	resp, stop, err := w.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex)
+	if stop != nil {
+		return false, *stop, true, nil
+	}
 	if err != nil {
-		if budgetGuard.IsBudgetExceeded(err) {
-			r := LoopResult{
-				Status: LoopBudgetExhausted,
-				Meta: w.buildLoopMeta(
-					turnIndex, budgetGuard.Usage(), totalChars(*messages), ctxBudgetGuard.TotalBudget(),
-					err.Error(), "", "token",
-				),
-			}
-			return false, r, true, nil
-		}
-		w.handleGatewayError(ctx, task, err)
 		return false, LoopResult{}, false, err
 	}
 	budgetGuard.AfterCall(resp.TokenUsage)
@@ -261,6 +194,46 @@ func (w *Worker) processAgenticIteration(
 		return w.finishAgenticTurnNoTools(ctx, task, profile, resp.Content, goalTracker, turnIndex, budgetGuard, ctxBudgetGuard, messages)
 	}
 
+	return w.continueAgenticAfterTools(
+		ctx, task, resp, messages, toolToAdapter, toolExecutor,
+		taskHooks, taskCaps, cm, goalTracker, toolTracker,
+		iterationGuard, budgetGuard, turnID, turnIndex,
+	)
+}
+
+func (w *Worker) generateAgenticTurn(
+	ctx context.Context, task models.Task, profile models.AgentProfile,
+	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
+	budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard, turnIndex int,
+) (gateway.AIResponse, *LoopResult, error) {
+	req := w.buildAgenticRequest(task, profile, *messages, tools)
+	resp, err := w.gateway.Generate(ctx, req)
+	if err != nil {
+		if budgetGuard.IsBudgetExceeded(err) {
+			r := LoopResult{
+				Status: LoopBudgetExhausted,
+				Meta: w.buildLoopMeta(
+					turnIndex, budgetGuard.Usage(), totalChars(*messages), ctxBudgetGuard.TotalBudget(),
+					err.Error(), "", "token",
+				),
+			}
+			return gateway.AIResponse{}, &r, nil
+		}
+		w.handleGatewayError(ctx, task, err)
+		return gateway.AIResponse{}, nil, err
+	}
+	return resp, nil, nil
+}
+
+func (w *Worker) continueAgenticAfterTools(
+	ctx context.Context, task models.Task,
+	resp gateway.AIResponse, messages *[]gateway.PromptMessage,
+	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
+	taskHooks *HookChain, taskCaps *capabilities.Registry,
+	cm *ContextManager, goalTracker *GoalTracker, toolTracker *toolFailureTracker,
+	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
+	turnID string, turnIndex int,
+) (continueLoop bool, result LoopResult, report bool, err error) {
 	iterationGuard.AfterIteration(true)
 	if abort, toolResult, toolReport := w.handleAgenticToolCalls(
 		ctx, task, turnID, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps,
@@ -268,7 +241,6 @@ func (w *Worker) processAgenticIteration(
 	); abort {
 		return false, toolResult, toolReport, nil
 	}
-
 	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
 	if stalled || stallErr != nil {
 		if stallErr != nil {
@@ -276,85 +248,5 @@ func (w *Worker) processAgenticIteration(
 		}
 		return false, LoopResult{}, false, stallErr
 	}
-
 	return true, LoopResult{}, false, nil
-}
-
-func (w *Worker) buildAgenticRequest(
-	task models.Task, profile models.AgentProfile,
-	messages []gateway.PromptMessage, tools []gateway.ToolDefinition,
-) gateway.AIRequest {
-	req := gateway.AIRequest{
-		Messages:       messages,
-		Temperature:    profile.Temperature,
-		Tools:          tools,
-		AgentID:        task.AgentID,
-		Role:           gateway.RoleWorker,
-		TaskID:         task.ID,
-		Provider:       profile.Provider,
-		Model:          profile.Model,
-		MaxTokens:      profile.MaxTokens,
-		SkipTruncation: true,
-	}
-	return w.applyTuning(req, task, profile)
-}
-
-func appendAssistantMessage(messages *[]gateway.PromptMessage, resp gateway.AIResponse) {
-	*messages = append(*messages, gateway.PromptMessage{
-		Role:      "assistant",
-		Content:   resp.Content,
-		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
-	})
-}
-
-func (w *Worker) finishAgenticTurnNoTools(
-	ctx context.Context, task models.Task, profile models.AgentProfile,
-	content string, goalTracker *GoalTracker,
-	turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
-	messages *[]gateway.PromptMessage,
-) (continueLoop bool, result LoopResult, report bool, err error) {
-	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, content)
-	if stalled || stallErr != nil {
-		if stallErr != nil {
-			w.handleGatewayError(ctx, task, stallErr)
-		}
-		return false, LoopResult{}, false, stallErr
-	}
-	w.commitTextWithProfile(ctx, task, content, &profile)
-	r := LoopResult{
-		Status: LoopSuccessfulCompletion,
-		Meta: w.buildLoopMeta(
-			turnIndex, budgetGuard.Usage(), totalChars(*messages), ctxBudgetGuard.TotalBudget(),
-			"", "", "",
-		),
-	}
-	return false, r, true, nil
-}
-
-func (w *Worker) handleGoalProgress(ctx context.Context, task models.Task, goalTracker *GoalTracker, content string) (bool, error) {
-	if goalTracker == nil || goalTracker.Goal() == nil {
-		return false, nil
-	}
-	completed, blocked := parseGoalProgress(content)
-	if stalled := goalTracker.AfterTurn(ctx, completed, blocked); stalled {
-		if err := w.handleGoalStalled(ctx, task, goalTracker); err != nil {
-			return true, err
-		}
-		return true, nil
-	}
-	return false, nil
-}
-
-func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
-	tools := append([]gateway.ToolDefinition(nil), toolExecutor.Definitions()...)
-	tools = append(tools, DelegateToolDefinition(), DelegateParallelToolDefinition())
-	if w.capabilities == nil {
-		return tools, nil
-	}
-	capabilityTools, toolToAdapter, err := w.capabilities.GetToolsAndAdapterIndex(ctx)
-	if err != nil {
-		slog.Warn("failed to get capability tools", "error", err)
-		return tools, nil
-	}
-	return append(tools, capabilityTools...), toolToAdapter
 }
