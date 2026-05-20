@@ -73,17 +73,26 @@ func TestPrependReviewRejectionFeedback_InjectsOnce(t *testing.T) {
 	w := &Worker{store: store}
 	base := []gateway.PromptMessage{{Role: "system", Content: "sys"}, {Role: "user", Content: "task"}}
 
-	first := w.prependReviewRejectionFeedback(ctx, parent, base)
+	first, subtaskID := w.prependReviewRejectionFeedback(ctx, parent, base)
 	if len(first) != len(base)+1 {
 		t.Fatalf("messages = %d, want %d", len(first), len(base)+1)
 	}
 	if !strings.Contains(first[len(first)-1].Content, "Please add error handling") {
 		t.Fatalf("feedback = %q, want rejection reason", first[len(first)-1].Content)
 	}
+	if subtaskID == "" {
+		t.Fatal("expected subtask ID for pending rejection consumption")
+	}
+	if err := markReviewRejectionUsed(ctx, store, parent.ID, subtaskID); err != nil {
+		t.Fatalf("mark rejection used: %v", err)
+	}
 
-	second := w.prependReviewRejectionFeedback(ctx, parent, base)
+	second, secondID := w.prependReviewRejectionFeedback(ctx, parent, base)
 	if len(second) != len(base) {
 		t.Fatalf("second call messages = %d, want %d (rejection already consumed)", len(second), len(base))
+	}
+	if secondID != "" {
+		t.Fatal("expected no pending rejection after marker written")
 	}
 }
 

@@ -13,13 +13,20 @@ import (
 )
 
 func (w *Worker) commit(ctx context.Context, task models.Task, result sandbox.Result, err error) {
+	_ = w.commitSucceeded(ctx, task, result, err)
+}
+
+// commitSucceeded persists a successful sandbox result and reports whether the
+// task result was written. Callers that must gate side effects on persistence
+// (e.g. HITL consumption markers) should use this instead of commit.
+func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result sandbox.Result, err error) bool {
 	if safety.ClassifiesAsBreakerFailure(err) {
 		w.handleGatewayError(ctx, task, err)
-		return
+		return false
 	}
 	if err != nil || !result.Success {
 		w.handleAgentFailure(ctx, task, failurePayload(result, err))
-		return
+		return false
 	}
 	if w.breaker != nil {
 		w.breaker.RecordSuccess()
@@ -30,7 +37,9 @@ func (w *Worker) commit(ctx context.Context, task models.Task, result sandbox.Re
 	})
 	if updateErr != nil {
 		w.emit(ctx, task, "ERROR", updateErr.Error())
+		return false
 	}
+	return true
 }
 
 func (w *Worker) handleAgentFailure(ctx context.Context, task models.Task, payload string) {

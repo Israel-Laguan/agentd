@@ -52,7 +52,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 	messages := []gateway.PromptMessage{{Role: "user", Content: "do work"}}
 
 	ctxBudget := NewContextBudgetGuard(60000, 0)
-	cont, result, report, err := w.processAgenticIteration(
+	cont, result, report, _, err := w.processAgenticIteration(
 		context.Background(),
 		task,
 		models.AgentProfile{},

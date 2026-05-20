@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -16,10 +17,32 @@ func (w *Worker) buildElicitationFileContext(task models.Task, project models.Pr
 	if ctx := strings.TrimSpace(project.OriginalInput); ctx != "" {
 		parts = append(parts, truncateRunes(ctx, 2000))
 	}
-	if d := strings.TrimSpace(task.Description); d != "" {
-		parts = append(parts, truncateRunes(d, 2000))
-	}
 	return strings.Join(parts, "\n")
+}
+
+// reblockTaskForPendingHITL moves a RUNNING parent back to BLOCKED when an open
+// clarification subtask already exists (re-process after stale recovery, etc.).
+func (w *Worker) reblockTaskForPendingHITL(ctx context.Context, task models.Task) (models.Task, error) {
+	updated, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked)
+	if err == nil {
+		return *updated, nil
+	}
+	if errors.Is(err, models.ErrStateConflict) || errors.Is(err, models.ErrOptimisticLock) {
+		fresh, getErr := w.store.GetTask(ctx, task.ID)
+		if getErr != nil {
+			return task, fmt.Errorf("refresh task for re-block: %w", getErr)
+		}
+		updated, retryErr := w.store.UpdateTaskState(ctx, fresh.ID, fresh.UpdatedAt, models.TaskStateBlocked)
+		if retryErr == nil {
+			return *updated, nil
+		}
+		if errors.Is(retryErr, models.ErrStateConflict) || errors.Is(retryErr, models.ErrOptimisticLock) {
+			slog.Warn("failed to re-block task for pending HITL; will retry on next pass", "task_id", task.ID, "error", retryErr)
+			return task, nil
+		}
+		return task, fmt.Errorf("re-block task for pending HITL: %w", retryErr)
+	}
+	return task, fmt.Errorf("re-block task for pending HITL: %w", err)
 }
 
 // runPreTaskElicitation consumes prior answers, skips well-specified tasks, or blocks for human input.
@@ -35,7 +58,11 @@ func (w *Worker) runPreTaskElicitation(ctx context.Context, task models.Task, pr
 		return task, false, fmt.Errorf("list elicitation subtasks: %w", err)
 	}
 	if pending := findPendingClarificationSubtask(children); pending != nil {
-		return task, true, nil
+		reblocked, err := w.reblockTaskForPendingHITL(ctx, task)
+		if err != nil {
+			return task, false, err
+		}
+		return reblocked, true, nil
 	}
 
 	if shouldSkipElicitation(task) {
@@ -93,7 +120,7 @@ func (w *Worker) requestElicitationFromAgent(
 		return fmt.Errorf("no elicitation subtask created")
 	}
 	if err := recordHITLExpiry(ctx, w.store, task.ID, time.Now().Add(DefaultApprovalTimeout)); err != nil {
-		return fmt.Errorf("record elicitation expiry: %w", err)
+		slog.Warn("failed to record elicitation expiry", "task_id", task.ID, "error", err)
 	}
 	w.emit(ctx, task, "CLARIFICATION_REQUESTED", truncate(titleQuestion, 500))
 	return nil
