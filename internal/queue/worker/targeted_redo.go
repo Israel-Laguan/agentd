@@ -87,7 +87,7 @@ func replaceSection(output, stepID, newBody string) string {
 	bodyStart := start + len(open)
 	endRel := strings.Index(output[bodyStart:], close)
 	if endRel < 0 {
-		return output
+		return output[:start] + open + "\n" + strings.TrimSpace(newBody) + "\n" + close + "\n"
 	}
 	bodyEnd := bodyStart + endRel
 	return output[:bodyStart] + "\n" + strings.TrimSpace(newBody) + "\n" + output[bodyEnd:]
@@ -126,12 +126,20 @@ func (w *Worker) buildRedoRequest(
 
 func (w *Worker) repairSection(
 	ctx context.Context, task models.Task, profile models.AgentProfile,
-	step PlanStep, errDesc, priorBody string,
+	step PlanStep, errDesc, priorBody string, budgetGuard *BudgetGuard,
 ) (string, error) {
+	if budgetGuard != nil {
+		if err := budgetGuard.BeforeCall(); err != nil {
+			return "", err
+		}
+	}
 	req := w.buildRedoRequest(task, profile, step, errDesc, priorBody)
 	resp, err := w.gateway.Generate(ctx, req)
 	if err != nil {
 		return "", err
+	}
+	if budgetGuard != nil {
+		budgetGuard.AfterCall(resp.TokenUsage)
 	}
 	return strings.TrimSpace(resp.Content), nil
 }
@@ -149,14 +157,12 @@ func stepValidationError(step PlanStep, output string) string {
 
 func (w *Worker) repairOutputWithPlan(
 	ctx context.Context, task models.Task, profile models.AgentProfile, plan *Plan, output string,
+	budgetGuard *BudgetGuard,
 ) string {
 	if plan == nil || w.planningCfg.ComplexityThreshold <= 0 {
 		return output
 	}
 	maxPasses := w.planningCfg.MaxRedoPasses
-	if maxPasses <= 0 {
-		maxPasses = 3
-	}
 	passes := make(map[string]int)
 	for {
 		failing := ValidateOutput(output, *plan)
@@ -170,7 +176,7 @@ func (w *Worker) repairOutputWithPlan(
 			}
 			errDesc := stepValidationError(step, output)
 			prior, _ := extractSection(output, step.ID)
-			newBody, err := w.repairSection(ctx, task, profile, step, errDesc, prior)
+			newBody, err := w.repairSection(ctx, task, profile, step, errDesc, prior, budgetGuard)
 			passes[step.ID]++
 			if err != nil {
 				continue

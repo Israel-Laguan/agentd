@@ -276,6 +276,50 @@ func TestFilePipeline_Process_RejectsPathEscape(t *testing.T) {
 	}
 }
 
+func TestFilePipeline_CacheHitBackfillsEmbedding(t *testing.T) {
+	t.Parallel()
+	store, err := NewDocStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("same content for embed backfill")
+	hash := contentHash(content)
+	doc := &CachedDoc{
+		ContentHash: hash,
+		Path:        "first.txt",
+		Markdown:    "cached body without embedding",
+		SourceSize:  int64(len(content)),
+		SourceMtime: 100,
+	}
+	if err := store.Put(doc); err != nil {
+		t.Fatal(err)
+	}
+	embedder := &fakeEmbedder{}
+	pipe := NewFilePipeline(FilePipelineConfig{
+		Workspace: t.TempDir(),
+		Store:     store,
+		Embedder:  embedder,
+	})
+	info := &fakeFileInfo{size: int64(len(content)), mtime: 100}
+	got, err := pipe.ingest(context.Background(), "second.txt", "", content, info, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&embedder.calls) != 1 {
+		t.Fatalf("embedder calls = %d, want 1 on cache hit backfill", embedder.calls)
+	}
+	if len(got.Embedding) == 0 {
+		t.Fatal("expected embedding on cache hit backfill")
+	}
+	cached, ok := store.Get(hash, int64(len(content)), 100)
+	if !ok {
+		t.Fatal("expected updated doc in store")
+	}
+	if len(cached.Embedding) == 0 {
+		t.Fatal("expected embedding persisted in store")
+	}
+}
+
 func TestFilePipeline_CacheHitPreservesPath(t *testing.T) {
 	t.Parallel()
 	store, err := NewDocStore(t.TempDir())

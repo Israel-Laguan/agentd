@@ -102,6 +102,10 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 }
 
 func loadAgenticPlanningConfig(v *viper.Viper) AgenticPlanningConfig {
+	complexity := v.GetInt("agentic.planning.complexity_threshold")
+	if complexity < 0 {
+		complexity = 0
+	}
 	maxRedo := v.GetInt("agentic.planning.max_redo_passes")
 	if maxRedo <= 0 {
 		maxRedo = DefaultPlanningMaxRedoPasses
@@ -111,7 +115,7 @@ func loadAgenticPlanningConfig(v *viper.Viper) AgenticPlanningConfig {
 		planCtx = DefaultPlanContextMaxChars
 	}
 	return AgenticPlanningConfig{
-		ComplexityThreshold: v.GetInt("agentic.planning.complexity_threshold"),
+		ComplexityThreshold: complexity,
 		MaxRedoPasses:       maxRedo,
 		PlanContextMaxChars: planCtx,
 	}
