@@ -57,10 +57,11 @@ func NewFilePipeline(cfg FilePipelineConfig) *FilePipeline {
 	}
 }
 
-// ProcessRead converts and caches a single file. Selection (topK) is skipped
-// because the read tool always returns the requested file's content.
+// ProcessRead converts and caches a single file without embedding. Selection
+// (topK) is skipped because the read tool always returns the requested file's
+// content; embeddings are computed later during batch Process/Select if needed.
 func (p *FilePipeline) ProcessRead(ctx context.Context, relPath, resolvedPath string, raw []byte, info os.FileInfo) (string, error) {
-	doc, err := p.ingest(ctx, relPath, resolvedPath, raw, info)
+	doc, err := p.ingest(ctx, relPath, resolvedPath, raw, info, false)
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +83,7 @@ func (p *FilePipeline) Process(ctx context.Context, relPaths []string) (string, 
 		if err != nil {
 			return "", err
 		}
-		doc, err := p.ingest(ctx, rel, full, raw, info)
+		doc, err := p.ingest(ctx, rel, full, raw, info, true)
 		if err != nil {
 			return "", err
 		}
@@ -95,7 +96,7 @@ func (p *FilePipeline) Process(ctx context.Context, relPaths []string) (string, 
 	return formatDocsForInjection(selected), nil
 }
 
-func (p *FilePipeline) ingest(ctx context.Context, relPath, resolvedPath string, raw []byte, info os.FileInfo) (*CachedDoc, error) {
+func (p *FilePipeline) ingest(ctx context.Context, relPath, resolvedPath string, raw []byte, info os.FileInfo, embed bool) (*CachedDoc, error) {
 	hash := contentHash(raw)
 	size := info.Size()
 	mtime := info.ModTime().Unix()
@@ -118,7 +119,7 @@ func (p *FilePipeline) ingest(ctx context.Context, relPath, resolvedPath string,
 	}
 
 	var embedding []float32
-	if p.embedder != nil {
+	if embed && p.embedder != nil {
 		snippet := firstNTokens(markdown, embedSnippetTokens)
 		vecs, embedErr := p.embedder.Embed(ctx, []string{snippet})
 		if embedErr != nil {
