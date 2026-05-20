@@ -124,6 +124,15 @@ func TestShouldSkipElicitation_AmbiguousShort(t *testing.T) {
 	}
 }
 
+func TestShouldSkipElicitation_StandaloneFilename(t *testing.T) {
+	t.Parallel()
+	desc := strings.Repeat("Update the entrypoint in main.go to wire the new handler. ", 12)
+	task := models.Task{Description: desc}
+	if !shouldSkipElicitation(task) {
+		t.Fatal("expected task referencing standalone main.go to skip elicitation")
+	}
+}
+
 func TestShouldSkipElicitation_LongNarrativeDoesNotSkip(t *testing.T) {
 	t.Parallel()
 	desc := strings.Repeat(
