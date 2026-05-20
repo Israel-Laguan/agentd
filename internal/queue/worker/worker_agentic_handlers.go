@@ -112,12 +112,12 @@ func (w *Worker) finishAgenticTurnNoTools(
 				)
 				if respecErr == nil {
 					_, editErr := w.messageEditor.Edit(
-						ctx, task.ID, turnID, messages, EditAnchorUserTurn, newContent,
+						ctx, task.ID, turnID, messages, EditAnchorUserTurn, newContent, cm,
 					)
 					if editErr == nil {
-						*respecAttempts++
+						(*respecAttempts)++
 						// In-session structural repair: rewind and re-run without committing broken output.
-						return true, LoopResult{}, false, 0, nil
+						return true, LoopResult{}, false, rewindToFirstTurn, nil
 					}
 				}
 			}

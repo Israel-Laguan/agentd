@@ -35,6 +35,16 @@ type MessageEditor struct {
 	cm          *ContextManager
 }
 
+func resolveEditContextManager(sessionCM, editorCM *ContextManager) *ContextManager {
+	if sessionCM != nil {
+		return sessionCM
+	}
+	if editorCM != nil {
+		return editorCM
+	}
+	return &ContextManager{}
+}
+
 // NewMessageEditor returns an editor backed by checkpoints and optional audit logging.
 func NewMessageEditor(checkpoints CheckpointStore, audit *AuditLogger, cm *ContextManager) *MessageEditor {
 	if cm == nil {
@@ -45,12 +55,14 @@ func NewMessageEditor(checkpoints CheckpointStore, audit *AuditLogger, cm *Conte
 
 // Edit checkpoints the current history, rewrites the user message at editable turnIndex,
 // and truncates that turn's suffix plus all subsequent turns.
+// cm is the session ContextManager when available; nil falls back to the editor's default.
 func (e *MessageEditor) Edit(
 	ctx context.Context,
 	sessionID, turnID string,
 	messages *[]gateway.PromptMessage,
 	turnIndex int,
 	newContent string,
+	cm *ContextManager,
 ) (EditResult, error) {
 	if e == nil {
 		return EditResult{}, errors.New("message editor: nil editor")
@@ -63,7 +75,7 @@ func (e *MessageEditor) Edit(
 	}
 	before := len(*messages)
 
-	edited, err := applyTurnEdit(*messages, turnIndex, newContent, e.cm)
+	edited, err := applyTurnEdit(*messages, turnIndex, newContent, resolveEditContextManager(cm, e.cm))
 	if err != nil {
 		return EditResult{}, err
 	}

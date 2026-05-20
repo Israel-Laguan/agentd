@@ -28,7 +28,7 @@ func TestMessageEditor_Edit_TruncatesFromTurn(t *testing.T) {
 		{Role: "assistant", Content: "wrong"},
 		{Role: "assistant", Content: "later"},
 	}
-	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "revised clarify")
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "revised clarify", nil)
 	if err != nil {
 		t.Fatalf("Edit: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestMessageEditor_Edit_RewritesUserContent(t *testing.T) {
 		{Role: "user", Content: "original task"},
 		{Role: "assistant", Content: "bad"},
 	}
-	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, EditAnchorUserTurn, "new task spec")
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, EditAnchorUserTurn, "new task spec", nil)
 	if err != nil {
 		t.Fatalf("Edit: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestMessageEditor_Edit_CheckpointsBeforeMutate(t *testing.T) {
 		{Role: "user", Content: "task"},
 		{Role: "assistant", Content: "stale"},
 	}
-	result, err := editor.Edit(context.Background(), "sess-1", "sess-1:0", &messages, EditAnchorUserTurn, "task v2")
+	result, err := editor.Edit(context.Background(), "sess-1", "sess-1:0", &messages, EditAnchorUserTurn, "task v2", nil)
 	if err != nil {
 		t.Fatalf("Edit: %v", err)
 	}
@@ -120,11 +120,13 @@ func TestMessageEditor_Edit_NoCheckpointOnValidationFailure(t *testing.T) {
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
 	}
-	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "nope")
+	baseline := append([]gateway.PromptMessage(nil), messages...)
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "nope", nil)
 	if err == nil {
 		t.Fatal("expected error when no post-anchor turns exist")
 	}
-	result, err := editor.Edit(context.Background(), "sess", "sess:1", &messages, EditAnchorUserTurn, "task v2")
+	messages = append([]gateway.PromptMessage(nil), baseline...)
+	result, err := editor.Edit(context.Background(), "sess", "sess:1", &messages, EditAnchorUserTurn, "task v2", nil)
 	if err != nil {
 		t.Fatalf("valid Edit: %v", err)
 	}
@@ -141,7 +143,7 @@ func TestMessageEditor_Edit_RejectsInvalidTurnIndex(t *testing.T) {
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
 	}
-	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "nope")
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "nope", nil)
 	if err == nil {
 		t.Fatal("expected error when no post-anchor turns exist")
 	}
@@ -159,7 +161,7 @@ func TestMessageEditor_Edit_RejectsAssistantOnlyTurn(t *testing.T) {
 		{Role: "user", Content: "task"},
 		{Role: "assistant", Content: "only assistant in rest"},
 	}
-	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "nope")
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, 0, "nope", nil)
 	if err == nil {
 		t.Fatal("expected error for assistant-only editable turn")
 	}
@@ -176,7 +178,7 @@ func TestMessageEditor_Edit_AuditRecord(t *testing.T) {
 		{Role: "user", Content: "task"},
 		{Role: "assistant", Content: "x"},
 	}
-	_, err := editor.Edit(context.Background(), "sess", "turn-1", &messages, EditAnchorUserTurn, "new")
+	_, err := editor.Edit(context.Background(), "sess", "turn-1", &messages, EditAnchorUserTurn, "new", nil)
 	if err != nil {
 		t.Fatalf("Edit: %v", err)
 	}

@@ -25,13 +25,13 @@ func (g *respecFailGateway) Generate(_ context.Context, req gateway.AIRequest) (
 }
 
 func (g *respecFailGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
+	return &models.DraftPlan{}, nil
 }
 func (g *respecFailGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
+	return &gateway.ScopeAnalysis{}, nil
 }
 func (g *respecFailGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
+	return &gateway.IntentAnalysis{}, nil
 }
 func (g *respecFailGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
