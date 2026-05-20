@@ -42,7 +42,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	var workPlan *Plan
 	if w.shouldPlan(task) {
 		var planErr error
-		workPlan, planErr = w.generatePlan(cancelCtx, task, project, profile, budgetGuard)
+		workPlan, planErr = w.generatePlan(cancelCtx, task, project, budgetGuard)
 		if planErr != nil {
 			slog.Warn("failed to generate work plan; continuing without plan", "task_id", task.ID, "error", planErr)
 		}
