@@ -143,7 +143,7 @@ func (w *Worker) buildPlanRequest(task models.Task, planContext string) gateway.
 		AgentID:  task.AgentID,
 		Role:     gateway.RoleMemory,
 		TaskID:   task.ID,
-		MaxTokens: 2000,
+		MaxTokens: planPhaseTokenReserve,
 	}
 }
 
