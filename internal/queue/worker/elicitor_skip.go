@@ -31,7 +31,7 @@ var (
 		`|\brequirements?\s*:` +
 		`)`)
 	elicitationListPattern     = regexp.MustCompile(`(?m)^\s*([-*•]|\d+[.)])\s+\S`)
-	elicitationFilePathPattern = regexp.MustCompile(`(?:^|[\s(])(?:[\w.-]+/)+[\w./-]+\.(?:go|ts|tsx|js|jsx|py|rs|java|md|yaml|yml|json)\b`)
+	elicitationFilePathPattern = regexp.MustCompile(`(?:^|[\s(])(?:[\w.-]+/)*[\w.-]+\.(?:go|ts|tsx|js|jsx|py|rs|java|md|yaml|yml|json)\b`)
 )
 
 func hasExplicitConstraints(task models.Task) bool {
