@@ -165,8 +165,10 @@ func NewWorker(
 		toolFailureStreak:       opts.ToolFailureStreak,
 		tokenUsageHook:          opts.TokenUsageHook,
 		fileContextCfg:          opts.FileContext,
-		planningCfg:             opts.Planning,
+		planningCfg:       opts.Planning,
+		checkpointStore:   NewMemoryCheckpointStore(),
 	}
+	w.messageEditor = NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
 	w.setupFileContext(opts)
 	w.setupOptionalLoaders(opts)
 	return w

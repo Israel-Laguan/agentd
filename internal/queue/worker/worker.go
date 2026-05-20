@@ -60,6 +60,8 @@ type Worker struct {
 	fileContextCfg            config.FileContextConfig
 	docStore                  *DocStore
 	planningCfg               config.AgenticPlanningConfig
+	messageEditor             *MessageEditor
+	checkpointStore           CheckpointStore
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.

@@ -98,18 +98,35 @@ func (w *Worker) handleAgenticToolCalls(
 func (w *Worker) finishAgenticTurnNoTools(
 	ctx context.Context, task models.Task, profile models.AgentProfile,
 	content string, workPlan *Plan, goalTracker *GoalTracker,
-	turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
-	messages *[]gateway.PromptMessage,
-) (continueLoop bool, result LoopResult, report bool, err error) {
+	turnID string, turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
+	cm *ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
+) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
 	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, content)
 	if stalled || stallErr != nil {
 		if stallErr != nil {
 			w.handleGatewayError(ctx, task, stallErr)
 		}
-		return false, LoopResult{}, false, stallErr
+		return false, LoopResult{}, false, -1, stallErr
 	}
-	if workPlan != nil {
+	if workPlan != nil && w.planningCfg.ComplexityThreshold > 0 {
 		content = w.repairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
+		failing := ValidateOutput(content, *workPlan)
+		if len(failing) > 0 && respecAttempts != nil && *respecAttempts < 1 && w.messageEditor != nil {
+			popLastAssistantMessage(messages)
+			newContent, respecErr := w.generateRespecifiedUserTurn(
+				ctx, task, workPlan, failing, *messages, cm, budgetGuard,
+			)
+			if respecErr == nil {
+				_, editErr := w.messageEditor.Edit(
+					ctx, task.ID, turnID, messages, EditAnchorUserTurn, newContent,
+				)
+				if editErr == nil {
+					*respecAttempts++
+					// In-session structural repair: rewind and re-run without committing broken output.
+					return true, LoopResult{}, false, 0, nil
+				}
+			}
+		}
 		content = preparePlanCommitContent(content, *workPlan)
 	}
 	w.commitTextWithProfile(ctx, task, content, &profile)
@@ -120,7 +137,17 @@ func (w *Worker) finishAgenticTurnNoTools(
 			"", "", "",
 		),
 	}
-	return false, r, true, nil
+	return false, r, true, -1, nil
+}
+
+func popLastAssistantMessage(messages *[]gateway.PromptMessage) {
+	if messages == nil || len(*messages) == 0 {
+		return
+	}
+	last := len(*messages) - 1
+	if (*messages)[last].Role == "assistant" {
+		*messages = (*messages)[:last]
+	}
 }
 
 func (w *Worker) handleGoalProgress(ctx context.Context, task models.Task, goalTracker *GoalTracker, content string) (bool, error) {
