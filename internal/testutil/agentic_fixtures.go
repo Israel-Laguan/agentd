@@ -1,4 +1,4 @@
-package worker
+package testutil
 
 import "strings"
 
@@ -8,6 +8,6 @@ func AgenticTestTaskDescription() string {
 	return strings.Repeat(
 		"Execute the agentic test scenario with explicit scope and acceptance criteria. ", 10) +
 		"\n- must complete without human clarification\n" +
-		"- must use internal/queue/worker/test_fixtures.go as a reference path\n" +
+		"- must use internal/testutil/agentic_fixtures.go as a reference path\n" +
 		"Acceptance: returns the expected committed output."
 }

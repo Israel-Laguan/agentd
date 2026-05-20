@@ -138,7 +138,7 @@ func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing
 func materializeLegacyReviewTask(t *testing.T, store models.KanbanStore, ctx context.Context, project, title string) models.Task {
 	t.Helper()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: project, Tasks: []models.DraftTask{{Title: title, Description: AgenticTestTaskDescription()}},
+		ProjectName: project, Tasks: []models.DraftTask{{Title: title, Description: testutil.AgenticTestTaskDescription()}},
 	})
 	if err != nil {
 		t.Fatalf("materialize plan: %v", err)

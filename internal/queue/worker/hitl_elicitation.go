@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -65,6 +66,7 @@ func latestElicitationQuestions(comments []models.Comment) ([]ElicitationQuestio
 		raw := strings.TrimPrefix(c.Body, hitlElicitationQuestionsPrefix)
 		var questions []ElicitationQuestion
 		if err := json.Unmarshal([]byte(raw), &questions); err != nil {
+			slog.Warn("ignored malformed elicitation questions comment", "comment_id", c.ID, "error", err)
 			continue
 		}
 		if !found || c.CreatedAt.After(latestAt) {

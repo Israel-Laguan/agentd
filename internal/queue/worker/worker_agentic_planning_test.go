@@ -10,6 +10,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // planningSequenceGateway returns plan JSON on JSONMode requests, then queued responses.
@@ -184,7 +185,7 @@ func TestAgenticPlanning_SimpleTaskSkipsPlanning(t *testing.T) {
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Hi",
-		Description: AgenticTestTaskDescription(),
+		Description: testutil.AgenticTestTaskDescription(),
 		State:       models.TaskStateQueued,
 	}
 	store.task = task

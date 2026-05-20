@@ -14,6 +14,7 @@ import (
 	"agentd/internal/models"
 	"agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 func TestWorkerAgenticModeFeatures(t *testing.T) {
@@ -62,7 +63,7 @@ func initializeWorkerScenario(sc *godog.ScenarioContext) {
 				BaseEntity:  models.BaseEntity{ID: "task-1"},
 				ProjectID:   "project-1",
 				AgentID:     "default",
-				Description: worker.AgenticTestTaskDescription(),
+				Description: testutil.AgenticTestTaskDescription(),
 				State:       models.TaskStateQueued,
 			},
 			project: models.Project{

@@ -12,6 +12,7 @@ import (
 	"agentd/internal/models"
 	"agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 type fakeGateway struct {
@@ -163,7 +164,7 @@ func newWorkerStore() *workerStore {
 			BaseEntity:  models.BaseEntity{ID: "task", UpdatedAt: now},
 			ProjectID:   "project",
 			AgentID:     "default",
-			Description: worker.AgenticTestTaskDescription(),
+			Description: testutil.AgenticTestTaskDescription(),
 			State:       models.TaskStateQueued,
 		},
 		project: models.Project{BaseEntity: models.BaseEntity{ID: "project"}, WorkspacePath: "/tmp"},
