@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"agentd/internal/models"
 )
+
+const elicitationEmptyAnswerFallback = "(no comment provided — subtask marked complete without written answer)"
 
 const (
 	hitlElicitationQuestionsPrefix = "agentd:hitl:elicitation-questions:"
@@ -100,16 +103,20 @@ func (w *Worker) tryConsumeElicitationAnswers(ctx context.Context, task models.T
 	}
 	answer := rejectionReasonFromSubtask(ctx, w.store, clarification.ID)
 	if answer == "" {
-		return task, false, nil
+		answer = elicitationEmptyAnswerFallback
 	}
 	block := formatClarificationsBlock(questions, answer)
 	updatedDesc := appendClarificationsToDescription(task.Description, block)
 	updated, err := w.store.UpdateTaskDescription(ctx, task.ID, task.UpdatedAt, updatedDesc)
 	if err != nil {
+		if errors.Is(err, models.ErrStateConflict) {
+			slog.Warn("elicitation description update conflict; retry on next pass", "task_id", task.ID, "error", err)
+			return task, false, nil
+		}
 		return task, false, fmt.Errorf("persist elicitation clarifications: %w", err)
 	}
 	if err := markElicitationUsed(ctx, w.store, task.ID, clarification.ID); err != nil {
-		return task, false, err
+		slog.Warn("failed to mark elicitation as consumed", "task_id", task.ID, "subtask_id", clarification.ID, "error", err)
 	}
 	return *updated, true, nil
 }

@@ -29,9 +29,15 @@ func updateTaskStateInTx(
 	}
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks
-		SET state = ?, started_at = ?, completed_at = ?, updated_at = ?
+		SET state = ?, started_at = ?, completed_at = ?,
+		    os_process_id = CASE WHEN ? = ? THEN NULL ELSE os_process_id END,
+		    last_heartbeat = CASE WHEN ? = ? THEN NULL ELSE last_heartbeat END,
+		    updated_at = ?
 		WHERE id = ? AND updated_at = ?`,
-		string(next), nullableTime(startedAt), nullableTime(completedAt), formatTime(now), current.ID, formatTime(expectedUpdatedAt))
+		string(next), nullableTime(startedAt), nullableTime(completedAt),
+		string(next), string(models.TaskStateBlocked),
+		string(next), string(models.TaskStateBlocked),
+		formatTime(now), current.ID, formatTime(expectedUpdatedAt))
 	if err != nil {
 		return fmt.Errorf("update task state: %w", err)
 	}

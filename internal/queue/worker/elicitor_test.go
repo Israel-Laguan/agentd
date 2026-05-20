@@ -250,6 +250,67 @@ func TestProcess_FullySpecifiedSkipsElicitation(t *testing.T) {
 	}
 }
 
+func TestRunPreTaskElicitation_PendingChildReblocksRunningParent(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "reblock-proj",
+		Tasks:       []models.DraftTask{{Title: "Fix", Description: "fix the bug"}},
+	})
+	if err != nil || len(tasks) == 0 {
+		t.Fatalf("materialize: %v", err)
+	}
+	parent := tasks[0]
+	running, err := store.MarkTaskRunning(ctx, parent.ID, parent.UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	if err := recordElicitationQuestions(ctx, store, parent.ID, []ElicitationQuestion{{Question: "Which bug?"}}); err != nil {
+		t.Fatalf("record questions: %v", err)
+	}
+	blocked, _, err := store.BlockTaskWithSubtasks(ctx, running.ID, running.UpdatedAt, []models.DraftTask{{
+		Title:       models.HITLSubtaskTitleClarification + "Which bug?",
+		Description: "clarify",
+		Assignee:    models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	ready, err := store.UpdateTaskState(ctx, blocked.ID, blocked.UpdatedAt, models.TaskStateReady)
+	if err != nil {
+		t.Fatalf("unblock parent to ready: %v", err)
+	}
+	running, err = store.MarkTaskRunning(ctx, ready.ID, ready.UpdatedAt, 42)
+	if err != nil {
+		t.Fatalf("re-claim parent: %v", err)
+	}
+
+	project, err := store.GetProject(ctx, running.ProjectID)
+	if err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	w := &Worker{store: store}
+	_, blockedOut, err := w.runPreTaskElicitation(ctx, *running, *project)
+	if err != nil {
+		t.Fatalf("runPreTaskElicitation: %v", err)
+	}
+	if !blockedOut {
+		t.Fatal("expected blocked=true when pending clarification child exists")
+	}
+	got, err := store.GetTask(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if got.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", got.State)
+	}
+	if got.OSProcessID != nil {
+		t.Fatalf("os_process_id = %v, want nil after re-block", got.OSProcessID)
+	}
+}
+
 func TestFormatClarificationsBlock(t *testing.T) {
 	t.Parallel()
 	questions := []ElicitationQuestion{{Question: "Which service?"}}
