@@ -53,6 +53,47 @@ func TestPlan_Validate(t *testing.T) {
 	}
 }
 
+func TestPlan_Validate_RejectsInvalidStepID(t *testing.T) {
+	t.Parallel()
+	cases := []string{"bad id", "<!--", "UPPER", ""}
+	for _, id := range cases {
+		if id == "" {
+			continue
+		}
+		p := &Plan{Steps: []PlanStep{{ID: id, Action: "do"}}}
+		if err := p.Validate(); err == nil {
+			t.Fatalf("id %q: expected validation error", id)
+		}
+	}
+}
+
+func TestPlan_Validate_NormalizesStepID(t *testing.T) {
+	t.Parallel()
+	p := &Plan{Steps: []PlanStep{{ID: " analyze ", Action: " review "}}}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("valid plan with padded id: %v", err)
+	}
+	if p.Steps[0].ID != "analyze" {
+		t.Fatalf("id = %q, want analyze", p.Steps[0].ID)
+	}
+	if p.Steps[0].Action != "review" {
+		t.Fatalf("action = %q, want review", p.Steps[0].Action)
+	}
+}
+
+func TestInjectPlan_EmptyMessages(t *testing.T) {
+	t.Parallel()
+	w := &Worker{}
+	plan := &Plan{Steps: []PlanStep{{ID: "analyze", Action: "review", OutputFormat: "text"}}}
+	msgs := w.injectPlan(nil, plan)
+	if len(msgs) != 1 || msgs[0].Role != "system" {
+		t.Fatalf("expected single system message, got %v", msgs)
+	}
+	if !strings.Contains(msgs[0].Content, "WORK PLAN") {
+		t.Fatalf("system prompt missing plan block: %q", msgs[0].Content)
+	}
+}
+
 func TestInjectPlan(t *testing.T) {
 	t.Parallel()
 	w := &Worker{}

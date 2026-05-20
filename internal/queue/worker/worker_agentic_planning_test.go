@@ -183,6 +183,9 @@ ok
 
 	var redoReq *gateway.AIRequest
 	for i := range gw.requests {
+		if len(gw.requests[i].Messages) == 0 {
+			continue
+		}
 		if strings.Contains(gw.requests[i].Messages[len(gw.requests[i].Messages)-1].Content, "Repair ONLY step") {
 			redoReq = &gw.requests[i]
 			break

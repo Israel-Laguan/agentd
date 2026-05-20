@@ -5,13 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
+
+var stepIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
 // PlanStep is one numbered step in a structured work plan.
 type PlanStep struct {
@@ -37,12 +41,18 @@ func (p *Plan) Validate() error {
 		if id == "" {
 			return fmt.Errorf("step %d: id is required", i+1)
 		}
-		if strings.TrimSpace(step.Action) == "" {
+		if !stepIDPattern.MatchString(id) {
+			return fmt.Errorf("step %q: id must match %q", id, stepIDPattern.String())
+		}
+		action := strings.TrimSpace(step.Action)
+		if action == "" {
 			return fmt.Errorf("step %q: action is required", id)
 		}
 		if _, dup := seen[id]; dup {
 			return fmt.Errorf("duplicate step id %q", id)
 		}
+		p.Steps[i].ID = id
+		p.Steps[i].Action = action
 		seen[id] = struct{}{}
 	}
 	return nil
@@ -115,22 +125,43 @@ func (w *Worker) generatePlan(
 	}
 	planContext := w.buildPlanContext(task, project)
 	req := w.buildPlanRequest(task, profile, planContext)
-	plan, err := gateway.GenerateJSON[Plan](ctx, w.gateway, req)
-	if err != nil {
-		slog.Warn("agentic plan generation failed; continuing without plan",
-			"task_id", task.ID, "error", err)
-		return nil, err
+	req.JSONMode = true
+	for attempt := 0; attempt < correction.MaxJSONAttempts; attempt++ {
+		resp, err := w.gateway.Generate(ctx, req)
+		if err != nil {
+			slog.Warn("agentic plan generation failed; continuing without plan",
+				"task_id", task.ID, "error", err)
+			return nil, err
+		}
+		if budgetGuard != nil {
+			budgetGuard.AfterCall(resp.TokenUsage)
+		}
+		var plan Plan
+		if err := json.Unmarshal([]byte(resp.Content), &plan); err != nil {
+			if attempt == correction.MaxJSONAttempts-1 {
+				slog.Warn("agentic plan generation failed; continuing without plan",
+					"task_id", task.ID, "error", err)
+				return nil, err
+			}
+			req.Messages = append(req.Messages, correction.PromptAfterInvalidJSON(err))
+			continue
+		}
+		if err := plan.Validate(); err != nil {
+			if attempt == correction.MaxJSONAttempts-1 {
+				slog.Warn("agentic plan validation failed; continuing without plan",
+					"task_id", task.ID, "error", err)
+				return nil, err
+			}
+			req.Messages = append(req.Messages, correction.PromptAfterInvalidJSON(err))
+			continue
+		}
+		return &plan, nil
 	}
-	if err := plan.Validate(); err != nil {
-		slog.Warn("agentic plan validation failed; continuing without plan",
-			"task_id", task.ID, "error", err)
-		return nil, err
-	}
-	return &plan, nil
+	return nil, models.ErrInvalidJSONResponse
 }
 
 func (w *Worker) injectPlan(messages []gateway.PromptMessage, plan *Plan) []gateway.PromptMessage {
-	if plan == nil || len(messages) == 0 {
+	if plan == nil {
 		return messages
 	}
 	raw, err := json.Marshal(plan)
@@ -146,6 +177,11 @@ func (w *Worker) injectPlan(messages []gateway.PromptMessage, plan *Plan) []gate
 	)
 	out := make([]gateway.PromptMessage, len(messages))
 	copy(out, messages)
+	if len(out) == 0 {
+		return []gateway.PromptMessage{
+			{Role: "system", Content: strings.TrimPrefix(block, "\n\n")},
+		}
+	}
 	for i := range out {
 		if out[i].Role == "system" {
 			out[i].Content += block

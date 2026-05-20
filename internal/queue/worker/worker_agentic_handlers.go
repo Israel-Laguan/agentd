@@ -101,15 +101,15 @@ func (w *Worker) finishAgenticTurnNoTools(
 	turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
 	messages *[]gateway.PromptMessage,
 ) (continueLoop bool, result LoopResult, report bool, err error) {
+	if workPlan != nil {
+		content = w.repairOutputWithPlan(ctx, task, profile, workPlan, content, budgetGuard)
+	}
 	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, content)
 	if stalled || stallErr != nil {
 		if stallErr != nil {
 			w.handleGatewayError(ctx, task, stallErr)
 		}
 		return false, LoopResult{}, false, stallErr
-	}
-	if workPlan != nil {
-		content = w.repairOutputWithPlan(ctx, task, profile, workPlan, content)
 	}
 	w.commitTextWithProfile(ctx, task, content, &profile)
 	r := LoopResult{
