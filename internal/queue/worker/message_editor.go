@@ -63,6 +63,11 @@ func (e *MessageEditor) Edit(
 	}
 	before := len(*messages)
 
+	edited, err := applyTurnEdit(*messages, turnIndex, newContent, e.cm)
+	if err != nil {
+		return EditResult{}, err
+	}
+
 	var checkpointID string
 	if e.checkpoints != nil {
 		id, err := e.checkpoints.Create(ctx, sessionID, *messages)
@@ -70,11 +75,6 @@ func (e *MessageEditor) Edit(
 			return EditResult{}, fmt.Errorf("message editor: checkpoint: %w", err)
 		}
 		checkpointID = id
-	}
-
-	edited, err := applyTurnEdit(*messages, turnIndex, newContent, e.cm)
-	if err != nil {
-		return EditResult{}, err
 	}
 	*messages = edited
 	after := len(*messages)
@@ -155,14 +155,14 @@ func applyTurnEdit(messages []gateway.PromptMessage, turnIndex int, newContent s
 		return nil, errTurnNotUserEditable
 	}
 
-	rewritten := append([]gateway.PromptMessage(nil), target.Messages...)
+	rewritten := clonePromptMessages(target.Messages)
 	rewritten[userIdx].Content = newContent
 	// Truncate within turn: keep messages up to and including rewritten user only.
 	rewritten = rewritten[:userIdx+1]
 
-	out := append([]gateway.PromptMessage{}, anchor...)
+	out := clonePromptMessages(anchor)
 	for i := 0; i < turnIndex; i++ {
-		out = append(out, turns[i].Messages...)
+		out = append(out, clonePromptMessages(turns[i].Messages)...)
 	}
 	out = append(out, rewritten...)
 	return out, nil
@@ -174,12 +174,13 @@ func applyAnchorUserEdit(anchor []gateway.PromptMessage, newContent string) ([]g
 	for i, m := range anchor {
 		if m.Role == "user" {
 			userIdx = i
+			break
 		}
 	}
 	if userIdx < 0 {
 		return nil, errAnchorUserNotFound
 	}
-	out := append([]gateway.PromptMessage{}, anchor...)
+	out := clonePromptMessages(anchor)
 	out[userIdx].Content = newContent
 	return out, nil
 }

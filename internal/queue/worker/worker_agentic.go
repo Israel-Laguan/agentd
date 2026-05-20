@@ -50,7 +50,10 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, budgetGuard)
 
+	// respecAttempts caps in-session structural repair to one rewrite per agentic run.
 	respecAttempts := 0
+	var lastRewindTarget = -2
+	var rewindStreak int
 	for turnIndex := 0; ; {
 		turnID := fmt.Sprintf("%s:%d", task.ID, turnIndex)
 		cont, result, report, rewindTo, err := w.processAgenticIteration(
@@ -69,9 +72,34 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			return LoopResult{}, false
 		}
 		if rewindTo >= 0 {
+			if rewindTo == lastRewindTarget {
+				rewindStreak++
+			} else {
+				lastRewindTarget = rewindTo
+				rewindStreak = 1
+			}
+			if rewindStreak > maxRewindStreak {
+				slog.Warn("agentic rewind stagnation",
+					"task_id", task.ID,
+					"turn_index", turnIndex,
+					"rewind_to", rewindTo,
+					"streak", rewindStreak,
+				)
+				r := LoopResult{
+					Status: LoopTurnLimitExceeded,
+					Meta: w.buildLoopMeta(
+						turnIndex, budgetGuard.Usage(), totalChars(messages), ctxBudgetGuard.TotalBudget(),
+						errRewindStagnation.Error(), "", "",
+					),
+				}
+				w.recordLoopResult(r)
+				return r, true
+			}
 			turnIndex = rewindTo
 			continue
 		}
+		lastRewindTarget = -2
+		rewindStreak = 0
 		turnIndex++
 	}
 }
@@ -189,9 +217,15 @@ func (w *Worker) guardBudgetBeforeCall(
 	return nil, err
 }
 
+const (
+	rewindNone = -1
+	maxRewindStreak = 3
+)
+
 var (
 	errIterationLimit = errors.New("iteration limit exceeded")
 	errContextBudget  = errors.New("context budget exhausted")
+	errRewindStagnation = errors.New("rewind stagnation")
 )
 
 func (w *Worker) processAgenticIteration(
@@ -209,17 +243,17 @@ func (w *Worker) processAgenticIteration(
 		ctx, task, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
 		ctxBudgetGuard, cm, goalTracker, turnID, turnIndex,
 	); stop != nil {
-		return false, *stop, true, -1, nil
+		return false, *stop, true, rewindNone, nil
 	} else if guardErr != nil {
-		return false, LoopResult{}, false, -1, guardErr
+		return false, LoopResult{}, false, rewindNone, guardErr
 	}
 
 	resp, stop, err := w.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex)
 	if stop != nil {
-		return false, *stop, true, -1, nil
+		return false, *stop, true, rewindNone, nil
 	}
 	if err != nil {
-		return false, LoopResult{}, false, -1, err
+		return false, LoopResult{}, false, rewindNone, err
 	}
 	budgetGuard.AfterCall(resp.TokenUsage)
 	if w.tokenUsageHook != nil && resp.TokenUsage > 0 {
@@ -244,7 +278,7 @@ func (w *Worker) processAgenticIteration(
 		taskHooks, taskCaps, cm, goalTracker, toolTracker,
 		iterationGuard, budgetGuard, turnID, turnIndex,
 	)
-	return cont, res, rep, -1, finErr
+	return cont, res, rep, rewindNone, finErr
 }
 
 func (w *Worker) generateAgenticTurn(

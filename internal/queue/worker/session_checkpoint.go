@@ -17,6 +17,9 @@ type SessionCheckpoint struct {
 	Messages  []gateway.PromptMessage
 }
 
+// maxCheckpointsPerSession bounds in-memory checkpoint growth per session.
+const maxCheckpointsPerSession = 32
+
 // CheckpointStore persists session checkpoints for restore before history edits.
 type CheckpointStore interface {
 	Create(ctx context.Context, sessionID string, messages []gateway.PromptMessage) (checkpointID string, err error)
@@ -40,15 +43,17 @@ func clonePromptMessages(messages []gateway.PromptMessage) []gateway.PromptMessa
 
 // memoryCheckpointStore is an in-process CheckpointStore for agentic sessions.
 type memoryCheckpointStore struct {
-	mu           sync.RWMutex
-	checkpoints  map[string]*SessionCheckpoint
-	nextID       int
+	mu            sync.RWMutex
+	checkpoints   map[string]*SessionCheckpoint
+	sessionOrder  map[string][]string
+	nextID        int
 }
 
 // NewMemoryCheckpointStore returns an in-memory checkpoint store.
 func NewMemoryCheckpointStore() CheckpointStore {
 	return &memoryCheckpointStore{
-		checkpoints: make(map[string]*SessionCheckpoint),
+		checkpoints:  make(map[string]*SessionCheckpoint),
+		sessionOrder: make(map[string][]string),
 	}
 }
 
@@ -66,6 +71,13 @@ func (s *memoryCheckpointStore) Create(_ context.Context, sessionID string, mess
 		CreatedAt: time.Now().UTC(),
 		Messages:  clonePromptMessages(messages),
 	}
+	order := append(s.sessionOrder[sessionID], id)
+	for len(order) > maxCheckpointsPerSession {
+		oldest := order[0]
+		order = order[1:]
+		delete(s.checkpoints, oldest)
+	}
+	s.sessionOrder[sessionID] = order
 	return id, nil
 }
 
