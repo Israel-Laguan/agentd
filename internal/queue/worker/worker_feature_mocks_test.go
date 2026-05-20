@@ -262,6 +262,10 @@ func (g *workerTestGateway) AnalyzeScope(context.Context, string) (*gateway.Scop
 func (g *workerTestGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (g *workerTestGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 
 type workerTestSandbox struct {
 	result   sandbox.Result

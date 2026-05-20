@@ -35,6 +35,10 @@ func (g *curatorTestGateway) AnalyzeScope(context.Context, string) (*gateway.Sco
 func (g *curatorTestGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (g *curatorTestGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 
 type closedBreaker struct{}
 

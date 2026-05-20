@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"agentd/internal/capabilities"
@@ -18,13 +19,38 @@ func (w *Worker) setupAgenticCancel(ctx context.Context, taskID string) (context
 	}
 }
 
-func (w *Worker) newAgenticTaskToolExecutor(project models.Project) *ToolExecutor {
-	return NewToolExecutor(
+func (w *Worker) newAgenticTaskToolExecutor(project models.Project, task models.Task) *ToolExecutor {
+	ex := NewToolExecutor(
 		w.sandbox,
 		project.WorkspacePath,
 		BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
 		w.sandboxWallTimeout,
 	)
+	if w.fileContextCfg.Enabled && w.docStore != nil {
+		taskQuery := strings.TrimSpace(task.Description)
+		if ctx := strings.TrimSpace(project.OriginalInput); ctx != "" {
+			if taskQuery != "" {
+				taskQuery += "\n"
+			}
+			taskQuery += ctx
+		}
+		var embedder Embedder
+		if w.gateway != nil {
+			embedder = &GatewayEmbedder{
+				Gateway: w.gateway,
+				Model:   w.fileContextCfg.EmbeddingModel,
+			}
+		}
+		ex.filePipeline = NewFilePipeline(FilePipelineConfig{
+			Workspace: project.WorkspacePath,
+			Store:     w.docStore,
+			Embedder:  embedder,
+			TopK:      w.fileContextCfg.TopK,
+			TaskQuery: taskQuery,
+			Pinned:    ParsePinnedPaths(taskQuery),
+		})
+	}
+	return ex
 }
 
 func (w *Worker) runSessionStart(ctx context.Context, task models.Task, project models.Project) error {

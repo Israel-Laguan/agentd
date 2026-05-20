@@ -147,6 +147,15 @@ agentic:
     top_k: 3                # max skills injected per session
     global_path: "skills"   # illustrative; see queue.skills.global_dir (relative to agentd home)
 
+  # Smart file context pipeline for the read tool (convert → cache → embed → select).
+  # PDF conversion requires pdftotext (poppler) on the worker host PATH.
+  # Embeddings use the first OpenAI-compatible gateway provider.
+  file_context:
+    enabled: false
+    top_k: 5
+    cache_path: "file-cache"              # relative to agentd home
+    embedding_model: "text-embedding-3-small"
+
 # Sandbox command execution hardening.
 sandbox:
   inactivity_timeout: "60s"

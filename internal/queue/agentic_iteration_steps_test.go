@@ -85,6 +85,10 @@ func (g *iterationGateway) AnalyzeScope(ctx context.Context, s string) (*gateway
 func (g *iterationGateway) ClassifyIntent(ctx context.Context, s string) (*gateway.IntentAnalysis, error) {
 	return nil, nil
 }
+func (g *iterationGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
+
 
 type iterationStore struct {
 	mu       sync.Mutex

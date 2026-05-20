@@ -27,6 +27,9 @@ func (m *mockGateway) AnalyzeScope(ctx context.Context, userIntent string) (*spe
 func (m *mockGateway) ClassifyIntent(ctx context.Context, userIntent string) (*spec.IntentAnalysis, error) {
 	return nil, nil
 }
+func (m *mockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
+	return spec.NoopEmbed(ctx, req)
+}
 
 // newTestCM creates a ContextManager seeded with working zone messages
 // for correction-related tests that don't need full config/gateway.

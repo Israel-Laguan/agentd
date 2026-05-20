@@ -405,3 +405,7 @@ func (g *testGateway) ClassifyIntent(_ context.Context, intent string) (*gateway
 		Reason: "default test behavior",
 	}, nil
 }
+
+func (g *testGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
+}
