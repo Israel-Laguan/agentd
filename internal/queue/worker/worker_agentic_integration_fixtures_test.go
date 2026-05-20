@@ -7,6 +7,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 func integrationSequenceResponses() []gateway.AIResponse {
@@ -39,7 +40,7 @@ func newAgenticIntegrationWorker(
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Check current directory",
-		Description: AgenticTestTaskDescription(),
+		Description: testutil.AgenticTestTaskDescription(),
 		State:       models.TaskStateQueued,
 	}
 	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
@@ -76,7 +77,7 @@ func newMaxIterationsAgenticFixture(t *testing.T) (*maxIterationsGateway, *mockA
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Test max iterations",
-		Description: AgenticTestTaskDescription(),
+		Description: testutil.AgenticTestTaskDescription(),
 		State:       models.TaskStateQueued,
 	}
 	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}

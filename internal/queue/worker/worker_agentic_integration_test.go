@@ -11,6 +11,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // TestAgenticLoop_IntegrationWithMockGateway verifies the full agentic loop
@@ -45,7 +46,7 @@ func TestAgenticLoop_EmitsToolAuditEvents(t *testing.T) {
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Check current directory",
-		Description: AgenticTestTaskDescription(),
+		Description: testutil.AgenticTestTaskDescription(),
 		State:       models.TaskStateQueued,
 	}
 	store.task = task
@@ -236,7 +237,7 @@ func TestAgenticLoop_BudgetExceededRequeues(t *testing.T) {
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Budget test",
-		Description: AgenticTestTaskDescription(),
+		Description: testutil.AgenticTestTaskDescription(),
 		State:       models.TaskStateQueued,
 	}
 	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
@@ -299,7 +300,7 @@ func TestAgenticLoop_TurnLimitExceeded(t *testing.T) {
 		ProjectID:   "project-1",
 		AgentID:     "agent-1",
 		Title:       "Turn limit",
-		Description: AgenticTestTaskDescription(),
+		Description: testutil.AgenticTestTaskDescription(),
 		State:       models.TaskStateQueued,
 	}
 	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
