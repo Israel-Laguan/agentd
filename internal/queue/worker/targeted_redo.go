@@ -14,6 +14,13 @@ import (
 
 var orderedListLinePattern = regexp.MustCompile(`^\d+\.\s`)
 
+// stepMarkerPattern matches <!-- step:id --> and <!-- /step:id --> markers.
+var stepMarkerPattern = regexp.MustCompile(`<!--\s*/?step:[^>]+-->\n?`)
+
+func stripStepMarkers(output string) string {
+	return strings.TrimSpace(stepMarkerPattern.ReplaceAllString(output, ""))
+}
+
 func isMarkdownListLine(trim string) bool {
 	if strings.HasPrefix(trim, "- ") || strings.HasPrefix(trim, "* ") || strings.HasPrefix(trim, "+ ") {
 		return true
@@ -99,9 +106,22 @@ func formatPlanOutputForCommit(output string, plan Plan) string {
 		}
 	}
 	if len(parts) == 0 {
+		if strings.Contains(output, "<!-- step:") {
+			return stripStepMarkers(output)
+		}
 		return output
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// preparePlanCommitContent formats plan output for commit. When validation still
+// fails after redo, it returns marker-stripped in-situ output instead of a
+// partial join of only non-empty sections.
+func preparePlanCommitContent(output string, plan Plan) string {
+	if len(ValidateOutput(output, plan)) > 0 {
+		return stripStepMarkers(output)
+	}
+	return formatPlanOutputForCommit(output, plan)
 }
 
 func replaceSection(output, stepID, newBody string) string {
