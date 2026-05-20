@@ -50,6 +50,7 @@ type WorkerOptions struct {
 	TokenUsageHook            func(int)
 	FileContext               config.FileContextConfig
 	FileContextCachePath      string
+	Planning                  config.AgenticPlanningConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -153,6 +154,7 @@ func NewWorker(
 		toolFailureStreak:       opts.ToolFailureStreak,
 		tokenUsageHook:          opts.TokenUsageHook,
 		fileContextCfg:          opts.FileContext,
+		planningCfg:             opts.Planning,
 	}
 	if opts.FileContext.Enabled && opts.FileContextCachePath != "" {
 		if docStore, err := NewDocStore(opts.FileContextCachePath); err == nil {

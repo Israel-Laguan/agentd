@@ -14,7 +14,20 @@ const (
 	DefaultFileContextTopK         = 5
 	DefaultFileContextCachePath    = "file-cache"
 	DefaultFileContextEmbedModel   = "text-embedding-3-small"
+	DefaultPlanningMaxRedoPasses   = 3
+	DefaultPlanContextMaxChars     = 4000
 )
+
+// AgenticPlanningConfig controls two-phase plan→execute and targeted section redo.
+type AgenticPlanningConfig struct {
+	// ComplexityThreshold is the minimum EstimateTaskComplexity score to run
+	// the plan phase. 0 disables planning and targeted redo entirely.
+	ComplexityThreshold int
+	// MaxRedoPasses is the per-step cap for targeted section repair.
+	MaxRedoPasses int
+	// PlanContextMaxChars caps title+description sent to the plan model.
+	PlanContextMaxChars int
+}
 
 type AgenticConfig struct {
 	// ContextWarningThreshold is the fraction (0–1) of the zone character budget
@@ -35,6 +48,8 @@ type AgenticConfig struct {
 	Audit AuditConfig
 	// FileContext configures smart file preprocessing for the read tool.
 	FileContext FileContextConfig
+	// Planning configures plan→execute splitting and targeted redo.
+	Planning AgenticPlanningConfig
 }
 
 // FileContextConfig controls convert/cache/select pipeline for workspace files.
@@ -61,6 +76,9 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.file_context.top_k", DefaultFileContextTopK)
 	v.SetDefault("agentic.file_context.cache_path", DefaultFileContextCachePath)
 	v.SetDefault("agentic.file_context.embedding_model", DefaultFileContextEmbedModel)
+	v.SetDefault("agentic.planning.complexity_threshold", 0)
+	v.SetDefault("agentic.planning.max_redo_passes", DefaultPlanningMaxRedoPasses)
+	v.SetDefault("agentic.planning.plan_context_max_chars", DefaultPlanContextMaxChars)
 }
 
 func loadAgenticConfig(v *viper.Viper) AgenticConfig {
@@ -79,6 +97,23 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 			Path:    v.GetString("agentic.audit.path"),
 		},
 		FileContext: loadFileContextConfig(v),
+		Planning:    loadAgenticPlanningConfig(v),
+	}
+}
+
+func loadAgenticPlanningConfig(v *viper.Viper) AgenticPlanningConfig {
+	maxRedo := v.GetInt("agentic.planning.max_redo_passes")
+	if maxRedo <= 0 {
+		maxRedo = DefaultPlanningMaxRedoPasses
+	}
+	planCtx := v.GetInt("agentic.planning.plan_context_max_chars")
+	if planCtx <= 0 {
+		planCtx = DefaultPlanContextMaxChars
+	}
+	return AgenticPlanningConfig{
+		ComplexityThreshold: v.GetInt("agentic.planning.complexity_threshold"),
+		MaxRedoPasses:       maxRedo,
+		PlanContextMaxChars: planCtx,
 	}
 }
 

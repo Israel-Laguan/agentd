@@ -38,12 +38,20 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	ctxBudgetGuard := NewContextBudgetGuard(contextBudget, w.contextWarningThreshold)
 	toolTracker := newToolFailureTracker(w.toolFailureStreak)
 
+	var workPlan *Plan
+	if w.shouldPlan(task) {
+		workPlan, _ = w.generatePlan(cancelCtx, task, project, profile, budgetGuard)
+		if workPlan != nil {
+			messages = w.injectPlan(messages, workPlan)
+		}
+	}
+
 	for turnIndex := 0; ; turnIndex++ {
 		turnID := fmt.Sprintf("%s:%d", task.ID, turnIndex)
 		cont, result, report, err := w.processAgenticIteration(
 			cancelCtx, task, profile, &messages, tools, toolToAdapter, taskToolExecutor,
 			iterationGuard, budgetGuard, deadlineGuard, ctxBudgetGuard, cm, goalTracker,
-			taskHooks, taskCaps, toolTracker, turnID, turnIndex,
+			taskHooks, taskCaps, toolTracker, workPlan, turnID, turnIndex,
 		)
 		if err != nil {
 			return LoopResult{}, false
@@ -166,7 +174,7 @@ func (w *Worker) processAgenticIteration(
 	deadlineGuard *DeadlineGuard, ctxBudgetGuard *ContextBudgetGuard,
 	cm *ContextManager, goalTracker *GoalTracker,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
-	toolTracker *toolFailureTracker, turnID string, turnIndex int,
+	toolTracker *toolFailureTracker, workPlan *Plan, turnID string, turnIndex int,
 ) (continueLoop bool, result LoopResult, report bool, err error) {
 	if stop, guardErr := w.guardAgenticIteration(
 		ctx, task, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
@@ -191,7 +199,7 @@ func (w *Worker) processAgenticIteration(
 	appendAssistantMessage(messages, resp)
 
 	if len(resp.ToolCalls) == 0 {
-		return w.finishAgenticTurnNoTools(ctx, task, profile, resp.Content, goalTracker, turnIndex, budgetGuard, ctxBudgetGuard, messages)
+		return w.finishAgenticTurnNoTools(ctx, task, profile, resp.Content, workPlan, goalTracker, turnIndex, budgetGuard, ctxBudgetGuard, messages)
 	}
 
 	return w.continueAgenticAfterTools(
