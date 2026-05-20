@@ -110,15 +110,18 @@ func (w *Worker) finishAgenticTurnNoTools(
 				newContent, respecErr := w.generateRespecifiedUserTurn(
 					ctx, task, workPlan, failing, msgsForRespec, cm, budgetGuard,
 				)
-				if respecErr == nil {
-					_, editErr := w.messageEditor.Edit(
-						ctx, task.ID, turnID, messages, EditAnchorUserTurn, newContent, cm,
-					)
-					if editErr == nil {
-						(*respecAttempts)++
-						// In-session structural repair: rewind and re-run without committing broken output.
-						return true, LoopResult{}, false, rewindToFirstTurn, nil
-					}
+				if respecErr != nil {
+					slog.Warn("agentic respec repair skipped",
+						"task_id", task.ID, "turn_id", turnID, "error", respecErr)
+				} else if _, editErr := w.messageEditor.Edit(
+					ctx, task.ID, turnID, messages, EditAnchorUserTurn, newContent, cm,
+				); editErr != nil {
+					slog.Warn("agentic respec history edit skipped",
+						"task_id", task.ID, "turn_id", turnID, "error", editErr)
+				} else {
+					(*respecAttempts)++
+					// In-session structural repair: rewind and re-run without committing broken output.
+					return true, LoopResult{}, false, rewindToFirstTurn, nil
 				}
 			}
 		}

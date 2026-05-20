@@ -16,6 +16,13 @@ func newToolFailureTracker(threshold int) *toolFailureTracker {
 	}
 }
 
+func (t *toolFailureTracker) reset() {
+	if t == nil {
+		return
+	}
+	clear(t.streak)
+}
+
 func (t *toolFailureTracker) Record(toolName string, status ToolStatus) (failed bool, streak int) {
 	if t == nil {
 		return false, 0

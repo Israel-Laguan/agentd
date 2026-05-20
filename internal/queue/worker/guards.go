@@ -65,6 +65,15 @@ func (g *IterationGuard) ResetAllowFinal() {
 	g.allowFinal = false
 }
 
+func (g *IterationGuard) reset() {
+	if g == nil {
+		return
+	}
+	g.current = 0
+	g.exceeded = false
+	g.allowFinal = false
+}
+
 type BudgetGuard struct {
 	tracker spec.BudgetTracker
 	taskID  string

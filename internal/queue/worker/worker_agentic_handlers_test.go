@@ -1,8 +1,10 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -39,6 +41,11 @@ func (g *respecFailGateway) Embed(context.Context, gateway.EmbedRequest) (gatewa
 
 func TestFinishAgenticTurnNoTools_RespecFailurePreservesMessages(t *testing.T) {
 	t.Parallel()
+	var logBuf bytes.Buffer
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(oldLogger) })
+
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-respec-fail"}, ProjectID: "proj", AgentID: "agent"}
 	cm := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, task.AgentID, task.ID)
 	committed := ""
@@ -82,5 +89,15 @@ func TestFinishAgenticTurnNoTools_RespecFailurePreservesMessages(t *testing.T) {
 	}
 	if len(messages) != before {
 		t.Fatalf("len(messages) = %d, want %d after failed respec", len(messages), before)
+	}
+	logs := logBuf.String()
+	if !strings.Contains(logs, "agentic respec repair skipped") {
+		t.Fatalf("expected respec repair skip warning, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "task-respec-fail") || !strings.Contains(logs, "task-respec-fail:0") {
+		t.Fatalf("expected task_id and turn_id in warning, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "respec gateway failure") {
+		t.Fatalf("expected respec error in warning, logs:\n%s", logs)
 	}
 }
