@@ -44,12 +44,16 @@ func newAgenticIntegrationWorker(
 	store := &mockAgenticStore{}
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: maxIter})
 	task := models.Task{
-		BaseEntity: models.BaseEntity{ID: "task-integration-test"},
-		ProjectID:  "project-1", AgentID: "agent-1",
-		Title: "Check current directory", State: models.TaskStateQueued,
+		BaseEntity:  models.BaseEntity{ID: "task-integration-test"},
+		ProjectID:   "project-1",
+		AgentID:     "agent-1",
+		Title:       "Check current directory",
+		Description: AgenticTestTaskDescription(),
+		State:       models.TaskStateQueued,
 	}
 	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
 	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: "/tmp/test-workspace"}
+	store.task = task
 	return store, w, task
 }
 
@@ -76,9 +80,12 @@ func TestAgenticLoop_EmitsToolAuditEvents(t *testing.T) {
 	store := &mockAgenticStore{}
 	w := NewWorker(store, gw, sb, nil, sink, WorkerOptions{MaxToolIterations: 10})
 	task := models.Task{
-		BaseEntity: models.BaseEntity{ID: "task-audit-events"},
-		ProjectID:  "project-1", AgentID: "agent-1",
-		Title: "Check current directory", State: models.TaskStateQueued,
+		BaseEntity:  models.BaseEntity{ID: "task-audit-events"},
+		ProjectID:   "project-1",
+		AgentID:     "agent-1",
+		Title:       "Check current directory",
+		Description: AgenticTestTaskDescription(),
+		State:       models.TaskStateQueued,
 	}
 	store.task = task
 	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
@@ -187,12 +194,16 @@ func newMaxIterationsAgenticFixture(t *testing.T) (*maxIterationsGateway, *mockA
 	store := &mockAgenticStore{}
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 3})
 	task := models.Task{
-		BaseEntity: models.BaseEntity{ID: "task-max-iter"},
-		ProjectID:  "project-1", AgentID: "agent-1",
-		Title: "Test max iterations", State: models.TaskStateQueued,
+		BaseEntity:  models.BaseEntity{ID: "task-max-iter"},
+		ProjectID:   "project-1",
+		AgentID:     "agent-1",
+		Title:       "Test max iterations",
+		Description: AgenticTestTaskDescription(),
+		State:       models.TaskStateQueued,
 	}
 	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
 	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: "/tmp/test-workspace"}
+	store.task = task
 	return gw, store, w, task
 }
 
@@ -342,12 +353,16 @@ func TestAgenticLoop_BudgetExceededRequeues(t *testing.T) {
 	var recorded LoopResult
 	w.SetLoopResultRecorder(func(r LoopResult) { recorded = r })
 	task := models.Task{
-		BaseEntity: models.BaseEntity{ID: "task-budget"},
-		ProjectID:  "project-1", AgentID: "agent-1",
-		Title: "Budget test", State: models.TaskStateQueued,
+		BaseEntity:  models.BaseEntity{ID: "task-budget"},
+		ProjectID:   "project-1",
+		AgentID:     "agent-1",
+		Title:       "Budget test",
+		Description: AgenticTestTaskDescription(),
+		State:       models.TaskStateQueued,
 	}
 	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
 	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: "/tmp/test-workspace"}
+	store.task = task
 
 	w.Process(context.Background(), task)
 
@@ -401,12 +416,16 @@ func TestAgenticLoop_TurnLimitExceeded(t *testing.T) {
 	var recorded LoopResult
 	w.SetLoopResultRecorder(func(r LoopResult) { recorded = r })
 	task := models.Task{
-		BaseEntity: models.BaseEntity{ID: "task-turn-limit"},
-		ProjectID:  "project-1", AgentID: "agent-1",
-		Title: "Turn limit", State: models.TaskStateQueued,
+		BaseEntity:  models.BaseEntity{ID: "task-turn-limit"},
+		ProjectID:   "project-1",
+		AgentID:     "agent-1",
+		Title:       "Turn limit",
+		Description: AgenticTestTaskDescription(),
+		State:       models.TaskStateQueued,
 	}
 	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
 	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: t.TempDir()}
+	store.task = task
 
 	w.Process(context.Background(), task)
 

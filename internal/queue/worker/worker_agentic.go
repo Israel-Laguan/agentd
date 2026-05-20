@@ -24,6 +24,15 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		return LoopResult{}, false
 	}
 
+	task, blocked, err := w.runPreTaskElicitation(cancelCtx, task, project)
+	if err != nil {
+		w.failHard(cancelCtx, task, err)
+		return LoopResult{}, false
+	}
+	if blocked {
+		return LoopResult{}, false
+	}
+
 	taskToolExecutor := w.newAgenticTaskToolExecutor(project, task)
 	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
 

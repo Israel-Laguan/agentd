@@ -89,10 +89,11 @@ func TestProviderSupportsAgentic_ReturnsFalseForOtherProviders(t *testing.T) {
 func newRoutingTest(profile models.AgentProfile) (*Worker, *routingTestStore, *routingTestGateway, *routingTestSandbox) {
 	store := &routingTestStore{
 		task: models.Task{
-			BaseEntity: models.BaseEntity{ID: "task-routing"},
-			ProjectID:  "project-1",
-			AgentID:    "agent-1",
-			State:      models.TaskStateQueued,
+			BaseEntity:  models.BaseEntity{ID: "task-routing"},
+			ProjectID:   "project-1",
+			AgentID:     "agent-1",
+			Description: AgenticTestTaskDescription(),
+			State:       models.TaskStateQueued,
 		},
 		project: models.Project{
 			BaseEntity:    models.BaseEntity{ID: "project-1"},

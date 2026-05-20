@@ -56,6 +56,7 @@ type KanbanStore interface {
 	UpdateTaskHeartbeat(ctx context.Context, id string) error
 	IncrementRetryCount(ctx context.Context, id string, expectedUpdatedAt time.Time) (*Task, error)
 	UpdateTaskState(ctx context.Context, id string, expectedUpdatedAt time.Time, next TaskState) (*Task, error)
+	UpdateTaskDescription(ctx context.Context, id string, expectedUpdatedAt time.Time, description string) (*Task, error)
 	UpdateTaskResult(ctx context.Context, id string, expectedUpdatedAt time.Time, result TaskResult) (*Task, error)
 	ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]Task, error)
 	ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleThreshold time.Duration) ([]Task, error)

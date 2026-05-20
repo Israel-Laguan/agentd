@@ -83,6 +83,10 @@ func (s *queueStore) UpdateTaskState(_ context.Context, id string, _ time.Time, 
 	return s.update(id, func(task *models.Task) { task.State = next; task.OSProcessID = nil })
 }
 
+func (s *queueStore) UpdateTaskDescription(_ context.Context, id string, _ time.Time, description string) (*models.Task, error) {
+	return s.update(id, func(task *models.Task) { task.Description = description })
+}
+
 func (s *queueStore) UpdateTaskResult(_ context.Context, id string, _ time.Time, result models.TaskResult) (*models.Task, error) {
 	next := models.TaskStateFailed
 	if result.Success {

@@ -27,6 +27,11 @@ func (s *routingTestStore) IncrementRetryCount(_ context.Context, _ string, _ ti
 	s.task.RetryCount++
 	return &s.task, nil
 }
+func (s *routingTestStore) UpdateTaskDescription(_ context.Context, _ string, _ time.Time, description string) (*models.Task, error) {
+	s.task.Description = description
+	return &s.task, nil
+}
+
 func (s *routingTestStore) UpdateTaskState(_ context.Context, _ string, _ time.Time, next models.TaskState) (*models.Task, error) {
 	s.task.State = next
 	return &s.task, nil
