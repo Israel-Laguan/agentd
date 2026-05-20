@@ -124,6 +124,23 @@ func TestShouldSkipElicitation_AmbiguousShort(t *testing.T) {
 	}
 }
 
+func TestShouldSkipElicitation_LongNarrativeDoesNotSkip(t *testing.T) {
+	t.Parallel()
+	desc := strings.Repeat(
+		"We noticed intermittent failures in staging last week. Everything looked fine as expected at first, "+
+			"and we should probably investigate when someone has time. The team discussed whether we need "+
+			"more logging but did not decide on concrete steps yet. ",
+		8,
+	)
+	if utf8.RuneCountInString(strings.TrimSpace(desc)) <= elicitationSkipMinDescriptionRunes {
+		t.Fatalf("test description too short: %d runes", utf8.RuneCountInString(strings.TrimSpace(desc)))
+	}
+	task := models.Task{Description: desc}
+	if shouldSkipElicitation(task) {
+		t.Fatal("expected long narrative without explicit constraints not to skip elicitation")
+	}
+}
+
 func TestElicitor_AnalyzeUsesRoleMemory(t *testing.T) {
 	t.Parallel()
 	gw := &elicitationSequenceGateway{elicitationJSON: sampleElicitationJSON()}

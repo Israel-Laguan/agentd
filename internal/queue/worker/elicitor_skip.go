@@ -20,9 +20,18 @@ func shouldSkipElicitation(task models.Task) bool {
 }
 
 var (
-	elicitationConstraintKeywords = regexp.MustCompile(`(?i)\b(must|should not|shall not|acceptance|repro|reproduce|expected|constraint|requirements?)\b`)
-	elicitationListPattern        = regexp.MustCompile(`(?m)^\s*([-*•]|\d+[.)])\s+\S`)
-	elicitationFilePathPattern    = regexp.MustCompile(`\b[\w./-]+\.(go|ts|tsx|js|jsx|py|rs|java|md|yaml|yml|json)\b`)
+	// Match imperative/spec language, not casual narrative ("as expected", "should we").
+	elicitationConstraintKeywords = regexp.MustCompile(`(?i)(?:` +
+		`\bmust\s+(?:not\s+)?\w+` +
+		`|\bshould\s+not\b|\bshall\s+not\b` +
+		`|\bacceptance\s*(?:criteria|:)` +
+		`|\brepro(?:duction)?\s+steps?\b|\bsteps?\s+to\s+repro(?:duce)?\b` +
+		`|\bexpected\s+(?:behavior|result|outcome|output|response)\b` +
+		`|\bconstraints?\s*:` +
+		`|\brequirements?\s*:` +
+		`)`)
+	elicitationListPattern     = regexp.MustCompile(`(?m)^\s*([-*•]|\d+[.)])\s+\S`)
+	elicitationFilePathPattern = regexp.MustCompile(`(?:^|[\s(])(?:[\w.-]+/)+[\w./-]+\.(?:go|ts|tsx|js|jsx|py|rs|java|md|yaml|yml|json)\b`)
 )
 
 func hasExplicitConstraints(task models.Task) bool {
@@ -39,7 +48,8 @@ func hasExplicitConstraints(task models.Task) bool {
 	if elicitationFilePathPattern.MatchString(desc) {
 		return true
 	}
-	if strings.Count(desc, "\n") >= 3 {
+	// Multi-section specs usually have several paragraph breaks; avoid skipping long prose.
+	if strings.Count(desc, "\n") >= 5 {
 		return true
 	}
 	return false
