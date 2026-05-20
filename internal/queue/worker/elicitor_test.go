@@ -3,8 +3,10 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"agentd/internal/gateway"
@@ -12,6 +14,25 @@ import (
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
+
+// transitionEnforcingStore mirrors production UpdateTaskState validation.
+type transitionEnforcingStore struct {
+	*testutil.FakeKanbanStore
+}
+
+func (s *transitionEnforcingStore) UpdateTaskState(ctx context.Context, id string, expected time.Time, next models.TaskState) (*models.Task, error) {
+	task, err := s.GetTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !task.UpdatedAt.Equal(expected) {
+		return nil, models.ErrStateConflict
+	}
+	if !task.State.CanTransitionTo(next) {
+		return nil, fmt.Errorf("%w: %s -> %s", models.ErrInvalidStateTransition, task.State, next)
+	}
+	return s.FakeKanbanStore.UpdateTaskState(ctx, id, expected, next)
+}
 
 type elicitationSequenceGateway struct {
 	elicitationJSON   string
@@ -308,6 +329,46 @@ func TestRunPreTaskElicitation_PendingChildReblocksRunningParent(t *testing.T) {
 	}
 	if got.OSProcessID != nil {
 		t.Fatalf("os_process_id = %v, want nil after re-block", got.OSProcessID)
+	}
+}
+
+func TestReblockTaskForPendingHITL_AlreadyBlockedAfterConflict(t *testing.T) {
+	t.Parallel()
+	base := testutil.NewFakeStore()
+	store := &transitionEnforcingStore{FakeKanbanStore: base}
+	ctx := context.Background()
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "reblock-race",
+		Tasks:       []models.DraftTask{{Title: "Fix", Description: "fix the bug"}},
+	})
+	if err != nil || len(tasks) == 0 {
+		t.Fatalf("materialize: %v", err)
+	}
+	parent := tasks[0]
+	running, err := store.MarkTaskRunning(ctx, parent.ID, parent.UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	stale := *running
+	if _, _, err := store.BlockTaskWithSubtasks(ctx, running.ID, running.UpdatedAt, []models.DraftTask{{
+		Title:       models.HITLSubtaskTitleClarification + "Which bug?",
+		Description: "clarify",
+		Assignee:    models.TaskAssigneeHuman,
+	}}); err != nil {
+		t.Fatalf("block: %v", err)
+	}
+
+	w := &Worker{store: store}
+	got, err := w.reblockTaskForPendingHITL(ctx, stale)
+	if err != nil {
+		t.Fatalf("reblockTaskForPendingHITL: %v", err)
+	}
+	if got.State != models.TaskStateBlocked {
+		t.Fatalf("state = %s, want BLOCKED", got.State)
+	}
+	if got.OSProcessID != nil {
+		t.Fatalf("os_process_id = %v, want nil", got.OSProcessID)
 	}
 }
 
