@@ -15,6 +15,12 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 	if len(cfg.ExternalTools) != 0 {
 		t.Fatalf("external_tools = %v, want empty slice", cfg.ExternalTools)
 	}
+	if cfg.ContextWarningThreshold != DefaultContextWarningThreshold {
+		t.Fatalf("ContextWarningThreshold = %v, want %v", cfg.ContextWarningThreshold, DefaultContextWarningThreshold)
+	}
+	if cfg.ToolFailureStreak != DefaultToolFailureStreak {
+		t.Fatalf("ToolFailureStreak = %d, want %d", cfg.ToolFailureStreak, DefaultToolFailureStreak)
+	}
 }
 
 func TestAgenticExternalToolsOverride_Viper(t *testing.T) {

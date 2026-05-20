@@ -51,7 +51,8 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 	cm := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, w.gateway, task.AgentID, task.ID)
 	messages := []gateway.PromptMessage{{Role: "user", Content: "do work"}}
 
-	cont, err := w.processAgenticIteration(
+	ctxBudget := NewContextBudgetGuard(60000, 0)
+	cont, result, report, err := w.processAgenticIteration(
 		context.Background(),
 		task,
 		models.AgentProfile{},
@@ -62,17 +63,23 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 		NewIterationGuard(3),
 		NewBudgetGuard(nil, task.ID),
 		NewDeadlineGuard(context.Background()),
+		ctxBudget,
 		cm,
 		goalTracker,
 		NewHookChain(),
 		nil,
+		newToolFailureTracker(0),
 		"task-123:0",
+		0,
 	)
 	if err != nil {
 		t.Fatalf("processAgenticIteration() error = %v", err)
 	}
 	if cont {
 		t.Fatal("expected no-tool response to stop loop")
+	}
+	if !report || result.Status != LoopSuccessfulCompletion {
+		t.Fatalf("result = %+v report = %v, want successful completion", result, report)
 	}
 	if !strings.Contains(committedText, "final response") {
 		t.Fatalf("committed text = %q, want final response", committedText)

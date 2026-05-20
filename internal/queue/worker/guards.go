@@ -130,3 +130,42 @@ func (g *DeadlineGuard) Remaining() time.Duration {
 func (g *DeadlineGuard) Deadline() time.Time {
 	return g.deadline
 }
+
+// ContextBudgetGuard tracks character budget fill for preemptive summarization
+// and typed BudgetExhausted stops.
+type ContextBudgetGuard struct {
+	totalBudget int
+	threshold   float64
+	warned      bool
+}
+
+// NewContextBudgetGuard creates a guard. threshold 0 disables the warning path.
+func NewContextBudgetGuard(totalBudget int, threshold float64) *ContextBudgetGuard {
+	return &ContextBudgetGuard{
+		totalBudget: totalBudget,
+		threshold:   threshold,
+	}
+}
+
+// Check reports whether the warning threshold was newly crossed and whether the
+// hard character budget is exhausted.
+func (g *ContextBudgetGuard) Check(chars int) (warn bool, exhausted bool) {
+	if g.totalBudget <= 0 {
+		return false, false
+	}
+	exhausted = chars >= g.totalBudget
+	if g.threshold <= 0 || g.warned || g.totalBudget <= 0 {
+		return false, exhausted
+	}
+	limit := int(float64(g.totalBudget) * g.threshold)
+	if chars >= limit {
+		g.warned = true
+		return true, exhausted
+	}
+	return false, exhausted
+}
+
+// TotalBudget returns the configured character budget cap.
+func (g *ContextBudgetGuard) TotalBudget() int {
+	return g.totalBudget
+}

@@ -82,6 +82,37 @@ func TestGroupTurns(t *testing.T) {
 	}
 }
 
+func TestPrepareContextForceSummarize_BelowTurnThreshold(t *testing.T) {
+	cfg := config.AgenticContextConfig{
+		RollingThresholdTurns: 100,
+		KeepRecentTurns:       1,
+	}
+	cm := NewContextManager(cfg, &mockGateway{}, "agent", "task")
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "ast1"},
+		{Role: "user", Content: "user2"},
+		{Role: "assistant", Content: "ast2"},
+		{Role: "user", Content: "user3"},
+		{Role: "assistant", Content: "ast3"},
+	}
+	normal, err := cm.PrepareContext(context.Background(), messages)
+	if err != nil {
+		t.Fatalf("PrepareContext: %v", err)
+	}
+	if len(normal) != len(messages) {
+		t.Fatalf("normal prepare flattened without summarize: got %d messages", len(normal))
+	}
+	forced, err := cm.PrepareContextForceSummarize(context.Background(), messages)
+	if err != nil {
+		t.Fatalf("PrepareContextForceSummarize: %v", err)
+	}
+	if len(forced) >= len(messages) {
+		t.Fatalf("expected fewer messages after force summarize, got %d", len(forced))
+	}
+}
+
 func TestRollingSummarizationTrigger(t *testing.T) {
 	cfg := config.AgenticContextConfig{
 		RollingThresholdTurns: 2,

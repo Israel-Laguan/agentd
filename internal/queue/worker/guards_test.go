@@ -226,6 +226,38 @@ func TestBudgetExceeded_ControlledError(t *testing.T) {
 	}
 }
 
+func TestContextBudgetGuard_WarnAndExhausted(t *testing.T) {
+	t.Parallel()
+	g := NewContextBudgetGuard(10000, 0.85)
+	warn, exhausted := g.Check(8000)
+	if warn || exhausted {
+		t.Fatalf("below threshold: warn=%v exhausted=%v", warn, exhausted)
+	}
+	warn, exhausted = g.Check(8600)
+	if !warn || exhausted {
+		t.Fatalf("at 86%%: warn=%v exhausted=%v, want warn only", warn, exhausted)
+	}
+	warn, exhausted = g.Check(9000)
+	if warn {
+		t.Fatal("warn should not fire twice")
+	}
+	if exhausted {
+		t.Fatal("9000 chars should not be exhausted at 10000 cap")
+	}
+	_, exhausted = g.Check(10000)
+	if !exhausted {
+		t.Fatal("expected exhausted at hard cap")
+	}
+}
+
+func TestContextBudgetGuard_DisabledThreshold(t *testing.T) {
+	t.Parallel()
+	g := NewContextBudgetGuard(1000, 0)
+	if warn, _ := g.Check(999); warn {
+		t.Fatal("threshold 0 should disable warn")
+	}
+}
+
 func TestDeadlineExpiredBeforeSecondIteration(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(1*time.Millisecond))
 	time.Sleep(10 * time.Millisecond)

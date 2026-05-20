@@ -49,6 +49,7 @@ type Daemon struct {
 	channel                 Channel
 	queuedReconcileAfter    time.Duration
 	rateLimitedRequeueAfter time.Duration
+	rollingLedger           *RollingTokenLedger
 	wg                      sync.WaitGroup
 }
 
@@ -77,6 +78,7 @@ type DaemonOptions struct {
 	Channel                 Channel
 	QueuedReconcileAfter    time.Duration
 	RateLimitedRequeueAfter time.Duration
+	RollingTokenLedger      *RollingTokenLedger
 }
 
 func NewDaemon(
@@ -104,6 +106,7 @@ func NewDaemon(
 		channel:                 opts.Channel,
 		queuedReconcileAfter:    opts.QueuedReconcileAfter,
 		rateLimitedRequeueAfter: opts.RateLimitedRequeueAfter,
+		rollingLedger:           opts.RollingTokenLedger,
 	}
 }
 

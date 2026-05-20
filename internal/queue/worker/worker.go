@@ -51,8 +51,12 @@ type Worker struct {
 	skillLoader          *SkillLoader
 	skillRouter          *SkillRouter
 	legacyHandoffTimeout time.Duration
-	externalTools        map[string]struct{}
-	auditLogger          *AuditLogger
+	externalTools             map[string]struct{}
+	auditLogger               *AuditLogger
+	contextWarningThreshold   float64
+	toolFailureStreak         int
+	tokenUsageHook            func(int)
+	loopResultRecorder        func(LoopResult)
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -100,6 +104,9 @@ type WorkerOptions struct {
 	ToolCredentials              map[string]string
 	DisableCredentialDetection     bool
 	Audit                          config.AuditConfig
+	ContextWarningThreshold        float64
+	ToolFailureStreak              int
+	TokenUsageHook                 func(int)
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -197,8 +204,11 @@ func NewWorker(
 		pluginMounter:        opts.PluginMounter,
 		contextCfg:           opts.AgenticContext,
 		legacyHandoffTimeout: opts.LegacyHandoffTimeout,
-		externalTools:        externalToolsSet(opts.ExternalTools),
-		auditLogger:          newAuditLogger(opts.Audit),
+		externalTools:           externalToolsSet(opts.ExternalTools),
+		auditLogger:             newAuditLogger(opts.Audit),
+		contextWarningThreshold: opts.ContextWarningThreshold,
+		toolFailureStreak:       opts.ToolFailureStreak,
+		tokenUsageHook:          opts.TokenUsageHook,
 	}
 	w.setupOptionalLoaders(opts)
 	return w
@@ -240,7 +250,9 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	// Agentic mode requires provider support (see agenticProviders)
 	if profile.AgenticMode {
 		if w.providerSupportsAgentic(*profile) {
-			w.processAgentic(ctx, task, *project, *profile)
+			if result, ok := w.processAgentic(ctx, task, *project, *profile); ok {
+				w.handleLoopResult(ctx, task, result)
+			}
 			return
 		}
 		slog.Warn("agentic mode requested but provider does not support tool round-tripping; falling back to legacy mode",
