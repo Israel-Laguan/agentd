@@ -32,6 +32,18 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 	}
 }
 
+func TestLoadAgenticConfig_NegativeComplexityThresholdClamped(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	v.Set("agentic.planning.complexity_threshold", -10)
+
+	cfg := loadAgenticConfig(v)
+	if cfg.Planning.ComplexityThreshold != 0 {
+		t.Fatalf("ComplexityThreshold = %d, want 0", cfg.Planning.ComplexityThreshold)
+	}
+}
+
 func TestLoadAgenticConfig_PlanningOverride(t *testing.T) {
 	t.Parallel()
 	v := viper.New()

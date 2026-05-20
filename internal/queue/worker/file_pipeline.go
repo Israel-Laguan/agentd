@@ -105,6 +105,18 @@ func (p *FilePipeline) ingest(ctx context.Context, relPath, resolvedPath string,
 		if cached, ok := p.store.Get(hash, size, mtime); ok {
 			doc := *cached
 			doc.Path = relPath
+			if embed && p.embedder != nil && len(doc.Embedding) == 0 {
+				snippet := firstNTokens(doc.Markdown, embedSnippetTokens)
+				vecs, embedErr := p.embedder.Embed(ctx, []string{snippet})
+				if embedErr != nil {
+					slog.Warn("file pipeline embed failed", "path", relPath, "error", embedErr)
+				} else if len(vecs) > 0 {
+					doc.Embedding = vecs[0]
+					if err := p.store.Put(&doc); err != nil {
+						slog.Warn("doc store put failed", "path", relPath, "error", err)
+					}
+				}
+			}
 			return &doc, nil
 		}
 	}

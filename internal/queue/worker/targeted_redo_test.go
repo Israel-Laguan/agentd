@@ -60,6 +60,16 @@ tail`
 	}
 }
 
+func TestReplaceSection_MissingCloseTag(t *testing.T) {
+	t.Parallel()
+	out := "<!-- step:x -->\nold body without close\n"
+	replaced := replaceSection(out, "x", "fixed")
+	body, ok := extractSection(replaced, "x")
+	if !ok || body != "fixed" {
+		t.Fatalf("replace missing close: body=%q ok=%v", body, ok)
+	}
+}
+
 type redoCountGateway struct {
 	redoCalls map[string]int
 	requests  []gateway.AIRequest
@@ -105,7 +115,7 @@ func TestRepairLoop_CapsAtThreePasses(t *testing.T) {
 	}
 	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
 	out := "<!-- step:only -->\n<!-- /step:only -->\n"
-	_ = w.repairOutputWithPlan(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, models.AgentProfile{}, plan, out)
+	_ = w.repairOutputWithPlan(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, models.AgentProfile{}, plan, out, nil)
 	if gw.redoCalls["only"] != 3 {
 		t.Fatalf("redo calls for step = %d, want 3", gw.redoCalls["only"])
 	}
