@@ -71,6 +71,39 @@ func (w *Worker) shouldPlan(task models.Task) bool {
 		EstimateTaskComplexity(task) >= w.planningCfg.ComplexityThreshold
 }
 
+// planPhaseTokenReserve is a conservative upper bound on tokens one plan call may
+// charge against the task budget (matches buildPlanRequest MaxTokens).
+const planPhaseTokenReserve = 2000
+
+// minExecutionTokenReserve is headroom we try to leave for the agentic loop when
+// a per-task token budget is enabled.
+const minExecutionTokenReserve = 1000
+
+// shouldPlanWithBudget decides whether to run the plan phase. Plan generation uses
+// the same BudgetGuard as execution, so both phases share one task token budget.
+// When the budget is tight we skip planning so execution is less likely to stop
+// immediately with LoopBudgetExhausted.
+func (w *Worker) shouldPlanWithBudget(task models.Task, budgetGuard *BudgetGuard) bool {
+	if !w.shouldPlan(task) {
+		return false
+	}
+	if w.tokenBudget <= 0 {
+		return true
+	}
+	used := 0
+	if budgetGuard != nil {
+		used = budgetGuard.Usage()
+	}
+	remaining := w.tokenBudget - used
+	need := planPhaseTokenReserve + minExecutionTokenReserve
+	if remaining < need {
+		slog.Info("skipping plan phase: insufficient token budget headroom for plan and execution",
+			"task_id", task.ID, "used", used, "remaining", remaining, "need", need, "cap", w.tokenBudget)
+		return false
+	}
+	return true
+}
+
 func (w *Worker) buildPlanContext(task models.Task, project models.Project) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Project: %s\n", project.ID)

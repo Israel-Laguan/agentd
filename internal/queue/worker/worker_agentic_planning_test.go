@@ -116,6 +116,39 @@ ok2
 	}
 }
 
+func TestAgenticPlanning_TightTokenBudgetSkipsPlanPhase(t *testing.T) {
+	t.Parallel()
+	gw := &planningSequenceGateway{
+		planJSON:  samplePlanJSON(),
+		responses: []gateway.AIResponse{{Content: "done without plan"}},
+	}
+	store := &mockAgenticStore{}
+	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
+	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: t.TempDir()}
+	task := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "task-tight-budget"},
+		ProjectID:   "project-1",
+		AgentID:     "agent-1",
+		Title:       "Complex",
+		Description: strings.Repeat("detail ", 80),
+		State:       models.TaskStateQueued,
+	}
+	store.task = task
+
+	w := NewWorker(store, gw, &mockAgenticSandbox{results: map[string]sandbox.Result{}}, nil, nil, WorkerOptions{
+		Planning:    config.AgenticPlanningConfig{ComplexityThreshold: 100},
+		TokenBudget: 2500,
+	})
+	w.Process(context.Background(), task)
+
+	if len(gw.requests) == 0 {
+		t.Fatal("expected at least one gateway call")
+	}
+	if gw.requests[0].JSONMode {
+		t.Fatal("tight token budget should skip plan JSON call")
+	}
+}
+
 func TestAgenticPlanning_SimpleTaskSkipsPlanning(t *testing.T) {
 	t.Parallel()
 	gw := &planningSequenceGateway{

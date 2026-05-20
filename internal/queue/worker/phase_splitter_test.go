@@ -22,6 +22,36 @@ func TestEstimateTaskComplexity(t *testing.T) {
 	}
 }
 
+func TestShouldPlanWithBudget(t *testing.T) {
+	t.Parallel()
+	long := models.Task{BaseEntity: models.BaseEntity{ID: "t1"}, Title: "x", Description: strings.Repeat("a", 200)}
+	w := &Worker{
+		planningCfg: config.AgenticPlanningConfig{ComplexityThreshold: 100},
+		tokenBudget: 10000,
+	}
+	g := NewBudgetGuard(nil, "t1")
+	if !w.shouldPlanWithBudget(long, g) {
+		t.Fatal("ample budget should allow planning")
+	}
+	tight := &Worker{
+		planningCfg: config.AgenticPlanningConfig{ComplexityThreshold: 100},
+		tokenBudget: 2500,
+	}
+	if tight.shouldPlanWithBudget(long, g) {
+		t.Fatal("budget below plan+execution reserve should skip planning")
+	}
+	tracker := gateway.NewBudgetTracker(5000)
+	gUsed := NewBudgetGuard(tracker, "t1")
+	tracker.Add("t1", 4000)
+	wUsed := &Worker{
+		planningCfg: config.AgenticPlanningConfig{ComplexityThreshold: 100},
+		tokenBudget: 5000,
+	}
+	if wUsed.shouldPlanWithBudget(long, gUsed) {
+		t.Fatal("high prior usage should skip planning")
+	}
+}
+
 func TestShouldPlan(t *testing.T) {
 	t.Parallel()
 	w := &Worker{planningCfg: config.AgenticPlanningConfig{ComplexityThreshold: 100}}
