@@ -32,6 +32,9 @@ func (w *Worker) reblockTaskForPendingHITL(ctx context.Context, task models.Task
 		if getErr != nil {
 			return task, fmt.Errorf("refresh task for re-block: %w", getErr)
 		}
+		if fresh.State == models.TaskStateBlocked {
+			return *fresh, nil
+		}
 		updated, retryErr := w.store.UpdateTaskState(ctx, fresh.ID, fresh.UpdatedAt, models.TaskStateBlocked)
 		if retryErr == nil {
 			return *updated, nil
