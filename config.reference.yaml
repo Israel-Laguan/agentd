@@ -88,6 +88,11 @@ gateway:
 # Agentic worker mode (per AgentProfile.agentic_mode). Unsupported providers
 # (see docs/provider-tool-calling.md) fall back to legacy JSON command execution.
 agentic:
+  # Fraction (0–1) of zone character budget that triggers preemptive summarization.
+  # 0 disables the warning path. Default 0.85.
+  context_warning_threshold: 0.85
+  # Consecutive errors on the same tool before LoopToolFailure. 0 = fatal-only.
+  tool_failure_streak: 3
   tool_rate_limits:
     bash: 50
     default: 100
@@ -199,6 +204,8 @@ queue:
   poll_max_interval: "10s"   # adaptive backoff ceiling when no tasks are available
   max_tool_iterations: 10    # max tool-call iterations per agentic task (0 = unlimited)
   token_budget: 0            # worker-level per-task token cap; 0 = unlimited (Danger A). See also gateway.budget.tokens_per_task.
+  rolling_token_window: "5h" # sliding window for harness-wide token ledger
+  rolling_token_limit: 0     # cumulative tokens in window before dispatch defers; 0 = disabled
   agentic_truncator_max: 30  # max messages after truncation in agentic mode
   agentic_character_budget: 0  # max characters for agentic truncation (0 = inherit gateway.truncator.max_input_chars)
   agentic_context:

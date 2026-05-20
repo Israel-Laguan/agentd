@@ -72,14 +72,15 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 }
 
 func buildStartRuntime(cfg config.Config, store models.KanbanStore, deps runtimeDeps, startOpts *startOptions) (*queue.Daemon, *http.Server) {
-	worker := buildWorker(store, deps, cfg)
+	rollingLedger := queue.NewRollingTokenLedger(cfg.Queue.RollingTokenWindow, cfg.Queue.RollingTokenLimit)
+	worker := buildWorker(store, deps, cfg, rollingLedger)
 	intake := buildIntake(store, deps, cfg)
-	daemon := buildDaemon(store, worker, intake, deps, cfg, startOpts)
+	daemon := buildDaemon(store, worker, intake, deps, cfg, startOpts, rollingLedger)
 	apiServer := buildAPIServer(store, deps, cfg)
 	return daemon, apiServer
 }
 
-func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *queue.Worker {
+func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, rollingLedger *queue.RollingTokenLedger) *queue.Worker {
 	workerRetriever := &memory.Retriever{Store: store, Cfg: cfg.Librarian}
 
 	userPrefsPath := ""
@@ -87,6 +88,11 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 		userPrefsPath = filepath.Join(cfg.HomeDir, cfg.Queue.Instructions.UserPreferencesFile)
 	}
 
+	var tokenHook func(int)
+	if rollingLedger != nil && rollingLedger.Enabled() {
+		ledger := rollingLedger
+		tokenHook = func(tokens int) { ledger.LogCall(tokens) }
+	}
 	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, queue.WorkerOptions{
 		Canceller:                 deps.canceller,
 		Tuner:                     queue.NewParameterTuner(cfg.Healing),
@@ -120,6 +126,9 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config) 
 			Enabled: cfg.Agentic.Audit.Enabled,
 			Path:    config.ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path),
 		},
+		ContextWarningThreshold: cfg.Agentic.ContextWarningThreshold,
+		ToolFailureStreak:       cfg.Agentic.ToolFailureStreak,
+		TokenUsageHook:          tokenHook,
 	})
 }
 
@@ -151,7 +160,7 @@ func buildDreamer(store models.KanbanStore, deps runtimeDeps, cfg config.Config)
 	}
 }
 
-func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontdesk.IntakeProcessor, deps runtimeDeps, cfg config.Config, startOpts *startOptions) *queue.Daemon {
+func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontdesk.IntakeProcessor, deps runtimeDeps, cfg config.Config, startOpts *startOptions, rollingLedger *queue.RollingTokenLedger) *queue.Daemon {
 	var rateLimitedRequeueAfter time.Duration
 	if cfg.Channel.RateLimit > 0 {
 		rateLimitedRequeueAfter = time.Duration(config.NormalizedRateWindow(cfg.Channel)) * time.Second
@@ -184,6 +193,7 @@ func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontde
 		Channel:                 ch,
 		QueuedReconcileAfter:    cfg.Queue.QueuedReconcileAfter,
 		RateLimitedRequeueAfter: rateLimitedRequeueAfter,
+		RollingTokenLedger:      rollingLedger,
 	})
 }
 

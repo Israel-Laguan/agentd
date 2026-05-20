@@ -2,9 +2,12 @@ package queue
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"time"
+
+	"agentd/internal/models"
 )
 
 func (d *Daemon) taskLoop(ctx context.Context) {
@@ -123,12 +126,31 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 				continue
 			}
 		}
+		if d.rollingLedger != nil && d.rollingLedger.Enabled() {
+			profile, profErr := d.store.GetAgentProfile(ctx, task.AgentID)
+			if profErr == nil {
+				projected := projectedTokensForTask(profile)
+				if d.rollingLedger.ShouldQueue(projected, d.rollingLedger.Limit()) {
+					wait := d.rollingLedger.EstimatedDrainWait(projected)
+					d.deferRollingBudget(ctx, task, wait)
+					if d.sink != nil {
+						_ = d.sink.Emit(ctx, models.Event{
+							ProjectID: task.ProjectID,
+							TaskID:    sql.NullString{String: task.ID, Valid: true},
+							Type:      "ROLLING_BUDGET_DEFER",
+							Payload:   fmt.Sprintf("deferred %s for rolling token budget", wait),
+						})
+					}
+					continue
+				}
+			}
+		}
 		if !d.sem.Acquire(ctx) {
 			return dispatched, nacked, nil
 		}
 		dispatched++
 		d.wg.Add(1)
-		go func() {
+		go func(task models.Task) {
 			defer d.wg.Done()
 			defer d.sem.Release()
 			defer func() {
@@ -139,7 +161,7 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 			runCtx, cancel := context.WithTimeout(ctx, d.taskDeadline)
 			defer cancel()
 			d.worker.Process(runCtx, task)
-		}()
+		}(task)
 	}
 	return dispatched, nacked, nil
 }

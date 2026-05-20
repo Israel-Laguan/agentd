@@ -41,14 +41,20 @@ func TestHandleAgenticToolCalls_FatalAborts(t *testing.T) {
 	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", task.ID)
 
 	var messages []gateway.PromptMessage
-	suspended := w.handleAgenticToolCalls(
+	budgetGuard := NewBudgetGuard(nil, task.ID)
+	abort, result, report := w.handleAgenticToolCalls(
 		context.Background(), task, "", resp, &messages, nil, ex, taskHooks, nil, cm,
+		newToolFailureTracker(0), 0, budgetGuard,
 	)
-	if !suspended {
-		t.Fatal("expected fatal tool result to suspend agentic loop")
+	if !abort || !report {
+		t.Fatal("expected fatal tool result to report LoopToolFailure")
 	}
+	if result.Status != LoopToolFailure {
+		t.Fatalf("result.Status = %s, want tool_failure", result.Status)
+	}
+	w.handleLoopResult(context.Background(), task, result)
 	if store.task.RetryCount != 1 {
-		t.Fatalf("RetryCount = %d, want 1 after handleAgentFailure", store.task.RetryCount)
+		t.Fatalf("RetryCount = %d, want 1 after handleLoopResult", store.task.RetryCount)
 	}
 	if len(messages) != 1 {
 		t.Fatalf("messages = %d, want 1 tool result appended before abort", len(messages))

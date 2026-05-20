@@ -47,6 +47,10 @@ const (
 	DefaultSkillsTopK = 3
 
 	DefaultLegacyHandoffTimeout = 7 * 24 * time.Hour
+
+	DefaultRollingTokenWindow = 5 * time.Hour
+	DefaultRollingTokenLimit    = 0 // 0 = disabled
+	DefaultRollingProjectedTokens = 4096
 )
 
 // InstructionsConfig holds paths for the instruction hierarchy layers.
@@ -105,6 +109,8 @@ type QueueConfig struct {
 	HITL                       HITLConfig
 	ToolTimeouts               ToolTimeoutsConfig
 	ToolRetries                ToolRetriesConfig
+	RollingTokenWindow         time.Duration
+	RollingTokenLimit          int
 }
 
 func setQueueDefaults(v *viper.Viper) {
@@ -128,6 +134,8 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.skills.threshold", DefaultSkillsThreshold)
 	v.SetDefault("queue.skills.top_k", DefaultSkillsTopK)
 	v.SetDefault("queue.hitl.legacy_handoff_timeout", DefaultLegacyHandoffTimeout.String())
+	v.SetDefault("queue.rolling_token_window", DefaultRollingTokenWindow.String())
+	v.SetDefault("queue.rolling_token_limit", DefaultRollingTokenLimit)
 	setToolTimeoutDefaults(v)
 	setToolRetryDefaults(v)
 }
@@ -194,6 +202,8 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 		},
 		ToolTimeouts: loadToolTimeoutsConfig(v),
 		ToolRetries:  loadToolRetriesConfig(v),
+		RollingTokenWindow: v.GetDuration("queue.rolling_token_window"),
+		RollingTokenLimit:  v.GetInt("queue.rolling_token_limit"),
 	}
 }
 

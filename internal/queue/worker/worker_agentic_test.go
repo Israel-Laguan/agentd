@@ -326,7 +326,7 @@ func TestHandleAgenticToolCalls_ResumesAfterApproval(t *testing.T) {
 	ctx := context.Background()
 	var messages []gateway.PromptMessage
 
-	if suspended := w.handleAgenticToolCalls(ctx, parent, "", resp, &messages, nil, ex, taskHooks, nil, cm); !suspended {
+	if abort, _, _ := w.handleAgenticToolCalls(ctx, parent, "", resp, &messages, nil, ex, taskHooks, nil, cm, newToolFailureTracker(0), 0, NewBudgetGuard(nil, parent.ID)); !abort {
 		t.Fatal("expected approval gate to suspend on first tool call")
 	}
 	if !store.blockCalled {
@@ -343,7 +343,7 @@ func TestHandleAgenticToolCalls_ResumesAfterApproval(t *testing.T) {
 	}
 
 	store.blockCalled = false
-	if suspended := w.handleAgenticToolCalls(ctx, *parentAfter, "", resp, &messages, nil, ex, taskHooks, nil, cm); suspended {
+	if abort, _, _ := w.handleAgenticToolCalls(ctx, *parentAfter, "", resp, &messages, nil, ex, taskHooks, nil, cm, newToolFailureTracker(0), 0, NewBudgetGuard(nil, parentAfter.ID)); abort {
 		t.Fatal("expected tool to proceed after human approval, not suspend again")
 	}
 	assertApprovalResumed(t, store, messages)
@@ -431,7 +431,7 @@ func TestHandleAgenticToolCalls_RefreshesTaskUpdatedAt(t *testing.T) {
 	var messages []gateway.PromptMessage
 	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", parent.ID)
 
-	if suspended := w.handleAgenticToolCalls(ctx, staleTask, "", resp, &messages, nil, ex, taskHooks, nil, cm); !suspended {
+	if abort, _, _ := w.handleAgenticToolCalls(ctx, staleTask, "", resp, &messages, nil, ex, taskHooks, nil, cm, newToolFailureTracker(0), 0, NewBudgetGuard(nil, staleTask.ID)); !abort {
 		t.Fatal("expected approval gate to suspend agentic loop")
 	}
 	if !store.capturedUpdatedAt.Equal(store.freshUpdatedAt) {

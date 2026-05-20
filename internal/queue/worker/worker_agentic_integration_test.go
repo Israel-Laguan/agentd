@@ -339,6 +339,8 @@ func TestAgenticLoop_BudgetExceededRequeues(t *testing.T) {
 		MaxToolIterations: 10,
 		TokenBudget:       100,
 	})
+	var recorded LoopResult
+	w.SetLoopResultRecorder(func(r LoopResult) { recorded = r })
 	task := models.Task{
 		BaseEntity: models.BaseEntity{ID: "task-budget"},
 		ProjectID:  "project-1", AgentID: "agent-1",
@@ -349,6 +351,12 @@ func TestAgenticLoop_BudgetExceededRequeues(t *testing.T) {
 
 	w.Process(context.Background(), task)
 
+	if recorded.Status != LoopBudgetExhausted {
+		t.Fatalf("LoopResult.Status = %s, want budget_exhausted", recorded.Status)
+	}
+	if recorded.Meta.BudgetKind != "token" {
+		t.Fatalf("BudgetKind = %q, want token", recorded.Meta.BudgetKind)
+	}
 	if gw.callCount != 2 {
 		t.Fatalf("expected 2 gateway calls before budget block, got %d", gw.callCount)
 	}
@@ -360,6 +368,70 @@ func TestAgenticLoop_BudgetExceededRequeues(t *testing.T) {
 	}
 	if store.committedResult != nil {
 		t.Fatal("expected no successful commit on budget exhaustion")
+	}
+}
+
+func TestAgenticLoop_TurnLimitExceeded(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		{
+			Content: "tool",
+			ToolCalls: []gateway.ToolCall{{
+				ID: "c1", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"true"}`},
+			}},
+		},
+		{
+			Content: "tool2",
+			ToolCalls: []gateway.ToolCall{{
+				ID: "c2", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"true"}`},
+			}},
+		},
+		{
+			Content: "grace tool",
+			ToolCalls: []gateway.ToolCall{{
+				ID: "c3", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"true"}`},
+			}},
+		},
+	}}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"true": {Success: true, ExitCode: 0, Stdout: "ok\n"},
+	}}
+	store := &mockAgenticStore{}
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 2})
+	var recorded LoopResult
+	w.SetLoopResultRecorder(func(r LoopResult) { recorded = r })
+	task := models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-turn-limit"},
+		ProjectID:  "project-1", AgentID: "agent-1",
+		Title: "Turn limit", State: models.TaskStateQueued,
+	}
+	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
+	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: t.TempDir()}
+
+	w.Process(context.Background(), task)
+
+	if recorded.Status != LoopTurnLimitExceeded {
+		t.Fatalf("LoopResult.Status = %s, want turn_limit_exceeded", recorded.Status)
+	}
+}
+
+func TestAgenticLoop_SuccessfulCompletion(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: integrationSequenceResponses()}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"pwd": {Success: true, ExitCode: 0, Stdout: "/home/user\n"},
+	}}
+	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
+	var recorded LoopResult
+	w.SetLoopResultRecorder(func(r LoopResult) { recorded = r })
+
+	w.Process(context.Background(), task)
+
+	if recorded.Status != LoopSuccessfulCompletion {
+		t.Fatalf("LoopResult.Status = %s, want successful_completion", recorded.Status)
+	}
+	if store.committedResult == nil || !store.committedResult.Success {
+		t.Fatal("expected successful commit")
 	}
 }
 

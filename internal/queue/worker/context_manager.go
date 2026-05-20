@@ -134,6 +134,16 @@ func NewContextManager(cfg config.AgenticContextConfig, gw gateway.AIGateway, ag
 
 // PrepareContext partitions messages into zones and applies compression if needed.
 func (cm *ContextManager) PrepareContext(ctx context.Context, messages []spec.PromptMessage) ([]spec.PromptMessage, error) {
+	return cm.prepareContext(ctx, messages, false)
+}
+
+// PrepareContextForceSummarize runs PrepareContext but forces rolling summarization
+// even when turn count is below RollingThresholdTurns (context warning path).
+func (cm *ContextManager) PrepareContextForceSummarize(ctx context.Context, messages []spec.PromptMessage) ([]spec.PromptMessage, error) {
+	return cm.prepareContext(ctx, messages, true)
+}
+
+func (cm *ContextManager) prepareContext(ctx context.Context, messages []spec.PromptMessage, forceSummarize bool) ([]spec.PromptMessage, error) {
 	if len(messages) == 0 {
 		return messages, nil
 	}
@@ -142,7 +152,8 @@ func (cm *ContextManager) PrepareContext(ctx context.Context, messages []spec.Pr
 	turns := cm.groupTurns(remaining)
 
 	var out []spec.PromptMessage
-	if len(turns) > cm.cfg.RollingThresholdTurns {
+	shouldSummarize := forceSummarize || len(turns) > cm.cfg.RollingThresholdTurns
+	if shouldSummarize && len(turns) > 0 {
 		var err error
 		out, err = cm.applyRollingSummarization(ctx, anchor, turns)
 		if err != nil {
