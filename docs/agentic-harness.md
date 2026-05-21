@@ -51,7 +51,7 @@ Outer retry/healing/handoff must continue to wrap the **whole** inner loop as on
 
 ### Current (default worker): structured JSON, one shot
 
-- Messages are built in [`worker_support.go`](../internal/queue/worker/worker_support.go) (`workerMessages`) from `AgentProfile` and the task.
+- Messages are built in [`worker_legacy.go`](../internal/queue/worker/worker_legacy.go) (`workerMessages`) from `AgentProfile` and the task.
 - The worker calls the gateway with JSON mode and decodes a **`workerResponse`**: `command`, or `too_complex` with `subtasks`, via `GenerateJSON` in [`worker.go`](../internal/queue/worker/worker.go).
 - Exactly **one** LLM generation per attempt drives **one** sandbox execution for the shell command path.
 
@@ -160,7 +160,8 @@ These support the outer system and **wrap** the inner agentic loop:
 | [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go) | `AIRequest`, `AIResponse`, `PromptMessage`, truncation and budget interfaces. |
 | [`internal/gateway/providers/openai.go`](../internal/gateway/providers/openai.go) | OpenAI HTTP request/response shapes. |
 | [`internal/queue/worker/worker.go`](../internal/queue/worker/worker.go) | `Process`, gateway calls, sandbox orchestration. |
-| [`internal/queue/worker/worker_support.go`](../internal/queue/worker/worker_support.go) | `workerResponse`, `workerMessages`, payload helpers. |
+| [`internal/queue/worker/worker_legacy.go`](../internal/queue/worker/worker_legacy.go) | `workerResponse`, `workerMessages`, legacy command/routing. |
+| [`internal/queue/worker/worker_support.go`](../internal/queue/worker/worker_support.go) | Sandbox env, heartbeat, tool result parsing, payload helpers. |
 | [`internal/queue/worker/worker_payloads.go`](../internal/queue/worker/worker_payloads.go) | Result/failure/prompt payload formatting for events. |
 | [`internal/queue/worker/worker_retry.go`](../internal/queue/worker/worker_retry.go) | Retry and healing. |
 | [`internal/queue/worker/worker_handoffs.go`](../internal/queue/worker/worker_handoffs.go) | Handoff creation. |
