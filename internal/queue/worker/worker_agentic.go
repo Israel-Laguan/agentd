@@ -202,6 +202,7 @@ func (w *Worker) processAgenticIteration(
 	toolTracker *toolFailureTracker, workPlan *Plan, turnID string, turnIndex int,
 	respecAttempts *int,
 	checkpointer *SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
+	sessionRecoveryNeedsPlanInject *bool,
 ) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
 	if stop, guardErr := w.guardAgenticIteration(
 		ctx, task, project, profile, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
@@ -240,7 +241,7 @@ func (w *Worker) processAgenticIteration(
 		cont, res, rep, rewind, finErr := w.finishAgenticTurnNoTools(
 			ctx, task, profile, resp.Content, workPlan, goalTracker,
 			turnID, turnIndex, budgetGuard, ctxBudgetGuard, cm, messages, respecAttempts,
-			checkpointer, sessionRecoveryGen, sessionRecoveryUsed,
+			checkpointer, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject,
 		)
 		return cont, res, rep, rewind, finErr
 	}

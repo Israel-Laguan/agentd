@@ -51,29 +51,27 @@ func TestAgenticRewindState_ForwardProgressResetsStreak(t *testing.T) {
 	}
 }
 
-func TestSessionRecoveryPlanReinjection_ClearsFlagAfterInject(t *testing.T) {
+func TestSessionRecoveryPlanReinjection_ClearsNeedsPlanInjectAfterInject(t *testing.T) {
 	t.Parallel()
 	w := NewWorker(nil, nil, nil, nil, nil, WorkerOptions{})
 	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "do", OutputFormat: "text"}}}
 	msgs := []gateway.PromptMessage{{Role: "system", Content: "base"}}
 	in := agenticTurnLoopInput{
-		sessionRecoveryUsed: true,
-		workPlan:            plan,
-		messages:            &msgs,
+		sessionRecoveryUsed:            true,
+		sessionRecoveryNeedsPlanInject: true,
+		workPlan:                       plan,
+		messages:                       &msgs,
 	}
-	rewindInjectPlan := func() {
-		if in.sessionRecoveryUsed && in.workPlan != nil && in.messages != nil {
-			*in.messages = w.injectPlan(*in.messages, in.workPlan)
-			in.sessionRecoveryUsed = false
-		}
-	}
-	rewindInjectPlan()
+	w.applySessionRecoveryPlanReinjection(&in)
 	if strings.Count((*in.messages)[0].Content, "WORK PLAN") != 1 {
 		t.Fatalf("first reinject should leave one WORK PLAN block, got %q", (*in.messages)[0].Content)
 	}
-	rewindInjectPlan()
+	w.applySessionRecoveryPlanReinjection(&in)
 	if strings.Count((*in.messages)[0].Content, "WORK PLAN") != 1 {
-		t.Fatal("cleared sessionRecoveryUsed must prevent duplicate plan reinjection on later rewind")
+		t.Fatal("cleared sessionRecoveryNeedsPlanInject must prevent duplicate plan reinjection on later rewind")
+	}
+	if !in.sessionRecoveryUsed {
+		t.Fatal("sessionRecoveryUsed must stay true after plan reinjection")
 	}
 }
 
