@@ -144,6 +144,10 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 | `agentic.tool_manifest.enabled` | `false` | When true, filter gateway tool definitions by classified task type before the agentic turn loop. Does not affect `agentic.model_routing` token estimates (routing still counts the full tool registry). |
 | `agentic.tool_manifest.min_confidence` | `0.35` | Minimum classifier confidence (0.0–1.0) to apply a manifest mapping; below threshold falls back to full agent tools. |
 | `agentic.tool_manifest.mappings` | _(built-in defaults)_ | Map task type names (`summarize`, `code_gen`, `doc_qa`, `web_research`, `full_agent`) to tool names. Empty slice means no tools; `*` or omitted/nil mapping means all tools. In YAML, quote the wildcard: `code_gen: ["*"]` (unquoted `*` in `[*]` is alias syntax, not a literal string). |
+| `agentic.capability_routing.enabled` | `false` | When true, classify task intent and route matching tasks to a configured external adapter, bypassing the agentic LLM turn loop. Runs after `agentic.model_routing`. |
+| `agentic.capability_routing.min_confidence` | `0.35` | Minimum classifier confidence (0.0–1.0) to apply a capability mapping; below threshold continues with the normal agentic loop. |
+| `agentic.capability_routing.mappings` | _(none)_ | Map intent names (`generate_image`, `real_time_search`, `browse_url`, `spreadsheet_ops`) to adapter registry names (`capabilities.Registry.Register` name). |
+| `agentic.capability_routing.tools` | _(intent name)_ | Optional per-intent tool name override passed to `CallTool`; when omitted, the intent name is used. |
 | `sandbox.inactivity_timeout` | `60s` | Max stdout/stderr silence before sandbox timeout triggers. |
 | `sandbox.wall_timeout` | `10m` | Max wall-clock execution time for each sandbox command payload. |
 | `sandbox.kill_grace` | `2s` | Grace window between SIGTERM and SIGKILL for timed-out process groups. |

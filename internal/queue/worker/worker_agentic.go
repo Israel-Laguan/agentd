@@ -35,6 +35,9 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	routingTools := append([]gateway.ToolDefinition(nil), tools...)
 	tools, toolToAdapter = w.filterAgenticTools(tools, toolToAdapter, task, profile)
 	profile = w.applyModelRouting(task, profile, messages, routingTools)
+	if result, ok := w.tryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); ok {
+		return result, true
+	}
 	if !w.providerSupportsAgentic(profile) {
 		slog.Warn("agentic mode requested but routed provider does not support tool round-tripping; falling back to legacy mode",
 			"task_id", task.ID,

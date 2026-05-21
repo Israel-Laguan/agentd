@@ -79,6 +79,8 @@ type AgenticConfig struct {
 	ModelRouting ModelRoutingConfig
 	// ToolManifest filters gateway tool definitions by classified task type.
 	ToolManifest ToolManifestConfig
+	// CapabilityRouting bypasses the agentic LLM loop for tasks mapped to external adapters.
+	CapabilityRouting CapabilityRoutingConfig
 }
 
 // FileContextConfig controls convert/cache/select pipeline for workspace files.
@@ -113,6 +115,7 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.model_routing.enabled", false)
 	v.SetDefault("agentic.model_routing.context_token_threshold", DefaultModelRoutingContextTokens)
 	setToolManifestDefaults(v)
+	setCapabilityRoutingDefaults(v)
 }
 
 func loadAgenticConfig(v *viper.Viper) AgenticConfig {
@@ -134,7 +137,8 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 		Planning:     loadAgenticPlanningConfig(v),
 		TopicGuard:     loadTopicGuardConfig(v),
 		ModelRouting:   loadModelRoutingConfig(v),
-		ToolManifest:   loadToolManifestConfig(v),
+		ToolManifest:       loadToolManifestConfig(v),
+		CapabilityRouting: loadCapabilityRoutingConfig(v),
 	}
 }
 
