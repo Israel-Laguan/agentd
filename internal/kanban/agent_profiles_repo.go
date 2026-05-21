@@ -12,7 +12,7 @@ import (
 
 func (s *Store) GetAgentProfile(ctx context.Context, id string) (*models.AgentProfile, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, updated_at
+		SELECT id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, disable_topic_drift, updated_at
 		FROM agent_profiles WHERE id = ?`, id)
 	profile, err := scanAgentProfile(row)
 	if err != nil {
@@ -26,7 +26,7 @@ func (s *Store) GetAgentProfile(ctx context.Context, id string) (*models.AgentPr
 
 func (s *Store) ListAgentProfiles(ctx context.Context) ([]models.AgentProfile, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, updated_at
+		SELECT id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, disable_topic_drift, updated_at
 		FROM agent_profiles ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list agent profiles: %w", err)
@@ -56,8 +56,8 @@ func (s *Store) UpsertAgentProfile(ctx context.Context, p models.AgentProfile) e
 		p.Role = "CODE_GEN"
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO agent_profiles (id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO agent_profiles (id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, disable_topic_drift, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			provider = excluded.provider,
@@ -67,9 +67,10 @@ func (s *Store) UpsertAgentProfile(ctx context.Context, p models.AgentProfile) e
 			role = excluded.role,
 			max_tokens = excluded.max_tokens,
 			agentic_mode = excluded.agentic_mode,
+			disable_topic_drift = excluded.disable_topic_drift,
 			updated_at = excluded.updated_at`,
 		p.ID, p.Name, p.Provider, p.Model, p.Temperature, nullString(p.SystemPrompt),
-		p.Role, p.MaxTokens, boolToInt(p.AgenticMode), formatTime(p.UpdatedAt))
+		p.Role, p.MaxTokens, boolToInt(p.AgenticMode), boolToInt(p.DisableTopicDrift), formatTime(p.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("upsert agent profile: %w", err)
 	}
@@ -138,9 +139,9 @@ func (s *Store) AssignTaskAgent(
 func scanAgentProfile(row scanner) (*models.AgentProfile, error) {
 	var p models.AgentProfile
 	var updatedAt string
-	var agenticMode int
+	var agenticMode, disableTopicDrift int
 	err := row.Scan(&p.ID, &p.Name, &p.Provider, &p.Model, &p.Temperature,
-		&p.SystemPrompt, &p.Role, &p.MaxTokens, &agenticMode, &updatedAt)
+		&p.SystemPrompt, &p.Role, &p.MaxTokens, &agenticMode, &disableTopicDrift, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -148,6 +149,7 @@ func scanAgentProfile(row scanner) (*models.AgentProfile, error) {
 		return nil, fmt.Errorf("scan agent profile: %w", err)
 	}
 	p.AgenticMode = agenticMode != 0
+	p.DisableTopicDrift = disableTopicDrift != 0
 	updated, err := parseTime(updatedAt)
 	if err != nil {
 		return nil, err

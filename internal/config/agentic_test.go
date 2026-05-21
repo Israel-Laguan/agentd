@@ -21,6 +21,12 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 	if cfg.ToolFailureStreak != DefaultToolFailureStreak {
 		t.Fatalf("ToolFailureStreak = %d, want %d", cfg.ToolFailureStreak, DefaultToolFailureStreak)
 	}
+	if !cfg.TopicGuard.Enabled {
+		t.Fatal("TopicGuard.Enabled should default to true")
+	}
+	if cfg.TopicGuard.Sensitivity != DefaultTopicGuardSensitivity {
+		t.Fatalf("TopicGuard.Sensitivity = %v, want %v", cfg.TopicGuard.Sensitivity, DefaultTopicGuardSensitivity)
+	}
 	if cfg.Planning.ComplexityThreshold != 0 {
 		t.Fatalf("Planning.ComplexityThreshold = %d, want 0", cfg.Planning.ComplexityThreshold)
 	}

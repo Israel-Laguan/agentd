@@ -49,12 +49,15 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, budgetGuard)
 
+	sessionMgr := NewSessionManager(task.ID, extractAnchorUserContent(messages), w.checkpointStore)
+
 	return w.runAgenticTurnLoop(agenticTurnLoopInput{
-		ctx: cancelCtx, task: task, profile: profile, messages: &messages,
+		ctx: cancelCtx, task: task, project: project, profile: profile, messages: &messages,
 		tools: tools, toolToAdapter: toolToAdapter, taskToolExecutor: taskToolExecutor,
 		iterationGuard: iterationGuard, budgetGuard: budgetGuard, deadlineGuard: deadlineGuard,
 		ctxBudgetGuard: ctxBudgetGuard, cm: cm, goalTracker: goalTracker,
 		taskHooks: taskHooks, taskCaps: taskCaps, toolTracker: toolTracker, workPlan: workPlan,
+		sessionMgr: sessionMgr,
 	})
 }
 
@@ -77,18 +80,18 @@ func (w *Worker) injectWorkPlanIfNeeded(
 }
 
 func (w *Worker) guardAgenticIteration(
-	ctx context.Context, task models.Task,
+	ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile,
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
 	iterationGuard *IterationGuard, budgetGuard *BudgetGuard, deadlineGuard *DeadlineGuard,
 	ctxBudgetGuard *ContextBudgetGuard, cm *ContextManager, goalTracker *GoalTracker,
-	turnID string, turnIndex int,
+	sessionMgr *SessionManager, turnID string, turnIndex int,
 ) (*LoopResult, error) {
 	if err := deadlineGuard.BeforeIteration(); err != nil {
 		w.handleGatewayError(ctx, task, err)
 		return nil, err
 	}
 	if stop, err := w.guardIterationAndBudget(
-		ctx, task, messages, iterationGuard, budgetGuard, ctxBudgetGuard, cm, turnIndex,
+		ctx, task, project, profile, messages, iterationGuard, budgetGuard, ctxBudgetGuard, cm, sessionMgr, turnIndex,
 	); stop != nil || err != nil {
 		return stop, err
 	}
@@ -100,10 +103,10 @@ func (w *Worker) guardAgenticIteration(
 }
 
 func (w *Worker) guardIterationAndBudget(
-	ctx context.Context, task models.Task,
+	ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile,
 	messages *[]gateway.PromptMessage,
 	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
-	ctxBudgetGuard *ContextBudgetGuard, cm *ContextManager,
+	ctxBudgetGuard *ContextBudgetGuard, cm *ContextManager, sessionMgr *SessionManager,
 	turnIndex int,
 ) (*LoopResult, error) {
 	if err := iterationGuard.BeforeIteration(); err != nil {
@@ -115,6 +118,11 @@ func (w *Worker) guardIterationAndBudget(
 			),
 		}
 		return &r, errIterationLimit
+	}
+	if reset, err := w.guardTopicDrift(ctx, task, project, profile, turnIndex, messages, sessionMgr); err != nil {
+		return nil, err
+	} else if reset {
+		return nil, errTopicDriftReset
 	}
 	contextExhausted, err := w.prepareAgenticIteration(ctx, messages, iterationGuard, cm, ctxBudgetGuard, task)
 	if err != nil {
@@ -177,22 +185,25 @@ var (
 )
 
 func (w *Worker) processAgenticIteration(
-	ctx context.Context, task models.Task, profile models.AgentProfile,
+	ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile,
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
 	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
 	deadlineGuard *DeadlineGuard, ctxBudgetGuard *ContextBudgetGuard,
-	cm *ContextManager, goalTracker *GoalTracker,
+	cm *ContextManager, goalTracker *GoalTracker, sessionMgr *SessionManager,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
 	toolTracker *toolFailureTracker, workPlan *Plan, turnID string, turnIndex int,
 	respecAttempts *int,
 ) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
 	if stop, guardErr := w.guardAgenticIteration(
-		ctx, task, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
-		ctxBudgetGuard, cm, goalTracker, turnID, turnIndex,
+		ctx, task, project, profile, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
+		ctxBudgetGuard, cm, goalTracker, sessionMgr, turnID, turnIndex,
 	); stop != nil {
 		return false, *stop, true, rewindNone, nil
 	} else if guardErr != nil {
+		if errors.Is(guardErr, errTopicDriftReset) {
+			return true, LoopResult{}, false, rewindToFirstTurn, errTopicDriftReset
+		}
 		return false, LoopResult{}, false, rewindNone, guardErr
 	}
 

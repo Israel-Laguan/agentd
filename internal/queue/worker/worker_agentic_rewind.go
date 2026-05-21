@@ -59,9 +59,15 @@ func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 	}
 }
 
+func resetAgenticStateForTopicDrift(in *agenticTurnLoopInput, w *Worker) {
+	resetAgenticStateForRewind(*in)
+	in.cm = w.newAgenticContextManagerOnly(in.task)
+}
+
 type agenticTurnLoopInput struct {
 	ctx              context.Context
 	task             models.Task
+	project          models.Project
 	profile          models.AgentProfile
 	messages         *[]gateway.PromptMessage
 	tools            []gateway.ToolDefinition
@@ -77,6 +83,7 @@ type agenticTurnLoopInput struct {
 	taskCaps         *capabilities.Registry
 	toolTracker      *toolFailureTracker
 	workPlan         *Plan
+	sessionMgr       *SessionManager
 }
 
 // runAgenticTurnLoop drives the inner agentic turn loop until completion, stagnation, or error.
@@ -86,8 +93,8 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 	for turnIndex := 0; ; {
 		turnID := fmt.Sprintf("%s:%d", in.task.ID, turnIndex)
 		cont, result, report, rewindTo, err := w.processAgenticIteration(
-			in.ctx, in.task, in.profile, in.messages, in.tools, in.toolToAdapter, in.taskToolExecutor,
-			in.iterationGuard, in.budgetGuard, in.deadlineGuard, in.ctxBudgetGuard, in.cm, in.goalTracker,
+			in.ctx, in.task, in.project, in.profile, in.messages, in.tools, in.toolToAdapter, in.taskToolExecutor,
+			in.iterationGuard, in.budgetGuard, in.deadlineGuard, in.ctxBudgetGuard, in.cm, in.goalTracker, in.sessionMgr,
 			in.taskHooks, in.taskCaps, in.toolTracker, in.workPlan, turnID, turnIndex, &respecAttempts,
 		)
 		if err != nil {
@@ -101,6 +108,12 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			return LoopResult{}, false
 		}
 		if rewindTo >= 0 {
+			if errors.Is(err, errTopicDriftReset) {
+				rewind.reset()
+				turnIndex = rewindTo
+				resetAgenticStateForTopicDrift(&in, w)
+				continue
+			}
 			if rewind.apply(rewindTo) {
 				slog.Warn("agentic rewind stagnation",
 					"task_id", in.task.ID,
