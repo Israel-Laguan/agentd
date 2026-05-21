@@ -22,7 +22,9 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	// pre-task elicitation run after the fallback check so legacy path is unaffected.
 	messages, tools, toolToAdapter, _, profile, taskToolExecutor, taskHooks, taskCaps :=
 		w.prepareAgenticRun(ctx, task, project, profile)
-	if result, ok := w.tryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); ok {
+	if result, ok, err := w.tryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); err != nil {
+		return LoopResult{}, false
+	} else if ok {
 		return result, true
 	}
 	if !w.providerSupportsAgentic(profile) {

@@ -18,7 +18,7 @@ const (
 var (
 	generateImageSignals  = []string{"image", "picture", "logo", "illustration", "render", "draw"}
 	realTimeSearchSignals = []string{"latest", "today", "current", "news", "real-time", "search the web"}
-	browseURLSignals      = []string{"url", "http", "browse", "fetch page", "scrape"}
+	browseURLSignals      = []string{"url", "http", "https", "browse", "fetch page", "scrape"}
 	spreadsheetOpsSignals = []string{"spreadsheet", "excel", "csv", "sheet", "pivot"}
 
 	capabilityIntentSignals  map[string][]string
