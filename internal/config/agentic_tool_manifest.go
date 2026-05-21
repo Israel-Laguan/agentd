@@ -8,8 +8,8 @@ const DefaultToolManifestMinConfidence = 0.35
 type ToolManifestConfig struct {
 	Enabled       bool
 	MinConfidence float64
-	// Mappings maps task type names to tool names advertised to the model.
-	// Empty slice means no tools; omitted full_agent or "*" means all tools.
+	// Mappings maps task type names (summarize, code_gen, doc_qa, web_research, full_agent)
+	// to tool names advertised to the model. Empty slice means no tools; "*" or nil means all tools.
 	Mappings map[string][]string
 }
 

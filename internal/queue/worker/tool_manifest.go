@@ -141,7 +141,16 @@ func NewToolManifest(cfg config.ToolManifestConfig) *ToolManifest {
 	}
 	mappings := defaultToolManifestMappings()
 	for k, v := range cfg.Mappings {
-		mappings[strings.ToLower(strings.TrimSpace(k))] = append([]string(nil), v...)
+		key := strings.ToLower(strings.TrimSpace(k))
+		switch {
+		case v == nil:
+			mappings[key] = nil
+		case len(v) == 0:
+			// Non-nil empty slice: "no tools". append(nil, v...) would collapse to nil ("all tools").
+			mappings[key] = []string{}
+		default:
+			mappings[key] = append([]string(nil), v...)
+		}
 	}
 	return &ToolManifest{
 		cfg:        cfg,
@@ -194,10 +203,6 @@ func (m *ToolManifest) Filter(
 		"confidence", classification.Confidence,
 		"scores", classification.Scores,
 	)
-
-	if taskType == TaskTypeFullAgent || taskType == TaskTypeWebResearch {
-		return tools, index
-	}
 
 	names, ok := m.mappings[taskType]
 	if !ok {

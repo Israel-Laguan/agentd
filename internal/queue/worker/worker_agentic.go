@@ -32,7 +32,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
 	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
-	routingTools := tools
+	routingTools := append([]gateway.ToolDefinition(nil), tools...)
 	tools, toolToAdapter = w.filterAgenticTools(tools, toolToAdapter, task, profile)
 	profile = w.applyModelRouting(task, profile, messages, routingTools)
 	if !w.providerSupportsAgentic(profile) {
