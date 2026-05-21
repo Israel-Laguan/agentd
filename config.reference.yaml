@@ -14,11 +14,7 @@ api:
   # X-Agentd-Materialize-Token with this exact value (CLI `agentd ask` sends it automatically).
   materialize_token: ""
 
-# AI gateway.
-# Tool capability fallback: when a request includes tools but the selected provider
-# does not support chat tools, the router clears tools and sets JSON mode (cascade
-# only). An explicit profile Provider with unsupported tools returns an error.
-# Role-mapped providers (role_models) use cascade-style fallback, not that error.
+# AI gateway (tool/JSON fallback: docs/provider-tool-calling.md).
 gateway:
   order: [openai, anthropic, ollama]
   max_tasks_per_phase: 7
@@ -80,13 +76,7 @@ gateway:
   #       type: bearer
   #       token: "${MCP_TOKEN}"
 
-# Per-tool rate limiting (PreToolUse).
-# Keys are tool names; values are max invocations per session.
-# The special "default" key applies to any tool without an explicit entry.
-# 0 or absent = unlimited.
-# Future extension: values may become objects with max_calls / window_seconds.
-# Agentic worker mode (per AgentProfile.agentic_mode). Unsupported providers
-# (see docs/provider-tool-calling.md) fall back to legacy JSON command execution.
+# Agentic worker mode (AgentProfile.agentic_mode); tool rate limits are per-session PreToolUse caps.
 agentic:
   # Fraction (0–1) of zone character budget that triggers preemptive summarization.
   # 0 disables the warning path. Default 0.85.
@@ -101,17 +91,8 @@ agentic:
   tool_rate_limits:
     bash: 50
     default: 100
-  # Credential mapping for tool handlers that call external APIs.
-  # Keys are tool names; values are environment variable names holding the credential.
-  # CredentialInjectionHook injects mapped env vars into the per-call execution
-  # environment only; values are never exposed in tool arguments or model context.
-  # CredentialValidationSessionHook checks at startup that every mapped env var is set.
-  # CredentialDetectionHook scans tool arguments and vetoes calls that match
-  # credential-like patterns; this can block execution even when tool_credentials
-  # is configured. Do not place secrets in tool args.
-  # disable_credential_detection: true  # opt out (not recommended; secrets may reach logs/context)
-  # bash and delegate tools receive merged env in subprocess/sandbox paths.
-  # MCP capability tools receive per-call auth via request context (Bearer from injected env).
+  # tool_credentials: map tool name → env var (injected per call; never in args). See docs/reference.md.
+  # disable_credential_detection: true  # opt out (not recommended)
   # tool_credentials:
   #   github: GITHUB_TOKEN
   #   jira: JIRA_API_KEY
@@ -170,7 +151,10 @@ agentic:
   tool_manifest:
     enabled: false
     min_confidence: 0.35
-    mappings: {summarize: [], code_gen: [bash, read, write], doc_qa: [read]}
+    # Use "*" (quoted) to expose all tools for a task type, e.g. code_gen: ["*"].
+    # Unquoted * is YAML alias syntax (e.g. [*] / [ * ]), not a literal string.
+    # Omitting a task type in mappings falls back to built-in defaults (nil/* = all tools).
+    mappings: {summarize: [], code_gen: [bash, read, write], doc_qa: [read], web_research: [read]}
 
 # Sandbox command execution hardening.
 sandbox:
@@ -205,24 +189,13 @@ breaker:
 disk:
   free_threshold_percent: 10.0
 
-# Channel-level security and validation.
-# Enforced at dispatch before a claimed task reaches the worker loop.
-#
-# Upgrade note: agentd applies viper defaults even when this block is absent from
-# ~/.agentd/config.yaml (max_message_size defaults to 1048576). That enables the
-# channel gate on upgrade—structural validation plus a 1MB payload cap; rate_limit
-# stays off unless you set it. Tasks with both empty title and description are
-# rejected to FAILED at dispatch. To keep pre-upgrade behavior (no dispatch gate),
-# set both max_message_size and rate_limit to 0 in your config.
+# Channel: dispatch validation (defaults apply when absent; set both limits to 0 to disable).
 channel:
   max_message_size: 1048576    # bytes; 0 = unlimited. Reject payloads above this threshold when > 0.
   rate_limit: 0                # max task admissions per task within rate_window (queue path keys session_id to task ID); 0 = unlimited. Dispatch-time validation runs when max_message_size > 0 and/or rate_limit > 0; set both to 0 to disable the channel gate.
   rate_window: 60              # sliding window (seconds) for per-session rate limiting.
 
-# Background job schedules live in <home>/agentd.crontab (not this file).
-# Example: @every 1m hitl-reconcile  — fail BLOCKED tasks past HITL deadline.
-
-# Queue daemon.
+# Queue daemon (cron schedules: <home>/agentd.crontab).
 queue:
   task_deadline: "10m"             # wall-clock timeout per worker task (the Reaper)
   queued_reconcile_after: "10m"    # min age before resetting stale QUEUED claims (orphan recovery); independent of task_deadline
