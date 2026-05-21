@@ -52,6 +52,7 @@ type WorkerOptions struct {
 	FileContextCachePath      string
 	Planning                  config.AgenticPlanningConfig
 	TopicGuard                config.TopicGuardConfig
+	ModelRouting              config.ModelRoutingConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -171,6 +172,7 @@ func NewWorker(
 	}
 	w.topicGuard = NewTopicGuard(gw, opts.TopicGuard)
 	w.messageEditor = NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
+	w.modelRouter = NewModelRouter(opts.ModelRouting)
 	w.setupFileContext(opts)
 	w.setupOptionalLoaders(opts)
 	return w

@@ -223,6 +223,7 @@ func (w *Worker) loadContext(
 func (w *Worker) command(ctx context.Context, task models.Task, profile models.AgentProfile) (workerResponse, error) {
 	messages := w.seedMessages(ctx, task, profile)
 	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
+	profile = w.applyModelRouting(task, profile, messages)
 	req := gateway.AIRequest{
 		Messages:    messages,
 		Temperature: profile.Temperature,

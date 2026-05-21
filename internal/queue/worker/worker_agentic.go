@@ -37,6 +37,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
 	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
+	profile = w.applyModelRouting(task, profile, messages)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
