@@ -101,23 +101,64 @@ func TestModelRouter_ContextOverrideForcesHigh(t *testing.T) {
 	}
 }
 
+func TestModelRouter_PartialTierFallback(t *testing.T) {
+	t.Parallel()
+	cfg := config.ModelRoutingConfig{
+		Enabled:               true,
+		ContextTokenThreshold: 150000,
+		High:                  config.ModelTierTarget{Provider: "anthropic", Model: "claude-opus"},
+	}
+	r := NewModelRouter(cfg)
+	if r == nil {
+		t.Fatal("NewModelRouter() = nil, want router with only high tier")
+	}
+	task := models.Task{Description: "summarize this file"}
+	provider, model, ok := r.Route(task, 0)
+	if !ok {
+		t.Fatal("Route() ok = false, want true")
+	}
+	if provider != "anthropic" || model != "claude-opus" {
+		t.Fatalf("Route() = %q/%q, want anthropic/claude-opus fallback", provider, model)
+	}
+}
+
+func TestModelRouter_PartialTierMidOnly(t *testing.T) {
+	t.Parallel()
+	cfg := config.ModelRoutingConfig{
+		Enabled:               true,
+		ContextTokenThreshold: 150000,
+		Mid:                   config.ModelTierTarget{Provider: "anthropic", Model: "claude-sonnet"},
+	}
+	r := NewModelRouter(cfg)
+	task := models.Task{Description: "architect compare design analyse migration"}
+	_, model, ok := r.Route(task, 0)
+	if !ok {
+		t.Fatal("Route() ok = false, want true")
+	}
+	if model != "claude-sonnet" {
+		t.Fatalf("Route() model = %q, want claude-sonnet fallback from unset high", model)
+	}
+}
+
 func TestEstimateContextTokens_LargeContext(t *testing.T) {
 	t.Parallel()
 	content := strings.Repeat("x", 600001) // 600001/4 > 150000
 	messages := []gateway.PromptMessage{{Role: "user", Content: content}}
-	tokens := EstimateContextTokens(messages)
+	tokens := EstimateContextTokens(messages, nil)
 	if tokens < 150000 {
 		t.Fatalf("EstimateContextTokens() = %d, want >= 150000", tokens)
 	}
 }
 
-func TestIsPinned(t *testing.T) {
+func TestEstimateContextTokens_IncludesTools(t *testing.T) {
 	t.Parallel()
-	if IsPinned(models.AgentProfile{Model: "gpt-4"}) != true {
-		t.Fatal("pinned profile should return true")
-	}
-	if IsPinned(models.AgentProfile{}) != false {
-		t.Fatal("empty model should return false")
+	tools := []gateway.ToolDefinition{{
+		Name:        "run_command",
+		Description: strings.Repeat("x", 600001),
+	}}
+	tokens := EstimateContextTokens(nil, tools)
+	if tokens < 150000 {
+		t.Fatalf("EstimateContextTokens() = %d, want >= 150000 from tool defs", tokens)
 	}
 }
 
@@ -130,18 +171,25 @@ func TestNewModelRouter_DisabledOrEmptyTiers(t *testing.T) {
 	if NewModelRouter(cfg) != nil {
 		t.Fatal("enabled with no tier targets should return nil router")
 	}
+	cfg = config.ModelRoutingConfig{
+		Enabled: true,
+		High:    config.ModelTierTarget{Provider: "anthropic", Model: "claude-opus"},
+	}
+	if NewModelRouter(cfg) == nil {
+		t.Fatal("enabled with partial high tier should return non-nil router")
+	}
 }
 
-func TestApplyModelRouting_PinnedProfileUnchanged(t *testing.T) {
+func TestApplyModelRouting_OverridesProfileModel(t *testing.T) {
 	t.Parallel()
 	w := &Worker{
 		modelRouter: NewModelRouter(testModelRoutingConfig()),
 	}
 	profile := models.AgentProfile{Provider: "openai", Model: "gpt-4"}
 	task := models.Task{Description: "summarize this file"}
-	got := w.applyModelRouting(task, profile, nil)
-	if got.Model != "gpt-4" || got.Provider != "openai" {
-		t.Fatalf("applyModelRouting() = %+v, want unchanged pinned profile", got)
+	got := w.applyModelRouting(task, profile, nil, nil)
+	if got.Model != "claude-haiku" || got.Provider != "anthropic" {
+		t.Fatalf("applyModelRouting() = %+v, want anthropic/claude-haiku", got)
 	}
 }
 
@@ -152,7 +200,7 @@ func TestApplyModelRouting_UnpinnedRoutesCheap(t *testing.T) {
 	}
 	profile := models.AgentProfile{Provider: "openai"}
 	task := models.Task{Description: "summarize this file"}
-	got := w.applyModelRouting(task, profile, nil)
+	got := w.applyModelRouting(task, profile, nil, nil)
 	if got.Model != "claude-haiku" || got.Provider != "anthropic" {
 		t.Fatalf("applyModelRouting() = %+v, want anthropic/claude-haiku", got)
 	}
@@ -167,7 +215,7 @@ func TestApplyModelRouting_ContextOverrideHigh(t *testing.T) {
 	task := models.Task{Description: "summarize this file"}
 	content := strings.Repeat("x", 600001)
 	messages := []gateway.PromptMessage{{Role: "user", Content: content}}
-	got := w.applyModelRouting(task, profile, messages)
+	got := w.applyModelRouting(task, profile, messages, nil)
 	if got.Model != "claude-opus" {
 		t.Fatalf("applyModelRouting() model = %q, want claude-opus", got.Model)
 	}

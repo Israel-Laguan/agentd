@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"encoding/json"
 	"strings"
 
 	"agentd/internal/config"
@@ -12,9 +13,9 @@ import (
 const charsPerToken = 4
 
 var (
-	reasoningSignals  = []string{"reason", "compare", "design", "architect", "analyse"}
+	reasoningSignals  = []string{"reason", "compare", "design", "architect", "analyse", "analyze", "analysis"}
 	creativeSignals   = []string{"write", "draft", "generate"}
-	mechanicalSignals = []string{"format", "summarize", "list", "rename", "fix grammar"}
+	mechanicalSignals = []string{"format", "summarize", "list", "rename", "grammar"}
 )
 
 // ComplexityScorer scores task text for model tier routing (0–10).
@@ -62,18 +63,34 @@ func tierConfigured(t config.ModelTierTarget) bool {
 	return t.Provider != "" && t.Model != ""
 }
 
-// IsPinned reports whether the profile has an explicit model that disables routing.
-func IsPinned(profile models.AgentProfile) bool {
-	return profile.Model != ""
+func firstConfiguredTier(candidates ...config.ModelTierTarget) (config.ModelTierTarget, bool) {
+	for _, t := range candidates {
+		if tierConfigured(t) {
+			return t, true
+		}
+	}
+	return config.ModelTierTarget{}, false
 }
 
-// EstimateContextTokens approximates token count from prompt messages (chars / 4).
-func EstimateContextTokens(messages []gateway.PromptMessage) int {
-	chars := totalChars(messages)
+// totalToolChars approximates tool-definition size for context token estimation.
+func totalToolChars(tools []gateway.ToolDefinition) int {
+	total := 0
+	for _, tool := range tools {
+		total += len(tool.Name) + len(tool.Description)
+		if b, err := json.Marshal(tool); err == nil {
+			total += len(b)
+		}
+	}
+	return total
+}
+
+// EstimateContextTokens approximates token count from messages and optional tool definitions.
+func EstimateContextTokens(messages []gateway.PromptMessage, tools []gateway.ToolDefinition) int {
+	chars := totalChars(messages) + totalToolChars(tools)
 	return chars / charsPerToken
 }
 
-// Route selects provider and model for a task. ok is false when the chosen tier is unset.
+// Route selects provider and model for a task. ok is false when no tier is configured.
 func (r *ModelRouter) Route(task models.Task, contextTokens int) (provider, model string, ok bool) {
 	if r == nil {
 		return "", "", false
@@ -91,17 +108,25 @@ func (r *ModelRouter) Route(task models.Task, contextTokens int) (provider, mode
 		}
 	}
 	if !tierConfigured(tier) {
-		return "", "", false
+		tier, ok = firstConfiguredTier(r.cfg.High, r.cfg.Mid, r.cfg.Cheap)
+		if !ok {
+			return "", "", false
+		}
 	}
 	return tier.Provider, tier.Model, true
 }
 
-// applyModelRouting selects provider/model from complexity routing when enabled and unpinned.
-func (w *Worker) applyModelRouting(task models.Task, profile models.AgentProfile, messages []gateway.PromptMessage) models.AgentProfile {
-	if w.modelRouter == nil || IsPinned(profile) {
+// applyModelRouting selects provider/model from complexity routing when enabled.
+func (w *Worker) applyModelRouting(
+	task models.Task,
+	profile models.AgentProfile,
+	messages []gateway.PromptMessage,
+	tools []gateway.ToolDefinition,
+) models.AgentProfile {
+	if w.modelRouter == nil {
 		return profile
 	}
-	contextTokens := EstimateContextTokens(messages)
+	contextTokens := EstimateContextTokens(messages, tools)
 	provider, model, ok := w.modelRouter.Route(task, contextTokens)
 	if !ok {
 		return profile

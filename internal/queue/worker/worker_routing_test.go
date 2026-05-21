@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/testutil"
@@ -255,6 +256,50 @@ func TestRoutingDecision_AgenticModeTrue_ProviderNotSupported(t *testing.T) {
 				t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)
 			}
 		})
+	}
+}
+
+// TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback verifies that
+// when model routing selects a provider without tool support, the worker falls back to legacy.
+func TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback(t *testing.T) {
+	t.Parallel()
+
+	profile := models.AgentProfile{
+		ID:          "agent-1",
+		Provider:    "anthropic",
+		Model:       "claude-3",
+		AgenticMode: true,
+	}
+	w, store, gw, sb := newRoutingTest(profile)
+	w.modelRouter = NewModelRouter(config.ModelRoutingConfig{
+		Enabled:               true,
+		ContextTokenThreshold: 150000,
+		Cheap:                 config.ModelTierTarget{Provider: "ollama", Model: "llama3"},
+		Mid:                   config.ModelTierTarget{Provider: "anthropic", Model: "claude-sonnet"},
+		High:                  config.ModelTierTarget{Provider: "anthropic", Model: "claude-opus"},
+	})
+	store.task.Description = "summarize this file"
+
+	w.Process(context.Background(), store.task)
+
+	if len(gw.requests) == 0 {
+		t.Fatal("expected at least 1 gateway request")
+	}
+	var legacyReq *gateway.AIRequest
+	for i := range gw.requests {
+		if gw.requests[i].JSONMode {
+			legacyReq = &gw.requests[i]
+			break
+		}
+	}
+	if legacyReq == nil {
+		t.Fatal("expected a legacy JSONMode gateway request")
+	}
+	if len(legacyReq.Tools) > 0 {
+		t.Error("expected no tools in legacy fallback after routing to ollama")
+	}
+	if sb.execCount != 1 {
+		t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)
 	}
 }
 
