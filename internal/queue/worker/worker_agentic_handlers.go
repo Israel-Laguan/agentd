@@ -69,7 +69,7 @@ func (w *Worker) handleAgenticToolCalls(
 		taskUpdatedAt := task.UpdatedAt
 		if fresh, err := w.store.GetTask(ctx, task.ID); err != nil {
 			slog.Warn("failed to refresh task version for tool dispatch", "task_id", task.ID, "error", err)
-		} else {
+		} else if fresh != nil {
 			taskUpdatedAt = fresh.UpdatedAt
 		}
 		tr, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)

@@ -7,11 +7,101 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
+
+// nilNilGetTaskStore documents defensive handling when GetTask returns (nil, nil).
+type nilNilGetTaskStore struct {
+	mockCommitStore
+}
+
+func (s *nilNilGetTaskStore) GetTask(context.Context, string) (*models.Task, error) {
+	return nil, nil
+}
+
+func TestHandleAgenticToolCalls_GetTaskNotFoundDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	taskHooks := NewHookChain()
+	taskHooks.RegisterPre(PreHook{
+		Name:   "shortcut",
+		Policy: FailOpen,
+		Fn: func(HookContext) (HookVerdict, error) {
+			return HookVerdict{Veto: true, ShortCircuit: true, Result: "cached"}, nil
+		},
+	})
+
+	w := NewWorker(&mockCommitStore{}, nil, nil, nil, nil, WorkerOptions{})
+	staleAt := time.Now().Add(-time.Hour)
+	task := models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-missing", UpdatedAt: staleAt},
+		ProjectID:  "proj",
+	}
+	resp := gateway.AIResponse{ToolCalls: []gateway.ToolCall{{
+		ID:       "call_1",
+		Type:     "function",
+		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"true"}`},
+	}}}
+	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", task.ID)
+
+	var messages []gateway.PromptMessage
+	abort, _, report := w.handleAgenticToolCalls(
+		context.Background(), task, "", resp, &messages, nil, ex, taskHooks, nil, cm,
+		newToolFailureTracker(0), 0, NewBudgetGuard(nil, task.ID),
+	)
+	if abort || report {
+		t.Fatalf("abort = %v report = %v, want non-aborting tool dispatch", abort, report)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("messages = %d, want 1 tool result appended", len(messages))
+	}
+	if messages[0].Content != "cached" {
+		t.Fatalf("tool message = %q, want cached hook result", messages[0].Content)
+	}
+}
+
+func TestHandleAgenticToolCalls_GetTaskNilNilDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	taskHooks := NewHookChain()
+	taskHooks.RegisterPre(PreHook{
+		Name:   "shortcut",
+		Policy: FailOpen,
+		Fn: func(HookContext) (HookVerdict, error) {
+			return HookVerdict{Veto: true, ShortCircuit: true, Result: "cached"}, nil
+		},
+	})
+
+	w := NewWorker(&nilNilGetTaskStore{}, nil, nil, nil, nil, WorkerOptions{})
+	task := models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-nil-nil", UpdatedAt: time.Now()},
+		ProjectID:  "proj",
+	}
+	resp := gateway.AIResponse{ToolCalls: []gateway.ToolCall{{
+		ID:       "call_1",
+		Type:     "function",
+		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"true"}`},
+	}}}
+	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", task.ID)
+
+	var messages []gateway.PromptMessage
+	abort, _, report := w.handleAgenticToolCalls(
+		context.Background(), task, "", resp, &messages, nil, ex, taskHooks, nil, cm,
+		newToolFailureTracker(0), 0, NewBudgetGuard(nil, task.ID),
+	)
+	if abort || report {
+		t.Fatalf("abort = %v report = %v, want non-aborting tool dispatch", abort, report)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("messages = %d, want 1 tool result appended", len(messages))
+	}
+}
 
 type respecFailGateway struct{}
 
