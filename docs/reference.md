@@ -131,6 +131,14 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 | `queue.task_deadline` | `10m` | Wall-clock timeout per dispatched worker task (the Reaper). |
 | `queue.queued_reconcile_after` | `10m` | Minimum age of a QUEUED claim before orphan recovery resets it to READY. Independent of `task_deadline`. Set to `0` to disable. |
 | `queue.poll_max_interval` | `10s` | Adaptive backoff ceiling when no tasks are available. |
+| `agentic.model_routing.enabled` | `false` | When true, override each task's agent profile provider/model via English keyword scoring (cheap/mid/high); non-English tasks may score as cheap. |
+| `agentic.model_routing.context_token_threshold` | `150000` | Estimated context tokens above which the high tier is forced regardless of score. |
+| `agentic.model_routing.cheap.provider` | `""` | Provider for the cheap tier. |
+| `agentic.model_routing.cheap.model` | `""` | Model for the cheap tier. |
+| `agentic.model_routing.mid.provider` | `""` | Provider for the mid tier. |
+| `agentic.model_routing.mid.model` | `""` | Model for the mid tier. |
+| `agentic.model_routing.high.provider` | `""` | Provider for the high tier. |
+| `agentic.model_routing.high.model` | `""` | Model for the high tier. |
 | `sandbox.inactivity_timeout` | `60s` | Max stdout/stderr silence before sandbox timeout triggers. |
 | `sandbox.wall_timeout` | `10m` | Max wall-clock execution time for each sandbox command payload. |
 | `sandbox.kill_grace` | `2s` | Grace window between SIGTERM and SIGKILL for timed-out process groups. |

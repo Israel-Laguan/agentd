@@ -91,8 +91,8 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	go func() {
 		waitDone <- waitCommand(cmd, timedOut, e.killGrace())
 	}()
-	output.wg.Wait()
 	waitErr := <-waitDone
+	output.wg.Wait()
 	if drainErr := output.drainError(); drainErr != nil {
 		return Result{}, fmt.Errorf("drain output: %w", drainErr)
 	}
