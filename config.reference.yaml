@@ -168,6 +168,21 @@ agentic:
     max_redo_passes: 3
     plan_context_max_chars: 4000
 
+  # Complexity-based model routing (Task 43). Routes unpinned agent profiles to
+  # cheap/mid/high tiers from keyword scoring; context above threshold forces high.
+  model_routing:
+    enabled: false
+    context_token_threshold: 150000
+    cheap:
+      provider: ""
+      model: ""
+    mid:
+      provider: ""
+      model: ""
+    high:
+      provider: ""
+      model: ""
+
 # Sandbox command execution hardening.
 sandbox:
   inactivity_timeout: "60s"
