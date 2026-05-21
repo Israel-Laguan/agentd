@@ -235,7 +235,7 @@ func (w *Worker) command(ctx context.Context, task models.Task, profile models.A
 		MaxTokens:   profile.MaxTokens,
 	}
 	// Legacy JSON command mode does not execute tool calls; do not advertise tools here.
-	req = w.applyTuning(req, task, profile)
+	req = w.applyTuning(req, task, profile, 0)
 	resp, err := gateway.GenerateJSON[workerResponse](ctx, w.gateway, req)
 	if err != nil {
 		return workerResponse{}, err
@@ -243,11 +243,19 @@ func (w *Worker) command(ctx context.Context, task models.Task, profile models.A
 	return resp, nil
 }
 
-func (w *Worker) applyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile) gateway.AIRequest {
-	if w.tuner == nil || task.RetryCount <= 0 {
+func tuningAttempt(task models.Task, sessionRecoveryGen int) int {
+	if sessionRecoveryGen > task.RetryCount {
+		return sessionRecoveryGen
+	}
+	return task.RetryCount
+}
+
+func (w *Worker) applyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest {
+	attempt := tuningAttempt(task, sessionRecoveryGen)
+	if w.tuner == nil || attempt <= 0 {
 		return req
 	}
-	action := w.tuner.ForAttempt(task.RetryCount, profile)
+	action := w.tuner.ForAttempt(attempt, profile)
 	if action.Type != planning.HealingActionTune {
 		return req
 	}

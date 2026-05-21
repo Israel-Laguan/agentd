@@ -82,8 +82,11 @@ type agenticTurnLoopInput struct {
 	taskHooks        *HookChain
 	taskCaps         *capabilities.Registry
 	toolTracker      *toolFailureTracker
-	workPlan         *Plan
-	sessionMgr       *SessionManager
+	workPlan              *Plan
+	sessionMgr            *SessionManager
+	checkpointer          *SessionCheckpointer
+	sessionRecoveryGen    int
+	sessionRecoveryUsed   bool
 }
 
 // runAgenticTurnLoop drives the inner agentic turn loop until completion, stagnation, or error.
@@ -96,6 +99,7 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			in.ctx, in.task, in.project, in.profile, in.messages, in.tools, in.toolToAdapter, in.taskToolExecutor,
 			in.iterationGuard, in.budgetGuard, in.deadlineGuard, in.ctxBudgetGuard, in.cm, in.goalTracker, in.sessionMgr,
 			in.taskHooks, in.taskCaps, in.toolTracker, in.workPlan, turnID, turnIndex, &respecAttempts,
+			in.checkpointer, &in.sessionRecoveryGen, &in.sessionRecoveryUsed,
 		)
 		if err != nil {
 			return LoopResult{}, false
