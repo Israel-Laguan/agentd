@@ -18,9 +18,11 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	cancelCtx, cleanup := w.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
-	// Build agentic messages/tools before applyModelRouting so token estimates include
-	// the full system prompt and tool definitions. When routing selects a provider
-	// without tool round-tripping, this setup is discarded on legacy fallback
+	// Build agentic messages and the full tool registry before applyModelRouting so
+	// token estimates include the system prompt and maximum tool-schema footprint
+	// (context_token_threshold). filterAgenticTools applies only to tools passed into
+	// the turn loop, not to routing estimates. When routing selects a provider without
+	// tool round-tripping, this setup is discarded on legacy fallback
 	// (profileAlreadyRouted). mountScopedPlugins only registers into per-task
 	// HookChain/Registry instances (no worker-global side effects). Session start and
 	// pre-task elicitation run after the fallback check so legacy path is unaffected.
@@ -30,8 +32,9 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
 	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
+	routingTools := tools
 	tools, toolToAdapter = w.filterAgenticTools(tools, toolToAdapter, task, profile)
-	profile = w.applyModelRouting(task, profile, messages, tools)
+	profile = w.applyModelRouting(task, profile, messages, routingTools)
 	if !w.providerSupportsAgentic(profile) {
 		slog.Warn("agentic mode requested but routed provider does not support tool round-tripping; falling back to legacy mode",
 			"task_id", task.ID,
