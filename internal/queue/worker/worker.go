@@ -85,8 +85,10 @@ type PluginMounter interface {
 // - Legacy mode (default): single-shot JSON command execution via GenerateJSON
 // - Agentic mode: inner loop with tool calling and message accumulation (processAgentic)
 // Model routing runs once per path: routeLegacyProfile in runLegacyTask for legacy,
-// applyModelRouting in processAgentic for agentic. Agentic fallback to legacy reuses
-// the agentic route (profileAlreadyRouted) so a second route cannot change provider.
+// applyModelRouting in processAgentic for agentic (using the pre-manifest tool registry
+// for context_token_threshold; manifest filtering applies only to turn-loop requests).
+// Agentic fallback to legacy reuses the agentic route (profileAlreadyRouted) so a
+// second route cannot change provider.
 func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
 	project, profile, err := w.loadContext(ctx, task)
