@@ -36,6 +36,44 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 	if cfg.Planning.PlanContextMaxChars != DefaultPlanContextMaxChars {
 		t.Fatalf("Planning.PlanContextMaxChars = %d, want %d", cfg.Planning.PlanContextMaxChars, DefaultPlanContextMaxChars)
 	}
+	if cfg.ModelRouting.Enabled {
+		t.Fatal("ModelRouting.Enabled should default to false")
+	}
+	if cfg.ModelRouting.ContextTokenThreshold != DefaultModelRoutingContextTokens {
+		t.Fatalf("ModelRouting.ContextTokenThreshold = %d, want %d",
+			cfg.ModelRouting.ContextTokenThreshold, DefaultModelRoutingContextTokens)
+	}
+}
+
+func TestLoadAgenticConfig_ModelRoutingOverride(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	v.Set("agentic.model_routing.enabled", true)
+	v.Set("agentic.model_routing.context_token_threshold", 200000)
+	v.Set("agentic.model_routing.cheap.provider", "anthropic")
+	v.Set("agentic.model_routing.cheap.model", "claude-haiku")
+	v.Set("agentic.model_routing.mid.provider", "anthropic")
+	v.Set("agentic.model_routing.mid.model", "claude-sonnet")
+	v.Set("agentic.model_routing.high.provider", "anthropic")
+	v.Set("agentic.model_routing.high.model", "claude-opus")
+
+	cfg := loadAgenticConfig(v)
+	if !cfg.ModelRouting.Enabled {
+		t.Fatal("ModelRouting.Enabled = false, want true")
+	}
+	if cfg.ModelRouting.ContextTokenThreshold != 200000 {
+		t.Fatalf("ContextTokenThreshold = %d, want 200000", cfg.ModelRouting.ContextTokenThreshold)
+	}
+	if cfg.ModelRouting.Cheap.Provider != "anthropic" || cfg.ModelRouting.Cheap.Model != "claude-haiku" {
+		t.Fatalf("Cheap = %+v, want anthropic/claude-haiku", cfg.ModelRouting.Cheap)
+	}
+	if cfg.ModelRouting.Mid.Model != "claude-sonnet" {
+		t.Fatalf("Mid = %+v", cfg.ModelRouting.Mid)
+	}
+	if cfg.ModelRouting.High.Model != "claude-opus" {
+		t.Fatalf("High = %+v", cfg.ModelRouting.High)
+	}
 }
 
 func TestLoadAgenticConfig_NegativeComplexityThresholdClamped(t *testing.T) {

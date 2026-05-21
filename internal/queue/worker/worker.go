@@ -63,6 +63,7 @@ type Worker struct {
 	messageEditor             *MessageEditor
 	checkpointStore           CheckpointStore
 	topicGuard                *TopicGuard
+	modelRouter               *ModelRouter
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.

@@ -16,13 +16,29 @@ const (
 	DefaultFileContextEmbedModel   = "text-embedding-3-small"
 	DefaultPlanningMaxRedoPasses   = 3
 	DefaultPlanContextMaxChars     = 4000
-	DefaultTopicGuardSensitivity   = 0.5
+	DefaultTopicGuardSensitivity        = 0.5
+	DefaultModelRoutingContextTokens = 150000
 )
 
 // TopicGuardConfig controls topic drift detection in the agentic loop.
 type TopicGuardConfig struct {
 	Enabled     bool
 	Sensitivity float64 // 0–1; higher = more willing to declare drift
+}
+
+// ModelTierTarget maps a complexity tier to a provider and model.
+type ModelTierTarget struct {
+	Provider string
+	Model    string
+}
+
+// ModelRoutingConfig controls keyword-based complexity routing to model tiers.
+type ModelRoutingConfig struct {
+	Enabled               bool
+	ContextTokenThreshold int
+	Cheap                 ModelTierTarget
+	Mid                   ModelTierTarget
+	High                  ModelTierTarget
 }
 
 // AgenticPlanningConfig controls two-phase plan→execute and targeted section redo.
@@ -59,6 +75,8 @@ type AgenticConfig struct {
 	Planning AgenticPlanningConfig
 	// TopicGuard configures session topic drift detection.
 	TopicGuard TopicGuardConfig
+	// ModelRouting maps task complexity to provider/model tiers.
+	ModelRouting ModelRoutingConfig
 }
 
 // FileContextConfig controls convert/cache/select pipeline for workspace files.
@@ -90,6 +108,8 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.planning.plan_context_max_chars", DefaultPlanContextMaxChars)
 	v.SetDefault("agentic.topic_guard.enabled", true)
 	v.SetDefault("agentic.topic_guard.sensitivity", DefaultTopicGuardSensitivity)
+	v.SetDefault("agentic.model_routing.enabled", false)
+	v.SetDefault("agentic.model_routing.context_token_threshold", DefaultModelRoutingContextTokens)
 }
 
 func loadAgenticConfig(v *viper.Viper) AgenticConfig {
@@ -108,8 +128,31 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 			Path:    v.GetString("agentic.audit.path"),
 		},
 		FileContext: loadFileContextConfig(v),
-		Planning:    loadAgenticPlanningConfig(v),
-		TopicGuard:  loadTopicGuardConfig(v),
+		Planning:     loadAgenticPlanningConfig(v),
+		TopicGuard:   loadTopicGuardConfig(v),
+		ModelRouting: loadModelRoutingConfig(v),
+	}
+}
+
+func loadModelRoutingConfig(v *viper.Viper) ModelRoutingConfig {
+	threshold := v.GetInt("agentic.model_routing.context_token_threshold")
+	if threshold <= 0 {
+		threshold = DefaultModelRoutingContextTokens
+	}
+	return ModelRoutingConfig{
+		Enabled:               v.GetBool("agentic.model_routing.enabled"),
+		ContextTokenThreshold: threshold,
+		Cheap:                 loadModelTierTarget(v, "cheap"),
+		Mid:                   loadModelTierTarget(v, "mid"),
+		High:                  loadModelTierTarget(v, "high"),
+	}
+}
+
+func loadModelTierTarget(v *viper.Viper, tier string) ModelTierTarget {
+	prefix := "agentic.model_routing." + tier
+	return ModelTierTarget{
+		Provider: v.GetString(prefix + ".provider"),
+		Model:    v.GetString(prefix + ".model"),
 	}
 }
 
