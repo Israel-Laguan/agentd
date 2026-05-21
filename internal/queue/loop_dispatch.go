@@ -20,6 +20,12 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 	if err != nil {
 		return 0, 0, err
 	}
+
+	type claimItem struct {
+		task models.Task
+		idx  int
+	}
+	var dispatchable []claimItem
 	for i, task := range tasks {
 		nack, skip := d.dispatchAdmit(ctx, task)
 		if nack {
@@ -31,14 +37,34 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 		if d.dispatchDeferRollingBudget(ctx, task) {
 			continue
 		}
+		dispatchable = append(dispatchable, claimItem{task: task, idx: i})
+	}
+
+	toGroup := make([]models.Task, len(dispatchable))
+	for i, item := range dispatchable {
+		toGroup[i] = item.task
+	}
+	batches := d.worker.GroupClaimed(ctx, toGroup)
+
+	scheduled := 0
+	for _, batch := range batches {
 		if !d.sem.Acquire(ctx) {
+			requeueFrom := len(tasks)
+			if scheduled < len(dispatchable) {
+				requeueFrom = dispatchable[scheduled].idx
+			}
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			d.requeueUndispatchedClaims(cleanupCtx, tasks[i:])
+			d.requeueUndispatchedClaims(cleanupCtx, tasks[requeueFrom:])
 			return dispatched, nacked, nil
 		}
 		dispatched++
-		d.runDispatchedTask(ctx, task)
+		if len(batch.Tasks) == 1 {
+			d.runDispatchedTask(ctx, batch.Tasks[0])
+		} else {
+			d.runDispatchedBatch(ctx, batch.Tasks)
+		}
+		scheduled += len(batch.Tasks)
 	}
 	return dispatched, nacked, nil
 }
@@ -161,4 +187,26 @@ func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task) {
 		defer cancel()
 		d.worker.Process(runCtx, task)
 	}(task)
+}
+
+func (d *Daemon) runDispatchedBatch(ctx context.Context, tasks []models.Task) {
+	d.wg.Add(1)
+	cp := append([]models.Task(nil), tasks...)
+	go func(tasks []models.Task) {
+		defer d.wg.Done()
+		defer d.sem.Release()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("dispatch batch goroutine panic", "task_count", len(tasks), "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+				cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				for _, task := range tasks {
+					d.failDispatchPanic(cleanupCtx, task, fmt.Sprint(r))
+				}
+			}
+		}()
+		runCtx, cancel := context.WithTimeout(ctx, d.taskDeadline)
+		defer cancel()
+		d.worker.ProcessBatch(runCtx, tasks)
+	}(cp)
 }

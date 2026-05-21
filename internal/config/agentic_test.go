@@ -57,6 +57,28 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 		t.Fatalf("CapabilityRouting.MinConfidence = %v, want %v",
 			cfg.CapabilityRouting.MinConfidence, DefaultCapabilityRoutingMinConfidence)
 	}
+	if cfg.Batching.Enabled {
+		t.Fatal("Batching.Enabled should default to false")
+	}
+	if cfg.Batching.MaxBatchSize != DefaultBatchingMaxBatchSize {
+		t.Fatalf("Batching.MaxBatchSize = %d, want %d", cfg.Batching.MaxBatchSize, DefaultBatchingMaxBatchSize)
+	}
+}
+
+func TestLoadAgenticConfig_BatchingOverride(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	v.Set("agentic.batching.enabled", true)
+	v.Set("agentic.batching.max_batch_size", 3)
+
+	cfg := loadAgenticConfig(v)
+	if !cfg.Batching.Enabled {
+		t.Fatal("Batching.Enabled = false, want true")
+	}
+	if cfg.Batching.MaxBatchSize != 3 {
+		t.Fatalf("Batching.MaxBatchSize = %d, want 3", cfg.Batching.MaxBatchSize)
+	}
 }
 
 func TestLoadAgenticConfig_CapabilityRoutingOverride(t *testing.T) {

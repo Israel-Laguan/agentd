@@ -156,6 +156,11 @@ agentic:
     # Omitting a task type in mappings falls back to built-in defaults (nil/* = all tools).
     mappings: {summarize: [], code_gen: [bash, read, write], doc_qa: [read], web_research: [read]}
 
+  # Task 46: batch independent tool-free tasks in one LLM call (same project + agent).
+  batching:
+    enabled: false
+    max_batch_size: 5
+
   # Task 45: external capability routing; see docs/reference.md
   capability_routing:
     enabled: false
