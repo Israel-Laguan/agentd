@@ -55,25 +55,19 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		return LoopResult{}, false
 	}
 
-	iterationGuard := NewIterationGuard(w.maxToolIterations)
-	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)
-	deadlineGuard := NewDeadlineGuard(cancelCtx)
-	cm, goalTracker := w.newAgenticContextManager(task)
-	contextBudget := cm.cfg.AnchorBudget + cm.cfg.WorkingBudget + cm.cfg.CompressedBudget
-	ctxBudgetGuard := NewContextBudgetGuard(contextBudget, w.contextWarningThreshold)
-	toolTracker := newToolFailureTracker(w.toolFailureStreak)
+	guards := w.newAgenticLoopGuards(cancelCtx, task)
 
 	checkpointer := NewSessionCheckpointer(task.ID)
-	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, budgetGuard, checkpointer)
+	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, guards.budget, checkpointer)
 
 	sessionMgr := NewSessionManager(task.ID, extractAnchorUserContent(messages), w.checkpointStore)
 
 	return w.runAgenticTurnLoop(agenticTurnLoopInput{
 		ctx: cancelCtx, task: task, project: project, profile: profile, messages: &messages,
 		tools: tools, toolToAdapter: toolToAdapter, taskToolExecutor: taskToolExecutor,
-		iterationGuard: iterationGuard, budgetGuard: budgetGuard, deadlineGuard: deadlineGuard,
-		ctxBudgetGuard: ctxBudgetGuard, cm: cm, goalTracker: goalTracker,
-		taskHooks: taskHooks, taskCaps: taskCaps, toolTracker: toolTracker, workPlan: workPlan,
+		iterationGuard: guards.iteration, budgetGuard: guards.budget, deadlineGuard: guards.deadline,
+		ctxBudgetGuard: guards.ctxBudget, cm: guards.cm, goalTracker: guards.goals,
+		taskHooks: taskHooks, taskCaps: taskCaps, toolTracker: guards.toolFails, workPlan: workPlan,
 		sessionMgr: sessionMgr, checkpointer: checkpointer,
 	})
 }
