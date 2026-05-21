@@ -18,23 +18,10 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	cancelCtx, cleanup := w.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
-	// Build agentic messages and the full tool registry before applyModelRouting so
-	// token estimates include the system prompt and maximum tool-schema footprint
-	// (context_token_threshold). filterAgenticTools applies only to tools passed into
-	// the turn loop, not to routing estimates. When routing selects a provider without
-	// tool round-tripping, this setup is discarded on legacy fallback
-	// (profileAlreadyRouted). mountScopedPlugins only registers into per-task
-	// HookChain/Registry instances (no worker-global side effects). Session start and
+	// prepareAgenticRun builds messages/tools before routing; session start and
 	// pre-task elicitation run after the fallback check so legacy path is unaffected.
-	taskToolExecutor := w.newAgenticTaskToolExecutor(project, task)
-	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
-
-	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
-	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
-	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
-	routingTools := append([]gateway.ToolDefinition(nil), tools...)
-	tools, toolToAdapter = w.filterAgenticTools(tools, toolToAdapter, task, profile)
-	profile = w.applyModelRouting(task, profile, messages, routingTools)
+	messages, tools, toolToAdapter, _, profile, taskToolExecutor, taskHooks, taskCaps :=
+		w.prepareAgenticRun(ctx, task, project, profile)
 	if result, ok := w.tryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); ok {
 		return result, true
 	}
