@@ -9,6 +9,7 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/queue/planning"
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
@@ -273,6 +274,7 @@ func TestAgenticPlanning_RespecAfterRedoExhausted(t *testing.T) {
 		planJSON: `{"steps":[{"id":"only","action":"do","output_format":"text"}]}`,
 		responses: []gateway.AIResponse{
 			{Content: "<!-- step:only -->\n<!-- /step:only -->\n"},
+			{Content: "<!-- step:only -->\n<!-- /step:only -->\n"},
 			{Content: "<!-- step:only -->\nfixed\n<!-- /step:only -->\n"},
 		},
 		redoBodies: map[string]string{"only": ""},
@@ -357,5 +359,61 @@ func TestAgenticPlanning_RedoCapAtThreePasses(t *testing.T) {
 	}
 	if strings.Contains(store.committedResult.Payload, "<!-- step:") {
 		t.Fatalf("committed payload should not contain step markers: %q", store.committedResult.Payload)
+	}
+}
+
+func TestAgenticPlanning_PrePlanRestoreAfterRedoExhausted(t *testing.T) {
+	t.Parallel()
+	gw := &planningSequenceGateway{
+		planJSON: `{"steps":[{"id":"only","action":"do","output_format":"text"}]}`,
+		responses: []gateway.AIResponse{
+			{Content: "<!-- step:only -->\n<!-- /step:only -->\n"},
+			{Content: "<!-- step:only -->\nrecovered\n<!-- /step:only -->\n"},
+		},
+		redoBodies: map[string]string{"only": ""},
+	}
+	store := &mockAgenticStore{}
+	store.profile = models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
+	store.project = models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: t.TempDir()}
+	task := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "task-restore"},
+		ProjectID:   "project-1",
+		AgentID:     "agent-1",
+		Title:       "Restore",
+		Description: strings.Repeat("w ", 100) + "\n- must complete all plan steps\nAcceptance: committed output matches plan.",
+		State:       models.TaskStateQueued,
+	}
+	store.task = task
+
+	tuner := planning.NewParameterTuner(config.HealingConfig{
+		Enabled:        true,
+		Steps:          []string{planning.HealingStepUpgradeModel},
+		UpgradeModel:   "gpt-4o",
+		MaxAdjustments: 3,
+	})
+	w := NewWorker(store, gw, &mockAgenticSandbox{results: map[string]sandbox.Result{}}, nil, nil, WorkerOptions{
+		Planning: config.AgenticPlanningConfig{ComplexityThreshold: 50, MaxRedoPasses: 0},
+		Tuner:    tuner,
+	})
+	w.Process(context.Background(), task)
+
+	var postRestoreModel string
+	for _, req := range gw.requests {
+		if len(req.Messages) == 0 || req.JSONMode {
+			continue
+		}
+		last := req.Messages[len(req.Messages)-1].Content
+		if strings.Contains(last, "Repair ONLY step") || strings.HasPrefix(last, "Revise the user task prompt") {
+			continue
+		}
+		if req.Model == "gpt-4o" {
+			postRestoreModel = req.Model
+		}
+	}
+	if postRestoreModel != "gpt-4o" {
+		t.Fatalf("post-restore agentic model = %q, want gpt-4o", postRestoreModel)
+	}
+	if store.committedResult == nil || !strings.Contains(store.committedResult.Payload, "recovered") {
+		t.Fatalf("committed payload = %v, want recovered output", store.committedResult)
 	}
 }

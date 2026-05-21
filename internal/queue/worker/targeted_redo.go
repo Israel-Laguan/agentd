@@ -211,16 +211,17 @@ func stepValidationError(step PlanStep, output string) string {
 func (w *Worker) repairOutputWithPlan(
 	ctx context.Context, task models.Task, plan *Plan, output string,
 	budgetGuard *BudgetGuard,
-) string {
+) (string, bool) {
 	if plan == nil || w.planningCfg.ComplexityThreshold <= 0 {
-		return output
+		return output, false
 	}
 	maxPasses := w.planningCfg.MaxRedoPasses
 	passes := make(map[string]int)
+	consecutiveNoProgress := 0
 	for {
 		failing := ValidateOutput(output, *plan)
 		if len(failing) == 0 {
-			return output
+			return output, false
 		}
 		progress := false
 		for _, step := range failing {
@@ -238,7 +239,12 @@ func (w *Worker) repairOutputWithPlan(
 			progress = true
 		}
 		if !progress {
-			return output
+			consecutiveNoProgress++
+			if consecutiveNoProgress > 2 {
+				return output, true
+			}
+			continue
 		}
+		consecutiveNoProgress = 0
 	}
 }

@@ -100,10 +100,28 @@ func (w *Worker) finishAgenticTurnNoTools(
 	content string, workPlan *Plan, goalTracker *GoalTracker,
 	turnID string, turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
 	cm *ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
+	checkpointer *SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
 ) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
 	if workPlan != nil {
 		if w.planningCfg.ComplexityThreshold > 0 {
-			content = w.repairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
+			var redoExhausted bool
+			content, redoExhausted = w.repairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
+			if redoExhausted && checkpointer != nil && sessionRecoveryGen != nil &&
+				(sessionRecoveryUsed == nil || !*sessionRecoveryUsed) {
+				if restoreErr := checkpointer.BranchFrom(prePlanCheckpointLabel, messages); restoreErr != nil {
+					slog.Warn("agentic pre_plan restore skipped",
+						"task_id", task.ID, "turn_id", turnID, "error", restoreErr)
+				} else {
+					*sessionRecoveryGen++
+					if sessionRecoveryUsed != nil {
+						*sessionRecoveryUsed = true
+					}
+					slog.Info("agentic session restored from pre_plan checkpoint",
+						"task_id", task.ID, "label", prePlanCheckpointLabel,
+						"session_recovery_gen", *sessionRecoveryGen)
+					return true, LoopResult{}, false, rewindToFirstTurn, nil
+				}
+			}
 			failing := ValidateOutput(content, *workPlan)
 			if len(failing) > 0 && respecAttempts != nil && *respecAttempts < 1 && w.messageEditor != nil {
 				msgsForRespec := messagesWithoutLastAssistant(*messages)
@@ -193,6 +211,7 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *ToolExecutor) (
 func (w *Worker) buildAgenticRequest(
 	task models.Task, profile models.AgentProfile,
 	messages []gateway.PromptMessage, tools []gateway.ToolDefinition,
+	sessionRecoveryGen int,
 ) gateway.AIRequest {
 	req := gateway.AIRequest{
 		Messages:       messages,
@@ -206,7 +225,7 @@ func (w *Worker) buildAgenticRequest(
 		MaxTokens:      profile.MaxTokens,
 		SkipTruncation: true,
 	}
-	return w.applyTuning(req, task, profile)
+	return w.applyTuning(req, task, profile, sessionRecoveryGen)
 }
 
 func appendAssistantMessage(messages *[]gateway.PromptMessage, resp gateway.AIResponse) {

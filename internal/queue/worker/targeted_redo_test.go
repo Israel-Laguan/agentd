@@ -243,8 +243,30 @@ func TestRepairLoop_CapsAtThreePasses(t *testing.T) {
 	}
 	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
 	out := "<!-- step:only -->\n<!-- /step:only -->\n"
-	_ = w.repairOutputWithPlan(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, plan, out, nil)
+	_, _ = w.repairOutputWithPlan(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, plan, out, nil)
 	if gw.redoCalls["only"] != 3 {
 		t.Fatalf("redo calls for step = %d, want 3", gw.redoCalls["only"])
+	}
+}
+
+func TestRepairLoop_ExhaustedAfterThreeNoProgressPasses(t *testing.T) {
+	t.Parallel()
+	gw := &redoCountGateway{redoCalls: map[string]int{"only": 0}}
+	w := &Worker{
+		gateway: gw,
+		planningCfg: config.AgenticPlanningConfig{
+			ComplexityThreshold: 1,
+			MaxRedoPasses:       0,
+		},
+	}
+	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
+	out := "<!-- step:only -->\n<!-- /step:only -->\n"
+	_, exhausted := w.repairOutputWithPlan(
+		context.Background(),
+		models.Task{BaseEntity: models.BaseEntity{ID: "t"}},
+		plan, out, nil,
+	)
+	if !exhausted {
+		t.Fatal("expected redo exhausted after three consecutive no-progress passes")
 	}
 }
