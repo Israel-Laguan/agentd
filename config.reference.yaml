@@ -125,7 +125,8 @@ agentic:
     tools: []                    # e.g., ["deploy", "write_config", "run_migration"]
     timeout: "30m"               # max wait for human decision before timing out
 
-  # Audit log (JSONL); args hashed (sha256), never raw — see docs/reference.md
+  # Structured audit log (JSONL): tool dispatches, turn-boundary snapshots, history edits.
+  # Arguments are hashed (sha256); raw args are never written to the audit file.
   audit:
     enabled: false
     path: "audit.jsonl"          # relative to agentd home when not absolute

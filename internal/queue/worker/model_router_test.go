@@ -250,3 +250,39 @@ func TestApplyModelRouting_ContextOverrideHigh(t *testing.T) {
 		t.Fatalf("applyModelRouting() model = %q, want claude-opus", got.Model)
 	}
 }
+
+// TestApplyModelRouting_UsesFullToolsBeforeManifestFilter verifies that model routing
+// token estimates use the pre-filter tool registry while the turn loop uses manifest-filtered tools.
+func TestApplyModelRouting_UsesFullToolsBeforeManifestFilter(t *testing.T) {
+	t.Parallel()
+	w := &Worker{
+		modelRouter:  NewModelRouter(testModelRoutingConfig()),
+		toolManifest: enabledToolManifest(),
+	}
+	task := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "t-route-manifest"},
+		Title:       "Summarize weekly report",
+		Description: "Provide a short recap and condense into bullet points",
+	}
+	profile := models.AgentProfile{Provider: "openai", Model: "gpt-4"}
+	routingTools := []gateway.ToolDefinition{{
+		Name:        "run_command",
+		Description: strings.Repeat("x", 600001),
+	}}
+	filtered, _ := w.filterAgenticTools(routingTools, nil, task, profile)
+	if len(filtered) != 0 {
+		t.Fatalf("filtered tools len = %d, want 0 for summarize manifest", len(filtered))
+	}
+	if tokens := EstimateContextTokens(nil, filtered); tokens >= 150000 {
+		t.Fatalf("filtered EstimateContextTokens() = %d, want below threshold", tokens)
+	}
+
+	routedFull := w.applyModelRouting(task, profile, nil, routingTools)
+	if routedFull.Model != "claude-opus" || routedFull.Provider != "anthropic" {
+		t.Fatalf("routing with full tools = %s/%s, want anthropic/claude-opus", routedFull.Provider, routedFull.Model)
+	}
+	routedFiltered := w.applyModelRouting(task, profile, nil, filtered)
+	if routedFiltered.Model != "claude-haiku" || routedFiltered.Provider != "anthropic" {
+		t.Fatalf("routing with filtered tools = %s/%s, want anthropic/claude-haiku", routedFiltered.Provider, routedFiltered.Model)
+	}
+}

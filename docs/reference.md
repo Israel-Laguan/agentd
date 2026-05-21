@@ -139,6 +139,11 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 | `agentic.model_routing.mid.model` | `""` | Model for the mid tier. |
 | `agentic.model_routing.high.provider` | `""` | Provider for the high tier. |
 | `agentic.model_routing.high.model` | `""` | Model for the high tier. |
+| `agentic.audit.enabled` | `false` | Enable structured JSONL audit logging (separate from SSE events). Records: `tool_dispatch`, `turn_snapshot`, `history_edit`; tool args stored as SHA-256 hash only. |
+| `agentic.audit.path` | `audit.jsonl` | Audit file path; relative paths resolve under agentd home (`ResolveAuditPath`). |
+| `agentic.tool_manifest.enabled` | `false` | When true, filter gateway tool definitions by classified task type before the agentic turn loop. |
+| `agentic.tool_manifest.min_confidence` | `0.35` | Minimum classifier confidence (0.0–1.0) to apply a manifest mapping; below threshold falls back to full agent tools. |
+| `agentic.tool_manifest.mappings` | _(built-in defaults)_ | Map task type names to tool names (e.g. `summarize: []`, `code_gen: [bash, read, write]`). Empty slice means no tools; omitted `full_agent` or `*` means all tools. |
 | `sandbox.inactivity_timeout` | `60s` | Max stdout/stderr silence before sandbox timeout triggers. |
 | `sandbox.wall_timeout` | `10m` | Max wall-clock execution time for each sandbox command payload. |
 | `sandbox.kill_grace` | `2s` | Grace window between SIGTERM and SIGKILL for timed-out process groups. |
