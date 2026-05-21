@@ -7,8 +7,35 @@ import (
 
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
+
+func (w *Worker) prepareAgenticRun(
+	ctx context.Context,
+	task models.Task,
+	project models.Project,
+	profile models.AgentProfile,
+) (
+	messages []gateway.PromptMessage,
+	tools []gateway.ToolDefinition,
+	toolToAdapter map[string]string,
+	routingTools []gateway.ToolDefinition,
+	routedProfile models.AgentProfile,
+	taskToolExecutor *ToolExecutor,
+	taskHooks *HookChain,
+	taskCaps *capabilities.Registry,
+) {
+	taskToolExecutor = w.newAgenticTaskToolExecutor(project, task)
+	taskHooks, taskCaps = w.mountAgenticHooks(project, profile)
+	messages = w.assembleAgenticSystemPrompt(ctx, task, project, profile)
+	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
+	tools, toolToAdapter = w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
+	routingTools = append([]gateway.ToolDefinition(nil), tools...)
+	tools, toolToAdapter = w.filterAgenticTools(tools, toolToAdapter, task, profile)
+	routedProfile = w.applyModelRouting(task, profile, messages, routingTools)
+	return messages, tools, toolToAdapter, routingTools, routedProfile, taskToolExecutor, taskHooks, taskCaps
+}
 
 func (w *Worker) setupAgenticCancel(ctx context.Context, taskID string) (context.Context, func()) {
 	cancelCtx, cancel := context.WithCancel(ctx)

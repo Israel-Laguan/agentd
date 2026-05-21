@@ -118,25 +118,19 @@ func (w *Worker) setupOptionalLoaders(opts WorkerOptions) {
 	}
 }
 
-func NewWorker(
+func newWorkerCore(
 	store models.KanbanStore,
 	gw gateway.AIGateway,
 	sb sandbox.Executor,
 	breaker *safety.CircuitBreaker,
 	sink models.EventSink,
 	opts WorkerOptions,
+	scrubber sandbox.Scrubber,
+	budgetTracker spec.BudgetTracker,
+	toolExecutor *ToolExecutor,
+	hooks *HookChain,
 ) *Worker {
-	opts = normalizeOpts(opts)
-	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
-	var budgetTracker spec.BudgetTracker
-	if opts.TokenBudget > 0 {
-		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
-	}
-	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
-	toolExecutor := NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout)
-	hooks := buildWorkerHooks(opts, toolExecutor, sink, scrubber)
-
-	w := &Worker{
+	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
 		heartbeatInterval:    opts.HeartbeatInterval,
@@ -156,22 +150,43 @@ func NewWorker(
 			BaseDelay:   opts.ToolRetries.BaseDelay,
 			MaxDelay:    opts.ToolRetries.MaxDelay,
 		}),
-		capabilities:         opts.Capabilities,
-		tokenBudget:          opts.TokenBudget,
-		budgetTracker:        budgetTracker,
-		hooks:                hooks,
-		pluginMounter:        opts.PluginMounter,
-		contextCfg:           opts.AgenticContext,
-		legacyHandoffTimeout: opts.LegacyHandoffTimeout,
+		capabilities:            opts.Capabilities,
+		tokenBudget:             opts.TokenBudget,
+		budgetTracker:           budgetTracker,
+		hooks:                   hooks,
+		pluginMounter:           opts.PluginMounter,
+		contextCfg:              opts.AgenticContext,
+		legacyHandoffTimeout:    opts.LegacyHandoffTimeout,
 		externalTools:           externalToolsSet(opts.ExternalTools),
 		auditLogger:             newAuditLogger(opts.Audit),
 		contextWarningThreshold: opts.ContextWarningThreshold,
 		toolFailureStreak:       opts.ToolFailureStreak,
 		tokenUsageHook:          opts.TokenUsageHook,
 		fileContextCfg:          opts.FileContext,
-		planningCfg:       opts.Planning,
-		checkpointStore: NewMemoryCheckpointStore(),
+		planningCfg:             opts.Planning,
+		checkpointStore:         NewMemoryCheckpointStore(),
 	}
+}
+
+func NewWorker(
+	store models.KanbanStore,
+	gw gateway.AIGateway,
+	sb sandbox.Executor,
+	breaker *safety.CircuitBreaker,
+	sink models.EventSink,
+	opts WorkerOptions,
+) *Worker {
+	opts = normalizeOpts(opts)
+	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
+	var budgetTracker spec.BudgetTracker
+	if opts.TokenBudget > 0 {
+		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
+	}
+	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
+	toolExecutor := NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout)
+	hooks := buildWorkerHooks(opts, toolExecutor, sink, scrubber)
+
+	w := newWorkerCore(store, gw, sb, breaker, sink, opts, scrubber, budgetTracker, toolExecutor, hooks)
 	w.topicGuard = NewTopicGuard(gw, opts.TopicGuard)
 	w.messageEditor = NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
 	w.modelRouter = NewModelRouter(opts.ModelRouting)
