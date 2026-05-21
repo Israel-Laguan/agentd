@@ -230,6 +230,9 @@ func TestMessageEditor_Edit_RejectsAssistantOnlyTurn(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for assistant-only editable turn")
 	}
+	if !strings.Contains(err.Error(), "editable user message") {
+		t.Fatalf("error = %v, want non-editable turn error", err)
+	}
 }
 
 func TestMessageEditor_Edit_AuditRecord(t *testing.T) {
