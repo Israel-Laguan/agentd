@@ -242,20 +242,50 @@ func TestRoutingDecision_AgenticModeTrue_ProviderNotSupported(t *testing.T) {
 			w, store, gw, sb := newRoutingTest(profile)
 			w.Process(context.Background(), store.task)
 
-			// Fallback to legacy: should use JSONMode, no tools
-			if len(gw.requests) == 0 {
-				t.Fatal("expected at least 1 gateway request")
+			// Fallback to legacy: exactly one JSONMode request, no tools
+			if len(gw.requests) != 1 {
+				t.Fatalf("expected exactly 1 gateway request for legacy fallback with provider %q, got %d", tc.provider, len(gw.requests))
 			}
 			if !gw.requests[0].JSONMode {
 				t.Errorf("expected JSONMode=true for legacy fallback with provider %q", tc.provider)
 			}
-			if len(gw.requests[0].Tools) > 0 {
-				t.Errorf("expected no tools in legacy fallback for provider %q", tc.provider)
+			if len(gw.requests[0].Tools) != 0 {
+				t.Fatalf("expected no tools in legacy fallback for provider %q, got %d", tc.provider, len(gw.requests[0].Tools))
 			}
 			if sb.execCount != 1 {
 				t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)
 			}
 		})
+	}
+}
+
+// TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_LegacyNotBlocked verifies that
+// unsupported providers skip agentic setup (including elicitation) and run legacy immediately.
+func TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_LegacyNotBlocked(t *testing.T) {
+	t.Parallel()
+
+	profile := models.AgentProfile{
+		ID:          "agent-1",
+		Provider:    "ollama",
+		Model:       "llama3",
+		AgenticMode: true,
+	}
+	w, store, gw, sb := newRoutingTest(profile)
+	store.task.Description = "fix the bug"
+
+	w.Process(context.Background(), store.task)
+
+	if store.task.State == models.TaskStateBlocked {
+		t.Fatal("expected legacy fallback, not BLOCKED from agentic elicitation")
+	}
+	if len(gw.requests) != 1 {
+		t.Fatalf("expected exactly 1 legacy gateway request, got %d", len(gw.requests))
+	}
+	if !gw.requests[0].JSONMode {
+		t.Fatal("expected legacy JSON mode request")
+	}
+	if sb.execCount != 1 {
+		t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)
 	}
 }
 
@@ -278,25 +308,19 @@ func TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback(t *tes
 		Mid:                   config.ModelTierTarget{Provider: "anthropic", Model: "claude-sonnet"},
 		High:                  config.ModelTierTarget{Provider: "anthropic", Model: "claude-opus"},
 	})
-	store.task.Description = "summarize this file"
+	store.task.Description = testutil.AgenticTestTaskDescription()
 
 	w.Process(context.Background(), store.task)
 
-	if len(gw.requests) == 0 {
-		t.Fatal("expected at least 1 gateway request")
+	if len(gw.requests) != 1 {
+		t.Fatalf("expected exactly 1 gateway request after unsupported-provider fallback, got %d", len(gw.requests))
 	}
-	var legacyReq *gateway.AIRequest
-	for i := range gw.requests {
-		if gw.requests[i].JSONMode {
-			legacyReq = &gw.requests[i]
-			break
-		}
+	legacyReq := gw.requests[0]
+	if !legacyReq.JSONMode {
+		t.Fatal("expected first gateway request to be legacy JSON mode")
 	}
-	if legacyReq == nil {
-		t.Fatal("expected a legacy JSONMode gateway request")
-	}
-	if len(legacyReq.Tools) > 0 {
-		t.Error("expected no tools in legacy fallback after routing to ollama")
+	if len(legacyReq.Tools) != 0 {
+		t.Fatalf("expected no tools in legacy fallback after routing to ollama, got %d", len(legacyReq.Tools))
 	}
 	if sb.execCount != 1 {
 		t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)

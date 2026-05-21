@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -44,6 +45,15 @@ func TestComplexityScorer_ArchitectPhraseAloneIsLow(t *testing.T) {
 	score := (ComplexityScorer{}).ScoreTask(task)
 	if score > 2 {
 		t.Fatalf("ScoreTask() = %d, want <= 2 with only architect reasoning signal", score)
+	}
+}
+
+func TestComplexityScorer_NoSubstringFalsePositives(t *testing.T) {
+	t.Parallel()
+	task := models.Task{Description: "listening to information while rewriting"}
+	score := (ComplexityScorer{}).ScoreTask(task)
+	if score != 0 {
+		t.Fatalf("ScoreTask() = %d, want 0 (no substring keyword matches)", score)
 	}
 }
 
@@ -147,6 +157,26 @@ func TestEstimateContextTokens_LargeContext(t *testing.T) {
 	tokens := EstimateContextTokens(messages, nil)
 	if tokens < 150000 {
 		t.Fatalf("EstimateContextTokens() = %d, want >= 150000", tokens)
+	}
+}
+
+func TestTotalToolChars_NoDoubleCount(t *testing.T) {
+	t.Parallel()
+	tool := gateway.ToolDefinition{
+		Name:        "run_command",
+		Description: "Execute a shell command",
+	}
+	b, err := json.Marshal(tool)
+	if err != nil {
+		t.Fatalf("json.Marshal(tool): %v", err)
+	}
+	got := totalToolChars([]gateway.ToolDefinition{tool})
+	if got != len(b) {
+		t.Fatalf("totalToolChars() = %d, want %d (marshaled JSON only)", got, len(b))
+	}
+	oldStyle := len(tool.Name) + len(tool.Description) + len(b)
+	if got >= oldStyle {
+		t.Fatalf("totalToolChars() = %d, want strictly less than double-count %d", got, oldStyle)
 	}
 }
 
