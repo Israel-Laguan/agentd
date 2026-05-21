@@ -266,6 +266,21 @@ func TestContextBudgetGuard_WarnAndExhausted(t *testing.T) {
 	}
 }
 
+func TestContextBudgetGuard_ResetRearmsWarn(t *testing.T) {
+	t.Parallel()
+	g := NewContextBudgetGuard(10000, 0.85)
+	if warn, _ := g.Check(8600); !warn {
+		t.Fatal("expected warn at threshold")
+	}
+	if warn, _ := g.Check(8600); warn {
+		t.Fatal("warn should not fire twice before reset")
+	}
+	g.reset()
+	if warn, _ := g.Check(8600); !warn {
+		t.Fatal("expected warn again after reset")
+	}
+}
+
 func TestContextBudgetGuard_DisabledThreshold(t *testing.T) {
 	t.Parallel()
 	g := NewContextBudgetGuard(1000, 0)

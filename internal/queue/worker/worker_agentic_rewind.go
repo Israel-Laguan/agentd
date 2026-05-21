@@ -54,6 +54,9 @@ func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 			in.goalTracker.SetGoal(*g)
 		}
 	}
+	if in.ctxBudgetGuard != nil {
+		in.ctxBudgetGuard.reset()
+	}
 }
 
 type agenticTurnLoopInput struct {
