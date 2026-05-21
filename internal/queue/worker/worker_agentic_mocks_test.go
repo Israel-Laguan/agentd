@@ -64,6 +64,7 @@ func (m *mockExecSandbox) Execute(ctx context.Context, payload sandbox.Payload) 
 // mockCommitStore implements models.KanbanStore to support commitText testing
 type mockCommitStore struct {
 	text          *string
+	task          *models.Task
 	comments      []models.Comment
 	listSinceArgs []time.Time
 	blockErr      error
@@ -133,6 +134,10 @@ func (m *mockCommitStore) GetAgentProfile(ctx context.Context, id string) (*mode
 }
 
 func (m *mockCommitStore) GetTask(ctx context.Context, id string) (*models.Task, error) {
+	if m.task != nil && m.task.ID == id {
+		t := *m.task
+		return &t, nil
+	}
 	return nil, nil
 }
 
