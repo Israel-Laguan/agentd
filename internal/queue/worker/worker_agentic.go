@@ -277,29 +277,3 @@ func (w *Worker) generateAgenticTurn(
 	}
 	return resp, nil, nil
 }
-
-func (w *Worker) continueAgenticAfterTools(
-	ctx context.Context, task models.Task,
-	resp gateway.AIResponse, messages *[]gateway.PromptMessage,
-	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
-	taskHooks *HookChain, taskCaps *capabilities.Registry,
-	cm *ContextManager, goalTracker *GoalTracker, toolTracker *toolFailureTracker,
-	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
-	turnID string, turnIndex int,
-) (continueLoop bool, result LoopResult, report bool, err error) {
-	iterationGuard.AfterIteration(true)
-	if abort, toolResult, toolReport := w.handleAgenticToolCalls(
-		ctx, task, turnID, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps,
-		cm, toolTracker, turnIndex, budgetGuard,
-	); abort {
-		return false, toolResult, toolReport, nil
-	}
-	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
-	if stalled || stallErr != nil {
-		if stallErr != nil {
-			w.handleGatewayError(ctx, task, stallErr)
-		}
-		return false, LoopResult{}, false, stallErr
-	}
-	return true, LoopResult{}, false, nil
-}

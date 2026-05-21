@@ -95,89 +95,30 @@ func (w *Worker) handleAgenticToolCalls(
 	return false, LoopResult{}, false
 }
 
-func (w *Worker) finishAgenticTurnNoTools(
-	ctx context.Context, task models.Task, profile models.AgentProfile,
-	content string, workPlan *Plan, goalTracker *GoalTracker,
-	turnID string, turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
-	cm *ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
-	checkpointer *SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
-) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
-	if workPlan != nil {
-		if w.planningCfg.ComplexityThreshold > 0 {
-			var redoExhausted bool
-			content, redoExhausted = w.repairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
-			if redoExhausted && checkpointer != nil && sessionRecoveryGen != nil &&
-				(sessionRecoveryUsed == nil || !*sessionRecoveryUsed) {
-				if restoreErr := checkpointer.BranchFrom(prePlanCheckpointLabel, messages); restoreErr != nil {
-					slog.Warn("agentic pre_plan restore skipped",
-						"task_id", task.ID, "turn_id", turnID, "error", restoreErr)
-				} else {
-					*sessionRecoveryGen++
-					if sessionRecoveryUsed != nil {
-						*sessionRecoveryUsed = true
-					}
-					slog.Info("agentic session restored from pre_plan checkpoint",
-						"task_id", task.ID, "label", prePlanCheckpointLabel,
-						"session_recovery_gen", *sessionRecoveryGen)
-					return true, LoopResult{}, false, rewindToFirstTurn, nil
-				}
-			}
-			failing := ValidateOutput(content, *workPlan)
-			if len(failing) > 0 && respecAttempts != nil && *respecAttempts < 1 && w.messageEditor != nil {
-				msgsForRespec := messagesWithoutLastAssistant(*messages)
-				newContent, respecErr := w.generateRespecifiedUserTurn(
-					ctx, task, workPlan, failing, msgsForRespec, cm, budgetGuard,
-				)
-				if respecErr != nil {
-					slog.Warn("agentic respec repair skipped",
-						"task_id", task.ID, "turn_id", turnID, "error", respecErr)
-				} else if _, editErr := w.messageEditor.Edit(
-					ctx, task.ID, turnID, messages, EditAnchorUserTurn, newContent, cm,
-				); editErr != nil {
-					slog.Warn("agentic respec history edit skipped",
-						"task_id", task.ID, "turn_id", turnID, "error", editErr)
-				} else {
-					(*respecAttempts)++
-					// In-session structural repair: rewind and re-run without committing broken output.
-					return true, LoopResult{}, false, rewindToFirstTurn, nil
-				}
-			}
-		}
-		content = preparePlanCommitContent(content, *workPlan)
+func (w *Worker) continueAgenticAfterTools(
+	ctx context.Context, task models.Task,
+	resp gateway.AIResponse, messages *[]gateway.PromptMessage,
+	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
+	taskHooks *HookChain, taskCaps *capabilities.Registry,
+	cm *ContextManager, goalTracker *GoalTracker, toolTracker *toolFailureTracker,
+	iterationGuard *IterationGuard, budgetGuard *BudgetGuard,
+	turnID string, turnIndex int,
+) (continueLoop bool, result LoopResult, report bool, err error) {
+	iterationGuard.AfterIteration(true)
+	if abort, toolResult, toolReport := w.handleAgenticToolCalls(
+		ctx, task, turnID, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps,
+		cm, toolTracker, turnIndex, budgetGuard,
+	); abort {
+		return false, toolResult, toolReport, nil
 	}
-	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, content)
+	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, resp.Content)
 	if stalled || stallErr != nil {
 		if stallErr != nil {
 			w.handleGatewayError(ctx, task, stallErr)
 		}
-		return false, LoopResult{}, false, rewindNone, stallErr
+		return false, LoopResult{}, false, stallErr
 	}
-	w.commitTextWithProfile(ctx, task, content, &profile)
-	r := LoopResult{
-		Status: LoopSuccessfulCompletion,
-		Meta: w.buildLoopMeta(
-			turnIndex, budgetGuard.Usage(), totalChars(*messages), ctxBudgetGuard.TotalBudget(),
-			"", "", "",
-		),
-	}
-	return false, r, true, rewindNone, nil
-}
-
-// messagesWithoutLastAssistant returns a copy of messages omitting a trailing assistant
-// message, used for respec input without mutating the live conversation slice.
-func messagesWithoutLastAssistant(messages []gateway.PromptMessage) []gateway.PromptMessage {
-	if len(messages) == 0 {
-		return nil
-	}
-	last := len(messages) - 1
-	if messages[last].Role != "assistant" {
-		out := make([]gateway.PromptMessage, len(messages))
-		copy(out, messages)
-		return out
-	}
-	out := make([]gateway.PromptMessage, last)
-	copy(out, messages[:last])
-	return out
+	return true, LoopResult{}, false, nil
 }
 
 func (w *Worker) handleGoalProgress(ctx context.Context, task models.Task, goalTracker *GoalTracker, content string) (bool, error) {
