@@ -12,7 +12,9 @@ import (
 
 // mountScopedPlugins loads project-scoped and session-scoped plugins,
 // returning a task-local HookChain and capabilities Registry that
-// augment the worker-level globals.
+// augment the worker-level globals. Mount only registers hooks and
+// capabilities into the provided chain/registry; it does not mutate
+// worker-global state.
 func (w *Worker) mountScopedPlugins(
 	project models.Project, profile models.AgentProfile,
 ) (*HookChain, *capabilities.Registry) {
