@@ -54,6 +54,7 @@ type WorkerOptions struct {
 	TopicGuard                config.TopicGuardConfig
 	ModelRouting              config.ModelRoutingConfig
 	ToolManifest              config.ToolManifestConfig
+	CapabilityRouting         config.CapabilityRoutingConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -175,6 +176,7 @@ func NewWorker(
 	w.messageEditor = NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
 	w.modelRouter = NewModelRouter(opts.ModelRouting)
 	w.toolManifest = NewToolManifest(opts.ToolManifest)
+	w.capabilityRouter = NewCapabilityRouter(opts.CapabilityRouting)
 	w.setupFileContext(opts)
 	w.setupOptionalLoaders(opts)
 	return w
