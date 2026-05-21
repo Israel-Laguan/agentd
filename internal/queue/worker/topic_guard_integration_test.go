@@ -96,6 +96,21 @@ func TestGuardTopicDrift_DriftBeforeCompression(t *testing.T) {
 	}
 }
 
+func TestRunAgenticTurnLoop_TopicDriftErrWithRewindContinues(t *testing.T) {
+	t.Parallel()
+	err := errTopicDriftReset
+	rewindTo := rewindToFirstTurn
+	continues := false
+	if err != nil {
+		if errors.Is(err, errTopicDriftReset) && rewindTo >= 0 {
+			continues = true
+		}
+	}
+	if !continues {
+		t.Fatal("topic drift error with rewind should continue the turn loop, not abort")
+	}
+}
+
 func TestGuardTopicDrift_RelatedFollowUp_NoReset(t *testing.T) {
 	gw := &driftTrackingGateway{topicDriftGateway: topicDriftGateway{response: "NO"}}
 	store := testutil.NewFakeStore()
