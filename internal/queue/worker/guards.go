@@ -178,3 +178,10 @@ func (g *ContextBudgetGuard) Check(chars int) (warn bool, exhausted bool) {
 func (g *ContextBudgetGuard) TotalBudget() int {
 	return g.totalBudget
 }
+
+func (g *ContextBudgetGuard) reset() {
+	if g == nil {
+		return
+	}
+	g.warned = false
+}
