@@ -55,6 +55,7 @@ type WorkerOptions struct {
 	ModelRouting              config.ModelRoutingConfig
 	ToolManifest              config.ToolManifestConfig
 	CapabilityRouting         config.CapabilityRoutingConfig
+	Batching                  config.BatchingConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -192,6 +193,7 @@ func NewWorker(
 	w.modelRouter = NewModelRouter(opts.ModelRouting)
 	w.toolManifest = NewToolManifest(opts.ToolManifest)
 	w.capabilityRouter = NewCapabilityRouter(opts.CapabilityRouting)
+	w.batcher = NewTaskBatcher(opts.Batching, w)
 	w.setupFileContext(opts)
 	w.setupOptionalLoaders(opts)
 	return w

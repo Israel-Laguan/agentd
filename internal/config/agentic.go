@@ -81,6 +81,8 @@ type AgenticConfig struct {
 	ToolManifest ToolManifestConfig
 	// CapabilityRouting bypasses the agentic LLM loop for tasks mapped to external adapters.
 	CapabilityRouting CapabilityRoutingConfig
+	// Batching consolidates independent tool-free tasks into a single LLM call.
+	Batching BatchingConfig
 }
 
 // FileContextConfig controls convert/cache/select pipeline for workspace files.
@@ -116,6 +118,7 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.model_routing.context_token_threshold", DefaultModelRoutingContextTokens)
 	setToolManifestDefaults(v)
 	setCapabilityRoutingDefaults(v)
+	setBatchingDefaults(v)
 }
 
 func loadAgenticConfig(v *viper.Viper) AgenticConfig {
@@ -139,6 +142,7 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 		ModelRouting:   loadModelRoutingConfig(v),
 		ToolManifest:       loadToolManifestConfig(v),
 		CapabilityRouting: loadCapabilityRoutingConfig(v),
+		Batching:          loadBatchingConfig(v),
 	}
 }
 
