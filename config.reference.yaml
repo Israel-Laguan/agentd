@@ -131,11 +131,7 @@ agentic:
     enabled: false
     path: "audit.jsonl"          # relative to agentd home when not absolute
 
-  # External tool names for prompt-injection resistance.
-  # Results from these tools are wrapped in <external_content> tags so the
-  # model treats them as untrusted data. When empty (default), all non-builtin
-  # tools (i.e. any MCP / capability tool) are treated as external.
-  # Explicitly listing names limits wrapping to only those tools.
+  # External tools: wrap in <external_content>; empty = all non-builtin; list limits scope
   external_tools: []             # e.g., ["web_fetch", "read_url", "search"]
 
   # Review loop configuration.
@@ -161,28 +157,19 @@ agentic:
     cache_path: "file-cache"              # relative to agentd home
     embedding_model: "text-embedding-3-small"
 
-  # Two-phase plan→execute for complex agentic tasks (Task 38).
-  # complexity_threshold: 0 disables planning; e.g. 500 enables for long tasks.
+  # Task 38: plan→execute; complexity_threshold 0 disables, e.g. 500 enables
   planning:
     complexity_threshold: 0
     max_redo_passes: 3
     plan_context_max_chars: 4000
 
-  # Complexity-based model routing (Task 43). When enabled, overrides each task's
-  # agent profile provider/model using English keyword scoring (cheap/mid/high);
-  # context above threshold forces high. Non-English tasks may score as cheap.
+  # Task 43: complexity routing; see docs/reference.md
   model_routing:
     enabled: false
     context_token_threshold: 150000
-    cheap:
-      provider: ""
-      model: ""
-    mid:
-      provider: ""
-      model: ""
-    high:
-      provider: ""
-      model: ""
+    cheap: {provider: "", model: ""}
+    mid: {provider: "", model: ""}
+    high: {provider: "", model: ""}
 
 # Sandbox command execution hardening.
 sandbox:
