@@ -102,6 +102,12 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			in.checkpointer, &in.sessionRecoveryGen, &in.sessionRecoveryUsed,
 		)
 		if err != nil {
+			if errors.Is(err, errTopicDriftReset) && rewindTo >= 0 {
+				rewind.reset()
+				turnIndex = rewindTo
+				resetAgenticStateForTopicDrift(&in, w)
+				continue
+			}
 			return LoopResult{}, false
 		}
 		if report {
@@ -112,12 +118,6 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			return LoopResult{}, false
 		}
 		if rewindTo >= 0 {
-			if errors.Is(err, errTopicDriftReset) {
-				rewind.reset()
-				turnIndex = rewindTo
-				resetAgenticStateForTopicDrift(&in, w)
-				continue
-			}
 			if rewind.apply(rewindTo) {
 				slog.Warn("agentic rewind stagnation",
 					"task_id", in.task.ID,
@@ -137,6 +137,9 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			}
 			turnIndex = rewindTo
 			resetAgenticStateForRewind(in)
+			if in.sessionRecoveryUsed && in.workPlan != nil && in.messages != nil {
+				*in.messages = w.injectPlan(*in.messages, in.workPlan)
+			}
 			continue
 		}
 		rewind.reset()

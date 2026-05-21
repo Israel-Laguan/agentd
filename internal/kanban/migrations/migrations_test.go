@@ -56,6 +56,40 @@ func TestMigrateToV2PreservesTasksAndAllowsBlockedState(t *testing.T) {
 	}
 }
 
+func TestMigrateToV10AddsDisableTopicDriftColumn(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:migrate-v10?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, v9SchemaWithAgentProfilesSQL); err != nil {
+		t.Fatalf("create v9 schema: %v", err)
+	}
+
+	if err := Run(ctx, db); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	var version string
+	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
+		t.Fatalf("read schema version: %v", err)
+	}
+	if version != "10" {
+		t.Fatalf("schema version = %q, want 10", version)
+	}
+
+	var hasColumn int
+	if err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM pragma_table_info('agent_profiles') WHERE name = 'disable_topic_drift'`).Scan(&hasColumn); err != nil {
+		t.Fatalf("check disable_topic_drift column: %v", err)
+	}
+	if hasColumn != 1 {
+		t.Fatalf("disable_topic_drift column present = %d, want 1", hasColumn)
+	}
+}
+
 func TestMigrateToV4AllowsFailedRequiresHumanState(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v4-v5?mode=memory&cache=shared")
 	if err != nil {
@@ -118,6 +152,39 @@ func TestMigrateToV4AllowsFailedRequiresHumanState(t *testing.T) {
 		t.Fatalf("success_criteria = %q, want []", successCriteria)
 	}
 }
+
+const v9SchemaWithAgentProfilesSQL = `
+CREATE TABLE projects (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    original_input TEXT NOT NULL,
+    workspace_path TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE agent_profiles (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    temperature REAL NOT NULL DEFAULT 0.7,
+    system_prompt TEXT,
+    role TEXT NOT NULL DEFAULT 'CODE_GEN',
+    max_tokens INTEGER NOT NULL DEFAULT 0,
+    agentic_mode INTEGER NOT NULL DEFAULT 0 CHECK (agentic_mode IN (0, 1)),
+    updated_at TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+) STRICT;
+
+INSERT INTO settings (key, value, updated_at)
+VALUES ('schema_version', '9', datetime('now'));`
 
 const v3SchemaSQL = `
 CREATE TABLE projects (

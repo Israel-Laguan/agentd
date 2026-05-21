@@ -101,8 +101,12 @@ func TestSessionCheckpointer_BranchFromMissingLabel(t *testing.T) {
 func TestSessionCheckpointer_List(t *testing.T) {
 	t.Parallel()
 	cp := NewSessionCheckpointer("task-4")
-	_ = cp.Checkpoint("beta", nil)
-	_ = cp.Checkpoint("alpha", nil)
+	if err := cp.Checkpoint("beta", nil); err != nil {
+		t.Fatalf("Checkpoint(beta): %v", err)
+	}
+	if err := cp.Checkpoint("alpha", nil); err != nil {
+		t.Fatalf("Checkpoint(alpha): %v", err)
+	}
 	labels := cp.List()
 	if len(labels) != 2 || labels[0] != "alpha" || labels[1] != "beta" {
 		t.Fatalf("List() = %v, want [alpha beta]", labels)
