@@ -131,6 +131,9 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 		TokenUsageHook:          tokenHook,
 		FileContext:               cfg.Agentic.FileContext,
 		FileContextCachePath: config.ResolveFileContextCachePath(cfg.HomeDir, cfg.Agentic.FileContext.CachePath),
+		Planning:                  cfg.Agentic.Planning,
+		TopicGuard:                cfg.Agentic.TopicGuard,
+		ModelRouting:              cfg.Agentic.ModelRouting,
 	})
 }
 

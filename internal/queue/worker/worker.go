@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"time"
 
@@ -83,8 +82,8 @@ type PluginMounter interface {
 // Process handles task execution, supporting two modes:
 // - Legacy mode (default): single-shot JSON command execution via GenerateJSON
 // - Agentic mode: inner loop with tool calling and message accumulation (processAgentic)
-// Routing is determined by profile.AgenticMode flag. When agentic mode is enabled but
-// the provider doesn't support tool round-tripping, falls back to legacy mode.
+// Routing is determined by profile.AgenticMode. After model routing, unsupported
+// providers fall back to legacy mode inside processAgentic.
 func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
 	project, profile, err := w.loadContext(ctx, task)
@@ -112,19 +111,12 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.handlePhasePlanning(ctx, task, *project)
 		return
 	}
-	// Routing: check AgenticMode flag to determine execution path
-	// Agentic mode requires provider support (see agenticProviders)
+	// AgenticMode selects processAgentic; routed provider capability is checked after model routing.
 	if profile.AgenticMode {
-		if w.providerSupportsAgentic(*profile) {
-			if result, ok := w.processAgentic(ctx, task, *project, *profile); ok {
-				w.handleLoopResult(ctx, task, result)
-			}
-			return
+		if result, ok := w.processAgentic(ctx, task, *project, *profile); ok {
+			w.handleLoopResult(ctx, task, result)
 		}
-		slog.Warn("agentic mode requested but provider does not support tool round-tripping; falling back to legacy mode",
-			"task_id", task.ID,
-			"provider", profile.Provider,
-		)
+		return
 	}
 	w.runLegacyTask(ctx, task, *project, *profile)
 }
