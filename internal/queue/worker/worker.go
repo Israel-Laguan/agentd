@@ -65,6 +65,7 @@ type Worker struct {
 	modelRouter               *ModelRouter
 	toolManifest              *ToolManifest
 	capabilityRouter          *CapabilityRouter
+	batcher                   *TaskBatcher
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
