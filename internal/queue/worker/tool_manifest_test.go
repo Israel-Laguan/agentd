@@ -171,6 +171,82 @@ func TestToolManifest_DisabledReturnsNil(t *testing.T) {
 	}
 }
 
+func TestToolManifest_WebResearchUserMapping(t *testing.T) {
+	t.Parallel()
+	m := NewToolManifest(config.ToolManifestConfig{
+		Enabled:       true,
+		MinConfidence: 0.35,
+		Mappings: map[string][]string{
+			TaskTypeWebResearch: {toolNameRead},
+		},
+	})
+	task := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "t8"},
+		Title:       "Search the web",
+		Description: "Fetch URL and browse lookup results",
+	}
+	tools, index := m.Filter(testManifestTools(), testManifestIndex(), task, models.AgentProfile{})
+	if len(tools) != 1 || tools[0].Name != toolNameRead {
+		t.Fatalf("tools = %v, want only read", toolNamesFromDefinitions(tools))
+	}
+	if len(index) != 1 || index[toolNameRead] != "builtin" {
+		t.Fatalf("index = %v, want read→builtin", index)
+	}
+}
+
+func TestToolManifest_FullAgentRestrictedMapping(t *testing.T) {
+	t.Parallel()
+	m := NewToolManifest(config.ToolManifestConfig{
+		Enabled:       true,
+		MinConfidence: 0.35,
+		Mappings: map[string][]string{
+			TaskTypeFullAgent: {toolNameBash, toolNameRead},
+		},
+	})
+	task := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "t9"},
+		Title:       "General task",
+		Description: "Unrelated work",
+	}
+	profile := models.AgentProfile{ToolManifestType: TaskTypeFullAgent}
+	tools, index := m.Filter(testManifestTools(), testManifestIndex(), task, profile)
+	if len(tools) != 2 {
+		t.Fatalf("tools len = %d, want 2", len(tools))
+	}
+	for _, name := range []string{toolNameBash, toolNameRead} {
+		if !containsTool(tools, name) {
+			t.Fatalf("missing %q in %v", name, toolNamesFromDefinitions(tools))
+		}
+	}
+	if len(index) != 2 {
+		t.Fatalf("index len = %d, want 2", len(index))
+	}
+}
+
+func TestToolManifest_FullAgentEmptyMapping(t *testing.T) {
+	t.Parallel()
+	m := NewToolManifest(config.ToolManifestConfig{
+		Enabled:       true,
+		MinConfidence: 0.35,
+		Mappings: map[string][]string{
+			TaskTypeFullAgent: []string{},
+		},
+	})
+	task := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "t10"},
+		Title:       "General task",
+		Description: "Unrelated work",
+	}
+	profile := models.AgentProfile{ToolManifestType: TaskTypeFullAgent}
+	tools, index := m.Filter(testManifestTools(), testManifestIndex(), task, profile)
+	if len(tools) != 0 {
+		t.Fatalf("tools len = %d, want 0", len(tools))
+	}
+	if index != nil {
+		t.Fatalf("index = %v, want nil", index)
+	}
+}
+
 func TestFilterAgenticTools_NoManifestPassthrough(t *testing.T) {
 	t.Parallel()
 	w := &Worker{}

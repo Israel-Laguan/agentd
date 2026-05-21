@@ -143,7 +143,7 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 | `agentic.audit.path` | `audit.jsonl` | Audit file path; relative paths resolve under agentd home (`ResolveAuditPath`). |
 | `agentic.tool_manifest.enabled` | `false` | When true, filter gateway tool definitions by classified task type before the agentic turn loop. Does not affect `agentic.model_routing` token estimates (routing still counts the full tool registry). |
 | `agentic.tool_manifest.min_confidence` | `0.35` | Minimum classifier confidence (0.0–1.0) to apply a manifest mapping; below threshold falls back to full agent tools. |
-| `agentic.tool_manifest.mappings` | _(built-in defaults)_ | Map task type names to tool names (e.g. `summarize: []`, `code_gen: [bash, read, write]`). Empty slice means no tools; omitted `full_agent` or `*` means all tools. |
+| `agentic.tool_manifest.mappings` | _(built-in defaults)_ | Map task type names (`summarize`, `code_gen`, `doc_qa`, `web_research`, `full_agent`) to tool names. Empty slice means no tools; `*` or omitted/nil mapping means all tools. In YAML, quote the wildcard: `code_gen: ["*"]` (unquoted `*` in `[*]` is alias syntax, not a literal string). |
 | `sandbox.inactivity_timeout` | `60s` | Max stdout/stderr silence before sandbox timeout triggers. |
 | `sandbox.wall_timeout` | `10m` | Max wall-clock execution time for each sandbox command payload. |
 | `sandbox.kill_grace` | `2s` | Grace window between SIGTERM and SIGKILL for timed-out process groups. |
