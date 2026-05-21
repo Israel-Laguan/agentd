@@ -7,11 +7,8 @@ import (
 	"github.com/spf13/viper"
 )
 
-func TestAgenticDefaults_Viper(t *testing.T) {
-	v := viper.New()
-	setAgenticDefaults(v)
-	cfg := loadAgenticConfig(v)
-
+func assertAgenticCoreDefaults(t *testing.T, cfg AgenticConfig) {
+	t.Helper()
 	if len(cfg.ExternalTools) != 0 {
 		t.Fatalf("external_tools = %v, want empty slice", cfg.ExternalTools)
 	}
@@ -21,12 +18,20 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 	if cfg.ToolFailureStreak != DefaultToolFailureStreak {
 		t.Fatalf("ToolFailureStreak = %d, want %d", cfg.ToolFailureStreak, DefaultToolFailureStreak)
 	}
+}
+
+func assertAgenticTopicGuardDefaults(t *testing.T, cfg AgenticConfig) {
+	t.Helper()
 	if !cfg.TopicGuard.Enabled {
 		t.Fatal("TopicGuard.Enabled should default to true")
 	}
 	if cfg.TopicGuard.Sensitivity != DefaultTopicGuardSensitivity {
 		t.Fatalf("TopicGuard.Sensitivity = %v, want %v", cfg.TopicGuard.Sensitivity, DefaultTopicGuardSensitivity)
 	}
+}
+
+func assertAgenticPlanningDefaults(t *testing.T, cfg AgenticConfig) {
+	t.Helper()
 	if cfg.Planning.ComplexityThreshold != 0 {
 		t.Fatalf("Planning.ComplexityThreshold = %d, want 0", cfg.Planning.ComplexityThreshold)
 	}
@@ -36,6 +41,10 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 	if cfg.Planning.PlanContextMaxChars != DefaultPlanContextMaxChars {
 		t.Fatalf("Planning.PlanContextMaxChars = %d, want %d", cfg.Planning.PlanContextMaxChars, DefaultPlanContextMaxChars)
 	}
+}
+
+func assertAgenticModelRoutingDefaults(t *testing.T, cfg AgenticConfig) {
+	t.Helper()
 	if cfg.ModelRouting.Enabled {
 		t.Fatal("ModelRouting.Enabled should default to false")
 	}
@@ -43,6 +52,10 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 		t.Fatalf("ModelRouting.ContextTokenThreshold = %d, want %d",
 			cfg.ModelRouting.ContextTokenThreshold, DefaultModelRoutingContextTokens)
 	}
+}
+
+func assertAgenticToolManifestDefaults(t *testing.T, cfg AgenticConfig) {
+	t.Helper()
 	if cfg.ToolManifest.Enabled {
 		t.Fatal("ToolManifest.Enabled should default to false")
 	}
@@ -50,6 +63,10 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 		t.Fatalf("ToolManifest.MinConfidence = %v, want %v",
 			cfg.ToolManifest.MinConfidence, DefaultToolManifestMinConfidence)
 	}
+}
+
+func assertAgenticCapabilityRoutingDefaults(t *testing.T, cfg AgenticConfig) {
+	t.Helper()
 	if cfg.CapabilityRouting.Enabled {
 		t.Fatal("CapabilityRouting.Enabled should default to false")
 	}
@@ -57,12 +74,30 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 		t.Fatalf("CapabilityRouting.MinConfidence = %v, want %v",
 			cfg.CapabilityRouting.MinConfidence, DefaultCapabilityRoutingMinConfidence)
 	}
+}
+
+func assertAgenticBatchingDefaults(t *testing.T, cfg AgenticConfig) {
+	t.Helper()
 	if cfg.Batching.Enabled {
 		t.Fatal("Batching.Enabled should default to false")
 	}
 	if cfg.Batching.MaxBatchSize != DefaultBatchingMaxBatchSize {
 		t.Fatalf("Batching.MaxBatchSize = %d, want %d", cfg.Batching.MaxBatchSize, DefaultBatchingMaxBatchSize)
 	}
+}
+
+func TestAgenticDefaults_Viper(t *testing.T) {
+	v := viper.New()
+	setAgenticDefaults(v)
+	cfg := loadAgenticConfig(v)
+
+	assertAgenticCoreDefaults(t, cfg)
+	assertAgenticTopicGuardDefaults(t, cfg)
+	assertAgenticPlanningDefaults(t, cfg)
+	assertAgenticModelRoutingDefaults(t, cfg)
+	assertAgenticToolManifestDefaults(t, cfg)
+	assertAgenticCapabilityRoutingDefaults(t, cfg)
+	assertAgenticBatchingDefaults(t, cfg)
 }
 
 func TestLoadAgenticConfig_BatchingOverride(t *testing.T) {
