@@ -11,7 +11,7 @@ import (
 func (w *Worker) tryAgenticPrePlanRecovery(
 	ctx context.Context, task models.Task, turnID string, redoExhausted bool,
 	checkpointer *SessionCheckpointer, messages *[]gateway.PromptMessage,
-	sessionRecoveryGen *int, sessionRecoveryUsed *bool,
+	sessionRecoveryGen *int, sessionRecoveryUsed *bool, sessionRecoveryNeedsPlanInject *bool,
 ) bool {
 	if !redoExhausted || checkpointer == nil || sessionRecoveryGen == nil {
 		return false
@@ -27,6 +27,9 @@ func (w *Worker) tryAgenticPrePlanRecovery(
 	*sessionRecoveryGen++
 	if sessionRecoveryUsed != nil {
 		*sessionRecoveryUsed = true
+	}
+	if sessionRecoveryNeedsPlanInject != nil {
+		*sessionRecoveryNeedsPlanInject = true
 	}
 	slog.Info("agentic session restored from pre_plan checkpoint",
 		"task_id", task.ID, "label", prePlanCheckpointLabel,
@@ -67,7 +70,7 @@ func (w *Worker) applyAgenticNoToolsPlanContent(
 	ctx context.Context, task models.Task, content string, workPlan *Plan, turnID string,
 	messages *[]gateway.PromptMessage, respecAttempts *int,
 	checkpointer *SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
-	budgetGuard *BudgetGuard, cm *ContextManager,
+	sessionRecoveryNeedsPlanInject *bool, budgetGuard *BudgetGuard, cm *ContextManager,
 ) (string, bool) {
 	if workPlan == nil {
 		return content, false
@@ -77,7 +80,7 @@ func (w *Worker) applyAgenticNoToolsPlanContent(
 	}
 	var redoExhausted bool
 	content, redoExhausted = w.repairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
-	if w.tryAgenticPrePlanRecovery(ctx, task, turnID, redoExhausted, checkpointer, messages, sessionRecoveryGen, sessionRecoveryUsed) {
+	if w.tryAgenticPrePlanRecovery(ctx, task, turnID, redoExhausted, checkpointer, messages, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject) {
 		return content, true
 	}
 	if w.tryAgenticRespecRewind(ctx, task, workPlan, content, turnID, messages, respecAttempts, cm, budgetGuard) {
@@ -92,10 +95,11 @@ func (w *Worker) finishAgenticTurnNoTools(
 	turnID string, turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
 	cm *ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
 	checkpointer *SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
+	sessionRecoveryNeedsPlanInject *bool,
 ) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
 	content, rewind := w.applyAgenticNoToolsPlanContent(
 		ctx, task, content, workPlan, turnID, messages, respecAttempts,
-		checkpointer, sessionRecoveryGen, sessionRecoveryUsed, budgetGuard, cm,
+		checkpointer, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject, budgetGuard, cm,
 	)
 	if rewind {
 		return true, LoopResult{}, false, rewindToFirstTurn, nil

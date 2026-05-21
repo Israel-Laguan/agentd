@@ -85,8 +85,17 @@ type agenticTurnLoopInput struct {
 	workPlan              *Plan
 	sessionMgr            *SessionManager
 	checkpointer          *SessionCheckpointer
-	sessionRecoveryGen    int
-	sessionRecoveryUsed   bool
+	sessionRecoveryGen              int
+	sessionRecoveryUsed             bool
+	sessionRecoveryNeedsPlanInject  bool
+}
+
+// applySessionRecoveryPlanReinjection injects the work plan once after a session-recovery rewind.
+func (w *Worker) applySessionRecoveryPlanReinjection(in *agenticTurnLoopInput) {
+	if in.sessionRecoveryNeedsPlanInject && in.workPlan != nil && in.messages != nil {
+		*in.messages = w.injectPlan(*in.messages, in.workPlan)
+		in.sessionRecoveryNeedsPlanInject = false
+	}
 }
 
 // runAgenticTurnLoop drives the inner agentic turn loop until completion, stagnation, or error.
@@ -99,7 +108,7 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			in.ctx, in.task, in.project, in.profile, in.messages, in.tools, in.toolToAdapter, in.taskToolExecutor,
 			in.iterationGuard, in.budgetGuard, in.deadlineGuard, in.ctxBudgetGuard, in.cm, in.goalTracker, in.sessionMgr,
 			in.taskHooks, in.taskCaps, in.toolTracker, in.workPlan, turnID, turnIndex, &respecAttempts,
-			in.checkpointer, &in.sessionRecoveryGen, &in.sessionRecoveryUsed,
+			in.checkpointer, &in.sessionRecoveryGen, &in.sessionRecoveryUsed, &in.sessionRecoveryNeedsPlanInject,
 		)
 		if err != nil {
 			if errors.Is(err, errTopicDriftReset) && rewindTo >= 0 {
@@ -137,10 +146,7 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			}
 			turnIndex = rewindTo
 			resetAgenticStateForRewind(in)
-			if in.sessionRecoveryUsed && in.workPlan != nil && in.messages != nil {
-				*in.messages = w.injectPlan(*in.messages, in.workPlan)
-				in.sessionRecoveryUsed = false
-			}
+			w.applySessionRecoveryPlanReinjection(&in)
 			continue
 		}
 		rewind.reset()
