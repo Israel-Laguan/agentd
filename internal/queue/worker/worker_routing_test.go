@@ -289,6 +289,60 @@ func TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_LegacyNotBlocked(t
 	}
 }
 
+// TestAgenticFallbackPreservesRoutedProvider verifies that when processAgentic routes to a
+// high-context tier then falls back to legacy, runLegacyTask does not re-route with legacy
+// (shorter) messages and change provider.
+func TestAgenticFallbackPreservesRoutedProvider(t *testing.T) {
+	t.Parallel()
+
+	profile := models.AgentProfile{
+		ID:          "agent-1",
+		Provider:    "openai",
+		Model:       "gpt-4",
+		AgenticMode: true,
+	}
+	w, store, gw, sb := newRoutingTest(profile)
+	w.modelRouter = NewModelRouter(config.ModelRoutingConfig{
+		Enabled:               true,
+		ContextTokenThreshold: 150000,
+		Cheap:                 config.ModelTierTarget{Provider: "anthropic", Model: "claude-haiku"},
+		Mid:                   config.ModelTierTarget{Provider: "anthropic", Model: "claude-sonnet"},
+		High:                  config.ModelTierTarget{Provider: "ollama", Model: "llama3"},
+	})
+
+	task := store.task
+	task.Description = "summarize this file"
+
+	// Agentic-sized context selects High (ollama, non-agentic).
+	huge := strings.Repeat("x", 600001)
+	agenticMessages := []gateway.PromptMessage{
+		{Role: "system", Content: huge},
+		{Role: "user", Content: task.Description},
+	}
+	tools := []gateway.ToolDefinition{{Name: "bash", Description: "run shell commands"}}
+	routed := w.applyModelRouting(task, profile, agenticMessages, tools)
+	if routed.Provider != "ollama" || routed.Model != "llama3" {
+		t.Fatalf("agentic route = %s/%s, want ollama/llama3", routed.Provider, routed.Model)
+	}
+
+	legacyRouted := w.routeLegacyProfile(context.Background(), task, profile)
+	if legacyRouted.Provider != "anthropic" {
+		t.Fatalf("legacy-only route provider = %q, want anthropic (proves re-route would differ)", legacyRouted.Provider)
+	}
+
+	w.runLegacyTask(context.Background(), task, store.project, routed, true)
+
+	if len(gw.requests) != 1 {
+		t.Fatalf("expected 1 gateway request, got %d", len(gw.requests))
+	}
+	if gw.requests[0].Provider != "ollama" || gw.requests[0].Model != "llama3" {
+		t.Fatalf("legacy fallback request = %s/%s, want ollama/llama3", gw.requests[0].Provider, gw.requests[0].Model)
+	}
+	if sb.execCount != 1 {
+		t.Fatalf("expected 1 sandbox run, got %d", sb.execCount)
+	}
+}
+
 // TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback verifies that
 // when model routing selects a provider without tool support, the worker falls back to legacy.
 func TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback(t *testing.T) {

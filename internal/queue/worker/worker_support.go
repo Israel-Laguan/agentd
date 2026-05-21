@@ -220,10 +220,16 @@ func (w *Worker) loadContext(
 	return project, profile, err
 }
 
+// routeLegacyProfile applies complexity routing for legacy JSON command mode.
+func (w *Worker) routeLegacyProfile(ctx context.Context, task models.Task, profile models.AgentProfile) models.AgentProfile {
+	messages := w.seedMessages(ctx, task, profile)
+	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
+	return w.applyModelRouting(task, profile, messages, nil)
+}
+
 func (w *Worker) command(ctx context.Context, task models.Task, profile models.AgentProfile) (workerResponse, error) {
 	messages := w.seedMessages(ctx, task, profile)
 	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
-	profile = w.applyModelRouting(task, profile, messages, nil)
 	req := gateway.AIRequest{
 		Messages:    messages,
 		Temperature: profile.Temperature,
