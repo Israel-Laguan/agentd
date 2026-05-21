@@ -65,6 +65,7 @@ type Worker struct {
 	topicGuard                *TopicGuard
 	modelRouter               *ModelRouter
 	toolManifest              *ToolManifest
+	capabilityRouter          *CapabilityRouter
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -116,7 +117,9 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.handlePhasePlanning(ctx, task, *project)
 		return
 	}
-	// AgenticMode selects processAgentic; post-routing capability is checked inside processAgentic.
+	// AgenticMode selects processAgentic. Model routing (Task 43) and external capability
+	// routing (Task 45) run inside processAgentic after tools are assembled; capability
+	// routing intercepts before the agentic turn loop when a mapped adapter is available.
 	if profile.AgenticMode {
 		if w.modelRouter == nil && !w.providerSupportsAgentic(*profile) {
 			slog.Warn("agentic mode requested but provider does not support tool round-tripping; falling back to legacy mode",

@@ -50,6 +50,42 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 		t.Fatalf("ToolManifest.MinConfidence = %v, want %v",
 			cfg.ToolManifest.MinConfidence, DefaultToolManifestMinConfidence)
 	}
+	if cfg.CapabilityRouting.Enabled {
+		t.Fatal("CapabilityRouting.Enabled should default to false")
+	}
+	if cfg.CapabilityRouting.MinConfidence != DefaultCapabilityRoutingMinConfidence {
+		t.Fatalf("CapabilityRouting.MinConfidence = %v, want %v",
+			cfg.CapabilityRouting.MinConfidence, DefaultCapabilityRoutingMinConfidence)
+	}
+}
+
+func TestLoadAgenticConfig_CapabilityRoutingOverride(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	v.Set("agentic.capability_routing.enabled", true)
+	v.Set("agentic.capability_routing.min_confidence", 0.5)
+	v.Set("agentic.capability_routing.mappings", map[string]interface{}{
+		"generate_image": "stability_api",
+		"browse_url":     "browser_api",
+	})
+	v.Set("agentic.capability_routing.tools", map[string]interface{}{
+		"generate_image": "generate",
+	})
+
+	cfg := loadAgenticConfig(v)
+	if !cfg.CapabilityRouting.Enabled {
+		t.Fatal("CapabilityRouting.Enabled = false, want true")
+	}
+	if cfg.CapabilityRouting.MinConfidence != 0.5 {
+		t.Fatalf("MinConfidence = %v, want 0.5", cfg.CapabilityRouting.MinConfidence)
+	}
+	if cfg.CapabilityRouting.Mappings["generate_image"] != "stability_api" {
+		t.Fatalf("mappings = %v", cfg.CapabilityRouting.Mappings)
+	}
+	if cfg.CapabilityRouting.Tools["generate_image"] != "generate" {
+		t.Fatalf("tools = %v", cfg.CapabilityRouting.Tools)
+	}
 }
 
 func TestLoadAgenticConfig_ToolManifestOverride(t *testing.T) {

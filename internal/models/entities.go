@@ -117,6 +117,9 @@ type AgentProfile struct {
 	// ToolManifestType forces a manifest category (e.g. "summarize", "code_gen").
 	// Empty = use the keyword classifier when tool manifest is enabled.
 	ToolManifestType string
+	// CapabilityRouteIntent forces an external capability intent (e.g. "generate_image").
+	// Empty = use the keyword classifier when capability routing is enabled.
+	CapabilityRouteIntent string
 	// AllowedTools, when non-empty, bypasses classifier and manifest; only listed
 	// tools are advertised to the model.
 	AllowedTools []string
