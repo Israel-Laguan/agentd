@@ -83,8 +83,9 @@ type PluginMounter interface {
 // Process handles task execution, supporting two modes:
 // - Legacy mode (default): single-shot JSON command execution via GenerateJSON
 // - Agentic mode: inner loop with tool calling and message accumulation (processAgentic)
-// Routing is determined by profile.AgenticMode. After model routing, unsupported
-// providers fall back to legacy mode inside processAgentic.
+// Model routing runs once per path: routeLegacyProfile in runLegacyTask for legacy,
+// applyModelRouting in processAgentic for agentic. Agentic fallback to legacy reuses
+// the agentic route (profileAlreadyRouted) so a second route cannot change provider.
 func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
 	project, profile, err := w.loadContext(ctx, task)
@@ -119,7 +120,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 				"task_id", task.ID,
 				"provider", profile.Provider,
 			)
-			w.runLegacyTask(ctx, task, *project, *profile)
+			w.runLegacyTask(ctx, task, *project, *profile, false)
 			return
 		}
 		if result, ok := w.processAgentic(ctx, task, *project, *profile); ok {
@@ -127,10 +128,13 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		}
 		return
 	}
-	w.runLegacyTask(ctx, task, *project, *profile)
+	w.runLegacyTask(ctx, task, *project, *profile, false)
 }
 
-func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
+func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, profileAlreadyRouted bool) {
+	if !profileAlreadyRouted {
+		profile = w.routeLegacyProfile(ctx, task, profile)
+	}
 	response, err := w.command(ctx, task, profile)
 	if err != nil {
 		w.handleGatewayError(ctx, task, err)

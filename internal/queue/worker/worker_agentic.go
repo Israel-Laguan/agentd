@@ -44,7 +44,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			"task_id", task.ID,
 			"provider", profile.Provider,
 		)
-		w.runLegacyTask(cancelCtx, task, project, profile)
+		w.runLegacyTask(cancelCtx, task, project, profile, true)
 		return LoopResult{}, false
 	}
 

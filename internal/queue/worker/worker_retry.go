@@ -106,6 +106,7 @@ func (w *Worker) breakdownCommand(ctx context.Context, task models.Task, profile
 		profile.SystemPrompt.Valid = true
 		profile.SystemPrompt.String = prompt
 	}
+	profile = w.routeLegacyProfile(ctx, task, profile)
 	return w.command(ctx, task, profile)
 }
 
