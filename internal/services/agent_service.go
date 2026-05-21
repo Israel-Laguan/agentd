@@ -119,6 +119,7 @@ func validateForCreate(p *models.AgentProfile) error {
 	p.Provider = strings.TrimSpace(p.Provider)
 	p.Model = strings.TrimSpace(p.Model)
 	p.Role = strings.TrimSpace(p.Role)
+	p.CapabilityRouteIntent = strings.TrimSpace(p.CapabilityRouteIntent)
 	if p.Name == "" || p.Provider == "" || p.Model == "" {
 		return errors.New("name, provider, and model are required")
 	}
