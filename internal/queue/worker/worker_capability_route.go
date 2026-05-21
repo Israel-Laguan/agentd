@@ -51,15 +51,15 @@ func (w *Worker) tryExternalCapabilityRoute(
 	project models.Project,
 	profile models.AgentProfile,
 	messages *[]gateway.PromptMessage,
-) (LoopResult, bool) {
+) (LoopResult, bool, error) {
 	_ = project
 	if w.capabilityRouter == nil {
-		return LoopResult{}, false
+		return LoopResult{}, false, nil
 	}
 
 	decision, ok := w.capabilityRouter.Route(task, profile)
 	if !ok {
-		return LoopResult{}, false
+		return LoopResult{}, false, nil
 	}
 
 	if w.capabilities == nil {
@@ -68,7 +68,7 @@ func (w *Worker) tryExternalCapabilityRoute(
 			"intent", decision.Intent,
 			"adapter", decision.Adapter,
 		)
-		return LoopResult{}, false
+		return LoopResult{}, false, nil
 	}
 
 	adapter, found := w.capabilities.GetAdapter(decision.Adapter)
@@ -78,20 +78,21 @@ func (w *Worker) tryExternalCapabilityRoute(
 			"intent", decision.Intent,
 			"adapter", decision.Adapter,
 		)
-		return LoopResult{}, false
+		return LoopResult{}, false, nil
 	}
 
 	out, err := w.capabilities.CallTool(ctx, decision.Adapter, decision.Tool, decision.Args)
 	if err != nil {
-		w.failHard(ctx, task, fmt.Errorf("capability routing: %s/%s: %w", decision.Adapter, decision.Tool, err))
-		return LoopResult{}, false
+		routeErr := fmt.Errorf("capability routing: %s/%s: %w", decision.Adapter, decision.Tool, err)
+		w.failHard(ctx, task, routeErr)
+		return LoopResult{}, false, routeErr
 	}
 
 	text, err := encodeCapabilityResult(out)
 	if err != nil {
 		w.failHard(ctx, task, err)
-		return LoopResult{}, false
+		return LoopResult{}, false, err
 	}
 
-	return w.commitCapabilityRouteResult(ctx, task, profile, messages, text), true
+	return w.commitCapabilityRouteResult(ctx, task, profile, messages, text), true, nil
 }

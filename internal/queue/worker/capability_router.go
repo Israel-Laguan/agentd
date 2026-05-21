@@ -102,9 +102,7 @@ func (r *CapabilityRouter) Route(task models.Task, profile models.AgentProfile) 
 }
 
 // AdaptTask builds default tool arguments from the task prompt.
-func (r *CapabilityRouter) AdaptTask(task models.Task, decision CapabilityRouteDecision) map[string]any {
-	_ = r
-	_ = decision
+func (r *CapabilityRouter) AdaptTask(task models.Task, _ CapabilityRouteDecision) map[string]any {
 	prompt := strings.TrimSpace(task.Title)
 	if desc := strings.TrimSpace(task.Description); desc != "" {
 		if prompt != "" {
