@@ -16,7 +16,14 @@ const (
 	DefaultFileContextEmbedModel   = "text-embedding-3-small"
 	DefaultPlanningMaxRedoPasses   = 3
 	DefaultPlanContextMaxChars     = 4000
+	DefaultTopicGuardSensitivity   = 0.5
 )
+
+// TopicGuardConfig controls topic drift detection in the agentic loop.
+type TopicGuardConfig struct {
+	Enabled     bool
+	Sensitivity float64 // 0–1; higher = more willing to declare drift
+}
 
 // AgenticPlanningConfig controls two-phase plan→execute and targeted section redo.
 type AgenticPlanningConfig struct {
@@ -50,6 +57,8 @@ type AgenticConfig struct {
 	FileContext FileContextConfig
 	// Planning configures plan→execute splitting and targeted redo.
 	Planning AgenticPlanningConfig
+	// TopicGuard configures session topic drift detection.
+	TopicGuard TopicGuardConfig
 }
 
 // FileContextConfig controls convert/cache/select pipeline for workspace files.
@@ -79,6 +88,8 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.planning.complexity_threshold", 0)
 	v.SetDefault("agentic.planning.max_redo_passes", DefaultPlanningMaxRedoPasses)
 	v.SetDefault("agentic.planning.plan_context_max_chars", DefaultPlanContextMaxChars)
+	v.SetDefault("agentic.topic_guard.enabled", true)
+	v.SetDefault("agentic.topic_guard.sensitivity", DefaultTopicGuardSensitivity)
 }
 
 func loadAgenticConfig(v *viper.Viper) AgenticConfig {
@@ -98,6 +109,24 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 		},
 		FileContext: loadFileContextConfig(v),
 		Planning:    loadAgenticPlanningConfig(v),
+		TopicGuard:  loadTopicGuardConfig(v),
+	}
+}
+
+func loadTopicGuardConfig(v *viper.Viper) TopicGuardConfig {
+	sensitivity := v.GetFloat64("agentic.topic_guard.sensitivity")
+	if sensitivity < 0 {
+		sensitivity = 0
+	}
+	if sensitivity > 1 {
+		sensitivity = 1
+	}
+	if sensitivity == 0 && !v.IsSet("agentic.topic_guard.sensitivity") {
+		sensitivity = DefaultTopicGuardSensitivity
+	}
+	return TopicGuardConfig{
+		Enabled:     v.GetBool("agentic.topic_guard.enabled"),
+		Sensitivity: sensitivity,
 	}
 }
 

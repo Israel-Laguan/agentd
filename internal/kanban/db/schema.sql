@@ -69,9 +69,11 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     role TEXT NOT NULL DEFAULT 'CODE_GEN',
     max_tokens INTEGER NOT NULL DEFAULT 0,
     agentic_mode INTEGER NOT NULL DEFAULT 0,
+    disable_topic_drift INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     CHECK (max_tokens >= 0),
-    CHECK (agentic_mode IN (0, 1))
+    CHECK (agentic_mode IN (0, 1)),
+    CHECK (disable_topic_drift IN (0, 1))
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS memories (

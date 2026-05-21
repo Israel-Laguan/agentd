@@ -111,8 +111,10 @@ type AgentProfile struct {
 	GatedTools []string
 	// Plugins lists plugin names activated for sessions using this
 	// profile (session-scoped activation).
-	Plugins   []string
-	UpdatedAt time.Time
+	Plugins []string
+	// DisableTopicDrift when true skips topic drift detection for this profile.
+	DisableTopicDrift bool
+	UpdatedAt         time.Time
 }
 
 // Memory stores lessons learned globally or per project.

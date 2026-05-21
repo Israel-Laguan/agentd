@@ -102,8 +102,8 @@ func TestMigrateToV4AllowsFailedRequiresHumanState(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "9" {
-		t.Fatalf("schema version = %q, want 9", version)
+	if version != "10" {
+		t.Fatalf("schema version = %q, want 10", version)
 	}
 
 	var completedAt sql.NullString

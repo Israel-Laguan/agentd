@@ -57,6 +57,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 	cont, result, report, _, err := w.processAgenticIteration(
 		context.Background(),
 		task,
+		models.Project{},
 		models.AgentProfile{},
 		&messages,
 		nil,
@@ -68,6 +69,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 		ctxBudget,
 		cm,
 		goalTracker,
+		nil,
 		NewHookChain(),
 		nil,
 		newToolFailureTracker(0),

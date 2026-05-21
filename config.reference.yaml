@@ -93,6 +93,11 @@ agentic:
   context_warning_threshold: 0.85
   # Consecutive errors on the same tool before LoopToolFailure. 0 = fatal-only.
   tool_failure_streak: 3
+  # Topic drift detection: opens a fresh in-task session when human input is unrelated.
+  topic_guard:
+    enabled: true
+    # 0–1 sensitivity; higher values declare drift more readily. Default 0.5.
+    sensitivity: 0.5
   tool_rate_limits:
     bash: 50
     default: 100

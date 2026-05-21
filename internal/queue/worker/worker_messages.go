@@ -140,3 +140,27 @@ func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Ta
 	intent := taskIntent(task)
 	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
+
+// assembleAgenticSystemPromptWithUserContent builds the layered system prompt and sets the
+// anchor user turn to userContent (used after topic drift resets).
+func (w *Worker) assembleAgenticSystemPromptWithUserContent(
+	ctx context.Context,
+	task models.Task,
+	project models.Project,
+	profile models.AgentProfile,
+	userContent string,
+) []gateway.PromptMessage {
+	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
+	return replaceFirstUserContent(messages, userContent)
+}
+
+func replaceFirstUserContent(messages []gateway.PromptMessage, content string) []gateway.PromptMessage {
+	out := append([]gateway.PromptMessage(nil), messages...)
+	for i := range out {
+		if out[i].Role == "user" {
+			out[i].Content = content
+			return out
+		}
+	}
+	return out
+}

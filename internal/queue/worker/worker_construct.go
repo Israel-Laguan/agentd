@@ -51,6 +51,7 @@ type WorkerOptions struct {
 	FileContext               config.FileContextConfig
 	FileContextCachePath      string
 	Planning                  config.AgenticPlanningConfig
+	TopicGuard                config.TopicGuardConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -166,8 +167,9 @@ func NewWorker(
 		tokenUsageHook:          opts.TokenUsageHook,
 		fileContextCfg:          opts.FileContext,
 		planningCfg:       opts.Planning,
-		checkpointStore:   NewMemoryCheckpointStore(),
+		checkpointStore: NewMemoryCheckpointStore(),
 	}
+	w.topicGuard = NewTopicGuard(gw, opts.TopicGuard)
 	w.messageEditor = NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
 	w.setupFileContext(opts)
 	w.setupOptionalLoaders(opts)

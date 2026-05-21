@@ -62,6 +62,7 @@ type Worker struct {
 	planningCfg               config.AgenticPlanningConfig
 	messageEditor             *MessageEditor
 	checkpointStore           CheckpointStore
+	topicGuard                *TopicGuard
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
