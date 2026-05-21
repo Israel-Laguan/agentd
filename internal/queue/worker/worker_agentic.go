@@ -47,7 +47,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	ctxBudgetGuard := NewContextBudgetGuard(contextBudget, w.contextWarningThreshold)
 	toolTracker := newToolFailureTracker(w.toolFailureStreak)
 
-	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, budgetGuard)
+	checkpointer := NewSessionCheckpointer(task.ID)
+	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, budgetGuard, checkpointer)
 
 	sessionMgr := NewSessionManager(task.ID, extractAnchorUserContent(messages), w.checkpointStore)
 
@@ -57,16 +58,22 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		iterationGuard: iterationGuard, budgetGuard: budgetGuard, deadlineGuard: deadlineGuard,
 		ctxBudgetGuard: ctxBudgetGuard, cm: cm, goalTracker: goalTracker,
 		taskHooks: taskHooks, taskCaps: taskCaps, toolTracker: toolTracker, workPlan: workPlan,
-		sessionMgr: sessionMgr,
+		sessionMgr: sessionMgr, checkpointer: checkpointer,
 	})
 }
 
 func (w *Worker) injectWorkPlanIfNeeded(
 	ctx context.Context, task models.Task, project models.Project,
 	messages []gateway.PromptMessage, budgetGuard *BudgetGuard,
+	checkpointer *SessionCheckpointer,
 ) ([]gateway.PromptMessage, *Plan) {
 	if !w.shouldPlanWithBudget(task, budgetGuard) {
 		return messages, nil
+	}
+	if checkpointer != nil {
+		if err := checkpointer.Checkpoint(prePlanCheckpointLabel, messages); err != nil {
+			slog.Warn("failed to checkpoint pre_plan", "task_id", task.ID, "error", err)
+		}
 	}
 	workPlan, planErr := w.generatePlan(ctx, task, project, budgetGuard)
 	if planErr != nil {
@@ -194,6 +201,7 @@ func (w *Worker) processAgenticIteration(
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
 	toolTracker *toolFailureTracker, workPlan *Plan, turnID string, turnIndex int,
 	respecAttempts *int,
+	checkpointer *SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
 ) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
 	if stop, guardErr := w.guardAgenticIteration(
 		ctx, task, project, profile, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
@@ -207,7 +215,11 @@ func (w *Worker) processAgenticIteration(
 		return false, LoopResult{}, false, rewindNone, guardErr
 	}
 
-	resp, stop, err := w.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex)
+	recoveryGen := 0
+	if sessionRecoveryGen != nil {
+		recoveryGen = *sessionRecoveryGen
+	}
+	resp, stop, err := w.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex, recoveryGen)
 	if stop != nil {
 		return false, *stop, true, rewindNone, nil
 	}
@@ -228,6 +240,7 @@ func (w *Worker) processAgenticIteration(
 		cont, res, rep, rewind, finErr := w.finishAgenticTurnNoTools(
 			ctx, task, profile, resp.Content, workPlan, goalTracker,
 			turnID, turnIndex, budgetGuard, ctxBudgetGuard, cm, messages, respecAttempts,
+			checkpointer, sessionRecoveryGen, sessionRecoveryUsed,
 		)
 		return cont, res, rep, rewind, finErr
 	}
@@ -244,8 +257,9 @@ func (w *Worker) generateAgenticTurn(
 	ctx context.Context, task models.Task, profile models.AgentProfile,
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
 	budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard, turnIndex int,
+	sessionRecoveryGen int,
 ) (gateway.AIResponse, *LoopResult, error) {
-	req := w.buildAgenticRequest(task, profile, *messages, tools)
+	req := w.buildAgenticRequest(task, profile, *messages, tools, sessionRecoveryGen)
 	resp, err := w.gateway.Generate(ctx, req)
 	if err != nil {
 		if budgetGuard.IsBudgetExceeded(err) {

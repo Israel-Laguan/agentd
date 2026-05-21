@@ -156,7 +156,7 @@ func TestBuildAgenticRequest_SkipTruncation(t *testing.T) {
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "t1"}, AgentID: "a1"}
 	profile := models.AgentProfile{Provider: "openai", Model: "gpt-4"}
 
-	req := w.buildAgenticRequest(task, profile, nil, nil)
+	req := w.buildAgenticRequest(task, profile, nil, nil, 0)
 	if !req.SkipTruncation {
 		t.Fatal("expected SkipTruncation=true on agentic AIRequest")
 	}

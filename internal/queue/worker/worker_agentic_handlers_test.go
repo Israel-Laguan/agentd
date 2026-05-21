@@ -76,6 +76,7 @@ func TestFinishAgenticTurnNoTools_RespecFailurePreservesMessages(t *testing.T) {
 		cm,
 		&messages,
 		&respecAttempts,
+		nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("finishAgenticTurnNoTools: %v", err)

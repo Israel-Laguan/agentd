@@ -3,11 +3,14 @@ package worker
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
 	"agentd/internal/gateway"
 )
+
+const prePlanCheckpointLabel = "pre_plan"
 
 // SessionCheckpoint captures a point-in-time copy of conversation history.
 type SessionCheckpoint struct {
@@ -91,4 +94,69 @@ func (s *memoryCheckpointStore) Get(_ context.Context, checkpointID string) (*Se
 	dup := *cp
 	dup.Messages = clonePromptMessages(cp.Messages)
 	return &dup, nil
+}
+
+// SessionCheckpointer stores labeled in-memory checkpoints for a single agentic session.
+type SessionCheckpointer struct {
+	sessionID string
+	labels    map[string][]gateway.PromptMessage
+	mu        sync.Mutex
+}
+
+// NewSessionCheckpointer returns a per-session labeled checkpoint store.
+func NewSessionCheckpointer(sessionID string) *SessionCheckpointer {
+	return &SessionCheckpointer{
+		sessionID: sessionID,
+		labels:    make(map[string][]gateway.PromptMessage),
+	}
+}
+
+// Checkpoint saves a deep copy of messages under label (overwrites prior label).
+func (c *SessionCheckpointer) Checkpoint(label string, messages []gateway.PromptMessage) error {
+	if c == nil {
+		return fmt.Errorf("checkpoint: checkpointer is nil")
+	}
+	if c.sessionID == "" {
+		return fmt.Errorf("checkpoint: sessionID required")
+	}
+	if label == "" {
+		return fmt.Errorf("checkpoint: label required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.labels[label] = clonePromptMessages(messages)
+	return nil
+}
+
+// BranchFrom restores messages from a labeled checkpoint; post-checkpoint turns are discarded.
+func (c *SessionCheckpointer) BranchFrom(label string, messages *[]gateway.PromptMessage) error {
+	if c == nil {
+		return fmt.Errorf("checkpoint: checkpointer is nil")
+	}
+	if messages == nil {
+		return fmt.Errorf("checkpoint: messages required")
+	}
+	c.mu.Lock()
+	saved, ok := c.labels[label]
+	c.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("checkpoint label %q not found for session %q", label, c.sessionID)
+	}
+	*messages = clonePromptMessages(saved)
+	return nil
+}
+
+// List returns sorted checkpoint labels for this session.
+func (c *SessionCheckpointer) List() []string {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.labels))
+	for label := range c.labels {
+		out = append(out, label)
+	}
+	sort.Strings(out)
+	return out
 }
