@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -302,5 +303,59 @@ func TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback(t *tes
 	}
 	if sb.execCount != 1 {
 		t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)
+	}
+}
+
+// TestProcessAgentic_ManifestFilterDoesNotShrinkRoutingEstimate verifies the full
+// Process → processAgentic path: model routing token estimates use the pre-filter
+// tool registry while gateway turn requests use manifest-filtered tools.
+func TestProcessAgentic_ManifestFilterDoesNotShrinkRoutingEstimate(t *testing.T) {
+	t.Parallel()
+
+	profile := models.AgentProfile{
+		ID:          "agent-1",
+		Provider:    "openai",
+		Model:       "gpt-4",
+		AgenticMode: true,
+	}
+	w, store, gw, _ := newRoutingTest(profile)
+	registry := capabilities.NewRegistry()
+	registry.Register("routing_bulk", fakeCapabilityCallAdapter{
+		name: "routing_bulk",
+		tools: []gateway.ToolDefinition{{
+			Name:        "routing_bulk",
+			Description: strings.Repeat("x", 600001),
+			Parameters:  &gateway.FunctionParameters{Type: "object"},
+		}},
+	})
+	w.modelRouter = NewModelRouter(testModelRoutingConfig())
+	w.toolManifest = NewToolManifest(config.ToolManifestConfig{
+		Enabled:       true,
+		MinConfidence: 0.35,
+	})
+	w.capabilities = registry
+
+	store.profile.ToolManifestType = TaskTypeSummarize
+	store.task.Description = testutil.AgenticTestTaskDescription()
+
+	w.Process(context.Background(), store.task)
+
+	var req gateway.AIRequest
+	var found bool
+	for _, r := range gw.requests {
+		if !r.JSONMode {
+			req = r
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected agentic turn request among %d gateway calls", len(gw.requests))
+	}
+	if req.Provider != "anthropic" || req.Model != "claude-opus" {
+		t.Fatalf("routed request = %s/%s, want anthropic/claude-opus (full tools exceed threshold)", req.Provider, req.Model)
+	}
+	if len(req.Tools) != 0 {
+		t.Fatalf("expected manifest-filtered zero tools in turn request, got %d: %v", len(req.Tools), toolNamesFromDefinitions(req.Tools))
 	}
 }

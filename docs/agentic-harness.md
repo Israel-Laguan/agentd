@@ -108,8 +108,9 @@ Agentic and legacy modes use the same hardened [`BashExecutor`](../internal/sand
 **Rules:**
 
 1. Agentic mode normally uses the inner tool loop only. If model routing selects a provider without tool round-tripping, [`processAgentic`](../internal/queue/worker/worker_agentic.go) falls back to `runLegacyTask` / `command()` and **preserves the provider and model selected by routing** (no second model routing pass).
-2. Each `bash` tool invocation is a separate sandbox execution (subject to hooks, timeouts, and scrubbing).
-3. Non-empty final assistant text without further `tool_calls` closes the task; it is stored as the task result payload, not executed as a shell command.
+2. When both model routing and the per-task tool manifest are enabled, routing token estimates use the **full** tool registry (`routingTools`); [`filterAgenticTools`](../internal/queue/worker/worker_tool_manifest.go) runs afterward and only affects tools sent in turn-loop gateway requests. This prevents manifest-reduced tool lists from understating context size and routing to a cheaper tier than `context_token_threshold` intends.
+3. Each `bash` tool invocation is a separate sandbox execution (subject to hooks, timeouts, and scrubbing).
+4. Non-empty final assistant text without further `tool_calls` closes the task; it is stored as the task result payload, not executed as a shell command.
 
 ## Conversation persistence across BLOCKED → READY
 
