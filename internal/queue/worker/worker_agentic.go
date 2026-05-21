@@ -18,6 +18,12 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	cancelCtx, cleanup := w.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
+	// Build agentic messages/tools before applyModelRouting so token estimates include
+	// the full system prompt and tool definitions. When routing selects a provider
+	// without tool round-tripping, this setup is discarded on legacy fallback
+	// (profileAlreadyRouted). mountScopedPlugins only registers into per-task
+	// HookChain/Registry instances (no worker-global side effects). Session start and
+	// pre-task elicitation run after the fallback check so legacy path is unaffected.
 	taskToolExecutor := w.newAgenticTaskToolExecutor(project, task)
 	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
 
