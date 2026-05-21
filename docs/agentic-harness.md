@@ -107,7 +107,7 @@ Agentic and legacy modes use the same hardened [`BashExecutor`](../internal/sand
 
 **Rules:**
 
-1. Agentic mode normally uses the inner tool loop only. If model routing selects a provider without tool round-tripping, [`processAgentic`](../internal/queue/worker/worker_agentic.go) falls back to `runLegacyTask` / `command()` and **reuses** that agentic route (no second model routing pass).
+1. Agentic mode normally uses the inner tool loop only. If model routing selects a provider without tool round-tripping, [`processAgentic`](../internal/queue/worker/worker_agentic.go) falls back to `runLegacyTask` / `command()` and **preserves the provider and model selected by routing** (no second model routing pass).
 2. Each `bash` tool invocation is a separate sandbox execution (subject to hooks, timeouts, and scrubbing).
 3. Non-empty final assistant text without further `tool_calls` closes the task; it is stored as the task result payload, not executed as a shell command.
 
