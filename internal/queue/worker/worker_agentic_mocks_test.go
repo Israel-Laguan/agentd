@@ -42,6 +42,24 @@ func (f fakeCapabilityCallAdapter) CallTool(_ context.Context, name string, args
 
 func (f fakeCapabilityCallAdapter) Close() error { return nil }
 
+type fakeCapabilityErrorAdapter struct {
+	name  string
+	tools []gateway.ToolDefinition
+	err   error
+}
+
+func (f fakeCapabilityErrorAdapter) Name() string { return f.name }
+
+func (f fakeCapabilityErrorAdapter) ListTools(context.Context) ([]gateway.ToolDefinition, error) {
+	return f.tools, nil
+}
+
+func (f fakeCapabilityErrorAdapter) CallTool(context.Context, string, map[string]any) (any, error) {
+	return nil, f.err
+}
+
+func (f fakeCapabilityErrorAdapter) Close() error { return nil }
+
 func containsTool(tools []gateway.ToolDefinition, name string) bool {
 	for _, tool := range tools {
 		if tool.Name == name {
