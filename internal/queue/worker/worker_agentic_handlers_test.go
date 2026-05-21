@@ -40,7 +40,6 @@ func (g *respecFailGateway) Embed(context.Context, gateway.EmbedRequest) (gatewa
 }
 
 func TestFinishAgenticTurnNoTools_RespecFailurePreservesMessages(t *testing.T) {
-	t.Parallel()
 	var logBuf bytes.Buffer
 	oldLogger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})))

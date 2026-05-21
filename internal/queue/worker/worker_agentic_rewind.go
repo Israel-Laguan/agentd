@@ -37,6 +37,11 @@ func (s *agenticRewindState) apply(rewindTo int) (stagnation bool) {
 	return s.streak > maxRewindStreak
 }
 
+func (s *agenticRewindState) reset() {
+	s.lastTarget = rewindNone
+	s.streak = 0
+}
+
 func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 	if in.toolTracker != nil {
 		in.toolTracker.reset()
@@ -114,6 +119,7 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			resetAgenticStateForRewind(in)
 			continue
 		}
+		rewind.reset()
 		turnIndex++
 	}
 }
