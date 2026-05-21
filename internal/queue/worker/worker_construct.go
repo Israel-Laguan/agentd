@@ -53,6 +53,7 @@ type WorkerOptions struct {
 	Planning                  config.AgenticPlanningConfig
 	TopicGuard                config.TopicGuardConfig
 	ModelRouting              config.ModelRoutingConfig
+	ToolManifest              config.ToolManifestConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -173,6 +174,7 @@ func NewWorker(
 	w.topicGuard = NewTopicGuard(gw, opts.TopicGuard)
 	w.messageEditor = NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
 	w.modelRouter = NewModelRouter(opts.ModelRouting)
+	w.toolManifest = NewToolManifest(opts.ToolManifest)
 	w.setupFileContext(opts)
 	w.setupOptionalLoaders(opts)
 	return w
