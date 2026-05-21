@@ -139,6 +139,7 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			resetAgenticStateForRewind(in)
 			if in.sessionRecoveryUsed && in.workPlan != nil && in.messages != nil {
 				*in.messages = w.injectPlan(*in.messages, in.workPlan)
+				in.sessionRecoveryUsed = false
 			}
 			continue
 		}
