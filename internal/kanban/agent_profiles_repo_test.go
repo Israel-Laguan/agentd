@@ -24,6 +24,7 @@ func TestAgentProfileLifecycle(t *testing.T) {
 	custom := models.AgentProfile{
 		ID: "researcher", Name: "Researcher", Provider: "ollama", Model: "llama3",
 		Temperature: 0.7, Role: "RESEARCH", MaxTokens: 2048, AgenticMode: true,
+		CapabilityRouteIntent: "generate_image",
 	}
 	if err := store.UpsertAgentProfile(ctx, custom); err != nil {
 		t.Fatalf("seed researcher: %v", err)
@@ -38,6 +39,9 @@ func TestAgentProfileLifecycle(t *testing.T) {
 	}
 	if !got.AgenticMode {
 		t.Fatalf("AgenticMode = false, want true")
+	}
+	if got.CapabilityRouteIntent != "generate_image" {
+		t.Fatalf("CapabilityRouteIntent = %q, want generate_image", got.CapabilityRouteIntent)
 	}
 
 	list, err := store.ListAgentProfiles(ctx)

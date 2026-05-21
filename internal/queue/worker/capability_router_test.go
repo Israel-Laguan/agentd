@@ -44,6 +44,22 @@ func TestIntentClassifier_BrowseURL_HTTPS(t *testing.T) {
 	}
 }
 
+func TestIntentClassifier_TieReturnsNoIntent(t *testing.T) {
+	t.Parallel()
+	c := NewIntentClassifier(0)
+	task := models.Task{
+		Title:       "latest url",
+		Description: "",
+	}
+	got := c.Classify(task)
+	if got.Intent != "" {
+		t.Fatalf("Intent = %q, want empty on tied scores", got.Intent)
+	}
+	if got.Scores[IntentRealTimeSearch] != 1 || got.Scores[IntentBrowseURL] != 1 {
+		t.Fatalf("Scores = %+v, want 1 hit each on real_time_search and browse_url", got.Scores)
+	}
+}
+
 func TestIntentClassifier_GenerateImage(t *testing.T) {
 	t.Parallel()
 	c := NewIntentClassifier(0.35)
