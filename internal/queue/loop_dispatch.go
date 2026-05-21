@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"agentd/internal/models"
+	qw "agentd/internal/queue/worker"
 )
 
 func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err error) {
@@ -44,7 +45,12 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 	for i, item := range dispatchable {
 		toGroup[i] = item.task
 	}
-	batches := d.worker.GroupClaimed(ctx, toGroup)
+	var batches []qw.TaskBatch
+	if d.worker == nil {
+		batches = qw.SingletonBatches(toGroup)
+	} else {
+		batches = d.worker.GroupClaimed(ctx, toGroup)
+	}
 
 	scheduled := 0
 	for _, batch := range batches {

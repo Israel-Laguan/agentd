@@ -36,7 +36,7 @@ func NewTaskBatcher(cfg config.BatchingConfig, w *Worker) *TaskBatcher {
 // Group partitions claimed tasks into batches. When batching is disabled, each task is its own batch.
 func (b *TaskBatcher) Group(ctx context.Context, claimed []models.Task) []TaskBatch {
 	if b == nil || !b.cfg.Enabled || len(claimed) == 0 {
-		return singletonBatches(claimed)
+		return SingletonBatches(claimed)
 	}
 
 	partitions := make(map[BatchKey][]models.Task)
@@ -104,7 +104,8 @@ func (b *TaskBatcher) singletonBatch(ctx context.Context, key BatchKey, task mod
 	return batch
 }
 
-func singletonBatches(tasks []models.Task) []TaskBatch {
+// SingletonBatches returns one batch per task (no LLM batching).
+func SingletonBatches(tasks []models.Task) []TaskBatch {
 	out := make([]TaskBatch, 0, len(tasks))
 	for _, task := range tasks {
 		out = append(out, TaskBatch{
@@ -181,7 +182,7 @@ func (w *Worker) requiresAgenticTools(
 // GroupClaimed is the dispatch entry point for batch grouping.
 func (w *Worker) GroupClaimed(ctx context.Context, tasks []models.Task) []TaskBatch {
 	if w.batcher == nil {
-		return singletonBatches(tasks)
+		return SingletonBatches(tasks)
 	}
 	return w.batcher.Group(ctx, tasks)
 }
