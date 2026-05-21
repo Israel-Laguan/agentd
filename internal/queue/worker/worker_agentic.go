@@ -18,20 +18,6 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	cancelCtx, cleanup := w.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
-	if err := w.runSessionStart(cancelCtx, task, project); err != nil {
-		w.failHard(cancelCtx, task, err)
-		return LoopResult{}, false
-	}
-
-	task, blocked, err := w.runPreTaskElicitation(cancelCtx, task, project)
-	if err != nil {
-		w.failHard(cancelCtx, task, err)
-		return LoopResult{}, false
-	}
-	if blocked {
-		return LoopResult{}, false
-	}
-
 	taskToolExecutor := w.newAgenticTaskToolExecutor(project, task)
 	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
 
@@ -45,6 +31,20 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 			"provider", profile.Provider,
 		)
 		w.runLegacyTask(cancelCtx, task, project, profile, true)
+		return LoopResult{}, false
+	}
+
+	if err := w.runSessionStart(cancelCtx, task, project); err != nil {
+		w.failHard(cancelCtx, task, err)
+		return LoopResult{}, false
+	}
+
+	task, blocked, err := w.runPreTaskElicitation(cancelCtx, task, project)
+	if err != nil {
+		w.failHard(cancelCtx, task, err)
+		return LoopResult{}, false
+	}
+	if blocked {
 		return LoopResult{}, false
 	}
 
