@@ -2,6 +2,7 @@ package worker
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 
 	"agentd/internal/config"
@@ -16,7 +17,26 @@ var (
 	reasoningSignals  = []string{"reason", "compare", "design", "architect", "analyse", "analyze", "analysis"}
 	creativeSignals   = []string{"write", "draft", "generate"}
 	mechanicalSignals = []string{"format", "summarize", "list", "rename", "grammar"}
+
+	keywordMatchers map[string]*regexp.Regexp
 )
+
+func init() {
+	all := append(append([]string{}, reasoningSignals...), creativeSignals...)
+	all = append(all, mechanicalSignals...)
+	keywordMatchers = make(map[string]*regexp.Regexp, len(all))
+	for _, kw := range all {
+		keywordMatchers[kw] = regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(kw) + `\b`)
+	}
+}
+
+func countKeyword(text, kw string) int {
+	re := keywordMatchers[kw]
+	if re == nil {
+		return 0
+	}
+	return len(re.FindAllStringIndex(text, -1))
+}
 
 // ComplexityScorer scores task text for model tier routing (0–10).
 type ComplexityScorer struct{}
@@ -26,13 +46,13 @@ func (ComplexityScorer) ScoreTask(task models.Task) int {
 	text := strings.ToLower(task.Title + " " + task.Description)
 	score := 0
 	for _, kw := range reasoningSignals {
-		score += 2 * strings.Count(text, kw)
+		score += 2 * countKeyword(text, kw)
 	}
 	for _, kw := range creativeSignals {
-		score += strings.Count(text, kw)
+		score += countKeyword(text, kw)
 	}
 	for _, kw := range mechanicalSignals {
-		score -= strings.Count(text, kw)
+		score -= countKeyword(text, kw)
 	}
 	if score < 0 {
 		return 0
@@ -76,10 +96,11 @@ func firstConfiguredTier(candidates ...config.ModelTierTarget) (config.ModelTier
 func totalToolChars(tools []gateway.ToolDefinition) int {
 	total := 0
 	for _, tool := range tools {
-		total += len(tool.Name) + len(tool.Description)
 		if b, err := json.Marshal(tool); err == nil {
 			total += len(b)
+			continue
 		}
+		total += len(tool.Name) + len(tool.Description)
 	}
 	return total
 }

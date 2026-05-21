@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"time"
 
@@ -111,8 +112,16 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.handlePhasePlanning(ctx, task, *project)
 		return
 	}
-	// AgenticMode selects processAgentic; routed provider capability is checked after model routing.
+	// AgenticMode selects processAgentic; post-routing capability is checked inside processAgentic.
 	if profile.AgenticMode {
+		if w.modelRouter == nil && !w.providerSupportsAgentic(*profile) {
+			slog.Warn("agentic mode requested but provider does not support tool round-tripping; falling back to legacy mode",
+				"task_id", task.ID,
+				"provider", profile.Provider,
+			)
+			w.runLegacyTask(ctx, task, *project, *profile)
+			return
+		}
 		if result, ok := w.processAgentic(ctx, task, *project, *profile); ok {
 			w.handleLoopResult(ctx, task, result)
 		}
