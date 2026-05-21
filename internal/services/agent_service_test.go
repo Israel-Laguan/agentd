@@ -146,6 +146,33 @@ func TestAgentServicePatchAgenticMode(t *testing.T) {
 	}
 }
 
+func TestAgentServiceCreateCapabilityRouteIntent(t *testing.T) {
+	store := testutil.NewFakeStore()
+	svc := services.NewAgentService(store, nil)
+
+	out, err := svc.Create(context.Background(), models.AgentProfile{
+		ID: "intent1", Name: "Agent", Provider: "openai", Model: "gpt-4",
+		CapabilityRouteIntent: "  generate_image  ",
+	})
+	if err != nil {
+		t.Fatalf("Create with intent: %v", err)
+	}
+	if out.CapabilityRouteIntent != "generate_image" {
+		t.Fatalf("CapabilityRouteIntent = %q, want generate_image", out.CapabilityRouteIntent)
+	}
+
+	out, err = svc.Create(context.Background(), models.AgentProfile{
+		ID: "intent2", Name: "Agent2", Provider: "openai", Model: "gpt-4",
+		CapabilityRouteIntent: "   ",
+	})
+	if err != nil {
+		t.Fatalf("Create with whitespace intent: %v", err)
+	}
+	if out.CapabilityRouteIntent != "" {
+		t.Fatalf("CapabilityRouteIntent = %q, want empty after whitespace-only", out.CapabilityRouteIntent)
+	}
+}
+
 func TestAgentServicePatchCapabilityRouteIntent(t *testing.T) {
 	store := testutil.NewFakeStore()
 	svc := services.NewAgentService(store, nil)
