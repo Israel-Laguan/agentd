@@ -73,7 +73,7 @@ func TestIterationGuard_ResetAllowFinal(t *testing.T) {
 	}
 }
 
-func TestIterationGuard_ResetRestoresBudget(t *testing.T) {
+func TestIterationGuard_ResetRestoresState(t *testing.T) {
 	g := NewIterationGuard(2)
 	g.AfterIteration(true)
 	g.AfterIteration(true)
