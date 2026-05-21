@@ -126,7 +126,7 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 // list in-place. The new implementation builds messages from scratch via
 // SystemPromptBuilder, separately prepends memory lessons, and appends a user
 // message. The legacy seedMessages path is still used by the non-agentic
-// command() path in worker_support.go.
+// command() path in worker_legacy.go.
 func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	systemPrompt := w.buildSystemPromptContent(task, project, profile)
 	userMsg := gateway.PromptMessage{
