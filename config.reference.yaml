@@ -171,6 +171,17 @@ agentic:
     mid: {provider: "", model: ""}
     high: {provider: "", model: ""}
 
+  # Task 44: per-task tool filtering (keyword classifier + manifest mappings).
+  # When disabled, all tools are advertised. Low-confidence classification falls back to all tools.
+  tool_manifest:
+    enabled: false
+    min_confidence: 0.35
+    mappings:
+      summarize: []
+      code_gen: [bash, read, write]
+      doc_qa: [read]
+      # full_agent: omit or use "*" → all tools
+
 # Sandbox command execution hardening.
 sandbox:
   inactivity_timeout: "60s"

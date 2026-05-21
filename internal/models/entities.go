@@ -114,6 +114,12 @@ type AgentProfile struct {
 	Plugins []string
 	// DisableTopicDrift when true skips topic drift detection for this profile.
 	DisableTopicDrift bool
+	// ToolManifestType forces a manifest category (e.g. "summarize", "code_gen").
+	// Empty = use the keyword classifier when tool manifest is enabled.
+	ToolManifestType string
+	// AllowedTools, when non-empty, bypasses classifier and manifest; only listed
+	// tools are advertised to the model.
+	AllowedTools []string
 	UpdatedAt         time.Time
 }
 
