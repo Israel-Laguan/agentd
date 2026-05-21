@@ -43,6 +43,43 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 		t.Fatalf("ModelRouting.ContextTokenThreshold = %d, want %d",
 			cfg.ModelRouting.ContextTokenThreshold, DefaultModelRoutingContextTokens)
 	}
+	if cfg.ToolManifest.Enabled {
+		t.Fatal("ToolManifest.Enabled should default to false")
+	}
+	if cfg.ToolManifest.MinConfidence != DefaultToolManifestMinConfidence {
+		t.Fatalf("ToolManifest.MinConfidence = %v, want %v",
+			cfg.ToolManifest.MinConfidence, DefaultToolManifestMinConfidence)
+	}
+}
+
+func TestLoadAgenticConfig_ToolManifestOverride(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	v.Set("agentic.tool_manifest.enabled", true)
+	v.Set("agentic.tool_manifest.min_confidence", 0.5)
+	v.Set("agentic.tool_manifest.mappings", map[string]interface{}{
+		"summarize": []interface{}{},
+		"code_gen":  []interface{}{"bash", "read", "write"},
+		"doc_qa":    []interface{}{"read"},
+	})
+
+	cfg := loadAgenticConfig(v)
+	if !cfg.ToolManifest.Enabled {
+		t.Fatal("ToolManifest.Enabled = false, want true")
+	}
+	if cfg.ToolManifest.MinConfidence != 0.5 {
+		t.Fatalf("MinConfidence = %v, want 0.5", cfg.ToolManifest.MinConfidence)
+	}
+	if len(cfg.ToolManifest.Mappings["summarize"]) != 0 {
+		t.Fatalf("summarize mapping = %v, want empty", cfg.ToolManifest.Mappings["summarize"])
+	}
+	if len(cfg.ToolManifest.Mappings["code_gen"]) != 3 {
+		t.Fatalf("code_gen mapping = %v, want 3 tools", cfg.ToolManifest.Mappings["code_gen"])
+	}
+	if cfg.ToolManifest.Mappings["doc_qa"][0] != "read" {
+		t.Fatalf("doc_qa mapping = %v, want [read]", cfg.ToolManifest.Mappings["doc_qa"])
+	}
 }
 
 func TestLoadAgenticConfig_ModelRoutingOverride(t *testing.T) {
