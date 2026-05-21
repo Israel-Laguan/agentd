@@ -28,8 +28,9 @@ type agentResponse struct {
 	SystemPrompt string  `json:"system_prompt,omitempty"`
 	Role         string  `json:"role"`
 	MaxTokens    int     `json:"max_tokens"`
-	AgenticMode  bool    `json:"agentic_mode"`
-	UpdatedAt    string  `json:"updated_at"`
+	AgenticMode            bool    `json:"agentic_mode"`
+	CapabilityRouteIntent  string  `json:"capability_route_intent,omitempty"`
+	UpdatedAt              string  `json:"updated_at"`
 }
 
 type agentCreateRequest struct {
@@ -41,7 +42,8 @@ type agentCreateRequest struct {
 	SystemPrompt string  `json:"system_prompt,omitempty"`
 	Role         string  `json:"role,omitempty"`
 	MaxTokens    int     `json:"max_tokens,omitempty"`
-	AgenticMode  bool    `json:"agentic_mode,omitempty"`
+	AgenticMode           bool   `json:"agentic_mode,omitempty"`
+	CapabilityRouteIntent string `json:"capability_route_intent,omitempty"`
 }
 
 type agentPatchRequest struct {
@@ -52,7 +54,8 @@ type agentPatchRequest struct {
 	SystemPrompt *string  `json:"system_prompt,omitempty"`
 	Role         *string  `json:"role,omitempty"`
 	MaxTokens    *int     `json:"max_tokens,omitempty"`
-	AgenticMode  *bool    `json:"agentic_mode,omitempty"`
+	AgenticMode           *bool   `json:"agentic_mode,omitempty"`
+	CapabilityRouteIntent *string `json:"capability_route_intent,omitempty"`
 }
 
 // List handles GET /api/v1/agents.
@@ -93,7 +96,7 @@ func (h AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	profile := models.AgentProfile{
 		ID: id, Name: req.Name, Provider: req.Provider, Model: req.Model,
 		Temperature: req.Temperature, Role: req.Role, MaxTokens: req.MaxTokens,
-		AgenticMode: req.AgenticMode,
+		AgenticMode: req.AgenticMode, CapabilityRouteIntent: strings.TrimSpace(req.CapabilityRouteIntent),
 	}
 	if req.SystemPrompt != "" {
 		profile.SystemPrompt.Valid = true
@@ -118,6 +121,7 @@ func (h AgentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		Name: req.Name, Provider: req.Provider, Model: req.Model,
 		Temperature: req.Temperature, SystemPrompt: req.SystemPrompt,
 		Role: req.Role, MaxTokens: req.MaxTokens, AgenticMode: req.AgenticMode,
+		CapabilityRouteIntent: req.CapabilityRouteIntent,
 	}
 	updated, err := h.Service.Patch(r.Context(), r.PathValue("id"), patch)
 	if err != nil {
@@ -140,7 +144,7 @@ func toAgentResponse(p models.AgentProfile) agentResponse {
 	out := agentResponse{
 		ID: p.ID, Name: p.Name, Provider: p.Provider, Model: p.Model,
 		Temperature: p.Temperature, Role: p.Role, MaxTokens: p.MaxTokens,
-		AgenticMode: p.AgenticMode,
+		AgenticMode: p.AgenticMode, CapabilityRouteIntent: p.CapabilityRouteIntent,
 		UpdatedAt: p.UpdatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
 	}
 	if p.SystemPrompt.Valid {

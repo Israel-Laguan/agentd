@@ -78,7 +78,7 @@ func (c *IntentClassifier) Classify(task models.Task) IntentClassification {
 		}
 	}
 
-	if topScore == 0 || confidence < c.minConfidence {
+	if topScore == 0 || topScore == secondScore || confidence < c.minConfidence {
 		return IntentClassification{Confidence: confidence, Scores: scores}
 	}
 	return IntentClassification{

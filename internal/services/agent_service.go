@@ -39,7 +39,8 @@ type AgentPatch struct {
 	SystemPrompt *string
 	Role         *string
 	MaxTokens    *int
-	AgenticMode  *bool
+	AgenticMode           *bool
+	CapabilityRouteIntent *string
 }
 
 // List returns all known agent profiles.
@@ -155,5 +156,8 @@ func applyPatch(profile *models.AgentProfile, patch AgentPatch) {
 	}
 	if patch.AgenticMode != nil {
 		profile.AgenticMode = *patch.AgenticMode
+	}
+	if patch.CapabilityRouteIntent != nil {
+		profile.CapabilityRouteIntent = strings.TrimSpace(*patch.CapabilityRouteIntent)
 	}
 }

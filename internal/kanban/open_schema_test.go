@@ -20,8 +20,8 @@ func TestOpenBootstrapsCurrentSchemaVersion(t *testing.T) {
 	if err := db.QueryRow(`SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "10" {
-		t.Fatalf("schema version = %q, want 10", version)
+	if version != "11" {
+		t.Fatalf("schema version = %q, want 11", version)
 	}
 
 	var successCriteria string

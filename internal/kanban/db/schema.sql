@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     max_tokens INTEGER NOT NULL DEFAULT 0,
     agentic_mode INTEGER NOT NULL DEFAULT 0,
     disable_topic_drift INTEGER NOT NULL DEFAULT 0,
+    capability_route_intent TEXT,
     updated_at TEXT NOT NULL,
     CHECK (max_tokens >= 0),
     CHECK (agentic_mode IN (0, 1)),
