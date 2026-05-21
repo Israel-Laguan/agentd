@@ -231,7 +231,7 @@ func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, act
 func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draftOutput string) {
 	if fresh, err := w.store.GetTask(ctx, task.ID); err != nil {
 		slog.Warn("failed to refresh task version for review handoff", "task_id", task.ID, "error", err)
-	} else {
+	} else if fresh != nil {
 		task = *fresh
 	}
 	if err := persistDraftReviewComment(ctx, w.store, task.ID, draftOutput); err != nil {

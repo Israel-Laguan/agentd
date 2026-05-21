@@ -138,7 +138,7 @@ func (m *mockCommitStore) GetTask(ctx context.Context, id string) (*models.Task,
 		t := *m.task
 		return &t, nil
 	}
-	return nil, nil
+	return nil, models.ErrTaskNotFound
 }
 
 func (m *mockCommitStore) Close() error {

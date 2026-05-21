@@ -32,6 +32,9 @@ func (w *Worker) reblockTaskForPendingHITL(ctx context.Context, task models.Task
 		if getErr != nil {
 			return task, fmt.Errorf("refresh task for re-block: %w", getErr)
 		}
+		if fresh == nil {
+			return task, fmt.Errorf("refresh task for re-block: %w", models.ErrTaskNotFound)
+		}
 		if fresh.State == models.TaskStateBlocked {
 			return *fresh, nil
 		}
