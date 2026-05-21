@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	currentSchemaVersion = 10
+	currentSchemaVersion = 11
 	schemaVersionKey     = "schema_version"
 )
 
@@ -35,6 +35,7 @@ func Run(ctx context.Context, db *sql.DB) error {
 		{8, migrateToV8},
 		{9, migrateToV9},
 		{10, migrateToV10},
+		{11, migrateToV11},
 	}
 	for _, migration := range migrations {
 		if err := applyMigration(ctx, db, version, migration.version, migration.run); err != nil {

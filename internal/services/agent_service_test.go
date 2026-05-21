@@ -146,6 +146,37 @@ func TestAgentServicePatchAgenticMode(t *testing.T) {
 	}
 }
 
+func TestAgentServicePatchCapabilityRouteIntent(t *testing.T) {
+	store := testutil.NewFakeStore()
+	svc := services.NewAgentService(store, nil)
+
+	intent := "generate_image"
+	_, err := svc.Patch(context.Background(), "default", services.AgentPatch{CapabilityRouteIntent: &intent})
+	if err != nil {
+		t.Fatalf("Patch set intent: %v", err)
+	}
+	got, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile: %v", err)
+	}
+	if got.CapabilityRouteIntent != "generate_image" {
+		t.Fatalf("CapabilityRouteIntent = %q, want generate_image", got.CapabilityRouteIntent)
+	}
+
+	clear := ""
+	_, err = svc.Patch(context.Background(), "default", services.AgentPatch{CapabilityRouteIntent: &clear})
+	if err != nil {
+		t.Fatalf("Patch clear intent: %v", err)
+	}
+	got, err = store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile after clear: %v", err)
+	}
+	if got.CapabilityRouteIntent != "" {
+		t.Fatalf("CapabilityRouteIntent = %q, want empty after clear", got.CapabilityRouteIntent)
+	}
+}
+
 func TestAgentServiceDeleteProtectedAndBus(t *testing.T) {
 	store := testutil.NewFakeStore()
 	bus := &recordingAgentBus{}
