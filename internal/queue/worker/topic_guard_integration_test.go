@@ -10,11 +10,55 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
 
 type driftTrackingGateway struct {
 	topicDriftGateway
+}
+
+// driftThenSequenceGateway returns YES for topic-guard drift checks and otherwise
+// delegates to a sequenceGateway for agentic turn generation.
+type driftThenSequenceGateway struct {
+	seq        *sequenceGateway
+	driftCalls int
+}
+
+func isTopicGuardRequest(req gateway.AIRequest) bool {
+	if req.Role == gateway.RoleMemory {
+		return true
+	}
+	for _, m := range req.Messages {
+		if m.Role == "system" && strings.Contains(m.Content, "classify whether two messages") {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *driftThenSequenceGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	if isTopicGuardRequest(req) {
+		g.driftCalls++
+		return gateway.AIResponse{Content: "YES"}, nil
+	}
+	return g.seq.Generate(ctx, req)
+}
+
+func (g *driftThenSequenceGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
+	return nil, nil
+}
+
+func (g *driftThenSequenceGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
+	return nil, nil
+}
+
+func (g *driftThenSequenceGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
+	return nil, nil
+}
+
+func (g *driftThenSequenceGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
+	return gateway.EmbedResponse{}, nil
 }
 
 func TestGuardTopicDrift_SkipsFirstTurn(t *testing.T) {
@@ -98,16 +142,97 @@ func TestGuardTopicDrift_DriftBeforeCompression(t *testing.T) {
 
 func TestRunAgenticTurnLoop_TopicDriftErrWithRewindContinues(t *testing.T) {
 	t.Parallel()
-	err := errTopicDriftReset
-	rewindTo := rewindToFirstTurn
-	continues := false
-	if err != nil {
-		if errors.Is(err, errTopicDriftReset) && rewindTo >= 0 {
-			continues = true
+	now := time.Now().UTC()
+	committed := ""
+	task := models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-1", UpdatedAt: now},
+		ProjectID:  "project-1",
+		AgentID:    "agent-1",
+		Title:      "CSS styling",
+	}
+	store := &mockCommitStore{
+		text: &committed,
+		task: &task,
+		comments: []models.Comment{{
+			BaseEntity: models.BaseEntity{UpdatedAt: now},
+			TaskID:     "task-1", Author: models.CommentAuthorUser, Body: "database migrations",
+		}},
+	}
+
+	seq := &sequenceGateway{responses: []gateway.AIResponse{
+		{
+			Content: "running a command",
+			ToolCalls: []gateway.ToolCall{{
+				ID: "call_1", Type: "function",
+				Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command": "echo ok"}`},
+			}},
+		},
+		{Content: "task completed after topic drift rewind"},
+	}}
+	gw := &driftThenSequenceGateway{seq: seq}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"echo ok": {Success: true, ExitCode: 0, Stdout: "ok\n"},
+	}}
+	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{
+		TopicGuard: config.TopicGuardConfig{Enabled: true},
+	})
+
+	project := models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: t.TempDir()}
+	profile := models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
+
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "CSS styling"},
+		{Role: "assistant", Content: "styled"},
+	}
+	sessionMgr := NewSessionManager(task.ID, "CSS styling", w.checkpointStore)
+	cm, goalTracker := w.newAgenticContextManager(task)
+	contextBudget := cm.cfg.AnchorBudget + cm.cfg.WorkingBudget + cm.cfg.CompressedBudget
+	ctxBudgetGuard := NewContextBudgetGuard(contextBudget, w.contextWarningThreshold)
+	taskToolExecutor := w.newAgenticTaskToolExecutor(project, task)
+	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)
+	tools, toolToAdapter := w.agenticToolsWithExtras(context.Background(), taskToolExecutor, taskCaps)
+
+	result, reported := w.runAgenticTurnLoop(agenticTurnLoopInput{
+		ctx:              context.Background(),
+		task:             task,
+		project:          project,
+		profile:          profile,
+		messages:         &messages,
+		tools:            tools,
+		toolToAdapter:    toolToAdapter,
+		taskToolExecutor: taskToolExecutor,
+		iterationGuard:   NewIterationGuard(10),
+		budgetGuard:      NewBudgetGuard(nil, task.ID),
+		deadlineGuard:    NewDeadlineGuard(context.Background()),
+		ctxBudgetGuard:   ctxBudgetGuard,
+		cm:               cm,
+		goalTracker:      goalTracker,
+		taskHooks:        taskHooks,
+		taskCaps:         taskCaps,
+		toolTracker:      newToolFailureTracker(0),
+		sessionMgr:       sessionMgr,
+	})
+
+	if !reported {
+		t.Fatal("expected loop to report a result after continuing past topic drift")
+	}
+	if result.Status != LoopSuccessfulCompletion {
+		t.Fatalf("result status = %v, want successful completion", result.Status)
+	}
+	if gw.driftCalls < 1 {
+		t.Fatal("expected topic drift guard to call gateway")
+	}
+	if seq.callCount < 2 {
+		t.Fatalf("expected at least 2 agentic gateway calls after drift rewind, got %d", seq.callCount)
+	}
+	for _, m := range messages {
+		if m.Role == "assistant" && m.Content == "styled" {
+			t.Fatal("assistant history from before drift should be cleared after rewind")
 		}
 	}
-	if !continues {
-		t.Fatal("topic drift error with rewind should continue the turn loop, not abort")
+	if committed == "" {
+		t.Fatal("expected committed text after loop completion")
 	}
 }
 
