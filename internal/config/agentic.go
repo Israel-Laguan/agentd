@@ -18,7 +18,6 @@ const (
 	DefaultPlanContextMaxChars     = 4000
 	DefaultTopicGuardSensitivity     = 0.5
 	DefaultModelRoutingContextTokens = 150000
-	DefaultToolManifestMinConfidence = 0.35
 )
 
 // TopicGuardConfig controls topic drift detection in the agentic loop.
@@ -31,15 +30,6 @@ type TopicGuardConfig struct {
 type ModelTierTarget struct {
 	Provider string
 	Model    string
-}
-
-// ToolManifestConfig controls per-task tool list filtering for agentic runs.
-type ToolManifestConfig struct {
-	Enabled       bool
-	MinConfidence float64
-	// Mappings maps task type names to tool names advertised to the model.
-	// Empty slice means no tools; omitted full_agent or "*" means all tools.
-	Mappings map[string][]string
 }
 
 // ModelRoutingConfig controls keyword-based complexity routing to model tiers.
@@ -122,8 +112,7 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.topic_guard.sensitivity", DefaultTopicGuardSensitivity)
 	v.SetDefault("agentic.model_routing.enabled", false)
 	v.SetDefault("agentic.model_routing.context_token_threshold", DefaultModelRoutingContextTokens)
-	v.SetDefault("agentic.tool_manifest.enabled", false)
-	v.SetDefault("agentic.tool_manifest.min_confidence", DefaultToolManifestMinConfidence)
+	setToolManifestDefaults(v)
 }
 
 func loadAgenticConfig(v *viper.Viper) AgenticConfig {
@@ -146,68 +135,6 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 		TopicGuard:     loadTopicGuardConfig(v),
 		ModelRouting:   loadModelRoutingConfig(v),
 		ToolManifest:   loadToolManifestConfig(v),
-	}
-}
-
-func loadToolManifestConfig(v *viper.Viper) ToolManifestConfig {
-	minConf := v.GetFloat64("agentic.tool_manifest.min_confidence")
-	if minConf < 0 {
-		minConf = 0
-	}
-	if minConf > 1 {
-		minConf = 1
-	}
-	if minConf == 0 && !v.IsSet("agentic.tool_manifest.min_confidence") {
-		minConf = DefaultToolManifestMinConfidence
-	}
-	return ToolManifestConfig{
-		Enabled:       v.GetBool("agentic.tool_manifest.enabled"),
-		MinConfidence: minConf,
-		Mappings:      loadToolManifestMappings(v),
-	}
-}
-
-func loadToolManifestMappings(v *viper.Viper) map[string][]string {
-	const key = "agentic.tool_manifest.mappings"
-	if !v.IsSet(key) {
-		return nil
-	}
-	raw := v.Get(key)
-	if raw == nil {
-		return nil
-	}
-	switch m := raw.(type) {
-	case map[string]interface{}:
-		out := make(map[string][]string, len(m))
-		for k, val := range m {
-			out[k] = interfaceToStringSlice(val)
-		}
-		return out
-	case map[string][]string:
-		cp := make(map[string][]string, len(m))
-		for k, val := range m {
-			cp[k] = append([]string(nil), val...)
-		}
-		return cp
-	default:
-		return nil
-	}
-}
-
-func interfaceToStringSlice(v interface{}) []string {
-	switch s := v.(type) {
-	case []string:
-		return append([]string(nil), s...)
-	case []interface{}:
-		out := make([]string, 0, len(s))
-		for _, item := range s {
-			if str, ok := item.(string); ok {
-				out = append(out, str)
-			}
-		}
-		return out
-	default:
-		return nil
 	}
 }
 

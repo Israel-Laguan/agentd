@@ -110,3 +110,27 @@ func (w *Worker) newAgenticContextManager(task models.Task) (*ContextManager, *G
 	}
 	return cm, goalTracker
 }
+
+type agenticLoopGuards struct {
+	iteration *IterationGuard
+	budget    *BudgetGuard
+	deadline  *DeadlineGuard
+	ctxBudget *ContextBudgetGuard
+	cm        *ContextManager
+	goals     *GoalTracker
+	toolFails *toolFailureTracker
+}
+
+func (w *Worker) newAgenticLoopGuards(cancelCtx context.Context, task models.Task) agenticLoopGuards {
+	cm, goalTracker := w.newAgenticContextManager(task)
+	contextBudget := cm.cfg.AnchorBudget + cm.cfg.WorkingBudget + cm.cfg.CompressedBudget
+	return agenticLoopGuards{
+		iteration: NewIterationGuard(w.maxToolIterations),
+		budget:    NewBudgetGuard(w.budgetTracker, task.ID),
+		deadline:  NewDeadlineGuard(cancelCtx),
+		ctxBudget: NewContextBudgetGuard(contextBudget, w.contextWarningThreshold),
+		cm:        cm,
+		goals:     goalTracker,
+		toolFails: newToolFailureTracker(w.toolFailureStreak),
+	}
+}
