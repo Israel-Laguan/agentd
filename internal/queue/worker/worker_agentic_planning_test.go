@@ -362,6 +362,41 @@ func TestAgenticPlanning_RedoCapAtThreePasses(t *testing.T) {
 	}
 }
 
+func assertPrePlanRestoreOutcome(t *testing.T, gw *planningSequenceGateway, store *mockAgenticStore, wantModel string) {
+	t.Helper()
+	var postRestoreModel string
+	var repairAfterRestore int
+	var sawPostRestore bool
+	for _, req := range gw.requests {
+		if len(req.Messages) == 0 || req.JSONMode {
+			continue
+		}
+		last := req.Messages[len(req.Messages)-1].Content
+		if strings.Contains(last, "Repair ONLY step") {
+			if sawPostRestore {
+				repairAfterRestore++
+			}
+			continue
+		}
+		if strings.HasPrefix(last, "Revise the user task prompt") {
+			continue
+		}
+		if req.Model == wantModel {
+			postRestoreModel = req.Model
+			sawPostRestore = true
+		}
+	}
+	if postRestoreModel != wantModel {
+		t.Fatalf("post-restore agentic model = %q, want %s", postRestoreModel, wantModel)
+	}
+	if repairAfterRestore > 0 {
+		t.Fatalf("unexpected %d repair calls after session restore", repairAfterRestore)
+	}
+	if store.committedResult == nil || !strings.Contains(store.committedResult.Payload, "recovered") {
+		t.Fatalf("committed payload = %v, want recovered output", store.committedResult)
+	}
+}
+
 func TestAgenticPlanning_PrePlanRestoreAfterRedoExhausted(t *testing.T) {
 	t.Parallel()
 	gw := &planningSequenceGateway{
@@ -396,24 +431,5 @@ func TestAgenticPlanning_PrePlanRestoreAfterRedoExhausted(t *testing.T) {
 		Tuner:    tuner,
 	})
 	w.Process(context.Background(), task)
-
-	var postRestoreModel string
-	for _, req := range gw.requests {
-		if len(req.Messages) == 0 || req.JSONMode {
-			continue
-		}
-		last := req.Messages[len(req.Messages)-1].Content
-		if strings.Contains(last, "Repair ONLY step") || strings.HasPrefix(last, "Revise the user task prompt") {
-			continue
-		}
-		if req.Model == "gpt-4o" {
-			postRestoreModel = req.Model
-		}
-	}
-	if postRestoreModel != "gpt-4o" {
-		t.Fatalf("post-restore agentic model = %q, want gpt-4o", postRestoreModel)
-	}
-	if store.committedResult == nil || !strings.Contains(store.committedResult.Payload, "recovered") {
-		t.Fatalf("committed payload = %v, want recovered output", store.committedResult)
-	}
+	assertPrePlanRestoreOutcome(t, gw, store, "gpt-4o")
 }

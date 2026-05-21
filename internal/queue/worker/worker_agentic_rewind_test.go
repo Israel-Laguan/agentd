@@ -1,46 +1,24 @@
 package worker
 
-import "testing"
+import (
+	"testing"
 
-func TestAgenticRewindState_Stagnation(t *testing.T) {
-	t.Parallel()
-	s := &agenticRewindState{}
-	for i := 0; i < maxRewindStreak; i++ {
-		if s.apply(rewindToFirstTurn) {
-			t.Fatalf("stagnation on apply %d, want only after streak > %d", i+1, maxRewindStreak)
-		}
-	}
-	if !s.apply(rewindToFirstTurn) {
-		t.Fatalf("expected stagnation after %d rewinds to same target", maxRewindStreak+1)
-	}
-}
+	"agentd/internal/models"
+)
 
-func TestAgenticRewindState_DifferentTargetResetsStreak(t *testing.T) {
+func TestResetAgenticStateForTopicDrift_ReplacesContextManager(t *testing.T) {
 	t.Parallel()
-	s := &agenticRewindState{}
-	s.apply(rewindToFirstTurn)
-	s.apply(rewindToFirstTurn)
-	if s.apply(1) {
-		t.Fatal("different rewind target should not stagnate on first apply")
+	w := NewWorker(nil, nil, nil, nil, nil, WorkerOptions{})
+	oldCM := &ContextManager{taskID: "task-1", agentID: "agent-1"}
+	in := agenticTurnLoopInput{
+		task: models.Task{BaseEntity: models.BaseEntity{ID: "task-1"}, AgentID: "agent-1"},
+		cm:   oldCM,
 	}
-	if s.streak != 1 {
-		t.Fatalf("streak = %d, want 1 after target change", s.streak)
+	resetAgenticStateForTopicDrift(&in, w)
+	if in.cm == nil {
+		t.Fatal("expected non-nil context manager after topic drift reset")
 	}
-}
-
-func TestAgenticRewindState_ForwardProgressResetsStreak(t *testing.T) {
-	t.Parallel()
-	s := &agenticRewindState{}
-	s.apply(rewindToFirstTurn)
-	s.apply(rewindToFirstTurn)
-	if s.streak != 2 {
-		t.Fatalf("streak = %d, want 2 before forward progress reset", s.streak)
-	}
-	s.reset()
-	if s.apply(rewindToFirstTurn) {
-		t.Fatal("forward progress reset should clear streak; same target after reset must not stagnate")
-	}
-	if s.streak != 1 {
-		t.Fatalf("streak = %d, want 1 after reset and re-apply", s.streak)
+	if in.cm == oldCM {
+		t.Fatal("expected fresh context manager after topic drift reset")
 	}
 }

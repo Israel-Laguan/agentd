@@ -256,7 +256,8 @@ func TestRepairLoop_ExhaustedAfterThreeNoProgressPasses(t *testing.T) {
 		gateway: gw,
 		planningCfg: config.AgenticPlanningConfig{
 			ComplexityThreshold: 1,
-			MaxRedoPasses:       0,
+			// MaxRedoPasses 0 disables per-step redo so only consecutiveNoProgress > 2 triggers exhaustion.
+			MaxRedoPasses: 0,
 		},
 	}
 	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
