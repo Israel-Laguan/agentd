@@ -16,7 +16,7 @@ const (
 	DefaultFileContextEmbedModel   = "text-embedding-3-small"
 	DefaultPlanningMaxRedoPasses   = 3
 	DefaultPlanContextMaxChars     = 4000
-	DefaultTopicGuardSensitivity        = 0.5
+	DefaultTopicGuardSensitivity     = 0.5
 	DefaultModelRoutingContextTokens = 150000
 )
 

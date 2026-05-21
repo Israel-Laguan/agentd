@@ -37,8 +37,16 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
 	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
-	profile = w.applyModelRouting(task, profile, messages)
 	tools, toolToAdapter := w.agenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
+	profile = w.applyModelRouting(task, profile, messages, tools)
+	if !w.providerSupportsAgentic(profile) {
+		slog.Warn("agentic mode requested but routed provider does not support tool round-tripping; falling back to legacy mode",
+			"task_id", task.ID,
+			"provider", profile.Provider,
+		)
+		w.runLegacyTask(cancelCtx, task, project, profile)
+		return LoopResult{}, false
+	}
 
 	iterationGuard := NewIterationGuard(w.maxToolIterations)
 	budgetGuard := NewBudgetGuard(w.budgetTracker, task.ID)

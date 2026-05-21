@@ -228,7 +228,7 @@ func (s *workerScenario) warningLogged(context.Context) error {
 	s.logHandler.mu.Lock()
 	defer s.logHandler.mu.Unlock()
 	for _, r := range s.logHandler.records {
-		if r.Level == slog.LevelWarn && strings.Contains(r.Message, "agentic mode requested but provider does not support") {
+		if r.Level == slog.LevelWarn && strings.Contains(r.Message, "does not support tool round-tripping") {
 			return nil
 		}
 	}
