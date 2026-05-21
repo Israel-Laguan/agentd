@@ -127,4 +127,9 @@ func TestLegacyPath_NotAffectedByAgenticConfig(t *testing.T) {
 	if len(req.Tools) != 0 {
 		t.Error("legacy path should not have tools even with agentic config")
 	}
+	for _, msg := range req.Messages {
+		if strings.Contains(msg.Content, "【") || strings.Contains(msg.Content, "collapsed") {
+			t.Error("legacy path should not contain truncation markers even with agentic config")
+		}
+	}
 }
