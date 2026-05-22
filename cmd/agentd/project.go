@@ -3,12 +3,15 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"agentd/internal/config"
 	"agentd/internal/kanban"
 	"agentd/internal/models"
+	"agentd/internal/queue/safety"
 )
 
 type projectOptions struct {
@@ -64,10 +67,34 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 	if err != nil {
 		return config.Config{}, nil, runtimeDeps{}, nil, err
 	}
+
+	slog.Debug("ensuring runtime directories", "home", cfg.HomeDir)
 	if err := config.EnsureDirs(cfg); err != nil {
 		return config.Config{}, nil, runtimeDeps{}, nil, err
 	}
 
+	// One-shot disk space preflight (warn only, mirrors periodic watchdog policy).
+	if pct, statErr := safety.DiskFreePercent(cfg.HomeDir); statErr == nil {
+		slog.Debug("disk space check", "path", cfg.HomeDir, "free_pct", fmt.Sprintf("%.1f%%", pct))
+		if pct < 10.0 {
+			slog.Warn("low disk space at startup", "path", cfg.HomeDir, "free_pct", fmt.Sprintf("%.1f%%", pct))
+		}
+	} else {
+		slog.Debug("disk space check skipped", "err", statErr)
+	}
+
+	// Writability probe: attempt to create+remove a temp file in each critical directory.
+	for _, dir := range []string{cfg.HomeDir, filepath.Dir(cfg.DBPath), cfg.ProjectsDir} {
+		f, tmpErr := os.CreateTemp(dir, ".agentd-write-check-*")
+		if tmpErr != nil {
+			return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("directory not writable %s: %w", dir, tmpErr)
+		}
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+	}
+	slog.Debug("writability check passed")
+
+	slog.Debug("checking LLM providers")
 	checkResult := config.CheckProviders(cfg.Gateway)
 	if !checkResult.Available {
 		if checkResult.HordeAvailable {
@@ -76,10 +103,14 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 			return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("no LLM providers available. Configure OPENAI_API_KEY, ANTHROPIC_API_KEY, or set up a local OpenAI-compatible endpoint")
 		}
 	}
+	slog.Debug("LLM provider check complete", "provider", checkResult.Provider, "available", checkResult.Available, "local_healthy", checkResult.LocalHealthy, "has_api_key", checkResult.HasAPIKey)
 
+	slog.Debug("opening database", "path", cfg.DBPath)
 	store, err := kanban.OpenStore(cfg.DBPath)
 	if err != nil {
 		return config.Config{}, nil, runtimeDeps{}, nil, err
 	}
+	slog.Debug("database ready")
+
 	return cfg, store, newRuntimeDeps(cfg, store), func() { closeStore(store) }, nil
 }

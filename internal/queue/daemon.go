@@ -117,26 +117,39 @@ func NewDaemon(
 }
 
 func (d *Daemon) Start(ctx context.Context) error {
+	slog.Debug("boot reconcile starting")
 	if err := recovery.BootReconcile(ctx, d.store, d.probe, d.sink); err != nil {
 		return err
 	}
 	logDaemonError("orphaned queued reconcile failed", d.reconcileOrphanedQueued(ctx))
+	slog.Info("boot reconcile complete", "scheduler_enabled", d.scheduler != nil && d.scheduler.Enabled())
+
 	loops := 8
 	if d.scheduler != nil && d.scheduler.Enabled() {
 		loops++
 	}
 	d.wg.Add(loops)
+	slog.Debug("starting daemon loop", "name", "task")
 	go d.taskLoop(ctx)
+	slog.Debug("starting daemon loop", "name", "intake")
 	go d.intakeLoop(ctx)
+	slog.Debug("starting daemon loop", "name", "heartbeat_reconcile")
 	go d.heartbeatReconcileLoop(ctx)
+	slog.Debug("starting daemon loop", "name", "queued_reconcile")
 	go d.queuedReconcileLoop(ctx)
+	slog.Debug("starting daemon loop", "name", "hitl_timeout")
 	go d.hitlTimeoutLoop(ctx)
+	slog.Debug("starting daemon loop", "name", "disk_watchdog")
 	go d.diskWatchdogLoop(ctx)
+	slog.Debug("starting daemon loop", "name", "memory_curator")
 	go d.memoryCuratorLoop(ctx)
+	slog.Debug("starting daemon loop", "name", "dream")
 	go d.dreamLoop(ctx)
 	if d.scheduler != nil && d.scheduler.Enabled() {
+		slog.Debug("starting daemon loop", "name", "scheduler")
 		go d.schedulerLoop(ctx)
 	}
+	slog.Info("all daemon loops started")
 	<-ctx.Done()
 	d.wg.Wait()
 	return nil
