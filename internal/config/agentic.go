@@ -86,6 +86,8 @@ type AgenticConfig struct {
 	Batching BatchingConfig
 	// PromptTemplatesPath is the JSON file of named prompt templates (relative to agentd home).
 	PromptTemplatesPath string
+	// Scheduler configures recurring and deferred task dispatch.
+	Scheduler SchedulerConfig
 }
 
 // FileContextConfig controls convert/cache/select pipeline for workspace files.
@@ -122,6 +124,7 @@ func setAgenticDefaults(v *viper.Viper) {
 	setToolManifestDefaults(v)
 	setCapabilityRoutingDefaults(v)
 	setBatchingDefaults(v)
+	setSchedulerDefaults(v)
 	v.SetDefault("agentic.prompt_templates_path", DefaultPromptTemplatesPath)
 }
 
@@ -148,6 +151,7 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 		CapabilityRouting: loadCapabilityRoutingConfig(v),
 		Batching:            loadBatchingConfig(v),
 		PromptTemplatesPath: v.GetString("agentic.prompt_templates_path"),
+		Scheduler:           loadSchedulerConfig(v),
 	}
 }
 

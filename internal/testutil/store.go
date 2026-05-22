@@ -23,10 +23,14 @@ type FakeKanbanStore struct {
 	memories     []models.Memory
 	profiles     map[string]models.AgentProfile
 	settings     map[string]string
+	scheduled    map[string]models.ScheduledTask
 	nextSeq      int
 }
 
-var _ models.KanbanStore = (*FakeKanbanStore)(nil)
+var (
+	_ models.KanbanStore          = (*FakeKanbanStore)(nil)
+	_ models.ScheduledTaskStore   = (*FakeKanbanStore)(nil)
+)
 
 func NewFakeStore() *FakeKanbanStore {
 	return &FakeKanbanStore{

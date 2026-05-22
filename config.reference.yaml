@@ -159,6 +159,9 @@ agentic:
   # Task 47: named prompt templates with typed slots (embedded defaults + optional file override).
   prompt_templates_path: "prompt_templates.json"
 
+  # Task 48: cron/deferred dispatch (minute tick); fields: id, cron_expr, task_type, context_fn, context_args, output_target, title
+  scheduler: {enabled: false, tick_interval: "1m", project_id: "", tasks: []}
+
   # Task 46: batch independent tool-free tasks in one LLM call (same project + agent).
   batching:
     enabled: false

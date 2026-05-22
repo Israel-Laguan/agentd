@@ -50,6 +50,8 @@ type Daemon struct {
 	queuedReconcileAfter    time.Duration
 	rateLimitedRequeueAfter time.Duration
 	rollingLedger           *RollingTokenLedger
+	scheduler               *Scheduler
+	schedulerTickEvery      time.Duration
 	wg                      sync.WaitGroup
 }
 
@@ -79,6 +81,8 @@ type DaemonOptions struct {
 	QueuedReconcileAfter    time.Duration
 	RateLimitedRequeueAfter time.Duration
 	RollingTokenLedger      *RollingTokenLedger
+	Scheduler               *Scheduler
+	SchedulerTickInterval   time.Duration
 }
 
 func NewDaemon(
@@ -107,6 +111,8 @@ func NewDaemon(
 		queuedReconcileAfter:    opts.QueuedReconcileAfter,
 		rateLimitedRequeueAfter: opts.RateLimitedRequeueAfter,
 		rollingLedger:           opts.RollingTokenLedger,
+		scheduler:               opts.Scheduler,
+		schedulerTickEvery:      opts.SchedulerTickInterval,
 	}
 }
 
@@ -115,7 +121,11 @@ func (d *Daemon) Start(ctx context.Context) error {
 		return err
 	}
 	logDaemonError("orphaned queued reconcile failed", d.reconcileOrphanedQueued(ctx))
-	d.wg.Add(8)
+	loops := 8
+	if d.scheduler != nil && d.scheduler.Enabled() {
+		loops++
+	}
+	d.wg.Add(loops)
 	go d.taskLoop(ctx)
 	go d.intakeLoop(ctx)
 	go d.heartbeatReconcileLoop(ctx)
@@ -124,6 +134,9 @@ func (d *Daemon) Start(ctx context.Context) error {
 	go d.diskWatchdogLoop(ctx)
 	go d.memoryCuratorLoop(ctx)
 	go d.dreamLoop(ctx)
+	if d.scheduler != nil && d.scheduler.Enabled() {
+		go d.schedulerLoop(ctx)
+	}
 	<-ctx.Done()
 	d.wg.Wait()
 	return nil
@@ -137,6 +150,7 @@ func normalizeDaemonOptions(opts DaemonOptions) DaemonOptions {
 	normalizeDiskOptions(&opts)
 	normalizeHITLReconcileOptions(&opts)
 	normalizeMemorySchedules(&opts)
+	normalizeSchedulerOptions(&opts)
 	if opts.Probe == nil {
 		opts.Probe = safety.GopsutilProbe{}
 	}
@@ -200,6 +214,12 @@ func normalizeMemorySchedules(opts *DaemonOptions) {
 	}
 	if opts.DreamSchedule == nil {
 		opts.DreamSchedule = config.DefaultCronSchedule.Dream.Schedule
+	}
+}
+
+func normalizeSchedulerOptions(opts *DaemonOptions) {
+	if opts.SchedulerTickInterval <= 0 {
+		opts.SchedulerTickInterval = config.DefaultSchedulerTickInterval
 	}
 }
 

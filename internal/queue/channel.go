@@ -232,6 +232,12 @@ func (d *Daemon) deferRateLimited(ctx context.Context, task models.Task) {
 		return
 	}
 	after := d.rateLimitedRequeueAfter
+	d.scheduleTaskDefer(ctx, task, after, func(ctx context.Context, t models.Task) {
+		d.deferRateLimitedTimer(ctx, t, after)
+	})
+}
+
+func (d *Daemon) deferRateLimitedTimer(ctx context.Context, task models.Task, after time.Duration) {
 	taskID := task.ID
 	d.wg.Add(1)
 	go func() {
