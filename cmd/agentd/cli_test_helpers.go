@@ -1,0 +1,31 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"path/filepath"
+	"testing"
+)
+
+func runCLI(t *testing.T, home string, args ...string) string {
+	t.Helper()
+	t.Setenv("AGENTD_GATEWAY_OPENAI_API_KEY", "test-key")
+
+	full := append([]string{"--home", home}, args...)
+	cmd := newRootCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs(full)
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("agentd %v error = %v", args, err)
+	}
+	return output.String()
+}
+
+func initHome(t *testing.T) string {
+	t.Helper()
+	home := filepath.Join(t.TempDir(), ".agentd")
+	runCLI(t, home, "init")
+	return home
+}
