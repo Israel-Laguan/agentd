@@ -1,10 +1,46 @@
 package spec
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"testing"
 )
+
+func TestNoopEmbed_ReturnsEmptyResponse(t *testing.T) {
+	resp, err := NoopEmbed(context.Background(), EmbedRequest{Input: []string{"hello"}})
+	if err != nil {
+		t.Fatalf("NoopEmbed: %v", err)
+	}
+	if len(resp.Vectors) != 0 {
+		t.Fatalf("vectors = %v, want empty", resp.Vectors)
+	}
+}
+
+func TestFunctionParametersMarshalJSON_WithProperties(t *testing.T) {
+	params := FunctionParameters{
+		Type: "object",
+		Properties: map[string]any{
+			"location": map[string]any{"type": "string"},
+		},
+		Required: []string{"location"},
+	}
+	data, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got["type"] != "object" {
+		t.Fatalf("type = %v", got["type"])
+	}
+	props, ok := got["properties"].(map[string]any)
+	if !ok || props["location"] == nil {
+		t.Fatalf("properties = %v", got["properties"])
+	}
+}
 
 func TestFunctionParametersMarshalJSON_NoArgumentSchema(t *testing.T) {
 	tests := []struct {

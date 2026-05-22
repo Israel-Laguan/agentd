@@ -24,6 +24,43 @@ func (b stubBreaker) FailureCount() int           { return b.failCount }
 func (b stubBreaker) OpenDuration() time.Duration { return b.open }
 func (b stubBreaker) LastError() error            { return b.lastErr }
 
+func TestSystemServiceSnapshotDefaultNowAndMem(t *testing.T) {
+	svc := &services.SystemService{
+		Summarizer: nil,
+		Breaker:    nil,
+		Now:        nil,
+		ReadMem:    nil,
+	}
+	out, err := svc.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if out.BuiltAt.IsZero() {
+		t.Fatal("BuiltAt should be populated via default Now()")
+	}
+	if out.Memory.HeapSys == 0 && out.Memory.HeapAlloc == 0 {
+		t.Fatalf("memory snapshot empty: %#v", out.Memory)
+	}
+}
+
+func TestSystemServiceSnapshotBreakerWithoutLastError(t *testing.T) {
+	br := stubBreaker{state: "closed", failCount: 0}
+	svc := services.NewSystemService(nil, br)
+	svc.Now = func() time.Time { return time.Unix(0, 0).UTC() }
+	svc.ReadMem = func() services.MemorySnapshot { return services.MemorySnapshot{} }
+
+	out, err := svc.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if out.Breaker == nil || out.Breaker.State != "closed" {
+		t.Fatalf("breaker = %#v", out.Breaker)
+	}
+	if out.Breaker.LastError != "" {
+		t.Fatalf("LastError = %q, want empty", out.Breaker.LastError)
+	}
+}
+
 func TestSystemServiceSnapshotNoSummarizer(t *testing.T) {
 	svc := &services.SystemService{
 		Summarizer: nil,

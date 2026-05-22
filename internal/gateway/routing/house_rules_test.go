@@ -21,6 +21,14 @@ func TestMergeHouseRulesIntoMessages_noSystemMessage(t *testing.T) {
 	}
 }
 
+func TestMergeHouseRulesIntoMessages_emptyRules(t *testing.T) {
+	msgs := []spec.PromptMessage{{Role: "user", Content: "Hi"}}
+	out := mergeHouseRulesIntoMessages(msgs, "  ")
+	if len(out) != 1 || out[0].Content != "Hi" {
+		t.Fatalf("messages = %#v", out)
+	}
+}
+
 func TestWithHouseRules_emptyNoOp(t *testing.T) {
 	ctx := WithHouseRules(context.Background(), "  ")
 	if HouseRulesFromContext(ctx) != "" {
