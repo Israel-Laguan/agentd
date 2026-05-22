@@ -330,9 +330,7 @@ func (m *mockGateway) Generate(ctx context.Context, req gateway.AIRequest) (gate
 func (m *mockGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
 	m.planCalls++
 	m.lastPlanIntent = intent
-	if rules := gateway.HouseRulesFromContext(ctx); rules != "" {
-		m.lastHouseRules = rules
-	}
+	m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
 	if m.planErr != nil {
 		return nil, m.planErr
 	}
@@ -344,9 +342,7 @@ func (m *mockGateway) GeneratePlan(ctx context.Context, intent string) (*models.
 
 func (m *mockGateway) AnalyzeScope(ctx context.Context, intent string) (*spec.ScopeAnalysis, error) {
 	m.analyzeCalls++
-	if rules := gateway.HouseRulesFromContext(ctx); rules != "" {
-		m.lastHouseRules = rules
-	}
+	m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
 	if m.scopeErr != nil {
 		return nil, m.scopeErr
 	}
