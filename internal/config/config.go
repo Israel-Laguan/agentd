@@ -54,19 +54,29 @@ type LoadOptions struct {
 // config is read; existing process env vars always take precedence.
 func Load(opts LoadOptions) (Config, error) {
 	// Seed env from project-local .env first so AGENTD_HOME can influence ResolveHome.
-	_ = godotenv.Load(".env")
+	if err := godotenv.Load(".env"); err != nil && !os.IsNotExist(err) {
+		return Config{}, fmt.Errorf("load .env from current directory: %w", err)
+	}
 
 	homeDir, err := ResolveHome(opts.HomeOverride)
 	if err != nil {
 		return Config{}, err
 	}
 
-	// Then load home-level .env; re-resolve in case it overrides AGENTD_HOME.
-	_ = godotenv.Load(filepath.Join(homeDir, ".env"))
-	homeDir, err = ResolveHome(opts.HomeOverride)
+	// Home-level .env may override AGENTD_HOME (and other vars) from the CWD .env.
+	if err := godotenv.Overload(filepath.Join(homeDir, ".env")); err != nil && !os.IsNotExist(err) {
+		return Config{}, fmt.Errorf("load .env from home directory: %w", err)
+	}
+	resolvedHome, err := ResolveHome(opts.HomeOverride)
 	if err != nil {
 		return Config{}, err
 	}
+	if resolvedHome != homeDir {
+		if err := godotenv.Overload(filepath.Join(resolvedHome, ".env")); err != nil && !os.IsNotExist(err) {
+			return Config{}, fmt.Errorf("load .env from home directory: %w", err)
+		}
+	}
+	homeDir = resolvedHome
 
 	cfg := baseConfig(homeDir)
 	v := newConfigViper(cfg, homeDir, opts.ConfigFile)

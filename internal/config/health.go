@@ -59,12 +59,30 @@ func CheckProviders(cfg GatewayConfig) ProviderCheckResult {
 		}
 	}
 
-	if result.HordeAvailable && !result.Available {
+	applyHordeFallback(&result, cfg.Horde.BaseURL)
+	return result
+}
+
+func applyHordeFallback(result *ProviderCheckResult, hordeBaseURL string) {
+	if result.HordeAvailable && !result.Available && isHordeHealthy(hordeBaseURL) {
 		result.Available = true
 		result.Provider = "horde"
 	}
+}
 
-	return result
+func isHordeHealthy(baseURL string) bool {
+	client := &http.Client{Timeout: 2 * time.Second}
+	url := baseURL + "/v2/status/heartbeat"
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return resp.StatusCode == http.StatusOK
 }
 
 func isLlamaCppHealthy(baseURL string) bool {
