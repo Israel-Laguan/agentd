@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"agentd/internal/config"
 )
 
 func TestOpenRuntime_NoProviders(t *testing.T) {
@@ -19,12 +21,27 @@ func TestOpenRuntime_NoProviders(t *testing.T) {
 	t.Setenv("AGENTD_GATEWAY_ANTHROPIC_API_KEY", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")
 
-	_, _, _, _, err := openRuntime(&rootOptions{home: home, configFile: configPath})
+	_, _, _, cleanup, err := openRuntime(&rootOptions{home: home, configFile: configPath})
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		t.Fatalf("openRuntime() error = %v, want nil (store-only path skips provider check)", err)
+	}
+}
+
+func TestRequireStartupProviders_NoProviders(t *testing.T) {
+	t.Setenv("AGENTD_GATEWAY_OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("AGENTD_GATEWAY_ANTHROPIC_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := requireStartupProviders(config.GatewayConfig{Order: []string{"openai"}})
 	if err == nil {
-		t.Fatal("openRuntime() error = nil, want no providers error")
+		t.Fatal("requireStartupProviders() error = nil, want no providers error")
 	}
 	if !strings.Contains(err.Error(), "no LLM providers available") {
-		t.Fatalf("openRuntime() error = %v", err)
+		t.Fatalf("requireStartupProviders() error = %v", err)
 	}
 }
 
