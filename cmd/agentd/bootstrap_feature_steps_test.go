@@ -190,23 +190,27 @@ func (s *bootstrapScenario) bindAPIPort(_ context.Context) error {
 
 // --- When ---
 
-func (s *bootstrapScenario) runInit(_ context.Context) error {
+func (s *bootstrapScenario) runInit(ctx context.Context) error {
 	cmd := newRootCommand()
 	cmd.SetArgs([]string{"--home", s.homeDir, "init"})
 	s.lastOutput.Reset()
 	cmd.SetOut(&s.lastOutput)
 	cmd.SetErr(&s.lastOutput)
-	s.lastErr = cmd.ExecuteContext(context.Background())
+	runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	s.lastErr = cmd.ExecuteContext(runCtx)
 	return nil
 }
 
-func (s *bootstrapScenario) runVerboseInit(_ context.Context) error {
+func (s *bootstrapScenario) runVerboseInit(ctx context.Context) error {
 	cmd := newRootCommand()
 	cmd.SetArgs([]string{"--home", s.homeDir, "--verbose", "init"})
 	s.lastOutput.Reset()
 	cmd.SetOut(&s.lastOutput)
 	cmd.SetErr(&s.lastOutput)
-	s.lastErr = cmd.ExecuteContext(context.Background())
+	runCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	s.lastErr = cmd.ExecuteContext(runCtx)
 	return nil
 }
 

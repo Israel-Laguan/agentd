@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -77,7 +78,7 @@ func preflightStartupDisk(cfg config.Config) {
 func preflightWritableDirs(cfg config.Config) error {
 	writableDirs := make([]string, 0, 4)
 	seen := make(map[string]bool)
-	for _, dir := range []string{cfg.HomeDir, cfg.ProjectsDir, cfg.UploadsDir, cfg.ArchivesDir} {
+	for _, dir := range []string{cfg.HomeDir, filepath.Dir(cfg.DBPath), cfg.ProjectsDir, cfg.UploadsDir, cfg.ArchivesDir} {
 		if dir == "" || seen[dir] {
 			continue
 		}
@@ -100,11 +101,10 @@ func requireStartupProviders(gw config.GatewayConfig) error {
 	slog.Debug("checking LLM providers")
 	checkResult := config.CheckProviders(gw)
 	if !checkResult.Available {
-		if checkResult.HordeAvailable {
-			slog.Warn("No LLM API keys configured and local provider not available. Falling back to AI Horde (anonymous, async, not recommended for production use)")
-		} else {
-			return fmt.Errorf("no LLM providers available. Configure OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or set up a local OpenAI-compatible endpoint")
-		}
+		return fmt.Errorf("no LLM providers available. Configure OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or set up a local OpenAI-compatible endpoint")
+	}
+	if checkResult.Provider == "horde" {
+		slog.Warn("No LLM API keys configured and local provider not available. Falling back to AI Horde (anonymous, async, not recommended for production use)")
 	}
 	slog.Debug("LLM provider check complete", "provider", checkResult.Provider, "available", checkResult.Available, "local_healthy", checkResult.LocalHealthy, "has_api_key", checkResult.HasAPIKey)
 	return nil

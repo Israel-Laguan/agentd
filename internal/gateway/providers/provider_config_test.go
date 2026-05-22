@@ -77,6 +77,7 @@ func TestBackendIdentity(t *testing.T) {
 			maxInput: 2000,
 		},
 		{
+			// 16000 is the configured gateway truncation budget (MaxInputChars → Router.applyTruncation), not a Gemini API character limit.
 			name:     "gemini",
 			backend:  NewOpenAI(spec.ProviderConfig{Type: "gemini", MaxInputChars: 16000}, nil),
 			provider: spec.ProviderGemini,
