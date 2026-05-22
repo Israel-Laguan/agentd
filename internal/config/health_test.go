@@ -56,11 +56,31 @@ func TestCheckProviders_HordeAvailable(t *testing.T) {
 		Horde: gateway.ProviderConfig{APIKey: "0000000000", Model: ""},
 	}
 	result := CheckProviders(cfg)
-	if result.Available {
-		t.Error("expected Available to be false (horde is fallback only)")
+	if !result.Available {
+		t.Error("expected Available to be true when horde is the only provider in order")
+	}
+	if result.Provider != "horde" {
+		t.Errorf("expected provider horde, got %s", result.Provider)
 	}
 	if !result.HordeAvailable {
 		t.Error("expected HordeAvailable to be true")
+	}
+}
+
+func TestCheckProviders_GeminiKey(t *testing.T) {
+	cfg := GatewayConfig{
+		Order:  []string{"gemini"},
+		Gemini: gateway.ProviderConfig{APIKey: "gemini-test-key", Model: "gemini-2.5-flash"},
+	}
+	result := CheckProviders(cfg)
+	if !result.Available {
+		t.Error("expected Available to be true with Gemini key")
+	}
+	if result.Provider != "gemini" {
+		t.Errorf("expected provider gemini, got %s", result.Provider)
+	}
+	if !result.HasAPIKey {
+		t.Error("expected HasAPIKey to be true")
 	}
 }
 
@@ -94,8 +114,11 @@ func TestCheckProviders_HordeFallback(t *testing.T) {
 		Horde:  gateway.ProviderConfig{APIKey: "0000000000", Model: ""},
 	}
 	result := CheckProviders(cfg)
-	if result.Available {
-		t.Error("expected Available to be false (no key, local not running)")
+	if !result.Available {
+		t.Error("expected Available to be true when horde is the only viable provider")
+	}
+	if result.Provider != "horde" {
+		t.Errorf("expected provider horde, got %s", result.Provider)
 	}
 	if !result.HordeAvailable {
 		t.Error("expected HordeAvailable to be true as fallback")
