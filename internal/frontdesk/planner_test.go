@@ -248,12 +248,16 @@ func TestPlanner_ctxWithHouseRules(t *testing.T) {
 	if err := store.SetSetting(context.Background(), models.SettingKeyHouseRules, "be concise"); err != nil {
 		t.Fatalf("SetSetting: %v", err)
 	}
-	p := newTestPlanner(t, store, &mockGateway{intent: &spec.IntentAnalysis{Intent: "plan_request"}})
+	gw := &mockGateway{intent: &spec.IntentAnalysis{Intent: "plan_request"}}
+	p := newTestPlanner(t, store, gw)
 	p.SettingsStore = store
 
 	_, err := p.PlanContent(context.Background(), nil, "plan work", nil)
 	if err != nil {
 		t.Fatalf("PlanContent() error = %v", err)
+	}
+	if gw.lastHouseRules != "be concise" {
+		t.Fatalf("lastHouseRules = %q, want be concise", gw.lastHouseRules)
 	}
 }
 
@@ -307,8 +311,9 @@ type mockGateway struct {
 	analyzeCalls    int
 	plan            *models.DraftPlan
 	planErr         error
-	planCalls      int
-	lastPlanIntent string
+	planCalls       int
+	lastPlanIntent  string
+	lastHouseRules  string
 }
 
 type contractMockGateway struct {
@@ -322,9 +327,12 @@ func (m *mockGateway) Generate(ctx context.Context, req gateway.AIRequest) (gate
 	return gateway.AIResponse{}, nil
 }
 
-func (m *mockGateway) GeneratePlan(_ context.Context, intent string) (*models.DraftPlan, error) {
+func (m *mockGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
 	m.planCalls++
 	m.lastPlanIntent = intent
+	if rules := gateway.HouseRulesFromContext(ctx); rules != "" {
+		m.lastHouseRules = rules
+	}
 	if m.planErr != nil {
 		return nil, m.planErr
 	}
@@ -334,8 +342,11 @@ func (m *mockGateway) GeneratePlan(_ context.Context, intent string) (*models.Dr
 	return &models.DraftPlan{}, nil
 }
 
-func (m *mockGateway) AnalyzeScope(_ context.Context, intent string) (*spec.ScopeAnalysis, error) {
+func (m *mockGateway) AnalyzeScope(ctx context.Context, intent string) (*spec.ScopeAnalysis, error) {
 	m.analyzeCalls++
+	if rules := gateway.HouseRulesFromContext(ctx); rules != "" {
+		m.lastHouseRules = rules
+	}
 	if m.scopeErr != nil {
 		return nil, m.scopeErr
 	}
@@ -373,7 +384,7 @@ func (m *contractMockGateway) GenerateStructuredJSON(_ context.Context, _ string
 	}
 	draft, ok := target.(*models.DraftPlan)
 	if !ok {
-		return nil
+		return errors.New("expected *models.DraftPlan target")
 	}
 	plan := m.plan
 	if plan == nil {

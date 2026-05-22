@@ -30,7 +30,7 @@ func TestMemoryRecallProviderUsesTitleWhenIntentMissing(t *testing.T) {
 		t.Fatalf("RecordMemory: %v", err)
 	}
 	p := memoryRecallProvider{retriever: &memory.Retriever{Store: store, Cfg: config.LibrarianConfig{RecallTimeout: time.Second}}}
-	body, err := p.Fetch(ctx, models.ScheduledTask{Title: "My Title"}, project.ID)
+	body, err := p.Fetch(ctx, models.ScheduledTask{Title: "symptom"}, project.ID)
 	if err != nil || !strings.Contains(body, "symptom") {
 		t.Fatalf("Fetch body = %q err = %v", body, err)
 	}
@@ -77,7 +77,7 @@ func TestMemoryRecallProviderPreferences(t *testing.T) {
 		t.Fatalf("RecordMemory: %v", err)
 	}
 	p := memoryRecallProvider{retriever: &memory.Retriever{Store: store, Cfg: config.LibrarianConfig{RecallTimeout: time.Second}}}
-	body, err := p.Fetch(ctx, models.ScheduledTask{ContextArgs: map[string]string{"user_id": "u1"}}, "p1")
+	body, err := p.Fetch(ctx, models.ScheduledTask{ContextArgs: map[string]string{"user_id": "u1", "intent": "concise"}}, "p1")
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
