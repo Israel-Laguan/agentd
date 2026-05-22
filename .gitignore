@@ -11,7 +11,7 @@
 ./~/
 bin/
 .gocache/
-agentd
+/agentd
 tasks/
 
 # Test binary, built with `go test -c`
