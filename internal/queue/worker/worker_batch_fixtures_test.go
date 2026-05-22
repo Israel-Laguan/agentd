@@ -232,7 +232,7 @@ func (g *batchTrackingGateway) batchJSON(req gateway.AIRequest) string {
 		slotCount = 1
 	}
 
-	if strings.Contains(req.Messages[0].Content, batchLegacySystemSuffix) {
+	if g.isLegacyRequest(req) {
 		var results []batchLegacySlot
 		for i := 0; i < slotCount; i++ {
 			if g.omitSlot != nil && *g.omitSlot == i {
