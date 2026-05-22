@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -31,7 +32,10 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 	}()
 
 	project, profile, err := w.loadContext(ctx, tasks[0])
-	if err != nil {
+	if err != nil || project == nil || profile == nil {
+		if err == nil {
+			err = fmt.Errorf("batch context missing for project=%q agent=%q", tasks[0].ProjectID, tasks[0].AgentID)
+		}
 		for _, task := range tasks {
 			w.failHard(ctx, task, err)
 		}
@@ -45,7 +49,7 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 
 	if len(runnable) < 2 {
 		for _, task := range runnable {
-			w.Process(ctx, task)
+			w.processRunningTask(ctx, task, *project, *profile)
 		}
 		return
 	}
@@ -70,6 +74,8 @@ func (w *Worker) prepareBatchRunnable(
 		}
 		running, runErr := w.store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, os.Getpid())
 		if runErr != nil {
+			slog.Warn("batch mark task running failed", "task_id", task.ID, "error", runErr)
+			w.requeue(ctx, task, fmt.Sprintf("mark running: %v", runErr))
 			continue
 		}
 		task = *running
@@ -100,7 +106,7 @@ func (w *Worker) processBatchAgentic(
 	resp, err := w.runBatchTextGateway(ctx, tasks, project, profile)
 	if err != nil {
 		for _, task := range tasks {
-			w.Process(ctx, task)
+			w.handleGatewayError(ctx, task, err)
 		}
 		return
 	}
@@ -110,8 +116,8 @@ func (w *Worker) processBatchAgentic(
 	}
 	for i, task := range tasks {
 		slot, ok := bySlot[i]
-		if !ok || strings.TrimSpace(slot.Content) == "" || slot.Slot != i {
-			w.Process(ctx, task)
+		if !ok || strings.TrimSpace(slot.Content) == "" {
+			w.processRunningTask(ctx, task, project, profile)
 			continue
 		}
 		p := profile
@@ -128,7 +134,7 @@ func (w *Worker) processBatchLegacy(
 	resp, err := w.runBatchLegacyGateway(ctx, tasks, project, profile)
 	if err != nil {
 		for _, task := range tasks {
-			w.Process(ctx, task)
+			w.handleGatewayError(ctx, task, err)
 		}
 		return
 	}
@@ -139,11 +145,11 @@ func (w *Worker) processBatchLegacy(
 	for i, task := range tasks {
 		slot, ok := bySlot[i]
 		if !ok {
-			w.Process(ctx, task)
+			w.processRunningTask(ctx, task, project, profile)
 			continue
 		}
-		if slot.Slot != i || validateBatchLegacySlot(slot) != nil {
-			w.Process(ctx, task)
+		if validateBatchLegacySlot(slot) != nil {
+			w.processRunningTask(ctx, task, project, profile)
 			continue
 		}
 		w.applyBatchLegacySlot(ctx, task, project, profile, slot)

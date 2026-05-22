@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"agentd/internal/models"
-	qw "agentd/internal/queue/worker"
 )
 
 func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err error) {
@@ -45,32 +44,43 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 	for i, item := range dispatchable {
 		toGroup[i] = item.task
 	}
-	var batches []qw.TaskBatch
 	if d.worker == nil {
-		batches = qw.SingletonBatches(toGroup)
-	} else {
-		batches = d.worker.GroupClaimed(ctx, toGroup)
-	}
-
-	scheduled := 0
-	for _, batch := range batches {
-		if !d.sem.Acquire(ctx) {
-			requeueFrom := len(tasks)
-			if scheduled < len(dispatchable) {
-				requeueFrom = dispatchable[scheduled].idx
+		if len(toGroup) > 0 {
+			if ctx.Err() != nil {
+				return 0, nacked, nil
 			}
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			d.requeueUndispatchedClaims(cleanupCtx, tasks[requeueFrom:])
-			return dispatched, nacked, nil
+			d.requeueUndispatchedClaims(cleanupCtx, toGroup)
+			return 0, nacked, fmt.Errorf("dispatch worker is nil")
 		}
-		dispatched++
-		if len(batch.Tasks) == 1 {
-			d.runDispatchedTask(ctx, batch.Tasks[0])
+		return 0, nacked, nil
+	}
+	batches := d.worker.GroupClaimed(ctx, toGroup)
+
+	for batchIdx, batch := range batches {
+		need := len(batch.Tasks)
+		acquired := 0
+		for acquired < need {
+			if !d.sem.Acquire(ctx) {
+				for i := 0; i < acquired; i++ {
+					d.sem.Release()
+				}
+				cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				for _, remaining := range batches[batchIdx:] {
+					d.requeueUndispatchedClaims(cleanupCtx, remaining.Tasks)
+				}
+				return dispatched, nacked, nil
+			}
+			acquired++
+		}
+		dispatched += need
+		if need == 1 {
+			d.runDispatchedTask(ctx, batch.Tasks[0], 1)
 		} else {
-			d.runDispatchedBatch(ctx, batch.Tasks)
+			d.runDispatchedBatch(ctx, batch.Tasks, need)
 		}
-		scheduled += len(batch.Tasks)
 	}
 	return dispatched, nacked, nil
 }
@@ -176,11 +186,15 @@ func (d *Daemon) dispatchDeferRollingBudget(ctx context.Context, task models.Tas
 	return true
 }
 
-func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task) {
+func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task, semSlots int) {
 	d.wg.Add(1)
-	go func(task models.Task) {
+	go func(task models.Task, semSlots int) {
 		defer d.wg.Done()
-		defer d.sem.Release()
+		defer func() {
+			for i := 0; i < semSlots; i++ {
+				d.sem.Release()
+			}
+		}()
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Error("dispatch goroutine panic", "task_id", task.ID, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
@@ -192,15 +206,19 @@ func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task) {
 		runCtx, cancel := context.WithTimeout(ctx, d.taskDeadline)
 		defer cancel()
 		d.worker.Process(runCtx, task)
-	}(task)
+	}(task, semSlots)
 }
 
-func (d *Daemon) runDispatchedBatch(ctx context.Context, tasks []models.Task) {
+func (d *Daemon) runDispatchedBatch(ctx context.Context, tasks []models.Task, semSlots int) {
 	d.wg.Add(1)
 	cp := append([]models.Task(nil), tasks...)
-	go func(tasks []models.Task) {
+	go func(tasks []models.Task, semSlots int) {
 		defer d.wg.Done()
-		defer d.sem.Release()
+		defer func() {
+			for i := 0; i < semSlots; i++ {
+				d.sem.Release()
+			}
+		}()
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Error("dispatch batch goroutine panic", "task_count", len(tasks), "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
@@ -214,5 +232,5 @@ func (d *Daemon) runDispatchedBatch(ctx context.Context, tasks []models.Task) {
 		runCtx, cancel := context.WithTimeout(ctx, d.taskDeadline)
 		defer cancel()
 		d.worker.ProcessBatch(runCtx, tasks)
-	}(cp)
+	}(cp, semSlots)
 }
