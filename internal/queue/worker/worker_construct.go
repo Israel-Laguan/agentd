@@ -56,6 +56,7 @@ type WorkerOptions struct {
 	ToolManifest              config.ToolManifestConfig
 	CapabilityRouting         config.CapabilityRoutingConfig
 	Batching                  config.BatchingConfig
+	PromptTemplatesPath       string
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -104,6 +105,18 @@ func (w *Worker) setupFileContext(opts WorkerOptions) {
 	} else {
 		slog.Warn("file context cache disabled", "error", err)
 	}
+}
+
+func (w *Worker) setupPromptLibrary(opts WorkerOptions) {
+	if opts.PromptTemplatesPath == "" {
+		return
+	}
+	lib, err := NewPromptLibrary(opts.PromptTemplatesPath)
+	if err != nil {
+		slog.Warn("prompt template library disabled", "path", opts.PromptTemplatesPath, "error", err)
+		return
+	}
+	w.promptLibrary = lib
 }
 
 func (w *Worker) setupOptionalLoaders(opts WorkerOptions) {
@@ -201,6 +214,7 @@ func NewWorker(
 	w.capabilityRouter = NewCapabilityRouter(opts.CapabilityRouting)
 	w.batcher = NewTaskBatcher(opts.Batching, w)
 	w.setupFileContext(opts)
+	w.setupPromptLibrary(opts)
 	w.setupOptionalLoaders(opts)
 	return w
 }

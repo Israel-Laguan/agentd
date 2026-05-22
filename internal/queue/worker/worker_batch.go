@@ -30,7 +30,7 @@ func (w *Worker) runBatchLegacyGateway(
 	profile models.AgentProfile,
 ) (batchLegacyResponse, error) {
 	req := w.buildBatchRequest(ctx, tasks, project, profile, false)
-	profile = w.routeLegacyProfile(ctx, tasks[0], profile)
+	profile = w.routeLegacyProfile(ctx, tasks[0], project, profile)
 	req.Provider = profile.Provider
 	req.Model = profile.Model
 	resp, err := gateway.GenerateJSON[batchLegacyResponse](ctx, w.gateway, req)

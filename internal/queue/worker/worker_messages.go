@@ -24,10 +24,28 @@ func (w *Worker) prependMemoryLessons(ctx context.Context, intent string, projec
 	return messages
 }
 
-func (w *Worker) seedMessages(ctx context.Context, task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
-	messages := workerMessages(task, profile)
+func (w *Worker) seedMessages(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
+	messages := w.legacySeedMessages(task, project, profile)
 	intent := taskIntent(task)
 	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
+}
+
+func (w *Worker) legacySeedMessages(task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
+	if w.promptLibrary != nil {
+		if name, slots, ok := w.promptTemplateForTask(task, profile); ok {
+			prefix := legacyJSONCommandSystemContent(profile)
+			rendered, err := w.promptLibrary.Render(name, RenderSession{SystemPrefix: prefix}, slots)
+			if err == nil {
+				return []gateway.PromptMessage{
+					{Role: "system", Content: rendered.System},
+					{Role: "user", Content: rendered.User},
+				}
+			}
+			slog.Warn("prompt template render failed for legacy seed",
+				"template", name, "task_id", task.ID, "error", err)
+		}
+	}
+	return workerMessages(task, profile)
 }
 
 func agenticToolUseSystemText(goal ...*AgentGoal) string {
@@ -118,6 +136,24 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 	return builder.Build()
 }
 
+func defaultTaskUserContent(task models.Task) string {
+	return fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
+}
+
+func (w *Worker) buildPromptMessages(task models.Task, project models.Project, profile models.AgentProfile) (system, user string) {
+	systemPrefix := w.buildSystemPromptContent(task, project, profile)
+	if name, slots, ok := w.promptTemplateForTask(task, profile); ok {
+		rendered, err := w.promptLibrary.Render(name, RenderSession{SystemPrefix: systemPrefix}, slots)
+		if err != nil {
+			slog.Warn("prompt template render failed, using default messages",
+				"template", name, "task_id", task.ID, "error", err)
+		} else {
+			return rendered.System, rendered.User
+		}
+	}
+	return systemPrefix, defaultTaskUserContent(task)
+}
+
 // assembleAgenticSystemPrompt builds the full layered system prompt for agentic
 // mode using the instruction hierarchy and skill router. It returns the initial
 // message list: [optional memory lessons, layered system prompt, user task].
@@ -128,14 +164,10 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 // message. The legacy seedMessages path is still used by the non-agentic
 // command() path in worker_legacy.go.
 func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	systemPrompt := w.buildSystemPromptContent(task, project, profile)
-	userMsg := gateway.PromptMessage{
-		Role:    "user",
-		Content: fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description),
-	}
+	systemPrompt, userContent := w.buildPromptMessages(task, project, profile)
 	messages := []gateway.PromptMessage{
 		gateway.PromptMessage{Role: "system", Content: systemPrompt},
-		userMsg,
+		{Role: "user", Content: userContent},
 	}
 	intent := taskIntent(task)
 	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)

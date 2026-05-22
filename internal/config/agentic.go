@@ -18,6 +18,7 @@ const (
 	DefaultPlanContextMaxChars     = 4000
 	DefaultTopicGuardSensitivity     = 0.5
 	DefaultModelRoutingContextTokens = 150000
+	DefaultPromptTemplatesPath       = "prompt_templates.json"
 )
 
 // TopicGuardConfig controls topic drift detection in the agentic loop.
@@ -83,6 +84,8 @@ type AgenticConfig struct {
 	CapabilityRouting CapabilityRoutingConfig
 	// Batching consolidates independent tool-free tasks into a single LLM call.
 	Batching BatchingConfig
+	// PromptTemplatesPath is the JSON file of named prompt templates (relative to agentd home).
+	PromptTemplatesPath string
 }
 
 // FileContextConfig controls convert/cache/select pipeline for workspace files.
@@ -119,6 +122,7 @@ func setAgenticDefaults(v *viper.Viper) {
 	setToolManifestDefaults(v)
 	setCapabilityRoutingDefaults(v)
 	setBatchingDefaults(v)
+	v.SetDefault("agentic.prompt_templates_path", DefaultPromptTemplatesPath)
 }
 
 func loadAgenticConfig(v *viper.Viper) AgenticConfig {
@@ -142,7 +146,8 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 		ModelRouting:   loadModelRoutingConfig(v),
 		ToolManifest:       loadToolManifestConfig(v),
 		CapabilityRouting: loadCapabilityRoutingConfig(v),
-		Batching:          loadBatchingConfig(v),
+		Batching:            loadBatchingConfig(v),
+		PromptTemplatesPath: v.GetString("agentic.prompt_templates_path"),
 	}
 }
 
@@ -230,6 +235,17 @@ func loadFileContextConfig(v *viper.Viper) FileContextConfig {
 func ResolveAuditPath(homeDir, raw string) string {
 	if raw == "" {
 		raw = "audit.jsonl"
+	}
+	if filepath.IsAbs(raw) {
+		return raw
+	}
+	return filepath.Join(homeDir, raw)
+}
+
+// ResolvePromptTemplatesPath returns the absolute prompt templates JSON path.
+func ResolvePromptTemplatesPath(homeDir, raw string) string {
+	if raw == "" {
+		raw = DefaultPromptTemplatesPath
 	}
 	if filepath.IsAbs(raw) {
 		return raw

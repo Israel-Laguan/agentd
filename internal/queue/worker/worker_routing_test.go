@@ -250,7 +250,7 @@ func TestAgenticFallbackPreservesRoutedProvider(t *testing.T) {
 		t.Fatalf("agentic route = %s/%s, want ollama/llama3", routed.Provider, routed.Model)
 	}
 
-	legacyRouted := w.routeLegacyProfile(context.Background(), task, profile)
+	legacyRouted := w.routeLegacyProfile(context.Background(), task, models.Project{}, profile)
 	if legacyRouted.Provider != "anthropic" {
 		t.Fatalf("legacy-only route provider = %q, want anthropic (proves re-route would differ)", legacyRouted.Provider)
 	}
