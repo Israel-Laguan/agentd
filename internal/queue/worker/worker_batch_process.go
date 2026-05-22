@@ -106,7 +106,7 @@ func (w *Worker) processBatchAgentic(
 	resp, err := w.runBatchTextGateway(ctx, tasks, project, profile)
 	if err != nil {
 		for _, task := range tasks {
-			w.failHard(ctx, task, err)
+			w.handleGatewayError(ctx, task, err)
 		}
 		return
 	}
@@ -134,7 +134,7 @@ func (w *Worker) processBatchLegacy(
 	resp, err := w.runBatchLegacyGateway(ctx, tasks, project, profile)
 	if err != nil {
 		for _, task := range tasks {
-			w.failHard(ctx, task, err)
+			w.handleGatewayError(ctx, task, err)
 		}
 		return
 	}

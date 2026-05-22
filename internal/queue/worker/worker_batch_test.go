@@ -123,7 +123,7 @@ func TestProcessBatch_MalformedSlot_RerunsSingleTask(t *testing.T) {
 	}
 }
 
-func TestProcessBatch_GatewayError_FailsAllTasks(t *testing.T) {
+func TestProcessBatch_GatewayError_RequeuesAllTasks(t *testing.T) {
 	t.Parallel()
 	store := &batchTestStore{
 		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp/ws"},
@@ -149,14 +149,14 @@ func TestProcessBatch_GatewayError_FailsAllTasks(t *testing.T) {
 	defer store.mu.Unlock()
 	for _, id := range []string{"t1", "t2", "t3"} {
 		task := store.tasks[id]
-		if task.State != models.TaskStateFailed {
-			t.Fatalf("task %s state = %s, want %s after batch gateway error", id, task.State, models.TaskStateFailed)
+		if task.State != models.TaskStateReady {
+			t.Fatalf("task %s state = %s, want %s after batch gateway error", id, task.State, models.TaskStateReady)
 		}
-		if store.results[id] == nil || store.results[id].Success {
-			t.Fatalf("task %s should have a failed result recorded", id)
+		if task.RetryCount != 1 {
+			t.Fatalf("task %s RetryCount = %d, want 1 after batch gateway error", id, task.RetryCount)
 		}
-		if !strings.Contains(store.results[id].Payload, "batch gateway unavailable") {
-			t.Fatalf("task %s result payload = %q, want batch gateway error", id, store.results[id].Payload)
+		if store.results[id] != nil {
+			t.Fatalf("task %s should not have a terminal result on first gateway error", id)
 		}
 	}
 }
