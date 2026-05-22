@@ -24,8 +24,12 @@ func NewOpenAI(cfg spec.ProviderConfig, client *http.Client) *OpenAI {
 	return &OpenAI{cfg: cfg, client: client}
 }
 
-// Name implements Backend.
+// Name implements Backend. Returns the configured provider type so that
+// OpenAI-compatible providers (e.g. Gemini) report their correct identity.
 func (o *OpenAI) Name() spec.Provider {
+	if t := spec.Provider(o.cfg.Type); t != "" && t != spec.ProviderOpenAI {
+		return t
+	}
 	return spec.ProviderOpenAI
 }
 
@@ -70,7 +74,7 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return spec.AIResponse{}, fmt.Errorf("decode openai response: %w", err)
 	}
-	return decoded.toAIResponse(model), nil
+	return decoded.toAIResponse(model, string(o.Name())), nil
 }
 
 func (o *OpenAI) url() string {
@@ -122,7 +126,7 @@ func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedRe
 	}
 	return spec.EmbedResponse{
 		Vectors:      vectors,
-		ProviderUsed: string(spec.ProviderOpenAI),
+		ProviderUsed: string(o.Name()),
 		ModelUsed:    modelUsed,
 	}, nil
 }
@@ -213,7 +217,7 @@ type openAIToolCall struct {
 	} `json:"function"`
 }
 
-func (r openAIResponse) toAIResponse(defaultModel string) spec.AIResponse {
+func (r openAIResponse) toAIResponse(defaultModel string, providerUsed string) spec.AIResponse {
 	model := r.Model
 	if model == "" {
 		model = defaultModel
@@ -245,7 +249,7 @@ func (r openAIResponse) toAIResponse(defaultModel string) spec.AIResponse {
 	return spec.AIResponse{
 		Content:      content,
 		TokenUsage:   r.Usage.TotalTokens,
-		ProviderUsed: string(spec.ProviderOpenAI),
+		ProviderUsed: providerUsed,
 		ModelUsed:    model,
 		ToolCalls:    toolCalls,
 	}

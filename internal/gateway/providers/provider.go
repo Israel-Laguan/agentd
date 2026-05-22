@@ -37,6 +37,10 @@ func AppendFromConfig(backends []Backend, cfg spec.ProviderConfig) []Backend {
 		return append(backends, NewLlamaCpp(cfg, nil))
 	case spec.ProviderHorde:
 		return append(backends, NewHorde(cfg, nil))
+	case spec.ProviderGemini:
+		// Gemini exposes an OpenAI-compatible endpoint; reuse the OpenAI backend.
+		cfg.Type = string(spec.ProviderGemini)
+		return append(backends, NewOpenAI(cfg, nil))
 	default:
 		return backends
 	}

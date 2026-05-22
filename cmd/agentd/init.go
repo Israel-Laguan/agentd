@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/spf13/cobra"
@@ -20,31 +21,31 @@ func newInitCommand(opts *rootOptions) *cobra.Command {
 				ConfigFile:   opts.configFile,
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("load configuration: %w", err)
 			}
 			if opts.verbose {
 				if err := writeConfig(cmd.OutOrStdout(), cfg); err != nil {
-					return err
+					return fmt.Errorf("write config output: %w", err)
 				}
 			}
 			slog.Debug("creating directories", "home", cfg.HomeDir)
 			if err := config.EnsureDirs(cfg); err != nil {
-				return err
+				return fmt.Errorf("ensure runtime directories: %w", err)
 			}
 			slog.Debug("creating crontab", "path", cfg.CronPath)
 			if err := config.WriteDefaultCron(cfg.CronPath); err != nil {
-				return err
+				return fmt.Errorf("write crontab: %w", err)
 			}
 
 			slog.Debug("initializing database", "path", cfg.DBPath)
 			store, err := kanban.OpenStore(cfg.DBPath)
 			if err != nil {
-				return err
+				return fmt.Errorf("open database: %w", err)
 			}
 			defer closeStore(store)
 			slog.Debug("seeding agent profiles")
 			if err := seedDefaultAgent(cmd.Context(), store); err != nil {
-				return err
+				return fmt.Errorf("seed default agent profiles: %w", err)
 			}
 
 			return writeFormat(

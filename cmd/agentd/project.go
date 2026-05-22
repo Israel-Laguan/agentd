@@ -65,12 +65,12 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 		ConfigFile:   opts.configFile,
 	})
 	if err != nil {
-		return config.Config{}, nil, runtimeDeps{}, nil, err
+		return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("load configuration: %w", err)
 	}
 
 	slog.Debug("ensuring runtime directories", "home", cfg.HomeDir)
 	if err := config.EnsureDirs(cfg); err != nil {
-		return config.Config{}, nil, runtimeDeps{}, nil, err
+		return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("ensure runtime directories: %w", err)
 	}
 
 	// One-shot disk space preflight (warn only, mirrors periodic watchdog policy).
@@ -108,7 +108,7 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 	slog.Debug("opening database", "path", cfg.DBPath)
 	store, err := kanban.OpenStore(cfg.DBPath)
 	if err != nil {
-		return config.Config{}, nil, runtimeDeps{}, nil, err
+		return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("open database: %w", err)
 	}
 	slog.Debug("database ready")
 
