@@ -47,6 +47,11 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	slog.Debug("tool credentials validated")
 
+	slog.Debug("running LLM warmup")
+	if err := config.WarmupLLM(cmd.Context(), deps.gateway, cfg.Gateway); err != nil {
+		return fmt.Errorf("LLM warmup: %w", err)
+	}
+
 	store = store.WithCanceller(deps.canceller)
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -54,12 +59,12 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	slog.Debug("building daemon and API server")
 	daemon, apiServer, err := buildStartRuntime(ctx, cfg, store, deps, startOpts)
 	if err != nil {
-		return err
+		return fmt.Errorf("build daemon and API server: %w", err)
 	}
 
 	listener, err := net.Listen("tcp", cfg.API.Address)
 	if err != nil {
-		return err
+		return fmt.Errorf("listen on API address %s: %w", cfg.API.Address, err)
 	}
 	defer listener.Close() //nolint:errcheck
 	slog.Info("API server listening", "address", listener.Addr().String())

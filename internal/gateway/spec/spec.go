@@ -135,6 +135,7 @@ const (
 	ProviderOllama    Provider = "ollama"
 	ProviderLlamaCpp  Provider = "llamacpp"
 	ProviderHorde     Provider = "horde"
+	ProviderGemini    Provider = "gemini"
 )
 
 // ErrContextBudgetExceeded is returned when input cannot fit the configured budget.

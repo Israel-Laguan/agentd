@@ -41,6 +41,7 @@ type GatewayConfig struct {
 	Ollama           gateway.ProviderConfig
 	LlamaCpp         gateway.ProviderConfig
 	Horde            gateway.ProviderConfig
+	Gemini           gateway.ProviderConfig
 	RoleModels       RoleModelsConfig
 	Truncation       TruncationConfig
 	Truncator        TruncatorConfig
@@ -84,6 +85,10 @@ func setGatewayDefaults(v *viper.Viper) {
 	v.SetDefault("gateway.horde.max_input_chars", 0)
 	v.SetDefault("gateway.horde.timeout", "5m")
 	v.SetDefault("gateway.horde.poll_interval", "4s")
+	v.SetDefault("gateway.gemini.base_url", "https://generativelanguage.googleapis.com/v1beta/openai")
+	v.SetDefault("gateway.gemini.model", "gemini-2.5-flash")
+	v.SetDefault("gateway.gemini.max_input_chars", 0)
+	v.SetDefault("gateway.gemini.timeout", "5m")
 	v.SetDefault("gateway.max_tasks_per_phase", 7)
 	v.SetDefault("gateway.truncator.policy", gateway.TruncatorPolicyHeadTail)
 	v.SetDefault("gateway.truncator.max_input_chars", 12000)
@@ -101,6 +106,10 @@ func loadGatewayConfig(v *viper.Viper) GatewayConfig {
 	anthropicKey := v.GetString("gateway.anthropic.api_key")
 	if anthropicKey == "" {
 		anthropicKey = os.Getenv("ANTHROPIC_API_KEY")
+	}
+	geminiKey := v.GetString("gateway.gemini.api_key")
+	if geminiKey == "" {
+		geminiKey = os.Getenv("GEMINI_API_KEY")
 	}
 	return GatewayConfig{
 		Order: v.GetStringSlice("gateway.order"),
@@ -134,6 +143,12 @@ func loadGatewayConfig(v *viper.Viper) GatewayConfig {
 			MaxInputChars: v.GetInt("gateway.horde.max_input_chars"),
 			Timeout:       durationOrDefault(v.GetDuration("gateway.horde.timeout"), 5*time.Minute),
 			PollInterval:  durationOrDefault(v.GetDuration("gateway.horde.poll_interval"), 4*time.Second),
+		},
+		Gemini: gateway.ProviderConfig{
+			Type: "gemini", BaseURL: v.GetString("gateway.gemini.base_url"),
+			APIKey: geminiKey, Model: v.GetString("gateway.gemini.model"),
+			MaxInputChars: v.GetInt("gateway.gemini.max_input_chars"),
+			Timeout:       durationOrDefault(v.GetDuration("gateway.gemini.timeout"), 5*time.Minute),
 		},
 		Truncation: TruncationConfig{
 			Strategy:       v.GetString("gateway.truncation.strategy"),
@@ -192,6 +207,9 @@ func (c GatewayConfig) ProviderConfigs() []gateway.ProviderConfig {
 		}
 		if name == "horde" {
 			configs = append(configs, c.Horde)
+		}
+		if name == "gemini" {
+			configs = append(configs, c.Gemini)
 		}
 	}
 	return configs

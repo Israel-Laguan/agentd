@@ -47,6 +47,13 @@ func CheckProviders(cfg GatewayConfig) ProviderCheckResult {
 				result.LocalHealthy = true
 				return result
 			}
+		case "gemini":
+			if cfg.Gemini.APIKey != "" {
+				result.Available = true
+				result.Provider = "gemini"
+				result.HasAPIKey = true
+				return result
+			}
 		case "horde":
 			result.HordeAvailable = true
 		}

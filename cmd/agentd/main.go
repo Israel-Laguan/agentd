@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"os"
 )
 
@@ -18,8 +16,7 @@ func execute(ctx context.Context, args []string) error {
 func main() {
 	ctx := context.Background()
 	if err := execute(ctx, os.Args); err != nil {
-		slog.Error("command failed", "error", err)
-		fmt.Fprintln(os.Stderr, err)
+		reportCommandError(err)
 		os.Exit(1)
 	}
 }

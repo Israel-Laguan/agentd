@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 
 	"agentd/internal/paths"
@@ -49,11 +50,18 @@ type LoadOptions struct {
 }
 
 // Load resolves agentd paths and reads optional config from <home>/config.yaml.
+// Environment variables are seeded from .env (CWD) and ~/.agentd/.env before
+// config is read; existing process env vars always take precedence.
 func Load(opts LoadOptions) (Config, error) {
 	homeDir, err := ResolveHome(opts.HomeOverride)
 	if err != nil {
 		return Config{}, err
 	}
+
+	// Load .env files: CWD first (project-specific), then home dir (global).
+	// godotenv.Load does not overwrite vars already set in the environment.
+	_ = godotenv.Load(".env")
+	_ = godotenv.Load(filepath.Join(homeDir, ".env"))
 
 	cfg := baseConfig(homeDir)
 	v := newConfigViper(cfg, homeDir, opts.ConfigFile)

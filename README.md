@@ -51,6 +51,8 @@ agentd -v init                 # Initialize with verbose logging
 
 `init` creates directories (`projects/`, `uploads/`, `archives/`), initializes the SQLite database, writes `agentd.crontab`, and seeds the `default`, `researcher`, and `qa` agent profiles.
 
+Startup and init findings, including the new error-reporting behavior, are documented in [`docs/init-startup.md`](docs/init-startup.md).
+
 ## Configuration
 
 Precedence (highest wins):
