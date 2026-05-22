@@ -83,27 +83,29 @@ func TestPluginLoader_HooksRegisteredIntoChain(t *testing.T) {
 	loader := NewPluginLoader(dir)
 	loader.envLookup = func(string) (string, bool) { return "", true }
 
-	runScriptCommandHook = func(context.Context, string, []string, ...string) (string, error) {
-		return "", nil
-	}
-	t.Cleanup(func() { runScriptCommandHook = nil })
+	withSerialShellHooks(func() {
+		runScriptCommandHook = func(context.Context, string, []string, ...string) (string, error) {
+			return "", nil
+		}
+		t.Cleanup(func() { runScriptCommandHook = nil })
 
-	chain := worker.NewHookChain()
-	registry := capabilities.NewRegistry()
-	manifests, err := loader.MountAll(chain, registry)
-	require.NoError(t, err)
-	require.Len(t, manifests, 1)
-	assert.Equal(t, "security", manifests[0].Name)
+		chain := worker.NewHookChain()
+		registry := capabilities.NewRegistry()
+		manifests, err := loader.MountAll(chain, registry)
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		assert.Equal(t, "security", manifests[0].Name)
 
-	verdict := chain.RunPre(worker.HookContext{
-		ToolName:  "bash",
-		Args:      `{"command":"ls"}`,
-		SessionID: "s1",
-		Timestamp: time.Now(),
+		verdict := chain.RunPre(worker.HookContext{
+			ToolName:  "bash",
+			Args:      `{"command":"ls"}`,
+			SessionID: "s1",
+			Timestamp: time.Now(),
+		})
+		if verdict.Veto {
+			t.Fatalf("hook veto: %s", verdict.Reason)
+		}
 	})
-	if verdict.Veto {
-		t.Fatalf("hook veto: %s", verdict.Reason)
-	}
 }
 
 func TestPluginLoader_CapabilitiesRegistered(t *testing.T) {

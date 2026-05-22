@@ -149,6 +149,13 @@ func TestProjectHandler_MaterializeToken(t *testing.T) {
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("code = %d body = %s", rec.Code, rec.Body.String())
 		}
+		projects, err := store.ListProjects(context.Background())
+		if err != nil {
+			t.Fatalf("ListProjects: %v", err)
+		}
+		if len(projects) != 0 {
+			t.Fatalf("expected no persisted projects on forbidden request, got %d", len(projects))
+		}
 	})
 
 	t.Run("forbidden with wrong token", func(t *testing.T) {
@@ -159,6 +166,13 @@ func TestProjectHandler_MaterializeToken(t *testing.T) {
 		h.Materialize(rec, req)
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("code = %d", rec.Code)
+		}
+		projects, err := store.ListProjects(context.Background())
+		if err != nil {
+			t.Fatalf("ListProjects: %v", err)
+		}
+		if len(projects) != 0 {
+			t.Fatalf("expected no persisted projects on forbidden request, got %d", len(projects))
 		}
 	})
 

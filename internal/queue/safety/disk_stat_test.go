@@ -2,6 +2,7 @@ package safety
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -16,7 +17,8 @@ func TestDiskFreePercent_TempDir(t *testing.T) {
 }
 
 func TestDiskFreePercent_InvalidPath(t *testing.T) {
-	_, err := DiskFreePercent("/nonexistent-agentd-coverage-path-xyz")
+	invalid := filepath.Join(t.TempDir(), "definitely-missing", "path")
+	_, err := DiskFreePercent(invalid)
 	if err == nil {
 		t.Fatal("expected error for invalid path")
 	}

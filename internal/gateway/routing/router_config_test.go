@@ -3,6 +3,7 @@ package routing
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"agentd/internal/gateway/spec"
@@ -51,7 +52,7 @@ func TestRouterReserveBudget(t *testing.T) {
 		TaskID:   "task-1",
 		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
 	})
-	if err == nil || err.Error() != "over budget" {
+	if err == nil || !errors.Is(err, tracker.reserveErr) {
 		t.Fatalf("Generate() error = %v", err)
 	}
 }
@@ -76,7 +77,7 @@ func TestRouterEmbed(t *testing.T) {
 		t.Parallel()
 		router := NewRouter(&mockProvider{providerName: "ollama", budget: 1000})
 		_, err := router.Embed(context.Background(), spec.EmbedRequest{Input: []string{"a"}})
-		if err == nil || err.Error() != "no embedding provider configured" {
+		if err == nil || !strings.Contains(err.Error(), "no embedding provider configured") {
 			t.Fatalf("Embed() error = %v", err)
 		}
 	})

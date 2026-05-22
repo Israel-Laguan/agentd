@@ -81,7 +81,7 @@ func TestDeferRateLimitedTimer_SkipsWhenStateChanged(t *testing.T) {
 	daemon := NewDaemon(store, nil, nil, nil, nil, DaemonOptions{Probe: StaticPIDProbe{}})
 	ctx := context.Background()
 	daemon.deferRateLimitedTimer(ctx, store.tasks[0], 30*time.Millisecond)
-	if _, err := store.UpdateTaskState(ctx, "task-0", now, models.TaskStateReady); err != nil {
+	if _, err := store.UpdateTaskState(ctx, "task-0", now, models.TaskStateFailed); err != nil {
 		t.Fatalf("UpdateTaskState() error = %v", err)
 	}
 	time.Sleep(50 * time.Millisecond)
@@ -89,8 +89,8 @@ func TestDeferRateLimitedTimer_SkipsWhenStateChanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask() error = %v", err)
 	}
-	if task.State != models.TaskStateReady {
-		t.Fatalf("state = %s, want READY (timer must not requeue)", task.State)
+	if task.State != models.TaskStateFailed {
+		t.Fatalf("state = %s, want FAILED (timer must not requeue)", task.State)
 	}
 }
 
