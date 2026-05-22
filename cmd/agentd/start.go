@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -43,21 +45,29 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	if err := queue.ValidateToolCredentials(cfg.Agentic.ToolCredentials); err != nil {
 		return fmt.Errorf("agentic.tool_credentials: %w", err)
 	}
+	slog.Debug("tool credentials validated")
 
 	store = store.WithCanceller(deps.canceller)
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	daemon, apiServer := buildStartRuntime(cfg, store, deps, startOpts)
+	slog.Debug("building daemon and API server")
+	daemon, apiServer, err := buildStartRuntime(ctx, cfg, store, deps, startOpts)
+	if err != nil {
+		return err
+	}
+
 	listener, err := net.Listen("tcp", cfg.API.Address)
 	if err != nil {
 		return err
 	}
 	defer listener.Close() //nolint:errcheck
+	slog.Info("API server listening", "address", listener.Addr().String())
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- apiServer.Serve(listener) }()
 	defer apiServer.Shutdown(ctx) //nolint:errcheck
+	slog.Debug("HTTP server started")
 
 	go func() {
 		<-ctx.Done()
@@ -68,16 +78,21 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 			stop()
 		}
 	}()
+
+	slog.Debug("starting daemon")
 	return daemon.Start(ctx)
 }
 
-func buildStartRuntime(cfg config.Config, store models.KanbanStore, deps runtimeDeps, startOpts *startOptions) (*queue.Daemon, *http.Server) {
+func buildStartRuntime(ctx context.Context, cfg config.Config, store models.KanbanStore, deps runtimeDeps, startOpts *startOptions) (*queue.Daemon, *http.Server, error) {
 	rollingLedger := queue.NewRollingTokenLedger(cfg.Queue.RollingTokenWindow, cfg.Queue.RollingTokenLimit)
 	worker := buildWorker(store, deps, cfg, rollingLedger)
 	intake := buildIntake(store, deps, cfg)
-	daemon := buildDaemon(store, worker, intake, deps, cfg, startOpts, rollingLedger)
+	daemon, err := buildDaemon(ctx, store, worker, intake, deps, cfg, startOpts, rollingLedger)
+	if err != nil {
+		return nil, nil, err
+	}
 	apiServer := buildAPIServer(store, deps, cfg)
-	return daemon, apiServer
+	return daemon, apiServer, nil
 }
 
 func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, rollingLedger *queue.RollingTokenLedger) *queue.Worker {
@@ -165,7 +180,7 @@ func buildDreamer(store models.KanbanStore, deps runtimeDeps, cfg config.Config)
 	}
 }
 
-func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontdesk.IntakeProcessor, deps runtimeDeps, cfg config.Config, startOpts *startOptions, rollingLedger *queue.RollingTokenLedger) *queue.Daemon {
+func buildDaemon(ctx context.Context, store models.KanbanStore, worker *queue.Worker, intake *frontdesk.IntakeProcessor, deps runtimeDeps, cfg config.Config, startOpts *startOptions, rollingLedger *queue.RollingTokenLedger) (*queue.Daemon, error) {
 	var rateLimitedRequeueAfter time.Duration
 	if cfg.Channel.RateLimit > 0 {
 		rateLimitedRequeueAfter = time.Duration(config.NormalizedRateWindow(cfg.Channel)) * time.Second
@@ -174,6 +189,17 @@ func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontde
 	if config.ChannelGateEnabled(cfg.Channel) {
 		ch = queue.NewChannelGate(cfg.Channel)
 	}
+	var scheduler *queue.Scheduler
+	if cfg.Agentic.Scheduler.Enabled {
+		slog.Debug("initializing agentic scheduler")
+		var schedErr error
+		scheduler, schedErr = queue.NewSchedulerFromConfig(ctx, store, deps.emitter, cfg.Agentic, cfg.Librarian)
+		if schedErr != nil {
+			return nil, fmt.Errorf("scheduler init: %w", schedErr)
+		}
+		slog.Debug("agentic scheduler initialized")
+	}
+
 	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{
 		MaxWorkers:              startOpts.workers,
 		TaskInterval:            cfg.Cron.TaskDispatch,
@@ -199,7 +225,8 @@ func buildDaemon(store models.KanbanStore, worker *queue.Worker, intake *frontde
 		QueuedReconcileAfter:    cfg.Queue.QueuedReconcileAfter,
 		RateLimitedRequeueAfter: rateLimitedRequeueAfter,
 		RollingTokenLedger:      rollingLedger,
-	})
+		Scheduler:               scheduler,
+	}), nil
 }
 
 func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *http.Server {
