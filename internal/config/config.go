@@ -70,7 +70,7 @@ func Load(opts LoadOptions) (Config, error) {
 	if err := godotenv.Overload(filepath.Join(homeDir, ".env")); err != nil && !os.IsNotExist(err) {
 		return Config{}, fmt.Errorf("load .env from home directory: %w", err)
 	}
-	restoreProcessEnv(originalEnv)
+	reapplySnapshotEnv(originalEnv)
 	resolvedHome, err := ResolveHome(opts.HomeOverride)
 	if err != nil {
 		return Config{}, err
@@ -83,6 +83,14 @@ func Load(opts LoadOptions) (Config, error) {
 	homeDir = resolvedHome
 
 	restoreProcessEnv(originalEnv)
+
+	// Re-seed env from .env files for config hydration (home already resolved).
+	if err := godotenv.Load(".env"); err != nil && !os.IsNotExist(err) {
+		return Config{}, fmt.Errorf("load .env from current directory: %w", err)
+	}
+	if err := godotenv.Overload(filepath.Join(homeDir, ".env")); err != nil && !os.IsNotExist(err) {
+		return Config{}, fmt.Errorf("load .env from home directory: %w", err)
+	}
 
 	cfg := baseConfig(homeDir)
 	v := newConfigViper(cfg, homeDir, opts.ConfigFile)
@@ -117,6 +125,7 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 	v.SetDefault("home", cfg.HomeDir)
+	v.Set("home", cfg.HomeDir)
 	v.SetDefault("db_path", cfg.DBPath)
 	v.SetDefault("projects_dir", cfg.ProjectsDir)
 	v.SetDefault("uploads_dir", cfg.UploadsDir)
@@ -241,8 +250,20 @@ func snapshotProcessEnv() map[string]string {
 	return snap
 }
 
+func reapplySnapshotEnv(snap map[string]string) {
+	for key, val := range snap {
+		_ = os.Setenv(key, val)
+	}
+}
+
 func restoreProcessEnv(snap map[string]string) {
 	for key, val := range snap {
 		_ = os.Setenv(key, val)
+	}
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if _, ok := snap[key]; !ok {
+			_ = os.Unsetenv(key)
+		}
 	}
 }

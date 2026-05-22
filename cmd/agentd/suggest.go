@@ -8,11 +8,14 @@ func newSuggestCommand(opts *rootOptions) *cobra.Command {
 		Short: "Ask the AI gateway for a human-run task command",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, _, deps, cleanup, err := openRuntime(opts)
+			cfg, _, deps, cleanup, err := openRuntime(opts)
 			if err != nil {
 				return err
 			}
 			defer cleanup()
+			if err := requireStartupProviders(cfg.Gateway); err != nil {
+				return err
+			}
 			suggestion, err := deps.runner.Suggest(cmd.Context(), args[0])
 			if err != nil {
 				return err

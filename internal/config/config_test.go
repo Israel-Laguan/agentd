@@ -287,8 +287,90 @@ func TestLoad_HomeDotEnvAfterAGENTD_HOMEOverride(t *testing.T) {
 	if cfg.HomeDir != homeC {
 		t.Errorf("HomeDir = %q, want %q", cfg.HomeDir, homeC)
 	}
-	if got := os.Getenv(marker); got != "loaded" {
-		t.Errorf("%s = %q, want loaded", marker, got)
+}
+
+func TestRestoreProcessEnv_UnsetsAddedKeys(t *testing.T) {
+	const marker = "AGENTD_RESTORE_TEST_MARKER"
+	snap := snapshotProcessEnv()
+	t.Cleanup(func() { restoreProcessEnv(snap) })
+
+	_ = os.Setenv(marker, "added")
+	restoreProcessEnv(snap)
+	if _, ok := os.LookupEnv(marker); ok {
+		t.Errorf("%s should be unset after restoreProcessEnv", marker)
+	}
+}
+
+func TestLoad_HomeOverrideBeatsCwdDotEnv(t *testing.T) {
+	tmp := t.TempDir()
+	fromEnv := filepath.Join(tmp, "from-env")
+	explicit := filepath.Join(tmp, "explicit")
+	if err := os.MkdirAll(explicit, 0o755); err != nil {
+		t.Fatalf("mkdir explicit: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, ".env"), []byte("AGENTD_HOME="+fromEnv+"\n"), 0o644); err != nil {
+		t.Fatalf("write cwd .env: %v", err)
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	if old, ok := os.LookupEnv("AGENTD_HOME"); ok {
+		t.Cleanup(func() { _ = os.Setenv("AGENTD_HOME", old) })
+	} else {
+		t.Cleanup(func() { _ = os.Unsetenv("AGENTD_HOME") })
+	}
+	_ = os.Unsetenv("AGENTD_HOME")
+
+	cfg, err := Load(LoadOptions{HomeOverride: explicit})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.HomeDir != explicit {
+		t.Errorf("HomeDir = %q, want %q", cfg.HomeDir, explicit)
+	}
+	wantDB := filepath.Join(explicit, "global.db")
+	if cfg.DBPath != wantDB {
+		t.Errorf("DBPath = %q, want %q", cfg.DBPath, wantDB)
+	}
+	wantCron := filepath.Join(explicit, cronFileName)
+	if cfg.CronPath != wantCron {
+		t.Errorf("CronPath = %q, want %q", cfg.CronPath, wantCron)
+	}
+}
+
+func TestLoad_NoEnvLeakAfterReturn(t *testing.T) {
+	tmp := t.TempDir()
+	const marker = "AGENTD_LOAD_LEAK_MARKER"
+	if err := os.WriteFile(filepath.Join(tmp, ".env"), []byte(marker+"=loaded\n"), 0o644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Unsetenv(marker) })
+	_ = os.Unsetenv(marker)
+
+	homeDir := filepath.Join(tmp, "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	if _, err := Load(LoadOptions{HomeOverride: homeDir}); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := os.LookupEnv(marker); ok {
+		t.Errorf("%s leaked into process env after Load() returned", marker)
 	}
 }
 
