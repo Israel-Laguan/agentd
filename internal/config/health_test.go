@@ -51,9 +51,18 @@ func TestCheckProviders_HasAnthropicKey(t *testing.T) {
 }
 
 func TestCheckProviders_HordeAvailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/status/heartbeat" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
 	cfg := GatewayConfig{
 		Order: []string{"horde"},
-		Horde: gateway.ProviderConfig{APIKey: "0000000000", Model: ""},
+		Horde: gateway.ProviderConfig{BaseURL: server.URL, APIKey: "0000000000", Model: ""},
 	}
 	result := CheckProviders(cfg)
 	if !result.Available {
@@ -61,6 +70,25 @@ func TestCheckProviders_HordeAvailable(t *testing.T) {
 	}
 	if result.Provider != "horde" {
 		t.Errorf("expected provider horde, got %s", result.Provider)
+	}
+	if !result.HordeAvailable {
+		t.Error("expected HordeAvailable to be true")
+	}
+}
+
+func TestCheckProviders_HordeUnavailableWhenHeartbeatFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	cfg := GatewayConfig{
+		Order: []string{"horde"},
+		Horde: gateway.ProviderConfig{BaseURL: server.URL, APIKey: "0000000000", Model: ""},
+	}
+	result := CheckProviders(cfg)
+	if result.Available {
+		t.Error("expected Available to be false when horde heartbeat is unhealthy")
 	}
 	if !result.HordeAvailable {
 		t.Error("expected HordeAvailable to be true")
@@ -97,7 +125,7 @@ func TestCheckProviders_OrderPreference(t *testing.T) {
 }
 
 func TestCheckProviders_HordeFallback(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ollamaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/tags" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -105,13 +133,22 @@ func TestCheckProviders_HordeFallback(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
-	defer server.Close()
+	defer ollamaSrv.Close()
+
+	hordeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/status/heartbeat" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer hordeSrv.Close()
 
 	cfg := GatewayConfig{
 		Order:  []string{"openai", "ollama", "horde"},
 		OpenAI: gateway.ProviderConfig{APIKey: "", Model: "gpt-4"},
-		Ollama: gateway.ProviderConfig{BaseURL: server.URL, Model: "llama3"},
-		Horde:  gateway.ProviderConfig{APIKey: "0000000000", Model: ""},
+		Ollama: gateway.ProviderConfig{BaseURL: ollamaSrv.URL, Model: "llama3"},
+		Horde:  gateway.ProviderConfig{BaseURL: hordeSrv.URL, APIKey: "0000000000", Model: ""},
 	}
 	result := CheckProviders(cfg)
 	if !result.Available {

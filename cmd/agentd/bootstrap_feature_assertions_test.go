@@ -48,18 +48,20 @@ func (s *bootstrapScenario) cronFileExists(_ context.Context) error {
 	return nil
 }
 
-func (s *bootstrapScenario) profilesSeeded(_ context.Context) error {
+func (s *bootstrapScenario) profilesSeeded(ctx context.Context) error {
 	store, err := kanban.OpenStore(filepath.Join(s.homeDir, "global.db"))
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}
 	defer func() { _ = store.Close() }()
-	profile, err := store.GetAgentProfile(context.Background(), "default")
-	if err != nil {
-		return fmt.Errorf("default profile lookup: %w", err)
-	}
-	if profile == nil {
-		return fmt.Errorf("default agent profile not found")
+	for _, id := range []string{"default", "researcher", "qa"} {
+		profile, err := store.GetAgentProfile(ctx, id)
+		if err != nil {
+			return fmt.Errorf("%s profile lookup: %w", id, err)
+		}
+		if profile == nil {
+			return fmt.Errorf("%s agent profile not found", id)
+		}
 	}
 	return nil
 }
@@ -99,7 +101,7 @@ func (s *bootstrapScenario) errorDescribesWritePermissions(_ context.Context) er
 func (s *bootstrapScenario) errorDescribesWarmup(_ context.Context) error {
 	summary, hint := describeCommandError(s.lastErr)
 	combined := strings.ToLower(summary + " " + hint)
-	if !strings.Contains(combined, "warmup") && !strings.Contains(combined, "api key") && !strings.Contains(combined, "provider") {
+	if !strings.Contains(combined, "warmup") {
 		return fmt.Errorf("expected warmup hint; summary=%q hint=%q err=%v", summary, hint, s.lastErr)
 	}
 	return nil
