@@ -16,6 +16,43 @@ func TestBatchUserPromptHasThreeSlots(t *testing.T) {
 	}
 }
 
+func TestBuildBatchRequest_LegacySystemPromptIncludesSafetyRules(t *testing.T) {
+	t.Parallel()
+	store := &batchTestStore{
+		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp/ws"},
+		profile: models.AgentProfile{
+			ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: false,
+		},
+	}
+	w := NewWorker(store, nil, nil, nil, nil, WorkerOptions{})
+	tasks := summarizeTasks(2)
+	req := w.buildBatchRequest(context.Background(), tasks, store.project, store.profile, false)
+
+	var system string
+	for _, m := range req.Messages {
+		if m.Role == "system" {
+			system = m.Content
+			break
+		}
+	}
+	if system == "" {
+		t.Fatal("expected system message in batch legacy request")
+	}
+	for _, want := range []string{
+		"Never use sudo",
+		"non-interactive",
+		`"results" array`,
+	} {
+		if !strings.Contains(system, want) {
+			t.Fatalf("system prompt missing %q; got:\n%s", want, system)
+		}
+	}
+	base := legacyJSONCommandSystemContent(store.profile)
+	if !strings.Contains(system, base) {
+		t.Fatalf("system prompt missing shared legacy base")
+	}
+}
+
 func TestRunBatchTextGateway_ValidResponse(t *testing.T) {
 	t.Parallel()
 	store := &batchTestStore{

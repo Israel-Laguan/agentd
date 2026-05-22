@@ -52,10 +52,7 @@ func (w *Worker) buildBatchRequest(
 		system = w.buildSystemPromptContent(tasks[0], project, profile) + "\n\n" + batchTextSystemSuffix
 		profile = w.applyModelRouting(tasks[0], profile, nil, nil)
 	} else {
-		system = legacyJSONCommandSystemSentinel + "\n\n" + batchLegacySystemSuffix
-		if profile.SystemPrompt.Valid {
-			system = profile.SystemPrompt.String + "\n\n" + batchLegacySystemSuffix
-		}
+		system = legacyJSONCommandSystemContent(profile) + "\n\n" + batchLegacySystemSuffix
 	}
 
 	req := gateway.AIRequest{
