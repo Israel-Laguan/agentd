@@ -126,10 +126,11 @@ func (s *Scheduler) cronDue(entry models.ScheduledTask, slot time.Time) bool {
 		return false
 	}
 	if delay, ok := cc.sched.(cron.ConstantDelaySchedule); ok {
-		if entry.LastFiredAt == nil {
-			return true
+		baseline := entry.CreatedAt.UTC().Truncate(time.Minute)
+		if entry.LastFiredAt != nil {
+			baseline = entry.LastFiredAt.UTC().Truncate(time.Minute)
 		}
-		return !slot.Before(entry.LastFiredAt.Add(delay.Delay))
+		return !slot.Before(baseline.Add(delay.Delay))
 	}
 	prev := slot.Add(-time.Minute)
 	return cc.sched.Next(prev).Equal(slot)
@@ -160,9 +161,6 @@ func (s *Scheduler) fireRequeue(ctx context.Context, entry models.ScheduledTask)
 		if _, err := s.store.UpdateTaskState(ctx, entry.TargetTaskID, current.UpdatedAt, models.TaskStateReady); err != nil {
 			return err
 		}
-	}
-	if err := s.store.UpdateScheduledTaskLastFired(ctx, entry.ID, time.Now().UTC()); err != nil {
-		return err
 	}
 	return s.store.DeleteScheduledTask(ctx, entry.ID)
 }

@@ -76,8 +76,8 @@ func TestMigrateToV10AddsDisableTopicDriftColumn(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "12" {
-		t.Fatalf("schema version = %q, want 12", version)
+	if version != "13" {
+		t.Fatalf("schema version = %q, want 13", version)
 	}
 
 	var hasColumn int
@@ -110,8 +110,8 @@ func TestMigrateToV11AddsCapabilityRouteIntentColumn(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "12" {
-		t.Fatalf("schema version = %q, want 12", version)
+	if version != "13" {
+		t.Fatalf("schema version = %q, want 13", version)
 	}
 
 	var hasColumn int
@@ -170,8 +170,8 @@ func TestMigrateToV4AllowsFailedRequiresHumanState(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "12" {
-		t.Fatalf("schema version = %q, want 12", version)
+	if version != "13" {
+		t.Fatalf("schema version = %q, want 13", version)
 	}
 
 	var completedAt sql.NullString
