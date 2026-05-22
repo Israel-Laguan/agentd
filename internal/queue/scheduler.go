@@ -122,10 +122,16 @@ func (s *Scheduler) cronDue(entry models.ScheduledTask, slot time.Time) bool {
 		cc = cachedCron{expr: entry.CronExpr, sched: sched}
 		s.cronByID[entry.ID] = cc
 	}
-	prev := slot.Add(-time.Minute)
 	if entry.LastFiredAt != nil && !entry.LastFiredAt.Before(slot) {
 		return false
 	}
+	if delay, ok := cc.sched.(cron.ConstantDelaySchedule); ok {
+		if entry.LastFiredAt == nil {
+			return true
+		}
+		return !slot.Before(entry.LastFiredAt.Add(delay.Delay))
+	}
+	prev := slot.Add(-time.Minute)
 	return cc.sched.Next(prev).Equal(slot)
 }
 

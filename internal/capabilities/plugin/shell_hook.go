@@ -107,8 +107,8 @@ func execScript(
 	if errors.As(err, &exitErr) {
 		return stdout, err
 	}
-	// Fall back to sh -c for scripts without a shebang or when direct exec is unsupported.
-	fallbackOut, fallbackErr := runScriptCommand(ctx, "/bin/sh", sandboxEnv, "-c", script)
+	// Fall back to /bin/sh for scripts without a shebang or when direct exec is unsupported.
+	fallbackOut, fallbackErr := runScriptCommand(ctx, "/bin/sh", sandboxEnv, script)
 	if ctx.Err() != nil {
 		return fallbackOut, fmt.Errorf("script timed out after %s", timeout)
 	}

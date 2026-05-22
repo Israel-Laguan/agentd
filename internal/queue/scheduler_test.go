@@ -58,6 +58,53 @@ func TestSchedulerCronEveryFiveMinutes(t *testing.T) {
 	}
 }
 
+func TestSchedulerDescriptorEveryFiveMinutes(t *testing.T) {
+	store := testutil.NewFakeStore()
+	project, err := store.EnsureSystemProject(context.Background())
+	if err != nil {
+		t.Fatalf("EnsureSystemProject: %v", err)
+	}
+	entry := models.ScheduledTask{
+		ID:          "health",
+		CronExpr:    "@every 5m",
+		Title:       "Health",
+		ContextFn:   "static",
+		ContextArgs: map[string]string{"body": "check"},
+		Kind:        models.ScheduledTaskKindDispatch,
+		Enabled:     true,
+		ProjectID:   project.ID,
+	}
+	if err := store.UpsertScheduledTask(context.Background(), entry); err != nil {
+		t.Fatalf("UpsertScheduledTask: %v", err)
+	}
+	sched, err := config.ParseCronExpr(entry.CronExpr)
+	if err != nil {
+		t.Fatalf("ParseCronExpr: %v", err)
+	}
+	s := NewScheduler(store, nil, SchedulerOptions{Enabled: true})
+	s.cronByID[entry.ID] = cachedCron{expr: entry.CronExpr, sched: sched}
+
+	base := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
+	if err := s.Tick(context.Background(), base); err != nil {
+		t.Fatalf("Tick at :00: %v", err)
+	}
+	if len(store.Tasks()) != 1 {
+		t.Fatalf("tasks after first tick = %d, want 1", len(store.Tasks()))
+	}
+	if err := s.Tick(context.Background(), base.Add(2*time.Minute)); err != nil {
+		t.Fatalf("Tick at :02: %v", err)
+	}
+	if len(store.Tasks()) != 1 {
+		t.Fatalf("tasks after :02 tick = %d, want 1 (no double dispatch)", len(store.Tasks()))
+	}
+	if err := s.Tick(context.Background(), base.Add(5*time.Minute)); err != nil {
+		t.Fatalf("Tick at :05: %v", err)
+	}
+	if len(store.Tasks()) != 2 {
+		t.Fatalf("tasks after :05 tick = %d, want 2", len(store.Tasks()))
+	}
+}
+
 func TestSchedulerRunAfterDeferredRequeue(t *testing.T) {
 	store := testutil.NewFakeStore()
 	ctx := context.Background()

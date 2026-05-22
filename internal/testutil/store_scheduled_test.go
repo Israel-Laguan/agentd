@@ -1,4 +1,4 @@
-package kanban
+package testutil
 
 import (
 	"context"
@@ -9,8 +9,30 @@ import (
 	"agentd/internal/models"
 )
 
-func TestUpsertScheduledTaskPreservesLastFiredOnConflict(t *testing.T) {
-	store := newTestStore(t)
+func TestFakeInsertReadyTaskMissingScheduleNoPartialTask(t *testing.T) {
+	store := NewFakeStore()
+	ctx := context.Background()
+	project, err := store.EnsureSystemProject(ctx)
+	if err != nil {
+		t.Fatalf("EnsureSystemProject: %v", err)
+	}
+	slot := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
+	_, err = store.InsertReadyTaskAndRecordDispatch(ctx, project.ID, models.DraftTask{
+		Title: "Orphan dispatch",
+	}, "missing-schedule", slot, false)
+	if err == nil {
+		t.Fatal("InsertReadyTaskAndRecordDispatch: want error")
+	}
+	if !strings.Contains(err.Error(), "missing-schedule") {
+		t.Fatalf("error = %v, want schedule id", err)
+	}
+	if len(store.Tasks()) != 0 {
+		t.Fatalf("tasks = %d, want 0", len(store.Tasks()))
+	}
+}
+
+func TestFakeUpsertScheduledTaskPreservesLastFiredOnConflict(t *testing.T) {
+	store := NewFakeStore()
 	ctx := context.Background()
 
 	fired := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
@@ -27,7 +49,6 @@ func TestUpsertScheduledTaskPreservesLastFiredOnConflict(t *testing.T) {
 		t.Fatalf("initial upsert: %v", err)
 	}
 
-	// Bootstrap-style upsert without LastFiredAt must not clear persisted value.
 	if err := store.UpsertScheduledTask(ctx, models.ScheduledTask{
 		ID:        entry.ID,
 		CronExpr:  entry.CronExpr,
@@ -52,31 +73,5 @@ func TestUpsertScheduledTaskPreservesLastFiredOnConflict(t *testing.T) {
 			got = tasks[0].LastFiredAt.String()
 		}
 		t.Fatalf("LastFiredAt = %s, want %s", got, fired)
-	}
-}
-
-func TestInsertReadyTaskAndRecordDispatchMissingScheduleRollsBack(t *testing.T) {
-	store := newTestStore(t)
-	ctx := context.Background()
-	project, err := store.EnsureSystemProject(ctx)
-	if err != nil {
-		t.Fatalf("EnsureSystemProject: %v", err)
-	}
-	slot := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
-	_, err = store.InsertReadyTaskAndRecordDispatch(ctx, project.ID, models.DraftTask{
-		Title: "Orphan dispatch",
-	}, "missing-schedule", slot, false)
-	if err == nil {
-		t.Fatal("InsertReadyTaskAndRecordDispatch: want error")
-	}
-	if !strings.Contains(err.Error(), "missing-schedule") {
-		t.Fatalf("error = %v, want schedule id", err)
-	}
-	tasks, err := store.ListTasks(ctx, models.TaskFilter{})
-	if err != nil {
-		t.Fatalf("ListTasks: %v", err)
-	}
-	if len(tasks.Data) != 0 {
-		t.Fatalf("tasks = %d, want 0 (tx rolled back)", len(tasks.Data))
 	}
 }

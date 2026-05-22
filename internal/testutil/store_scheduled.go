@@ -45,7 +45,14 @@ func (s *FakeKanbanStore) UpsertScheduledTask(_ context.Context, t models.Schedu
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t = cloneScheduledTask(t)
-	if t.CreatedAt.IsZero() {
+	if existing, ok := s.scheduled[t.ID]; ok {
+		if t.LastFiredAt == nil {
+			t.LastFiredAt = existing.LastFiredAt
+		}
+		if t.CreatedAt.IsZero() {
+			t.CreatedAt = existing.CreatedAt
+		}
+	} else if t.CreatedAt.IsZero() {
 		t.CreatedAt = now()
 	}
 	t.UpdatedAt = now()
@@ -124,7 +131,6 @@ func (s *FakeKanbanStore) insertReadyTask(
 	if strings.TrimSpace(task.Description) == "" {
 		task.Description = task.Title
 	}
-	s.tasks[task.ID] = task
 	if scheduleID != "" {
 		entry, ok := s.scheduled[scheduleID]
 		if !ok {
@@ -139,6 +145,7 @@ func (s *FakeKanbanStore) insertReadyTask(
 			s.scheduled[scheduleID] = entry
 		}
 	}
+	s.tasks[task.ID] = task
 	return &task, nil
 }
 
