@@ -17,6 +17,13 @@ const defaultShellTimeout = 10 * time.Second
 
 var shellHookEnvAllowlist = []string{"PATH"}
 
+// shellHookTestDefault is set from _test.go init; when non-zero it replaces
+// defaultShellTimeout for manifests with no explicit timeout field.
+var shellHookTestDefault time.Duration
+
+// runScriptCommandHook, when set by tests, replaces subprocess execution.
+var runScriptCommandHook func(ctx context.Context, name string, env []string, args ...string) (string, error)
+
 // ShellPreHook wraps a shell script as a PreHook. The script receives
 // context via environment variables (HOOK_TOOL, HOOK_ARGS,
 // HOOK_SESSION, HOOK_TIMESTAMP). Exit code 0 means allow; non-zero
@@ -122,6 +129,13 @@ func execScript(
 }
 
 func runScriptCommand(ctx context.Context, name string, env []string, args ...string) (string, error) {
+	if runScriptCommandHook != nil {
+		return runScriptCommandHook(ctx, name, env, args...)
+	}
+	return runScriptCommandImpl(ctx, name, env, args...)
+}
+
+func runScriptCommandImpl(ctx context.Context, name string, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // plugin scripts are admin-configured
 	cmd.Env = env
 	cmd.WaitDelay = 500 * time.Millisecond
@@ -150,6 +164,9 @@ func resolveScript(script, pluginDir string) string {
 
 func parseTimeout(raw string) time.Duration {
 	if raw == "" {
+		if shellHookTestDefault > 0 {
+			return shellHookTestDefault
+		}
 		return defaultShellTimeout
 	}
 	d, err := time.ParseDuration(raw)
