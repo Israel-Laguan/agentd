@@ -94,6 +94,38 @@ func TestTaskBatcher_Group_ToolRequiredExcluded(t *testing.T) {
 	}
 }
 
+func TestTaskBatcher_Group_DependencyConflictSplit(t *testing.T) {
+	t.Parallel()
+	store := &batchTestStore{
+		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp"},
+		profile: models.AgentProfile{ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: true},
+	}
+	w := NewWorker(store, nil, nil, nil, nil, WorkerOptions{
+		Batching:     config.BatchingConfig{Enabled: true, MaxBatchSize: 5},
+		ToolManifest: config.ToolManifestConfig{Enabled: true, MinConfidence: 0.35},
+	})
+	tasks := []models.Task{
+		{BaseEntity: models.BaseEntity{ID: "t1"}, ProjectID: "p1", AgentID: "ag1", Title: "Summarize 1", Description: "condense"},
+		{BaseEntity: models.BaseEntity{ID: "t2"}, ProjectID: "p1", AgentID: "ag1", Title: "Summarize 2", Description: "condense", DependsOn: []string{"t1"}},
+		{BaseEntity: models.BaseEntity{ID: "t3"}, ProjectID: "p1", AgentID: "ag1", Title: "Summarize 3", Description: "condense"},
+	}
+	batches := w.GroupClaimed(context.Background(), tasks)
+	if len(batches) != 2 {
+		t.Fatalf("batches len = %d, want 2", len(batches))
+	}
+	for _, b := range batches {
+		ids := make(map[string]struct{}, len(b.Tasks))
+		for _, task := range b.Tasks {
+			ids[task.ID] = struct{}{}
+		}
+		if _, hasT1 := ids["t1"]; hasT1 {
+			if _, hasT2 := ids["t2"]; hasT2 {
+				t.Fatal("dependent tasks t1 and t2 must not share a batch")
+			}
+		}
+	}
+}
+
 func TestTaskBatcher_Group_MaxBatchSize(t *testing.T) {
 	t.Parallel()
 	store := &batchTestStore{

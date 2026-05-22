@@ -31,8 +31,8 @@ func validateBatchTextResponse(want int, resp batchTextResponse) error {
 	}
 	seen := make(map[int]struct{}, want)
 	for i, s := range resp.Results {
-		if s.Slot != i {
-			return fmt.Errorf("results[%d].slot = %d, want %d", i, s.Slot, i)
+		if s.Slot < 0 || s.Slot >= want {
+			return fmt.Errorf("results[%d].slot = %d, want range [0,%d)", i, s.Slot, want)
 		}
 		if strings.TrimSpace(s.Content) == "" {
 			return fmt.Errorf("results[%d].content is empty", i)
