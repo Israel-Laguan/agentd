@@ -66,6 +66,7 @@ type Worker struct {
 	toolManifest              *ToolManifest
 	capabilityRouter          *CapabilityRouter
 	batcher                   *TaskBatcher
+	promptLibrary             *PromptLibrary
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -131,9 +132,9 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 
 func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, profileAlreadyRouted bool) {
 	if !profileAlreadyRouted {
-		profile = w.routeLegacyProfile(ctx, task, profile)
+		profile = w.routeLegacyProfile(ctx, task, project, profile)
 	}
-	response, err := w.command(ctx, task, profile)
+	response, err := w.command(ctx, task, project, profile)
 	if err != nil {
 		w.handleGatewayError(ctx, task, err)
 		return

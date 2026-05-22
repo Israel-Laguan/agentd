@@ -334,6 +334,15 @@ func TestResolveAuditPath_Relative(t *testing.T) {
 	}
 }
 
+func TestResolvePromptTemplatesPath(t *testing.T) {
+	t.Parallel()
+	got := ResolvePromptTemplatesPath("/home/agentd", "prompt_templates.json")
+	want := filepath.Join("/home/agentd", "prompt_templates.json")
+	if got != want {
+		t.Fatalf("ResolvePromptTemplatesPath = %q, want %q", got, want)
+	}
+}
+
 func TestLoadAgenticConfig_Empty(t *testing.T) {
 	t.Parallel()
 	v := viper.New()
