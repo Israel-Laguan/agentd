@@ -24,6 +24,9 @@ func TestLegacySeedMessages_CodeGenUsesJSONWorkerMessages(t *testing.T) {
 	if len(got) != len(want) {
 		t.Fatalf("len(got) = %d, len(want) = %d", len(got), len(want))
 	}
+	if len(got) < 2 {
+		t.Fatalf("expected at least 2 messages, got %d", len(got))
+	}
 	for i := range got {
 		if got[i].Role != want[i].Role || got[i].Content != want[i].Content {
 			t.Fatalf("message[%d]: got role=%q content=%q, want role=%q content=%q",

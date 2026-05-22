@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"agentd/internal/models"
@@ -96,7 +97,7 @@ func TestPromptLibrary_CODE_PROMPT_BUILDER(t *testing.T) {
 		t.Fatalf("user should not request markdown: %q", rendered.User)
 	}
 	lowerSystem := strings.ToLower(rendered.System)
-	if strings.Contains(lowerSystem, "json") && !strings.Contains(rendered.System, "or JSON") {
+	if strings.Contains(lowerSystem, "json") && !strings.Contains(lowerSystem, "or json") {
 		t.Fatalf("system should not contain json unless negated: %q", rendered.System)
 	}
 	if strings.Contains(rendered.System, "```") {
@@ -138,6 +139,43 @@ func TestPromptLibrary_Save(t *testing.T) {
 	}
 	if rendered.System != "SYS ok" || rendered.User != "USER ok" {
 		t.Fatalf("rendered = %#v", rendered)
+	}
+}
+
+func TestPromptLibrary_SaveConcurrent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "templates.json")
+	lib, err := NewPromptLibrary(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmplA := PromptTemplate{System: "A", UserPrompt: "a", RequiredSlots: []string{}}
+	tmplB := PromptTemplate{System: "B", UserPrompt: "b", RequiredSlots: []string{}}
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		errs <- lib.Save("CONCURRENT_A", tmplA)
+	}()
+	go func() {
+		defer wg.Done()
+		errs <- lib.Save("CONCURRENT_B", tmplB)
+	}()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(data)
+	if !strings.Contains(body, "CONCURRENT_A") || !strings.Contains(body, "CONCURRENT_B") {
+		t.Fatalf("file missing concurrent saves: %s", body)
 	}
 }
 
