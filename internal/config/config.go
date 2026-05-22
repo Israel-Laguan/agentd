@@ -91,6 +91,7 @@ func Load(opts LoadOptions) (Config, error) {
 	if err := godotenv.Overload(filepath.Join(homeDir, ".env")); err != nil && !os.IsNotExist(err) {
 		return Config{}, fmt.Errorf("load .env from home directory: %w", err)
 	}
+	reapplySnapshotEnv(originalEnv)
 
 	cfg := baseConfig(homeDir)
 	v := newConfigViper(cfg, homeDir, opts.ConfigFile)
