@@ -88,14 +88,16 @@ func TestPromptLibrary_CODE_PROMPT_BUILDER(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lower := strings.ToLower(rendered.System + rendered.User)
-	for _, forbidden := range []string{"```", "markdown", "json"} {
-		if strings.Contains(lower, forbidden) && strings.Contains(rendered.System, forbidden) {
-			// system explicitly forbids markdown/json — allow "json" only if negated
-			if forbidden == "json" && strings.Contains(rendered.System, "or JSON") {
-				continue
-			}
-		}
+	if strings.Contains(rendered.User, "```") {
+		t.Fatalf("user should not contain fences: %q", rendered.User)
+	}
+	lowerUser := strings.ToLower(rendered.User)
+	if strings.Contains(lowerUser, "markdown") {
+		t.Fatalf("user should not request markdown: %q", rendered.User)
+	}
+	lowerSystem := strings.ToLower(rendered.System)
+	if strings.Contains(lowerSystem, "json") && !strings.Contains(rendered.System, "or JSON") {
+		t.Fatalf("system should not contain json unless negated: %q", rendered.System)
 	}
 	if strings.Contains(rendered.System, "```") {
 		t.Fatalf("system should not encourage fences: %q", rendered.System)
@@ -141,13 +143,45 @@ func TestPromptLibrary_Save(t *testing.T) {
 
 func TestBuildCodeGenSlots(t *testing.T) {
 	slots := buildCodeGenSlots(models.Task{
-		Title:       "Fix handler",
-		Description: "Update internal/api/handler.go\nSignature:\nfunc Handle() error",
+		Title:       "Add parser",
+		Description: "Implement parseToken in parser.go\nSignature:\nfunc parseToken(s string) (string, error)\nTest cases:\n- empty input errors",
 	})
 	if slots[slotLanguage] != "go" {
 		t.Fatalf("language = %q, want go", slots[slotLanguage])
 	}
-	if slots[slotFilename] != "handler.go" {
-		t.Fatalf("filename = %q, want handler.go", slots[slotFilename])
+	if slots[slotFilename] != "parser.go" {
+		t.Fatalf("filename = %q, want parser.go", slots[slotFilename])
+	}
+	if strings.Contains(slots[slotSignature], "Test cases:") {
+		t.Fatalf("signature should not include test cases section: %q", slots[slotSignature])
+	}
+	if !strings.Contains(slots[slotTestCases], "empty input") {
+		t.Fatalf("test_cases missing body: %q", slots[slotTestCases])
+	}
+}
+
+func TestExtractPromptSection(t *testing.T) {
+	t.Parallel()
+	text := "Implement parseToken in parser.go\nSignature:\nfunc parseToken(s string) (string, error)\nTest cases:\n- empty input errors"
+	got := extractPromptSection(text, "Signature:", "fallback")
+	if strings.Contains(got, "Test cases:") {
+		t.Fatalf("signature should not include next section: %q", got)
+	}
+	if !strings.Contains(got, "parseToken") {
+		t.Fatalf("signature missing body: %q", got)
+	}
+	if extractPromptSection(text, "Language:", "fallback") != "fallback" {
+		t.Fatal("missing header should return fallback")
+	}
+}
+
+func TestSubstituteSlots_LongerSlotNameFirst(t *testing.T) {
+	t.Parallel()
+	out := substituteSlots("{{foobar}} {{foo}}", map[string]string{
+		"foo":    "A",
+		"foobar": "B",
+	})
+	if out != "B A" {
+		t.Fatalf("substituteSlots = %q, want %q", out, "B A")
 	}
 }

@@ -130,18 +130,25 @@ func (lib *PromptLibrary) Save(name string, tmpl PromptTemplate) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create prompt templates dir: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write prompt templates %s: %w", path, err)
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return fmt.Errorf("write temp prompt templates: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("rename prompt templates: %w", err)
 	}
 	return nil
 }
 
 func substituteSlots(text string, slots map[string]string) string {
-	out := text
-	for name, val := range slots {
-		out = strings.ReplaceAll(out, "{{"+name+"}}", val)
-	}
-	return out
+	return slotRegex.ReplaceAllStringFunc(text, func(m string) string {
+		key := m[2 : len(m)-2]
+		if val, ok := slots[key]; ok {
+			return val
+		}
+		return m
+	})
 }
 
 func joinSystemPrefix(prefix, templateSystem string) string {
@@ -158,7 +165,9 @@ func joinSystemPrefix(prefix, templateSystem string) string {
 }
 
 var (
-	pathLikeToken = regexp.MustCompile(`(?i)[\w./-]+\.(go|py|ts|tsx|js|jsx|rs|java|rb|php|cs|cpp|c|h|swift|kt|scala|sh|sql|yaml|yml|json|md)`)
+	pathLikeToken         = regexp.MustCompile(`(?i)[\w./-]+\.(go|py|ts|tsx|js|jsx|rs|java|rb|php|cs|cpp|c|h|swift|kt|scala|sh|sql|yaml|yml|json|md)`)
+	slotRegex             = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+	promptSectionHeaderRE = regexp.MustCompile(`(?im)^\s*(language|filename|signature|test cases|tests)\s*:`)
 	extToLanguage = map[string]string{
 		"go": "go", "py": "python", "ts": "typescript", "tsx": "typescript",
 		"js": "javascript", "jsx": "javascript", "rs": "rust", "java": "java",
@@ -215,16 +224,9 @@ func extractPromptSection(text, header, fallback string) string {
 	if idx < 0 {
 		return strings.TrimSpace(fallback)
 	}
-	body := text[idx+len(header):]
-	if nl := strings.Index(body, "\n\n"); nl >= 0 {
-		nextHeaders := []string{"language:", "filename:", "signature:", "test cases:", "tests:"}
-		chunk := strings.ToLower(body[:nl])
-		for _, nh := range nextHeaders {
-			if strings.Contains(chunk, nh) {
-				body = body[:nl]
-				break
-			}
-		}
+	body := strings.TrimLeft(text[idx+len(header):], " \t\r\n")
+	if loc := promptSectionHeaderRE.FindStringIndex(body); loc != nil {
+		body = body[:loc[0]]
 	}
 	return strings.TrimSpace(body)
 }

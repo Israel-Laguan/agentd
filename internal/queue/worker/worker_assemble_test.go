@@ -270,6 +270,23 @@ func TestAssembleAgenticSystemPrompt_MissingFilesAreNonFatal(t *testing.T) {
 	}
 }
 
+func TestAssembleAgenticSystemPrompt_NilPromptLibrary(t *testing.T) {
+	w := &Worker{promptLibrary: nil}
+	task := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "t-nil-lib"},
+		Title:       "Implement add",
+		Description: "Add function in math.go\nSignature:\nfunc Add(a, b int) int",
+	}
+	profile := models.AgentProfile{ToolManifestType: TaskTypeCodeGen}
+	messages := w.assembleAgenticSystemPrompt(context.Background(), task, models.Project{}, profile)
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages))
+	}
+	if !strings.Contains(messages[1].Content, "You are executing Task:") {
+		t.Fatalf("nil promptLibrary should use default user prompt, got %q", messages[1].Content)
+	}
+}
+
 func TestAssembleAgenticSystemPrompt_CodeGenTemplate(t *testing.T) {
 	lib, err := NewPromptLibrary("")
 	if err != nil {
