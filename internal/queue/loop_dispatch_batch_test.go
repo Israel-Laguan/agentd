@@ -258,6 +258,40 @@ func TestRequeueUndispatchedClaims_RequeuesQueuedTasks(t *testing.T) {
 	}
 }
 
+func TestDispatchGuardNilWorker_CanceledContextRequeues(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	store := newDispatchBatchStore([]models.Task{
+		{BaseEntity: models.BaseEntity{ID: "t0", UpdatedAt: now}, ProjectID: "p1", AgentID: "ag1", State: models.TaskStateReady},
+		{BaseEntity: models.BaseEntity{ID: "t1", UpdatedAt: now}, ProjectID: "p2", AgentID: "ag1", State: models.TaskStateReady},
+	})
+	daemon := NewDaemon(store, nil, nil, nil, nil, DaemonOptions{MaxWorkers: 1, Probe: StaticPIDProbe{}})
+
+	claimed, err := store.ClaimNextReadyTasks(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("ClaimNextReadyTasks() error = %v", err)
+	}
+	if len(claimed) != 2 {
+		t.Fatalf("claimed = %d, want 2", len(claimed))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := daemon.dispatchGuardNilWorker(ctx, claimed); err != nil {
+		t.Fatalf("dispatchGuardNilWorker() error = %v, want nil on canceled ctx", err)
+	}
+
+	for _, id := range []string{"t0", "t1"} {
+		task, err := store.GetTask(context.Background(), id)
+		if err != nil {
+			t.Fatalf("GetTask(%s): %v", id, err)
+		}
+		if task.State != models.TaskStateReady {
+			t.Fatalf("%s state = %s, want %s after canceled nil-worker requeue", id, task.State, models.TaskStateReady)
+		}
+	}
+}
+
 func TestGroupClaimed_ReordersByProjectBeforeDispatch(t *testing.T) {
 	t.Parallel()
 	now := time.Now().UTC()
