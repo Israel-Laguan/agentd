@@ -47,12 +47,8 @@ func startAPIServer(ctx context.Context, listener net.Listener, apiServer *http.
 }
 
 func drainAPIServerError(apiErrCh <-chan error) error {
-	select {
-	case err := <-apiErrCh:
-		if err != nil {
-			return fmt.Errorf("api server failed: %w", err)
-		}
-	default:
+	if err, ok := <-apiErrCh; ok && err != nil {
+		return fmt.Errorf("api server failed: %w", err)
 	}
 	return nil
 }
