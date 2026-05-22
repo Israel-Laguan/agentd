@@ -54,6 +54,7 @@ type LoadOptions struct {
 // config is read; existing process env vars always take precedence.
 func Load(opts LoadOptions) (Config, error) {
 	originalEnv := snapshotProcessEnv()
+	defer restoreProcessEnv(originalEnv)
 
 	// Seed env from project-local .env first so AGENTD_HOME can influence ResolveHome.
 	if err := godotenv.Load(".env"); err != nil && !os.IsNotExist(err) {
@@ -69,6 +70,7 @@ func Load(opts LoadOptions) (Config, error) {
 	if err := godotenv.Overload(filepath.Join(homeDir, ".env")); err != nil && !os.IsNotExist(err) {
 		return Config{}, fmt.Errorf("load .env from home directory: %w", err)
 	}
+	restoreProcessEnv(originalEnv)
 	resolvedHome, err := ResolveHome(opts.HomeOverride)
 	if err != nil {
 		return Config{}, err
