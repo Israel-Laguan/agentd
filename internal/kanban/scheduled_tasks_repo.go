@@ -72,7 +72,6 @@ func (s *Store) UpsertScheduledTask(ctx context.Context, t models.ScheduledTask)
 			project_id = excluded.project_id,
 			kind = excluded.kind,
 			target_task_id = excluded.target_task_id,
-			last_fired_at = excluded.last_fired_at,
 			enabled = excluded.enabled,
 			updated_at = excluded.updated_at`,
 		t.ID, t.CronExpr, formatOptionalTime(t.RunAfter), t.TaskType, t.ContextFn, argsJSON, t.OutputTarget,
@@ -114,6 +113,28 @@ func (s *Store) ScheduleDeferredRequeue(ctx context.Context, taskID string, runA
 }
 
 func (s *Store) InsertReadyTask(ctx context.Context, projectID string, draft models.DraftTask) (*models.Task, error) {
+	return s.insertReadyTaskInTx(ctx, projectID, draft, "", time.Time{}, false)
+}
+
+func (s *Store) InsertReadyTaskAndRecordDispatch(
+	ctx context.Context,
+	projectID string,
+	draft models.DraftTask,
+	scheduleID string,
+	slot time.Time,
+	deleteEntry bool,
+) (*models.Task, error) {
+	return s.insertReadyTaskInTx(ctx, projectID, draft, scheduleID, slot, deleteEntry)
+}
+
+func (s *Store) insertReadyTaskInTx(
+	ctx context.Context,
+	projectID string,
+	draft models.DraftTask,
+	scheduleID string,
+	slot time.Time,
+	deleteEntry bool,
+) (*models.Task, error) {
 	return retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
@@ -138,6 +159,18 @@ func (s *Store) InsertReadyTask(ctx context.Context, projectID string, draft mod
 		if err := insertTask(ctx, tx, task.Title, task); err != nil {
 			return nil, err
 		}
+		if scheduleID != "" {
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE scheduled_tasks SET last_fired_at = ?, updated_at = ? WHERE id = ?`,
+				formatTime(slot), formatTime(now), scheduleID); err != nil {
+				return nil, fmt.Errorf("update scheduled task last_fired %q: %w", scheduleID, err)
+			}
+			if deleteEntry {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id = ?`, scheduleID); err != nil {
+					return nil, fmt.Errorf("delete scheduled task %q: %w", scheduleID, err)
+				}
+			}
+		}
 		return &task, commitTx(tx, "insert ready task")
 	})
 }
@@ -156,6 +189,7 @@ func scanScheduledTask(row scheduledTaskScanner) (models.ScheduledTask, error) {
 		enabled         int
 		createdAt       string
 		updatedAt       string
+		err             error
 	)
 	if err := row.Scan(
 		&t.ID, &t.CronExpr, &runAfter, &t.TaskType, &t.ContextFn, &contextArgsJSON, &t.OutputTarget,
@@ -166,21 +200,32 @@ func scanScheduledTask(row scheduledTaskScanner) (models.ScheduledTask, error) {
 	}
 	t.Kind = models.ScheduledTaskKind(kind)
 	t.Enabled = enabled != 0
-	t.ContextArgs, _ = decodeContextArgs(contextArgsJSON)
+	t.ContextArgs, err = decodeContextArgs(contextArgsJSON)
+	if err != nil {
+		return models.ScheduledTask{}, fmt.Errorf("scan scheduled task context args: %w", err)
+	}
 	if runAfter.Valid && runAfter.String != "" {
 		parsed, err := time.Parse(time.RFC3339Nano, runAfter.String)
-		if err == nil {
-			t.RunAfter = &parsed
+		if err != nil {
+			return models.ScheduledTask{}, fmt.Errorf("scan scheduled task run_after: %w", err)
 		}
+		t.RunAfter = &parsed
 	}
 	if lastFired.Valid && lastFired.String != "" {
 		parsed, err := time.Parse(time.RFC3339Nano, lastFired.String)
-		if err == nil {
-			t.LastFiredAt = &parsed
+		if err != nil {
+			return models.ScheduledTask{}, fmt.Errorf("scan scheduled task last_fired_at: %w", err)
 		}
+		t.LastFiredAt = &parsed
 	}
-	t.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
-	t.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updatedAt)
+	t.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return models.ScheduledTask{}, fmt.Errorf("scan scheduled task created_at: %w", err)
+	}
+	t.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
+	if err != nil {
+		return models.ScheduledTask{}, fmt.Errorf("scan scheduled task updated_at: %w", err)
+	}
 	return t, nil
 }
 
@@ -201,7 +246,7 @@ func decodeContextArgs(raw string) (map[string]string, error) {
 	}
 	var out map[string]string
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return map[string]string{}, nil
+		return nil, fmt.Errorf("decode context args: %w", err)
 	}
 	return out, nil
 }

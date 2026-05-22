@@ -12,6 +12,7 @@ import (
 
 // NewSchedulerFromConfig constructs a scheduler and seeds the registry from config.
 func NewSchedulerFromConfig(
+	ctx context.Context,
 	board models.KanbanStore,
 	sink models.EventSink,
 	agentic config.AgenticConfig,
@@ -27,14 +28,14 @@ func NewSchedulerFromConfig(
 		ProjectID: agentic.Scheduler.ProjectID,
 		Providers: providers,
 	})
-	if err := s.BootstrapFromConfig(agentic.Scheduler); err != nil {
+	if err := s.BootstrapFromConfig(ctx, agentic.Scheduler); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
 // BootstrapFromConfig upserts configured tasks into the persisted registry.
-func (s *Scheduler) BootstrapFromConfig(cfg config.SchedulerConfig) error {
+func (s *Scheduler) BootstrapFromConfig(ctx context.Context, cfg config.SchedulerConfig) error {
 	if s.store == nil {
 		return nil
 	}
@@ -42,22 +43,25 @@ func (s *Scheduler) BootstrapFromConfig(cfg config.SchedulerConfig) error {
 		if strings.TrimSpace(t.ID) == "" {
 			continue
 		}
-		entry := configTaskToModel(t)
+		entry, err := configTaskToModel(t)
+		if err != nil {
+			return fmt.Errorf("scheduled task %q: %w", t.ID, err)
+		}
 		if strings.TrimSpace(entry.CronExpr) != "" {
 			sched, err := config.ParseCronExpr(entry.CronExpr)
 			if err != nil {
 				return fmt.Errorf("scheduled task %q cron: %w", t.ID, err)
 			}
-			s.cronByID[entry.ID] = sched
+			s.cronByID[entry.ID] = cachedCron{expr: entry.CronExpr, sched: sched}
 		}
-		if err := s.store.UpsertScheduledTask(context.Background(), entry); err != nil {
+		if err := s.store.UpsertScheduledTask(ctx, entry); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func configTaskToModel(t config.SchedulerTaskConfig) models.ScheduledTask {
+func configTaskToModel(t config.SchedulerTaskConfig) (models.ScheduledTask, error) {
 	entry := models.ScheduledTask{
 		ID:                  t.ID,
 		CronExpr:            t.CronExpr,
@@ -75,11 +79,13 @@ func configTaskToModel(t config.SchedulerTaskConfig) models.ScheduledTask {
 		entry.OutputTarget = config.DefaultSchedulerOutputTarget
 	}
 	if strings.TrimSpace(t.RunAfter) != "" {
-		if parsed, err := time.Parse(time.RFC3339, t.RunAfter); err == nil {
-			entry.RunAfter = &parsed
-		} else if parsed, err := time.Parse(time.RFC3339Nano, t.RunAfter); err == nil {
-			entry.RunAfter = &parsed
+		parsed, err := time.Parse(time.RFC3339, t.RunAfter)
+		if err != nil {
+			if parsed, err = time.Parse(time.RFC3339Nano, t.RunAfter); err != nil {
+				return entry, fmt.Errorf("invalid run_after %q: %w", t.RunAfter, err)
+			}
 		}
+		entry.RunAfter = &parsed
 	}
-	return entry
+	return entry, nil
 }

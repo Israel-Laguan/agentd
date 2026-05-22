@@ -35,7 +35,7 @@ func TestSchedulerCronEveryFiveMinutes(t *testing.T) {
 		t.Fatalf("ParseCronExpr: %v", err)
 	}
 	s := NewScheduler(store, nil, SchedulerOptions{Enabled: true})
-	s.cronByID[entry.ID] = sched
+	s.cronByID[entry.ID] = cachedCron{expr: entry.CronExpr, sched: sched}
 
 	base := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
 	if err := s.Tick(context.Background(), base); err != nil {
@@ -87,7 +87,10 @@ func TestSchedulerRunAfterDeferredRequeue(t *testing.T) {
 	if err := s.Tick(ctx, before); err != nil {
 		t.Fatalf("Tick before: %v", err)
 	}
-	got, _ := store.GetTask(ctx, task.ID)
+	got, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask before run_after: %v", err)
+	}
 	if got.State != models.TaskStateQueued {
 		t.Fatalf("state before run_after = %s, want QUEUED", got.State)
 	}
@@ -95,7 +98,10 @@ func TestSchedulerRunAfterDeferredRequeue(t *testing.T) {
 	if err := s.Tick(ctx, runAfter); err != nil {
 		t.Fatalf("Tick at run_after: %v", err)
 	}
-	got, _ = store.GetTask(ctx, task.ID)
+	got, err = store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask after run_after: %v", err)
+	}
 	if got.State != models.TaskStateReady {
 		t.Fatalf("state after run_after = %s, want READY", got.State)
 	}
@@ -106,7 +112,10 @@ func TestSchedulerRunAfterDeferredRequeue(t *testing.T) {
 
 func TestSchedulerTickIdempotentSameMinute(t *testing.T) {
 	store := testutil.NewFakeStore()
-	project, _ := store.EnsureSystemProject(context.Background())
+	project, err := store.EnsureSystemProject(context.Background())
+	if err != nil {
+		t.Fatalf("EnsureSystemProject: %v", err)
+	}
 	entry := models.ScheduledTask{
 		ID:        "once",
 		CronExpr:  "*/5 * * * *",
@@ -116,10 +125,15 @@ func TestSchedulerTickIdempotentSameMinute(t *testing.T) {
 		Enabled:   true,
 		ProjectID: project.ID,
 	}
-	_ = store.UpsertScheduledTask(context.Background(), entry)
-	sched, _ := config.ParseCronExpr(entry.CronExpr)
+	if err := store.UpsertScheduledTask(context.Background(), entry); err != nil {
+		t.Fatalf("UpsertScheduledTask: %v", err)
+	}
+	sched, err := config.ParseCronExpr(entry.CronExpr)
+	if err != nil {
+		t.Fatalf("ParseCronExpr: %v", err)
+	}
 	s := NewScheduler(store, nil, SchedulerOptions{Enabled: true})
-	s.cronByID[entry.ID] = sched
+	s.cronByID[entry.ID] = cachedCron{expr: entry.CronExpr, sched: sched}
 
 	slot := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
 	if err := s.Tick(context.Background(), slot); err != nil {
@@ -152,14 +166,22 @@ func (w *processRecordingWorker) GroupClaimed(_ context.Context, tasks []models.
 
 func TestScheduledTaskReachesDispatchPipeline(t *testing.T) {
 	store := testutil.NewFakeStore()
-	project, _ := store.EnsureSystemProject(context.Background())
-	_ = store.UpsertScheduledTask(context.Background(), models.ScheduledTask{
+	project, err := store.EnsureSystemProject(context.Background())
+	if err != nil {
+		t.Fatalf("EnsureSystemProject: %v", err)
+	}
+	if err := store.UpsertScheduledTask(context.Background(), models.ScheduledTask{
 		ID: "dispatch", CronExpr: "0 * * * *", Title: "Hourly", ContextFn: "static",
 		Kind: models.ScheduledTaskKindDispatch, Enabled: true, ProjectID: project.ID,
-	})
-	sched, _ := config.ParseCronExpr("0 * * * *")
+	}); err != nil {
+		t.Fatalf("UpsertScheduledTask: %v", err)
+	}
+	sched, err := config.ParseCronExpr("0 * * * *")
+	if err != nil {
+		t.Fatalf("ParseCronExpr: %v", err)
+	}
 	s := NewScheduler(store, nil, SchedulerOptions{Enabled: true})
-	s.cronByID["dispatch"] = sched
+	s.cronByID["dispatch"] = cachedCron{expr: "0 * * * *", sched: sched}
 
 	slot := time.Date(2026, 5, 21, 14, 0, 0, 0, time.UTC)
 	if err := s.Tick(context.Background(), slot); err != nil {

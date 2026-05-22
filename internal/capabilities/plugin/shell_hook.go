@@ -3,6 +3,7 @@ package plugin
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -94,22 +95,41 @@ func execScript(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Execute the script directly so the kernel honors shebangs; avoids an extra sh -c layer.
-	cmd := exec.CommandContext(ctx, script) //nolint:gosec // plugin scripts are admin-configured
-	cmd.Env = worker.BuildSandboxEnv(shellHookEnvAllowlist, env)
+	sandboxEnv := worker.BuildSandboxEnv(shellHookEnvAllowlist, env)
+	stdout, err := runScriptCommand(ctx, script, sandboxEnv)
+	if ctx.Err() != nil {
+		return stdout, fmt.Errorf("script timed out after %s", timeout)
+	}
+	if err == nil {
+		return stdout, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return stdout, err
+	}
+	// Fall back to sh -c for scripts without a shebang or when direct exec is unsupported.
+	fallbackOut, fallbackErr := runScriptCommand(ctx, "/bin/sh", sandboxEnv, "-c", script)
+	if ctx.Err() != nil {
+		return fallbackOut, fmt.Errorf("script timed out after %s", timeout)
+	}
+	if fallbackErr == nil {
+		return fallbackOut, nil
+	}
+	if errors.As(fallbackErr, &exitErr) {
+		return fallbackOut, fallbackErr
+	}
+	return stdout, err
+}
+
+func runScriptCommand(ctx context.Context, name string, env []string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // plugin scripts are admin-configured
+	cmd.Env = env
 	cmd.WaitDelay = 500 * time.Millisecond
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-
 	err := cmd.Run()
-	if ctx.Err() != nil {
-		return "", fmt.Errorf("script timed out after %s", timeout)
-	}
-	if err != nil {
-		return stdout.String(), err
-	}
-	return stdout.String(), nil
+	return stdout.String(), err
 }
 
 func hookEnv(ctx worker.HookContext) []string {

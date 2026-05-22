@@ -18,8 +18,9 @@ func (d *Daemon) scheduleTaskDefer(ctx context.Context, task models.Task, wait t
 		runAfter := time.Now().UTC().Add(wait)
 		if err := d.scheduler.ScheduleDeferred(ctx, task.ID, runAfter); err != nil {
 			slog.Error("schedule deferred requeue failed", "task_id", task.ID, "error", err)
+		} else {
+			return
 		}
-		return
 	}
 	if timerDefer != nil {
 		timerDefer(ctx, task)

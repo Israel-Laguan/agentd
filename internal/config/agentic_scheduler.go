@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/spf13/viper"
@@ -39,31 +40,35 @@ func setSchedulerDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.scheduler.project_id", "")
 }
 
-func loadSchedulerConfig(v *viper.Viper) SchedulerConfig {
+func loadSchedulerConfig(v *viper.Viper) (SchedulerConfig, error) {
 	tick := v.GetDuration("agentic.scheduler.tick_interval")
 	if tick <= 0 {
 		tick = DefaultSchedulerTickInterval
+	}
+	tasks, err := loadSchedulerTasks(v)
+	if err != nil {
+		return SchedulerConfig{}, fmt.Errorf("decode agentic.scheduler.tasks: %w", err)
 	}
 	return SchedulerConfig{
 		Enabled:      v.GetBool("agentic.scheduler.enabled"),
 		TickInterval: tick,
 		ProjectID:    v.GetString("agentic.scheduler.project_id"),
-		Tasks:        loadSchedulerTasks(v),
-	}
+		Tasks:        tasks,
+	}, nil
 }
 
-func loadSchedulerTasks(v *viper.Viper) []SchedulerTaskConfig {
+func loadSchedulerTasks(v *viper.Viper) ([]SchedulerTaskConfig, error) {
 	if !v.IsSet("agentic.scheduler.tasks") {
-		return nil
+		return nil, nil
 	}
 	var tasks []SchedulerTaskConfig
 	if err := v.UnmarshalKey("agentic.scheduler.tasks", &tasks); err != nil {
-		return nil
+		return nil, err
 	}
 	for i := range tasks {
 		if tasks[i].OutputTarget == "" {
 			tasks[i].OutputTarget = DefaultSchedulerOutputTarget
 		}
 	}
-	return tasks
+	return tasks, nil
 }

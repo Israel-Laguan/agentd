@@ -27,13 +27,6 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 )`
 
 func migrateToV12(ctx context.Context, db *sql.DB) error {
-	exists, err := tableExists(ctx, db, "scheduled_tasks")
-	if err != nil {
-		return fmt.Errorf("check scheduled_tasks table for schema migration v12: %w", err)
-	}
-	if exists {
-		return setSchemaVersion(ctx, db, 12)
-	}
 	if _, err := db.ExecContext(ctx, scheduledTasksTableSQL); err != nil {
 		return fmt.Errorf("create scheduled_tasks table: %w", err)
 	}
