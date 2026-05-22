@@ -236,6 +236,10 @@ func TestLoad_ProcessEnvOverridesHomeDotEnv(t *testing.T) {
 	if cfg.HomeDir != processHome {
 		t.Errorf("HomeDir = %q, want %q (process env should win over home .env)", cfg.HomeDir, processHome)
 	}
+	wantDB := filepath.Join(processHome, "global.db")
+	if cfg.DBPath != wantDB {
+		t.Errorf("DBPath = %q, want %q (derived paths should follow effective home)", cfg.DBPath, wantDB)
+	}
 }
 
 func TestLoad_HomeDotEnvAfterAGENTD_HOMEOverride(t *testing.T) {
