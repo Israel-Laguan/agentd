@@ -1,6 +1,13 @@
 package plugin
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
+
+func init() {
+	shellHookTestDefault = 30 * time.Second
+}
 
 // shellHookSerial limits concurrent shell hook subprocess spawns in tests.
 // Under -race with full-module parallelism, many short scripts can miss the

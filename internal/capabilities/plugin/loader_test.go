@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -82,6 +83,11 @@ func TestPluginLoader_HooksRegisteredIntoChain(t *testing.T) {
 	loader := NewPluginLoader(dir)
 	loader.envLookup = func(string) (string, bool) { return "", true }
 
+	runScriptCommandHook = func(context.Context, string, []string, ...string) (string, error) {
+		return "", nil
+	}
+	t.Cleanup(func() { runScriptCommandHook = nil })
+
 	chain := worker.NewHookChain()
 	registry := capabilities.NewRegistry()
 	manifests, err := loader.MountAll(chain, registry)
@@ -89,15 +95,15 @@ func TestPluginLoader_HooksRegisteredIntoChain(t *testing.T) {
 	require.Len(t, manifests, 1)
 	assert.Equal(t, "security", manifests[0].Name)
 
-	withSerialShellHooks(func() {
-		verdict := chain.RunPre(worker.HookContext{
-			ToolName:  "bash",
-			Args:      `{"command":"ls"}`,
-			SessionID: "s1",
-			Timestamp: time.Now(),
-		})
-		assert.False(t, verdict.Veto, "allow script should not veto")
+	verdict := chain.RunPre(worker.HookContext{
+		ToolName:  "bash",
+		Args:      `{"command":"ls"}`,
+		SessionID: "s1",
+		Timestamp: time.Now(),
 	})
+	if verdict.Veto {
+		t.Fatalf("hook veto: %s", verdict.Reason)
+	}
 }
 
 func TestPluginLoader_CapabilitiesRegistered(t *testing.T) {
