@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
@@ -29,7 +30,9 @@ func startAPIServer(ctx context.Context, listener net.Listener, apiServer *http.
 	go func() { errCh <- apiServer.Serve(listener) }()
 	go func() {
 		<-ctx.Done()
-		_ = apiServer.Shutdown(ctx)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = apiServer.Shutdown(shutdownCtx)
 	}()
 	apiErrCh := make(chan error, 1)
 	go func() {
