@@ -13,7 +13,10 @@ type Store struct {
 	canceller models.TaskCanceller
 }
 
-var _ models.KanbanStore = (*Store)(nil)
+var (
+	_ models.KanbanStore         = (*Store)(nil)
+	_ models.ScheduledTaskStore = (*Store)(nil)
+)
 var _ models.KanbanBoardContract = (*Store)(nil)
 
 func NewStore(db *sql.DB) *Store { return &Store{db: db} }

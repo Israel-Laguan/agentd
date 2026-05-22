@@ -30,14 +30,16 @@ func TestShellPreHook_Allow(t *testing.T) {
 	}
 	hook := ShellPreHook(entry, dir)
 
-	verdict, err := hook.Fn(worker.HookContext{
-		ToolName:  "bash",
-		Args:      `{"command":"ls"}`,
-		SessionID: "s1",
-		Timestamp: time.Now(),
+	withSerialShellHooks(func() {
+		verdict, err := hook.Fn(worker.HookContext{
+			ToolName:  "bash",
+			Args:      `{"command":"ls"}`,
+			SessionID: "s1",
+			Timestamp: time.Now(),
+		})
+		require.NoError(t, err)
+		assert.False(t, verdict.Veto)
 	})
-	require.NoError(t, err)
-	assert.False(t, verdict.Veto)
 }
 
 func TestShellPreHook_RespectsShebang(t *testing.T) {
@@ -51,13 +53,15 @@ func TestShellPreHook_RespectsShebang(t *testing.T) {
 	}
 	hook := ShellPreHook(entry, dir)
 
-	verdict, err := hook.Fn(worker.HookContext{
-		ToolName:  "bash",
-		SessionID: "s1",
-		Timestamp: time.Now(),
+	withSerialShellHooks(func() {
+		verdict, err := hook.Fn(worker.HookContext{
+			ToolName:  "bash",
+			SessionID: "s1",
+			Timestamp: time.Now(),
+		})
+		require.NoError(t, err)
+		assert.False(t, verdict.Veto, "shebang must dispatch to bash, not /bin/sh parsing the file")
 	})
-	require.NoError(t, err)
-	assert.False(t, verdict.Veto, "shebang must dispatch to bash, not /bin/sh parsing the file")
 }
 
 func TestShellPreHook_Veto(t *testing.T) {
@@ -71,20 +75,22 @@ func TestShellPreHook_Veto(t *testing.T) {
 	}
 	hook := ShellPreHook(entry, dir)
 
-	verdict, err := hook.Fn(worker.HookContext{
-		ToolName:  "bash",
-		Args:      `{"command":"rm -rf /"}`,
-		SessionID: "s1",
-		Timestamp: time.Now(),
+	withSerialShellHooks(func() {
+		verdict, err := hook.Fn(worker.HookContext{
+			ToolName:  "bash",
+			Args:      `{"command":"rm -rf /"}`,
+			SessionID: "s1",
+			Timestamp: time.Now(),
+		})
+		require.NoError(t, err)
+		assert.True(t, verdict.Veto)
+		assert.Contains(t, verdict.Reason, "blocked by policy")
 	})
-	require.NoError(t, err)
-	assert.True(t, verdict.Veto)
-	assert.Contains(t, verdict.Reason, "blocked by policy")
 }
 
 func TestShellPreHook_Timeout(t *testing.T) {
 	dir := t.TempDir()
-	writeScript(t, dir, "slow.sh", "#!/bin/sh\nsleep 10\n")
+	writeScript(t, dir, "slow.sh", "#!/bin/sh\nsleep 2\n")
 
 	entry := HookEntry{
 		Name:    "test-slow",
@@ -94,13 +100,15 @@ func TestShellPreHook_Timeout(t *testing.T) {
 	}
 	hook := ShellPreHook(entry, dir)
 
-	verdict, err := hook.Fn(worker.HookContext{
-		ToolName:  "bash",
-		Timestamp: time.Now(),
+	withSerialShellHooks(func() {
+		verdict, err := hook.Fn(worker.HookContext{
+			ToolName:  "bash",
+			Timestamp: time.Now(),
+		})
+		require.NoError(t, err)
+		assert.True(t, verdict.Veto)
+		assert.Contains(t, verdict.Reason, "timed out")
 	})
-	require.NoError(t, err)
-	assert.True(t, verdict.Veto)
-	assert.Contains(t, verdict.Reason, "timed out")
 }
 
 func TestShellPreHook_EnvVarsPassedToScript(t *testing.T) {
@@ -120,14 +128,16 @@ exit 1
 	}
 	hook := ShellPreHook(entry, dir)
 
-	verdict, err := hook.Fn(worker.HookContext{
-		ToolName:  "bash",
-		Args:      `{}`,
-		SessionID: "session-123",
-		Timestamp: time.Now(),
+	withSerialShellHooks(func() {
+		verdict, err := hook.Fn(worker.HookContext{
+			ToolName:  "bash",
+			Args:      `{}`,
+			SessionID: "session-123",
+			Timestamp: time.Now(),
+		})
+		require.NoError(t, err)
+		assert.False(t, verdict.Veto)
 	})
-	require.NoError(t, err)
-	assert.False(t, verdict.Veto)
 }
 
 func TestShellPostHook_MutatesResult(t *testing.T) {
@@ -141,12 +151,14 @@ func TestShellPostHook_MutatesResult(t *testing.T) {
 	}
 	hook := ShellPostHook(entry, dir)
 
-	result, err := hook.Fn(worker.HookContext{
-		ToolName:  "bash",
-		Timestamp: time.Now(),
-	}, "original")
-	require.NoError(t, err)
-	assert.Contains(t, result, "modified:")
+	withSerialShellHooks(func() {
+		result, err := hook.Fn(worker.HookContext{
+			ToolName:  "bash",
+			Timestamp: time.Now(),
+		}, "original")
+		require.NoError(t, err)
+		assert.Contains(t, result, "modified:")
+	})
 }
 
 func TestShellPostHook_ErrorReturnsError(t *testing.T) {
@@ -160,11 +172,13 @@ func TestShellPostHook_ErrorReturnsError(t *testing.T) {
 	}
 	hook := ShellPostHook(entry, dir)
 
-	_, err := hook.Fn(worker.HookContext{
-		ToolName:  "bash",
-		Timestamp: time.Now(),
-	}, "original")
-	require.Error(t, err)
+	withSerialShellHooks(func() {
+		_, err := hook.Fn(worker.HookContext{
+			ToolName:  "bash",
+			Timestamp: time.Now(),
+		}, "original")
+		require.Error(t, err)
+	})
 }
 
 func TestParsePolicy(t *testing.T) {
@@ -201,11 +215,13 @@ exit 0
 	}
 	hook := ShellPreHook(entry, dir)
 
-	verdict, err := hook.Fn(worker.HookContext{
-		ToolName:  "bash",
-		SessionID: "s1",
-		Timestamp: time.Now(),
+	withSerialShellHooks(func() {
+		verdict, err := hook.Fn(worker.HookContext{
+			ToolName:  "bash",
+			SessionID: "s1",
+			Timestamp: time.Now(),
+		})
+		require.NoError(t, err)
+		assert.False(t, verdict.Veto)
 	})
-	require.NoError(t, err)
-	assert.False(t, verdict.Veto)
 }
