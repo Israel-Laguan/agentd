@@ -126,9 +126,9 @@ func (s *Scheduler) cronDue(entry models.ScheduledTask, slot time.Time) bool {
 		return false
 	}
 	if delay, ok := cc.sched.(cron.ConstantDelaySchedule); ok {
-		baseline := entry.CreatedAt.UTC().Truncate(time.Minute)
+		baseline := entry.CreatedAt.UTC()
 		if entry.LastFiredAt != nil {
-			baseline = entry.LastFiredAt.UTC().Truncate(time.Minute)
+			baseline = entry.LastFiredAt.UTC()
 		}
 		return !slot.Before(baseline.Add(delay.Delay))
 	}
