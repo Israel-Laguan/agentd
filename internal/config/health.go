@@ -59,6 +59,11 @@ func CheckProviders(cfg GatewayConfig) ProviderCheckResult {
 		}
 	}
 
+	if result.HordeAvailable && !result.Available {
+		result.Available = true
+		result.Provider = "horde"
+	}
+
 	return result
 }
 

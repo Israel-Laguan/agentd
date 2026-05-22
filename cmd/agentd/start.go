@@ -32,6 +32,7 @@ func newStartCommand(opts *rootOptions) *cobra.Command {
 		RunE:  func(cmd *cobra.Command, args []string) error { return runStartCommand(cmd, opts, startOpts) },
 	}
 	cmd.Flags().IntVar(&startOpts.workers, "workers", 0, "maximum concurrent workers (default: NumCPU-2)")
+	cmd.Flags().BoolVar(&startOpts.skipLLMWarmup, "skip-llm-warmup", false, "skip the billable LLM warmup request on startup")
 	return cmd
 }
 
@@ -47,9 +48,13 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	slog.Debug("tool credentials validated")
 
-	slog.Debug("running LLM warmup")
-	if err := config.WarmupLLM(cmd.Context(), deps.gateway, cfg.Gateway); err != nil {
-		return fmt.Errorf("LLM warmup: %w", err)
+	if startOpts.skipLLMWarmup || !cfg.Gateway.WarmupEnabled {
+		slog.Debug("LLM warmup skipped", "flag", startOpts.skipLLMWarmup, "config_enabled", cfg.Gateway.WarmupEnabled)
+	} else {
+		slog.Debug("running LLM warmup")
+		if err := config.WarmupLLM(cmd.Context(), deps.gateway, cfg.Gateway); err != nil {
+			return fmt.Errorf("LLM warmup: %w", err)
+		}
 	}
 
 	store = store.WithCanceller(deps.canceller)
@@ -78,14 +83,28 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 		<-ctx.Done()
 		_ = apiServer.Shutdown(ctx)
 	}()
+	apiErrCh := make(chan error, 1)
 	go func() {
 		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			apiErrCh <- err
 			stop()
+			return
 		}
+		close(apiErrCh)
 	}()
 
 	slog.Debug("starting daemon")
-	return daemon.Start(ctx)
+	if err := daemon.Start(ctx); err != nil {
+		return err
+	}
+	select {
+	case err := <-apiErrCh:
+		if err != nil {
+			return fmt.Errorf("api server failed: %w", err)
+		}
+	default:
+	}
+	return nil
 }
 
 func buildStartRuntime(ctx context.Context, cfg config.Config, store models.KanbanStore, deps runtimeDeps, startOpts *startOptions) (*queue.Daemon, *http.Server, error) {
@@ -251,5 +270,6 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 }
 
 type startOptions struct {
-	workers int
+	workers        int
+	skipLLMWarmup  bool
 }

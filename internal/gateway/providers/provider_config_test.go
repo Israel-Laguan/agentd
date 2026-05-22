@@ -18,6 +18,7 @@ func TestAppendFromConfig(t *testing.T) {
 		{"ollama", 1},
 		{"llamacpp", 1},
 		{"horde", 1},
+		{"gemini", 1},
 		{"unknown", 0},
 	}
 
@@ -74,6 +75,12 @@ func TestBackendIdentity(t *testing.T) {
 			backend:  NewHorde(spec.ProviderConfig{Type: "horde", MaxInputChars: 2000}, nil),
 			provider: spec.ProviderHorde,
 			maxInput: 2000,
+		},
+		{
+			name:     "gemini",
+			backend:  NewOpenAI(spec.ProviderConfig{Type: "gemini", MaxInputChars: 16000}, nil),
+			provider: spec.ProviderGemini,
+			maxInput: 16000,
 		},
 	}
 

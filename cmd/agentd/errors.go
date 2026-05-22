@@ -31,7 +31,7 @@ func describeCommandError(err error) (string, string) {
 	case strings.Contains(errText, "bind: address already in use"):
 		return "Another process is already using the configured API address.", "Stop that process or set AGENTD_API_ADDRESS to a free port."
 	case strings.Contains(errText, "directory not writable"):
-		return "agentd could not write to one of its data directories.", "Check the permissions for AGENTD_HOME, the database directory, and the projects directory."
+		return "agentd could not write to one of its data directories.", "Check the permissions for AGENTD_HOME, projects, uploads, and archives directories."
 	case strings.Contains(errText, "LLM warmup failed"):
 		return "agentd reached your LLM provider, but the startup warmup failed.", "Check the provider order, API key, model name, and network access."
 	case strings.Contains(errText, "no LLM providers available"):

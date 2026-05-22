@@ -11,6 +11,7 @@
 ./~/
 bin/
 .gocache/
+.golangci-cache/
 /agentd
 tasks/
 

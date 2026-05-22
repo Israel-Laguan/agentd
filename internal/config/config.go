@@ -53,15 +53,20 @@ type LoadOptions struct {
 // Environment variables are seeded from .env (CWD) and ~/.agentd/.env before
 // config is read; existing process env vars always take precedence.
 func Load(opts LoadOptions) (Config, error) {
+	// Seed env from project-local .env first so AGENTD_HOME can influence ResolveHome.
+	_ = godotenv.Load(".env")
+
 	homeDir, err := ResolveHome(opts.HomeOverride)
 	if err != nil {
 		return Config{}, err
 	}
 
-	// Load .env files: CWD first (project-specific), then home dir (global).
-	// godotenv.Load does not overwrite vars already set in the environment.
-	_ = godotenv.Load(".env")
+	// Then load home-level .env; re-resolve in case it overrides AGENTD_HOME.
 	_ = godotenv.Load(filepath.Join(homeDir, ".env"))
+	homeDir, err = ResolveHome(opts.HomeOverride)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := baseConfig(homeDir)
 	v := newConfigViper(cfg, homeDir, opts.ConfigFile)

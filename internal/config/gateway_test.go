@@ -45,6 +45,20 @@ func TestGatewayConfig_ProviderConfigs(t *testing.T) {
 	}
 }
 
+func TestGatewayConfig_ProviderConfigs_Gemini(t *testing.T) {
+	cfg := GatewayConfig{
+		Order:  []string{"gemini"},
+		Gemini: gateway.ProviderConfig{Type: "gemini", APIKey: "gem-key"},
+	}
+	configs := cfg.ProviderConfigs()
+	if len(configs) != 1 {
+		t.Fatalf("ProviderConfigs() length = %v, want 1", len(configs))
+	}
+	if configs[0].Type != "gemini" {
+		t.Errorf("provider type = %v, want gemini", configs[0].Type)
+	}
+}
+
 func TestGatewayConfig_ProviderConfigs_EmptyOrder(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:  []string{},
