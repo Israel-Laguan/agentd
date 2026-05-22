@@ -128,9 +128,6 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 	if err := preflightWritableDirs(cfg); err != nil {
 		return config.Config{}, nil, runtimeDeps{}, nil, err
 	}
-	if err := requireStartupProviders(cfg.Gateway); err != nil {
-		return config.Config{}, nil, runtimeDeps{}, nil, err
-	}
 
 	slog.Debug("opening database", "path", cfg.DBPath)
 	store, err := kanban.OpenStore(cfg.DBPath)

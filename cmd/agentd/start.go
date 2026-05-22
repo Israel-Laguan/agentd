@@ -42,6 +42,10 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	defer cleanup()
 
+	if err := requireStartupProviders(cfg.Gateway); err != nil {
+		return err
+	}
+
 	if err := queue.ValidateToolCredentials(cfg.Agentic.ToolCredentials); err != nil {
 		return fmt.Errorf("agentic.tool_credentials: %w", err)
 	}
