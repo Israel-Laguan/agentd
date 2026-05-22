@@ -64,6 +64,7 @@ func TestSchedulerDescriptorEveryFiveMinutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureSystemProject: %v", err)
 	}
+	base := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
 	entry := models.ScheduledTask{
 		ID:          "health",
 		CronExpr:    "@every 5m",
@@ -73,6 +74,7 @@ func TestSchedulerDescriptorEveryFiveMinutes(t *testing.T) {
 		Kind:        models.ScheduledTaskKindDispatch,
 		Enabled:     true,
 		ProjectID:   project.ID,
+		CreatedAt:   base,
 	}
 	if err := store.UpsertScheduledTask(context.Background(), entry); err != nil {
 		t.Fatalf("UpsertScheduledTask: %v", err)
@@ -84,24 +86,71 @@ func TestSchedulerDescriptorEveryFiveMinutes(t *testing.T) {
 	s := NewScheduler(store, nil, SchedulerOptions{Enabled: true})
 	s.cronByID[entry.ID] = cachedCron{expr: entry.CronExpr, sched: sched}
 
-	base := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
 	if err := s.Tick(context.Background(), base); err != nil {
 		t.Fatalf("Tick at :00: %v", err)
 	}
-	if len(store.Tasks()) != 1 {
-		t.Fatalf("tasks after first tick = %d, want 1", len(store.Tasks()))
+	if len(store.Tasks()) != 0 {
+		t.Fatalf("tasks after first tick = %d, want 0 (@every waits one interval)", len(store.Tasks()))
 	}
 	if err := s.Tick(context.Background(), base.Add(2*time.Minute)); err != nil {
 		t.Fatalf("Tick at :02: %v", err)
 	}
-	if len(store.Tasks()) != 1 {
-		t.Fatalf("tasks after :02 tick = %d, want 1 (no double dispatch)", len(store.Tasks()))
+	if len(store.Tasks()) != 0 {
+		t.Fatalf("tasks after :02 tick = %d, want 0", len(store.Tasks()))
 	}
 	if err := s.Tick(context.Background(), base.Add(5*time.Minute)); err != nil {
 		t.Fatalf("Tick at :05: %v", err)
 	}
+	if len(store.Tasks()) != 1 {
+		t.Fatalf("tasks after :05 tick = %d, want 1", len(store.Tasks()))
+	}
+	if err := s.Tick(context.Background(), base.Add(10*time.Minute)); err != nil {
+		t.Fatalf("Tick at :10: %v", err)
+	}
 	if len(store.Tasks()) != 2 {
-		t.Fatalf("tasks after :05 tick = %d, want 2", len(store.Tasks()))
+		t.Fatalf("tasks after :10 tick = %d, want 2", len(store.Tasks()))
+	}
+}
+
+func TestSchedulerEveryWaitsIntervalCalendarFiresAtBoundary(t *testing.T) {
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+	project, err := store.EnsureSystemProject(ctx)
+	if err != nil {
+		t.Fatalf("EnsureSystemProject: %v", err)
+	}
+	base := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
+
+	entries := []models.ScheduledTask{
+		{
+			ID: "calendar", CronExpr: "*/5 * * * *", Title: "Calendar",
+			ContextFn: "static", Kind: models.ScheduledTaskKindDispatch,
+			Enabled: true, ProjectID: project.ID, CreatedAt: base,
+		},
+		{
+			ID: "every", CronExpr: "@every 5m", Title: "Every",
+			ContextFn: "static", Kind: models.ScheduledTaskKindDispatch,
+			Enabled: true, ProjectID: project.ID, CreatedAt: base,
+		},
+	}
+	for _, entry := range entries {
+		if err := store.UpsertScheduledTask(ctx, entry); err != nil {
+			t.Fatalf("UpsertScheduledTask %s: %v", entry.ID, err)
+		}
+	}
+	s := NewScheduler(store, nil, SchedulerOptions{Enabled: true})
+	for _, entry := range entries {
+		sched, err := config.ParseCronExpr(entry.CronExpr)
+		if err != nil {
+			t.Fatalf("ParseCronExpr %s: %v", entry.ID, err)
+		}
+		s.cronByID[entry.ID] = cachedCron{expr: entry.CronExpr, sched: sched}
+	}
+	if err := s.Tick(ctx, base); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if len(store.Tasks()) != 1 {
+		t.Fatalf("tasks at :00 = %d, want 1 (calendar only)", len(store.Tasks()))
 	}
 }
 
@@ -250,6 +299,66 @@ func TestScheduledTaskReachesDispatchPipeline(t *testing.T) {
 	rec.Process(context.Background(), claimed[0])
 	if len(rec.calls) != 1 {
 		t.Fatalf("Process calls = %d, want 1", len(rec.calls))
+	}
+}
+
+func TestScheduleDeferredRequeueClearsStaleLastFired(t *testing.T) {
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+	project, err := store.EnsureSystemProject(ctx)
+	if err != nil {
+		t.Fatalf("EnsureSystemProject: %v", err)
+	}
+	_, err = store.InsertReadyTask(ctx, project.ID, models.DraftTask{
+		Title: "Deferred", Assignee: models.TaskAssigneeSystem,
+	})
+	if err != nil {
+		t.Fatalf("InsertReadyTask: %v", err)
+	}
+	claimed, err := store.ClaimNextReadyTasks(ctx, 1)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("ClaimNextReadyTasks: %v len=%d", err, len(claimed))
+	}
+	task := claimed[0]
+
+	staleFired := time.Date(2026, 5, 21, 11, 0, 0, 0, time.UTC)
+	oldRunAfter := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
+	if err := store.UpsertScheduledTask(ctx, models.ScheduledTask{
+		ID:           "defer:" + task.ID,
+		RunAfter:     &oldRunAfter,
+		Kind:         models.ScheduledTaskKindRequeue,
+		TargetTaskID: task.ID,
+		Enabled:      true,
+		LastFiredAt:  &staleFired,
+	}); err != nil {
+		t.Fatalf("UpsertScheduledTask stale entry: %v", err)
+	}
+
+	newRunAfter := time.Date(2026, 5, 21, 14, 0, 0, 0, time.UTC)
+	if err := store.ScheduleDeferredRequeue(ctx, task.ID, newRunAfter); err != nil {
+		t.Fatalf("ScheduleDeferredRequeue: %v", err)
+	}
+	entries := store.ScheduledTasks()
+	if len(entries) != 1 {
+		t.Fatalf("entries = %d, want 1", len(entries))
+	}
+	if entries[0].LastFiredAt != nil {
+		t.Fatalf("LastFiredAt = %v, want nil after reschedule", entries[0].LastFiredAt)
+	}
+
+	s := NewScheduler(store, nil, SchedulerOptions{Enabled: true})
+	if err := s.Tick(ctx, newRunAfter); err != nil {
+		t.Fatalf("Tick at run_after: %v", err)
+	}
+	got, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State != models.TaskStateReady {
+		t.Fatalf("state = %s, want READY", got.State)
+	}
+	if len(store.ScheduledTasks()) != 0 {
+		t.Fatalf("scheduled entries = %d, want 0", len(store.ScheduledTasks()))
 	}
 }
 
