@@ -7,6 +7,15 @@ import (
 	"github.com/spf13/viper"
 )
 
+func mustLoadAgenticConfig(t *testing.T, v *viper.Viper) AgenticConfig {
+	t.Helper()
+	cfg, err := loadAgenticConfig(v)
+	if err != nil {
+		t.Fatalf("loadAgenticConfig: %v", err)
+	}
+	return cfg
+}
+
 func assertAgenticCoreDefaults(t *testing.T, cfg AgenticConfig) {
 	t.Helper()
 	if len(cfg.ExternalTools) != 0 {
@@ -89,7 +98,7 @@ func assertAgenticBatchingDefaults(t *testing.T, cfg AgenticConfig) {
 func TestAgenticDefaults_Viper(t *testing.T) {
 	v := viper.New()
 	setAgenticDefaults(v)
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 
 	assertAgenticCoreDefaults(t, cfg)
 	assertAgenticTopicGuardDefaults(t, cfg)
@@ -107,7 +116,7 @@ func TestLoadAgenticConfig_BatchingOverride(t *testing.T) {
 	v.Set("agentic.batching.enabled", true)
 	v.Set("agentic.batching.max_batch_size", 3)
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if !cfg.Batching.Enabled {
 		t.Fatal("Batching.Enabled = false, want true")
 	}
@@ -123,13 +132,13 @@ func TestLoadAgenticConfig_BatchingInvalidMaxFallsBack(t *testing.T) {
 	v.Set("agentic.batching.enabled", true)
 	v.Set("agentic.batching.max_batch_size", 0)
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if cfg.Batching.MaxBatchSize != DefaultBatchingMaxBatchSize {
 		t.Fatalf("Batching.MaxBatchSize = %d, want %d", cfg.Batching.MaxBatchSize, DefaultBatchingMaxBatchSize)
 	}
 
 	v.Set("agentic.batching.max_batch_size", -1)
-	cfg = loadAgenticConfig(v)
+	cfg = mustLoadAgenticConfig(t, v)
 	if cfg.Batching.MaxBatchSize != DefaultBatchingMaxBatchSize {
 		t.Fatalf("negative max: MaxBatchSize = %d, want %d", cfg.Batching.MaxBatchSize, DefaultBatchingMaxBatchSize)
 	}
@@ -141,7 +150,7 @@ func TestLoadAgenticConfig_BatchingMaxClampedToUpperBound(t *testing.T) {
 	setAgenticDefaults(v)
 	v.Set("agentic.batching.max_batch_size", 999)
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if cfg.Batching.MaxBatchSize != MaxBatchingMaxBatchSize {
 		t.Fatalf("Batching.MaxBatchSize = %d, want %d", cfg.Batching.MaxBatchSize, MaxBatchingMaxBatchSize)
 	}
@@ -161,7 +170,7 @@ func TestLoadAgenticConfig_CapabilityRoutingOverride(t *testing.T) {
 		"generate_image": "generate",
 	})
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if !cfg.CapabilityRouting.Enabled {
 		t.Fatal("CapabilityRouting.Enabled = false, want true")
 	}
@@ -188,7 +197,7 @@ func TestLoadAgenticConfig_ToolManifestOverride(t *testing.T) {
 		"doc_qa":    []interface{}{"read"},
 	})
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if !cfg.ToolManifest.Enabled {
 		t.Fatal("ToolManifest.Enabled = false, want true")
 	}
@@ -219,7 +228,7 @@ func TestLoadAgenticConfig_ModelRoutingOverride(t *testing.T) {
 	v.Set("agentic.model_routing.high.provider", "anthropic")
 	v.Set("agentic.model_routing.high.model", "claude-opus")
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if !cfg.ModelRouting.Enabled {
 		t.Fatal("ModelRouting.Enabled = false, want true")
 	}
@@ -243,7 +252,7 @@ func TestLoadAgenticConfig_NegativeComplexityThresholdClamped(t *testing.T) {
 	setAgenticDefaults(v)
 	v.Set("agentic.planning.complexity_threshold", -10)
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if cfg.Planning.ComplexityThreshold != 0 {
 		t.Fatalf("ComplexityThreshold = %d, want 0", cfg.Planning.ComplexityThreshold)
 	}
@@ -257,7 +266,7 @@ func TestLoadAgenticConfig_PlanningOverride(t *testing.T) {
 	v.Set("agentic.planning.max_redo_passes", 5)
 	v.Set("agentic.planning.plan_context_max_chars", 2000)
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if cfg.Planning.ComplexityThreshold != 500 {
 		t.Fatalf("ComplexityThreshold = %d, want 500", cfg.Planning.ComplexityThreshold)
 	}
@@ -273,7 +282,7 @@ func TestAgenticExternalToolsOverride_Viper(t *testing.T) {
 	v := viper.New()
 	setAgenticDefaults(v)
 	v.Set("agentic.external_tools", []string{"web_fetch", "search"})
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 
 	if len(cfg.ExternalTools) != 2 {
 		t.Fatalf("external_tools len = %d, want 2", len(cfg.ExternalTools))
@@ -289,7 +298,7 @@ func TestLoadAgenticConfig_ToolCredentials(t *testing.T) {
 	v.Set("agentic.tool_credentials.github", "GITHUB_TOKEN")
 	v.Set("agentic.tool_credentials.jira", "JIRA_API_KEY")
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if cfg.ToolCredentials["github"] != "GITHUB_TOKEN" {
 		t.Fatalf("github = %q, want GITHUB_TOKEN", cfg.ToolCredentials["github"])
 	}
@@ -303,7 +312,7 @@ func TestLoadAgenticConfig_DisableCredentialDetection(t *testing.T) {
 	v := viper.New()
 	v.Set("agentic.disable_credential_detection", true)
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if !cfg.DisableCredentialDetection {
 		t.Fatal("DisableCredentialDetection = false, want true")
 	}
@@ -316,7 +325,7 @@ func TestLoadAgenticConfig_Audit(t *testing.T) {
 	v.Set("agentic.audit.enabled", true)
 	v.Set("agentic.audit.path", "/var/log/agentd/audit.jsonl")
 
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if !cfg.Audit.Enabled {
 		t.Fatal("Audit.Enabled = false, want true")
 	}
@@ -375,7 +384,7 @@ func TestResolvePromptTemplatesPath(t *testing.T) {
 func TestLoadAgenticConfig_Empty(t *testing.T) {
 	t.Parallel()
 	v := viper.New()
-	cfg := loadAgenticConfig(v)
+	cfg := mustLoadAgenticConfig(t, v)
 	if len(cfg.ToolCredentials) != 0 {
 		t.Fatalf("ToolCredentials = %v, want empty", cfg.ToolCredentials)
 	}

@@ -42,6 +42,44 @@ func TestMigrateToV12CreatesScheduledTasksTable(t *testing.T) {
 	}
 }
 
+func TestMigrateToV12RepairsMissingRunAfterIndex(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:migrate-v12-repair?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, v11SchemaSQL); err != nil {
+		t.Fatalf("create v11 schema: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, scheduledTasksTableSQL); err != nil {
+		t.Fatalf("precreate scheduled_tasks: %v", err)
+	}
+
+	if err := Run(ctx, db); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	var version string
+	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
+		t.Fatalf("read schema version: %v", err)
+	}
+	if version != "12" {
+		t.Fatalf("schema version = %q, want 12", version)
+	}
+
+	var idxCount int
+	if err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM sqlite_master
+		WHERE type='index' AND name='idx_scheduled_tasks_run_after'`).Scan(&idxCount); err != nil {
+		t.Fatalf("check scheduled_tasks index: %v", err)
+	}
+	if idxCount != 1 {
+		t.Fatalf("idx_scheduled_tasks_run_after exists = %d, want 1", idxCount)
+	}
+}
+
 const v11SchemaSQL = `
 CREATE TABLE settings (
     key TEXT PRIMARY KEY,

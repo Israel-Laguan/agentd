@@ -42,6 +42,28 @@ func TestShellPreHook_Allow(t *testing.T) {
 	})
 }
 
+func TestShellPreHook_NoShebangFallsBackToSh(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, "no_shebang.sh", "echo 'shell works'\nexit 0\n")
+
+	entry := HookEntry{
+		Name:   "no-shebang",
+		Script: "no_shebang.sh",
+		Policy: "fail_closed",
+	}
+	hook := ShellPreHook(entry, dir)
+
+	withSerialShellHooks(func() {
+		verdict, err := hook.Fn(worker.HookContext{
+			ToolName:  "bash",
+			SessionID: "s1",
+			Timestamp: time.Now(),
+		})
+		require.NoError(t, err)
+		assert.False(t, verdict.Veto)
+	})
+}
+
 func TestShellPreHook_RespectsShebang(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, "bash_only.sh", "#!/usr/bin/env bash\n[[ -n \"$BASH_VERSION\" ]] && exit 0\necho 'not bash'\nexit 1\n")

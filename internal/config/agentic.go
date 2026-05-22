@@ -128,10 +128,14 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.prompt_templates_path", DefaultPromptTemplatesPath)
 }
 
-func loadAgenticConfig(v *viper.Viper) AgenticConfig {
+func loadAgenticConfig(v *viper.Viper) (AgenticConfig, error) {
 	threshold := v.GetFloat64("agentic.context_warning_threshold")
 	if threshold < 0 || threshold > 1 {
 		threshold = DefaultContextWarningThreshold
+	}
+	scheduler, err := loadSchedulerConfig(v)
+	if err != nil {
+		return AgenticConfig{}, err
 	}
 	return AgenticConfig{
 		ContextWarningThreshold:    threshold,
@@ -151,8 +155,8 @@ func loadAgenticConfig(v *viper.Viper) AgenticConfig {
 		CapabilityRouting: loadCapabilityRoutingConfig(v),
 		Batching:            loadBatchingConfig(v),
 		PromptTemplatesPath: v.GetString("agentic.prompt_templates_path"),
-		Scheduler:           loadSchedulerConfig(v),
-	}
+		Scheduler:           scheduler,
+	}, nil
 }
 
 func loadModelRoutingConfig(v *viper.Viper) ModelRoutingConfig {
