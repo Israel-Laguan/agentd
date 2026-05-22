@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
 	"agentd/internal/gateway"
+	"agentd/internal/kanban"
 	"agentd/internal/models"
 )
 
@@ -168,6 +170,41 @@ func TestNotFound(t *testing.T) {
 	})
 	resp := request(handler, http.MethodGet, "/api/v1/nonexistent", "")
 	assertStatus(t, resp, http.StatusNotFound)
+}
+
+// TestStartup_FreshDatabaseHealthCheck verifies that a freshly opened kanban
+// store (as created during `agentd init`) can serve the core API endpoints
+// without errors. This is a regression guard for the boot sequence: if schema
+// migrations or default-data seeding break, these assertions will catch it.
+func TestStartup_FreshDatabaseHealthCheck(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "global.db")
+	store, err := kanban.OpenStore(dbPath)
+	if err != nil {
+		t.Fatalf("kanban.OpenStore: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	handler := api.NewHandler(api.ServerDeps{
+		Store:      store,
+		Gateway:    newTestGateway(),
+		Bus:        bus.NewInProcess(),
+		Summarizer: frontdesk.NewStatusSummarizer(store),
+	})
+
+	resp := request(handler, http.MethodGet, "/api/v1/system/status", "")
+	assertStatus(t, resp, http.StatusOK)
+	assertJSONField(t, resp, "status", "success")
+
+	resp = request(handler, http.MethodGet, "/api/v1/projects", "")
+	assertStatus(t, resp, http.StatusOK)
+	assertJSONField(t, resp, "status", "success")
+	body := decodeBody(t, resp)
+	// data is null (nil slice) when the store is empty; that is valid JSON
+	if data, ok := body["data"]; ok && data != nil {
+		if _, ok := data.([]any); !ok {
+			t.Fatalf("projects data has unexpected type: %T", data)
+		}
+	}
 }
 
 func request(handler http.Handler, method, path, body string) *httptest.ResponseRecorder {
