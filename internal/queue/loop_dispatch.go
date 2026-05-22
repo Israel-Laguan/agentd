@@ -51,12 +51,12 @@ func (d *Daemon) dispatchGuardNilWorker(ctx context.Context, toGroup []models.Ta
 	if len(toGroup) == 0 {
 		return nil
 	}
-	if ctx.Err() != nil {
-		return nil
-	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	d.requeueUndispatchedClaims(cleanupCtx, toGroup)
+	if ctx.Err() != nil {
+		return nil
+	}
 	return fmt.Errorf("dispatch worker is nil")
 }
 

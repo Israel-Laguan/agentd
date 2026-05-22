@@ -76,11 +76,21 @@ func (s *batchTestStore) GetTask(_ context.Context, id string) (*models.Task, er
 	return &t, nil
 }
 
-func (s *batchTestStore) IncrementRetryCount(context.Context, string, time.Time) (*models.Task, error) {
-	return nil, nil
+func (s *batchTestStore) IncrementRetryCount(_ context.Context, id string, _ time.Time) (*models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t := s.lookupTaskLocked(id)
+	t.RetryCount++
+	s.tasks[id] = t
+	return &t, nil
 }
-func (s *batchTestStore) UpdateTaskState(context.Context, string, time.Time, models.TaskState) (*models.Task, error) {
-	return nil, nil
+func (s *batchTestStore) UpdateTaskState(_ context.Context, id string, _ time.Time, next models.TaskState) (*models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t := s.lookupTaskLocked(id)
+	t.State = next
+	s.tasks[id] = t
+	return &t, nil
 }
 func (s *batchTestStore) UpdateTaskDescription(context.Context, string, time.Time, string) (*models.Task, error) {
 	return nil, nil
@@ -451,8 +461,14 @@ func TestProcessBatch_GatewayError_FailsAllTasks(t *testing.T) {
 	defer store.mu.Unlock()
 	for _, id := range []string{"t1", "t2", "t3"} {
 		task := store.tasks[id]
-		if task.State == models.TaskStateRunning {
-			t.Fatalf("task %s stuck RUNNING after batch gateway error", id)
+		if task.State != models.TaskStateFailed {
+			t.Fatalf("task %s state = %s, want %s after batch gateway error", id, task.State, models.TaskStateFailed)
+		}
+		if store.results[id] == nil || store.results[id].Success {
+			t.Fatalf("task %s should have a failed result recorded", id)
+		}
+		if !strings.Contains(store.results[id].Payload, "batch gateway unavailable") {
+			t.Fatalf("task %s result payload = %q, want batch gateway error", id, store.results[id].Payload)
 		}
 	}
 }
