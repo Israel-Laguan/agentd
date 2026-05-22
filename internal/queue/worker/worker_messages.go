@@ -30,21 +30,7 @@ func (w *Worker) seedMessages(ctx context.Context, task models.Task, project mod
 	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
-func (w *Worker) legacySeedMessages(task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	if w.promptLibrary != nil {
-		if name, slots, ok := w.promptTemplateForTask(task, profile); ok {
-			prefix := legacyJSONCommandSystemContent(profile)
-			rendered, err := w.promptLibrary.Render(name, RenderSession{SystemPrefix: prefix}, slots)
-			if err == nil {
-				return []gateway.PromptMessage{
-					{Role: "system", Content: rendered.System},
-					{Role: "user", Content: rendered.User},
-				}
-			}
-			slog.Warn("prompt template render failed for legacy seed",
-				"template", name, "task_id", task.ID, "error", err)
-		}
-	}
+func (w *Worker) legacySeedMessages(task models.Task, _ models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	return workerMessages(task, profile)
 }
 

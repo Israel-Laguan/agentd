@@ -336,10 +336,39 @@ func TestResolveAuditPath_Relative(t *testing.T) {
 
 func TestResolvePromptTemplatesPath(t *testing.T) {
 	t.Parallel()
-	got := ResolvePromptTemplatesPath("/home/agentd", "prompt_templates.json")
-	want := filepath.Join("/home/agentd", "prompt_templates.json")
-	if got != want {
-		t.Fatalf("ResolvePromptTemplatesPath = %q, want %q", got, want)
+	cases := []struct {
+		name string
+		home string
+		raw  string
+		want string
+	}{
+		{
+			name: "relative",
+			home: "/home/agentd",
+			raw:  "prompt_templates.json",
+			want: filepath.Join("/home/agentd", "prompt_templates.json"),
+		},
+		{
+			name: "empty uses default",
+			home: "/home/agentd",
+			raw:  "",
+			want: filepath.Join("/home/agentd", DefaultPromptTemplatesPath),
+		},
+		{
+			name: "absolute passthrough",
+			home: "/home/agentd",
+			raw:  "/etc/agentd/prompts.json",
+			want: "/etc/agentd/prompts.json",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := ResolvePromptTemplatesPath(tc.home, tc.raw)
+			if got != tc.want {
+				t.Fatalf("ResolvePromptTemplatesPath(%q, %q) = %q, want %q", tc.home, tc.raw, got, tc.want)
+			}
+		})
 	}
 }
 

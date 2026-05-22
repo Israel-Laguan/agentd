@@ -61,7 +61,7 @@ func (w *Worker) handleAgentFailure(ctx context.Context, task models.Task, paylo
 			w.requeue(ctx, *retried, payload)
 			return
 		case planning.HealingActionSplit:
-			w.handleHealingSplit(ctx, *retried, *profile)
+			w.handleHealingSplit(ctx, *retried, *project, *profile)
 			return
 		case planning.HealingActionHuman:
 			w.createHealingHandoff(ctx, *retried, action, payload)
@@ -76,9 +76,9 @@ func (w *Worker) handleAgentFailure(ctx context.Context, task models.Task, paylo
 	w.evict(ctx, *retried, payload)
 }
 
-func (w *Worker) handleHealingSplit(ctx context.Context, task models.Task, profile models.AgentProfile) {
+func (w *Worker) handleHealingSplit(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
 	w.emit(ctx, task, "HEALING_SPLIT", fmt.Sprintf("attempt=%d step=%s", task.RetryCount, planning.HealingStepSplitTask))
-	response, err := w.breakdownCommand(ctx, task, profile)
+	response, err := w.breakdownCommand(ctx, task, project, profile)
 	if err != nil {
 		w.createHealingHandoff(ctx, task, planning.HealingAction{
 			Type:     planning.HealingActionHuman,
@@ -98,7 +98,7 @@ func (w *Worker) handleHealingSplit(ctx context.Context, task models.Task, profi
 	w.handleTaskBreakdown(ctx, task, response.Subtasks)
 }
 
-func (w *Worker) breakdownCommand(ctx context.Context, task models.Task, profile models.AgentProfile) (workerResponse, error) {
+func (w *Worker) breakdownCommand(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (workerResponse, error) {
 	prompt := "This task has failed multiple times. Break it into smaller independently executable subtasks instead of attempting a single command."
 	if profile.SystemPrompt.Valid {
 		profile.SystemPrompt.String = profile.SystemPrompt.String + "\n\n" + prompt
@@ -106,8 +106,8 @@ func (w *Worker) breakdownCommand(ctx context.Context, task models.Task, profile
 		profile.SystemPrompt.Valid = true
 		profile.SystemPrompt.String = prompt
 	}
-	profile = w.routeLegacyProfile(ctx, task, models.Project{}, profile)
-	return w.command(ctx, task, models.Project{}, profile)
+	profile = w.routeLegacyProfile(ctx, task, project, profile)
+	return w.command(ctx, task, project, profile)
 }
 
 func (w *Worker) tunePayload(profile models.AgentProfile, action planning.HealingAction, attempt int) string {
