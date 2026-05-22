@@ -112,27 +112,41 @@ func (lib *PromptLibrary) Save(name string, tmpl PromptTemplate) error {
 		return fmt.Errorf("prompt template: empty name")
 	}
 	lib.mu.Lock()
+	defer lib.mu.Unlock()
 	lib.templates[name] = tmpl
-	snapshot := make(map[string]PromptTemplate, len(lib.templates))
-	for k, v := range lib.templates {
-		snapshot[k] = v
-	}
 	path := lib.path
-	lib.mu.Unlock()
-
 	if path == "" {
 		return nil
 	}
-	data, err := json.MarshalIndent(snapshot, "", "  ")
+	data, err := json.MarshalIndent(lib.templates, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal prompt templates: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create prompt templates dir: %w", err)
 	}
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+	mode := os.FileMode(0o644)
+	if st, err := os.Stat(path); err == nil {
+		mode = st.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp prompt templates: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("write temp prompt templates: %w", err)
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("chmod temp prompt templates: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("close temp prompt templates: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath)

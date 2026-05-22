@@ -168,8 +168,15 @@ func (w *Worker) assembleAgenticSystemPromptWithUserContent(
 	profile models.AgentProfile,
 	userContent string,
 ) []gateway.PromptMessage {
-	messages := w.assembleAgenticSystemPrompt(ctx, task, project, profile)
-	return replaceFirstUserContent(messages, userContent)
+	// Topic drift resets use the new user input as anchor; skip CODE_PROMPT_BUILDER
+	// so code-gen system instructions are not kept after a non-code topic change.
+	systemPrompt := w.buildSystemPromptContent(task, project, profile)
+	messages := []gateway.PromptMessage{
+		gateway.PromptMessage{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userContent},
+	}
+	intent := taskIntent(task)
+	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
 func replaceFirstUserContent(messages []gateway.PromptMessage, content string) []gateway.PromptMessage {
