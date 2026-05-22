@@ -103,7 +103,9 @@ func (s *Store) UpdateScheduledTaskLastFired(ctx context.Context, id string, fir
 
 func (s *Store) ScheduleDeferredRequeue(ctx context.Context, taskID string, runAfter time.Time) error {
 	id := "defer:" + taskID
-	_ = s.DeleteScheduledTask(ctx, id)
+	if err := s.DeleteScheduledTask(ctx, id); err != nil {
+		return fmt.Errorf("reset deferred scheduled task %q: %w", id, err)
+	}
 	return s.UpsertScheduledTask(ctx, models.ScheduledTask{
 		ID:           id,
 		RunAfter:     &runAfter,
