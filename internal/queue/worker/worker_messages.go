@@ -178,14 +178,3 @@ func (w *Worker) assembleAgenticSystemPromptWithUserContent(
 	intent := taskIntent(task)
 	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
-
-func replaceFirstUserContent(messages []gateway.PromptMessage, content string) []gateway.PromptMessage {
-	out := append([]gateway.PromptMessage(nil), messages...)
-	for i := range out {
-		if out[i].Role == "user" {
-			out[i].Content = content
-			return out
-		}
-	}
-	return out
-}
