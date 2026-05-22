@@ -10,8 +10,14 @@ import (
 )
 
 // deferRollingBudget leaves a task in QUEUED and requeues to READY after the
-// estimated window drain. Task 48 scheduler should replace this with run_after.
+// estimated window drain. When the scheduler is enabled, run_after replaces the timer.
 func (d *Daemon) deferRollingBudget(ctx context.Context, task models.Task, wait time.Duration) {
+	d.scheduleTaskDefer(ctx, task, wait, func(ctx context.Context, t models.Task) {
+		d.deferRollingBudgetTimer(ctx, t, wait)
+	})
+}
+
+func (d *Daemon) deferRollingBudgetTimer(ctx context.Context, task models.Task, wait time.Duration) {
 	if wait <= 0 {
 		wait = time.Minute
 	}

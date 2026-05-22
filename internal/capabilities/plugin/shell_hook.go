@@ -94,7 +94,8 @@ func execScript(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", script) //nolint:gosec // plugin scripts are admin-configured
+	// Execute the script directly so the kernel honors shebangs; avoids an extra sh -c layer.
+	cmd := exec.CommandContext(ctx, script) //nolint:gosec // plugin scripts are admin-configured
 	cmd.Env = worker.BuildSandboxEnv(shellHookEnvAllowlist, env)
 	cmd.WaitDelay = 500 * time.Millisecond
 	var stdout, stderr bytes.Buffer

@@ -64,6 +64,15 @@ var DefaultCronSchedule = CronSchedule{
 
 var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 
+// ParseCronExpr parses a 5-field cron expression or descriptor into a Schedule.
+func ParseCronExpr(expr string) (cron.Schedule, error) {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return nil, fmt.Errorf("empty cron expression")
+	}
+	return cronParser.Parse(expr)
+}
+
 // LoadCron reads an agentd crontab file. A missing file returns defaults.
 func LoadCron(path string) (CronSchedule, error) {
 	schedule := DefaultCronSchedule

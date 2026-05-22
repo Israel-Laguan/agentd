@@ -91,3 +91,16 @@ type KanbanStore interface {
 	SetSetting(ctx context.Context, key, value string) error
 	Close() error
 }
+
+// ScheduledTaskStore persists the scheduler registry and creates dispatch tasks.
+type ScheduledTaskStore interface {
+	ListScheduledTasks(ctx context.Context) ([]ScheduledTask, error)
+	UpsertScheduledTask(ctx context.Context, t ScheduledTask) error
+	DeleteScheduledTask(ctx context.Context, id string) error
+	UpdateScheduledTaskLastFired(ctx context.Context, id string, firedAt time.Time) error
+	ScheduleDeferredRequeue(ctx context.Context, taskID string, runAfter time.Time) error
+	InsertReadyTask(ctx context.Context, projectID string, draft DraftTask) (*Task, error)
+	EnsureSystemProject(ctx context.Context) (*Project, error)
+	GetTask(ctx context.Context, id string) (*Task, error)
+	UpdateTaskState(ctx context.Context, id string, expectedUpdatedAt time.Time, next TaskState) (*Task, error)
+}

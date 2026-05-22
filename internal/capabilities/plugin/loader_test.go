@@ -89,13 +89,15 @@ func TestPluginLoader_HooksRegisteredIntoChain(t *testing.T) {
 	require.Len(t, manifests, 1)
 	assert.Equal(t, "security", manifests[0].Name)
 
-	verdict := chain.RunPre(worker.HookContext{
-		ToolName:  "bash",
-		Args:      `{"command":"ls"}`,
-		SessionID: "s1",
-		Timestamp: time.Now(),
+	withSerialShellHooks(func() {
+		verdict := chain.RunPre(worker.HookContext{
+			ToolName:  "bash",
+			Args:      `{"command":"ls"}`,
+			SessionID: "s1",
+			Timestamp: time.Now(),
+		})
+		assert.False(t, verdict.Veto, "allow script should not veto")
 	})
-	assert.False(t, verdict.Veto, "allow script should not veto")
 }
 
 func TestPluginLoader_CapabilitiesRegistered(t *testing.T) {
