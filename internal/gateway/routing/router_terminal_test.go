@@ -15,14 +15,13 @@ func TestDecideTerminalError(t *testing.T) {
 	providerErr := errors.New("provider down")
 
 	tests := []struct {
-		name                    string
-		req                     spec.AIRequest
-		matchedProvider         bool
-		selectedHasToolSupport  bool
-		providerErrs            []error
-		wantSubstr              string
-		wantLLMUnreachable      bool
-		wantToolsUnsupported    bool
+		name                   string
+		req                    spec.AIRequest
+		matchedProvider        bool
+		selectedHasToolSupport bool
+		providerErrs           []error
+		wantSubstr             string
+		wantLLMUnreachable     bool
 	}{
 		{
 			name: "explicit provider missing tools support",
@@ -33,7 +32,6 @@ func TestDecideTerminalError(t *testing.T) {
 			matchedProvider:        true,
 			selectedHasToolSupport: false,
 			wantSubstr:             "does not support tools",
-			wantToolsUnsupported:   true,
 		},
 		{
 			name: "explicit provider not configured",
@@ -66,9 +64,6 @@ func TestDecideTerminalError(t *testing.T) {
 			}
 			if tt.wantLLMUnreachable && !errors.Is(err, models.ErrLLMUnreachable) {
 				t.Fatalf("error = %v, want ErrLLMUnreachable", err)
-			}
-			if tt.wantToolsUnsupported && !strings.Contains(err.Error(), "does not support tools") {
-				t.Fatalf("error = %v", err)
 			}
 		})
 	}

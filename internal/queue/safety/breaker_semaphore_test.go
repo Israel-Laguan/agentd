@@ -243,8 +243,10 @@ func TestNewSemaphoreMinimumCapacity(t *testing.T) {
 func TestSemaphoreAcquireAtCapacity(t *testing.T) {
 	sem := NewSemaphore(2)
 	ctx := context.Background()
-	if !sem.Acquire(ctx) || !sem.Acquire(ctx) {
-		t.Fatal("expected to fill semaphore")
+	for i := 0; i < 2; i++ {
+		if !sem.Acquire(ctx) {
+			t.Fatalf("acquire %d failed", i+1)
+		}
 	}
 	if sem.Available() != 0 {
 		t.Fatalf("available = %d, want 0 at capacity", sem.Available())
