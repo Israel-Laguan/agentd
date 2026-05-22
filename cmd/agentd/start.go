@@ -67,7 +67,11 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	defer listener.Close() //nolint:errcheck
 	slog.Info("API server listening", "address", listener.Addr().String())
-	defer apiServer.Shutdown(ctx) //nolint:errcheck
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = apiServer.Shutdown(shutdownCtx) //nolint:errcheck
+	}()
 	slog.Debug("HTTP server started")
 
 	apiErrCh := startAPIServer(ctx, listener, apiServer, stop)

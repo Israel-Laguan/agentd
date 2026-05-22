@@ -32,7 +32,7 @@ func describeCommandError(err error) (string, string) {
 		return "Another process is already using the configured API address.", "Stop that process or set AGENTD_API_ADDRESS to a free port."
 	case strings.Contains(errText, "directory not writable"):
 		return "agentd could not write to one of its data directories.", "Check the permissions for AGENTD_HOME, projects, uploads, and archives directories."
-	case strings.Contains(errText, "LLM warmup failed"):
+	case strings.Contains(errText, "LLM warmup failed") || strings.Contains(errText, "LLM warmup:"):
 		return "agentd reached your LLM provider, but the startup warmup failed.", "Check the provider order, API key, model name, and network access."
 	case strings.Contains(errText, "no LLM providers available"):
 		return "agentd could not find a usable LLM provider.", "Set an API key or configure a local OpenAI-compatible provider in your config."

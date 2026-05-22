@@ -203,6 +203,41 @@ func TestLoad_MalformedDotEnv(t *testing.T) {
 	}
 }
 
+func TestLoad_ProcessEnvOverridesHomeDotEnv(t *testing.T) {
+	tmp := t.TempDir()
+	processHome := filepath.Join(tmp, "process-home")
+	fileHome := filepath.Join(tmp, "file-home")
+	if err := os.MkdirAll(processHome, 0o755); err != nil {
+		t.Fatalf("mkdir process-home: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(processHome, ".env"), []byte("AGENTD_HOME="+fileHome+"\n"), 0o644); err != nil {
+		t.Fatalf("write home .env: %v", err)
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	if old, ok := os.LookupEnv("AGENTD_HOME"); ok {
+		t.Cleanup(func() { _ = os.Setenv("AGENTD_HOME", old) })
+	} else {
+		t.Cleanup(func() { _ = os.Unsetenv("AGENTD_HOME") })
+	}
+	t.Setenv("AGENTD_HOME", processHome)
+
+	cfg, err := Load(LoadOptions{})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.HomeDir != processHome {
+		t.Errorf("HomeDir = %q, want %q (process env should win over home .env)", cfg.HomeDir, processHome)
+	}
+}
+
 func TestLoad_HomeDotEnvAfterAGENTD_HOMEOverride(t *testing.T) {
 	tmp := t.TempDir()
 	homeB := filepath.Join(tmp, "home-b")

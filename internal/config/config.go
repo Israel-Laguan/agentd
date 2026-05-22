@@ -53,6 +53,8 @@ type LoadOptions struct {
 // Environment variables are seeded from .env (CWD) and ~/.agentd/.env before
 // config is read; existing process env vars always take precedence.
 func Load(opts LoadOptions) (Config, error) {
+	originalEnv := snapshotProcessEnv()
+
 	// Seed env from project-local .env first so AGENTD_HOME can influence ResolveHome.
 	if err := godotenv.Load(".env"); err != nil && !os.IsNotExist(err) {
 		return Config{}, fmt.Errorf("load .env from current directory: %w", err)
@@ -77,6 +79,8 @@ func Load(opts LoadOptions) (Config, error) {
 		}
 	}
 	homeDir = resolvedHome
+
+	restoreProcessEnv(originalEnv)
 
 	cfg := baseConfig(homeDir)
 	v := newConfigViper(cfg, homeDir, opts.ConfigFile)
@@ -224,4 +228,19 @@ func isConfigNotFound(err error) bool {
 		return true
 	}
 	return false
+}
+
+func snapshotProcessEnv() map[string]string {
+	snap := make(map[string]string)
+	for _, kv := range os.Environ() {
+		key, val, _ := strings.Cut(kv, "=")
+		snap[key] = val
+	}
+	return snap
+}
+
+func restoreProcessEnv(snap map[string]string) {
+	for key, val := range snap {
+		_ = os.Setenv(key, val)
+	}
 }
