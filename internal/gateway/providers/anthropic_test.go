@@ -290,6 +290,17 @@ func TestAnthropicTools_Serialization(t *testing.T) {
 	}
 }
 
+func TestAnthropicMaxTokens(t *testing.T) {
+	t.Parallel()
+
+	if got := anthropicMaxTokens(512); got != 512 {
+		t.Fatalf("anthropicMaxTokens(512) = %d, want 512", got)
+	}
+	if got := anthropicMaxTokens(0); got != 1024 {
+		t.Fatalf("anthropicMaxTokens(0) = %d, want 1024", got)
+	}
+}
+
 func TestAnthropicCapabilities(t *testing.T) {
 	a := NewAnthropic(spec.ProviderConfig{
 		Model: "claude-3-haiku",

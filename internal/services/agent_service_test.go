@@ -228,6 +228,109 @@ func TestAgentServiceDeleteProtectedAndBus(t *testing.T) {
 	}
 }
 
+func TestAgentServiceGetNotFound(t *testing.T) {
+	store := testutil.NewFakeStore()
+	svc := services.NewAgentService(store, nil)
+
+	_, err := svc.Get(context.Background(), "missing-agent")
+	if !errors.Is(err, models.ErrAgentProfileNotFound) {
+		t.Fatalf("Get missing: %v", err)
+	}
+}
+
+func TestAgentServicePatchAllScalarFields(t *testing.T) {
+	store := testutil.NewFakeStore()
+	svc := services.NewAgentService(store, nil)
+
+	provider := "  anthropic  "
+	model := " claude-3 "
+	temp := 0.42
+	prompt := "be concise"
+	role := "  REVIEWER  "
+	max := 4096
+	_, err := svc.Patch(context.Background(), "default", services.AgentPatch{
+		Provider:     &provider,
+		Model:        &model,
+		Temperature:  &temp,
+		SystemPrompt: &prompt,
+		Role:         &role,
+		MaxTokens:    &max,
+	})
+	if err != nil {
+		t.Fatalf("Patch: %v", err)
+	}
+	got, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile: %v", err)
+	}
+	if got.Provider != "anthropic" || got.Model != "claude-3" {
+		t.Fatalf("provider/model = %q / %q", got.Provider, got.Model)
+	}
+	if got.Temperature != 0.42 {
+		t.Fatalf("Temperature = %v", got.Temperature)
+	}
+	if !got.SystemPrompt.Valid || got.SystemPrompt.String != "be concise" {
+		t.Fatalf("SystemPrompt = %#v", got.SystemPrompt)
+	}
+	if got.Role != "REVIEWER" || got.MaxTokens != 4096 {
+		t.Fatalf("Role/MaxTokens = %q / %d", got.Role, got.MaxTokens)
+	}
+}
+
+func TestAgentServicePatchMaxTokensNegativeIgnored(t *testing.T) {
+	store := testutil.NewFakeStore()
+	svc := services.NewAgentService(store, nil)
+
+	ok := 512
+	_, err := svc.Patch(context.Background(), "default", services.AgentPatch{MaxTokens: &ok})
+	if err != nil {
+		t.Fatalf("Patch set max: %v", err)
+	}
+
+	bad := -1
+	_, err = svc.Patch(context.Background(), "default", services.AgentPatch{MaxTokens: &bad})
+	if err != nil {
+		t.Fatalf("Patch negative max: %v", err)
+	}
+	got, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile: %v", err)
+	}
+	if got.MaxTokens != 512 {
+		t.Fatalf("MaxTokens = %d, want 512 (negative patch ignored)", got.MaxTokens)
+	}
+}
+
+func TestAgentServicePatchNotFound(t *testing.T) {
+	store := testutil.NewFakeStore()
+	svc := services.NewAgentService(store, nil)
+
+	name := "nope"
+	_, err := svc.Patch(context.Background(), "ghost", services.AgentPatch{Name: &name})
+	if !errors.Is(err, models.ErrAgentProfileNotFound) {
+		t.Fatalf("Patch missing agent: %v", err)
+	}
+}
+
+type upsertFailAgentStore struct {
+	*testutil.FakeKanbanStore
+}
+
+func (s *upsertFailAgentStore) UpsertAgentProfile(context.Context, models.AgentProfile) error {
+	return errors.New("upsert boom")
+}
+
+func TestAgentServicePatchUpsertError(t *testing.T) {
+	store := &upsertFailAgentStore{FakeKanbanStore: testutil.NewFakeStore()}
+	svc := services.NewAgentService(store, nil)
+
+	name := "fail"
+	_, err := svc.Patch(context.Background(), "default", services.AgentPatch{Name: &name})
+	if err == nil || err.Error() != "upsert boom" {
+		t.Fatalf("Patch upsert error: %v", err)
+	}
+}
+
 func TestAgentServiceDeleteInUse(t *testing.T) {
 	store := testutil.NewFakeStore()
 	svc := services.NewAgentService(store, nil)
