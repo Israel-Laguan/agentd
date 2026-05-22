@@ -82,8 +82,10 @@ func (s *FakeKanbanStore) UpdateScheduledTaskLastFired(_ context.Context, id str
 }
 
 func (s *FakeKanbanStore) ScheduleDeferredRequeue(_ context.Context, taskID string, runAfter time.Time) error {
+	id := "defer:" + taskID
+	_ = s.DeleteScheduledTask(context.Background(), id)
 	return s.UpsertScheduledTask(context.Background(), models.ScheduledTask{
-		ID:           "defer:" + taskID,
+		ID:           id,
 		RunAfter:     &runAfter,
 		Kind:         models.ScheduledTaskKindRequeue,
 		TargetTaskID: taskID,

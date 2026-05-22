@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 	enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL
-)`
+) STRICT`
 
 func migrateToV12(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, scheduledTasksTableSQL); err != nil {

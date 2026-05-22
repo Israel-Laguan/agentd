@@ -9,8 +9,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestMigrateToV12CreatesScheduledTasksTable(t *testing.T) {
-	db, err := sql.Open("sqlite", "file:migrate-v12?mode=memory&cache=shared")
+func TestMigrateToV13CreatesStrictScheduledTasks(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:migrate-v13?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -31,15 +31,6 @@ func TestMigrateToV12CreatesScheduledTasksTable(t *testing.T) {
 	}
 	if version != "13" {
 		t.Fatalf("schema version = %q, want 13", version)
-	}
-
-	var tableExists int
-	if err := db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'scheduled_tasks'`).Scan(&tableExists); err != nil {
-		t.Fatalf("check scheduled_tasks table: %v", err)
-	}
-	if tableExists != 1 {
-		t.Fatalf("scheduled_tasks table exists = %d, want 1", tableExists)
 	}
 
 	var createSQL string
@@ -52,8 +43,8 @@ func TestMigrateToV12CreatesScheduledTasksTable(t *testing.T) {
 	}
 }
 
-func TestMigrateToV12RepairsMissingRunAfterIndex(t *testing.T) {
-	db, err := sql.Open("sqlite", "file:migrate-v12-repair?mode=memory&cache=shared")
+func TestMigrateToV13RebuildsNonStrictTable(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:migrate-v13-rebuild?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -63,8 +54,17 @@ func TestMigrateToV12RepairsMissingRunAfterIndex(t *testing.T) {
 	if _, err := db.ExecContext(ctx, v11SchemaSQL); err != nil {
 		t.Fatalf("create v11 schema: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, scheduledTasksTableSQL); err != nil {
-		t.Fatalf("precreate scheduled_tasks: %v", err)
+	nonStrictSQL := strings.Replace(scheduledTasksTableSQL, ") STRICT", ")", 1)
+	if _, err := db.ExecContext(ctx, nonStrictSQL); err != nil {
+		t.Fatalf("precreate non-strict scheduled_tasks: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE settings SET value = '12' WHERE key = 'schema_version'`); err != nil {
+		t.Fatalf("set schema version 12: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO scheduled_tasks (id, cron_expr, created_at, updated_at)
+		VALUES ('keep-me', '*/5 * * * *', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z')`); err != nil {
+		t.Fatalf("seed scheduled_tasks: %v", err)
 	}
 
 	if err := Run(ctx, db); err != nil {
@@ -79,6 +79,23 @@ func TestMigrateToV12RepairsMissingRunAfterIndex(t *testing.T) {
 		t.Fatalf("schema version = %q, want 13", version)
 	}
 
+	var createSQL string
+	if err := db.QueryRowContext(ctx, `
+		SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scheduled_tasks'`).Scan(&createSQL); err != nil {
+		t.Fatalf("read scheduled_tasks ddl: %v", err)
+	}
+	if !strings.Contains(strings.ToUpper(createSQL), "STRICT") {
+		t.Fatalf("scheduled_tasks ddl missing STRICT: %s", createSQL)
+	}
+
+	var id string
+	if err := db.QueryRowContext(ctx, `SELECT id FROM scheduled_tasks WHERE id = 'keep-me'`).Scan(&id); err != nil {
+		t.Fatalf("read migrated row: %v", err)
+	}
+	if id != "keep-me" {
+		t.Fatalf("id = %q, want keep-me", id)
+	}
+
 	var idxCount int
 	if err := db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM sqlite_master
@@ -89,12 +106,3 @@ func TestMigrateToV12RepairsMissingRunAfterIndex(t *testing.T) {
 		t.Fatalf("idx_scheduled_tasks_run_after exists = %d, want 1", idxCount)
 	}
 }
-
-const v11SchemaSQL = `
-CREATE TABLE settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-INSERT INTO settings (key, value, updated_at) VALUES ('schema_version', '11', datetime('now'));
-`
