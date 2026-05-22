@@ -80,13 +80,12 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	stopWallTimeout := e.startWallTimeout(payload, markTimedOut)
 	defer stopWallTimeout()
 	output := newCommandOutput(e.maxLogBytes(), e.scrubber())
-	output.start(execCtx, e.Sink, payload, stdout, stderr)
 	if err := cmd.Start(); err != nil {
 		cancel()
-		output.wg.Wait()
 		return Result{}, fmt.Errorf("start command: %w", err)
 	}
 	processID.Store(int32(cmd.Process.Pid))
+	output.start(execCtx, e.Sink, payload, stdout, stderr)
 	waitDone := make(chan error, 1)
 	go func() {
 		waitDone <- waitCommand(cmd, timedOut, e.killGrace())
