@@ -363,7 +363,7 @@ func TestOpenAIResponse_UnmarshalAssistantToolCallsSnippet(t *testing.T) {
 		tc.Function.Arguments != `{"location":"Boston"}` {
 		t.Errorf("tool_call = %+v", tc)
 	}
-	resp := decoded.toAIResponse("gpt-4")
+	resp := decoded.toAIResponse("gpt-4", "openai")
 	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].ID != "call_abc123" {
 		t.Errorf("toAIResponse ToolCalls = %+v", resp.ToolCalls)
 	}

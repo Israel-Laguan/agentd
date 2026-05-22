@@ -17,8 +17,10 @@ func newRootCommand() *cobra.Command {
 	opts := &rootOptions{}
 
 	rootCmd := &cobra.Command{
-		Use:   "agentd",
-		Short: "Local-first autonomous workforce daemon",
+		Use:           "agentd",
+		Short:         "Local-first autonomous workforce daemon",
+		SilenceErrors:  true,
+		SilenceUsage:   true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			logLevel := slog.LevelInfo
 			if opts.verbose {

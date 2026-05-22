@@ -53,6 +53,7 @@ const (
 	ProviderOllama    = spec.ProviderOllama
 	ProviderLlamaCpp  = spec.ProviderLlamaCpp
 	ProviderHorde     = spec.ProviderHorde
+	ProviderGemini    = spec.ProviderGemini
 )
 
 // Errors and markers.
