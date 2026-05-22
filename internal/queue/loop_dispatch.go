@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"agentd/internal/models"
+	qw "agentd/internal/queue/worker"
 )
 
 func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err error) {
@@ -20,13 +21,17 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 	if err != nil {
 		return 0, 0, err
 	}
-
-	type claimItem struct {
-		task models.Task
-		idx  int
+	toGroup, nacked := d.dispatchFilterClaimed(ctx, tasks)
+	if d.worker == nil {
+		return 0, nacked, d.dispatchGuardNilWorker(ctx, toGroup)
 	}
-	var dispatchable []claimItem
-	for i, task := range tasks {
+	batches := d.worker.GroupClaimed(ctx, toGroup)
+	dispatched, err = d.dispatchRunBatches(ctx, batches)
+	return dispatched, nacked, err
+}
+
+func (d *Daemon) dispatchFilterClaimed(ctx context.Context, tasks []models.Task) (toGroup []models.Task, nacked int) {
+	for _, task := range tasks {
 		nack, skip := d.dispatchAdmit(ctx, task)
 		if nack {
 			nacked++
@@ -37,27 +42,25 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 		if d.dispatchDeferRollingBudget(ctx, task) {
 			continue
 		}
-		dispatchable = append(dispatchable, claimItem{task: task, idx: i})
+		toGroup = append(toGroup, task)
 	}
+	return toGroup, nacked
+}
 
-	toGroup := make([]models.Task, len(dispatchable))
-	for i, item := range dispatchable {
-		toGroup[i] = item.task
+func (d *Daemon) dispatchGuardNilWorker(ctx context.Context, toGroup []models.Task) error {
+	if len(toGroup) == 0 {
+		return nil
 	}
-	if d.worker == nil {
-		if len(toGroup) > 0 {
-			if ctx.Err() != nil {
-				return 0, nacked, nil
-			}
-			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancel()
-			d.requeueUndispatchedClaims(cleanupCtx, toGroup)
-			return 0, nacked, fmt.Errorf("dispatch worker is nil")
-		}
-		return 0, nacked, nil
+	if ctx.Err() != nil {
+		return nil
 	}
-	batches := d.worker.GroupClaimed(ctx, toGroup)
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	d.requeueUndispatchedClaims(cleanupCtx, toGroup)
+	return fmt.Errorf("dispatch worker is nil")
+}
 
+func (d *Daemon) dispatchRunBatches(ctx context.Context, batches []qw.TaskBatch) (dispatched int, err error) {
 	for batchIdx, batch := range batches {
 		need := len(batch.Tasks)
 		acquired := 0
@@ -71,7 +74,7 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 				for _, remaining := range batches[batchIdx:] {
 					d.requeueUndispatchedClaims(cleanupCtx, remaining.Tasks)
 				}
-				return dispatched, nacked, nil
+				return dispatched, nil
 			}
 			acquired++
 		}
@@ -82,7 +85,7 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 			d.runDispatchedBatch(ctx, batch.Tasks, need)
 		}
 	}
-	return dispatched, nacked, nil
+	return dispatched, nil
 }
 
 func (d *Daemon) requeueUndispatchedClaims(ctx context.Context, tasks []models.Task) {
