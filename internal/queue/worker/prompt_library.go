@@ -113,8 +113,7 @@ func (lib *PromptLibrary) Save(name string, tmpl PromptTemplate) error {
 	}
 	lib.mu.Lock()
 	defer lib.mu.Unlock()
-	path := lib.path
-	if path == "" {
+	if lib.path == "" {
 		lib.templates[name] = tmpl
 		return nil
 	}
@@ -123,7 +122,15 @@ func (lib *PromptLibrary) Save(name string, tmpl PromptTemplate) error {
 		toPersist[k] = v
 	}
 	toPersist[name] = tmpl
-	data, err := json.MarshalIndent(toPersist, "", "  ")
+	if err := writePromptTemplatesFile(lib.path, toPersist); err != nil {
+		return err
+	}
+	lib.templates[name] = tmpl
+	return nil
+}
+
+func writePromptTemplatesFile(path string, templates map[string]PromptTemplate) error {
+	data, err := json.MarshalIndent(templates, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal prompt templates: %w", err)
 	}
@@ -157,7 +164,6 @@ func (lib *PromptLibrary) Save(name string, tmpl PromptTemplate) error {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("rename prompt templates: %w", err)
 	}
-	lib.templates[name] = tmpl
 	return nil
 }
 
