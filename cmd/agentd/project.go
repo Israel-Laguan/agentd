@@ -58,6 +58,58 @@ func projectPlan(p *projectOptions) models.DraftPlan {
 	}
 }
 
+func preflightStartupDisk(cfg config.Config) {
+	pct, statErr := safety.DiskFreePercent(cfg.HomeDir)
+	if statErr != nil {
+		slog.Debug("disk space check skipped", "err", statErr)
+		return
+	}
+	threshold := cfg.Disk.FreeThresholdPercent
+	if threshold <= 0 {
+		threshold = 10.0
+	}
+	slog.Debug("disk space check", "path", cfg.HomeDir, "free_pct", fmt.Sprintf("%.1f%%", pct))
+	if pct < threshold {
+		slog.Warn("low disk space at startup", "path", cfg.HomeDir, "free_pct", fmt.Sprintf("%.1f%%", pct), "threshold_pct", fmt.Sprintf("%.1f%%", threshold))
+	}
+}
+
+func preflightWritableDirs(cfg config.Config) error {
+	writableDirs := make([]string, 0, 4)
+	seen := make(map[string]bool)
+	for _, dir := range []string{cfg.HomeDir, cfg.ProjectsDir, cfg.UploadsDir, cfg.ArchivesDir} {
+		if dir == "" || seen[dir] {
+			continue
+		}
+		seen[dir] = true
+		writableDirs = append(writableDirs, dir)
+	}
+	for _, dir := range writableDirs {
+		f, tmpErr := os.CreateTemp(dir, ".agentd-write-check-*")
+		if tmpErr != nil {
+			return fmt.Errorf("directory not writable %s: %w", dir, tmpErr)
+		}
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+	}
+	slog.Debug("writability check passed")
+	return nil
+}
+
+func requireStartupProviders(gw config.GatewayConfig) error {
+	slog.Debug("checking LLM providers")
+	checkResult := config.CheckProviders(gw)
+	if !checkResult.Available {
+		if checkResult.HordeAvailable {
+			slog.Warn("No LLM API keys configured and local provider not available. Falling back to AI Horde (anonymous, async, not recommended for production use)")
+		} else {
+			return fmt.Errorf("no LLM providers available. Configure OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or set up a local OpenAI-compatible endpoint")
+		}
+	}
+	slog.Debug("LLM provider check complete", "provider", checkResult.Provider, "available", checkResult.Available, "local_healthy", checkResult.LocalHealthy, "has_api_key", checkResult.HasAPIKey)
+	return nil
+}
+
 func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, func(), error) {
 	cfg, err := config.Load(config.LoadOptions{
 		HomeOverride: opts.home,
@@ -72,50 +124,13 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 		return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("ensure runtime directories: %w", err)
 	}
 
-	// One-shot disk space preflight (warn only, mirrors periodic watchdog policy).
-	if pct, statErr := safety.DiskFreePercent(cfg.HomeDir); statErr == nil {
-		threshold := cfg.Disk.FreeThresholdPercent
-		if threshold <= 0 {
-			threshold = 10.0
-		}
-		slog.Debug("disk space check", "path", cfg.HomeDir, "free_pct", fmt.Sprintf("%.1f%%", pct))
-		if pct < threshold {
-			slog.Warn("low disk space at startup", "path", cfg.HomeDir, "free_pct", fmt.Sprintf("%.1f%%", pct), "threshold_pct", fmt.Sprintf("%.1f%%", threshold))
-		}
-	} else {
-		slog.Debug("disk space check skipped", "err", statErr)
+	preflightStartupDisk(cfg)
+	if err := preflightWritableDirs(cfg); err != nil {
+		return config.Config{}, nil, runtimeDeps{}, nil, err
 	}
-
-	// Writability probe: attempt to create+remove a temp file in each critical directory.
-	writableDirs := make([]string, 0, 4)
-	seen := make(map[string]bool)
-	for _, dir := range []string{cfg.HomeDir, cfg.ProjectsDir, cfg.UploadsDir, cfg.ArchivesDir} {
-		if dir == "" || seen[dir] {
-			continue
-		}
-		seen[dir] = true
-		writableDirs = append(writableDirs, dir)
+	if err := requireStartupProviders(cfg.Gateway); err != nil {
+		return config.Config{}, nil, runtimeDeps{}, nil, err
 	}
-	for _, dir := range writableDirs {
-		f, tmpErr := os.CreateTemp(dir, ".agentd-write-check-*")
-		if tmpErr != nil {
-			return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("directory not writable %s: %w", dir, tmpErr)
-		}
-		_ = f.Close()
-		_ = os.Remove(f.Name())
-	}
-	slog.Debug("writability check passed")
-
-	slog.Debug("checking LLM providers")
-	checkResult := config.CheckProviders(cfg.Gateway)
-	if !checkResult.Available {
-		if checkResult.HordeAvailable {
-			slog.Warn("No LLM API keys configured and local provider not available. Falling back to AI Horde (anonymous, async, not recommended for production use)")
-		} else {
-			return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("no LLM providers available. Configure OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or set up a local OpenAI-compatible endpoint")
-		}
-	}
-	slog.Debug("LLM provider check complete", "provider", checkResult.Provider, "available", checkResult.Available, "local_healthy", checkResult.LocalHealthy, "has_api_key", checkResult.HasAPIKey)
 
 	slog.Debug("opening database", "path", cfg.DBPath)
 	store, err := kanban.OpenStore(cfg.DBPath)
