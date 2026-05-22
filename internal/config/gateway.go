@@ -36,6 +36,7 @@ type RoleModelsConfig struct {
 
 type GatewayConfig struct {
 	Order            []string
+	WarmupEnabled    bool
 	OpenAI           gateway.ProviderConfig
 	Anthropic        gateway.ProviderConfig
 	Ollama           gateway.ProviderConfig
@@ -62,6 +63,7 @@ type TruncatorConfig struct {
 }
 
 func setGatewayDefaults(v *viper.Viper) {
+	v.SetDefault("gateway.warmup_enabled", true)
 	v.SetDefault("gateway.order", []string{"openai", "ollama"})
 	v.SetDefault("gateway.openai.base_url", "https://api.openai.com/v1")
 	v.SetDefault("gateway.openai.model", "gpt-4o-mini")
@@ -112,7 +114,8 @@ func loadGatewayConfig(v *viper.Viper) GatewayConfig {
 		geminiKey = os.Getenv("GEMINI_API_KEY")
 	}
 	return GatewayConfig{
-		Order: v.GetStringSlice("gateway.order"),
+		Order:         v.GetStringSlice("gateway.order"),
+		WarmupEnabled: v.GetBool("gateway.warmup_enabled"),
 		OpenAI: gateway.ProviderConfig{
 			Type: "openai", BaseURL: v.GetString("gateway.openai.base_url"),
 			APIKey: openAIKey, Model: v.GetString("gateway.openai.model"),

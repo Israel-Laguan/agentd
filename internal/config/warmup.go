@@ -19,9 +19,6 @@ import (
 func WarmupLLM(ctx context.Context, gw gateway.AIGateway, gatewayCfg GatewayConfig) error {
 	result := CheckProviders(gatewayCfg)
 	if !result.Available {
-		if result.HordeAvailable {
-			return warmupHorde(ctx, gatewayCfg.Horde.BaseURL)
-		}
 		return fmt.Errorf("no LLM provider available for warmup")
 	}
 

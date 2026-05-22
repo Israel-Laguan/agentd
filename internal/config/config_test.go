@@ -141,6 +141,44 @@ func TestLoad_WithMissingConfig(t *testing.T) {
 	}
 }
 
+func TestLoad_AGENTD_HOME_FromCwdDotEnv(t *testing.T) {
+	tmp := t.TempDir()
+	customHome := filepath.Join(tmp, "custom-agentd")
+	if err := os.WriteFile(filepath.Join(tmp, ".env"), []byte("AGENTD_HOME="+customHome+"\n"), 0o644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	if err := os.Chdir(tmp); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	if old, ok := os.LookupEnv("AGENTD_HOME"); ok {
+		t.Cleanup(func() { _ = os.Setenv("AGENTD_HOME", old) })
+	} else {
+		t.Cleanup(func() { _ = os.Unsetenv("AGENTD_HOME") })
+	}
+	_ = os.Unsetenv("AGENTD_HOME")
+
+	cfg, err := Load(LoadOptions{})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.HomeDir != customHome {
+		t.Errorf("HomeDir = %q, want %q", cfg.HomeDir, customHome)
+	}
+	wantDB := filepath.Join(customHome, "global.db")
+	if cfg.DBPath != wantDB {
+		t.Errorf("DBPath = %q, want %q", cfg.DBPath, wantDB)
+	}
+	wantProjects := filepath.Join(customHome, "projects")
+	if cfg.ProjectsDir != wantProjects {
+		t.Errorf("ProjectsDir = %q, want %q", cfg.ProjectsDir, wantProjects)
+	}
+}
+
 func TestLoad_SkillsGlobalDir_ExplicitAbsolute(t *testing.T) {
 	homeDir := filepath.Join(t.TempDir(), "agentd")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {

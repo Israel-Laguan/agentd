@@ -26,7 +26,7 @@ If any step fails, the CLI now says what part of init failed and shows the wrapp
 3. Verify that at least one LLM provider is available.
 4. Open the database.
 5. Validate tool credentials.
-6. Warm up the selected LLM provider.
+6. Warm up the selected LLM provider (unless `gateway.warmup_enabled: false` or `agentd start --skip-llm-warmup`).
 7. Build the daemon and API server.
 8. Bind the API listener.
 9. Run boot reconciliation and start the daemon loops.
