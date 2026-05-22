@@ -54,11 +54,14 @@ func (b *stubBoard) ReconcileGhostTasks(context.Context, []int) ([]models.Task, 
 
 type minimalStore struct {
 	stubBoard
-	getProject *models.Project
-	getProjErr error
-	getTask    *models.Task
-	getTaskErr error
-	addCalls   int
+	getProject    *models.Project
+	getProjErr    error
+	getTask       *models.Task
+	getTaskErr    error
+	addCalls      int
+	assignErr     error
+	splitErr      error
+	splitChildren []models.Task
 }
 
 func (m *minimalStore) GetProject(_ context.Context, id string) (*models.Project, error) {
@@ -132,8 +135,42 @@ func (m *minimalStore) ReconcileOrphanedQueued(context.Context, time.Duration) (
 func (m *minimalStore) ReconcileStaleTasks(context.Context, []int, time.Duration) ([]models.Task, error) {
 	return nil, nil
 }
-func (m *minimalStore) BlockTaskWithSubtasks(context.Context, string, time.Time, []models.DraftTask) (*models.Task, []models.Task, error) {
-	return nil, nil, nil
+func (m *minimalStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, drafts []models.DraftTask) (*models.Task, []models.Task, error) {
+	if m.splitErr != nil {
+		return nil, nil, m.splitErr
+	}
+	if m.getTask == nil {
+		return nil, nil, models.ErrTaskNotFound
+	}
+	parent := *m.getTask
+	parent.State = models.TaskStateBlocked
+	m.getTask = &parent
+	if len(m.splitChildren) > 0 {
+		return &parent, append([]models.Task(nil), m.splitChildren...), nil
+	}
+	children := make([]models.Task, 0, len(drafts))
+	for _, d := range drafts {
+		children = append(children, models.Task{
+			BaseEntity:  models.BaseEntity{ID: "child-" + d.Title},
+			Title:       d.Title,
+			Description: d.Description,
+			State:       models.TaskStateReady,
+		})
+	}
+	return &parent, children, nil
+}
+
+func (m *minimalStore) AssignTaskAgent(_ context.Context, _ string, _ time.Time, agentID string) (*models.Task, error) {
+	if m.assignErr != nil {
+		return nil, m.assignErr
+	}
+	if m.getTask == nil {
+		return nil, models.ErrTaskNotFound
+	}
+	updated := *m.getTask
+	updated.AgentID = agentID
+	m.getTask = &updated
+	return &updated, nil
 }
 
 func (m *minimalStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
@@ -190,9 +227,6 @@ func (f fullStore) ListAgentProfiles(context.Context) ([]models.AgentProfile, er
 	return nil, nil
 }
 func (f fullStore) DeleteAgentProfile(context.Context, string) error { return nil }
-func (f fullStore) AssignTaskAgent(context.Context, string, time.Time, string) (*models.Task, error) {
-	return nil, nil
-}
 func (f fullStore) ListSettings(context.Context) ([]models.Setting, error)   { return nil, nil }
 func (f fullStore) GetSetting(context.Context, string) (string, bool, error) { return "", false, nil }
 func (f fullStore) SetSetting(context.Context, string, string) error         { return nil }
@@ -314,5 +348,107 @@ func TestListByProjectInjectsProjectIDFilter(t *testing.T) {
 	}
 	if store.listFilter.ProjectID == nil || *store.listFilter.ProjectID != "p1" {
 		t.Fatalf("project filter not injected: %+v", store.listFilter.ProjectID)
+	}
+}
+
+type spyTaskBus struct {
+	assigned int
+	split    int
+	retried  int
+}
+
+func (b *spyTaskBus) PublishTaskAssigned(context.Context, models.Task) { b.assigned++ }
+func (b *spyTaskBus) PublishTaskSplit(context.Context, models.Task, []models.Task) {
+	b.split++
+}
+func (b *spyTaskBus) PublishTaskRetried(context.Context, models.Task) { b.retried++ }
+
+func TestTaskService_WithBus(t *testing.T) {
+	_, full := newStore()
+	svc := services.NewTaskService(full, nil)
+	bus := &spyTaskBus{}
+	withBus := svc.WithBus(bus)
+	if withBus.Bus != bus {
+		t.Fatal("WithBus should attach bus to copy")
+	}
+	if svc.Bus != nil {
+		t.Fatal("original service should remain without bus")
+	}
+}
+
+func TestTaskService_AssignAgent(t *testing.T) {
+	store, full := newStore()
+	now := time.Now().UTC()
+	store.getTask = &models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-1", UpdatedAt: now},
+		AgentID:    "old",
+		State:      models.TaskStateReady,
+	}
+	bus := &spyTaskBus{}
+	svc := services.NewTaskService(full, nil).WithBus(bus)
+
+	updated, err := svc.AssignAgent(context.Background(), "task-1", "new-agent")
+	if err != nil {
+		t.Fatalf("AssignAgent: %v", err)
+	}
+	if updated.AgentID != "new-agent" {
+		t.Fatalf("agent = %q, want new-agent", updated.AgentID)
+	}
+	if bus.assigned != 1 {
+		t.Fatalf("assigned publishes = %d, want 1", bus.assigned)
+	}
+}
+
+func TestTaskService_Split(t *testing.T) {
+	store, full := newStore()
+	now := time.Now().UTC()
+	store.getTask = &models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-1", UpdatedAt: now},
+		State:      models.TaskStateRunning,
+	}
+	bus := &spyTaskBus{}
+	svc := services.NewTaskService(full, nil).WithBus(bus)
+
+	parent, children, err := svc.Split(context.Background(), "task-1", []models.DraftTask{
+		{Title: "a", Description: "do a"},
+	})
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	if parent.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", parent.State)
+	}
+	if len(children) != 1 || children[0].Title != "a" {
+		t.Fatalf("children = %#v", children)
+	}
+	if bus.split != 1 {
+		t.Fatalf("split publishes = %d, want 1", bus.split)
+	}
+}
+
+func TestTaskService_Retry(t *testing.T) {
+	store, full := newStore()
+	now := time.Now().UTC()
+	store.getTask = &models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-1", UpdatedAt: now},
+		State:      models.TaskStateRunning,
+	}
+	svc := services.NewTaskService(full, nil)
+	if _, err := svc.Retry(context.Background(), "task-1"); !errors.Is(err, models.ErrInvalidStateTransition) {
+		t.Fatalf("Retry from RUNNING err = %v, want ErrInvalidStateTransition", err)
+	}
+
+	store.getTask.State = models.TaskStateFailed
+	bus := &spyTaskBus{}
+	svc = services.NewTaskService(full, nil).WithBus(bus)
+	updated, err := svc.Retry(context.Background(), "task-1")
+	if err != nil {
+		t.Fatalf("Retry: %v", err)
+	}
+	if updated.State != models.TaskStateReady {
+		t.Fatalf("state = %s, want READY", updated.State)
+	}
+	if bus.retried != 1 {
+		t.Fatalf("retried publishes = %d, want 1", bus.retried)
 	}
 }

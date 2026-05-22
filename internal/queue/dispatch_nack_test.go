@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -12,6 +13,84 @@ import (
 func TestTaskStateQueued_CanTransitionToFailed(t *testing.T) {
 	if !models.TaskStateQueued.CanTransitionTo(models.TaskStateFailed) {
 		t.Fatal("QUEUED -> FAILED must be valid for permanent dispatch reject")
+	}
+}
+
+func TestFailDispatchRejected_EmitsFailureEvent(t *testing.T) {
+	store := newQueueStore()
+	now := time.Now().UTC()
+	store.tasks = []models.Task{{
+		BaseEntity: models.BaseEntity{ID: "task-0", CreatedAt: now, UpdatedAt: now},
+		ProjectID:  "project", AgentID: "default",
+		Title: "reject me", State: models.TaskStateQueued, Assignee: models.TaskAssigneeSystem,
+	}}
+	sink := &recordingSink{}
+	daemon := NewDaemon(store, nil, nil, nil, sink, DaemonOptions{Probe: StaticPIDProbe{}})
+	rejectErr := errors.New("permanent channel reject")
+	daemon.failDispatchRejected(context.Background(), store.tasks[0], rejectErr)
+
+	task, err := store.GetTask(context.Background(), "task-0")
+	if err != nil {
+		t.Fatalf("GetTask() error = %v", err)
+	}
+	if task.State != models.TaskStateFailed {
+		t.Fatalf("state = %s, want FAILED", task.State)
+	}
+	if len(sink.events) != 1 {
+		t.Fatalf("events = %d, want 1", len(sink.events))
+	}
+	evt := sink.events[0]
+	if evt.Type != models.EventTypeFailure {
+		t.Fatalf("event type = %s, want FAILURE", evt.Type)
+	}
+	if evt.Payload != rejectErr.Error() {
+		t.Fatalf("payload = %q, want %q", evt.Payload, rejectErr.Error())
+	}
+}
+
+func TestDeferRateLimitedTimer_CancelBeforeRequeue(t *testing.T) {
+	store := newQueueStore()
+	now := time.Now().UTC()
+	store.tasks = []models.Task{{
+		BaseEntity: models.BaseEntity{ID: "task-0", CreatedAt: now, UpdatedAt: now},
+		ProjectID:  "project", AgentID: "default",
+		Title: "rate limited", State: models.TaskStateQueued, Assignee: models.TaskAssigneeSystem,
+	}}
+	daemon := NewDaemon(store, nil, nil, nil, nil, DaemonOptions{Probe: StaticPIDProbe{}})
+	ctx, cancel := context.WithCancel(context.Background())
+	daemon.deferRateLimitedTimer(ctx, store.tasks[0], 100*time.Millisecond)
+	cancel()
+	time.Sleep(150 * time.Millisecond)
+	task, err := store.GetTask(context.Background(), "task-0")
+	if err != nil {
+		t.Fatalf("GetTask() error = %v", err)
+	}
+	if task.State != models.TaskStateQueued {
+		t.Fatalf("state = %s, want QUEUED after cancel before timer", task.State)
+	}
+}
+
+func TestDeferRateLimitedTimer_SkipsWhenStateChanged(t *testing.T) {
+	store := newQueueStore()
+	now := time.Now().UTC()
+	store.tasks = []models.Task{{
+		BaseEntity: models.BaseEntity{ID: "task-0", CreatedAt: now, UpdatedAt: now},
+		ProjectID:  "project", AgentID: "default",
+		Title: "rate limited", State: models.TaskStateQueued, Assignee: models.TaskAssigneeSystem,
+	}}
+	daemon := NewDaemon(store, nil, nil, nil, nil, DaemonOptions{Probe: StaticPIDProbe{}})
+	ctx := context.Background()
+	daemon.deferRateLimitedTimer(ctx, store.tasks[0], 30*time.Millisecond)
+	if _, err := store.UpdateTaskState(ctx, "task-0", now, models.TaskStateReady); err != nil {
+		t.Fatalf("UpdateTaskState() error = %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	task, err := store.GetTask(ctx, "task-0")
+	if err != nil {
+		t.Fatalf("GetTask() error = %v", err)
+	}
+	if task.State != models.TaskStateReady {
+		t.Fatalf("state = %s, want READY (timer must not requeue)", task.State)
 	}
 }
 
