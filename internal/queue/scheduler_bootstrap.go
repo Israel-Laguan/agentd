@@ -35,6 +35,7 @@ func NewSchedulerFromConfig(
 }
 
 // BootstrapFromConfig upserts configured tasks into the persisted registry.
+// Tasks removed from config are not deleted; use DeleteScheduledTask or manual DB cleanup.
 func (s *Scheduler) BootstrapFromConfig(ctx context.Context, cfg config.SchedulerConfig) error {
 	if s.store == nil {
 		return nil

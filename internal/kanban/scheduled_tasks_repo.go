@@ -160,13 +160,21 @@ func (s *Store) insertReadyTaskInTx(
 			return nil, err
 		}
 		if scheduleID != "" {
-			if _, err := tx.ExecContext(ctx, `
+			res, err := tx.ExecContext(ctx, `
 				UPDATE scheduled_tasks SET last_fired_at = ?, updated_at = ? WHERE id = ?`,
-				formatTime(slot), formatTime(now), scheduleID); err != nil {
+				formatTime(slot), formatTime(now), scheduleID)
+			if err != nil {
+				return nil, fmt.Errorf("update scheduled task last_fired %q: %w", scheduleID, err)
+			}
+			if err := requireRowsAffected(res, 1, fmt.Errorf("scheduled task %q not found", scheduleID)); err != nil {
 				return nil, fmt.Errorf("update scheduled task last_fired %q: %w", scheduleID, err)
 			}
 			if deleteEntry {
-				if _, err := tx.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id = ?`, scheduleID); err != nil {
+				delRes, err := tx.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id = ?`, scheduleID)
+				if err != nil {
+					return nil, fmt.Errorf("delete scheduled task %q: %w", scheduleID, err)
+				}
+				if err := requireRowsAffected(delRes, 1, fmt.Errorf("scheduled task %q not found", scheduleID)); err != nil {
 					return nil, fmt.Errorf("delete scheduled task %q: %w", scheduleID, err)
 				}
 			}
