@@ -101,6 +101,44 @@ func TestSessionManager_ArchiveAndReset_InheritsPrefsNotHistory(t *testing.T) {
 	}
 }
 
+func TestSessionManager_ArchiveAndReset_SkipsCodeGenTemplateOnDrift(t *testing.T) {
+	lib, err := NewPromptLibrary("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &Worker{promptLibrary: lib}
+	sm := NewSessionManager("task-1", "Implement add", nil)
+
+	task := models.Task{
+		BaseEntity:  models.BaseEntity{ID: "task-1"},
+		Title:       "Implement add",
+		Description: "Add function in math.go\nSignature:\nfunc Add(a, b int) int\nTest cases:\n- Add(1,2) == 3",
+	}
+	profile := models.AgentProfile{ToolManifestType: TaskTypeCodeGen}
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys with raw source code"},
+		{Role: "user", Content: "Implement add"},
+		{Role: "assistant", Content: "done"},
+	}
+
+	_, err = sm.ArchiveAndReset(context.Background(), w, task, models.Project{}, profile, &messages, "database migrations")
+	if err != nil {
+		t.Fatalf("ArchiveAndReset: %v", err)
+	}
+	if len(messages) < 2 {
+		t.Fatalf("expected system+user messages, got %d", len(messages))
+	}
+	if strings.Contains(messages[0].Content, "raw source code") {
+		t.Fatalf("drift reset should not keep CODE_PROMPT_BUILDER system text: %q", messages[0].Content)
+	}
+	if !strings.Contains(messages[0].Content, "autonomous agent") {
+		t.Fatal("fresh session should use default instruction hierarchy")
+	}
+	if messages[1].Role != "user" || messages[1].Content != "database migrations" {
+		t.Fatalf("user turn = %+v, want drift input", messages[1])
+	}
+}
+
 func TestSessionManager_AdvanceTopic(t *testing.T) {
 	sm := NewSessionManager("t", "migrations", nil)
 	sm.AdvanceTopic("now add tests for the migration")
