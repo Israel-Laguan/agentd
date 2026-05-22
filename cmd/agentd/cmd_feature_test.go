@@ -86,6 +86,8 @@ func initializeCLIScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^the user rejects the plan$`, noopCLI)
 	sc.Step(`^the CLI should not call the materialize endpoint$`, noopCLI)
 	sc.Step(`^the CLI should exit gracefully$`, noopCLI)
+
+	registerBootstrapSteps(sc)
 }
 
 // Cron schedule steps
