@@ -101,58 +101,16 @@ func setGatewayDefaults(v *viper.Viper) {
 }
 
 func loadGatewayConfig(v *viper.Viper) GatewayConfig {
-	openAIKey := v.GetString("gateway.openai.api_key")
-	if openAIKey == "" {
-		openAIKey = os.Getenv("OPENAI_API_KEY")
-	}
-	anthropicKey := v.GetString("gateway.anthropic.api_key")
-	if anthropicKey == "" {
-		anthropicKey = os.Getenv("ANTHROPIC_API_KEY")
-	}
-	geminiKey := v.GetString("gateway.gemini.api_key")
-	if geminiKey == "" {
-		geminiKey = os.Getenv("GEMINI_API_KEY")
-	}
+	openAI, anthropic, ollama, llamaCpp, horde, gemini := loadGatewayProviderConfigs(v)
 	return GatewayConfig{
 		Order:         v.GetStringSlice("gateway.order"),
 		WarmupEnabled: v.GetBool("gateway.warmup_enabled"),
-		OpenAI: gateway.ProviderConfig{
-			Type: "openai", BaseURL: v.GetString("gateway.openai.base_url"),
-			APIKey: openAIKey, Model: v.GetString("gateway.openai.model"),
-			MaxInputChars: v.GetInt("gateway.openai.max_input_chars"),
-			Timeout:       durationOrDefault(v.GetDuration("gateway.openai.timeout"), 5*time.Minute),
-		},
-		Anthropic: gateway.ProviderConfig{
-			Type: "anthropic", BaseURL: v.GetString("gateway.anthropic.base_url"),
-			APIKey: anthropicKey, Model: v.GetString("gateway.anthropic.model"),
-			MaxInputChars: v.GetInt("gateway.anthropic.max_input_chars"),
-			Timeout:       durationOrDefault(v.GetDuration("gateway.anthropic.timeout"), 5*time.Minute),
-		},
-		Ollama: gateway.ProviderConfig{
-			Type: "ollama", BaseURL: v.GetString("gateway.ollama.base_url"),
-			Model:         v.GetString("gateway.ollama.model"),
-			MaxInputChars: v.GetInt("gateway.ollama.max_input_chars"),
-			Timeout:       durationOrDefault(v.GetDuration("gateway.ollama.timeout"), 5*time.Minute),
-		},
-		LlamaCpp: gateway.ProviderConfig{
-			Type: "llamacpp", BaseURL: v.GetString("gateway.llamacpp.base_url"),
-			Model:         v.GetString("gateway.llamacpp.model"),
-			MaxInputChars: v.GetInt("gateway.llamacpp.max_input_chars"),
-			Timeout:       durationOrDefault(v.GetDuration("gateway.llamacpp.timeout"), 5*time.Minute),
-		},
-		Horde: gateway.ProviderConfig{
-			Type: "horde", BaseURL: v.GetString("gateway.horde.base_url"),
-			APIKey: v.GetString("gateway.horde.api_key"), Model: v.GetString("gateway.horde.model"),
-			MaxInputChars: v.GetInt("gateway.horde.max_input_chars"),
-			Timeout:       durationOrDefault(v.GetDuration("gateway.horde.timeout"), 5*time.Minute),
-			PollInterval:  durationOrDefault(v.GetDuration("gateway.horde.poll_interval"), 4*time.Second),
-		},
-		Gemini: gateway.ProviderConfig{
-			Type: "gemini", BaseURL: v.GetString("gateway.gemini.base_url"),
-			APIKey: geminiKey, Model: v.GetString("gateway.gemini.model"),
-			MaxInputChars: v.GetInt("gateway.gemini.max_input_chars"),
-			Timeout:       durationOrDefault(v.GetDuration("gateway.gemini.timeout"), 5*time.Minute),
-		},
+		OpenAI:        openAI,
+		Anthropic:     anthropic,
+		Ollama:        ollama,
+		LlamaCpp:      llamaCpp,
+		Horde:         horde,
+		Gemini:        gemini,
 		Truncation: TruncationConfig{
 			Strategy:       v.GetString("gateway.truncation.strategy"),
 			HeadRatio:      v.GetFloat64("gateway.truncation.head_ratio"),

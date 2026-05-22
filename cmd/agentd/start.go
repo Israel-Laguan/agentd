@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -48,13 +47,8 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	slog.Debug("tool credentials validated")
 
-	if startOpts.skipLLMWarmup || !cfg.Gateway.WarmupEnabled {
-		slog.Debug("LLM warmup skipped", "flag", startOpts.skipLLMWarmup, "config_enabled", cfg.Gateway.WarmupEnabled)
-	} else {
-		slog.Debug("running LLM warmup")
-		if err := config.WarmupLLM(cmd.Context(), deps.gateway, cfg.Gateway); err != nil {
-			return fmt.Errorf("LLM warmup: %w", err)
-		}
+	if err := warmupLLMIfNeeded(cmd.Context(), deps.gateway, cfg.Gateway, startOpts.skipLLMWarmup, cfg.Gateway.WarmupEnabled); err != nil {
+		return err
 	}
 
 	store = store.WithCanceller(deps.canceller)
@@ -73,38 +67,16 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	defer listener.Close() //nolint:errcheck
 	slog.Info("API server listening", "address", listener.Addr().String())
-
-	errCh := make(chan error, 1)
-	go func() { errCh <- apiServer.Serve(listener) }()
 	defer apiServer.Shutdown(ctx) //nolint:errcheck
 	slog.Debug("HTTP server started")
 
-	go func() {
-		<-ctx.Done()
-		_ = apiServer.Shutdown(ctx)
-	}()
-	apiErrCh := make(chan error, 1)
-	go func() {
-		if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			apiErrCh <- err
-			stop()
-			return
-		}
-		close(apiErrCh)
-	}()
+	apiErrCh := startAPIServer(ctx, listener, apiServer, stop)
 
 	slog.Debug("starting daemon")
 	if err := daemon.Start(ctx); err != nil {
 		return err
 	}
-	select {
-	case err := <-apiErrCh:
-		if err != nil {
-			return fmt.Errorf("api server failed: %w", err)
-		}
-	default:
-	}
-	return nil
+	return drainAPIServerError(apiErrCh)
 }
 
 func buildStartRuntime(ctx context.Context, cfg config.Config, store models.KanbanStore, deps runtimeDeps, startOpts *startOptions) (*queue.Daemon, *http.Server, error) {
