@@ -86,6 +86,12 @@ func normalizeOpts(opts WorkerOptions) WorkerOptions {
 	if opts.LegacyHandoffTimeout <= 0 {
 		opts.LegacyHandoffTimeout = config.DefaultLegacyHandoffTimeout
 	}
+	if opts.Batching.MaxBatchSize < 1 {
+		opts.Batching.MaxBatchSize = config.DefaultBatchingMaxBatchSize
+	}
+	if opts.Batching.MaxBatchSize > config.MaxBatchingMaxBatchSize {
+		opts.Batching.MaxBatchSize = config.MaxBatchingMaxBatchSize
+	}
 	return opts
 }
 

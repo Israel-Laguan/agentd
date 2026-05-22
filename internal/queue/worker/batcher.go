@@ -35,7 +35,7 @@ func NewTaskBatcher(cfg config.BatchingConfig, w *Worker) *TaskBatcher {
 
 // Group partitions claimed tasks into batches. When batching is disabled, each task is its own batch.
 func (b *TaskBatcher) Group(ctx context.Context, claimed []models.Task) []TaskBatch {
-	if b == nil || !b.cfg.Enabled || len(claimed) == 0 {
+	if b == nil || b.worker == nil || !b.cfg.Enabled || len(claimed) == 0 {
 		return SingletonBatches(claimed)
 	}
 

@@ -116,6 +116,37 @@ func TestLoadAgenticConfig_BatchingOverride(t *testing.T) {
 	}
 }
 
+func TestLoadAgenticConfig_BatchingInvalidMaxFallsBack(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	v.Set("agentic.batching.enabled", true)
+	v.Set("agentic.batching.max_batch_size", 0)
+
+	cfg := loadAgenticConfig(v)
+	if cfg.Batching.MaxBatchSize != DefaultBatchingMaxBatchSize {
+		t.Fatalf("Batching.MaxBatchSize = %d, want %d", cfg.Batching.MaxBatchSize, DefaultBatchingMaxBatchSize)
+	}
+
+	v.Set("agentic.batching.max_batch_size", -1)
+	cfg = loadAgenticConfig(v)
+	if cfg.Batching.MaxBatchSize != DefaultBatchingMaxBatchSize {
+		t.Fatalf("negative max: MaxBatchSize = %d, want %d", cfg.Batching.MaxBatchSize, DefaultBatchingMaxBatchSize)
+	}
+}
+
+func TestLoadAgenticConfig_BatchingMaxClampedToUpperBound(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	v.Set("agentic.batching.max_batch_size", 999)
+
+	cfg := loadAgenticConfig(v)
+	if cfg.Batching.MaxBatchSize != MaxBatchingMaxBatchSize {
+		t.Fatalf("Batching.MaxBatchSize = %d, want %d", cfg.Batching.MaxBatchSize, MaxBatchingMaxBatchSize)
+	}
+}
+
 func TestLoadAgenticConfig_CapabilityRoutingOverride(t *testing.T) {
 	t.Parallel()
 	v := viper.New()

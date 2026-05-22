@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -35,6 +36,9 @@ func (s *batchTestStore) MarkTaskRunning(_ context.Context, id string, _ time.Ti
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t := s.lookupTaskLocked(id)
+	if t.State != models.TaskStateQueued {
+		return nil, models.ErrStateConflict
+	}
 	t.State = models.TaskStateRunning
 	s.tasks[id] = t
 	return &t, nil
@@ -243,6 +247,30 @@ func (g *batchTrackingGateway) batchJSON(req gateway.AIRequest) string {
 	return string(b)
 }
 
+type batchFailingGateway struct{}
+
+func (g *batchFailingGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	for _, m := range req.Messages {
+		if m.Role == "user" && countBatchSlots(m.Content) > 1 {
+			return gateway.AIResponse{}, errors.New("batch gateway unavailable")
+		}
+	}
+	return gateway.AIResponse{Content: "single fallback summary"}, nil
+}
+
+func (g *batchFailingGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
+	return nil, nil
+}
+func (g *batchFailingGateway) AnalyzeScope(context.Context, string) (*spec.ScopeAnalysis, error) {
+	return nil, nil
+}
+func (g *batchFailingGateway) ClassifyIntent(context.Context, string) (*spec.IntentAnalysis, error) {
+	return nil, nil
+}
+func (g *batchFailingGateway) Embed(context.Context, spec.EmbedRequest) (spec.EmbedResponse, error) {
+	return spec.EmbedResponse{}, nil
+}
+
 func (g *batchTrackingGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
 	return nil, nil
 }
@@ -394,6 +422,38 @@ func TestProcessBatch_MalformedSlot_RerunsSingleTask(t *testing.T) {
 	}
 	if store.results["t2"] == nil || !strings.Contains(store.results["t2"].Payload, "single fallback") {
 		t.Fatalf("slot 1 result payload = %q, want single-task fallback content", store.results["t2"].Payload)
+	}
+}
+
+func TestProcessBatch_GatewayError_FailsAllTasks(t *testing.T) {
+	t.Parallel()
+	store := &batchTestStore{
+		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp/ws"},
+		profile: models.AgentProfile{
+			ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: true,
+		},
+		tasks:   make(map[string]models.Task),
+		results: make(map[string]*models.TaskResult),
+	}
+	tasks := summarizeTasks(3)
+	for _, task := range tasks {
+		store.tasks[task.ID] = task
+	}
+	gw := &batchFailingGateway{}
+	w := NewWorker(store, gw, nil, nil, nil, WorkerOptions{
+		Batching:     config.BatchingConfig{Enabled: true, MaxBatchSize: 5},
+		ToolManifest: config.ToolManifestConfig{Enabled: true, MinConfidence: 0.35},
+	})
+
+	w.ProcessBatch(context.Background(), tasks)
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	for _, id := range []string{"t1", "t2", "t3"} {
+		task := store.tasks[id]
+		if task.State == models.TaskStateRunning {
+			t.Fatalf("task %s stuck RUNNING after batch gateway error", id)
+		}
 	}
 }
 
