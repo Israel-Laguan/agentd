@@ -9,6 +9,25 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func assertMigratedV13StrictScheduledTasks(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	var version string
+	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
+		t.Fatalf("read schema version: %v", err)
+	}
+	if version != "13" {
+		t.Fatalf("schema version = %q, want 13", version)
+	}
+	var createSQL string
+	if err := db.QueryRowContext(ctx, `
+		SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scheduled_tasks'`).Scan(&createSQL); err != nil {
+		t.Fatalf("read scheduled_tasks ddl: %v", err)
+	}
+	if !strings.Contains(strings.ToUpper(createSQL), "STRICT") {
+		t.Fatalf("scheduled_tasks ddl missing STRICT: %s", createSQL)
+	}
+}
+
 func TestMigrateToV13CreatesStrictScheduledTasks(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v13?mode=memory&cache=shared")
 	if err != nil {
@@ -25,22 +44,7 @@ func TestMigrateToV13CreatesStrictScheduledTasks(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	var version string
-	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
-		t.Fatalf("read schema version: %v", err)
-	}
-	if version != "13" {
-		t.Fatalf("schema version = %q, want 13", version)
-	}
-
-	var createSQL string
-	if err := db.QueryRowContext(ctx, `
-		SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scheduled_tasks'`).Scan(&createSQL); err != nil {
-		t.Fatalf("read scheduled_tasks ddl: %v", err)
-	}
-	if !strings.Contains(strings.ToUpper(createSQL), "STRICT") {
-		t.Fatalf("scheduled_tasks ddl missing STRICT: %s", createSQL)
-	}
+	assertMigratedV13StrictScheduledTasks(t, ctx, db)
 }
 
 func TestMigrateToV13RebuildsNonStrictTable(t *testing.T) {
@@ -71,22 +75,7 @@ func TestMigrateToV13RebuildsNonStrictTable(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	var version string
-	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
-		t.Fatalf("read schema version: %v", err)
-	}
-	if version != "13" {
-		t.Fatalf("schema version = %q, want 13", version)
-	}
-
-	var createSQL string
-	if err := db.QueryRowContext(ctx, `
-		SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scheduled_tasks'`).Scan(&createSQL); err != nil {
-		t.Fatalf("read scheduled_tasks ddl: %v", err)
-	}
-	if !strings.Contains(strings.ToUpper(createSQL), "STRICT") {
-		t.Fatalf("scheduled_tasks ddl missing STRICT: %s", createSQL)
-	}
+	assertMigratedV13StrictScheduledTasks(t, ctx, db)
 
 	var id string
 	if err := db.QueryRowContext(ctx, `SELECT id FROM scheduled_tasks WHERE id = 'keep-me'`).Scan(&id); err != nil {
