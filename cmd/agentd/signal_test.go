@@ -1,17 +1,22 @@
 package main
 
 import (
+	"bufio"
 	"context"
-	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 )
 
-const signalChildEnv = "AGENTD_SIGNAL_CHILD"
+const (
+	signalChildEnv       = "AGENTD_SIGNAL_CHILD"
+	signalChildReadyLine = "signal-child-ready"
+)
 
 // TestSignalNotifyContextCancelsOnInterrupt verifies signal.NotifyContext in a
 // child process. We re-exec the test binary instead of signaling os.Getpid(),
@@ -24,6 +29,10 @@ func TestSignalNotifyContextCancelsOnInterrupt(t *testing.T) {
 
 	cmd := exec.Command(os.Args[0], "-test.run=^TestSignalNotifyContextCancelsOnInterrupt$", "-test.count=1")
 	cmd.Env = append(os.Environ(), signalChildEnv+"=1")
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("StderrPipe: %v", err)
+	}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Start child: %v", err)
 	}
@@ -34,6 +43,23 @@ func TestSignalNotifyContextCancelsOnInterrupt(t *testing.T) {
 		_ = cmd.Wait()
 	}()
 
+	ready := make(chan struct{})
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			if strings.Contains(scanner.Text(), signalChildReadyLine) {
+				close(ready)
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("child did not signal readiness")
+	}
+
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
 		t.Fatalf("Signal child: %v", err)
 	}
@@ -43,7 +69,7 @@ func TestSignalNotifyContextCancelsOnInterrupt(t *testing.T) {
 
 	select {
 	case err := <-done:
-		if err != nil && !childExitedAfterInterrupt(err) {
+		if err != nil {
 			t.Fatalf("child exit: %v", err)
 		}
 	case <-time.After(5 * time.Second):
@@ -51,18 +77,11 @@ func TestSignalNotifyContextCancelsOnInterrupt(t *testing.T) {
 	}
 }
 
-func childExitedAfterInterrupt(err error) bool {
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		return false
-	}
-	status, ok := exitErr.Sys().(syscall.WaitStatus)
-	return ok && status.Signaled() && status.Signal() == syscall.SIGINT
-}
-
 func testSignalNotifyContextChild(t *testing.T) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	fmt.Fprintln(os.Stderr, signalChildReadyLine)
 
 	select {
 	case <-ctx.Done():

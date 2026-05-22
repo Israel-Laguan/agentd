@@ -77,7 +77,11 @@ func TestCheckProviders_HordeAvailable(t *testing.T) {
 }
 
 func TestCheckProviders_HordeUnavailableWhenHeartbeatFails(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/status/heartbeat" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
