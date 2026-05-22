@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -14,6 +15,11 @@ import (
 	"agentd/internal/models"
 	qw "agentd/internal/queue/worker"
 )
+
+type cachedCron struct {
+	expr  string
+	sched cron.Schedule
+}
 
 // ContextProvider resolves live context for a scheduled dispatch at runtime.
 type ContextProvider interface {
@@ -30,7 +36,7 @@ type Scheduler struct {
 	enabled     bool
 	projectID   string
 	providers   ContextProviderRegistry
-	cronByID    map[string]cron.Schedule
+	cronByID    map[string]cachedCron
 }
 
 // SchedulerOptions configures a Scheduler instance.
@@ -51,7 +57,7 @@ func NewScheduler(store models.ScheduledTaskStore, sink models.EventSink, opts S
 		enabled:   opts.Enabled,
 		projectID: opts.ProjectID,
 		providers: opts.Providers,
-		cronByID:  make(map[string]cron.Schedule),
+		cronByID:  make(map[string]cachedCron),
 	}
 }
 
@@ -106,21 +112,21 @@ func (s *Scheduler) cronDue(entry models.ScheduledTask, slot time.Time) bool {
 	if strings.TrimSpace(entry.CronExpr) == "" {
 		return false
 	}
-	sched := s.cronByID[entry.ID]
-	if sched == nil {
-		var err error
-		sched, err = config.ParseCronExpr(entry.CronExpr)
+	cc, ok := s.cronByID[entry.ID]
+	if !ok || cc.expr != entry.CronExpr || cc.sched == nil {
+		sched, err := config.ParseCronExpr(entry.CronExpr)
 		if err != nil {
 			slog.Error("scheduler invalid cron", "id", entry.ID, "error", err)
 			return false
 		}
-		s.cronByID[entry.ID] = sched
+		cc = cachedCron{expr: entry.CronExpr, sched: sched}
+		s.cronByID[entry.ID] = cc
 	}
 	prev := slot.Add(-time.Minute)
 	if entry.LastFiredAt != nil && !entry.LastFiredAt.Before(slot) {
 		return false
 	}
-	return sched.Next(prev).Equal(slot)
+	return cc.sched.Next(prev).Equal(slot)
 }
 
 func runAfterDue(entry models.ScheduledTask, slot time.Time) bool {
@@ -139,6 +145,9 @@ func (s *Scheduler) fireRequeue(ctx context.Context, entry models.ScheduledTask)
 	}
 	current, err := s.store.GetTask(ctx, entry.TargetTaskID)
 	if err != nil {
+		if errors.Is(err, models.ErrTaskNotFound) {
+			return s.store.DeleteScheduledTask(ctx, entry.ID)
+		}
 		return err
 	}
 	if current.State == models.TaskStateQueued {
@@ -167,19 +176,14 @@ func (s *Scheduler) fireDispatch(ctx context.Context, entry models.ScheduledTask
 	}
 	title = fmt.Sprintf("%s [%s]", title, slot.Format("2006-01-02 15:04"))
 	description := buildScheduledDescription(entry, contextBody)
-	task, err := s.store.InsertReadyTask(ctx, projectID, models.DraftTask{
+	oneShot := entry.RunAfter != nil && strings.TrimSpace(entry.CronExpr) == ""
+	task, err := s.store.InsertReadyTaskAndRecordDispatch(ctx, projectID, models.DraftTask{
 		Title:       title,
 		Description: description,
 		Assignee:    models.TaskAssigneeSystem,
-	})
+	}, entry.ID, slot, oneShot)
 	if err != nil {
 		return err
-	}
-	if err := s.store.UpdateScheduledTaskLastFired(ctx, entry.ID, slot); err != nil {
-		return err
-	}
-	if oneShot := entry.RunAfter != nil && strings.TrimSpace(entry.CronExpr) == ""; oneShot {
-		_ = s.store.DeleteScheduledTask(ctx, entry.ID)
 	}
 	return s.emitDispatchEvent(ctx, entry, projectID, task)
 }

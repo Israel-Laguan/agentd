@@ -120,6 +120,7 @@ func readConfig(v *viper.Viper, configFile string) error {
 }
 
 func hydrateConfig(cfg Config, v *viper.Viper) (Config, error) {
+	var err error
 	cfg.HomeDir = v.GetString("home")
 	cfg.DBPath = v.GetString("db_path")
 	cfg.ProjectsDir = v.GetString("projects_dir")
@@ -135,11 +136,15 @@ func hydrateConfig(cfg Config, v *viper.Viper) (Config, error) {
 	cfg.Librarian = loadLibrarianConfig(v)
 	cfg.Queue = loadQueueConfig(v)
 	cfg.Queue.Skills.GlobalDir = resolveSkillsGlobalDir(cfg.HomeDir, cfg.Queue.Skills.GlobalDir)
-	cfg.Agentic = loadAgenticConfig(v)
+	cfg.Agentic, err = loadAgenticConfig(v)
+	if err != nil {
+		return Config{}, err
+	}
 	cfg.Agentic.Audit.Path = ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path)
 	cfg.Agentic.PromptTemplatesPath = ResolvePromptTemplatesPath(cfg.HomeDir, cfg.Agentic.PromptTemplatesPath)
 	cfg.Channel = loadChannelConfig(v)
-	cron, err := LoadCron(cfg.CronPath)
+	var cron CronSchedule
+	cron, err = LoadCron(cfg.CronPath)
 	if err != nil {
 		return Config{}, err
 	}
