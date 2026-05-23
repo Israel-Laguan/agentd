@@ -10,7 +10,10 @@ import (
 	"github.com/spf13/viper"
 )
 
-const envPrefix = "AGENTD"
+const (
+	envPrefix        = "AGENTD"
+	maxHomeRedirects = 8
+)
 
 func readDotEnv(path string) (map[string]string, error) {
 	m, err := godotenv.Read(path)
@@ -69,39 +72,45 @@ func loadDotEnvLayers(homeOverride string, process map[string]string) (string, m
 		return "", nil, fmt.Errorf("load .env from current directory: %w", err)
 	}
 
-	merged := mergeDotEnv(nil, cwdEnv)
-	homeDir, err := resolveHomeDir(homeOverride, process, merged)
-	if err != nil {
-		return "", nil, err
-	}
+	walkMerged := mergeDotEnv(nil, cwdEnv)
+	for range maxHomeRedirects {
+		homeDir, err := resolveHomeDir(homeOverride, process, walkMerged)
+		if err != nil {
+			return "", nil, err
+		}
 
-	homeEnv, err := readDotEnv(filepath.Join(homeDir, ".env"))
-	if err != nil {
-		return "", nil, fmt.Errorf("load .env from home directory: %w", err)
-	}
-	merged = mergeDotEnv(merged, homeEnv)
-
-	resolvedHome, err := resolveHomeDir(homeOverride, process, merged)
-	if err != nil {
-		return "", nil, err
-	}
-	if resolvedHome != homeDir {
-		homeEnv, err = readDotEnv(filepath.Join(resolvedHome, ".env"))
+		homeEnv, err := readDotEnv(filepath.Join(homeDir, ".env"))
 		if err != nil {
 			return "", nil, fmt.Errorf("load .env from home directory: %w", err)
 		}
-		merged = mergeDotEnv(merged, homeEnv)
-		homeDir = resolvedHome
-	}
+		walkMerged = mergeDotEnv(walkMerged, homeEnv)
 
-	return homeDir, merged, nil
+		resolvedHome, err := resolveHomeDir(homeOverride, process, walkMerged)
+		if err != nil {
+			return "", nil, err
+		}
+		if resolvedHome == homeDir {
+			return homeDir, mergeDotEnv(cwdEnv, homeEnv), nil
+		}
+	}
+	return "", nil, fmt.Errorf("AGENTD_HOME redirect cycle or too many redirects (max %d)", maxHomeRedirects)
+}
+
+func viperKeyByEnvSuffix(v *viper.Viper) map[string]string {
+	keys := v.AllKeys()
+	out := make(map[string]string, len(keys))
+	for _, key := range keys {
+		suffix := strings.ReplaceAll(key, ".", "_")
+		out[suffix] = key
+	}
+	return out
 }
 
 func applyDotEnvToViper(v *viper.Viper, dotenv, process map[string]string) {
 	if len(dotenv) == 0 {
 		return
 	}
-	replacer := strings.NewReplacer("_", ".")
+	bySuffix := viperKeyByEnvSuffix(v)
 	for key, val := range dotenv {
 		if !strings.HasPrefix(key, envPrefix+"_") {
 			continue
@@ -111,9 +120,12 @@ func applyDotEnvToViper(v *viper.Viper, dotenv, process map[string]string) {
 				continue
 			}
 		}
-		configKey := strings.ToLower(strings.TrimPrefix(key, envPrefix+"_"))
-		configKey = replacer.Replace(configKey)
-		if configKey == "home" {
+		suffix := strings.ToLower(strings.TrimPrefix(key, envPrefix+"_"))
+		if suffix == "home" {
+			continue
+		}
+		configKey, ok := bySuffix[suffix]
+		if !ok {
 			continue
 		}
 		v.Set(configKey, val)
