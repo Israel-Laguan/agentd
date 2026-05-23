@@ -99,7 +99,7 @@ func decodeDraft(resp *http.Response) (models.DraftPlan, error) {
 		return models.DraftPlan{}, err
 	}
 	if len(decoded.Choices) == 0 {
-		return models.DraftPlan{}, mapDraftAPIError(resp.StatusCode, body)
+		return models.DraftPlan{}, fmt.Errorf("draft response missing choices")
 	}
 	raw := decoded.Choices[0].Message.Content
 	var probe struct {

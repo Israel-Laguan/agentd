@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -17,6 +18,23 @@ func TestMapDraftAPIError_ProviderMessages(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "500") {
 		t.Fatalf("error = %v, want HTTP status in message", err)
+	}
+}
+
+func TestDecodeDraft_EmptyChoices(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{"choices":[]}`)),
+	}
+	_, err := decodeDraft(resp)
+	if err == nil {
+		t.Fatal("decodeDraft() error = nil, want missing choices error")
+	}
+	if !strings.Contains(err.Error(), "missing choices") {
+		t.Fatalf("error = %v, want missing choices message", err)
+	}
+	if strings.Contains(err.Error(), "status OK") {
+		t.Fatalf("error = %v, should not report misleading status OK", err)
 	}
 }
 
