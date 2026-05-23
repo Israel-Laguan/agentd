@@ -289,18 +289,6 @@ func TestLoad_HomeDotEnvAfterAGENTD_HOMEOverride(t *testing.T) {
 	}
 }
 
-func TestRestoreProcessEnv_UnsetsAddedKeys(t *testing.T) {
-	const marker = "AGENTD_RESTORE_TEST_MARKER"
-	snap := snapshotProcessEnv()
-	t.Cleanup(func() { restoreProcessEnv(snap) })
-
-	_ = os.Setenv(marker, "added")
-	restoreProcessEnv(snap)
-	if _, ok := os.LookupEnv(marker); ok {
-		t.Errorf("%s should be unset after restoreProcessEnv", marker)
-	}
-}
-
 func TestLoad_HomeOverrideBeatsCwdDotEnv(t *testing.T) {
 	tmp := t.TempDir()
 	fromEnv := filepath.Join(tmp, "from-env")
@@ -469,6 +457,52 @@ func TestResolveSkillsGlobalDir(t *testing.T) {
 			t.Errorf("resolveSkillsGlobalDir() = %q, want %q", got, want)
 		}
 	})
+}
+
+func TestLoad_ConfigFileCannotOverrideHome(t *testing.T) {
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	otherHome := filepath.Join(t.TempDir(), "other-home")
+	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+	body := fmt.Sprintf("home: %q\n", filepath.ToSlash(otherHome))
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.HomeDir != homeDir {
+		t.Fatalf("HomeDir = %q, want %q (config home: must not override resolved home)", cfg.HomeDir, homeDir)
+	}
+}
+
+func TestLoad_ConcurrentSafe(t *testing.T) {
+	dirA := filepath.Join(t.TempDir(), "a")
+	dirB := filepath.Join(t.TempDir(), "b")
+	for _, dir := range []string{dirA, dirB} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+	}
+
+	errCh := make(chan error, 2)
+	go func() {
+		_, err := Load(LoadOptions{HomeOverride: dirA})
+		errCh <- err
+	}()
+	go func() {
+		_, err := Load(LoadOptions{HomeOverride: dirB})
+		errCh <- err
+	}()
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+	}
 }
 
 func TestIsConfigNotFound(t *testing.T) {

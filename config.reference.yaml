@@ -1,7 +1,9 @@
 # agentd configuration reference
 # Copy to ~/.agentd/config.yaml or pass via: agentd --config <path>
 
-# Filesystem layout (usually derived from --home).
+# Filesystem layout. Effective home is resolved from --home, AGENTD_HOME, or
+# .env (CWD then ~/.agentd/.env) before config.yaml is read; the home: key here
+# is informational only and cannot override that resolved path.
 home: ~/.agentd
 db_path: ~/.agentd/global.db
 projects_dir: ~/.agentd/projects
