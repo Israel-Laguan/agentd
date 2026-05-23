@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -82,16 +83,23 @@ func draftPlan(cmd *cobra.Command, client *http.Client, baseURL, prompt string) 
 }
 
 func decodeDraft(resp *http.Response) (models.DraftPlan, error) {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return models.DraftPlan{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return models.DraftPlan{}, mapDraftAPIError(resp.StatusCode, body)
+	}
 	var decoded struct {
 		Choices []struct {
 			Message gateway.PromptMessage `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+	if err := json.Unmarshal(body, &decoded); err != nil {
 		return models.DraftPlan{}, err
 	}
-	if resp.StatusCode != http.StatusOK || len(decoded.Choices) == 0 {
-		return models.DraftPlan{}, fmt.Errorf("draft request failed with status %s", resp.Status)
+	if len(decoded.Choices) == 0 {
+		return models.DraftPlan{}, mapDraftAPIError(resp.StatusCode, body)
 	}
 	raw := decoded.Choices[0].Message.Content
 	var probe struct {
@@ -104,8 +112,25 @@ func decodeDraft(resp *http.Response) (models.DraftPlan, error) {
 		}
 	}
 	var plan models.DraftPlan
-	err := json.Unmarshal([]byte(raw), &plan)
-	return plan, err
+	if err = json.Unmarshal([]byte(raw), &plan); err != nil {
+		return models.DraftPlan{}, err
+	}
+	return plan, nil
+}
+
+func mapDraftAPIError(status int, body []byte) error {
+	text := string(body)
+	switch {
+	case strings.Contains(text, "no LLM providers configured"),
+		strings.Contains(text, "no LLM providers available"),
+		strings.Contains(text, "LLM provider unreachable"):
+		return fmt.Errorf("draft request failed (HTTP %d): %w", status, config.ErrNoLLMProviders)
+	default:
+		if status > 0 {
+			return fmt.Errorf("draft request failed with status %s", http.StatusText(status))
+		}
+		return fmt.Errorf("draft request failed with empty response")
+	}
 }
 
 func printPlan(cmd *cobra.Command, plan models.DraftPlan) error {

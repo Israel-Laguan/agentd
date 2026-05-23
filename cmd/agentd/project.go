@@ -88,7 +88,7 @@ func preflightWritableDirs(cfg config.Config) error {
 	for _, dir := range writableDirs {
 		f, tmpErr := os.CreateTemp(dir, ".agentd-write-check-*")
 		if tmpErr != nil {
-			return fmt.Errorf("directory not writable %s: %w", dir, tmpErr)
+			return fmt.Errorf("%w %s: %w", config.ErrDirsNotWritable, dir, tmpErr)
 		}
 		_ = f.Close()
 		_ = os.Remove(f.Name())
@@ -101,7 +101,7 @@ func requireStartupProviders(gw config.GatewayConfig) error {
 	slog.Debug("checking LLM providers")
 	checkResult := config.CheckProviders(gw)
 	if !checkResult.Available {
-		return fmt.Errorf("no LLM providers available. Configure OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or set up a local OpenAI-compatible endpoint")
+		return fmt.Errorf("%w: configure OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or set up a local OpenAI-compatible endpoint", config.ErrNoLLMProviders)
 	}
 	if checkResult.Provider == "horde" {
 		slog.Warn("No LLM API keys configured and local provider not available. Falling back to AI Horde (anonymous, async, not recommended for production use)")

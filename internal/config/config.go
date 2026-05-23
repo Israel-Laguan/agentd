@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 
 	"agentd/internal/paths"
@@ -50,56 +49,26 @@ type LoadOptions struct {
 }
 
 // Load resolves agentd paths and reads optional config from <home>/config.yaml.
-// Environment variables are seeded from .env (CWD) and ~/.agentd/.env before
-// config is read; existing process env vars always take precedence.
+// Values from .env (CWD and home) are merged without modifying the process
+// environment; existing process env vars always take precedence. Load is safe
+// for concurrent callers.
 func Load(opts LoadOptions) (Config, error) {
-	originalEnv := snapshotProcessEnv()
-	defer restoreProcessEnv(originalEnv)
-
-	// Seed env from project-local .env first so AGENTD_HOME can influence ResolveHome.
-	if err := godotenv.Load(".env"); err != nil && !os.IsNotExist(err) {
-		return Config{}, fmt.Errorf("load .env from current directory: %w", err)
-	}
-
-	homeDir, err := ResolveHome(opts.HomeOverride)
+	processEnv := snapshotProcessEnv()
+	homeDir, dotenv, err := loadDotEnvLayers(opts.HomeOverride, processEnv)
 	if err != nil {
 		return Config{}, err
 	}
-
-	// Home-level .env may override AGENTD_HOME (and other vars) from the CWD .env.
-	if err := godotenv.Overload(filepath.Join(homeDir, ".env")); err != nil && !os.IsNotExist(err) {
-		return Config{}, fmt.Errorf("load .env from home directory: %w", err)
-	}
-	reapplySnapshotEnv(originalEnv)
-	resolvedHome, err := ResolveHome(opts.HomeOverride)
-	if err != nil {
-		return Config{}, err
-	}
-	if resolvedHome != homeDir {
-		if err := godotenv.Overload(filepath.Join(resolvedHome, ".env")); err != nil && !os.IsNotExist(err) {
-			return Config{}, fmt.Errorf("load .env from home directory: %w", err)
-		}
-	}
-	homeDir = resolvedHome
-
-	restoreProcessEnv(originalEnv)
-
-	// Re-seed env from .env files for config hydration (home already resolved).
-	if err := godotenv.Load(".env"); err != nil && !os.IsNotExist(err) {
-		return Config{}, fmt.Errorf("load .env from current directory: %w", err)
-	}
-	if err := godotenv.Overload(filepath.Join(homeDir, ".env")); err != nil && !os.IsNotExist(err) {
-		return Config{}, fmt.Errorf("load .env from home directory: %w", err)
-	}
-	reapplySnapshotEnv(originalEnv)
 
 	cfg := baseConfig(homeDir)
 	v := newConfigViper(cfg, homeDir, opts.ConfigFile)
 	if err := readConfig(v, opts.ConfigFile); err != nil {
 		return Config{}, err
 	}
+	applyDotEnvToViper(v, dotenv, processEnv)
+	// Re-pin resolved home after explicit config and .env hydration.
+	v.Set("home", cfg.HomeDir)
 
-	return hydrateConfig(cfg, v)
+	return hydrateConfig(cfg, v, processEnv, dotenv)
 }
 
 func baseConfig(homeDir string) Config {
@@ -126,6 +95,7 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 	v.SetDefault("home", cfg.HomeDir)
+	// Pin resolved home: config.yaml lives under home, so home: in config cannot relocate it.
 	v.Set("home", cfg.HomeDir)
 	v.SetDefault("db_path", cfg.DBPath)
 	v.SetDefault("projects_dir", cfg.ProjectsDir)
@@ -147,18 +117,18 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 func readConfig(v *viper.Viper, configFile string) error {
 	if err := v.ReadInConfig(); err != nil {
 		if !isConfigNotFound(err) {
-			return fmt.Errorf("read config: %w", err)
+			return fmt.Errorf("%w: read config: %w", ErrConfigRead, err)
 		}
 	}
 	if configFile != "" {
 		if err := overrideFromExplicitConfig(v, configFile); err != nil {
-			return fmt.Errorf("read explicit config: %w", err)
+			return fmt.Errorf("%w: read explicit config: %w", ErrConfigRead, err)
 		}
 	}
 	return nil
 }
 
-func hydrateConfig(cfg Config, v *viper.Viper) (Config, error) {
+func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string) (Config, error) {
 	var err error
 	cfg.HomeDir = v.GetString("home")
 	cfg.DBPath = v.GetString("db_path")
@@ -166,7 +136,7 @@ func hydrateConfig(cfg Config, v *viper.Viper) (Config, error) {
 	cfg.UploadsDir = v.GetString("uploads_dir")
 	cfg.CronPath = filepath.Join(cfg.HomeDir, cronFileName)
 	cfg.API = loadAPIConfig(v)
-	cfg.Gateway = loadGatewayConfig(v)
+	cfg.Gateway = loadGatewayConfig(v, process, dotenv)
 	cfg.Sandbox = loadSandboxConfig(v)
 	cfg.Healing = loadHealingConfig(v)
 	cfg.Breaker = loadBreakerConfig(v)
@@ -242,29 +212,3 @@ func isConfigNotFound(err error) bool {
 	return false
 }
 
-func snapshotProcessEnv() map[string]string {
-	snap := make(map[string]string)
-	for _, kv := range os.Environ() {
-		key, val, _ := strings.Cut(kv, "=")
-		snap[key] = val
-	}
-	return snap
-}
-
-func reapplySnapshotEnv(snap map[string]string) {
-	for key, val := range snap {
-		_ = os.Setenv(key, val)
-	}
-}
-
-func restoreProcessEnv(snap map[string]string) {
-	for key, val := range snap {
-		_ = os.Setenv(key, val)
-	}
-	for _, kv := range os.Environ() {
-		key, _, _ := strings.Cut(kv, "=")
-		if _, ok := snap[key]; !ok {
-			_ = os.Unsetenv(key)
-		}
-	}
-}

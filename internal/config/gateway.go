@@ -100,8 +100,8 @@ func setGatewayDefaults(v *viper.Viper) {
 	v.SetDefault("gateway.truncation.stash_threshold", 50000)
 }
 
-func loadGatewayConfig(v *viper.Viper) GatewayConfig {
-	openAI, anthropic, ollama, llamaCpp, horde, gemini := loadGatewayProviderConfigs(v)
+func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) GatewayConfig {
+	openAI, anthropic, ollama, llamaCpp, horde, gemini := loadGatewayProviderConfigs(v, process, dotenv)
 	return GatewayConfig{
 		Order:         v.GetStringSlice("gateway.order"),
 		WarmupEnabled: v.GetBool("gateway.warmup_enabled"),
