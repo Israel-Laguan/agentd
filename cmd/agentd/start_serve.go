@@ -20,7 +20,7 @@ func warmupLLMIfNeeded(ctx context.Context, gw gateway.AIGateway, gcfg config.Ga
 	}
 	slog.Debug("running LLM warmup")
 	if err := config.WarmupLLM(ctx, gw, gcfg); err != nil {
-		return fmt.Errorf("LLM warmup: %w", err)
+		return fmt.Errorf("%w: %w", config.ErrLLMWarmup, err)
 	}
 	return nil
 }

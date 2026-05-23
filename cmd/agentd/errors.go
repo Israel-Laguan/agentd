@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"strings"
+
+	"agentd/internal/config"
 )
 
 func reportCommandError(err error) {
@@ -24,18 +26,20 @@ func describeCommandError(err error) (string, string) {
 		return "", ""
 	}
 
-	errText := err.Error()
 	switch {
-	case strings.Contains(errText, "load configuration:") || strings.Contains(errText, "read config:"):
+	case errors.Is(err, config.ErrConfigRead):
 		return "agentd could not read its configuration file.", "Check the config path, file format, and any values loaded from .env or AGENTD_* variables."
-	case strings.Contains(errText, "bind: address already in use"):
-		return "Another process is already using the configured API address.", "Stop that process or set AGENTD_API_ADDRESS to a free port."
-	case strings.Contains(errText, "directory not writable"):
+	case errors.Is(err, config.ErrDirsNotWritable):
 		return "agentd could not write to one of its data directories.", "Check the permissions for AGENTD_HOME, projects, uploads, and archives directories."
-	case strings.Contains(errText, "LLM warmup failed") || strings.Contains(errText, "LLM warmup:"):
+	case errors.Is(err, config.ErrLLMWarmup):
 		return "agentd reached your LLM provider, but the startup warmup failed.", "Check the provider order, API key, model name, and network access."
-	case strings.Contains(errText, "no LLM providers available"):
+	case errors.Is(err, config.ErrNoLLMProviders):
 		return "agentd could not find a usable LLM provider.", "Set an API key or configure a local OpenAI-compatible provider in your config."
+	}
+
+	errText := err.Error()
+	if strings.Contains(errText, "bind: address already in use") {
+		return "Another process is already using the configured API address.", "Stop that process or set AGENTD_API_ADDRESS to a free port."
 	}
 
 	var opErr *net.OpError

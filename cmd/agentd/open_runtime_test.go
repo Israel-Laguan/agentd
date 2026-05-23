@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,8 +41,8 @@ func TestRequireStartupProviders_NoProviders(t *testing.T) {
 	if err == nil {
 		t.Fatal("requireStartupProviders() error = nil, want no providers error")
 	}
-	if !strings.Contains(err.Error(), "no LLM providers available") {
-		t.Fatalf("requireStartupProviders() error = %v", err)
+	if !errors.Is(err, config.ErrNoLLMProviders) {
+		t.Fatalf("requireStartupProviders() error = %v, want %v", err, config.ErrNoLLMProviders)
 	}
 }
 

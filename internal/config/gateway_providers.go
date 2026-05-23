@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"time"
 
 	"github.com/spf13/viper"
@@ -9,19 +8,19 @@ import (
 	"agentd/internal/gateway"
 )
 
-func apiKeyFromConfigOrEnv(v *viper.Viper, configKey, envVar string) string {
+func apiKeyFromConfigOrEnv(v *viper.Viper, process, dotenv map[string]string, configKey, envVar string) string {
 	if key := v.GetString(configKey); key != "" {
 		return key
 	}
-	return os.Getenv(envVar)
+	return envLookup(process, dotenv, envVar)
 }
 
-func loadGatewayProviderConfigs(v *viper.Viper) (
+func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]string) (
 	openAI, anthropic, ollama, llamaCpp, horde, gemini gateway.ProviderConfig,
 ) {
-	openAIKey := apiKeyFromConfigOrEnv(v, "gateway.openai.api_key", "OPENAI_API_KEY")
-	anthropicKey := apiKeyFromConfigOrEnv(v, "gateway.anthropic.api_key", "ANTHROPIC_API_KEY")
-	geminiKey := apiKeyFromConfigOrEnv(v, "gateway.gemini.api_key", "GEMINI_API_KEY")
+	openAIKey := apiKeyFromConfigOrEnv(v, process, dotenv, "gateway.openai.api_key", "OPENAI_API_KEY")
+	anthropicKey := apiKeyFromConfigOrEnv(v, process, dotenv, "gateway.anthropic.api_key", "ANTHROPIC_API_KEY")
+	geminiKey := apiKeyFromConfigOrEnv(v, process, dotenv, "gateway.gemini.api_key", "GEMINI_API_KEY")
 	return gateway.ProviderConfig{
 			Type: "openai", BaseURL: v.GetString("gateway.openai.base_url"),
 			APIKey: openAIKey, Model: v.GetString("gateway.openai.model"),
