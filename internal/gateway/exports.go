@@ -109,6 +109,15 @@ var (
 	SupportsChatTools = providers.SupportsChatTools
 )
 
+// ProviderSupportsChatTools resolves tool support for a provider name using the
+// configured router when available; otherwise falls back to built-in adapter checks.
+func ProviderSupportsChatTools(gw AIGateway, provider string) bool {
+	if r, ok := gw.(*Router); ok {
+		return r.ProviderSupportsChatTools(provider)
+	}
+	return SupportsChatTools(provider)
+}
+
 // GenerateJSON re-exports generic JSON repair.
 func GenerateJSON[T any](ctx context.Context, gw AIGateway, req AIRequest) (T, error) {
 	return correction.GenerateJSON[T](ctx, gw, req)

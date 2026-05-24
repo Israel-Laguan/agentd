@@ -201,7 +201,7 @@ func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) 
 // providerSupportsAgentic returns true if the provider supports agentic mode
 // (tool round-tripping with message accumulation).
 func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
-	return gateway.SupportsChatTools(profile.Provider)
+	return gateway.ProviderSupportsChatTools(w.gateway, profile.Provider)
 }
 
 // SetSandbox swaps the executor used by integration tests that replace the sandbox.

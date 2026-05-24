@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
 
@@ -43,6 +44,32 @@ func TestProviderSupportsAgentic_ReturnsTrueForSupportedProviders(t *testing.T) 
 				t.Errorf("providerSupportsAgentic(%q) = %v, want %v", tc.provider, result, tc.expected)
 			}
 		})
+	}
+}
+
+func TestProviderSupportsAgentic_CustomProviderName(t *testing.T) {
+	t.Parallel()
+
+	gw, err := gateway.NewRouterFromConfigs([]spec.ProviderConfig{{
+		Name:    "poolside",
+		Type:    "openai",
+		BaseURL: "https://inference.poolside.ai/v1",
+		Model:   "poolside-model",
+		APIKey:  "test-key",
+	}})
+	if err != nil {
+		t.Fatalf("NewRouterFromConfigs() error = %v", err)
+	}
+
+	w := &Worker{gateway: gw}
+	profile := models.AgentProfile{
+		ID:       "test",
+		Provider: "poolside",
+		Model:    "poolside-model",
+	}
+
+	if !w.providerSupportsAgentic(profile) {
+		t.Fatal("providerSupportsAgentic(poolside) = false, want true")
 	}
 }
 

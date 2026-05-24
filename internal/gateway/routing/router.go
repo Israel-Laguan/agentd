@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/providers"
@@ -37,6 +38,22 @@ func NewRouter(providersList ...providers.Backend) *Router {
 		truncator:        truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}},
 		maxTasksPerPhase: defaultMaxTasksPerPhase,
 	}
+}
+
+// ProviderSupportsChatTools reports whether the named configured backend supports
+// chat tool round-tripping. Custom provider names (e.g. poolside with adapter openai)
+// are resolved via backend Capabilities().
+func (r *Router) ProviderSupportsChatTools(provider string) bool {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return false
+	}
+	for _, p := range r.providers {
+		if strings.EqualFold(string(p.Name()), provider) {
+			return p.Capabilities().SupportsChatTools
+		}
+	}
+	return false
 }
 
 // NewRouterFromConfigs builds providers from ProviderConfig entries in order.
