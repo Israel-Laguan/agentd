@@ -203,12 +203,13 @@ func (r *Router) selectCandidateProviders(req spec.AIRequest) (candidates []prov
 }
 
 func decideTerminalError(req spec.AIRequest, matchedProvider, selectedHasToolSupport bool, providerErrs []error) error {
+	requestedProvider := strings.TrimSpace(req.Provider)
 	hasRequestedTools := len(req.Tools) > 0
-	if req.Provider != "" && !req.ProviderFromRole && matchedProvider && hasRequestedTools && !selectedHasToolSupport {
-		return fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", req.Provider)
+	if requestedProvider != "" && !req.ProviderFromRole && matchedProvider && hasRequestedTools && !selectedHasToolSupport {
+		return fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", requestedProvider)
 	}
-	if req.Provider != "" && len(providerErrs) == 0 {
-		return fmt.Errorf("LLM provider %q is not configured", req.Provider)
+	if requestedProvider != "" && len(providerErrs) == 0 {
+		return fmt.Errorf("LLM provider %q is not configured", requestedProvider)
 	}
 	if len(providerErrs) == 0 {
 		return fmt.Errorf("%w: all providers skipped (tool mismatch or empty cascade)", models.ErrLLMUnreachable)
