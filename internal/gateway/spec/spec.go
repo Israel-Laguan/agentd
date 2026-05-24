@@ -117,7 +117,8 @@ type AIResponse struct {
 
 // ProviderCapabilities declares optional backend capabilities for a provider entry.
 type ProviderCapabilities struct {
-	ChatTools bool `json:"chat_tools,omitempty" mapstructure:"chat_tools"`
+	// ChatTools overrides adapter-default tool support when set.
+	ChatTools *bool `json:"chat_tools,omitempty" mapstructure:"chat_tools"`
 }
 
 // ProviderConfig configures one concrete LLM endpoint.

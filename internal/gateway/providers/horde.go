@@ -66,7 +66,7 @@ func (h *Horde) MaxInputChars() int {
 
 // Capabilities implements Backend.
 func (h *Horde) Capabilities() Capabilities {
-	return Capabilities{SupportsChatTools: false}
+	return capabilitiesFromConfig(h.cfg, false)
 }
 
 // Generate implements Backend.
