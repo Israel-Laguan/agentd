@@ -29,7 +29,7 @@ providers:
     base_url: "https://inference.poolside.ai/v1"
     model: "poolside/laguna-m.1"
     api_key_env: POOLSIDE_API_KEY
-    health: api_key
+    health: api_key   # api_key | ollama | llamacpp | horde (empty = adapter default)
     capabilities:
       chat_tools: true
 ```
