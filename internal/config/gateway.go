@@ -162,8 +162,18 @@ func (c GatewayConfig) RoleRoutes() map[gateway.Role]gateway.RoleTarget {
 }
 
 func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {
-	const legacyProviderCount = 6
-	byName := make(map[string]gateway.ProviderConfig, len(c.Providers)+legacyProviderCount)
+	legacyProviders := []struct {
+		name string
+		cfg  gateway.ProviderConfig
+	}{
+		{name: "openai", cfg: c.OpenAI},
+		{name: "anthropic", cfg: c.Anthropic},
+		{name: "ollama", cfg: c.Ollama},
+		{name: "llamacpp", cfg: c.LlamaCpp},
+		{name: "horde", cfg: c.Horde},
+		{name: "gemini", cfg: c.Gemini},
+	}
+	byName := make(map[string]gateway.ProviderConfig, len(c.Providers)+len(legacyProviders))
 	put := func(cfg gateway.ProviderConfig) error {
 		if cfg.Name == "" {
 			cfg.Name = cfg.Type
@@ -186,17 +196,7 @@ func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {
 			return nil, err
 		}
 	}
-	for _, legacy := range []struct {
-		name string
-		cfg  gateway.ProviderConfig
-	}{
-		{name: "openai", cfg: c.OpenAI},
-		{name: "anthropic", cfg: c.Anthropic},
-		{name: "ollama", cfg: c.Ollama},
-		{name: "llamacpp", cfg: c.LlamaCpp},
-		{name: "horde", cfg: c.Horde},
-		{name: "gemini", cfg: c.Gemini},
-	} {
+	for _, legacy := range legacyProviders {
 		if _, exists := byName[legacy.name]; exists {
 			continue
 		}
