@@ -138,7 +138,7 @@ func (h *Horde) poll(ctx context.Context, requestID, defaultModel string) (spec.
 			}
 			return spec.AIResponse{
 				Content:      generation.Text,
-				ProviderUsed: string(spec.ProviderHorde),
+				ProviderUsed: string(h.Name()),
 				ModelUsed:    model,
 			}, nil
 		}

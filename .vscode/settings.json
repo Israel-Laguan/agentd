@@ -2,10 +2,5 @@
   "files.watcherExclude": {
     "**/target": true
   },
-  "chat.tools.terminal.autoApprove": {
-    "/^go test \\./\\.\\.\\. -count=1$/": {
-      "approve": true,
-      "matchCommandLine": true
-    }
   }
 }

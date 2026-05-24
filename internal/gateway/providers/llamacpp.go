@@ -62,7 +62,7 @@ func (l *LlamaCpp) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRes
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return spec.AIResponse{}, fmt.Errorf("decode llamacpp response: %w", err)
 	}
-	return openAIResponseToLlamaCpp(decoded, model), nil
+	return openAIResponseToLlamaCpp(decoded, model, string(l.Name())), nil
 }
 
 func (l *LlamaCpp) url() string {
@@ -74,7 +74,7 @@ func (l *LlamaCpp) Capabilities() Capabilities {
 	return Capabilities{SupportsChatTools: false}
 }
 
-func openAIResponseToLlamaCpp(r openAIResponse, defaultModel string) spec.AIResponse {
+func openAIResponseToLlamaCpp(r openAIResponse, defaultModel string, providerUsed string) spec.AIResponse {
 	model := r.Model
 	if model == "" {
 		model = defaultModel
@@ -86,7 +86,7 @@ func openAIResponseToLlamaCpp(r openAIResponse, defaultModel string) spec.AIResp
 	return spec.AIResponse{
 		Content:      content,
 		TokenUsage:   r.Usage.TotalTokens,
-		ProviderUsed: string(spec.ProviderLlamaCpp),
+		ProviderUsed: providerUsed,
 		ModelUsed:    model,
 	}
 }

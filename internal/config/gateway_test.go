@@ -102,6 +102,19 @@ func TestGatewayConfig_ProviderConfigs_CustomProvider(t *testing.T) {
 	}
 }
 
+func TestGatewayConfig_ProviderConfigs_DuplicateNames(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"dup"},
+		Providers: []gateway.ProviderConfig{
+			{Name: "dup", Type: "openai"},
+			{Name: "dup", Type: "anthropic"},
+		},
+	}
+	if _, err := cfg.ProviderConfigs(); err == nil || !strings.Contains(err.Error(), "dup") {
+		t.Fatalf("ProviderConfigs() error = %v, want duplicate error mentioning dup", err)
+	}
+}
+
 func TestGatewayConfig_ProviderConfigs_UnknownOrderEntry(t *testing.T) {
 	cfg := GatewayConfig{Order: []string{"nope"}}
 	if _, err := cfg.ProviderConfigs(); err == nil || !strings.Contains(err.Error(), "nope") {
