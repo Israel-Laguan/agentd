@@ -49,7 +49,7 @@ type GatewayConfig struct {
 	Truncation       TruncationConfig
 	Truncator        TruncatorConfig
 	MaxTasksPerPhase int
-	Capabilities     []CapabilityManifest `json:"-"`
+	MCPServers       []CapabilityManifest `json:"-"`
 }
 
 type TruncationConfig struct {
@@ -133,7 +133,7 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 		},
 		MaxTasksPerPhase: v.GetInt("gateway.max_tasks_per_phase"),
 		RoleModels:       loadRoleModels(v),
-		Capabilities:     loadCapabilities(v),
+		MCPServers:       loadMCPServers(v),
 	}
 	if _, err := cfg.ProviderConfigs(); err != nil {
 		return GatewayConfig{}, fmt.Errorf("gateway providers: %w", err)
@@ -246,9 +246,9 @@ func durationOrDefault(value, fallback time.Duration) time.Duration {
 	return fallback
 }
 
-func loadCapabilities(v *viper.Viper) []CapabilityManifest {
+func loadMCPServers(v *viper.Viper) []CapabilityManifest {
 	var caps []CapabilityManifest
-	if err := v.UnmarshalKey("gateway.capabilities", &caps); err != nil {
+	if err := v.UnmarshalKey("gateway.mcp_servers", &caps); err != nil {
 		return nil
 	}
 	for i := range caps {
