@@ -94,18 +94,19 @@ All fields per entry:
 
 `truncator.policy`: `head_tail`, `middle_out`, `summarize`, or `reject`. The `truncation` block holds active strategy parameters including `stash_threshold` for file-stash offload.
 
-### MCP capabilities
+### MCP servers
 
-External tool servers via Model Context Protocol:
+External tool servers via Model Context Protocol (config key `gateway.mcp_servers`; formerly `gateway.capabilities`):
 
 ```yaml
-capabilities:
-  - type: mcp
-    name: "github"
-    server_url: "https://api.example.com/mcp"
-    auth:
-      type: bearer
-      token: "${MCP_TOKEN}"
+gateway:
+  mcp_servers:
+    - type: mcp
+      name: "github"
+      server_url: "https://api.example.com/mcp"
+      auth:
+        type: bearer
+        token: "${MCP_TOKEN}"
 ```
 
 ## Agentic
