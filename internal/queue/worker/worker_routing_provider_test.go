@@ -20,9 +20,9 @@ func newWorkerWithProviders(t *testing.T, cfgs ...spec.ProviderConfig) *Worker {
 	return &Worker{gateway: gw}
 }
 
-// toolCapableConfig returns a minimal ProviderConfig for an OpenAI-adapter provider.
-func toolCapableConfig(name string) spec.ProviderConfig {
-	return spec.ProviderConfig{Name: name, Type: "openai", BaseURL: "https://example.com/v1", Model: "test-model", APIKey: "test-key"}
+// toolCapableConfig returns a minimal ProviderConfig for a chat-tool-capable provider.
+func toolCapableConfig(name, providerType string) spec.ProviderConfig {
+	return spec.ProviderConfig{Name: name, Type: providerType, BaseURL: "https://example.com/v1", Model: "test-model", APIKey: "test-key"}
 }
 
 // noToolConfig returns a minimal ProviderConfig for an Ollama provider (no tool support).
@@ -37,25 +37,25 @@ func TestProviderSupportsAgentic_RouterBacked(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name       string
+		name        string
 		providerCfg spec.ProviderConfig
-		query      string
-		want       bool
+		query       string
+		want        bool
 	}{
 		// OpenAI adapter providers — all return true
-		{"openai lowercase",   toolCapableConfig("openai"),    "openai",    true},
-		{"openai uppercase",   toolCapableConfig("openai"),    "OPENAI",    true},
-		{"anthropic lowercase", toolCapableConfig("anthropic"), "anthropic", true},
-		{"anthropic uppercase", toolCapableConfig("anthropic"), "ANTHROPIC", true},
+		{"openai lowercase", toolCapableConfig("openai", "openai"), "openai", true},
+		{"openai uppercase", toolCapableConfig("openai", "openai"), "OPENAI", true},
+		{"anthropic lowercase", toolCapableConfig("anthropic", "anthropic"), "anthropic", true},
+		{"anthropic uppercase", toolCapableConfig("anthropic", "anthropic"), "ANTHROPIC", true},
 		// Gemini reuses the OpenAI adapter; must reach the agentic loop.
-		{"gemini lowercase", toolCapableConfig("gemini"), "gemini", true},
-		{"gemini uppercase", toolCapableConfig("gemini"), "GEMINI", true},
+		{"gemini lowercase", toolCapableConfig("gemini", "gemini"), "gemini", true},
+		{"gemini uppercase", toolCapableConfig("gemini", "gemini"), "GEMINI", true},
 		// Ollama intentionally has no chat-tool support.
 		{"ollama lowercase", noToolConfig("ollama"), "ollama", false},
 		{"ollama uppercase", noToolConfig("ollama"), "OLLAMA", false},
 		// LlamaCpp and Horde also have no chat-tool support.
 		{"llamacpp", spec.ProviderConfig{Name: "llamacpp", Type: "llamacpp", BaseURL: "http://localhost:8080", Model: "local"}, "llamacpp", false},
-		{"horde",    spec.ProviderConfig{Name: "horde",    Type: "horde",    BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"}, "horde", false},
+		{"horde", spec.ProviderConfig{Name: "horde", Type: "horde", BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"}, "horde", false},
 	}
 
 	for _, tc := range testCases {
@@ -77,7 +77,7 @@ func TestProviderSupportsAgentic_UnknownProvider(t *testing.T) {
 	t.Parallel()
 
 	unknowns := []string{"azure-openai", "vertex", "unknown", ""}
-	w := newWorkerWithProviders(t, toolCapableConfig("openai"))
+	w := newWorkerWithProviders(t, toolCapableConfig("openai", "openai"))
 
 	for _, name := range unknowns {
 		name := name
@@ -165,4 +165,3 @@ func TestProviderSupportsAgentic_ImportFromGateway(t *testing.T) {
 		t.Errorf("gateway.ProviderOpenAI = %q, want \"openai\"", gateway.ProviderOpenAI)
 	}
 }
-
