@@ -258,6 +258,66 @@ func TestLoad_GatewayProviders_UnmarshalError(t *testing.T) {
 	}
 }
 
+func TestLoad_GatewayProviders_CustomProvider(t *testing.T) {
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+	body := `gateway:
+  order: [poolside]
+  providers:
+    - name: poolside
+      adapter: openai
+      base_url: "https://inference.poolside.ai/v1"
+      model: "poolside/laguna-m.1"
+      api_key_env: POOLSIDE_API_KEY
+      health: api_key
+      capabilities:
+        chat_tools: true
+`
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	t.Run("provider_configs", func(t *testing.T) {
+		cfg, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		configs, err := cfg.Gateway.ProviderConfigs()
+		if err != nil {
+			t.Fatalf("ProviderConfigs() error = %v", err)
+		}
+		if len(configs) != 1 {
+			t.Fatalf("ProviderConfigs() length = %d, want 1", len(configs))
+		}
+		if configs[0].Name != "poolside" || configs[0].Type != "openai" {
+			t.Fatalf("ProviderConfigs()[0] = %+v, want poolside/openai", configs[0])
+		}
+		if configs[0].BaseURL != "https://inference.poolside.ai/v1" {
+			t.Fatalf("BaseURL = %q, want poolside inference URL", configs[0].BaseURL)
+		}
+		if configs[0].Model != "poolside/laguna-m.1" {
+			t.Fatalf("Model = %q, want poolside/laguna-m.1", configs[0].Model)
+		}
+	})
+
+	t.Run("api_key_env", func(t *testing.T) {
+		t.Setenv("POOLSIDE_API_KEY", "test-key")
+		cfg, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if len(cfg.Gateway.Providers) != 1 {
+			t.Fatalf("Providers length = %d, want 1", len(cfg.Gateway.Providers))
+		}
+		if cfg.Gateway.Providers[0].APIKey != "test-key" {
+			t.Fatalf("APIKey = %q, want test-key from POOLSIDE_API_KEY", cfg.Gateway.Providers[0].APIKey)
+		}
+	})
+}
+
 func TestLoad_ConfigFileCannotOverrideHome(t *testing.T) {
 	homeDir := filepath.Join(t.TempDir(), "agentd")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
