@@ -4,11 +4,15 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"agentd/internal/gateway"
 )
 
 type ProviderCheckResult struct {
 	Available      bool
 	Provider       string
+	AdapterType    string
+	BaseURL        string
 	HordeAvailable bool
 	LocalHealthy   bool
 	HasAPIKey      bool
@@ -16,58 +20,65 @@ type ProviderCheckResult struct {
 
 func CheckProviders(cfg GatewayConfig) ProviderCheckResult {
 	result := ProviderCheckResult{}
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		return result
+	}
 
-	for _, name := range cfg.Order {
-		switch name {
-		case "openai":
-			if cfg.OpenAI.APIKey != "" {
+	var hordeCandidate *gateway.ProviderConfig
+
+	for i := range configs {
+		provider := configs[i]
+		switch gateway.Provider(provider.Type) {
+		case gateway.ProviderOpenAI, gateway.ProviderGemini:
+			if provider.APIKey != "" {
 				result.Available = true
-				result.Provider = "openai"
+				result.Provider = provider.Name
+				result.AdapterType = provider.Type
+				result.BaseURL = provider.BaseURL
 				result.HasAPIKey = true
 				return result
 			}
-		case "anthropic":
-			if cfg.Anthropic.APIKey != "" {
+		case gateway.ProviderAnthropic:
+			if provider.APIKey != "" {
 				result.Available = true
-				result.Provider = "anthropic"
+				result.Provider = provider.Name
+				result.AdapterType = provider.Type
+				result.BaseURL = provider.BaseURL
 				result.HasAPIKey = true
 				return result
 			}
-		case "ollama":
-			if isOllamaHealthy(cfg.Ollama.BaseURL) {
+		case gateway.ProviderOllama:
+			if isOllamaHealthy(provider.BaseURL) {
 				result.Available = true
-				result.Provider = "ollama"
+				result.Provider = provider.Name
+				result.AdapterType = provider.Type
+				result.BaseURL = provider.BaseURL
 				result.LocalHealthy = true
 				return result
 			}
-		case "llamacpp":
-			if isLlamaCppHealthy(cfg.LlamaCpp.BaseURL) {
+		case gateway.ProviderLlamaCpp:
+			if isLlamaCppHealthy(provider.BaseURL) {
 				result.Available = true
-				result.Provider = "llamacpp"
+				result.Provider = provider.Name
+				result.AdapterType = provider.Type
+				result.BaseURL = provider.BaseURL
 				result.LocalHealthy = true
 				return result
 			}
-		case "gemini":
-			if cfg.Gemini.APIKey != "" {
-				result.Available = true
-				result.Provider = "gemini"
-				result.HasAPIKey = true
-				return result
-			}
-		case "horde":
+		case gateway.ProviderHorde:
 			result.HordeAvailable = true
+			hordeCandidate = &provider
 		}
 	}
 
-	applyHordeFallback(&result, cfg.Horde.BaseURL)
-	return result
-}
-
-func applyHordeFallback(result *ProviderCheckResult, hordeBaseURL string) {
-	if result.HordeAvailable && !result.Available && isHordeHealthy(hordeBaseURL) {
+	if hordeCandidate != nil && !result.Available && isHordeHealthy(hordeCandidate.BaseURL) {
 		result.Available = true
-		result.Provider = "horde"
+		result.Provider = hordeCandidate.Name
+		result.AdapterType = hordeCandidate.Type
+		result.BaseURL = hordeCandidate.BaseURL
 	}
+	return result
 }
 
 func isHordeHealthy(baseURL string) bool {

@@ -115,15 +115,24 @@ type AIResponse struct {
 	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
 }
 
+// ProviderCapabilities declares optional backend capabilities for a provider entry.
+type ProviderCapabilities struct {
+	ChatTools bool `json:"chat_tools,omitempty" mapstructure:"chat_tools"`
+}
+
 // ProviderConfig configures one concrete LLM endpoint.
 type ProviderConfig struct {
-	Type          string        `json:"type"`
-	BaseURL       string        `json:"base_url"`
-	APIKey        string        `json:"api_key"`
-	Model         string        `json:"model"`
-	MaxInputChars int           `json:"max_input_chars"`
-	Timeout       time.Duration `json:"timeout"`
-	PollInterval  time.Duration `json:"poll_interval"`
+	Name          string               `json:"name,omitempty" mapstructure:"name"`
+	Type          string               `json:"type" mapstructure:"adapter"`
+	BaseURL       string               `json:"base_url" mapstructure:"base_url"`
+	APIKey        string               `json:"api_key" mapstructure:"api_key"`
+	APIKeyEnv     string               `json:"api_key_env,omitempty" mapstructure:"api_key_env"`
+	Model         string               `json:"model" mapstructure:"model"`
+	MaxInputChars int                  `json:"max_input_chars" mapstructure:"max_input_chars"`
+	Timeout       time.Duration        `json:"timeout" mapstructure:"timeout"`
+	PollInterval  time.Duration        `json:"poll_interval" mapstructure:"poll_interval"`
+	Health        string               `json:"health,omitempty" mapstructure:"health"`
+	Capabilities  ProviderCapabilities `json:"capabilities,omitempty" mapstructure:"capabilities"`
 }
 
 // Provider identifies an LLM backend implementation.

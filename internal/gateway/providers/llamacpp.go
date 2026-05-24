@@ -26,7 +26,7 @@ func NewLlamaCpp(cfg spec.ProviderConfig, client *http.Client) *LlamaCpp {
 
 // Name implements Backend.
 func (l *LlamaCpp) Name() spec.Provider {
-	return spec.ProviderLlamaCpp
+	return providerName(l.cfg, spec.ProviderLlamaCpp)
 }
 
 // MaxInputChars implements Backend.

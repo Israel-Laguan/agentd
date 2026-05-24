@@ -40,12 +40,16 @@ func NewRouter(providersList ...providers.Backend) *Router {
 }
 
 // NewRouterFromConfigs builds providers from ProviderConfig entries in order.
-func NewRouterFromConfigs(configs []spec.ProviderConfig) *Router {
+func NewRouterFromConfigs(configs []spec.ProviderConfig) (*Router, error) {
 	list := make([]providers.Backend, 0, len(configs))
 	for _, cfg := range configs {
-		list = providers.AppendFromConfig(list, cfg)
+		var err error
+		list, err = providers.AppendFromConfig(list, cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return NewRouter(list...)
+	return NewRouter(list...), nil
 }
 
 // WithTruncation sets the truncator and optional max message size override.

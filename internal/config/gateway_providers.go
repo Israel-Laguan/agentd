@@ -54,3 +54,22 @@ func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]strin
 			Timeout:       durationOrDefault(v.GetDuration("gateway.gemini.timeout"), 5*time.Minute),
 		}
 }
+
+func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) []gateway.ProviderConfig {
+	if !v.IsSet("gateway.providers") {
+		return nil
+	}
+	var providers []gateway.ProviderConfig
+	if err := v.UnmarshalKey("gateway.providers", &providers); err != nil {
+		return nil
+	}
+	for i := range providers {
+		if providers[i].APIKey == "" && providers[i].APIKeyEnv != "" {
+			providers[i].APIKey = envLookup(process, dotenv, providers[i].APIKeyEnv)
+		}
+		if providers[i].Name == "" {
+			providers[i].Name = providers[i].Type
+		}
+	}
+	return providers
+}

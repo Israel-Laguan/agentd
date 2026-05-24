@@ -26,7 +26,7 @@ func NewOllama(cfg spec.ProviderConfig, client *http.Client) *Ollama {
 
 // Name implements Backend.
 func (o *Ollama) Name() spec.Provider {
-	return spec.ProviderOllama
+	return providerName(o.cfg, spec.ProviderOllama)
 }
 
 // MaxInputChars implements Backend.

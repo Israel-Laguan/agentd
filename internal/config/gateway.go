@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -37,6 +38,7 @@ type RoleModelsConfig struct {
 type GatewayConfig struct {
 	Order            []string
 	WarmupEnabled    bool
+	Providers        []gateway.ProviderConfig
 	OpenAI           gateway.ProviderConfig
 	Anthropic        gateway.ProviderConfig
 	Ollama           gateway.ProviderConfig
@@ -108,6 +110,7 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) Gatewa
 	return GatewayConfig{
 		Order:         v.GetStringSlice("gateway.order"),
 		WarmupEnabled: v.GetBool("gateway.warmup_enabled"),
+		Providers:     loadGatewayProviders(v, process, dotenv),
 		OpenAI:        openAI,
 		Anthropic:     anthropic,
 		Ollama:        ollama,
@@ -154,29 +157,59 @@ func (c GatewayConfig) RoleRoutes() map[gateway.Role]gateway.RoleTarget {
 	return routes
 }
 
-func (c GatewayConfig) ProviderConfigs() []gateway.ProviderConfig {
-	configs := make([]gateway.ProviderConfig, 0, len(c.Order))
-	for _, name := range c.Order {
-		if name == "openai" {
-			configs = append(configs, c.OpenAI)
+func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {
+	byName := make(map[string]gateway.ProviderConfig, len(c.Providers)+6)
+	put := func(cfg gateway.ProviderConfig) error {
+		if cfg.Name == "" {
+			cfg.Name = cfg.Type
 		}
-		if name == "anthropic" {
-			configs = append(configs, c.Anthropic)
+		if cfg.Name == "" {
+			return nil
 		}
-		if name == "ollama" {
-			configs = append(configs, c.Ollama)
+		if cfg.Type == "" {
+			cfg.Type = cfg.Name
 		}
-		if name == "llamacpp" {
-			configs = append(configs, c.LlamaCpp)
+		if _, exists := byName[cfg.Name]; exists {
+			return fmt.Errorf("duplicate provider %q", cfg.Name)
 		}
-		if name == "horde" {
-			configs = append(configs, c.Horde)
-		}
-		if name == "gemini" {
-			configs = append(configs, c.Gemini)
+		byName[cfg.Name] = cfg
+		return nil
+	}
+
+	for _, cfg := range c.Providers {
+		if err := put(cfg); err != nil {
+			return nil, err
 		}
 	}
-	return configs
+	for _, legacy := range []struct {
+		name string
+		cfg  gateway.ProviderConfig
+	}{
+		{name: "openai", cfg: c.OpenAI},
+		{name: "anthropic", cfg: c.Anthropic},
+		{name: "ollama", cfg: c.Ollama},
+		{name: "llamacpp", cfg: c.LlamaCpp},
+		{name: "horde", cfg: c.Horde},
+		{name: "gemini", cfg: c.Gemini},
+	} {
+		if _, exists := byName[legacy.name]; exists {
+			continue
+		}
+		legacy.cfg.Name = legacy.name
+		if err := put(legacy.cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	configs := make([]gateway.ProviderConfig, 0, len(c.Order))
+	for _, name := range c.Order {
+		cfg, ok := byName[name]
+		if !ok {
+			return nil, fmt.Errorf("unknown provider %q in gateway.order", name)
+		}
+		configs = append(configs, cfg)
+	}
+	return configs, nil
 }
 
 func (c TruncationConfig) StrategyImpl() gateway.TruncationStrategy {
