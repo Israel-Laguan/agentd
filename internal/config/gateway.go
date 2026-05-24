@@ -12,17 +12,17 @@ import (
 )
 
 type AuthConfig struct {
-	Type  string `json:"type"`
-	Token string `json:"token"`
+	Type  string `json:"type" mapstructure:"type"`
+	Token string `json:"token" mapstructure:"token"`
 }
 
 type CapabilityManifest struct {
-	Type      string     `json:"type"`
-	Name      string     `json:"name"`
-	ServerURL string     `json:"server_url,omitempty"`
-	Command   string     `json:"command,omitempty"`
-	Args      []string   `json:"args,omitempty"`
-	Auth      AuthConfig `json:"auth,omitempty"`
+	Type      string     `json:"type" mapstructure:"type"`
+	Name      string     `json:"name" mapstructure:"name"`
+	ServerURL string     `json:"server_url,omitempty" mapstructure:"server_url"`
+	Command   string     `json:"command,omitempty" mapstructure:"command"`
+	Args      []string   `json:"args,omitempty" mapstructure:"args"`
+	Auth      AuthConfig `json:"auth,omitempty" mapstructure:"auth"`
 }
 
 type RoleModelConfig struct {
@@ -112,6 +112,10 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 	if err != nil {
 		return GatewayConfig{}, err
 	}
+	mcpServers, err := loadMCPServers(v)
+	if err != nil {
+		return GatewayConfig{}, fmt.Errorf("gateway mcp_servers: %w", err)
+	}
 	cfg := GatewayConfig{
 		Order:         v.GetStringSlice("gateway.order"),
 		WarmupEnabled: v.GetBool("gateway.warmup_enabled"),
@@ -134,7 +138,7 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 		},
 		MaxTasksPerPhase: v.GetInt("gateway.max_tasks_per_phase"),
 		RoleModels:       loadRoleModels(v),
-		MCPServers:       loadMCPServers(v),
+		MCPServers:       mcpServers,
 	}
 	if _, err := cfg.ProviderConfigs(); err != nil {
 		return GatewayConfig{}, fmt.Errorf("gateway providers: %w", err)
@@ -247,27 +251,33 @@ func durationOrDefault(value, fallback time.Duration) time.Duration {
 	return fallback
 }
 
-func loadMCPServers(v *viper.Viper) []CapabilityManifest {
-	var caps []CapabilityManifest
-	if err := v.UnmarshalKey("gateway.mcp_servers", &caps); err == nil && len(caps) > 0 {
+func loadMCPServers(v *viper.Viper) ([]CapabilityManifest, error) {
+	if v.IsSet("gateway.mcp_servers") {
+		var caps []CapabilityManifest
+		if err := v.UnmarshalKey("gateway.mcp_servers", &caps); err != nil {
+			return nil, fmt.Errorf("invalid gateway.mcp_servers: %w", err)
+		}
 		for i := range caps {
 			if caps[i].Auth.Token != "" {
 				caps[i].Auth.Token = os.ExpandEnv(caps[i].Auth.Token)
 			}
 		}
-		return caps
+		return caps, nil
 	}
+
 	// Backward compat: fall back to the old gateway.capabilities key, deprecated in favour of
 	// gateway.mcp_servers. Will be removed in a future release.
 	var legacy []CapabilityManifest
-	if err := v.UnmarshalKey("gateway.capabilities", &legacy); err == nil && len(legacy) > 0 {
-		slog.Warn("gateway.capabilities is deprecated; rename the config key to gateway.mcp_servers")
-		for i := range legacy {
-			if legacy[i].Auth.Token != "" {
-				legacy[i].Auth.Token = os.ExpandEnv(legacy[i].Auth.Token)
-			}
-		}
-		return legacy
+	if err := v.UnmarshalKey("gateway.capabilities", &legacy); err != nil {
+		return nil, fmt.Errorf("invalid gateway.capabilities: %w", err)
 	}
-	return nil
+	for i := range legacy {
+		if legacy[i].Auth.Token != "" {
+			legacy[i].Auth.Token = os.ExpandEnv(legacy[i].Auth.Token)
+		}
+	}
+	if len(legacy) > 0 {
+		slog.Warn("gateway.capabilities is deprecated; rename the config key to gateway.mcp_servers")
+	}
+	return legacy, nil
 }

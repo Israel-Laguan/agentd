@@ -115,8 +115,12 @@ var (
 //
 // Test doubles that exercise the agentic path must implement ProviderSupportsChatTools
 // so that providerSupportsAgentic in the worker package returns the correct value.
+type chatToolsChecker interface {
+	ProviderSupportsChatTools(string) bool
+}
+
 func ProviderSupportsChatTools(gw AIGateway, provider string) bool {
-	if c, ok := gw.(interface{ ProviderSupportsChatTools(string) bool }); ok {
+	if c, ok := gw.(chatToolsChecker); ok {
 		return c.ProviderSupportsChatTools(provider)
 	}
 	return false
