@@ -258,6 +258,29 @@ func TestLoad_GatewayProviders_UnmarshalError(t *testing.T) {
 	}
 }
 
+func TestLoad_GatewayOrder_DuplicateEntry(t *testing.T) {
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+	body := `gateway:
+  order: [openai, openai]
+  openai:
+    api_key: sk-test
+`
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	_, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+	if err == nil {
+		t.Fatal("Load() error = nil, want duplicate gateway.order error")
+	}
+	if !strings.Contains(err.Error(), "duplicate") || !strings.Contains(err.Error(), "gateway.order") {
+		t.Fatalf("Load() error = %v, want duplicate error in gateway.order", err)
+	}
+}
+
 func TestLoad_GatewayProviders_CustomProvider(t *testing.T) {
 	homeDir := filepath.Join(t.TempDir(), "agentd")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
