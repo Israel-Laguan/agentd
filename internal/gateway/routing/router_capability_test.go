@@ -356,6 +356,37 @@ func TestAllNonToolProviders_AllFail(t *testing.T) {
 	}
 }
 
+// TestRoleRoutingWhitespaceProviderUsesRoleMapping verifies that whitespace-only
+// Provider values are treated as unspecified so gateway.role_models still applies.
+func TestRoleRoutingWhitespaceProviderUsesRoleMapping(t *testing.T) {
+	openai := &mockProvider{
+		providerName: "openai",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: true},
+	}
+	ollama := &mockProvider{
+		providerName: "ollama",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: false},
+	}
+	routes := map[spec.Role]spec.RoleTarget{
+		spec.RoleChat: {Provider: "ollama", Model: "llama3:8b"},
+	}
+	router := NewRouter(openai, ollama).WithRoleRouting(routes)
+
+	resp, err := router.Generate(context.Background(), spec.AIRequest{
+		Role:     spec.RoleChat,
+		Provider: "   ",
+		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.ProviderUsed != "ollama" {
+		t.Fatalf("ProviderUsed = %q, want ollama from role routing", resp.ProviderUsed)
+	}
+}
+
 // TestRoleRoutingNonToolProviderWithToolsJSONFallback verifies that a role-mapped
 // non-tool provider still receives JSON fallback when tools are present.
 func TestRoleRoutingNonToolProviderWithToolsJSONFallback(t *testing.T) {

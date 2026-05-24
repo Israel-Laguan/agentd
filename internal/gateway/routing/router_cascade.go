@@ -94,6 +94,8 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 	if err := r.reserveBudget(req.TaskID); err != nil {
 		return spec.AIResponse{}, err
 	}
+	req.Provider = strings.TrimSpace(req.Provider)
+	req.Model = strings.TrimSpace(req.Model)
 	req = r.applyRoleRouting(req)
 	candidates, matchedProvider, selectedHasToolSupport := r.selectCandidateProviders(req)
 	hasRequestedTools := len(req.Tools) > 0
