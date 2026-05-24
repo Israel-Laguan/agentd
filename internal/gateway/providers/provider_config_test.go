@@ -66,61 +66,61 @@ func TestAppendFromConfig_CustomName(t *testing.T) {
 	}
 }
 
+var backendIdentityCases = []struct {
+	name     string
+	backend  Backend
+	provider spec.Provider
+	maxInput int
+}{
+	{
+		name:     "openai",
+		backend:  NewOpenAI(spec.ProviderConfig{Type: "openai", MaxInputChars: 12000}, nil),
+		provider: spec.ProviderOpenAI,
+		maxInput: 12000,
+	},
+	{
+		name:     "anthropic",
+		backend:  NewAnthropic(spec.ProviderConfig{Type: "anthropic", MaxInputChars: 8000}, nil),
+		provider: spec.ProviderAnthropic,
+		maxInput: 8000,
+	},
+	{
+		name:     "ollama",
+		backend:  NewOllama(spec.ProviderConfig{Type: "ollama", MaxInputChars: 4000}, nil),
+		provider: spec.ProviderOllama,
+		maxInput: 4000,
+	},
+	{
+		name:     "llamacpp",
+		backend:  NewLlamaCpp(spec.ProviderConfig{Type: "llamacpp", MaxInputChars: 3000}, nil),
+		provider: spec.ProviderLlamaCpp,
+		maxInput: 3000,
+	},
+	{
+		name:     "horde",
+		backend:  NewHorde(spec.ProviderConfig{Type: "horde", MaxInputChars: 2000}, nil),
+		provider: spec.ProviderHorde,
+		maxInput: 2000,
+	},
+	{
+		// 16000 is the configured gateway truncation budget (MaxInputChars → Router.applyTruncation), not a Gemini API character limit.
+		name:     "gemini",
+		backend:  NewOpenAI(spec.ProviderConfig{Type: "gemini", MaxInputChars: 16000}, nil),
+		provider: spec.ProviderGemini,
+		maxInput: 16000,
+	},
+	{
+		name:     "custom openai name",
+		backend:  NewOpenAI(spec.ProviderConfig{Name: "poolside", Type: "openai", MaxInputChars: 16000}, nil),
+		provider: spec.Provider("poolside"),
+		maxInput: 16000,
+	},
+}
+
 func TestBackendIdentity(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		backend  Backend
-		provider spec.Provider
-		maxInput int
-	}{
-		{
-			name:     "openai",
-			backend:  NewOpenAI(spec.ProviderConfig{Type: "openai", MaxInputChars: 12000}, nil),
-			provider: spec.ProviderOpenAI,
-			maxInput: 12000,
-		},
-		{
-			name:     "anthropic",
-			backend:  NewAnthropic(spec.ProviderConfig{Type: "anthropic", MaxInputChars: 8000}, nil),
-			provider: spec.ProviderAnthropic,
-			maxInput: 8000,
-		},
-		{
-			name:     "ollama",
-			backend:  NewOllama(spec.ProviderConfig{Type: "ollama", MaxInputChars: 4000}, nil),
-			provider: spec.ProviderOllama,
-			maxInput: 4000,
-		},
-		{
-			name:     "llamacpp",
-			backend:  NewLlamaCpp(spec.ProviderConfig{Type: "llamacpp", MaxInputChars: 3000}, nil),
-			provider: spec.ProviderLlamaCpp,
-			maxInput: 3000,
-		},
-		{
-			name:     "horde",
-			backend:  NewHorde(spec.ProviderConfig{Type: "horde", MaxInputChars: 2000}, nil),
-			provider: spec.ProviderHorde,
-			maxInput: 2000,
-		},
-		{
-			// 16000 is the configured gateway truncation budget (MaxInputChars → Router.applyTruncation), not a Gemini API character limit.
-			name:     "gemini",
-			backend:  NewOpenAI(spec.ProviderConfig{Type: "gemini", MaxInputChars: 16000}, nil),
-			provider: spec.ProviderGemini,
-			maxInput: 16000,
-		},
-		{
-			name:     "custom openai name",
-			backend:  NewOpenAI(spec.ProviderConfig{Name: "poolside", Type: "openai", MaxInputChars: 16000}, nil),
-			provider: spec.Provider("poolside"),
-			maxInput: 16000,
-		},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range backendIdentityCases {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
