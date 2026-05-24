@@ -21,6 +21,55 @@ func newProvidersViper(t *testing.T, yaml string) *viper.Viper {
 	return v
 }
 
+func TestLoadGatewayProviders_NameFallsBackToType(t *testing.T) {
+	yaml := `    - adapter: openai
+      health: api_key
+`
+	v := newProvidersViper(t, yaml)
+	process := map[string]string{
+		"AGENTD_GATEWAY_OPENAI_API_KEY": "sk-openai",
+	}
+
+	providers, err := loadGatewayProviders(v, process, nil)
+	if err != nil {
+		t.Fatalf("loadGatewayProviders() error = %v", err)
+	}
+	if len(providers) != 1 {
+		t.Fatalf("len(providers) = %d, want 1", len(providers))
+	}
+	if providers[0].Name != "openai" {
+		t.Errorf("Name = %q, want %q", providers[0].Name, "openai")
+	}
+	if providers[0].APIKey != "sk-openai" {
+		t.Errorf("APIKey = %q, want %q", providers[0].APIKey, "sk-openai")
+	}
+}
+
+func TestLoadGatewayProviders_GenericEnvVar_HyphenatedName(t *testing.T) {
+	yaml := `    - name: my-vendor
+      adapter: openai
+      health: api_key
+`
+	v := newProvidersViper(t, yaml)
+	process := map[string]string{
+		"AGENTD_GATEWAY_MY_VENDOR_API_KEY": "sk-hyphen",
+	}
+
+	providers, err := loadGatewayProviders(v, process, nil)
+	if err != nil {
+		t.Fatalf("loadGatewayProviders() error = %v", err)
+	}
+	if len(providers) != 1 {
+		t.Fatalf("len(providers) = %d, want 1", len(providers))
+	}
+	if providers[0].Name != "my-vendor" {
+		t.Errorf("Name = %q, want %q", providers[0].Name, "my-vendor")
+	}
+	if providers[0].APIKey != "sk-hyphen" {
+		t.Errorf("APIKey = %q, want %q (from AGENTD_GATEWAY_MY_VENDOR_API_KEY)", providers[0].APIKey, "sk-hyphen")
+	}
+}
+
 func TestLoadGatewayProviders_GenericEnvVar(t *testing.T) {
 	yaml := `    - name: poolside
       adapter: openai

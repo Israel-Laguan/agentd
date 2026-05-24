@@ -58,6 +58,11 @@ func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]strin
 		}
 }
 
+func genericGatewayAPIKeyEnv(providerName string) string {
+	normalized := strings.ToUpper(strings.ReplaceAll(providerName, "-", "_"))
+	return "AGENTD_GATEWAY_" + normalized + "_API_KEY"
+}
+
 func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) ([]gateway.ProviderConfig, error) {
 	if !v.IsSet("gateway.providers") {
 		return nil, nil
@@ -74,19 +79,22 @@ func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) ([]
 		if providers[i].APIKey == "" && providers[i].APIKeyEnv != "" {
 			providers[i].APIKey = envLookup(process, dotenv, providers[i].APIKeyEnv)
 		}
-		if providers[i].APIKey == "" {
-			generic := "AGENTD_GATEWAY_" + strings.ToUpper(providers[i].Name) + "_API_KEY"
-			providers[i].APIKey = envLookup(process, dotenv, generic)
+
+		genericEnv := ""
+		if providers[i].Name != "" {
+			genericEnv = genericGatewayAPIKeyEnv(providers[i].Name)
+			if providers[i].APIKey == "" {
+				providers[i].APIKey = envLookup(process, dotenv, genericEnv)
+			}
 		}
-	}
-	for _, p := range providers {
-		if p.APIKey == "" && healthModeFor(p) == healthModeAPIKey {
-			envHint := "AGENTD_GATEWAY_" + strings.ToUpper(p.Name) + "_API_KEY"
-			if p.APIKeyEnv != "" {
-				envHint = p.APIKeyEnv
+
+		if providers[i].APIKey == "" && healthModeFor(providers[i]) == healthModeAPIKey {
+			envHint := genericEnv
+			if providers[i].APIKeyEnv != "" {
+				envHint = providers[i].APIKeyEnv
 			}
 			slog.Warn("provider has no API key; set it via config or env",
-				"provider", p.Name,
+				"provider", providers[i].Name,
 				"env_var", envHint,
 			)
 		}
