@@ -63,7 +63,7 @@ Precedence (highest wins):
 4. Auto-discovered `<home>/config.yaml`
 5. Compiled defaults
 
-See [`config.reference.yaml`](config.reference.yaml) for every available key. See [`docs/reference.md`](docs/reference.md) for config key defaults, task states, event types, and feature catalog.
+See [`config.reference.yaml`](config.reference.yaml) for every available key (copy-paste template). See [`docs/config-reference.md`](docs/config-reference.md) for extended configuration documentation and [`docs/reference.md`](docs/reference.md) for config key defaults, task states, event types, and feature catalog.
 
 ## Chat Intake
 

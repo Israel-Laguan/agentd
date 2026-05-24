@@ -3,10 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"agentd/internal/config"
 )
 
 func TestReportCobraUsageError_UnknownCommand(t *testing.T) {
@@ -27,10 +31,24 @@ func TestReportCobraUsageError_UnknownCommand(t *testing.T) {
 }
 
 func TestReportCobraUsageError_OperationalError(t *testing.T) {
-	err := execute(context.Background(), []string{"agentd", "start"})
+	home := initHome(t)
+	configPath := writeStartTestConfig(t)
+	clearProviderKeys(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := execute(ctx, []string{
+		"agentd", "--home", home, "--config", configPath, "start", "--skip-llm-warmup",
+	})
 	if err == nil {
-		// start may fail for many reasons; we only need a non-cobra-parse error.
-		t.Skip("start succeeded unexpectedly")
+		t.Fatal("execute() error = nil, want operational error from start without providers")
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("start blocked until context deadline; expected immediate provider configuration error")
+	}
+	if !errors.Is(err, config.ErrNoLLMProviders) {
+		t.Fatalf("error = %v, want %v", err, config.ErrNoLLMProviders)
 	}
 	if reportCobraUsageError(err) {
 		t.Fatalf("reportCobraUsageError() = true, want false for operational error %v", err)
