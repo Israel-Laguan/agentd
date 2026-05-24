@@ -39,6 +39,17 @@ func TestProviderCapabilitiesMatrix(t *testing.T) {
 			backend:           NewHorde(spec.ProviderConfig{BaseURL: "https://aihorde.net/api", Model: "horde-test"}, nil),
 			supportsChatTools: false,
 		},
+		{
+			// Gemini reuses the OpenAI adapter; its Capabilities() must return true so
+			// the router and worker gate agree without a separate string switch.
+			name: "gemini",
+			backend: NewOpenAI(spec.ProviderConfig{
+				Name:    "gemini",
+				BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+				Model:   "gemini-2.5-flash",
+			}, nil),
+			supportsChatTools: true,
+		},
 	}
 
 	for _, tt := range tests {

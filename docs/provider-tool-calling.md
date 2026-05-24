@@ -4,12 +4,19 @@ agentd keeps provider tool support conservative. A provider must keep
 `SupportsChatTools` false until it has request mapping, response parsing, and
 fixture tests for that provider's actual wire format.
 
+The **router** (`*routing.Router`) is the single source of truth for per-provider
+`SupportsChatTools`. The worker gate calls `gateway.ProviderSupportsChatTools(gw,
+name)` which delegates to the router's backend registry; there is no separate
+static string switch. At startup, agentd logs `provider supports chat tools` for
+every provider in the order list whose backend returns `SupportsChatTools: true`.
+
 ## Capability Matrix
 
 | Provider | `SupportsChatTools` | Status | Notes |
 | --- | --- | --- | --- |
 | OpenAI | `true` | Verified | Sends OpenAI-compatible `tools` and parses `tool_calls` in provider fixture tests. |
 | Anthropic | `true` | Verified | Maps `AIRequest.Tools` to `tools` with `name`, `description`, `input_schema`; parses `tool_use` content blocks; fixture tests cover request/response. |
+| Gemini | `true` | Verified | Reuses the OpenAI adapter (`adapter: gemini` → `NewOpenAI`); the OpenAI-compatible endpoint accepts `tools` and returns `tool_calls`. Capability flag inherits from the adapter's `adapterDefault: true`. |
 | Ollama | `false` | Not wired | `/api/chat` supports a `tools` field and returns `message.tool_calls`, but support depends on server and model behavior. |
 | llama.cpp | `false` | Not wired | OpenAI-style function calling depends on runtime setup such as `llama-server --jinja`, chat templates, and model support. |
 | AI Horde | `false` | Unsupported | The current provider uses async text generation with prompt and Kobold-style generation parameters, not a chat tool-call contract. |

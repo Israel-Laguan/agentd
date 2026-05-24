@@ -101,21 +101,25 @@ var (
 
 // Providers.
 var (
-	NewOpenAI         = providers.NewOpenAI
-	NewAnthropic      = providers.NewAnthropic
-	NewOllama         = providers.NewOllama
-	NewLlamaCpp       = providers.NewLlamaCpp
-	NewHorde          = providers.NewHorde
-	SupportsChatTools = providers.SupportsChatTools
+	NewOpenAI    = providers.NewOpenAI
+	NewAnthropic = providers.NewAnthropic
+	NewOllama    = providers.NewOllama
+	NewLlamaCpp  = providers.NewLlamaCpp
+	NewHorde     = providers.NewHorde
 )
 
 // ProviderSupportsChatTools resolves tool support for a provider name using the
-// configured router when available; otherwise falls back to built-in adapter checks.
+// configured router. Returns false if the gateway is not a *Router or does not
+// implement chatToolsChecker, or if the provider is not registered. The router
+// (or any type that satisfies chatToolsChecker) is the single source of truth.
+//
+// Test doubles that exercise the agentic path must implement ProviderSupportsChatTools
+// so that providerSupportsAgentic in the worker package returns the correct value.
 func ProviderSupportsChatTools(gw AIGateway, provider string) bool {
-	if r, ok := gw.(*Router); ok && r != nil {
-		return r.ProviderSupportsChatTools(provider)
+	if c, ok := gw.(interface{ ProviderSupportsChatTools(string) bool }); ok {
+		return c.ProviderSupportsChatTools(provider)
 	}
-	return SupportsChatTools(provider)
+	return false
 }
 
 // GenerateJSON re-exports generic JSON repair.

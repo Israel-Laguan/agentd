@@ -95,6 +95,11 @@ gateway:
     head_ratio: 0.5
     max_input_chars: 12000
     stash_threshold: 50000
+  # MCP external tool servers (formerly gateway.capabilities — renamed in Task 10)
+  # mcp_servers:
+  #   - name: my-mcp-server
+  #     type: mcp
+  #     server_url: "http://localhost:9000"
 
 agentic:
   context_warning_threshold: 0.85
