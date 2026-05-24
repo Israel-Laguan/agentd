@@ -111,7 +111,7 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 	if err != nil {
 		return GatewayConfig{}, err
 	}
-	return GatewayConfig{
+	cfg := GatewayConfig{
 		Order:         v.GetStringSlice("gateway.order"),
 		WarmupEnabled: v.GetBool("gateway.warmup_enabled"),
 		Providers:     providers,
@@ -134,7 +134,11 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 		MaxTasksPerPhase: v.GetInt("gateway.max_tasks_per_phase"),
 		RoleModels:       loadRoleModels(v),
 		Capabilities:     loadCapabilities(v),
-	}, nil
+	}
+	if _, err := cfg.ProviderConfigs(); err != nil {
+		return GatewayConfig{}, fmt.Errorf("gateway providers: %w", err)
+	}
+	return cfg, nil
 }
 
 func loadRoleModels(v *viper.Viper) RoleModelsConfig {

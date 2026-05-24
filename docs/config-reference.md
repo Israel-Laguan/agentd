@@ -21,7 +21,8 @@ Tool/JSON fallback behavior is documented in [`provider-tool-calling.md`](provid
 ### Custom provider registry
 
 The `gateway.providers` list registers one or more provider entries. `name` is the operator-facing
-identifier referenced by `gateway.order`; `adapter` selects the Go backend implementation.
+identifier referenced by `gateway.order` (defaults to the entry's `adapter` value when omitted);
+`adapter` selects the Go backend implementation.
 
 Multiple entries may share the same `adapter` at different `base_url` values — each becomes an
 independent backend. This enables cascading two OpenAI-compatible endpoints, which is impossible
@@ -68,7 +69,7 @@ All fields per entry:
 
 | Field | Notes |
 | --- | --- |
-| `name` | Required. Unique operator identifier; referenced in `gateway.order` and `req.Provider`. |
+| `name` | Optional; defaults to the entry's `adapter` value when omitted. Must be unique after defaulting — duplicate names (explicit or implicit) are rejected at config load. Referenced by `gateway.order` and `req.Provider`; use distinct names when running multiple entries with the same adapter (e.g. `openai` + `poolside`, both `adapter: openai`). |
 | `adapter` | Required. Backend implementation: `openai`, `anthropic`, `ollama`, `llamacpp`, `horde`, `gemini`. |
 | `base_url` | Provider endpoint URL. |
 | `model` | Default model for this entry. |
