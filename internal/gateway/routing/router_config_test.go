@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
 )
 
@@ -54,6 +55,51 @@ func TestWithPhaseCap(t *testing.T) {
 	router := NewRouter().WithPhaseCap(5).WithPhaseCap(-1)
 	if router.maxTasksPerPhase != 5 {
 		t.Fatalf("maxTasksPerPhase = %d, want 5", router.maxTasksPerPhase)
+	}
+}
+
+func TestNewRouterFromConfigs_TwoOpenAIAdapters(t *testing.T) {
+	t.Parallel()
+
+	router, err := NewRouterFromConfigs([]spec.ProviderConfig{
+		{Name: "openai", Type: "openai", BaseURL: "https://api.openai.com/v1"},
+		{Name: "poolside", Type: "openai", BaseURL: "https://inference.poolside.ai/v1"},
+	})
+	if err != nil {
+		t.Fatalf("NewRouterFromConfigs() error = %v", err)
+	}
+	if len(router.providers) != 2 {
+		t.Fatalf("providers = %d, want 2", len(router.providers))
+	}
+	if got := router.providers[0].Name(); got != spec.Provider("openai") {
+		t.Errorf("providers[0].Name() = %q, want openai", got)
+	}
+	if got := router.providers[1].Name(); got != spec.Provider("poolside") {
+		t.Errorf("providers[1].Name() = %q, want poolside", got)
+	}
+}
+
+func TestRouter_ProviderRouting_PoolsideVsOpenAI(t *testing.T) {
+	t.Parallel()
+
+	openai := &mockProvider{providerName: "openai", content: "openai-response",
+		capabilities: providers.Capabilities{SupportsChatTools: true}}
+	poolside := &mockProvider{providerName: "poolside", content: "poolside-response",
+		capabilities: providers.Capabilities{SupportsChatTools: true}}
+	router := NewRouter(openai, poolside)
+
+	resp, err := router.Generate(context.Background(), spec.AIRequest{
+		Messages:  []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		Provider: "poolside",
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if resp.ProviderUsed != "poolside" {
+		t.Errorf("ProviderUsed = %q, want poolside", resp.ProviderUsed)
+	}
+	if openai.request.Messages != nil {
+		t.Errorf("openai backend was called unexpectedly (request = %+v)", openai.request)
 	}
 }
 
