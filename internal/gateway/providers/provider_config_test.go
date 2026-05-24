@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"strings"
 	"testing"
 
 	"agentd/internal/gateway/spec"
@@ -10,23 +11,36 @@ func TestAppendFromConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		typ  string
-		want int
+		typ     string
+		want    int
+		wantErr bool
 	}{
-		{"openai", 1},
-		{"anthropic", 1},
-		{"ollama", 1},
-		{"llamacpp", 1},
-		{"horde", 1},
-		{"gemini", 1},
-		{"unknown", 0},
+		{"openai", 1, false},
+		{"anthropic", 1, false},
+		{"ollama", 1, false},
+		{"llamacpp", 1, false},
+		{"horde", 1, false},
+		{"gemini", 1, false},
+		{"unknown", 0, true},
 	}
 
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.typ, func(t *testing.T) {
 			t.Parallel()
-			got := AppendFromConfig(nil, spec.ProviderConfig{Type: tt.typ, BaseURL: "http://example"})
+			got, err := AppendFromConfig(nil, spec.ProviderConfig{Type: tt.typ, BaseURL: "http://example"})
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), tt.typ) {
+					t.Fatalf("AppendFromConfig() error = %v, want provider name in error", err)
+				}
+				if len(got) != 0 {
+					t.Fatalf("len = %d, want 0 on error", len(got))
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("AppendFromConfig() error = %v", err)
+			}
 			if len(got) != tt.want {
 				t.Fatalf("len = %d, want %d", len(got), tt.want)
 			}
@@ -37,14 +51,29 @@ func TestAppendFromConfig(t *testing.T) {
 	}
 }
 
+func TestAppendFromConfig_CustomName(t *testing.T) {
+	t.Parallel()
+
+	got, err := AppendFromConfig(nil, spec.ProviderConfig{Type: "openai", Name: "poolside", BaseURL: "http://example"})
+	if err != nil {
+		t.Fatalf("AppendFromConfig() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1", len(got))
+	}
+	if got[0].Name() != spec.Provider("poolside") {
+		t.Fatalf("Name() = %q, want poolside", got[0].Name())
+	}
+}
+
 func TestBackendIdentity(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		backend    Backend
-		provider   spec.Provider
-		maxInput   int
+		name     string
+		backend  Backend
+		provider spec.Provider
+		maxInput int
 	}{
 		{
 			name:     "openai",
@@ -81,6 +110,12 @@ func TestBackendIdentity(t *testing.T) {
 			name:     "gemini",
 			backend:  NewOpenAI(spec.ProviderConfig{Type: "gemini", MaxInputChars: 16000}, nil),
 			provider: spec.ProviderGemini,
+			maxInput: 16000,
+		},
+		{
+			name:     "custom openai name",
+			backend:  NewOpenAI(spec.ProviderConfig{Name: "poolside", Type: "openai", MaxInputChars: 16000}, nil),
+			provider: spec.Provider("poolside"),
 			maxInput: 16000,
 		},
 	}

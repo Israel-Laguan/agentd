@@ -27,10 +27,7 @@ func NewOpenAI(cfg spec.ProviderConfig, client *http.Client) *OpenAI {
 // Name implements Backend. Returns the configured provider type so that
 // OpenAI-compatible providers (e.g. Gemini) report their correct identity.
 func (o *OpenAI) Name() spec.Provider {
-	if t := spec.Provider(o.cfg.Type); t != "" && t != spec.ProviderOpenAI {
-		return t
-	}
-	return spec.ProviderOpenAI
+	return providerName(o.cfg, spec.ProviderOpenAI)
 }
 
 // MaxInputChars implements Backend.
@@ -152,12 +149,12 @@ func (o *OpenAI) Capabilities() Capabilities {
 }
 
 type openAIRequest struct {
-	Model          string          `json:"model"`
-	Messages       []openAIMessage `json:"messages"`
-	Temperature    float64         `json:"temperature"`
-	MaxTokens      int             `json:"max_tokens,omitempty"`
+	Model          string            `json:"model"`
+	Messages       []openAIMessage   `json:"messages"`
+	Temperature    float64           `json:"temperature"`
+	MaxTokens      int               `json:"max_tokens,omitempty"`
 	ResponseFormat map[string]string `json:"response_format,omitempty"`
-	Tools          []openAITool    `json:"tools,omitempty"`
+	Tools          []openAITool      `json:"tools,omitempty"`
 }
 
 type openAIMessage struct {

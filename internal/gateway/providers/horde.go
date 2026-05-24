@@ -56,7 +56,7 @@ func NewHorde(cfg spec.ProviderConfig, client *http.Client) *Horde {
 
 // Name implements Backend.
 func (h *Horde) Name() spec.Provider {
-	return spec.ProviderHorde
+	return providerName(h.cfg, spec.ProviderHorde)
 }
 
 // MaxInputChars implements Backend.

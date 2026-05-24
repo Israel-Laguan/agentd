@@ -23,8 +23,12 @@ func WarmupLLM(ctx context.Context, gw gateway.AIGateway, gatewayCfg GatewayConf
 	}
 
 	// Horde is async — a generate call can take minutes. Ping its heartbeat instead.
-	if result.Provider == string(gateway.ProviderHorde) {
-		return warmupHorde(ctx, gatewayCfg.Horde.BaseURL)
+	if result.AdapterType == string(gateway.ProviderHorde) {
+		baseURL := result.BaseURL
+		if baseURL == "" {
+			baseURL = gatewayCfg.Horde.BaseURL
+		}
+		return warmupHorde(ctx, baseURL)
 	}
 
 	slog.Debug("LLM warmup starting", "provider", result.Provider)

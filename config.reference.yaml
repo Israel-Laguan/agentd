@@ -21,6 +21,17 @@ gateway:
   order: [openai, anthropic, ollama]
   warmup_enabled: true # set false or use `agentd start --skip-llm-warmup` to skip billable startup probe
   max_tasks_per_phase: 7
+  # New-style provider registry for custom vendors. `name` is the operator-facing
+  # identifier; `adapter` selects the Go backend implementation.
+  # providers:
+  #   - name: poolside
+  #     adapter: openai
+  #     base_url: "https://inference.poolside.ai/v1"
+  #     model: "poolside/laguna-m.1"
+  #     api_key_env: POOLSIDE_API_KEY
+  #     health: api_key
+  #     capabilities:
+  #       chat_tools: true
   openai:
     base_url: "https://api.openai.com/v1"
     model: "gpt-4o-mini"
@@ -50,6 +61,12 @@ gateway:
     max_input_chars: 0
     timeout: "5m"
     poll_interval: "4s"
+  gemini:
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+    model: "gemini-2.5-flash"
+    api_key: "" # or set GEMINI_API_KEY
+    max_input_chars: 0
+    timeout: "5m"
   budget:
     tokens_per_task: 50000 # per-task token cap; 0 = unlimited (Danger A)
   role_models:             # Flow 6.3: specialized model routing (wired via WithRoleRouting)

@@ -12,13 +12,39 @@ import (
 func TestNewRouterFromConfigs(t *testing.T) {
 	t.Parallel()
 
-	router := NewRouterFromConfigs([]spec.ProviderConfig{
+	router, err := NewRouterFromConfigs([]spec.ProviderConfig{
 		{Type: "openai", BaseURL: "https://api.openai.com/v1"},
 		{Type: "anthropic", BaseURL: "https://api.anthropic.com"},
-		{Type: "unknown"},
 	})
+	if err != nil {
+		t.Fatalf("NewRouterFromConfigs() error = %v", err)
+	}
 	if len(router.providers) != 2 {
 		t.Fatalf("providers = %d, want 2", len(router.providers))
+	}
+}
+
+func TestNewRouterFromConfigs_CustomName(t *testing.T) {
+	t.Parallel()
+
+	router, err := NewRouterFromConfigs([]spec.ProviderConfig{{Name: "poolside", Type: "openai", BaseURL: "https://inference.poolside.ai/v1"}})
+	if err != nil {
+		t.Fatalf("NewRouterFromConfigs() error = %v", err)
+	}
+	if len(router.providers) != 1 {
+		t.Fatalf("providers = %d, want 1", len(router.providers))
+	}
+	if got := router.providers[0].Name(); got != spec.Provider("poolside") {
+		t.Fatalf("provider name = %q, want poolside", got)
+	}
+}
+
+func TestNewRouterFromConfigs_UnknownAdapter(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewRouterFromConfigs([]spec.ProviderConfig{{Type: "unknown"}})
+	if err == nil || !strings.Contains(err.Error(), "unknown") {
+		t.Fatalf("NewRouterFromConfigs() error = %v, want adapter name in error", err)
 	}
 }
 
@@ -37,9 +63,9 @@ type stubBudgetTracker struct {
 }
 
 func (b *stubBudgetTracker) Reserve(string) error { return b.reserveErr }
-func (b *stubBudgetTracker) Add(string, int)    { b.added++ }
-func (b *stubBudgetTracker) Usage(string) int   { return 0 }
-func (b *stubBudgetTracker) Reset(string)       {}
+func (b *stubBudgetTracker) Add(string, int)      { b.added++ }
+func (b *stubBudgetTracker) Usage(string) int     { return 0 }
+func (b *stubBudgetTracker) Reset(string)         {}
 
 func TestRouterReserveBudget(t *testing.T) {
 	t.Parallel()

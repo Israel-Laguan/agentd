@@ -29,7 +29,7 @@ func NewAnthropic(cfg spec.ProviderConfig, client *http.Client) *Anthropic {
 
 // Name implements Backend.
 func (a *Anthropic) Name() spec.Provider {
-	return spec.ProviderAnthropic
+	return providerName(a.cfg, spec.ProviderAnthropic)
 }
 
 // MaxInputChars implements Backend.
