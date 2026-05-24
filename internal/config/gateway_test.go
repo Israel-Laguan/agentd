@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
+
 	"agentd/internal/gateway"
 )
 
@@ -240,5 +242,81 @@ func TestGatewayConfig_ProviderConfigs_ImplicitNameCollision(t *testing.T) {
 	}
 	if _, err := cfg.ProviderConfigs(); err == nil || !strings.Contains(err.Error(), "openai") {
 		t.Fatalf("ProviderConfigs() error = %v, want duplicate error mentioning openai", err)
+	}
+}
+
+func TestLoadMCPServers_NewKey(t *testing.T) {
+	t.Parallel()
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	yaml := `
+gateway:
+  mcp_servers:
+    - type: stdio
+      name: mytool
+      command: /usr/bin/mytool
+`
+	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	servers := loadMCPServers(v)
+	if len(servers) != 1 {
+		t.Fatalf("loadMCPServers() len = %d, want 1", len(servers))
+	}
+	if servers[0].Name != "mytool" {
+		t.Errorf("servers[0].Name = %q, want mytool", servers[0].Name)
+	}
+}
+
+func TestLoadMCPServers_OldKeyFallback(t *testing.T) {
+	t.Parallel()
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	yaml := `
+gateway:
+  capabilities:
+    - type: stdio
+      name: legacytool
+      command: /usr/bin/legacytool
+`
+	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	servers := loadMCPServers(v)
+	if len(servers) != 1 {
+		t.Fatalf("loadMCPServers() len = %d, want 1 (fallback to old key)", len(servers))
+	}
+	if servers[0].Name != "legacytool" {
+		t.Errorf("servers[0].Name = %q, want legacytool", servers[0].Name)
+	}
+}
+
+func TestLoadMCPServers_OldKeyIgnoredWhenNewPresent(t *testing.T) {
+	t.Parallel()
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	yaml := `
+gateway:
+  mcp_servers:
+    - type: stdio
+      name: newtool
+      command: /usr/bin/newtool
+  capabilities:
+    - type: stdio
+      name: oldtool
+      command: /usr/bin/oldtool
+`
+	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	servers := loadMCPServers(v)
+	if len(servers) != 1 {
+		t.Fatalf("loadMCPServers() len = %d, want 1 (new key wins)", len(servers))
+	}
+	if servers[0].Name != "newtool" {
+		t.Errorf("servers[0].Name = %q, want newtool (new key should win)", servers[0].Name)
 	}
 }
