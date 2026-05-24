@@ -13,16 +13,31 @@ api:
 gateway:
   order: [openai, anthropic, gemini, ollama]
   # See docs/config-reference.md#custom-provider-registry
+  #
+  # Example: two endpoints sharing the same adapter (OpenAI + Poolside in cascade).
+  # This was impossible with the old per-vendor slot schema (Task 09).
   # providers:
+  #   - name: openai
+  #     adapter: openai
+  #     base_url: "https://api.openai.com/v1"
+  #     api_key_env: OPENAI_API_KEY
+  #     model: "gpt-4o-mini"
   #   - name: poolside
   #     adapter: openai
   #     base_url: "https://inference.poolside.ai/v1"
-  #     model: "poolside/laguna-m.1"
   #     api_key_env: POOLSIDE_API_KEY
-  #     health: api_key
+  #     model: "poolside/laguna-m.1"
   #     capabilities:
   #       chat_tools: true
-  # order: [poolside, openai, anthropic, gemini, ollama]
+  # order: [openai, poolside, anthropic, gemini, ollama]
+  #
+  # Single custom entry (e.g. vLLM alongside OpenAI):
+  # providers:
+  #   - name: vllm
+  #     adapter: openai
+  #     base_url: "http://127.0.0.1:8000/v1"
+  #     model: "your-model-name"
+  # order: [openai, vllm]
   warmup_enabled: true
   max_tasks_per_phase: 7
   openai:

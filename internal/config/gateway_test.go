@@ -195,3 +195,40 @@ func TestDurationOrDefault(t *testing.T) {
 		t.Errorf("durationOrDefault(0, 10s) = %v, want 10s", durationOrDefault(0, 10*time.Second))
 	}
 }
+
+func TestGatewayConfig_ProviderConfigs_TwoOpenAIAdapters(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"openai", "poolside"},
+		Providers: []gateway.ProviderConfig{
+			{Name: "openai", Type: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "key-oai"},
+			{Name: "poolside", Type: "openai", BaseURL: "https://inference.poolside.ai/v1", APIKey: "key-ps"},
+		},
+	}
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		t.Fatalf("ProviderConfigs() error = %v", err)
+	}
+	if len(configs) != 2 {
+		t.Fatalf("ProviderConfigs() length = %d, want 2", len(configs))
+	}
+	if configs[0].Name != "openai" || configs[0].Type != "openai" || configs[0].BaseURL != "https://api.openai.com/v1" {
+		t.Errorf("configs[0] = %+v", configs[0])
+	}
+	if configs[1].Name != "poolside" || configs[1].Type != "openai" || configs[1].BaseURL != "https://inference.poolside.ai/v1" {
+		t.Errorf("configs[1] = %+v", configs[1])
+	}
+}
+
+func TestGatewayConfig_ProviderConfigs_ImplicitNameCollision(t *testing.T) {
+	// Two entries with adapter: openai but no explicit name both default to "openai" and collide.
+	cfg := GatewayConfig{
+		Order: []string{"openai"},
+		Providers: []gateway.ProviderConfig{
+			{Type: "openai", BaseURL: "https://api.openai.com/v1"},
+			{Type: "openai", BaseURL: "https://inference.poolside.ai/v1"},
+		},
+	}
+	if _, err := cfg.ProviderConfigs(); err == nil || !strings.Contains(err.Error(), "openai") {
+		t.Fatalf("ProviderConfigs() error = %v, want duplicate error mentioning openai", err)
+	}
+}

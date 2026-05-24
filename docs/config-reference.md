@@ -20,19 +20,62 @@ Tool/JSON fallback behavior is documented in [`provider-tool-calling.md`](provid
 
 ### Custom provider registry
 
-The `gateway.providers` list registers custom vendors. `name` is the operator-facing identifier; `adapter` selects the Go backend implementation. Example:
+The `gateway.providers` list registers one or more provider entries. `name` is the operator-facing
+identifier referenced by `gateway.order`; `adapter` selects the Go backend implementation.
+
+Multiple entries may share the same `adapter` at different `base_url` values — each becomes an
+independent backend. This enables cascading two OpenAI-compatible endpoints, which is impossible
+with the legacy per-vendor slot schema:
 
 ```yaml
-providers:
-  - name: poolside
-    adapter: openai
-    base_url: "https://inference.poolside.ai/v1"
-    model: "poolside/laguna-m.1"
-    api_key_env: POOLSIDE_API_KEY
-    health: api_key   # api_key | ollama | llamacpp | horde (empty = adapter default)
-    capabilities:
-      chat_tools: true
+gateway:
+  providers:
+    - name: openai
+      adapter: openai
+      base_url: "https://api.openai.com/v1"
+      api_key_env: OPENAI_API_KEY
+      model: "gpt-4o-mini"
+    - name: poolside
+      adapter: openai
+      base_url: "https://inference.poolside.ai/v1"
+      api_key_env: POOLSIDE_API_KEY
+      model: "poolside/laguna-m.1"
+      capabilities:
+        chat_tools: true
+  order: [openai, poolside, anthropic]
 ```
+
+Single custom entry (e.g. vLLM or LM Studio alongside the named OpenAI slot):
+
+```yaml
+gateway:
+  providers:
+    - name: vllm
+      adapter: openai
+      base_url: "http://127.0.0.1:8000/v1"
+      model: "your-model-name"
+  order: [openai, vllm]
+  openai:
+    base_url: "https://api.openai.com/v1"
+    api_key_env: OPENAI_API_KEY
+```
+
+Legacy flat keys (`gateway.openai.*`, `gateway.anthropic.*`, etc.) are still supported and produce
+an implicit entry with `name` matching the vendor (e.g. `name: openai, adapter: openai`). Existing
+deployments require no config changes.
+
+All fields per entry:
+
+| Field | Notes |
+| --- | --- |
+| `name` | Required. Unique operator identifier; referenced in `gateway.order` and `req.Provider`. |
+| `adapter` | Required. Backend implementation: `openai`, `anthropic`, `ollama`, `llamacpp`, `horde`, `gemini`. |
+| `base_url` | Provider endpoint URL. |
+| `model` | Default model for this entry. |
+| `api_key_env` | Env var name to read the API key from at startup. |
+| `api_key` | Inline API key (prefer `api_key_env`). |
+| `health` | Health-check variant: `api_key`, `ollama`, `llamacpp`, `horde`, or empty (adapter default). |
+| `capabilities.chat_tools` | Override adapter default for chat tool support (`true`/`false`). |
 
 ### Provider blocks
 

@@ -157,22 +157,65 @@ gateway:
 ```
 
 ### LM Studio
+
+Use the `providers` list so LM Studio can coexist with a cloud OpenAI slot:
+
 ```yaml
 gateway:
-  order: [openai]  # Uses OpenAI-compatible provider
-  openai:
-    base_url: "http://127.0.0.1:1234"
-    model: "local-model"
-    api_key: "not-required"
+  providers:
+    - name: lmstudio
+      adapter: openai
+      base_url: "http://127.0.0.1:1234/v1"
+      model: "local-model"
+      api_key: "not-required"
+  order: [lmstudio]
+```
+
+To run LM Studio as a fallback behind OpenAI, add both to `providers` and list them in `order`:
+
+```yaml
+gateway:
+  providers:
+    - name: openai
+      adapter: openai
+      base_url: "https://api.openai.com/v1"
+      api_key_env: OPENAI_API_KEY
+      model: "gpt-4o-mini"
+    - name: lmstudio
+      adapter: openai
+      base_url: "http://127.0.0.1:1234/v1"
+      model: "local-model"
+      api_key: "not-required"
+  order: [openai, lmstudio]
 ```
 
 ### vLLM
+
 ```yaml
 gateway:
-  order: [openai]
-  openai:
-    base_url: "http://127.0.0.1:8000/v1"
-    model: "your-model-name"
+  providers:
+    - name: vllm
+      adapter: openai
+      base_url: "http://127.0.0.1:8000/v1"
+      model: "your-model-name"
+  order: [vllm]
+```
+
+To keep OpenAI as primary with vLLM as local fallback:
+
+```yaml
+gateway:
+  providers:
+    - name: openai
+      adapter: openai
+      base_url: "https://api.openai.com/v1"
+      api_key_env: OPENAI_API_KEY
+      model: "gpt-4o-mini"
+    - name: vllm
+      adapter: openai
+      base_url: "http://127.0.0.1:8000/v1"
+      model: "your-model-name"
+  order: [openai, vllm]
 ```
 
 ## Troubleshooting
