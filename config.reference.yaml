@@ -12,6 +12,17 @@ api:
 
 gateway:
   order: [openai, anthropic, gemini, ollama]
+  # See docs/config-reference.md#custom-provider-registry
+  # providers:
+  #   - name: poolside
+  #     adapter: openai
+  #     base_url: "https://inference.poolside.ai/v1"
+  #     model: "poolside/laguna-m.1"
+  #     api_key_env: POOLSIDE_API_KEY
+  #     health: api_key
+  #     capabilities:
+  #       chat_tools: true
+  # order: [poolside, openai, anthropic, gemini, ollama]
   warmup_enabled: true
   max_tasks_per_phase: 7
   openai:
