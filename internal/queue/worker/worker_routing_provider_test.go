@@ -8,40 +8,99 @@ import (
 	"agentd/internal/models"
 )
 
-// TestProviderSupportsAgentic_ReturnsTrueForSupportedProviders verifies that providerSupportsAgentic
-// returns true for OpenAI and Anthropic providers.
-// Validates: Requirements 1, 3, 4, 6.2
-func TestProviderSupportsAgentic_ReturnsTrueForSupportedProviders(t *testing.T) {
+// newWorkerWithProviders builds a Worker whose gateway is a Router containing the
+// given provider configs. Tests that need providerSupportsAgentic to resolve names
+// must call this instead of constructing a nil-gateway Worker.
+func newWorkerWithProviders(t *testing.T, cfgs ...spec.ProviderConfig) *Worker {
+	t.Helper()
+	gw, err := gateway.NewRouterFromConfigs(cfgs)
+	if err != nil {
+		t.Fatalf("NewRouterFromConfigs() error = %v", err)
+	}
+	return &Worker{gateway: gw}
+}
+
+// toolCapableConfig returns a minimal ProviderConfig for an OpenAI-adapter provider.
+func toolCapableConfig(name string) spec.ProviderConfig {
+	return spec.ProviderConfig{Name: name, Type: "openai", BaseURL: "https://example.com/v1", Model: "test-model", APIKey: "test-key"}
+}
+
+// noToolConfig returns a minimal ProviderConfig for an Ollama provider (no tool support).
+func noToolConfig(name string) spec.ProviderConfig {
+	return spec.ProviderConfig{Name: name, Type: "ollama", BaseURL: "http://localhost:11434", Model: "llama-test"}
+}
+
+// TestProviderSupportsAgentic_RouterBacked verifies providerSupportsAgentic via the
+// router for all built-in provider types. This replaces the old nil-gateway tests
+// and confirms that the router is the single source of truth for chat-tool capability.
+func TestProviderSupportsAgentic_RouterBacked(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name     string
-		provider string
-		expected bool
+		name       string
+		providerCfg spec.ProviderConfig
+		query      string
+		want       bool
 	}{
-		{"OpenAI lowercase", "openai", true},
-		{"OpenAI uppercase", "OPENAI", true},
-		{"OpenAI mixed case", "OpenAI", true},
-		{"Anthropic lowercase", "anthropic", true},
-		{"Anthropic uppercase", "ANTHROPIC", true},
-		{"Anthropic mixed case", "Anthropic", true},
+		// OpenAI adapter providers — all return true
+		{"openai lowercase",   toolCapableConfig("openai"),    "openai",    true},
+		{"openai uppercase",   toolCapableConfig("openai"),    "OPENAI",    true},
+		{"anthropic lowercase", toolCapableConfig("anthropic"), "anthropic", true},
+		{"anthropic uppercase", toolCapableConfig("anthropic"), "ANTHROPIC", true},
+		// Gemini reuses the OpenAI adapter; must reach the agentic loop.
+		{"gemini lowercase", toolCapableConfig("gemini"), "gemini", true},
+		{"gemini uppercase", toolCapableConfig("gemini"), "GEMINI", true},
+		// Ollama intentionally has no chat-tool support.
+		{"ollama lowercase", noToolConfig("ollama"), "ollama", false},
+		{"ollama uppercase", noToolConfig("ollama"), "OLLAMA", false},
 	}
 
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			w := &Worker{}
-			profile := models.AgentProfile{
-				ID:       "test",
-				Provider: tc.provider,
-				Model:    "gpt-4",
+			w := newWorkerWithProviders(t, tc.providerCfg)
+			profile := models.AgentProfile{ID: "test", Provider: tc.query, Model: "any"}
+			if got := w.providerSupportsAgentic(profile); got != tc.want {
+				t.Errorf("providerSupportsAgentic(%q) = %v, want %v", tc.query, got, tc.want)
 			}
+		})
+	}
+}
 
-			result := w.providerSupportsAgentic(profile)
-			if result != tc.expected {
-				t.Errorf("providerSupportsAgentic(%q) = %v, want %v", tc.provider, result, tc.expected)
+// TestProviderSupportsAgentic_UnknownProvider verifies that a provider not present
+// in the router's config returns false (router is strict, no fallback guessing).
+func TestProviderSupportsAgentic_UnknownProvider(t *testing.T) {
+	t.Parallel()
+
+	unknowns := []string{"azure-openai", "vertex", "unknown", ""}
+	w := newWorkerWithProviders(t, toolCapableConfig("openai"))
+
+	for _, name := range unknowns {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			profile := models.AgentProfile{ID: "test", Provider: name, Model: "any"}
+			if w.providerSupportsAgentic(profile) {
+				t.Errorf("providerSupportsAgentic(%q) = true, want false (not in router)", name)
+			}
+		})
+	}
+}
+
+// TestProviderSupportsAgentic_NilGateway verifies that a Worker with no gateway
+// configured returns false for all providers (safe default).
+func TestProviderSupportsAgentic_NilGateway(t *testing.T) {
+	t.Parallel()
+
+	w := &Worker{}
+	for _, name := range []string{"openai", "anthropic", "gemini", "ollama", ""} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			profile := models.AgentProfile{ID: "test", Provider: name, Model: "any"}
+			if w.providerSupportsAgentic(profile) {
+				t.Errorf("providerSupportsAgentic(%q) = true, want false (nil gateway)", name)
 			}
 		})
 	}
@@ -50,74 +109,57 @@ func TestProviderSupportsAgentic_ReturnsTrueForSupportedProviders(t *testing.T) 
 func TestProviderSupportsAgentic_CustomProviderName(t *testing.T) {
 	t.Parallel()
 
-	gw, err := gateway.NewRouterFromConfigs([]spec.ProviderConfig{{
+	w := newWorkerWithProviders(t, spec.ProviderConfig{
 		Name:    "poolside",
 		Type:    "openai",
 		BaseURL: "https://inference.poolside.ai/v1",
 		Model:   "poolside-model",
 		APIKey:  "test-key",
-	}})
-	if err != nil {
-		t.Fatalf("NewRouterFromConfigs() error = %v", err)
-	}
-
-	w := &Worker{gateway: gw}
-	profile := models.AgentProfile{
-		ID:       "test",
-		Provider: "poolside",
-		Model:    "poolside-model",
-	}
-
+	})
+	profile := models.AgentProfile{ID: "test", Provider: "poolside", Model: "poolside-model"}
 	if !w.providerSupportsAgentic(profile) {
 		t.Fatal("providerSupportsAgentic(poolside) = false, want true")
 	}
 }
 
-// TestProviderSupportsAgentic_ReturnsFalseForOtherProviders verifies that providerSupportsAgentic
-// returns false for providers other than OpenAI and Anthropic.
-// Validates: Requirements 1, 3, 4, 6.2
-func TestProviderSupportsAgentic_ReturnsFalseForOtherProviders(t *testing.T) {
+// TestProviderSupportsAgentic_GeminiReachesAgenticLoop is the canonical regression
+// guard for Task 10: a Worker with a gemini-configured router must NOT fall back to
+// legacy mode.
+func TestProviderSupportsAgentic_GeminiReachesAgenticLoop(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		name     string
-		provider string
-	}{
-		{"Ollama", "ollama"},
-		{"Ollama uppercase", "OLLAMA"},
-		{"Azure OpenAI", "azure-openai"},
-		{"Vertex", "vertex"},
-		{"Empty string", ""},
+	w := newWorkerWithProviders(t, spec.ProviderConfig{
+		Name:    "gemini",
+		Type:    "gemini",
+		BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+		Model:   "gemini-2.5-flash",
+		APIKey:  "test-key",
+	})
+	profile := models.AgentProfile{ID: "agent-gemini", Provider: "gemini", Model: "gemini-2.5-flash"}
+	if !w.providerSupportsAgentic(profile) {
+		t.Fatal("providerSupportsAgentic(gemini) = false — Gemini would silently fall back to " +
+			"legacy mode; this is the Task 10 regression")
 	}
+}
 
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+// TestProviderSupportsAgentic_OllamaRemainsLegacy is the intentional-false regression
+// guard: Ollama must continue to fall back to legacy one-shot JSON.
+func TestProviderSupportsAgentic_OllamaRemainsLegacy(t *testing.T) {
+	t.Parallel()
 
-			w := &Worker{}
-			profile := models.AgentProfile{
-				ID:       "test",
-				Provider: tc.provider,
-				Model:    "claude-3",
-			}
-
-			result := w.providerSupportsAgentic(profile)
-			if result {
-				t.Errorf("providerSupportsAgentic(%q) = true, want false", tc.provider)
-			}
-		})
+	w := newWorkerWithProviders(t, noToolConfig("ollama"))
+	profile := models.AgentProfile{ID: "agent-ollama", Provider: "ollama", Model: "llama3:8b"}
+	if w.providerSupportsAgentic(profile) {
+		t.Fatal("providerSupportsAgentic(ollama) = true — Ollama agentic mode is intentionally disabled")
 	}
 }
 
 // TestProviderSupportsAgentic_ImportFromGateway verifies that the provider constant
 // is correctly imported from gateway package.
-// Validates: Requirement 3.3
 func TestProviderSupportsAgentic_ImportFromGateway(t *testing.T) {
 	t.Parallel()
-
-	// Verify gateway.ProviderOpenAI is accessible and has correct value
 	if string(gateway.ProviderOpenAI) != "openai" {
 		t.Errorf("gateway.ProviderOpenAI = %q, want \"openai\"", gateway.ProviderOpenAI)
 	}
 }
+

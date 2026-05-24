@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 
 	"agentd/internal/bus"
 	"agentd/internal/config"
@@ -42,6 +43,11 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 		gw = gw.WithRoleRouting(routes)
 	}
 	gw.WithTruncation(cfg.Gateway.TruncatorImpl(gw, breaker), cfg.Gateway.Truncator.MaxInputChars)
+	for _, p := range providerConfigs {
+		if gw.ProviderSupportsChatTools(p.Name) {
+			slog.Info("provider supports chat tools", "provider", p.Name)
+		}
+	}
 	sb := &sandbox.BashExecutor{
 		Root:        cfg.ProjectsDir,
 		Sink:        bus.EventBridge{Emitter: emitter},

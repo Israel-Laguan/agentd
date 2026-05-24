@@ -305,11 +305,14 @@ func (*sequenceProvider) Capabilities() providers.Capabilities {
 func TestProviderSupportsChatTools_TypedNilGateway(t *testing.T) {
 	t.Parallel()
 
+	// A typed nil *Router satisfies the chatToolsChecker interface but the nil
+	// receiver guard in (*Router).ProviderSupportsChatTools returns false for all
+	// providers — there is no fallback static table when no router is configured.
 	var gw AIGateway = (*Router)(nil)
-	if !ProviderSupportsChatTools(gw, "openai") {
-		t.Fatal("ProviderSupportsChatTools typed-nil gateway openai = false, want fallback true")
+	if ProviderSupportsChatTools(gw, "openai") {
+		t.Fatal("ProviderSupportsChatTools typed-nil gateway openai = true, want false (no router configured)")
 	}
 	if ProviderSupportsChatTools(gw, "poolside") {
-		t.Fatal("ProviderSupportsChatTools typed-nil gateway poolside = true, want fallback false")
+		t.Fatal("ProviderSupportsChatTools typed-nil gateway poolside = true, want false")
 	}
 }
