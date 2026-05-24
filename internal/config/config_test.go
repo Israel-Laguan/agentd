@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -236,6 +237,25 @@ func TestResolveSkillsGlobalDir(t *testing.T) {
 			t.Errorf("resolveSkillsGlobalDir() = %q, want %q", got, want)
 		}
 	})
+}
+
+func TestLoad_GatewayProviders_UnmarshalError(t *testing.T) {
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+	body := "gateway:\n  providers: not-a-list\n"
+	if err := os.WriteFile(configPath, []byte(body), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	_, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+	if err == nil {
+		t.Fatal("Load() error = nil, want gateway.providers unmarshal error")
+	}
+	if !strings.Contains(err.Error(), "unmarshal gateway.providers") {
+		t.Fatalf("Load() error = %v, want unmarshal gateway.providers", err)
+	}
 }
 
 func TestLoad_ConfigFileCannotOverrideHome(t *testing.T) {

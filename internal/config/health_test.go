@@ -116,6 +116,14 @@ func TestCheckProviders_GeminiKey(t *testing.T) {
 	}
 }
 
+func TestCheckProviders_InvalidOrder(t *testing.T) {
+	cfg := GatewayConfig{Order: []string{"nope"}}
+	result := CheckProviders(cfg)
+	if result.Available {
+		t.Error("expected Available to be false when gateway.order references unknown provider")
+	}
+}
+
 func TestCheckProviders_OrderPreference(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:     []string{"openai", "anthropic"},
