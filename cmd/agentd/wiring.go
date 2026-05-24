@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+
 	"agentd/internal/bus"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
@@ -27,8 +29,15 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) runtimeDeps {
 	ws := &sandbox.FSWorkspaceManager{Root: cfg.ProjectsDir}
 	emitter := bus.NewEventEmitter(store, eventBus)
 	breaker := queue.NewCircuitBreaker()
-	gw := gateway.NewRouterFromConfigs(cfg.Gateway.ProviderConfigs()).
-		WithPhaseCap(cfg.Gateway.MaxTasksPerPhase)
+	providerConfigs, err := cfg.Gateway.ProviderConfigs()
+	if err != nil {
+		log.Fatal(err)
+	}
+	gw, err := gateway.NewRouterFromConfigs(providerConfigs)
+	if err != nil {
+		log.Fatal(err)
+	}
+	gw = gw.WithPhaseCap(cfg.Gateway.MaxTasksPerPhase)
 	if routes := cfg.Gateway.RoleRoutes(); routes != nil {
 		gw = gw.WithRoleRouting(routes)
 	}

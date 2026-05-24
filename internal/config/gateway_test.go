@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -36,7 +37,10 @@ func TestGatewayConfig_ProviderConfigs(t *testing.T) {
 		OpenAI:    gateway.ProviderConfig{Type: "openai", APIKey: "key1"},
 		Anthropic: gateway.ProviderConfig{Type: "anthropic", APIKey: "key2"},
 	}
-	configs := cfg.ProviderConfigs()
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		t.Fatalf("ProviderConfigs() error = %v", err)
+	}
 	if len(configs) != 2 {
 		t.Errorf("ProviderConfigs() length = %v, want 2", len(configs))
 	}
@@ -50,7 +54,10 @@ func TestGatewayConfig_ProviderConfigs_Gemini(t *testing.T) {
 		Order:  []string{"gemini"},
 		Gemini: gateway.ProviderConfig{Type: "gemini", APIKey: "gem-key"},
 	}
-	configs := cfg.ProviderConfigs()
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		t.Fatalf("ProviderConfigs() error = %v", err)
+	}
 	if len(configs) != 1 {
 		t.Fatalf("ProviderConfigs() length = %v, want 1", len(configs))
 	}
@@ -64,9 +71,58 @@ func TestGatewayConfig_ProviderConfigs_EmptyOrder(t *testing.T) {
 		Order:  []string{},
 		OpenAI: gateway.ProviderConfig{Type: "openai"},
 	}
-	configs := cfg.ProviderConfigs()
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		t.Fatalf("ProviderConfigs() error = %v", err)
+	}
 	if len(configs) != 0 {
 		t.Errorf("ProviderConfigs() = %v, want empty", len(configs))
+	}
+}
+
+func TestGatewayConfig_ProviderConfigs_CustomProvider(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"poolside"},
+		Providers: []gateway.ProviderConfig{{
+			Name:    "poolside",
+			Type:    "openai",
+			BaseURL: "https://inference.poolside.ai/v1",
+			APIKey:  "poolside-key",
+		}},
+	}
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		t.Fatalf("ProviderConfigs() error = %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("ProviderConfigs() length = %d, want 1", len(configs))
+	}
+	if configs[0].Name != "poolside" || configs[0].Type != "openai" {
+		t.Fatalf("ProviderConfigs()[0] = %+v, want poolside/openai", configs[0])
+	}
+}
+
+func TestGatewayConfig_ProviderConfigs_UnknownOrderEntry(t *testing.T) {
+	cfg := GatewayConfig{Order: []string{"nope"}}
+	if _, err := cfg.ProviderConfigs(); err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("ProviderConfigs() error = %v, want unknown name", err)
+	}
+}
+
+func TestGatewayConfig_ProviderConfigs_BackwardCompat(t *testing.T) {
+	cfg := GatewayConfig{
+		Order:  []string{"openai"},
+		OpenAI: gateway.ProviderConfig{Type: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "key1"},
+	}
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		t.Fatalf("ProviderConfigs() error = %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("ProviderConfigs() length = %d, want 1", len(configs))
+	}
+	if configs[0].Name != "openai" || configs[0].Type != "openai" {
+		t.Fatalf("ProviderConfigs()[0] = %+v, want openai/openai", configs[0])
 	}
 }
 
