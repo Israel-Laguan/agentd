@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -65,11 +67,28 @@ func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) ([]
 		return nil, fmt.Errorf("unmarshal gateway.providers: %w", err)
 	}
 	for i := range providers {
+		// Normalize name first so the generic env var pattern uses the resolved name.
+		if providers[i].Name == "" {
+			providers[i].Name = providers[i].Type
+		}
 		if providers[i].APIKey == "" && providers[i].APIKeyEnv != "" {
 			providers[i].APIKey = envLookup(process, dotenv, providers[i].APIKeyEnv)
 		}
-		if providers[i].Name == "" {
-			providers[i].Name = providers[i].Type
+		if providers[i].APIKey == "" {
+			generic := "AGENTD_GATEWAY_" + strings.ToUpper(providers[i].Name) + "_API_KEY"
+			providers[i].APIKey = envLookup(process, dotenv, generic)
+		}
+	}
+	for _, p := range providers {
+		if p.APIKey == "" && healthModeFor(p) == healthModeAPIKey {
+			envHint := "AGENTD_GATEWAY_" + strings.ToUpper(p.Name) + "_API_KEY"
+			if p.APIKeyEnv != "" {
+				envHint = p.APIKeyEnv
+			}
+			slog.Warn("provider has no API key; set it via config or env",
+				"provider", p.Name,
+				"env_var", envHint,
+			)
 		}
 	}
 	return providers, nil
