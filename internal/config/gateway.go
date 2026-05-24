@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -248,13 +249,25 @@ func durationOrDefault(value, fallback time.Duration) time.Duration {
 
 func loadMCPServers(v *viper.Viper) []CapabilityManifest {
 	var caps []CapabilityManifest
-	if err := v.UnmarshalKey("gateway.mcp_servers", &caps); err != nil {
-		return nil
-	}
-	for i := range caps {
-		if caps[i].Auth.Token != "" {
-			caps[i].Auth.Token = os.ExpandEnv(caps[i].Auth.Token)
+	if err := v.UnmarshalKey("gateway.mcp_servers", &caps); err == nil && len(caps) > 0 {
+		for i := range caps {
+			if caps[i].Auth.Token != "" {
+				caps[i].Auth.Token = os.ExpandEnv(caps[i].Auth.Token)
+			}
 		}
+		return caps
 	}
-	return caps
+	// Backward compat: fall back to the old gateway.capabilities key, deprecated in favour of
+	// gateway.mcp_servers. Will be removed in a future release.
+	var legacy []CapabilityManifest
+	if err := v.UnmarshalKey("gateway.capabilities", &legacy); err == nil && len(legacy) > 0 {
+		slog.Warn("gateway.capabilities is deprecated; rename the config key to gateway.mcp_servers")
+		for i := range legacy {
+			if legacy[i].Auth.Token != "" {
+				legacy[i].Auth.Token = os.ExpandEnv(legacy[i].Auth.Token)
+			}
+		}
+		return legacy
+	}
+	return nil
 }

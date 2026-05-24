@@ -53,6 +53,9 @@ func TestProviderSupportsAgentic_RouterBacked(t *testing.T) {
 		// Ollama intentionally has no chat-tool support.
 		{"ollama lowercase", noToolConfig("ollama"), "ollama", false},
 		{"ollama uppercase", noToolConfig("ollama"), "OLLAMA", false},
+		// LlamaCpp and Horde also have no chat-tool support.
+		{"llamacpp", spec.ProviderConfig{Name: "llamacpp", Type: "llamacpp", BaseURL: "http://localhost:8080", Model: "local"}, "llamacpp", false},
+		{"horde",    spec.ProviderConfig{Name: "horde",    Type: "horde",    BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"}, "horde", false},
 	}
 
 	for _, tc := range testCases {
