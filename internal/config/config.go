@@ -136,7 +136,10 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	cfg.UploadsDir = v.GetString("uploads_dir")
 	cfg.CronPath = filepath.Join(cfg.HomeDir, cronFileName)
 	cfg.API = loadAPIConfig(v)
-	cfg.Gateway = loadGatewayConfig(v, process, dotenv)
+	cfg.Gateway, err = loadGatewayConfig(v, process, dotenv)
+	if err != nil {
+		return Config{}, fmt.Errorf("load gateway config: %w", err)
+	}
 	cfg.Sandbox = loadSandboxConfig(v)
 	cfg.Healing = loadHealingConfig(v)
 	cfg.Breaker = loadBreakerConfig(v)

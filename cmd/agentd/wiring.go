@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 
 	"agentd/internal/bus"
 	"agentd/internal/config"
@@ -24,18 +24,18 @@ type runtimeDeps struct {
 	runner    *queue.TaskRunner
 }
 
-func newRuntimeDeps(cfg config.Config, store models.KanbanStore) runtimeDeps {
+func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, error) {
 	eventBus := bus.NewInProcess()
 	ws := &sandbox.FSWorkspaceManager{Root: cfg.ProjectsDir}
 	emitter := bus.NewEventEmitter(store, eventBus)
 	breaker := queue.NewCircuitBreaker()
 	providerConfigs, err := cfg.Gateway.ProviderConfigs()
 	if err != nil {
-		log.Fatal(err)
+		return runtimeDeps{}, fmt.Errorf("resolve provider configs: %w", err)
 	}
 	gw, err := gateway.NewRouterFromConfigs(providerConfigs)
 	if err != nil {
-		log.Fatal(err)
+		return runtimeDeps{}, fmt.Errorf("build gateway router: %w", err)
 	}
 	gw = gw.WithPhaseCap(cfg.Gateway.MaxTasksPerPhase)
 	if routes := cfg.Gateway.RoleRoutes(); routes != nil {
@@ -66,5 +66,5 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) runtimeDeps {
 		canceller: queue.NewCancelRegistry(),
 		project:   services.NewProjectService(store, ws),
 		runner:    queue.NewTaskRunner(gw, store, emitter, ws),
-	}
+	}, nil
 }

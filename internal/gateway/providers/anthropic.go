@@ -77,7 +77,7 @@ func (a *Anthropic) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRe
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return spec.AIResponse{}, fmt.Errorf("decode anthropic response: %w", err)
 	}
-	return decoded.toAIResponse(model), nil
+	return decoded.toAIResponse(model, string(a.Name())), nil
 }
 
 func (a *Anthropic) post(ctx context.Context, body anthropicRequest) ([]byte, error) {
@@ -163,7 +163,7 @@ type anthropicResponse struct {
 	Model string `json:"model"`
 }
 
-func (r anthropicResponse) toAIResponse(defaultModel string) spec.AIResponse {
+func (r anthropicResponse) toAIResponse(defaultModel string, providerUsed string) spec.AIResponse {
 	model := r.Model
 	if model == "" {
 		model = defaultModel
@@ -193,7 +193,7 @@ func (r anthropicResponse) toAIResponse(defaultModel string) spec.AIResponse {
 	return spec.AIResponse{
 		Content:      content,
 		TokenUsage:   r.Usage.InputTokens + r.Usage.OutputTokens,
-		ProviderUsed: string(spec.ProviderAnthropic),
+		ProviderUsed: providerUsed,
 		ModelUsed:    model,
 		ToolCalls:    toolCalls,
 	}

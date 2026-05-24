@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"net/http"
+	"log/slog"
 	"time"
 
 	"agentd/internal/gateway"
@@ -22,6 +23,7 @@ func CheckProviders(cfg GatewayConfig) ProviderCheckResult {
 	result := ProviderCheckResult{}
 	configs, err := cfg.ProviderConfigs()
 	if err != nil {
+		slog.Warn("provider config error while checking availability", "err", err)
 		return result
 	}
 
@@ -37,7 +39,7 @@ func CheckProviders(cfg GatewayConfig) ProviderCheckResult {
 		}
 		if gateway.Provider(provider.Type) == gateway.ProviderHorde {
 			result.HordeAvailable = true
-			hordeCandidate = &provider
+			hordeCandidate = &configs[i]
 		}
 	}
 
