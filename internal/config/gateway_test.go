@@ -260,7 +260,10 @@ gateway:
 	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	servers := loadMCPServers(v)
+	servers, err := loadMCPServers(v)
+	if err != nil {
+		t.Fatalf("loadMCPServers() error = %v", err)
+	}
 	if len(servers) != 1 {
 		t.Fatalf("loadMCPServers() len = %d, want 1", len(servers))
 	}
@@ -284,7 +287,10 @@ gateway:
 	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	servers := loadMCPServers(v)
+	servers, err := loadMCPServers(v)
+	if err != nil {
+		t.Fatalf("loadMCPServers() error = %v", err)
+	}
 	if len(servers) != 1 {
 		t.Fatalf("loadMCPServers() len = %d, want 1 (fallback to old key)", len(servers))
 	}
@@ -312,11 +318,43 @@ gateway:
 	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	servers := loadMCPServers(v)
+	servers, err := loadMCPServers(v)
+	if err != nil {
+		t.Fatalf("loadMCPServers() error = %v", err)
+	}
 	if len(servers) != 1 {
 		t.Fatalf("loadMCPServers() len = %d, want 1 (new key wins)", len(servers))
 	}
 	if servers[0].Name != "newtool" {
 		t.Errorf("servers[0].Name = %q, want newtool (new key should win)", servers[0].Name)
+	}
+}
+
+func TestLoadMCPServers_ExpandsAuthTokenEnv(t *testing.T) {
+	t.Setenv("MCP_TOKEN", "secret-token")
+	v := viper.New()
+	v.SetConfigType("yaml")
+	yaml := `
+gateway:
+  mcp_servers:
+    - type: stdio
+      name: securetool
+      command: /usr/bin/securetool
+      auth:
+        type: bearer
+        token: "${MCP_TOKEN}"
+`
+	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	servers, err := loadMCPServers(v)
+	if err != nil {
+		t.Fatalf("loadMCPServers() error = %v", err)
+	}
+	if len(servers) != 1 {
+		t.Fatalf("loadMCPServers() len = %d, want 1", len(servers))
+	}
+	if servers[0].Auth.Token != "secret-token" {
+		t.Fatalf("servers[0].Auth.Token = %q, want secret-token", servers[0].Auth.Token)
 	}
 }
