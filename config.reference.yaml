@@ -1,59 +1,41 @@
-# agentd configuration reference
-# Copy to ~/.agentd/config.yaml or pass via: agentd --config <path>
+# agentd configuration reference — copy to ~/.agentd/config.yaml or pass via: agentd --config <path>
+# Extended documentation: docs/config-reference.md
 
-# Filesystem layout. Effective home is resolved from --home, AGENTD_HOME, or
-# .env (CWD then ~/.agentd/.env) before config.yaml is read; the home: key here
-# is informational only and cannot override that resolved path.
 home: ~/.agentd
 db_path: ~/.agentd/global.db
 projects_dir: ~/.agentd/projects
 uploads_dir: ~/.agentd/uploads
 
-# HTTP API.
 api:
   address: "127.0.0.1:8765"
-  # When non-empty, POST /api/v1/projects/materialize requires header
-  # X-Agentd-Materialize-Token with this exact value (CLI `agentd ask` sends it automatically).
-  materialize_token: ""
+  materialize_token: "" # see docs/config-reference.md#api
 
-# AI gateway (tool/JSON fallback: docs/provider-tool-calling.md).
 gateway:
   order: [openai, anthropic, ollama]
-  warmup_enabled: true # set false or use `agentd start --skip-llm-warmup` to skip billable startup probe
+  warmup_enabled: true
   max_tasks_per_phase: 7
-  # New-style provider registry for custom vendors. `name` is the operator-facing
-  # identifier; `adapter` selects the Go backend implementation.
-  # providers:
-  #   - name: poolside
-  #     adapter: openai
-  #     base_url: "https://inference.poolside.ai/v1"
-  #     model: "poolside/laguna-m.1"
-  #     api_key_env: POOLSIDE_API_KEY
-  #     health: api_key
-  #     capabilities:
-  #       chat_tools: true
   openai:
     base_url: "https://api.openai.com/v1"
     model: "gpt-4o-mini"
-    api_key: "" # or set OPENAI_API_KEY
-    max_input_chars: 0 # 0 = use gateway.truncator.max_input_chars
-    timeout: "5m"      # protect against slow LLM response (defaults to 5m)
+    api_key: ""
+    max_input_chars: 0
+    timeout: "5m"
   anthropic:
     base_url: "https://api.anthropic.com"
     model: "claude-3-haiku-20240307"
-    api_key: "" # or set ANTHROPIC_API_KEY
+    api_key: ""
     max_input_chars: 0
-    timeout: "5m"      # protect against slow LLM response (defaults to 5m)
+    timeout: "5m"
   ollama:
     base_url: "http://127.0.0.1:11434"
     model: "llama3:8b"
     max_input_chars: 0
-    timeout: "5m"      # protect against slow local inference (defaults to 5m)
+    timeout: "5m"
   llamacpp:
     base_url: "http://127.0.0.1:8080"
-    model: "gpt-4"  # change this to match your GGUF model filename (e.g., "Qwen3.6-35B-A3B-APEX-I-Balanced.gguf")
+    model: "gpt-4"
     max_input_chars: 0
-    timeout: "5m"   # protect against slow local inference
+    timeout: "5m"
   horde:
     base_url: "https://aihorde.net/api"
     api_key: "0000000000"
@@ -64,130 +46,77 @@ gateway:
   gemini:
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
     model: "gemini-2.5-flash"
-    api_key: "" # or set GEMINI_API_KEY
+    api_key: ""
     max_input_chars: 0
     timeout: "5m"
   budget:
-    tokens_per_task: 50000 # per-task token cap; 0 = unlimited (Danger A)
-  role_models:             # Flow 6.3: specialized model routing (wired via WithRoleRouting)
-    chat:                  # high-reasoning model for planning/intent
-      provider: ""         # empty = use default cascade order
-      model: ""
-    worker:                # fast coding model for task execution
+    tokens_per_task: 50000
+  role_models:
+    chat:
       provider: ""
       model: ""
-    memory:                # cheap model for summarization/curation
-      provider: ""         # non-tool providers here still get JSON fallback when tools are sent
+    worker:
+      provider: ""
+      model: ""
+    memory:
+      provider: ""
       model: ""
   truncator:
-    policy: "head_tail" # head_tail | middle_out | summarize | reject
+    policy: "head_tail"
     max_input_chars: 12000
   truncation:
     strategy: "head_tail"
     head_ratio: 0.5
     max_input_chars: 12000
     stash_threshold: 50000
-  # MCP (Model Context Protocol) capabilities - external tool servers
-  # capabilities:
-  #   - type: mcp
-  #     name: "github"
-  #     server_url: "https://api.example.com/mcp"
-  #     auth:
-  #       type: bearer
-  #       token: "${MCP_TOKEN}"
 
-# Agentic worker mode (AgentProfile.agentic_mode); tool rate limits are per-session PreToolUse caps.
 agentic:
-  # Fraction (0–1) of zone character budget that triggers preemptive summarization.
-  # 0 disables the warning path. Default 0.85.
   context_warning_threshold: 0.85
-  # Consecutive errors on the same tool before LoopToolFailure. 0 = fatal-only.
   tool_failure_streak: 3
-  # Topic drift detection: opens a fresh in-task session when human input is unrelated.
   topic_guard:
     enabled: true
-    # 0–1 sensitivity; higher values declare drift more readily. Default 0.5.
     sensitivity: 0.5
   tool_rate_limits:
     bash: 50
     default: 100
-  # tool_credentials: map tool name → env var (injected per call; never in args). See docs/reference.md.
-  # disable_credential_detection: true  # opt out (not recommended)
-  # tool_credentials:
-  #   github: GITHUB_TOKEN
-  #   jira: JIRA_API_KEY
-  #   slack: SLACK_BOT_TOKEN
-
-  # Approval gates for high-stakes tool calls.
-  # Tools listed here require explicit human approval before execution.
-  # The agent pauses and sends a structured approval request via a HUMAN subtask.
   approval_gates:
     enabled: false
-    tools: []                    # e.g., ["deploy", "write_config", "run_migration"]
-    timeout: "30m"               # max wait for human decision before timing out
-
-  # Audit log (JSONL): tool dispatches, turn snapshots, history edits; args hashed (sha256) — see docs/reference.md
+    tools: []
+    timeout: "30m"
   audit:
     enabled: false
-    path: "audit.jsonl"          # relative to agentd home when not absolute
-
-  # External tools: wrap in <external_content>; empty = all non-builtin; list limits scope
-  external_tools: []             # e.g., ["web_fetch", "read_url", "search"]
-
-  # Review loop; profile override via AgentProfile.RequireReview
+    path: "audit.jsonl"
+  external_tools: []
   review:
-    enabled: false               # default; override per-profile via AgentProfile.RequireReview
-
-  # Skills: markdown injected when TF-IDF matches task (see queue.skills.global_dir)
+    enabled: false
   skills:
-    threshold: 0.1          # minimum TF-IDF relevance score (0.0–1.0)
-    top_k: 3                # max skills injected per session
-    global_path: "skills"   # illustrative; see queue.skills.global_dir (relative to agentd home)
-
-  # Smart file context pipeline for the read tool (convert → cache → embed → select).
-  # PDF conversion requires pdftotext (poppler) on the worker host PATH.
-  # Embeddings use the first OpenAI-compatible gateway provider.
+    threshold: 0.1
+    top_k: 3
+    global_path: "skills"
   file_context:
     enabled: false
     top_k: 5
-    cache_path: "file-cache"              # relative to agentd home
+    cache_path: "file-cache"
     embedding_model: "text-embedding-3-small"
-
-  # Task 38: plan→execute; complexity_threshold 0 disables, e.g. 500 enables
   planning:
     complexity_threshold: 0
     max_redo_passes: 3
     plan_context_max_chars: 4000
-
-  # Task 43: complexity routing; see docs/reference.md
   model_routing:
     enabled: false
     context_token_threshold: 150000
     cheap: {provider: "", model: ""}
     mid: {provider: "", model: ""}
     high: {provider: "", model: ""}
-
-  # Task 44: tool manifest; see docs/reference.md
   tool_manifest:
     enabled: false
     min_confidence: 0.35
-    # Use "*" (quoted) to expose all tools for a task type, e.g. code_gen: ["*"].
-    # Unquoted * is YAML alias syntax (e.g. [*] / [ * ]), not a literal string.
-    # Omitting a task type in mappings falls back to built-in defaults (nil/* = all tools).
     mappings: {summarize: [], code_gen: [bash, read, write], doc_qa: [read], web_research: [read]}
-
-  # Task 47: named prompt templates with typed slots (embedded defaults + optional file override).
   prompt_templates_path: "prompt_templates.json"
-
-  # Task 48: cron/deferred dispatch (minute tick); fields: id, cron_expr, task_type, context_fn, context_args, output_target, title
   scheduler: {enabled: false, tick_interval: "1m", project_id: "", tasks: []}
-
-  # Task 46: batch independent tool-free tasks in one LLM call (same project + agent).
   batching:
     enabled: false
     max_batch_size: 5
-
-  # Task 45: external capability routing; see docs/reference.md
   capability_routing:
     enabled: false
     min_confidence: 0.35
@@ -199,7 +128,6 @@ agentic:
     tools:
       generate_image: generate
 
-# Sandbox command execution hardening.
 sandbox:
   inactivity_timeout: "60s"
   wall_timeout: "10m"
@@ -214,7 +142,6 @@ sandbox:
     open_files: 1024
     processes: 256
 
-# Self-healing.
 healing:
   enabled: true
   strategy: "increase_effort"
@@ -224,31 +151,27 @@ healing:
   upgrade_provider: ""
   context_multiplier: 2.0
 
-# Circuit breaker.
 breaker:
   handoff_after: "2m"
 
-# Disk watchdog.
 disk:
   free_threshold_percent: 10.0
 
-# Channel: dispatch validation (defaults apply when absent; set both limits to 0 to disable).
 channel:
-  max_message_size: 1048576    # bytes; 0 = unlimited. Reject payloads above this threshold when > 0.
-  rate_limit: 0                # max task admissions per task within rate_window (queue path keys session_id to task ID); 0 = unlimited. Dispatch-time validation runs when max_message_size > 0 and/or rate_limit > 0; set both to 0 to disable the channel gate.
-  rate_window: 60              # sliding window (seconds) for per-session rate limiting.
+  max_message_size: 1048576
+  rate_limit: 0
+  rate_window: 60
 
-# Queue daemon (cron schedules: <home>/agentd.crontab).
 queue:
-  task_deadline: "10m"             # wall-clock timeout per worker task (the Reaper)
-  queued_reconcile_after: "10m"    # min age before resetting stale QUEUED claims (orphan recovery); independent of task_deadline
-  poll_max_interval: "10s"   # adaptive backoff ceiling when no tasks are available
-  max_tool_iterations: 10    # max tool-call iterations per agentic task (0 = unlimited)
-  token_budget: 0            # worker-level per-task token cap; 0 = unlimited (Danger A). See also gateway.budget.tokens_per_task.
-  rolling_token_window: "5h" # sliding window for harness-wide token ledger
-  rolling_token_limit: 0     # cumulative tokens in window before dispatch defers; 0 = disabled
-  agentic_truncator_max: 30  # max messages after truncation in agentic mode
-  agentic_character_budget: 0  # max characters for agentic truncation (0 = inherit gateway.truncator.max_input_chars)
+  task_deadline: "10m"
+  queued_reconcile_after: "10m"
+  poll_max_interval: "10s"
+  max_tool_iterations: 10
+  token_budget: 0
+  rolling_token_window: "5h"
+  rolling_token_limit: 0
+  agentic_truncator_max: 30
+  agentic_character_budget: 0
   agentic_context:
     anchor_budget: 10000
     working_budget: 40000
@@ -256,20 +179,15 @@ queue:
     rolling_threshold_turns: 15
     keep_recent_turns: 5
   instructions:
-    project_file: ".agentd/AGENTS.md"      # project-level instructions (relative to workspace)
-    user_preferences_file: "prefs.yaml"   # user preferences (relative to ~/.agentd/)
+    project_file: ".agentd/AGENTS.md"
+    user_preferences_file: "prefs.yaml"
   skills:
-    project_dir: ".agentd/skills"        # project-scoped skills (relative to workspace)
-    global_dir: "skills"                 # global skills dir: relative to agentd home (home / AGENTD_HOME); absolute or "~/..." also allowed
-    threshold: 0.1                        # minimum TF-IDF relevance score (0.0-1.0)
-    top_k: 3                            # max skills injected per session
+    project_dir: ".agentd/skills"
+    global_dir: "skills"
+    threshold: 0.1
+    top_k: 3
   hitl:
-    # Prompt/permission/healing/provider handoffs use this reconcile deadline.
-    # Approval, review, and clarification handoffs use the 30m approval path instead.
     legacy_handoff_timeout: "168h"
-  # Per-tool dispatch timeouts.
-  # Keys are tool names; the special "default" key applies to unlisted tools.
-  # Values are Go duration strings (e.g. "30s", "1m").
   tool_timeouts:
     bash: "60s"
     read: "10s"
@@ -277,40 +195,28 @@ queue:
     delegate: "10m"
     delegate_parallel: "10m"
     default: "30s"
-  # Tool-level retry configuration.
-  # Transient tool failures (timeouts, network errors) are retried transparently
-  # with exponential backoff + jitter. The model never sees intermediate failures.
-  # Only tools listed in tools are eligible; others are never retried.
   tool_retries:
-    max_attempts: 3        # total attempts per tool call (1 = no retry)
-    base_delay: "200ms"    # base delay between retries (Go duration string)
-    max_delay: "5s"        # ceiling for exponential backoff (Go duration string)
-    tools: ["read"]        # allowlisted tool names safe to retry
+    max_attempts: 3
+    base_delay: "200ms"
+    max_delay: "5s"
+    tools: ["read"]
 
-# Heartbeat reconciliation.
 heartbeat:
   stale_after: "2m"
 
-# Librarian log archival, memory curation, and recall.
 librarian:
-  retention_hours: 24              # completed task age before curation eligibility
-  archive_grace_days: 7            # days to retain tar.gz archives after memory ingestion
-  chunk_chars: 8000                # max chars per map-phase summarization chunk
-  max_reduce_passes: 3             # recursive reduce rounds before concatenating
-  fallback_head_tail_chars: 2000   # chars kept from head/tail in deterministic fallback
-  recall_timeout: "500ms"          # hard timeout for memory recall (Danger B)
-  recall_top_k: 5                  # max memories returned per recall
-  preferences_top_k: 3             # max user preferences per recall
-  dream_cluster_min_size: 3        # min cluster size for dream consolidation
-  dream_similarity_threshold: 0.7  # Jaccard threshold for memory clustering
+  retention_hours: 24
+  archive_grace_days: 7
+  chunk_chars: 8000
+  max_reduce_passes: 3
+  fallback_head_tail_chars: 2000
+  recall_timeout: "500ms"
+  recall_top_k: 5
+  preferences_top_k: 3
+  dream_cluster_min_size: 3
+  dream_similarity_threshold: 0.7
 
-# Plugin infrastructure.
-# Plugins are directories inside the configured path, each containing a
-# manifest.json that declares hooks, capabilities, and env requirements.
-# Load order is determined by numeric directory prefix (01-security/,
-# 02-observability/, 10-code-quality/) or by the manifest "priority" field.
-# A restart is required to pick up new or changed plugins.
 plugins:
   enabled: false
-  path: "~/.agentd/plugins"          # directory scanned for plugin sub-directories
-  shell_hook_timeout: "3s"           # default timeout for shell-based hooks
+  path: "~/.agentd/plugins"
+  shell_hook_timeout: "3s"
