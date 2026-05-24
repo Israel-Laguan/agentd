@@ -2,11 +2,19 @@ package config
 
 import (
 	"context"
-	"net/http"
 	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
 	"agentd/internal/gateway"
+)
+
+const (
+	healthModeAPIKey   = "api_key"
+	healthModeOllama   = "ollama"
+	healthModeLlamaCpp = "llamacpp"
+	healthModeHorde    = "horde"
 )
 
 type ProviderCheckResult struct {
@@ -31,15 +39,23 @@ func CheckProviders(cfg GatewayConfig) ProviderCheckResult {
 
 	for i := range configs {
 		provider := configs[i]
-		if r, ok := tryKeyBackedProvider(provider); ok {
-			return r
-		}
-		if r, ok := tryLocalProvider(provider); ok {
-			return r
-		}
-		if gateway.Provider(provider.Type) == gateway.ProviderHorde {
+		mode := healthModeFor(provider)
+		switch mode {
+		case healthModeAPIKey:
+			if r, ok := tryAPIKeyHealth(provider); ok {
+				return r
+			}
+		case healthModeOllama, healthModeLlamaCpp:
+			if r, ok := tryLocalHealth(provider, mode); ok {
+				return r
+			}
+		case healthModeHorde:
 			result.HordeAvailable = true
 			hordeCandidate = &configs[i]
+		default:
+			if mode != "" {
+				slog.Debug("unknown provider health mode", "provider", provider.Name, "health", mode)
+			}
 		}
 	}
 
@@ -51,6 +67,24 @@ func CheckProviders(cfg GatewayConfig) ProviderCheckResult {
 	return result
 }
 
+func healthModeFor(p gateway.ProviderConfig) string {
+	if h := strings.TrimSpace(strings.ToLower(p.Health)); h != "" {
+		return h
+	}
+	switch gateway.Provider(p.Type) {
+	case gateway.ProviderOpenAI, gateway.ProviderGemini, gateway.ProviderAnthropic:
+		return healthModeAPIKey
+	case gateway.ProviderOllama:
+		return healthModeOllama
+	case gateway.ProviderLlamaCpp:
+		return healthModeLlamaCpp
+	case gateway.ProviderHorde:
+		return healthModeHorde
+	default:
+		return ""
+	}
+}
+
 func availableFromConfig(p gateway.ProviderConfig) ProviderCheckResult {
 	return ProviderCheckResult{
 		Available:   true,
@@ -60,26 +94,21 @@ func availableFromConfig(p gateway.ProviderConfig) ProviderCheckResult {
 	}
 }
 
-func tryKeyBackedProvider(p gateway.ProviderConfig) (ProviderCheckResult, bool) {
-	switch gateway.Provider(p.Type) {
-	case gateway.ProviderOpenAI, gateway.ProviderGemini, gateway.ProviderAnthropic:
-		if p.APIKey == "" {
-			return ProviderCheckResult{}, false
-		}
-		r := availableFromConfig(p)
-		r.HasAPIKey = true
-		return r, true
-	default:
+func tryAPIKeyHealth(p gateway.ProviderConfig) (ProviderCheckResult, bool) {
+	if p.APIKey == "" {
 		return ProviderCheckResult{}, false
 	}
+	r := availableFromConfig(p)
+	r.HasAPIKey = true
+	return r, true
 }
 
-func tryLocalProvider(p gateway.ProviderConfig) (ProviderCheckResult, bool) {
+func tryLocalHealth(p gateway.ProviderConfig, mode string) (ProviderCheckResult, bool) {
 	var healthy func(string) bool
-	switch gateway.Provider(p.Type) {
-	case gateway.ProviderOllama:
+	switch mode {
+	case healthModeOllama:
 		healthy = isOllamaHealthy
-	case gateway.ProviderLlamaCpp:
+	case healthModeLlamaCpp:
 		healthy = isLlamaCppHealthy
 	default:
 		return ProviderCheckResult{}, false

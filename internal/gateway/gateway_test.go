@@ -301,3 +301,15 @@ func (*sequenceProvider) MaxInputChars() int {
 func (*sequenceProvider) Capabilities() providers.Capabilities {
 	return providers.Capabilities{SupportsChatTools: true}
 }
+
+func TestProviderSupportsChatTools_TypedNilGateway(t *testing.T) {
+	t.Parallel()
+
+	var gw AIGateway = (*Router)(nil)
+	if !ProviderSupportsChatTools(gw, "openai") {
+		t.Fatal("ProviderSupportsChatTools typed-nil gateway openai = false, want fallback true")
+	}
+	if ProviderSupportsChatTools(gw, "poolside") {
+		t.Fatal("ProviderSupportsChatTools typed-nil gateway poolside = true, want fallback false")
+	}
+}

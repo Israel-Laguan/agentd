@@ -227,3 +227,48 @@ func TestCheckProviders_LlamaCppHealthy(t *testing.T) {
 		t.Error("expected LocalHealthy to be true")
 	}
 }
+
+func TestCheckProviders_CustomProvider_HealthAPIKey(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"poolside"},
+		Providers: []gateway.ProviderConfig{{
+			Name:   "poolside",
+			Type:   "openai",
+			APIKey: "poolside-key",
+			Model:  "poolside-model",
+			Health: "api_key",
+		}},
+	}
+	result := CheckProviders(cfg)
+	if !result.Available {
+		t.Fatal("expected Available to be true with custom provider health api_key")
+	}
+	if result.Provider != "poolside" {
+		t.Errorf("expected provider poolside, got %s", result.Provider)
+	}
+	if !result.HasAPIKey {
+		t.Error("expected HasAPIKey to be true")
+	}
+}
+
+func TestCheckProviders_HealthAPIKey_OverridesAdapter(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"local"},
+		Providers: []gateway.ProviderConfig{{
+			Name:   "local",
+			Type:   "ollama",
+			APIKey: "sk-override",
+			Health: "api_key",
+		}},
+	}
+	result := CheckProviders(cfg)
+	if !result.Available {
+		t.Fatal("expected Available to be true when health api_key overrides ollama adapter")
+	}
+	if !result.HasAPIKey {
+		t.Error("expected HasAPIKey to be true")
+	}
+	if result.LocalHealthy {
+		t.Error("expected LocalHealthy to be false for api_key health mode")
+	}
+}
