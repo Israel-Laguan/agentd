@@ -207,7 +207,12 @@ func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {
 	}
 
 	configs := make([]gateway.ProviderConfig, 0, len(c.Order))
+	seenOrder := make(map[string]struct{}, len(c.Order))
 	for _, name := range c.Order {
+		if _, exists := seenOrder[name]; exists {
+			return nil, fmt.Errorf("duplicate provider %q in gateway.order", name)
+		}
+		seenOrder[name] = struct{}{}
 		cfg, ok := byName[name]
 		if !ok {
 			return nil, fmt.Errorf("unknown provider %q in gateway.order", name)

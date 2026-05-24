@@ -39,6 +39,12 @@ func TestDecideTerminalError(t *testing.T) {
 			wantSubstr: "not configured",
 		},
 		{
+			name:               "whitespace-only provider treated as unspecified",
+			req:                spec.AIRequest{Provider: "   "},
+			wantSubstr:         "all providers skipped",
+			wantLLMUnreachable: true,
+		},
+		{
 			name:               "all providers skipped",
 			wantSubstr:         "all providers skipped",
 			wantLLMUnreachable: true,
