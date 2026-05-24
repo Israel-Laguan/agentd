@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/spf13/viper"
@@ -55,13 +56,13 @@ func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]strin
 		}
 }
 
-func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) []gateway.ProviderConfig {
+func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) ([]gateway.ProviderConfig, error) {
 	if !v.IsSet("gateway.providers") {
-		return nil
+		return nil, nil
 	}
 	var providers []gateway.ProviderConfig
 	if err := v.UnmarshalKey("gateway.providers", &providers); err != nil {
-		return nil
+		return nil, fmt.Errorf("unmarshal gateway.providers: %w", err)
 	}
 	for i := range providers {
 		if providers[i].APIKey == "" && providers[i].APIKeyEnv != "" {
@@ -71,5 +72,5 @@ func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) []g
 			providers[i].Name = providers[i].Type
 		}
 	}
-	return providers
+	return providers, nil
 }

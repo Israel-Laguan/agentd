@@ -61,7 +61,7 @@ func (o *Ollama) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return spec.AIResponse{}, fmt.Errorf("decode ollama response: %w", err)
 	}
-	return decoded.toAIResponse(model), nil
+	return decoded.toAIResponse(model, string(o.Name())), nil
 }
 
 func (o *Ollama) url() string {
@@ -88,7 +88,7 @@ type ollamaResponse struct {
 	EvalCount       int                `json:"eval_count"`
 }
 
-func (r ollamaResponse) toAIResponse(defaultModel string) spec.AIResponse {
+func (r ollamaResponse) toAIResponse(defaultModel string, providerUsed string) spec.AIResponse {
 	model := r.Model
 	if model == "" {
 		model = defaultModel
@@ -96,7 +96,7 @@ func (r ollamaResponse) toAIResponse(defaultModel string) spec.AIResponse {
 	return spec.AIResponse{
 		Content:      r.Message.Content,
 		TokenUsage:   r.PromptEvalCount + r.EvalCount,
-		ProviderUsed: string(spec.ProviderOllama),
+		ProviderUsed: providerUsed,
 		ModelUsed:    model,
 	}
 }

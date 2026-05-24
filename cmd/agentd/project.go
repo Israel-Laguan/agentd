@@ -136,5 +136,10 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 	}
 	slog.Debug("database ready")
 
-	return cfg, store, newRuntimeDeps(cfg, store), func() { closeStore(store) }, nil
+	deps, err := newRuntimeDeps(cfg, store)
+	if err != nil {
+		closeStore(store)
+		return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("initialize runtime: %w", err)
+	}
+	return cfg, store, deps, func() { closeStore(store) }, nil
 }

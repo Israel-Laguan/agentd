@@ -11,7 +11,7 @@ api:
   materialize_token: "" # see docs/config-reference.md#api
 
 gateway:
-  order: [openai, anthropic, ollama]
+  order: [openai, anthropic, gemini, ollama]
   warmup_enabled: true
   max_tasks_per_phase: 7
   openai:

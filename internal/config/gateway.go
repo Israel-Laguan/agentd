@@ -105,12 +105,16 @@ func setGatewayDefaults(v *viper.Viper) {
 	v.SetDefault("gateway.truncation.stash_threshold", 50000)
 }
 
-func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) GatewayConfig {
+func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (GatewayConfig, error) {
 	openAI, anthropic, ollama, llamaCpp, horde, gemini := loadGatewayProviderConfigs(v, process, dotenv)
+	providers, err := loadGatewayProviders(v, process, dotenv)
+	if err != nil {
+		return GatewayConfig{}, err
+	}
 	return GatewayConfig{
 		Order:         v.GetStringSlice("gateway.order"),
 		WarmupEnabled: v.GetBool("gateway.warmup_enabled"),
-		Providers:     loadGatewayProviders(v, process, dotenv),
+		Providers:     providers,
 		OpenAI:        openAI,
 		Anthropic:     anthropic,
 		Ollama:        ollama,
@@ -130,7 +134,7 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) Gatewa
 		MaxTasksPerPhase: v.GetInt("gateway.max_tasks_per_phase"),
 		RoleModels:       loadRoleModels(v),
 		Capabilities:     loadCapabilities(v),
-	}
+	}, nil
 }
 
 func loadRoleModels(v *viper.Viper) RoleModelsConfig {
@@ -158,7 +162,8 @@ func (c GatewayConfig) RoleRoutes() map[gateway.Role]gateway.RoleTarget {
 }
 
 func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {
-	byName := make(map[string]gateway.ProviderConfig, len(c.Providers)+6)
+	const legacyProviderCount = 6
+	byName := make(map[string]gateway.ProviderConfig, len(c.Providers)+legacyProviderCount)
 	put := func(cfg gateway.ProviderConfig) error {
 		if cfg.Name == "" {
 			cfg.Name = cfg.Type
