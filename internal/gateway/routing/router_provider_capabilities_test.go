@@ -1,10 +1,12 @@
 package routing
 
 import (
+	"context"
 	"testing"
 
 	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
+	"agentd/internal/gateway/truncation"
 )
 
 func TestRouterProviderSupportsChatTools_CustomNameOpenAIAdapter(t *testing.T) {
@@ -52,5 +54,30 @@ func TestRouterProviderSupportsChatTools_NonToolProvider(t *testing.T) {
 
 	if r.ProviderSupportsChatTools("local-ollama") {
 		t.Fatal("ProviderSupportsChatTools(local-ollama) = true, want false")
+	}
+}
+
+func TestSelectCandidateProviders_CaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	poolside := &mockProvider{
+		providerName: "poolside",
+		budget:       10000,
+		capabilities: providers.Capabilities{SupportsChatTools: true},
+	}
+	router := NewRouter(poolside).WithTruncation(
+		truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}},
+		12000,
+	)
+
+	resp, err := router.Generate(context.Background(), spec.AIRequest{
+		Provider: "Poolside",
+		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v, want success for case-insensitive provider match", err)
+	}
+	if resp.Content != "ok" {
+		t.Fatalf("content = %q, want ok", resp.Content)
 	}
 }

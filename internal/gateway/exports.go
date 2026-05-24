@@ -112,7 +112,7 @@ var (
 // ProviderSupportsChatTools resolves tool support for a provider name using the
 // configured router when available; otherwise falls back to built-in adapter checks.
 func ProviderSupportsChatTools(gw AIGateway, provider string) bool {
-	if r, ok := gw.(*Router); ok {
+	if r, ok := gw.(*Router); ok && r != nil {
 		return r.ProviderSupportsChatTools(provider)
 	}
 	return SupportsChatTools(provider)
