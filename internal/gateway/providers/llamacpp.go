@@ -71,7 +71,7 @@ func (l *LlamaCpp) url() string {
 
 // Capabilities implements Backend.
 func (l *LlamaCpp) Capabilities() Capabilities {
-	return Capabilities{SupportsChatTools: false}
+	return capabilitiesFromConfig(l.cfg, false)
 }
 
 func openAIResponseToLlamaCpp(r openAIResponse, defaultModel string, providerUsed string) spec.AIResponse {

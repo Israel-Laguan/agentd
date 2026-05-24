@@ -91,7 +91,7 @@ func (a *Anthropic) post(ctx context.Context, body anthropicRequest) ([]byte, er
 
 // Capabilities implements Backend.
 func (a *Anthropic) Capabilities() Capabilities {
-	return Capabilities{SupportsChatTools: true}
+	return capabilitiesFromConfig(a.cfg, true)
 }
 
 func splitSystemMessages(messages []spec.PromptMessage) (string, []anthropicMessage) {

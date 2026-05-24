@@ -70,7 +70,7 @@ func (o *Ollama) url() string {
 
 // Capabilities implements Backend.
 func (o *Ollama) Capabilities() Capabilities {
-	return Capabilities{SupportsChatTools: false}
+	return capabilitiesFromConfig(o.cfg, false)
 }
 
 type ollamaRequest struct {

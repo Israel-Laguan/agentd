@@ -95,6 +95,37 @@ func assertAnthropicResponse(t *testing.T, resp spec.AIResponse) {
 	}
 }
 
+func TestAnthropicGenerate_CustomProviderNameInResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(anthropicResponse{
+			Content: []anthropicContentBlock{
+				{Type: "text", Text: stringPtr("ok")},
+			},
+			Model: "claude-3-haiku",
+		})
+	}))
+	defer srv.Close()
+
+	a := NewAnthropic(spec.ProviderConfig{
+		Name:    "my-anthropic",
+		Type:    "anthropic",
+		BaseURL: srv.URL,
+		APIKey:  "sk-test",
+		Model:   "claude-3-haiku",
+	}, srv.Client())
+
+	resp, err := a.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if resp.ProviderUsed != "my-anthropic" {
+		t.Fatalf("ProviderUsed = %q, want my-anthropic", resp.ProviderUsed)
+	}
+}
+
 func TestAnthropicSystemMessageFlattening(t *testing.T) {
 	messages := []spec.PromptMessage{
 		{Role: "system", Content: "First system."},

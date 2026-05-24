@@ -35,6 +35,17 @@ func providerName(cfg spec.ProviderConfig, fallback spec.Provider) spec.Provider
 	return fallback
 }
 
+func chatToolsCapability(cfg spec.ProviderConfig, adapterDefault bool) bool {
+	if cfg.Capabilities.ChatTools != nil {
+		return *cfg.Capabilities.ChatTools
+	}
+	return adapterDefault
+}
+
+func capabilitiesFromConfig(cfg spec.ProviderConfig, adapterDefault bool) Capabilities {
+	return Capabilities{SupportsChatTools: chatToolsCapability(cfg, adapterDefault)}
+}
+
 // AppendFromConfig appends a provider built from cfg when the adapter Type is recognized.
 func AppendFromConfig(backends []Backend, cfg spec.ProviderConfig) ([]Backend, error) {
 	switch spec.Provider(cfg.Type) {

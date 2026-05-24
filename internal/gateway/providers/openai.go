@@ -145,7 +145,7 @@ type openAIEmbedData struct {
 
 // Capabilities implements Backend.
 func (o *OpenAI) Capabilities() Capabilities {
-	return Capabilities{SupportsChatTools: true}
+	return capabilitiesFromConfig(o.cfg, true)
 }
 
 type openAIRequest struct {
