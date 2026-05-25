@@ -22,12 +22,12 @@ func newWorkerWithProviders(t *testing.T, cfgs ...spec.ProviderConfig) *Worker {
 
 // toolCapableConfig returns a minimal ProviderConfig for a chat-tool-capable provider.
 func toolCapableConfig(name, providerType string) spec.ProviderConfig {
-	return spec.ProviderConfig{Name: name, Type: providerType, BaseURL: "https://example.com/v1", Model: "test-model", APIKey: "test-key"}
+	return spec.ProviderConfig{Name: name, Adapter: providerType, BaseURL: "https://example.com/v1", Model: "test-model", APIKey: "test-key"}
 }
 
 // noToolConfig returns a minimal ProviderConfig for an Ollama provider (no tool support).
 func noToolConfig(name string) spec.ProviderConfig {
-	return spec.ProviderConfig{Name: name, Type: "ollama", BaseURL: "http://localhost:11434", Model: "llama-test"}
+	return spec.ProviderConfig{Name: name, Adapter: "ollama", BaseURL: "http://localhost:11434", Model: "llama-test"}
 }
 
 // TestProviderSupportsAgentic_RouterBacked verifies providerSupportsAgentic via the
@@ -54,8 +54,8 @@ func TestProviderSupportsAgentic_RouterBacked(t *testing.T) {
 		{"ollama lowercase", noToolConfig("ollama"), "ollama", false},
 		{"ollama uppercase", noToolConfig("ollama"), "OLLAMA", false},
 		// LlamaCpp and Horde also have no chat-tool support.
-		{"llamacpp", spec.ProviderConfig{Name: "llamacpp", Type: "llamacpp", BaseURL: "http://localhost:8080", Model: "local"}, "llamacpp", false},
-		{"horde", spec.ProviderConfig{Name: "horde", Type: "horde", BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"}, "horde", false},
+		{"llamacpp", spec.ProviderConfig{Name: "llamacpp", Adapter: "llamacpp", BaseURL: "http://localhost:8080", Model: "local"}, "llamacpp", false},
+		{"horde", spec.ProviderConfig{Name: "horde", Adapter: "horde", BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"}, "horde", false},
 	}
 
 	for _, tc := range testCases {
@@ -114,7 +114,7 @@ func TestProviderSupportsAgentic_CustomProviderName(t *testing.T) {
 
 	w := newWorkerWithProviders(t, spec.ProviderConfig{
 		Name:    "poolside",
-		Type:    "openai",
+		Adapter: "openai",
 		BaseURL: "https://inference.poolside.ai/v1",
 		Model:   "poolside-model",
 		APIKey:  "test-key",
@@ -132,7 +132,7 @@ func TestProviderSupportsAgentic_EmptyProviderUsesCascade(t *testing.T) {
 
 	w := newWorkerWithProviders(t, spec.ProviderConfig{
 		Name:    "gemini",
-		Type:    "gemini",
+		Adapter: "gemini",
 		BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 		Model:   "gemini-2.5-flash",
 		APIKey:  "test-key",
@@ -151,7 +151,7 @@ func TestProviderSupportsAgentic_GeminiReachesAgenticLoop(t *testing.T) {
 
 	w := newWorkerWithProviders(t, spec.ProviderConfig{
 		Name:    "gemini",
-		Type:    "gemini",
+		Adapter: "gemini",
 		BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 		Model:   "gemini-2.5-flash",
 		APIKey:  "test-key",

@@ -237,7 +237,7 @@ func TestCheckProviders_CustomProvider_AdapterDefaultOpenAI(t *testing.T) {
 		Order: []string{"poolside"},
 		Providers: []gateway.ProviderConfig{{
 			Name:   "poolside",
-			Type:   "openai",
+			Adapter: "openai",
 			APIKey: "poolside-key",
 			Model:  "poolside-model",
 		}},
@@ -259,7 +259,7 @@ func TestCheckProviders_CustomProvider_HealthAPIKey(t *testing.T) {
 		Order: []string{"poolside"},
 		Providers: []gateway.ProviderConfig{{
 			Name:   "poolside",
-			Type:   "openai",
+			Adapter: "openai",
 			APIKey: "poolside-key",
 			Model:  "poolside-model",
 			Health: "api_key",
@@ -306,7 +306,7 @@ func TestCheckProviders_HealthAPIKey_OverridesAdapter(t *testing.T) {
 		Order: []string{"local"},
 		Providers: []gateway.ProviderConfig{{
 			Name:   "local",
-			Type:   "ollama",
+			Adapter: "ollama",
 			APIKey: "sk-override",
 			Health: "api_key",
 		}},

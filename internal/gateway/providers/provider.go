@@ -29,8 +29,8 @@ func providerName(cfg spec.ProviderConfig, fallback spec.Provider) spec.Provider
 	if cfg.Name != "" {
 		return spec.Provider(cfg.Name)
 	}
-	if cfg.Type != "" {
-		return spec.Provider(cfg.Type)
+	if cfg.Adapter != "" {
+		return spec.Provider(cfg.Adapter)
 	}
 	return fallback
 }
@@ -46,9 +46,15 @@ func capabilitiesFromConfig(cfg spec.ProviderConfig, adapterDefault bool) Capabi
 	return Capabilities{SupportsChatTools: chatToolsCapability(cfg, adapterDefault)}
 }
 
-// AppendFromConfig appends a provider built from cfg when the adapter Type is recognized.
+// AppendFromConfig appends a provider built from cfg when the adapter is recognized.
+// When Adapter is empty it defaults to Name, preserving backward compatibility for
+// entries that identify both vendor and wire protocol with a single name.
 func AppendFromConfig(backends []Backend, cfg spec.ProviderConfig) ([]Backend, error) {
-	switch spec.Provider(cfg.Type) {
+	adapter := cfg.Adapter
+	if adapter == "" {
+		adapter = string(cfg.Name)
+	}
+	switch spec.Provider(adapter) {
 	case spec.ProviderOpenAI:
 		return append(backends, NewOpenAI(cfg, nil)), nil
 	case spec.ProviderAnthropic:
@@ -63,6 +69,6 @@ func AppendFromConfig(backends []Backend, cfg spec.ProviderConfig) ([]Backend, e
 		// Gemini exposes an OpenAI-compatible endpoint; reuse the OpenAI backend.
 		return append(backends, NewOpenAI(cfg, nil)), nil
 	default:
-		return backends, fmt.Errorf("unknown provider adapter %q", cfg.Type)
+		return backends, fmt.Errorf("unknown provider adapter %q", adapter)
 	}
 }

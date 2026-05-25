@@ -351,7 +351,7 @@ func TestLoad_GatewayProviders_CustomProvider(t *testing.T) {
 		if len(configs) != 1 {
 			t.Fatalf("ProviderConfigs() length = %d, want 1", len(configs))
 		}
-		if configs[0].Name != "poolside" || configs[0].Type != "openai" {
+		if configs[0].Name != "poolside" || configs[0].Adapter != "openai" {
 			t.Fatalf("ProviderConfigs()[0] = %+v, want poolside/openai", configs[0])
 		}
 		if configs[0].BaseURL != "https://inference.poolside.ai/v1" {

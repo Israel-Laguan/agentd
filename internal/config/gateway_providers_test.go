@@ -276,7 +276,7 @@ func TestLoadGatewayProviders_EmptyEntry(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:     []string{"openai"},
 		Providers: providers,
-		OpenAI:    gateway.ProviderConfig{Type: "openai", APIKey: "sk-test"},
+		OpenAI:    gateway.ProviderConfig{Adapter: "openai", APIKey: "sk-test"},
 	}
 	_, err = cfg.ProviderConfigs()
 	if err == nil {

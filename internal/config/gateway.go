@@ -187,11 +187,11 @@ func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown provider %q in gateway.order", name)
 		}
-		normalizedType, err := normalizeAdapterType(cfg.Type)
+		normalizedType, err := normalizeAdapterType(cfg.Adapter)
 		if err != nil {
 			return nil, fmt.Errorf("provider %q: %w", name, err)
 		}
-		cfg.Type = normalizedType
+		cfg.Adapter = normalizedType
 		if err := validateHealthMode(cfg.Health); err != nil {
 			return nil, fmt.Errorf("provider %q: %w", name, err)
 		}
