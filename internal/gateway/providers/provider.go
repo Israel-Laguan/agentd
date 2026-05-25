@@ -47,15 +47,32 @@ func capabilitiesFromConfig(cfg spec.ProviderConfig, adapterDefault bool) Capabi
 	return Capabilities{SupportsChatTools: chatToolsCapability(cfg, adapterDefault)}
 }
 
+// canonicalAdapter normalizes name/adapter fields and maps the legacy gemini adapter alias
+// to openai while preserving gemini as the provider name when no explicit name is set.
+func canonicalAdapter(cfg spec.ProviderConfig) spec.ProviderConfig {
+	cfg.Name = strings.ToLower(strings.TrimSpace(cfg.Name))
+	cfg.Adapter = strings.ToLower(strings.TrimSpace(cfg.Adapter))
+	if cfg.Adapter == "" {
+		cfg.Adapter = cfg.Name
+	}
+	if cfg.Name == "" {
+		cfg.Name = cfg.Adapter
+	}
+	if cfg.Adapter == string(spec.ProviderGemini) {
+		cfg.Adapter = string(spec.ProviderOpenAI)
+		if cfg.Name == string(spec.ProviderGemini) || cfg.Name == "" {
+			cfg.Name = string(spec.ProviderGemini)
+		}
+	}
+	return cfg
+}
+
 // AppendFromConfig appends a provider built from cfg when the adapter is recognized.
 // When Adapter is empty it defaults to Name, preserving backward compatibility for
 // entries that identify both vendor and wire protocol with a single name.
 func AppendFromConfig(backends []Backend, cfg spec.ProviderConfig) ([]Backend, error) {
-	adapter := strings.ToLower(strings.TrimSpace(cfg.Adapter))
-	if adapter == "" {
-		adapter = strings.ToLower(strings.TrimSpace(string(cfg.Name)))
-	}
-	cfg.Adapter = adapter
+	cfg = canonicalAdapter(cfg)
+	adapter := cfg.Adapter
 	switch spec.Provider(adapter) {
 	case spec.ProviderOpenAI:
 		return append(backends, NewOpenAI(cfg, nil)), nil
@@ -67,9 +84,6 @@ func AppendFromConfig(backends []Backend, cfg spec.ProviderConfig) ([]Backend, e
 		return append(backends, NewLlamaCpp(cfg, nil)), nil
 	case spec.ProviderHorde:
 		return append(backends, NewHorde(cfg, nil)), nil
-	case spec.ProviderGemini:
-		// Gemini exposes an OpenAI-compatible endpoint; reuse the OpenAI backend.
-		return append(backends, NewOpenAI(cfg, nil)), nil
 	default:
 		return backends, fmt.Errorf("unknown provider adapter %q", adapter)
 	}

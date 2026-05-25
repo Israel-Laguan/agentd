@@ -47,7 +47,6 @@ var allKnownAdapters = []string{
 	string(gateway.ProviderOllama),
 	string(gateway.ProviderLlamaCpp),
 	string(gateway.ProviderHorde),
-	string(gateway.ProviderGemini),
 }
 
 func validAdaptersHint() string {
@@ -59,9 +58,12 @@ func validAdaptersHint() string {
 // normalizeAdapterType trims and lowercases a recognised adapter name.
 func normalizeAdapterType(adapter string) (string, error) {
 	t := strings.TrimSpace(strings.ToLower(adapter))
+	if t == string(gateway.ProviderGemini) {
+		return string(gateway.ProviderOpenAI), nil
+	}
 	switch gateway.Provider(t) {
 	case gateway.ProviderOpenAI, gateway.ProviderAnthropic, gateway.ProviderOllama,
-		gateway.ProviderLlamaCpp, gateway.ProviderHorde, gateway.ProviderGemini:
+		gateway.ProviderLlamaCpp, gateway.ProviderHorde:
 		return t, nil
 	default:
 		return "", fmt.Errorf("unknown adapter %q (valid: %s)", adapter, validAdaptersHint())
@@ -175,7 +177,7 @@ func healthModeFor(p gateway.ProviderConfig) string {
 		return h
 	}
 	switch gateway.Provider(strings.TrimSpace(strings.ToLower(p.Adapter))) {
-	case gateway.ProviderOpenAI, gateway.ProviderGemini, gateway.ProviderAnthropic:
+	case gateway.ProviderOpenAI, gateway.ProviderAnthropic:
 		return healthModeAPIKey
 	case gateway.ProviderOllama:
 		return healthModeOllama

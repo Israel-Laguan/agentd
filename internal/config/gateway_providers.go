@@ -51,11 +51,23 @@ func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]strin
 			Timeout:       durationOrDefault(v.GetDuration("gateway.horde.timeout"), 5*time.Minute),
 			PollInterval:  durationOrDefault(v.GetDuration("gateway.horde.poll_interval"), 4*time.Second),
 		}, gateway.ProviderConfig{
-			Adapter: "gemini", BaseURL: v.GetString("gateway.gemini.base_url"),
+			Name: "gemini", Adapter: "openai", BaseURL: v.GetString("gateway.gemini.base_url"),
 			APIKey: geminiKey, Model: v.GetString("gateway.gemini.model"),
 			MaxInputChars: v.GetInt("gateway.gemini.max_input_chars"),
 			Timeout:       durationOrDefault(v.GetDuration("gateway.gemini.timeout"), 5*time.Minute),
 		}
+}
+
+func canonicalGatewayProvider(cfg gateway.ProviderConfig) gateway.ProviderConfig {
+	cfg.Name = strings.ToLower(strings.TrimSpace(cfg.Name))
+	cfg.Adapter = strings.ToLower(strings.TrimSpace(cfg.Adapter))
+	if cfg.Adapter == string(gateway.ProviderGemini) {
+		cfg.Adapter = string(gateway.ProviderOpenAI)
+		if cfg.Name == string(gateway.ProviderGemini) || cfg.Name == "" {
+			cfg.Name = string(gateway.ProviderGemini)
+		}
+	}
+	return cfg
 }
 
 func genericGatewayAPIKeyEnv(providerName string) string {
@@ -114,6 +126,7 @@ func putGatewayProvider(byName map[string]gateway.ProviderConfig, cfg gateway.Pr
 	if cfg.Adapter == "" {
 		cfg.Adapter = cfg.Name
 	}
+	cfg = canonicalGatewayProvider(cfg)
 	if _, exists := byName[cfg.Name]; exists {
 		return fmt.Errorf("duplicate provider %q", cfg.Name)
 	}
