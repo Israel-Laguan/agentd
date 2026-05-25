@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"agentd/internal/kanban"
-
 	_ "modernc.org/sqlite"
+
+	"agentd/internal/kanban"
 )
 
 func TestInitVerbosePrintsConfig(t *testing.T) {
