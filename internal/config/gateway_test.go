@@ -117,6 +117,23 @@ func TestGatewayConfig_ProviderConfigs_DuplicateNames(t *testing.T) {
 	}
 }
 
+func TestGatewayConfig_ProviderConfigs_EmptyProviderEntry(t *testing.T) {
+	cfg := GatewayConfig{
+		Order:     []string{"openai"},
+		Providers: []gateway.ProviderConfig{{}},
+	}
+	_, err := cfg.ProviderConfigs()
+	if err == nil {
+		t.Fatal("ProviderConfigs() error = nil, want error for empty provider entry")
+	}
+	if !strings.Contains(err.Error(), "gateway.providers[0]") {
+		t.Errorf("error = %v, want gateway.providers[0]", err)
+	}
+	if !strings.Contains(err.Error(), "name and adapter") {
+		t.Errorf("error = %v, want mention of missing name and adapter", err)
+	}
+}
+
 func TestGatewayConfig_ProviderConfigs_DuplicateOrderEntry(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:  []string{"openai", "openai"},

@@ -20,9 +20,10 @@ Tool/JSON fallback behavior is documented in [`provider-tool-calling.md`](provid
 
 ### Custom provider registry
 
-The `gateway.providers` list registers one or more provider entries. `name` is the operator-facing
-identifier referenced by `gateway.order` (defaults to the entry's `adapter` value when omitted);
-`adapter` selects the Go backend implementation.
+The `gateway.providers` list registers one or more provider entries. Each entry must set at least
+one of `name` or `adapter` (non-empty after trimming whitespace); otherwise config load fails.
+`name` is the operator-facing identifier referenced by `gateway.order` (defaults to the entry's
+`adapter` value when omitted); `adapter` selects the Go backend implementation.
 
 Multiple entries may share the same `adapter` at different `base_url` values — each becomes an
 independent backend. This enables cascading two OpenAI-compatible endpoints, which is impossible
