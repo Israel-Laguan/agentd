@@ -51,8 +51,18 @@ func TestAgentServiceCreateValidation(t *testing.T) {
 	svc := services.NewAgentService(store, nil)
 
 	_, err := svc.Create(context.Background(), models.AgentProfile{Name: "", Provider: "p", Model: "m"})
-	if err == nil || err.Error() != "name, provider, and model are required" {
+	if err == nil || err.Error() != "name is required" {
 		t.Fatalf("Create missing name: %v", err)
+	}
+
+	_, err = svc.Create(context.Background(), models.AgentProfile{Name: "Cascade", Provider: "", Model: "", Role: "CODE_GEN"})
+	if err != nil {
+		t.Fatalf("Create cascade mode (empty provider/model): %v", err)
+	}
+
+	_, err = svc.Create(context.Background(), models.AgentProfile{ID: "partial", Name: "Partial", Provider: "openai", Model: ""})
+	if err == nil || err.Error() != "provider and model must both be set or both empty for gateway cascade" {
+		t.Fatalf("Create partial provider/model: %v", err)
 	}
 
 	_, err = svc.Create(context.Background(), models.AgentProfile{Name: "n", Provider: "p", Model: "m", MaxTokens: -1})

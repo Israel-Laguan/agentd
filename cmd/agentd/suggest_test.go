@@ -64,7 +64,7 @@ func seedSuggestTask(t *testing.T, openAIURL string) (string, string) {
 		t.Fatalf("OpenStore() error = %v", err)
 	}
 	defer func() { _ = store.Close() }()
-	if err := seedDefaultAgent(context.Background(), store); err != nil {
+	if err := seedDefaultAgent(context.Background(), store, false); err != nil {
 		t.Fatalf("seedDefaultAgent() error = %v", err)
 	}
 	project, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{

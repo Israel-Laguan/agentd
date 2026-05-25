@@ -77,6 +77,8 @@ gateway:
     timeout: "5m"
   budget:
     tokens_per_task: 50000
+  # Role-level defaults when an agent profile leaves provider/model empty (see agentd init seeds).
+  # Per-agent cascade uses gateway.order; role_models apply inside the router for chat/worker/memory roles.
   role_models:
     chat:
       provider: ""

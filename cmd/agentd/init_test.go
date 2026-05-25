@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/kanban"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -24,6 +26,9 @@ func TestInitVerbosePrintsConfig(t *testing.T) {
 		t.Fatalf("agentd init error = %v", err)
 	}
 	out := output.String()
+	if !strings.Contains(out, "gateway.order cascade") {
+		t.Errorf("verbose init output missing profile cascade hint\n%s", out)
+	}
 	for _, expect := range []string{"home=", "db_path=", "api.address=", "cron.path="} {
 		if !strings.Contains(out, expect) {
 			t.Errorf("verbose output missing %q\n%s", expect, out)
@@ -41,6 +46,10 @@ func TestInitCreatesHomeDatabaseAndWAL(t *testing.T) {
 
 	if err := cmd.ExecuteContext(context.Background()); err != nil {
 		t.Fatalf("agentd init error = %v", err)
+	}
+	out := output.String()
+	if !strings.Contains(out, "gateway.order cascade") {
+		t.Errorf("init output missing profile cascade hint\n%s", out)
 	}
 
 	assertPathExists(t, home)
@@ -107,4 +116,129 @@ func assertJournalMode(t *testing.T, dbPath, want string) {
 	if !strings.EqualFold(got, want) {
 		t.Fatalf("journal_mode = %s, want %s", got, want)
 	}
+}
+
+// TestSeedProfilesHaveEmptyProvider verifies that freshly seeded profiles have
+// empty provider and model strings so they cascade through gateway.order.
+func TestSeedProfilesHaveEmptyProvider(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".agentd")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	store, err := openTestStore(t, filepath.Join(home, "global.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	if err := seedDefaultAgent(context.Background(), store, false); err != nil {
+		t.Fatalf("seedDefaultAgent: %v", err)
+	}
+
+	for _, id := range []string{"default", "researcher", "qa"} {
+		p, err := store.GetAgentProfile(context.Background(), id)
+		if err != nil {
+			t.Fatalf("GetAgentProfile(%s): %v", id, err)
+		}
+		if p.Provider != "" {
+			t.Errorf("profile %s: Provider = %q, want empty (gateway cascade)", id, p.Provider)
+		}
+		if p.Model != "" {
+			t.Errorf("profile %s: Model = %q, want empty (gateway cascade)", id, p.Model)
+		}
+	}
+}
+
+// TestInitDoesNotOverwriteExistingProfile verifies that a repeated "agentd init"
+// (without --reset-profiles) preserves operator PATCHes to the default profile.
+func TestInitDoesNotOverwriteExistingProfile(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".agentd")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	store, err := openTestStore(t, filepath.Join(home, "global.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	// First seed.
+	if err := seedDefaultAgent(context.Background(), store, false); err != nil {
+		t.Fatalf("first seedDefaultAgent: %v", err)
+	}
+
+	// Simulate an operator PATCH.
+	p, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile: %v", err)
+	}
+	p.Provider = "gemini"
+	p.Model = "gemini-2.5-flash"
+	if err := store.UpsertAgentProfile(context.Background(), *p); err != nil {
+		t.Fatalf("UpsertAgentProfile (patch): %v", err)
+	}
+
+	// Second seed — must not overwrite.
+	if err := seedDefaultAgent(context.Background(), store, false); err != nil {
+		t.Fatalf("second seedDefaultAgent: %v", err)
+	}
+
+	got, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile after re-seed: %v", err)
+	}
+	if got.Provider != "gemini" {
+		t.Errorf("Provider = %q after re-seed, want %q", got.Provider, "gemini")
+	}
+	if got.Model != "gemini-2.5-flash" {
+		t.Errorf("Model = %q after re-seed, want %q", got.Model, "gemini-2.5-flash")
+	}
+}
+
+// TestInitResetProfilesFlag verifies that --reset-profiles overwrites existing profiles.
+func TestInitResetProfilesFlag(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".agentd")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	store, err := openTestStore(t, filepath.Join(home, "global.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	// Seed and patch.
+	if err := seedDefaultAgent(context.Background(), store, false); err != nil {
+		t.Fatalf("first seedDefaultAgent: %v", err)
+	}
+	p, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile: %v", err)
+	}
+	p.Provider = "gemini"
+	p.Model = "gemini-2.5-flash"
+	if err := store.UpsertAgentProfile(context.Background(), *p); err != nil {
+		t.Fatalf("UpsertAgentProfile (patch): %v", err)
+	}
+
+	// Re-seed with reset=true — must overwrite back to defaults.
+	if err := seedDefaultAgent(context.Background(), store, true); err != nil {
+		t.Fatalf("seedDefaultAgent(reset=true): %v", err)
+	}
+
+	got, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile after reset: %v", err)
+	}
+	if got.Provider != "" {
+		t.Errorf("Provider = %q after reset, want empty", got.Provider)
+	}
+	if got.Model != "" {
+		t.Errorf("Model = %q after reset, want empty", got.Model)
+	}
+}
+
+func openTestStore(t *testing.T, dbPath string) (*kanban.Store, error) {
+	t.Helper()
+	return kanban.OpenStore(dbPath)
 }
