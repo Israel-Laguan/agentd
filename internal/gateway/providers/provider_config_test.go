@@ -83,6 +83,40 @@ func TestAppendFromConfig_AdapterDefault(t *testing.T) {
 	}
 }
 
+func TestAppendFromConfig_NormalizesAdapter(t *testing.T) {
+	t.Parallel()
+
+	got, err := AppendFromConfig(nil, spec.ProviderConfig{Adapter: " OpenAI ", BaseURL: "http://example"})
+	if err != nil {
+		t.Fatalf("AppendFromConfig() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1", len(got))
+	}
+	if got[0].Name() != spec.ProviderOpenAI {
+		t.Fatalf("Name() = %q, want %q", got[0].Name(), spec.ProviderOpenAI)
+	}
+}
+
+func TestAppendFromConfig_CustomNameNormalizesAdapter(t *testing.T) {
+	t.Parallel()
+
+	got, err := AppendFromConfig(nil, spec.ProviderConfig{
+		Adapter: " OPENAI ",
+		Name:    "poolside",
+		BaseURL: "http://example",
+	})
+	if err != nil {
+		t.Fatalf("AppendFromConfig() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1", len(got))
+	}
+	if got[0].Name() != spec.Provider("poolside") {
+		t.Fatalf("Name() = %q, want poolside", got[0].Name())
+	}
+}
+
 var backendIdentityCases = []struct {
 	name     string
 	backend  Backend
