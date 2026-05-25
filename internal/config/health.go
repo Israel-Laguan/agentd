@@ -174,7 +174,7 @@ func healthModeFor(p gateway.ProviderConfig) string {
 	if h := strings.TrimSpace(strings.ToLower(p.Health)); h != "" {
 		return h
 	}
-	switch gateway.Provider(strings.TrimSpace(strings.ToLower(p.Type))) {
+	switch gateway.Provider(strings.TrimSpace(strings.ToLower(p.Adapter))) {
 	case gateway.ProviderOpenAI, gateway.ProviderGemini, gateway.ProviderAnthropic:
 		return healthModeAPIKey
 	case gateway.ProviderOllama:
@@ -192,7 +192,7 @@ func availableFromConfig(p gateway.ProviderConfig) ProviderCheckResult {
 	return ProviderCheckResult{
 		Available:   true,
 		Provider:    p.Name,
-		AdapterType: p.Type,
+		AdapterType: p.Adapter,
 		HealthMode:  healthModeFor(p),
 		BaseURL:     p.BaseURL,
 	}

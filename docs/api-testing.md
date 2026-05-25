@@ -52,6 +52,28 @@ Returns system health, memory usage, circuit breaker state, and task summary.
 
 **Test Coverage**: `e2e/http_test.go:20`
 
+### POST /api/v1/system/breaker/reset
+
+Reset the LLM circuit breaker without restarting the daemon. Use this after quota exhaustion or a transient provider outage has tripped the breaker and you want to resume task execution.
+
+**Query Parameters** (optional):
+
+| Parameter | Description |
+|-----------|-------------|
+| `provider` | Reset only the named provider's breaker (e.g. `?provider=gemini`). Omit to reset the global breaker and all per-provider breakers. |
+
+**Response**:
+```json
+{
+  "status": "success",
+  "data": { "reset": true, "provider": "" }
+}
+```
+
+When `?provider=gemini` is supplied, `"provider"` in the response is `"gemini"`.
+
+**Test Coverage**: `internal/api/controllers/system_test.go`
+
 ---
 
 ## Project Endpoints

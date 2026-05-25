@@ -109,7 +109,7 @@ func TestAnthropicGenerate_CustomProviderNameInResponse(t *testing.T) {
 
 	a := NewAnthropic(spec.ProviderConfig{
 		Name:    "my-anthropic",
-		Type:    "anthropic",
+		Adapter: "anthropic",
 		BaseURL: srv.URL,
 		APIKey:  "sk-test",
 		Model:   "claude-3-haiku",
