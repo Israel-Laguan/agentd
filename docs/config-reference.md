@@ -47,6 +47,20 @@ gateway:
   order: [openai, poolside, anthropic]
 ```
 
+Adapter-specific settings belong in `options` (each adapter reads its own keys; unknown keys
+log a warning and are ignored):
+
+```yaml
+gateway:
+  providers:
+  - name: horde
+    adapter: horde
+    base_url: "https://aihorde.net/api"
+    options:
+      poll_interval: "5s"
+  order: [openai, horde]
+```
+
 Single custom entry (e.g. vLLM or LM Studio alongside the named OpenAI slot):
 
 ```yaml
@@ -78,6 +92,7 @@ All fields per entry:
 | `api_key` | Inline API key (prefer `api_key_env`). |
 | `health` | Health-check variant: `api_key`, `ollama`, `llamacpp`, `horde`, or empty (adapter default). |
 | `capabilities.chat_tools` | Override adapter default for chat tool support (`true`/`false`). |
+| `options` | Adapter-specific key/value map. Each adapter reads only its known keys; unrecognized keys log a warning at startup and are ignored. Example: Horde `poll_interval` (duration string). Invalid typed values for known keys fall back to adapter defaults with an error log. |
 
 ### Provider blocks
 

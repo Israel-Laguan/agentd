@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -287,5 +288,81 @@ func TestLoadGatewayProviders_EmptyEntry(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "name and adapter") {
 		t.Errorf("error = %v, want mention of missing name and adapter", err)
+	}
+}
+
+// newHordeViper returns a viper with the given gateway.horde.poll_interval value.
+func newHordeViper(t *testing.T, pollInterval string) *viper.Viper {
+	t.Helper()
+	v := viper.New()
+	v.SetConfigType("yaml")
+	if err := v.ReadConfig(strings.NewReader("gateway:\n  horde:\n    poll_interval: " + pollInterval + "\n")); err != nil {
+		t.Fatalf("viper read config: %v", err)
+	}
+	return v
+}
+
+func TestLoadGatewayProviderConfigs_HordePollIntervalLandsInOptions(t *testing.T) {
+	// Backward-compat: the legacy gateway.horde.poll_interval viper key must
+	// populate Options["poll_interval"] as a time.Duration.
+	v := newHordeViper(t, "5s")
+	_, _, _, _, horde, _ := loadGatewayProviderConfigs(v, nil, nil)
+
+	pi, ok := horde.Options["poll_interval"]
+	if !ok {
+		t.Fatal(`Options["poll_interval"] not set`)
+	}
+	d, ok := pi.(time.Duration)
+	if !ok {
+		t.Fatalf(`Options["poll_interval"] type = %T, want time.Duration`, pi)
+	}
+	if d != 5*time.Second {
+		t.Fatalf("poll_interval = %v, want 5s", d)
+	}
+}
+
+func TestLoadGatewayProviderConfigs_HordePollIntervalDefault(t *testing.T) {
+	// When gateway.horde.poll_interval is not set the default (4s) is used.
+	v := viper.New()
+	_, _, _, _, horde, _ := loadGatewayProviderConfigs(v, nil, nil)
+
+	pi, ok := horde.Options["poll_interval"]
+	if !ok {
+		t.Fatal(`Options["poll_interval"] not set`)
+	}
+	d, ok := pi.(time.Duration)
+	if !ok {
+		t.Fatalf(`Options["poll_interval"] type = %T, want time.Duration`, pi)
+	}
+	if d != 4*time.Second {
+		t.Fatalf("poll_interval = %v, want 4s (default)", d)
+	}
+}
+
+func TestLoadGatewayProviders_OptionsMapPassedThrough(t *testing.T) {
+	// Dynamic gateway.providers entries with an options block must have their
+	// Options map populated by UnmarshalKey so adapters can read them.
+	yaml := `    - name: horde
+      adapter: horde
+      options:
+        poll_interval: "5s"
+`
+	v := newProvidersViper(t, yaml)
+	providers, err := loadGatewayProviders(v, nil, nil)
+	if err != nil {
+		t.Fatalf("loadGatewayProviders() error = %v", err)
+	}
+	if len(providers) != 1 {
+		t.Fatalf("len(providers) = %d, want 1", len(providers))
+	}
+	if providers[0].Options == nil {
+		t.Fatal("Options is nil, want non-nil")
+	}
+	pi, ok := providers[0].Options["poll_interval"]
+	if !ok {
+		t.Fatal(`Options["poll_interval"] not set`)
+	}
+	if pi != "5s" {
+		t.Fatalf(`Options["poll_interval"] = %v, want "5s"`, pi)
 	}
 }

@@ -49,7 +49,9 @@ func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]strin
 			APIKey: v.GetString("gateway.horde.api_key"), Model: v.GetString("gateway.horde.model"),
 			MaxInputChars: v.GetInt("gateway.horde.max_input_chars"),
 			Timeout:       durationOrDefault(v.GetDuration("gateway.horde.timeout"), 5*time.Minute),
-			PollInterval:  durationOrDefault(v.GetDuration("gateway.horde.poll_interval"), 4*time.Second),
+			Options: map[string]any{
+				"poll_interval": durationOrDefault(v.GetDuration("gateway.horde.poll_interval"), 4*time.Second),
+			},
 		}, gateway.ProviderConfig{
 			Name: "gemini", Adapter: "openai", BaseURL: v.GetString("gateway.gemini.base_url"),
 			APIKey: geminiKey, Model: v.GetString("gateway.gemini.model"),

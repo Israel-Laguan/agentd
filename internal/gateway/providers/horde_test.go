@@ -1,9 +1,11 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,11 +34,11 @@ func TestHordeGenerateSubmitsAndPollsUntilDone(t *testing.T) {
 	defer srv.Close()
 
 	provider := NewHorde(spec.ProviderConfig{
-		BaseURL:      srv.URL,
-		APIKey:       "key",
-		Model:        "horde-model",
-		PollInterval: time.Millisecond,
-		Timeout:      time.Second,
+		BaseURL: srv.URL,
+		APIKey:  "key",
+		Model:   "horde-model",
+		Timeout: time.Second,
+		Options: map[string]any{"poll_interval": time.Millisecond},
 	}, srv.Client())
 	resp, err := provider.Generate(context.Background(), spec.AIRequest{
 		Messages:    []spec.PromptMessage{{Role: "system", Content: "Return JSON."}, {Role: "user", Content: "Do work."}},
@@ -120,9 +122,9 @@ func TestHordeGenerateTimesOutWhilePolling(t *testing.T) {
 	defer srv.Close()
 
 	_, err := NewHorde(spec.ProviderConfig{
-		BaseURL:      srv.URL,
-		PollInterval: time.Millisecond,
-		Timeout:      5 * time.Millisecond,
+		BaseURL: srv.URL,
+		Timeout: 5 * time.Millisecond,
+		Options: map[string]any{"poll_interval": time.Millisecond},
 	}, srv.Client()).Generate(context.Background(), sampleAIRequest())
 	if !errors.Is(err, models.ErrLLMUnreachable) {
 		t.Fatalf("Generate() error = %v, want ErrLLMUnreachable", err)
@@ -159,6 +161,59 @@ func TestHordeMapsQuotaError(t *testing.T) {
 		Generate(context.Background(), sampleAIRequest())
 	if !errors.Is(err, models.ErrLLMQuotaExceeded) {
 		t.Fatalf("Generate() error = %v, want ErrLLMQuotaExceeded", err)
+	}
+}
+
+func TestHordePollIntervalFromOptionsString(t *testing.T) {
+	// poll_interval arriving as a YAML-decoded string (e.g. "5s") must be
+	// parsed and applied correctly.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/generate/text/async":
+			writeJSON(t, w, hordeAsyncResponse{ID: "req-str"})
+		case "/v2/generate/text/status/req-str":
+			writeJSON(t, w, hordeStatusResponse{
+				Done: true, IsPossible: true,
+				Generations: []hordeGeneration{{Text: "ok", Model: "m"}},
+			})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	h := NewHorde(spec.ProviderConfig{
+		BaseURL: srv.URL,
+		Timeout: time.Second,
+		Options: map[string]any{"poll_interval": "5ms"}, // string form as from YAML
+	}, srv.Client())
+	if h.pollInterval != 5*time.Millisecond {
+		t.Fatalf("pollInterval = %v, want 5ms", h.pollInterval)
+	}
+	if _, err := h.Generate(context.Background(), sampleAIRequest()); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+}
+
+func TestHordeUnknownOptionLogsWarning(t *testing.T) {
+	// An unrecognized option key must produce a slog.Warn but not fail.
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	old := slog.Default()
+	slog.SetDefault(logger)
+	t.Cleanup(func() { slog.SetDefault(old) })
+
+	h := NewHorde(spec.ProviderConfig{
+		Options: map[string]any{"unsupported_key": "value"},
+	}, nil)
+	if h == nil {
+		t.Fatal("NewHorde returned nil")
+	}
+	if !strings.Contains(buf.String(), "unknown provider option ignored") {
+		t.Errorf("expected warning for unknown option; log = %q", buf.String())
+	}
+	if !strings.Contains(buf.String(), "unsupported_key") {
+		t.Errorf("expected warning to name the unknown key; log = %q", buf.String())
 	}
 }
 
