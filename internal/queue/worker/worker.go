@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -23,6 +24,7 @@ type Worker struct {
 	gateway              gateway.AIGateway
 	sandbox              sandbox.Executor
 	breaker              *safety.CircuitBreaker
+	providerBreakers     *safety.ProviderBreakers
 	sink                 models.EventSink
 	canceller            *CancelRegistry
 	tuner                *planning.ParameterTuner
@@ -117,6 +119,16 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	if planning.IsPhasePlanningTask(task.Title) {
 		w.handlePhasePlanning(ctx, task, *project)
 		return
+	}
+	// Guard: if this provider's circuit breaker is open, create an immediate
+	// handoff rather than wasting a slot on a call that will fail with 429.
+	if w.providerBreakers != nil && profile.Provider != "" {
+		if w.providerBreakers.Get(profile.Provider).IsOpen() {
+			w.createProviderExhaustedHandoff(ctx, task,
+				fmt.Errorf("%w: provider %s circuit breaker is open",
+					models.ErrLLMQuotaExceeded, profile.Provider))
+			return
+		}
 	}
 	// AgenticMode selects processAgentic. Model routing (Task 43) and external capability
 	// routing (Task 45) run inside processAgentic after tools are assembled; capability

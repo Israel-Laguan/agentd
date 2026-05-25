@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -45,6 +46,18 @@ func FormatForHuman(msg HITLMessage) string {
 
 func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err error) {
 	if safety.ClassifiesAsBreakerFailure(err) {
+		if errors.Is(err, models.ErrLLMQuotaExceeded) {
+			// Record on per-provider breaker (if available) so per-provider
+			// status is accurate, but never requeue on quota — always hand off
+			// immediately to avoid amplifying daily-quota consumption.
+			if w.providerBreakers != nil {
+				provider := w.lookupProvider(ctx, task)
+				w.providerBreakers.Get(provider).RecordError(err)
+			}
+			w.createProviderExhaustedHandoff(ctx, task, err)
+			return
+		}
+		// Non-quota outage (ErrLLMUnreachable): use the global breaker.
 		if w.breaker != nil {
 			w.breaker.RecordError(err)
 			if w.breaker.IsOpen() {
@@ -58,6 +71,16 @@ func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err e
 	w.handleAgentFailure(ctx, task, fmt.Sprintf("gateway error: %v", err))
 }
 
+// lookupProvider returns the provider name configured for the task's agent.
+// Returns an empty string on any error so callers can use it as a key prefix.
+func (w *Worker) lookupProvider(ctx context.Context, task models.Task) string {
+	profile, err := w.store.GetAgentProfile(ctx, task.AgentID)
+	if err != nil || profile == nil {
+		return ""
+	}
+	return profile.Provider
+}
+
 func (w *Worker) recordLegacyHandoffExpiry(ctx context.Context, task models.Task) bool {
 	if err := recordHITLExpiry(ctx, w.store, task.ID, time.Now().Add(w.legacyHandoffTimeout)); err != nil {
 		w.emit(ctx, task, "ERROR", err.Error())
@@ -67,10 +90,13 @@ func (w *Worker) recordLegacyHandoffExpiry(ctx context.Context, task models.Task
 }
 
 func (w *Worker) createProviderExhaustedHandoff(ctx context.Context, task models.Task, err error) {
-	description := fmt.Sprintf(
-		"All configured AI providers failed and the circuit breaker is open. Human review is required before this task can continue.\n\nLast gateway error:\n%s",
-		truncate(err.Error(), 1500),
-	)
+	var cause string
+	if errors.Is(err, models.ErrLLMQuotaExceeded) {
+		cause = "Provider quota exhausted; retry after quota reset or switch provider."
+	} else {
+		cause = "All configured AI providers failed and the circuit breaker is open. Human review is required before this task can continue."
+	}
+	description := fmt.Sprintf("%s\n\nLast gateway error:\n%s", cause, truncate(err.Error(), 1500))
 	_, _, blockErr := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
 		Title:       models.HITLSubtaskTitleManualReview + " AI providers unavailable",
 		Description: description,

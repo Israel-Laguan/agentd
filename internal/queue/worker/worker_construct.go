@@ -57,6 +57,7 @@ type WorkerOptions struct {
 	CapabilityRouting         config.CapabilityRoutingConfig
 	Batching                  config.BatchingConfig
 	PromptTemplatesPath       string
+	ProviderBreakers          *safety.ProviderBreakers
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -152,6 +153,7 @@ func newWorkerCore(
 ) *Worker {
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
+		providerBreakers: opts.ProviderBreakers,
 		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
 		heartbeatInterval:    opts.HeartbeatInterval,
 		sandboxWallTimeout:   opts.SandboxWallTimeout,

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -59,6 +60,34 @@ func TestRoleRoutingExplicitProviderOverridesRole(t *testing.T) {
 	}
 	if resp.ProviderUsed != "openai" {
 		t.Fatalf("explicit Provider should override role routing, got %q", resp.ProviderUsed)
+	}
+}
+
+func TestRoleRoutingCascadesToNextOnFailure(t *testing.T) {
+	gemini := &fakeProvider{providerName: "gemini", err: fmt.Errorf("gemini quota exhausted")}
+	horde := &fakeProvider{providerName: "horde", resp: AIResponse{Content: "ok", ProviderUsed: "horde"}}
+
+	routes := map[Role]RoleTarget{
+		RoleWorker: {Provider: "gemini", Model: "gemini-2.5-flash"},
+	}
+	router := NewRouter(gemini, horde).WithRoleRouting(routes)
+
+	resp, err := router.Generate(context.Background(), AIRequest{
+		Messages: []PromptMessage{{Role: "user", Content: "test"}},
+		Role:     RoleWorker,
+		// Provider is intentionally empty: should be filled by role routing, then cascade on failure
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if resp.ProviderUsed != "horde" {
+		t.Errorf("ProviderUsed = %q, want horde", resp.ProviderUsed)
+	}
+	if gemini.calls != 1 {
+		t.Errorf("gemini.calls = %d, want 1 (must be attempted first)", gemini.calls)
+	}
+	if horde.calls != 1 {
+		t.Errorf("horde.calls = %d, want 1", horde.calls)
 	}
 }
 

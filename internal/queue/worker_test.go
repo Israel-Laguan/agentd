@@ -299,3 +299,92 @@ func TestWorkerLegacyPathWhenAgenticModeFalse(t *testing.T) {
 		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
 	}
 }
+
+// TestWorkerQuotaExhaustedCreatesImmediateHandoff verifies that a single HTTP
+// 429 (ErrLLMQuotaExceeded) creates a PROVIDER_EXHAUSTED_HANDOFF immediately
+// without requeuing the task or incrementing the retry counter.
+func TestWorkerQuotaExhaustedCreatesImmediateHandoff(t *testing.T) {
+	store := newWorkerStore()
+	gw := &fakeGateway{err: models.ErrLLMQuotaExceeded}
+	sink := &recordingSink{}
+	worker := NewWorker(store, gw, &fakeSandbox{}, NewCircuitBreaker(), sink, WorkerOptions{})
+
+	worker.Process(context.Background(), store.task)
+
+	if store.task.State != models.TaskStateBlocked {
+		t.Fatalf("state = %s, want BLOCKED", store.task.State)
+	}
+	if len(store.drafts) != 1 || store.drafts[0].Assignee != models.TaskAssigneeHuman {
+		t.Fatalf("drafts = %#v", store.drafts)
+	}
+	if !strings.Contains(store.drafts[0].Description, "quota exhausted") {
+		t.Fatalf("description = %q, want quota message", store.drafts[0].Description)
+	}
+	if !sink.hasEvent("PROVIDER_EXHAUSTED_HANDOFF") {
+		t.Fatalf("events = %#v, want PROVIDER_EXHAUSTED_HANDOFF", sink.events)
+	}
+	// Must not requeue: RetryCount stays at 0.
+	if store.task.RetryCount != 0 {
+		t.Fatalf("retry count = %d, want 0 (no requeue on quota)", store.task.RetryCount)
+	}
+}
+
+// TestWorkerPerProviderBreakerIsolation verifies that a quota error recorded
+// against "gemini" opens only the gemini breaker and leaves the "horde" breaker
+// unaffected. A second task with a different provider should not be blocked.
+func TestWorkerPerProviderBreakerIsolation(t *testing.T) {
+	// First worker uses provider "gemini" and encounters quota errors.
+	storeGemini := newWorkerStore()
+	storeGemini.profile.Provider = "gemini"
+	gw := &fakeGateway{err: models.ErrLLMQuotaExceeded}
+	pb := NewProviderBreakers()
+	workerGemini := NewWorker(storeGemini, gw, &fakeSandbox{}, NewCircuitBreaker(), nil,
+		WorkerOptions{ProviderBreakers: pb})
+
+	workerGemini.Process(context.Background(), storeGemini.task)
+
+	// Gemini breaker should now be tracking the failure.
+	geminiBreaker := pb.Get("gemini")
+	if geminiBreaker.FailureCount() == 0 {
+		t.Fatal("gemini breaker should have recorded failure")
+	}
+
+	// Horde breaker must be untouched.
+	hordeBreaker := pb.Get("horde")
+	if hordeBreaker.State() != BreakerClosed {
+		t.Fatalf("horde breaker state = %s, want CLOSED", hordeBreaker.State())
+	}
+}
+
+// TestWorkerPreExecPerProviderBreakerCheck verifies that a task whose provider's
+// breaker is open is immediately handed off without making any LLM calls.
+func TestWorkerPreExecPerProviderBreakerCheck(t *testing.T) {
+	store := newWorkerStore()
+	store.profile.Provider = "gemini"
+	store.profile.AgenticMode = false
+
+	pb := NewProviderBreakers()
+	// Manually open the gemini breaker.
+	for i := 0; i < 3; i++ {
+		pb.Get("gemini").RecordError(models.ErrLLMQuotaExceeded)
+	}
+
+	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	sb := &fakeSandbox{result: sandbox.Result{Success: true}}
+	sink := &recordingSink{}
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink,
+		WorkerOptions{ProviderBreakers: pb})
+
+	worker.Process(context.Background(), store.task)
+
+	if store.task.State != models.TaskStateBlocked {
+		t.Fatalf("state = %s, want BLOCKED (pre-exec breaker check)", store.task.State)
+	}
+	// No LLM call should have been made.
+	if len(gw.requests) > 0 {
+		t.Fatalf("gateway requests = %d, want 0 (breaker blocked before LLM call)", len(gw.requests))
+	}
+	if !sink.hasEvent("PROVIDER_EXHAUSTED_HANDOFF") {
+		t.Fatalf("events = %#v, want PROVIDER_EXHAUSTED_HANDOFF", sink.events)
+	}
+}

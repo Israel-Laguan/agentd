@@ -33,3 +33,50 @@ func TestSystemGetSuccess(t *testing.T) {
 		t.Fatalf("code = %d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+// stubResetter is a minimal services.BreakerResetter for tests.
+type stubResetter struct{ called bool }
+
+func (r *stubResetter) Reset() { r.called = true }
+
+func TestSystemResetNoService(t *testing.T) {
+	h := controllers.SystemHandler{System: nil}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/breaker/reset", nil)
+	rec := httptest.NewRecorder()
+	h.Reset(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("code = %d, want 503", rec.Code)
+	}
+}
+
+func TestSystemResetNoResetter(t *testing.T) {
+	store := testutil.NewFakeStore()
+	sum := frontdesk.NewStatusSummarizer(store)
+	sys := services.NewSystemService(sum, nil)
+	// Resetter and ProviderBreakers are both nil.
+	h := controllers.SystemHandler{System: sys}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/breaker/reset", nil)
+	rec := httptest.NewRecorder()
+	h.Reset(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("code = %d, want 503 when no resetter configured", rec.Code)
+	}
+}
+
+func TestSystemResetSuccess(t *testing.T) {
+	store := testutil.NewFakeStore()
+	sum := frontdesk.NewStatusSummarizer(store)
+	sys := services.NewSystemService(sum, nil)
+	resetter := &stubResetter{}
+	sys.Resetter = resetter
+	h := controllers.SystemHandler{System: sys}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/breaker/reset", nil)
+	rec := httptest.NewRecorder()
+	h.Reset(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d body=%s, want 200", rec.Code, rec.Body.String())
+	}
+	if !resetter.called {
+		t.Fatal("Reset() was not called on the resetter")
+	}
+}
