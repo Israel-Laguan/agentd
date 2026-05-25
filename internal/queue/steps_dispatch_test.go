@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 )
 
 // --- Queue scenario steps (dispatch, breaker, outage) ---
 
 func (s *queueScenario) maxWorkersLimit(_ context.Context, limit int) error {
-	s.sandbox = &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
+	s.sandbox = newBlockingQueueSandbox()
 	s.rebuild(limit)
 	return nil
 }
@@ -131,7 +132,7 @@ func (s *queueScenario) breakerOpen(context.Context) error {
 func (s *queueScenario) breakerTimeoutElapsed(context.Context) error {
 	s.now = s.now.Add(DefaultBreakerTimeout + time.Second)
 	s.store.seed(3, models.TaskStateReady)
-	s.sandbox = &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
+	s.sandbox = newBlockingQueueSandbox()
 	s.rebuild(3)
 	return nil
 }
@@ -141,14 +142,19 @@ func (s *queueScenario) breakerShouldBeHalfOpen(context.Context) error {
 }
 
 func (s *queueScenario) oneProbeTask(context.Context) error {
-	return requireEqual("probe tasks", s.store.count(models.TaskStateRunning)+s.store.count(models.TaskStateQueued), 1)
+	return waitFor(func() bool {
+		active := s.store.count(models.TaskStateRunning) + s.store.count(models.TaskStateQueued)
+		return active == 1
+	}, "exactly one probe task")
 }
 
 func (s *queueScenario) testTaskSucceeds(ctx context.Context) error {
-	task, ok := s.store.first(models.TaskStateQueued)
-	if !ok {
-		task, ok = s.store.first(models.TaskStateRunning)
+	if err := waitFor(func() bool {
+		return s.store.count(models.TaskStateRunning) == 1
+	}, "probe task running"); err != nil {
+		return err
 	}
+	task, ok := s.store.first(models.TaskStateRunning)
 	if !ok {
 		return fmt.Errorf("no probe task found")
 	}
@@ -156,8 +162,10 @@ func (s *queueScenario) testTaskSucceeds(ctx context.Context) error {
 		return err
 	}
 	s.breaker.RecordSuccess()
-	s.daemon.sem.Release()
-	return nil
+	if s.sandbox != nil {
+		s.sandbox.unblockProbe()
+	}
+	return waitFor(func() bool { return s.daemon.sem.InUse() == 0 }, "probe worker slot release")
 }
 
 func (s *queueScenario) breakerShouldBeClosed(context.Context) error {
@@ -165,7 +173,22 @@ func (s *queueScenario) breakerShouldBeClosed(context.Context) error {
 }
 
 func (s *queueScenario) normalPollingResumes(ctx context.Context) error {
+	if err := waitFor(func() bool {
+		return s.daemon.sem.InUse() == 0 && s.store.count(models.TaskStateReady) == 2
+	}, "ready for normal polling"); err != nil {
+		return err
+	}
 	return s.nextTickPicks(ctx, 2)
+}
+
+func newBlockingQueueSandbox() *queueSandbox {
+	return &queueSandbox{
+		result:     sandbox.Result{Success: true, ExitCode: 0},
+		blockOnCtx: true,
+		started:    make(chan struct{}),
+		cancelled:  make(chan struct{}),
+		unblock:    make(chan struct{}),
+	}
 }
 
 func requireEqual(label string, got, want int) error {

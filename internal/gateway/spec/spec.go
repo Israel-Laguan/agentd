@@ -124,7 +124,7 @@ type ProviderCapabilities struct {
 // ProviderConfig configures one concrete LLM endpoint.
 type ProviderConfig struct {
 	Name          string               `json:"name,omitempty" mapstructure:"name"`
-	Type          string               `json:"type" mapstructure:"adapter"`
+	Adapter       string               `json:"adapter" mapstructure:"adapter"`
 	BaseURL       string               `json:"base_url" mapstructure:"base_url"`
 	APIKey        string               `json:"api_key" mapstructure:"api_key"`
 	APIKeyEnv     string               `json:"api_key_env,omitempty" mapstructure:"api_key_env"`

@@ -14,7 +14,7 @@ func TestRouterProviderSupportsChatTools_CustomNameOpenAIAdapter(t *testing.T) {
 
 	poolside := providers.NewOpenAI(spec.ProviderConfig{
 		Name:    "poolside",
-		Type:    "openai",
+		Adapter: "openai",
 		BaseURL: "https://inference.poolside.ai/v1",
 		Model:   "poolside-model",
 	}, nil)
@@ -32,7 +32,7 @@ func TestRouterProviderSupportsChatTools_BuiltinName(t *testing.T) {
 	t.Parallel()
 
 	r := NewRouter(providers.NewOpenAI(spec.ProviderConfig{
-		Type:    "openai",
+		Adapter: "openai",
 		BaseURL: "https://api.openai.com/v1",
 		Model:   "gpt-4o-mini",
 	}, nil))
@@ -47,7 +47,7 @@ func TestRouterProviderSupportsChatTools_NonToolProvider(t *testing.T) {
 
 	r := NewRouter(providers.NewOllama(spec.ProviderConfig{
 		Name:    "local-ollama",
-		Type:    "ollama",
+		Adapter: "ollama",
 		BaseURL: "http://localhost:11434",
 		Model:   "llama3",
 	}, nil))
@@ -64,7 +64,7 @@ func TestRouterProviderSupportsChatTools_EmptyProvider(t *testing.T) {
 		t.Parallel()
 		r, err := NewRouterFromConfigs([]spec.ProviderConfig{{
 			Name:    "gemini",
-			Type:    "gemini",
+			Adapter: "gemini",
 			BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
 			Model:   "gemini-2.5-flash",
 			APIKey:  "test-key",
@@ -81,7 +81,7 @@ func TestRouterProviderSupportsChatTools_EmptyProvider(t *testing.T) {
 		t.Parallel()
 		r := NewRouter(providers.NewOllama(spec.ProviderConfig{
 			Name:    "ollama",
-			Type:    "ollama",
+			Adapter: "ollama",
 			BaseURL: "http://localhost:11434",
 			Model:   "llama3",
 		}, nil))
@@ -125,32 +125,32 @@ type backendCapabilityCase struct {
 var backendCapabilityCases = []backendCapabilityCase{
 	{
 		name:          "openai",
-		cfg:           spec.ProviderConfig{Name: "openai", Type: "openai", BaseURL: "https://api.openai.com/v1", Model: "gpt-4o"},
+		cfg:           spec.ProviderConfig{Name: "openai", Adapter: "openai", BaseURL: "https://api.openai.com/v1", Model: "gpt-4o"},
 		wantChatTools: true,
 	},
 	{
 		name:          "anthropic",
-		cfg:           spec.ProviderConfig{Name: "anthropic", Type: "anthropic", BaseURL: "https://api.anthropic.com", Model: "claude-3-5-haiku-latest"},
+		cfg:           spec.ProviderConfig{Name: "anthropic", Adapter: "anthropic", BaseURL: "https://api.anthropic.com", Model: "claude-3-5-haiku-latest"},
 		wantChatTools: true,
 	},
 	{
 		name:          "gemini",
-		cfg:           spec.ProviderConfig{Name: "gemini", Type: "gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Model: "gemini-2.5-flash"},
+		cfg:           spec.ProviderConfig{Name: "gemini", Adapter: "gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Model: "gemini-2.5-flash"},
 		wantChatTools: true,
 	},
 	{
 		name:          "ollama",
-		cfg:           spec.ProviderConfig{Name: "ollama", Type: "ollama", BaseURL: "http://localhost:11434", Model: "llama3"},
+		cfg:           spec.ProviderConfig{Name: "ollama", Adapter: "ollama", BaseURL: "http://localhost:11434", Model: "llama3"},
 		wantChatTools: false,
 	},
 	{
 		name:          "llamacpp",
-		cfg:           spec.ProviderConfig{Name: "llamacpp", Type: "llamacpp", BaseURL: "http://localhost:8080", Model: "local"},
+		cfg:           spec.ProviderConfig{Name: "llamacpp", Adapter: "llamacpp", BaseURL: "http://localhost:8080", Model: "local"},
 		wantChatTools: false,
 	},
 	{
 		name:          "horde",
-		cfg:           spec.ProviderConfig{Name: "horde", Type: "horde", BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"},
+		cfg:           spec.ProviderConfig{Name: "horde", Adapter: "horde", BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"},
 		wantChatTools: false,
 	},
 }

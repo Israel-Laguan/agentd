@@ -148,7 +148,7 @@ func TestWarmupLLM_CustomHordeName(t *testing.T) {
 		Order: []string{"my-horde"},
 		Providers: []gateway.ProviderConfig{{
 			Name:    "my-horde",
-			Type:    "horde",
+			Adapter: "horde",
 			BaseURL: srv.URL,
 		}},
 	}
@@ -183,7 +183,7 @@ func TestWarmupLLM_HealthHordeOverridesAdapter(t *testing.T) {
 		Order: []string{"async-openai"},
 		Providers: []gateway.ProviderConfig{{
 			Name:    "async-openai",
-			Type:    "openai",
+			Adapter: "openai",
 			BaseURL: srv.URL,
 			Health:  "horde",
 		}},

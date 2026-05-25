@@ -14,8 +14,8 @@ func TestNewRouterFromConfigs(t *testing.T) {
 	t.Parallel()
 
 	router, err := NewRouterFromConfigs([]spec.ProviderConfig{
-		{Type: "openai", BaseURL: "https://api.openai.com/v1"},
-		{Type: "anthropic", BaseURL: "https://api.anthropic.com"},
+		{Adapter: "openai", BaseURL: "https://api.openai.com/v1"},
+		{Adapter: "anthropic", BaseURL: "https://api.anthropic.com"},
 	})
 	if err != nil {
 		t.Fatalf("NewRouterFromConfigs() error = %v", err)
@@ -28,7 +28,7 @@ func TestNewRouterFromConfigs(t *testing.T) {
 func TestNewRouterFromConfigs_CustomName(t *testing.T) {
 	t.Parallel()
 
-	router, err := NewRouterFromConfigs([]spec.ProviderConfig{{Name: "poolside", Type: "openai", BaseURL: "https://inference.poolside.ai/v1"}})
+	router, err := NewRouterFromConfigs([]spec.ProviderConfig{{Name: "poolside", Adapter: "openai", BaseURL: "https://inference.poolside.ai/v1"}})
 	if err != nil {
 		t.Fatalf("NewRouterFromConfigs() error = %v", err)
 	}
@@ -43,7 +43,7 @@ func TestNewRouterFromConfigs_CustomName(t *testing.T) {
 func TestNewRouterFromConfigs_UnknownAdapter(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewRouterFromConfigs([]spec.ProviderConfig{{Type: "unknown"}})
+	_, err := NewRouterFromConfigs([]spec.ProviderConfig{{Adapter: "unknown"}})
 	if err == nil || !strings.Contains(err.Error(), "unknown") {
 		t.Fatalf("NewRouterFromConfigs() error = %v, want adapter name in error", err)
 	}
@@ -62,8 +62,8 @@ func TestNewRouterFromConfigs_TwoOpenAIAdapters(t *testing.T) {
 	t.Parallel()
 
 	router, err := NewRouterFromConfigs([]spec.ProviderConfig{
-		{Name: "openai", Type: "openai", BaseURL: "https://api.openai.com/v1"},
-		{Name: "poolside", Type: "openai", BaseURL: "https://inference.poolside.ai/v1"},
+		{Name: "openai", Adapter: "openai", BaseURL: "https://api.openai.com/v1"},
+		{Name: "poolside", Adapter: "openai", BaseURL: "https://inference.poolside.ai/v1"},
 	})
 	if err != nil {
 		t.Fatalf("NewRouterFromConfigs() error = %v", err)

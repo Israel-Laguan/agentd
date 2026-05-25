@@ -36,8 +36,8 @@ func TestGatewayConfig_Defaults(t *testing.T) {
 func TestGatewayConfig_ProviderConfigs(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:     []string{"openai", "anthropic"},
-		OpenAI:    gateway.ProviderConfig{Type: "openai", APIKey: "key1"},
-		Anthropic: gateway.ProviderConfig{Type: "anthropic", APIKey: "key2"},
+		OpenAI:    gateway.ProviderConfig{Adapter: "openai", APIKey: "key1"},
+		Anthropic: gateway.ProviderConfig{Adapter: "anthropic", APIKey: "key2"},
 	}
 	configs, err := cfg.ProviderConfigs()
 	if err != nil {
@@ -46,15 +46,15 @@ func TestGatewayConfig_ProviderConfigs(t *testing.T) {
 	if len(configs) != 2 {
 		t.Errorf("ProviderConfigs() length = %v, want 2", len(configs))
 	}
-	if configs[0].Type != "openai" {
-		t.Errorf("first provider = %v, want openai", configs[0].Type)
+	if configs[0].Adapter != "openai" {
+		t.Errorf("first provider = %v, want openai", configs[0].Adapter)
 	}
 }
 
 func TestGatewayConfig_ProviderConfigs_Gemini(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:  []string{"gemini"},
-		Gemini: gateway.ProviderConfig{Type: "gemini", APIKey: "gem-key"},
+		Gemini: gateway.ProviderConfig{Adapter: "gemini", APIKey: "gem-key"},
 	}
 	configs, err := cfg.ProviderConfigs()
 	if err != nil {
@@ -63,15 +63,15 @@ func TestGatewayConfig_ProviderConfigs_Gemini(t *testing.T) {
 	if len(configs) != 1 {
 		t.Fatalf("ProviderConfigs() length = %v, want 1", len(configs))
 	}
-	if configs[0].Type != "gemini" {
-		t.Errorf("provider type = %v, want gemini", configs[0].Type)
+	if configs[0].Adapter != "gemini" {
+		t.Errorf("provider type = %v, want gemini", configs[0].Adapter)
 	}
 }
 
 func TestGatewayConfig_ProviderConfigs_EmptyOrder(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:  []string{},
-		OpenAI: gateway.ProviderConfig{Type: "openai"},
+		OpenAI: gateway.ProviderConfig{Adapter: "openai"},
 	}
 	configs, err := cfg.ProviderConfigs()
 	if err != nil {
@@ -87,7 +87,7 @@ func TestGatewayConfig_ProviderConfigs_CustomProvider(t *testing.T) {
 		Order: []string{"poolside"},
 		Providers: []gateway.ProviderConfig{{
 			Name:    "poolside",
-			Type:    "openai",
+			Adapter: "openai",
 			BaseURL: "https://inference.poolside.ai/v1",
 			APIKey:  "poolside-key",
 		}},
@@ -99,7 +99,7 @@ func TestGatewayConfig_ProviderConfigs_CustomProvider(t *testing.T) {
 	if len(configs) != 1 {
 		t.Fatalf("ProviderConfigs() length = %d, want 1", len(configs))
 	}
-	if configs[0].Name != "poolside" || configs[0].Type != "openai" {
+	if configs[0].Name != "poolside" || configs[0].Adapter != "openai" {
 		t.Fatalf("ProviderConfigs()[0] = %+v, want poolside/openai", configs[0])
 	}
 }
@@ -108,8 +108,8 @@ func TestGatewayConfig_ProviderConfigs_DuplicateNames(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"dup"},
 		Providers: []gateway.ProviderConfig{
-			{Name: "dup", Type: "openai"},
-			{Name: "dup", Type: "anthropic"},
+			{Name: "dup", Adapter: "openai"},
+			{Name: "dup", Adapter: "anthropic"},
 		},
 	}
 	if _, err := cfg.ProviderConfigs(); err == nil || !strings.Contains(err.Error(), "dup") {
@@ -137,7 +137,7 @@ func TestGatewayConfig_ProviderConfigs_EmptyProviderEntry(t *testing.T) {
 func TestGatewayConfig_ProviderConfigs_DuplicateOrderEntry(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:  []string{"openai", "openai"},
-		OpenAI: gateway.ProviderConfig{Type: "openai", APIKey: "key1"},
+		OpenAI: gateway.ProviderConfig{Adapter: "openai", APIKey: "key1"},
 	}
 	if _, err := cfg.ProviderConfigs(); err == nil || !strings.Contains(err.Error(), "duplicate") || !strings.Contains(err.Error(), "gateway.order") {
 		t.Fatalf("ProviderConfigs() error = %v, want duplicate error in gateway.order", err)
@@ -154,7 +154,7 @@ func TestGatewayConfig_ProviderConfigs_UnknownOrderEntry(t *testing.T) {
 func TestGatewayConfig_ProviderConfigs_BackwardCompat(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:  []string{"openai"},
-		OpenAI: gateway.ProviderConfig{Type: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "key1"},
+		OpenAI: gateway.ProviderConfig{Adapter: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "key1"},
 	}
 	configs, err := cfg.ProviderConfigs()
 	if err != nil {
@@ -163,7 +163,7 @@ func TestGatewayConfig_ProviderConfigs_BackwardCompat(t *testing.T) {
 	if len(configs) != 1 {
 		t.Fatalf("ProviderConfigs() length = %d, want 1", len(configs))
 	}
-	if configs[0].Name != "openai" || configs[0].Type != "openai" {
+	if configs[0].Name != "openai" || configs[0].Adapter != "openai" {
 		t.Fatalf("ProviderConfigs()[0] = %+v, want openai/openai", configs[0])
 	}
 }
@@ -229,8 +229,8 @@ func TestGatewayConfig_ProviderConfigs_TwoOpenAIAdapters(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"openai", "poolside"},
 		Providers: []gateway.ProviderConfig{
-			{Name: "openai", Type: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "key-oai"},
-			{Name: "poolside", Type: "openai", BaseURL: "https://inference.poolside.ai/v1", APIKey: "key-ps"},
+			{Name: "openai", Adapter: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "key-oai"},
+			{Name: "poolside", Adapter: "openai", BaseURL: "https://inference.poolside.ai/v1", APIKey: "key-ps"},
 		},
 	}
 	configs, err := cfg.ProviderConfigs()
@@ -240,10 +240,10 @@ func TestGatewayConfig_ProviderConfigs_TwoOpenAIAdapters(t *testing.T) {
 	if len(configs) != 2 {
 		t.Fatalf("ProviderConfigs() length = %d, want 2", len(configs))
 	}
-	if configs[0].Name != "openai" || configs[0].Type != "openai" || configs[0].BaseURL != "https://api.openai.com/v1" {
+	if configs[0].Name != "openai" || configs[0].Adapter != "openai" || configs[0].BaseURL != "https://api.openai.com/v1" {
 		t.Errorf("configs[0] = %+v", configs[0])
 	}
-	if configs[1].Name != "poolside" || configs[1].Type != "openai" || configs[1].BaseURL != "https://inference.poolside.ai/v1" {
+	if configs[1].Name != "poolside" || configs[1].Adapter != "openai" || configs[1].BaseURL != "https://inference.poolside.ai/v1" {
 		t.Errorf("configs[1] = %+v", configs[1])
 	}
 }
@@ -253,8 +253,8 @@ func TestGatewayConfig_ProviderConfigs_ImplicitNameCollision(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"openai"},
 		Providers: []gateway.ProviderConfig{
-			{Type: "openai", BaseURL: "https://api.openai.com/v1"},
-			{Type: "openai", BaseURL: "https://inference.poolside.ai/v1"},
+			{Adapter: "openai", BaseURL: "https://api.openai.com/v1"},
+			{Adapter: "openai", BaseURL: "https://inference.poolside.ai/v1"},
 		},
 	}
 	if _, err := cfg.ProviderConfigs(); err == nil || !strings.Contains(err.Error(), "openai") {
@@ -381,7 +381,7 @@ func TestProviderConfigs_NormalizesAdapterType(t *testing.T) {
 		Order: []string{"custom"},
 		Providers: []gateway.ProviderConfig{{
 			Name:   "custom",
-			Type:   " OpenAI ",
+			Adapter:   " OpenAI ",
 			APIKey: "sk-test",
 		}},
 	}
@@ -392,8 +392,8 @@ func TestProviderConfigs_NormalizesAdapterType(t *testing.T) {
 	if len(configs) != 1 {
 		t.Fatalf("ProviderConfigs() length = %d, want 1", len(configs))
 	}
-	if configs[0].Type != "openai" {
-		t.Errorf("Type = %q, want openai", configs[0].Type)
+	if configs[0].Adapter != "openai" {
+		t.Errorf("Adapter = %q, want openai", configs[0].Adapter)
 	}
 }
 
@@ -402,7 +402,7 @@ func TestProviderConfigs_UnknownAdapter(t *testing.T) {
 		Order: []string{"custom"},
 		Providers: []gateway.ProviderConfig{{
 			Name: "custom",
-			Type: "foo",
+			Adapter: "foo",
 		}},
 	}
 	_, err := cfg.ProviderConfigs()
@@ -422,7 +422,7 @@ func TestProviderConfigs_UnknownHealthValue(t *testing.T) {
 		Order: []string{"custom"},
 		Providers: []gateway.ProviderConfig{{
 			Name:   "custom",
-			Type:   "openai",
+			Adapter: "openai",
 			APIKey: "sk-test",
 			Health: "undefined_probe",
 		}},
@@ -458,7 +458,7 @@ func TestProviderConfigs_KnownHealthValues_Valid(t *testing.T) {
 				Order: []string{"p"},
 				Providers: []gateway.ProviderConfig{{
 					Name:   "p",
-					Type:   "openai",
+					Adapter: "openai",
 					Health: tc.mode,
 				}},
 			}
