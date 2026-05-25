@@ -16,7 +16,7 @@ every provider in the order list whose backend returns `SupportsChatTools: true`
 | --- | --- | --- | --- |
 | OpenAI | `true` | Verified | Sends OpenAI-compatible `tools` and parses `tool_calls` in provider fixture tests. |
 | Anthropic | `true` | Verified | Maps `AIRequest.Tools` to `tools` with `name`, `description`, `input_schema`; parses `tool_use` content blocks; fixture tests cover request/response. |
-| Gemini | `true` | Verified | Reuses the OpenAI adapter (`adapter: gemini` → `NewOpenAI`); the OpenAI-compatible endpoint accepts `tools` and returns `tool_calls`. Capability flag inherits from the adapter's `adapterDefault: true`. |
+| Gemini | `true` | Verified | OpenAI-compatible endpoint via `name: gemini`, `adapter: openai` (legacy `adapter: gemini` alias is accepted). Sends `tools` and parses `tool_calls` like OpenAI. |
 | Ollama | `false` | Not wired | `/api/chat` supports a `tools` field and returns `message.tool_calls`, but support depends on server and model behavior. |
 | llama.cpp | `false` | Not wired | OpenAI-style function calling depends on runtime setup such as `llama-server --jinja`, chat templates, and model support. |
 | AI Horde | `false` | Unsupported | The current provider uses async text generation with prompt and Kobold-style generation parameters, not a chat tool-call contract. |
