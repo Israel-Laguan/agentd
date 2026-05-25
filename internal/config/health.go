@@ -41,6 +41,33 @@ func validHealthModesHint() string {
 	return strings.Join(modes, ", ")
 }
 
+var allKnownAdapters = []string{
+	string(gateway.ProviderOpenAI),
+	string(gateway.ProviderAnthropic),
+	string(gateway.ProviderOllama),
+	string(gateway.ProviderLlamaCpp),
+	string(gateway.ProviderHorde),
+	string(gateway.ProviderGemini),
+}
+
+func validAdaptersHint() string {
+	adapters := slices.Clone(allKnownAdapters)
+	slices.Sort(adapters)
+	return strings.Join(adapters, ", ")
+}
+
+// validateAdapterType returns an error when adapter is not a recognised backend.
+func validateAdapterType(adapter string) error {
+	t := strings.TrimSpace(strings.ToLower(adapter))
+	switch gateway.Provider(t) {
+	case gateway.ProviderOpenAI, gateway.ProviderAnthropic, gateway.ProviderOllama,
+		gateway.ProviderLlamaCpp, gateway.ProviderHorde, gateway.ProviderGemini:
+		return nil
+	default:
+		return fmt.Errorf("unknown adapter %q (valid: %s)", adapter, validAdaptersHint())
+	}
+}
+
 // validateHealthMode returns an error when health is explicitly set to an
 // unrecognised value. An empty string is valid (adapter default is used).
 func validateHealthMode(health string) error {
@@ -58,6 +85,7 @@ type ProviderCheckResult struct {
 	Available      bool
 	Provider       string
 	AdapterType    string
+	HealthMode     string
 	BaseURL        string
 	HordeAvailable bool
 	LocalHealthy   bool
@@ -127,6 +155,7 @@ func availableFromConfig(p gateway.ProviderConfig) ProviderCheckResult {
 		Available:   true,
 		Provider:    p.Name,
 		AdapterType: p.Type,
+		HealthMode:  healthModeFor(p),
 		BaseURL:     p.BaseURL,
 	}
 }
