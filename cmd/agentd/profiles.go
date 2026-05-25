@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"agentd/internal/config"
@@ -12,12 +13,12 @@ import (
 
 // initProfileHint returns operator-facing lines about seeded profiles and detected providers.
 func initProfileHint(gw config.GatewayConfig) string {
-	check := config.CheckProviders(gw)
+	check := config.CheckProvidersOffline(gw)
 	hint := "profiles: default, researcher, qa (empty provider/model → gateway.order cascade)\n"
 	if check.Available && check.Provider != "" {
 		hint += fmt.Sprintf("detected LLM provider: %s\n", check.Provider)
 	} else {
-		hint += "no LLM API keys detected yet; configure OPENAI_API_KEY, GEMINI_API_KEY, or gateway.providers before agentd start\n"
+		hint += "no LLM API keys detected yet; configure OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or gateway.providers before agentd start\n"
 	}
 	hint += "re-run with --reset-profiles to overwrite existing profile provider/model values\n"
 	return hint
@@ -31,8 +32,12 @@ func initProfileHint(gw config.GatewayConfig) string {
 func seedDefaultAgent(ctx context.Context, store *kanban.Store, reset bool) error {
 	for _, profile := range defaultAgentProfiles() {
 		if !reset {
-			if existing, err := store.GetAgentProfile(ctx, profile.ID); err == nil && existing != nil {
+			existing, err := store.GetAgentProfile(ctx, profile.ID)
+			if err == nil && existing != nil {
 				continue
+			}
+			if err != nil && !errors.Is(err, models.ErrAgentProfileNotFound) {
+				return err
 			}
 		}
 		if err := store.UpsertAgentProfile(ctx, profile); err != nil {

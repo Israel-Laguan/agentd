@@ -238,6 +238,79 @@ func TestInitResetProfilesFlag(t *testing.T) {
 	}
 }
 
+// TestInitCLIResetProfilesFlag exercises the --reset-profiles flag through the init CLI.
+func TestInitCLIResetProfilesFlag(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".agentd")
+
+	runInit := func(initArgs ...string) error {
+		cmd := newRootCommand()
+		cmd.SetArgs(append([]string{"--home", home, "init"}, initArgs...))
+		var output bytes.Buffer
+		cmd.SetOut(&output)
+		cmd.SetErr(&output)
+		return cmd.ExecuteContext(context.Background())
+	}
+
+	if err := runInit(); err != nil {
+		t.Fatalf("first agentd init: %v", err)
+	}
+
+	store, err := openTestStore(t, filepath.Join(home, "global.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	p, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		_ = store.Close()
+		t.Fatalf("GetAgentProfile: %v", err)
+	}
+	p.Provider = "gemini"
+	p.Model = "gemini-2.5-flash"
+	if err := store.UpsertAgentProfile(context.Background(), *p); err != nil {
+		_ = store.Close()
+		t.Fatalf("UpsertAgentProfile (patch): %v", err)
+	}
+	_ = store.Close()
+
+	if err := runInit(); err != nil {
+		t.Fatalf("second agentd init (no reset): %v", err)
+	}
+	store, err = openTestStore(t, filepath.Join(home, "global.db"))
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	got, err := store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		_ = store.Close()
+		t.Fatalf("GetAgentProfile after re-init: %v", err)
+	}
+	if got.Provider != "gemini" || got.Model != "gemini-2.5-flash" {
+		_ = store.Close()
+		t.Fatalf("profile after re-init = %+v, want patched gemini values preserved", got)
+	}
+	_ = store.Close()
+
+	if err := runInit("--reset-profiles"); err != nil {
+		t.Fatalf("agentd init --reset-profiles: %v", err)
+	}
+	store, err = openTestStore(t, filepath.Join(home, "global.db"))
+	if err != nil {
+		t.Fatalf("reopen store after reset: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	got, err = store.GetAgentProfile(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetAgentProfile after reset: %v", err)
+	}
+	if got.Provider != "" {
+		t.Errorf("Provider = %q after reset, want empty", got.Provider)
+	}
+	if got.Model != "" {
+		t.Errorf("Model = %q after reset, want empty", got.Model)
+	}
+}
+
 func openTestStore(t *testing.T, dbPath string) (*kanban.Store, error) {
 	t.Helper()
 	return kanban.OpenStore(dbPath)

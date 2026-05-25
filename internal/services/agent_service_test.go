@@ -3,6 +3,7 @@ package services_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"agentd/internal/models"
@@ -308,6 +309,42 @@ func TestAgentServicePatchMaxTokensNegativeIgnored(t *testing.T) {
 	}
 	if got.MaxTokens != 512 {
 		t.Fatalf("MaxTokens = %d, want 512 (negative patch ignored)", got.MaxTokens)
+	}
+}
+
+func TestAgentServicePatchProviderModelPair(t *testing.T) {
+	store := testutil.NewFakeStore()
+	svc := services.NewAgentService(store, nil)
+
+	provider := "openai"
+	model := "gpt-4"
+	if _, err := svc.Patch(context.Background(), "default", services.AgentPatch{
+		Provider: &provider,
+		Model:    &model,
+	}); err != nil {
+		t.Fatalf("Patch set provider/model: %v", err)
+	}
+
+	empty := ""
+	_, err := svc.Patch(context.Background(), "default", services.AgentPatch{Provider: &empty})
+	if err == nil {
+		t.Fatal("expected error when clearing provider but leaving model set")
+	}
+	if !strings.Contains(err.Error(), "provider and model must both be set or both empty") {
+		t.Fatalf("Patch error = %v, want provider/model pair error", err)
+	}
+
+	if _, err := svc.Patch(context.Background(), "default", services.AgentPatch{
+		Provider: &empty,
+		Model:    &empty,
+	}); err != nil {
+		t.Fatalf("Patch clear both provider/model: %v", err)
+	}
+
+	onlyModel := "gpt-4"
+	_, err = svc.Patch(context.Background(), "default", services.AgentPatch{Model: &onlyModel})
+	if err == nil {
+		t.Fatal("expected error when setting model without provider")
 	}
 }
 

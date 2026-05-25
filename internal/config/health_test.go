@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"agentd/internal/gateway"
 )
@@ -273,6 +274,33 @@ func TestCheckProviders_CustomProvider_HealthAPIKey(t *testing.T) {
 	}
 	if !result.HasAPIKey {
 		t.Error("expected HasAPIKey to be true")
+	}
+}
+
+func TestCheckProviders_OfflineSkipsNetworkProbes(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"ollama", "openai"},
+		Ollama: gateway.ProviderConfig{
+			BaseURL: "http://127.0.0.1:1",
+			Model:   "llama3",
+		},
+		OpenAI: gateway.ProviderConfig{APIKey: "", Model: "gpt-4"},
+	}
+	done := make(chan struct{})
+	go func() {
+		result := CheckProvidersOffline(cfg)
+		if !result.Available {
+			t.Errorf("expected offline check to report ollama configured, got Available=false")
+		}
+		if result.Provider != "ollama" {
+			t.Errorf("Provider = %q, want ollama", result.Provider)
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("CheckProvidersOffline blocked on unreachable local provider")
 	}
 }
 
