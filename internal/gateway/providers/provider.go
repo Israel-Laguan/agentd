@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"agentd/internal/gateway/spec"
 )
@@ -50,9 +51,9 @@ func capabilitiesFromConfig(cfg spec.ProviderConfig, adapterDefault bool) Capabi
 // When Adapter is empty it defaults to Name, preserving backward compatibility for
 // entries that identify both vendor and wire protocol with a single name.
 func AppendFromConfig(backends []Backend, cfg spec.ProviderConfig) ([]Backend, error) {
-	adapter := cfg.Adapter
+	adapter := strings.ToLower(strings.TrimSpace(cfg.Adapter))
 	if adapter == "" {
-		adapter = string(cfg.Name)
+		adapter = strings.ToLower(strings.TrimSpace(string(cfg.Name)))
 	}
 	switch spec.Provider(adapter) {
 	case spec.ProviderOpenAI:
