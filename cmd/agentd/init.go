@@ -11,7 +11,8 @@ import (
 )
 
 func newInitCommand(opts *rootOptions) *cobra.Command {
-	return &cobra.Command{
+	var resetProfiles bool
+	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize the local agentd home and database",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -43,19 +44,22 @@ func newInitCommand(opts *rootOptions) *cobra.Command {
 				return fmt.Errorf("open database: %w", err)
 			}
 			defer closeStore(store)
-			slog.Debug("seeding agent profiles")
-			if err := seedDefaultAgent(cmd.Context(), store); err != nil {
+			slog.Debug("seeding agent profiles", "reset", resetProfiles)
+			if err := seedDefaultAgent(cmd.Context(), store, resetProfiles); err != nil {
 				return fmt.Errorf("seed default agent profiles: %w", err)
 			}
 
 			return writeFormat(
 				cmd.OutOrStdout(),
-				"agentd initialized\nhome: %s\ndatabase: %s\nprojects: %s\ncron: %s\n",
+				"agentd initialized\nhome: %s\ndatabase: %s\nprojects: %s\ncron: %s\n%s",
 				cfg.HomeDir,
 				cfg.DBPath,
 				cfg.ProjectsDir,
 				cfg.CronPath,
+				initProfileHint(cfg.Gateway),
 			)
 		},
 	}
+	cmd.Flags().BoolVar(&resetProfiles, "reset-profiles", false, "Re-seed all agent profiles, overwriting any existing values")
+	return cmd
 }

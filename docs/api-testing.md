@@ -241,7 +241,7 @@ Get a specific agent profile.
 
 ### POST /api/v1/agents
 
-Create an agent profile. Optional `agentic_mode` (boolean, default `false`).
+Create an agent profile. Optional `agentic_mode` (boolean, default `false`). Omit `provider` and `model` (or set both to empty strings) to delegate routing to `gateway.order` and `gateway.role_models`, matching the built-in seeded profiles from `agentd init`.
 
 ### PATCH /api/v1/agents/{id}
 

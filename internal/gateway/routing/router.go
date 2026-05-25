@@ -40,13 +40,20 @@ func NewRouter(providersList ...providers.Backend) *Router {
 
 // ProviderSupportsChatTools reports whether the named configured backend supports
 // chat tool round-tripping. Custom provider names (e.g. poolside with adapter openai)
-// are resolved via backend Capabilities(). Returns false for a nil receiver.
+// are resolved via backend Capabilities(). When provider is empty, returns true if
+// any configured backend in gateway order supports chat tools (cascade / seed profiles).
+// Returns false for a nil receiver.
 func (r *Router) ProviderSupportsChatTools(provider string) bool {
 	if r == nil {
 		return false
 	}
 	provider = strings.TrimSpace(provider)
 	if provider == "" {
+		for _, p := range r.providers {
+			if p.Capabilities().SupportsChatTools {
+				return true
+			}
+		}
 		return false
 	}
 	for _, p := range r.providers {

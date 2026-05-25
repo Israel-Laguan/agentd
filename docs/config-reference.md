@@ -89,7 +89,7 @@ All fields per entry:
 
 ### Role models
 
-`gateway.role_models` (chat / worker / memory) wires specialized model routing via `WithRoleRouting`. Empty `provider` uses the default cascade order. Non-tool providers in the memory role still get JSON fallback when tools are sent.
+`gateway.role_models` (chat / worker / memory) wires specialized model routing via `WithRoleRouting`. Empty `provider` uses the default cascade order. Built-in agent profiles from `agentd init` also use empty `provider`/`model` so workers delegate to `gateway.order` unless you PATCH explicit values; see [init-startup.md](init-startup.md). Non-tool providers in the memory role still get JSON fallback when tools are sent.
 
 ### Truncation
 
