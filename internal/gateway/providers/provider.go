@@ -3,7 +3,9 @@ package providers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"agentd/internal/gateway/spec"
 )
@@ -65,6 +67,47 @@ func canonicalAdapter(cfg spec.ProviderConfig) spec.ProviderConfig {
 		}
 	}
 	return cfg
+}
+
+// optionDuration retrieves a time.Duration from an adapter options map.
+// val may be a time.Duration (set programmatically) or a string accepted by
+// time.ParseDuration (as decoded from YAML). Falls back to def on missing key
+// or unparseable value, logging an error in the latter case.
+func optionDuration(opts map[string]any, key string, def time.Duration) time.Duration {
+	val, ok := opts[key]
+	if !ok {
+		return def
+	}
+	switch v := val.(type) {
+	case time.Duration:
+		return v
+	case string:
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			slog.Error("option: invalid duration", "key", key, "value", v, "err", err)
+			return def
+		}
+		return d
+	default:
+		slog.Error("option: expected duration or string", "key", key, "type", fmt.Sprintf("%T", val))
+		return def
+	}
+}
+
+// warnUnknownOptions logs a slog.Warn for each key in opts not present in known.
+func warnUnknownOptions(adapter string, known []string, opts map[string]any) {
+	if len(opts) == 0 {
+		return
+	}
+	knownSet := make(map[string]struct{}, len(known))
+	for _, k := range known {
+		knownSet[k] = struct{}{}
+	}
+	for k := range opts {
+		if _, ok := knownSet[k]; !ok {
+			slog.Warn("unknown provider option ignored", "adapter", adapter, "key", k)
+		}
+	}
 }
 
 // AppendFromConfig appends a provider built from cfg when the adapter is recognized.

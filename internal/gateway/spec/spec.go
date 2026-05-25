@@ -131,9 +131,11 @@ type ProviderConfig struct {
 	Model         string               `json:"model" mapstructure:"model"`
 	MaxInputChars int                  `json:"max_input_chars" mapstructure:"max_input_chars"`
 	Timeout       time.Duration        `json:"timeout" mapstructure:"timeout"`
-	PollInterval  time.Duration        `json:"poll_interval" mapstructure:"poll_interval"`
 	Health        string               `json:"health,omitempty" mapstructure:"health"`
 	Capabilities  ProviderCapabilities `json:"capabilities,omitempty" mapstructure:"capabilities"`
+	// Options holds adapter-specific configuration keys. Each adapter reads its
+	// own known keys; unrecognized keys are logged as warnings and ignored.
+	Options map[string]any `json:"options,omitempty" mapstructure:"options"`
 }
 
 // Provider identifies an LLM backend implementation.

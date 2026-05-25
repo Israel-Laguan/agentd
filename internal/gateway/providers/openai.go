@@ -21,6 +21,7 @@ func NewOpenAI(cfg spec.ProviderConfig, client *http.Client) *OpenAI {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	warnUnknownOptions("openai", nil, cfg.Options)
 	return &OpenAI{cfg: cfg, client: client}
 }
 

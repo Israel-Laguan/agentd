@@ -21,6 +21,7 @@ func NewOllama(cfg spec.ProviderConfig, client *http.Client) *Ollama {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	warnUnknownOptions("ollama", nil, cfg.Options)
 	return &Ollama{cfg: cfg, client: client}
 }
 

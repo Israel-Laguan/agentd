@@ -24,6 +24,7 @@ func NewAnthropic(cfg spec.ProviderConfig, client *http.Client) *Anthropic {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	warnUnknownOptions("anthropic", nil, cfg.Options)
 	return &Anthropic{cfg: cfg, client: client}
 }
 

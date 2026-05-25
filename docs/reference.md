@@ -124,7 +124,7 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 | `gateway.horde.api_key` | `0000000000` | Optional AI Horde API key (anonymous default). |
 | `gateway.horde.model` | _(empty)_ | AI Horde model selection. |
 | `gateway.horde.timeout` | `5m` | Maximum wait time for an AI Horde queued generation. |
-| `gateway.horde.poll_interval` | `4s` | Delay between AI Horde status checks. |
+| `gateway.horde.poll_interval` | `4s` | Delay between AI Horde status checks (legacy key; populates `options.poll_interval` on the Horde provider entry). Prefer `options.poll_interval` under `gateway.providers` or the legacy horde block — see [`config-reference.md`](config-reference.md#custom-provider-registry). |
 | `gateway.max_tasks_per_phase` | `7` | Maximum tasks Frontdesk may emit for a single planning phase. |
 | `gateway.truncator.policy` | `middle_out` | Default truncation policy for outbound LLM requests. |
 | `gateway.truncator.max_input_chars` | _(configured)_ | Default input character budget for the truncator. |

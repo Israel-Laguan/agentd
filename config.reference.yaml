@@ -68,7 +68,10 @@ gateway:
     model: ""
     max_input_chars: 0
     timeout: "5m"
-    poll_interval: "4s"
+    poll_interval: "4s"  # legacy key — still supported; populates options.poll_interval
+    # Preferred form (adapter-specific options):
+    # options:
+    #   poll_interval: "4s"
   gemini:
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
     model: "gemini-2.5-flash"

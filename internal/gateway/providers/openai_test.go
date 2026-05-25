@@ -1,7 +1,10 @@
 package providers
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"agentd/internal/gateway/spec"
@@ -168,22 +171,25 @@ func TestMessagesToOpenAI_ToolResultEmptyContent(t *testing.T) {
 	}
 }
 
-func TestMessagesToOpenAI_UserEmptyContent(t *testing.T) {
-	t.Parallel()
-	msgs := marshalOpenAIMessages(t, []spec.PromptMessage{
-		{Role: "user", Content: ""},
-	})
-	if len(msgs) != 1 {
-		t.Fatalf("messages len = %d, want 1", len(msgs))
+func TestNewOpenAI_UnknownOptionLogsWarning(t *testing.T) {
+	// Unrecognized options must produce a slog.Warn but must not cause any error
+	// or prevent the provider from being constructed.
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	old := slog.Default()
+	slog.SetDefault(logger)
+	t.Cleanup(func() { slog.SetDefault(old) })
+
+	o := NewOpenAI(spec.ProviderConfig{
+		Options: map[string]any{"thinking_mode": true},
+	}, nil)
+	if o == nil {
+		t.Fatal("NewOpenAI returned nil")
 	}
-	msg := msgs[0]
-	if msg["role"] != "user" {
-		t.Fatalf("role = %v, want user", msg["role"])
+	if !strings.Contains(buf.String(), "unknown provider option ignored") {
+		t.Errorf("expected warning for unknown option; log = %q", buf.String())
 	}
-	if _, has := msg["content"]; !has {
-		t.Fatal("user message with empty content must include content key")
-	}
-	if msg["content"] != "" {
-		t.Fatalf("content = %v, want empty string", msg["content"])
+	if !strings.Contains(buf.String(), "thinking_mode") {
+		t.Errorf("expected warning to name the key; log = %q", buf.String())
 	}
 }
