@@ -103,11 +103,13 @@ func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) ([]
 }
 
 func putGatewayProvider(byName map[string]gateway.ProviderConfig, cfg gateway.ProviderConfig) error {
+	cfg.Name = strings.TrimSpace(cfg.Name)
+	cfg.Type = strings.TrimSpace(cfg.Type)
 	if cfg.Name == "" {
 		cfg.Name = cfg.Type
 	}
 	if cfg.Name == "" {
-		return nil
+		return fmt.Errorf("entry missing name and adapter")
 	}
 	if cfg.Type == "" {
 		cfg.Type = cfg.Name
@@ -132,9 +134,9 @@ func (c GatewayConfig) gatewayProvidersByName() (map[string]gateway.ProviderConf
 		{name: "gemini", cfg: c.Gemini},
 	}
 	byName := make(map[string]gateway.ProviderConfig, len(c.Providers)+len(legacyProviders))
-	for _, cfg := range c.Providers {
+	for i, cfg := range c.Providers {
 		if err := putGatewayProvider(byName, cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("gateway.providers[%d]: %w", i, err)
 		}
 	}
 	for _, legacy := range legacyProviders {
