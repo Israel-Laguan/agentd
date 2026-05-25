@@ -85,7 +85,7 @@ All fields per entry:
 | Field | Notes |
 | --- | --- |
 | `name` | Optional; defaults to the entry's `adapter` value when omitted. Must be unique after defaulting — duplicate names (explicit or implicit) are rejected at config load. Referenced by `gateway.order` and `req.Provider`; use distinct names when running multiple entries with the same adapter (e.g. `openai` + `poolside`, both `adapter: openai`). |
-| `adapter` | Optional; defaults to the entry's `name` when omitted. Backend implementation: `openai`, `anthropic`, `ollama`, `llamacpp`, `horde`. Legacy configs may use `adapter: gemini`; it is normalized to `openai` when `name` is `gemini`. Prefer explicit `name: gemini` with `adapter: openai`. |
+| `adapter` | Optional; defaults to the entry's `name` when omitted. Backend implementation: `openai`, `anthropic`, `ollama`, `llamacpp`, `horde`. Legacy configs may use `adapter: gemini`; canonicalization remaps `adapter: gemini` to `openai` regardless of `name`. Prefer explicit `name: gemini` with `adapter: openai`. |
 | `base_url` | Provider endpoint URL. |
 | `model` | Default model for this entry. |
 | `api_key_env` | Env var name to read the API key from at startup. |
