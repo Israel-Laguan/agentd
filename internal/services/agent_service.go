@@ -85,6 +85,10 @@ func (s *AgentService) Patch(ctx context.Context, id string, patch AgentPatch) (
 		return nil, err
 	}
 	applyPatch(current, patch)
+	current.Name = strings.TrimSpace(current.Name)
+	if current.Name == "" {
+		return nil, errors.New("name is required")
+	}
 	if err := validateProviderModelPair(current.Provider, current.Model); err != nil {
 		return nil, err
 	}

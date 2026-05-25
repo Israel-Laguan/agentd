@@ -286,19 +286,16 @@ func TestCheckProviders_OfflineSkipsNetworkProbes(t *testing.T) {
 		},
 		OpenAI: gateway.ProviderConfig{APIKey: "", Model: "gpt-4"},
 	}
-	done := make(chan struct{})
-	go func() {
-		result := CheckProvidersOffline(cfg)
+	resultCh := make(chan ProviderCheckResult, 1)
+	go func() { resultCh <- CheckProvidersOffline(cfg) }()
+	select {
+	case result := <-resultCh:
 		if !result.Available {
 			t.Errorf("expected offline check to report ollama configured, got Available=false")
 		}
 		if result.Provider != "ollama" {
 			t.Errorf("Provider = %q, want ollama", result.Provider)
 		}
-		close(done)
-	}()
-	select {
-	case <-done:
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("CheckProvidersOffline blocked on unreachable local provider")
 	}
