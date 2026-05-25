@@ -29,6 +29,24 @@ func TestBashExecutorCapturesStdout(t *testing.T) {
 	}
 }
 
+func TestBashExecutorCapturesStdoutRepeatedly(t *testing.T) {
+	const iterations = 100
+	for i := range iterations {
+		sink := &recordingSink{}
+		exec, workspace := testExecutor(t, sink)
+		result, err := exec.Execute(context.Background(), testPayload(workspace, "echo hello"))
+		if err != nil {
+			t.Fatalf("iteration %d: Execute() error = %v", i, err)
+		}
+		if result.ExitCode != 0 || !result.Success || result.Stdout != "hello\n" {
+			t.Fatalf("iteration %d: result = %#v", i, result)
+		}
+		if len(sink.events) != 1 || sink.events[0].Type != "LOG_CHUNK" || sink.events[0].Payload != "hello" {
+			t.Fatalf("iteration %d: events = %#v", i, sink.events)
+		}
+	}
+}
+
 func TestBashExecutorExitCode(t *testing.T) {
 	exec, workspace := testExecutor(t, nil)
 	result, err := exec.Execute(context.Background(), testPayload(workspace, "exit 7"))
