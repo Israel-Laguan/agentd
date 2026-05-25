@@ -40,10 +40,8 @@ func NewHorde(cfg spec.ProviderConfig, client *http.Client) *Horde {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	pollInterval := cfg.PollInterval
-	if pollInterval <= 0 {
-		pollInterval = defaultHordePollInterval
-	}
+	warnUnknownOptions("horde", []string{"poll_interval"}, cfg.Options)
+	pollInterval := optionDuration(cfg.Options, "poll_interval", defaultHordePollInterval)
 	timeout := cfg.Timeout
 	if timeout <= 0 {
 		timeout = defaultHordeTimeout

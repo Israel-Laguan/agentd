@@ -21,6 +21,7 @@ func NewLlamaCpp(cfg spec.ProviderConfig, client *http.Client) *LlamaCpp {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	warnUnknownOptions("llamacpp", nil, cfg.Options)
 	return &LlamaCpp{cfg: cfg, client: client}
 }
 
