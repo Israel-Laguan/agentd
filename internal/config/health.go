@@ -56,16 +56,22 @@ func validAdaptersHint() string {
 	return strings.Join(adapters, ", ")
 }
 
-// validateAdapterType returns an error when adapter is not a recognised backend.
-func validateAdapterType(adapter string) error {
+// normalizeAdapterType trims and lowercases a recognised adapter name.
+func normalizeAdapterType(adapter string) (string, error) {
 	t := strings.TrimSpace(strings.ToLower(adapter))
 	switch gateway.Provider(t) {
 	case gateway.ProviderOpenAI, gateway.ProviderAnthropic, gateway.ProviderOllama,
 		gateway.ProviderLlamaCpp, gateway.ProviderHorde, gateway.ProviderGemini:
-		return nil
+		return t, nil
 	default:
-		return fmt.Errorf("unknown adapter %q (valid: %s)", adapter, validAdaptersHint())
+		return "", fmt.Errorf("unknown adapter %q (valid: %s)", adapter, validAdaptersHint())
 	}
+}
+
+// validateAdapterType returns an error when adapter is not a recognised backend.
+func validateAdapterType(adapter string) error {
+	_, err := normalizeAdapterType(adapter)
+	return err
 }
 
 // validateHealthMode returns an error when health is explicitly set to an
@@ -90,6 +96,44 @@ type ProviderCheckResult struct {
 	HordeAvailable bool
 	LocalHealthy   bool
 	HasAPIKey      bool
+}
+
+// CheckProvidersOffline reports the first configured provider without network probes.
+// Use for CLI hints where responsiveness matters more than live health.
+func CheckProvidersOffline(cfg GatewayConfig) ProviderCheckResult {
+	result := ProviderCheckResult{}
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		slog.Warn("provider config error while checking availability", "err", err)
+		return result
+	}
+
+	var hordeCandidate *gateway.ProviderConfig
+
+	for i := range configs {
+		provider := configs[i]
+		mode := healthModeFor(provider)
+		switch mode {
+		case healthModeAPIKey:
+			if r, ok := tryAPIKeyHealth(provider); ok {
+				return r
+			}
+		case healthModeOllama, healthModeLlamaCpp:
+			if provider.BaseURL != "" {
+				return availableFromConfig(provider)
+			}
+		case healthModeHorde:
+			result.HordeAvailable = true
+			hordeCandidate = &configs[i]
+		}
+	}
+
+	if hordeCandidate != nil && hordeCandidate.BaseURL != "" {
+		r := availableFromConfig(*hordeCandidate)
+		r.HordeAvailable = true
+		return r
+	}
+	return result
 }
 
 func CheckProviders(cfg GatewayConfig) ProviderCheckResult {
@@ -136,7 +180,7 @@ func healthModeFor(p gateway.ProviderConfig) string {
 	if h := strings.TrimSpace(strings.ToLower(p.Health)); h != "" {
 		return h
 	}
-	switch gateway.Provider(p.Type) {
+	switch gateway.Provider(strings.TrimSpace(strings.ToLower(p.Type))) {
 	case gateway.ProviderOpenAI, gateway.ProviderGemini, gateway.ProviderAnthropic:
 		return healthModeAPIKey
 	case gateway.ProviderOllama:
