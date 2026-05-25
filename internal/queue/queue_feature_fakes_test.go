@@ -56,6 +56,12 @@ func (s *queueSandbox) Execute(ctx context.Context, _ sandbox.Payload) (sandbox.
 		case <-ctx.Done():
 			s.cancelOnce.Do(func() { close(s.cancelled) })
 			return sandbox.Result{Success: false, ExitCode: -1}, ctx.Err()
+		default:
+		}
+		select {
+		case <-ctx.Done():
+			s.cancelOnce.Do(func() { close(s.cancelled) })
+			return sandbox.Result{Success: false, ExitCode: -1}, ctx.Err()
 		case <-s.unblock:
 			return s.result, s.err
 		}
