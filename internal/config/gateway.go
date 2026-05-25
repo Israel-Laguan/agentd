@@ -171,48 +171,9 @@ func (c GatewayConfig) RoleRoutes() map[gateway.Role]gateway.RoleTarget {
 }
 
 func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {
-	legacyProviders := []struct {
-		name string
-		cfg  gateway.ProviderConfig
-	}{
-		{name: "openai", cfg: c.OpenAI},
-		{name: "anthropic", cfg: c.Anthropic},
-		{name: "ollama", cfg: c.Ollama},
-		{name: "llamacpp", cfg: c.LlamaCpp},
-		{name: "horde", cfg: c.Horde},
-		{name: "gemini", cfg: c.Gemini},
-	}
-	byName := make(map[string]gateway.ProviderConfig, len(c.Providers)+len(legacyProviders))
-	put := func(cfg gateway.ProviderConfig) error {
-		if cfg.Name == "" {
-			cfg.Name = cfg.Type
-		}
-		if cfg.Name == "" {
-			return nil
-		}
-		if cfg.Type == "" {
-			cfg.Type = cfg.Name
-		}
-		if _, exists := byName[cfg.Name]; exists {
-			return fmt.Errorf("duplicate provider %q", cfg.Name)
-		}
-		byName[cfg.Name] = cfg
-		return nil
-	}
-
-	for _, cfg := range c.Providers {
-		if err := put(cfg); err != nil {
-			return nil, err
-		}
-	}
-	for _, legacy := range legacyProviders {
-		if _, exists := byName[legacy.name]; exists {
-			continue
-		}
-		legacy.cfg.Name = legacy.name
-		if err := put(legacy.cfg); err != nil {
-			return nil, err
-		}
+	byName, err := c.gatewayProvidersByName()
+	if err != nil {
+		return nil, err
 	}
 
 	configs := make([]gateway.ProviderConfig, 0, len(c.Order))
