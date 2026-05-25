@@ -321,6 +321,59 @@ func TestLoadGatewayProviderConfigs_HordePollIntervalLandsInOptions(t *testing.T
 	}
 }
 
+func TestLoadGatewayProviderConfigs_HordeOptionsPollIntervalPreferred(t *testing.T) {
+	v := viper.New()
+	v.SetConfigType("yaml")
+	yaml := `gateway:
+  horde:
+    poll_interval: 5s
+    options:
+      poll_interval: 6s
+`
+	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
+		t.Fatalf("viper read config: %v", err)
+	}
+	_, _, _, _, horde, _ := loadGatewayProviderConfigs(v, nil, nil)
+
+	pi, ok := horde.Options["poll_interval"]
+	if !ok {
+		t.Fatal(`Options["poll_interval"] not set`)
+	}
+	d, ok := pi.(time.Duration)
+	if !ok {
+		t.Fatalf(`Options["poll_interval"] type = %T, want time.Duration`, pi)
+	}
+	if d != 6*time.Second {
+		t.Fatalf("poll_interval = %v, want 6s (options key preferred)", d)
+	}
+}
+
+func TestLoadGatewayProviderConfigs_HordeOptionsPollIntervalOnly(t *testing.T) {
+	v := viper.New()
+	v.SetConfigType("yaml")
+	yaml := `gateway:
+  horde:
+    options:
+      poll_interval: 7s
+`
+	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
+		t.Fatalf("viper read config: %v", err)
+	}
+	_, _, _, _, horde, _ := loadGatewayProviderConfigs(v, nil, nil)
+
+	pi, ok := horde.Options["poll_interval"]
+	if !ok {
+		t.Fatal(`Options["poll_interval"] not set`)
+	}
+	d, ok := pi.(time.Duration)
+	if !ok {
+		t.Fatalf(`Options["poll_interval"] type = %T, want time.Duration`, pi)
+	}
+	if d != 7*time.Second {
+		t.Fatalf("poll_interval = %v, want 7s", d)
+	}
+}
+
 func TestLoadGatewayProviderConfigs_HordePollIntervalDefault(t *testing.T) {
 	// When gateway.horde.poll_interval is not set the default (4s) is used.
 	v := viper.New()

@@ -9,8 +9,6 @@ import (
 )
 
 func TestOptionDurationInvalidString(t *testing.T) {
-	t.Parallel()
-
 	const def = 4 * time.Second
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError}))
