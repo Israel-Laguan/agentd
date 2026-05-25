@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+
+	"agentd/internal/gateway"
 )
 
 // newProvidersViper returns a viper instance with gateway.providers set to the
@@ -262,5 +264,28 @@ func TestLoadGatewayProviders_NoWarningWhenKeyPresent(t *testing.T) {
 
 	if buf.Len() != 0 {
 		t.Errorf("unexpected warning emitted when key is present: %s", buf.String())
+	}
+}
+
+func TestLoadGatewayProviders_EmptyEntry(t *testing.T) {
+	v := newProvidersViper(t, "    - {}\n")
+	providers, err := loadGatewayProviders(v, nil, nil)
+	if err != nil {
+		t.Fatalf("loadGatewayProviders() error = %v", err)
+	}
+	cfg := GatewayConfig{
+		Order:     []string{"openai"},
+		Providers: providers,
+		OpenAI:    gateway.ProviderConfig{Type: "openai", APIKey: "sk-test"},
+	}
+	_, err = cfg.ProviderConfigs()
+	if err == nil {
+		t.Fatal("ProviderConfigs() error = nil, want error for empty gateway.providers entry")
+	}
+	if !strings.Contains(err.Error(), "gateway.providers[0]") {
+		t.Errorf("error = %v, want gateway.providers[0]", err)
+	}
+	if !strings.Contains(err.Error(), "name and adapter") {
+		t.Errorf("error = %v, want mention of missing name and adapter", err)
 	}
 }
