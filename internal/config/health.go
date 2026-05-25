@@ -177,7 +177,7 @@ func healthModeFor(p gateway.ProviderConfig) string {
 		return h
 	}
 	switch gateway.Provider(strings.TrimSpace(strings.ToLower(p.Adapter))) {
-	case gateway.ProviderOpenAI, gateway.ProviderAnthropic:
+	case gateway.ProviderOpenAI, gateway.ProviderAnthropic, gateway.ProviderGemini:
 		return healthModeAPIKey
 	case gateway.ProviderOllama:
 		return healthModeOllama
