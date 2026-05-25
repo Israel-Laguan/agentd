@@ -103,7 +103,7 @@ func requireStartupProviders(gw config.GatewayConfig) error {
 	if !checkResult.Available {
 		return fmt.Errorf("%w: configure OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or set up a local OpenAI-compatible endpoint", config.ErrNoLLMProviders)
 	}
-	if checkResult.Provider == "horde" {
+	if checkResult.HordeAvailable {
 		slog.Warn("No LLM API keys configured and local provider not available. Falling back to AI Horde (anonymous, async, not recommended for production use)")
 	}
 	slog.Debug("LLM provider check complete", "provider", checkResult.Provider, "available", checkResult.Available, "local_healthy", checkResult.LocalHealthy, "has_api_key", checkResult.HasAPIKey)

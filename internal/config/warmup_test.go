@@ -125,6 +125,77 @@ func TestWarmupLLM_GenerateFailure(t *testing.T) {
 	}
 }
 
+func TestWarmupLLM_CustomHordeName(t *testing.T) {
+	t.Parallel()
+	var generateCalled bool
+	gw := &mockWarmupGateway{
+		generate: func(context.Context, gateway.AIRequest) (gateway.AIResponse, error) {
+			generateCalled = true
+			return gateway.AIResponse{}, nil
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/status/heartbeat" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := GatewayConfig{
+		Order: []string{"my-horde"},
+		Providers: []gateway.ProviderConfig{{
+			Name:    "my-horde",
+			Type:    "horde",
+			BaseURL: srv.URL,
+		}},
+	}
+	if err := WarmupLLM(context.Background(), gw, cfg); err != nil {
+		t.Fatalf("WarmupLLM() error = %v", err)
+	}
+	if generateCalled {
+		t.Fatal("Generate should not be called for horde health mode warmup")
+	}
+}
+
+func TestWarmupLLM_HealthHordeOverridesAdapter(t *testing.T) {
+	t.Parallel()
+	var generateCalled bool
+	gw := &mockWarmupGateway{
+		generate: func(context.Context, gateway.AIRequest) (gateway.AIResponse, error) {
+			generateCalled = true
+			return gateway.AIResponse{}, nil
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/status/heartbeat" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := GatewayConfig{
+		Order: []string{"async-openai"},
+		Providers: []gateway.ProviderConfig{{
+			Name:    "async-openai",
+			Type:    "openai",
+			BaseURL: srv.URL,
+			Health:  "horde",
+		}},
+	}
+	if err := WarmupLLM(context.Background(), gw, cfg); err != nil {
+		t.Fatalf("WarmupLLM() error = %v", err)
+	}
+	if generateCalled {
+		t.Fatal("Generate should not be called when health mode is horde")
+	}
+}
+
 func TestWarmupLLM_NoProvider(t *testing.T) {
 	t.Parallel()
 	err := WarmupLLM(context.Background(), &mockWarmupGateway{}, GatewayConfig{})

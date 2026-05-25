@@ -74,6 +74,9 @@ func TestCheckProviders_HordeAvailable(t *testing.T) {
 	if !result.HordeAvailable {
 		t.Error("expected HordeAvailable to be true")
 	}
+	if result.HealthMode != healthModeHorde {
+		t.Errorf("expected HealthMode %q, got %q", healthModeHorde, result.HealthMode)
+	}
 }
 
 func TestCheckProviders_HordeUnavailableWhenHeartbeatFails(t *testing.T) {
@@ -225,6 +228,28 @@ func TestCheckProviders_LlamaCppHealthy(t *testing.T) {
 	}
 	if !result.LocalHealthy {
 		t.Error("expected LocalHealthy to be true")
+	}
+}
+
+func TestCheckProviders_CustomProvider_AdapterDefaultOpenAI(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"poolside"},
+		Providers: []gateway.ProviderConfig{{
+			Name:   "poolside",
+			Type:   "openai",
+			APIKey: "poolside-key",
+			Model:  "poolside-model",
+		}},
+	}
+	result := CheckProviders(cfg)
+	if !result.Available {
+		t.Fatal("expected Available to be true with adapter default api_key probe")
+	}
+	if result.HealthMode != healthModeAPIKey {
+		t.Errorf("expected HealthMode %q, got %q", healthModeAPIKey, result.HealthMode)
+	}
+	if result.Provider != "poolside" {
+		t.Errorf("expected provider poolside, got %s", result.Provider)
 	}
 }
 
