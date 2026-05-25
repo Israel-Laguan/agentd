@@ -68,12 +68,6 @@ func normalizeAdapterType(adapter string) (string, error) {
 	}
 }
 
-// validateAdapterType returns an error when adapter is not a recognised backend.
-func validateAdapterType(adapter string) error {
-	_, err := normalizeAdapterType(adapter)
-	return err
-}
-
 // validateHealthMode returns an error when health is explicitly set to an
 // unrecognised value. An empty string is valid (adapter default is used).
 func validateHealthMode(health string) error {
