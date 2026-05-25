@@ -63,8 +63,34 @@ func TestGatewayConfig_ProviderConfigs_Gemini(t *testing.T) {
 	if len(configs) != 1 {
 		t.Fatalf("ProviderConfigs() length = %v, want 1", len(configs))
 	}
-	if configs[0].Adapter != "gemini" {
-		t.Errorf("provider type = %v, want gemini", configs[0].Adapter)
+	if configs[0].Adapter != "openai" {
+		t.Errorf("provider adapter = %v, want openai", configs[0].Adapter)
+	}
+	if configs[0].Name != "gemini" {
+		t.Errorf("provider name = %v, want gemini", configs[0].Name)
+	}
+}
+
+func TestGatewayConfig_ProviderConfigs_GeminiLegacyAdapterAlias(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"gemini"},
+		Providers: []gateway.ProviderConfig{{
+			Adapter: "gemini",
+			APIKey:  "gem-key",
+		}},
+	}
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		t.Fatalf("ProviderConfigs() error = %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("ProviderConfigs() length = %v, want 1", len(configs))
+	}
+	if configs[0].Name != "gemini" {
+		t.Errorf("provider name = %v, want gemini", configs[0].Name)
+	}
+	if configs[0].Adapter != "openai" {
+		t.Errorf("provider adapter = %v, want openai", configs[0].Adapter)
 	}
 }
 

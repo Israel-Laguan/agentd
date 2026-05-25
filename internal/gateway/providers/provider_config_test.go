@@ -47,6 +47,15 @@ func TestAppendFromConfig(t *testing.T) {
 			if tt.want == 1 && got[0].Name() != spec.Provider(tt.typ) {
 				t.Fatalf("Name() = %q, want %q", got[0].Name(), tt.typ)
 			}
+			if tt.typ == "gemini" {
+				openAI, ok := got[0].(*OpenAI)
+				if !ok {
+					t.Fatalf("backend type = %T, want *OpenAI", got[0])
+				}
+				if openAI.cfg.Adapter != string(spec.ProviderOpenAI) {
+					t.Fatalf("cfg.Adapter = %q, want openai", openAI.cfg.Adapter)
+				}
+			}
 		})
 	}
 }
@@ -156,7 +165,7 @@ var backendIdentityCases = []struct {
 	{
 		// 16000 is the configured gateway truncation budget (MaxInputChars → Router.applyTruncation), not a Gemini API character limit.
 		name:     "gemini",
-		backend:  NewOpenAI(spec.ProviderConfig{Adapter: "gemini", MaxInputChars: 16000}, nil),
+		backend:  NewOpenAI(spec.ProviderConfig{Name: "gemini", Adapter: "openai", MaxInputChars: 16000}, nil),
 		provider: spec.ProviderGemini,
 		maxInput: 16000,
 	},
