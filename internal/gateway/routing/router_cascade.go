@@ -50,26 +50,57 @@ func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq s
 	return resp, true, nil
 }
 
-func (r *Router) selectCandidateProviders(req spec.AIRequest) (candidates []providers.Backend, matchedProvider bool, selectedHasToolSupport bool) {
-	requestedProvider := strings.TrimSpace(req.Provider)
-	hasRequestedTools := len(req.Tools) > 0
+func appendCandidate(candidates []providers.Backend, p providers.Backend, selectedHasToolSupport *bool) []providers.Backend {
+	if p.Capabilities().SupportsChatTools {
+		*selectedHasToolSupport = true
+	}
+	return append(candidates, p)
+}
+
+// selectRoleRoutedCandidates prefers the role-assigned provider but allows cascade
+// fallback through gateway.order on failure.
+func (r *Router) selectRoleRoutedCandidates(requestedProvider string) (candidates []providers.Backend, matchedProvider bool, selectedHasToolSupport bool) {
+	for _, p := range r.providers {
+		if strings.EqualFold(requestedProvider, string(p.Name())) {
+			matchedProvider = true
+			candidates = appendCandidate(candidates, p, &selectedHasToolSupport)
+		}
+	}
+	for _, p := range r.providers {
+		if !strings.EqualFold(requestedProvider, string(p.Name())) {
+			candidates = appendCandidate(candidates, p, &selectedHasToolSupport)
+		}
+	}
+	return candidates, matchedProvider, selectedHasToolSupport
+}
+
+func skipExplicitProviderWithoutTools(requestedProvider string, req spec.AIRequest, hasRequestedTools bool, p providers.Backend) bool {
+	// When an explicit provider is requested with tools but doesn't support them,
+	// skip it so the after-loop error fires. Legacy fallback only applies to
+	// non-explicit provider cascading (including role-routed providers).
+	return requestedProvider != "" && !req.ProviderFromRole && hasRequestedTools && !p.Capabilities().SupportsChatTools
+}
+
+func (r *Router) selectDefaultCandidates(req spec.AIRequest, requestedProvider string, hasRequestedTools bool) (candidates []providers.Backend, matchedProvider bool, selectedHasToolSupport bool) {
 	for _, p := range r.providers {
 		if requestedProvider != "" && !strings.EqualFold(requestedProvider, string(p.Name())) {
 			continue
 		}
 		matchedProvider = true
-		// When an explicit provider is requested with tools but doesn't support them,
-		// skip it so the after-loop error fires. Legacy fallback only applies to
-		// non-explicit provider cascading (including role-routed providers).
-		if requestedProvider != "" && !req.ProviderFromRole && hasRequestedTools && !p.Capabilities().SupportsChatTools {
+		if skipExplicitProviderWithoutTools(requestedProvider, req, hasRequestedTools, p) {
 			continue
 		}
-		candidates = append(candidates, p)
-		if p.Capabilities().SupportsChatTools {
-			selectedHasToolSupport = true
-		}
+		candidates = appendCandidate(candidates, p, &selectedHasToolSupport)
 	}
 	return candidates, matchedProvider, selectedHasToolSupport
+}
+
+func (r *Router) selectCandidateProviders(req spec.AIRequest) (candidates []providers.Backend, matchedProvider bool, selectedHasToolSupport bool) {
+	requestedProvider := strings.TrimSpace(req.Provider)
+	if req.ProviderFromRole && requestedProvider != "" {
+		return r.selectRoleRoutedCandidates(requestedProvider)
+	}
+	return r.selectDefaultCandidates(req, requestedProvider, len(req.Tools) > 0)
 }
 
 func decideTerminalError(req spec.AIRequest, matchedProvider, selectedHasToolSupport bool, providerErrs []error) error {

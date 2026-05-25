@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -29,6 +30,21 @@ type BreakerProbe interface {
 	LastError() error
 }
 
+// BreakerResetter allows an operator to reset the circuit breaker without
+// restarting the daemon. It is intentionally separate from BreakerProbe to
+// keep the read path decoupled from the write path.
+type BreakerResetter interface {
+	Reset()
+}
+
+// ProviderBreakersProbe surfaces per-provider breaker state for the status
+// endpoint and supports targeted resets.
+type ProviderBreakersProbe interface {
+	Snapshot() map[string]ProviderBreakerEntry
+	Reset(provider string)
+	ResetAll()
+}
+
 // MemorySnapshot reports current Go runtime memory usage in bytes.
 type MemorySnapshot struct {
 	HeapAlloc uint64 `json:"heap_alloc"`
@@ -36,22 +52,35 @@ type MemorySnapshot struct {
 	NumGC     uint32 `json:"num_gc"`
 }
 
+// ProviderBreakerEntry is the per-provider circuit breaker state exposed in
+// the system status response. The shape mirrors safety.ProviderBreakerEntry
+// but is defined here with JSON tags so services stays import-free from queue.
+type ProviderBreakerEntry struct {
+	State        string        `json:"state"`
+	FailureCount int           `json:"failure_count"`
+	OpenFor      time.Duration `json:"open_for"`
+	LastError    string        `json:"last_error,omitempty"`
+}
+
 // SystemStatus is the payload returned by /api/v1/system/status.
 type SystemStatus struct {
-	Status  *frontdesk.StatusReport `json:"status,omitempty"`
-	Breaker *BreakerSnapshot        `json:"breaker,omitempty"`
-	Memory  MemorySnapshot          `json:"memory"`
-	BuiltAt time.Time               `json:"built_at"`
+	Status           *frontdesk.StatusReport          `json:"status,omitempty"`
+	Breaker          *BreakerSnapshot                 `json:"breaker,omitempty"`
+	ProviderBreakers map[string]ProviderBreakerEntry   `json:"provider_breakers,omitempty"`
+	Memory           MemorySnapshot                   `json:"memory"`
+	BuiltAt          time.Time                        `json:"built_at"`
 }
 
 // SystemService composes the deterministic StatusSummarizer with optional
 // runtime probes. Probes are nil-safe so unit tests can construct the
 // service without spinning up a daemon.
 type SystemService struct {
-	Summarizer *frontdesk.StatusSummarizer
-	Breaker    BreakerProbe
-	Now        func() time.Time
-	ReadMem    func() MemorySnapshot
+	Summarizer       *frontdesk.StatusSummarizer
+	Breaker          BreakerProbe
+	Resetter         BreakerResetter
+	ProviderBreakers ProviderBreakersProbe
+	Now              func() time.Time
+	ReadMem          func() MemorySnapshot
 }
 
 // NewSystemService wires the deterministic status summarizer and any
@@ -83,7 +112,45 @@ func (s *SystemService) Snapshot(ctx context.Context) (*SystemStatus, error) {
 		}
 		out.Breaker = snap
 	}
+	if s.ProviderBreakers != nil {
+		raw := s.ProviderBreakers.Snapshot()
+		if len(raw) > 0 {
+			provSnap := make(map[string]ProviderBreakerEntry, len(raw))
+			for name, e := range raw {
+				provSnap[name] = ProviderBreakerEntry{
+					State:        e.State,
+					FailureCount: e.FailureCount,
+					OpenFor:      e.OpenFor,
+					LastError:    e.LastError,
+				}
+			}
+			out.ProviderBreakers = provSnap
+		}
+	}
 	return out, nil
+}
+
+// ResetBreaker resets the global circuit breaker via the injected Resetter.
+// Returns an error if no resetter was wired.
+func (s *SystemService) ResetBreaker(provider string) error {
+	if provider != "" {
+		if s.ProviderBreakers == nil {
+			return fmt.Errorf("per-provider breaker reset not available")
+		}
+		s.ProviderBreakers.Reset(provider)
+		return nil
+	}
+	// Reset all: global breaker + all per-provider breakers.
+	if s.Resetter == nil && s.ProviderBreakers == nil {
+		return fmt.Errorf("breaker reset not available")
+	}
+	if s.Resetter != nil {
+		s.Resetter.Reset()
+	}
+	if s.ProviderBreakers != nil {
+		s.ProviderBreakers.ResetAll()
+	}
+	return nil
 }
 
 func (s *SystemService) now() time.Time {

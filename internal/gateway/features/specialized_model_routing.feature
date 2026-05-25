@@ -32,3 +32,10 @@ Feature: Specialized Model Routing
     And two providers "openai", "ollama" are configured
     When a request with role "chat" and explicit provider "openai" is sent
     Then the response should indicate ProviderUsed: "openai"
+
+  Scenario: Role-assigned provider fails, falls back to next in gateway order
+    Given role routes map worker to provider "gemini" with model "gemini-2.5-flash"
+    And the provider "gemini" returns an error
+    And the provider "horde" is configured and available
+    When a request with role "worker" is sent
+    Then the response should indicate ProviderUsed: "horde"

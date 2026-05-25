@@ -148,6 +148,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 		Planning:                  cfg.Agentic.Planning,
 		TopicGuard:                cfg.Agentic.TopicGuard,
 		ModelRouting:              cfg.Agentic.ModelRouting,
+		ProviderBreakers:          deps.providerBreakers,
 	})
 }
 
@@ -235,6 +236,8 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 	board, _ := any(store).(models.KanbanBoardContract)
 	taskService := services.NewTaskService(store, board)
 	systemService := services.NewSystemService(summarizer, breakerProbe{breaker: deps.breaker})
+	systemService.Resetter = breakerProbe{breaker: deps.breaker}
+	systemService.ProviderBreakers = providerBreakersProbe{pb: deps.providerBreakers}
 	return api.NewServer(api.ServerDeps{
 		Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus,
 		Project: deps.project, Tasks: taskService, System: systemService,

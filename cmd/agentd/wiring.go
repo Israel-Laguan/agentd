@@ -14,15 +14,16 @@ import (
 )
 
 type runtimeDeps struct {
-	bus       *bus.InProcess
-	workspace sandbox.WorkspaceManager
-	emitter   *bus.EventEmitter
-	gateway   gateway.AIGateway
-	sandbox   sandbox.Executor
-	breaker   *queue.CircuitBreaker
-	canceller *queue.CancelRegistry
-	project   *services.ProjectService
-	runner    *queue.TaskRunner
+	bus              *bus.InProcess
+	workspace        sandbox.WorkspaceManager
+	emitter          *bus.EventEmitter
+	gateway          gateway.AIGateway
+	sandbox          sandbox.Executor
+	breaker          *queue.CircuitBreaker
+	providerBreakers *queue.ProviderBreakers
+	canceller        *queue.CancelRegistry
+	project          *services.ProjectService
+	runner           *queue.TaskRunner
 }
 
 func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, error) {
@@ -30,6 +31,7 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 	ws := &sandbox.FSWorkspaceManager{Root: cfg.ProjectsDir}
 	emitter := bus.NewEventEmitter(store, eventBus)
 	breaker := queue.NewCircuitBreaker()
+	providerBreakers := queue.NewProviderBreakers()
 	providerConfigs, err := cfg.Gateway.ProviderConfigs()
 	if err != nil {
 		return runtimeDeps{}, fmt.Errorf("resolve provider configs: %w", err)
@@ -63,14 +65,15 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 		},
 	}
 	return runtimeDeps{
-		bus:       eventBus,
-		workspace: ws,
-		emitter:   emitter,
-		gateway:   gw,
-		sandbox:   sb,
-		breaker:   breaker,
-		canceller: queue.NewCancelRegistry(),
-		project:   services.NewProjectService(store, ws),
-		runner:    queue.NewTaskRunner(gw, store, emitter, ws),
+		bus:              eventBus,
+		workspace:        ws,
+		emitter:          emitter,
+		gateway:          gw,
+		sandbox:          sb,
+		breaker:          breaker,
+		providerBreakers: providerBreakers,
+		canceller:        queue.NewCancelRegistry(),
+		project:          services.NewProjectService(store, ws),
+		runner:           queue.NewTaskRunner(gw, store, emitter, ws),
 	}, nil
 }

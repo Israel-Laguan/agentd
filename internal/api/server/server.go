@@ -74,6 +74,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	mux.HandleFunc("PATCH /api/v1/agents/{id}", agents.Patch)
 	mux.HandleFunc("DELETE /api/v1/agents/{id}", agents.Delete)
 	mux.HandleFunc("GET /api/v1/system/status", system.Get)
+	mux.HandleFunc("POST /api/v1/system/breaker/reset", system.Reset)
 	mux.HandleFunc("GET /api/v1/events/stream", stream.ServeHTTP)
 	mux.HandleFunc("POST /v1/chat/completions", chat.Complete)
 	mux.HandleFunc("POST /api/v1/preferences", preferences.Save)

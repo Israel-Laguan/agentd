@@ -90,6 +90,11 @@ const (
 
 var NewCircuitBreaker = safety.NewCircuitBreaker
 
+type ProviderBreakers = safety.ProviderBreakers
+type ProviderBreakerEntry = safety.ProviderBreakerEntry
+
+var NewProviderBreakers = safety.NewProviderBreakers
+
 // DefaultBreakerTimeout matches the circuit breaker open-state timeout.
 const DefaultBreakerTimeout = safety.DefaultBreakerTimeout
 

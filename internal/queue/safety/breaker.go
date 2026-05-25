@@ -154,6 +154,19 @@ func (b *CircuitBreaker) ForceStateForTest(state BreakerState, tripTime time.Tim
 	b.inflight = false
 }
 
+// Reset unconditionally returns the breaker to the CLOSED state and clears
+// all failure counters. Intended for operator-initiated recovery via the
+// /api/v1/system/breaker/reset endpoint; no probe is required.
+func (b *CircuitBreaker) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.state = BreakerClosed
+	b.failureCount = 0
+	b.tripTime = time.Time{}
+	b.lastError = nil
+	b.inflight = false
+}
+
 // ArmForResilienceTest configures an OPEN breaker for queue integration tests.
 func (b *CircuitBreaker) ArmForResilienceTest(now, tripTime time.Time, failureCount int, lastErr error) {
 	b.mu.Lock()

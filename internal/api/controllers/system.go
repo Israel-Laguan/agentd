@@ -26,3 +26,19 @@ func (h SystemHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteSuccess(w, http.StatusOK, snapshot, nil)
 }
+
+// Reset handles POST /api/v1/system/breaker/reset.
+// An optional ?provider=<name> query parameter resets only that provider's
+// breaker; omitting it resets the global breaker and all per-provider breakers.
+func (h SystemHandler) Reset(w http.ResponseWriter, r *http.Request) {
+	if h.System == nil {
+		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", "system service is not configured")
+		return
+	}
+	provider := r.URL.Query().Get("provider")
+	if err := h.System.ResetBreaker(provider); err != nil {
+		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", err.Error())
+		return
+	}
+	httpx.WriteSuccess(w, http.StatusOK, map[string]any{"reset": true, "provider": provider}, nil)
+}
