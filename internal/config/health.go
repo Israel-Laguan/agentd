@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,11 +19,26 @@ const (
 	healthModeHorde    = "horde"
 )
 
-var knownHealthModes = map[string]struct{}{
-	healthModeAPIKey:   {},
-	healthModeOllama:   {},
-	healthModeLlamaCpp: {},
-	healthModeHorde:    {},
+var allExplicitHealthModes = []string{
+	healthModeAPIKey,
+	healthModeOllama,
+	healthModeLlamaCpp,
+	healthModeHorde,
+}
+
+var knownHealthModes map[string]struct{}
+
+func init() {
+	knownHealthModes = make(map[string]struct{}, len(allExplicitHealthModes))
+	for _, m := range allExplicitHealthModes {
+		knownHealthModes[m] = struct{}{}
+	}
+}
+
+func validHealthModesHint() string {
+	modes := slices.Clone(allExplicitHealthModes)
+	slices.Sort(modes)
+	return strings.Join(modes, ", ")
 }
 
 // validateHealthMode returns an error when health is explicitly set to an
@@ -33,7 +49,7 @@ func validateHealthMode(health string) error {
 		return nil
 	}
 	if _, ok := knownHealthModes[h]; !ok {
-		return fmt.Errorf("unknown health mode %q (valid: api_key, ollama, llamacpp, horde)", h)
+		return fmt.Errorf("unknown health mode %q (valid: %s)", h, validHealthModesHint())
 	}
 	return nil
 }

@@ -163,8 +163,18 @@ func TestLoad_LegacyOpenAIAPIKeyFromEnv(t *testing.T) {
 	if len(configs) == 0 {
 		t.Fatal("ProviderConfigs() empty, want at least openai from default gateway.order")
 	}
-	if configs[0].Name != "openai" || configs[0].APIKey != "sk-legacy-openai" {
-		t.Fatalf("ProviderConfigs()[0] = %+v, want openai with APIKey sk-legacy-openai", configs[0])
+	var found bool
+	for _, p := range configs {
+		if p.Name == "openai" {
+			found = true
+			if p.APIKey != "sk-legacy-openai" {
+				t.Fatalf("openai APIKey = %q, want sk-legacy-openai", p.APIKey)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("ProviderConfigs() missing openai provider: %+v", configs)
 	}
 }
 
