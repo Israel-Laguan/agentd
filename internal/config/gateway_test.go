@@ -382,19 +382,30 @@ func TestProviderConfigs_UnknownHealthValue(t *testing.T) {
 }
 
 func TestProviderConfigs_KnownHealthValues_Valid(t *testing.T) {
-	modes := []string{"api_key", "ollama", "llamacpp", "horde"}
-	for _, mode := range modes {
-		t.Run(mode, func(t *testing.T) {
+	tests := []struct {
+		name string
+		mode string
+	}{
+		{name: "api_key_trimmed_mixed_case", mode: "  Api_Key  "},
+	}
+	for _, mode := range allExplicitHealthModes {
+		tests = append(tests, struct {
+			name string
+			mode string
+		}{name: mode, mode: mode})
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			cfg := GatewayConfig{
 				Order: []string{"p"},
 				Providers: []gateway.ProviderConfig{{
 					Name:   "p",
 					Type:   "openai",
-					Health: mode,
+					Health: tc.mode,
 				}},
 			}
 			if _, err := cfg.ProviderConfigs(); err != nil {
-				t.Errorf("ProviderConfigs() error = %v for known health mode %q", err, mode)
+				t.Errorf("ProviderConfigs() error = %v for known health mode %q", err, tc.mode)
 			}
 		})
 	}
