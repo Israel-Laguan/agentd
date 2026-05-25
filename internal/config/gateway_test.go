@@ -376,6 +376,27 @@ gateway:
 	}
 }
 
+func TestProviderConfigs_NormalizesAdapterType(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"custom"},
+		Providers: []gateway.ProviderConfig{{
+			Name:   "custom",
+			Type:   " OpenAI ",
+			APIKey: "sk-test",
+		}},
+	}
+	configs, err := cfg.ProviderConfigs()
+	if err != nil {
+		t.Fatalf("ProviderConfigs() error = %v", err)
+	}
+	if len(configs) != 1 {
+		t.Fatalf("ProviderConfigs() length = %d, want 1", len(configs))
+	}
+	if configs[0].Type != "openai" {
+		t.Errorf("Type = %q, want openai", configs[0].Type)
+	}
+}
+
 func TestProviderConfigs_UnknownAdapter(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"custom"},

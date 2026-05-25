@@ -85,6 +85,9 @@ func (s *AgentService) Patch(ctx context.Context, id string, patch AgentPatch) (
 		return nil, err
 	}
 	applyPatch(current, patch)
+	if err := validateProviderModelPair(current.Provider, current.Model); err != nil {
+		return nil, err
+	}
 	if err := s.Store.UpsertAgentProfile(ctx, *current); err != nil {
 		return nil, err
 	}
@@ -123,16 +126,21 @@ func validateForCreate(p *models.AgentProfile) error {
 	if p.Name == "" {
 		return errors.New("name is required")
 	}
-	providerEmpty := p.Provider == ""
-	modelEmpty := p.Model == ""
-	if providerEmpty != modelEmpty {
-		return errors.New("provider and model must both be set or both empty for gateway cascade")
+	if err := validateProviderModelPair(p.Provider, p.Model); err != nil {
+		return err
 	}
 	if p.MaxTokens < 0 {
 		return errors.New("max_tokens must be >= 0")
 	}
 	if p.Role == "" {
 		p.Role = "CODE_GEN"
+	}
+	return nil
+}
+
+func validateProviderModelPair(provider, model string) error {
+	if (provider == "") != (model == "") {
+		return errors.New("provider and model must both be set or both empty for gateway cascade")
 	}
 	return nil
 }
