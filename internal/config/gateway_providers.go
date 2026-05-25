@@ -50,7 +50,7 @@ func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]strin
 			MaxInputChars: v.GetInt("gateway.horde.max_input_chars"),
 			Timeout:       durationOrDefault(v.GetDuration("gateway.horde.timeout"), 5*time.Minute),
 			Options: map[string]any{
-				"poll_interval": durationOrDefault(v.GetDuration("gateway.horde.poll_interval"), 4*time.Second),
+				"poll_interval": hordePollInterval(v),
 			},
 		}, gateway.ProviderConfig{
 			Name: "gemini", Adapter: "openai", BaseURL: v.GetString("gateway.gemini.base_url"),
@@ -58,6 +58,14 @@ func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]strin
 			MaxInputChars: v.GetInt("gateway.gemini.max_input_chars"),
 			Timeout:       durationOrDefault(v.GetDuration("gateway.gemini.timeout"), 5*time.Minute),
 		}
+}
+
+func hordePollInterval(v *viper.Viper) time.Duration {
+	poll := durationOrDefault(v.GetDuration("gateway.horde.poll_interval"), 4*time.Second)
+	if v.IsSet("gateway.horde.options.poll_interval") {
+		poll = durationOrDefault(v.GetDuration("gateway.horde.options.poll_interval"), poll)
+	}
+	return poll
 }
 
 func canonicalGatewayProvider(cfg gateway.ProviderConfig) gateway.ProviderConfig {
