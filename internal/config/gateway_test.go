@@ -358,3 +358,44 @@ gateway:
 		t.Fatalf("servers[0].Auth.Token = %q, want secret-token", servers[0].Auth.Token)
 	}
 }
+
+func TestProviderConfigs_UnknownHealthValue(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"custom"},
+		Providers: []gateway.ProviderConfig{{
+			Name:   "custom",
+			Type:   "openai",
+			APIKey: "sk-test",
+			Health: "undefined_probe",
+		}},
+	}
+	_, err := cfg.ProviderConfigs()
+	if err == nil {
+		t.Fatal("expected error for unknown health value, got nil")
+	}
+	if !strings.Contains(err.Error(), "undefined_probe") {
+		t.Errorf("error should mention the unknown value, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "custom") {
+		t.Errorf("error should mention the provider name, got: %v", err)
+	}
+}
+
+func TestProviderConfigs_KnownHealthValues_Valid(t *testing.T) {
+	modes := []string{"api_key", "ollama", "llamacpp", "horde"}
+	for _, mode := range modes {
+		t.Run(mode, func(t *testing.T) {
+			cfg := GatewayConfig{
+				Order: []string{"p"},
+				Providers: []gateway.ProviderConfig{{
+					Name:   "p",
+					Type:   "openai",
+					Health: mode,
+				}},
+			}
+			if _, err := cfg.ProviderConfigs(); err != nil {
+				t.Errorf("ProviderConfigs() error = %v for known health mode %q", err, mode)
+			}
+		})
+	}
+}

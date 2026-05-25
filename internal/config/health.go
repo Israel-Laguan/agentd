@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -16,6 +17,26 @@ const (
 	healthModeLlamaCpp = "llamacpp"
 	healthModeHorde    = "horde"
 )
+
+var knownHealthModes = map[string]struct{}{
+	healthModeAPIKey:   {},
+	healthModeOllama:   {},
+	healthModeLlamaCpp: {},
+	healthModeHorde:    {},
+}
+
+// validateHealthMode returns an error when health is explicitly set to an
+// unrecognised value. An empty string is valid (adapter default is used).
+func validateHealthMode(health string) error {
+	h := strings.TrimSpace(strings.ToLower(health))
+	if h == "" {
+		return nil
+	}
+	if _, ok := knownHealthModes[h]; !ok {
+		return fmt.Errorf("unknown health mode %q (valid: api_key, ollama, llamacpp, horde)", h)
+	}
+	return nil
+}
 
 type ProviderCheckResult struct {
 	Available      bool
