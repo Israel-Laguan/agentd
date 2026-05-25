@@ -376,6 +376,26 @@ gateway:
 	}
 }
 
+func TestProviderConfigs_UnknownAdapter(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"custom"},
+		Providers: []gateway.ProviderConfig{{
+			Name: "custom",
+			Type: "foo",
+		}},
+	}
+	_, err := cfg.ProviderConfigs()
+	if err == nil {
+		t.Fatal("expected error for unknown adapter, got nil")
+	}
+	if !strings.Contains(err.Error(), "foo") {
+		t.Errorf("error should mention the unknown adapter, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "custom") {
+		t.Errorf("error should mention the provider name, got: %v", err)
+	}
+}
+
 func TestProviderConfigs_UnknownHealthValue(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"custom"},

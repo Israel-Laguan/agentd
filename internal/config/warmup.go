@@ -23,12 +23,8 @@ func WarmupLLM(ctx context.Context, gw gateway.AIGateway, gatewayCfg GatewayConf
 	}
 
 	// Horde is async — a generate call can take minutes. Ping its heartbeat instead.
-	if result.AdapterType == string(gateway.ProviderHorde) {
-		baseURL := result.BaseURL
-		if baseURL == "" {
-			baseURL = gatewayCfg.Horde.BaseURL
-		}
-		return warmupHorde(ctx, baseURL)
+	if result.HealthMode == healthModeHorde {
+		return warmupHorde(ctx, result.Provider, result.BaseURL)
 	}
 
 	slog.Debug("LLM warmup starting", "provider", result.Provider)
@@ -48,8 +44,8 @@ func WarmupLLM(ctx context.Context, gw gateway.AIGateway, gatewayCfg GatewayConf
 
 // warmupHorde pings the AI Horde heartbeat endpoint to confirm the service is
 // reachable without queuing a full async generation job.
-func warmupHorde(ctx context.Context, baseURL string) error {
-	slog.Debug("LLM warmup starting", "provider", "horde", "mode", "heartbeat")
+func warmupHorde(ctx context.Context, provider, baseURL string) error {
+	slog.Debug("LLM warmup starting", "provider", provider, "mode", "heartbeat")
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := baseURL + "/v2/status/heartbeat"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -64,6 +60,6 @@ func warmupHorde(ctx context.Context, baseURL string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("horde heartbeat returned %d", resp.StatusCode)
 	}
-	slog.Info("LLM warmup OK", "provider", "horde", "mode", "heartbeat")
+	slog.Info("LLM warmup OK", "provider", provider, "mode", "heartbeat")
 	return nil
 }
