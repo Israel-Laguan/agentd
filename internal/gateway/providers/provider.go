@@ -55,6 +55,7 @@ func AppendFromConfig(backends []Backend, cfg spec.ProviderConfig) ([]Backend, e
 	if adapter == "" {
 		adapter = strings.ToLower(strings.TrimSpace(string(cfg.Name)))
 	}
+	cfg.Adapter = adapter
 	switch spec.Provider(adapter) {
 	case spec.ProviderOpenAI:
 		return append(backends, NewOpenAI(cfg, nil)), nil

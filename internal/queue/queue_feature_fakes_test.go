@@ -52,11 +52,9 @@ func (s *queueSandbox) Execute(ctx context.Context, _ sandbox.Payload) (sandbox.
 	}
 	s.startedOnce.Do(func() { close(s.started) })
 	if s.unblock != nil {
-		select {
-		case <-ctx.Done():
+		if err := ctx.Err(); err != nil {
 			s.cancelOnce.Do(func() { close(s.cancelled) })
-			return sandbox.Result{Success: false, ExitCode: -1}, ctx.Err()
-		default:
+			return sandbox.Result{Success: false, ExitCode: -1}, err
 		}
 		select {
 		case <-ctx.Done():
