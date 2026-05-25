@@ -72,7 +72,21 @@ Reset the LLM circuit breaker without restarting the daemon. Use this after quot
 
 When `?provider=gemini` is supplied, `"provider"` in the response is `"gemini"`.
 
-**Test Coverage**: `internal/api/controllers/system_test.go`
+**Error Responses**:
+- `503 UNAVAILABLE` — System service not configured (`SystemHandler.System` is nil)
+- `503 UNAVAILABLE` — Neither global resetter nor per-provider breakers are configured (global reset with no `?provider=`)
+- `503 UNAVAILABLE` — Per-provider breakers not configured (`?provider=<name>` supplied but `ProviderBreakers` is nil)
+
+```json
+{ "status": "error", "error": { "code": "UNAVAILABLE", "message": "breaker reset not available" } }
+```
+
+**Test Coverage**:
+- No service (503): `internal/api/controllers/system_test.go:42`
+- No resetter (503): `internal/api/controllers/system_test.go:52`
+- Global reset success (200): `internal/api/controllers/system_test.go:66`
+- Per-provider reset success (200): `internal/api/controllers/system_test.go:96`
+- Per-provider reset, no breakers (503): `internal/api/controllers/system_test.go:114`
 
 ---
 
