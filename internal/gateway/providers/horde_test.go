@@ -195,6 +195,23 @@ func TestHordePollIntervalFromOptionsString(t *testing.T) {
 	}
 }
 
+func TestNewHorde_ZeroPollIntervalFallsBackToDefault(t *testing.T) {
+	// poll_interval <= 0 must fall back to the default to avoid time.NewTicker panic.
+	for _, val := range []any{time.Duration(0), "0s", "-1s"} {
+		h := NewHorde(spec.ProviderConfig{
+			Options: map[string]any{"poll_interval": val},
+		}, nil)
+		if h.pollInterval <= 0 {
+			t.Errorf("poll_interval value %v: got non-positive pollInterval %v, want fallback %v",
+				val, h.pollInterval, defaultHordePollInterval)
+		}
+		if h.pollInterval != defaultHordePollInterval {
+			t.Errorf("poll_interval value %v: got pollInterval %v, want default %v",
+				val, h.pollInterval, defaultHordePollInterval)
+		}
+	}
+}
+
 func TestHordeUnknownOptionLogsWarning(t *testing.T) {
 	// An unrecognized option key must produce a slog.Warn but not fail.
 	var buf bytes.Buffer

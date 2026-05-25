@@ -61,11 +61,17 @@ func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]strin
 }
 
 func canonicalGatewayProvider(cfg gateway.ProviderConfig) gateway.ProviderConfig {
-	cfg.Name = strings.ToLower(strings.TrimSpace(cfg.Name))
+	cfg.Name = strings.TrimSpace(cfg.Name)
 	cfg.Adapter = strings.ToLower(strings.TrimSpace(cfg.Adapter))
+	if cfg.Adapter == "" {
+		cfg.Adapter = strings.ToLower(cfg.Name)
+	}
+	if cfg.Name == "" {
+		cfg.Name = cfg.Adapter
+	}
 	if cfg.Adapter == string(gateway.ProviderGemini) {
 		cfg.Adapter = string(gateway.ProviderOpenAI)
-		if cfg.Name == string(gateway.ProviderGemini) || cfg.Name == "" {
+		if strings.EqualFold(cfg.Name, string(gateway.ProviderGemini)) || cfg.Name == "" {
 			cfg.Name = string(gateway.ProviderGemini)
 		}
 	}
