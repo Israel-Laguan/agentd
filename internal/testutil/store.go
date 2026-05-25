@@ -38,7 +38,7 @@ func NewFakeStore() *FakeKanbanStore {
 		tasks:        make(map[string]models.Task),
 		childParents: make(map[string][]string),
 		profiles: map[string]models.AgentProfile{
-			"default": {ID: "default", Temperature: 0.2, SystemPrompt: sql.NullString{String: "Return JSON.", Valid: true}},
+			"default": {ID: "default", Name: "Default", Temperature: 0.2, SystemPrompt: sql.NullString{String: "Return JSON.", Valid: true}},
 		},
 		settings:  make(map[string]string),
 		scheduled: make(map[string]models.ScheduledTask),
