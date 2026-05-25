@@ -142,6 +142,32 @@ func TestLoad_WithMissingConfig(t *testing.T) {
 	}
 }
 
+func TestLoad_LegacyOpenAIAPIKeyFromEnv(t *testing.T) {
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	t.Setenv("OPENAI_API_KEY", "sk-legacy-openai")
+
+	cfg, err := Load(LoadOptions{HomeOverride: homeDir})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Gateway.OpenAI.APIKey != "sk-legacy-openai" {
+		t.Fatalf("Gateway.OpenAI.APIKey = %q, want sk-legacy-openai from OPENAI_API_KEY", cfg.Gateway.OpenAI.APIKey)
+	}
+	configs, err := cfg.Gateway.ProviderConfigs()
+	if err != nil {
+		t.Fatalf("ProviderConfigs() error = %v", err)
+	}
+	if len(configs) == 0 {
+		t.Fatal("ProviderConfigs() empty, want at least openai from default gateway.order")
+	}
+	if configs[0].Name != "openai" || configs[0].APIKey != "sk-legacy-openai" {
+		t.Fatalf("ProviderConfigs()[0] = %+v, want openai with APIKey sk-legacy-openai", configs[0])
+	}
+}
+
 func TestLoad_SkillsGlobalDir_ExplicitAbsolute(t *testing.T) {
 	homeDir := filepath.Join(t.TempDir(), "agentd")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
