@@ -13,8 +13,11 @@ package worker
 import "strings"
 
 // routingTestGateway: mirrors production routing — openai, anthropic, gemini are
-// tool-capable; everything else (ollama, unknown, empty) falls back to legacy.
+// tool-capable; empty provider means cascade (any tool-capable provider in order).
 func (g *routingTestGateway) ProviderSupportsChatTools(provider string) bool {
+	if strings.TrimSpace(provider) == "" {
+		return true
+	}
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case "openai", "anthropic", "gemini":
 		return true

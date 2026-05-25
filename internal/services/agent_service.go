@@ -120,8 +120,13 @@ func validateForCreate(p *models.AgentProfile) error {
 	p.Model = strings.TrimSpace(p.Model)
 	p.Role = strings.TrimSpace(p.Role)
 	p.CapabilityRouteIntent = strings.TrimSpace(p.CapabilityRouteIntent)
-	if p.Name == "" || p.Provider == "" || p.Model == "" {
-		return errors.New("name, provider, and model are required")
+	if p.Name == "" {
+		return errors.New("name is required")
+	}
+	providerEmpty := p.Provider == ""
+	modelEmpty := p.Model == ""
+	if providerEmpty != modelEmpty {
+		return errors.New("provider and model must both be set or both empty for gateway cascade")
 	}
 	if p.MaxTokens < 0 {
 		return errors.New("max_tokens must be >= 0")

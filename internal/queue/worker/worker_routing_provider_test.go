@@ -76,7 +76,7 @@ func TestProviderSupportsAgentic_RouterBacked(t *testing.T) {
 func TestProviderSupportsAgentic_UnknownProvider(t *testing.T) {
 	t.Parallel()
 
-	unknowns := []string{"azure-openai", "vertex", "unknown", ""}
+	unknowns := []string{"azure-openai", "vertex", "unknown"}
 	w := newWorkerWithProviders(t, toolCapableConfig("openai", "openai"))
 
 	for _, name := range unknowns {
@@ -122,6 +122,24 @@ func TestProviderSupportsAgentic_CustomProviderName(t *testing.T) {
 	profile := models.AgentProfile{ID: "test", Provider: "poolside", Model: "poolside-model"}
 	if !w.providerSupportsAgentic(profile) {
 		t.Fatal("providerSupportsAgentic(poolside) = false, want true")
+	}
+}
+
+// TestProviderSupportsAgentic_EmptyProviderUsesCascade verifies seeded/PATCHed profiles
+// with empty provider delegate agentic capability to gateway.order (Task 13).
+func TestProviderSupportsAgentic_EmptyProviderUsesCascade(t *testing.T) {
+	t.Parallel()
+
+	w := newWorkerWithProviders(t, spec.ProviderConfig{
+		Name:    "gemini",
+		Type:    "gemini",
+		BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+		Model:   "gemini-2.5-flash",
+		APIKey:  "test-key",
+	})
+	profile := models.AgentProfile{ID: "default", Provider: "", Model: ""}
+	if !w.providerSupportsAgentic(profile) {
+		t.Fatal("providerSupportsAgentic(\"\") = false with gemini router, want true (cascade)")
 	}
 }
 

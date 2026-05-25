@@ -15,7 +15,9 @@ This note captures the startup path validated during the bootstrap work and the 
 2. Ensure the runtime directories exist.
 3. Write the default cron file if one is not already present.
 4. Open the SQLite database and apply migrations.
-5. Seed the built-in agent profiles.
+5. Seed the built-in agent profiles (`default`, `researcher`, `qa`) with empty `provider` and `model` so tasks cascade through `gateway.order`. Existing profiles are left unchanged on repeat init; use `agentd init --reset-profiles` to force defaults or to clear stale rows that still pin `openai` / `anthropic` from older installs.
+
+Init prints a short hint listing seeded profiles, the first detected LLM provider from `CheckProviders`, and the `--reset-profiles` flag. Enable agentic mode per profile via PATCH (`agentic_mode: true`); empty provider works with agentic when at least one configured backend in order supports chat tools.
 
 If any step fails, the CLI now says what part of init failed and shows the wrapped error chain.
 

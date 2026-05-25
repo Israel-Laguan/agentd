@@ -137,6 +137,31 @@ func TestRoutingDecision_AgenticModeTrue_ProviderSupported(t *testing.T) {
 	}
 }
 
+// TestRoutingDecision_AgenticModeTrue_EmptyProviderCascade verifies that agentic mode
+// with empty profile provider uses the agentic path (gateway cascade), not legacy fallback.
+func TestRoutingDecision_AgenticModeTrue_EmptyProviderCascade(t *testing.T) {
+	t.Parallel()
+
+	profile := models.AgentProfile{
+		ID:          "agent-1",
+		Provider:    "",
+		Model:       "",
+		AgenticMode: true,
+	}
+	w, store, gw, _ := newRoutingTest(profile)
+	w.Process(context.Background(), store.task)
+
+	if len(gw.requests) == 0 {
+		t.Fatal("expected at least 1 gateway request")
+	}
+	if gw.requests[0].JSONMode {
+		t.Error("expected JSONMode=false for agentic path with empty provider (cascade)")
+	}
+	if len(gw.requests[0].Tools) == 0 {
+		t.Error("expected tools in agentic path request with empty provider (cascade)")
+	}
+}
+
 // TestRoutingDecision_AgenticModeTrue_ProviderNotSupported verifies by calling Process
 // that when AgenticMode is true but provider doesn't support it, the legacy path is taken.
 // Validates: Requirements 1, 3, 4, 6.2
@@ -150,7 +175,6 @@ func TestRoutingDecision_AgenticModeTrue_ProviderNotSupported(t *testing.T) {
 		{"Ollama", "ollama"},
 		{"Azure OpenAI", "azure-openai"},
 		{"Vertex", "vertex"},
-		{"Empty provider", ""},
 	}
 
 	for _, tc := range testCases {

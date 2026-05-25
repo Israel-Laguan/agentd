@@ -57,6 +57,40 @@ func TestRouterProviderSupportsChatTools_NonToolProvider(t *testing.T) {
 	}
 }
 
+func TestRouterProviderSupportsChatTools_EmptyProvider(t *testing.T) {
+	t.Parallel()
+
+	t.Run("gemini_only", func(t *testing.T) {
+		t.Parallel()
+		r, err := NewRouterFromConfigs([]spec.ProviderConfig{{
+			Name:    "gemini",
+			Type:    "gemini",
+			BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+			Model:   "gemini-2.5-flash",
+			APIKey:  "test-key",
+		}})
+		if err != nil {
+			t.Fatalf("NewRouterFromConfigs() error = %v", err)
+		}
+		if !r.ProviderSupportsChatTools("") {
+			t.Fatal("ProviderSupportsChatTools(\"\") = false, want true when gemini is configured")
+		}
+	})
+
+	t.Run("ollama_only", func(t *testing.T) {
+		t.Parallel()
+		r := NewRouter(providers.NewOllama(spec.ProviderConfig{
+			Name:    "ollama",
+			Type:    "ollama",
+			BaseURL: "http://localhost:11434",
+			Model:   "llama3",
+		}, nil))
+		if r.ProviderSupportsChatTools("") {
+			t.Fatal("ProviderSupportsChatTools(\"\") = true, want false when only ollama is configured")
+		}
+	})
+}
+
 func TestSelectCandidateProviders_CaseInsensitive(t *testing.T) {
 	t.Parallel()
 
