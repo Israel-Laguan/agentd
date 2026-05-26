@@ -38,6 +38,19 @@ func NewRouter(providersList ...providers.Backend) *Router {
 	}
 }
 
+// ProviderNames returns the names of all configured backends in router order.
+// Returns nil for a nil receiver.
+func (r *Router) ProviderNames() []string {
+	if r == nil {
+		return nil
+	}
+	names := make([]string, 0, len(r.providers))
+	for _, p := range r.providers {
+		names = append(names, string(p.Name()))
+	}
+	return names
+}
+
 // ProviderSupportsChatTools reports whether the named configured backend supports
 // chat tool round-tripping. Custom provider names (e.g. poolside with adapter openai)
 // are resolved via backend Capabilities(). When provider is empty, returns true if
