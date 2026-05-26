@@ -25,6 +25,7 @@ export interface Task {
   logs: TaskLog[];
   createdAt: number;
   updatedAt: number;
+  token_usage?: number;
 }
 
 export interface Project {
@@ -74,3 +75,9 @@ export interface TaskComment {
     name: string;
   };
 };
+
+export interface Provider {
+  name: string;
+  adapter: string;
+  models: string[];
+}

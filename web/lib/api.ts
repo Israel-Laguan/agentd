@@ -3,39 +3,78 @@ import { mockWorkforce } from "@/lib/mocks/workforce.mock";
 import { mockChat } from "@/lib/mocks/chat.mock";
 import { mockApprovePlan } from "@/lib/mocks/plan.mock";
 import { mockTaskComments } from "@/lib/mocks/mock-task-comment";
+import { mockProviders } from "@/lib/mocks/providers.mock";
 import { ChatSettings } from "@/app/components/chat/chat-settings-modal";
+import { Provider, Task, TaskComment, ChatResponse } from "@/lib/types";
+import { unwrapData, mapDaemonTask, mapDaemonComment } from "@/lib/mappers";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
-const USE_MOCK = true;
+// Set NEXT_PUBLIC_USE_MOCK=false to disable mock mode and hit the real daemon.
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
+// Set NEXT_PUBLIC_API_URL to override the daemon address (default: http://localhost:8765).
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8765";
 
 // ---------------- BOARD ----------------
-export async function getBoard() {
+export async function getBoard(): Promise<{ tasks: Task[] }> {
   if (USE_MOCK) return structuredClone(mockBoard);
 
-  const res = await fetch(`${API}/api/v1/projects`);
-  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-  return res.json();
+  // Fetch all projects, then fetch tasks per project in parallel.
+  const projectsRes = await fetch(`${API}/api/v1/projects`);
+  if (!projectsRes.ok) throw new Error(`HTTP error! status: ${projectsRes.status}`);
+  const projects = unwrapData<Record<string, unknown>[]>(await projectsRes.json());
+
+  const taskArrays = await Promise.all(
+    projects.map(async (p) => {
+      const r = await fetch(`${API}/api/v1/projects/${p.ID as string}/tasks`);
+      if (!r.ok) return [] as Task[];
+      return unwrapData<Record<string, unknown>[]>(await r.json()).map(mapDaemonTask);
+    })
+  );
+  return { tasks: taskArrays.flat() };
 }
 
 // ---------------- WORKFORCE ----------------
 export async function getWorkforce() {
   if (USE_MOCK) return mockWorkforce;
 
-  const res = await fetch(`${API}/api/v1/agents`);
-  return res.json();
+  // No dedicated workforce-shape endpoint exists today.
+  // Return null so the UI shows blank metrics rather than crashing.
+  return null;
 }
 
 // ---------------- CHAT ----------------
-export async function sendChat(message: string, settings: ChatSettings) {
+export async function sendChat(message: string, settings?: ChatSettings): Promise<ChatResponse> {
   if (USE_MOCK) return mockChat(message);
 
   const res = await fetch(`${API}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, settings }),
+    // Backend expects OpenAI-compatible wire shape.
+    body: JSON.stringify({
+      model: settings?.model,
+      messages: [{ role: "user", content: message }],
+    }),
   });
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+  const envelope = await res.json();
+  // Unwrap OpenAI choices array into a ChatResponse shape.
+  const choice = envelope?.choices?.[0];
+  return {
+    message: {
+      id: envelope?.id ?? "",
+      role: "assistant" as const,
+      content: choice?.message?.content ?? "",
+    },
+  } satisfies ChatResponse;
+}
 
-  return res.json();
+// ---------------- PROVIDERS ----------------
+export async function fetchProviders(): Promise<Provider[]> {
+  if (USE_MOCK) return mockProviders;
+
+  const res = await fetch(`${API}/api/v1/gateway/providers`);
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+  const envelope = await res.json();
+  return envelope.data as Provider[];
 }
 
 export async function postApprovePlan() {
@@ -52,7 +91,7 @@ export async function postApprovePlan() {
   return res.json();
 }
 
-export async function fetchTaskComments(taskId: string) {
+export async function fetchTaskComments(taskId: string): Promise<TaskComment[]> {
   if (USE_MOCK) {
     return mockTaskComments.filter((c: { taskId: string }) => c.taskId === taskId);
   }
@@ -63,7 +102,7 @@ export async function fetchTaskComments(taskId: string) {
     throw new Error("Failed to fetch comments");
   }
 
-  return res.json();
+  return unwrapData<Record<string, unknown>[]>(await res.json()).map(mapDaemonComment);
 }
 
 export async function updateTask(
@@ -85,14 +124,15 @@ export async function updateTask(
   const res = await fetch(`${API}/api/v1/tasks/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(updates),
+    // Backend patchRequest expects { state } not { status }.
+    body: JSON.stringify({ state: updates.status }),
   });
 
   if (!res.ok) {
     throw new Error("Failed to update task");
   }
 
-  return res.json();
+  return mapDaemonTask(unwrapData<Record<string, unknown>>(await res.json()));
 }
 
 export async function addTaskComment(
@@ -121,7 +161,8 @@ export async function addTaskComment(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ message }),
+      // Backend commentRequest expects { content } not { message }.
+      body: JSON.stringify({ content: message }),
     }
   );
 
@@ -129,5 +170,5 @@ export async function addTaskComment(
     throw new Error("Failed to add comment");
   }
 
-  return res.json();
+  return mapDaemonComment(unwrapData<Record<string, unknown>>(await res.json()));
 }

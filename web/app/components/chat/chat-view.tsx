@@ -67,15 +67,9 @@ export function ChatView({
     try {
       const data = await sendChat(userMsg.content, chatSettings);
 
-      const assistant =
+      const assistant: ChatMessage | null =
         data?.message
-          ? { ...data.message, id: data.message.id ?? createMessageId() }
-          : data?.choices?.[0]?.message?.content
-          ? {
-              id: createMessageId(),
-              role: "assistant",
-              content: data.choices[0].message.content,
-            }
+          ? { ...data.message, id: data.message.id ?? createMessageId() } as ChatMessage
           : null;
 
       if (assistant) setMessages((p) => [...p, assistant]);

@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
+import { fetchProviders } from "@/lib/api";
+import { Provider } from "@/lib/types";
 
 export interface ChatSettings {
-  provider: "openai" | "anthropic" | "local";
+  provider: string;
   model: string;
   effort: "low" | "medium" | "high";
 }
@@ -16,12 +19,11 @@ interface ChatSettingsModalProps {
   setSettings: React.Dispatch<React.SetStateAction<ChatSettings>>;
   onSave: (settings: ChatSettings) => void;
 }
-const PROVIDER_MODELS = {
-  openai: ["gpt-4o", "gpt-4.1"],
-  anthropic: ["claude-3.5-sonnet"],
-  local: ["llama-3", "mistral"],
-} as const;
-
+const PROVIDER_MODELS_FALLBACK: Provider[] = [
+  { name: "openai", adapter: "openai", models: ["gpt-4o", "gpt-4.1"] },
+  { name: "anthropic", adapter: "anthropic", models: ["claude-3.5-sonnet"] },
+  { name: "local", adapter: "ollama", models: ["llama-3", "mistral"] },
+];
 
 export function ChatSettingsModal({
   open,
@@ -30,9 +32,25 @@ export function ChatSettingsModal({
   setSettings,
   onSave,
 }: ChatSettingsModalProps) {
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [fetchStatus, setFetchStatus] = useState<"idle" | "loading" | "error">("idle");
 
-  const availableModels =
-  PROVIDER_MODELS[settings.provider as keyof typeof PROVIDER_MODELS];
+  useEffect(() => {
+    if (!open) return;
+    setFetchStatus("loading");
+    fetchProviders()
+      .then((list) => {
+        setProviders(list.length > 0 ? list : PROVIDER_MODELS_FALLBACK);
+        setFetchStatus("idle");
+      })
+      .catch(() => {
+        setProviders(PROVIDER_MODELS_FALLBACK);
+        setFetchStatus("error");
+      });
+  }, [open]);
+
+  const activeProvider = providers.find((p) => p.name === settings.provider);
+  const availableModels = activeProvider?.models ?? [];
 
   return (
     <AnimatePresence>
@@ -77,6 +95,10 @@ export function ChatSettingsModal({
 
             {/* content */}
             <div className="p-4 space-y-5">
+              {fetchStatus === "error" && (
+                <p className="text-[11px] text-red-400">Could not reach daemon — showing defaults.</p>
+              )}
+
               {/* Provider */}
               <div className="space-y-1">
                 <label htmlFor="provider-select" className="text-[11px] text-text-dim uppercase tracking-wider">
@@ -86,21 +108,25 @@ export function ChatSettingsModal({
                 <select
                   id="provider-select"
                   value={settings.provider}
+                  disabled={fetchStatus === "loading"}
                   onChange={(e) => {
-                    const provider =
-                      e.target.value as ChatSettings["provider"];
-
+                    const providerName = e.target.value;
+                    const providerEntry = providers.find((p) => p.name === providerName);
                     setSettings(prev => ({
                       ...prev,
-                      provider,
-                      model: PROVIDER_MODELS[provider][0],
+                      provider: providerName,
+                      model: providerEntry?.models[0] ?? "",
                     }));
                   }}
-                  className="w-full bg-bg border border-border rounded-md px-3 py-2 text-sm outline-none"
+                  className="w-full bg-bg border border-border rounded-md px-3 py-2 text-sm outline-none disabled:opacity-50"
                 >
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="local">Local</option>
+                  {fetchStatus === "loading" ? (
+                    <option value="">Loading...</option>
+                  ) : (
+                    providers.map((p) => (
+                      <option key={p.name} value={p.name}>{p.name}</option>
+                    ))
+                  )}
                 </select>
               </div>
 
