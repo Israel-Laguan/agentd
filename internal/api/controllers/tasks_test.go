@@ -86,8 +86,19 @@ func TestTaskHandler_PatchValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("empty state", func(t *testing.T) {
+	t.Run("empty state and no description", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/t1", strings.NewReader(`{"state":"  "}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.SetPathValue("id", "t1")
+		rec := httptest.NewRecorder()
+		h.Patch(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("code = %d", rec.Code)
+		}
+	})
+
+	t.Run("empty body", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/t1", strings.NewReader(`{}`))
 		req.Header.Set("Content-Type", "application/json")
 		req.SetPathValue("id", "t1")
 		rec := httptest.NewRecorder()
@@ -108,6 +119,62 @@ func TestTaskHandler_PatchValidation(t *testing.T) {
 			t.Fatalf("code = %d", rec.Code)
 		}
 	})
+}
+
+func TestTaskHandler_PatchDescription(t *testing.T) {
+	h, store := taskTestHandler()
+	_, taskID := seedProjectTask(t, store)
+
+	body := `{"description":"updated work"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/"+taskID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", taskID)
+	rec := httptest.NewRecorder()
+	h.Patch(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Patch code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			Description string `json:"Description"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Data.Description != "updated work" {
+		t.Fatalf("description = %q, want updated work", resp.Data.Description)
+	}
+}
+
+func TestTaskHandler_PatchStateAndDescription(t *testing.T) {
+	h, store := taskTestHandler()
+	_, taskID := seedProjectTask(t, store)
+
+	body := `{"state":"completed","description":"done"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/"+taskID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", taskID)
+	rec := httptest.NewRecorder()
+	h.Patch(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Patch code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			State       string `json:"state"`
+			Description string `json:"Description"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Data.State != string(models.TaskStateCompleted) {
+		t.Fatalf("state = %q, want COMPLETED", resp.Data.State)
+	}
+	if resp.Data.Description != "done" {
+		t.Fatalf("description = %q, want done", resp.Data.Description)
+	}
 }
 
 func TestTaskHandler_ListByProject(t *testing.T) {

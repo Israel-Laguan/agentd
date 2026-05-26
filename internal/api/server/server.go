@@ -86,13 +86,25 @@ func NewHandler(deps ServerDeps) http.Handler {
 	return corsMiddleware(mux)
 }
 
-// corsMiddleware adds permissive CORS headers so the Next.js dev server
-// (localhost:3000) can reach the daemon (localhost:8765) without a proxy.
+// corsAllowedOrigins is the set of origins permitted to make cross-origin
+// requests to the daemon. Restricted to the local Next.js dev server so that
+// arbitrary websites cannot read daemon API responses in a user's browser.
+var corsAllowedOrigins = map[string]struct{}{
+	"http://localhost:3000": {},
+}
+
+// corsMiddleware adds CORS headers for allowed origins so the Next.js dev
+// server (localhost:3000) can reach the daemon (localhost:8765) without a
+// proxy. Origins not in the allowlist receive no CORS headers.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		origin := r.Header.Get("Origin")
+		if _, ok := corsAllowedOrigins[origin]; ok {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

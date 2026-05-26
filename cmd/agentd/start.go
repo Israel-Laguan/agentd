@@ -90,7 +90,10 @@ func buildStartRuntime(ctx context.Context, cfg config.Config, store models.Kanb
 	if err != nil {
 		return nil, nil, err
 	}
-	apiServer := buildAPIServer(store, deps, cfg)
+	apiServer, err := buildAPIServer(store, deps, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 	return daemon, apiServer, nil
 }
 
@@ -229,7 +232,7 @@ func buildDaemon(ctx context.Context, store models.KanbanStore, worker *queue.Wo
 	}), nil
 }
 
-func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *http.Server {
+func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Config) (*http.Server, error) {
 	retriever := &memory.Retriever{Store: store, Cfg: cfg.Librarian}
 	summarizer := frontdesk.NewStatusSummarizer(store)
 	fileStash := &frontdesk.FileStash{Dir: cfg.UploadsDir, StashThreshold: cfg.Gateway.Truncation.StashThreshold}
@@ -238,7 +241,10 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 	systemService := services.NewSystemService(summarizer, breakerProbe{breaker: deps.breaker})
 	systemService.Resetter = breakerProbe{breaker: deps.breaker}
 	systemService.ProviderBreakers = providerBreakersProbe{pb: deps.providerBreakers}
-	providerCfgs, _ := cfg.Gateway.ProviderConfigs()
+	providerCfgs, err := cfg.Gateway.ProviderConfigs()
+	if err != nil {
+		return nil, fmt.Errorf("gateway provider configs: %w", err)
+	}
 	return api.NewServer(api.ServerDeps{
 		Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus,
 		Project: deps.project, Tasks: taskService, System: systemService,
@@ -246,7 +252,7 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 		Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars,
 		Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken,
 		ProviderConfigs: providerCfgs,
-	})
+	}), nil
 }
 
 type startOptions struct {

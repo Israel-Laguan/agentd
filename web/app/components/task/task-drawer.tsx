@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRef, useState, useLayoutEffect } from "react";
 import { CommentPanel } from "../comment/comment-panel";
 
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
+
 interface TaskDrawerProps {
   task: Task | null;
   onClose: () => void;
@@ -94,11 +96,14 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
           {/* content */}
           <div className="flex-1 p-4 space-y-5 overflow-y-auto">
 
-            {/* TITLE (editable) */}
+            {/* TITLE (editable in mock mode only; daemon PATCH does not support title yet) */}
             <div>
               <label className="text-[10px] text-text-dim">Title</label>
+              {!USE_MOCK && (
+                <p className="text-[10px] text-text-dim mb-1">Title edits are not supported by the daemon yet.</p>
+              )}
 
-              {isEditingTitle ? (
+              {USE_MOCK && isEditingTitle ? (
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -113,17 +118,23 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                 />
               ) : (
                 <p
-                  className="text-sm text-text font-medium cursor-text focus:outline-none focus:ring-2 focus:ring-accent rounded px-1 -mx-1"
-                  onClick={() => setIsEditingTitle(true)}
-                  tabIndex={0}
-                  role="button"
-                  aria-label="Edit title"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setIsEditingTitle(true);
-                    }
-                  }}
+                  className={`text-sm text-text font-medium rounded px-1 -mx-1 ${
+                    USE_MOCK ? "cursor-text focus:outline-none focus:ring-2 focus:ring-accent" : ""
+                  }`}
+                  onClick={USE_MOCK ? () => setIsEditingTitle(true) : undefined}
+                  tabIndex={USE_MOCK ? 0 : undefined}
+                  role={USE_MOCK ? "button" : undefined}
+                  aria-label={USE_MOCK ? "Edit title" : undefined}
+                  onKeyDown={
+                    USE_MOCK
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setIsEditingTitle(true);
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   {title}
                 </p>
