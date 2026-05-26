@@ -4,16 +4,17 @@ import (
 	"net/http"
 
 	"agentd/internal/api/httpx"
-	"agentd/internal/gateway/spec"
 )
 
 // GatewayHandler exposes metadata about configured gateway providers.
+// Configs holds only the wire-safe summary; API keys and base URLs are
+// stripped at construction time in server.NewHandler.
 type GatewayHandler struct {
-	Configs []spec.ProviderConfig
+	Configs []ProviderEntry
 }
 
-// providerEntry is the JSON wire shape for a single provider entry.
-type providerEntry struct {
+// ProviderEntry is the JSON wire shape for a single provider entry.
+type ProviderEntry struct {
 	Name    string   `json:"name"`
 	Adapter string   `json:"adapter"`
 	Models  []string `json:"models"`
@@ -24,17 +25,9 @@ type providerEntry struct {
 // adapter type and available models. Returns an empty array when no
 // providers are configured.
 func (h GatewayHandler) List(w http.ResponseWriter, r *http.Request) {
-	entries := make([]providerEntry, 0, len(h.Configs))
-	for _, cfg := range h.Configs {
-		models := make([]string, 0, 1)
-		if cfg.Model != "" {
-			models = append(models, cfg.Model)
-		}
-		entries = append(entries, providerEntry{
-			Name:    cfg.Name,
-			Adapter: cfg.Adapter,
-			Models:  models,
-		})
+	entries := h.Configs
+	if entries == nil {
+		entries = []ProviderEntry{}
 	}
 	httpx.WriteSuccess(w, http.StatusOK, entries, nil)
 }

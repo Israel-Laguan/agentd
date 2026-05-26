@@ -67,9 +67,14 @@ export function ChatSettingsModal({
       })
       .catch(() => {
         if (cancelled) return;
-        const resolved = PROVIDER_MODELS_FALLBACK;
-        setProviders((prev) => (prev.length > 0 ? prev : resolved));
-        setSettings((prev) => reconcileChatSettings(resolved, prev));
+        setProviders((prevProviders) => {
+          const retained =
+            prevProviders.length > 0 ? prevProviders : PROVIDER_MODELS_FALLBACK;
+          setSettings((prevSettings) =>
+            reconcileChatSettings(retained, prevSettings)
+          );
+          return retained;
+        });
         setFetchError(true);
       });
     return () => {

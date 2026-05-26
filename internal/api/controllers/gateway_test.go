@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"agentd/internal/api/controllers"
-	"agentd/internal/gateway/spec"
 )
 
 func TestGatewayListEmpty(t *testing.T) {
@@ -31,9 +30,9 @@ func TestGatewayListEmpty(t *testing.T) {
 
 func TestGatewayListProviders(t *testing.T) {
 	h := controllers.GatewayHandler{
-		Configs: []spec.ProviderConfig{
-			{Name: "gemini", Adapter: "openai", Model: "gemini-2.5-flash"},
-			{Name: "local", Adapter: "ollama", Model: "llama3:8b"},
+		Configs: []controllers.ProviderEntry{
+			{Name: "gemini", Adapter: "openai", Models: []string{"gemini-2.5-flash"}},
+			{Name: "local", Adapter: "ollama", Models: []string{"llama3:8b"}},
 		},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/gateway/providers", nil)
@@ -66,8 +65,8 @@ func TestGatewayListProviders(t *testing.T) {
 
 func TestGatewayListNoModel(t *testing.T) {
 	h := controllers.GatewayHandler{
-		Configs: []spec.ProviderConfig{
-			{Name: "horde", Adapter: "horde", Model: ""},
+		Configs: []controllers.ProviderEntry{
+			{Name: "horde", Adapter: "horde", Models: []string{}},
 		},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/gateway/providers", nil)

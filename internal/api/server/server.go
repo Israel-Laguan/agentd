@@ -60,7 +60,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	preferences := controllers.PreferencesHandler{Store: deps.Store}
 	system := controllers.SystemHandler{System: resolveSystemService(deps)}
 	agents := controllers.AgentHandler{Service: resolveAgentService(deps)}
-	gway := controllers.GatewayHandler{Configs: deps.ProviderConfigs}
+	gway := controllers.GatewayHandler{Configs: toProviderEntries(deps.ProviderConfigs)}
 
 	mux.HandleFunc("GET /api/v1/projects", projects.List)
 	mux.HandleFunc("GET /api/v1/projects/{id}", projects.Get)
@@ -150,4 +150,23 @@ func resolveSystemService(deps ServerDeps) *services.SystemService {
 		return nil
 	}
 	return services.NewSystemService(deps.Summarizer, nil)
+}
+
+// toProviderEntries converts full ProviderConfig slices (which carry API keys
+// and base URLs) into the minimal wire-safe summary used by GatewayHandler.
+// Stripping credentials here ensures they never reside inside an HTTP handler.
+func toProviderEntries(cfgs []spec.ProviderConfig) []controllers.ProviderEntry {
+	entries := make([]controllers.ProviderEntry, 0, len(cfgs))
+	for _, cfg := range cfgs {
+		models := make([]string, 0, 1)
+		if cfg.Model != "" {
+			models = append(models, cfg.Model)
+		}
+		entries = append(entries, controllers.ProviderEntry{
+			Name:    cfg.Name,
+			Adapter: cfg.Adapter,
+			Models:  models,
+		})
+	}
+	return entries
 }

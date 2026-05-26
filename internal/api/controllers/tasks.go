@@ -113,6 +113,9 @@ func (h TaskHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 
 // Patch handles PATCH /api/v1/tasks/{id}. Supports state transitions and
 // description updates; at least one field must be present in the body.
+// State is applied first because it is more likely to be rejected by the
+// state machine; this minimises the window for partial commits when both
+// fields are sent in a single request.
 func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
 	var req patchRequest
@@ -128,23 +131,8 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			[]string{"state or description must be provided"})
 		return
 	}
-	if h.Store == nil {
-		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "store is not configured")
-		return
-	}
-	current, err := h.Store.GetTask(r.Context(), taskID)
-	if err != nil {
-		httpx.WriteMappedError(w, err)
-		return
-	}
-	updated := current
-	if hasDescription {
-		updated, err = h.Store.UpdateTaskDescription(r.Context(), taskID, updated.UpdatedAt, *req.Description)
-		if err != nil {
-			httpx.WriteMappedError(w, err)
-			return
-		}
-	}
+	var updated *models.Task
+	var err error
 	if hasState {
 		if h.Tasks == nil {
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
@@ -152,6 +140,27 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		}
 		next := models.TaskState(strings.ToUpper(strings.TrimSpace(req.State)))
 		updated, err = h.Tasks.UpdateTaskState(r.Context(), taskID, next)
+		if err != nil {
+			httpx.WriteMappedError(w, err)
+			return
+		}
+	}
+	if hasDescription {
+		if h.Store == nil {
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "store is not configured")
+			return
+		}
+		var baseTask *models.Task
+		if updated != nil {
+			baseTask = updated
+		} else {
+			baseTask, err = h.Store.GetTask(r.Context(), taskID)
+			if err != nil {
+				httpx.WriteMappedError(w, err)
+				return
+			}
+		}
+		updated, err = h.Store.UpdateTaskDescription(r.Context(), taskID, baseTask.UpdatedAt, *req.Description)
 		if err != nil {
 			httpx.WriteMappedError(w, err)
 			return
