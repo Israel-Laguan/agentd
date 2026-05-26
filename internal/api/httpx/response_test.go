@@ -67,6 +67,7 @@ func TestMapErrorSentinels(t *testing.T) {
 		{models.ErrProjectNotFound, http.StatusNotFound, CodeNotFound},
 		{models.ErrSandboxViolation, http.StatusForbidden, CodeForbidden},
 		{models.ErrInvalidDraftPlan, http.StatusBadRequest, CodeValidation},
+		{&models.ProviderNotConfiguredError{Provider: "x", Available: []string{"openai"}}, http.StatusBadRequest, CodeValidation},
 		{models.ErrStateConflict, http.StatusConflict, CodeStateConflict},
 	}
 	for _, tc := range cases {

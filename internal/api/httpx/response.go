@@ -108,7 +108,10 @@ func MetaFromPagination(params models.PaginationParams, total int) *Meta {
 // errors.Is so wrapped errors from the store layer (e.g. fmt.Errorf
 // wrapping ErrTaskNotFound) still resolve to their canonical mapping.
 func MapError(err error) (int, string, string) {
+	var providerNotCfg *models.ProviderNotConfiguredError
 	switch {
+	case errors.As(err, &providerNotCfg):
+		return http.StatusBadRequest, CodeValidation, err.Error()
 	case errors.Is(err, models.ErrProjectNotFound):
 		return http.StatusNotFound, CodeNotFound, "project not found"
 	case errors.Is(err, models.ErrTaskNotFound):

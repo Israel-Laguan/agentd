@@ -8,13 +8,20 @@ import (
 	"agentd/internal/models"
 )
 
+// ProviderLister is a narrow interface satisfied by the gateway Router.
+// It provides the live set of configured provider names for validation.
+type ProviderLister interface {
+	ProviderNames() []string
+}
+
 // AgentService coordinates HTTP-driven CRUD on AgentProfile records.
 // Validation that requires DB transactions (delete protections, in-use
 // checks) lives inside the store; this service is intentionally thin and
 // only enforces request-shape rules.
 type AgentService struct {
-	Store models.KanbanStore
-	Bus   AgentBus
+	Store  models.KanbanStore
+	Bus    AgentBus
+	Lister ProviderLister // optional; nil skips provider-existence validation
 }
 
 // AgentBus is the optional bus surface used to publish agent_updated /
@@ -64,6 +71,9 @@ func (s *AgentService) Create(ctx context.Context, p models.AgentProfile) (*mode
 	if err := validateForCreate(&p); err != nil {
 		return nil, err
 	}
+	if err := s.validateProviderExists(p.Provider); err != nil {
+		return nil, err
+	}
 	if existing, _ := s.Store.GetAgentProfile(ctx, p.ID); existing != nil {
 		return nil, models.ErrAgentProfileInUse
 	}
@@ -90,6 +100,9 @@ func (s *AgentService) Patch(ctx context.Context, id string, patch AgentPatch) (
 		return nil, errors.New("name is required")
 	}
 	if err := validateProviderModelPair(current.Provider, current.Model); err != nil {
+		return nil, err
+	}
+	if err := s.validateProviderExists(current.Provider); err != nil {
 		return nil, err
 	}
 	if err := s.Store.UpsertAgentProfile(ctx, *current); err != nil {
@@ -140,6 +153,19 @@ func validateForCreate(p *models.AgentProfile) error {
 		p.Role = "CODE_GEN"
 	}
 	return nil
+}
+
+func (s *AgentService) validateProviderExists(provider string) error {
+	if s.Lister == nil || provider == "" {
+		return nil
+	}
+	names := s.Lister.ProviderNames()
+	for _, n := range names {
+		if strings.EqualFold(n, provider) {
+			return nil
+		}
+	}
+	return &models.ProviderNotConfiguredError{Provider: provider, Available: names}
 }
 
 func validateProviderModelPair(provider, model string) error {

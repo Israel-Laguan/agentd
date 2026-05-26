@@ -12,10 +12,57 @@ import (
 	"agentd/internal/testutil"
 )
 
+// stubProviderLister implements services.ProviderLister for HTTP tests.
+type stubProviderLister struct {
+	names []string
+}
+
+func (s stubProviderLister) ProviderNames() []string { return s.names }
+
 func agentTestHandler() controllers.AgentHandler {
+	return agentTestHandlerWithProviders()
+}
+
+func agentTestHandlerWithProviders(names ...string) controllers.AgentHandler {
 	store := testutil.NewFakeStore()
 	svc := services.NewAgentService(store, nil)
+	if len(names) > 0 {
+		svc.Lister = stubProviderLister{names: names}
+	}
 	return controllers.AgentHandler{Service: svc}
+}
+
+func decodeAgentErrorBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	return body
+}
+
+func assertAgentValidationFailed(t *testing.T, rec *httptest.ResponseRecorder, wantSubstrings ...string) {
+	t.Helper()
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body.String())
+	}
+	body := decodeAgentErrorBody(t, rec)
+	if body["status"] != "error" {
+		t.Fatalf("status field = %v, want error", body["status"])
+	}
+	errObj, ok := body["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error object missing: %+v", body)
+	}
+	if errObj["code"] != "VALIDATION_FAILED" {
+		t.Fatalf("error.code = %v, want VALIDATION_FAILED", errObj["code"])
+	}
+	msg, _ := errObj["message"].(string)
+	for _, sub := range wantSubstrings {
+		if !strings.Contains(msg, sub) {
+			t.Fatalf("error.message = %q, want substring %q", msg, sub)
+		}
+	}
 }
 
 func seedAgent(t *testing.T, h controllers.AgentHandler) {
@@ -207,6 +254,64 @@ func TestAgentHandler_PatchAgenticMode(t *testing.T) {
 	}
 	if getResp.Data.AgenticMode {
 		t.Fatal("expected agentic_mode false after disable patch")
+	}
+}
+
+func TestAgentHandler_CreateUnknownProvider(t *testing.T) {
+	h := agentTestHandlerWithProviders("openai", "gemini")
+	body := `{"id":"bad-agent","name":"Bad Agent","provider":"nonexistent","model":"m1"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+	assertAgentValidationFailed(t, rec, "nonexistent", "openai", "gemini")
+}
+
+func TestAgentHandler_CreateKnownProvider(t *testing.T) {
+	h := agentTestHandlerWithProviders("openai", "gemini")
+	body := `{"id":"good-agent","name":"Good Agent","provider":"gemini","model":"gemini-pro"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Create code = %d body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAgentHandler_CreateEmptyProviderCascade(t *testing.T) {
+	h := agentTestHandlerWithProviders("openai", "gemini")
+	body := `{"id":"cascade-agent","name":"Cascade Agent","provider":"","model":""}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Create code = %d body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAgentHandler_PatchUnknownProvider(t *testing.T) {
+	h := agentTestHandlerWithProviders("openai", "gemini")
+	body := `{"provider":"bad-corp","model":"bad-corp/v1"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/default", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "default")
+	rec := httptest.NewRecorder()
+	h.Patch(rec, req)
+	assertAgentValidationFailed(t, rec, "bad-corp", "openai")
+}
+
+func TestAgentHandler_PatchKnownProvider(t *testing.T) {
+	h := agentTestHandlerWithProviders("openai", "gemini")
+	body := `{"provider":"gemini","model":"gemini-pro"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/default", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "default")
+	rec := httptest.NewRecorder()
+	h.Patch(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Patch code = %d body = %s", rec.Code, rec.Body.String())
 	}
 }
 

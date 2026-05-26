@@ -40,6 +40,28 @@ func TestNewRouterFromConfigs_CustomName(t *testing.T) {
 	}
 }
 
+func TestRouterProviderNames(t *testing.T) {
+	t.Parallel()
+
+	router, err := NewRouterFromConfigs([]spec.ProviderConfig{
+		{Name: "poolside", Adapter: "openai", BaseURL: "https://inference.poolside.ai/v1"},
+		{Name: "gemini", Adapter: "openai", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai"},
+	})
+	if err != nil {
+		t.Fatalf("NewRouterFromConfigs() error = %v", err)
+	}
+	got := router.ProviderNames()
+	want := []string{"poolside", "gemini"}
+	if len(got) != len(want) {
+		t.Fatalf("ProviderNames() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ProviderNames()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestNewRouterFromConfigs_UnknownAdapter(t *testing.T) {
 	t.Parallel()
 

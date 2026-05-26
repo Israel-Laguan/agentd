@@ -126,7 +126,11 @@ func resolveAgentService(deps ServerDeps) *services.AgentService {
 	if deps.Bus != nil {
 		bridge = bus.AgentBridge{Bus: deps.Bus}
 	}
-	return services.NewAgentService(deps.Store, bridge)
+	svc := services.NewAgentService(deps.Store, bridge)
+	if lister, ok := deps.Gateway.(services.ProviderLister); ok {
+		svc.Lister = lister
+	}
+	return svc
 }
 
 func resolveTaskService(deps ServerDeps) *services.TaskService {
