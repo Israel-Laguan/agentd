@@ -21,6 +21,12 @@ import { Sidebar } from "./components/layout/sidebar";
 import { TaskDrawer } from "@/app/components/task/task-drawer";
 import { ChatSettings } from "./components/chat/chat-settings-modal";
 
+const DEFAULT_CHAT_SETTINGS: ChatSettings = {
+  provider: "openai",
+  model: "gpt-4o",
+  effort: "medium",
+};
+
 export default function Page() {
   const [activeTab, setActiveTab] = useState('chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -31,21 +37,20 @@ export default function Page() {
   const [boardError, setBoardError] = useState(false);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [chatSettings, setChatSettings] = useState<ChatSettings>({
-    provider: "",
-    model: "",
-    effort: "medium",
-  });
+  const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Seed chat settings from the first configured provider once the daemon responds.
   useEffect(() => {
     fetchProviders().then((list) => {
-      if (list.length > 0) {
-        setChatSettings(prev =>
-          prev.provider ? prev : { provider: list[0].name, model: list[0].models[0] ?? "", effort: "medium" }
-        );
-      }
+      const first = list[0];
+      setChatSettings(prev =>
+        prev.provider
+          ? prev
+          : first
+            ? { provider: first.name, model: first.models[0] ?? "", effort: "medium" }
+            : { provider: "openai", model: "gpt-4o", effort: "medium" }
+      );
     }).catch(() => {
       // Daemon unreachable in USE_MOCK=false; fall back silently.
       setChatSettings(prev => prev.provider ? prev : { provider: "openai", model: "gpt-4o", effort: "medium" });

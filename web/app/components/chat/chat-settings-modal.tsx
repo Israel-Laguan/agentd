@@ -25,6 +25,25 @@ const PROVIDER_MODELS_FALLBACK: Provider[] = [
   { name: "local", adapter: "ollama", models: ["llama-3", "mistral"] },
 ];
 
+function reconcileChatSettings(
+  resolved: Provider[],
+  prev: ChatSettings
+): ChatSettings {
+  const matched = resolved.find((p) => p.name === prev.provider);
+  if (matched) {
+    const model = matched.models.includes(prev.model)
+      ? prev.model
+      : (matched.models[0] ?? "");
+    return { ...prev, model };
+  }
+  const first = resolved[0];
+  return {
+    ...prev,
+    provider: first?.name ?? "",
+    model: first?.models[0] ?? "",
+  };
+}
+
 export function ChatSettingsModal({
   open,
   onClose,
@@ -41,18 +60,22 @@ export function ChatSettingsModal({
     fetchProviders()
       .then((list) => {
         if (cancelled) return;
-        setProviders(list.length > 0 ? list : PROVIDER_MODELS_FALLBACK);
+        const resolved = list.length > 0 ? list : PROVIDER_MODELS_FALLBACK;
+        setProviders(resolved);
+        setSettings((prev) => reconcileChatSettings(resolved, prev));
         setFetchError(false);
       })
       .catch(() => {
         if (cancelled) return;
-        setProviders((prev) => (prev.length > 0 ? prev : PROVIDER_MODELS_FALLBACK));
+        const resolved = PROVIDER_MODELS_FALLBACK;
+        setProviders((prev) => (prev.length > 0 ? prev : resolved));
+        setSettings((prev) => reconcileChatSettings(resolved, prev));
         setFetchError(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, setSettings]);
 
   const isLoading = open && providers.length === 0 && !fetchError;
 

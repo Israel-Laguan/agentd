@@ -67,12 +67,16 @@ export function ChatView({
     try {
       const data = await sendChat(userMsg.content, chatSettings);
 
-      const assistant: ChatMessage | null =
+      const assistant: ChatMessage =
         data?.message
           ? { ...data.message, id: data.message.id ?? createMessageId() } as ChatMessage
-          : null;
+          : {
+              id: createMessageId(),
+              role: "assistant",
+              content: "Sorry, I couldn't get a response — please try again.",
+            };
 
-      if (assistant) setMessages((p) => [...p, assistant]);
+      setMessages((p) => [...p, assistant]);
       if (data.plan) setDraftPlan(data.plan);
     } catch (error) {
       console.error("Failed to send message:", error);
