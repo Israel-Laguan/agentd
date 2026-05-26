@@ -1,6 +1,22 @@
 package models
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
+
+// ProviderNotConfiguredError is returned when an agent profile is created or
+// patched with a provider name that is not present in the live gateway registry.
+type ProviderNotConfiguredError struct {
+	Provider  string
+	Available []string
+}
+
+func (e *ProviderNotConfiguredError) Error() string {
+	return fmt.Sprintf("provider '%s' is not configured; available: [%s]",
+		e.Provider, strings.Join(e.Available, ", "))
+}
 
 var (
 	ErrCircularDependency     = errors.New("circular task dependency")
