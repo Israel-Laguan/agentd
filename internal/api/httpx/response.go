@@ -17,10 +17,11 @@ import (
 // The JSON wire format is preserved exactly as before: callers see
 // {status, data, meta?, error?} with the same field names.
 type APIResponse[T any] struct {
-	Status string    `json:"status"`
-	Data   T         `json:"data,omitempty"`
-	Meta   *Meta     `json:"meta,omitempty"`
-	Error  *APIError `json:"error,omitempty"`
+	Status   string    `json:"status"`
+	Data     T         `json:"data,omitempty"`
+	Meta     *Meta     `json:"meta,omitempty"`
+	Warnings []string  `json:"warnings,omitempty"`
+	Error    *APIError `json:"error,omitempty"`
 }
 
 // Envelope is retained as an untyped alias so existing call sites continue
@@ -57,7 +58,16 @@ const (
 // WriteSuccess emits a 2xx envelope. Pass a nil meta when the response
 // is a single resource (no pagination block).
 func WriteSuccess(w http.ResponseWriter, status int, data any, meta *Meta) {
-	WriteJSON(w, status, Envelope{Status: "success", Data: data, Meta: meta})
+	WriteSuccessWithWarnings(w, status, data, meta, nil)
+}
+
+// WriteSuccessWithWarnings emits a 2xx envelope with optional non-fatal warnings.
+func WriteSuccessWithWarnings(w http.ResponseWriter, status int, data any, meta *Meta, warnings []string) {
+	env := Envelope{Status: "success", Data: data, Meta: meta}
+	if len(warnings) > 0 {
+		env.Warnings = warnings
+	}
+	WriteJSON(w, status, env)
 }
 
 // WriteError emits an error envelope with a single human-readable message.
@@ -127,7 +137,8 @@ func MapError(err error) (int, string, string) {
 		errors.Is(err, models.ErrTaskBlocked):
 		return http.StatusConflict, CodeStateConflict, err.Error()
 	case errors.Is(err, models.ErrInvalidDraftPlan),
-		errors.Is(err, models.ErrCircularDependency):
+		errors.Is(err, models.ErrCircularDependency),
+		errors.Is(err, models.ErrAgentProfileInvalid):
 		return http.StatusBadRequest, CodeValidation, err.Error()
 	case errors.Is(err, models.ErrSandboxViolation):
 		return http.StatusForbidden, CodeForbidden, err.Error()

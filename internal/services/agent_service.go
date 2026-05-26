@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"strings"
 
 	"agentd/internal/models"
@@ -67,53 +67,56 @@ func (s *AgentService) Get(ctx context.Context, id string) (*models.AgentProfile
 // Create inserts a new profile. The caller may leave ID blank to have a
 // UUID assigned. Returns ErrAgentProfileInUse when the requested ID
 // already exists; the manager's loop should PATCH instead.
-func (s *AgentService) Create(ctx context.Context, p models.AgentProfile) (*models.AgentProfile, error) {
+func (s *AgentService) Create(ctx context.Context, p models.AgentProfile) (AgentWriteResult, error) {
 	if err := validateForCreate(&p); err != nil {
-		return nil, err
+		return AgentWriteResult{}, err
 	}
 	if err := s.validateProviderExists(p.Provider); err != nil {
-		return nil, err
+		return AgentWriteResult{}, err
 	}
 	if existing, _ := s.Store.GetAgentProfile(ctx, p.ID); existing != nil {
-		return nil, models.ErrAgentProfileInUse
+		return AgentWriteResult{}, models.ErrAgentProfileInUse
 	}
 	if err := s.Store.UpsertAgentProfile(ctx, p); err != nil {
-		return nil, err
+		return AgentWriteResult{}, err
 	}
 	created, err := s.Store.GetAgentProfile(ctx, p.ID)
 	if err != nil {
-		return nil, err
+		return AgentWriteResult{}, err
 	}
 	s.publishUpdated(ctx, *created)
-	return created, nil
+	return AgentWriteResult{Profile: created, Warnings: s.warnIfModelNotConfigured(p.Provider, p.Model)}, nil
 }
 
 // Patch applies a sparse update and returns the new profile.
-func (s *AgentService) Patch(ctx context.Context, id string, patch AgentPatch) (*models.AgentProfile, error) {
+func (s *AgentService) Patch(ctx context.Context, id string, patch AgentPatch) (AgentWriteResult, error) {
 	current, err := s.Store.GetAgentProfile(ctx, id)
 	if err != nil {
-		return nil, err
+		return AgentWriteResult{}, err
 	}
 	applyPatch(current, patch)
 	current.Name = strings.TrimSpace(current.Name)
 	if current.Name == "" {
-		return nil, errors.New("name is required")
+		return AgentWriteResult{}, fmt.Errorf("%w: name is required", models.ErrAgentProfileInvalid)
 	}
 	if err := validateProviderModelPair(current.Provider, current.Model); err != nil {
-		return nil, err
+		return AgentWriteResult{}, err
 	}
 	if err := s.validateProviderExists(current.Provider); err != nil {
-		return nil, err
+		return AgentWriteResult{}, err
 	}
 	if err := s.Store.UpsertAgentProfile(ctx, *current); err != nil {
-		return nil, err
+		return AgentWriteResult{}, err
 	}
 	updated, err := s.Store.GetAgentProfile(ctx, id)
 	if err != nil {
-		return nil, err
+		return AgentWriteResult{}, err
 	}
 	s.publishUpdated(ctx, *updated)
-	return updated, nil
+	return AgentWriteResult{
+		Profile:  updated,
+		Warnings: s.warnIfModelNotConfigured(current.Provider, current.Model),
+	}, nil
 }
 
 // Delete removes a profile. The store enforces protected/in-use guards.
@@ -141,13 +144,13 @@ func validateForCreate(p *models.AgentProfile) error {
 	p.Role = strings.TrimSpace(p.Role)
 	p.CapabilityRouteIntent = strings.TrimSpace(p.CapabilityRouteIntent)
 	if p.Name == "" {
-		return errors.New("name is required")
+		return fmt.Errorf("%w: name is required", models.ErrAgentProfileInvalid)
 	}
 	if err := validateProviderModelPair(p.Provider, p.Model); err != nil {
 		return err
 	}
 	if p.MaxTokens < 0 {
-		return errors.New("max_tokens must be >= 0")
+		return fmt.Errorf("%w: max_tokens must be >= 0", models.ErrAgentProfileInvalid)
 	}
 	if p.Role == "" {
 		p.Role = "CODE_GEN"
@@ -170,7 +173,7 @@ func (s *AgentService) validateProviderExists(provider string) error {
 
 func validateProviderModelPair(provider, model string) error {
 	if (provider == "") != (model == "") {
-		return errors.New("provider and model must both be set or both empty for gateway cascade")
+		return fmt.Errorf("%w: provider and model must both be set or both empty for gateway cascade", models.ErrAgentProfileInvalid)
 	}
 	return nil
 }

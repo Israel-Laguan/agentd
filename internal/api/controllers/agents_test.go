@@ -12,22 +12,34 @@ import (
 	"agentd/internal/testutil"
 )
 
-// stubProviderLister implements services.ProviderLister for HTTP tests.
-type stubProviderLister struct {
-	names []string
+// stubProviderRegistry implements provider validation stubs for HTTP tests.
+type stubProviderRegistry struct {
+	names  []string
+	models map[string][]string
 }
 
-func (s stubProviderLister) ProviderNames() []string { return s.names }
+func (s stubProviderRegistry) ProviderNames() []string { return s.names }
+
+func (s stubProviderRegistry) KnownModels(provider string) []string {
+	if s.models == nil {
+		return nil
+	}
+	return s.models[provider]
+}
 
 func agentTestHandler() controllers.AgentHandler {
 	return agentTestHandlerWithProviders()
 }
 
 func agentTestHandlerWithProviders(names ...string) controllers.AgentHandler {
+	return agentTestHandlerWithRegistry(names, nil)
+}
+
+func agentTestHandlerWithRegistry(names []string, models map[string][]string) controllers.AgentHandler {
 	store := testutil.NewFakeStore()
 	svc := services.NewAgentService(store, nil)
 	if len(names) > 0 {
-		svc.Lister = stubProviderLister{names: names}
+		svc.Lister = stubProviderRegistry{names: names, models: models}
 	}
 	return controllers.AgentHandler{Service: svc}
 }
@@ -267,6 +279,38 @@ func TestAgentHandler_CreateUnknownProvider(t *testing.T) {
 	assertAgentValidationFailed(t, rec, "nonexistent", "openai", "gemini")
 }
 
+func TestAgentHandler_CreateMissingName(t *testing.T) {
+	h := agentTestHandler()
+	body := `{"id":"no-name","name":"","provider":"openai","model":"gpt-4"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+	assertAgentValidationFailed(t, rec, "name is required")
+}
+
+func TestAgentHandler_CreatePartialProviderModel(t *testing.T) {
+	h := agentTestHandler()
+	body := `{"id":"partial","name":"Partial","provider":"openai","model":""}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+	assertAgentValidationFailed(t, rec, "provider and model must both be set or both empty")
+}
+
+func TestAgentHandler_PatchMissingName(t *testing.T) {
+	h := agentTestHandler()
+	seedAgent(t, h)
+	body := `{"name":"   "}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/test-agent", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "test-agent")
+	rec := httptest.NewRecorder()
+	h.Patch(rec, req)
+	assertAgentValidationFailed(t, rec, "name is required")
+}
+
 func TestAgentHandler_CreateKnownProvider(t *testing.T) {
 	h := agentTestHandlerWithProviders("openai", "gemini")
 	body := `{"id":"good-agent","name":"Good Agent","provider":"gemini","model":"gemini-pro"}`
@@ -300,6 +344,30 @@ func TestAgentHandler_PatchUnknownProvider(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.Patch(rec, req)
 	assertAgentValidationFailed(t, rec, "bad-corp", "openai", "gemini")
+}
+
+func TestAgentHandler_CreateUnknownModelWarning(t *testing.T) {
+	h := agentTestHandlerWithRegistry(
+		[]string{"openai"},
+		map[string][]string{"openai": {"gpt-4o-mini"}},
+	)
+	body := `{"id":"warn-agent","name":"Warn Agent","provider":"openai","model":"gpt-4o"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Create code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeAgentErrorBody(t, rec)
+	warnings, ok := resp["warnings"].([]any)
+	if !ok || len(warnings) != 1 {
+		t.Fatalf("warnings = %v, want one entry", resp["warnings"])
+	}
+	msg, _ := warnings[0].(string)
+	if !strings.Contains(msg, "gpt-4o-mini") {
+		t.Fatalf("warning = %q, want configured model hint", msg)
+	}
 }
 
 func TestAgentHandler_PatchKnownProvider(t *testing.T) {

@@ -34,6 +34,7 @@ var (
 	ErrTaskNotFound           = errors.New("task not found")
 	ErrBudgetExceeded         = errors.New("task token budget exceeded")
 	ErrAgentProfileNotFound   = errors.New("agent profile not found")
+	ErrAgentProfileInvalid    = errors.New("invalid agent profile")
 	ErrAgentProfileProtected  = errors.New("agent profile is protected")
 	ErrAgentProfileInUse      = errors.New("agent profile in use by tasks")
 	ErrMessageTooLarge        = errors.New("message exceeds max size")
