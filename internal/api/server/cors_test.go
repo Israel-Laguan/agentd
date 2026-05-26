@@ -57,6 +57,25 @@ func TestCorsMiddleware_OptionsPreflight(t *testing.T) {
 	}
 }
 
+func TestCorsMiddleware_OptionsDisallowedOrigin(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	})
+	handler := corsMiddleware(next)
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/projects", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTeapot {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusTeapot)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want empty", got)
+	}
+}
+
 func TestCorsMiddleware_OptionsWithoutOrigin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
