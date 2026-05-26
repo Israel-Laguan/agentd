@@ -119,6 +119,18 @@ func TestTaskHandler_PatchValidation(t *testing.T) {
 			t.Fatalf("code = %d", rec.Code)
 		}
 	})
+
+	t.Run("nil task service for description", func(t *testing.T) {
+		bare := controllers.TaskHandler{Store: testutil.NewFakeStore()}
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/t1", strings.NewReader(`{"description":"x"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.SetPathValue("id", "t1")
+		rec := httptest.NewRecorder()
+		bare.Patch(rec, req)
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("code = %d", rec.Code)
+		}
+	})
 }
 
 func TestTaskHandler_PatchDescription(t *testing.T) {
