@@ -299,7 +299,7 @@ func TestAgentHandler_PatchUnknownProvider(t *testing.T) {
 	req.SetPathValue("id", "default")
 	rec := httptest.NewRecorder()
 	h.Patch(rec, req)
-	assertAgentValidationFailed(t, rec, "bad-corp", "openai")
+	assertAgentValidationFailed(t, rec, "bad-corp", "openai", "gemini")
 }
 
 func TestAgentHandler_PatchKnownProvider(t *testing.T) {

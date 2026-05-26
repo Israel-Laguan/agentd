@@ -46,7 +46,9 @@ func (r *Router) ProviderNames() []string {
 	}
 	names := make([]string, 0, len(r.providers))
 	for _, p := range r.providers {
-		names = append(names, string(p.Name()))
+		if p != nil {
+			names = append(names, string(p.Name()))
+		}
 	}
 	return names
 }
