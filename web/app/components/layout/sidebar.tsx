@@ -2,14 +2,12 @@ import { Dispatch, SetStateAction } from "react";
 import { MessageSquare, LayoutDashboard, Users, BookOpen, Terminal, Settings } from "lucide-react";
 import { SidebarItem } from "@/app/components/sidebar-item";
 import { motion } from "framer-motion";
+import { WorkforceState } from "@/lib/types";
 
 interface SidebarProps {
     activeTab: string;
     setActiveTab: Dispatch<SetStateAction<string>>;
-    workforce: {
-        activeWorkers: number;
-        maxWorkers: number;
-    } | null;
+    workforce: WorkforceState | null;
 }
 export const Sidebar = ({ activeTab, setActiveTab, workforce }: SidebarProps) => {
     return (

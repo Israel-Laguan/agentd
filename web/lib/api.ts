@@ -5,7 +5,7 @@ import { mockApprovePlan } from "@/lib/mocks/plan.mock";
 import { mockTaskComments } from "@/lib/mocks/mock-task-comment";
 import { mockProviders } from "@/lib/mocks/providers.mock";
 import { ChatSettings } from "@/app/components/chat/chat-settings-modal";
-import { Provider, Task, TaskComment, ChatResponse } from "@/lib/types";
+import { Provider, Task, TaskComment, ChatResponse, WorkforceState } from "@/lib/types";
 import { unwrapData, mapDaemonTask, mapDaemonComment } from "@/lib/mappers";
 
 // Set NEXT_PUBLIC_USE_MOCK=false to disable mock mode and hit the real daemon.
@@ -35,7 +35,7 @@ export async function getBoard(): Promise<{ tasks: Task[] }> {
 }
 
 // ---------------- WORKFORCE ----------------
-export async function getWorkforce() {
+export async function getWorkforce(): Promise<WorkforceState | null> {
   if (USE_MOCK) return mockWorkforce;
 
   // No dedicated workforce-shape endpoint exists today.
