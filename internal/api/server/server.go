@@ -8,6 +8,7 @@ import (
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/memory"
 	"agentd/internal/models"
 	"agentd/internal/services"
@@ -30,6 +31,7 @@ type ServerDeps struct {
 	Budget           int
 	Hub              *sse.Hub
 	Retriever        *memory.Retriever
+	ProviderConfigs  []spec.ProviderConfig
 }
 
 // NewServer returns an http.Server with the API handler.
@@ -58,11 +60,13 @@ func NewHandler(deps ServerDeps) http.Handler {
 	preferences := controllers.PreferencesHandler{Store: deps.Store}
 	system := controllers.SystemHandler{System: resolveSystemService(deps)}
 	agents := controllers.AgentHandler{Service: resolveAgentService(deps)}
+	gway := controllers.GatewayHandler{Configs: deps.ProviderConfigs}
 
 	mux.HandleFunc("GET /api/v1/projects", projects.List)
 	mux.HandleFunc("GET /api/v1/projects/{id}", projects.Get)
 	mux.HandleFunc("GET /api/v1/projects/{id}/tasks", tasks.ListByProject)
 	mux.HandleFunc("POST /api/v1/projects/materialize", projects.Materialize)
+	mux.HandleFunc("GET /api/v1/tasks/{id}/comments", tasks.ListComments)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/comments", tasks.AddComment)
 	mux.HandleFunc("PATCH /api/v1/tasks/{id}", tasks.Patch)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/assign", tasks.Assign)
@@ -73,12 +77,28 @@ func NewHandler(deps ServerDeps) http.Handler {
 	mux.HandleFunc("POST /api/v1/agents", agents.Create)
 	mux.HandleFunc("PATCH /api/v1/agents/{id}", agents.Patch)
 	mux.HandleFunc("DELETE /api/v1/agents/{id}", agents.Delete)
+	mux.HandleFunc("GET /api/v1/gateway/providers", gway.List)
 	mux.HandleFunc("GET /api/v1/system/status", system.Get)
 	mux.HandleFunc("POST /api/v1/system/breaker/reset", system.Reset)
 	mux.HandleFunc("GET /api/v1/events/stream", stream.ServeHTTP)
 	mux.HandleFunc("POST /v1/chat/completions", chat.Complete)
 	mux.HandleFunc("POST /api/v1/preferences", preferences.Save)
-	return mux
+	return corsMiddleware(mux)
+}
+
+// corsMiddleware adds permissive CORS headers so the Next.js dev server
+// (localhost:3000) can reach the daemon (localhost:8765) without a proxy.
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func resolveAgentService(deps ServerDeps) *services.AgentService {
