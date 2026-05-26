@@ -15,7 +15,7 @@ Acknowledged. Removed the redundant `truncationThreshold` check; `withinLimits` 
 `totalChars` lives in `internal/queue/worker/context_budget.go` (package `worker`), so the truncation test can call it without an import. Verified with:
 
 ```bash
-go test ./internal/queue/worker/ -run TestApplyAgenticTruncation
+make test PKG=./internal/queue/worker/... RUN=TestApplyAgenticTruncation
 ```
 
 ---

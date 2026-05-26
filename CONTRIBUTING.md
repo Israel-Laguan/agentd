@@ -26,10 +26,15 @@ make check       # run full quality gate (loc + lint + test)
 
 ## Make Targets
 
+All compile/lint/test targets set `GOCACHE=$(pwd)/.gocache` and `GOMODCACHE=$HOME/go/pkg/mod` (override with `GOMODCACHE=…` if needed). See [`REVIEW.md`](REVIEW.md#go-toolchain-troubleshooting) if tests fail with missing modules or stale builds.
+
 | Target | Description |
 | --- | --- |
 | `make build` | Compile the binary to `bin/agentd` |
-| `make test` | Run race-enabled tests for all packages |
+| `make test` | Race-enabled tests (default: all packages `./...`) |
+| `make test PKG=./internal/api/...` | Same, scoped to one package tree |
+| `make test PKG=./path/... RUN=TestFoo` | Same, one package and test name regex |
+| `make test-e2e` | E2E tests under `./e2e/...` |
 | `make coverage` | Run tests with coverage report |
 | `make lint` | Run `golangci-lint` (includes `depguard`, `cyclop`, `funlen`, `revive`) |
 | `make loc` | Check tracked file line counts: 300 default, 500 for `*_test.go`, 400 under `docs/` (see [`docs/guardrails.md`](docs/guardrails.md) / [`GUARDRAILS.md`](GUARDRAILS.md)) |
@@ -46,7 +51,21 @@ make check       # run full quality gate (loc + lint + test)
 
 - Unit tests: `*_test.go` files alongside the code they test. Use table-driven tests for multi-case scenarios.
 - BDD tests: `*.feature` files with Godog step definitions in `*_feature_steps_test.go` files.
-- All tests must pass with the race detector enabled (`go test -race`).
+- All tests must pass with the race detector enabled (CI runs `make test`, which uses `-race`).
+
+**While editing** — run only what you changed:
+
+```sh
+make test PKG=./internal/api/controllers/... RUN=TestGateway
+```
+
+**Before push** — full gate:
+
+```sh
+make check
+```
+
+Avoid bare `go test` unless you set the same env as Make (`GOCACHE` and `GOMODCACHE`; see [`REVIEW.md`](REVIEW.md#go-toolchain-troubleshooting)).
 
 ## Pull Request Guidelines
 

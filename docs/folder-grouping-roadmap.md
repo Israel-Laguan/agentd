@@ -11,7 +11,7 @@ Latest baseline report: [`docs/folder-size-audit.md`](folder-size-audit.md).
 3. Kanban (`internal/kanban`)
 4. API (`internal/api`)
 
-Run `go test ./...` after each phase before moving to the next one.
+Run `make test PKG=./...` (or `make check`) after each phase before moving to the next one.
 
 ## Phase 1: Queue Grouping
 
@@ -110,7 +110,7 @@ Expected import touch points:
 
 - Create target folders and move only a coherent slice (do not mix domains in one commit).
 - Keep package names stable where possible to minimize code churn.
-- Update imports and compile with `go test ./...`.
-- Fix any broken `_test.go` references and rerun `go test ./...`.
+- Update imports and compile with `make test` (or `make test PKG=./...` for the touched tree).
+- Fix any broken `_test.go` references and rerun the same scoped `make test`.
 - Update architecture/docs references if any moved paths are linked.
 - Stop and revert only the in-flight phase if tests fail repeatedly.
