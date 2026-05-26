@@ -12,6 +12,9 @@ on:
       - "Makefile"
       - ".golangci.yml"
       - "scripts/**"
+      - "docs/**"
+      - "README.md"
+      - "config.reference.yaml"
       - ".github/workflows/ci-go.yml"
   pull_request:
     paths:
@@ -21,6 +24,9 @@ on:
       - "Makefile"
       - ".golangci.yml"
       - "scripts/**"
+      - "docs/**"
+      - "README.md"
+      - "config.reference.yaml"
       - ".github/workflows/ci-go.yml"
 
 concurrency:
