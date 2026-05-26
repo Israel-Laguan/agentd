@@ -19,6 +19,7 @@ const defaultMaxTasksPerPhase = 7
 // Router cascades across providers and applies truncation and budgets.
 type Router struct {
 	providers        []providers.Backend
+	providerModels   map[string][]string
 	maxMessageChars  int
 	truncator        spec.Truncator
 	maxTasksPerPhase int
@@ -51,6 +52,15 @@ func (r *Router) ProviderNames() []string {
 		}
 	}
 	return names
+}
+
+// KnownModels returns gateway-configured model hints for a provider name (config default
+// and role_models entries). Empty when the provider is unknown or no models are configured.
+func (r *Router) KnownModels(provider string) []string {
+	if r == nil {
+		return nil
+	}
+	return knownModelsForProvider(r.providerModels, provider)
 }
 
 // ProviderSupportsChatTools reports whether the named configured backend supports
@@ -89,7 +99,9 @@ func NewRouterFromConfigs(configs []spec.ProviderConfig) (*Router, error) {
 			return nil, err
 		}
 	}
-	return NewRouter(list...), nil
+	router := NewRouter(list...)
+	router.providerModels = buildProviderModels(configs)
+	return router, nil
 }
 
 // WithTruncation sets the truncator and optional max message size override.
@@ -120,6 +132,10 @@ func (r *Router) WithBudget(tracker spec.BudgetTracker) *Router {
 // WithRoleRouting maps logical roles to preferred provider/model pairs.
 func (r *Router) WithRoleRouting(routes map[spec.Role]spec.RoleTarget) *Router {
 	r.roleRoutes = routes
+	if r.providerModels == nil {
+		r.providerModels = make(map[string][]string)
+	}
+	mergeRoleRouteModels(r.providerModels, routes)
 	return r
 }
 

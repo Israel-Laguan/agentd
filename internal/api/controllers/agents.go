@@ -102,12 +102,12 @@ func (h AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		profile.SystemPrompt.Valid = true
 		profile.SystemPrompt.String = req.SystemPrompt
 	}
-	created, err := h.Service.Create(r.Context(), profile)
+	result, err := h.Service.Create(r.Context(), profile)
 	if err != nil {
 		httpx.WriteMappedError(w, err)
 		return
 	}
-	httpx.WriteSuccess(w, http.StatusCreated, toAgentResponse(*created), nil)
+	httpx.WriteSuccessWithWarnings(w, http.StatusCreated, toAgentResponse(*result.Profile), nil, result.Warnings)
 }
 
 // Patch handles PATCH /api/v1/agents/{id}.
@@ -123,12 +123,12 @@ func (h AgentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		Role: req.Role, MaxTokens: req.MaxTokens, AgenticMode: req.AgenticMode,
 		CapabilityRouteIntent: req.CapabilityRouteIntent,
 	}
-	updated, err := h.Service.Patch(r.Context(), r.PathValue("id"), patch)
+	result, err := h.Service.Patch(r.Context(), r.PathValue("id"), patch)
 	if err != nil {
 		httpx.WriteMappedError(w, err)
 		return
 	}
-	httpx.WriteSuccess(w, http.StatusOK, toAgentResponse(*updated), nil)
+	httpx.WriteSuccessWithWarnings(w, http.StatusOK, toAgentResponse(*result.Profile), nil, result.Warnings)
 }
 
 // Delete handles DELETE /api/v1/agents/{id}.
