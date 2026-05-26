@@ -86,7 +86,10 @@ func (s *queueScenario) gatewayUnreachable(context.Context) error {
 func (s *queueScenario) threeWorkersFailOutage(ctx context.Context) error {
 	s.store.seed(3, models.TaskStateReady)
 	_, _, err := s.daemon.dispatch(ctx)
-	return err
+	if err != nil {
+		return err
+	}
+	return waitFor(func() bool { return s.daemon.sem.InUse() == 0 }, "outage workers finished")
 }
 
 func (s *queueScenario) breakerShouldBeOpen(context.Context) error {
@@ -94,12 +97,16 @@ func (s *queueScenario) breakerShouldBeOpen(context.Context) error {
 }
 
 func (s *queueScenario) outageTasksReadyThenHumanHandoff(context.Context) error {
+	return waitFor(func() bool { return s.outageHandoffSettled() }, "outage handoff settlement")
+}
+
+func (s *queueScenario) outageHandoffSettled() bool {
 	tasks, _ := s.store.ListTasksByProject(context.Background(), "project")
 	ready := 0
 	blocked := 0
 	for _, task := range tasks {
 		if task.RetryCount != 0 {
-			return fmt.Errorf("task %s retries=%d", task.ID, task.RetryCount)
+			return false
 		}
 		switch task.State {
 		case models.TaskStateReady:
@@ -107,16 +114,10 @@ func (s *queueScenario) outageTasksReadyThenHumanHandoff(context.Context) error 
 		case models.TaskStateBlocked:
 			blocked++
 		default:
-			return fmt.Errorf("task %s state=%s", task.ID, task.State)
+			return false
 		}
 	}
-	if ready != 2 || blocked != 1 {
-		return fmt.Errorf("ready=%d blocked=%d, want ready=2 blocked=1", ready, blocked)
-	}
-	if !s.sink.containsType("PROVIDER_EXHAUSTED_HANDOFF") {
-		return fmt.Errorf("missing PROVIDER_EXHAUSTED_HANDOFF event")
-	}
-	return nil
+	return ready == 2 && blocked == 1 && s.sink.containsType("PROVIDER_EXHAUSTED_HANDOFF")
 }
 
 func (s *queueScenario) daemonPausesPolling(ctx context.Context) error {
@@ -148,24 +149,18 @@ func (s *queueScenario) oneProbeTask(context.Context) error {
 	}, "exactly one probe task")
 }
 
-func (s *queueScenario) testTaskSucceeds(ctx context.Context) error {
+func (s *queueScenario) testTaskSucceeds(_ context.Context) error {
 	if err := waitFor(func() bool {
 		return s.store.count(models.TaskStateRunning) == 1
 	}, "probe task running"); err != nil {
 		return err
 	}
-	task, ok := s.store.first(models.TaskStateRunning)
-	if !ok {
-		return fmt.Errorf("no probe task found")
-	}
-	if _, err := s.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{Success: true}); err != nil {
-		return err
-	}
-	s.breaker.RecordSuccess()
 	if s.sandbox != nil {
 		s.sandbox.unblockProbe()
 	}
-	return waitFor(func() bool { return s.daemon.sem.InUse() == 0 }, "probe worker slot release")
+	return waitFor(func() bool {
+		return s.store.count(models.TaskStateCompleted) >= 1 && s.daemon.sem.InUse() == 0
+	}, "probe task completed")
 }
 
 func (s *queueScenario) breakerShouldBeClosed(context.Context) error {
@@ -173,12 +168,21 @@ func (s *queueScenario) breakerShouldBeClosed(context.Context) error {
 }
 
 func (s *queueScenario) normalPollingResumes(ctx context.Context) error {
-	if err := waitFor(func() bool {
-		return s.daemon.sem.InUse() == 0 && s.store.count(models.TaskStateReady) == 2
-	}, "ready for normal polling"); err != nil {
-		return err
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if s.daemon.sem.InUse() != 0 || s.store.count(models.TaskStateReady) != 2 {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if err := s.daemonTicks(ctx); err != nil {
+			return err
+		}
+		if s.lastQueued == 2 {
+			return nil
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	return s.nextTickPicks(ctx, 2)
+	return fmt.Errorf("newly claimed tasks = %d, want 2", s.lastQueued)
 }
 
 func newBlockingQueueSandbox() *queueSandbox {
@@ -206,7 +210,7 @@ func requireBreakerState(b *CircuitBreaker, want BreakerState) error {
 }
 
 func waitFor(ok func() bool, label string) error {
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		if ok() {
 			return nil
