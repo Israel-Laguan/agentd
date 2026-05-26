@@ -55,6 +55,38 @@ func TestNewHandlerGETProjectsSmoke(t *testing.T) {
 	}
 }
 
+func TestAgentCreateWarnsUnknownModelWhenGatewayIsRouter(t *testing.T) {
+	store := testutil.NewFakeStore()
+	router, err := gateway.NewRouterFromConfigs([]spec.ProviderConfig{
+		{Adapter: "openai", BaseURL: "https://api.openai.com/v1", Model: "gpt-4o-mini"},
+	})
+	if err != nil {
+		t.Fatalf("NewRouterFromConfigs: %v", err)
+	}
+	h := server.NewHandler(server.ServerDeps{
+		Store:      store,
+		Gateway:    router,
+		Bus:        bus.NewInProcess(),
+		Summarizer: frontdesk.NewStatusSummarizer(store),
+	})
+	body := `{"id":"warn-agent","name":"Warn","provider":"openai","model":"gpt-4o"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body = %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	warnings, ok := resp["warnings"].([]any)
+	if !ok || len(warnings) != 1 {
+		t.Fatalf("warnings = %v, want one model hint", resp["warnings"])
+	}
+}
+
 func TestAgentCreateRejectsUnknownProviderWhenGatewayIsRouter(t *testing.T) {
 	store := testutil.NewFakeStore()
 	router, err := gateway.NewRouterFromConfigs([]spec.ProviderConfig{

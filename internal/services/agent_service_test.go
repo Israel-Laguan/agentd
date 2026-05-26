@@ -52,7 +52,7 @@ func TestAgentServiceCreateValidation(t *testing.T) {
 	svc := services.NewAgentService(store, nil)
 
 	_, err := svc.Create(context.Background(), models.AgentProfile{Name: "", Provider: "p", Model: "m"})
-	if err == nil || err.Error() != "name is required" {
+	if !errors.Is(err, models.ErrAgentProfileInvalid) || !strings.Contains(err.Error(), "name is required") {
 		t.Fatalf("Create missing name: %v", err)
 	}
 
@@ -62,12 +62,12 @@ func TestAgentServiceCreateValidation(t *testing.T) {
 	}
 
 	_, err = svc.Create(context.Background(), models.AgentProfile{ID: "partial", Name: "Partial", Provider: "openai", Model: ""})
-	if err == nil || err.Error() != "provider and model must both be set or both empty for gateway cascade" {
+	if !errors.Is(err, models.ErrAgentProfileInvalid) || !strings.Contains(err.Error(), "provider and model must both be set or both empty") {
 		t.Fatalf("Create partial provider/model: %v", err)
 	}
 
 	_, err = svc.Create(context.Background(), models.AgentProfile{Name: "n", Provider: "p", Model: "m", MaxTokens: -1})
-	if err == nil || err.Error() != "max_tokens must be >= 0" {
+	if !errors.Is(err, models.ErrAgentProfileInvalid) || !strings.Contains(err.Error(), "max_tokens must be >= 0") {
 		t.Fatalf("Create bad max_tokens: %v", err)
 	}
 }
@@ -92,15 +92,15 @@ func TestAgentServiceCreateDefaultRoleAndBus(t *testing.T) {
 	svc := services.NewAgentService(store, bus)
 
 	p := models.AgentProfile{ID: "new1", Name: "Agent", Provider: "openai", Model: "gpt-4"}
-	out, err := svc.Create(context.Background(), p)
+	result, err := svc.Create(context.Background(), p)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if out.Role != "CODE_GEN" {
-		t.Fatalf("Role = %q, want CODE_GEN", out.Role)
+	if result.Profile.Role != "CODE_GEN" {
+		t.Fatalf("Role = %q, want CODE_GEN", result.Profile.Role)
 	}
-	if len(bus.updated) != 1 || bus.updated[0].ID != out.ID {
-		t.Fatalf("bus updated = %#v, want one publish for %q", bus.updated, out.ID)
+	if len(bus.updated) != 1 || bus.updated[0].ID != result.Profile.ID {
+		t.Fatalf("bus updated = %#v, want one publish for %q", bus.updated, result.Profile.ID)
 	}
 }
 
@@ -161,26 +161,26 @@ func TestAgentServiceCreateCapabilityRouteIntent(t *testing.T) {
 	store := testutil.NewFakeStore()
 	svc := services.NewAgentService(store, nil)
 
-	out, err := svc.Create(context.Background(), models.AgentProfile{
+	result, err := svc.Create(context.Background(), models.AgentProfile{
 		ID: "intent1", Name: "Agent", Provider: "openai", Model: "gpt-4",
 		CapabilityRouteIntent: "  generate_image  ",
 	})
 	if err != nil {
 		t.Fatalf("Create with intent: %v", err)
 	}
-	if out.CapabilityRouteIntent != "generate_image" {
-		t.Fatalf("CapabilityRouteIntent = %q, want generate_image", out.CapabilityRouteIntent)
+	if result.Profile.CapabilityRouteIntent != "generate_image" {
+		t.Fatalf("CapabilityRouteIntent = %q, want generate_image", result.Profile.CapabilityRouteIntent)
 	}
 
-	out, err = svc.Create(context.Background(), models.AgentProfile{
+	result, err = svc.Create(context.Background(), models.AgentProfile{
 		ID: "intent2", Name: "Agent2", Provider: "openai", Model: "gpt-4",
 		CapabilityRouteIntent: "   ",
 	})
 	if err != nil {
 		t.Fatalf("Create with whitespace intent: %v", err)
 	}
-	if out.CapabilityRouteIntent != "" {
-		t.Fatalf("CapabilityRouteIntent = %q, want empty after whitespace-only", out.CapabilityRouteIntent)
+	if result.Profile.CapabilityRouteIntent != "" {
+		t.Fatalf("CapabilityRouteIntent = %q, want empty after whitespace-only", result.Profile.CapabilityRouteIntent)
 	}
 }
 
@@ -327,8 +327,8 @@ func TestAgentServicePatchProviderModelPair(t *testing.T) {
 
 	empty := ""
 	_, err := svc.Patch(context.Background(), "default", services.AgentPatch{Provider: &empty})
-	if err == nil {
-		t.Fatal("expected error when clearing provider but leaving model set")
+	if !errors.Is(err, models.ErrAgentProfileInvalid) {
+		t.Fatalf("Patch error = %v, want ErrAgentProfileInvalid", err)
 	}
 	if !strings.Contains(err.Error(), "provider and model must both be set or both empty") {
 		t.Fatalf("Patch error = %v, want provider/model pair error", err)
@@ -343,8 +343,8 @@ func TestAgentServicePatchProviderModelPair(t *testing.T) {
 
 	onlyModel := "gpt-4"
 	_, err = svc.Patch(context.Background(), "default", services.AgentPatch{Model: &onlyModel})
-	if err == nil {
-		t.Fatal("expected error when setting model without provider")
+	if !errors.Is(err, models.ErrAgentProfileInvalid) {
+		t.Fatalf("Patch set model only: %v, want ErrAgentProfileInvalid", err)
 	}
 }
 
