@@ -83,6 +83,9 @@ func TestGatewayListNoModel(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
+	if len(env.Data) != 1 {
+		t.Fatalf("len(data) = %d, want 1", len(env.Data))
+	}
 	if len(env.Data[0].Models) != 0 {
 		t.Errorf("expected empty models, got %v", env.Data[0].Models)
 	}
