@@ -97,6 +97,20 @@ All fields per entry:
 ### Provider blocks
 
 - **openai / anthropic / gemini**: set `api_key` in YAML or via `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`.
+
+#### `gateway.gemini`
+
+Built-in slot for Google's OpenAI-compatible Gemini endpoint (uses the `openai` adapter internally):
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `gateway.gemini.base_url` | `https://generativelanguage.googleapis.com/v1beta/openai` | OpenAI-compatible base URL |
+| `gateway.gemini.api_key` | `""` | Inline key; prefer `GEMINI_API_KEY` in `.env` |
+| `gateway.gemini.model` | `gemini-2.5-flash` | Model name for cascade and warmup |
+| `gateway.gemini.max_input_chars` | `0` | `0` inherits `gateway.truncator.max_input_chars` |
+| `gateway.gemini.timeout` | `5m` | Per-request HTTP timeout |
+
+Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First Run with Gemini Only](../README.md#first-run-with-gemini-only).
 - **ollama / llamacpp**: local inference endpoints; set `model` to match your deployed model.
 - **horde**: AI Horde fallback; anonymous key `0000000000` is valid.
 - **max_input_chars**: `0` inherits `gateway.truncator.max_input_chars`.

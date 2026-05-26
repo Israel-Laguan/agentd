@@ -4,11 +4,17 @@ agentd keeps provider tool support conservative. A provider must keep
 `SupportsChatTools` false until it has request mapping, response parsing, and
 fixture tests for that provider's actual wire format.
 
+Each backend implements `Backend.Capabilities()` in
+[`internal/gateway/providers/provider.go`](../internal/gateway/providers/provider.go),
+returning `Capabilities{SupportsChatTools: ...}`. Adapter defaults can be overridden
+per entry via `capabilities.chat_tools` in config.
+
 The **router** (`*routing.Router`) is the single source of truth for per-provider
-`SupportsChatTools`. The worker gate calls `gateway.ProviderSupportsChatTools(gw,
-name)` which delegates to the router's backend registry; there is no separate
-static string switch. At startup, agentd logs `provider supports chat tools` for
-every provider in the order list whose backend returns `SupportsChatTools: true`.
+`SupportsChatTools` via [`ProviderSupportsChatTools`](../internal/gateway/routing/router.go).
+The worker gate calls `gateway.ProviderSupportsChatTools(gw, name)`, which delegates to
+the router's backend registry; there is no separate static string switch. At startup,
+agentd logs `provider supports chat tools` for every provider in the order list whose
+backend returns `SupportsChatTools: true`.
 
 ## Capability Matrix
 
@@ -63,6 +69,31 @@ structured chat messages or tool-call objects.
 
 Keep `SupportsChatTools` false unless Horde adds a tool-call-capable API or this
 provider switches to a tested proxy with an explicit contract.
+
+## AgenticMode Gate
+
+`SupportsChatTools` controls two independent gates:
+
+**Path A — Router (frontdesk / single-shot tool calls):** When a client sends `tools` on
+`POST /v1/chat/completions`, the router checks `ProviderSupportsChatTools` to decide whether
+to forward tool definitions to the provider. This is the only gate for the Frontdesk planning
+flow and for single-shot worker requests.
+
+**Path B — Worker (agentic inner loop):** When `AgentProfile.AgenticMode: true`, the worker
+calls `providerSupportsAgentic` in
+[`internal/queue/worker/worker_support.go`](../internal/queue/worker/worker_support.go),
+which wraps `gateway.ProviderSupportsChatTools` before entering `processAgentic`. If the
+resolved provider returns `SupportsChatTools: false`, the worker silently falls back to the
+legacy single-shot JSON path (`runLegacyTask`) and emits a warning log line. No error is
+surfaced to the task; execution continues in legacy mode.
+
+As a result, any provider listed as `SupportsChatTools: false` in the Capability Matrix above
+will use legacy mode even when `AgenticMode: true` is set on the agent profile. Run
+`agentd start -v` to see the fallback warning.
+
+See [`docs/agentic-harness.md`](agentic-harness.md) for the full agentic inner loop
+specification, sandbox model, and the behavior table that maps `AgenticMode` × provider to
+the resulting execution path.
 
 ## Sources
 

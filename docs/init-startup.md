@@ -19,6 +19,9 @@ This note captures the startup path validated during the bootstrap work and the 
 
 Init prints a short hint listing seeded profiles, the first detected LLM provider from `CheckProviders`, and the `--reset-profiles` flag. Enable agentic mode per profile via PATCH (`agentic_mode: true`); empty provider works with agentic when at least one configured backend in order supports chat tools.
 
+For Gemini-only or other non-OpenAI deployments, PATCH each seeded profile with explicit
+`provider` and `model` after init (see [README § First Run with Gemini Only](../README.md#first-run-with-gemini-only)).
+
 If any step fails, the CLI now says what part of init failed and shows the wrapped error chain.
 
 ## `agentd start`

@@ -26,6 +26,30 @@ make build
 ./bin/agentd init
 ```
 
+### First Run with Gemini Only
+
+If you only have a Gemini API key:
+
+1. Add `GEMINI_API_KEY=<key>` to `.env` (copy `.env.example`).
+2. Set `gateway.order: [gemini]` in `~/.agentd/config.yaml` (or export `AGENTD_GATEWAY_ORDER=gemini`).
+3. Start with `--skip-llm-warmup` to avoid a billable startup probe on the free tier:
+   ```sh
+   agentd start --skip-llm-warmup
+   ```
+4. After `agentd init`, the seeded profiles (`default`, `researcher`, `qa`) default to no provider
+   override. Force them to Gemini via the agent API:
+   ```sh
+   # list profile IDs
+   curl http://127.0.0.1:8765/api/v1/agents
+   # patch each one
+   curl -X PATCH http://127.0.0.1:8765/api/v1/agents/<id> \
+     -H 'Content-Type: application/json' \
+     -d '{"provider":"gemini","model":"gemini-2.5-flash"}'
+   ```
+5. For dev/smoke testing, add `healing.enabled: false` to config to suppress retry escalation.
+
+See [`docs/config-reference.md`](docs/config-reference.md) for all Gemini config keys.
+
 ## Development
 
 Run tests through Make (sets `GOCACHE` and `GOMODCACHE` correctly):
@@ -97,6 +121,8 @@ Run spawned agents under a non-sudoer system user. `agentd` blocks commands that
 | [`docs/architecture-flows.md`](docs/architecture-flows.md) | Extended flows: Manager's Loop, Memory Recall |
 | [`docs/frontdesk.md`](docs/frontdesk.md) | Chat intake decision flow, package boundaries, interface seams |
 | [`docs/reference.md`](docs/reference.md) | Feature catalog, task states, event types, config key reference |
+| [`docs/openai-compatible-providers.md`](docs/openai-compatible-providers.md) | Using Groq, Together AI, Poolside, and other OpenAI-compatible cloud vendors |
+| [`docs/llamacpp-quickstart.md`](docs/llamacpp-quickstart.md) | Local inference quickstart (llama.cpp, LM Studio, vLLM, Ollama) |
 | [`docs/guardrails.md`](docs/guardrails.md) | Size limits, layer boundaries, quality workflow (human-facing) |
 | [`docs/phase1-skeleton.md`](docs/phase1-skeleton.md) | Phase 1 hardening baseline contract |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute |
