@@ -41,19 +41,19 @@ export default function Page() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Seed chat settings from the first configured provider once the daemon responds.
+  // Only applies when the user has not already changed away from the default.
   useEffect(() => {
     fetchProviders().then((list) => {
       const first = list[0];
       setChatSettings(prev =>
-        prev.provider
+        (prev.provider !== DEFAULT_CHAT_SETTINGS.provider || prev.model !== DEFAULT_CHAT_SETTINGS.model)
           ? prev
           : first
-            ? { provider: first.name, model: first.models[0] ?? "", effort: "medium" }
-            : { provider: "openai", model: "gpt-4o", effort: "medium" }
+            ? { ...prev, provider: first.name, model: first.models[0] ?? "" }
+            : prev
       );
     }).catch(() => {
-      // Daemon unreachable in USE_MOCK=false; fall back silently.
-      setChatSettings(prev => prev.provider ? prev : { provider: "openai", model: "gpt-4o", effort: "medium" });
+      // Daemon unreachable in USE_MOCK=false; keep existing defaults silently.
     });
   }, []);
 
