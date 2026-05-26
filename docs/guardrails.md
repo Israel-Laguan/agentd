@@ -44,13 +44,20 @@ Current lint enforcement: `depguard` blocks imports from `internal/models` to ou
 
 ## Local Quality Workflow
 
-Run these checks before committing:
+While iterating, scope tests to the package you changed:
 
 ```sh
-make lint        # static checks and architecture guardrails
-make test        # race-enabled tests for internal/
+make test PKG=./internal/queue/worker/...   # optional RUN=TestName
+make lint                                 # static checks and architecture guardrails
+```
+
+Before committing or opening a PR:
+
+```sh
 make check       # loc + lint + test (full quality gate)
 ```
+
+`make test` / `make build` set workspace `GOCACHE` and default `GOMODCACHE` so tests work in normal shells and IDE agents. Troubleshooting: [`REVIEW.md`](../REVIEW.md#go-toolchain-troubleshooting).
 
 ## Pre-commit Checklist
 

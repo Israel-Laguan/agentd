@@ -26,42 +26,50 @@ Run these on the PR branch. Order is fastest-fail first; `make check` is the req
 | Compile | `make build` | `cmd/agentd` builds to `bin/agentd` |
 | LOC | `make loc` | File size limits ([`scripts/checkloc`](scripts/checkloc): 300 default, 500 for `*_test.go`, 400 under `docs/`) |
 | Lint | `make lint` | `golangci-lint` + [`depguard`](.golangci.yml) architecture rules |
-| Tests | `make test` | Race-enabled tests for `./...` |
+| Tests (while iterating) | `make test PKG=./path/... RUN=TestName` | Race-enabled tests for one package or test |
+| Tests (full) | `make test` | Race-enabled tests for `./...` |
 | Full gate | `make check` | `loc` + `lint` + `test` (required before merge) |
 | E2E (if API/queue touched) | `make test-e2e` | `./e2e/...` |
 | Web (if `web/` changed) | `cd web && npm run build && npm run lint` | Next.js build + ESLint |
 
-### Targeted checks (large PRs)
+### Targeted checks (while iterating or large PRs)
 
 ```sh
-go test -race ./internal/queue/worker/...
-go test -race -run TestSpecific ./path/to/pkg
+make test PKG=./internal/queue/worker/...
+make test PKG=./internal/api/controllers/... RUN=TestGateway
 ```
 
-Prefer `make test` (or `make check`) so the workspace-local Go cache is used; see below if you run `go test` directly.
+Use scoped `PKG` / `RUN` while editing; run `make test` (all packages) or `make check` before merge. See [`CONTRIBUTING.md`](CONTRIBUTING.md#testing).
 
-## Go build cache troubleshooting
+## Go toolchain troubleshooting
 
-`make build`, `make lint`, `make test`, and `make coverage` all set `GOCACHE=$(pwd)/.gocache` via the Makefile. That avoids stale artefacts from the **global** Go cache after `git checkout` or when switching branches.
+`make build`, `make lint`, `make test`, `make coverage`, and `make test-e2e` set:
+
+- `GOCACHE=$(pwd)/.gocache` — avoids stale **build** artefacts after `git checkout` or branch switches
+- `GOMODCACHE=$HOME/go/pkg/mod` by default — avoids empty module caches in some IDE/agent environments
+
+**Prefer Makefile targets** over bare `go test`. If you must run tools outside Make, match the same env (see manual override below).
 
 ### Symptoms
 
+- `no required module provides package …` while `go.mod` looks correct (often wrong/empty `GOMODCACHE`)
 - `make lint` or `golangci-lint` fails locally but passes elsewhere (or on a fresh clone)
 - Phantom compile or type-check errors that disappear after a clean build
 - Inconsistent results between `make test` and a bare `go test`
 
 ### Fixes (try in order)
 
-1. **Use Makefile targets** — `make lint`, `make build`, `make test`, or `make check` (all use `.gocache/`).
-2. **Reset workspace cache** — `rm -rf .gocache` then `make check`.
-3. **Manual override** (if you must run tools outside Make):
+1. **Use Makefile targets** — `make build`, `make lint`, `make test`, or `make check`.
+2. **Reset workspace build cache** — `rm -rf .gocache` then `make check`.
+3. **Refresh modules** — `go mod download` (or `make tidy`), then retry.
+4. **Manual override** (if you must run tools outside Make):
 
    ```sh
+   env GOCACHE=$(pwd)/.gocache GOMODCACHE="${GOMODCACHE:-$HOME/go/pkg/mod}" go test -race ./path/...
    env GOCACHE=$(pwd)/.gocache golangci-lint run ./...
-   env GOCACHE=$(pwd)/.gocache go test -race ./...
    ```
 
-4. **Last resort** — `go clean -cache` clears the **global** cache and affects all Go projects on your machine.
+5. **Last resort** — `go clean -cache` clears the **global** build cache and affects all Go projects on your machine.
 
 `.gocache/` is listed in [`.gitignore`](.gitignore) and is safe to delete anytime.
 
