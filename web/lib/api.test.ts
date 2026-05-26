@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getBoard, getWorkforce, sendChat, updateTask, fetchTaskComments, addTaskComment } from './api';
+import { getBoard, getWorkforce, sendChat, updateTask, fetchTaskComments, addTaskComment, fetchProviders } from './api';
 import { mockBoard } from './mocks/board.mock';
 import { mockWorkforce } from './mocks/workforce.mock';
 import { mockTaskComments } from './mocks/mock-task-comment';
+import { mockProviders } from './mocks/providers.mock';
 import { TaskStatus } from './types';
 
 const initialTasks = structuredClone(mockBoard.tasks);
@@ -50,5 +51,12 @@ describe('API (mock mode)', () => {
     expect(comment.taskId).toBe('t1');
     expect(comment.message).toBe('test comment');
     expect(mockTaskComments.length).toBe(before + 1);
+  });
+
+  it('fetchProviders returns mock provider list', async () => {
+    const providers = await fetchProviders();
+    expect(providers).toEqual(mockProviders);
+    expect(providers.length).toBeGreaterThan(0);
+    expect(providers[0]).toMatchObject({ name: expect.any(String), adapter: expect.any(String), models: expect.any(Array) });
   });
 });

@@ -138,6 +138,24 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusOK, h.attachAgent(r.Context(), updated), nil)
 }
 
+// ListComments handles GET /api/v1/tasks/{id}/comments.
+func (h TaskHandler) ListComments(w http.ResponseWriter, r *http.Request) {
+	taskID := r.PathValue("id")
+	if h.Store == nil {
+		httpx.WriteSuccess(w, http.StatusOK, []models.Comment{}, nil)
+		return
+	}
+	comments, err := h.Store.ListComments(r.Context(), taskID)
+	if err != nil {
+		httpx.WriteMappedError(w, err)
+		return
+	}
+	if comments == nil {
+		comments = []models.Comment{}
+	}
+	httpx.WriteSuccess(w, http.StatusOK, comments, nil)
+}
+
 // ListByProject handles GET /api/v1/projects/{id}/tasks with optional
 // ?state=PENDING,RUNNING&assignee=HUMAN&limit=&offset= query parameters.
 func (h TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {

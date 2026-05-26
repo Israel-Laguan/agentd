@@ -11,7 +11,7 @@ import {
   ChatMessage,
   DraftPlan,
 } from '@/lib/types';
-import { getBoard, getWorkforce, updateTask } from "@/lib/api";
+import { getBoard, getWorkforce, updateTask, fetchProviders } from "@/lib/api";
 import { BoardView } from "@/app/components/board/board-view";
 import { ChatView } from "@/app/components/chat/chat-view";
 import { LogsView } from "@/app/components/logs-view";
@@ -28,15 +28,29 @@ export default function Page() {
   const [draftPlan, setDraftPlan] = useState<DraftPlan | null>(null);
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [boardError, setBoardError] = useState(false);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const DefaultChatSettings: ChatSettings = {
-    provider: "openai",
-    model: "gpt-4o",
+  const [chatSettings, setChatSettings] = useState<ChatSettings>({
+    provider: "",
+    model: "",
     effort: "medium",
-  };
-  const [chatSettings, setChatSettings] = useState<ChatSettings>(DefaultChatSettings);
+  });
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Seed chat settings from the first configured provider once the daemon responds.
+  useEffect(() => {
+    fetchProviders().then((list) => {
+      if (list.length > 0) {
+        setChatSettings(prev =>
+          prev.provider ? prev : { provider: list[0].name, model: list[0].models[0] ?? "", effort: "medium" }
+        );
+      }
+    }).catch(() => {
+      // Daemon unreachable in USE_MOCK=false; fall back silently.
+      setChatSettings(prev => prev.provider ? prev : { provider: "openai", model: "gpt-4o", effort: "medium" });
+    });
+  }, []);
 
   const handleNewIntake = useCallback(() => {
     setActiveTab('chat');
@@ -44,7 +58,7 @@ export default function Page() {
     setDraftPlan(null);
     setInput('');
     setSelectedTask(null);
-    setChatSettings(DefaultChatSettings);
+    setChatSettings(prev => ({ provider: prev.provider, model: prev.model, effort: "medium" }));
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
@@ -55,6 +69,7 @@ export default function Page() {
       try {
         const [board, workforce] = await Promise.all([getBoard(), getWorkforce()]);
         if (!mounted) return;
+        setBoardError(false);
         setWorkforce(workforce);
 
         setLocalTasks(prev =>
@@ -74,6 +89,7 @@ export default function Page() {
         });
       } catch (e) {
         console.error("Polling failed", e);
+        setBoardError(true);
       }
     };
 
@@ -194,11 +210,18 @@ export default function Page() {
             )}
 
             {activeTab === 'board' && (
-              <BoardView
-                tasks={localTasks}
-                onDragEnd={handleDragEnd}
-                onTaskClick={setSelectedTask}
-              />
+              <>
+                {boardError && (
+                  <div className="mx-4 mt-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                    Could not reach daemon — board may be stale. Retrying&hellip;
+                  </div>
+                )}
+                <BoardView
+                  tasks={localTasks}
+                  onDragEnd={handleDragEnd}
+                  onTaskClick={setSelectedTask}
+                />
+              </>
             )}
 
             {activeTab === 'logs' && (
