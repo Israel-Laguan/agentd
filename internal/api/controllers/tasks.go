@@ -138,21 +138,11 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if hasDescription {
-		if h.Store == nil {
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "store is not configured")
+		if h.Tasks == nil {
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
 			return
 		}
-		var baseTask *models.Task
-		if updated != nil {
-			baseTask = updated
-		} else {
-			baseTask, err = h.Store.GetTask(r.Context(), taskID)
-			if err != nil {
-				httpx.WriteMappedError(w, err)
-				return
-			}
-		}
-		updated, err = h.Store.UpdateTaskDescription(r.Context(), taskID, baseTask.UpdatedAt, *req.Description)
+		updated, err = h.Tasks.UpdateTaskDescription(r.Context(), taskID, *req.Description)
 		if err != nil {
 			httpx.WriteMappedError(w, err)
 			return

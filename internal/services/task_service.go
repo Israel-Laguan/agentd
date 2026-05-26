@@ -84,6 +84,17 @@ func (s *TaskService) UpdateTaskState(ctx context.Context, taskID string, next m
 	return s.Store.UpdateTaskState(ctx, taskID, current.UpdatedAt, next)
 }
 
+// UpdateTaskDescription updates task description metadata via the store's
+// optimistic lock. Unlike AssignAgent, Split, or Retry, this does not publish
+// bus signals; description edits are passive and do not drive the manager loop.
+func (s *TaskService) UpdateTaskDescription(ctx context.Context, taskID, description string) (*models.Task, error) {
+	current, err := s.Store.GetTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	return s.Store.UpdateTaskDescription(ctx, taskID, current.UpdatedAt, description)
+}
+
 // ListByProject returns a paginated slice of tasks for a project, applying
 // the filter (state, assignee) supplied by the caller. The project is
 // looked up first so callers receive ErrProjectNotFound rather than an
