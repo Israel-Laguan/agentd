@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getBoard, getWorkforce, sendChat, updateTask, fetchTaskComments, addTaskComment, fetchProviders } from './api';
 import { mockBoard } from './mocks/board.mock';
 import { mockWorkforce } from './mocks/workforce.mock';
@@ -58,5 +58,25 @@ describe('API (mock mode)', () => {
     expect(providers).toEqual(mockProviders);
     expect(providers.length).toBeGreaterThan(0);
     expect(providers[0]).toMatchObject({ name: expect.any(String), adapter: expect.any(String), models: expect.any(Array) });
+  });
+});
+
+describe('API (non-mock mode)', () => {
+  const originalUseMock = process.env.NEXT_PUBLIC_USE_MOCK;
+
+  afterEach(() => {
+    if (originalUseMock === undefined) {
+      delete process.env.NEXT_PUBLIC_USE_MOCK;
+    } else {
+      process.env.NEXT_PUBLIC_USE_MOCK = originalUseMock;
+    }
+    vi.resetModules();
+  });
+
+  it('getWorkforce returns null when no workforce endpoint exists', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const { getWorkforce } = await import('./api');
+    expect(await getWorkforce()).toBeNull();
   });
 });
