@@ -106,8 +106,10 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		}
 		if r.Method == http.MethodOptions && origin != "" {
-			w.WriteHeader(http.StatusNoContent)
-			return
+			if _, ok := corsAllowedOrigins[origin]; ok {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
