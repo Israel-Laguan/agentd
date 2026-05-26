@@ -38,9 +38,7 @@ type splitSubtask struct {
 	Description string `json:"description"`
 }
 
-// taskResponse augments models.Task with an embedded AgentProfile snapshot
-// so the cockpit knows which agent is doing the work without an extra
-// /api/v1/agents/{id} round-trip.
+// taskResponse augments models.Task with an embedded AgentProfile snapshot.
 type taskResponse struct {
 	models.Task
 	Agent *agentResponse `json:"agent,omitempty"`
@@ -88,9 +86,7 @@ func (h TaskHandler) attachAgents(ctx context.Context, tasks []models.Task) []ta
 	return out
 }
 
-// AddComment handles POST /api/v1/tasks/{id}/comments. The state guard
-// (rejecting comments on terminal tasks) lives in the store transaction;
-// this handler only enforces input shape and translates store sentinels.
+// AddComment handles POST /api/v1/tasks/{id}/comments.
 func (h TaskHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
 	var req commentRequest
@@ -111,11 +107,7 @@ func (h TaskHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusCreated, comment, nil)
 }
 
-// Patch handles PATCH /api/v1/tasks/{id}. Supports state transitions and
-// description updates; at least one field must be present in the body.
-// State is applied first because it is more likely to be rejected by the
-// state machine; this minimises the window for partial commits when both
-// fields are sent in a single request.
+// Patch handles PATCH /api/v1/tasks/{id}.
 func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
 	var req patchRequest
@@ -187,8 +179,7 @@ func (h TaskHandler) ListComments(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusOK, comments, nil)
 }
 
-// ListByProject handles GET /api/v1/projects/{id}/tasks with optional
-// ?state=PENDING,RUNNING&assignee=HUMAN&limit=&offset= query parameters.
+// ListByProject handles GET /api/v1/projects/{id}/tasks.
 func (h TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	if h.Tasks == nil {
@@ -208,9 +199,7 @@ func (h TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusOK, h.attachAgents(r.Context(), page.Data), httpx.MetaFromPagination(filter.Pagination, page.Total))
 }
 
-// Assign handles POST /api/v1/tasks/{id}/assign. The store rejects
-// reassignment of a RUNNING task with an ErrStateConflict; the operator
-// should pause via comments first if a live swap is intended.
+// Assign handles POST /api/v1/tasks/{id}/assign.
 func (h TaskHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
 	var req assignRequest
@@ -235,8 +224,7 @@ func (h TaskHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusOK, h.attachAgent(r.Context(), updated), nil)
 }
 
-// Split handles POST /api/v1/tasks/{id}/split. Wraps the existing
-// BlockTaskWithSubtasks primitive so a human can break down a stuck task.
+// Split handles POST /api/v1/tasks/{id}/split.
 func (h TaskHandler) Split(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
 	var req splitRequest
@@ -270,9 +258,7 @@ func (h TaskHandler) Split(w http.ResponseWriter, r *http.Request) {
 	}, nil)
 }
 
-// Retry handles POST /api/v1/tasks/{id}/retry. Allowed from FAILED,
-// FAILED_REQUIRES_HUMAN, or BLOCKED. Picks up the current agent_id and
-// any prior comments left by the operator.
+// Retry handles POST /api/v1/tasks/{id}/retry.
 func (h TaskHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
 	if h.Tasks == nil {
