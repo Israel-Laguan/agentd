@@ -26,7 +26,7 @@ make check       # run full quality gate (loc + lint + test)
 
 ## Make Targets
 
-All compile/lint/test targets set `GOCACHE=$(pwd)/.gocache` and `GOMODCACHE=$HOME/go/pkg/mod` (override with `GOMODCACHE=…` if needed). See [`REVIEW.md`](REVIEW.md#go-toolchain-troubleshooting) if tests fail with missing modules or stale builds.
+All compile/lint/test targets use `GOCACHE=$(pwd)/.gocache` and `GOMODCACHE` from your environment (defaulting to `$(HOME)/go/pkg/mod`). In agent/sandbox shells, export `GOMODCACHE="$HOME/go/pkg/mod"` before running `make` so inherited empty caches do not break module resolution. See [`REVIEW.md`](REVIEW.md#go-toolchain-troubleshooting) if tests fail with missing modules or stale builds.
 
 | Target | Description |
 | --- | --- |
@@ -65,7 +65,7 @@ make test PKG=./internal/api/controllers/... RUN=TestGateway
 make check
 ```
 
-Avoid bare `go test` unless you set the same env as Make (`GOCACHE` and `GOMODCACHE`; see [`REVIEW.md`](REVIEW.md#go-toolchain-troubleshooting)).
+Avoid bare `go test` unless you set the same env as Make (`GOCACHE` and `GOMODCACHE="$HOME/go/pkg/mod"`; see [`REVIEW.md`](REVIEW.md#go-toolchain-troubleshooting)).
 
 ## Pull Request Guidelines
 
