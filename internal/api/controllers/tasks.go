@@ -21,7 +21,8 @@ type commentRequest struct {
 }
 
 type patchRequest struct {
-	State string `json:"state"`
+	State       string  `json:"state"`
+	Description *string `json:"description,omitempty"`
 }
 
 type assignRequest struct {
@@ -110,9 +111,8 @@ func (h TaskHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteSuccess(w, http.StatusCreated, comment, nil)
 }
 
-// Patch handles PATCH /api/v1/tasks/{id}. Today the only supported patch
-// is a state transition, but the request shape leaves room for future
-// editable fields.
+// Patch handles PATCH /api/v1/tasks/{id}. Supports state transitions and
+// description updates; at least one field must be present in the body.
 func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
 	var req patchRequest
@@ -120,20 +120,42 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}
-	if strings.TrimSpace(req.State) == "" {
+	hasState := strings.TrimSpace(req.State) != ""
+	hasDescription := req.Description != nil
+	if !hasState && !hasDescription {
 		httpx.WriteValidationError(w, http.StatusBadRequest, httpx.CodeValidation,
-			"state is required", []string{"state must be a known TaskState"})
+			"at least one of state or description is required",
+			[]string{"state or description must be provided"})
 		return
 	}
-	next := models.TaskState(strings.ToUpper(strings.TrimSpace(req.State)))
-	if h.Tasks == nil {
-		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
+	if h.Store == nil {
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "store is not configured")
 		return
 	}
-	updated, err := h.Tasks.UpdateTaskState(r.Context(), taskID, next)
+	current, err := h.Store.GetTask(r.Context(), taskID)
 	if err != nil {
 		httpx.WriteMappedError(w, err)
 		return
+	}
+	updated := current
+	if hasDescription {
+		updated, err = h.Store.UpdateTaskDescription(r.Context(), taskID, updated.UpdatedAt, *req.Description)
+		if err != nil {
+			httpx.WriteMappedError(w, err)
+			return
+		}
+	}
+	if hasState {
+		if h.Tasks == nil {
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
+			return
+		}
+		next := models.TaskState(strings.ToUpper(strings.TrimSpace(req.State)))
+		updated, err = h.Tasks.UpdateTaskState(r.Context(), taskID, next)
+		if err != nil {
+			httpx.WriteMappedError(w, err)
+			return
+		}
 	}
 	httpx.WriteSuccess(w, http.StatusOK, h.attachAgent(r.Context(), updated), nil)
 }

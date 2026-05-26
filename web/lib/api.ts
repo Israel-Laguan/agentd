@@ -24,7 +24,9 @@ export async function getBoard(): Promise<{ tasks: Task[] }> {
 
   const taskArrays = await Promise.all(
     projects.map(async (p) => {
-      const r = await fetch(`${API}/api/v1/projects/${p.ID as string}/tasks`);
+      const projectId = (p.ID ?? p.id) as string;
+      if (!projectId) return [] as Task[];
+      const r = await fetch(`${API}/api/v1/projects/${projectId}/tasks`);
       if (!r.ok) return [] as Task[];
       return unwrapData<Record<string, unknown>[]>(await r.json()).map(mapDaemonTask);
     })
@@ -58,11 +60,14 @@ export async function sendChat(message: string, settings?: ChatSettings): Promis
   const envelope = await res.json();
   // Unwrap OpenAI choices array into a ChatResponse shape.
   const choice = envelope?.choices?.[0];
+  if (!choice?.message?.content) {
+    throw new Error("Invalid chat response: missing choices[0].message.content");
+  }
   return {
     message: {
       id: envelope?.id ?? "",
       role: "assistant" as const,
-      content: choice?.message?.content ?? "",
+      content: choice.message.content,
     },
   } satisfies ChatResponse;
 }
@@ -124,8 +129,11 @@ export async function updateTask(
   const res = await fetch(`${API}/api/v1/tasks/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    // Backend patchRequest expects { state } not { status }.
-    body: JSON.stringify({ state: updates.status }),
+    // Backend patchRequest expects { state, description }; title is not supported yet.
+    body: JSON.stringify({
+      ...(updates.description !== undefined ? { description: updates.description } : {}),
+      ...(updates.status !== undefined ? { state: updates.status } : {}),
+    }),
   });
 
   if (!res.ok) {
