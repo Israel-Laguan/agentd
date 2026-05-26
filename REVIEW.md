@@ -43,12 +43,14 @@ Use scoped `PKG` / `RUN` while editing; run `make test` (all packages) or `make 
 
 ## Go toolchain troubleshooting
 
-`make build`, `make lint`, `make test`, `make coverage`, and `make test-e2e` set:
+`make build`, `make lint`, `make test`, `make coverage`, and `make test-e2e` use:
 
 - `GOCACHE=$(pwd)/.gocache` — avoids stale **build** artefacts after `git checkout` or branch switches
-- `GOMODCACHE=$HOME/go/pkg/mod` by default — avoids empty module caches in some IDE/agent environments
+- `GOMODCACHE` from your environment, otherwise `$(HOME)/go/pkg/mod` — avoids empty module caches in some IDE/agent environments
 
-**Prefer Makefile targets** over bare `go test`. If you must run tools outside Make, match the same env (see manual override below).
+Because Make uses `GOMODCACHE ?= ...`, an inherited sandbox value can still win. In agent/sandbox shells, set `GOMODCACHE="$HOME/go/pkg/mod"` before running Make.
+
+**Prefer Makefile targets** over bare `go test`, but pin cache env first in constrained shells.
 
 ### Symptoms
 
@@ -59,14 +61,22 @@ Use scoped `PKG` / `RUN` while editing; run `make test` (all packages) or `make 
 
 ### Fixes (try in order)
 
-1. **Use Makefile targets** — `make build`, `make lint`, `make test`, or `make check`.
+1. **Pin cache env, then use Makefile targets**:
+
+   ```sh
+   export GOMODCACHE="$HOME/go/pkg/mod"
+   export GOCACHE="$(pwd)/.gocache"
+   make build && make lint && make test
+   ```
+
+   (`make check` is fine too once this env is set.)
 2. **Reset workspace build cache** — `rm -rf .gocache` then `make check`.
 3. **Refresh modules** — `go mod download` (or `make tidy`), then retry.
 4. **Manual override** (if you must run tools outside Make):
 
    ```sh
-   env GOCACHE=$(pwd)/.gocache GOMODCACHE="${GOMODCACHE:-$HOME/go/pkg/mod}" go test -race ./path/...
-   env GOCACHE=$(pwd)/.gocache golangci-lint run ./...
+   env GOCACHE=$(pwd)/.gocache GOMODCACHE="$HOME/go/pkg/mod" go test -race ./path/...
+   env GOCACHE=$(pwd)/.gocache GOMODCACHE="$HOME/go/pkg/mod" golangci-lint run ./...
    ```
 
 5. **Last resort** — `go clean -cache` clears the **global** build cache and affects all Go projects on your machine.
