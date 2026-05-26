@@ -108,11 +108,11 @@ Do not mix groups. Do not use aliases unless there is a name collision.
 1. Write unit tests alongside behavior changes in `*_test.go` files. Use table-driven tests for multi-case scenarios.
 2. Use `t.Helper()` in test helper functions.
 3. For flows and integrations, add Godog BDD `.feature` files with step definitions.
-4. Tests must pass with the race detector: `go test -race ./...`.
+4. Tests must pass with the race detector. While iterating: `make test PKG=./path/...` (optional `RUN=TestName`). Before finishing: `make check`.
 5. Do not skip writing tests. If the change is documentation-only, state that explicitly.
 
 **Reason:** The project has 28 test packages passing with `-race`. Race detector failures indicate real concurrency bugs in this system (workers, queue dispatch, SQLite access).
-**Provenance:** Repository quality gate (`make check` runs `go test -race ./...`).
+**Provenance:** Repository quality gate (`make check` → `make test` with `-race`). Prefer Make over bare `go test`; see [`REVIEW.md`](REVIEW.md#go-toolchain-troubleshooting).
 
 ---
 

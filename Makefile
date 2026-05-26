@@ -5,9 +5,12 @@ COVERPKG ?= ./...
 
 .PHONY: build test coverage run tidy lint loc check test-e2e
 
+# Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
+# sandboxes often set an empty GOMODCACHE and break go test / make build).
+GOMODCACHE ?= $(HOME)/go/pkg/mod
 # Workspace-local GOCACHE for all compile/lint/test paths to avoid stale-build
 # artefacts when switching branches or when the global cache becomes inconsistent.
-GO_ENV = env GOCACHE=$(CURDIR)/.gocache
+GO_ENV = env GOCACHE=$(CURDIR)/.gocache GOMODCACHE=$(GOMODCACHE)
 
 test-e2e:
 	$(GO_ENV) $(GO) test -v ./e2e/...
@@ -15,8 +18,16 @@ test-e2e:
 build:
 	$(GO_ENV) $(GO) build -o bin/agentd ./cmd/agentd
 
+# Scoped runs: make test PKG=./internal/api/controllers/... RUN=TestGateway
+PKG ?= ./...
+RUN ?=
+TEST_FLAGS = -v -race -cover
+ifneq ($(strip $(RUN)),)
+TEST_FLAGS += -run $(RUN)
+endif
+
 test:
-	$(GO_ENV) $(GO) test -v -race -cover ./...
+	$(GO_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
 
 coverage:
 	$(GO_ENV) $(GO) test -v -race -covermode=atomic -coverpkg=$(COVERPKG) -coverprofile=coverage.out ./...

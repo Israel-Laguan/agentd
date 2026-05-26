@@ -371,16 +371,20 @@ Server-Sent Events (SSE) stream for real-time updates.
 
 ## Running the Tests
 
-To verify API functionality:
+Prefer Makefile targets (race detector, workspace `GOCACHE`, reliable `GOMODCACHE`):
 
-```bash
-# Run e2e tests
-go test -v ./e2e/...
-
-# Run API unit tests
-go test -v ./internal/api/...
+```sh
+make test-e2e
+make test PKG=./internal/api/...
+make check    # full gate before merge
 ```
 
-**Expected Results**: All tests pass (10/10 for e2e, all API route tests pass).
+Scoped examples:
 
-**Stale cache workaround**: If you see inconsistent or stale test results after switching branches, see [`REVIEW.md`](../REVIEW.md#go-build-cache-troubleshooting). Prefer `make test` or `make check`, which use a workspace-local `.gocache/` automatically.
+```sh
+make test PKG=./internal/api/controllers/... RUN=TestGateway
+```
+
+**Expected Results**: All tests pass (e2e and API route tests).
+
+**Troubleshooting**: Missing modules, stale builds, or `go test` vs `make test` mismatches — [`REVIEW.md`](../REVIEW.md#go-toolchain-troubleshooting).
