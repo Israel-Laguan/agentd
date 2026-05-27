@@ -127,13 +127,13 @@ func (s *FakeKanbanStore) EnsureSystemProject(context.Context) (*models.Project,
 func (s *FakeKanbanStore) EnsureProjectTask(_ context.Context, projectID string, draft models.DraftTask) (*models.Task, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.validateDraftAgentIDs([]models.DraftTask{draft}); err != nil {
+		return nil, false, err
+	}
 	for _, t := range s.tasks {
 		if t.ProjectID == projectID && t.Title == draft.Title && t.State != models.TaskStateCompleted {
 			return &t, false, nil
 		}
-	}
-	if err := s.validateDraftAgentIDs([]models.DraftTask{draft}); err != nil {
-		return nil, false, err
 	}
 	task := models.Task{
 		BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
