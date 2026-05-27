@@ -67,7 +67,7 @@ func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err e
 
 func (w *Worker) handoffOrFail(ctx context.Context, task models.Task, err error) {
 	if !w.healingEnabled {
-		w.failHard(ctx, task, err)
+		w.failTerminal(ctx, task, err, models.TaskStateFailed)
 		w.emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", "healing disabled; task failed: "+truncate(err.Error(), 500))
 		return
 	}

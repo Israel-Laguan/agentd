@@ -219,6 +219,72 @@ func TestTaskHandler_ListByProject(t *testing.T) {
 	}
 }
 
+func TestTaskHandler_ListByProjectExcludesHealing(t *testing.T) {
+	h, store := taskTestHandler()
+	ctx := context.Background()
+	proj, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "heal-filter",
+		Tasks:       []models.DraftTask{{Title: "work", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	parent := tasks[0]
+	_, _, err = store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title:    models.HITLSubtaskTitleManualReview + " AI unavailable",
+		Assignee: models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("BlockTaskWithSubtasks: %v", err)
+	}
+
+	list := func(includeHealing bool) []string {
+		t.Helper()
+		url := "/api/v1/projects/" + proj.ID + "/tasks"
+		if includeHealing {
+			url += "?include_healing=true"
+		}
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req.SetPathValue("id", proj.ID)
+		rec := httptest.NewRecorder()
+		h.ListByProject(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("ListByProject code = %d body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Data []struct {
+				Title string `json:"Title"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		titles := make([]string, len(resp.Data))
+		for i, row := range resp.Data {
+			titles[i] = row.Title
+		}
+		return titles
+	}
+
+	excl := list(false)
+	for _, title := range excl {
+		if strings.HasPrefix(title, models.HITLSubtaskTitleManualReview) {
+			t.Fatalf("default list included healing task %q", title)
+		}
+	}
+
+	incl := list(true)
+	var foundHealing bool
+	for _, title := range incl {
+		if strings.HasPrefix(title, models.HITLSubtaskTitleManualReview) {
+			foundHealing = true
+		}
+	}
+	if !foundHealing {
+		t.Fatal("include_healing=true should list self-healing handoff subtask")
+	}
+}
+
 func TestTaskHandler_ListByProjectValidation(t *testing.T) {
 	h, store := taskTestHandler()
 	projectID, _ := seedProjectTask(t, store)

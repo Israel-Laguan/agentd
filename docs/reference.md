@@ -114,10 +114,12 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 | `uploads_dir` | `<home>/uploads` | Directory for oversized uploaded or referenced file content. |
 | `breaker.handoff_after` | `2m` | Duration the LLM breaker must stay open before creating a HUMAN outage task. |
 | `disk.free_threshold_percent` | `10.0` | Minimum acceptable free disk percentage. |
-| `healing.enabled` | `true` | Enables self-healing retry parameter tuning. |
+| `healing.enabled` | `true` | Self-healing ladder and provider-exhaustion HUMAN handoffs. When `false`, failures terminate without healing subtasks (product HITL gates unchanged). |
 | `healing.strategy` | `increase_effort` | Built-in healing ladder (`increase_effort` or `minimize_variables`). |
 | `healing.steps` | _(empty)_ | Optional custom healing step list overriding the preset ladder. |
 | `healing.max_adjustments` | `0` | Maximum healing steps before HUMAN handoff; `0` means full ladder. |
+| `healing.max_healing_tasks` | `0` | Max HUMAN handoff subtasks per parent before failing; `0` means unlimited. |
+| `healing.outage_handoff_enabled` | `true` | When `false`, skip `_system` "System Offline" tasks when the global breaker stays open. |
 | `healing.upgrade_model` | _(empty)_ | Model override used by the upgrade healing step. |
 | `healing.upgrade_provider` | _(empty)_ | Provider override used by the upgrade healing step. |
 | `healing.context_multiplier` | `1.5` | Multiplier for increasing retry context budget. |

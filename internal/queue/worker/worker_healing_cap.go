@@ -30,7 +30,7 @@ func (w *Worker) healingTaskCapReached(ctx context.Context, task models.Task) bo
 
 func (w *Worker) createProviderExhaustedHandoff(ctx context.Context, task models.Task, err error) {
 	if w.healingTaskCapReached(ctx, task) {
-		w.failHard(ctx, task, fmt.Errorf("max_healing_tasks cap reached: %w", err))
+		w.failTerminal(ctx, task, fmt.Errorf("max_healing_tasks cap reached: %w", err), models.TaskStateFailed)
 		w.emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", "max_healing_tasks cap reached; task failed: "+truncate(err.Error(), 500))
 		return
 	}
@@ -58,7 +58,7 @@ func (w *Worker) createProviderExhaustedHandoff(ctx context.Context, task models
 
 func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, action planning.HealingAction, payload string) {
 	if w.healingTaskCapReached(ctx, task) {
-		w.failHard(ctx, task, fmt.Errorf("max_healing_tasks cap reached: %s", action.Reason))
+		w.failTerminal(ctx, task, fmt.Errorf("max_healing_tasks cap reached: %s", action.Reason), models.TaskStateFailed)
 		w.emit(ctx, task, "HEALING_HANDOFF", "max_healing_tasks cap reached; task failed: "+truncate(payload, 500))
 		return
 	}

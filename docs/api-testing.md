@@ -30,6 +30,8 @@ The agentd API follows a consistent JSON envelope format:
 
 Returns system health, memory usage, circuit breaker state, and task summary.
 
+**Query Parameters:** `include_healing`, `include_system` (default false; set `true` to count self-healing handoff subtasks or include `_system`).
+
 **Response**:
 ```json
 {
@@ -98,6 +100,8 @@ Example (global reset unavailable):
 
 List all projects.
 
+**Query Parameters:** `include_system` (default false).
+
 **Response**:
 ```json
 {
@@ -136,6 +140,7 @@ List tasks for a project with optional filters.
 **Query Parameters**:
 - `state` - Filter by state (comma-separated): `PENDING`, `READY`, `QUEUED`, `RUNNING`, `BLOCKED`, `COMPLETED`, `FAILED`, `IN_CONSIDERATION`
 - `assignee` - Filter by assignee: `HUMAN`, `SYSTEM`, or agent ID
+- `include_healing` - When `true`, include self-healing handoff subtasks. Default: excluded.
 - `limit` - Maximum results (default: 50)
 - `offset` - Pagination offset
 

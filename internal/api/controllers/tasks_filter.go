@@ -42,6 +42,7 @@ func parseTaskFilter(r *http.Request) (models.TaskFilter, []string) {
 			filter.Assignee = &assignee
 		}
 	}
+	filter.IncludeHealing = q.Get("include_healing") == "true"
 	return filter, errs
 }
 

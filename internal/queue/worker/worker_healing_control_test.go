@@ -13,7 +13,7 @@ func TestHandleGatewayError_HealingDisabled_FailsTask(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
 	sink := &mockEventSink{}
-	w := &Worker{store: store, sink: sink}
+	w := &Worker{store: store, sink: sink, healingEnabled: false}
 
 	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
 		ProjectName: "heal-disabled",
@@ -29,6 +29,13 @@ func TestHandleGatewayError_HealingDisabled_FailsTask(t *testing.T) {
 	children, _ := store.ListChildTasks(context.Background(), task.ID)
 	if len(children) > 0 {
 		t.Fatalf("expected no child tasks when healing disabled, got %d", len(children))
+	}
+	updated, err := store.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if updated.State != models.TaskStateFailed {
+		t.Fatalf("state = %s, want FAILED", updated.State)
 	}
 
 	var found bool

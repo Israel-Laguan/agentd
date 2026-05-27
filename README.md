@@ -50,7 +50,7 @@ If you only have a Gemini API key:
      -H 'Content-Type: application/json' \
      -d '{"provider":"gemini","model":"gemini-2.5-flash"}'
    ```
-6. For dev/smoke testing, add `healing.enabled: false` to config to suppress retry escalation.
+6. For dev/smoke testing, set `healing.enabled: false` and `healing.outage_handoff_enabled: false` to suppress self-healing handoffs and `_system` outage tasks. Status defaults omit healing noise: `curl -s 'http://127.0.0.1:8765/api/v1/system/status'`.
 
 See [`docs/config-reference.md`](docs/config-reference.md) for all Gemini config keys.
 

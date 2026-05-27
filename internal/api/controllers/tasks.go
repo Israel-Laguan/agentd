@@ -170,6 +170,7 @@ func (h TaskHandler) ListComments(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListByProject handles GET /api/v1/projects/{id}/tasks.
+// Query params: include_healing — include self-healing handoff tasks (default false).
 func (h TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	if h.Tasks == nil {

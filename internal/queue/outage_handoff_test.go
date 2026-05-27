@@ -49,6 +49,34 @@ func TestOutageHandoffCreatesHumanTaskWithDebugContext(t *testing.T) {
 	}
 }
 
+func TestOutageHandoffDisabled_SkipsTaskCreation(t *testing.T) {
+	store := newQueueTestStore(t)
+	ctx := context.Background()
+	breaker, now := openBreaker(t)
+	sink := &recordingSink{}
+	disabled := false
+	daemon := NewDaemon(store, nil, nil, breaker, sink, DaemonOptions{
+		MaxWorkers:           1,
+		HandoffAfter:         time.Minute,
+		OutageHandoffEnabled: &disabled,
+	})
+	*now = (*now).Add(2 * time.Minute)
+
+	if err := daemon.checkOutageHandoff(ctx); err != nil {
+		t.Fatalf("checkOutageHandoff() error = %v", err)
+	}
+	projects, err := store.ListProjects(ctx)
+	if err != nil {
+		t.Fatalf("ListProjects() error = %v", err)
+	}
+	if len(projects) != 0 {
+		t.Fatalf("projects = %d, want none when outage handoff disabled", len(projects))
+	}
+	if len(sink.events) != 0 {
+		t.Fatalf("events = %d, want none", len(sink.events))
+	}
+}
+
 func TestOutageHandoffDeduplicatesOpenTask(t *testing.T) {
 	store := newQueueTestStore(t)
 	ctx := context.Background()

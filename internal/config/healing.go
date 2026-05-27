@@ -8,14 +8,15 @@ const (
 )
 
 type HealingConfig struct {
-	Enabled           bool
-	Strategy          string
-	Steps             []string
-	MaxAdjustments    int
-	UpgradeModel      string
-	UpgradeProvider   string
-	ContextMultiplier float64
-	MaxHealingTasks   int
+	Enabled                bool
+	Strategy               string
+	Steps                  []string
+	MaxAdjustments         int
+	UpgradeModel           string
+	UpgradeProvider        string
+	ContextMultiplier      float64
+	MaxHealingTasks        int
+	OutageHandoffEnabled   bool
 }
 
 func setHealingDefaults(v *viper.Viper) {
@@ -27,6 +28,7 @@ func setHealingDefaults(v *viper.Viper) {
 	v.SetDefault("healing.upgrade_provider", "")
 	v.SetDefault("healing.context_multiplier", 2.0)
 	v.SetDefault("healing.max_healing_tasks", 0)
+	v.SetDefault("healing.outage_handoff_enabled", true)
 }
 
 func loadHealingConfig(v *viper.Viper) HealingConfig {
@@ -38,6 +40,7 @@ func loadHealingConfig(v *viper.Viper) HealingConfig {
 		UpgradeModel:      v.GetString("healing.upgrade_model"),
 		UpgradeProvider:   v.GetString("healing.upgrade_provider"),
 		ContextMultiplier: v.GetFloat64("healing.context_multiplier"),
-		MaxHealingTasks:   v.GetInt("healing.max_healing_tasks"),
+		MaxHealingTasks:        v.GetInt("healing.max_healing_tasks"),
+		OutageHandoffEnabled:   v.GetBool("healing.outage_handoff_enabled"),
 	}
 }

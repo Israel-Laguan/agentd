@@ -167,3 +167,19 @@ func (w *Worker) failHard(ctx context.Context, task models.Task, err error) {
 		w.emit(ctx, task, "ERROR", updateErr.Error())
 	}
 }
+
+// failTerminal records a failed result and moves the task to a terminal state so
+// it is not picked up again (used when healing handoffs are disabled or capped).
+func (w *Worker) failTerminal(ctx context.Context, task models.Task, err error, state models.TaskState) {
+	updated, updateErr := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
+		Success: false,
+		Payload: truncate(err.Error(), 1000),
+	})
+	if updateErr != nil {
+		w.emit(ctx, task, "ERROR", updateErr.Error())
+		return
+	}
+	if _, stateErr := w.store.UpdateTaskState(ctx, updated.ID, updated.UpdatedAt, state); stateErr != nil {
+		w.emit(ctx, task, "ERROR", stateErr.Error())
+	}
+}
