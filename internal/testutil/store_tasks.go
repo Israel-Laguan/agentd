@@ -228,6 +228,9 @@ func (s *FakeKanbanStore) ReconcileStaleTasks(_ context.Context, alivePIDs []int
 func (s *FakeKanbanStore) BlockTaskWithSubtasks(_ context.Context, id string, _ time.Time, drafts []models.DraftTask) (*models.Task, []models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.validateDraftAgentIDs(drafts); err != nil {
+		return nil, nil, err
+	}
 	t, ok := s.tasks[id]
 	if !ok {
 		return nil, nil, models.ErrTaskNotFound
@@ -241,7 +244,7 @@ func (s *FakeKanbanStore) BlockTaskWithSubtasks(_ context.Context, id string, _ 
 		child := models.Task{
 			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
 			ProjectID:       t.ProjectID,
-			AgentID:         "default",
+			AgentID:         resolveTaskAgentID(d.AgentID),
 			Title:           d.Title,
 			Description:     d.Description,
 			State:           models.TaskStateReady,
@@ -258,12 +261,15 @@ func (s *FakeKanbanStore) BlockTaskWithSubtasks(_ context.Context, id string, _ 
 func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, _ string, drafts []models.DraftTask) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.validateDraftAgentIDs(drafts); err != nil {
+		return nil, err
+	}
 	var created []models.Task
 	for _, d := range drafts {
 		task := models.Task{
 			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
 			ProjectID:       projectID,
-			AgentID:         "default",
+			AgentID:         resolveTaskAgentID(d.AgentID),
 			Title:           d.Title,
 			Description:     d.Description,
 			State:           models.TaskStateReady,

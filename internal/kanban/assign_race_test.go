@@ -120,6 +120,43 @@ func TestAssignRunningTaskConflict(t *testing.T) {
 	_ = task // keep linter happy
 }
 
+// TestMaterializeMultipleAgentIDsPreservedThroughClaim verifies that when
+// several READY tasks are pre-assigned to different agents, claim retains
+// each task's agent_id (dispatch routes execution via task.AgentID).
+func TestMaterializeMultipleAgentIDsPreservedThroughClaim(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	seedProfile(t, store, ctx, "default")
+	seedProfile(t, store, ctx, "researcher")
+
+	_, _, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "multi-route",
+		Tasks: []models.DraftTask{
+			{TempID: "t1", Title: "Research", AgentID: "researcher"},
+			{TempID: "t2", Title: "Implement", AgentID: "default"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan() error = %v", err)
+	}
+
+	claimed, err := store.ClaimNextReadyTasks(ctx, 10)
+	if err != nil {
+		t.Fatalf("ClaimNextReadyTasks() error = %v", err)
+	}
+	if len(claimed) != 2 {
+		t.Fatalf("expected 2 claimed tasks, got %d", len(claimed))
+	}
+	byTitle := tasksByTitle(claimed)
+	if byTitle["Research"].AgentID != "researcher" {
+		t.Fatalf("Research agent_id = %q, want researcher", byTitle["Research"].AgentID)
+	}
+	if byTitle["Implement"].AgentID != defaultAgentID {
+		t.Fatalf("Implement agent_id = %q, want %s", byTitle["Implement"].AgentID, defaultAgentID)
+	}
+}
+
 // TestPreAssignedTaskClaimableAndRoutedCorrectly verifies that a task
 // materialized with an explicit agent_id is claimed by the dispatch
 // loop and retains the pre-assigned agent_id through the claim.
