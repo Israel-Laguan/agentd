@@ -17,10 +17,13 @@ This note captures the startup path validated during the bootstrap work and the 
 4. Open the SQLite database and apply migrations.
 5. Seed the built-in agent profiles (`default`, `researcher`, `qa`) with empty `provider` and `model` so tasks cascade through `gateway.order`. Existing profiles are left unchanged on repeat init; use `agentd init --reset-profiles` to force defaults or to clear stale rows that still pin `openai` / `anthropic` from older installs.
 
-Init prints a short hint listing seeded profiles, the first detected LLM provider from `CheckProviders`, and the `--reset-profiles` flag. Enable agentic mode per profile via PATCH (`agentic_mode: true`); empty provider works with agentic when at least one configured backend in order supports chat tools.
+Init prints a short hint listing seeded profiles, the first detected LLM provider (offline key check), how to **PATCH** `/api/v1/agents/<id>` after `agentd start` to pin `provider` / `model`, and `--reset-profiles`. When `gemini` is in `gateway.order` or detected from keys, the hint also mentions `agentd start --skip-llm-warmup`.
 
-For Gemini-only or other non-OpenAI deployments, PATCH each seeded profile with explicit
-`provider` and `model` after init (see [README § First Run with Gemini Only](../README.md#first-run-with-gemini-only)).
+Seeded profiles start with empty `provider` / `model` and follow `gateway.order` on each task. Re-running `agentd init` does **not** overwrite profiles that already exist (operator PATCHes are preserved). Use `agentd init --reset-profiles` to restore empty provider/model or clear stale pins from older installs.
+
+Enable agentic mode per profile via PATCH (`agentic_mode: true`); empty provider works with agentic when at least one configured backend in order supports chat tools.
+
+For Gemini-only setups, cascade routing is usually enough; optionally PATCH explicit `provider` / `model` (see [README § First Run with Gemini Only](../README.md#first-run-with-gemini-only)).
 
 If any step fails, the CLI now says what part of init failed and shows the wrapped error chain.
 

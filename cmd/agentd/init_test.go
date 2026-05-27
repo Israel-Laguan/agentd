@@ -51,6 +51,9 @@ func TestInitCreatesHomeDatabaseAndWAL(t *testing.T) {
 	if !strings.Contains(out, "gateway.order cascade") {
 		t.Errorf("init output missing profile cascade hint\n%s", out)
 	}
+	if !strings.Contains(out, "PATCH /api/v1/agents/<id>") {
+		t.Errorf("init output missing profile PATCH hint\n%s", out)
+	}
 
 	assertPathExists(t, home)
 	dbPath := filepath.Join(home, "global.db")
