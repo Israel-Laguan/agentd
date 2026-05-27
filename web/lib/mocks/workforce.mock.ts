@@ -1,7 +1,7 @@
 import { WorkforceState } from "@/lib/types";
 
 export const mockWorkforce: WorkforceState = {
-  activeWorkers: 3,
-  maxWorkers: 5,
-  queueLength: 7,
+  active_workers: 3,
+  max_workers: 5,
+  queue_length: 7,
 };

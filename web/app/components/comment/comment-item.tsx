@@ -16,7 +16,7 @@ export const CommentItem = ({ comment }: CommentItemProps) => {
           </span>
 
           <span className="text-xs text-gray-400">
-            {new Date(comment.createdAt).toLocaleString()}
+            {new Date(comment.created_at).toLocaleString()}
           </span>
         </div>
 

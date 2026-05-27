@@ -2,6 +2,11 @@
 
 See [`architecture.md`](architecture.md) for system node diagrams, data flows, and architectural invariants.
 
+## API Migration Notes
+
+- Breaking change (2026-05-27): task/project/comment payloads returned by API endpoints now serialize field names as `snake_case` (for example `id`, `project_id`, `state`, `created_at`) instead of legacy PascalCase keys (for example `ID`, `ProjectID`, `State`, `CreatedAt`).
+- Affected clients should update JSON access patterns, `jq` selectors, and TypeScript/Python structs accordingly.
+
 ## Feature Catalog
 
 ### Journey 1: Frontdesk Intake

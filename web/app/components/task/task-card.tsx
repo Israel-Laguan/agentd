@@ -20,7 +20,7 @@ interface TaskCardProps {
     id: string;
     title: string;
     description: string;
-    status: TaskStatus;
+    state: TaskStatus;
   };
   onClick: () => void;
 }
@@ -50,7 +50,7 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
     [TaskStatus.IN_CONSIDERATION]: MessageSquare,
   };
 
-  const StatusIcon = Icons[task.status as TaskStatus] || AlertCircle;
+  const StatusIcon = Icons[task.state as TaskStatus] || AlertCircle;
   const {
     attributes,
     listeners,
@@ -96,9 +96,9 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
         </h4>
       </div>
 
-        <div className={cn("shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", statusColors[task.status as TaskStatus])}>
-          <StatusIcon size={10} className={task.status === TaskStatus.RUNNING ? "animate-spin" : ""} />
-          {task.status}
+        <div className={cn("shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", statusColors[task.state as TaskStatus])}>
+          <StatusIcon size={10} className={task.state === TaskStatus.RUNNING ? "animate-spin" : ""} />
+          {task.state}
         </div>
       </div>
       <p className="text-[11px] text-text-dim line-clamp-2 mb-3 leading-relaxed">{task.description}</p>
@@ -107,9 +107,9 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
             <div
               className={cn(
                 "h-full transition-all duration-700",
-                task.status === TaskStatus.COMPLETED ? "w-full bg-accent" :
-                task.status === TaskStatus.RUNNING ? "w-2/3 bg-blue animate-pulse" :
-                task.status === TaskStatus.READY ? "w-1/3 bg-green-500/60" : "w-0"
+                task.state === TaskStatus.COMPLETED ? "w-full bg-accent" :
+                task.state === TaskStatus.RUNNING ? "w-2/3 bg-blue animate-pulse" :
+                task.state === TaskStatus.READY ? "w-1/3 bg-green-500/60" : "w-0"
               )}
             />
          </div>

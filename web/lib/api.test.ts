@@ -33,22 +33,22 @@ describe('API (mock mode)', () => {
 
   it('updateTask mutates and returns the task', async () => {
     const original = mockBoard.tasks[0];
-    const updated = await updateTask(original.id, { status: TaskStatus.COMPLETED });
-    expect(updated.status).toBe(TaskStatus.COMPLETED);
+    const updated = await updateTask(original.id, { state: TaskStatus.COMPLETED });
+    expect(updated.state).toBe(TaskStatus.COMPLETED);
     expect(updated.id).toBe(original.id);
-    expect(mockBoard.tasks[0].status).toBe(TaskStatus.COMPLETED);
+    expect(mockBoard.tasks[0].state).toBe(TaskStatus.COMPLETED);
   });
 
   it('fetchTaskComments filters by taskId', async () => {
     const comments = await fetchTaskComments('t1');
     expect(comments.length).toBeGreaterThan(0);
-    expect(comments.every((c: { taskId: string }) => c.taskId === 't1')).toBe(true);
+    expect(comments.every((c: { task_id: string }) => c.task_id === 't1')).toBe(true);
   });
 
   it('addTaskComment appends a comment', async () => {
     const before = mockTaskComments.length;
     const comment = await addTaskComment('t1', 'test comment');
-    expect(comment.taskId).toBe('t1');
+    expect(comment.task_id).toBe('t1');
     expect(comment.message).toBe('test comment');
     expect(mockTaskComments.length).toBe(before + 1);
   });

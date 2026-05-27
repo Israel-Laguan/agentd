@@ -34,10 +34,10 @@ func TestTaskHandler_ListComments(t *testing.T) {
 	var resp struct {
 		Status string `json:"status"`
 		Data   []struct {
-			TaskID  string `json:"TaskID"`
-			Author  string `json:"Author"`
-			Body    string `json:"Body"`
-			Content string `json:"Content"`
+			TaskID  string `json:"task_id"`
+			Author  string `json:"author"`
+			Body    string `json:"body"`
+			Content string `json:"content"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {

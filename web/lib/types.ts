@@ -17,14 +17,14 @@ export interface TaskLog {
 
 export interface Task {
   id: string;
-  projectId: string;
+  project_id: string;
   title: string;
   description: string;
-  status: TaskStatus;
-  dependsOn: string[];
+  state: TaskStatus;
+  depends_on: string[];
   logs: TaskLog[];
-  createdAt: number;
-  updatedAt: number;
+  created_at: number;
+  updated_at: number;
   token_usage?: number;
 }
 
@@ -33,13 +33,13 @@ export interface Project {
   name: string;
   description: string;
   status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
-  createdAt: number;
+  created_at: number;
 }
 
 export interface WorkforceState {
-  activeWorkers: number;
-  maxWorkers: number;
-  queueLength: number;
+  active_workers: number;
+  max_workers: number;
+  queue_length: number;
 }
 
 export interface ChatMessage {
@@ -67,9 +67,9 @@ export interface DraftPlan {
 
 export interface TaskComment {
   id: string;
-  taskId: string;
+  task_id: string;
   message: string;
-  createdAt: string;
+  created_at: string;
   author: {
     id: string;
     name: string;

@@ -35,7 +35,7 @@ func listProjectTaskTitles(t *testing.T, h controllers.TaskHandler, projectID st
 	}
 	var resp struct {
 		Data []struct {
-			Title string `json:"Title"`
+			Title string `json:"title"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
@@ -176,7 +176,7 @@ func TestTaskHandler_PatchDescription(t *testing.T) {
 	}
 	var resp struct {
 		Data struct {
-			Description string `json:"Description"`
+			Description string `json:"description"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
@@ -203,7 +203,7 @@ func TestTaskHandler_PatchStateAndDescription(t *testing.T) {
 	var resp struct {
 		Data struct {
 			State       string `json:"state"`
-			Description string `json:"Description"`
+			Description string `json:"description"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
@@ -230,7 +230,7 @@ func TestTaskHandler_ListByProject(t *testing.T) {
 	}
 	var resp struct {
 		Data []struct {
-			ProjectID string `json:"ProjectID"`
+			ProjectID string `json:"project_id"`
 		} `json:"data"`
 		Meta struct {
 			Total int `json:"total"`
@@ -353,7 +353,7 @@ func TestTaskHandler_Assign(t *testing.T) {
 	}
 	var resp struct {
 		Data struct {
-			AgentID string `json:"AgentID"`
+			AgentID string `json:"agent_id"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {

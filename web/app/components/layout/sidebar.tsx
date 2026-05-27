@@ -33,15 +33,15 @@ export const Sidebar = ({ activeTab, setActiveTab, workforce }: SidebarProps) =>
             <div className="p-3 bg-bg/50 rounded-lg border border-border">
               <div className="flex justify-between items-center mb-1.5">
                 <span className="text-[9px] font-bold text-text-dim uppercase tracking-widest">Load Status</span>
-                <span className="text-[10px] font-mono text-text">{workforce.activeWorkers}/{workforce.maxWorkers}</span>
+                <span className="text-[10px] font-mono text-text">{workforce.active_workers}/{workforce.max_workers}</span>
               </div>
               <div className="h-1 bg-border rounded-full overflow-hidden">
                 <motion.div
                    initial={{ width: 0 }}
                    animate={{
                      width: `${
-                       workforce.maxWorkers > 0
-                         ? Math.min(100, (workforce.activeWorkers / workforce.maxWorkers) * 100)
+                       workforce.max_workers > 0
+                         ? Math.min(100, (workforce.active_workers / workforce.max_workers) * 100)
                          : 0
                      }%`
                    }}

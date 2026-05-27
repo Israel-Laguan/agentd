@@ -40,6 +40,6 @@ describe("mapDaemonComment", () => {
 describe("mapDaemonTask", () => {
   it("reads lowercase state key", () => {
     const task = mapDaemonTask({ id: "t1", state: "RUNNING" });
-    expect(task.status).toBe("RUNNING");
+    expect(task.state).toBe("RUNNING");
   });
 });
