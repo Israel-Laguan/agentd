@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+
+	"agentd/internal/gateway"
 )
 
 // ConfigSource describes one resolved config key, its effective value, and provenance.
@@ -34,11 +36,12 @@ func ConfigSources(opts LoadOptions) ([]ConfigSource, Config, error) {
 	}
 
 	explicitV := explicitFileViper(opts.ConfigFile)
+	providerCache := buildProviderResolveCache(state)
 	showKeys := configShowKeys(state)
 	sources := make([]ConfigSource, 0, len(showKeys))
 	for _, key := range showKeys {
 		if name, field, ok := parseProviderConfigKey(key); ok {
-			sources = append(sources, resolveProviderConfigSource(name, field, state))
+			sources = append(sources, resolveProviderConfigSource(name, field, state, providerCache))
 			continue
 		}
 		sources = append(sources, resolveConfigSource(key, state, explicitV))
@@ -106,7 +109,7 @@ func resolveConfigSource(key string, state viperLoadState, explicitV *viper.Vipe
 	if state.fileV.IsSet(key) {
 		fileVal := normalizeViperValue(state.fileV.Get(key))
 		if effective == maskIfSensitive(key, fileVal) || effective == fileVal {
-			src.Source = "config.yaml"
+			src.Source = fileConfigSourceLabel(state)
 			return src
 		}
 	}
@@ -119,27 +122,54 @@ func normalizeCompare(key, effective, raw string) bool {
 	return effective == normalizeViperValue(raw) || effective == maskIfSensitive(key, raw)
 }
 
-func resolveProviderConfigSource(name, field string, state viperLoadState) ConfigSource {
+type providerResolveCache struct {
+	fileProviders      []gateway.ProviderConfig
+	effectiveProviders []gateway.ProviderConfig
+	fileErr            error
+	effErr             error
+}
+
+func buildProviderResolveCache(state viperLoadState) providerResolveCache {
+	fileProviders, fileErr := gatewayProvidersFromViper(state.fileV)
+	effectiveProviders, effErr := loadGatewayProviders(state.v, state.process, state.dotenv)
+	return providerResolveCache{
+		fileProviders:      fileProviders,
+		effectiveProviders: effectiveProviders,
+		fileErr:            fileErr,
+		effErr:             effErr,
+	}
+}
+
+func fileConfigSourceLabel(state viperLoadState) string {
+	if state.opts.ConfigFile != "" {
+		return "explicit config"
+	}
+	return "config.yaml"
+}
+
+func fileConfigOverridePrefix(state viperLoadState) string {
+	return fileConfigSourceLabel(state) + ": "
+}
+
+func resolveProviderConfigSource(name, field string, state viperLoadState, cache providerResolveCache) ConfigSource {
 	key := providerDisplayKey(name, field)
 	src := ConfigSource{Key: key}
 
-	fileProviders, err := gatewayProvidersFromViper(state.fileV)
-	if err != nil {
+	if cache.fileErr != nil {
 		src.Source = "error"
 		return src
 	}
-	fileP, ok := effectiveProviderByName(fileProviders, name)
+	fileP, ok := effectiveProviderByName(cache.fileProviders, name)
 	if !ok {
 		src.Source = "default"
 		return src
 	}
 
-	effectiveProviders, err := loadGatewayProviders(state.v, state.process, state.dotenv)
-	if err != nil {
+	if cache.effErr != nil {
 		src.Source = "error"
 		return src
 	}
-	eff, ok := effectiveProviderByName(effectiveProviders, name)
+	eff, ok := effectiveProviderByName(cache.effectiveProviders, name)
 	if !ok {
 		src.Source = "default"
 		return src
@@ -147,47 +177,61 @@ func resolveProviderConfigSource(name, field string, state viperLoadState) Confi
 
 	switch field {
 	case "api_key":
-		src.Value = maskIfSensitive("api_key", eff.APIKey)
-		envKey := providerAPIKeyEnv(fileP)
-		if envVal, ok := state.process[envKey]; ok && eff.APIKey == envVal {
-			src.Source = envKey
-		} else if envVal, ok := state.dotenv[envKey]; ok && eff.APIKey == envVal {
-			src.Source = envKey + " (.env file)"
-		} else if strings.TrimSpace(fileP.APIKey) != "" && eff.APIKey == fileP.APIKey {
-			src.Source = "config.yaml"
-		} else {
-			src.Source = "default"
-		}
-		if fileKey := strings.TrimSpace(fileP.APIKey); fileKey != "" && eff.APIKey != fileKey {
-			if envVal, envSrc := envOverrideSource(envKey, state.dotenv, state.process); envSrc != "" && eff.APIKey == envVal {
-				src.OverriddenFrom = "config.yaml: " + maskIfSensitive("api_key", fileKey)
-			}
-		}
+		return resolveProviderAPIKeyConfigSource(src, fileP, eff, state)
 	case "base_url":
-		src.Value = eff.BaseURL
-		flatKey := "gateway." + strings.ReplaceAll(name, "-", "_") + ".base_url"
-		if state.fileV.IsSet(flatKey) {
-			if envVal, ok := state.process[envKeyForConfigKey(flatKey)]; ok && eff.BaseURL == envVal {
-				src.Source = envKeyForConfigKey(flatKey)
-			} else if envVal, ok := state.dotenv[envKeyForConfigKey(flatKey)]; ok && eff.BaseURL == envVal {
-				src.Source = envKeyForConfigKey(flatKey) + " (.env file)"
-			} else if eff.BaseURL == strings.TrimSpace(fileP.BaseURL) {
-				src.Source = "config.yaml"
-			} else {
-				src.Source = "default"
-			}
-			if fileURL := strings.TrimSpace(fileP.BaseURL); fileURL != "" && eff.BaseURL != fileURL {
-				if envVal, envSrc := envOverrideSource(envKeyForConfigKey(flatKey), state.dotenv, state.process); envSrc != "" && eff.BaseURL == envVal {
-					src.OverriddenFrom = "config.yaml: " + fileURL
-				}
-			}
-		} else if strings.TrimSpace(fileP.BaseURL) != "" && eff.BaseURL == fileP.BaseURL {
-			src.Source = "config.yaml"
-		} else {
-			src.Source = "default"
-		}
+		return resolveProviderBaseURLConfigSource(src, name, fileP, eff, state)
 	default:
 		src.Source = "default"
+	}
+	return src
+}
+
+func resolveProviderAPIKeyConfigSource(
+	src ConfigSource,
+	fileP, eff gateway.ProviderConfig,
+	state viperLoadState,
+) ConfigSource {
+	src.Value = maskIfSensitive("api_key", eff.APIKey)
+	envKey := providerAPIKeyEnv(fileP)
+	if envVal, ok := state.process[envKey]; ok && eff.APIKey == envVal {
+		src.Source = envKey
+	} else if envVal, ok := state.dotenv[envKey]; ok && eff.APIKey == envVal {
+		src.Source = envKey + " (.env file)"
+	} else if strings.TrimSpace(fileP.APIKey) != "" && eff.APIKey == fileP.APIKey {
+		src.Source = fileConfigSourceLabel(state)
+	} else {
+		src.Source = "default"
+	}
+	if fileKey := strings.TrimSpace(fileP.APIKey); fileKey != "" && eff.APIKey != fileKey {
+		if envVal, envSrc := envOverrideSource(envKey, state.dotenv, state.process); envSrc != "" && eff.APIKey == envVal {
+			src.OverriddenFrom = fileConfigOverridePrefix(state) + maskIfSensitive("api_key", fileKey)
+		}
+	}
+	return src
+}
+
+func resolveProviderBaseURLConfigSource(
+	src ConfigSource,
+	name string,
+	fileP, eff gateway.ProviderConfig,
+	state viperLoadState,
+) ConfigSource {
+	src.Value = eff.BaseURL
+	flatKey := "gateway." + strings.ReplaceAll(name, "-", "_") + ".base_url"
+	envKey := envKeyForConfigKey(flatKey)
+	if envVal, ok := state.process[envKey]; ok && eff.BaseURL == envVal {
+		src.Source = envKey
+	} else if envVal, ok := state.dotenv[envKey]; ok && eff.BaseURL == envVal {
+		src.Source = envKey + " (.env file)"
+	} else if strings.TrimSpace(fileP.BaseURL) != "" && eff.BaseURL == strings.TrimSpace(fileP.BaseURL) {
+		src.Source = fileConfigSourceLabel(state)
+	} else {
+		src.Source = "default"
+	}
+	if fileURL := strings.TrimSpace(fileP.BaseURL); fileURL != "" && eff.BaseURL != fileURL {
+		if envVal, envSrc := envOverrideSource(envKey, state.dotenv, state.process); envSrc != "" && eff.BaseURL == envVal {
+			src.OverriddenFrom = fileConfigOverridePrefix(state) + fileURL
+		}
 	}
 	return src
 }
@@ -209,5 +253,5 @@ func overrideNote(state viperLoadState, key string) string {
 	if effective != envVal {
 		return ""
 	}
-	return "config.yaml: " + maskIfSensitive(key, fileVal)
+	return fileConfigOverridePrefix(state) + maskIfSensitive(key, fileVal)
 }

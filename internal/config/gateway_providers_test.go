@@ -87,6 +87,9 @@ func TestLoadGatewayProviders_GenericEnvVar_OverridesInlineFileAPIKey(t *testing
 	if err != nil {
 		t.Fatalf("loadGatewayProviders() error = %v", err)
 	}
+	if len(providers) == 0 {
+		t.Fatal("expected at least 1 provider, got 0")
+	}
 	if providers[0].APIKey != "sk-env" {
 		t.Errorf("APIKey = %q, want sk-env (env must beat inline config api_key)", providers[0].APIKey)
 	}

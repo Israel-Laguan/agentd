@@ -343,6 +343,10 @@ func TestLoad_LogsOverrideFromDotenvFile(t *testing.T) {
 	writeOverrideTestConfig(t, configPath, "gateway:\n  order: [horde]\n")
 
 	t.Chdir(dir)
+	if oldVal, had := os.LookupEnv("AGENTD_GATEWAY_ORDER"); had {
+		_ = os.Unsetenv("AGENTD_GATEWAY_ORDER")
+		t.Cleanup(func() { _ = os.Setenv("AGENTD_GATEWAY_ORDER", oldVal) })
+	}
 	buf := captureInfoLogs(t)
 
 	_, err := Load(LoadOptions{HomeOverride: home})

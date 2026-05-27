@@ -14,6 +14,10 @@ func TestConfigSources_DotenvOverrideNote(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("AGENTD_GATEWAY_ORDER=gemini\n"), 0o644); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
+	if oldVal, had := os.LookupEnv("AGENTD_GATEWAY_ORDER"); had {
+		_ = os.Unsetenv("AGENTD_GATEWAY_ORDER")
+		t.Cleanup(func() { _ = os.Setenv("AGENTD_GATEWAY_ORDER", oldVal) })
+	}
 	t.Chdir(dir)
 
 	sources, _, err := ConfigSources(LoadOptions{HomeOverride: home})

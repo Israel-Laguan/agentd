@@ -65,6 +65,10 @@ func TestConfigShowCommand_EnvOverridesFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("AGENTD_GATEWAY_ORDER=gemini\n"), 0o644); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
+	if oldVal, had := os.LookupEnv("AGENTD_GATEWAY_ORDER"); had {
+		_ = os.Unsetenv("AGENTD_GATEWAY_ORDER")
+		t.Cleanup(func() { _ = os.Setenv("AGENTD_GATEWAY_ORDER", oldVal) })
+	}
 	oldWd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Getwd: %v", err)
@@ -103,6 +107,10 @@ func TestConfigShowCommand_ProviderAPIKeyOverridesFile(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("AGENTD_GATEWAY_POOLSIDE_API_KEY=sk-env\n"), 0o644); err != nil {
 		t.Fatalf("write .env: %v", err)
+	}
+	if oldVal, had := os.LookupEnv("AGENTD_GATEWAY_POOLSIDE_API_KEY"); had {
+		_ = os.Unsetenv("AGENTD_GATEWAY_POOLSIDE_API_KEY")
+		t.Cleanup(func() { _ = os.Setenv("AGENTD_GATEWAY_POOLSIDE_API_KEY", oldVal) })
 	}
 	oldWd, err := os.Getwd()
 	if err != nil {

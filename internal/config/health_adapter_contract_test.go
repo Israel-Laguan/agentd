@@ -95,9 +95,12 @@ func testHealthAdapterDefaultMode(t *testing.T, contract healthAdapterContract) 
 func testHealthAdapterProbePath(t *testing.T, contract healthAdapterContract) {
 	t.Helper()
 
-	var gotPath string
+	gotPathCh := make(chan string, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		select {
+		case gotPathCh <- r.URL.Path:
+		default:
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -115,6 +118,12 @@ func testHealthAdapterProbePath(t *testing.T, contract healthAdapterContract) {
 	result := CheckProviders(cfg)
 	if !result.Available {
 		t.Fatal("expected Available=true for healthy probe")
+	}
+	var gotPath string
+	select {
+	case gotPath = <-gotPathCh:
+	default:
+		t.Fatal("expected probe request but handler was never called")
 	}
 	if gotPath != contract.probePath {
 		t.Fatalf("probe path = %q, want %q", gotPath, contract.probePath)

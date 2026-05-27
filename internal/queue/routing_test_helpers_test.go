@@ -30,5 +30,5 @@ func providerSupportsChatToolsViaRouter(provider string) bool {
 	if err != nil {
 		return false
 	}
-	return r.ProviderSupportsChatTools(provider)
+	return r.ProviderSupportsChatTools(cfg.Name)
 }
