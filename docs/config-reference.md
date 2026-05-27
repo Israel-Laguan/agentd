@@ -184,6 +184,11 @@ Cron schedules live in `<home>/agentd.crontab`.
 | `token_budget` | Worker-level per-task token cap; `0` = unlimited. See also `gateway.budget.tokens_per_task`. |
 | `agentic_character_budget` | `0` inherits `gateway.truncator.max_input_chars`. |
 | `hitl.legacy_handoff_timeout` | Prompt/permission/healing/provider handoffs. Approval, review, and clarification use the 30m approval path. |
+| `legacy.max_breakdown_depth` | Max parent→child `too_complex` generations in legacy JSON mode before `LEGACY_MODE_HANDOFF` (`0` = no cap; default `2`). |
+| `legacy.max_subtasks_per_breakdown` | Max subtasks from one `too_complex` response (`0` = no cap; default `5`). |
+| `legacy.preflight_score` | When task complexity score ≥ threshold, append a one-command hint to the legacy prompt (`0` = off; default `6`). |
+| `legacy.reject_score` | Skip the LLM and hand off when complexity ≥ threshold (`0` = off; default `9`). |
+| `legacy.max_description_len` | Skip the LLM when description length exceeds limit (`0` = off; default `2000`). |
 | `tool_timeouts` | Per-tool dispatch timeouts; `"default"` applies to unlisted tools. Go duration strings (`"30s"`, `"1m"`). |
 | `tool_retries` | Transient failures retried with exponential backoff + jitter; model never sees intermediate failures. Only listed tools are eligible. |
 

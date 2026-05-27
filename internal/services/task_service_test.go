@@ -176,6 +176,10 @@ func (m *minimalStore) AssignTaskAgent(_ context.Context, _ string, _ time.Time,
 	return &updated, nil
 }
 
+func (m *minimalStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *minimalStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

@@ -154,6 +154,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 		ProviderBreakers:          deps.providerBreakers,
 		HealingDisabled:           !cfg.Healing.Enabled,
 		MaxHealingTasks:           cfg.Healing.MaxHealingTasks,
+		Legacy:                    cfg.Queue.Legacy,
 	})
 }
 

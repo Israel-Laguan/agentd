@@ -9,7 +9,6 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
 )
 
 // TestAgenticMode_DefaultIsFalse verifies that the default value of AgenticMode is false.
@@ -171,9 +170,8 @@ func TestLegacySystemPrompt_StatesOneCommandConstraint(t *testing.T) {
 type legacyHandoffStore struct {
 	routingTestStore
 	mu          sync.Mutex
-	blocked     bool
-	subtasks    []models.DraftTask
-	emittedKinds []string
+	blocked  bool
+	subtasks []models.DraftTask
 }
 
 func (s *legacyHandoffStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, drafts []models.DraftTask) (*models.Task, []models.Task, error) {
@@ -209,6 +207,25 @@ func (g *invalidJSONGateway) Generate(_ context.Context, req gateway.AIRequest) 
 	return gateway.AIResponse{Content: `{"command":"echo '...truncated`}, nil
 }
 
+func newLegacyJSONHandoffFixtures() (*legacyHandoffStore, *invalidJSONGateway, *legacyHandoffSink) {
+	profile := models.AgentProfile{
+		ID: "agent-handoff", Provider: "ollama", Model: "llama3", AgenticMode: false,
+	}
+	store := &legacyHandoffStore{
+		routingTestStore: routingTestStore{
+			task: models.Task{
+				BaseEntity: models.BaseEntity{ID: "task-json-fail"},
+				ProjectID:  "project-1", AgentID: "agent-handoff", State: models.TaskStateQueued,
+			},
+			project: models.Project{
+				BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: "/tmp/test-workspace",
+			},
+			profile: profile,
+		},
+	}
+	return store, &invalidJSONGateway{}, &legacyHandoffSink{}
+}
+
 // TestLegacyWorker_InvalidJSONResponse_EmitsHumanHandoff verifies that when
 // the gateway persistently returns invalid JSON (simulating a truncated
 // response), the legacy worker creates a HUMAN-assignee handoff subtask and
@@ -216,78 +233,41 @@ func (g *invalidJSONGateway) Generate(_ context.Context, req gateway.AIRequest) 
 func TestLegacyWorker_InvalidJSONResponse_EmitsHumanHandoff(t *testing.T) {
 	t.Parallel()
 
-	profile := models.AgentProfile{
-		ID:          "agent-handoff",
-		Provider:    "ollama",
-		Model:       "llama3",
-		AgenticMode: false,
-	}
-	store := &legacyHandoffStore{
-		routingTestStore: routingTestStore{
-			task: models.Task{
-				BaseEntity: models.BaseEntity{ID: "task-json-fail"},
-				ProjectID:  "project-1",
-				AgentID:    "agent-handoff",
-				State:      models.TaskStateQueued,
-			},
-			project: models.Project{
-				BaseEntity:    models.BaseEntity{ID: "project-1"},
-				WorkspacePath: "/tmp/test-workspace",
-			},
-			profile: profile,
-		},
-	}
-	gw := &invalidJSONGateway{}
-	sb := &routingTestSandbox{}
-	sink := &legacyHandoffSink{}
-
-	w := NewWorker(store, gw, sb, nil, sink, WorkerOptions{MaxToolIterations: 5})
+	store, gw, sink := newLegacyJSONHandoffFixtures()
+	w := NewWorker(store, gw, &routingTestSandbox{}, nil, sink, WorkerOptions{MaxToolIterations: 5})
 	w.Process(context.Background(), store.task)
 
 	store.mu.Lock()
-	blocked := store.blocked
-	subtasks := store.subtasks
+	blocked, subtasks := store.blocked, store.subtasks
 	store.mu.Unlock()
 
-	// Must have called BlockTaskWithSubtasks.
 	if !blocked {
 		t.Fatal("expected BlockTaskWithSubtasks to be called for invalid JSON handoff")
 	}
-
-	// The subtask must be assigned to HUMAN.
 	if len(subtasks) == 0 {
 		t.Fatal("expected at least one handoff subtask")
 	}
 	if subtasks[0].Assignee != models.TaskAssigneeHuman {
 		t.Errorf("handoff subtask assignee = %q, want %q", subtasks[0].Assignee, models.TaskAssigneeHuman)
 	}
-
-	// The subtask description must mention agentic_mode.
 	if !strings.Contains(subtasks[0].Description, "agentic_mode") {
 		t.Errorf("handoff description missing 'agentic_mode'; got: %s", subtasks[0].Description[:min(200, len(subtasks[0].Description))])
 	}
-
-	// The emitted event must include LEGACY_MODE_HANDOFF.
 	sink.mu.Lock()
 	kinds := sink.kinds
 	sink.mu.Unlock()
-	found := false
-	for _, k := range kinds {
-		if k == "LEGACY_MODE_HANDOFF" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !containsEvent(kinds, "LEGACY_MODE_HANDOFF") {
 		t.Errorf("expected LEGACY_MODE_HANDOFF event; got events: %v", kinds)
 	}
 }
 
-// invalidJSONSandbox satisfies sandbox.Executor (unused in this test path).
-type invalidJSONSandbox struct{}
-
-func (s *invalidJSONSandbox) Execute(_ context.Context, _ sandbox.Payload) (sandbox.Result, error) {
-	return sandbox.Result{Success: true}, nil
+func containsEvent(kinds []string, want string) bool {
+	for _, k := range kinds {
+		if k == want {
+			return true
+		}
+	}
+	return false
 }
 
 func min(a, b int) int {

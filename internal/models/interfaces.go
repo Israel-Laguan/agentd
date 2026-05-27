@@ -63,6 +63,7 @@ type KanbanStore interface {
 	ReconcileOrphanedQueued(ctx context.Context, minAge time.Duration) ([]Task, error)
 	BlockTaskWithSubtasks(ctx context.Context, taskID string, expectedUpdatedAt time.Time, subtasks []DraftTask) (*Task, []Task, error)
 	ListChildTasks(ctx context.Context, parentID string) ([]Task, error)
+	ListParentTasks(ctx context.Context, childID string) ([]Task, error)
 	ReconcileExpiredBlockedTasks(ctx context.Context, now time.Time) ([]Task, error)
 	AppendTasksToProject(ctx context.Context, projectID, parentTaskID string, drafts []DraftTask) ([]Task, error)
 	AddComment(ctx context.Context, c Comment) error

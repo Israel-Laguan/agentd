@@ -28,6 +28,23 @@ func (s *FakeKanbanStore) ListChildTasks(_ context.Context, parentID string) ([]
 	return out, nil
 }
 
+func (s *FakeKanbanStore) ListParentTasks(_ context.Context, childID string) ([]models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []models.Task
+	for parentID, childIDs := range s.childParents {
+		for _, cid := range childIDs {
+			if cid != childID {
+				continue
+			}
+			if t, ok := s.tasks[parentID]; ok {
+				out = append(out, t)
+			}
+		}
+	}
+	return out, nil
+}
+
 func (s *FakeKanbanStore) unblockBlockedParentsLocked(childID string) {
 	for parentID, childIDs := range s.childParents {
 		found := false
