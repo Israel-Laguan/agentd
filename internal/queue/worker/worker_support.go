@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -216,7 +217,11 @@ func (w *Worker) warnIfWorkspaceEmpty(ctx context.Context, task models.Task, pro
 	if project == nil || project.WorkspacePath == "" {
 		return
 	}
-	entries, err := os.ReadDir(project.WorkspacePath)
+	wsPath := project.WorkspacePath
+	if !filepath.IsAbs(wsPath) {
+		return
+	}
+	entries, err := os.ReadDir(wsPath)
 	if err != nil {
 		return
 	}

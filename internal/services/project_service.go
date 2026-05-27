@@ -35,10 +35,10 @@ func (s *ProjectService) MaterializePlan(
 	ctx context.Context,
 	plan models.DraftPlan,
 ) (*models.Project, []models.Task, error) {
+	plan.WorkspacePending = true
 	needsExplicitReady := strings.TrimSpace(plan.SourcePath) == ""
 	if needsExplicitReady {
 		plan.SourcePath = ""
-		plan.WorkspacePending = true
 	}
 
 	project, tasks, err := s.store.MaterializePlan(ctx, plan)
