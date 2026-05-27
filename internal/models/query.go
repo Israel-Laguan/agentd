@@ -19,9 +19,10 @@ type PaginatedResult[T any] struct {
 
 // TaskFilter safely constrains task list queries.
 type TaskFilter struct {
-	Pagination   PaginationParams
-	ProjectID    *string
-	States       []TaskState
-	Assignee     *TaskAssignee
-	UpdatedAfter *time.Time
+	Pagination     PaginationParams
+	ProjectID      *string
+	States         []TaskState
+	Assignee       *TaskAssignee
+	UpdatedAfter   *time.Time
+	IncludeHealing bool
 }

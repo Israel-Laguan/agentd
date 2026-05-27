@@ -2,6 +2,18 @@ package models
 
 import "testing"
 
+func TestIsSelfHealingHandoffTask(t *testing.T) {
+	t.Parallel()
+	handoff := Task{Assignee: TaskAssigneeHuman, Title: HITLSubtaskTitleManualReview + " AI unavailable"}
+	if !IsSelfHealingHandoffTask(handoff) {
+		t.Fatal("expected manual-review HUMAN subtask to be self-healing handoff")
+	}
+	approval := Task{Assignee: TaskAssigneeHuman, Title: HITLSubtaskTitleApproveTool + " deploy"}
+	if IsSelfHealingHandoffTask(approval) {
+		t.Fatal("approval gate should not be classified as self-healing handoff")
+	}
+}
+
 func TestChildResolvedForParentUnblock(t *testing.T) {
 	tests := []struct {
 		name  string
