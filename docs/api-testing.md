@@ -127,7 +127,7 @@ Create a project from a draft plan.
 }
 ```
 
-Optional per-task `agent_id` pre-assigns an agent at creation (default: `default`). Unknown IDs → `404 AGENT_PROFILE_NOT_FOUND`.
+Optional per-task `agent_id` pre-assigns an agent at creation (default: `default`). Unknown IDs → `404 NOT_FOUND`.
 
 **Response**: Returns the created project and its tasks.
 
@@ -218,7 +218,7 @@ Add a human comment to a task. This pauses the task to `IN_CONSIDERATION` state.
 
 ### POST /api/v1/tasks/{id}/assign
 
-Assign a task to an agent. Reassignment of a `RUNNING` task returns `409 STATE_CONFLICT`; unknown `agent_id` → `404 AGENT_PROFILE_NOT_FOUND`. Prefer `agent_id` on materialize when known upfront.
+Assign a task to an agent. Reassignment of a `RUNNING` task returns `409 STATE_CONFLICT`; unknown `agent_id` → `404 NOT_FOUND`. Prefer `agent_id` on materialize when known upfront.
 
 **Request Body**:
 ```json
