@@ -12,14 +12,16 @@ import (
 	"agentd/internal/models"
 )
 
-func (s *gatewayScenario) openAIAdapterWithTimeout(_ context.Context, _ string, ms int) error {
+func (s *gatewayScenario) openAIAdapterWithTimeout(_ context.Context, name string, ms int) error {
 	s.probeAdapter = "openai"
+	s.probeProvider = name
 	s.budget = ms
 	return nil
 }
 
-func (s *gatewayScenario) ollamaAdapterWithTimeout(_ context.Context, _ string, ms int) error {
+func (s *gatewayScenario) ollamaAdapterWithTimeout(_ context.Context, name string, ms int) error {
 	s.probeAdapter = "ollama"
+	s.probeProvider = name
 	s.budget = ms
 	return nil
 }
@@ -69,7 +71,13 @@ func (s *gatewayScenario) mockServerImmediate(context.Context) error {
 	return nil
 }
 
-func (s *gatewayScenario) sendToProvider(context.Context, string) error {
+func (s *gatewayScenario) sendToProvider(_ context.Context, name string) error {
+	if s.probeProvider == "" {
+		return fmt.Errorf("no provider configured for cancellation probe")
+	}
+	if name != s.probeProvider {
+		return fmt.Errorf("provider mismatch: got %q, configured %q", name, s.probeProvider)
+	}
 	return nil
 }
 
