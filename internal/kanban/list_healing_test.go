@@ -95,3 +95,42 @@ func TestListTasksIncludeHealingListsHandoff(t *testing.T) {
 		t.Fatal("include_healing list should return self-healing handoff subtask")
 	}
 }
+
+func TestListTasksExcludeHealing_DoesNotFilterWrongCaseTitle(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	proj, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "healing-case",
+		Tasks:       []models.DraftTask{{Title: "work", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	parent := tasks[0]
+	decoyTitle := "manual review required: decoy"
+	if _, _, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title:    decoyTitle,
+		Assignee: models.TaskAssigneeHuman,
+	}}); err != nil {
+		t.Fatalf("BlockTaskWithSubtasks: %v", err)
+	}
+	if models.IsSelfHealingHandoffTask(models.Task{Assignee: models.TaskAssigneeHuman, Title: decoyTitle}) {
+		t.Fatal("decoy title must not match IsSelfHealingHandoffTask (case-sensitive prefix)")
+	}
+
+	pid := proj.ID
+	page, err := store.ListTasks(ctx, models.TaskFilter{ProjectID: &pid, IncludeHealing: false})
+	if err != nil {
+		t.Fatalf("ListTasks exclude healing: %v", err)
+	}
+	var found bool
+	for _, task := range page.Data {
+		if task.Title == decoyTitle {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("wrong-case HUMAN title must remain visible when include_healing=false (SQL must match Go prefix semantics)")
+	}
+}
