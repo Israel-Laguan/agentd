@@ -16,6 +16,7 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 		WorkspacePath: "/tmp/projects/" + plan.ProjectName,
 	}
 	s.projects[project.ID] = project
+	tempToID := make(map[string]string, len(plan.Tasks))
 	tasks := make([]models.Task, 0, len(plan.Tasks))
 	for _, draft := range plan.Tasks {
 		state := models.TaskStateReady
@@ -37,6 +38,16 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 		}
 		s.tasks[task.ID] = task
 		tasks = append(tasks, task)
+		if tid := draft.ID(); tid != "" {
+			tempToID[tid] = task.ID
+		}
+	}
+	for i, draft := range plan.Tasks {
+		for _, dep := range draft.DependsOn {
+			if parentID, ok := tempToID[dep]; ok {
+				s.childParents[tasks[i].ID] = append(s.childParents[tasks[i].ID], parentID)
+			}
+		}
 	}
 	return &project, tasks, nil
 }

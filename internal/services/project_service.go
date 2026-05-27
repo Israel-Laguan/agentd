@@ -64,13 +64,21 @@ func (s *ProjectService) MaterializePlan(
 		return project, tasks, nil
 	}
 
-	// source_path was provided and copied; unlock tasks to READY.
+	// source_path was provided and copied; unlock root tasks to READY.
 	unlocked, err := s.store.MarkProjectTasksReady(ctx, project.ID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unlock tasks after workspace seed: %w", err)
 	}
-	if len(unlocked) > 0 {
-		tasks = unlocked
+	// Merge updated states back into the full task list so dependent
+	// tasks (still PENDING) are not dropped from the response.
+	ready := make(map[string]models.Task, len(unlocked))
+	for _, t := range unlocked {
+		ready[t.ID] = t
+	}
+	for i, t := range tasks {
+		if updated, ok := ready[t.ID]; ok {
+			tasks[i] = updated
+		}
 	}
 	return project, tasks, nil
 }

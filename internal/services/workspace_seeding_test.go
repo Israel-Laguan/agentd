@@ -76,6 +76,52 @@ func TestMaterializeWithSourcePath(t *testing.T) {
 	}
 }
 
+// TestMaterializeWithSourcePathAndDeps verifies that the response includes
+// all tasks (both root READY and dependent PENDING) when source_path is set.
+func TestMaterializeWithSourcePathAndDeps(t *testing.T) {
+	t.Parallel()
+
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package main"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wsRoot := t.TempDir()
+	ws := &sandbox.FSWorkspaceManager{Root: wsRoot}
+	store := testutil.NewFakeStore()
+	svc := services.NewProjectService(store, ws)
+
+	plan := models.DraftPlan{
+		ProjectName: "deps-test",
+		SourcePath:  srcDir,
+		Tasks: []models.DraftTask{
+			{TempID: "t1", Title: "Build"},
+			{TempID: "t2", Title: "Test", DependsOn: []string{"t1"}},
+		},
+	}
+
+	_, tasks, err := svc.MaterializePlan(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+
+	if len(tasks) != 2 {
+		t.Fatalf("tasks count = %d, want 2 (both root and dependent)", len(tasks))
+	}
+
+	byTitle := make(map[string]models.Task)
+	for _, task := range tasks {
+		byTitle[task.Title] = task
+	}
+
+	if byTitle["Build"].State != models.TaskStateReady {
+		t.Fatalf("Build state = %q, want READY", byTitle["Build"].State)
+	}
+	if byTitle["Test"].State != models.TaskStatePending {
+		t.Fatalf("Test state = %q, want PENDING (has dependency)", byTitle["Test"].State)
+	}
+}
+
 // TestMaterializeWithoutSourcePath verifies Option B: tasks start PENDING
 // when no source_path is provided.
 func TestMaterializeWithoutSourcePath(t *testing.T) {
