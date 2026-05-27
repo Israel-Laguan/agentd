@@ -17,6 +17,9 @@ func (s *Store) MaterializePlan(ctx context.Context, plan models.DraftPlan) (*mo
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := s.validateDraftAgentIDs(ctx, normalized); err != nil {
+		return nil, nil, err
+	}
 
 	type result struct {
 		project *models.Project
@@ -69,6 +72,26 @@ func (s *Store) ListProjects(ctx context.Context) ([]models.Project, error) {
 	}
 	defer closeRows(rows)
 	return scanProjects(rows)
+}
+
+// validateDraftAgentIDs verifies that every non-default agent_id referenced
+// in the draft plan corresponds to an existing agent profile.
+func (s *Store) validateDraftAgentIDs(ctx context.Context, plan models.DraftPlan) error {
+	seen := make(map[string]struct{})
+	for _, draft := range plan.Tasks {
+		id := resolveAgentID(draft.AgentID)
+		if id == defaultAgentID {
+			continue
+		}
+		if _, checked := seen[id]; checked {
+			continue
+		}
+		if _, err := s.GetAgentProfile(ctx, id); err != nil {
+			return fmt.Errorf("task %q: agent_id %q: %w", draft.ID(), id, err)
+		}
+		seen[id] = struct{}{}
+	}
+	return nil
 }
 
 func prepareDraftPlan(plan models.DraftPlan) (models.DraftPlan, error) {
@@ -141,7 +164,7 @@ func newTask(draft models.DraftTask, projectID, taskID string, now time.Time, wo
 	return models.Task{
 		BaseEntity:      models.BaseEntity{ID: taskID, CreatedAt: now, UpdatedAt: now},
 		ProjectID:       projectID,
-		AgentID:         defaultAgentID,
+		AgentID:         resolveAgentID(draft.AgentID),
 		Title:           strings.TrimSpace(draft.Title),
 		Description:     strings.TrimSpace(draft.Description),
 		State:           state,
