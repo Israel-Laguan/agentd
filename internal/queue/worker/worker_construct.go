@@ -58,7 +58,7 @@ type WorkerOptions struct {
 	Batching                  config.BatchingConfig
 	PromptTemplatesPath       string
 	ProviderBreakers          *safety.ProviderBreakers
-	HealingEnabled            bool
+	HealingDisabled           bool
 	MaxHealingTasks           int
 }
 
@@ -189,7 +189,7 @@ func newWorkerCore(
 		fileContextCfg:          opts.FileContext,
 		planningCfg:             opts.Planning,
 		checkpointStore:         NewMemoryCheckpointStore(),
-		healingEnabled:          opts.HealingEnabled,
+		healingEnabled:          !opts.HealingDisabled,
 		maxHealingTasks:         opts.MaxHealingTasks,
 	}
 }

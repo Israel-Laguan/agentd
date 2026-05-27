@@ -91,9 +91,9 @@ func (s *StatusSummarizer) SummarizeWithOptions(ctx context.Context, opts Summar
 }
 
 // isHealingTask returns true for tasks created by the self-healing ladder
-// (HITL subtasks assigned to HUMAN with known handoff title prefixes).
+// (HITL subtasks assigned to HUMAN with "Manual review required:" prefix).
 func isHealingTask(t models.Task) bool {
-	return t.Assignee == models.TaskAssigneeHuman && models.IsHITLSubtaskTitle(t.Title)
+	return t.Assignee == models.TaskAssigneeHuman && strings.HasPrefix(t.Title, models.HITLSubtaskTitleManualReview)
 }
 
 func buildMessage(projectCount, remaining int, byState map[string]int) string {

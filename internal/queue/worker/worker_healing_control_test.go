@@ -13,7 +13,7 @@ func TestHandleGatewayError_HealingDisabled_FailsTask(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
 	sink := &mockEventSink{}
-	w := &Worker{store: store, sink: sink, healingEnabled: false}
+	w := &Worker{store: store, sink: sink}
 
 	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
 		ProjectName: "heal-disabled",
