@@ -169,7 +169,7 @@ func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project mo
 		return
 	}
 	if response.TooComplex {
-		w.handleLegacyTaskBreakdown(ctx, task, response.Subtasks)
+		w.handleLegacyTaskBreakdown(ctx, task, response.Subtasks, false)
 		return
 	}
 	execCtx, cancel := context.WithCancel(ctx)

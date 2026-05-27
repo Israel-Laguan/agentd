@@ -269,8 +269,25 @@ func TestProjectHandler_MaterializeWithSourcePath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	body := `{"project_name":"seeded-api","source_path":"` + srcDir + `","tasks":[{"title":"Build","description":"work"}]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader(body))
+	bodyBytes, err := json.Marshal(struct {
+		ProjectName string `json:"project_name"`
+		SourcePath  string `json:"source_path"`
+		Tasks       []struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		} `json:"tasks"`
+	}{
+		ProjectName: "seeded-api",
+		SourcePath:  srcDir,
+		Tasks: []struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		}{{Title: "Build", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader(string(bodyBytes)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Materialize(rec, req)
