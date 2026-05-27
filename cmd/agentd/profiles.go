@@ -20,8 +20,21 @@ func initProfileHint(gw config.GatewayConfig) string {
 	} else {
 		hint += "no LLM API keys detected yet; configure OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or gateway.providers before agentd start\n"
 	}
+	hint += "after agentd start: PATCH /api/v1/agents/<id> with {\"provider\":\"...\",\"model\":\"...\"} to pin routing (repeat init preserves existing profiles)\n"
+	if gatewayOrderIncludes(gw.Order, "gemini") || check.Provider == "gemini" {
+		hint += "gemini free tier: agentd start --skip-llm-warmup to skip the billable warmup probe\n"
+	}
 	hint += "re-run with --reset-profiles to overwrite existing profile provider/model values\n"
 	return hint
+}
+
+func gatewayOrderIncludes(order []string, name string) bool {
+	for _, p := range order {
+		if p == name {
+			return true
+		}
+	}
+	return false
 }
 
 // seedDefaultAgent installs default agent profiles into the store.
