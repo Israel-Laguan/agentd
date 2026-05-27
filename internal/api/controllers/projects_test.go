@@ -42,6 +42,57 @@ func seedProject(t *testing.T, store *testutil.FakeKanbanStore) string {
 	return proj.ID
 }
 
+func projectHandlerWithMaterializeToken(t *testing.T, token string) (controllers.ProjectHandler, *sandbox.FSWorkspaceManager) {
+	t.Helper()
+	store := testutil.NewFakeStore()
+	ws := &sandbox.FSWorkspaceManager{Root: t.TempDir()}
+	svc := services.NewProjectService(store, ws)
+	return controllers.ProjectHandler{
+		Store:            store,
+		Service:          svc,
+		MaterializeToken: token,
+	}, ws
+}
+
+func materializeProjectHTTP(t *testing.T, h controllers.ProjectHandler, body, token string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("X-Agentd-Materialize-Token", token)
+	}
+	rec := httptest.NewRecorder()
+	h.Materialize(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Materialize code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			Project struct {
+				ID string `json:"ID"`
+			} `json:"project"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	return resp.Data.Project.ID
+}
+
+func assertWorkspaceReadyStatus(t *testing.T, h controllers.ProjectHandler, projectID, token string, want int) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/workspace/ready", nil)
+	req.SetPathValue("id", projectID)
+	if token != "" {
+		req.Header.Set("X-Agentd-Materialize-Token", token)
+	}
+	rec := httptest.NewRecorder()
+	h.WorkspaceReady(rec, req)
+	if rec.Code != want {
+		t.Fatalf("code = %d body = %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestProjectHandler_List(t *testing.T) {
 	h, store := projectTestHandler()
 	seedProject(t, store)
@@ -351,71 +402,22 @@ func TestProjectHandler_WorkspaceReadyEmptyWorkspace(t *testing.T) {
 }
 
 func TestProjectHandler_WorkspaceReadyToken(t *testing.T) {
-	store := testutil.NewFakeStore()
-	ws := &sandbox.FSWorkspaceManager{Root: t.TempDir()}
-	svc := services.NewProjectService(store, ws)
-	h := controllers.ProjectHandler{
-		Store:            store,
-		Service:          svc,
-		MaterializeToken: "workspace-ready-secret",
-	}
-
+	const token = "workspace-ready-secret"
+	h, ws := projectHandlerWithMaterializeToken(t, token)
 	matBody := `{"project_name":"token-ready","tasks":[{"title":"T","description":"d"}]}`
-	matReq := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader(matBody))
-	matReq.Header.Set("Content-Type", "application/json")
-	matReq.Header.Set("X-Agentd-Materialize-Token", "workspace-ready-secret")
-	matRec := httptest.NewRecorder()
-	h.Materialize(matRec, matReq)
-	if matRec.Code != http.StatusCreated {
-		t.Fatalf("Materialize code = %d body = %s", matRec.Code, matRec.Body.String())
-	}
-	var matResp struct {
-		Data struct {
-			Project struct {
-				ID string `json:"ID"`
-			} `json:"project"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(matRec.Body.Bytes(), &matResp); err != nil {
-		t.Fatal(err)
-	}
-	projectID := matResp.Data.Project.ID
+	projectID := materializeProjectHTTP(t, h, matBody, token)
 	if err := os.WriteFile(filepath.Join(ws.ProjectDir(projectID), "seed.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	readyURL := "/api/v1/projects/" + projectID + "/workspace/ready"
-
 	t.Run("forbidden without header", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, readyURL, nil)
-		req.SetPathValue("id", projectID)
-		rec := httptest.NewRecorder()
-		h.WorkspaceReady(rec, req)
-		if rec.Code != http.StatusForbidden {
-			t.Fatalf("code = %d body = %s", rec.Code, rec.Body.String())
-		}
+		assertWorkspaceReadyStatus(t, h, projectID, "", http.StatusForbidden)
 	})
-
 	t.Run("forbidden with wrong token", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, readyURL, nil)
-		req.SetPathValue("id", projectID)
-		req.Header.Set("X-Agentd-Materialize-Token", "wrong")
-		rec := httptest.NewRecorder()
-		h.WorkspaceReady(rec, req)
-		if rec.Code != http.StatusForbidden {
-			t.Fatalf("code = %d body = %s", rec.Code, rec.Body.String())
-		}
+		assertWorkspaceReadyStatus(t, h, projectID, "wrong", http.StatusForbidden)
 	})
-
 	t.Run("ok with matching token", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, readyURL, nil)
-		req.SetPathValue("id", projectID)
-		req.Header.Set("X-Agentd-Materialize-Token", "workspace-ready-secret")
-		rec := httptest.NewRecorder()
-		h.WorkspaceReady(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("code = %d body = %s", rec.Code, rec.Body.String())
-		}
+		assertWorkspaceReadyStatus(t, h, projectID, token, http.StatusOK)
 	})
 }
 
