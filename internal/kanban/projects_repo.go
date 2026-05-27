@@ -82,7 +82,7 @@ func (s *Store) validateDraftAgentIDs(ctx context.Context, plan models.DraftPlan
 
 // validateTaskAgentIDs verifies that every non-default agent_id in the
 // given drafts corresponds to an existing agent profile. Shared by
-// MaterializePlan, BlockTaskWithSubtasks, and AppendTasksToProject.
+// MaterializePlan, BlockTaskWithSubtasks, AppendTasksToProject, and EnsureProjectTask.
 func (s *Store) validateTaskAgentIDs(ctx context.Context, drafts []models.DraftTask) error {
 	seen := make(map[string]struct{})
 	for _, draft := range drafts {
