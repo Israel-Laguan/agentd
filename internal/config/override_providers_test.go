@@ -128,3 +128,58 @@ func TestConfigSources_ProviderAPIKeyOverrideNote(t *testing.T) {
 		t.Errorf("OverriddenFrom = %q, want config.yaml note", line.OverriddenFrom)
 	}
 }
+
+func TestDetectAllConfigOverrides_ProviderAPIKey_GenericFallbackWhenExplicitMissing(t *testing.T) {
+	home := t.TempDir()
+	configPath := home + "/config.yaml"
+	writeOverrideTestConfig(t, configPath, `gateway:
+  providers:
+    - name: poolside
+      adapter: openai
+      api_key: sk-file
+      api_key_env: POOLSIDE_API_KEY
+`)
+
+	fv := newFileOnlyViper(home, configPath)
+	if err := fv.ReadInConfig(); err != nil {
+		t.Fatalf("ReadInConfig: %v", err)
+	}
+
+	process := map[string]string{"AGENTD_GATEWAY_POOLSIDE_API_KEY": "sk-env"}
+	dotenv := map[string]string{}
+	v := testViperAfterLoad(t, home, "", process, dotenv, true)
+
+	overrides := detectAllConfigOverrides(fv, v, dotenv, process)
+	if len(overrides) != 1 {
+		t.Fatalf("want 1 override, got %d: %+v", len(overrides), overrides)
+	}
+	o := overrides[0]
+	if o.EnvVar != "AGENTD_GATEWAY_POOLSIDE_API_KEY" {
+		t.Errorf("EnvVar = %q, want AGENTD_GATEWAY_POOLSIDE_API_KEY", o.EnvVar)
+	}
+}
+
+func TestConfigSources_ProviderAPIKeySource_GenericFallbackWhenExplicitMissing(t *testing.T) {
+	home := t.TempDir()
+	configPath := home + "/config.yaml"
+	writeOverrideTestConfig(t, configPath, `gateway:
+  providers:
+    - name: poolside
+      adapter: openai
+      api_key: sk-file
+      api_key_env: POOLSIDE_API_KEY
+`)
+	t.Setenv("AGENTD_GATEWAY_POOLSIDE_API_KEY", "sk-env")
+
+	sources, _, err := ConfigSources(LoadOptions{HomeOverride: home})
+	if err != nil {
+		t.Fatalf("ConfigSources: %v", err)
+	}
+	line := findSourceLine(sources, "gateway.providers[name=poolside].api_key")
+	if line == nil {
+		t.Fatal("missing provider api_key line")
+	}
+	if line.Source != "AGENTD_GATEWAY_POOLSIDE_API_KEY" {
+		t.Errorf("Source = %q, want AGENTD_GATEWAY_POOLSIDE_API_KEY", line.Source)
+	}
+}
