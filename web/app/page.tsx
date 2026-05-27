@@ -39,6 +39,8 @@ export default function Page() {
   const [isTyping, setIsTyping] = useState(false);
   const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
   const inputRef = useRef<HTMLInputElement>(null);
+  /** Per-task optimistic drag generation; avoids rollback when Date.now() collides. */
+  const dragVersionRef = useRef<Map<string, number>>(new Map());
 
   // Seed chat settings from the first configured provider once the daemon responds.
   // Only applies when the user has not already changed away from the default.
@@ -129,6 +131,8 @@ export default function Page() {
     const currentTask = localTasks.find((t) => t.id === taskId);
     const prevStatus = currentTask?.state;
     const prevUpdatedAt = currentTask?.updated_at;
+    const dragVersion = (dragVersionRef.current.get(taskId) ?? 0) + 1;
+    dragVersionRef.current.set(taskId, dragVersion);
     const now = Date.now();
 
     setLocalTasks((tasks) =>
@@ -150,24 +154,25 @@ export default function Page() {
 
     updateTask(taskId, { state: newStatus, updated_at: now }).catch((err) => {
       console.error("Failed to persist task status", err);
-      if (prevStatus !== undefined && prevUpdatedAt !== undefined) {
-        setLocalTasks((tasks) =>
-          tasks.map((task) =>
-            task.id === taskId && task.updated_at === now
-              ? {
-                  ...task,
-                  state: prevStatus,
-                  updated_at: prevUpdatedAt,
-                }
-              : task
-          )
-        );
-        setSelectedTask((prev) =>
-          prev?.id === taskId && prev.updated_at === now
-            ? { ...prev, state: prevStatus, updated_at: prevUpdatedAt }
-            : prev
-        );
-      }
+      if (dragVersionRef.current.get(taskId) !== dragVersion) return;
+      if (prevStatus === undefined || prevUpdatedAt === undefined) return;
+
+      setLocalTasks((tasks) =>
+        tasks.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                state: prevStatus,
+                updated_at: prevUpdatedAt,
+              }
+            : task
+        )
+      );
+      setSelectedTask((prev) =>
+        prev?.id === taskId
+          ? { ...prev, state: prevStatus, updated_at: prevUpdatedAt }
+          : prev
+      );
     });
   };
 
