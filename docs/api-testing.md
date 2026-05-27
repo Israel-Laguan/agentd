@@ -120,12 +120,14 @@ Create a project from a draft plan.
 **Request Body**:
 ```json
 {
-  "name": "project-name",
+  "project_name": "project-name",
   "tasks": [
-    { "title": "Task title", "description": "Task description" }
+    { "title": "Task title", "description": "...", "agent_id": "researcher" }
   ]
 }
 ```
+
+Optional per-task `agent_id` pre-assigns an agent at creation (default: `default`). Unknown IDs → `404 AGENT_PROFILE_NOT_FOUND`.
 
 **Response**: Returns the created project and its tasks.
 
@@ -216,7 +218,7 @@ Add a human comment to a task. This pauses the task to `IN_CONSIDERATION` state.
 
 ### POST /api/v1/tasks/{id}/assign
 
-Assign a task to an agent.
+Assign a task to an agent (`READY`/`QUEUED` only; `RUNNING` → `409 STATE_CONFLICT`). Prefer `agent_id` on materialize when known upfront.
 
 **Request Body**:
 ```json
