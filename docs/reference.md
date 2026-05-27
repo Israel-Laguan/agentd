@@ -6,6 +6,51 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 
 - Breaking change (2026-05-27): task/project/comment payloads returned by API endpoints now serialize field names as `snake_case` (for example `id`, `project_id`, `state`, `created_at`) instead of legacy PascalCase keys (for example `ID`, `ProjectID`, `State`, `CreatedAt`).
 - Affected clients should update JSON access patterns, `jq` selectors, and TypeScript/Python structs accordingly.
+- The API path remains `/api/v1/`. There is no parallel PascalCase endpoint; all consumers must migrate.
+
+### Deprecation timeline
+
+| Phase | Date | Action |
+|-------|------|--------|
+| Breaking change | 2026-05-27 | snake_case keys are now the only format returned |
+| Observation window | until 2026-06-27 | Monitor for integration failures; patch releases issued if critical regressions surface |
+| Stabilisation | 2026-07-01 | snake_case contract considered stable; no further compatibility shims planned |
+
+### Migration examples
+
+**`jq` selectors**
+
+```bash
+# Before
+curl .../api/v1/tasks | jq '.[].ID'
+curl .../api/v1/tasks | jq '.[].ProjectID'
+
+# After
+curl .../api/v1/tasks | jq '.[].id'
+curl .../api/v1/tasks | jq '.[].project_id'
+```
+
+**TypeScript**
+
+```typescript
+// Before
+interface Task { ID: string; ProjectID: string; State: string; CreatedAt: string; }
+
+// After
+interface Task { id: string; project_id: string; state: string; created_at: string; }
+```
+
+**Python**
+
+```python
+# Before
+task["ID"], task["ProjectID"], task["State"]
+
+# After
+task["id"], task["project_id"], task["state"]
+```
+
+> **Note for web-frontend consumers**: the mappers in `web/lib/mappers.ts` contain fallback chains that accept both the old PascalCase and new snake_case keys, so existing frontend code continues to work. External consumers (CLI tools, scripts, third-party integrations) do not have this fallback and must update their field access patterns.
 
 ## Feature Catalog
 

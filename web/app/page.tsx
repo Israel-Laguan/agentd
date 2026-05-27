@@ -153,7 +153,7 @@ export default function Page() {
       if (prevStatus !== undefined && prevUpdatedAt !== undefined) {
         setLocalTasks((tasks) =>
           tasks.map((task) =>
-            task.id === taskId
+            task.id === taskId && task.updated_at === now
               ? {
                   ...task,
                   state: prevStatus,
@@ -163,7 +163,7 @@ export default function Page() {
           )
         );
         setSelectedTask((prev) =>
-          prev?.id === taskId
+          prev?.id === taskId && prev.updated_at === now
             ? { ...prev, state: prevStatus, updated_at: prevUpdatedAt }
             : prev
         );
