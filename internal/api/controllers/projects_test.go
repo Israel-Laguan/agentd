@@ -54,7 +54,7 @@ func projectHandlerWithMaterializeToken(t *testing.T, token string) (controllers
 	}, ws
 }
 
-func materializeProjectHTTP(t *testing.T, h controllers.ProjectHandler, body, token string) string {
+func postMaterialize(t *testing.T, h controllers.ProjectHandler, body, token string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -63,20 +63,91 @@ func materializeProjectHTTP(t *testing.T, h controllers.ProjectHandler, body, to
 	}
 	rec := httptest.NewRecorder()
 	h.Materialize(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("Materialize code = %d body = %s", rec.Code, rec.Body.String())
-	}
+	return rec
+}
+
+func parseMaterializeResponse(t *testing.T, rec *httptest.ResponseRecorder) (projectID string, taskStates []string) {
+	t.Helper()
 	var resp struct {
 		Data struct {
 			Project struct {
 				ID string `json:"id"`
 			} `json:"project"`
+			Tasks []struct {
+				State string `json:"state"`
+			} `json:"tasks"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	return resp.Data.Project.ID
+	if resp.Data.Project.ID == "" {
+		t.Fatalf("project id empty in response: %s", rec.Body.String())
+	}
+	states := make([]string, len(resp.Data.Tasks))
+	for i, task := range resp.Data.Tasks {
+		states[i] = task.State
+	}
+	return resp.Data.Project.ID, states
+}
+
+func materializeSourcePathBody(t *testing.T, projectName, sourcePath string) []byte {
+	t.Helper()
+	bodyBytes, err := json.Marshal(struct {
+		ProjectName string `json:"project_name"`
+		SourcePath  string `json:"source_path"`
+		Tasks       []struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		} `json:"tasks"`
+	}{
+		ProjectName: projectName,
+		SourcePath:  sourcePath,
+		Tasks: []struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		}{{Title: "Build", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bodyBytes
+}
+
+func workspaceReadyTaskStates(t *testing.T, h controllers.ProjectHandler, projectID string) []string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/workspace/ready", nil)
+	req.SetPathValue("id", projectID)
+	rec := httptest.NewRecorder()
+	h.WorkspaceReady(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("WorkspaceReady code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			Tasks []struct {
+				State string `json:"state"`
+			} `json:"tasks"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	states := make([]string, len(resp.Data.Tasks))
+	for i, task := range resp.Data.Tasks {
+		states[i] = task.State
+	}
+	return states
+}
+
+func materializeProjectHTTP(t *testing.T, h controllers.ProjectHandler, body, token string) string {
+	t.Helper()
+	rec := postMaterialize(t, h, body, token)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Materialize code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	projectID, _ := parseMaterializeResponse(t, rec)
+	return projectID
 }
 
 func assertWorkspaceReadyStatus(t *testing.T, h controllers.ProjectHandler, projectID, token string, want int) {
@@ -295,56 +366,20 @@ func TestProjectHandler_MaterializeWithSourcePath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	bodyBytes, err := json.Marshal(struct {
-		ProjectName string `json:"project_name"`
-		SourcePath  string `json:"source_path"`
-		Tasks       []struct {
-			Title       string `json:"title"`
-			Description string `json:"description"`
-		} `json:"tasks"`
-	}{
-		ProjectName: "seeded-api",
-		SourcePath:  srcDir,
-		Tasks: []struct {
-			Title       string `json:"title"`
-			Description string `json:"description"`
-		}{{Title: "Build", Description: "work"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader(string(bodyBytes)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.Materialize(rec, req)
+	body := string(materializeSourcePathBody(t, "seeded-api", srcDir))
+	rec := postMaterialize(t, h, body, "")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("Materialize code = %d body = %s", rec.Code, rec.Body.String())
 	}
-
-	var resp struct {
-		Data struct {
-			Project struct {
-				ID string `json:"id"`
-			} `json:"project"`
-			Tasks []struct {
-				State string `json:"state"`
-			} `json:"tasks"`
-		} `json:"data"`
+	projectID, states := parseMaterializeResponse(t, rec)
+	if len(states) != 1 {
+		t.Fatalf("tasks len = %d", len(states))
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Data.Project.ID == "" {
-		t.Fatalf("project id empty in response: %s", rec.Body.String())
-	}
-	if len(resp.Data.Tasks) != 1 {
-		t.Fatalf("tasks len = %d", len(resp.Data.Tasks))
-	}
-	if resp.Data.Tasks[0].State != string(models.TaskStateReady) {
-		t.Fatalf("task state = %q, want READY", resp.Data.Tasks[0].State)
+	if states[0] != string(models.TaskStateReady) {
+		t.Fatalf("task state = %q, want READY", states[0])
 	}
 
-	helloPath := filepath.Join(ws.ProjectDir(resp.Data.Project.ID), "hello.txt")
+	helloPath := filepath.Join(ws.ProjectDir(projectID), "hello.txt")
 	data, err := os.ReadFile(helloPath)
 	if err != nil {
 		t.Fatalf("read seeded hello.txt: %v", err)
@@ -358,33 +393,13 @@ func TestProjectHandler_WorkspaceReadyUnlocksTasks(t *testing.T) {
 	h, ws := projectServiceTestHandler(t)
 
 	body := `{"project_name":"ready-api","tasks":[{"title":"Work","description":"do it"}]}`
-	matReq := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader(body))
-	matReq.Header.Set("Content-Type", "application/json")
-	matRec := httptest.NewRecorder()
-	h.Materialize(matRec, matReq)
-	if matRec.Code != http.StatusCreated {
-		t.Fatalf("Materialize code = %d body = %s", matRec.Code, matRec.Body.String())
+	rec := postMaterialize(t, h, body, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Materialize code = %d body = %s", rec.Code, rec.Body.String())
 	}
-
-	var matResp struct {
-		Data struct {
-			Project struct {
-				ID string `json:"id"`
-			} `json:"project"`
-			Tasks []struct {
-				State string `json:"state"`
-			} `json:"tasks"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(matRec.Body.Bytes(), &matResp); err != nil {
-		t.Fatal(err)
-	}
-	projectID := matResp.Data.Project.ID
-	if projectID == "" {
-		t.Fatalf("project id empty in response: %s", matRec.Body.String())
-	}
-	if matResp.Data.Tasks[0].State != string(models.TaskStatePending) {
-		t.Fatalf("task state = %q, want PENDING before workspace/ready", matResp.Data.Tasks[0].State)
+	projectID, states := parseMaterializeResponse(t, rec)
+	if len(states) == 0 || states[0] != string(models.TaskStatePending) {
+		t.Fatalf("task state = %v, want PENDING before workspace/ready", states)
 	}
 
 	seedPath := filepath.Join(ws.ProjectDir(projectID), "seed.txt")
@@ -392,29 +407,12 @@ func TestProjectHandler_WorkspaceReadyUnlocksTasks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readyReq := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/workspace/ready", nil)
-	readyReq.SetPathValue("id", projectID)
-	readyRec := httptest.NewRecorder()
-	h.WorkspaceReady(readyRec, readyReq)
-	if readyRec.Code != http.StatusOK {
-		t.Fatalf("WorkspaceReady code = %d body = %s", readyRec.Code, readyRec.Body.String())
+	unlocked := workspaceReadyTaskStates(t, h, projectID)
+	if len(unlocked) != 1 {
+		t.Fatalf("unlocked tasks len = %d, want 1", len(unlocked))
 	}
-
-	var readyResp struct {
-		Data struct {
-			Tasks []struct {
-				State string `json:"state"`
-			} `json:"tasks"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(readyRec.Body.Bytes(), &readyResp); err != nil {
-		t.Fatal(err)
-	}
-	if len(readyResp.Data.Tasks) != 1 {
-		t.Fatalf("unlocked tasks len = %d, want 1", len(readyResp.Data.Tasks))
-	}
-	if readyResp.Data.Tasks[0].State != string(models.TaskStateReady) {
-		t.Fatalf("unlocked task state = %q, want READY", readyResp.Data.Tasks[0].State)
+	if unlocked[0] != string(models.TaskStateReady) {
+		t.Fatalf("unlocked task state = %q, want READY", unlocked[0])
 	}
 }
 
