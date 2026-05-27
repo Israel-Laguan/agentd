@@ -171,6 +171,36 @@ func TestDraftTask_UnmarshalJSON_SuccessCriteria(t *testing.T) {
 	})
 }
 
+func TestDraftTask_UnmarshalJSON_AgentID(t *testing.T) {
+	t.Run("snake_case", func(t *testing.T) {
+		var task DraftTask
+		if err := json.Unmarshal([]byte(`{"title":"t","agent_id":"researcher"}`), &task); err != nil {
+			t.Fatalf("UnmarshalJSON() error = %v", err)
+		}
+		if task.AgentID != "researcher" {
+			t.Fatalf("AgentID = %q, want researcher", task.AgentID)
+		}
+	})
+	t.Run("legacy camelCase", func(t *testing.T) {
+		var task DraftTask
+		if err := json.Unmarshal([]byte(`{"Title":"t","AgentID":"qa"}`), &task); err != nil {
+			t.Fatalf("UnmarshalJSON() error = %v", err)
+		}
+		if task.AgentID != "qa" {
+			t.Fatalf("AgentID = %q, want qa", task.AgentID)
+		}
+	})
+	t.Run("empty defaults to empty string", func(t *testing.T) {
+		var task DraftTask
+		if err := json.Unmarshal([]byte(`{"title":"t"}`), &task); err != nil {
+			t.Fatalf("UnmarshalJSON() error = %v", err)
+		}
+		if task.AgentID != "" {
+			t.Fatalf("AgentID = %q, want empty", task.AgentID)
+		}
+	})
+}
+
 func TestDraftTask_ID(t *testing.T) {
 	tests := []struct {
 		name string

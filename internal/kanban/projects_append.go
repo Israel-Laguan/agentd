@@ -66,7 +66,7 @@ func appendedTask(projectID string, draft models.DraftTask, nowTime time.Time) m
 	return models.Task{
 		BaseEntity:      models.BaseEntity{ID: uuid.NewString(), CreatedAt: nowTime, UpdatedAt: nowTime},
 		ProjectID:       projectID,
-		AgentID:         defaultAgentID,
+		AgentID:         resolveAgentID(draft.AgentID),
 		Title:           strings.TrimSpace(draft.Title),
 		Description:     strings.TrimSpace(draft.Description),
 		State:           models.TaskStatePending,

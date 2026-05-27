@@ -91,6 +91,11 @@ type DraftTask struct {
 	Title           string       `json:"title"`
 	Description     string       `json:"description"`
 	Assignee        TaskAssignee `json:"assignee"`
+	// AgentID optionally pre-assigns the task to a specific agent profile at
+	// creation time. When non-empty the materialized task row carries this
+	// agent_id, eliminating the race between dispatch and a separate assign
+	// call. Empty means the store default ("default") is used.
+	AgentID         string       `json:"agent_id,omitempty"`
 	DependsOn       []string     `json:"depends_on,omitempty"`
 	SuccessCriteria []string     `json:"success_criteria,omitempty"`
 }
@@ -105,6 +110,7 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 		TitleLegacy           string       `json:"Title"`
 		DescriptionLegacy     string       `json:"Description"`
 		AssigneeLegacy        TaskAssignee `json:"Assignee"`
+		AgentIDLegacy         string       `json:"AgentID"`
 		DependsOnLegacy       []string     `json:"DependsOn"`
 		SuccessCriteriaLegacy []string     `json:"SuccessCriteria"`
 	}
@@ -126,6 +132,9 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 	}
 	if d.Assignee == "" {
 		d.Assignee = raw.AssigneeLegacy
+	}
+	if d.AgentID == "" {
+		d.AgentID = raw.AgentIDLegacy
 	}
 	if len(d.DependsOn) == 0 && len(raw.DependsOnLegacy) > 0 {
 		d.DependsOn = raw.DependsOnLegacy
