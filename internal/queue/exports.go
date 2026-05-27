@@ -27,6 +27,7 @@ const (
 
 type Worker = qw.Worker
 type WorkerOptions = qw.WorkerOptions
+type TokenUsageStore = qw.TokenUsageStore
 
 var NewWorker = qw.NewWorker
 

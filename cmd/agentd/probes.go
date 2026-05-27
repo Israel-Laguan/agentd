@@ -92,3 +92,20 @@ func (p providerBreakersProbe) ResetAll() {
 		p.pb.ResetAll()
 	}
 }
+
+// rollingBudgetProbe adapts *queue.RollingTokenLedger to services.RollingBudgetProbe.
+type rollingBudgetProbe struct {
+	ledger *queue.RollingTokenLedger
+	window time.Duration
+}
+
+var _ services.RollingBudgetProbe = rollingBudgetProbe{}
+
+func (p rollingBudgetProbe) RollingBudgetSnapshot() (limit, remaining int, enabled bool, window time.Duration) {
+	window = p.window
+	if p.ledger == nil || !p.ledger.Enabled() {
+		return 0, 0, false, window
+	}
+	limit = p.ledger.Limit()
+	return limit, p.ledger.BudgetRemaining(limit), true, window
+}

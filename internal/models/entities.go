@@ -82,6 +82,12 @@ type Event struct {
 	Payload   string
 }
 
+// TokenUsageEvent is a timestamped per-call token count used to rebuild rolling budgets.
+type TokenUsageEvent struct {
+	At     time.Time
+	Tokens int
+}
+
 // AgentProfile configures a concrete model/provider pair.
 type AgentProfile struct {
 	ID           string

@@ -10,8 +10,9 @@ import {
   WorkforceState,
   ChatMessage,
   DraftPlan,
+  SystemStatus,
 } from '@/lib/types';
-import { getBoard, getWorkforce, updateTask, fetchProviders } from "@/lib/api";
+import { getBoard, getWorkforce, getSystemStatus, updateTask, fetchProviders } from "@/lib/api";
 import { BoardView } from "@/app/components/board/board-view";
 import { ChatView } from "@/app/components/chat/chat-view";
 import { LogsView } from "@/app/components/logs-view";
@@ -35,6 +36,7 @@ export default function Page() {
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [boardError, setBoardError] = useState(false);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
@@ -74,10 +76,15 @@ export default function Page() {
 
     const poll = async () => {
       try {
-        const [board, workforce] = await Promise.all([getBoard(), getWorkforce()]);
+        const [board, workforce, status] = await Promise.all([
+          getBoard(),
+          getWorkforce(),
+          getSystemStatus(),
+        ]);
         if (!mounted) return;
         setBoardError(false);
         setWorkforce(workforce);
+        setSystemStatus(status);
 
         setLocalTasks(prev =>
           prev.length === 0
@@ -97,6 +104,7 @@ export default function Page() {
       } catch (e) {
         console.error("Polling failed", e);
         setBoardError(true);
+        setSystemStatus(null);
       }
     };
 
@@ -251,7 +259,23 @@ export default function Page() {
       </main>
 
       {/* Persistent System Footer */}
-      <Footer />
+      <Footer
+        daemonReachable={!boardError}
+        totalTokens={systemStatus?.total_token_usage ?? null}
+        runningTasks={
+          systemStatus?.status?.summary.tasks_by_state?.RUNNING ?? null
+        }
+        rollingBudget={
+          systemStatus?.rolling_budget_enabled &&
+          systemStatus.rolling_token_limit &&
+          systemStatus.rolling_token_remaining !== undefined
+            ? {
+                limit: systemStatus.rolling_token_limit,
+                remaining: systemStatus.rolling_token_remaining,
+              }
+            : null
+        }
+      />
       <TaskDrawer
         task={selectedTask}
         onClose={() => setSelectedTask(null)}

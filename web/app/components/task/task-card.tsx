@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { TaskStatus } from "@/lib/types";
+import { formatTokenCount } from "@/lib/format";
 import {
   AlertCircle,
   CheckCircle2,
@@ -21,6 +22,7 @@ interface TaskCardProps {
     title: string;
     description: string;
     state: TaskStatus;
+    token_usage?: number;
   };
   onClick: () => void;
 }
@@ -103,6 +105,11 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
       </div>
       <p className="text-[11px] text-text-dim line-clamp-2 mb-3 leading-relaxed">{task.description}</p>
       <div className="flex items-center gap-2">
+        {(task.token_usage ?? 0) > 0 && (
+          <span className="text-[9px] font-mono text-text-dim shrink-0" title="Tokens used">
+            {formatTokenCount(task.token_usage!)} tok
+          </span>
+        )}
          <div className="h-1 flex-1 bg-border/30 rounded-full overflow-hidden">
             <div
               className={cn(
