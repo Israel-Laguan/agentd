@@ -112,6 +112,9 @@ func (m *FSWorkspaceManager) SeedFromPath(ctx context.Context, projectID, source
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return nil
+		}
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
