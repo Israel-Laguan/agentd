@@ -20,6 +20,9 @@ func (s *Store) BlockTaskWithSubtasks(
 	if len(subtasks) == 0 {
 		return nil, nil, models.ErrInvalidDraftPlan
 	}
+	if err := s.validateTaskAgentIDs(ctx, subtasks); err != nil {
+		return nil, nil, err
+	}
 	type result struct {
 		blocked  *models.Task
 		children []models.Task
