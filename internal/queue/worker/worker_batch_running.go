@@ -21,7 +21,7 @@ func (w *Worker) processRunningTask(
 	// handoff rather than wasting the slot on a call that will fail with 429.
 	if w.providerBreakers != nil && profile.Provider != "" {
 		if w.providerBreakers.Get(profile.Provider).IsOpen() {
-			w.createProviderExhaustedHandoff(ctx, task,
+			w.handoffOrFail(ctx, task,
 				fmt.Errorf("%w: provider %s circuit breaker is open",
 					models.ErrLLMQuotaExceeded, profile.Provider))
 			return
