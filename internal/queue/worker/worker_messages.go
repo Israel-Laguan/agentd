@@ -30,10 +30,6 @@ func (w *Worker) seedMessages(ctx context.Context, task models.Task, project mod
 	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
-func (w *Worker) legacySeedMessages(task models.Task, _ models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	return workerMessages(task, profile)
-}
-
 func agenticToolUseSystemText(goal ...*AgentGoal) string {
 	text := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
 When you need to execute a command, use the bash tool.

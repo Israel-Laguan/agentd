@@ -42,7 +42,14 @@ func parseTaskFilter(r *http.Request) (models.TaskFilter, []string) {
 			filter.Assignee = &assignee
 		}
 	}
-	filter.IncludeHealing = q.Get("include_healing") == "true"
+	switch raw := strings.ToLower(strings.TrimSpace(q.Get("include_healing"))); raw {
+	case "", "false":
+		filter.IncludeHealing = false
+	case "true":
+		filter.IncludeHealing = true
+	default:
+		errs = append(errs, "include_healing must be true or false")
+	}
 	return filter, errs
 }
 

@@ -286,6 +286,10 @@ func (m *mockCommitStore) BlockTaskWithSubtasks(ctx context.Context, taskID stri
 	return nil, nil, nil
 }
 
+func (m *mockCommitStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockCommitStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

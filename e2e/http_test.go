@@ -312,6 +312,10 @@ func (s *testStore) BlockTaskWithSubtasks(context.Context, string, time.Time, []
 	return &s.task, nil, nil
 }
 
+func (s *testStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *testStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

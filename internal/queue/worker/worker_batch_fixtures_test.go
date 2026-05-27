@@ -169,6 +169,10 @@ func (s *batchTestStore) AppendTasksToProject(context.Context, string, string, [
 func (s *batchTestStore) BlockTaskWithSubtasks(context.Context, string, time.Time, []models.DraftTask) (*models.Task, []models.Task, error) {
 	return nil, nil, nil
 }
+func (s *batchTestStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *batchTestStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }
