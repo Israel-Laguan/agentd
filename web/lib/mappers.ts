@@ -72,7 +72,7 @@ export function mapDaemonComment(raw: Record<string, unknown>): TaskComment {
   return {
     id: (raw.ID ?? raw.id ?? "") as string,
     task_id: (raw.TaskID ?? raw.task_id ?? raw.taskId ?? "") as string,
-    message: (raw.Body ?? raw.Content ?? raw.body ?? "") as string,
+    message: (raw.Body ?? raw.Content ?? raw.body ?? raw.content ?? "") as string,
     created_at: createdAt,
     author,
   };
