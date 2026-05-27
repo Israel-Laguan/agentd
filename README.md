@@ -32,12 +32,16 @@ If you only have a Gemini API key:
 
 1. Add `GEMINI_API_KEY=<key>` to `.env` (copy `.env.example`).
 2. Set `gateway.order: [gemini]` in `~/.agentd/config.yaml` (or export `AGENTD_GATEWAY_ORDER=gemini`).
-3. Start with `--skip-llm-warmup` to avoid a billable startup probe on the free tier:
+3. Run `agentd init` to seed the default agent profiles (empty `provider` / `model` → `gateway.order` cascade):
+   ```sh
+   agentd init
+   ```
+4. Start with `--skip-llm-warmup` to avoid a billable startup probe on the free tier:
    ```sh
    agentd start --skip-llm-warmup
    ```
-4. After `agentd init`, the seeded profiles (`default`, `researcher`, `qa`) default to no provider
-   override. Force them to Gemini via the agent API:
+   With only `gemini` in `gateway.order`, seeded profiles already route to Gemini without further setup.
+5. (Optional) Pin explicit provider/model on each profile via the agent API:
    ```sh
    # list profile IDs
    curl http://127.0.0.1:8765/api/v1/agents
@@ -46,7 +50,7 @@ If you only have a Gemini API key:
      -H 'Content-Type: application/json' \
      -d '{"provider":"gemini","model":"gemini-2.5-flash"}'
    ```
-5. For dev/smoke testing, add `healing.enabled: false` to config to suppress retry escalation.
+6. For dev/smoke testing, add `healing.enabled: false` to config to suppress retry escalation.
 
 See [`docs/config-reference.md`](docs/config-reference.md) for all Gemini config keys.
 
