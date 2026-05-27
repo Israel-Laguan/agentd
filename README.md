@@ -8,7 +8,7 @@ Phase 1 hardening baseline: [`docs/phase1-skeleton.md`](docs/phase1-skeleton.md)
 
 - Domain models and shared interfaces in `internal/models`.
 - SQLite-backed Kanban store with task DAG, comments, and events in `internal/kanban`.
-- AI gateway with provider fallback (OpenAI, Anthropic, Ollama, llama.cpp, AI Horde) in `internal/gateway`.
+- AI gateway with provider fallback (OpenAI, Anthropic, Gemini, Ollama, llama.cpp, AI Horde) in `internal/gateway`.
 - Sandboxed command execution with permission detection in `internal/sandbox`.
 - Worker-pool queue with heartbeat, retry, and phase planning in `internal/queue`.
 - Two-phase log archival and memory curation in `internal/memory`.
@@ -88,9 +88,9 @@ agentd init --home /custom/dir # Use custom home directory
 agentd -v init                 # Initialize with verbose logging
 ```
 
-`init` creates directories (`projects/`, `uploads/`, `archives/`), initializes the SQLite database, writes `agentd.crontab`, and seeds the `default`, `researcher`, and `qa` agent profiles.
+`init` creates directories (`projects/`, `uploads/`, `archives/`), initializes the SQLite database, writes `agentd.crontab`, and seeds the `default`, `researcher`, and `qa` agent profiles with empty `provider` / `model` (tasks follow `gateway.order`). Re-running `init` **preserves** any operator PATCH to those profiles; use `--reset-profiles` to force defaults.
 
-Startup and init findings, including the new error-reporting behavior, are documented in [`docs/init-startup.md`](docs/init-startup.md).
+Init prints hints for cascade routing, optional `PATCH /api/v1/agents/<id>` to pin provider/model, and (when Gemini is configured) `agentd start --skip-llm-warmup`. See [First Run with Gemini Only](#first-run-with-gemini-only) and [`docs/init-startup.md`](docs/init-startup.md) for the full init/start flow and error surfaces.
 
 ## Configuration
 

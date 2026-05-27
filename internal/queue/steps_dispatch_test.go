@@ -23,11 +23,11 @@ func (s *queueScenario) readyTasks(_ context.Context, count int) error {
 }
 
 func (s *queueScenario) daemonTicks(ctx context.Context) error {
-	before := s.store.count(models.TaskStateQueued) + s.store.count(models.TaskStateRunning)
-	if _, _, err := s.daemon.dispatch(ctx); err != nil {
+	dispatched, _, err := s.daemon.dispatch(ctx)
+	if err != nil {
 		return err
 	}
-	s.lastQueued = s.store.count(models.TaskStateQueued) + s.store.count(models.TaskStateRunning) - before
+	s.lastQueued = dispatched
 	return nil
 }
 
@@ -42,12 +42,11 @@ func (s *queueScenario) semaphoreAvailable(_ context.Context, want int) error {
 }
 
 func (s *queueScenario) nextTickIgnores(ctx context.Context, _ int) error {
-	before := s.store.count(models.TaskStateQueued) + s.store.count(models.TaskStateRunning)
-	if _, _, err := s.daemon.dispatch(ctx); err != nil {
+	dispatched, _, err := s.daemon.dispatch(ctx)
+	if err != nil {
 		return err
 	}
-	after := s.store.count(models.TaskStateQueued) + s.store.count(models.TaskStateRunning)
-	return requireEqual("newly claimed tasks", after-before, 0)
+	return requireEqual("newly claimed tasks", dispatched, 0)
 }
 
 func (s *queueScenario) oneWorkerFinishes(ctx context.Context) error {
