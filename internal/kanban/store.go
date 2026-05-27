@@ -2,11 +2,23 @@ package kanban
 
 import (
 	"database/sql"
+	"strings"
 
 	"agentd/internal/models"
 )
 
 const defaultAgentID = "default"
+
+// resolveAgentID returns draft.AgentID when explicitly set, otherwise the
+// store default. This lets materialize callers pre-assign a task to a
+// specific agent profile, eliminating the race between dispatch and a
+// separate assign call.
+func resolveAgentID(draftAgentID string) string {
+	if id := strings.TrimSpace(draftAgentID); id != "" {
+		return id
+	}
+	return defaultAgentID
+}
 
 type Store struct {
 	db        *sql.DB

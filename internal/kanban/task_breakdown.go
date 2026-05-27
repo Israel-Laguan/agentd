@@ -105,7 +105,7 @@ func readySubtask(projectID string, draft models.DraftTask, now time.Time) model
 	return models.Task{
 		BaseEntity:      models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
 		ProjectID:       projectID,
-		AgentID:         defaultAgentID,
+		AgentID:         resolveAgentID(draft.AgentID),
 		Title:           strings.TrimSpace(draft.Title),
 		Description:     strings.TrimSpace(draft.Description),
 		State:           models.TaskStateReady,
