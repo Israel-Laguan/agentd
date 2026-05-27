@@ -58,6 +58,8 @@ type WorkerOptions struct {
 	Batching                  config.BatchingConfig
 	PromptTemplatesPath       string
 	ProviderBreakers          *safety.ProviderBreakers
+	HealingEnabled            bool
+	MaxHealingTasks           int
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -187,6 +189,8 @@ func newWorkerCore(
 		fileContextCfg:          opts.FileContext,
 		planningCfg:             opts.Planning,
 		checkpointStore:         NewMemoryCheckpointStore(),
+		healingEnabled:          opts.HealingEnabled,
+		maxHealingTasks:         opts.MaxHealingTasks,
 	}
 }
 

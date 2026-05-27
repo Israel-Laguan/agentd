@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"agentd/internal/models"
-	"agentd/internal/queue/planning"
 	"agentd/internal/queue/recovery"
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
@@ -47,21 +46,16 @@ func FormatForHuman(msg HITLMessage) string {
 func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err error) {
 	if safety.ClassifiesAsBreakerFailure(err) {
 		if errors.Is(err, models.ErrLLMQuotaExceeded) {
-			// Record on per-provider breaker (if available) so per-provider
-			// status is accurate, but never requeue on quota — always hand off
-			// immediately to avoid amplifying daily-quota consumption.
 			if w.providerBreakers != nil {
-				provider := w.lookupProvider(ctx, task)
-				w.providerBreakers.Get(provider).RecordError(err)
+				w.providerBreakers.Get(w.lookupProvider(ctx, task)).RecordError(err)
 			}
-			w.createProviderExhaustedHandoff(ctx, task, err)
+			w.handoffOrFail(ctx, task, err)
 			return
 		}
-		// Non-quota outage (ErrLLMUnreachable): use the global breaker.
 		if w.breaker != nil {
 			w.breaker.RecordError(err)
 			if w.breaker.IsOpen() {
-				w.createProviderExhaustedHandoff(ctx, task, err)
+				w.handoffOrFail(ctx, task, err)
 				return
 			}
 		}
@@ -69,6 +63,15 @@ func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err e
 		return
 	}
 	w.handleAgentFailure(ctx, task, fmt.Sprintf("gateway error: %v", err))
+}
+
+func (w *Worker) handoffOrFail(ctx context.Context, task models.Task, err error) {
+	if !w.healingEnabled {
+		w.failHard(ctx, task, err)
+		w.emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", "healing disabled; task failed: "+truncate(err.Error(), 500))
+		return
+	}
+	w.createProviderExhaustedHandoff(ctx, task, err)
 }
 
 // lookupProvider returns the provider name configured for the task's agent.
@@ -87,29 +90,6 @@ func (w *Worker) recordLegacyHandoffExpiry(ctx context.Context, task models.Task
 		return false
 	}
 	return true
-}
-
-func (w *Worker) createProviderExhaustedHandoff(ctx context.Context, task models.Task, err error) {
-	var cause string
-	if errors.Is(err, models.ErrLLMQuotaExceeded) {
-		cause = "Provider quota exhausted; retry after quota reset or switch provider."
-	} else {
-		cause = "All configured AI providers failed and the circuit breaker is open. Human review is required before this task can continue."
-	}
-	description := fmt.Sprintf("%s\n\nLast gateway error:\n%s", cause, truncate(err.Error(), 1500))
-	_, _, blockErr := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title:       models.HITLSubtaskTitleManualReview + " AI providers unavailable",
-		Description: description,
-		Assignee:    models.TaskAssigneeHuman,
-	}})
-	if blockErr != nil {
-		w.emit(ctx, task, "ERROR", blockErr.Error())
-		return
-	}
-	if !w.recordLegacyHandoffExpiry(ctx, task) {
-		return
-	}
-	w.emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", truncate(description, 1000))
 }
 
 func (w *Worker) handlePromptRecovery(
@@ -228,27 +208,6 @@ func formatCriteria(criteria []string) string {
 		fmt.Fprintf(&b, "- %s\n", c)
 	}
 	return b.String()
-}
-
-func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, action planning.HealingAction, payload string) {
-	description := fmt.Sprintf(
-		"The worker exhausted automatic self-healing actions and needs human review.\n\nReason: %s\n\nLast failure:\n%s",
-		action.Reason,
-		truncate(payload, 1500),
-	)
-	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title:       models.HITLSubtaskTitleManualReview + " self-healing failed",
-		Description: description,
-		Assignee:    models.TaskAssigneeHuman,
-	}})
-	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
-		return
-	}
-	if !w.recordLegacyHandoffExpiry(ctx, task) {
-		return
-	}
-	w.emit(ctx, task, "HEALING_HANDOFF", truncate(description, 1000))
 }
 
 // createReviewHandoff blocks the task with a HUMAN subtask so a human

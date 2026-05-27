@@ -69,6 +69,8 @@ type Worker struct {
 	capabilityRouter          *CapabilityRouter
 	batcher                   *TaskBatcher
 	promptLibrary             *PromptLibrary
+	healingEnabled            bool
+	maxHealingTasks           int
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
