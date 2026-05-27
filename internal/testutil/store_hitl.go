@@ -18,7 +18,7 @@ func hitlChildFailsOnTimeout(state models.TaskState) bool {
 func (s *FakeKanbanStore) ListChildTasks(_ context.Context, parentID string) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ids := s.childParents[parentID]
+	ids := s.listChildTaskIDsLocked(parentID)
 	out := make([]models.Task, 0, len(ids))
 	for _, id := range ids {
 		if t, ok := s.tasks[id]; ok {
@@ -44,40 +44,20 @@ func (s *FakeKanbanStore) ListParentTasks(_ context.Context, childID string) ([]
 		seen[id] = struct{}{}
 		out = append(out, t)
 	}
-	// MaterializePlan DependsOn: childParents[child] lists blocking parent IDs.
 	for _, parentID := range s.childParents[childID] {
 		appendParent(parentID)
-	}
-	// BlockTaskWithSubtasks: childParents[parent] lists child IDs.
-	for parentID, childIDs := range s.childParents {
-		for _, cid := range childIDs {
-			if cid == childID {
-				appendParent(parentID)
-				break
-			}
-		}
 	}
 	return out, nil
 }
 
 func (s *FakeKanbanStore) unblockBlockedParentsLocked(childID string) {
-	for parentID, childIDs := range s.childParents {
-		found := false
-		for _, cid := range childIDs {
-			if cid == childID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			continue
-		}
+	for _, parentID := range s.childParents[childID] {
 		parent, ok := s.tasks[parentID]
 		if !ok || parent.State != models.TaskStateBlocked {
 			continue
 		}
 		allResolved := true
-		for _, cid := range childIDs {
+		for _, cid := range s.listChildTaskIDsLocked(parentID) {
 			child, ok := s.tasks[cid]
 			if !ok {
 				continue
@@ -106,7 +86,7 @@ func (s *FakeKanbanStore) ReconcileExpiredBlockedTasks(_ context.Context, now ti
 			continue
 		}
 		hasOpenChild := false
-		for _, childID := range s.childParents[id] {
+		for _, childID := range s.listChildTaskIDsLocked(id) {
 			child, ok := s.tasks[childID]
 			if !ok {
 				continue
@@ -132,7 +112,7 @@ func (s *FakeKanbanStore) ReconcileExpiredBlockedTasks(_ context.Context, now ti
 		t.UpdatedAt = completed
 		s.tasks[id] = t
 		expired = append(expired, t)
-		for _, childID := range s.childParents[id] {
+		for _, childID := range s.listChildTaskIDsLocked(id) {
 			child, ok := s.tasks[childID]
 			if !ok || !hitlChildFailsOnTimeout(child.State) {
 				continue
