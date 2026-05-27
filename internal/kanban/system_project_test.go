@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"agentd/internal/models"
@@ -52,4 +53,24 @@ func TestEnsureProjectTaskDeduplicatesOpenTask(t *testing.T) {
 		t.Fatalf("task ID = %s, want %s", second.ID, first.ID)
 	}
 	assertCount(t, store.db, "tasks", 1)
+}
+
+func TestEnsureProjectTaskRejectsUnknownAgentID(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	project, err := store.EnsureSystemProject(ctx)
+	if err != nil {
+		t.Fatalf("EnsureSystemProject() error = %v", err)
+	}
+
+	_, _, err = store.EnsureProjectTask(ctx, project.ID, models.DraftTask{
+		Title:   "Alert with bad agent",
+		AgentID: "nonexistent",
+	})
+	if err == nil {
+		t.Fatal("EnsureProjectTask() expected error for unknown agent_id")
+	}
+	if !errors.Is(err, models.ErrAgentProfileNotFound) {
+		t.Fatalf("EnsureProjectTask() error = %v, want ErrAgentProfileNotFound", err)
+	}
 }

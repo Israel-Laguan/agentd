@@ -46,6 +46,9 @@ func (s *Store) EnsureSystemProject(ctx context.Context) (*models.Project, error
 }
 
 func (s *Store) EnsureProjectTask(ctx context.Context, projectID string, draft models.DraftTask) (*models.Task, bool, error) {
+	if err := s.validateTaskAgentIDs(ctx, []models.DraftTask{draft}); err != nil {
+		return nil, false, err
+	}
 	type result struct {
 		task    *models.Task
 		created bool
