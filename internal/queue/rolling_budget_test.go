@@ -3,6 +3,8 @@ package queue
 import (
 	"testing"
 	"time"
+
+	"agentd/internal/models"
 )
 
 func TestRollingTokenLedger_PruneAndRemaining(t *testing.T) {
@@ -35,6 +37,19 @@ func TestRollingTokenLedger_Disabled(t *testing.T) {
 	l := NewRollingTokenLedger(time.Hour, 0)
 	if l.Enabled() || l.ShouldQueue(100, 0) {
 		t.Fatal("limit 0 should disable ledger")
+	}
+}
+
+func TestRollingTokenLedger_HydrateFromEvents(t *testing.T) {
+	t.Parallel()
+	l := NewRollingTokenLedger(time.Hour, 1000)
+	now := time.Now()
+	l.HydrateFromEvents([]models.TokenUsageEvent{
+		{At: now.Add(-30 * time.Minute), Tokens: 400},
+		{At: now.Add(-10 * time.Minute), Tokens: 300},
+	})
+	if rem := l.BudgetRemaining(1000); rem != 300 {
+		t.Fatalf("BudgetRemaining after hydrate = %d, want 300", rem)
 	}
 }
 

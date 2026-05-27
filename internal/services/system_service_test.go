@@ -128,3 +128,74 @@ type listProjectsFailStore struct {
 func (s *listProjectsFailStore) ListProjects(context.Context) ([]models.Project, error) {
 	return nil, errors.New("list boom")
 }
+
+// stubTokenCounter is a test double for services.TokenCounter.
+type stubTokenCounter struct{ total int }
+
+func (s stubTokenCounter) SumTokenUsage(context.Context) (int, error) { return s.total, nil }
+
+// TestSystemStatusTotalTokenUsage verifies that SnapshotWithOptions includes
+// the sum of all task token_usage values when a TokenCounter is wired.
+func TestSystemStatusTotalTokenUsage(t *testing.T) {
+	t.Parallel()
+	svc := &services.SystemService{
+		Now:          func() time.Time { return time.Unix(0, 0).UTC() },
+		ReadMem:      func() services.MemorySnapshot { return services.MemorySnapshot{} },
+		TokenCounter: stubTokenCounter{total: 47},
+	}
+	out, err := svc.SnapshotWithOptions(context.Background(), services.StatusOptions{})
+	if err != nil {
+		t.Fatalf("SnapshotWithOptions: %v", err)
+	}
+	if out.TotalTokenUsage != 47 {
+		t.Errorf("TotalTokenUsage = %d, want 47", out.TotalTokenUsage)
+	}
+}
+
+// TestSystemStatusTotalTokenUsage_NilCounter verifies that a nil TokenCounter
+// leaves TotalTokenUsage at zero without error.
+func TestSystemStatusTotalTokenUsage_NilCounter(t *testing.T) {
+	t.Parallel()
+	svc := &services.SystemService{
+		Now:     func() time.Time { return time.Unix(0, 0).UTC() },
+		ReadMem: func() services.MemorySnapshot { return services.MemorySnapshot{} },
+	}
+	out, err := svc.SnapshotWithOptions(context.Background(), services.StatusOptions{})
+	if err != nil {
+		t.Fatalf("SnapshotWithOptions: %v", err)
+	}
+	if out.TotalTokenUsage != 0 {
+		t.Errorf("TotalTokenUsage = %d, want 0", out.TotalTokenUsage)
+	}
+}
+
+type stubRollingBudget struct {
+	limit, remaining int
+	enabled          bool
+	window           time.Duration
+}
+
+func (s stubRollingBudget) RollingBudgetSnapshot() (limit, remaining int, enabled bool, window time.Duration) {
+	return s.limit, s.remaining, s.enabled, s.window
+}
+
+func TestSystemStatusRollingBudget(t *testing.T) {
+	t.Parallel()
+	svc := &services.SystemService{
+		Now:     func() time.Time { return time.Unix(0, 0).UTC() },
+		ReadMem: func() services.MemorySnapshot { return services.MemorySnapshot{} },
+		RollingBudget: stubRollingBudget{
+			limit: 100_000, remaining: 42_000, enabled: true, window: 5 * time.Hour,
+		},
+	}
+	out, err := svc.SnapshotWithOptions(context.Background(), services.StatusOptions{})
+	if err != nil {
+		t.Fatalf("SnapshotWithOptions: %v", err)
+	}
+	if !out.RollingBudgetEnabled || out.RollingTokenLimit != 100_000 || out.RollingTokenRemaining != 42_000 {
+		t.Fatalf("rolling budget snapshot = %+v", out)
+	}
+	if out.RollingTokenWindow != 5*time.Hour {
+		t.Fatalf("RollingTokenWindow = %v, want 5h", out.RollingTokenWindow)
+	}
+}

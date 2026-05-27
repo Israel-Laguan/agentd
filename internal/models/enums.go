@@ -161,6 +161,7 @@ const (
 	EventTypeGoalStalled           EventType = "GOAL_STALLED"
 	EventTypeTopicDrift            EventType = "TOPIC_DRIFT"
 	EventTypeWarning               EventType = "WARNING"
+	EventTypeTokenUsage            EventType = "TOKEN_USAGE"
 )
 
 // CommentAuthor identifies the actor that produced a comment.

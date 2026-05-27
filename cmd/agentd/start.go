@@ -84,13 +84,14 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 
 func buildStartRuntime(ctx context.Context, cfg config.Config, store models.KanbanStore, deps runtimeDeps, startOpts *startOptions) (*queue.Daemon, *http.Server, error) {
 	rollingLedger := queue.NewRollingTokenLedger(cfg.Queue.RollingTokenWindow, cfg.Queue.RollingTokenLimit)
+	hydrateRollingLedger(ctx, store, rollingLedger)
 	worker := buildWorker(store, deps, cfg, rollingLedger)
 	intake := buildIntake(store, deps, cfg)
 	daemon, err := buildDaemon(ctx, store, worker, intake, deps, cfg, startOpts, rollingLedger)
 	if err != nil {
 		return nil, nil, err
 	}
-	apiServer, err := buildAPIServer(store, deps, cfg)
+	apiServer, err := buildAPIServer(store, deps, cfg, rollingLedger)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -146,6 +147,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 		ContextWarningThreshold: cfg.Agentic.ContextWarningThreshold,
 		ToolFailureStreak:       cfg.Agentic.ToolFailureStreak,
 		TokenUsageHook:          tokenHook,
+		TokenStore:              tokenUsageStore(store),
 		FileContext:               cfg.Agentic.FileContext,
 		FileContextCachePath: config.ResolveFileContextCachePath(cfg.HomeDir, cfg.Agentic.FileContext.CachePath),
 		Planning:                  cfg.Agentic.Planning,
@@ -237,7 +239,7 @@ func buildDaemon(ctx context.Context, store models.KanbanStore, worker *queue.Wo
 	}), nil
 }
 
-func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Config) (*http.Server, error) {
+func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Config, rollingLedger *queue.RollingTokenLedger) (*http.Server, error) {
 	retriever := &memory.Retriever{Store: store, Cfg: cfg.Librarian}
 	summarizer := frontdesk.NewStatusSummarizer(store)
 	fileStash := &frontdesk.FileStash{Dir: cfg.UploadsDir, StashThreshold: cfg.Gateway.Truncation.StashThreshold}
@@ -246,6 +248,12 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 	systemService := services.NewSystemService(summarizer, breakerProbe{breaker: deps.breaker})
 	systemService.Resetter = breakerProbe{breaker: deps.breaker}
 	systemService.ProviderBreakers = providerBreakersProbe{pb: deps.providerBreakers}
+	if tc, ok := store.(services.TokenCounter); ok {
+		systemService.TokenCounter = tc
+	}
+	if rollingLedger != nil {
+		systemService.RollingBudget = rollingBudgetProbe{ledger: rollingLedger, window: cfg.Queue.RollingTokenWindow}
+	}
 	providerCfgs, err := cfg.Gateway.ProviderConfigs()
 	if err != nil {
 		return nil, fmt.Errorf("gateway provider configs: %w", err)
@@ -263,4 +271,25 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 type startOptions struct {
 	workers        int
 	skipLLMWarmup  bool
+}
+
+// tokenUsageStore extracts the queue.TokenUsageStore narrow interface from the
+// KanbanStore. Returns nil if the concrete store does not implement AddTokenUsage
+// (e.g. test doubles), in which case per-call token persistence is a no-op.
+func tokenUsageStore(store models.KanbanStore) queue.TokenUsageStore {
+	ts, _ := store.(queue.TokenUsageStore)
+	return ts
+}
+
+func hydrateRollingLedger(ctx context.Context, store models.KanbanStore, ledger *queue.RollingTokenLedger) {
+	if ledger == nil || !ledger.Enabled() {
+		return
+	}
+	src, ok := store.(queue.TokenUsageEventSource)
+	if !ok {
+		return
+	}
+	if err := ledger.HydrateFromStore(ctx, src); err != nil {
+		slog.Warn("rolling token ledger hydrate failed", "err", err)
+	}
 }

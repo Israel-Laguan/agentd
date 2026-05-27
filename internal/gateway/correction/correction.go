@@ -46,6 +46,42 @@ func GenerateJSON[T any](ctx context.Context, gw spec.AIGateway, req spec.AIRequ
 	return zero, models.ErrInvalidJSONResponse
 }
 
+// GenerateJSONWithUsage is like GenerateJSON but also returns the cumulative token
+// usage across all provider calls in the retry loop (retries cost tokens too).
+func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req spec.AIRequest) (T, int, error) {
+	var zero T
+	req.JSONMode = true
+	var totalUsage int
+	var lastRaw string
+	for attempt := 0; attempt < MaxJSONAttempts; attempt++ {
+		resp, err := gw.Generate(ctx, req)
+		if err != nil {
+			return zero, totalUsage, err
+		}
+		totalUsage += resp.TokenUsage
+		lastRaw = resp.Content
+		var out T
+		if err := json.Unmarshal([]byte(resp.Content), &out); err != nil {
+			if attempt == MaxJSONAttempts-1 {
+				return zero, totalUsage, WrapInvalidJSONError(err, lastRaw)
+			}
+			req.Messages = append(req.Messages, PromptAfterInvalidJSON(err))
+			continue
+		}
+		if v, ok := any(&out).(spec.Validatable); ok {
+			if err := v.Validate(); err != nil {
+				if attempt == MaxJSONAttempts-1 {
+					return zero, totalUsage, WrapInvalidJSONError(err, lastRaw)
+				}
+				req.Messages = append(req.Messages, PromptAfterInvalidJSON(err))
+				continue
+			}
+		}
+		return out, totalUsage, nil
+	}
+	return zero, totalUsage, models.ErrInvalidJSONResponse
+}
+
 // PromptAfterInvalidJSON builds the corrective user message for invalid JSON.
 func PromptAfterInvalidJSON(err error) spec.PromptMessage {
 	return spec.PromptMessage{

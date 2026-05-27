@@ -141,6 +141,14 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
               )}
             </div>
 
+            {/* TOKEN USAGE */}
+            <div>
+              <label className="text-[10px] text-text-dim">Tokens used</label>
+              <p className="text-sm text-text font-mono">
+                {(task.token_usage ?? 0).toLocaleString()}
+              </p>
+            </div>
+
             {/* DESCRIPTION (editable) */}
             <div>
               <label className="text-[10px] text-text-dim">Description</label>

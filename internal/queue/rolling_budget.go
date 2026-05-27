@@ -1,8 +1,12 @@
 package queue
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
+
+	"agentd/internal/models"
 )
 
 const rollingBudgetQueueMultiplier = 1.2
@@ -42,6 +46,37 @@ func (l *RollingTokenLedger) Limit() int {
 		return 0
 	}
 	return l.limit
+}
+
+// HydrateFromEvents replaces in-memory entries from persisted per-call events.
+func (l *RollingTokenLedger) HydrateFromEvents(events []models.TokenUsageEvent) {
+	if l == nil || !l.Enabled() {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = l.entries[:0]
+	for _, e := range events {
+		if e.Tokens <= 0 {
+			continue
+		}
+		l.entries = append(l.entries, ledgerEntry{at: e.At, tokens: e.Tokens})
+	}
+	l.pruneLocked(time.Now())
+}
+
+// HydrateFromStore loads token usage events within the ledger window from src.
+func (l *RollingTokenLedger) HydrateFromStore(ctx context.Context, src TokenUsageEventSource) error {
+	if l == nil || !l.Enabled() || src == nil {
+		return nil
+	}
+	since := time.Now().Add(-l.window)
+	events, err := src.ListTokenUsageEventsSince(ctx, since)
+	if err != nil {
+		return fmt.Errorf("hydrate rolling token ledger: %w", err)
+	}
+	l.HydrateFromEvents(events)
+	return nil
 }
 
 // LogCall appends token usage and prunes entries older than the window.

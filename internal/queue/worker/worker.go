@@ -58,6 +58,7 @@ type Worker struct {
 	contextWarningThreshold   float64
 	toolFailureStreak         int
 	tokenUsageHook            func(int)
+	tokenStore                TokenUsageStore
 	loopResultRecorder        func(LoopResult)
 	fileContextCfg            config.FileContextConfig
 	docStore                  *DocStore
@@ -82,6 +83,27 @@ type Worker struct {
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
 type MemoryRetriever interface {
 	Recall(ctx context.Context, intent, projectID, userID string) []models.Memory
+}
+
+// TokenUsageStore persists per-call token counts to the task row.
+// It is implemented by the kanban store and injected via WorkerOptions.TokenStore.
+type TokenUsageStore interface {
+	AddTokenUsage(ctx context.Context, taskID string, tokens int) error
+}
+
+// recordTaskTokenUsage feeds the optional rolling ledger hook, persists usage to
+// the task row, and emits a TOKEN_USAGE audit event when a sink is wired.
+func (w *Worker) recordTaskTokenUsage(ctx context.Context, task models.Task, tokens int) {
+	if tokens <= 0 {
+		return
+	}
+	if w.tokenUsageHook != nil {
+		w.tokenUsageHook(tokens)
+	}
+	if w.tokenStore != nil {
+		_ = w.tokenStore.AddTokenUsage(ctx, task.ID, tokens)
+	}
+	w.emit(ctx, task, string(models.EventTypeTokenUsage), fmt.Sprintf(`{"tokens":%d}`, tokens))
 }
 
 // PluginMounter loads and mounts plugins from a directory into a
@@ -159,7 +181,8 @@ func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project mo
 		w.createLegacyModeHandoff(ctx, task, reason, nil)
 		return
 	}
-	response, err := w.command(ctx, task, project, profile)
+	response, tokenUsage, err := w.command(ctx, task, project, profile)
+	w.recordTaskTokenUsage(ctx, task, tokenUsage)
 	if err != nil {
 		if errors.Is(err, models.ErrInvalidJSONResponse) {
 			w.createLegacyModeHandoff(ctx, task, "Gateway could not return valid JSON after repair attempts.", err)
