@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"testing"
 
@@ -147,6 +148,26 @@ func TestLegacyPreflight_AddsNoteForHighComplexity(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected legacy preflight user note for high-complexity task")
+	}
+}
+
+func TestLegacyPreflight_SkipsWhenCustomSystemPrompt(t *testing.T) {
+	t.Parallel()
+
+	w := &Worker{legacyPreflightScore: 6}
+	task := models.Task{
+		Description: "architect compare design analyse a microservice migration strategy",
+	}
+	profile := models.AgentProfile{
+		Provider:     "ollama",
+		Model:        "llama3",
+		SystemPrompt: sql.NullString{String: "Break it into smaller independently executable subtasks.", Valid: true},
+	}
+	msgs := w.legacySeedMessages(task, models.Project{}, profile)
+	for _, m := range msgs {
+		if strings.Contains(m.Content, "LEGACY MODE CONSTRAINT") {
+			t.Fatalf("preflight note must not be added when SystemPrompt is set; got %q", m.Content)
+		}
 	}
 }
 

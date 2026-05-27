@@ -51,7 +51,7 @@ func (w *Worker) legacyDispatchRejectReason(task models.Task, profile models.Age
 
 func (w *Worker) legacySeedMessages(task models.Task, _ models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := workerMessages(task, profile)
-	if w.legacyPreflightScore > 0 && !w.providerSupportsAgentic(profile) {
+	if w.legacyPreflightScore > 0 && !w.providerSupportsAgentic(profile) && !profile.SystemPrompt.Valid {
 		if (ComplexityScorer{}).ScoreTask(task) >= w.legacyPreflightScore {
 			messages = append(messages, gateway.PromptMessage{
 				Role:    "user",
