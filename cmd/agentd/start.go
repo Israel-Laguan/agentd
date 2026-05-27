@@ -205,7 +205,9 @@ func buildDaemon(ctx context.Context, store models.KanbanStore, worker *queue.Wo
 		slog.Debug("agentic scheduler initialized")
 	}
 
+	outageHandoff := cfg.Healing.OutageHandoffEnabled
 	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{
+		OutageHandoffEnabled:    &outageHandoff,
 		MaxWorkers:              startOpts.workers,
 		TaskInterval:            cfg.Cron.TaskDispatch,
 		MaxTaskInterval:         cfg.Queue.PollMaxInterval,

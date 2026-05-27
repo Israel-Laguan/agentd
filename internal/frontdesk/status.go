@@ -69,7 +69,7 @@ func (s *StatusSummarizer) SummarizeWithOptions(ctx context.Context, opts Summar
 			return nil, err
 		}
 		for _, t := range tasks {
-			if !opts.IncludeHealing && isHealingTask(t) {
+			if !opts.IncludeHealing && models.IsSelfHealingHandoffTask(t) {
 				continue
 			}
 			byState[string(t.State)]++
@@ -88,12 +88,6 @@ func (s *StatusSummarizer) SummarizeWithOptions(ctx context.Context, opts Summar
 		Message: buildMessage(len(projects), remaining, byState),
 		Summary: StatusSummary{TotalProjects: len(projects), TasksByState: byState},
 	}, nil
-}
-
-// isHealingTask returns true for tasks created by the self-healing ladder
-// (HITL subtasks assigned to HUMAN with "Manual review required:" prefix).
-func isHealingTask(t models.Task) bool {
-	return t.Assignee == models.TaskAssigneeHuman && strings.HasPrefix(t.Title, models.HITLSubtaskTitleManualReview)
 }
 
 func buildMessage(projectCount, remaining int, byState map[string]int) string {

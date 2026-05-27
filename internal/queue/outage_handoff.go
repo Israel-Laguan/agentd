@@ -13,6 +13,9 @@ import (
 const outageHandoffTitle = "System Offline: Please check AI API connections."
 
 func (d *Daemon) checkOutageHandoff(ctx context.Context) error {
+	if !d.outageHandoffEnabled {
+		return nil
+	}
 	if d.breaker == nil || d.breaker.OpenDuration() < d.handoffAfter {
 		return nil
 	}

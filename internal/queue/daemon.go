@@ -33,6 +33,7 @@ type Daemon struct {
 	heartbeatInterval       time.Duration
 	staleAfter              time.Duration
 	handoffAfter            time.Duration
+	outageHandoffEnabled    bool
 	diskWatchdogEvery       time.Duration
 	diskWatchdogSchedule    cron.Schedule
 	hitlReconcileEvery      time.Duration
@@ -64,6 +65,7 @@ type DaemonOptions struct {
 	HeartbeatInterval       time.Duration
 	StaleAfter              time.Duration
 	HandoffAfter            time.Duration
+	OutageHandoffEnabled    *bool
 	DiskWatchdogEvery       time.Duration
 	DiskWatchdogSchedule    cron.Schedule
 	HITLReconcileEvery      time.Duration
@@ -94,12 +96,17 @@ func NewDaemon(
 	opts DaemonOptions,
 ) *Daemon {
 	opts = normalizeDaemonOptions(opts)
+	outageHandoffEnabled := true
+	if opts.OutageHandoffEnabled != nil {
+		outageHandoffEnabled = *opts.OutageHandoffEnabled
+	}
 	return &Daemon{
 		store: store, worker: worker, intake: intake, breaker: breaker, sink: sink,
 		sem: safety.NewSemaphore(opts.MaxWorkers), probe: opts.Probe,
 		taskInterval: opts.TaskInterval, maxTaskInterval: opts.MaxTaskInterval,
 		taskDeadline: opts.TaskDeadline, intakeEvery: opts.IntakeInterval,
 		heartbeatInterval: opts.HeartbeatInterval, staleAfter: opts.StaleAfter, handoffAfter: opts.HandoffAfter,
+		outageHandoffEnabled: outageHandoffEnabled,
 		diskWatchdogEvery: opts.DiskWatchdogEvery, diskWatchdogSchedule: opts.DiskWatchdogSchedule,
 		hitlReconcileEvery: opts.HITLReconcileEvery, hitlReconcileSchedule: opts.HITLReconcileSchedule,
 		diskFreeThreshold: opts.DiskFreeThreshold, diskCheckPath: opts.DiskCheckPath,

@@ -26,6 +26,14 @@ var HITLSubtaskTitlePrefixes = []string{
 	HITLSubtaskTitleManualAction,
 }
 
+// IsSelfHealingHandoffTask reports tasks created by the self-healing ladder or
+// provider-exhaustion handoffs (manual-review HUMAN subtasks). Used to filter
+// observability APIs; product HITL gates use other title prefixes.
+func IsSelfHealingHandoffTask(t Task) bool {
+	return t.Assignee == TaskAssigneeHuman &&
+		strings.HasPrefix(t.Title, HITLSubtaskTitleManualReview)
+}
+
 // IsHITLSubtaskTitle reports whether title was created by a HITL handoff or gate.
 func IsHITLSubtaskTitle(title string) bool {
 	for _, prefix := range HITLSubtaskTitlePrefixes {
