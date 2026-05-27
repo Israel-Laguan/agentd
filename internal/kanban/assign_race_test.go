@@ -197,6 +197,61 @@ func TestSubtaskInheritsAgentID(t *testing.T) {
 	_ = parent // keep linter happy
 }
 
+// TestBlockTaskWithSubtasks_UnknownAgentIDFails verifies that creating
+// subtasks with a non-existent agent_id is rejected.
+func TestBlockTaskWithSubtasks_UnknownAgentIDFails(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	seedProfile(t, store, ctx, "default")
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "subtask-bad-agent",
+		Tasks:       []models.DraftTask{{TempID: "t1", Title: "Parent"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan() error = %v", err)
+	}
+
+	claimed, _ := store.ClaimNextReadyTasks(ctx, 1)
+	running, err := store.MarkTaskRunning(ctx, claimed[0].ID, claimed[0].UpdatedAt, 12345)
+	if err != nil {
+		t.Fatalf("MarkTaskRunning() error = %v", err)
+	}
+
+	_, _, err = store.BlockTaskWithSubtasks(ctx, running.ID, running.UpdatedAt, []models.DraftTask{
+		{Title: "Ghost subtask", AgentID: "nonexistent"},
+	})
+	if !errors.Is(err, models.ErrAgentProfileNotFound) {
+		t.Fatalf("BlockTaskWithSubtasks() error = %v, want ErrAgentProfileNotFound", err)
+	}
+	_ = tasks
+}
+
+// TestAppendTasksToProject_UnknownAgentIDFails verifies that appending
+// tasks with a non-existent agent_id is rejected.
+func TestAppendTasksToProject_UnknownAgentIDFails(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	seedProfile(t, store, ctx, "default")
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "append-bad-agent",
+		Tasks:       []models.DraftTask{{TempID: "t1", Title: "Parent"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan() error = %v", err)
+	}
+
+	_, err = store.AppendTasksToProject(ctx, tasks[0].ProjectID, tasks[0].ID, []models.DraftTask{
+		{Title: "Ghost follow-up", AgentID: "nonexistent"},
+	})
+	if !errors.Is(err, models.ErrAgentProfileNotFound) {
+		t.Fatalf("AppendTasksToProject() error = %v, want ErrAgentProfileNotFound", err)
+	}
+}
+
 func seedProfile(t *testing.T, store *Store, ctx context.Context, id string) {
 	t.Helper()
 	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{

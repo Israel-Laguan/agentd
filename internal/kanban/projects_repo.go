@@ -77,8 +77,15 @@ func (s *Store) ListProjects(ctx context.Context) ([]models.Project, error) {
 // validateDraftAgentIDs verifies that every non-default agent_id referenced
 // in the draft plan corresponds to an existing agent profile.
 func (s *Store) validateDraftAgentIDs(ctx context.Context, plan models.DraftPlan) error {
+	return s.validateTaskAgentIDs(ctx, plan.Tasks)
+}
+
+// validateTaskAgentIDs verifies that every non-default agent_id in the
+// given drafts corresponds to an existing agent profile. Shared by
+// MaterializePlan, BlockTaskWithSubtasks, and AppendTasksToProject.
+func (s *Store) validateTaskAgentIDs(ctx context.Context, drafts []models.DraftTask) error {
 	seen := make(map[string]struct{})
-	for _, draft := range plan.Tasks {
+	for _, draft := range drafts {
 		id := resolveAgentID(draft.AgentID)
 		if id == defaultAgentID {
 			continue

@@ -17,6 +17,9 @@ func (s *Store) AppendTasksToProject(
 	parentTaskID string,
 	drafts []models.DraftTask,
 ) ([]models.Task, error) {
+	if err := s.validateTaskAgentIDs(ctx, drafts); err != nil {
+		return nil, err
+	}
 	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
