@@ -35,6 +35,16 @@ describe("mapDaemonComment", () => {
     const comment = mapDaemonComment({ Body: "anon" });
     expect(comment.author).toEqual({ id: "system", name: "System" });
   });
+
+  it("maps snake_case content field to message", () => {
+    const comment = mapDaemonComment({
+      id: "c3",
+      task_id: "t1",
+      content: "from api",
+      created_at: "2025-06-01T00:00:00.000Z",
+    });
+    expect(comment.message).toBe("from api");
+  });
 });
 
 describe("mapDaemonTask", () => {
