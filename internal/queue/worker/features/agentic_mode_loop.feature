@@ -5,7 +5,7 @@ Feature: Agentic mode inner loop with tool calling
 
   Background:
     Given the worker is configured with agentic mode enabled
-    And the provider is "openai"
+    And the provider is "synth-tools"
 
   Scenario: Gateway returns tool calls then final text
     Given the gateway will return tool calls on first call

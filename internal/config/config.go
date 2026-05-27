@@ -48,33 +48,62 @@ type LoadOptions struct {
 	ConfigFile   string
 }
 
-// Load resolves agentd paths and reads optional config from <home>/config.yaml.
-// Values from .env (CWD and home) are merged without modifying the process
-// environment; existing process env vars always take precedence. Load is safe
-// for concurrent callers.
-func Load(opts LoadOptions) (Config, error) {
+// viperLoadState holds the resolved viper instances and env layers from
+// prepareViperLoad. Callers must not mutate the maps.
+type viperLoadState struct {
+	homeDir string
+	cfg     Config
+	v       *viper.Viper
+	fileV   *viper.Viper
+	dotenv  map[string]string
+	process map[string]string
+	opts    LoadOptions
+}
+
+// prepareViperLoad resolves home, merges .env layers, reads config, and applies
+// dotenv to the main viper. fileV is a file-only snapshot for override detection.
+func prepareViperLoad(opts LoadOptions) (viperLoadState, error) {
 	processEnv := snapshotProcessEnv()
 	homeDir, dotenv, err := loadDotEnvLayers(opts.HomeOverride, processEnv)
 	if err != nil {
-		return Config{}, err
+		return viperLoadState{}, err
 	}
 
 	cfg := baseConfig(homeDir)
 	v := newConfigViper(cfg, homeDir, opts.ConfigFile)
 	if err := readConfig(v, opts.ConfigFile); err != nil {
-		return Config{}, err
+		return viperLoadState{}, err
 	}
 	applyDotEnvToViper(v, dotenv, processEnv)
 
-	// Log any config-file values that an env var silently overrode.
 	fv := newFileOnlyViper(homeDir, opts.ConfigFile)
 	_ = fv.ReadInConfig() // Ignore not-found: no file → nothing to compare.
-	logConfigOverrides(detectOverrides(fv, dotenv, processEnv, monitoredConfigKeys))
 
-	// Re-pin resolved home after explicit config and .env hydration.
-	v.Set("home", cfg.HomeDir)
+	return viperLoadState{
+		homeDir: homeDir,
+		cfg:     cfg,
+		v:       v,
+		fileV:   fv,
+		dotenv:  dotenv,
+		process: processEnv,
+		opts:    opts,
+	}, nil
+}
 
-	return hydrateConfig(cfg, v, processEnv, dotenv)
+// Load resolves agentd paths and reads optional config from <home>/config.yaml.
+// Values from .env (CWD and home) are merged without modifying the process
+// environment; existing process env vars always take precedence. Load is safe
+// for concurrent callers.
+func Load(opts LoadOptions) (Config, error) {
+	state, err := prepareViperLoad(opts)
+	if err != nil {
+		return Config{}, err
+	}
+
+	logConfigOverrides(detectAllConfigOverrides(state.fileV, state.v, state.dotenv, state.process))
+
+	state.v.Set("home", state.cfg.HomeDir)
+	return hydrateConfig(state.cfg, state.v, state.process, state.dotenv)
 }
 
 func baseConfig(homeDir string) Config {

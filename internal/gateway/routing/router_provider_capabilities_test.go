@@ -60,20 +60,20 @@ func TestRouterProviderSupportsChatTools_NonToolProvider(t *testing.T) {
 func TestRouterProviderSupportsChatTools_EmptyProvider(t *testing.T) {
 	t.Parallel()
 
-	t.Run("gemini_only", func(t *testing.T) {
+	t.Run("tool_capable_only", func(t *testing.T) {
 		t.Parallel()
 		r, err := NewRouterFromConfigs([]spec.ProviderConfig{{
-			Name:    "gemini",
-			Adapter: "gemini",
-			BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-			Model:   "gemini-2.5-flash",
+			Name:    "synth-openai",
+			Adapter: "openai",
+			BaseURL: "https://example.invalid/v1",
+			Model:   "test-model",
 			APIKey:  "test-key",
 		}})
 		if err != nil {
 			t.Fatalf("NewRouterFromConfigs() error = %v", err)
 		}
 		if !r.ProviderSupportsChatTools("") {
-			t.Fatal("ProviderSupportsChatTools(\"\") = false, want true when gemini is configured")
+			t.Fatal("ProviderSupportsChatTools(\"\") = false, want true when a tool-capable provider is configured")
 		}
 	})
 
@@ -113,89 +113,5 @@ func TestSelectCandidateProviders_CaseInsensitive(t *testing.T) {
 	}
 	if resp.Content != "ok" {
 		t.Fatalf("content = %q, want ok", resp.Content)
-	}
-}
-
-type backendCapabilityCase struct {
-	name          string
-	cfg           spec.ProviderConfig
-	wantChatTools bool
-}
-
-var backendCapabilityCases = []backendCapabilityCase{
-	{
-		name:          "openai",
-		cfg:           spec.ProviderConfig{Name: "openai", Adapter: "openai", BaseURL: "https://api.openai.com/v1", Model: "gpt-4o"},
-		wantChatTools: true,
-	},
-	{
-		name:          "anthropic",
-		cfg:           spec.ProviderConfig{Name: "anthropic", Adapter: "anthropic", BaseURL: "https://api.anthropic.com", Model: "claude-3-5-haiku-latest"},
-		wantChatTools: true,
-	},
-	{
-		name:          "gemini",
-		cfg:           spec.ProviderConfig{Name: "gemini", Adapter: "gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Model: "gemini-2.5-flash"},
-		wantChatTools: true,
-	},
-	{
-		name:          "ollama",
-		cfg:           spec.ProviderConfig{Name: "ollama", Adapter: "ollama", BaseURL: "http://localhost:11434", Model: "llama3"},
-		wantChatTools: false,
-	},
-	{
-		name:          "llamacpp",
-		cfg:           spec.ProviderConfig{Name: "llamacpp", Adapter: "llamacpp", BaseURL: "http://localhost:8080", Model: "local"},
-		wantChatTools: false,
-	},
-	{
-		name:          "horde",
-		cfg:           spec.ProviderConfig{Name: "horde", Adapter: "horde", BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"},
-		wantChatTools: false,
-	},
-}
-
-// TestRouterBackendCapabilityConsistency verifies that for every standard adapter type,
-// ProviderSupportsChatTools(name) agrees with Backend.Capabilities().SupportsChatTools.
-// This locks the single-source-of-truth invariant so adapter drift is caught early.
-func TestRouterBackendCapabilityConsistency(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range backendCapabilityCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assertBackendCapabilityConsistency(t, tc)
-		})
-	}
-}
-
-func assertBackendCapabilityConsistency(t *testing.T, tc backendCapabilityCase) {
-	t.Helper()
-
-	// Build a backend directly to get its declared capability.
-	var backendList []providers.Backend
-	backendList, err := providers.AppendFromConfig(backendList, tc.cfg)
-	if err != nil {
-		t.Fatalf("AppendFromConfig(%q): %v", tc.name, err)
-	}
-	if len(backendList) != 1 {
-		t.Fatalf("AppendFromConfig returned %d backends, want 1", len(backendList))
-	}
-	backendCap := backendList[0].Capabilities().SupportsChatTools
-
-	// Build a router from the same config and query via ProviderSupportsChatTools.
-	r, err := NewRouterFromConfigs([]spec.ProviderConfig{tc.cfg})
-	if err != nil {
-		t.Fatalf("NewRouterFromConfigs(%q): %v", tc.name, err)
-	}
-	routerCap := r.ProviderSupportsChatTools(tc.name)
-
-	if backendCap != routerCap {
-		t.Errorf("capability mismatch for %q: backend.Capabilities().SupportsChatTools=%v, router.ProviderSupportsChatTools=%v",
-			tc.name, backendCap, routerCap)
-	}
-	if routerCap != tc.wantChatTools {
-		t.Errorf("ProviderSupportsChatTools(%q) = %v, want %v", tc.name, routerCap, tc.wantChatTools)
 	}
 }

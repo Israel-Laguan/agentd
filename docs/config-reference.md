@@ -6,6 +6,8 @@ Key defaults and semantics: [`reference.md`](reference.md#config-keys).
 
 Precedence (highest wins): CLI flags → explicit `--config` file → `AGENTD_*` env → `<home>/config.yaml` → compiled defaults.
 
+Repo or home `.env` files are loaded into `AGENTD_*` at startup (they do not export variables to your shell). When a merged env value overrides the same key in `config.yaml`, agentd emits `config: key overridden by env` at INFO during `Load` (for example when `AGENTD_GATEWAY_ORDER` in `.env` replaces `gateway.order` in `~/.agentd/config.yaml`). Run `agentd config show` to print resolved gateway-related keys with source annotations.
+
 ## Filesystem layout
 
 Effective home is resolved from `--home`, `AGENTD_HOME`, or `.env` (CWD then `~/.agentd/.env`) before `config.yaml` is read. The `home:` key in the template is informational only and cannot override that resolved path.

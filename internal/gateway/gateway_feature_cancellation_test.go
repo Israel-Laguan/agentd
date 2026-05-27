@@ -12,14 +12,14 @@ import (
 	"agentd/internal/models"
 )
 
-func (s *gatewayScenario) openAIWithTimeout(_ context.Context, ms int) error {
-	s.providerContent = "openai"
+func (s *gatewayScenario) openAIAdapterWithTimeout(_ context.Context, _ string, ms int) error {
+	s.probeAdapter = "openai"
 	s.budget = ms
 	return nil
 }
 
-func (s *gatewayScenario) ollamaWithTimeout(_ context.Context, ms int) error {
-	s.providerContent = "ollama"
+func (s *gatewayScenario) ollamaAdapterWithTimeout(_ context.Context, _ string, ms int) error {
+	s.probeAdapter = "ollama"
 	s.budget = ms
 	return nil
 }
@@ -28,7 +28,7 @@ func (s *gatewayScenario) mockServerDelays(_ context.Context, ms int) error {
 	delay := time.Duration(ms) * time.Millisecond
 	timeout := time.Duration(s.budget) * time.Millisecond
 
-	switch s.providerContent {
+	switch s.probeAdapter {
 	case "openai":
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			time.Sleep(delay)
@@ -51,6 +51,8 @@ func (s *gatewayScenario) mockServerDelays(_ context.Context, ms int) error {
 		s.providerResp, s.providerErr = o.Generate(context.Background(), AIRequest{
 			Messages: []PromptMessage{{Role: "user", Content: "hello"}},
 		})
+	default:
+		return fmt.Errorf("unknown probe adapter %q", s.probeAdapter)
 	}
 	return nil
 }
@@ -67,11 +69,7 @@ func (s *gatewayScenario) mockServerImmediate(context.Context) error {
 	return nil
 }
 
-func (s *gatewayScenario) sendToOpenAI(context.Context) error {
-	return nil
-}
-
-func (s *gatewayScenario) sendToOllama(context.Context) error {
+func (s *gatewayScenario) sendToProvider(context.Context, string) error {
 	return nil
 }
 

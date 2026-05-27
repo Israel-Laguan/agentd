@@ -104,15 +104,20 @@ func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) ([]
 		if providers[i].Name == "" {
 			providers[i].Name = providers[i].Adapter
 		}
-		if providers[i].APIKey == "" && providers[i].APIKeyEnv != "" {
-			providers[i].APIKey = envLookup(process, dotenv, providers[i].APIKeyEnv)
-		}
-
 		genericEnv := ""
 		if providers[i].Name != "" {
 			genericEnv = genericGatewayAPIKeyEnv(providers[i].Name)
-			if providers[i].APIKey == "" {
-				providers[i].APIKey = envLookup(process, dotenv, genericEnv)
+		}
+		// Env beats inline api_key in the file (same precedence as flat gateway.* keys).
+		if providers[i].APIKeyEnv != "" {
+			if key := envLookup(process, dotenv, providers[i].APIKeyEnv); key != "" {
+				providers[i].APIKey = key
+				continue
+			}
+		}
+		if genericEnv != "" {
+			if key := envLookup(process, dotenv, genericEnv); key != "" {
+				providers[i].APIKey = key
 			}
 		}
 

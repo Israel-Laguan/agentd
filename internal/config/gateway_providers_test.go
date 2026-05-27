@@ -73,6 +73,25 @@ func TestLoadGatewayProviders_GenericEnvVar_HyphenatedName(t *testing.T) {
 	}
 }
 
+func TestLoadGatewayProviders_GenericEnvVar_OverridesInlineFileAPIKey(t *testing.T) {
+	yaml := `    - name: poolside
+      adapter: openai
+      api_key: sk-file
+`
+	v := newProvidersViper(t, yaml)
+	process := map[string]string{
+		"AGENTD_GATEWAY_POOLSIDE_API_KEY": "sk-env",
+	}
+
+	providers, err := loadGatewayProviders(v, process, nil)
+	if err != nil {
+		t.Fatalf("loadGatewayProviders() error = %v", err)
+	}
+	if providers[0].APIKey != "sk-env" {
+		t.Errorf("APIKey = %q, want sk-env (env must beat inline config api_key)", providers[0].APIKey)
+	}
+}
+
 func TestLoadGatewayProviders_GenericEnvVar(t *testing.T) {
 	yaml := `    - name: poolside
       adapter: openai

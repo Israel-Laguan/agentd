@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 // writeOverrideTestConfig writes a minimal YAML config file for override tests.
@@ -32,13 +34,20 @@ func captureInfoLogs(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-func fileViperFromPath(t *testing.T, home, configFile string) interface{ IsSet(string) bool; Get(string) any } {
+// testViperAfterLoad builds the main viper after readConfig; when applyEnv is true,
+// merged dotenv/process layers are applied via applyDotEnvToViper (simulating env win).
+func testViperAfterLoad(t *testing.T, home, configFile string, process, dotenv map[string]string, applyEnv bool) *viper.Viper {
 	t.Helper()
-	fv := newFileOnlyViper(home, configFile)
-	if err := fv.ReadInConfig(); err != nil {
-		t.Fatalf("ReadInConfig: %v", err)
+	cfg := baseConfig(home)
+	v := newConfigViper(cfg, home, configFile)
+	if err := readConfig(v, configFile); err != nil {
+		t.Fatalf("readConfig: %v", err)
 	}
-	return fv
+	if applyEnv {
+		merged := mergeDotEnv(dotenv, process)
+		applyDotEnvToViper(v, merged, map[string]string{})
+	}
+	return v
 }
 
 // ---- detectOverrides unit tests ----
@@ -55,8 +64,9 @@ func TestDetectOverrides_ProcessEnvOverridesGatewayOrder(t *testing.T) {
 
 	process := map[string]string{"AGENTD_GATEWAY_ORDER": "gemini"}
 	dotenv := map[string]string{}
+	v := testViperAfterLoad(t, home, "", process, dotenv, true)
 
-	overrides := detectOverrides(fv, dotenv, process, monitoredConfigKeys)
+	overrides := detectAllConfigOverrides(fv, v, dotenv, process)
 
 	if len(overrides) != 1 {
 		t.Fatalf("want 1 override, got %d: %+v", len(overrides), overrides)
@@ -92,8 +102,9 @@ func TestDetectOverrides_NoFalsePositiveWhenValuesAgree(t *testing.T) {
 	// Env agrees with file.
 	process := map[string]string{"AGENTD_GATEWAY_ORDER": "horde"}
 	dotenv := map[string]string{}
+	v := testViperAfterLoad(t, home, "", process, dotenv, true)
 
-	overrides := detectOverrides(fv, dotenv, process, monitoredConfigKeys)
+	overrides := detectAllConfigOverrides(fv, v, dotenv, process)
 	if len(overrides) != 0 {
 		t.Errorf("want 0 overrides, got %d: %+v", len(overrides), overrides)
 	}
@@ -112,8 +123,9 @@ func TestDetectOverrides_DotenvSourceAttribution(t *testing.T) {
 	// Key is in dotenv only, not in process env.
 	dotenv := map[string]string{"AGENTD_GATEWAY_ORDER": "gemini"}
 	process := map[string]string{}
+	v := testViperAfterLoad(t, home, "", process, dotenv, true)
 
-	overrides := detectOverrides(fv, dotenv, process, monitoredConfigKeys)
+	overrides := detectAllConfigOverrides(fv, v, dotenv, process)
 	if len(overrides) != 1 {
 		t.Fatalf("want 1 override, got %d: %+v", len(overrides), overrides)
 	}
@@ -135,8 +147,9 @@ func TestDetectOverrides_ProcessEnvWinsOverDotenv(t *testing.T) {
 	// Both process env and dotenv set the key; process env wins.
 	process := map[string]string{"AGENTD_GATEWAY_ORDER": "openai"}
 	dotenv := map[string]string{"AGENTD_GATEWAY_ORDER": "gemini"}
+	v := testViperAfterLoad(t, home, "", process, dotenv, true)
 
-	overrides := detectOverrides(fv, dotenv, process, monitoredConfigKeys)
+	overrides := detectAllConfigOverrides(fv, v, dotenv, process)
 	if len(overrides) != 1 {
 		t.Fatalf("want 1 override, got %d: %+v", len(overrides), overrides)
 	}
@@ -160,8 +173,9 @@ func TestDetectOverrides_APIKeyValueMasked(t *testing.T) {
 
 	process := map[string]string{"AGENTD_GATEWAY_OPENAI_API_KEY": "sk-env-key"}
 	dotenv := map[string]string{}
+	v := testViperAfterLoad(t, home, "", process, dotenv, true)
 
-	overrides := detectOverrides(fv, dotenv, process, monitoredConfigKeys)
+	overrides := detectAllConfigOverrides(fv, v, dotenv, process)
 	if len(overrides) != 1 {
 		t.Fatalf("want 1 override, got %d: %+v", len(overrides), overrides)
 	}
@@ -187,10 +201,30 @@ func TestDetectOverrides_NoOverrideWhenKeyAbsentFromFile(t *testing.T) {
 
 	process := map[string]string{"AGENTD_GATEWAY_ORDER": "gemini"}
 	dotenv := map[string]string{}
+	v := testViperAfterLoad(t, home, "", process, dotenv, true)
 
-	overrides := detectOverrides(fv, dotenv, process, monitoredConfigKeys)
+	overrides := detectAllConfigOverrides(fv, v, dotenv, process)
 	if len(overrides) != 0 {
 		t.Errorf("want 0 overrides (key not in file), got %d: %+v", len(overrides), overrides)
+	}
+}
+
+func TestDetectOverrides_NoLogWhenExplicitConfigWins(t *testing.T) {
+	home := t.TempDir()
+	configPath := filepath.Join(home, "explicit.yaml")
+	writeOverrideTestConfig(t, configPath, "gateway:\n  order: [horde]\n")
+
+	fv := newFileOnlyViper(home, configPath)
+	if err := fv.ReadInConfig(); err != nil {
+		t.Fatalf("ReadInConfig: %v", err)
+	}
+
+	process := map[string]string{"AGENTD_GATEWAY_ORDER": "gemini"}
+	v := testViperAfterLoad(t, home, configPath, process, nil, false)
+
+	overrides := detectAllConfigOverrides(fv, v, nil, process)
+	if len(overrides) != 0 {
+		t.Errorf("want 0 overrides when explicit config wins, got %d: %+v", len(overrides), overrides)
 	}
 }
 
@@ -206,8 +240,9 @@ func TestDetectOverrides_BaseURLOverride(t *testing.T) {
 
 	process := map[string]string{"AGENTD_GATEWAY_OPENAI_BASE_URL": "https://api.openai.com/v1"}
 	dotenv := map[string]string{}
+	v := testViperAfterLoad(t, home, "", process, dotenv, true)
 
-	overrides := detectOverrides(fv, dotenv, process, monitoredConfigKeys)
+	overrides := detectAllConfigOverrides(fv, v, dotenv, process)
 	if len(overrides) != 1 {
 		t.Fatalf("want 1 override, got %d: %+v", len(overrides), overrides)
 	}
@@ -265,7 +300,7 @@ func TestLoad_LogsOverrideAtStartup(t *testing.T) {
 
 	buf := captureInfoLogs(t)
 
-	_, err := Load(LoadOptions{HomeOverride: home, ConfigFile: configPath})
+	_, err := Load(LoadOptions{HomeOverride: home})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -293,8 +328,34 @@ func TestLoad_NoOverrideLogWhenNoConflict(t *testing.T) {
 	}
 
 	output := buf.String()
-	if strings.Contains(output, "config key overridden") {
+	if strings.Contains(output, "key overridden by env") {
 		t.Errorf("unexpected override log: %s", output)
+	}
+}
+
+func TestLoad_LogsOverrideFromDotenvFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("AGENTD_GATEWAY_ORDER=gemini\n"), 0o644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	home := filepath.Join(dir, ".agentd")
+	configPath := filepath.Join(home, "config.yaml")
+	writeOverrideTestConfig(t, configPath, "gateway:\n  order: [horde]\n")
+
+	t.Chdir(dir)
+	buf := captureInfoLogs(t)
+
+	_, err := Load(LoadOptions{HomeOverride: home})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "gateway.order") {
+		t.Errorf("startup log missing gateway.order override: %s", output)
+	}
+	if !strings.Contains(output, ".env file") {
+		t.Errorf("startup log missing .env file source: %s", output)
 	}
 }
 

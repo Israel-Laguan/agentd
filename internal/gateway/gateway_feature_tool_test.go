@@ -14,9 +14,9 @@ import (
 )
 
 func registerToolSteps(sc *godog.ScenarioContext, state *gatewayScenario) {
-	sc.Step(`^a mock OpenAI provider$`, state.toolMockProvider)
-	sc.Step(`^a mock OpenAI provider that returns tool_calls$`, state.toolMockProviderWithToolCalls)
-	sc.Step(`^a mock OpenAI provider that returns null content with tool_calls$`, state.toolMockProviderWithNullContentAndToolCalls)
+	sc.Step(`^a mock provider "([^"]*)" using the openai wire protocol$`, state.toolMockProvider)
+	sc.Step(`^a mock provider "([^"]*)" using the openai wire protocol that returns tool_calls$`, state.toolMockProviderWithToolCalls)
+	sc.Step(`^a mock provider "([^"]*)" using the openai wire protocol that returns null content with tool_calls$`, state.toolMockProviderWithNullContentAndToolCalls)
 	sc.Step(`^Generate is called with a tool definition that has no parameters$`, state.toolGenerateWithNoParams)
 	sc.Step(`^the request should include the tool with parameters field present$`, state.toolReqHasParameters)
 	sc.Step(`^the parameters should be a valid JSON Schema object$`, state.toolParamsIsEmptyObject)
@@ -30,12 +30,12 @@ func registerToolSteps(sc *godog.ScenarioContext, state *gatewayScenario) {
 	sc.Step(`^the request should include the tools$`, state.toolReqHasTools)
 }
 
-func (s *gatewayScenario) toolMockProvider(_ context.Context) error {
+func (s *gatewayScenario) toolMockProvider(_ context.Context, name string) error {
 	s.providers = append(s.providers, &fakeProvider{
-		providerName: "openai",
+		providerName: name,
 		resp: AIResponse{
 			Content:      `{"result":"ok"}`,
-			ProviderUsed: "openai",
+			ProviderUsed: name,
 		},
 	})
 	return nil
@@ -74,12 +74,12 @@ func (s *gatewayScenario) toolGenerateWithJSONModeAndTools(_ context.Context) er
 	return nil
 }
 
-func (s *gatewayScenario) toolMockProviderWithToolCalls(_ context.Context) error {
+func (s *gatewayScenario) toolMockProviderWithToolCalls(_ context.Context, name string) error {
 	s.providers = append(s.providers, &fakeProvider{
-		providerName: "openai",
+		providerName: name,
 		resp: AIResponse{
 			Content:      "",
-			ProviderUsed: "openai",
+			ProviderUsed: name,
 			ToolCalls: []spec.ToolCall{{
 				ID:   "call_123",
 				Type: "function",
@@ -93,12 +93,12 @@ func (s *gatewayScenario) toolMockProviderWithToolCalls(_ context.Context) error
 	return nil
 }
 
-func (s *gatewayScenario) toolMockProviderWithNullContentAndToolCalls(_ context.Context) error {
+func (s *gatewayScenario) toolMockProviderWithNullContentAndToolCalls(_ context.Context, name string) error {
 	s.providers = append(s.providers, &fakeProvider{
-		providerName: "openai",
+		providerName: name,
 		resp: AIResponse{
 			Content:      "",
-			ProviderUsed: "openai",
+			ProviderUsed: name,
 			ToolCalls: []spec.ToolCall{{
 				ID:   "call_456",
 				Type: "function",
@@ -115,13 +115,13 @@ func (s *gatewayScenario) toolMockProviderWithNullContentAndToolCalls(_ context.
 func (s *gatewayScenario) toolGenerateWithNoParams(_ context.Context) error {
 	var ok bool
 	for _, p := range s.providers {
-		if p.providerName == "openai" {
+		if p.providerName == "synth-openai" {
 			ok = true
 			break
 		}
 	}
 	if !ok {
-		s.providers = append(s.providers, &fakeProvider{providerName: "openai"})
+		s.providers = append(s.providers, &fakeProvider{providerName: "synth-openai"})
 	}
 
 	provs := make([]providers.Backend, len(s.providers))

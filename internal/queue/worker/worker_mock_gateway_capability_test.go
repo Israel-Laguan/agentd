@@ -6,24 +6,18 @@ package worker
 // (chatToolsChecker) instead of a static string switch, any gateway that is not a
 // *routing.Router must implement ProviderSupportsChatTools itself.
 //
-// Routing-decision tests (routingTestGateway) implement proper per-provider logic.
-// All other agentic-loop test doubles return true for any non-empty provider name,
-// since those tests exercise loop mechanics, not provider selection.
+// Routing-decision tests (routingTestGateway) delegate to a real router built from
+// ProviderConfig. All other agentic-loop test doubles return true for any non-empty
+// provider name, since those tests exercise loop mechanics, not provider selection.
 
 import "strings"
 
-// routingTestGateway: mirrors production routing — openai, anthropic, gemini are
-// tool-capable; empty provider means cascade (any tool-capable provider in order).
+// routingTestGateway delegates capability checks to the configured router.
 func (g *routingTestGateway) ProviderSupportsChatTools(provider string) bool {
-	if strings.TrimSpace(provider) == "" {
-		return true
-	}
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "openai", "anthropic", "gemini":
-		return true
-	default:
+	if g.router == nil {
 		return false
 	}
+	return g.router.ProviderSupportsChatTools(provider)
 }
 
 // sequenceGateway: used for agentic loop integration tests (not routing tests).

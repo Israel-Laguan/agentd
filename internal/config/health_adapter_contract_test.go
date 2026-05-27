@@ -63,6 +63,21 @@ func TestHordeAdapterHealthContract(t *testing.T) {
 	runHealthAdapterContract(t, healthAdapterContracts["horde"])
 }
 
+// TestGeminiAdapterAliasHealthMode verifies healthModeFor before adapter canonicalization.
+// Legacy gemini adapter alias is the only vendor-specific health case; see adapter_contract_test.go.
+func TestGeminiAdapterAliasHealthMode(t *testing.T) {
+	t.Parallel()
+
+	p := gateway.ProviderConfig{
+		Name:    "gemini",
+		Adapter: "gemini",
+		APIKey:  "",
+	}
+	if got := healthModeFor(p); got != healthModeAPIKey {
+		t.Errorf("healthModeFor(adapter=gemini) = %q, want %q", got, healthModeAPIKey)
+	}
+}
+
 func testHealthAdapterDefaultMode(t *testing.T, contract healthAdapterContract) {
 	t.Helper()
 
