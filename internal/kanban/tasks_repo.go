@@ -74,8 +74,15 @@ func (s *Store) MarkProjectTasksReady(ctx context.Context, projectID string) ([]
 		now := utcNow()
 		_, err = tx.ExecContext(ctx, `
 			UPDATE tasks SET state = ?, updated_at = ?
-			WHERE project_id = ? AND state = ?`,
-			models.TaskStateReady, formatTime(now), projectID, models.TaskStatePending)
+			WHERE project_id = ? AND state = ?
+			AND NOT EXISTS (
+				SELECT 1 FROM task_relations tr
+				JOIN tasks parent ON parent.id = tr.parent_task_id
+				WHERE tr.child_task_id = tasks.id
+				AND parent.state NOT IN (?, ?)
+			)`,
+			models.TaskStateReady, formatTime(now), projectID, models.TaskStatePending,
+			models.TaskStateCompleted, models.TaskStateFailed)
 		if err != nil {
 			return nil, fmt.Errorf("mark project tasks ready: %w", err)
 		}

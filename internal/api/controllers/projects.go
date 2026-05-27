@@ -66,6 +66,10 @@ func (h ProjectHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 // WorkspaceReady signals that the project workspace has been populated and
 // tasks may be dispatched. Transitions PENDING tasks to READY.
 func (h ProjectHandler) WorkspaceReady(w http.ResponseWriter, r *http.Request) {
+	if err := h.verifyMaterializeToken(r); err != nil {
+		httpx.WriteError(w, http.StatusForbidden, httpx.CodeForbidden, err.Error())
+		return
+	}
 	projectID := r.PathValue("id")
 	if h.Service == nil {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "project service not configured")
