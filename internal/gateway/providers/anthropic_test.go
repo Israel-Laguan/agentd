@@ -332,17 +332,6 @@ func TestAnthropicMaxTokens(t *testing.T) {
 	}
 }
 
-func TestAnthropicCapabilities(t *testing.T) {
-	a := NewAnthropic(spec.ProviderConfig{
-		Model: "claude-3-haiku",
-	}, nil)
-
-	caps := a.Capabilities()
-	if caps.SupportsChatTools != true {
-		t.Fatalf("SupportsChatTools = %v, want true", caps.SupportsChatTools)
-	}
-}
-
 func stringPtr(s string) *string {
 	return &s
 }

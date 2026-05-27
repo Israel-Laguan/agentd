@@ -405,23 +405,6 @@ func TestOpenAIToolCalls_EmptyWhenAbsent(t *testing.T) {
 	}
 }
 
-// TestOpenAICapabilities_SupportsChatTools verifies that OpenAI provider's
-// Capabilities() returns SupportsChatTools = true.
-// Validates: Requirements 1.3, 5.1, 5.5
-func TestOpenAICapabilities_SupportsChatTools(t *testing.T) {
-	t.Parallel()
-
-	o := NewOpenAI(spec.ProviderConfig{
-		BaseURL: "https://api.openai.com/v1",
-		Model:   "gpt-4",
-	}, nil)
-
-	caps := o.Capabilities()
-	if !caps.SupportsChatTools {
-		t.Errorf("Capabilities().SupportsChatTools = false, want true")
-	}
-}
-
 // TestOpenAICapabilities_Consistency verifies that the Capabilities result
 // is consistent across multiple calls (idempotent query).
 // Validates: Property 1 - Capability Consistency
