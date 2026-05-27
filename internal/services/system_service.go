@@ -89,13 +89,27 @@ func NewSystemService(summarizer *frontdesk.StatusSummarizer, breaker BreakerPro
 	return &SystemService{Summarizer: summarizer, Breaker: breaker, Now: time.Now, ReadMem: readMemStats}
 }
 
+// StatusOptions controls filtering for the status snapshot.
+type StatusOptions struct {
+	IncludeHealing bool
+	IncludeSystem  bool
+}
+
 // Snapshot collects the current system status. It always returns a
 // non-nil SystemStatus on success; missing probes simply omit their
 // sections.
 func (s *SystemService) Snapshot(ctx context.Context) (*SystemStatus, error) {
+	return s.SnapshotWithOptions(ctx, StatusOptions{IncludeHealing: true, IncludeSystem: true})
+}
+
+// SnapshotWithOptions collects the current system status with filtering.
+func (s *SystemService) SnapshotWithOptions(ctx context.Context, opts StatusOptions) (*SystemStatus, error) {
 	out := &SystemStatus{BuiltAt: s.now(), Memory: s.readMem()}
 	if s.Summarizer != nil {
-		report, err := s.Summarizer.Summarize(ctx)
+		report, err := s.Summarizer.SummarizeWithOptions(ctx, frontdesk.SummarizeOptions{
+			IncludeHealing: opts.IncludeHealing,
+			IncludeSystem:  opts.IncludeSystem,
+		})
 		if err != nil {
 			return nil, err
 		}

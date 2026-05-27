@@ -15,6 +15,7 @@ type HealingConfig struct {
 	UpgradeModel      string
 	UpgradeProvider   string
 	ContextMultiplier float64
+	MaxHealingTasks   int
 }
 
 func setHealingDefaults(v *viper.Viper) {
@@ -25,6 +26,7 @@ func setHealingDefaults(v *viper.Viper) {
 	v.SetDefault("healing.upgrade_model", "")
 	v.SetDefault("healing.upgrade_provider", "")
 	v.SetDefault("healing.context_multiplier", 2.0)
+	v.SetDefault("healing.max_healing_tasks", 0)
 }
 
 func loadHealingConfig(v *viper.Viper) HealingConfig {
@@ -36,5 +38,6 @@ func loadHealingConfig(v *viper.Viper) HealingConfig {
 		UpgradeModel:      v.GetString("healing.upgrade_model"),
 		UpgradeProvider:   v.GetString("healing.upgrade_provider"),
 		ContextMultiplier: v.GetFloat64("healing.context_multiplier"),
+		MaxHealingTasks:   v.GetInt("healing.max_healing_tasks"),
 	}
 }

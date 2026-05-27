@@ -60,3 +60,22 @@ func TestHealingStrategy_Constants(t *testing.T) {
 		t.Errorf("HealingStrategyMinimizeVariables = %v", HealingStrategyMinimizeVariables)
 	}
 }
+
+func TestHealingConfig_MaxHealingTasks(t *testing.T) {
+	cfg := HealingConfig{
+		Enabled:         true,
+		MaxHealingTasks: 5,
+	}
+	if cfg.MaxHealingTasks != 5 {
+		t.Errorf("MaxHealingTasks = %v, want 5", cfg.MaxHealingTasks)
+	}
+}
+
+func TestHealingConfig_MaxHealingTasksDefaultZero(t *testing.T) {
+	cfg := HealingConfig{
+		Enabled: true,
+	}
+	if cfg.MaxHealingTasks != 0 {
+		t.Errorf("MaxHealingTasks = %v, want 0 (no cap)", cfg.MaxHealingTasks)
+	}
+}

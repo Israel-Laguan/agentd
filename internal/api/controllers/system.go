@@ -14,12 +14,19 @@ type SystemHandler struct {
 }
 
 // Get handles GET /api/v1/system/status.
+// Query params:
+//   - include_healing: include healing/handoff tasks in counts (default false)
+//   - include_system:  include _system project tasks in counts (default false)
 func (h SystemHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h.System == nil {
 		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", "system service is not configured")
 		return
 	}
-	snapshot, err := h.System.Snapshot(r.Context())
+	opts := services.StatusOptions{
+		IncludeHealing: r.URL.Query().Get("include_healing") == "true",
+		IncludeSystem:  r.URL.Query().Get("include_system") == "true",
+	}
+	snapshot, err := h.System.SnapshotWithOptions(r.Context(), opts)
 	if err != nil {
 		httpx.WriteMappedError(w, err)
 		return
