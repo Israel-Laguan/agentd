@@ -3,9 +3,13 @@ package worker
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 )
 
 // TestAgenticMode_DefaultIsFalse verifies that the default value of AgenticMode is false.
@@ -132,4 +136,163 @@ func TestLegacyPath_NotAffectedByAgenticConfig(t *testing.T) {
 			t.Error("legacy path should not contain truncation markers even with agentic config")
 		}
 	}
+}
+
+// TestLegacySystemPrompt_StatesOneCommandConstraint verifies that the default
+// legacy system prompt explicitly states the one-command constraint and
+// discourages embedding large output in command arguments.
+func TestLegacySystemPrompt_StatesOneCommandConstraint(t *testing.T) {
+	t.Parallel()
+
+	content := legacyJSONCommandSystemContent(models.AgentProfile{})
+
+	checks := []struct {
+		phrase string
+		reason string
+	}{
+		{"one JSON object", "prompt must state the single-object constraint"},
+		{"CONSTRAINT", "prompt must have an explicit CONSTRAINT section"},
+		{"pipes", "prompt must recommend pipes/redirects over embedded output"},
+		{"non-interactive", "prompt must require non-interactive flags"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(content, c.phrase) {
+			t.Errorf("system prompt missing %q: %s", c.phrase, c.reason)
+		}
+	}
+
+	// Sentinel used by tests as a probe must still match the first sentence.
+	if !strings.HasPrefix(content, legacyJSONCommandSystemSentinel) {
+		t.Errorf("prompt does not start with sentinel %q", legacyJSONCommandSystemSentinel)
+	}
+}
+
+// legacyHandoffStore extends routingTestStore to capture BlockTaskWithSubtasks calls.
+type legacyHandoffStore struct {
+	routingTestStore
+	mu          sync.Mutex
+	blocked     bool
+	subtasks    []models.DraftTask
+	emittedKinds []string
+}
+
+func (s *legacyHandoffStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, drafts []models.DraftTask) (*models.Task, []models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.blocked = true
+	s.subtasks = append(s.subtasks, drafts...)
+	s.task.State = models.TaskStateBlocked
+	return &s.task, nil, nil
+}
+
+// legacyHandoffSink records emitted event kinds.
+type legacyHandoffSink struct {
+	mu    sync.Mutex
+	kinds []string
+}
+
+func (s *legacyHandoffSink) Emit(_ context.Context, ev models.Event) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.kinds = append(s.kinds, string(ev.Type))
+	return nil
+}
+
+// invalidJSONGateway returns non-JSON content to simulate truncated responses.
+type invalidJSONGateway struct {
+	routingTestGateway
+}
+
+func (g *invalidJSONGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	g.requests = append(g.requests, req)
+	// Return something that cannot be parsed as JSON.
+	return gateway.AIResponse{Content: `{"command":"echo '...truncated`}, nil
+}
+
+// TestLegacyWorker_InvalidJSONResponse_EmitsHumanHandoff verifies that when
+// the gateway persistently returns invalid JSON (simulating a truncated
+// response), the legacy worker creates a HUMAN-assignee handoff subtask and
+// emits a LEGACY_MODE_HANDOFF event instead of cycling through generic retries.
+func TestLegacyWorker_InvalidJSONResponse_EmitsHumanHandoff(t *testing.T) {
+	t.Parallel()
+
+	profile := models.AgentProfile{
+		ID:          "agent-handoff",
+		Provider:    "ollama",
+		Model:       "llama3",
+		AgenticMode: false,
+	}
+	store := &legacyHandoffStore{
+		routingTestStore: routingTestStore{
+			task: models.Task{
+				BaseEntity: models.BaseEntity{ID: "task-json-fail"},
+				ProjectID:  "project-1",
+				AgentID:    "agent-handoff",
+				State:      models.TaskStateQueued,
+			},
+			project: models.Project{
+				BaseEntity:    models.BaseEntity{ID: "project-1"},
+				WorkspacePath: "/tmp/test-workspace",
+			},
+			profile: profile,
+		},
+	}
+	gw := &invalidJSONGateway{}
+	sb := &routingTestSandbox{}
+	sink := &legacyHandoffSink{}
+
+	w := NewWorker(store, gw, sb, nil, sink, WorkerOptions{MaxToolIterations: 5})
+	w.Process(context.Background(), store.task)
+
+	store.mu.Lock()
+	blocked := store.blocked
+	subtasks := store.subtasks
+	store.mu.Unlock()
+
+	// Must have called BlockTaskWithSubtasks.
+	if !blocked {
+		t.Fatal("expected BlockTaskWithSubtasks to be called for invalid JSON handoff")
+	}
+
+	// The subtask must be assigned to HUMAN.
+	if len(subtasks) == 0 {
+		t.Fatal("expected at least one handoff subtask")
+	}
+	if subtasks[0].Assignee != models.TaskAssigneeHuman {
+		t.Errorf("handoff subtask assignee = %q, want %q", subtasks[0].Assignee, models.TaskAssigneeHuman)
+	}
+
+	// The subtask description must mention agentic_mode.
+	if !strings.Contains(subtasks[0].Description, "agentic_mode") {
+		t.Errorf("handoff description missing 'agentic_mode'; got: %s", subtasks[0].Description[:min(200, len(subtasks[0].Description))])
+	}
+
+	// The emitted event must include LEGACY_MODE_HANDOFF.
+	sink.mu.Lock()
+	kinds := sink.kinds
+	sink.mu.Unlock()
+	found := false
+	for _, k := range kinds {
+		if k == "LEGACY_MODE_HANDOFF" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected LEGACY_MODE_HANDOFF event; got events: %v", kinds)
+	}
+}
+
+// invalidJSONSandbox satisfies sandbox.Executor (unused in this test path).
+type invalidJSONSandbox struct{}
+
+func (s *invalidJSONSandbox) Execute(_ context.Context, _ sandbox.Payload) (sandbox.Result, error) {
+	return sandbox.Result{Success: true}, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
