@@ -123,7 +123,7 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 | `healing.outage_handoff_enabled` | `true` | When `false`, skip `_system` "System Offline" tasks when the global breaker stays open. |
 | `healing.upgrade_model` | _(empty)_ | Model override used by the upgrade healing step. |
 | `healing.upgrade_provider` | _(empty)_ | Provider override used by the upgrade healing step. |
-| `healing.context_multiplier` | `1.5` | Multiplier for increasing retry context budget. |
+| `healing.context_multiplier` | `2.0` | Multiplier for increasing retry context budget. |
 | `gateway.horde.base_url` | `https://aihorde.net/api` | AI Horde endpoint URL. |
 | `gateway.horde.api_key` | `0000000000` | Optional AI Horde API key (anonymous default). |
 | `gateway.horde.model` | _(empty)_ | AI Horde model selection. |
