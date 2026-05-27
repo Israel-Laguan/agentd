@@ -155,6 +155,10 @@ func (s *workerTestStore) MaterializePlan(context.Context, models.DraftPlan) (*m
 	return nil, nil, nil
 }
 
+func (s *workerTestStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *workerTestStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	return &models.Project{}, nil
 }

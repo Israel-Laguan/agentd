@@ -11,6 +11,16 @@ type DraftPlan struct {
 	ProjectName string      `json:"project_name"`
 	Description string      `json:"description,omitempty"`
 	Tasks       []DraftTask `json:"tasks"`
+	// SourcePath is an optional local filesystem path whose contents are
+	// copied into the project workspace before tasks become claimable.
+	// When set, the server performs an atomic copy so workers never run
+	// against an empty directory.
+	SourcePath string `json:"source_path,omitempty"`
+	// WorkspacePending when true forces all root tasks (those without
+	// dependencies) into PENDING state at creation time. Used by the
+	// ProjectService to defer task dispatch until workspace content is
+	// ready. Not serialized in the API response.
+	WorkspacePending bool `json:"-"`
 }
 
 // UnmarshalJSON accepts both proposal snake_case and legacy camel-case keys.

@@ -66,6 +66,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	mux.HandleFunc("GET /api/v1/projects/{id}", projects.Get)
 	mux.HandleFunc("GET /api/v1/projects/{id}/tasks", tasks.ListByProject)
 	mux.HandleFunc("POST /api/v1/projects/materialize", projects.Materialize)
+	mux.HandleFunc("POST /api/v1/projects/{id}/workspace/ready", projects.WorkspaceReady)
 	mux.HandleFunc("GET /api/v1/tasks/{id}/comments", tasks.ListComments)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/comments", tasks.AddComment)
 	mux.HandleFunc("PATCH /api/v1/tasks/{id}", tasks.Patch)

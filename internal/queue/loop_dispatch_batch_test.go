@@ -186,6 +186,9 @@ func (s *dispatchBatchStore) SetSetting(context.Context, string, string) error {
 func (s *dispatchBatchStore) MaterializePlan(context.Context, models.DraftPlan) (*models.Project, []models.Task, error) {
 	return nil, nil, nil
 }
+func (s *dispatchBatchStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *dispatchBatchStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	p := s.projects["p1"]
 	return &p, nil

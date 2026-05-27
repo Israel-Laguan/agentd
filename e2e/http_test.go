@@ -259,6 +259,9 @@ func (s *testStore) Close() error { return nil }
 func (s *testStore) MaterializePlan(context.Context, models.DraftPlan) (*models.Project, []models.Task, error) {
 	return &s.project, []models.Task{s.task}, nil
 }
+func (s *testStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *testStore) GetProject(_ context.Context, id string) (*models.Project, error) {
 	if id != s.project.ID {
 		return nil, models.ErrProjectNotFound

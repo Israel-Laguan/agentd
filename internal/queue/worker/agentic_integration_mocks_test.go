@@ -278,6 +278,10 @@ func (m *mockAgenticStore) MaterializePlan(context.Context, models.DraftPlan) (*
 	return nil, nil, nil
 }
 
+func (m *mockAgenticStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockAgenticStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	return &models.Project{}, nil
 }

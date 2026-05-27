@@ -192,6 +192,9 @@ func (s *apiStore) Close() error { return nil }
 func (s *apiStore) MaterializePlan(context.Context, models.DraftPlan) (*models.Project, []models.Task, error) {
 	return &s.project, []models.Task{s.task}, nil
 }
+func (s *apiStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *apiStore) GetProject(_ context.Context, id string) (*models.Project, error) {
 	if id != s.project.ID {
 		return nil, models.ErrProjectNotFound

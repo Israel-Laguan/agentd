@@ -86,6 +86,9 @@ type KanbanStore interface {
 	UpsertAgentProfile(ctx context.Context, p AgentProfile) error
 	DeleteAgentProfile(ctx context.Context, id string) error
 	AssignTaskAgent(ctx context.Context, taskID string, expectedUpdatedAt time.Time, agentID string) (*Task, error)
+	// MarkProjectTasksReady transitions all PENDING tasks belonging to the
+	// given project to READY. Used to unlock tasks after workspace seeding.
+	MarkProjectTasksReady(ctx context.Context, projectID string) ([]Task, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
 	GetSetting(ctx context.Context, key string) (string, bool, error)
 	SetSetting(ctx context.Context, key, value string) error

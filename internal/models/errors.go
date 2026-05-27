@@ -41,4 +41,5 @@ var (
 	ErrMessageInvalid         = errors.New("invalid inbound message")
 	ErrChannelRateLimited     = errors.New("channel rate limit exceeded")
 	ErrDispatchNack           = errors.New("dispatch nacked")
+	ErrWorkspaceNotReady      = errors.New("workspace not ready")
 )

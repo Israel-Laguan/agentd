@@ -14,6 +14,10 @@ func (s *queueStore) MaterializePlan(context.Context, models.DraftPlan) (*models
 	return &s.project, nil, nil
 }
 
+func (s *queueStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *queueStore) GetProject(context.Context, string) (*models.Project, error) {
 	return &s.project, nil
 }
