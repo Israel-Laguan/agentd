@@ -65,6 +65,12 @@ func Load(opts LoadOptions) (Config, error) {
 		return Config{}, err
 	}
 	applyDotEnvToViper(v, dotenv, processEnv)
+
+	// Log any config-file values that an env var silently overrode.
+	fv := newFileOnlyViper(homeDir, opts.ConfigFile)
+	_ = fv.ReadInConfig() // Ignore not-found: no file → nothing to compare.
+	logConfigOverrides(detectOverrides(fv, dotenv, processEnv, monitoredConfigKeys))
+
 	// Re-pin resolved home after explicit config and .env hydration.
 	v.Set("home", cfg.HomeDir)
 
