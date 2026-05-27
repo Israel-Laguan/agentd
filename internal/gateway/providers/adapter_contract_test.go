@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -141,11 +142,14 @@ func testAdapterContractGeneratePath(t *testing.T, contract adapterContract) {
 	t.Helper()
 	t.Parallel()
 
+	var mu sync.Mutex
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		if gotPath == "" {
 			gotPath = r.URL.Path
 		}
+		mu.Unlock()
 		writeAdapterContractGenerateResponse(t, w, r, contract.adapter)
 	}))
 	defer srv.Close()
@@ -157,8 +161,11 @@ func testAdapterContractGeneratePath(t *testing.T, contract adapterContract) {
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	if gotPath != contract.generatePath {
-		t.Fatalf("HTTP path = %q, want %q", gotPath, contract.generatePath)
+	mu.Lock()
+	path := gotPath
+	mu.Unlock()
+	if path != contract.generatePath {
+		t.Fatalf("HTTP path = %q, want %q", path, contract.generatePath)
 	}
 }
 
@@ -166,11 +173,17 @@ func testAdapterContractToolFormat(t *testing.T, contract adapterContract) {
 	t.Helper()
 	t.Parallel()
 
+	var mu sync.Mutex
 	var body map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatalf("decode request: %v", err)
+		var b map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
+			http.Error(w, "decode request: "+err.Error(), http.StatusBadRequest)
+			return
 		}
+		mu.Lock()
+		body = b
+		mu.Unlock()
 		writeAdapterContractGenerateResponse(t, w, r, contract.adapter)
 	}))
 	defer srv.Close()
@@ -184,7 +197,10 @@ func testAdapterContractToolFormat(t *testing.T, contract adapterContract) {
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	assertAdapterContractToolFormat(t, contract.adapter, body)
+	mu.Lock()
+	b := body
+	mu.Unlock()
+	assertAdapterContractToolFormat(t, contract.adapter, b)
 }
 
 func newAdapterContractBackend(t *testing.T, contract adapterContract, srv *httptest.Server) Backend {
@@ -233,7 +249,7 @@ func writeAdapterContractGenerateResponse(t *testing.T, w http.ResponseWriter, r
 
 	switch adapter {
 	case "openai", "llamacpp":
-		writeOpenAIJSON(t, w, openAIResponseBody("ok", "contract-model"))
+		_ = json.NewEncoder(w).Encode(openAIResponseBody("ok", "contract-model"))
 	case "anthropic":
 		_ = json.NewEncoder(w).Encode(anthropicResponse{
 			Content: []anthropicContentBlock{{Type: "text", Text: stringPtr("ok")}},
@@ -256,9 +272,9 @@ func writeAdapterContractGenerateResponse(t *testing.T, w http.ResponseWriter, r
 			})
 			return
 		}
-		t.Fatalf("unexpected horde request: %s %s", r.Method, r.URL.Path)
+		http.Error(w, "unexpected horde request: "+r.Method+" "+r.URL.Path, http.StatusInternalServerError)
 	default:
-		t.Fatalf("unsupported adapter %q", adapter)
+		http.Error(w, "unsupported adapter: "+adapter, http.StatusInternalServerError)
 	}
 }
 

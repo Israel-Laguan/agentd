@@ -30,12 +30,10 @@ func testProviderConfig(name string) (spec.ProviderConfig, bool) {
 }
 
 func coalesceName(actual, defaultName string) string {
-	switch actual {
-	case "openai", "anthropic", "ollama":
+	if strings.TrimSpace(actual) != "" {
 		return actual
-	default:
-		return defaultName
 	}
+	return defaultName
 }
 
 // standardRoutingTestConfigs returns providers commonly used in worker_routing_test.go,
@@ -54,10 +52,13 @@ func routingConfigsForProfile(provider string) []spec.ProviderConfig {
 	if provider == "" {
 		return []spec.ProviderConfig{toolCapableConfig("synth-openai", "openai")}
 	}
-	if _, ok := testProviderConfig(provider); !ok {
+	cfg, ok := testProviderConfig(provider)
+	if !ok {
 		return nil
 	}
-	return standardRoutingTestConfigs()
+	cfgs := standardRoutingTestConfigs()
+	cfgs = append(cfgs, cfg)
+	return cfgs
 }
 
 func buildTestCapabilityRouter(cfgs ...spec.ProviderConfig) (*gateway.Router, error) {

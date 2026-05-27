@@ -64,7 +64,7 @@ func newConfigShowCommand(opts *rootOptions) *cobra.Command {
 				return err
 			}
 			for _, s := range sources {
-				if err := writeLine(cmd.OutOrStdout(), config.FormatConfigSourceLine(s)+"\n"); err != nil {
+				if err := writeLine(cmd.OutOrStdout(), config.FormatConfigSourceLine(s)); err != nil {
 					return err
 				}
 			}
