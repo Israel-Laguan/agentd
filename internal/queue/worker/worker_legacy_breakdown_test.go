@@ -7,6 +7,7 @@ import (
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
 
@@ -177,5 +178,88 @@ func TestLegacyDispatchReject_HighComplexitySkipsGateway(t *testing.T) {
 	store.mu.Unlock()
 	if !blocked {
 		t.Fatal("expected handoff for high-complexity dispatch reject")
+	}
+}
+
+func TestLegacyDispatchReject_AgenticCapableProviderStillHandoffs(t *testing.T) {
+	t.Parallel()
+
+	router, err := gateway.NewRouterFromConfigs([]spec.ProviderConfig{toolCapableConfig("openai", "openai")})
+	if err != nil {
+		t.Fatalf("NewRouterFromConfigs: %v", err)
+	}
+	store := &legacyHandoffStore{
+		routingTestStore: routingTestStore{
+			task: models.Task{
+				BaseEntity:  models.BaseEntity{ID: "task-reject-openai"},
+				ProjectID:   "project-1",
+				AgentID:     "agent-1",
+				State:       models.TaskStateQueued,
+				Description: "architect compare design analyse reason write draft generate migration plan",
+			},
+			project: models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}},
+			profile: models.AgentProfile{
+				ID: "agent-1", Provider: "openai", Model: "gpt-4o-mini", AgenticMode: false,
+			},
+		},
+	}
+	gw := &legacyContentGateway{
+		routingTestGateway: routingTestGateway{router: router},
+		content:            `{"command":"echo ok"}`,
+	}
+	w := NewWorker(store, gw, &routingTestSandbox{}, nil, &legacyHandoffSink{}, legacyCapOptions())
+	w.Process(context.Background(), store.task)
+
+	if len(gw.requests) != 0 {
+		t.Fatalf("expected dispatch reject to skip gateway, got %d requests", len(gw.requests))
+	}
+	store.mu.Lock()
+	blocked := store.blocked
+	store.mu.Unlock()
+	if !blocked {
+		t.Fatal("expected handoff for high-complexity legacy task on agentic-capable provider")
+	}
+}
+
+func TestHandleHealingSplit_SubtaskCap_EmitsHealingHandoff(t *testing.T) {
+	t.Parallel()
+
+	store := &legacyHandoffStore{
+		routingTestStore: routingTestStore{
+			task: models.Task{
+				BaseEntity: models.BaseEntity{ID: "task-heal-cap"},
+				ProjectID:  "project-1",
+				AgentID:    "agent-1",
+				State:      models.TaskStateQueued,
+				RetryCount: 3,
+			},
+			project: models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}},
+			profile: models.AgentProfile{
+				ID: "agent-1", Provider: "ollama", Model: "llama3", AgenticMode: true,
+			},
+		},
+	}
+	gw := &legacyContentGateway{content: `{"too_complex":true,"subtasks":[{"title":"a","description":"1"},{"title":"b","description":"2"},{"title":"c","description":"3"},{"title":"d","description":"4"},{"title":"e","description":"5"},{"title":"f","description":"6"}]}`}
+	sink := &legacyHandoffSink{}
+	opts := legacyCapOptions()
+	opts.Legacy.MaxSubtasksPerBreakdown = 5
+	w := NewWorker(store, gw, &routingTestSandbox{}, nil, sink, opts)
+
+	w.handleHealingSplit(context.Background(), store.task, store.project, store.profile)
+
+	store.mu.Lock()
+	blocked := store.blocked
+	store.mu.Unlock()
+	if !blocked {
+		t.Fatal("expected handoff when healing split exceeds subtask cap")
+	}
+	sink.mu.Lock()
+	kinds := sink.kinds
+	sink.mu.Unlock()
+	if !containsEvent(kinds, "HEALING_HANDOFF") {
+		t.Fatalf("expected HEALING_HANDOFF event; got %v", kinds)
+	}
+	if containsEvent(kinds, "LEGACY_MODE_HANDOFF") {
+		t.Fatalf("unexpected LEGACY_MODE_HANDOFF event; got %v", kinds)
 	}
 }

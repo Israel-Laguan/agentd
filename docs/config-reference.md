@@ -165,6 +165,20 @@ Enabled per agent profile via `AgentProfile.agentic_mode`. Tool rate limits are 
 | `batching` | Batch independent tool-free tasks in one LLM call (same project + agent). |
 | `capability_routing` | Route matching intents to external adapters, bypassing the agentic turn loop. Runs after `model_routing`. |
 
+## Healing
+
+| Key | Notes |
+| --- | --- |
+| `healing.enabled` | Self-healing ladder and provider-exhaustion HUMAN handoffs. When `false`, failures terminate without healing subtasks. |
+| `healing.strategy` | Built-in ladder: `increase_effort` or `minimize_variables`. |
+| `healing.steps` | Optional custom step list overriding the preset ladder. |
+| `healing.max_adjustments` | Max healing steps before HUMAN handoff; `0` = full ladder. |
+| `healing.max_healing_tasks` | Max HUMAN handoff subtasks per parent before failing; `0` = unlimited. |
+| `healing.outage_handoff_enabled` | When `false`, skip `_system` "System Offline" tasks when the global breaker stays open. |
+| `healing.upgrade_model` | Model override for the upgrade healing step. |
+| `healing.upgrade_provider` | Provider override for the upgrade healing step. |
+| `healing.context_multiplier` | Multiplier for increasing retry context budget. |
+
 ## Channel
 
 Dispatch validation defaults apply when absent. Set both `max_message_size` and `rate_limit` to `0` to disable the channel gate entirely.

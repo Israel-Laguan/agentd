@@ -31,14 +31,29 @@ func (s *FakeKanbanStore) ListChildTasks(_ context.Context, parentID string) ([]
 func (s *FakeKanbanStore) ListParentTasks(_ context.Context, childID string) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	seen := make(map[string]struct{})
 	var out []models.Task
+	appendParent := func(id string) {
+		if _, ok := seen[id]; ok {
+			return
+		}
+		t, ok := s.tasks[id]
+		if !ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, t)
+	}
+	// MaterializePlan DependsOn: childParents[child] lists blocking parent IDs.
+	for _, parentID := range s.childParents[childID] {
+		appendParent(parentID)
+	}
+	// BlockTaskWithSubtasks: childParents[parent] lists child IDs.
 	for parentID, childIDs := range s.childParents {
 		for _, cid := range childIDs {
-			if cid != childID {
-				continue
-			}
-			if t, ok := s.tasks[parentID]; ok {
-				out = append(out, t)
+			if cid == childID {
+				appendParent(parentID)
+				break
 			}
 		}
 	}

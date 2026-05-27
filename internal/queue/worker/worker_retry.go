@@ -95,7 +95,7 @@ func (w *Worker) handleHealingSplit(ctx context.Context, task models.Task, proje
 		}, "worker did not return subtasks during healing split")
 		return
 	}
-	w.handleLegacyTaskBreakdown(ctx, task, response.Subtasks)
+	w.handleLegacyTaskBreakdown(ctx, task, response.Subtasks, true)
 }
 
 func (w *Worker) breakdownCommand(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (workerResponse, error) {
