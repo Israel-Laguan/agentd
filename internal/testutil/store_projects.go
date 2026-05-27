@@ -46,14 +46,32 @@ func (s *FakeKanbanStore) MarkProjectTasksReady(_ context.Context, projectID str
 	defer s.mu.Unlock()
 	var unlocked []models.Task
 	for id, t := range s.tasks {
-		if t.ProjectID == projectID && t.State == models.TaskStatePending {
-			t.State = models.TaskStateReady
-			t.UpdatedAt = now()
-			s.tasks[id] = t
-			unlocked = append(unlocked, t)
+		if t.ProjectID != projectID || t.State != models.TaskStatePending {
+			continue
 		}
+		if s.hasPendingParents(id) {
+			continue
+		}
+		t.State = models.TaskStateReady
+		t.UpdatedAt = now()
+		s.tasks[id] = t
+		unlocked = append(unlocked, t)
 	}
 	return unlocked, nil
+}
+
+func (s *FakeKanbanStore) hasPendingParents(taskID string) bool {
+	parents := s.childParents[taskID]
+	for _, pid := range parents {
+		parent, ok := s.tasks[pid]
+		if !ok {
+			continue
+		}
+		if parent.State != models.TaskStateCompleted && parent.State != models.TaskStateFailed {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *FakeKanbanStore) GetProject(_ context.Context, id string) (*models.Project, error) {
