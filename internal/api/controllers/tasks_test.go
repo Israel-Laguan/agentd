@@ -299,6 +299,19 @@ func TestTaskHandler_ListByProjectValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("invalid include_healing", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/tasks?include_healing=tru", nil)
+		req.SetPathValue("id", projectID)
+		rec := httptest.NewRecorder()
+		h.ListByProject(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("code = %d body = %s", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "include_healing") {
+			t.Fatalf("body = %s, want include_healing validation error", rec.Body.String())
+		}
+	})
+
 	t.Run("nil task service", func(t *testing.T) {
 		bare := controllers.TaskHandler{Store: store}
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/tasks", nil)

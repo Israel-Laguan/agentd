@@ -358,6 +358,28 @@ func TestListByProjectInjectsProjectIDFilter(t *testing.T) {
 	}
 }
 
+func TestListByProjectBoardPassesIncludeHealing(t *testing.T) {
+	store, full := newStore()
+	store.getProject = &models.Project{BaseEntity: models.BaseEntity{ID: "p1"}}
+	store.listResult = models.PaginatedResult[models.Task]{
+		Data:    []models.Task{{BaseEntity: models.BaseEntity{ID: "t1"}}},
+		Total:   12,
+		HasNext: true,
+	}
+	svc := services.NewTaskService(full, &store.stubBoard)
+
+	page, err := svc.ListByProject(context.Background(), "p1", models.TaskFilter{IncludeHealing: false})
+	if err != nil {
+		t.Fatalf("ListByProject: %v", err)
+	}
+	if store.listFilter.IncludeHealing {
+		t.Fatal("expected IncludeHealing=false on board filter")
+	}
+	if page.Total != 12 || !page.HasNext {
+		t.Fatalf("pagination = total %d hasNext %v, want 12 true", page.Total, page.HasNext)
+	}
+}
+
 type spyTaskBus struct {
 	assigned int
 	split    int
