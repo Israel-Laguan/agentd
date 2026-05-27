@@ -157,6 +157,32 @@ func TestProjectHandler_GetNotFound(t *testing.T) {
 	}
 }
 
+func TestProjectHandler_MaterializeWithAgentID(t *testing.T) {
+	h, store := projectTestHandler()
+	ctx := context.Background()
+	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{
+		ID: "researcher", Name: "Researcher", Provider: "openai", Model: "gpt-4o-mini",
+	}); err != nil {
+		t.Fatalf("UpsertAgentProfile: %v", err)
+	}
+
+	body := `{"project_name":"pre-assign","tasks":[{"title":"Research","agent_id":"researcher"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Materialize(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Materialize code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	tasks := store.Tasks()
+	if len(tasks) != 1 {
+		t.Fatalf("store tasks len = %d", len(tasks))
+	}
+	if tasks[0].AgentID != "researcher" {
+		t.Fatalf("stored agent_id = %q, want researcher", tasks[0].AgentID)
+	}
+}
+
 func TestProjectHandler_Materialize(t *testing.T) {
 	h, store := projectTestHandler()
 

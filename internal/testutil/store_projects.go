@@ -9,6 +9,9 @@ import (
 func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPlan) (*models.Project, []models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.validateDraftAgentIDs(plan.Tasks); err != nil {
+		return nil, nil, err
+	}
 	project := models.Project{
 		BaseEntity:    models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
 		Name:          plan.ProjectName,
@@ -26,7 +29,7 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 		task := models.Task{
 			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
 			ProjectID:       project.ID,
-			AgentID:         "default",
+			AgentID:         resolveTaskAgentID(draft.AgentID),
 			Title:           draft.Title,
 			Description:     draft.Description,
 			State:           state,
@@ -129,10 +132,13 @@ func (s *FakeKanbanStore) EnsureProjectTask(_ context.Context, projectID string,
 			return &t, false, nil
 		}
 	}
+	if err := s.validateDraftAgentIDs([]models.DraftTask{draft}); err != nil {
+		return nil, false, err
+	}
 	task := models.Task{
 		BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
 		ProjectID:       projectID,
-		AgentID:         "default",
+		AgentID:         resolveTaskAgentID(draft.AgentID),
 		Title:           draft.Title,
 		Description:     draft.Description,
 		Assignee:        draft.Assignee,
