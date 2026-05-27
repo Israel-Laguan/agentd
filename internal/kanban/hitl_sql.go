@@ -25,3 +25,9 @@ func hitlSubtaskTitleMatchSQL(titleExpr string) (string, []any) {
 	}
 	return "(" + strings.Join(parts, " OR ") + ")", args
 }
+
+// selfHealingHandoffExcludeSQL matches models.IsSelfHealingHandoffTask for SQL filters.
+func selfHealingHandoffExcludeSQL() (string, []any) {
+	return "NOT (assignee = ? AND title LIKE ?)",
+		[]any{models.TaskAssigneeHuman, models.HITLSubtaskTitleManualReview + "%"}
+}
