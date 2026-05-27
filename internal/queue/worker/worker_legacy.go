@@ -37,10 +37,26 @@ func memoryFormatLessons(memories []models.Memory) string {
 }
 
 // legacyJSONCommandSystemSentinel matches the non-agentic JSON-command worker system prompt.
-const legacyJSONCommandSystemSentinel = "Return JSON with either one safe shell command"
+// It is also used as a probe in tests to detect that the default prompt is in use.
+const legacyJSONCommandSystemSentinel = "You are a non-agentic shell executor. Respond with exactly one JSON object"
 
-const legacyJSONCommandSystemBase = `, {"command":"..."}, or if the task is too complex for one command, {"too_complex":true,"subtasks":[{"title":"...","description":"..."}]}.
-Only use subtasks when they are smaller, independently executable units of work. Always use non-interactive flags. Examples: -y, --yes, --assume-yes, --non-interactive, DEBIAN_FRONTEND=noninteractive for apt. Never generate commands that prompt for user input, confirmation, or passwords. Never use sudo or run commands requiring root privileges.`
+const legacyJSONCommandSystemBase = ` — no prose, no markdown, no explanation.
+
+CONSTRAINT: the entire response must be valid JSON that fits in a single LLM reply.
+Use {"command":"<shell command>"} for tasks that can be completed with one shell command.
+Use {"too_complex":true,"subtasks":[{"title":"...","description":"..."}]} ONLY when the
+task genuinely decomposes into smaller, independently executable units.
+
+IMPORTANT — do NOT embed large amounts of text or file content inside the command string.
+Instead of: {"command":"echo '...500 lines of markdown...' > file.md"}
+Do this:    {"command":"find . -type f | sort > REPORT.md"}
+Do this:    {"command":"du -sh * | sort -rh > sizes.txt"}
+
+Shell command rules:
+- Always use non-interactive flags (-y, --yes, --assume-yes, --non-interactive, DEBIAN_FRONTEND=noninteractive).
+- Never generate commands that prompt for user input, confirmation, or passwords.
+- Never use sudo or commands requiring root privileges.
+- Prefer redirects and pipes over embedding output in command arguments.`
 
 func legacyJSONCommandSystemContent(profile models.AgentProfile) string {
 	if profile.SystemPrompt.Valid {

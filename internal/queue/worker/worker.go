@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -151,6 +152,10 @@ func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project mo
 	}
 	response, err := w.command(ctx, task, project, profile)
 	if err != nil {
+		if errors.Is(err, models.ErrInvalidJSONResponse) {
+			w.createLegacyModeHandoff(ctx, task, err)
+			return
+		}
 		w.handleGatewayError(ctx, task, err)
 		return
 	}
