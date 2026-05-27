@@ -12,6 +12,10 @@ func TestIsSelfHealingHandoffTask(t *testing.T) {
 	if IsSelfHealingHandoffTask(approval) {
 		t.Fatal("approval gate should not be classified as self-healing handoff")
 	}
+	legacy := Task{Assignee: TaskAssigneeHuman, Title: HITLSubtaskTitleManualAction + " switch to agentic mode"}
+	if IsSelfHealingHandoffTask(legacy) {
+		t.Fatal("legacy mode handoff should be visible in default listings (not self-healing)")
+	}
 }
 
 func TestChildResolvedForParentUnblock(t *testing.T) {
