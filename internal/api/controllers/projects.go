@@ -27,11 +27,23 @@ type workspaceReadyResponse struct {
 	Tasks []models.Task `json:"tasks"`
 }
 
+// List handles GET /api/v1/projects.
+// Query params:
+//   - include_system: include _system project in listing (default false)
 func (h ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	projects, err := h.Store.ListProjects(r.Context())
 	if err != nil {
 		httpx.WriteMappedError(w, err)
 		return
+	}
+	if r.URL.Query().Get("include_system") != "true" {
+		filtered := projects[:0]
+		for _, p := range projects {
+			if p.Name != "_system" {
+				filtered = append(filtered, p)
+			}
+		}
+		projects = filtered
 	}
 	httpx.WriteSuccess(w, http.StatusOK, projects, &httpx.Meta{Page: 1, PerPage: len(projects), Total: len(projects)})
 }

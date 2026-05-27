@@ -30,10 +30,29 @@ type StatusSummary struct {
 	TasksByState  map[string]int `json:"tasks_by_state"`
 }
 
+// SummarizeOptions controls filtering for status summarization.
+type SummarizeOptions struct {
+	IncludeHealing bool
+	IncludeSystem  bool
+}
+
 func (s *StatusSummarizer) Summarize(ctx context.Context) (*StatusReport, error) {
+	return s.SummarizeWithOptions(ctx, SummarizeOptions{IncludeHealing: true, IncludeSystem: true})
+}
+
+func (s *StatusSummarizer) SummarizeWithOptions(ctx context.Context, opts SummarizeOptions) (*StatusReport, error) {
 	projects, err := s.store.ListProjects(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if !opts.IncludeSystem {
+		filtered := projects[:0]
+		for _, p := range projects {
+			if p.Name != "_system" {
+				filtered = append(filtered, p)
+			}
+		}
+		projects = filtered
 	}
 	if len(projects) == 0 {
 		return &StatusReport{
@@ -50,6 +69,9 @@ func (s *StatusSummarizer) Summarize(ctx context.Context) (*StatusReport, error)
 			return nil, err
 		}
 		for _, t := range tasks {
+			if !opts.IncludeHealing && isHealingTask(t) {
+				continue
+			}
 			byState[string(t.State)]++
 		}
 	}
@@ -66,6 +88,12 @@ func (s *StatusSummarizer) Summarize(ctx context.Context) (*StatusReport, error)
 		Message: buildMessage(len(projects), remaining, byState),
 		Summary: StatusSummary{TotalProjects: len(projects), TasksByState: byState},
 	}, nil
+}
+
+// isHealingTask returns true for tasks created by the self-healing ladder
+// (HITL subtasks assigned to HUMAN with known handoff title prefixes).
+func isHealingTask(t models.Task) bool {
+	return t.Assignee == models.TaskAssigneeHuman && models.IsHITLSubtaskTitle(t.Title)
 }
 
 func buildMessage(projectCount, remaining int, byState map[string]int) string {

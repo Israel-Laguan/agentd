@@ -152,6 +152,8 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 		TopicGuard:                cfg.Agentic.TopicGuard,
 		ModelRouting:              cfg.Agentic.ModelRouting,
 		ProviderBreakers:          deps.providerBreakers,
+		HealingEnabled:            cfg.Healing.Enabled,
+		MaxHealingTasks:           cfg.Healing.MaxHealingTasks,
 	})
 }
 
