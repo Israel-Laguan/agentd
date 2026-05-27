@@ -17,6 +17,7 @@ type FakeKanbanStore struct {
 	mu           sync.Mutex
 	projects     map[string]models.Project
 	tasks        map[string]models.Task
+	// childParents maps child task ID → blocking parent task IDs (task_relations edges).
 	childParents map[string][]string
 	events       []models.Event
 	comments     []commentPayloadAtRest
