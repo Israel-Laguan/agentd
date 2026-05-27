@@ -72,6 +72,11 @@ type Worker struct {
 	promptLibrary             *PromptLibrary
 	healingEnabled            bool
 	maxHealingTasks           int
+	legacyMaxBreakdownDepth       int
+	legacyMaxSubtasksPerBreakdown int
+	legacyPreflightScore          int
+	legacyRejectScore             int
+	legacyMaxDescriptionLen       int
 }
 
 // MemoryRetriever is an optional dependency for pre-fetching durable memories.
@@ -150,17 +155,21 @@ func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project mo
 	if !profileAlreadyRouted {
 		profile = w.routeLegacyProfile(ctx, task, project, profile)
 	}
+	if reason := w.legacyDispatchRejectReason(task, profile); reason != "" {
+		w.createLegacyModeHandoff(ctx, task, reason, nil)
+		return
+	}
 	response, err := w.command(ctx, task, project, profile)
 	if err != nil {
 		if errors.Is(err, models.ErrInvalidJSONResponse) {
-			w.createLegacyModeHandoff(ctx, task, err)
+			w.createLegacyModeHandoff(ctx, task, "Gateway could not return valid JSON after repair attempts.", err)
 			return
 		}
 		w.handleGatewayError(ctx, task, err)
 		return
 	}
 	if response.TooComplex {
-		w.handleTaskBreakdown(ctx, task, response.Subtasks)
+		w.handleLegacyTaskBreakdown(ctx, task, response.Subtasks)
 		return
 	}
 	execCtx, cancel := context.WithCancel(ctx)

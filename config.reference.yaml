@@ -226,6 +226,12 @@ queue:
     top_k: 3
   hitl:
     legacy_handoff_timeout: "168h"
+  legacy:
+    max_breakdown_depth: 2
+    max_subtasks_per_breakdown: 5
+    preflight_score: 6
+    reject_score: 9
+    max_description_len: 2000
   tool_timeouts:
     bash: "60s"
     read: "10s"

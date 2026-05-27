@@ -115,7 +115,7 @@ func (s *TaskService) ListByProject(
 			return models.PaginatedResult[models.Task]{}, err
 		}
 		if !filter.IncludeHealing {
-			page = excludeSelfHealingHandoffs(page)
+			page.Data = excludeSelfHealingHandoffs(page.Data)
 		}
 		return page, nil
 	}
@@ -125,22 +125,20 @@ func (s *TaskService) ListByProject(
 	}
 	page := models.PaginatedResult[models.Task]{Data: tasks, Total: len(tasks), HasNext: false}
 	if !filter.IncludeHealing {
-		page = excludeSelfHealingHandoffs(page)
+		page.Data = excludeSelfHealingHandoffs(page.Data)
+		page.Total = len(page.Data)
 	}
 	return page, nil
 }
 
-func excludeSelfHealingHandoffs(page models.PaginatedResult[models.Task]) models.PaginatedResult[models.Task] {
-	filtered := page.Data[:0]
-	for _, t := range page.Data {
+func excludeSelfHealingHandoffs(tasks []models.Task) []models.Task {
+	filtered := tasks[:0]
+	for _, t := range tasks {
 		if !models.IsSelfHealingHandoffTask(t) {
 			filtered = append(filtered, t)
 		}
 	}
-	page.Data = filtered
-	page.Total = len(filtered)
-	page.HasNext = false
-	return page
+	return filtered
 }
 
 // AssignAgent retargets a task to a different agent profile. The store

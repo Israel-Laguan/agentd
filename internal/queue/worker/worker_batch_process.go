@@ -164,7 +164,7 @@ func (w *Worker) applyBatchLegacySlot(
 	slot batchLegacySlot,
 ) {
 	if slot.TooComplex {
-		w.handleTaskBreakdown(ctx, task, slot.Subtasks)
+		w.handleLegacyTaskBreakdown(ctx, task, slot.Subtasks)
 		return
 	}
 	execCtx, cancel := context.WithCancel(ctx)

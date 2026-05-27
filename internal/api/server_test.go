@@ -247,6 +247,10 @@ func (s *apiStore) BlockTaskWithSubtasks(context.Context, string, time.Time, []m
 	return &s.task, nil, nil
 }
 
+func (s *apiStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *apiStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

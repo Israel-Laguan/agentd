@@ -202,6 +202,10 @@ func (s *queueStore) BlockTaskWithSubtasks(_ context.Context, id string, _ time.
 	return parent, children, nil
 }
 
+func (s *queueStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *queueStore) ListChildTasks(_ context.Context, _ string) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

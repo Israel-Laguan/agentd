@@ -215,8 +215,11 @@ func formatCriteria(criteria []string) string {
 // internal retries are exhausted. This typically means the task requires
 // multi-step reasoning or produces too much output for a single shell
 // command argument, and the agent should be switched to agentic mode.
-func (w *Worker) createLegacyModeHandoff(ctx context.Context, task models.Task, err error) {
-	detail := "Last error:\n" + truncate(err.Error(), 1500)
+func (w *Worker) createLegacyModeHandoff(ctx context.Context, task models.Task, cause string, err error) {
+	detail := cause
+	if err != nil {
+		detail += "\n\nLast error:\n" + truncate(err.Error(), 1500)
+	}
 	description := FormatForHuman(HITLMessage{
 		Summary: "Task cannot be completed in legacy (one-shot JSON) mode.",
 		Action: "Switch the agent to agentic mode:\n" +

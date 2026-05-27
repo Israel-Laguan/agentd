@@ -16,6 +16,7 @@ type routingTestStore struct {
 	project models.Project
 	profile models.AgentProfile
 	result  *models.TaskResult
+	parents map[string][]models.Task
 }
 
 func (s *routingTestStore) MarkTaskRunning(_ context.Context, _ string, _ time.Time, _ int) (*models.Task, error) {
@@ -130,6 +131,13 @@ func (s *routingTestStore) AppendTasksToProject(context.Context, string, string,
 }
 func (s *routingTestStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, _ []models.DraftTask) (*models.Task, []models.Task, error) {
 	return &s.task, nil, nil
+}
+
+func (s *routingTestStore) ListParentTasks(_ context.Context, childID string) ([]models.Task, error) {
+	if s.parents == nil {
+		return nil, nil
+	}
+	return s.parents[childID], nil
 }
 
 func (s *routingTestStore) ListChildTasks(context.Context, string) ([]models.Task, error) {

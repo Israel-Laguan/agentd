@@ -107,6 +107,7 @@ type QueueConfig struct {
 	Instructions               InstructionsConfig
 	Skills                     SkillsConfig
 	HITL                       HITLConfig
+	Legacy                     LegacyConfig
 	ToolTimeouts               ToolTimeoutsConfig
 	ToolRetries                ToolRetriesConfig
 	RollingTokenWindow         time.Duration
@@ -138,6 +139,7 @@ func setQueueDefaults(v *viper.Viper) {
 	v.SetDefault("queue.rolling_token_limit", DefaultRollingTokenLimit)
 	setToolTimeoutDefaults(v)
 	setToolRetryDefaults(v)
+	setLegacyDefaults(v)
 }
 
 const (
@@ -200,6 +202,7 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 		HITL: HITLConfig{
 			LegacyHandoffTimeout: v.GetDuration("queue.hitl.legacy_handoff_timeout"),
 		},
+		Legacy:     loadLegacyConfig(v),
 		ToolTimeouts: loadToolTimeoutsConfig(v),
 		ToolRetries:  loadToolRetriesConfig(v),
 		RollingTokenWindow: v.GetDuration("queue.rolling_token_window"),

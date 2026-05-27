@@ -94,6 +94,7 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 | `TUNE` | Worker | Model parameters changed for a retry attempt. |
 | `HEALING_SPLIT` | Worker | Repeated-failure task forced into the breakdown path. |
 | `HEALING_HANDOFF` | Worker | Self-healing exhausted; HUMAN review task created. |
+| `LEGACY_MODE_HANDOFF` | Worker | Legacy one-shot JSON path failed (invalid JSON, breakdown limits, or dispatch reject); HUMAN subtask instructs switching to agentic mode. |
 | `POISON_PILL_HANDOFF` | Worker | Task evicted after max retries; moved to FAILED_REQUIRES_HUMAN. |
 | `PROVIDER_EXHAUSTED_HANDOFF` | Worker | All configured AI providers exhausted; HUMAN review task created. |
 | `PHASE_PLANNING` | Worker | Phase-planning task completed; next batch of project tasks appended. |

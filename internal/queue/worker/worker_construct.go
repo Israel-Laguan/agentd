@@ -60,6 +60,7 @@ type WorkerOptions struct {
 	ProviderBreakers          *safety.ProviderBreakers
 	HealingDisabled           bool
 	MaxHealingTasks           int
+	Legacy                    config.LegacyConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -189,8 +190,13 @@ func newWorkerCore(
 		fileContextCfg:          opts.FileContext,
 		planningCfg:             opts.Planning,
 		checkpointStore:         NewMemoryCheckpointStore(),
-		healingEnabled:          !opts.HealingDisabled,
-		maxHealingTasks:         opts.MaxHealingTasks,
+		healingEnabled:                !opts.HealingDisabled,
+		maxHealingTasks:               opts.MaxHealingTasks,
+		legacyMaxBreakdownDepth:       opts.Legacy.MaxBreakdownDepth,
+		legacyMaxSubtasksPerBreakdown: opts.Legacy.MaxSubtasksPerBreakdown,
+		legacyPreflightScore:          opts.Legacy.PreflightScore,
+		legacyRejectScore:             opts.Legacy.RejectScore,
+		legacyMaxDescriptionLen:       opts.Legacy.MaxDescriptionLen,
 	}
 }
 

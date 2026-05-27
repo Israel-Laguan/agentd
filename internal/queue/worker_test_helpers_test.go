@@ -334,6 +334,10 @@ func (s *workerStore) ListChildTasks(context.Context, string) ([]models.Task, er
 	return nil, nil
 }
 
+func (s *workerStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *workerStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) ([]models.Task, error) {
 	return nil, nil
 }

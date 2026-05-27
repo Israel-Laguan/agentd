@@ -20,6 +20,34 @@ func taskTestHandler() (controllers.TaskHandler, *testutil.FakeKanbanStore) {
 	return controllers.TaskHandler{Store: store, Tasks: svc}, store
 }
 
+func listProjectTaskTitles(t *testing.T, h controllers.TaskHandler, projectID string, includeHealing bool) []string {
+	t.Helper()
+	url := "/api/v1/projects/" + projectID + "/tasks"
+	if includeHealing {
+		url += "?include_healing=true"
+	}
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	req.SetPathValue("id", projectID)
+	rec := httptest.NewRecorder()
+	h.ListByProject(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ListByProject code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data []struct {
+			Title string `json:"Title"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	titles := make([]string, len(resp.Data))
+	for i, row := range resp.Data {
+		titles[i] = row.Title
+	}
+	return titles
+}
+
 func seedProjectTask(t *testing.T, store *testutil.FakeKanbanStore) (projectID, taskID string) {
 	t.Helper()
 	ctx := context.Background()
@@ -238,42 +266,14 @@ func TestTaskHandler_ListByProjectExcludesHealing(t *testing.T) {
 		t.Fatalf("BlockTaskWithSubtasks: %v", err)
 	}
 
-	list := func(includeHealing bool) []string {
-		t.Helper()
-		url := "/api/v1/projects/" + proj.ID + "/tasks"
-		if includeHealing {
-			url += "?include_healing=true"
-		}
-		req := httptest.NewRequest(http.MethodGet, url, nil)
-		req.SetPathValue("id", proj.ID)
-		rec := httptest.NewRecorder()
-		h.ListByProject(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("ListByProject code = %d body = %s", rec.Code, rec.Body.String())
-		}
-		var resp struct {
-			Data []struct {
-				Title string `json:"Title"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-			t.Fatal(err)
-		}
-		titles := make([]string, len(resp.Data))
-		for i, row := range resp.Data {
-			titles[i] = row.Title
-		}
-		return titles
-	}
-
-	excl := list(false)
+	excl := listProjectTaskTitles(t, h, proj.ID, false)
 	for _, title := range excl {
 		if strings.HasPrefix(title, models.HITLSubtaskTitleManualReview) {
 			t.Fatalf("default list included healing task %q", title)
 		}
 	}
 
-	incl := list(true)
+	incl := listProjectTaskTitles(t, h, proj.ID, true)
 	var foundHealing bool
 	for _, title := range incl {
 		if strings.HasPrefix(title, models.HITLSubtaskTitleManualReview) {
