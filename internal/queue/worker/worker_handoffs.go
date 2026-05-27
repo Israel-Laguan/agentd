@@ -210,6 +210,37 @@ func formatCriteria(criteria []string) string {
 	return b.String()
 }
 
+// createLegacyModeHandoff blocks the task with a HUMAN subtask when the
+// legacy JSON-command worker cannot obtain a valid JSON response after all
+// internal retries are exhausted. This typically means the task requires
+// multi-step reasoning or produces too much output for a single shell
+// command argument, and the agent should be switched to agentic mode.
+func (w *Worker) createLegacyModeHandoff(ctx context.Context, task models.Task, err error) {
+	detail := "Last error:\n" + truncate(err.Error(), 1500)
+	description := FormatForHuman(HITLMessage{
+		Summary: "Task cannot be completed in legacy (one-shot JSON) mode.",
+		Action: "Switch the agent to agentic mode:\n" +
+			"  PATCH /api/v1/agents/" + task.AgentID + "\n" +
+			`  {"agentic_mode":true,"provider":"openai"}  ` + "(or \"anthropic\")\n" +
+			"Then re-queue the task by setting its state to READY.",
+		Urgency: "blocking",
+		Detail:  detail,
+	})
+	_, _, blockErr := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
+		Title:       models.HITLSubtaskTitleManualReview + " switch to agentic mode",
+		Description: description,
+		Assignee:    models.TaskAssigneeHuman,
+	}})
+	if blockErr != nil {
+		w.emit(ctx, task, "ERROR", blockErr.Error())
+		return
+	}
+	if !w.recordLegacyHandoffExpiry(ctx, task) {
+		return
+	}
+	w.emit(ctx, task, "LEGACY_MODE_HANDOFF", truncate(description, 1000))
+}
+
 // createReviewHandoff blocks the task with a HUMAN subtask so a human
 // can review the agent's draft output before the task is marked
 // complete. Review feedback re-enters the loop as task-level context.
