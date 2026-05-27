@@ -42,20 +42,22 @@ func TestProviderSupportsAgentic_RouterBacked(t *testing.T) {
 		query       string
 		want        bool
 	}{
-		// OpenAI adapter providers — all return true
-		{"openai lowercase", toolCapableConfig("openai", "openai"), "openai", true},
-		{"openai uppercase", toolCapableConfig("openai", "openai"), "OPENAI", true},
-		{"anthropic lowercase", toolCapableConfig("anthropic", "anthropic"), "anthropic", true},
-		{"anthropic uppercase", toolCapableConfig("anthropic", "anthropic"), "ANTHROPIC", true},
-		// Gemini reuses the OpenAI adapter; must reach the agentic loop.
-		{"gemini lowercase", toolCapableConfig("gemini", "gemini"), "gemini", true},
-		{"gemini uppercase", toolCapableConfig("gemini", "gemini"), "GEMINI", true},
-		// Ollama intentionally has no chat-tool support.
-		{"ollama lowercase", noToolConfig("ollama"), "ollama", false},
-		{"ollama uppercase", noToolConfig("ollama"), "OLLAMA", false},
-		// LlamaCpp and Horde also have no chat-tool support.
-		{"llamacpp", spec.ProviderConfig{Name: "llamacpp", Adapter: "llamacpp", BaseURL: "http://localhost:8080", Model: "local"}, "llamacpp", false},
-		{"horde", spec.ProviderConfig{Name: "horde", Adapter: "horde", BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"}, "horde", false},
+		// Adapter-type entries use synthetic names so that adding a new OpenAI-compatible
+		// vendor via config requires zero edits here.  Real-vendor regression guards live
+		// in the dedicated tests below (TestProviderSupportsAgentic_GeminiReachesAgenticLoop,
+		// TestProviderSupportsAgentic_OllamaRemainsLegacy, etc.).
+
+		// openai adapter — tool-capable
+		{"openai adapter", toolCapableConfig("synth-openai", "openai"), "synth-openai", true},
+		{"openai adapter case-insensitive", toolCapableConfig("synth-openai", "openai"), "SYNTH-OPENAI", true},
+		// anthropic adapter — tool-capable
+		{"anthropic adapter", toolCapableConfig("synth-anthropic", "anthropic"), "synth-anthropic", true},
+		// ollama adapter — no chat-tool support
+		{"ollama adapter", noToolConfig("synth-ollama"), "synth-ollama", false},
+		{"ollama adapter case-insensitive", noToolConfig("synth-ollama"), "SYNTH-OLLAMA", false},
+		// llamacpp and horde — no chat-tool support
+		{"llamacpp adapter", spec.ProviderConfig{Name: "synth-llamacpp", Adapter: "llamacpp", BaseURL: "http://localhost:8080", Model: "local"}, "synth-llamacpp", false},
+		{"horde adapter", spec.ProviderConfig{Name: "synth-horde", Adapter: "horde", BaseURL: "https://stablehorde.net/api/v2", Model: "aphrodite"}, "synth-horde", false},
 	}
 
 	for _, tc := range testCases {
