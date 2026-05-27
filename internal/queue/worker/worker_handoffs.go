@@ -230,7 +230,7 @@ func (w *Worker) createLegacyModeHandoff(ctx context.Context, task models.Task, 
 		Detail:  detail,
 	})
 	_, _, blockErr := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title:       models.HITLSubtaskTitleManualReview + " switch to agentic mode",
+		Title:       models.HITLSubtaskTitleManualAction + " switch to agentic mode",
 		Description: description,
 		Assignee:    models.TaskAssigneeHuman,
 	}})
