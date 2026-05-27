@@ -92,6 +92,18 @@ func genericGatewayAPIKeyEnv(providerName string) string {
 }
 
 func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) ([]gateway.ProviderConfig, error) {
+	return loadGatewayProvidersWithWarnings(v, process, dotenv, true)
+}
+
+func loadGatewayProvidersNoWarn(v *viper.Viper, process, dotenv map[string]string) ([]gateway.ProviderConfig, error) {
+	return loadGatewayProvidersWithWarnings(v, process, dotenv, false)
+}
+
+func loadGatewayProvidersWithWarnings(
+	v *viper.Viper,
+	process, dotenv map[string]string,
+	emitMissingAPIKeyWarn bool,
+) ([]gateway.ProviderConfig, error) {
 	if !v.IsSet("gateway.providers") {
 		return nil, nil
 	}
@@ -104,27 +116,18 @@ func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) ([]
 		if providers[i].Name == "" {
 			providers[i].Name = providers[i].Adapter
 		}
-		genericEnv := ""
-		if providers[i].Name != "" {
-			genericEnv = genericGatewayAPIKeyEnv(providers[i].Name)
-		}
 		// Env beats inline api_key in the file (same precedence as flat gateway.* keys).
-		if providers[i].APIKeyEnv != "" {
-			if key := envLookup(process, dotenv, providers[i].APIKeyEnv); key != "" {
-				providers[i].APIKey = key
-				continue
-			}
-		}
-		if genericEnv != "" {
+		for _, genericEnv := range providerAPIKeyEnvCandidates(providers[i]) {
 			if key := envLookup(process, dotenv, genericEnv); key != "" {
 				providers[i].APIKey = key
+				break
 			}
 		}
 
-		if providers[i].APIKey == "" && healthModeFor(providers[i]) == healthModeAPIKey {
-			envHint := genericEnv
-			if providers[i].APIKeyEnv != "" {
-				envHint = providers[i].APIKeyEnv
+		if emitMissingAPIKeyWarn && providers[i].APIKey == "" && healthModeFor(providers[i]) == healthModeAPIKey {
+			envHint := ""
+			if keys := providerAPIKeyEnvCandidates(providers[i]); len(keys) > 0 {
+				envHint = keys[0]
 			}
 			slog.Warn("provider has no API key; set it via config or env",
 				"provider", providers[i].Name,

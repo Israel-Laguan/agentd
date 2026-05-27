@@ -33,13 +33,38 @@ func providerName(p gateway.ProviderConfig) string {
 }
 
 func providerAPIKeyEnv(p gateway.ProviderConfig) string {
-	if env := strings.TrimSpace(p.APIKeyEnv); env != "" {
-		return env
-	}
-	if name := providerName(p); name != "" {
-		return genericGatewayAPIKeyEnv(name)
+	if keys := providerAPIKeyEnvCandidates(p); len(keys) > 0 {
+		return keys[0]
 	}
 	return ""
+}
+
+func providerAPIKeyEnvCandidates(p gateway.ProviderConfig) []string {
+	keys := make([]string, 0, 2)
+	if env := strings.TrimSpace(p.APIKeyEnv); env != "" {
+		keys = append(keys, env)
+	}
+	if name := providerName(p); name != "" {
+		generic := genericGatewayAPIKeyEnv(name)
+		if generic != "" && (len(keys) == 0 || keys[0] != generic) {
+			keys = append(keys, generic)
+		}
+	}
+	return keys
+}
+
+func providerAPIKeyEnvOverride(
+	fileP gateway.ProviderConfig,
+	effectiveValue string,
+	dotenv, process map[string]string,
+) (envKey, envVal, source string, ok bool) {
+	for _, key := range providerAPIKeyEnvCandidates(fileP) {
+		val, src := envOverrideSource(key, dotenv, process)
+		if src != "" && (effectiveValue == "" || val == effectiveValue) {
+			return key, val, src, true
+		}
+	}
+	return "", "", "", false
 }
 
 func gatewayProvidersFromViper(v *viper.Viper) ([]gateway.ProviderConfig, error) {
@@ -89,7 +114,7 @@ func detectProviderEntryOverrides(fv, v *viper.Viper, dotenv, process map[string
 	if err != nil || len(fileProviders) == 0 {
 		return nil
 	}
-	effectiveProviders, err := loadGatewayProviders(v, process, dotenv)
+	effectiveProviders, err := loadGatewayProvidersNoWarn(v, process, dotenv)
 	if err != nil {
 		return nil
 	}
@@ -117,13 +142,12 @@ func detectProviderAPIKeyOverride(
 	if fileKey == "" {
 		return configOverride{}, false
 	}
-	envKey := providerAPIKeyEnv(fileP)
-	envVal, source := envOverrideSource(envKey, dotenv, process)
-	if source == "" || envVal == fileKey {
+	eff, ok := effectiveProviderByName(effectiveProviders, name)
+	if !ok {
 		return configOverride{}, false
 	}
-	eff, ok := effectiveProviderByName(effectiveProviders, name)
-	if !ok || eff.APIKey != envVal {
+	envKey, envVal, source, found := providerAPIKeyEnvOverride(fileP, eff.APIKey, dotenv, process)
+	if !found || envVal == fileKey {
 		return configOverride{}, false
 	}
 	return configOverride{

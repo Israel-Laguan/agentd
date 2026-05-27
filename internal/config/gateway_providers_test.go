@@ -264,6 +264,28 @@ func TestLoadGatewayProviders_EmptyKeyWarning_UsesExplicitEnvHint(t *testing.T) 
 	}
 }
 
+func TestLoadGatewayProvidersNoWarn_SuppressesEmptyKeyWarning(t *testing.T) {
+	yaml := `    - name: poolside
+      adapter: openai
+      health: api_key
+`
+	v := newProvidersViper(t, yaml)
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	old := slog.Default()
+	slog.SetDefault(logger)
+	t.Cleanup(func() { slog.SetDefault(old) })
+
+	_, err := loadGatewayProvidersNoWarn(v, nil, nil)
+	if err != nil {
+		t.Fatalf("loadGatewayProvidersNoWarn() error = %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("unexpected warning output: %s", buf.String())
+	}
+}
+
 func TestLoadGatewayProviders_NoWarningWhenKeyPresent(t *testing.T) {
 	yaml := `    - name: poolside
       adapter: openai

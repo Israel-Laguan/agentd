@@ -131,7 +131,7 @@ type providerResolveCache struct {
 
 func buildProviderResolveCache(state viperLoadState) providerResolveCache {
 	fileProviders, fileErr := gatewayProvidersFromViper(state.fileV)
-	effectiveProviders, effErr := loadGatewayProviders(state.v, state.process, state.dotenv)
+	effectiveProviders, effErr := loadGatewayProvidersNoWarn(state.v, state.process, state.dotenv)
 	return providerResolveCache{
 		fileProviders:      fileProviders,
 		effectiveProviders: effectiveProviders,
@@ -192,18 +192,20 @@ func resolveProviderAPIKeyConfigSource(
 	state viperLoadState,
 ) ConfigSource {
 	src.Value = maskIfSensitive("api_key", eff.APIKey)
-	envKey := providerAPIKeyEnv(fileP)
-	if envVal, ok := state.process[envKey]; ok && eff.APIKey == envVal {
-		src.Source = envKey
-	} else if envVal, ok := state.dotenv[envKey]; ok && eff.APIKey == envVal {
-		src.Source = envKey + " (.env file)"
+	envKey, envVal, envSource, found := providerAPIKeyEnvOverride(fileP, eff.APIKey, state.dotenv, state.process)
+	if found {
+		if envSource == ".env file" {
+			src.Source = envKey + " (.env file)"
+		} else {
+			src.Source = envKey
+		}
 	} else if strings.TrimSpace(fileP.APIKey) != "" && eff.APIKey == fileP.APIKey {
 		src.Source = fileConfigSourceLabel(state)
 	} else {
 		src.Source = "default"
 	}
 	if fileKey := strings.TrimSpace(fileP.APIKey); fileKey != "" && eff.APIKey != fileKey {
-		if envVal, envSrc := envOverrideSource(envKey, state.dotenv, state.process); envSrc != "" && eff.APIKey == envVal {
+		if found && eff.APIKey == envVal {
 			src.OverriddenFrom = fileConfigOverridePrefix(state) + maskIfSensitive("api_key", fileKey)
 		}
 	}
