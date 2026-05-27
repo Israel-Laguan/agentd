@@ -188,6 +188,8 @@ healing:
   upgrade_model: ""
   upgrade_provider: ""
   context_multiplier: 2.0
+  max_healing_tasks: 0
+  outage_handoff_enabled: true
 
 breaker:
   handoff_after: "2m"

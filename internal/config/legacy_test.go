@@ -20,4 +20,10 @@ func TestLegacyConfig_Defaults(t *testing.T) {
 	if cfg.PreflightScore != DefaultLegacyPreflightScore {
 		t.Errorf("PreflightScore = %d, want %d", cfg.PreflightScore, DefaultLegacyPreflightScore)
 	}
+	if cfg.RejectScore != DefaultLegacyRejectScore {
+		t.Errorf("RejectScore = %d, want %d", cfg.RejectScore, DefaultLegacyRejectScore)
+	}
+	if cfg.MaxDescriptionLen != DefaultLegacyMaxDescriptionLen {
+		t.Errorf("MaxDescriptionLen = %d, want %d", cfg.MaxDescriptionLen, DefaultLegacyMaxDescriptionLen)
+	}
 }
