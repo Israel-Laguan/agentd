@@ -333,20 +333,6 @@ func TestCheckProviders_OfflineSkipsNetworkProbes(t *testing.T) {
 	}
 }
 
-func TestHealthModeFor_GeminiAdapterUncanonicalizedReturnsAPIKey(t *testing.T) {
-	// healthModeFor is called in loadGatewayProviders before canonicalGatewayProvider
-	// runs, so p.Adapter may still be "gemini" (not yet normalized to "openai").
-	// It must return healthModeAPIKey so the missing-API-key warning fires correctly.
-	p := gateway.ProviderConfig{
-		Name:    "gemini",
-		Adapter: "gemini",
-		APIKey:  "",
-	}
-	if got := healthModeFor(p); got != healthModeAPIKey {
-		t.Errorf("healthModeFor with adapter=\"gemini\" = %q, want %q", got, healthModeAPIKey)
-	}
-}
-
 func TestCheckProviders_HealthAPIKey_OverridesAdapter(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"local"},

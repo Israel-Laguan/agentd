@@ -8,7 +8,7 @@ import (
 )
 
 func newConfigCommand(opts *rootOptions) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Print current persisted settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -45,6 +45,30 @@ func newConfigCommand(opts *rootOptions) *cobra.Command {
 				}
 			}
 			return writeCronConfig(cmd.OutOrStdout(), cfg)
+		},
+	}
+	cmd.AddCommand(newConfigShowCommand(opts))
+	return cmd
+}
+
+func newConfigShowCommand(opts *rootOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "show",
+		Short: "Print resolved config with source annotations",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sources, _, err := config.ConfigSources(config.LoadOptions{
+				HomeOverride: opts.home,
+				ConfigFile:   opts.configFile,
+			})
+			if err != nil {
+				return err
+			}
+			for _, s := range sources {
+				if err := writeLine(cmd.OutOrStdout(), config.FormatConfigSourceLine(s)+"\n"); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 	}
 }

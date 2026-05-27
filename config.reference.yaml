@@ -1,4 +1,6 @@
 # agentd configuration reference — copy to ~/.agentd/config.yaml or pass via: agentd --config <path>
+# Precedence: CLI flags > --config file > AGENTD_* (incl. repo .env) > this file > defaults.
+# When .env and config.yaml disagree, startup logs "config: key overridden by env"; use: agentd config show
 # Extended documentation: docs/config-reference.md
 
 home: ~/.agentd

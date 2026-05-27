@@ -15,8 +15,8 @@ func TestAppendFromConfig(t *testing.T) {
 		want    int
 		wantErr bool
 	}{
-		// One entry per adapter type (wire protocol).  Do NOT add vendor alias names
-		// here — aliases (e.g. "gemini") are covered by TestAppendFromConfig_LegacyGeminiAlias.
+		// One entry per adapter type (wire protocol). Legacy adapter aliases (e.g. gemini)
+		// are covered in adapter_contract_test.go.
 		{"openai", 1, false},
 		{"anthropic", 1, false},
 		{"ollama", 1, false},
@@ -49,33 +49,6 @@ func TestAppendFromConfig(t *testing.T) {
 				t.Fatalf("Name() = %q, want %q", got[0].Name(), tt.typ)
 			}
 		})
-	}
-}
-
-// TestAppendFromConfig_LegacyGeminiAlias is a regression guard for the "gemini"
-// adapter alias.  "gemini" is not an adapter type — it is a vendor name that
-// canonicalAdapter maps to the openai wire protocol.  This test must NOT be used
-// as a template when adding new vendors; new OpenAI-compatible vendors should use
-// adapter: openai with a custom name (see TestAppendFromConfig_CustomName).
-func TestAppendFromConfig_LegacyGeminiAlias(t *testing.T) {
-	t.Parallel()
-
-	got, err := AppendFromConfig(nil, spec.ProviderConfig{Adapter: "gemini", BaseURL: "http://example"})
-	if err != nil {
-		t.Fatalf("AppendFromConfig(gemini) error = %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("len = %d, want 1", len(got))
-	}
-	if got[0].Name() != spec.ProviderGemini {
-		t.Fatalf("Name() = %q, want %q", got[0].Name(), spec.ProviderGemini)
-	}
-	openAI, ok := got[0].(*OpenAI)
-	if !ok {
-		t.Fatalf("backend type = %T, want *OpenAI", got[0])
-	}
-	if openAI.cfg.Adapter != string(spec.ProviderOpenAI) {
-		t.Fatalf("cfg.Adapter = %q, want openai", openAI.cfg.Adapter)
 	}
 }
 
@@ -204,12 +177,9 @@ var backendIdentityCases = []struct {
 		maxInput: 2000,
 	},
 	{
-		// Regression guard: gemini is a vendor alias for the openai adapter.
-		// 16000 is the configured gateway truncation budget, not a Gemini API limit.
-		// Do NOT copy this pattern for new vendors — use adapter:openai + custom name instead.
-		name:     "gemini (openai alias)",
-		backend:  NewOpenAI(spec.ProviderConfig{Name: "gemini", Adapter: "openai", MaxInputChars: 16000}, nil),
-		provider: spec.ProviderGemini,
+		name:     "synth-vendor-b",
+		backend:  NewOpenAI(spec.ProviderConfig{Name: "synth-vendor-b", Adapter: "openai", MaxInputChars: 16000}, nil),
+		provider: spec.Provider("synth-vendor-b"),
 		maxInput: 16000,
 	},
 	{

@@ -72,7 +72,7 @@ func initializeWorkerScenario(sc *godog.ScenarioContext) {
 			},
 			profile: models.AgentProfile{
 				ID:       "default",
-				Provider: "openai",
+				Provider: "synth-tools",
 				Model:    "gpt-4",
 			},
 		}

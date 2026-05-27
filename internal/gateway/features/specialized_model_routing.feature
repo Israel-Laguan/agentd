@@ -4,38 +4,38 @@ Feature: Specialized Model Routing
   memory gets cheap summarization (Flow 6.3).
 
   Scenario: Chat role routes to the smart provider
-    Given role routes map chat to provider "openai" with model "gpt-4o"
-    And role routes map worker to provider "anthropic" with model "claude-3-haiku"
-    And role routes map memory to provider "ollama" with model "llama3-8b"
-    And three providers "openai", "anthropic", "ollama" are configured
+    Given role routes map chat to provider "synth-chat" with model "gpt-4o"
+    And role routes map worker to provider "synth-worker" with model "claude-3-haiku"
+    And role routes map memory to provider "synth-memory" with model "llama3-8b"
+    And three providers "synth-chat", "synth-worker", "synth-memory" are configured
     When a request with role "chat" is sent
-    Then the response should indicate ProviderUsed: "openai"
+    Then the response should indicate ProviderUsed: "synth-chat"
 
   Scenario: Worker role routes to the coding provider
-    Given role routes map chat to provider "openai" with model "gpt-4o"
-    And role routes map worker to provider "anthropic" with model "claude-3-haiku"
-    And role routes map memory to provider "ollama" with model "llama3-8b"
-    And three providers "openai", "anthropic", "ollama" are configured
+    Given role routes map chat to provider "synth-chat" with model "gpt-4o"
+    And role routes map worker to provider "synth-worker" with model "claude-3-haiku"
+    And role routes map memory to provider "synth-memory" with model "llama3-8b"
+    And three providers "synth-chat", "synth-worker", "synth-memory" are configured
     When a request with role "worker" is sent
-    Then the response should indicate ProviderUsed: "anthropic"
+    Then the response should indicate ProviderUsed: "synth-worker"
 
   Scenario: Memory role routes to the cheap provider
-    Given role routes map chat to provider "openai" with model "gpt-4o"
-    And role routes map worker to provider "anthropic" with model "claude-3-haiku"
-    And role routes map memory to provider "ollama" with model "llama3-8b"
-    And three providers "openai", "anthropic", "ollama" are configured
+    Given role routes map chat to provider "synth-chat" with model "gpt-4o"
+    And role routes map worker to provider "synth-worker" with model "claude-3-haiku"
+    And role routes map memory to provider "synth-memory" with model "llama3-8b"
+    And three providers "synth-chat", "synth-worker", "synth-memory" are configured
     When a request with role "memory" is sent
-    Then the response should indicate ProviderUsed: "ollama"
+    Then the response should indicate ProviderUsed: "synth-memory"
 
   Scenario: Explicit provider on request overrides role routing
-    Given role routes map chat to provider "ollama" with model "llama3-8b"
-    And two providers "openai", "ollama" are configured
-    When a request with role "chat" and explicit provider "openai" is sent
-    Then the response should indicate ProviderUsed: "openai"
+    Given role routes map chat to provider "synth-memory" with model "llama3-8b"
+    And two providers "synth-chat", "synth-memory" are configured
+    When a request with role "chat" and explicit provider "synth-chat" is sent
+    Then the response should indicate ProviderUsed: "synth-chat"
 
   Scenario: Role-assigned provider fails, falls back to next in gateway order
-    Given role routes map worker to provider "gemini" with model "gemini-2.5-flash"
-    And the provider "gemini" returns an error
-    And the provider "horde" is configured and available
+    Given role routes map worker to provider "synth-worker-fail" with model "worker-model"
+    And the provider "synth-worker-fail" returns an error
+    And the provider "synth-horde" is configured and available
     When a request with role "worker" is sent
-    Then the response should indicate ProviderUsed: "horde"
+    Then the response should indicate ProviderUsed: "synth-horde"

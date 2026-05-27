@@ -102,6 +102,8 @@ Precedence (highest wins):
 4. Auto-discovered `<home>/config.yaml`
 5. Compiled defaults
 
+A `.env` file in the current working directory (and `<home>/.env`) is merged into `AGENTD_*` values at startup without modifying your shell environment. Process environment variables still win over `.env`. When an env value disagrees with the same key in `config.yaml` (for example `AGENTD_GATEWAY_ORDER` in the repo `.env` vs `gateway.order` in `~/.agentd/config.yaml`), agentd logs `config: key overridden by env` at INFO on startup. Inspect resolved values and sources with `agentd config show`.
+
 See [`config.reference.yaml`](config.reference.yaml) for every available key (copy-paste template). See [`docs/config-reference.md`](docs/config-reference.md) for extended configuration documentation and [`docs/reference.md`](docs/reference.md) for config key defaults, task states, event types, and feature catalog.
 
 ## Chat Intake

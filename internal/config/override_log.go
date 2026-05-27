@@ -3,27 +3,11 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/spf13/viper"
 )
-
-// monitoredConfigKeys lists the config keys checked for env-override logging
-// at startup. Covers the minimum set required: gateway.order, provider
-// base_url, and provider api_key fields.
-var monitoredConfigKeys = []string{
-	"gateway.order",
-	"gateway.openai.api_key",
-	"gateway.openai.base_url",
-	"gateway.anthropic.api_key",
-	"gateway.anthropic.base_url",
-	"gateway.ollama.base_url",
-	"gateway.llamacpp.base_url",
-	"gateway.horde.api_key",
-	"gateway.horde.base_url",
-	"gateway.gemini.api_key",
-	"gateway.gemini.base_url",
-}
 
 type configOverride struct {
 	Key            string
@@ -96,10 +80,10 @@ func envOverrideSource(envKey string, dotenv, process map[string]string) (string
 	return "", ""
 }
 
-// detectOverrides inspects each key in keys and returns a configOverride for
-// every key that (a) is present in the config file (fv) and (b) is set to a
-// different value by an env var from dotenv or process.
-func detectOverrides(fv *viper.Viper, dotenv, process map[string]string, keys []string) []configOverride {
+// detectOverrides inspects each key in keys and returns a configOverride when
+// the config file sets a value that differs from an env/dotenv var and the
+// effective resolved value (v) matches the env value (env actually won).
+func detectOverrides(fv, v *viper.Viper, dotenv, process map[string]string, keys []string) []configOverride {
 	var overrides []configOverride
 	for _, key := range keys {
 		if !fv.IsSet(key) {
@@ -114,6 +98,10 @@ func detectOverrides(fv *viper.Viper, dotenv, process map[string]string, keys []
 		if fileVal == envVal {
 			continue
 		}
+		effective := normalizeViperValue(v.Get(key))
+		if effective != envVal {
+			continue
+		}
 		overrides = append(overrides, configOverride{
 			Key:            key,
 			EnvVar:         envKey,
@@ -125,11 +113,59 @@ func detectOverrides(fv *viper.Viper, dotenv, process map[string]string, keys []
 	return overrides
 }
 
+// isMonitoredGatewayFlatKey reports legacy gateway.<provider>.api_key|base_url keys.
+func isMonitoredGatewayFlatKey(key string) bool {
+	parts := strings.Split(key, ".")
+	if len(parts) != 3 || parts[0] != "gateway" {
+		return false
+	}
+	switch parts[2] {
+	case "api_key", "base_url":
+		return parts[1] != "providers"
+	default:
+		return false
+	}
+}
+
+// monitoredGatewayFlatKeys returns gateway.order plus any gateway.<provider>.{api_key,base_url}
+// keys present in the config file snapshot.
+func monitoredGatewayFlatKeys(fv *viper.Viper) []string {
+	if fv == nil {
+		return []string{"gateway.order"}
+	}
+	seen := map[string]struct{}{"gateway.order": {}}
+	for _, key := range fv.AllKeys() {
+		if isMonitoredGatewayFlatKey(key) {
+			seen[key] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(seen))
+	for key := range seen {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// detectAllConfigOverrides merges flat gateway key overrides with gateway.providers overrides.
+func detectAllConfigOverrides(fv, v *viper.Viper, dotenv, process map[string]string) []configOverride {
+	flat := detectOverrides(fv, v, dotenv, process, monitoredGatewayFlatKeys(fv))
+	provider := detectProviderEntryOverrides(fv, v, dotenv, process)
+	if len(provider) == 0 {
+		return flat
+	}
+	out := make([]configOverride, 0, len(flat)+len(provider))
+	out = append(out, flat...)
+	out = append(out, provider...)
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
 // logConfigOverrides emits one slog.Info line per override describing which
 // env var overrode which config-file value.
 func logConfigOverrides(overrides []configOverride) {
 	for _, o := range overrides {
-		slog.Info("config key overridden",
+		slog.Info("config: key overridden by env",
 			"key", o.Key,
 			"env_var", o.EnvVar,
 			"effective_value", o.EffectiveValue,
