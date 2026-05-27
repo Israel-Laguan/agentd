@@ -98,7 +98,7 @@ export async function postApprovePlan() {
 
 export async function fetchTaskComments(taskId: string): Promise<TaskComment[]> {
   if (USE_MOCK) {
-    return mockTaskComments.filter((c: { taskId: string }) => c.taskId === taskId);
+    return mockTaskComments.filter((c: { task_id: string }) => c.task_id === taskId);
   }
 
   const res = await fetch(`${API}/api/v1/tasks/${taskId}/comments`);
@@ -115,14 +115,14 @@ export async function updateTask(
   updates: Partial<{
     title: string;
     description: string;
-    status: string;
-    updatedAt: number;
+    state: string;
+    updated_at: number;
   }>
 ) {
   if (USE_MOCK) {
     const task = mockBoard.tasks.find((t) => t.id === id);
     if (!task) throw new Error("Task not found");
-    Object.assign(task, updates, { updatedAt: Date.now() });
+    Object.assign(task, updates, { updated_at: Date.now() });
     return structuredClone(task);
   }
 
@@ -132,7 +132,7 @@ export async function updateTask(
     // Backend patchRequest expects { state, description }; title is not supported yet.
     body: JSON.stringify({
       ...(updates.description !== undefined ? { description: updates.description } : {}),
-      ...(updates.status !== undefined ? { state: updates.status } : {}),
+      ...(updates.state !== undefined ? { state: updates.state } : {}),
     }),
   });
 
@@ -148,15 +148,15 @@ export async function addTaskComment(
   message: string
 ) {
   if (USE_MOCK) {
-    const comment = {
+    const comment: TaskComment = {
       id: crypto.randomUUID(),
-      taskId: id,
+      task_id: id,
       author: {
         id: "me",
         name: "You",
       },
       message,
-      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
     };
     mockTaskComments.push(comment);
     return comment;

@@ -19,11 +19,11 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
   const [description, setDescription] = useState(task?.description ?? "");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
-  const [status, setStatus] = useState<TaskStatus>(task?.status || TaskStatus.PENDING);
+  const [status, setStatus] = useState<TaskStatus>(task?.state || TaskStatus.PENDING);
 
   const committedTitleRef = useRef(task?.title ?? "");
   const committedDescriptionRef = useRef(task?.description ?? "");
-  const committedStatusRef = useRef<TaskStatus>(task?.status || TaskStatus.PENDING);
+  const committedStatusRef = useRef<TaskStatus>(task?.state || TaskStatus.PENDING);
   const suppressBlurSaveRef = useRef(false);
 
   // Synchronize local state when the task prop changes (review-requested pattern).
@@ -33,12 +33,12 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
     suppressBlurSaveRef.current = true;
     setTitle(task.title ?? "");
     setDescription(task.description ?? "");
-    setStatus(task.status || TaskStatus.PENDING);
+    setStatus(task.state || TaskStatus.PENDING);
     setIsEditingTitle(false);
     setIsEditingDescription(false);
     committedTitleRef.current = task.title ?? "";
     committedDescriptionRef.current = task.description ?? "";
-    committedStatusRef.current = task.status || TaskStatus.PENDING;
+    committedStatusRef.current = task.state || TaskStatus.PENDING;
     queueMicrotask(() => {
       suppressBlurSaveRef.current = false;
     });
@@ -52,7 +52,7 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
       await onUpdateTask(task.id, patch);
       if (patch.title !== undefined) committedTitleRef.current = patch.title;
       if (patch.description !== undefined) committedDescriptionRef.current = patch.description;
-      if (patch.status !== undefined) committedStatusRef.current = patch.status;
+      if (patch.state !== undefined) committedStatusRef.current = patch.state;
     } catch (err) {
       setTitle(committedTitleRef.current);
       setDescription(committedDescriptionRef.current);
@@ -185,7 +185,7 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                 onChange={(e) => {
                   const s = e.target.value as TaskStatus;
                   setStatus(s);
-                  handleSave({ status: s }).catch(() => {});
+                  handleSave({ state: s }).catch(() => {});
                 }}
                 className="mt-1 text-sm text-text bg-bg border border-border rounded px-2 py-1"
               >
@@ -201,7 +201,7 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
             <div>
               <label className="text-[10px] text-text-dim">Created</label>
               <p className="text-xs text-text-dim">
-                {new Date(task.createdAt).toLocaleString()}
+                {new Date(task.created_at).toLocaleString()}
               </p>
             </div>
 
@@ -209,7 +209,7 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
             <div>
               <label className="text-[10px] text-text-dim">Updated</label>
               <p className="text-xs text-text-dim">
-                {new Date(task.updatedAt).toLocaleString()}
+                {new Date(task.updated_at).toLocaleString()}
               </p>
             </div>
 

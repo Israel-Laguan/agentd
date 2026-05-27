@@ -82,7 +82,7 @@ export default function Page() {
             ? board.tasks
             : board.tasks.map((serverTask: Task) => {
                 const localTask = prev.find(t => t.id === serverTask.id);
-                return localTask && localTask.updatedAt > serverTask.updatedAt
+                return localTask && localTask.updated_at > serverTask.updated_at
                   ? localTask
                   : serverTask;
               })
@@ -90,7 +90,7 @@ export default function Page() {
         setSelectedTask(prev => {
           if (!prev) return prev;
           const fresh = board.tasks.find((t: Task) => t.id === prev.id);
-          return fresh && fresh.updatedAt > prev.updatedAt ? fresh : prev;
+          return fresh && fresh.updated_at > prev.updated_at ? fresh : prev;
         });
       } catch (e) {
         console.error("Polling failed", e);
@@ -127,8 +127,8 @@ export default function Page() {
     const newStatus = over.id as TaskStatus;
 
     const currentTask = localTasks.find((t) => t.id === taskId);
-    const prevStatus = currentTask?.status;
-    const prevUpdatedAt = currentTask?.updatedAt;
+    const prevStatus = currentTask?.state;
+    const prevUpdatedAt = currentTask?.updated_at;
     const now = Date.now();
 
     setLocalTasks((tasks) =>
@@ -136,19 +136,19 @@ export default function Page() {
         task.id === taskId
           ? {
               ...task,
-              status: newStatus,
-              updatedAt: now,
+              state: newStatus,
+              updated_at: now,
             }
           : task
       )
     );
     setSelectedTask((prev) =>
       prev?.id === taskId
-        ? { ...prev, status: newStatus, updatedAt: now }
+        ? { ...prev, state: newStatus, updated_at: now }
         : prev
     );
 
-    updateTask(taskId, { status: newStatus, updatedAt: now }).catch((err) => {
+    updateTask(taskId, { state: newStatus, updated_at: now }).catch((err) => {
       console.error("Failed to persist task status", err);
       if (prevStatus !== undefined && prevUpdatedAt !== undefined) {
         setLocalTasks((tasks) =>
@@ -156,15 +156,15 @@ export default function Page() {
             task.id === taskId
               ? {
                   ...task,
-                  status: prevStatus,
-                  updatedAt: prevUpdatedAt,
+                  state: prevStatus,
+                  updated_at: prevUpdatedAt,
                 }
               : task
           )
         );
         setSelectedTask((prev) =>
           prev?.id === taskId
-            ? { ...prev, status: prevStatus, updatedAt: prevUpdatedAt }
+            ? { ...prev, state: prevStatus, updated_at: prevUpdatedAt }
             : prev
         );
       }
