@@ -40,22 +40,21 @@ function authorFromDaemon(raw: unknown): { id: string; name: string } {
   return { id: "system", name: "System" };
 }
 
-// mapDaemonTask converts a raw daemon Task (PascalCase, no json tags) to the
-// web Task shape (camelCase). Fields with no direct web equivalent are dropped
+// mapDaemonTask converts a raw daemon Task (snake_case with PascalCase fallback) to the
+// web Task shape. Fields with no direct web equivalent are dropped
 // or degraded gracefully.
 export function mapDaemonTask(raw: Record<string, unknown>): Task {
   return {
     id: (raw.ID ?? raw.id ?? "") as string,
-    projectId: (raw.ProjectID ?? raw.projectId ?? "") as string,
+    project_id: (raw.ProjectID ?? raw.project_id ?? raw.projectId ?? "") as string,
     title: (raw.Title ?? raw.title ?? "") as string,
     description: (raw.Description ?? raw.description ?? "") as string,
-    // Daemon uses "State"; web uses "status". Values align: PENDING, RUNNING, etc.
-    status: ((raw.State ?? raw.state ?? raw.status ?? "PENDING") as string) as TaskStatus,
-    dependsOn: ((raw.DependsOn ?? raw.dependsOn ?? []) as string[]),
+    state: ((raw.State ?? raw.state ?? raw.status ?? "PENDING") as string) as TaskStatus,
+    depends_on: ((raw.DependsOn ?? raw.depends_on ?? raw.dependsOn ?? []) as string[]),
     // Logs is a raw string on the daemon side; degrade to empty structured array.
     logs: [] as TaskLog[],
-    createdAt: isoToMs(raw.CreatedAt ?? raw.createdAt),
-    updatedAt: isoToMs(raw.UpdatedAt ?? raw.updatedAt),
+    created_at: isoToMs(raw.CreatedAt ?? raw.created_at ?? raw.createdAt),
+    updated_at: isoToMs(raw.UpdatedAt ?? raw.updated_at ?? raw.updatedAt),
     token_usage: (raw.TokenUsage ?? raw.token_usage) as number | undefined,
   };
 }
@@ -65,16 +64,16 @@ export function mapDaemonTask(raw: Record<string, unknown>): Task {
 export function mapDaemonComment(raw: Record<string, unknown>): TaskComment {
   const author = authorFromDaemon(raw.Author ?? raw.author);
 
-  const rawCreatedAt = raw.CreatedAt ?? raw.createdAt;
+  const rawCreatedAt = raw.CreatedAt ?? raw.created_at ?? raw.createdAt;
   const createdAt = typeof rawCreatedAt === "string"
     ? rawCreatedAt
     : new Date(isoToMs(rawCreatedAt)).toISOString();
 
   return {
     id: (raw.ID ?? raw.id ?? "") as string,
-    taskId: (raw.TaskID ?? raw.taskId ?? "") as string,
+    task_id: (raw.TaskID ?? raw.task_id ?? raw.taskId ?? "") as string,
     message: (raw.Body ?? raw.Content ?? raw.body ?? "") as string,
-    createdAt,
+    created_at: createdAt,
     author,
   };
 }

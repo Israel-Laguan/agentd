@@ -46,9 +46,9 @@ export function CommentPanel({ taskId }: { taskId: string }) {
 
     const optimistic: TaskComment = {
       id: `temp-${Date.now()}`,
-      taskId,
+      task_id: taskId,
       message: trimmed,
-      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
       author: {
         id: "me",
         name: "You"

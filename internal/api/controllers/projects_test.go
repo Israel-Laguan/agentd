@@ -69,7 +69,7 @@ func materializeProjectHTTP(t *testing.T, h controllers.ProjectHandler, body, to
 	var resp struct {
 		Data struct {
 			Project struct {
-				ID string `json:"ID"`
+				ID string `json:"id"`
 			} `json:"project"`
 		} `json:"data"`
 	}
@@ -324,7 +324,7 @@ func TestProjectHandler_MaterializeWithSourcePath(t *testing.T) {
 	var resp struct {
 		Data struct {
 			Project struct {
-				ID string `json:"ID"`
+				ID string `json:"id"`
 			} `json:"project"`
 			Tasks []struct {
 				State string `json:"state"`
@@ -333,6 +333,9 @@ func TestProjectHandler_MaterializeWithSourcePath(t *testing.T) {
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
+	}
+	if resp.Data.Project.ID == "" {
+		t.Fatalf("project id empty in response: %s", rec.Body.String())
 	}
 	if len(resp.Data.Tasks) != 1 {
 		t.Fatalf("tasks len = %d", len(resp.Data.Tasks))
@@ -366,7 +369,7 @@ func TestProjectHandler_WorkspaceReadyUnlocksTasks(t *testing.T) {
 	var matResp struct {
 		Data struct {
 			Project struct {
-				ID string `json:"ID"`
+				ID string `json:"id"`
 			} `json:"project"`
 			Tasks []struct {
 				State string `json:"state"`
@@ -377,6 +380,9 @@ func TestProjectHandler_WorkspaceReadyUnlocksTasks(t *testing.T) {
 		t.Fatal(err)
 	}
 	projectID := matResp.Data.Project.ID
+	if projectID == "" {
+		t.Fatalf("project id empty in response: %s", matRec.Body.String())
+	}
 	if matResp.Data.Tasks[0].State != string(models.TaskStatePending) {
 		t.Fatalf("task state = %q, want PENDING before workspace/ready", matResp.Data.Tasks[0].State)
 	}
@@ -426,7 +432,7 @@ func TestProjectHandler_WorkspaceReadyEmptyWorkspace(t *testing.T) {
 	var matResp struct {
 		Data struct {
 			Project struct {
-				ID string `json:"ID"`
+				ID string `json:"id"`
 			} `json:"project"`
 		} `json:"data"`
 	}
@@ -434,6 +440,9 @@ func TestProjectHandler_WorkspaceReadyEmptyWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	projectID := matResp.Data.Project.ID
+	if projectID == "" {
+		t.Fatalf("project id empty in response: %s", matRec.Body.String())
+	}
 
 	readyReq := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/workspace/ready", nil)
 	readyReq.SetPathValue("id", projectID)

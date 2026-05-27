@@ -116,8 +116,8 @@ func TestAssignTaskAgentEndpoint(t *testing.T) {
 	resp := request(handler, http.MethodPost, "/api/v1/tasks/"+task.ID+"/assign", `{"agent_id":"qa"}`)
 	assertStatus(t, resp, http.StatusOK)
 	updated := decodeBody(t, resp)["data"].(map[string]any)
-	if updated["AgentID"].(string) != "qa" {
-		t.Fatalf("AgentID = %v, want qa", updated["AgentID"])
+	if updated["agent_id"].(string) != "qa" {
+		t.Fatalf("agent_id = %v, want qa", updated["agent_id"])
 	}
 
 	resp = request(handler, http.MethodPost, "/api/v1/tasks/"+task.ID+"/assign", `{"agent_id":"missing"}`)
@@ -134,8 +134,8 @@ func TestSplitTaskEndpoint(t *testing.T) {
 	assertStatus(t, resp, http.StatusCreated)
 	wrapper := decodeBody(t, resp)["data"].(map[string]any)
 	parent := wrapper["parent"].(map[string]any)
-	if parent["State"].(string) != string(models.TaskStateBlocked) {
-		t.Fatalf("parent state = %v, want BLOCKED", parent["State"])
+	if parent["state"].(string) != string(models.TaskStateBlocked) {
+		t.Fatalf("parent state = %v, want BLOCKED", parent["state"])
 	}
 	children := wrapper["children"].([]any)
 	if len(children) != 2 {
@@ -158,8 +158,8 @@ func TestRetryEndpoint(t *testing.T) {
 	resp := request(handler, http.MethodPost, "/api/v1/tasks/"+task.ID+"/retry", "")
 	assertStatus(t, resp, http.StatusOK)
 	updated := decodeBody(t, resp)["data"].(map[string]any)
-	if updated["State"].(string) != string(models.TaskStateReady) {
-		t.Fatalf("State = %v, want READY", updated["State"])
+	if updated["state"].(string) != string(models.TaskStateReady) {
+		t.Fatalf("state = %v, want READY", updated["state"])
 	}
 }
 

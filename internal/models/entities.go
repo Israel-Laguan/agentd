@@ -7,44 +7,44 @@ import (
 
 // BaseEntity contains fields shared by persisted records.
 type BaseEntity struct {
-	ID        string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Project is a local workspace backed by a Kanban plan.
 type Project struct {
 	BaseEntity
-	Name          string
-	OriginalInput string
-	WorkspacePath string
-	Status        ProjectStatus
+	Name          string        `json:"name"`
+	OriginalInput string        `json:"original_input"`
+	WorkspacePath string        `json:"workspace_path"`
+	Status        ProjectStatus `json:"status"`
 }
 
 // Task is the durable unit of work moved by the Kanban state machine.
 type Task struct {
 	BaseEntity
-	ProjectID       string
-	AgentID         string
-	Title           string
-	Description     string
-	State           TaskState
-	Assignee        TaskAssignee
-	OSProcessID     *int
-	StartedAt       *time.Time
-	CompletedAt     *time.Time
-	LastHeartbeat   *time.Time
-	RetryCount      int
-	TokenUsage      int
-	SuccessCriteria []string
-	DependsOn       []string
-	Logs            string
+	ProjectID       string       `json:"project_id"`
+	AgentID         string       `json:"agent_id"`
+	Title           string       `json:"title"`
+	Description     string       `json:"description"`
+	State           TaskState    `json:"state"`
+	Assignee        TaskAssignee `json:"assignee"`
+	OSProcessID     *int         `json:"os_process_id,omitempty"`
+	StartedAt       *time.Time   `json:"started_at,omitempty"`
+	CompletedAt     *time.Time   `json:"completed_at,omitempty"`
+	LastHeartbeat   *time.Time   `json:"last_heartbeat,omitempty"`
+	RetryCount      int          `json:"retry_count"`
+	TokenUsage      int          `json:"token_usage"`
+	SuccessCriteria []string     `json:"success_criteria"`
+	DependsOn       []string     `json:"depends_on"`
+	Logs            string       `json:"logs"`
 }
 
 // TaskResult is the durable outcome reported by a worker after running a task.
 type TaskResult struct {
-	Success bool
-	Payload string
+	Success bool   `json:"success"`
+	Payload string `json:"payload"`
 }
 
 // TaskRelation models a dependency edge: parent must complete before child.
@@ -57,12 +57,12 @@ type TaskRelation struct {
 // Comment records human or system context on a task.
 type Comment struct {
 	BaseEntity
-	TaskID string
-	Author CommentAuthor
-	Body   string
+	TaskID string        `json:"task_id"`
+	Author CommentAuthor `json:"author"`
+	Body   string        `json:"body"`
 	// Content is a proposal-aligned alias used by box-level contracts.
-	Content string
-	HasRead bool
+	Content string `json:"content"`
+	HasRead bool   `json:"has_read"`
 }
 
 // CommentRef identifies a human comment that still needs queue intake.
@@ -159,7 +159,7 @@ type RecallQuery struct {
 
 // Setting is a persisted key/value configuration entry.
 type Setting struct {
-	Key       string
-	Value     string
-	UpdatedAt time.Time
+	Key       string    `json:"key"`
+	Value     string    `json:"value"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

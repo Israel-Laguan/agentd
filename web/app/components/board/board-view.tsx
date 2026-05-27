@@ -40,14 +40,14 @@ export function BoardView({
     };
 
     for (const task of tasks) {
-      if (groups[task.status]) {
-        groups[task.status].push(task);
+      if (groups[task.state]) {
+        groups[task.state].push(task);
       }
     }
 
     Object.keys(groups).forEach((key) => {
       groups[key as TaskStatus].sort(
-        (a, b) => b.updatedAt - a.updatedAt
+        (a, b) => b.updated_at - a.updated_at
       );
     });
 
