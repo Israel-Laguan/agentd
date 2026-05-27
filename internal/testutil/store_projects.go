@@ -18,13 +18,17 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 	s.projects[project.ID] = project
 	tasks := make([]models.Task, 0, len(plan.Tasks))
 	for _, draft := range plan.Tasks {
+		state := models.TaskStateReady
+		if len(draft.DependsOn) > 0 || plan.WorkspacePending {
+			state = models.TaskStatePending
+		}
 		task := models.Task{
 			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
 			ProjectID:       project.ID,
 			AgentID:         "default",
 			Title:           draft.Title,
 			Description:     draft.Description,
-			State:           models.TaskStateReady,
+			State:           state,
 			Assignee:        draft.Assignee,
 			SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
 		}
@@ -35,6 +39,21 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 		tasks = append(tasks, task)
 	}
 	return &project, tasks, nil
+}
+
+func (s *FakeKanbanStore) MarkProjectTasksReady(_ context.Context, projectID string) ([]models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var unlocked []models.Task
+	for id, t := range s.tasks {
+		if t.ProjectID == projectID && t.State == models.TaskStatePending {
+			t.State = models.TaskStateReady
+			t.UpdatedAt = now()
+			s.tasks[id] = t
+			unlocked = append(unlocked, t)
+		}
+	}
+	return unlocked, nil
 }
 
 func (s *FakeKanbanStore) GetProject(_ context.Context, id string) (*models.Project, error) {

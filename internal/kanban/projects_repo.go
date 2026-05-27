@@ -124,7 +124,7 @@ func insertTasks(
 	tasks := make([]models.Task, 0, len(plan.Tasks))
 	for _, draft := range plan.Tasks {
 		draftID := draft.ID()
-		task := newTask(draft, projectID, taskIDs[draftID], now)
+		task := newTask(draft, projectID, taskIDs[draftID], now, plan.WorkspacePending)
 		if err := insertTask(ctx, tx, draftID, task); err != nil {
 			return nil, err
 		}
@@ -133,9 +133,9 @@ func insertTasks(
 	return tasks, nil
 }
 
-func newTask(draft models.DraftTask, projectID, taskID string, now time.Time) models.Task {
+func newTask(draft models.DraftTask, projectID, taskID string, now time.Time, workspacePending bool) models.Task {
 	state := models.TaskStateReady
-	if len(draft.DependsOn) > 0 {
+	if len(draft.DependsOn) > 0 || workspacePending {
 		state = models.TaskStatePending
 	}
 	return models.Task{

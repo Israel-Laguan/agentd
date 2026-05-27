@@ -116,6 +116,9 @@ func (m *minimalStore) UpdateTaskDescription(_ context.Context, _ string, _ time
 func (m *minimalStore) MaterializePlan(context.Context, models.DraftPlan) (*models.Project, []models.Task, error) {
 	return nil, nil, nil
 }
+func (m *minimalStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (m *minimalStore) EnsureSystemProject(context.Context) (*models.Project, error) { return nil, nil }
 func (m *minimalStore) EnsureProjectTask(context.Context, string, models.DraftTask) (*models.Task, bool, error) {
 	return nil, false, nil

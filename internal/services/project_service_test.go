@@ -26,6 +26,10 @@ func (s *stubWorkspace) ProjectDir(projectID string) string { return "/tmp/" + p
 
 func (s *stubWorkspace) SecureDelete(context.Context, string) error { return nil }
 
+func (s *stubWorkspace) SeedFromPath(context.Context, string, string) error { return nil }
+
+func (s *stubWorkspace) IsWorkspacePopulated(context.Context, string) (bool, error) { return true, nil }
+
 func TestProjectServiceMaterializeWorkspaceError(t *testing.T) {
 	store := testutil.NewFakeStore()
 	ws := &stubWorkspace{err: errors.New("disk full")}
@@ -53,5 +57,9 @@ func TestProjectServiceMaterializeSetsWorkspacePath(t *testing.T) {
 	}
 	if len(tasks) != 1 {
 		t.Fatalf("tasks len = %d", len(tasks))
+	}
+	// Without source_path, tasks start PENDING (workspace not ready)
+	if tasks[0].State != models.TaskStatePending {
+		t.Fatalf("task state = %q, want PENDING", tasks[0].State)
 	}
 }

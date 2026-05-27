@@ -239,6 +239,10 @@ func (m *mockCommitStore) MaterializePlan(ctx context.Context, dp models.DraftPl
 	return nil, nil, nil
 }
 
+func (m *mockCommitStore) MarkProjectTasksReady(ctx context.Context, projectID string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockCommitStore) EnsureSystemProject(ctx context.Context) (*models.Project, error) {
 	return nil, nil
 }
