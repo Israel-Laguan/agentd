@@ -258,11 +258,14 @@ func (s *FakeKanbanStore) BlockTaskWithSubtasks(_ context.Context, id string, _ 
 	return &t, children, nil
 }
 
-func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, _ string, drafts []models.DraftTask) ([]models.Task, error) {
+func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, parentTaskID string, drafts []models.DraftTask) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.validateDraftAgentIDs(drafts); err != nil {
 		return nil, err
+	}
+	if _, ok := s.tasks[parentTaskID]; !ok {
+		return nil, models.ErrTaskNotFound
 	}
 	var created []models.Task
 	for _, d := range drafts {
@@ -277,6 +280,7 @@ func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, _ s
 			SuccessCriteria: append([]string(nil), d.SuccessCriteria...),
 		}
 		s.tasks[task.ID] = task
+		s.childParents[task.ID] = append(s.childParents[task.ID], parentTaskID)
 		created = append(created, task)
 	}
 	return created, nil
