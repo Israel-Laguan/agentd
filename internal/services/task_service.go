@@ -110,14 +110,7 @@ func (s *TaskService) ListByProject(
 	pid := strings.TrimSpace(projectID)
 	filter.ProjectID = &pid
 	if s.Board != nil {
-		page, err := s.Board.ListTasks(ctx, filter)
-		if err != nil {
-			return models.PaginatedResult[models.Task]{}, err
-		}
-		if !filter.IncludeHealing {
-			page.Data = excludeSelfHealingHandoffs(page.Data)
-		}
-		return page, nil
+		return s.Board.ListTasks(ctx, filter)
 	}
 	tasks, err := s.Store.ListTasksByProject(ctx, projectID)
 	if err != nil {

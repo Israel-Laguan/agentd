@@ -66,6 +66,11 @@ func (s *Store) ListTasks(ctx context.Context, filter models.TaskFilter) (models
 			args = append(args, state)
 		}
 	}
+	if !filter.IncludeHealing {
+		exclude, excludeArgs := selfHealingHandoffExcludeSQL()
+		clauses = append(clauses, exclude)
+		args = append(args, excludeArgs...)
+	}
 
 	where := ""
 	if len(clauses) > 0 {
