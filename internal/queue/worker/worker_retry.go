@@ -107,7 +107,9 @@ func (w *Worker) breakdownCommand(ctx context.Context, task models.Task, project
 		profile.SystemPrompt.String = prompt
 	}
 	profile = w.routeLegacyProfile(ctx, task, project, profile)
-	return w.command(ctx, task, project, profile)
+	resp, tokenUsage, err := w.command(ctx, task, project, profile)
+	w.recordTaskTokenUsage(ctx, task, tokenUsage)
+	return resp, err
 }
 
 func (w *Worker) tunePayload(profile models.AgentProfile, action planning.HealingAction, attempt int) string {

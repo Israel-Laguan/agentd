@@ -233,9 +233,7 @@ func (w *Worker) processAgenticIteration(
 		return false, LoopResult{}, false, rewindNone, err
 	}
 	budgetGuard.AfterCall(resp.TokenUsage)
-	if w.tokenUsageHook != nil && resp.TokenUsage > 0 {
-		w.tokenUsageHook(resp.TokenUsage)
-	}
+	w.recordTaskTokenUsage(ctx, task, resp.TokenUsage)
 	if w.messageEditor != nil {
 		w.messageEditor.CommitAssistant(messages, resp)
 	} else {

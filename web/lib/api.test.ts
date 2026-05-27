@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { getBoard, getWorkforce, sendChat, updateTask, fetchTaskComments, addTaskComment, fetchProviders } from './api';
+import { getBoard, getWorkforce, getSystemStatus, sendChat, updateTask, fetchTaskComments, addTaskComment, fetchProviders } from './api';
+import { mockSystemStatus } from './mocks/system.mock';
 import { mockBoard } from './mocks/board.mock';
 import { mockWorkforce } from './mocks/workforce.mock';
 import { mockTaskComments } from './mocks/mock-task-comment';
@@ -18,6 +19,12 @@ describe('API (mock mode)', () => {
   it('getBoard returns mock board', async () => {
     const board = await getBoard();
     expect(board).toEqual(mockBoard);
+  });
+
+  it('getSystemStatus returns mock system status', async () => {
+    const status = await getSystemStatus();
+    expect(status).toEqual(mockSystemStatus);
+    expect(status.total_token_usage).toBeGreaterThan(0);
   });
 
   it('getWorkforce returns mock workforce', async () => {
@@ -78,5 +85,26 @@ describe('API (non-mock mode)', () => {
     vi.resetModules();
     const { getWorkforce } = await import('./api');
     expect(await getWorkforce()).toBeNull();
+  });
+
+  it('getSystemStatus parses total_token_usage from daemon envelope', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          total_token_usage: 99,
+          status: { summary: { tasks_by_state: { RUNNING: 3 } } },
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { getSystemStatus } = await import('./api');
+    const status = await getSystemStatus();
+    expect(status.total_token_usage).toBe(99);
+    expect(status.status?.summary.tasks_by_state.RUNNING).toBe(3);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/system/status'));
   });
 });

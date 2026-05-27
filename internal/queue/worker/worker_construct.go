@@ -48,6 +48,9 @@ type WorkerOptions struct {
 	ContextWarningThreshold   float64
 	ToolFailureStreak         int
 	TokenUsageHook            func(int)
+	// TokenStore, when set, persists per-call token usage to the task row in the
+	// database on every LLM call (agentic and legacy), independently of TokenUsageHook.
+	TokenStore                TokenUsageStore
 	FileContext               config.FileContextConfig
 	FileContextCachePath      string
 	Planning                  config.AgenticPlanningConfig
@@ -187,6 +190,7 @@ func newWorkerCore(
 		contextWarningThreshold: opts.ContextWarningThreshold,
 		toolFailureStreak:       opts.ToolFailureStreak,
 		tokenUsageHook:          opts.TokenUsageHook,
+		tokenStore:              opts.TokenStore,
 		fileContextCfg:          opts.FileContext,
 		planningCfg:             opts.Planning,
 		checkpointStore:         NewMemoryCheckpointStore(),

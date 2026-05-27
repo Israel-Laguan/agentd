@@ -131,6 +131,11 @@ func GenerateJSON[T any](ctx context.Context, gw AIGateway, req AIRequest) (T, e
 	return correction.GenerateJSON[T](ctx, gw, req)
 }
 
+// GenerateJSONWithUsage re-exports generic JSON repair with cumulative token usage.
+func GenerateJSONWithUsage[T any](ctx context.Context, gw AIGateway, req AIRequest) (T, int, error) {
+	return correction.GenerateJSONWithUsage[T](ctx, gw, req)
+}
+
 // Validatable types implementing semantic validation after JSON parse.
 type Validatable = spec.Validatable
 

@@ -69,6 +69,22 @@ type SystemStatus struct {
 	ProviderBreakers map[string]ProviderBreakerEntry   `json:"provider_breakers,omitempty"`
 	Memory           MemorySnapshot                   `json:"memory"`
 	BuiltAt          time.Time                        `json:"built_at"`
+	TotalTokenUsage         int           `json:"total_token_usage"`
+	RollingBudgetEnabled    bool          `json:"rolling_budget_enabled,omitempty"`
+	RollingTokenLimit       int           `json:"rolling_token_limit,omitempty"`
+	RollingTokenRemaining   int           `json:"rolling_token_remaining,omitempty"`
+	RollingTokenWindow      time.Duration `json:"rolling_token_window,omitempty"`
+}
+
+// TokenCounter sums token usage across all persisted tasks.
+// Implemented by the kanban store.
+type TokenCounter interface {
+	SumTokenUsage(ctx context.Context) (int, error)
+}
+
+// RollingBudgetProbe exposes rolling token budget state for /system/status.
+type RollingBudgetProbe interface {
+	RollingBudgetSnapshot() (limit, remaining int, enabled bool, window time.Duration)
 }
 
 // SystemService composes the deterministic StatusSummarizer with optional
@@ -79,6 +95,8 @@ type SystemService struct {
 	Breaker          BreakerProbe
 	Resetter         BreakerResetter
 	ProviderBreakers ProviderBreakersProbe
+	TokenCounter     TokenCounter
+	RollingBudget    RollingBudgetProbe
 	Now              func() time.Time
 	ReadMem          func() MemorySnapshot
 }
@@ -139,6 +157,20 @@ func (s *SystemService) SnapshotWithOptions(ctx context.Context, opts StatusOpti
 				}
 			}
 			out.ProviderBreakers = provSnap
+		}
+	}
+	if s.TokenCounter != nil {
+		if total, err := s.TokenCounter.SumTokenUsage(ctx); err == nil {
+			out.TotalTokenUsage = total
+		}
+	}
+	if s.RollingBudget != nil {
+		limit, remaining, enabled, window := s.RollingBudget.RollingBudgetSnapshot()
+		if enabled {
+			out.RollingBudgetEnabled = true
+			out.RollingTokenLimit = limit
+			out.RollingTokenRemaining = remaining
+			out.RollingTokenWindow = window
 		}
 	}
 	return out, nil

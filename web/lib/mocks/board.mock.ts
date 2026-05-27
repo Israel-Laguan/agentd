@@ -12,6 +12,7 @@ export const mockBoard: { tasks: Task[] } = {
       logs: [],
       created_at: Date.now(),
       updated_at: Date.now(),
+      token_usage: 1200,
     },
     {
       id: "t2",
@@ -28,6 +29,7 @@ export const mockBoard: { tasks: Task[] } = {
       ],
       created_at: Date.now(),
       updated_at: Date.now(),
+      token_usage: 8450,
     },
     {
       id: "t3",

@@ -55,18 +55,24 @@ func TestAgenticLoop_EmitsToolAuditEvents(t *testing.T) {
 
 	w.Process(context.Background(), task)
 
-	if len(sink.events) != 2 {
-		t.Fatalf("expected 2 audit events, got %d", len(sink.events))
+	var toolEvents []models.Event
+	for _, ev := range sink.events {
+		if ev.Type == models.EventTypeToolCall || ev.Type == models.EventTypeToolResult {
+			toolEvents = append(toolEvents, ev)
+		}
 	}
-	if sink.events[0].Type != models.EventTypeToolCall {
-		t.Fatalf("first event should be TOOL_CALL, got %q", sink.events[0].Type)
+	if len(toolEvents) != 2 {
+		t.Fatalf("expected 2 tool audit events, got %d (total events %d)", len(toolEvents), len(sink.events))
 	}
-	if sink.events[1].Type != models.EventTypeToolResult {
-		t.Fatalf("second event should be TOOL_RESULT, got %q", sink.events[1].Type)
+	if toolEvents[0].Type != models.EventTypeToolCall {
+		t.Fatalf("first tool event should be TOOL_CALL, got %q", toolEvents[0].Type)
+	}
+	if toolEvents[1].Type != models.EventTypeToolResult {
+		t.Fatalf("second tool event should be TOOL_RESULT, got %q", toolEvents[1].Type)
 	}
 
 	var callEvent ToolCallEvent
-	if err := json.Unmarshal([]byte(sink.events[0].Payload), &callEvent); err != nil {
+	if err := json.Unmarshal([]byte(toolEvents[0].Payload), &callEvent); err != nil {
 		t.Fatalf("unmarshal TOOL_CALL: %v", err)
 	}
 	if callEvent.ToolName != "bash" || callEvent.CallID != "call_abc123" {
@@ -74,14 +80,14 @@ func TestAgenticLoop_EmitsToolAuditEvents(t *testing.T) {
 	}
 
 	var resultEvent ToolResultEvent
-	if err := json.Unmarshal([]byte(sink.events[1].Payload), &resultEvent); err != nil {
+	if err := json.Unmarshal([]byte(toolEvents[1].Payload), &resultEvent); err != nil {
 		t.Fatalf("unmarshal TOOL_RESULT: %v", err)
 	}
 	if resultEvent.ToolName != "bash" || resultEvent.CallID != "call_abc123" {
 		t.Fatalf("TOOL_RESULT event = %+v, want tool_name=bash call_id=call_abc123", resultEvent)
 	}
-	if sink.events[0].ProjectID != "project-1" || sink.events[0].TaskID.String != task.ID {
-		t.Fatalf("event routing = proj %q task %q", sink.events[0].ProjectID, sink.events[0].TaskID.String)
+	if toolEvents[0].ProjectID != "project-1" || toolEvents[0].TaskID.String != task.ID {
+		t.Fatalf("event routing = proj %q task %q", toolEvents[0].ProjectID, toolEvents[0].TaskID.String)
 	}
 }
 

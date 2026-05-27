@@ -42,6 +42,26 @@ export interface WorkforceState {
   queue_length: number;
 }
 
+export interface SystemStatusSummary {
+  total_projects: number;
+  tasks_by_state: Record<string, number>;
+}
+
+export interface SystemStatusReport {
+  kind: string;
+  message: string;
+  summary: SystemStatusSummary;
+}
+
+export interface SystemStatus {
+  total_token_usage: number;
+  rolling_budget_enabled?: boolean;
+  rolling_token_limit?: number;
+  rolling_token_remaining?: number;
+  rolling_token_window?: string;
+  status?: SystemStatusReport;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
