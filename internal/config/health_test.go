@@ -103,6 +103,38 @@ func TestCheckProviders_HordeUnavailableWhenHeartbeatFails(t *testing.T) {
 	}
 }
 
+// TestCheckProviders_OpenAICompatibleAdapterWithAPIKey verifies that any provider
+// using the openai adapter with an API key is reported as available via healthModeAPIKey.
+// Uses a synthetic name so no new test is needed when further OpenAI-compatible vendors
+// are added via config.
+func TestCheckProviders_OpenAICompatibleAdapterWithAPIKey(t *testing.T) {
+	cfg := GatewayConfig{
+		Order: []string{"synth-openai-compat"},
+		Providers: []gateway.ProviderConfig{{
+			Name:    "synth-openai-compat",
+			Adapter: "openai",
+			APIKey:  "test-key",
+			Model:   "test-model",
+		}},
+	}
+	result := CheckProviders(cfg)
+	if !result.Available {
+		t.Error("expected Available to be true with openai-adapter API key")
+	}
+	if result.Provider != "synth-openai-compat" {
+		t.Errorf("expected provider synth-openai-compat, got %s", result.Provider)
+	}
+	if !result.HasAPIKey {
+		t.Error("expected HasAPIKey to be true")
+	}
+	if result.HealthMode != healthModeAPIKey {
+		t.Errorf("expected HealthMode %q, got %q", healthModeAPIKey, result.HealthMode)
+	}
+}
+
+// TestCheckProviders_GeminiKey is a regression guard for the legacy GatewayConfig.Gemini
+// named field.  New OpenAI-compatible vendors should use GatewayConfig.Providers instead;
+// see TestCheckProviders_OpenAICompatibleAdapterWithAPIKey for the general pattern.
 func TestCheckProviders_GeminiKey(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:  []string{"gemini"},
