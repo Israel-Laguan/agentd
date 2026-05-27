@@ -7,27 +7,27 @@ import (
 )
 
 func TestRoleRoutingDispatchesToMappedProvider(t *testing.T) {
-	openAI := &fakeProvider{providerName: "openai", resp: AIResponse{Content: "smart", ProviderUsed: "openai"}}
-	anthropic := &fakeProvider{providerName: "anthropic", resp: AIResponse{Content: "code", ProviderUsed: "anthropic"}}
-	ollama := &fakeProvider{providerName: "ollama", resp: AIResponse{Content: "cheap", ProviderUsed: "ollama"}}
+	chat := &fakeProvider{providerName: "synth-chat", resp: AIResponse{Content: "smart", ProviderUsed: "synth-chat"}}
+	worker := &fakeProvider{providerName: "synth-worker", resp: AIResponse{Content: "code", ProviderUsed: "synth-worker"}}
+	memory := &fakeProvider{providerName: "synth-memory", resp: AIResponse{Content: "cheap", ProviderUsed: "synth-memory"}}
 
 	routes := map[Role]RoleTarget{
-		RoleChat:   {Provider: "openai", Model: "gpt-4o"},
-		RoleWorker: {Provider: "anthropic", Model: "claude-3-haiku"},
-		RoleMemory: {Provider: "ollama", Model: "llama3-8b"},
+		RoleChat:   {Provider: "synth-chat", Model: "gpt-4o"},
+		RoleWorker: {Provider: "synth-worker", Model: "claude-3-haiku"},
+		RoleMemory: {Provider: "synth-memory", Model: "llama3-8b"},
 	}
-	router := NewRouter(openAI, anthropic, ollama).WithRoleRouting(routes)
+	router := NewRouter(chat, worker, memory).WithRoleRouting(routes)
 
 	tests := []struct {
 		role         Role
 		wantProvider string
 	}{
-		{RoleChat, "openai"},
-		{RoleWorker, "anthropic"},
-		{RoleMemory, "ollama"},
+		{RoleChat, "synth-chat"},
+		{RoleWorker, "synth-worker"},
+		{RoleMemory, "synth-memory"},
 	}
 	for _, tt := range tests {
-		openAI.calls, anthropic.calls, ollama.calls = 0, 0, 0
+		chat.calls, worker.calls, memory.calls = 0, 0, 0
 		resp, err := router.Generate(context.Background(), AIRequest{
 			Messages: []PromptMessage{{Role: "user", Content: "test"}},
 			Role:     tt.role,
@@ -42,35 +42,35 @@ func TestRoleRoutingDispatchesToMappedProvider(t *testing.T) {
 }
 
 func TestRoleRoutingExplicitProviderOverridesRole(t *testing.T) {
-	openAI := &fakeProvider{providerName: "openai", resp: AIResponse{Content: "ok", ProviderUsed: "openai"}}
-	ollama := &fakeProvider{providerName: "ollama", resp: AIResponse{Content: "local", ProviderUsed: "ollama"}}
+	chat := &fakeProvider{providerName: "synth-chat", resp: AIResponse{Content: "ok", ProviderUsed: "synth-chat"}}
+	memory := &fakeProvider{providerName: "synth-memory", resp: AIResponse{Content: "local", ProviderUsed: "synth-memory"}}
 
 	routes := map[Role]RoleTarget{
-		RoleChat: {Provider: "ollama"},
+		RoleChat: {Provider: "synth-memory"},
 	}
-	router := NewRouter(openAI, ollama).WithRoleRouting(routes)
+	router := NewRouter(chat, memory).WithRoleRouting(routes)
 
 	resp, err := router.Generate(context.Background(), AIRequest{
 		Messages: []PromptMessage{{Role: "user", Content: "test"}},
 		Role:     RoleChat,
-		Provider: "openai",
+		Provider: "synth-chat",
 	})
 	if err != nil {
 		t.Fatalf("error = %v", err)
 	}
-	if resp.ProviderUsed != "openai" {
+	if resp.ProviderUsed != "synth-chat" {
 		t.Fatalf("explicit Provider should override role routing, got %q", resp.ProviderUsed)
 	}
 }
 
 func TestRoleRoutingCascadesToNextOnFailure(t *testing.T) {
-	gemini := &fakeProvider{providerName: "gemini", err: fmt.Errorf("gemini quota exhausted")}
-	horde := &fakeProvider{providerName: "horde", resp: AIResponse{Content: "ok", ProviderUsed: "horde"}}
+	workerFail := &fakeProvider{providerName: "synth-worker-fail", err: fmt.Errorf("worker quota exhausted")}
+	horde := &fakeProvider{providerName: "synth-horde", resp: AIResponse{Content: "ok", ProviderUsed: "synth-horde"}}
 
 	routes := map[Role]RoleTarget{
-		RoleWorker: {Provider: "gemini", Model: "gemini-2.5-flash"},
+		RoleWorker: {Provider: "synth-worker-fail", Model: "worker-model"},
 	}
-	router := NewRouter(gemini, horde).WithRoleRouting(routes)
+	router := NewRouter(workerFail, horde).WithRoleRouting(routes)
 
 	resp, err := router.Generate(context.Background(), AIRequest{
 		Messages: []PromptMessage{{Role: "user", Content: "test"}},
@@ -80,14 +80,14 @@ func TestRoleRoutingCascadesToNextOnFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	if resp.ProviderUsed != "horde" {
-		t.Errorf("ProviderUsed = %q, want horde", resp.ProviderUsed)
+	if resp.ProviderUsed != "synth-horde" {
+		t.Errorf("ProviderUsed = %q, want synth-horde", resp.ProviderUsed)
 	}
-	if gemini.calls != 1 {
-		t.Errorf("gemini.calls = %d, want 1 (must be attempted first)", gemini.calls)
+	if workerFail.calls != 1 {
+		t.Errorf("synth-worker-fail.calls = %d, want 1 (must be attempted first)", workerFail.calls)
 	}
 	if horde.calls != 1 {
-		t.Errorf("horde.calls = %d, want 1", horde.calls)
+		t.Errorf("synth-horde.calls = %d, want 1", horde.calls)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/testutil"
 )
@@ -29,6 +30,19 @@ func newRoutingTest(profile models.AgentProfile) (*Worker, *routingTestStore, *r
 		profile: profile,
 	}
 	gw := &routingTestGateway{}
+	cfgs := routingConfigsForProfile(profile.Provider)
+	if len(cfgs) == 0 && strings.TrimSpace(profile.Provider) != "" {
+		cfgs = nil
+	} else if len(cfgs) == 0 {
+		cfgs = []spec.ProviderConfig{toolCapableConfig("synth-openai", "openai")}
+	}
+	if len(cfgs) > 0 {
+		r, err := buildTestCapabilityRouter(cfgs...)
+		if err != nil {
+			panic("buildTestCapabilityRouter: " + err.Error())
+		}
+		gw.router = r
+	}
 	sb := &routingTestSandbox{}
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
 	return w, store, gw, sb

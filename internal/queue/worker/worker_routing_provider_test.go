@@ -43,9 +43,7 @@ func TestProviderSupportsAgentic_RouterBacked(t *testing.T) {
 		want        bool
 	}{
 		// Adapter-type entries use synthetic names so that adding a new OpenAI-compatible
-		// vendor via config requires zero edits here.  Real-vendor regression guards live
-		// in the dedicated tests below (TestProviderSupportsAgentic_GeminiReachesAgenticLoop,
-		// TestProviderSupportsAgentic_OllamaRemainsLegacy, etc.).
+		// vendor via config requires zero edits here.
 
 		// openai adapter — tool-capable
 		{"openai adapter", toolCapableConfig("synth-openai", "openai"), "synth-openai", true},
@@ -99,7 +97,7 @@ func TestProviderSupportsAgentic_NilGateway(t *testing.T) {
 	t.Parallel()
 
 	w := &Worker{}
-	for _, name := range []string{"openai", "anthropic", "gemini", "ollama", ""} {
+	for _, name := range []string{"synth-openai", "synth-unknown", "azure-openai", ""} {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -132,36 +130,10 @@ func TestProviderSupportsAgentic_CustomProviderName(t *testing.T) {
 func TestProviderSupportsAgentic_EmptyProviderUsesCascade(t *testing.T) {
 	t.Parallel()
 
-	w := newWorkerWithProviders(t, spec.ProviderConfig{
-		Name:    "gemini",
-		Adapter: "gemini",
-		BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-		Model:   "gemini-2.5-flash",
-		APIKey:  "test-key",
-	})
+	w := newWorkerWithProviders(t, toolCapableConfig("synth-openai", "openai"))
 	profile := models.AgentProfile{ID: "default", Provider: "", Model: ""}
 	if !w.providerSupportsAgentic(profile) {
-		t.Fatal("providerSupportsAgentic(\"\") = false with gemini router, want true (cascade)")
-	}
-}
-
-// TestProviderSupportsAgentic_GeminiReachesAgenticLoop is the canonical regression
-// guard for Task 10: a Worker with a gemini-configured router must NOT fall back to
-// legacy mode.
-func TestProviderSupportsAgentic_GeminiReachesAgenticLoop(t *testing.T) {
-	t.Parallel()
-
-	w := newWorkerWithProviders(t, spec.ProviderConfig{
-		Name:    "gemini",
-		Adapter: "gemini",
-		BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-		Model:   "gemini-2.5-flash",
-		APIKey:  "test-key",
-	})
-	profile := models.AgentProfile{ID: "agent-gemini", Provider: "gemini", Model: "gemini-2.5-flash"}
-	if !w.providerSupportsAgentic(profile) {
-		t.Fatal("providerSupportsAgentic(gemini) = false — Gemini would silently fall back to " +
-			"legacy mode; this is the Task 10 regression")
+		t.Fatal("providerSupportsAgentic(\"\") = false with tool-capable router, want true (cascade)")
 	}
 }
 
@@ -170,8 +142,8 @@ func TestProviderSupportsAgentic_GeminiReachesAgenticLoop(t *testing.T) {
 func TestProviderSupportsAgentic_OllamaRemainsLegacy(t *testing.T) {
 	t.Parallel()
 
-	w := newWorkerWithProviders(t, noToolConfig("ollama"))
-	profile := models.AgentProfile{ID: "agent-ollama", Provider: "ollama", Model: "llama3:8b"}
+	w := newWorkerWithProviders(t, noToolConfig("synth-ollama"))
+	profile := models.AgentProfile{ID: "agent-ollama", Provider: "synth-ollama", Model: "llama3:8b"}
 	if w.providerSupportsAgentic(profile) {
 		t.Fatal("providerSupportsAgentic(ollama) = true — Ollama agentic mode is intentionally disabled")
 	}

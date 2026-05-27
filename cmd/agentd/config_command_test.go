@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -48,5 +50,93 @@ func TestConfigCommand_WithSettings(t *testing.T) {
 	}
 	if strings.Contains(output, "no settings configured") {
 		t.Fatalf("unexpected empty settings message: %s", output)
+	}
+}
+
+func TestConfigShowCommand_EnvOverridesFile(t *testing.T) {
+	dir := t.TempDir()
+	home := filepath.Join(dir, ".agentd")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte("gateway:\n  order: [horde]\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("AGENTD_GATEWAY_ORDER=gemini\n"), 0o644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	output := runCLI(t, home, "config", "show")
+	if !strings.Contains(output, "gateway.order=gemini") {
+		t.Fatalf("output missing gateway.order: %s", output)
+	}
+	if !strings.Contains(output, "AGENTD_GATEWAY_ORDER") {
+		t.Fatalf("output missing env source: %s", output)
+	}
+	if !strings.Contains(output, "overrides config.yaml") {
+		t.Fatalf("output missing override note: %s", output)
+	}
+}
+
+func TestConfigShowCommand_ProviderAPIKeyOverridesFile(t *testing.T) {
+	dir := t.TempDir()
+	home := filepath.Join(dir, ".agentd")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	config := `gateway:
+  providers:
+    - name: poolside
+      adapter: openai
+      api_key: sk-file
+`
+	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte(config), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("AGENTD_GATEWAY_POOLSIDE_API_KEY=sk-env\n"), 0o644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	output := runCLI(t, home, "config", "show")
+	if !strings.Contains(output, "gateway.providers[name=poolside].api_key") {
+		t.Fatalf("output missing provider api_key line: %s", output)
+	}
+	if !strings.Contains(output, "AGENTD_GATEWAY_POOLSIDE_API_KEY") {
+		t.Fatalf("output missing env source: %s", output)
+	}
+	if !strings.Contains(output, "overrides config.yaml") {
+		t.Fatalf("output missing override note: %s", output)
+	}
+}
+
+func TestConfigShowCommand_NoOverrideWhenValuesAgree(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".agentd")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte("gateway:\n  order: [horde]\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("AGENTD_GATEWAY_ORDER", "horde")
+
+	output := runCLI(t, home, "config", "show")
+	if strings.Contains(output, "overrides config.yaml") {
+		t.Fatalf("unexpected override note: %s", output)
 	}
 }

@@ -42,7 +42,7 @@ type gatewayScenario struct {
 	// Provider cancellation fields
 	providerResp    AIResponse
 	providerErr     error
-	providerContent string
+	probeAdapter    string // openai or ollama wire protocol under test
 
 	// JSON syntax self-correction (Router.Generate JSONMode)
 	jsonSeq *sequenceProvider
@@ -162,12 +162,11 @@ func registerSchemaAndCancellationSteps(sc *godog.ScenarioContext, state *gatewa
 	sc.Step(`^the error should be ErrInvalidJSONResponse$`, state.errorIsInvalidJSON)
 
 	// Provider cancellation steps
-	sc.Step(`^an OpenAI provider configured with a (\d+)ms timeout$`, state.openAIWithTimeout)
-	sc.Step(`^an Ollama provider configured with a (\d+)ms timeout$`, state.ollamaWithTimeout)
+	sc.Step(`^provider "([^"]*)" using the openai adapter configured with a (\d+)ms timeout$`, state.openAIAdapterWithTimeout)
+	sc.Step(`^provider "([^"]*)" using the ollama adapter configured with a (\d+)ms timeout$`, state.ollamaAdapterWithTimeout)
 	sc.Step(`^the mock server delays responses by (\d+)ms$`, state.mockServerDelays)
 	sc.Step(`^the mock server responds immediately$`, state.mockServerImmediate)
-	sc.Step(`^a request is sent to the OpenAI provider$`, state.sendToOpenAI)
-	sc.Step(`^a request is sent to the Ollama provider$`, state.sendToOllama)
+	sc.Step(`^a request is sent to provider "([^"]*)"$`, state.sendToProvider)
 	sc.Step(`^the request should fail with ErrLLMUnreachable$`, state.requestFailsUnreachable)
 	sc.Step(`^the request should succeed with content "([^"]*)"$`, state.requestSucceedsWithContent)
 }

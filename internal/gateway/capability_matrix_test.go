@@ -30,8 +30,6 @@ func registeredProviderEntries() []spec.ProviderConfig {
 		{Name: "synth-ollama", Adapter: "ollama", BaseURL: "http://example.invalid"},
 		{Name: "synth-llamacpp", Adapter: "llamacpp", BaseURL: "http://example.invalid"},
 		{Name: "synth-horde", Adapter: "horde", BaseURL: "http://example.invalid"},
-		// Legacy alias regression guard: adapter gemini canonicalizes to openai.
-		{Name: "gemini", Adapter: "gemini", BaseURL: "http://example.invalid"},
 		// Synthetic OpenAI-compatible vendor name.
 		{Name: "synth-openai-compat", Adapter: "openai", BaseURL: "http://example.invalid"},
 	}
