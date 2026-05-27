@@ -38,7 +38,12 @@ func TestMarkdownInternalLinksResolve(t *testing.T) {
 			if !isDocCrossReference(pathPart) {
 				continue
 			}
-			resolved := filepath.Clean(filepath.Join(filepath.Dir(f), pathPart))
+			var resolved string
+			if strings.HasPrefix(pathPart, "/") {
+				resolved = filepath.Clean(filepath.Join(root, pathPart))
+			} else {
+				resolved = filepath.Clean(filepath.Join(filepath.Dir(f), pathPart))
+			}
 			if !isVerifiableDocTarget(resolved, root) {
 				continue
 			}

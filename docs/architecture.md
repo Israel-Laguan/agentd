@@ -71,7 +71,9 @@ graph LR
 
 ### LLM Layer
 
-- **Today:** OpenAI, Anthropic, Gemini, Ollama, and AI Horde providers live in [`internal/gateway/providers/`](../internal/gateway/providers/); wire types live in [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go) and are re-exported from [`internal/gateway/exports.go`](../internal/gateway/exports.go). Per-task token budget enforcement lives in [`internal/gateway/budget.go`](../internal/gateway/budget.go). Role-based routing is configured via `Router.WithRoleRouting` ([`internal/gateway/routing/router.go`](../internal/gateway/routing/router.go)). `AIResponse.ProviderUsed` names the configured provider entry (`"gemini"`, `"poolside"`, …); the built-in `openai` slot always reports `"openai"` even when `gateway.openai.base_url` points at a third-party endpoint — use `gateway.providers` with a distinct `name` for accurate identity in logs and API responses ([`docs/openai-compatible-providers.md`](openai-compatible-providers.md)).
+- **Today:** OpenAI, Anthropic, Gemini, Ollama, and AI Horde providers live in [`internal/gateway/providers/`](../internal/gateway/providers/). Wire types live in [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go) and are re-exported from [`internal/gateway/exports.go`](../internal/gateway/exports.go).
+- **Today:** Per-task token budget enforcement lives in [`internal/gateway/budget.go`](../internal/gateway/budget.go). Role-based routing is configured via `Router.WithRoleRouting` ([`internal/gateway/routing/router.go`](../internal/gateway/routing/router.go)).
+- **Today:** `AIResponse.ProviderUsed` names the configured provider entry (`"gemini"`, `"poolside"`, …). The built-in `openai` slot always reports `"openai"` even when `gateway.openai.base_url` points at a third-party endpoint; use `gateway.providers` with a distinct `name` for accurate identity in logs and API responses ([`docs/openai-compatible-providers.md`](openai-compatible-providers.md)).
 - **Spec role:** The LLM layer is raw compute. It should not own orchestration, state, retries, file access, or task lifecycle decisions.
 
 ### File System
