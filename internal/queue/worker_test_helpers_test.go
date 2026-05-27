@@ -278,6 +278,9 @@ func (s *workerStore) SetSetting(context.Context, string, string) error { return
 func (s *workerStore) MaterializePlan(context.Context, models.DraftPlan) (*models.Project, []models.Task, error) {
 	return nil, nil, errors.New("not implemented")
 }
+func (s *workerStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *workerStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	return &models.Project{BaseEntity: models.BaseEntity{ID: "system"}, Name: "_system"}, nil
 }

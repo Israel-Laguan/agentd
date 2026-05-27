@@ -99,6 +99,9 @@ func (s *routingTestStore) SetSetting(context.Context, string, string) error { r
 func (s *routingTestStore) MaterializePlan(context.Context, models.DraftPlan) (*models.Project, []models.Task, error) {
 	return nil, nil, nil
 }
+func (s *routingTestStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *routingTestStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	return &models.Project{}, nil
 }

@@ -100,6 +100,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.failHard(ctx, task, err)
 		return
 	}
+	w.warnIfWorkspaceEmpty(ctx, task, project)
 	running, err := w.store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, os.Getpid())
 	if err != nil {
 		return

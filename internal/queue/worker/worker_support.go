@@ -208,3 +208,29 @@ func (w *Worker) providerSupportsAgentic(profile models.AgentProfile) bool {
 func (w *Worker) SetSandbox(sb sandbox.Executor) {
 	w.sandbox = sb
 }
+
+// warnIfWorkspaceEmpty emits a WARNING event when the project workspace
+// directory exists but contains no files. This serves as a safety net
+// alerting operators that the workspace was not seeded before dispatch.
+func (w *Worker) warnIfWorkspaceEmpty(ctx context.Context, task models.Task, project *models.Project) {
+	if project == nil || project.WorkspacePath == "" {
+		return
+	}
+	entries, err := os.ReadDir(project.WorkspacePath)
+	if err != nil {
+		return
+	}
+	if len(entries) > 0 {
+		return
+	}
+	slog.Warn("workspace empty at dispatch time",
+		"task_id", task.ID, "project_id", task.ProjectID)
+	if w.sink != nil {
+		_ = w.sink.Emit(ctx, models.Event{
+			ProjectID: task.ProjectID,
+			TaskID:    sql.NullString{String: task.ID, Valid: true},
+			Type:      models.EventTypeWarning,
+			Payload:   "workspace empty at dispatch time; consider using source_path on materialize or calling POST /workspace/ready after seeding",
+		})
+	}
+}

@@ -138,6 +138,9 @@ func (s *batchTestStore) SetSetting(context.Context, string, string) error { ret
 func (s *batchTestStore) MaterializePlan(context.Context, models.DraftPlan) (*models.Project, []models.Task, error) {
 	return nil, nil, nil
 }
+func (s *batchTestStore) MarkProjectTasksReady(context.Context, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *batchTestStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	return &s.project, nil
 }

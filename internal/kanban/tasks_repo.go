@@ -63,6 +63,37 @@ func (s *Store) ClaimNextReadyTasks(ctx context.Context, limit int) ([]models.Ta
 	})
 }
 
+func (s *Store) MarkProjectTasksReady(ctx context.Context, projectID string) ([]models.Task, error) {
+	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+		tx, err := beginImmediate(ctx, s.db)
+		if err != nil {
+			return nil, fmt.Errorf("begin mark project tasks ready: %w", err)
+		}
+		defer rollbackUnlessCommitted(tx)
+
+		now := utcNow()
+		_, err = tx.ExecContext(ctx, `
+			UPDATE tasks SET state = ?, updated_at = ?
+			WHERE project_id = ? AND state = ?`,
+			models.TaskStateReady, formatTime(now), projectID, models.TaskStatePending)
+		if err != nil {
+			return nil, fmt.Errorf("mark project tasks ready: %w", err)
+		}
+		rows, err := tx.QueryContext(ctx,
+			selectTaskSQL()+" WHERE project_id = ? AND state = ? ORDER BY created_at",
+			projectID, models.TaskStateReady)
+		if err != nil {
+			return nil, fmt.Errorf("select unlocked tasks: %w", err)
+		}
+		defer closeRows(rows)
+		tasks, err := scanTasks(rows)
+		if err != nil {
+			return nil, err
+		}
+		return tasks, commitTx(tx, "mark project tasks ready")
+	})
+}
+
 func (s *Store) UpdateTaskState(
 	ctx context.Context,
 	id string,

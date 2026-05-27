@@ -23,6 +23,10 @@ type materializeResponse struct {
 	Tasks   []models.Task   `json:"tasks"`
 }
 
+type workspaceReadyResponse struct {
+	Tasks []models.Task `json:"tasks"`
+}
+
 func (h ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	projects, err := h.Store.ListProjects(r.Context())
 	if err != nil {
@@ -57,6 +61,26 @@ func (h ProjectHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteSuccess(w, http.StatusCreated, materializeResponse{Project: project, Tasks: tasks}, nil)
+}
+
+// WorkspaceReady signals that the project workspace has been populated and
+// tasks may be dispatched. Transitions PENDING tasks to READY.
+func (h ProjectHandler) WorkspaceReady(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("id")
+	if h.Service == nil {
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "project service not configured")
+		return
+	}
+	tasks, err := h.Service.MarkWorkspaceReady(r.Context(), projectID)
+	if err != nil {
+		if errors.Is(err, models.ErrWorkspaceNotReady) {
+			httpx.WriteError(w, http.StatusConflict, httpx.CodeStateConflict, err.Error())
+			return
+		}
+		httpx.WriteMappedError(w, err)
+		return
+	}
+	httpx.WriteSuccess(w, http.StatusOK, workspaceReadyResponse{Tasks: tasks}, nil)
 }
 
 func (h ProjectHandler) materialize(r *http.Request, plan models.DraftPlan) (*models.Project, []models.Task, error) {
