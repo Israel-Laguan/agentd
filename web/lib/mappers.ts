@@ -62,18 +62,20 @@ export function mapDaemonTask(raw: Record<string, unknown>): Task {
 // mapDaemonDraftPlan converts a raw daemon DraftPlan (project_name / PascalCase
 // fallback) to the web DraftPlan shape. project_name maps to name; task
 // ref_id / temp_id map to the optional DraftPlanTask.id.
-export function mapDaemonDraftPlan(raw: Record<string, unknown>): DraftPlan {
-  const name = (raw.project_name ?? raw.ProjectName ?? "") as string;
-  const description = (raw.description ?? raw.Description ?? "") as string;
-  const rawTasks = ((raw.tasks ?? raw.Tasks ?? []) as Record<string, unknown>[]);
+export function mapDaemonDraftPlan(raw: Record<string, unknown> | null | undefined): DraftPlan {
+  const safeRaw = raw ?? {};
+  const name = (safeRaw.project_name ?? safeRaw.ProjectName ?? "") as string;
+  const description = (safeRaw.description ?? safeRaw.Description ?? "") as string;
+  const rawTasksValue = safeRaw.tasks ?? safeRaw.Tasks;
+  const rawTasks = Array.isArray(rawTasksValue) ? (rawTasksValue as Record<string, unknown>[]) : [];
   const tasks: DraftPlanTask[] = rawTasks.map((t) => {
-    const id = (
-      (t.ref_id ?? t.ReferenceID ?? t.temp_id ?? t.TempID ?? "") as string
-    ).trim() || undefined;
+    const safeT = t ?? {};
+    const rawID = safeT.ref_id ?? safeT.ReferenceID ?? safeT.temp_id ?? safeT.TempID;
+    const id = typeof rawID === "string" ? rawID.trim() || undefined : undefined;
     return {
       ...(id !== undefined ? { id } : {}),
-      title: (t.title ?? t.Title ?? "") as string,
-      description: (t.description ?? t.Description ?? "") as string,
+      title: (safeT.title ?? safeT.Title ?? "") as string,
+      description: (safeT.description ?? safeT.Description ?? "") as string,
     };
   });
   return { name, description, tasks };

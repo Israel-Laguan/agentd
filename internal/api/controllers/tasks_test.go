@@ -190,6 +190,15 @@ func TestTaskHandler_PatchDescription(t *testing.T) {
 func TestTaskHandler_PatchStateAndDescription(t *testing.T) {
 	h, store := taskTestHandler()
 	_, taskID := seedProjectTask(t, store)
+	// Advance task to RUNNING so COMPLETED is a valid transition.
+	ctx := context.Background()
+	task, err := store.GetTask(ctx, taskID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if _, err := store.UpdateTaskState(ctx, taskID, task.UpdatedAt, models.TaskStateRunning); err != nil {
+		t.Fatalf("UpdateTaskState to RUNNING: %v", err)
+	}
 
 	body := `{"state":"completed","description":"done"}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/"+taskID, strings.NewReader(body))

@@ -51,7 +51,17 @@ export function useTaskBoard(
         : prev
     );
 
-    updateTask(taskId, { state: newStatus, updated_at: now }).catch((err) => {
+    updateTask(taskId, { state: newStatus })
+      .then((serverTask) => {
+        if (dragVersionRef.current.get(taskId) !== dragVersion) return;
+        setLocalTasks((tasks) =>
+          tasks.map((task) => (task.id === taskId ? serverTask : task))
+        );
+        setSelectedTask((prev) =>
+          prev?.id === taskId ? serverTask : prev
+        );
+      })
+      .catch((err) => {
       console.error("Failed to persist task status", err);
       if (dragVersionRef.current.get(taskId) !== dragVersion) return;
       if (prevStatus === undefined || prevUpdatedAt === undefined) return;

@@ -32,6 +32,9 @@ func TestTaskService_PatchTask_BothFields(t *testing.T) {
 	if updated.Description != "new desc" {
 		t.Fatalf("description = %q, want new desc", updated.Description)
 	}
+	if store.patchCalls != 1 {
+		t.Fatalf("UpdateTaskPatch called %d times, want 1 (atomic single-call contract)", store.patchCalls)
+	}
 }
 
 func TestTaskService_PatchTask_InvalidState(t *testing.T) {

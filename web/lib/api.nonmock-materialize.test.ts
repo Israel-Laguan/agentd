@@ -1,8 +1,21 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useNonMockMode, NON_MOCK_ENV } from './api.nonmock.shared';
 
 describe('API (non-mock materialize)', () => {
   const enableNonMock = useNonMockMode();
+  let originalToken: string | undefined;
+
+  beforeEach(() => {
+    originalToken = process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN;
+  });
+
+  afterEach(() => {
+    if (originalToken === undefined) {
+      delete process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN;
+    } else {
+      process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN = originalToken;
+    }
+  });
 
   it('postApprovePlan POSTs to materialize with project_name body', async () => {
     enableNonMock();
@@ -40,7 +53,6 @@ describe('API (non-mock materialize)', () => {
     await postApprovePlan({ name: 'P', description: '', tasks: [] });
     const headers = fetchMock.mock.calls[0][1].headers;
     expect(headers['X-Agentd-Materialize-Token']).toBe('secret-token');
-    delete process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN;
   });
 
   it('postApprovePlan omits token header when env unset', async () => {

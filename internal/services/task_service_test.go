@@ -59,6 +59,7 @@ type minimalStore struct {
 	getTask       *models.Task
 	getTaskErr    error
 	addCalls      int
+	patchCalls    int
 	assignErr     error
 	splitErr      error
 	splitChildren []models.Task
@@ -114,6 +115,7 @@ func (m *minimalStore) UpdateTaskDescription(_ context.Context, _ string, _ time
 }
 
 func (m *minimalStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, state *models.TaskState, description *string) (*models.Task, error) {
+	m.patchCalls++
 	if m.getTask == nil {
 		return nil, models.ErrTaskNotFound
 	}

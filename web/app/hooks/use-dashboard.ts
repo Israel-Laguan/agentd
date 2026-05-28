@@ -41,7 +41,7 @@ export function useDashboard(
       });
       return board.tasks;
     },
-    []
+    [setSelectedTask]
   );
 
   const refreshDashboard = useCallback(
@@ -68,29 +68,24 @@ export function useDashboard(
 
   useEffect(() => {
     let mounted = true;
+    let timerId: ReturnType<typeof setTimeout>;
 
     const poll = async () => {
       try {
         await refreshDashboard(false);
-        if (!mounted) return;
       } catch (e) {
-        if (!mounted) return;
         console.error("Polling failed", e);
-        setBoardError(true);
-        setSystemStatus(null);
+        if (mounted) setBoardError(true);
+      } finally {
+        if (mounted) timerId = setTimeout(poll, 3000);
       }
     };
 
     void poll();
 
-    const interval = setInterval(() => {
-      if (!mounted) return;
-      void poll();
-    }, 3000);
-
     return () => {
       mounted = false;
-      clearInterval(interval);
+      clearTimeout(timerId);
     };
   }, [refreshDashboard]);
 

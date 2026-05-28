@@ -21,10 +21,8 @@ export async function fetchTaskComments(taskId: string): Promise<TaskComment[]> 
 export async function updateTask(
   id: string,
   updates: Partial<{
-    title: string;
     description: string;
     state: string;
-    updated_at: number;
   }>
 ) {
   if (USE_MOCK) {
