@@ -205,6 +205,18 @@ func (s *workerStore) UpdateTaskDescription(_ context.Context, _ string, _ time.
 	return &s.task, nil
 }
 
+func (s *workerStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, state *models.TaskState, description *string) (*models.Task, error) {
+	if state != nil {
+		s.task.State = *state
+		s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
+	}
+	if description != nil {
+		s.task.Description = *description
+		s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
+	}
+	return &s.task, nil
+}
+
 func (s *workerStore) UpdateTaskState(_ context.Context, _ string, _ time.Time, next models.TaskState) (*models.Task, error) {
 	s.task.State = next
 	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)

@@ -165,6 +165,16 @@ func (m *mockAgenticStore) UpdateTaskDescription(_ context.Context, _ string, _ 
 	return &m.task, nil
 }
 
+func (m *mockAgenticStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, state *models.TaskState, description *string) (*models.Task, error) {
+	if state != nil {
+		m.task.State = *state
+	}
+	if description != nil {
+		m.task.Description = *description
+	}
+	return &m.task, nil
+}
+
 func (m *mockAgenticStore) UpdateTaskResult(_ context.Context, _ string, _ time.Time, result models.TaskResult) (*models.Task, error) {
 	m.committedResult = &result
 	if result.Success {

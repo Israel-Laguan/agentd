@@ -57,6 +57,11 @@ type KanbanStore interface {
 	IncrementRetryCount(ctx context.Context, id string, expectedUpdatedAt time.Time) (*Task, error)
 	UpdateTaskState(ctx context.Context, id string, expectedUpdatedAt time.Time, next TaskState) (*Task, error)
 	UpdateTaskDescription(ctx context.Context, id string, expectedUpdatedAt time.Time, description string) (*Task, error)
+	// UpdateTaskPatch applies an optional state transition and optional description change in a
+	// single atomic transaction. Either field may be nil to leave it unchanged. When both are
+	// provided the operation is all-or-nothing: a failure on either write leaves the task row
+	// untouched.
+	UpdateTaskPatch(ctx context.Context, id string, expectedUpdatedAt time.Time, state *TaskState, description *string) (*Task, error)
 	UpdateTaskResult(ctx context.Context, id string, expectedUpdatedAt time.Time, result TaskResult) (*Task, error)
 	UpdateCriteriaMet(ctx context.Context, id string, met []string) error
 	ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]Task, error)

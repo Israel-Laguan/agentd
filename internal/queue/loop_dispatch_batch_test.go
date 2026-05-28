@@ -147,6 +147,9 @@ func (s *dispatchBatchStore) IncrementRetryCount(_ context.Context, id string, _
 func (s *dispatchBatchStore) UpdateTaskDescription(context.Context, string, time.Time, string) (*models.Task, error) {
 	return nil, nil
 }
+func (s *dispatchBatchStore) UpdateTaskPatch(context.Context, string, time.Time, *models.TaskState, *string) (*models.Task, error) {
+	return nil, nil
+}
 func (s *dispatchBatchStore) AddComment(context.Context, models.Comment) error { return nil }
 func (s *dispatchBatchStore) ListComments(context.Context, string) ([]models.Comment, error) {
 	return nil, nil

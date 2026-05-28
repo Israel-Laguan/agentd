@@ -34,6 +34,16 @@ func (s *routingTestStore) UpdateTaskDescription(_ context.Context, _ string, _ 
 	return &s.task, nil
 }
 
+func (s *routingTestStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, state *models.TaskState, description *string) (*models.Task, error) {
+	if state != nil {
+		s.task.State = *state
+	}
+	if description != nil {
+		s.task.Description = *description
+	}
+	return &s.task, nil
+}
+
 func (s *routingTestStore) UpdateTaskState(_ context.Context, _ string, _ time.Time, next models.TaskState) (*models.Task, error) {
 	s.task.State = next
 	return &s.task, nil

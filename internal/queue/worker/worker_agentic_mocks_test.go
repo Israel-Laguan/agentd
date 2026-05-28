@@ -118,6 +118,10 @@ func (m *mockCommitStore) UpdateTaskState(ctx context.Context, id string, t time
 	return nil, nil
 }
 
+func (m *mockCommitStore) UpdateTaskPatch(context.Context, string, time.Time, *models.TaskState, *string) (*models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockCommitStore) UpdateTaskResult(ctx context.Context, id string, t time.Time, result models.TaskResult) (*models.Task, error) {
 	if m.text != nil && result.Payload != "" {
 		*m.text = result.Payload
