@@ -110,4 +110,143 @@ describe('API (non-mock mode)', () => {
     expect(status.status?.summary.tasks_by_state.RUNNING).toBe(3);
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/system/status'));
   });
+
+  it('sendChat returns plan from tool_calls (create_plan)', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const planArgs = JSON.stringify({
+      project_name: 'Todo API',
+      description: 'A REST API',
+      tasks: [{ title: 'Setup DB', description: 'init schema', ref_id: 'task-1' }],
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'cmpl-1',
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ function: { name: 'create_plan', arguments: planArgs } }],
+          },
+          finish_reason: 'tool_calls',
+        }],
+      }),
+    }));
+    const { sendChat } = await import('./api');
+    const res = await sendChat('Build a todo API');
+    expect(res.plan).toBeDefined();
+    expect(res.plan!.name).toBe('Todo API');
+    expect(res.plan!.tasks).toHaveLength(1);
+    expect(res.plan!.tasks[0]).toEqual({ id: 'task-1', title: 'Setup DB', description: 'init schema' });
+    expect(res.message.content).toBe('');
+  });
+
+  it('sendChat returns plan from message.content fallback (no tool_calls)', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const planContent = JSON.stringify({
+      project_name: 'Fallback Project',
+      description: 'Content only',
+      tasks: [{ title: 'Task One', description: 'do it' }],
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'cmpl-2',
+        choices: [{ message: { role: 'assistant', content: planContent }, finish_reason: 'stop' }],
+      }),
+    }));
+    const { sendChat } = await import('./api');
+    const res = await sendChat('plan something');
+    expect(res.plan).toBeDefined();
+    expect(res.plan!.name).toBe('Fallback Project');
+    expect(res.plan!.tasks[0].title).toBe('Task One');
+  });
+
+  it('sendChat returns no plan for plain text content', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'cmpl-3',
+        choices: [{ message: { role: 'assistant', content: 'Hello, how can I help?' }, finish_reason: 'stop' }],
+      }),
+    }));
+    const { sendChat } = await import('./api');
+    const res = await sendChat('hello');
+    expect(res.plan).toBeUndefined();
+    expect(res.message.content).toBe('Hello, how can I help?');
+  });
+
+  it('sendChat forwards approved_scopes in request body', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'cmpl-4',
+        choices: [{ message: { role: 'assistant', content: 'Generating plan...' }, finish_reason: 'stop' }],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { sendChat } = await import('./api');
+    await sendChat('build it', undefined, ['backend-api']);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.approved_scopes).toEqual(['backend-api']);
+    expect(body.tools).toBeDefined();
+    expect(body.tools[0].function.name).toBe('create_plan');
+  });
+
+  it('postApprovePlan POSTs to materialize with project_name body', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { project: { id: 'p1' }, tasks: [] } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { postApprovePlan } = await import('./api');
+    await postApprovePlan({ name: 'My Project', description: 'desc', tasks: [{ id: 't1', title: 'Do thing', description: 'do it' }] });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/projects/materialize'),
+      expect.objectContaining({ method: 'POST' })
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.project_name).toBe('My Project');
+    expect(body.tasks[0].temp_id).toBe('t1');
+    expect(body.tasks[0].title).toBe('Do thing');
+  });
+
+  it('postApprovePlan sends materialize token header when env set', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN = 'secret-token';
+    vi.resetModules();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { postApprovePlan } = await import('./api');
+    await postApprovePlan({ name: 'P', description: '', tasks: [] });
+    const headers = fetchMock.mock.calls[0][1].headers;
+    expect(headers['X-Agentd-Materialize-Token']).toBe('secret-token');
+    delete process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN;
+  });
+
+  it('postApprovePlan omits token header when env unset', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    delete process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN;
+    vi.resetModules();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { postApprovePlan } = await import('./api');
+    await postApprovePlan({ name: 'P', description: '', tasks: [] });
+    const headers = fetchMock.mock.calls[0][1].headers;
+    expect(headers['X-Agentd-Materialize-Token']).toBeUndefined();
+  });
 });
