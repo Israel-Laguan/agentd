@@ -53,6 +53,7 @@ type Daemon struct {
 	rollingLedger           *RollingTokenLedger
 	scheduler               *Scheduler
 	schedulerTickEvery      time.Duration
+	lastRollingLedgerRefresh time.Time
 	wg                      sync.WaitGroup
 }
 

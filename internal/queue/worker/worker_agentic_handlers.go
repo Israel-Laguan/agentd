@@ -112,7 +112,7 @@ func (w *Worker) continueAgenticAfterTools(
 	iterationGuard.AfterIteration(true)
 	if abort, toolResult, toolReport := w.handleAgenticToolCalls(
 		ctx, task, turnID, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps,
-		cm, toolTracker, turnIndex, budgetGuard, profile.Provider,
+		cm, toolTracker, turnIndex, budgetGuard, resp.ProviderUsed,
 	); abort {
 		return false, toolResult, toolReport, nil
 	}
