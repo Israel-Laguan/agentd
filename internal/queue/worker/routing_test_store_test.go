@@ -24,6 +24,7 @@ func (s *routingTestStore) MarkTaskRunning(_ context.Context, _ string, _ time.T
 	return &s.task, nil
 }
 func (s *routingTestStore) UpdateTaskHeartbeat(context.Context, string) error { return nil }
+func (s *routingTestStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 func (s *routingTestStore) IncrementRetryCount(_ context.Context, _ string, _ time.Time) (*models.Task, error) {
 	s.task.RetryCount++
 	return &s.task, nil

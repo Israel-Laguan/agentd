@@ -58,6 +58,7 @@ type KanbanStore interface {
 	UpdateTaskState(ctx context.Context, id string, expectedUpdatedAt time.Time, next TaskState) (*Task, error)
 	UpdateTaskDescription(ctx context.Context, id string, expectedUpdatedAt time.Time, description string) (*Task, error)
 	UpdateTaskResult(ctx context.Context, id string, expectedUpdatedAt time.Time, result TaskResult) (*Task, error)
+	UpdateCriteriaMet(ctx context.Context, id string, met []string) error
 	ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]Task, error)
 	ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleThreshold time.Duration) ([]Task, error)
 	ReconcileOrphanedQueued(ctx context.Context, minAge time.Duration) ([]Task, error)

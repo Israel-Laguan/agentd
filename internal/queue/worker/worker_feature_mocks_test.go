@@ -25,6 +25,7 @@ func (s *workerTestStore) MarkTaskRunning(_ context.Context, id string, _ time.T
 func (s *workerTestStore) UpdateTaskHeartbeat(context.Context, string) error {
 	return nil
 }
+func (s *workerTestStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 
 func (s *workerTestStore) IncrementRetryCount(_ context.Context, _ string, _ time.Time) (*models.Task, error) {
 	s.task.RetryCount++

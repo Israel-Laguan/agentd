@@ -148,6 +148,7 @@ func (m *mockAgenticStore) MarkTaskRunning(_ context.Context, id string, _ time.
 func (m *mockAgenticStore) UpdateTaskHeartbeat(context.Context, string) error {
 	return nil
 }
+func (m *mockAgenticStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 
 func (m *mockAgenticStore) IncrementRetryCount(_ context.Context, _ string, _ time.Time) (*models.Task, error) {
 	m.task.RetryCount++

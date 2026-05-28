@@ -189,6 +189,10 @@ func (s *workerStore) UpdateTaskHeartbeat(context.Context, string) error {
 	return nil
 }
 
+func (s *workerStore) UpdateCriteriaMet(context.Context, string, []string) error {
+	return nil
+}
+
 func (s *workerStore) IncrementRetryCount(context.Context, string, time.Time) (*models.Task, error) {
 	s.task.RetryCount++
 	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)

@@ -130,7 +130,7 @@ func (w *Worker) newAgenticContextManager(task models.Task) (*ContextManager, *G
 	)
 
 	goal := GoalFromTask(task)
-	goalTracker := NewGoalTracker(task.ID, task.ProjectID)
+	goalTracker := NewGoalTracker(task.ID, task.ProjectID, WithCriteriaStore(w.store))
 	if goal != nil {
 		goalTracker.SetGoal(*goal)
 		cm.SetGoalTracker(goalTracker)

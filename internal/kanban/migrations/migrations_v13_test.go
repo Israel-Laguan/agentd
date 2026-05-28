@@ -15,8 +15,8 @@ func assertMigratedV13StrictScheduledTasks(t *testing.T, ctx context.Context, db
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "13" {
-		t.Fatalf("schema version = %q, want 13", version)
+	if version != "14" {
+		t.Fatalf("schema version = %q, want 14", version)
 	}
 	var createSQL string
 	if err := db.QueryRowContext(ctx, `

@@ -95,3 +95,71 @@ func TestGoalTracker_SetGoal_IsolatesMutation(t *testing.T) {
 		t.Fatalf("mutation leaked through SetGoal: %v", stored.SuccessCriteria)
 	}
 }
+
+// -- CriteriaUpdater persistence tests --
+
+type fakeCriteriaStore struct {
+	calls [][]string
+	err   error
+}
+
+func (f *fakeCriteriaStore) UpdateCriteriaMet(_ context.Context, _ string, met []string) error {
+	f.calls = append(f.calls, append([]string(nil), met...))
+	return f.err
+}
+
+func TestGoalTracker_AfterTurn_PersistsCriteriaOnCompletion(t *testing.T) {
+	store := &fakeCriteriaStore{}
+	gt := NewGoalTracker("task-1", "project-1", WithCriteriaStore(store))
+	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a", "b"}})
+
+	gt.AfterTurn(context.Background(), []string{"a"}, nil)
+
+	if len(store.calls) != 1 {
+		t.Fatalf("UpdateCriteriaMet called %d times, want 1", len(store.calls))
+	}
+	if len(store.calls[0]) != 1 || store.calls[0][0] != "a" {
+		t.Fatalf("UpdateCriteriaMet got %v, want [a]", store.calls[0])
+	}
+}
+
+func TestGoalTracker_AfterTurn_DoesNotPersistWhenNothingCompleted(t *testing.T) {
+	store := &fakeCriteriaStore{}
+	gt := NewGoalTracker("task-1", "project-1", WithCriteriaStore(store))
+	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a", "b"}})
+
+	gt.AfterTurn(context.Background(), nil, nil)
+
+	if len(store.calls) != 0 {
+		t.Fatalf("UpdateCriteriaMet called %d times, want 0", len(store.calls))
+	}
+}
+
+func TestGoalTracker_AfterTurn_AccumulatesCriteria(t *testing.T) {
+	store := &fakeCriteriaStore{}
+	gt := NewGoalTracker("task-1", "project-1", WithCriteriaStore(store))
+	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a", "b"}})
+
+	gt.AfterTurn(context.Background(), []string{"a"}, nil)
+	gt.AfterTurn(context.Background(), []string{"b"}, nil)
+
+	if len(store.calls) != 2 {
+		t.Fatalf("UpdateCriteriaMet called %d times, want 2", len(store.calls))
+	}
+	// Second call should contain both criteria (accumulated).
+	if len(store.calls[1]) != 2 {
+		t.Fatalf("second UpdateCriteriaMet got %v, want [a b]", store.calls[1])
+	}
+}
+
+func TestGoalTracker_AfterTurn_PersistErrorIsNonFatal(t *testing.T) {
+	store := &fakeCriteriaStore{err: context.DeadlineExceeded}
+	gt := NewGoalTracker("task-1", "project-1", WithCriteriaStore(store), WithStallThreshold(100))
+	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}})
+
+	// Should not panic or return true (stalled) due to the store error.
+	stalled := gt.AfterTurn(context.Background(), []string{"a"}, nil)
+	if stalled {
+		t.Fatal("persist error should not cause stall")
+	}
+}

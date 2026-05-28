@@ -78,6 +78,7 @@ func (s *queueStore) UpdateTaskHeartbeat(_ context.Context, id string) error {
 	})
 	return err
 }
+func (s *queueStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 
 func (s *queueStore) IncrementRetryCount(_ context.Context, id string, _ time.Time) (*models.Task, error) {
 	return s.update(id, func(task *models.Task) { task.RetryCount++ })
