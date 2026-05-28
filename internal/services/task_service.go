@@ -95,6 +95,20 @@ func (s *TaskService) UpdateTaskDescription(ctx context.Context, taskID, descrip
 	return s.Store.UpdateTaskDescription(ctx, taskID, current.UpdatedAt, description)
 }
 
+// PatchTask atomically applies a state transition and/or a description change.
+// Either pointer may be nil to leave the field unchanged. When both are non-nil
+// the entire patch succeeds or fails together — no partial commit.
+func (s *TaskService) PatchTask(ctx context.Context, taskID string, state *models.TaskState, description *string) (*models.Task, error) {
+	if state != nil && !state.Valid() {
+		return nil, models.ErrInvalidStateTransition
+	}
+	current, err := s.Store.GetTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	return s.Store.UpdateTaskPatch(ctx, taskID, current.UpdatedAt, state, description)
+}
+
 // ListByProject returns a paginated slice of tasks for a project, applying
 // the filter (state, assignee) supplied by the caller. The project is
 // looked up first so callers receive ErrProjectNotFound rather than an

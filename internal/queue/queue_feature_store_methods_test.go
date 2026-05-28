@@ -92,6 +92,18 @@ func (s *queueStore) UpdateTaskDescription(_ context.Context, id string, _ time.
 	return s.update(id, func(task *models.Task) { task.Description = description })
 }
 
+func (s *queueStore) UpdateTaskPatch(_ context.Context, id string, _ time.Time, state *models.TaskState, description *string) (*models.Task, error) {
+	return s.update(id, func(task *models.Task) {
+		if state != nil {
+			task.State = *state
+			task.OSProcessID = nil
+		}
+		if description != nil {
+			task.Description = *description
+		}
+	})
+}
+
 func (s *queueStore) UpdateTaskResult(_ context.Context, id string, _ time.Time, result models.TaskResult) (*models.Task, error) {
 	next := models.TaskStateFailed
 	if result.Success {
