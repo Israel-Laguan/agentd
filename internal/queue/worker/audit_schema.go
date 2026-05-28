@@ -17,6 +17,7 @@ const (
 	recordTypeTaskStart    = "task_start"
 	recordTypeTaskComplete = "task_complete"
 	recordTypeTaskFail     = "task_fail"
+	recordTypeTaskReview   = "task_review"
 	recordTypeDaemonStart  = "daemon_start"
 )
 
@@ -78,7 +79,7 @@ type TurnSnapshotRecord struct {
 	Timestamp    time.Time `json:"timestamp"`
 }
 
-// TaskAuditRecord captures a legacy-mode task lifecycle event (start, complete, or fail).
+// TaskAuditRecord captures a legacy-mode task lifecycle event (start, complete, fail, or review handoff).
 type TaskAuditRecord struct {
 	Type       string    `json:"type,omitempty"`
 	RecordType string    `json:"record_type,omitempty"`

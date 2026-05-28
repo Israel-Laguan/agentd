@@ -100,7 +100,7 @@ func (l *AuditLogger) RecordTurnSnapshot(rec TurnSnapshotRecord) {
 	}
 }
 
-// RecordTaskEvent writes a task lifecycle event (task_start, task_complete, or task_fail).
+// RecordTaskEvent writes a task lifecycle event (task_start, task_complete, task_fail, or task_review).
 func (l *AuditLogger) RecordTaskEvent(rec TaskAuditRecord) {
 	if !l.Enabled() {
 		return
