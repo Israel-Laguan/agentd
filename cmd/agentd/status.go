@@ -44,7 +44,7 @@ func newStatusCommand(opts *rootOptions) *cobra.Command {
 // Priority: explicit --api-url flag > config file API.Address > hardcoded default.
 func resolveAPIBase(opts *rootOptions, flagValue string) (string, error) {
 	if flagValue != "" {
-		return strings.TrimRight(flagValue, "/"), nil
+		return normalizeAPIBaseURL(flagValue), nil
 	}
 	cfg, err := config.Load(config.LoadOptions{
 		HomeOverride: opts.home,
@@ -54,13 +54,17 @@ func resolveAPIBase(opts *rootOptions, flagValue string) (string, error) {
 		return "", err
 	}
 	if cfg.API.Address != "" {
-		addr := strings.TrimRight(cfg.API.Address, "/")
-		if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
-			addr = "http://" + addr
-		}
-		return addr, nil
+		return normalizeAPIBaseURL(cfg.API.Address), nil
 	}
 	return "http://127.0.0.1:8765", nil
+}
+
+func normalizeAPIBaseURL(addr string) string {
+	addr = strings.TrimRight(addr, "/")
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		addr = "http://" + addr
+	}
+	return addr
 }
 
 // fetchStatusCounts calls GET /api/v1/system/status and returns task state counts.
