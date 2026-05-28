@@ -9,10 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
-
-	"agentd/internal/models"
 )
 
 // mockStatusResponse builds the JSON envelope that /api/v1/system/status returns.
@@ -85,16 +81,6 @@ func TestStatus_APIURLCustomBase(t *testing.T) {
 	runCLI(t, home, "status", "--api-url", srv.URL)
 	if gotHost == "" {
 		t.Fatal("mock server never received a request")
-	}
-}
-
-func knownCounts() map[models.TaskState]int {
-	return map[models.TaskState]int{
-		models.TaskStateReady:     1,
-		models.TaskStateQueued:    1,
-		models.TaskStateRunning:   1,
-		models.TaskStateCompleted: 1,
-		models.TaskStateFailed:    1,
 	}
 }
 
@@ -201,34 +187,5 @@ func TestStatus_ConnectionRefused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "daemon is not running") {
 		t.Errorf("expected 'daemon is not running' in error, got: %v", err)
-	}
-}
-
-func assertStatusOutput(t *testing.T, counts map[models.TaskState]int) {
-	t.Helper()
-	cmd := &cobra.Command{}
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-
-	if err := printStatus(cmd, counts); err != nil {
-		t.Fatalf("printStatus() error = %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "STATE             COUNT") {
-		t.Error("missing header line")
-	}
-	for _, expect := range []string{
-		"READY             1",
-		"QUEUED            1",
-		"RUNNING           1",
-		"COMPLETED         1",
-		"FAILED            1",
-		"queue_length      2",
-		"active_threads    1",
-	} {
-		if !strings.Contains(output, expect) {
-			t.Errorf("output missing %q\nfull output:\n%s", expect, output)
-		}
 	}
 }
