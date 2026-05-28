@@ -73,7 +73,7 @@ export interface ChatResponse {
   plan?: DraftPlan;
 }
 
-interface DraftPlanTask {
+export interface DraftPlanTask {
   id?: string;
   title: string;
   description: string;

@@ -1,4 +1,4 @@
-import { Task, TaskStatus, TaskLog, TaskComment } from "@/lib/types";
+import { Task, TaskStatus, TaskLog, TaskComment, DraftPlan, DraftPlanTask } from "@/lib/types";
 
 // unwrapData extracts the `.data` field from the daemon's standard envelope
 // { status, data, meta?, error? }. Used by all real-API fetch functions.
@@ -57,6 +57,26 @@ export function mapDaemonTask(raw: Record<string, unknown>): Task {
     updated_at: isoToMs(raw.UpdatedAt ?? raw.updated_at ?? raw.updatedAt),
     token_usage: (raw.TokenUsage ?? raw.token_usage) as number | undefined,
   };
+}
+
+// mapDaemonDraftPlan converts a raw daemon DraftPlan (project_name / PascalCase
+// fallback) to the web DraftPlan shape. project_name maps to name; task
+// ref_id / temp_id map to the optional DraftPlanTask.id.
+export function mapDaemonDraftPlan(raw: Record<string, unknown>): DraftPlan {
+  const name = (raw.project_name ?? raw.ProjectName ?? "") as string;
+  const description = (raw.description ?? raw.Description ?? "") as string;
+  const rawTasks = ((raw.tasks ?? raw.Tasks ?? []) as Record<string, unknown>[]);
+  const tasks: DraftPlanTask[] = rawTasks.map((t) => {
+    const id = (
+      (t.ref_id ?? t.ReferenceID ?? t.temp_id ?? t.TempID ?? "") as string
+    ).trim() || undefined;
+    return {
+      ...(id !== undefined ? { id } : {}),
+      title: (t.title ?? t.Title ?? "") as string,
+      description: (t.description ?? t.Description ?? "") as string,
+    };
+  });
+  return { name, description, tasks };
 }
 
 // mapDaemonComment converts a raw daemon Comment (PascalCase) to the web

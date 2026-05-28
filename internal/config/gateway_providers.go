@@ -138,24 +138,48 @@ func loadGatewayProvidersWithWarnings(
 	return providers, nil
 }
 
-func putGatewayProvider(byName map[string]gateway.ProviderConfig, cfg gateway.ProviderConfig) error {
+func finalizeGatewayProvider(cfg gateway.ProviderConfig) (gateway.ProviderConfig, error) {
 	cfg.Name = strings.TrimSpace(cfg.Name)
 	cfg.Adapter = strings.TrimSpace(cfg.Adapter)
 	if cfg.Name == "" {
 		cfg.Name = cfg.Adapter
 	}
 	if cfg.Name == "" {
-		return fmt.Errorf("entry missing name and adapter")
+		return cfg, fmt.Errorf("entry missing name and adapter")
 	}
 	if cfg.Adapter == "" {
 		cfg.Adapter = cfg.Name
 	}
-	cfg = canonicalGatewayProvider(cfg)
+	return canonicalGatewayProvider(cfg), nil
+}
+
+func putGatewayProvider(byName map[string]gateway.ProviderConfig, cfg gateway.ProviderConfig) error {
+	cfg, err := finalizeGatewayProvider(cfg)
+	if err != nil {
+		return err
+	}
 	if _, exists := byName[cfg.Name]; exists {
 		return fmt.Errorf("duplicate provider %q", cfg.Name)
 	}
 	byName[cfg.Name] = cfg
 	return nil
+}
+
+// registerBuiltInGatewayProvider adds a legacy flat-key slot when not overridden in gateway.providers.
+// Slot keys are fixed; normalization must keep the slot name or the process panics (programming error).
+func registerBuiltInGatewayProvider(byName map[string]gateway.ProviderConfig, slot string, cfg gateway.ProviderConfig) {
+	if _, exists := byName[slot]; exists {
+		return
+	}
+	cfg.Name = slot
+	finalized, err := finalizeGatewayProvider(cfg)
+	if err != nil {
+		panic("config: built-in gateway provider " + slot + ": " + err.Error())
+	}
+	if finalized.Name != slot {
+		panic(fmt.Sprintf("config: built-in gateway provider %q normalized to %q", slot, finalized.Name))
+	}
+	byName[slot] = finalized
 }
 
 func (c GatewayConfig) gatewayProvidersByName() (map[string]gateway.ProviderConfig, error) {
@@ -177,13 +201,7 @@ func (c GatewayConfig) gatewayProvidersByName() (map[string]gateway.ProviderConf
 		}
 	}
 	for _, legacy := range legacyProviders {
-		if _, exists := byName[legacy.name]; exists {
-			continue
-		}
-		legacy.cfg.Name = legacy.name
-		if err := putGatewayProvider(byName, legacy.cfg); err != nil {
-			return nil, err
-		}
+		registerBuiltInGatewayProvider(byName, legacy.name, legacy.cfg)
 	}
 	return byName, nil
 }
