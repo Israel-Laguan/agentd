@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"agentd/internal/models"
@@ -16,6 +17,9 @@ func (s *FakeKanbanStore) UpdateTaskPatch(_ context.Context, id string, expected
 	}
 	if !t.UpdatedAt.Equal(expectedUpdatedAt) {
 		return nil, models.ErrStateConflict
+	}
+	if state != nil && !t.State.CanTransitionTo(*state) {
+		return nil, fmt.Errorf("%w: %s -> %s", models.ErrInvalidStateTransition, t.State, *state)
 	}
 	ts := now()
 	if state != nil {

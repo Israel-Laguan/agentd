@@ -25,6 +25,9 @@ func (s *Store) UpdateTaskPatch(
 		if err != nil {
 			return nil, err
 		}
+		if !current.UpdatedAt.Equal(expectedUpdatedAt) {
+			return nil, models.ErrStateConflict
+		}
 		if state != nil && !current.State.CanTransitionTo(*state) {
 			return nil, fmt.Errorf("%w: %s -> %s", models.ErrInvalidStateTransition, current.State, *state)
 		}

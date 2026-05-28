@@ -206,12 +206,16 @@ func (s *workerStore) UpdateTaskDescription(_ context.Context, _ string, _ time.
 }
 
 func (s *workerStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, state *models.TaskState, description *string) (*models.Task, error) {
+	updated := false
 	if state != nil {
 		s.task.State = *state
-		s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
+		updated = true
 	}
 	if description != nil {
 		s.task.Description = *description
+		updated = true
+	}
+	if updated {
 		s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
 	}
 	return &s.task, nil
