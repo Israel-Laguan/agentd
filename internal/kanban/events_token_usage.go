@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"agentd/internal/models"
@@ -54,8 +56,7 @@ func parseTokenUsagePayload(payload string) (int, bool) {
 	if err := json.Unmarshal([]byte(payload), &p); err == nil && p.Tokens > 0 {
 		return p.Tokens, true
 	}
-	var n int
-	if _, err := fmt.Sscanf(payload, "%d", &n); err == nil && n > 0 {
+	if n, err := strconv.Atoi(strings.TrimSpace(payload)); err == nil && n > 0 {
 		return n, true
 	}
 	return 0, false

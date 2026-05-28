@@ -76,15 +76,22 @@ export default function Page() {
 
     const poll = async () => {
       try {
-        const [board, workforce, status] = await Promise.all([
+        const [boardRes, workforceRes, statusRes] = await Promise.allSettled([
           getBoard(),
           getWorkforce(),
           getSystemStatus(),
         ]);
         if (!mounted) return;
+        if (boardRes.status !== "fulfilled" || workforceRes.status !== "fulfilled") {
+          setBoardError(true);
+          setSystemStatus(statusRes.status === "fulfilled" ? statusRes.value : null);
+          return;
+        }
+        const board = boardRes.value;
+        const workforce = workforceRes.value;
         setBoardError(false);
         setWorkforce(workforce);
-        setSystemStatus(status);
+        setSystemStatus(statusRes.status === "fulfilled" ? statusRes.value : null);
 
         setLocalTasks(prev =>
           prev.length === 0

@@ -6,17 +6,24 @@ import (
 )
 
 // AddTokenUsage atomically increments token_usage for the given task.
-// It is a no-op when tokens <= 0 or the task does not exist.
+// It is a no-op when tokens <= 0 and returns an error when taskID is unknown.
 func (s *Store) AddTokenUsage(ctx context.Context, taskID string, tokens int) error {
 	if tokens <= 0 {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE tasks SET token_usage = token_usage + ? WHERE id = ?`,
 		tokens, taskID,
 	)
 	if err != nil {
 		return fmt.Errorf("add token usage: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("add token usage rows affected: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("add token usage: task %q not found", taskID)
 	}
 	return nil
 }
