@@ -1,5 +1,26 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Real daemon mode
+
+By default the UI uses in-memory mocks. To talk to a running `agentd`:
+
+```bash
+# Terminal 1 — daemon (LLM configured in agentd.yaml)
+./bin/agentd start -v
+
+# Terminal 2 — cockpit
+cd web
+NEXT_PUBLIC_USE_MOCK=false npm run dev
+```
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_USE_MOCK` | Set to `false` to call the daemon instead of mocks (default: mock on). |
+| `NEXT_PUBLIC_API_URL` | Daemon base URL (default: `http://localhost:8765`). |
+| `NEXT_PUBLIC_MATERIALIZE_TOKEN` | When `api.materialize_token` is set in daemon config, send the same value as `X-Agentd-Materialize-Token` on plan approval (`POST /api/v1/projects/materialize`). |
+
+Chat sends `tools: [{ name: "create_plan" }]` on `/v1/chat/completions` so the daemon can return `tool_calls` (`create_plan`, `status_report`). The UI maps `project_name` → plan card fields, renders status/clarification panels instead of raw JSON, and approves via materialize (refreshing the board and opening the first new task).
+
 ## Getting Started
 
 First, run the development server:

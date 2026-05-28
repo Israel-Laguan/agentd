@@ -1,13 +1,22 @@
 import { mockBoard } from "@/lib/mocks/board.mock";
 import { mockWorkforce } from "@/lib/mocks/workforce.mock";
 import { mockChat } from "@/lib/mocks/chat.mock";
-import { mockApprovePlan } from "@/lib/mocks/plan.mock";
 import { mockTaskComments } from "@/lib/mocks/mock-task-comment";
 import { mockProviders } from "@/lib/mocks/providers.mock";
 import { ChatSettings } from "@/app/components/chat/chat-settings-modal";
-import { Provider, Task, TaskComment, ChatResponse, WorkforceState, SystemStatus, DraftPlan } from "@/lib/types";
+import {
+  Provider,
+  Task,
+  TaskComment,
+  ChatResponse,
+  WorkforceState,
+  SystemStatus,
+  DraftPlan,
+  MaterializeResult,
+} from "@/lib/types";
 import { mockSystemStatus } from "@/lib/mocks/system.mock";
 import { unwrapData, mapDaemonTask, mapDaemonComment, mapDaemonDraftPlan } from "@/lib/mappers";
+import { parseStructuredIntake, displayContentForChat } from "@/lib/chat-intake";
 
 // Set NEXT_PUBLIC_USE_MOCK=false to disable mock mode and hit the real daemon.
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
@@ -163,13 +172,23 @@ export async function sendChat(
     }
   }
 
+  const intake = parseStructuredIntake(content, toolCalls);
+  const displayContent = displayContentForChat(content, Boolean(plan), intake);
+
   return {
     message: {
       id: envelope?.id ?? "",
       role: "assistant" as const,
-      content: content ?? "",
+      content: displayContent,
     },
     ...(plan ? { plan } : {}),
+    ...(intake?.statusReport ? { statusReport: intake.statusReport } : {}),
+    ...(intake?.scopeClarification
+      ? { scopeClarification: intake.scopeClarification }
+      : {}),
+    ...(intake?.intentClarification
+      ? { intentClarification: intake.intentClarification }
+      : {}),
   } satisfies ChatResponse;
 }
 
@@ -183,8 +202,13 @@ export async function fetchProviders(): Promise<Provider[]> {
   return envelope.data as Provider[];
 }
 
-export async function postApprovePlan(plan: DraftPlan) {
-  if (USE_MOCK) return mockApprovePlan;
+export async function postApprovePlan(plan: DraftPlan): Promise<MaterializeResult> {
+  if (USE_MOCK) {
+    return {
+      projectId: "mock-project",
+      taskIds: plan.tasks.map((t, i) => t.id ?? `mock-task-${i}`),
+    };
+  }
 
   // Map web DraftPlan back to the daemon's models.DraftPlan wire shape.
   const daemonBody = {
@@ -212,7 +236,15 @@ export async function postApprovePlan(plan: DraftPlan) {
     throw new Error(`Failed to approve plan: ${res.status}`);
   }
 
-  return res.json();
+  const data = unwrapData<{
+    project?: Record<string, unknown>;
+    tasks?: Record<string, unknown>[];
+  }>(await res.json());
+  const projectId = String(data.project?.id ?? data.project?.ID ?? "");
+  const taskIds = (data.tasks ?? [])
+    .map((t) => String(t.id ?? t.ID ?? ""))
+    .filter(Boolean);
+  return { projectId, taskIds };
 }
 
 export async function fetchTaskComments(taskId: string): Promise<TaskComment[]> {
