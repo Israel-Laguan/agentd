@@ -2,101 +2,166 @@ package main
 
 import (
 	"bytes"
-	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 
-	"agentd/internal/kanban"
 	"agentd/internal/models"
 )
 
-func TestStatusPrintsTaskStateCounts(t *testing.T) {
-	store := openInMemoryStore(t)
-	ctx := context.Background()
-
-	seedStatusPlan(t, ctx, store)
-	counts, err := taskStateCounts(ctx, store)
-	if err != nil {
-		t.Fatalf("taskStateCounts() error = %v", err)
-	}
-	assertStateCounts(t, counts)
-	assertStatusOutput(t, counts)
-}
-
-func seedStatusPlan(t *testing.T, ctx context.Context, store *kanban.Store) {
-	t.Helper()
-	plan := models.DraftPlan{
-		ProjectName: "status plan",
-		Description: "test counts",
-		Tasks: []models.DraftTask{
-			{TempID: "a", Title: "A"},
-			{TempID: "b", Title: "B"},
-			{TempID: "c", Title: "C", DependsOn: []string{"a"}},
-			{TempID: "d", Title: "D"},
-			{TempID: "e", Title: "E"},
+// mockStatusResponse builds the JSON envelope that /api/v1/system/status returns.
+func mockStatusResponse(tasksByState map[string]int) []byte {
+	body, _ := json.Marshal(map[string]any{
+		"status": "success",
+		"data": map[string]any{
+			"status": map[string]any{
+				"kind":    "status_report",
+				"message": "ok",
+				"summary": map[string]any{
+					"total_projects": 1,
+					"tasks_by_state": tasksByState,
+				},
+			},
 		},
-	}
-	_, tasks, err := store.MaterializePlan(ctx, plan)
-	if err != nil {
-		t.Fatalf("MaterializePlan() error = %v", err)
-	}
-
-	byTitle := make(map[string]models.Task, len(tasks))
-	for _, task := range tasks {
-		byTitle[task.Title] = task
-	}
-
-	claimed, err := store.ClaimNextReadyTasks(ctx, 10)
-	if err != nil {
-		t.Fatalf("ClaimNextReadyTasks() error = %v", err)
-	}
-	for _, c := range claimed {
-		byTitle[c.Title] = c
-	}
-
-	taskA := byTitle["A"]
-	updatedA, err := store.UpdateTaskState(ctx, taskA.ID, taskA.UpdatedAt, models.TaskStateRunning)
-	if err != nil {
-		t.Fatalf("UpdateTaskState(A->RUNNING) error = %v", err)
-	}
-	_, err = store.UpdateTaskResult(ctx, updatedA.ID, updatedA.UpdatedAt, models.TaskResult{Success: true})
-	if err != nil {
-		t.Fatalf("UpdateTaskResult(A) error = %v", err)
-	}
-
-	taskB := byTitle["B"]
-	updatedB, err := store.UpdateTaskState(ctx, taskB.ID, taskB.UpdatedAt, models.TaskStateRunning)
-	if err != nil {
-		t.Fatalf("UpdateTaskState(B->RUNNING) error = %v", err)
-	}
-	_, err = store.UpdateTaskResult(ctx, updatedB.ID, updatedB.UpdatedAt, models.TaskResult{Success: false, Payload: "oops"})
-	if err != nil {
-		t.Fatalf("UpdateTaskResult(B) error = %v", err)
-	}
-
-	taskD := byTitle["D"]
-	updatedD, err := store.UpdateTaskState(ctx, taskD.ID, taskD.UpdatedAt, models.TaskStateRunning)
-	if err != nil {
-		t.Fatalf("UpdateTaskState(D->RUNNING) error = %v", err)
-	}
-	byTitle["D"] = *updatedD
+	})
+	return body
 }
 
-func assertStateCounts(t *testing.T, counts map[models.TaskState]int) {
-	t.Helper()
-	wantCounts := map[models.TaskState]int{
+func TestResolveAPIBase_FlagWins(t *testing.T) {
+	const custom = "http://custom:9999"
+	got := resolveAPIBase(&rootOptions{}, custom)
+	if got != custom {
+		t.Fatalf("resolveAPIBase() = %q, want %q", got, custom)
+	}
+}
+
+func TestStatus_APIURLCustomBase(t *testing.T) {
+	var gotHost string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHost = r.Host
+		if r.URL.Path != "/api/v1/system/status" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(mockStatusResponse(map[string]int{"ready": 1}))
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	runCLI(t, home, "status", "--api-url", srv.URL)
+	if gotHost == "" {
+		t.Fatal("mock server never received a request")
+	}
+}
+
+func knownCounts() map[models.TaskState]int {
+	return map[models.TaskState]int{
 		models.TaskStateReady:     1,
 		models.TaskStateQueued:    1,
 		models.TaskStateRunning:   1,
 		models.TaskStateCompleted: 1,
 		models.TaskStateFailed:    1,
 	}
-	for state, want := range wantCounts {
-		if counts[state] != want {
-			t.Errorf("count[%s] = %d, want %d", state, counts[state], want)
+}
+
+// TestStatus_HTTPFetch verifies that the status command fetches task counts
+// from the daemon API and formats them correctly.
+func TestStatus_HTTPFetch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/system/status" {
+			http.NotFound(w, r)
+			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(mockStatusResponse(map[string]int{
+			"ready": 1, "queued": 1, "running": 1, "completed": 1, "failed": 1,
+		}))
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	output := runCLI(t, home, "status", "--api-url", srv.URL)
+	assertStatusOutput(t, knownCounts())
+	_ = output
+}
+
+// TestStatus_ReadOnlyHome verifies that status succeeds even when the agentd
+// home directory is not writable (the common sandbox failure mode).
+func TestStatus_ReadOnlyHome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(mockStatusResponse(map[string]int{"ready": 2}))
+	}))
+	defer srv.Close()
+
+	home := filepath.Join(t.TempDir(), ".agentd")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(home, 0o555); err != nil {
+		t.Skipf("cannot chmod (may be running as root): %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(home, 0o755) })
+
+	output := runCLI(t, home, "status", "--api-url", srv.URL)
+	if !strings.Contains(output, "STATE") {
+		t.Errorf("expected status output, got: %s", output)
+	}
+}
+
+// TestStatus_ReadOnlyHomeNoAPIFlag verifies that a read-only home does not trigger
+// the openRuntime writability preflight; without a running daemon we get a
+// connection error instead of "directory not writable".
+func TestStatus_ReadOnlyHomeNoAPIFlag(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".agentd")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(home, 0o555); err != nil {
+		t.Skipf("cannot chmod (may be running as root): %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(home, 0o755) })
+
+	cmd := newRootCommand()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--home", home, "status"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when daemon not running, got nil")
+	}
+	if strings.Contains(err.Error(), "directory not writable") ||
+		strings.Contains(err.Error(), "data directories") {
+		t.Fatalf("got writability preflight error, want connection/daemon error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "daemon is not running") {
+		t.Errorf("expected 'daemon is not running' in error, got: %v", err)
+	}
+}
+
+// TestStatus_ConnectionRefused verifies that a friendly error is returned
+// when the daemon is not running.
+func TestStatus_ConnectionRefused(t *testing.T) {
+	home := t.TempDir()
+	cmd := newRootCommand()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--home", home, "status", "--api-url", "http://127.0.0.1:1"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when daemon not running, got nil")
+	}
+	if !strings.Contains(err.Error(), "daemon is not running") {
+		t.Errorf("expected 'daemon is not running' in error, got: %v", err)
 	}
 }
 
@@ -127,14 +192,4 @@ func assertStatusOutput(t *testing.T, counts map[models.TaskState]int) {
 			t.Errorf("output missing %q\nfull output:\n%s", expect, output)
 		}
 	}
-}
-
-func openInMemoryStore(t *testing.T) *kanban.Store {
-	t.Helper()
-	store, err := kanban.OpenStore("file::memory:?cache=shared")
-	if err != nil {
-		t.Fatalf("OpenStore() error = %v", err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	return store
 }

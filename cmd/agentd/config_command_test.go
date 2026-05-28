@@ -133,6 +133,19 @@ func TestConfigShowCommand_ProviderAPIKeyOverridesFile(t *testing.T) {
 	}
 }
 
+func TestConfigShow_ReadOnlyHome(t *testing.T) {
+	home := initHome(t)
+	if err := os.Chmod(home, 0o555); err != nil {
+		t.Skipf("cannot chmod (may be running as root): %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(home, 0o755) })
+
+	output := runCLI(t, home, "config", "show")
+	if !strings.Contains(output, "api.address=") {
+		t.Fatalf("config show on read-only home: missing resolved config: %s", output)
+	}
+}
+
 func TestConfigShowCommand_NoOverrideWhenValuesAgree(t *testing.T) {
 	home := filepath.Join(t.TempDir(), ".agentd")
 	if err := os.MkdirAll(home, 0o755); err != nil {
