@@ -94,6 +94,9 @@ func (s *batchTestStore) UpdateTaskState(_ context.Context, id string, _ time.Ti
 func (s *batchTestStore) UpdateTaskDescription(context.Context, string, time.Time, string) (*models.Task, error) {
 	return nil, nil
 }
+func (s *batchTestStore) UpdateTaskPatch(context.Context, string, time.Time, *models.TaskState, *string) (*models.Task, error) {
+	return nil, nil
+}
 func (s *batchTestStore) AddComment(context.Context, models.Comment) error { return nil }
 func (s *batchTestStore) ListComments(context.Context, string) ([]models.Comment, error) {
 	return nil, nil

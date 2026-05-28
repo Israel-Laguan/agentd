@@ -125,7 +125,18 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	}
 	var updated *models.Task
 	var err error
-	if hasState {
+	if hasState && hasDescription {
+		if h.Tasks == nil {
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
+			return
+		}
+		next := models.TaskState(strings.ToUpper(strings.TrimSpace(req.State)))
+		updated, err = h.Tasks.PatchTask(r.Context(), taskID, &next, req.Description)
+		if err != nil {
+			httpx.WriteMappedError(w, err)
+			return
+		}
+	} else if hasState {
 		if h.Tasks == nil {
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
 			return
@@ -136,8 +147,7 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteMappedError(w, err)
 			return
 		}
-	}
-	if hasDescription {
+	} else {
 		if h.Tasks == nil {
 			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
 			return
