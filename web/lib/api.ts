@@ -5,14 +5,27 @@ import { mockApprovePlan } from "@/lib/mocks/plan.mock";
 import { mockTaskComments } from "@/lib/mocks/mock-task-comment";
 import { mockProviders } from "@/lib/mocks/providers.mock";
 import { ChatSettings } from "@/app/components/chat/chat-settings-modal";
-import { Provider, Task, TaskComment, ChatResponse, WorkforceState, SystemStatus } from "@/lib/types";
+import { Provider, Task, TaskComment, ChatResponse, WorkforceState, SystemStatus, DraftPlan } from "@/lib/types";
 import { mockSystemStatus } from "@/lib/mocks/system.mock";
-import { unwrapData, mapDaemonTask, mapDaemonComment } from "@/lib/mappers";
+import { unwrapData, mapDaemonTask, mapDaemonComment, mapDaemonDraftPlan } from "@/lib/mappers";
 
 // Set NEXT_PUBLIC_USE_MOCK=false to disable mock mode and hit the real daemon.
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 // Set NEXT_PUBLIC_API_URL to override the daemon address (default: http://localhost:8765).
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8765";
+// Set NEXT_PUBLIC_MATERIALIZE_TOKEN to match api.materialize_token in the daemon config.
+const MATERIALIZE_TOKEN = process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN ?? "";
+
+// OpenAI function-tool definition sent with every chat request so the daemon
+// emits tool_calls (create_plan / status_report) when the response is structured.
+const CREATE_PLAN_TOOL_DEF = {
+  type: "function",
+  function: {
+    name: "create_plan",
+    description: "Create a structured project plan",
+    parameters: { type: "object", properties: {} },
+  },
+} as const;
 
 // ---------------- BOARD ----------------
 export async function getBoard(): Promise<{ tasks: Task[] }> {
@@ -91,31 +104,72 @@ export async function getWorkforce(): Promise<WorkforceState | null> {
 }
 
 // ---------------- CHAT ----------------
-export async function sendChat(message: string, settings?: ChatSettings): Promise<ChatResponse> {
+export async function sendChat(
+  message: string,
+  settings?: ChatSettings,
+  approvedScopes?: string[]
+): Promise<ChatResponse> {
   if (USE_MOCK) return mockChat(message);
+
+  const body: Record<string, unknown> = {
+    model: settings?.model,
+    messages: [{ role: "user", content: message }],
+    // Opt into structured plan/status tool_calls from the daemon.
+    tools: [CREATE_PLAN_TOOL_DEF],
+  };
+  if (approvedScopes && approvedScopes.length > 0) {
+    body.approved_scopes = approvedScopes;
+  }
 
   const res = await fetch(`${API}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    // Backend expects OpenAI-compatible wire shape.
-    body: JSON.stringify({
-      model: settings?.model,
-      messages: [{ role: "user", content: message }],
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
   const envelope = await res.json();
   // Unwrap OpenAI choices array into a ChatResponse shape.
   const choice = envelope?.choices?.[0];
-  if (!choice?.message?.content) {
-    throw new Error("Invalid chat response: missing choices[0].message.content");
+  const content: string | null | undefined = choice?.message?.content;
+  const toolCalls: { function?: { name?: string; arguments?: string } }[] | undefined =
+    choice?.message?.tool_calls;
+
+  if (!content && (!toolCalls || toolCalls.length === 0)) {
+    throw new Error("Invalid chat response: missing choices[0].message.content and tool_calls");
   }
+
+  // --- Plan extraction ---
+  // Primary: look for a create_plan tool call (daemon emits this when tools were requested).
+  let plan: DraftPlan | undefined;
+  if (toolCalls && toolCalls.length > 0) {
+    const createPlanCall = toolCalls.find((tc) => tc.function?.name === "create_plan");
+    if (createPlanCall?.function?.arguments) {
+      try {
+        plan = mapDaemonDraftPlan(JSON.parse(createPlanCall.function.arguments));
+      } catch {
+        // malformed arguments — fall through to content fallback
+      }
+    }
+  }
+  // Fallback: try to parse plan JSON from message.content (no-tools path).
+  if (!plan && content) {
+    try {
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      if (parsed.project_name || parsed.ProjectName || parsed.tasks || parsed.Tasks) {
+        plan = mapDaemonDraftPlan(parsed);
+      }
+    } catch {
+      // plain text content — no plan
+    }
+  }
+
   return {
     message: {
       id: envelope?.id ?? "",
       role: "assistant" as const,
-      content: choice.message.content,
+      content: content ?? "",
     },
+    ...(plan ? { plan } : {}),
   } satisfies ChatResponse;
 }
 
@@ -129,11 +183,29 @@ export async function fetchProviders(): Promise<Provider[]> {
   return envelope.data as Provider[];
 }
 
-export async function postApprovePlan() {
+export async function postApprovePlan(plan: DraftPlan) {
   if (USE_MOCK) return mockApprovePlan;
 
-  const res = await fetch(`${API}/api/v1/approve-plan`, {
+  // Map web DraftPlan back to the daemon's models.DraftPlan wire shape.
+  const daemonBody = {
+    project_name: plan.name,
+    description: plan.description,
+    tasks: plan.tasks.map((t) => ({
+      title: t.title,
+      description: t.description,
+      ...(t.id ? { temp_id: t.id } : {}),
+    })),
+  };
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (MATERIALIZE_TOKEN) {
+    headers["X-Agentd-Materialize-Token"] = MATERIALIZE_TOKEN;
+  }
+
+  const res = await fetch(`${API}/api/v1/projects/materialize`, {
     method: "POST",
+    headers,
+    body: JSON.stringify(daemonBody),
   });
 
   if (!res.ok) {

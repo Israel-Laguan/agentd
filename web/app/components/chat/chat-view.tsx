@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 
 function createMessageId() {
@@ -55,17 +55,32 @@ export function ChatView({
   const [draftSettings, setDraftSettings] =
   useState(chatSettings);
 
+  // approvedScopes: set when the user selects a scope from a scope_clarification
+  // response; forwarded on the next sendChat call then cleared.
+  const [approvedScopes, setApprovedScopes] = useState<string[]>([]);
+  // pendingScopeOptions: populated when daemon returns scope_clarification JSON.
+  const [pendingScopeOptions, setPendingScopeOptions] = useState<
+    { id: string; description: string }[]
+  >([]);
+  // lastUserMessage: stored so scope selection can re-send the original intent.
+  const lastUserMessageRef = useRef<string>("");
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
     const userMsg = { id: createMessageId(), role: "user", content: input } as ChatMessage;
+    lastUserMessageRef.current = input;
 
     setMessages((p) => [...p, userMsg]);
     setInput("");
     setIsTyping(true);
+    setPendingScopeOptions([]);
+
+    const scopesToSend = approvedScopes.slice();
+    setApprovedScopes([]);
 
     try {
-      const data = await sendChat(userMsg.content, chatSettings);
+      const data = await sendChat(userMsg.content, chatSettings, scopesToSend.length > 0 ? scopesToSend : undefined);
 
       const assistant: ChatMessage =
         data?.message
@@ -77,7 +92,24 @@ export function ChatView({
             };
 
       setMessages((p) => [...p, assistant]);
-      if (data.plan) setDraftPlan(data.plan);
+      if (data.plan) {
+        setDraftPlan(data.plan);
+      } else if (assistant.content) {
+        // Check for scope_clarification / intent_clarification structured responses.
+        try {
+          const parsed = JSON.parse(assistant.content) as Record<string, unknown>;
+          if (parsed.kind === "scope_clarification" && Array.isArray(parsed.scopes)) {
+            setPendingScopeOptions(
+              (parsed.scopes as Record<string, unknown>[]).map((s) => ({
+                id: String(s.id ?? ""),
+                description: String(s.description ?? ""),
+              }))
+            );
+          }
+        } catch {
+          // plain text — ignore
+        }
+      }
     } catch (error) {
       console.error("Failed to send message:", error);
       setMessages((p) => [
@@ -93,9 +125,38 @@ export function ChatView({
     }
   };
 
-  const approvePlan = async () => {
+  const handleScopeSelect = async (scopeId: string) => {
+    setPendingScopeOptions([]);
+    const originalMessage = lastUserMessageRef.current;
+    if (!originalMessage) return;
+
+    const userMsg = {
+      id: createMessageId(),
+      role: "user" as const,
+      content: `[Scope selected: ${scopeId}]`,
+    };
+    setMessages((p) => [...p, userMsg]);
+    setIsTyping(true);
+
     try {
-      await postApprovePlan();
+      const data = await sendChat(originalMessage, chatSettings, [scopeId]);
+      const assistant: ChatMessage =
+        data?.message
+          ? { ...data.message, id: data.message.id ?? createMessageId() } as ChatMessage
+          : { id: createMessageId(), role: "assistant", content: "Sorry, I couldn't get a response." };
+      setMessages((p) => [...p, assistant]);
+      if (data.plan) setDraftPlan(data.plan);
+    } catch (error) {
+      console.error("Failed to send scope selection:", error);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  const approvePlan = async () => {
+    if (!draftPlan) return;
+    try {
+      await postApprovePlan(draftPlan);
       setDraftPlan(null);
       setMessages((p) => [
         ...p,
@@ -146,6 +207,24 @@ export function ChatView({
         ))}
 
         {isTyping && <ChatTyping />}
+
+        {pendingScopeOptions.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-text-dim">Select a scope to proceed:</p>
+            <div className="flex flex-wrap gap-2">
+              {pendingScopeOptions.map((scope) => (
+                <button
+                  key={scope.id}
+                  type="button"
+                  onClick={() => handleScopeSelect(scope.id)}
+                  className="px-3 py-1.5 text-sm border border-text-dim rounded hover:border-text hover:text-text transition-all"
+                >
+                  {scope.description || scope.id}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {draftPlan && (
           <DraftPlanView
