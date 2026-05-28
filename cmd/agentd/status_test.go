@@ -35,9 +35,36 @@ func mockStatusResponse(tasksByState map[string]int) []byte {
 
 func TestResolveAPIBase_FlagWins(t *testing.T) {
 	const custom = "http://custom:9999"
-	got := resolveAPIBase(&rootOptions{}, custom)
+	got, err := resolveAPIBase(&rootOptions{}, custom)
+	if err != nil {
+		t.Fatalf("resolveAPIBase() unexpected error: %v", err)
+	}
 	if got != custom {
 		t.Fatalf("resolveAPIBase() = %q, want %q", got, custom)
+	}
+}
+
+func TestResolveAPIBase_ConfigAddressNormalization(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".agentd")
+	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+	writeConfigTestFile(t, configPath, []byte("api:\n  address: https://daemon.example:8765/\n"))
+
+	got, err := resolveAPIBase(&rootOptions{home: home, configFile: configPath}, "")
+	if err != nil {
+		t.Fatalf("resolveAPIBase() error = %v", err)
+	}
+	if got != "https://daemon.example:8765" {
+		t.Fatalf("resolveAPIBase() = %q, want %q", got, "https://daemon.example:8765")
+	}
+}
+
+func TestResolveAPIBase_ConfigLoadError(t *testing.T) {
+	_, err := resolveAPIBase(&rootOptions{
+		home:       filepath.Join(t.TempDir(), ".agentd"),
+		configFile: filepath.Join(t.TempDir(), "missing.yaml"),
+	}, "")
+	if err == nil {
+		t.Fatal("resolveAPIBase() error = nil, want config load failure")
 	}
 }
 
@@ -81,15 +108,27 @@ func TestStatus_HTTPFetch(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(mockStatusResponse(map[string]int{
-			"ready": 1, "queued": 1, "running": 1, "completed": 1, "failed": 1,
+			"READY": 1, "QUEUED": 1, "RUNNING": 1, "COMPLETED": 1, "FAILED": 1,
 		}))
 	}))
 	defer srv.Close()
 
 	home := t.TempDir()
 	output := runCLI(t, home, "status", "--api-url", srv.URL)
-	assertStatusOutput(t, knownCounts())
-	_ = output
+	for _, expect := range []string{
+		"STATE             COUNT",
+		"READY             1",
+		"QUEUED            1",
+		"RUNNING           1",
+		"COMPLETED         1",
+		"FAILED            1",
+		"queue_length      2",
+		"active_threads    1",
+	} {
+		if !strings.Contains(output, expect) {
+			t.Errorf("output missing %q\nfull output:\n%s", expect, output)
+		}
+	}
 }
 
 // TestStatus_ReadOnlyHome verifies that status succeeds even when the agentd

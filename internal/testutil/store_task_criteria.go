@@ -16,7 +16,7 @@ func (s *FakeKanbanStore) UpdateCriteriaMet(_ context.Context, id string, met []
 	if t.State != models.TaskStateRunning {
 		return nil
 	}
-	cp := append([]string(nil), met...)
+	cp := append([]string{}, met...)
 	t.CriteriaMet = cp
 	t.UpdatedAt = now()
 	s.tasks[id] = t
