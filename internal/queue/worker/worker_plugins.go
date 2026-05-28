@@ -77,7 +77,12 @@ func (w *Worker) dispatchToolWithHooks(
 	toolExecutor *ToolExecutor,
 	taskHooks *HookChain,
 	scopedCapabilities *capabilities.Registry,
+	provider ...string,
 ) (ToolResult, bool) {
+	providerName := ""
+	if len(provider) > 0 {
+		providerName = provider[0]
+	}
 	var verdicts []string
 	hookCtx := HookContext{
 		ToolName:      call.Function.Name,
@@ -85,6 +90,7 @@ func (w *Worker) dispatchToolWithHooks(
 		CallID:        call.ID,
 		SessionID:     sessionID,
 		ProjectID:     projectID,
+		Provider:      providerName,
 		TurnID:        turnID,
 		Timestamp:     time.Now(),
 		TaskUpdatedAt: taskUpdatedAt,

@@ -15,6 +15,8 @@ type dispatchBatchStore struct {
 	tasks    []models.Task
 	projects map[string]models.Project
 	profiles map[string]models.AgentProfile
+	events   []models.TokenUsageEvent
+	queries  int
 }
 
 func newDispatchBatchStore(tasks []models.Task) *dispatchBatchStore {
@@ -229,6 +231,19 @@ func (s *dispatchBatchStore) ListUnprocessedHumanComments(context.Context) ([]mo
 	return nil, nil
 }
 func (s *dispatchBatchStore) MarkCommentProcessed(context.Context, string, string) error { return nil }
+func (s *dispatchBatchStore) ListTokenUsageEventsSince(_ context.Context, since time.Time) ([]models.TokenUsageEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.queries++
+	out := make([]models.TokenUsageEvent, 0, len(s.events))
+	for _, ev := range s.events {
+		if ev.At.Before(since) {
+			continue
+		}
+		out = append(out, ev)
+	}
+	return out, nil
+}
 
 func TestRequeueUndispatchedClaims_RequeuesQueuedTasks(t *testing.T) {
 	t.Parallel()
@@ -324,5 +339,28 @@ func TestGroupClaimed_ReordersByProjectBeforeDispatch(t *testing.T) {
 	}
 	if len(batches[1].Tasks) != 1 || batches[1].Tasks[0].ID != "t1" {
 		t.Fatalf("second batch = %+v, want [t1]", batches[1].Tasks)
+	}
+}
+
+func TestRefreshRollingLedgerFromStore_UsesPersistedEvents(t *testing.T) {
+	t.Parallel()
+	store := newDispatchBatchStore(nil)
+	now := time.Now()
+	store.events = []models.TokenUsageEvent{
+		{At: now.Add(-30 * time.Minute), Tokens: 35},
+		{At: now.Add(-5 * time.Minute), Tokens: 25},
+	}
+	daemon := NewDaemon(store, nil, nil, nil, nil, DaemonOptions{MaxWorkers: 1, Probe: StaticPIDProbe{}})
+	daemon.rollingLedger = NewRollingTokenLedger(time.Hour, 100)
+
+	daemon.refreshRollingLedgerFromStore(context.Background())
+
+	if got := daemon.rollingLedger.BudgetRemaining(100); got != 40 {
+		t.Fatalf("BudgetRemaining = %d, want 40", got)
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.queries != 1 {
+		t.Fatalf("ListTokenUsageEventsSince queries = %d, want 1", store.queries)
 	}
 }

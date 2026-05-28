@@ -64,7 +64,12 @@ func (w *Worker) handleAgenticToolCalls(
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
 	cm *ContextManager, toolTracker *toolFailureTracker,
 	turnIndex int, budgetGuard *BudgetGuard,
+	provider ...string,
 ) (abort bool, result LoopResult, report bool) {
+	providerName := ""
+	if len(provider) > 0 {
+		providerName = provider[0]
+	}
 	for _, call := range resp.ToolCalls {
 		taskUpdatedAt := task.UpdatedAt
 		if fresh, err := w.store.GetTask(ctx, task.ID); err != nil {
@@ -72,7 +77,7 @@ func (w *Worker) handleAgenticToolCalls(
 		} else if fresh != nil {
 			taskUpdatedAt = fresh.UpdatedAt
 		}
-		tr, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps)
+		tr, suspended := w.dispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps, providerName)
 		contextContent := tr.ForContext()
 		if detected := cm.CheckToolResult(contextContent); len(detected) > 0 {
 			slog.Info("auto-detected context corrections", "task_id", task.ID, "count", len(detected))
@@ -96,7 +101,7 @@ func (w *Worker) handleAgenticToolCalls(
 }
 
 func (w *Worker) continueAgenticAfterTools(
-	ctx context.Context, task models.Task,
+	ctx context.Context, task models.Task, profile models.AgentProfile,
 	resp gateway.AIResponse, messages *[]gateway.PromptMessage,
 	toolToAdapter map[string]string, toolExecutor *ToolExecutor,
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
@@ -107,7 +112,7 @@ func (w *Worker) continueAgenticAfterTools(
 	iterationGuard.AfterIteration(true)
 	if abort, toolResult, toolReport := w.handleAgenticToolCalls(
 		ctx, task, turnID, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps,
-		cm, toolTracker, turnIndex, budgetGuard,
+		cm, toolTracker, turnIndex, budgetGuard, profile.Provider,
 	); abort {
 		return false, toolResult, toolReport, nil
 	}

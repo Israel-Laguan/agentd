@@ -180,30 +180,70 @@ func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project mo
 	if !profileAlreadyRouted {
 		profile = w.routeLegacyProfile(ctx, task, project, profile)
 	}
-	if reason := w.legacyDispatchRejectReason(task, profile); reason != "" {
-		w.createLegacyModeHandoff(ctx, task, reason, nil)
+
+	audit := w.beginLegacyTaskAudit(task, project, profile.Provider)
+	defer w.finishLegacyTaskAudit(task, project, profile.Provider, audit)
+
+	response, ok := w.prepareLegacyExecution(ctx, task, project, profile, audit)
+	if !ok {
 		return
 	}
+	w.executeLegacyCommand(ctx, task, project, profile, response.Command, audit)
+}
+
+func (w *Worker) prepareLegacyExecution(
+	ctx context.Context,
+	task models.Task,
+	project models.Project,
+	profile models.AgentProfile,
+	audit *legacyTaskAudit,
+) (workerResponse, bool) {
+	if reason := w.legacyDispatchRejectReason(task, profile); reason != "" {
+		audit.failed = true
+		w.createLegacyModeHandoff(ctx, task, reason, nil)
+		return workerResponse{}, false
+	}
+
 	response, tokenUsage, err := w.command(ctx, task, project, profile)
 	w.recordTaskTokenUsage(ctx, task, tokenUsage)
+	audit.command = response.Command
+	audit.tokenUsage = tokenUsage
 	if err != nil {
+		audit.failed = true
 		if errors.Is(err, models.ErrInvalidJSONResponse) {
 			w.createLegacyModeHandoff(ctx, task, "Gateway could not return valid JSON after repair attempts.", err)
-			return
+			return workerResponse{}, false
 		}
 		w.handleGatewayError(ctx, task, err)
-		return
+		return workerResponse{}, false
 	}
 	if response.TooComplex {
+		audit.failed = true
 		w.handleLegacyTaskBreakdown(ctx, task, response.Subtasks, false)
-		return
+		return workerResponse{}, false
 	}
+
+	return response, true
+}
+
+func (w *Worker) executeLegacyCommand(
+	ctx context.Context,
+	task models.Task,
+	project models.Project,
+	profile models.AgentProfile,
+	command string,
+	audit *legacyTaskAudit,
+) {
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w.registerCancel(task.ID, cancel)
 	defer w.deregisterCancel(task.ID)
-	command := response.Command
+
 	result, runErr := w.sandbox.Execute(execCtx, w.payload(task, project, command))
+	audit.exitCode = result.ExitCode
+	if runErr != nil || !result.Success {
+		audit.failed = true
+	}
 	if w.isPromptHang(result, runErr) {
 		w.handlePromptRecovery(ctx, task, project, command, result)
 		return
@@ -213,8 +253,42 @@ func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project mo
 		return
 	}
 	if profile.RequireReview && runErr == nil && result.Success {
+		audit.failed = false // review handoff is not a failure
 		w.createReviewHandoff(ctx, task, result.Stdout)
 		return
 	}
 	w.commit(ctx, task, result, runErr)
+}
+
+type legacyTaskAudit struct {
+	command    string
+	exitCode   int
+	tokenUsage int
+	failed     bool
+}
+
+func (w *Worker) beginLegacyTaskAudit(task models.Task, project models.Project, provider string) *legacyTaskAudit {
+	w.auditLogger.RecordTaskEvent(TaskAuditRecord{
+		RecordType: recordTypeTaskStart,
+		TaskID:     task.ID,
+		ProjectID:  project.ID,
+		Provider:   provider,
+	})
+	return &legacyTaskAudit{}
+}
+
+func (w *Worker) finishLegacyTaskAudit(task models.Task, project models.Project, provider string, audit *legacyTaskAudit) {
+	recType := recordTypeTaskComplete
+	if audit.failed {
+		recType = recordTypeTaskFail
+	}
+	w.auditLogger.RecordTaskEvent(TaskAuditRecord{
+		RecordType: recType,
+		TaskID:     task.ID,
+		ProjectID:  project.ID,
+		Provider:   provider,
+		Command:    audit.command,
+		ExitCode:   audit.exitCode,
+		TokenUsage: audit.tokenUsage,
+	})
 }

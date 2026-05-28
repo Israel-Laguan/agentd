@@ -31,6 +31,10 @@ type TokenUsageStore = qw.TokenUsageStore
 
 var NewWorker = qw.NewWorker
 
+// EnsureAuditFile creates the audit file at path and writes a daemon_start marker.
+// Call at daemon startup when agentic.audit.enabled is true.
+var EnsureAuditFile = qw.EnsureAuditFile
+
 // ValidateToolCredentials checks that every mapped env var in toolCredentials is set.
 func ValidateToolCredentials(toolCredentials map[string]string) error {
 	if len(toolCredentials) == 0 {
