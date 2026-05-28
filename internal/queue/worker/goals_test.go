@@ -164,3 +164,18 @@ func TestGoalFromTask_BlankCriteriaOnly(t *testing.T) {
 		t.Fatalf("goal = %#v, want nil", g)
 	}
 }
+
+func TestGoalFromTask_RestoresPersistedCriteriaMet(t *testing.T) {
+	task := models.Task{
+		Description:     "do stuff",
+		SuccessCriteria: []string{"file exists", "tests pass"},
+		CriteriaMet:     []string{"file exists", "unknown", "  "},
+	}
+	g := GoalFromTask(task)
+	if g == nil {
+		t.Fatal("expected non-nil goal")
+	}
+	if !reflect.DeepEqual(g.CompletedCriteria, []string{"file exists"}) {
+		t.Fatalf("completed = %v, want [file exists]", g.CompletedCriteria)
+	}
+}

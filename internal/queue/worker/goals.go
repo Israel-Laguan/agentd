@@ -2,10 +2,9 @@ package worker
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
-
-	"agentd/internal/models"
 )
 
 // DefaultStallThreshold is the number of turns with < 10% progress
@@ -129,6 +128,13 @@ type GoalTracker struct {
 	stallThreshold int
 	taskID         string
 	projectID      string
+	store          CriteriaUpdater
+}
+
+// CriteriaUpdater is the minimal store interface needed to persist
+// completed success criteria. It is satisfied by *kanban.Store.
+type CriteriaUpdater interface {
+	UpdateCriteriaMet(ctx context.Context, id string, met []string) error
 }
 
 // GoalTrackerOption configures a GoalTracker.
@@ -140,6 +146,14 @@ func WithStallThreshold(threshold int) GoalTrackerOption {
 		if threshold > 0 {
 			gt.stallThreshold = threshold
 		}
+	}
+}
+
+// WithCriteriaStore wires a CriteriaUpdater so that AfterTurn persists
+// CompletedCriteria to the database after each turn.
+func WithCriteriaStore(s CriteriaUpdater) GoalTrackerOption {
+	return func(gt *GoalTracker) {
+		gt.store = s
 	}
 }
 
@@ -187,7 +201,7 @@ func (gt *GoalTracker) Goal() *AgentGoal {
 // AfterTurn is called after each agentic loop iteration. It increments
 // TurnsActive, applies the model's reported progress, and checks for
 // stall conditions. Returns true if the goal is stalled.
-func (gt *GoalTracker) AfterTurn(_ context.Context, completed, blocked []string) bool {
+func (gt *GoalTracker) AfterTurn(ctx context.Context, completed, blocked []string) bool {
 	gt.mu.Lock()
 	if gt.goal == nil {
 		gt.mu.Unlock()
@@ -198,61 +212,16 @@ func (gt *GoalTracker) AfterTurn(_ context.Context, completed, blocked []string)
 	gt.goal.MarkCompleted(completed)
 	gt.goal.MarkBlocked(blocked)
 	stalled := gt.goal.IsStalled(gt.stallThreshold)
+	met := append([]string(nil), gt.goal.CompletedCriteria...)
+	store := gt.store
+	taskID := gt.taskID
 	gt.mu.Unlock()
+
+	if store != nil && len(met) > 0 {
+		if err := store.UpdateCriteriaMet(ctx, taskID, met); err != nil {
+			slog.Warn("failed to persist criteria_met", "task_id", taskID, "error", err)
+		}
+	}
+
 	return stalled
-}
-
-// parseGoalProgress extracts completed and blocked criteria markers from the
-// model's response text. The model is expected to emit lines like:
-//
-//	[COMPLETED] criterion text
-//	[BLOCKED] criterion text
-func parseGoalProgress(content string) (completed, blocked []string) {
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		for _, marker := range []string{"[COMPLETED]", "[BLOCKED]"} {
-			if len(trimmed) < len(marker) || !strings.EqualFold(trimmed[:len(marker)], marker) {
-				continue
-			}
-			v := strings.TrimSpace(trimmed[len(marker):])
-			if v == "" {
-				continue
-			}
-			if marker == "[COMPLETED]" {
-				completed = append(completed, v)
-			} else {
-				blocked = append(blocked, v)
-			}
-			break
-		}
-	}
-	return completed, blocked
-}
-
-// GoalFromTask extracts a goal from a task's SuccessCriteria and
-// description. Returns nil when no success criteria are present.
-func GoalFromTask(task models.Task) *AgentGoal {
-	if len(task.SuccessCriteria) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(task.SuccessCriteria))
-	criteria := make([]string, 0, len(task.SuccessCriteria))
-	for _, c := range task.SuccessCriteria {
-		v := strings.TrimSpace(c)
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		criteria = append(criteria, v)
-	}
-	if len(criteria) == 0 {
-		return nil
-	}
-	return &AgentGoal{
-		Description:     task.Description,
-		SuccessCriteria: append([]string(nil), criteria...),
-	}
 }

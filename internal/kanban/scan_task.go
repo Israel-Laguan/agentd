@@ -21,6 +21,7 @@ type taskScanValues struct {
 	lastHeartbeat   sql.NullString
 	osPID           sql.NullInt64
 	successCriteria string
+	criteriaMet     string
 }
 
 func scanTaskValues(row scanner, values *taskScanValues) error {
@@ -28,7 +29,7 @@ func scanTaskValues(row scanner, values *taskScanValues) error {
 	err := row.Scan(
 		&t.ID, &t.ProjectID, &t.AgentID, &t.Title, &t.Description, &values.state, &values.assignee,
 		&values.osPID, &values.startedAt, &values.completedAt, &values.lastHeartbeat, &t.RetryCount, &t.TokenUsage,
-		&values.successCriteria, &values.createdAt, &values.updatedAt,
+		&values.successCriteria, &values.criteriaMet, &values.createdAt, &values.updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return models.ErrTaskNotFound
@@ -54,6 +55,9 @@ func (v *taskScanValues) apply() error {
 	}
 	if err := json.Unmarshal([]byte(v.successCriteria), &v.task.SuccessCriteria); err != nil {
 		return fmt.Errorf("decode success criteria: %w", err)
+	}
+	if err := json.Unmarshal([]byte(v.criteriaMet), &v.task.CriteriaMet); err != nil {
+		return fmt.Errorf("decode criteria met: %w", err)
 	}
 	return applyEntityTimes(v.task, v.createdAt, v.updatedAt)
 }

@@ -298,6 +298,7 @@ func (s *testStore) UpdateTaskDescription(_ context.Context, _ string, _ time.Ti
 func (s *testStore) UpdateTaskResult(context.Context, string, time.Time, models.TaskResult) (*models.Task, error) {
 	return &s.task, nil
 }
+func (s *testStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 func (s *testStore) ReconcileGhostTasks(context.Context, []int) ([]models.Task, error) {
 	return nil, nil
 }

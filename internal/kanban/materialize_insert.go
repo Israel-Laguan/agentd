@@ -16,11 +16,11 @@ func insertTask(ctx context.Context, tx sqlExecutor, tempID string, task models.
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO tasks (
 			id, project_id, agent_id, title, description, state, assignee,
-			os_process_id, started_at, completed_at, last_heartbeat, retry_count, token_usage, success_criteria, created_at, updated_at
+			os_process_id, started_at, completed_at, last_heartbeat, retry_count, token_usage, success_criteria, criteria_met, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, task.ProjectID, task.AgentID, task.Title, task.Description, string(task.State), string(task.Assignee),
-		nil, nil, nil, nil, task.RetryCount, task.TokenUsage, successCriteria, formatTime(task.CreatedAt), formatTime(task.UpdatedAt))
+		nil, nil, nil, nil, task.RetryCount, task.TokenUsage, successCriteria, "[]", formatTime(task.CreatedAt), formatTime(task.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert task %q: %w", tempID, err)
 	}
