@@ -139,7 +139,27 @@ describe('API (non-mock mode)', () => {
     expect(res.plan!.name).toBe('Todo API');
     expect(res.plan!.tasks).toHaveLength(1);
     expect(res.plan!.tasks[0]).toEqual({ id: 'task-1', title: 'Setup DB', description: 'init schema' });
-    expect(res.message.content).toBe('');
+    expect(res.message.content).toContain('draft plan');
+  });
+
+  it('sendChat does not set plan for scope_clarification JSON in content', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const clarification = JSON.stringify({
+      kind: 'scope_clarification',
+      scopes: [{ id: 'backend', description: 'Backend API' }],
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'cmpl-5',
+        choices: [{ message: { role: 'assistant', content: clarification }, finish_reason: 'stop' }],
+      }),
+    }));
+    const { sendChat } = await import('./api');
+    const res = await sendChat('build something big');
+    expect(res.plan).toBeUndefined();
+    expect(res.message.content).toBe(clarification);
   });
 
   it('sendChat returns plan from message.content fallback (no tool_calls)', async () => {
@@ -199,16 +219,97 @@ describe('API (non-mock mode)', () => {
     expect(body.tools[0].function.name).toBe('create_plan');
   });
 
+  it('sendChat returns statusReport from status_report tool_calls', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const statusArgs = JSON.stringify({
+      kind: 'status_report',
+      message: 'You have 1 active project(s) with 2 task(s) remaining',
+      summary: { total_projects: 1, tasks_by_state: { RUNNING: 1, READY: 1 } },
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'cmpl-status',
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: statusArgs,
+            tool_calls: [{ function: { name: 'status_report', arguments: statusArgs } }],
+          },
+          finish_reason: 'tool_calls',
+        }],
+      }),
+    }));
+    const { sendChat } = await import('./api');
+    const res = await sendChat('status?');
+    expect(res.statusReport).toBeDefined();
+    expect(res.statusReport!.totalProjects).toBe(1);
+    expect(res.message.content).toBe('You have 1 active project(s) with 2 task(s) remaining');
+    expect(res.message.content).not.toContain('"kind"');
+    expect(res.plan).toBeUndefined();
+  });
+
+  it('sendChat returns intentClarification without raw JSON bubble text', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const clarification = JSON.stringify({
+      kind: 'intent_clarification',
+      message: "I'm not sure what you need.",
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'cmpl-intent',
+        choices: [{ message: { role: 'assistant', content: clarification }, finish_reason: 'stop' }],
+      }),
+    }));
+    const { sendChat } = await import('./api');
+    const res = await sendChat('Hello');
+    expect(res.intentClarification?.message).toContain('not sure');
+    expect(res.message.content).toBe("I'm not sure what you need.");
+    expect(res.plan).toBeUndefined();
+  });
+
+  it('sendChat returns scopeClarification with label mapped scopes', async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK = 'false';
+    vi.resetModules();
+    const clarification = JSON.stringify({
+      kind: 'scope_clarification',
+      message: 'Multiple projects detected.',
+      scopes: [
+        { id: 'backend-api', label: 'Backend API service' },
+        { id: 'frontend-ui', label: 'Frontend UI' },
+      ],
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'cmpl-scope',
+        choices: [{ message: { role: 'assistant', content: clarification }, finish_reason: 'stop' }],
+      }),
+    }));
+    const { sendChat } = await import('./api');
+    const res = await sendChat('Build API and UI');
+    expect(res.scopeClarification?.scopes).toHaveLength(2);
+    expect(res.scopeClarification!.scopes[0].label).toBe('Backend API service');
+    expect(res.message.content).toBe('Multiple projects detected.');
+  });
+
   it('postApprovePlan POSTs to materialize with project_name body', async () => {
     process.env.NEXT_PUBLIC_USE_MOCK = 'false';
     vi.resetModules();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: { project: { id: 'p1' }, tasks: [] } }),
+      json: async () => ({
+        data: { project: { id: 'p1' }, tasks: [{ id: 'task-a', title: 'Do thing' }] },
+      }),
     });
     vi.stubGlobal('fetch', fetchMock);
     const { postApprovePlan } = await import('./api');
-    await postApprovePlan({ name: 'My Project', description: 'desc', tasks: [{ id: 't1', title: 'Do thing', description: 'do it' }] });
+    const result = await postApprovePlan({ name: 'My Project', description: 'desc', tasks: [{ id: 't1', title: 'Do thing', description: 'do it' }] });
+    expect(result.projectId).toBe('p1');
+    expect(result.taskIds).toEqual(['task-a']);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/projects/materialize'),
       expect.objectContaining({ method: 'POST' })

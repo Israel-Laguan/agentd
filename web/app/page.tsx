@@ -11,6 +11,7 @@ import {
   ChatMessage,
   DraftPlan,
   SystemStatus,
+  MaterializeResult,
 } from '@/lib/types';
 import { getBoard, getWorkforce, getSystemStatus, updateTask, fetchProviders } from "@/lib/api";
 import { BoardView } from "@/app/components/board/board-view";
@@ -71,44 +72,81 @@ export default function Page() {
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
+  const applyDashboardSnapshot = useCallback(
+    (
+      board: { tasks: Task[] },
+      workforce: WorkforceState | null,
+      status: SystemStatus | null,
+      replaceTasks: boolean
+    ) => {
+      setBoardError(false);
+      setWorkforce(workforce);
+      setSystemStatus(status);
+      setLocalTasks((prev) =>
+        replaceTasks
+          ? board.tasks
+          : prev.length === 0
+            ? board.tasks
+            : board.tasks.map((serverTask: Task) => {
+                const localTask = prev.find((t) => t.id === serverTask.id);
+                return localTask && localTask.updated_at > serverTask.updated_at
+                  ? localTask
+                  : serverTask;
+              })
+      );
+      setSelectedTask((prev) => {
+        if (!prev) return prev;
+        const fresh = board.tasks.find((t: Task) => t.id === prev.id);
+        return fresh && fresh.updated_at > prev.updated_at ? fresh : prev;
+      });
+      return board.tasks;
+    },
+    []
+  );
+
+  const refreshDashboard = useCallback(
+    async (replaceTasks = false): Promise<Task[]> => {
+      const [boardRes, workforceRes, statusRes] = await Promise.allSettled([
+        getBoard(),
+        getWorkforce(),
+        getSystemStatus(),
+      ]);
+      if (boardRes.status !== "fulfilled" || workforceRes.status !== "fulfilled") {
+        setBoardError(true);
+        setSystemStatus(statusRes.status === "fulfilled" ? statusRes.value : null);
+        throw new Error("dashboard refresh failed");
+      }
+      return applyDashboardSnapshot(
+        boardRes.value,
+        workforceRes.value,
+        statusRes.status === "fulfilled" ? statusRes.value : null,
+        replaceTasks
+      );
+    },
+    [applyDashboardSnapshot]
+  );
+
+  const handleMaterialized = useCallback(
+    async (result: MaterializeResult) => {
+      const tasks = await refreshDashboard(true);
+      const focus =
+        tasks.find((t) => result.taskIds.includes(t.id)) ??
+        tasks.find((t) => t.project_id === result.projectId);
+      if (focus) setSelectedTask(focus);
+    },
+    [refreshDashboard]
+  );
+
   useEffect(() => {
     let mounted = true;
 
     const poll = async () => {
       try {
-        const [boardRes, workforceRes, statusRes] = await Promise.allSettled([
-          getBoard(),
-          getWorkforce(),
-          getSystemStatus(),
-        ]);
+        const tasks = await refreshDashboard(false);
         if (!mounted) return;
-        if (boardRes.status !== "fulfilled" || workforceRes.status !== "fulfilled") {
-          setBoardError(true);
-          setSystemStatus(statusRes.status === "fulfilled" ? statusRes.value : null);
-          return;
-        }
-        const board = boardRes.value;
-        const workforce = workforceRes.value;
-        setBoardError(false);
-        setWorkforce(workforce);
-        setSystemStatus(statusRes.status === "fulfilled" ? statusRes.value : null);
-
-        setLocalTasks(prev =>
-          prev.length === 0
-            ? board.tasks
-            : board.tasks.map((serverTask: Task) => {
-                const localTask = prev.find(t => t.id === serverTask.id);
-                return localTask && localTask.updated_at > serverTask.updated_at
-                  ? localTask
-                  : serverTask;
-              })
-        );
-        setSelectedTask(prev => {
-          if (!prev) return prev;
-          const fresh = board.tasks.find((t: Task) => t.id === prev.id);
-          return fresh && fresh.updated_at > prev.updated_at ? fresh : prev;
-        });
+        void tasks;
       } catch (e) {
+        if (!mounted) return;
         console.error("Polling failed", e);
         setBoardError(true);
         setSystemStatus(null);
@@ -126,7 +164,7 @@ export default function Page() {
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [refreshDashboard]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -224,6 +262,7 @@ export default function Page() {
                 draftPlan={draftPlan}
                 setDraftPlan={setDraftPlan}
                 setActiveTab={setActiveTab}
+                onMaterialized={handleMaterialized}
                 input={input}
                 setInput={setInput}
                 isTyping={isTyping}
