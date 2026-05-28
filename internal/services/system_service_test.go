@@ -195,7 +195,7 @@ func TestSystemStatusRollingBudget(t *testing.T) {
 	if !out.RollingBudgetEnabled || out.RollingTokenLimit != 100_000 || out.RollingTokenRemaining != 42_000 {
 		t.Fatalf("rolling budget snapshot = %+v", out)
 	}
-	if out.RollingTokenWindow != 5*time.Hour {
-		t.Fatalf("RollingTokenWindow = %v, want 5h", out.RollingTokenWindow)
+	if out.RollingTokenWindow != (5 * time.Hour).String() {
+		t.Fatalf("RollingTokenWindow = %v, want 5h0m0s", out.RollingTokenWindow)
 	}
 }

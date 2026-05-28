@@ -57,9 +57,9 @@ export async function getSystemStatus(): Promise<SystemStatus> {
   return {
     total_token_usage: Number(raw.total_token_usage ?? raw.TotalTokenUsage ?? 0),
     rolling_budget_enabled: Boolean(raw.rolling_budget_enabled ?? raw.RollingBudgetEnabled),
-    rolling_token_limit: Number(raw.rolling_token_limit ?? raw.RollingTokenLimit ?? 0) || undefined,
+    rolling_token_limit: Number(raw.rolling_token_limit ?? raw.RollingTokenLimit ?? 0),
     rolling_token_remaining:
-      Number(raw.rolling_token_remaining ?? raw.RollingTokenRemaining ?? 0) || undefined,
+      Number(raw.rolling_token_remaining ?? raw.RollingTokenRemaining ?? 0),
     rolling_token_window: (raw.rolling_token_window ?? raw.RollingTokenWindow) as string | undefined,
     status:
       status && typeof status === "object"

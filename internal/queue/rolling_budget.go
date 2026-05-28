@@ -55,14 +55,15 @@ func (l *RollingTokenLedger) HydrateFromEvents(events []models.TokenUsageEvent) 
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	now := time.Now()
 	l.entries = l.entries[:0]
 	for _, e := range events {
-		if e.Tokens <= 0 {
+		if e.Tokens <= 0 || e.At.After(now) {
 			continue
 		}
 		l.entries = append(l.entries, ledgerEntry{at: e.At, tokens: e.Tokens})
 	}
-	l.pruneLocked(time.Now())
+	l.pruneLocked(now)
 }
 
 // HydrateFromStore loads token usage events within the ledger window from src.

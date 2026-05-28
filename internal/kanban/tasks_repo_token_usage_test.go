@@ -80,4 +80,13 @@ func TestAddTokenUsage_NoOpForNonPositive(t *testing.T) {
 	if got.TokenUsage != 0 {
 		t.Errorf("TokenUsage = %d, want 0", got.TokenUsage)
 	}
+	t.Run("unknown task id returns error", func(t *testing.T) {
+		err := store.AddTokenUsage(ctx, "nonexistent-task-id", 5)
+		if err == nil {
+			t.Fatal("AddTokenUsage with unknown taskID: want error, got nil")
+		}
+		if _, getErr := store.GetTask(ctx, "nonexistent-task-id"); getErr == nil {
+			t.Fatal("GetTask for unknown taskID: want error, got nil")
+		}
+	})
 }
