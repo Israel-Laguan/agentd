@@ -40,6 +40,16 @@ func TestResolveAPIBase_FlagWins(t *testing.T) {
 	}
 }
 
+func TestResolveAPIBase_FlagAddressNormalization(t *testing.T) {
+	got, err := resolveAPIBase(&rootOptions{}, "127.0.0.1:8765/")
+	if err != nil {
+		t.Fatalf("resolveAPIBase() unexpected error: %v", err)
+	}
+	if got != "http://127.0.0.1:8765" {
+		t.Fatalf("resolveAPIBase() = %q, want %q", got, "http://127.0.0.1:8765")
+	}
+}
+
 func TestResolveAPIBase_ConfigAddressNormalization(t *testing.T) {
 	home := filepath.Join(t.TempDir(), ".agentd")
 	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
