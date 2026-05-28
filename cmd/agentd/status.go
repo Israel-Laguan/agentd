@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -22,7 +25,10 @@ func newStatusCommand(opts *rootOptions) *cobra.Command {
 		Use:   "status",
 		Short: "Print queue status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			base := resolveAPIBase(opts, apiURL)
+			base, err := resolveAPIBase(opts, apiURL)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
 			counts, err := fetchStatusCounts(cmd.Context(), base)
 			if err != nil {
 				return err
@@ -36,18 +42,25 @@ func newStatusCommand(opts *rootOptions) *cobra.Command {
 
 // resolveAPIBase returns the HTTP base URL for the daemon API.
 // Priority: explicit --api-url flag > config file API.Address > hardcoded default.
-func resolveAPIBase(opts *rootOptions, flagValue string) string {
+func resolveAPIBase(opts *rootOptions, flagValue string) (string, error) {
 	if flagValue != "" {
-		return strings.TrimRight(flagValue, "/")
+		return strings.TrimRight(flagValue, "/"), nil
 	}
 	cfg, err := config.Load(config.LoadOptions{
 		HomeOverride: opts.home,
 		ConfigFile:   opts.configFile,
 	})
-	if err == nil && cfg.API.Address != "" {
-		return "http://" + cfg.API.Address
+	if err != nil {
+		return "", err
 	}
-	return "http://127.0.0.1:8765"
+	if cfg.API.Address != "" {
+		addr := strings.TrimRight(cfg.API.Address, "/")
+		if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+			addr = "http://" + addr
+		}
+		return addr, nil
+	}
+	return "http://127.0.0.1:8765", nil
 }
 
 // fetchStatusCounts calls GET /api/v1/system/status and returns task state counts.
@@ -94,10 +107,18 @@ func fetchStatusCounts(ctx context.Context, base string) (map[models.TaskState]i
 }
 
 func isConnectionError(err error) bool {
-	s := err.Error()
-	return strings.Contains(s, "connection refused") ||
-		strings.Contains(s, "no such host") ||
-		strings.Contains(s, "connect: connection refused")
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return true
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		return isConnectionError(urlErr.Err)
+	}
+	return false
 }
 
 func printStatus(cmd *cobra.Command, counts map[models.TaskState]int) error {
