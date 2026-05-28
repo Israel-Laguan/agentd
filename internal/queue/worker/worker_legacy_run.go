@@ -91,7 +91,7 @@ func (w *Worker) executeLegacyCommand(
 		return
 	}
 	if profile.RequireReview && runErr == nil && result.Success {
-		audit.failed = false // review handoff is not a failure
+		audit.reviewHandoff = true
 		w.createReviewHandoff(ctx, task, result.Stdout)
 		return
 	}
@@ -99,10 +99,11 @@ func (w *Worker) executeLegacyCommand(
 }
 
 type legacyTaskAudit struct {
-	command    string
-	exitCode   int
-	tokenUsage int
-	failed     bool
+	command       string
+	exitCode      int
+	tokenUsage    int
+	failed        bool
+	reviewHandoff bool
 }
 
 func (w *Worker) beginLegacyTaskAudit(task models.Task, project models.Project, provider string) *legacyTaskAudit {
@@ -123,8 +124,11 @@ func (w *Worker) finishLegacyTaskAudit(task models.Task, project models.Project,
 		return
 	}
 	recType := recordTypeTaskComplete
-	if audit.failed {
+	switch {
+	case audit.failed:
 		recType = recordTypeTaskFail
+	case audit.reviewHandoff:
+		recType = recordTypeTaskReview
 	}
 	w.auditLogger.RecordTaskEvent(TaskAuditRecord{
 		RecordType: recType,
