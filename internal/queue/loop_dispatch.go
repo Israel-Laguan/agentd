@@ -31,6 +31,7 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 }
 
 func (d *Daemon) dispatchFilterClaimed(ctx context.Context, tasks []models.Task) (toGroup []models.Task, nacked int) {
+	d.refreshRollingLedgerFromStore(ctx)
 	for _, task := range tasks {
 		nack, skip := d.dispatchAdmit(ctx, task)
 		if nack {
@@ -45,6 +46,22 @@ func (d *Daemon) dispatchFilterClaimed(ctx context.Context, tasks []models.Task)
 		toGroup = append(toGroup, task)
 	}
 	return toGroup, nacked
+}
+
+// refreshRollingLedgerFromStore reloads the rolling ledger from persisted token
+// usage events so queueing decisions are based on durable data, not only process
+// memory. Failures are non-fatal and leave the in-memory snapshot in place.
+func (d *Daemon) refreshRollingLedgerFromStore(ctx context.Context) {
+	if d.rollingLedger == nil || !d.rollingLedger.Enabled() {
+		return
+	}
+	src, ok := d.store.(TokenUsageEventSource)
+	if !ok {
+		return
+	}
+	if err := d.rollingLedger.HydrateFromStore(ctx, src); err != nil {
+		slog.Warn("rolling token ledger refresh failed", "error", err)
+	}
 }
 
 func (d *Daemon) dispatchGuardNilWorker(ctx context.Context, toGroup []models.Task) error {
