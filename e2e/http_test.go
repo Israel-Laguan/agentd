@@ -295,6 +295,15 @@ func (s *testStore) UpdateTaskDescription(_ context.Context, _ string, _ time.Ti
 	s.task.Description = description
 	return &s.task, nil
 }
+func (s *testStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, state *models.TaskState, description *string) (*models.Task, error) {
+	if state != nil {
+		s.task.State = *state
+	}
+	if description != nil {
+		s.task.Description = *description
+	}
+	return &s.task, nil
+}
 func (s *testStore) UpdateTaskResult(context.Context, string, time.Time, models.TaskResult) (*models.Task, error) {
 	return &s.task, nil
 }
