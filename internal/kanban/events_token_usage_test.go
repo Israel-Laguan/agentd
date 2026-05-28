@@ -22,45 +22,25 @@ func TestListTokenUsageEventsSince(t *testing.T) {
 		t.Fatalf("materialize: %v", err)
 	}
 	task := tasks[0]
+	appendTokenUsageEvent := func(ts time.Time, payload, label string) {
+		t.Helper()
+		if err := store.AppendEvent(ctx, models.Event{
+			BaseEntity: models.BaseEntity{CreatedAt: ts, UpdatedAt: ts},
+			ProjectID:  task.ProjectID,
+			TaskID:     sql.NullString{String: task.ID, Valid: true},
+			Type:       models.EventTypeTokenUsage,
+			Payload:    payload,
+		}); err != nil {
+			t.Fatalf("append %s: %v", label, err)
+		}
+	}
 
 	now := utcNow()
 	old := now.Add(-2 * time.Hour)
-	if err := store.AppendEvent(ctx, models.Event{
-		BaseEntity: models.BaseEntity{CreatedAt: old, UpdatedAt: old},
-		ProjectID:  task.ProjectID,
-		TaskID:     sql.NullString{String: task.ID, Valid: true},
-		Type:       models.EventTypeTokenUsage,
-		Payload:    `{"tokens":10}`,
-	}); err != nil {
-		t.Fatalf("append old event: %v", err)
-	}
-	if err := store.AppendEvent(ctx, models.Event{
-		BaseEntity: models.BaseEntity{CreatedAt: now, UpdatedAt: now},
-		ProjectID:  task.ProjectID,
-		TaskID:     sql.NullString{String: task.ID, Valid: true},
-		Type:       models.EventTypeTokenUsage,
-		Payload:    `{"tokens":5}`,
-	}); err != nil {
-		t.Fatalf("append recent event: %v", err)
-	}
-	if err := store.AppendEvent(ctx, models.Event{
-		BaseEntity: models.BaseEntity{CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute)},
-		ProjectID:  task.ProjectID,
-		TaskID:     sql.NullString{String: task.ID, Valid: true},
-		Type:       models.EventTypeTokenUsage,
-		Payload:    `7`,
-	}); err != nil {
-		t.Fatalf("append legacy integer event: %v", err)
-	}
-	if err := store.AppendEvent(ctx, models.Event{
-		BaseEntity: models.BaseEntity{CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now.Add(2 * time.Minute)},
-		ProjectID:  task.ProjectID,
-		TaskID:     sql.NullString{String: task.ID, Valid: true},
-		Type:       models.EventTypeTokenUsage,
-		Payload:    `7junk`,
-	}); err != nil {
-		t.Fatalf("append malformed event: %v", err)
-	}
+	appendTokenUsageEvent(old, `{"tokens":10}`, "old event")
+	appendTokenUsageEvent(now, `{"tokens":5}`, "recent event")
+	appendTokenUsageEvent(now.Add(time.Minute), `7`, "legacy integer event")
+	appendTokenUsageEvent(now.Add(2*time.Minute), `7junk`, "malformed event")
 
 	events, err := store.ListTokenUsageEventsSince(ctx, now.Add(-time.Hour))
 	if err != nil {
