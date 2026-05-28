@@ -110,6 +110,9 @@ func requireStartupProviders(gw config.GatewayConfig) error {
 	return nil
 }
 
+// openRuntime opens the local DB and runtime deps for commands that mutate state.
+// Read-only observation commands (status) call the daemon HTTP API instead and
+// must not use this path, so they work when ~/.agentd is not writable.
 func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, func(), error) {
 	cfg, err := config.Load(config.LoadOptions{
 		HomeOverride: opts.home,

@@ -36,6 +36,25 @@ func TestInitVerbosePrintsConfig(t *testing.T) {
 	}
 }
 
+func TestInit_NonWritableHome(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".agentd")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(home, 0o555); err != nil {
+		t.Skipf("cannot chmod (may be running as root): %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(home, 0o755) })
+
+	err := execInitCLI(t, home)
+	if err == nil {
+		t.Fatal("agentd init on read-only home: error = nil, want failure")
+	}
+	if !strings.Contains(err.Error(), "writable") && !strings.Contains(err.Error(), "permission") {
+		t.Fatalf("init error = %v, want writable/permission failure", err)
+	}
+}
+
 func TestInitCreatesHomeDatabaseAndWAL(t *testing.T) {
 	home := filepath.Join(t.TempDir(), ".agentd")
 	cmd := newRootCommand()
