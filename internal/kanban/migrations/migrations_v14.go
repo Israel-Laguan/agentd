@@ -19,7 +19,7 @@ func migrateToV14(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("check tasks.criteria_met column: %w", err)
 	}
 	if !has {
-		if _, err := db.ExecContext(ctx, `ALTER TABLE tasks ADD COLUMN criteria_met TEXT NOT NULL DEFAULT '[]'`); err != nil {
+		if _, err := db.ExecContext(ctx, `ALTER TABLE tasks ADD COLUMN criteria_met TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(criteria_met) AND json_type(criteria_met) = 'array')`); err != nil {
 			return fmt.Errorf("add tasks.criteria_met column: %w", err)
 		}
 	}

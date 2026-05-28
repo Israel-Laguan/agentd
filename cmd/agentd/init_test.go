@@ -44,6 +44,11 @@ func TestInit_NonWritableHome(t *testing.T) {
 	if err := os.Chmod(home, 0o555); err != nil {
 		t.Skipf("cannot chmod (may be running as root): %v", err)
 	}
+	if f, err := os.CreateTemp(home, ".write-probe-*"); err == nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		t.Skip("home still writable in this environment (likely privileged user)")
+	}
 	t.Cleanup(func() { _ = os.Chmod(home, 0o755) })
 
 	err := execInitCLI(t, home)

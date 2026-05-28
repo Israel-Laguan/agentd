@@ -60,8 +60,10 @@ func TestTaskHandler_ListByProject_IncludesCriteriaMet(t *testing.T) {
 		t.Fatalf("task count = %d, want 1", len(resp.Data))
 	}
 	row := resp.Data[0]
-	if len(row.SuccessCriteria) != 2 {
-		t.Fatalf("success_criteria = %v, want 2 entries", row.SuccessCriteria)
+	if len(row.SuccessCriteria) != 2 ||
+		row.SuccessCriteria[0] != "REPORT.md exists" ||
+		row.SuccessCriteria[1] != "REPORT.md contains tree" {
+		t.Fatalf("success_criteria = %v, want [REPORT.md exists REPORT.md contains tree]", row.SuccessCriteria)
 	}
 	if len(row.CriteriaMet) != 1 || row.CriteriaMet[0] != "REPORT.md exists" {
 		t.Fatalf("criteria_met = %v, want [REPORT.md exists]", row.CriteriaMet)

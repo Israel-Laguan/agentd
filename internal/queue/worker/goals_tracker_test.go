@@ -147,7 +147,7 @@ func TestGoalTracker_AfterTurn_AccumulatesCriteria(t *testing.T) {
 		t.Fatalf("UpdateCriteriaMet called %d times, want 2", len(store.calls))
 	}
 	// Second call should contain both criteria (accumulated).
-	if len(store.calls[1]) != 2 {
+	if len(store.calls[1]) != 2 || store.calls[1][0] != "a" || store.calls[1][1] != "b" {
 		t.Fatalf("second UpdateCriteriaMet got %v, want [a b]", store.calls[1])
 	}
 }
