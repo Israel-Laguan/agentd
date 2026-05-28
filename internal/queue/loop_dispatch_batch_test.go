@@ -364,3 +364,23 @@ func TestRefreshRollingLedgerFromStore_UsesPersistedEvents(t *testing.T) {
 		t.Fatalf("ListTokenUsageEventsSince queries = %d, want 1", store.queries)
 	}
 }
+
+func TestRefreshRollingLedgerFromStore_Throttled(t *testing.T) {
+	t.Parallel()
+	store := newDispatchBatchStore(nil)
+	now := time.Now()
+	store.events = []models.TokenUsageEvent{
+		{At: now.Add(-5 * time.Minute), Tokens: 10},
+	}
+	daemon := NewDaemon(store, nil, nil, nil, nil, DaemonOptions{MaxWorkers: 1, Probe: StaticPIDProbe{}})
+	daemon.rollingLedger = NewRollingTokenLedger(time.Hour, 100)
+	daemon.lastRollingLedgerRefresh = time.Now()
+
+	daemon.refreshRollingLedgerFromStore(context.Background())
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.queries != 0 {
+		t.Fatalf("ListTokenUsageEventsSince queries = %d, want 0 while throttled", store.queries)
+	}
+}

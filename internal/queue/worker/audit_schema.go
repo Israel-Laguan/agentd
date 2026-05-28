@@ -86,7 +86,7 @@ type TaskAuditRecord struct {
 	ProjectID  string    `json:"project_id"`
 	Provider   string    `json:"provider"`
 	Command    string    `json:"command,omitempty"`
-	ExitCode   int       `json:"exit_code,omitempty"`
+	ExitCode   int       `json:"exit_code"`
 	TokenUsage int       `json:"token_usage"`
 	Timestamp  time.Time `json:"timestamp"`
 }
@@ -179,29 +179,27 @@ func (s *FileAuditSink) appendJSON(v any) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if dir := filepath.Dir(s.path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-	}
-
 	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
+	defer f.Close() //nolint:errcheck
 
-	_, writeErr := f.Write(data)
-	closeErr := f.Close()
-	if writeErr != nil {
-		return writeErr
+	if _, err := f.Write(data); err != nil {
+		return err
 	}
-	return closeErr
+	return nil
 }
 
 // EnsureAuditFile creates the audit file (and parent directories) and writes a
 // daemon_start marker so that the file exists before any task runs. It is safe
 // to call multiple times; each call appends one daemon_start record.
 func EnsureAuditFile(path string) error {
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
 	sink := NewFileAuditSink(path)
 	rec := DaemonStartRecord{
 		Type:       recordTypeDaemonStart,
