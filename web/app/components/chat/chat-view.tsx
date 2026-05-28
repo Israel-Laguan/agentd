@@ -1,13 +1,20 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 
 function createMessageId() {
   return globalThis.crypto?.randomUUID?.() ?? `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-import { ChatMessage, DraftPlan } from "@/lib/types";
+import {
+  ChatMessage,
+  ChatResponse,
+  ChatScopeOption,
+  ChatStatusReport,
+  DraftPlan,
+  MaterializeResult,
+} from "@/lib/types";
 import { sendChat, postApprovePlan } from "@/lib/api";
 
 import { ChatMessageView } from "./chat-message";
@@ -15,6 +22,11 @@ import { ChatInput } from "./chat-input";
 import { DraftPlanView } from "./draft-plan-view";
 import { ChatTyping } from "./chat-typing";
 import { ChatEmptyState } from "./chat-empty-state";
+import { ChatStatusReportView } from "./chat-status-report-view";
+import {
+  ChatScopeClarificationPanel,
+  ChatIntentClarificationPanel,
+} from "./chat-clarification-panel";
 import { Settings } from "lucide-react";
 import {
   ChatSettingsModal,
@@ -27,6 +39,7 @@ interface ChatViewProps {
   draftPlan: DraftPlan | null;
   setDraftPlan: React.Dispatch<React.SetStateAction<DraftPlan | null>>;
   setActiveTab: (tab: string) => void;
+  onMaterialized?: (result: MaterializeResult) => void | Promise<void>;
   input: string;
   setInput: (v: string) => void;
   isTyping: boolean;
@@ -42,6 +55,7 @@ export function ChatView({
   draftPlan,
   setDraftPlan,
   setActiveTab,
+  onMaterialized,
   input,
   setInput,
   isTyping,
@@ -55,15 +69,64 @@ export function ChatView({
   const [draftSettings, setDraftSettings] =
   useState(chatSettings);
 
-  // approvedScopes: set when the user selects a scope from a scope_clarification
-  // response; forwarded on the next sendChat call then cleared.
-  const [approvedScopes, setApprovedScopes] = useState<string[]>([]);
-  // pendingScopeOptions: populated when daemon returns scope_clarification JSON.
-  const [pendingScopeOptions, setPendingScopeOptions] = useState<
-    { id: string; description: string }[]
-  >([]);
-  // lastUserMessage: stored so scope selection can re-send the original intent.
+  const [pendingScopeOptions, setPendingScopeOptions] = useState<ChatScopeOption[]>([]);
+  const [showIntentActions, setShowIntentActions] = useState(false);
+  const [statusReport, setStatusReport] = useState<ChatStatusReport | null>(null);
   const lastUserMessageRef = useRef<string>("");
+
+  const clearStructuredUi = useCallback(() => {
+    setPendingScopeOptions([]);
+    setShowIntentActions(false);
+    setStatusReport(null);
+  }, []);
+
+  const applyChatResponse = useCallback(
+    (data: ChatResponse) => {
+      if (data.plan) {
+        setDraftPlan(data.plan);
+        setStatusReport(null);
+        setPendingScopeOptions([]);
+        setShowIntentActions(false);
+        return;
+      }
+      setDraftPlan(null);
+      if (data.statusReport) {
+        setStatusReport(data.statusReport);
+        setPendingScopeOptions([]);
+        setShowIntentActions(false);
+        return;
+      }
+      setStatusReport(null);
+      if (data.scopeClarification?.scopes.length) {
+        setPendingScopeOptions(data.scopeClarification.scopes);
+        setShowIntentActions(false);
+        return;
+      }
+      setPendingScopeOptions([]);
+      setShowIntentActions(Boolean(data.intentClarification));
+    },
+    [setDraftPlan]
+  );
+
+  const assistantFromResponse = (data: ChatResponse): ChatMessage =>
+    data?.message
+      ? { ...data.message, id: data.message.id ?? createMessageId() } as ChatMessage
+      : {
+          id: createMessageId(),
+          role: "assistant",
+          content: "Sorry, I couldn't get a response — please try again.",
+        };
+
+  const runChat = useCallback(
+    async (message: string, approvedScopes?: string[]) => {
+      const data = await sendChat(message, chatSettings, approvedScopes);
+      const assistant = assistantFromResponse(data);
+      setMessages((p) => [...p, assistant]);
+      applyChatResponse(data);
+      return data;
+    },
+    [chatSettings, setMessages, applyChatResponse]
+  );
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -74,42 +137,10 @@ export function ChatView({
     setMessages((p) => [...p, userMsg]);
     setInput("");
     setIsTyping(true);
-    setPendingScopeOptions([]);
-
-    const scopesToSend = approvedScopes.slice();
-    setApprovedScopes([]);
+    clearStructuredUi();
 
     try {
-      const data = await sendChat(userMsg.content, chatSettings, scopesToSend.length > 0 ? scopesToSend : undefined);
-
-      const assistant: ChatMessage =
-        data?.message
-          ? { ...data.message, id: data.message.id ?? createMessageId() } as ChatMessage
-          : {
-              id: createMessageId(),
-              role: "assistant",
-              content: "Sorry, I couldn't get a response — please try again.",
-            };
-
-      setMessages((p) => [...p, assistant]);
-      if (data.plan) {
-        setDraftPlan(data.plan);
-      } else if (assistant.content) {
-        // Check for scope_clarification / intent_clarification structured responses.
-        try {
-          const parsed = JSON.parse(assistant.content) as Record<string, unknown>;
-          if (parsed.kind === "scope_clarification" && Array.isArray(parsed.scopes)) {
-            setPendingScopeOptions(
-              (parsed.scopes as Record<string, unknown>[]).map((s) => ({
-                id: String(s.id ?? ""),
-                description: String(s.description ?? ""),
-              }))
-            );
-          }
-        } catch {
-          // plain text — ignore
-        }
-      }
+      await runChat(userMsg.content);
     } catch (error) {
       console.error("Failed to send message:", error);
       setMessages((p) => [
@@ -137,17 +168,28 @@ export function ChatView({
     };
     setMessages((p) => [...p, userMsg]);
     setIsTyping(true);
+    clearStructuredUi();
 
     try {
-      const data = await sendChat(originalMessage, chatSettings, [scopeId]);
-      const assistant: ChatMessage =
-        data?.message
-          ? { ...data.message, id: data.message.id ?? createMessageId() } as ChatMessage
-          : { id: createMessageId(), role: "assistant", content: "Sorry, I couldn't get a response." };
-      setMessages((p) => [...p, assistant]);
-      if (data.plan) setDraftPlan(data.plan);
+      await runChat(originalMessage, [scopeId]);
     } catch (error) {
       console.error("Failed to send scope selection:", error);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  const sendSuggested = async (text: string) => {
+    lastUserMessageRef.current = text;
+    const userMsg = { id: createMessageId(), role: "user", content: text };
+    setMessages((p) => [...p, userMsg]);
+    setIsTyping(true);
+    clearStructuredUi();
+
+    try {
+      await runChat(text);
+    } catch (error) {
+      console.error("Failed to send suggested message:", error);
     } finally {
       setIsTyping(false);
     }
@@ -156,8 +198,9 @@ export function ChatView({
   const approvePlan = async () => {
     if (!draftPlan) return;
     try {
-      await postApprovePlan(draftPlan);
+      const result = await postApprovePlan(draftPlan);
       setDraftPlan(null);
+      clearStructuredUi();
       setMessages((p) => [
         ...p,
         {
@@ -166,9 +209,18 @@ export function ChatView({
           content: "The workforce has been deployed. You can track progress on the board.",
         },
       ]);
+      await onMaterialized?.(result);
       setActiveTab("board");
     } catch (e) {
       console.error(e);
+      setMessages((p) => [
+        ...p,
+        {
+          id: createMessageId(),
+          role: "assistant",
+          content: "Failed to materialize the plan. Check the daemon logs and try again.",
+        },
+      ]);
     }
   };
 
@@ -208,22 +260,20 @@ export function ChatView({
 
         {isTyping && <ChatTyping />}
 
+        {statusReport && <ChatStatusReportView report={statusReport} />}
+
         {pendingScopeOptions.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-text-dim">Select a scope to proceed:</p>
-            <div className="flex flex-wrap gap-2">
-              {pendingScopeOptions.map((scope) => (
-                <button
-                  key={scope.id}
-                  type="button"
-                  onClick={() => handleScopeSelect(scope.id)}
-                  className="px-3 py-1.5 text-sm border border-text-dim rounded hover:border-text hover:text-text transition-all"
-                >
-                  {scope.description || scope.id}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ChatScopeClarificationPanel
+            scopes={pendingScopeOptions}
+            onSelect={handleScopeSelect}
+          />
+        )}
+
+        {showIntentActions && (
+          <ChatIntentClarificationPanel
+            onStatusCheck={() => void sendSuggested("What's the status of my projects?")}
+            onPlanWork={() => void sendSuggested("I'd like to plan new work for my project")}
+          />
         )}
 
         {draftPlan && (

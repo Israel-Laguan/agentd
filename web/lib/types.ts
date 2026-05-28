@@ -68,9 +68,37 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatStatusReport {
+  message: string;
+  totalProjects: number;
+  tasksByState: Record<string, number>;
+}
+
+export interface ChatScopeOption {
+  id: string;
+  label: string;
+}
+
+export interface ChatScopeClarification {
+  message: string;
+  scopes: ChatScopeOption[];
+}
+
+export interface ChatIntentClarification {
+  message: string;
+}
+
 export interface ChatResponse {
   message: ChatMessage;
   plan?: DraftPlan;
+  statusReport?: ChatStatusReport;
+  scopeClarification?: ChatScopeClarification;
+  intentClarification?: ChatIntentClarification;
+}
+
+export interface MaterializeResult {
+  projectId: string;
+  taskIds: string[];
 }
 
 export interface DraftPlanTask {
