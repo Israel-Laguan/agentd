@@ -19,9 +19,6 @@ func newConfigCommand(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := config.EnsureDirs(cfg); err != nil {
-				return err
-			}
 
 			store, err := kanban.OpenStore(cfg.DBPath)
 			if err != nil {
