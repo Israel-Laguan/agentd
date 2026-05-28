@@ -107,7 +107,7 @@ func (w *Worker) guardAgenticIteration(
 	); stop != nil || err != nil {
 		return stop, err
 	}
-	w.recordAgenticTurnSnapshot(task.ID, turnID, messages, tools, budgetGuard, goalTracker)
+	w.recordAgenticTurnSnapshot(task.ID, project.ID, profile.Provider, turnID, messages, tools, budgetGuard, goalTracker)
 	if err := budgetGuard.BeforeCall(); err != nil {
 		return w.guardBudgetBeforeCall(ctx, task, messages, budgetGuard, ctxBudgetGuard, turnIndex, err)
 	}
@@ -155,7 +155,7 @@ func (w *Worker) guardIterationAndBudget(
 }
 
 func (w *Worker) recordAgenticTurnSnapshot(
-	taskID, turnID string, messages *[]gateway.PromptMessage,
+	taskID, projectID, provider, turnID string, messages *[]gateway.PromptMessage,
 	tools []gateway.ToolDefinition, budgetGuard *BudgetGuard, goalTracker *GoalTracker,
 ) {
 	goalProgress := 0.0
@@ -165,7 +165,7 @@ func (w *Worker) recordAgenticTurnSnapshot(
 		}
 	}
 	w.recordTurnSnapshot(
-		taskID, turnID,
+		taskID, projectID, provider, turnID,
 		len(*messages),
 		budgetGuard.Usage(),
 		toolNamesFromDefinitions(tools),
@@ -250,7 +250,7 @@ func (w *Worker) processAgenticIteration(
 	}
 
 	cont, res, rep, finErr := w.continueAgenticAfterTools(
-		ctx, task, resp, messages, toolToAdapter, toolExecutor,
+		ctx, task, profile, resp, messages, toolToAdapter, toolExecutor,
 		taskHooks, taskCaps, cm, goalTracker, toolTracker,
 		iterationGuard, budgetGuard, turnID, turnIndex,
 	)

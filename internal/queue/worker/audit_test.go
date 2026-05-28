@@ -180,6 +180,15 @@ func TestRecordTurnSnapshot_Metadata(t *testing.T) {
 	if rec["record_type"] != recordTypeTurnSnapshot {
 		t.Fatalf("record_type = %v, want %q", rec["record_type"], recordTypeTurnSnapshot)
 	}
+	if rec["type"] != recordTypeTurnSnapshot {
+		t.Fatalf("type = %v, want %q", rec["type"], recordTypeTurnSnapshot)
+	}
+	if rec["task_id"] != "task-1" {
+		t.Fatalf("task_id = %v, want task-1", rec["task_id"])
+	}
+	if rec["token_usage"] == nil {
+		t.Fatal("token_usage missing")
+	}
 	if int(rec["message_count"].(float64)) != 7 {
 		t.Fatalf("message_count = %v, want 7", rec["message_count"])
 	}
@@ -223,6 +232,12 @@ func TestFileAuditSink_HistoryEdit(t *testing.T) {
 	if parsed["record_type"] != recordTypeHistoryEdit {
 		t.Fatalf("record_type = %v, want %q", parsed["record_type"], recordTypeHistoryEdit)
 	}
+	if parsed["type"] != recordTypeHistoryEdit {
+		t.Fatalf("type = %v, want %q", parsed["type"], recordTypeHistoryEdit)
+	}
+	if parsed["task_id"] != "sess-edit" {
+		t.Fatalf("task_id = %v, want sess-edit", parsed["task_id"])
+	}
 	if parsed["checkpoint_id"] != "sess-edit:cp:1" {
 		t.Fatalf("checkpoint_id = %v", parsed["checkpoint_id"])
 	}
@@ -251,7 +266,7 @@ func TestDispatchToolWithHooks_WritesStructuredAudit(t *testing.T) {
 	}
 	_, _ = w.dispatchToolWithHooks(
 		context.Background(), "sess-d", "proj-d", "sess-d:0", time.Now(),
-		call, nil, w.toolExecutor, nil, nil,
+		call, nil, w.toolExecutor, nil, nil, "openai",
 	)
 
 	data, err := os.ReadFile(path)
@@ -261,9 +276,27 @@ func TestDispatchToolWithHooks_WritesStructuredAudit(t *testing.T) {
 	if strings.Contains(string(data), "echo audit") {
 		t.Fatal("raw args must not appear in structured audit log")
 	}
-	if !strings.Contains(string(data), `"record_type":"tool_dispatch"`) &&
-		!strings.Contains(string(data), `"record_type": "tool_dispatch"`) {
-		t.Fatalf("expected tool_dispatch record, got %q", string(data))
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(data))), &rec); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if rec["record_type"] != recordTypeToolDispatch {
+		t.Fatalf("record_type = %v, want %q", rec["record_type"], recordTypeToolDispatch)
+	}
+	if rec["type"] != recordTypeToolDispatch {
+		t.Fatalf("type = %v, want %q", rec["type"], recordTypeToolDispatch)
+	}
+	if rec["task_id"] != "sess-d" {
+		t.Fatalf("task_id = %v, want sess-d", rec["task_id"])
+	}
+	if rec["project_id"] != "proj-d" {
+		t.Fatalf("project_id = %v, want proj-d", rec["project_id"])
+	}
+	if rec["provider"] != "openai" {
+		t.Fatalf("provider = %v, want openai", rec["provider"])
+	}
+	if _, ok := rec["token_usage"]; !ok {
+		t.Fatal("missing token_usage")
 	}
 }
 
@@ -302,4 +335,156 @@ func TestStructuredAuditHook_PassThrough(t *testing.T) {
 func filepathJoinTemp(t *testing.T, name string) string {
 	t.Helper()
 	return filepath.Join(t.TempDir(), name)
+}
+
+func TestEnsureAuditFile_CreatesFile(t *testing.T) {
+	t.Parallel()
+	path := filepathJoinTemp(t, "audit.jsonl")
+	if err := EnsureAuditFile(path); err != nil {
+		t.Fatalf("EnsureAuditFile: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("file not created: %v", err)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(data))), &rec); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if rec["record_type"] != recordTypeDaemonStart {
+		t.Fatalf("record_type = %v, want %q", rec["record_type"], recordTypeDaemonStart)
+	}
+	if rec["type"] != recordTypeDaemonStart {
+		t.Fatalf("type = %v, want %q", rec["type"], recordTypeDaemonStart)
+	}
+	if _, ok := rec["timestamp"]; !ok {
+		t.Fatal("missing timestamp field")
+	}
+}
+
+func TestEnsureAuditFile_CreatesParentDirs(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "nested", "sub", "audit.jsonl")
+	if err := EnsureAuditFile(path); err != nil {
+		t.Fatalf("EnsureAuditFile: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("file not created: %v", err)
+	}
+}
+
+func TestEnsureAuditFile_AppendsOnRepeat(t *testing.T) {
+	t.Parallel()
+	path := filepathJoinTemp(t, "audit-repeat.jsonl")
+	if err := EnsureAuditFile(path); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	if err := EnsureAuditFile(path); err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 daemon_start lines, got %d: %q", len(lines), string(data))
+	}
+	for i, line := range lines {
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("line %d: unmarshal: %v", i, err)
+		}
+		if rec["record_type"] != recordTypeDaemonStart {
+			t.Fatalf("line %d: record_type = %v", i, rec["record_type"])
+		}
+		if rec["type"] != recordTypeDaemonStart {
+			t.Fatalf("line %d: type = %v", i, rec["type"])
+		}
+	}
+}
+
+func TestFileAuditSink_WriteTaskEvent(t *testing.T) {
+	t.Parallel()
+	path := filepathJoinTemp(t, "audit-task.jsonl")
+	sink := NewFileAuditSink(path)
+
+	start := TaskAuditRecord{
+		RecordType: recordTypeTaskStart,
+		TaskID:     "task-42",
+		ProjectID:  "proj-1",
+		Provider:   "openai",
+		Timestamp:  time.Now().UTC(),
+	}
+	if err := sink.WriteTaskEvent(start); err != nil {
+		t.Fatalf("WriteTaskEvent(start): %v", err)
+	}
+	complete := TaskAuditRecord{
+		RecordType: recordTypeTaskComplete,
+		TaskID:     "task-42",
+		ProjectID:  "proj-1",
+		Provider:   "openai",
+		Command:    "echo done",
+		ExitCode:   0,
+		TokenUsage: 150,
+		Timestamp:  time.Now().UTC(),
+	}
+	if err := sink.WriteTaskEvent(complete); err != nil {
+		t.Fatalf("WriteTaskEvent(complete): %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 lines, got %d", len(lines))
+	}
+	for i, wantType := range []string{recordTypeTaskStart, recordTypeTaskComplete} {
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(lines[i]), &rec); err != nil {
+			t.Fatalf("line %d unmarshal: %v", i, err)
+		}
+		assertTaskRecordCoreFields(t, rec, i, wantType)
+	}
+	assertCompleteRecordFields(t, lines[1])
+}
+
+func TestAuditLogger_RecordTaskEvent_NilSafe(t *testing.T) {
+	t.Parallel()
+	var l *AuditLogger
+	// Must not panic.
+	l.RecordTaskEvent(TaskAuditRecord{RecordType: recordTypeTaskStart, TaskID: "x"})
+	l.RecordDaemonStart()
+}
+
+func assertTaskRecordCoreFields(t *testing.T, rec map[string]any, line int, wantType string) {
+	t.Helper()
+	if rec["record_type"] != wantType {
+		t.Fatalf("line %d: record_type = %v, want %q", line, rec["record_type"], wantType)
+	}
+	if rec["type"] != wantType {
+		t.Fatalf("line %d: type = %v, want %q", line, rec["type"], wantType)
+	}
+	if rec["task_id"] != "task-42" {
+		t.Fatalf("line %d: task_id = %v", line, rec["task_id"])
+	}
+	if rec["project_id"] != "proj-1" {
+		t.Fatalf("line %d: project_id = %v", line, rec["project_id"])
+	}
+}
+
+func assertCompleteRecordFields(t *testing.T, line string) {
+	t.Helper()
+	var completeRec map[string]any
+	if err := json.Unmarshal([]byte(line), &completeRec); err != nil {
+		t.Fatalf("complete unmarshal: %v", err)
+	}
+	if completeRec["command"] != "echo done" {
+		t.Fatalf("command = %v", completeRec["command"])
+	}
+	if int(completeRec["token_usage"].(float64)) != 150 {
+		t.Fatalf("token_usage = %v", completeRec["token_usage"])
+	}
 }

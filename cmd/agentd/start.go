@@ -51,6 +51,13 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	slog.Debug("tool credentials validated")
 
+	if cfg.Agentic.Audit.Enabled {
+		if err := queue.EnsureAuditFile(cfg.Agentic.Audit.Path); err != nil {
+			slog.Warn("failed to initialize audit file",
+				"path", cfg.Agentic.Audit.Path, "error", err)
+		}
+	}
+
 	if err := warmupLLMIfNeeded(cmd.Context(), deps.gateway, cfg.Gateway, startOpts.skipLLMWarmup, cfg.Gateway.WarmupEnabled); err != nil {
 		return err
 	}
@@ -271,25 +278,4 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 type startOptions struct {
 	workers        int
 	skipLLMWarmup  bool
-}
-
-// tokenUsageStore extracts the queue.TokenUsageStore narrow interface from the
-// KanbanStore. Returns nil if the concrete store does not implement AddTokenUsage
-// (e.g. test doubles), in which case per-call token persistence is a no-op.
-func tokenUsageStore(store models.KanbanStore) queue.TokenUsageStore {
-	ts, _ := store.(queue.TokenUsageStore)
-	return ts
-}
-
-func hydrateRollingLedger(ctx context.Context, store models.KanbanStore, ledger *queue.RollingTokenLedger) {
-	if ledger == nil || !ledger.Enabled() {
-		return
-	}
-	src, ok := store.(queue.TokenUsageEventSource)
-	if !ok {
-		return
-	}
-	if err := ledger.HydrateFromStore(ctx, src); err != nil {
-		slog.Warn("rolling token ledger hydrate failed", "err", err)
-	}
 }

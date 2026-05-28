@@ -46,6 +46,7 @@ type HookContext struct {
 	CallID        string
 	SessionID     string
 	ProjectID     string
+	Provider      string
 	Timestamp     time.Time
 	TaskUpdatedAt time.Time // persisted task version for optimistic locking
 	ExecCtx       context.Context

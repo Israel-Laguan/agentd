@@ -1,129 +1,12 @@
 package worker
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"sync"
 	"time"
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 )
-
-const (
-	recordTypeToolDispatch = "tool_dispatch"
-	recordTypeTurnSnapshot = "turn_snapshot"
-	recordTypeHistoryEdit  = "history_edit"
-)
-
-// AuditRecord is a structured audit entry for a single tool dispatch.
-// Arguments are hashed rather than stored in full to avoid leaking secrets.
-type AuditRecord struct {
-	RecordType       string    `json:"record_type"`
-	SessionID        string    `json:"session_id"`
-	TurnID           string    `json:"turn_id"`
-	ToolName         string    `json:"tool_name"`
-	ArgsHash         string    `json:"args_hash"`
-	ResultStatus     string    `json:"result_status"`
-	ElapsedMs        int64     `json:"elapsed_ms"`
-	HookVerdicts     []string  `json:"hook_verdicts"`
-	TokenCountBefore int       `json:"token_count_before"`
-	TokenCountAfter  int       `json:"token_count_after"`
-	Timestamp        time.Time `json:"timestamp"`
-}
-
-// HistoryEditRecord captures a turn-level history rewrite for observability.
-// New content is hashed rather than stored in full to avoid leaking secrets.
-type HistoryEditRecord struct {
-	RecordType      string    `json:"record_type"`
-	SessionID       string    `json:"session_id"`
-	TurnID          string    `json:"turn_id"`
-	TurnIndex       int       `json:"turn_index"`
-	CheckpointID    string    `json:"checkpoint_id"`
-	MessagesBefore  int       `json:"messages_before"`
-	MessagesAfter   int       `json:"messages_after"`
-	NewContentHash  string    `json:"new_content_hash"`
-	Timestamp       time.Time `json:"timestamp"`
-}
-
-// TurnSnapshotRecord captures lightweight context metadata at a turn boundary
-// to support session replay reconstruction without storing full context.
-type TurnSnapshotRecord struct {
-	RecordType   string    `json:"record_type"`
-	SessionID    string    `json:"session_id"`
-	TurnID       string    `json:"turn_id"`
-	MessageCount int       `json:"message_count"`
-	TokenCount   int       `json:"token_count"`
-	ActiveTools  []string  `json:"active_tools"`
-	GoalProgress float64   `json:"goal_progress"`
-	Timestamp    time.Time `json:"timestamp"`
-}
-
-// AuditSink persists structured audit records.
-type AuditSink interface {
-	WriteAudit(AuditRecord) error
-	WriteTurnSnapshot(TurnSnapshotRecord) error
-	WriteHistoryEdit(HistoryEditRecord) error
-}
-
-// FileAuditSink appends JSON lines to a file.
-type FileAuditSink struct {
-	path string
-	mu   sync.Mutex
-}
-
-// NewFileAuditSink returns a sink that writes to path.
-func NewFileAuditSink(path string) *FileAuditSink {
-	return &FileAuditSink{path: path}
-}
-
-func (s *FileAuditSink) WriteAudit(rec AuditRecord) error {
-	rec.RecordType = recordTypeToolDispatch
-	return s.appendJSON(rec)
-}
-
-func (s *FileAuditSink) WriteTurnSnapshot(rec TurnSnapshotRecord) error {
-	rec.RecordType = recordTypeTurnSnapshot
-	return s.appendJSON(rec)
-}
-
-func (s *FileAuditSink) WriteHistoryEdit(rec HistoryEditRecord) error {
-	rec.RecordType = recordTypeHistoryEdit
-	return s.appendJSON(rec)
-}
-
-func (s *FileAuditSink) appendJSON(v any) error {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if dir := filepath.Dir(s.path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-	}
-
-	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-
-	_, writeErr := f.Write(data)
-	closeErr := f.Close()
-	if writeErr != nil {
-		return writeErr
-	}
-	return closeErr
-}
 
 // AuditLogger writes structured audit records when enabled.
 type AuditLogger struct {
@@ -159,6 +42,10 @@ func (l *AuditLogger) RecordToolDispatch(ctx HookContext, tr ToolResult, verdict
 	}
 	status := auditResultStatus(ctx, tr)
 	rec := AuditRecord{
+		TaskID:           ctx.SessionID,
+		ProjectID:        ctx.ProjectID,
+		Provider:         ctx.Provider,
+		TokenUsage:       nonNegativeDelta(tokenAfter, ctx.TokenCountBefore),
 		SessionID:        ctx.SessionID,
 		TurnID:           ctx.TurnID,
 		ToolName:         ctx.ToolName,
@@ -213,6 +100,41 @@ func (l *AuditLogger) RecordTurnSnapshot(rec TurnSnapshotRecord) {
 	}
 }
 
+// RecordTaskEvent writes a task lifecycle event (task_start, task_complete, or task_fail).
+func (l *AuditLogger) RecordTaskEvent(rec TaskAuditRecord) {
+	if !l.Enabled() {
+		return
+	}
+	if rec.Timestamp.IsZero() {
+		rec.Timestamp = time.Now().UTC()
+	}
+	if rec.Type == "" {
+		rec.Type = rec.RecordType
+	}
+	if err := l.sink.WriteTaskEvent(rec); err != nil {
+		slog.Warn("structured audit write failed",
+			"record_type", rec.RecordType,
+			"task_id", rec.TaskID,
+			"error", err,
+		)
+	}
+}
+
+// RecordDaemonStart writes a daemon_start marker to the audit file.
+func (l *AuditLogger) RecordDaemonStart() {
+	if !l.Enabled() {
+		return
+	}
+	rec := DaemonStartRecord{
+		Type:       recordTypeDaemonStart,
+		RecordType: recordTypeDaemonStart,
+		Timestamp:  time.Now().UTC(),
+	}
+	if err := l.sink.WriteDaemonStart(rec); err != nil {
+		slog.Warn("structured audit write failed", "record_type", recordTypeDaemonStart, "error", err)
+	}
+}
+
 // StructuredAuditHook returns a PostHook that records a tool dispatch audit entry.
 // Production dispatch uses recordToolDispatch after the full hook chain instead;
 // this hook exists for isolated unit tests.
@@ -238,11 +160,6 @@ func StructuredAuditHook(logger *AuditLogger) PostHook {
 	}
 }
 
-func hashArgs(args string) string {
-	sum := sha256.Sum256([]byte(args))
-	return hex.EncodeToString(sum[:])
-}
-
 func auditResultStatus(ctx HookContext, tr ToolResult) string {
 	if ctx.ResultStatusSet {
 		return ctx.ResultStatus.String()
@@ -260,11 +177,20 @@ func (w *Worker) recordToolDispatch(hookCtx HookContext, tr ToolResult, verdicts
 	w.auditLogger.RecordToolDispatch(hookCtx, tr, verdicts, hookCtx.TokenCountAfter)
 }
 
-func (w *Worker) recordTurnSnapshot(sessionID, turnID string, messageCount, tokenCount int, activeTools []string, goalProgress float64) {
+func (w *Worker) recordTurnSnapshot(
+	sessionID, projectID, provider, turnID string,
+	messageCount, tokenCount int,
+	activeTools []string,
+	goalProgress float64,
+) {
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
 		return
 	}
 	w.auditLogger.RecordTurnSnapshot(TurnSnapshotRecord{
+		TaskID:       sessionID,
+		ProjectID:    projectID,
+		Provider:     provider,
+		TokenUsage:   tokenCount,
 		SessionID:    sessionID,
 		TurnID:       turnID,
 		MessageCount: messageCount,
