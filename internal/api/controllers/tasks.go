@@ -123,13 +123,13 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			[]string{"state or description must be provided"})
 		return
 	}
+	if h.Tasks == nil {
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
+		return
+	}
 	var updated *models.Task
 	var err error
 	if hasState && hasDescription {
-		if h.Tasks == nil {
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
-			return
-		}
 		next := models.TaskState(strings.ToUpper(strings.TrimSpace(req.State)))
 		updated, err = h.Tasks.PatchTask(r.Context(), taskID, &next, req.Description)
 		if err != nil {
@@ -137,10 +137,6 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if hasState {
-		if h.Tasks == nil {
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
-			return
-		}
 		next := models.TaskState(strings.ToUpper(strings.TrimSpace(req.State)))
 		updated, err = h.Tasks.UpdateTaskState(r.Context(), taskID, next)
 		if err != nil {
@@ -148,10 +144,6 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		if h.Tasks == nil {
-			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
-			return
-		}
 		updated, err = h.Tasks.UpdateTaskDescription(r.Context(), taskID, *req.Description)
 		if err != nil {
 			httpx.WriteMappedError(w, err)

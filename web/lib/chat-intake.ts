@@ -29,7 +29,7 @@ export function mapScopeOptions(scopes: unknown): ChatScopeOption[] {
       if (!id) return null;
       const label = String(
         row.label ?? row.Label ?? row.description ?? row.Description ?? id
-      );
+      ).trim() || id;
       return { id, label };
     })
     .filter((s): s is ChatScopeOption => s !== null);
@@ -44,7 +44,7 @@ export function mapStatusReport(raw: Record<string, unknown>): ChatStatusReport 
   }
   return {
     message: String(raw.message ?? raw.Message ?? ""),
-    totalProjects: Number(summary?.total_projects ?? summary?.TotalProjects ?? 0),
+    totalProjects: Number(summary?.total_projects ?? summary?.TotalProjects) || 0,
     tasksByState: normalized,
   };
 }

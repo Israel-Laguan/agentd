@@ -65,7 +65,7 @@ export function useChatSession(
 
   const assistantFromResponse = (data: ChatResponse): ChatMessage =>
     data?.message
-      ? { ...data.message, id: data.message.id ?? createMessageId() } as ChatMessage
+      ? { ...data.message, id: data.message.id || createMessageId() } as ChatMessage
       : {
           id: createMessageId(),
           role: "assistant",
@@ -129,6 +129,14 @@ export function useChatSession(
       await runChat(originalMessage, [scopeId]);
     } catch (error) {
       console.error("Failed to send scope selection:", error);
+      setMessages((p) => [
+        ...p,
+        {
+          id: createMessageId(),
+          role: "assistant",
+          content: "Sorry, I encountered an error processing your request. Please try again.",
+        },
+      ]);
     } finally {
       setIsTyping(false);
     }
@@ -145,6 +153,14 @@ export function useChatSession(
       await runChat(text);
     } catch (error) {
       console.error("Failed to send suggested message:", error);
+      setMessages((p) => [
+        ...p,
+        {
+          id: createMessageId(),
+          role: "assistant",
+          content: "Sorry, I encountered an error processing your request. Please try again.",
+        },
+      ]);
     } finally {
       setIsTyping(false);
     }
@@ -152,20 +168,9 @@ export function useChatSession(
 
   const approvePlan = async () => {
     if (!draftPlan) return;
+    let result: MaterializeResult;
     try {
-      const result = await postApprovePlan(draftPlan);
-      setDraftPlan(null);
-      clearStructuredUi();
-      setMessages((p) => [
-        ...p,
-        {
-          id: createMessageId(),
-          role: "assistant",
-          content: "The workforce has been deployed. You can track progress on the board.",
-        },
-      ]);
-      await onMaterialized?.(result);
-      setActiveTab("board");
+      result = await postApprovePlan(draftPlan);
     } catch (e) {
       console.error(e);
       setMessages((p) => [
@@ -176,7 +181,24 @@ export function useChatSession(
           content: "Failed to materialize the plan. Check the daemon logs and try again.",
         },
       ]);
+      return;
     }
+    setDraftPlan(null);
+    clearStructuredUi();
+    setMessages((p) => [
+      ...p,
+      {
+        id: createMessageId(),
+        role: "assistant",
+        content: "The workforce has been deployed. You can track progress on the board.",
+      },
+    ]);
+    try {
+      await onMaterialized?.(result);
+    } catch (e) {
+      console.error("onMaterialized callback error:", e);
+    }
+    setActiveTab("board");
   };
 
   return {

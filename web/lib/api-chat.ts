@@ -67,7 +67,7 @@ export async function sendChat(
 
   return {
     message: {
-      id: envelope?.id ?? "",
+      id: envelope?.id || `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       role: "assistant" as const,
       content: displayContent,
     },
@@ -119,9 +119,12 @@ export async function postApprovePlan(plan: DraftPlan): Promise<MaterializeResul
     project?: Record<string, unknown>;
     tasks?: Record<string, unknown>[];
   }>(await res.json());
-  const projectId = String(data.project?.id ?? data.project?.ID ?? "");
-  const taskIds = (data.tasks ?? [])
+  const projectId = String(data?.project?.id ?? data?.project?.ID ?? "");
+  const taskIds = (data?.tasks ?? [])
     .map((t) => String(t.id ?? t.ID ?? ""))
     .filter(Boolean);
+  if (!projectId) {
+    throw new Error("Failed to approve plan: missing project id in response");
+  }
   return { projectId, taskIds };
 }
