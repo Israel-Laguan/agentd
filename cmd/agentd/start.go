@@ -51,13 +51,6 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	slog.Debug("tool credentials validated")
 
-	if cfg.Agentic.Audit.Enabled {
-		if err := queue.EnsureAuditFile(cfg.Agentic.Audit.Path); err != nil {
-			slog.Warn("failed to initialize audit file",
-				"path", cfg.Agentic.Audit.Path, "error", err)
-		}
-	}
-
 	if err := warmupLLMIfNeeded(cmd.Context(), deps.gateway, cfg.Gateway, startOpts.skipLLMWarmup, cfg.Gateway.WarmupEnabled); err != nil {
 		return err
 	}
@@ -78,6 +71,14 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	defer listener.Close() //nolint:errcheck
 	slog.Info("API server listening", "address", listener.Addr().String())
+
+	if cfg.Agentic.Audit.Enabled {
+		auditPath := config.ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path)
+		if err := queue.EnsureAuditFile(auditPath); err != nil {
+			slog.Warn("failed to initialize audit file",
+				"path", auditPath, "error", err)
+		}
+	}
 	slog.Debug("HTTP server started")
 
 	apiErrCh := startAPIServer(ctx, listener, apiServer, stop)

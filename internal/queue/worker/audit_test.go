@@ -34,6 +34,11 @@ func TestFileAuditSink_CreatesParentDir(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
 	path := filepath.Join(base, "nested", "dir", "audit.jsonl")
+	// EnsureAuditFile is responsible for creating parent directories; the sink
+	// itself no longer calls MkdirAll on every write.
+	if err := EnsureAuditFile(path); err != nil {
+		t.Fatalf("EnsureAuditFile: %v", err)
+	}
 	sink := NewFileAuditSink(path)
 	if err := sink.WriteAudit(AuditRecord{ToolName: "bash", Timestamp: time.Now().UTC()}); err != nil {
 		t.Fatalf("WriteAudit: %v", err)
