@@ -95,6 +95,7 @@ func (m *mockCommitStore) MarkTaskRunning(ctx context.Context, id string, t time
 func (m *mockCommitStore) UpdateTaskHeartbeat(ctx context.Context, id string) error {
 	return nil
 }
+func (m *mockCommitStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 
 func (m *mockCommitStore) IncrementRetryCount(ctx context.Context, id string, t time.Time) (*models.Task, error) {
 	return nil, nil

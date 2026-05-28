@@ -29,8 +29,8 @@ func TestMigrateToV12CreatesScheduledTasksTable(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "13" {
-		t.Fatalf("schema version = %q, want 13", version)
+	if version != "14" {
+		t.Fatalf("schema version = %q, want 14", version)
 	}
 
 	var tableExists int
@@ -75,8 +75,8 @@ func TestMigrateToV12RepairsMissingRunAfterIndex(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "13" {
-		t.Fatalf("schema version = %q, want 13", version)
+	if version != "14" {
+		t.Fatalf("schema version = %q, want 14", version)
 	}
 
 	var idxCount int

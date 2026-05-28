@@ -220,6 +220,7 @@ func (s *apiStore) MarkTaskRunning(context.Context, string, time.Time, int) (*mo
 func (s *apiStore) UpdateTaskHeartbeat(context.Context, string) error {
 	return nil
 }
+func (s *apiStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 func (s *apiStore) IncrementRetryCount(context.Context, string, time.Time) (*models.Task, error) {
 	return &s.task, nil
 }

@@ -111,6 +111,9 @@ func (s *dispatchBatchStore) MarkTaskRunning(_ context.Context, id string, _ tim
 }
 
 func (s *dispatchBatchStore) UpdateTaskHeartbeat(_ context.Context, id string) error { return nil }
+func (s *dispatchBatchStore) UpdateCriteriaMet(context.Context, string, []string) error {
+	return nil
+}
 
 func (s *dispatchBatchStore) UpdateTaskResult(_ context.Context, id string, _ time.Time, result models.TaskResult) (*models.Task, error) {
 	s.mu.Lock()

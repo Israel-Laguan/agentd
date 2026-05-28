@@ -8,16 +8,16 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestMigrateToV9AddsAgenticModeColumn(t *testing.T) {
-	db, err := sql.Open("sqlite", "file:migrate-v9?mode=memory&cache=shared")
+func TestMigrateToV14AddsCriteriaMetColumn(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:migrate-v14?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
 	ctx := context.Background()
-	if _, err := db.ExecContext(ctx, v8SchemaSQL); err != nil {
-		t.Fatalf("create v8 schema: %v", err)
+	if _, err := db.ExecContext(ctx, v13SchemaSQL); err != nil {
+		t.Fatalf("create v13 schema: %v", err)
 	}
 
 	if err := Run(ctx, db); err != nil {
@@ -34,23 +34,25 @@ func TestMigrateToV9AddsAgenticModeColumn(t *testing.T) {
 
 	var hasColumn int
 	if err := db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM pragma_table_info('agent_profiles') WHERE name = 'agentic_mode'`).Scan(&hasColumn); err != nil {
-		t.Fatalf("check agent_profiles.agentic_mode column: %v", err)
+		SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name = 'criteria_met'`).Scan(&hasColumn); err != nil {
+		t.Fatalf("check tasks.criteria_met column: %v", err)
 	}
 	if hasColumn != 1 {
-		t.Fatalf("agentic_mode column present = %d, want 1", hasColumn)
+		t.Fatalf("criteria_met column present = %d, want 1", hasColumn)
 	}
 
-	var agenticMode int
-	if err := db.QueryRowContext(ctx, `SELECT agentic_mode FROM agent_profiles WHERE id = 'default'`).Scan(&agenticMode); err != nil {
-		t.Fatalf("read agentic_mode: %v", err)
+	var criteriaMet string
+	if err := db.QueryRowContext(ctx, `SELECT criteria_met FROM tasks WHERE id = 'task'`).Scan(&criteriaMet); err != nil {
+		t.Fatalf("read criteria_met: %v", err)
 	}
-	if agenticMode != 0 {
-		t.Fatalf("agentic_mode = %d, want 0", agenticMode)
+	if criteriaMet != "[]" {
+		t.Fatalf("criteria_met = %q, want []", criteriaMet)
 	}
 }
 
-const v8SchemaSQL = `
+// v13SchemaSQL is the tasks schema as it existed just before v14, including
+// the success_criteria column added in v8 but without criteria_met.
+const v13SchemaSQL = `
 CREATE TABLE projects (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
@@ -75,20 +77,8 @@ CREATE TABLE tasks (
     last_heartbeat TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
     token_usage INTEGER NOT NULL DEFAULT 0,
-    success_criteria TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(success_criteria) AND json_type(success_criteria) = 'array'),
+    success_criteria TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-) STRICT;
-
-CREATE TABLE agent_profiles (
-    id TEXT PRIMARY KEY NOT NULL,
-    name TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    model TEXT NOT NULL,
-    temperature REAL NOT NULL DEFAULT 0.7,
-    system_prompt TEXT,
-    role TEXT NOT NULL DEFAULT 'CODE_GEN',
-    max_tokens INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL
 ) STRICT;
 
@@ -98,8 +88,14 @@ CREATE TABLE settings (
     updated_at TEXT NOT NULL
 ) STRICT;
 
-INSERT INTO settings (key, value, updated_at) VALUES ('schema_version', '8', datetime('now'));
+INSERT INTO settings (key, value, updated_at) VALUES ('schema_version', '13', datetime('now'));
 
-INSERT INTO agent_profiles (id, name, provider, model, updated_at)
-VALUES ('default', 'Default', 'openai', 'gpt-4', '2026-05-21T10:00:00Z');
+INSERT INTO projects (id, name, original_input, workspace_path, status, created_at, updated_at)
+VALUES ('project', 'Project', 'input', 'workspace', 'ACTIVE', '2026-05-28T10:00:00Z', '2026-05-28T10:00:00Z');
+
+INSERT INTO tasks (
+    id, project_id, agent_id, title, description, state, assignee,
+    os_process_id, started_at, last_heartbeat, retry_count, token_usage, success_criteria, created_at, updated_at
+)
+VALUES ('task', 'project', 'default', 'Task', 'description', 'READY', 'SYSTEM', NULL, NULL, NULL, 0, 0, '["file exists"]', '2026-05-28T10:00:00Z', '2026-05-28T10:00:00Z');
 `

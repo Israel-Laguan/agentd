@@ -37,6 +37,7 @@ type Task struct {
 	RetryCount      int          `json:"retry_count"`
 	TokenUsage      int          `json:"token_usage"`
 	SuccessCriteria []string     `json:"success_criteria"`
+	CriteriaMet     []string     `json:"criteria_met"`
 	DependsOn       []string     `json:"depends_on"`
 	Logs            string       `json:"logs"`
 }
