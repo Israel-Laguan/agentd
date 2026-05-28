@@ -15,35 +15,8 @@ const MaxJSONAttempts = 3
 
 // GenerateJSON unmarshals provider JSON with validation and self-correction prompts.
 func GenerateJSON[T any](ctx context.Context, gw spec.AIGateway, req spec.AIRequest) (T, error) {
-	var zero T
-	req.JSONMode = true
-	var lastRaw string
-	for attempt := 0; attempt < MaxJSONAttempts; attempt++ {
-		resp, err := gw.Generate(ctx, req)
-		if err != nil {
-			return zero, err
-		}
-		lastRaw = resp.Content
-		var out T
-		if err := json.Unmarshal([]byte(resp.Content), &out); err != nil {
-			if attempt == MaxJSONAttempts-1 {
-				return zero, WrapInvalidJSONError(err, lastRaw)
-			}
-			req.Messages = append(req.Messages, PromptAfterInvalidJSON(err))
-			continue
-		}
-		if v, ok := any(&out).(spec.Validatable); ok {
-			if err := v.Validate(); err != nil {
-				if attempt == MaxJSONAttempts-1 {
-					return zero, WrapInvalidJSONError(err, lastRaw)
-				}
-				req.Messages = append(req.Messages, PromptAfterInvalidJSON(err))
-				continue
-			}
-		}
-		return out, nil
-	}
-	return zero, models.ErrInvalidJSONResponse
+	v, _, err := GenerateJSONWithUsage[T](ctx, gw, req)
+	return v, err
 }
 
 // GenerateJSONWithUsage is like GenerateJSON but also returns the cumulative token
@@ -68,8 +41,14 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 			req.Messages = append(req.Messages, PromptAfterInvalidJSON(err))
 			continue
 		}
-		if v, ok := any(&out).(spec.Validatable); ok {
-			if err := v.Validate(); err != nil {
+		var validatable spec.Validatable
+		if v, ok := any(out).(spec.Validatable); ok {
+			validatable = v
+		} else if v, ok := any(&out).(spec.Validatable); ok {
+			validatable = v
+		}
+		if validatable != nil {
+			if err := validatable.Validate(); err != nil {
 				if attempt == MaxJSONAttempts-1 {
 					return zero, totalUsage, WrapInvalidJSONError(err, lastRaw)
 				}

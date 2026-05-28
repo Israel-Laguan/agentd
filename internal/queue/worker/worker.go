@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -101,7 +102,9 @@ func (w *Worker) recordTaskTokenUsage(ctx context.Context, task models.Task, tok
 		w.tokenUsageHook(tokens)
 	}
 	if w.tokenStore != nil {
-		_ = w.tokenStore.AddTokenUsage(ctx, task.ID, tokens)
+		if err := w.tokenStore.AddTokenUsage(ctx, task.ID, tokens); err != nil {
+			slog.Error("failed to persist token usage", "task_id", task.ID, "tokens", tokens, "err", err)
+		}
 	}
 	w.emit(ctx, task, string(models.EventTypeTokenUsage), fmt.Sprintf(`{"tokens":%d}`, tokens))
 }

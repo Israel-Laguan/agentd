@@ -78,6 +78,7 @@ describe('API (non-mock mode)', () => {
       process.env.NEXT_PUBLIC_USE_MOCK = originalUseMock;
     }
     vi.resetModules();
+    vi.unstubAllGlobals();
   });
 
   it('getWorkforce returns null when no workforce endpoint exists', async () => {
@@ -95,6 +96,7 @@ describe('API (non-mock mode)', () => {
       json: async () => ({
         data: {
           total_token_usage: 99,
+          rolling_token_remaining: 0,
           status: { summary: { tasks_by_state: { RUNNING: 3 } } },
         },
       }),
@@ -104,6 +106,7 @@ describe('API (non-mock mode)', () => {
     const { getSystemStatus } = await import('./api');
     const status = await getSystemStatus();
     expect(status.total_token_usage).toBe(99);
+    expect(status.rolling_token_remaining).toBe(0);
     expect(status.status?.summary.tasks_by_state.RUNNING).toBe(3);
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/system/status'));
   });

@@ -72,8 +72,8 @@ type SystemStatus struct {
 	TotalTokenUsage         int           `json:"total_token_usage"`
 	RollingBudgetEnabled    bool          `json:"rolling_budget_enabled,omitempty"`
 	RollingTokenLimit       int           `json:"rolling_token_limit,omitempty"`
-	RollingTokenRemaining   int           `json:"rolling_token_remaining,omitempty"`
-	RollingTokenWindow      time.Duration `json:"rolling_token_window,omitempty"`
+	RollingTokenRemaining   int           `json:"rolling_token_remaining"`
+	RollingTokenWindow      string        `json:"rolling_token_window,omitempty"`
 }
 
 // TokenCounter sums token usage across all persisted tasks.
@@ -170,7 +170,7 @@ func (s *SystemService) SnapshotWithOptions(ctx context.Context, opts StatusOpti
 			out.RollingBudgetEnabled = true
 			out.RollingTokenLimit = limit
 			out.RollingTokenRemaining = remaining
-			out.RollingTokenWindow = window
+			out.RollingTokenWindow = window.String()
 		}
 	}
 	return out, nil

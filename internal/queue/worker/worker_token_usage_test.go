@@ -117,7 +117,7 @@ func TestTokenUsage_AgenticPath_WritesSingleTurn(t *testing.T) {
 		t.Errorf("total tokens = %d, want 15", got)
 	}
 	if got := ts.callCount(); got != 1 {
-		t.Errorf("AddTokenUsage calls = %d, want 1", got)
+		t.Fatalf("AddTokenUsage calls = %d, want 1", got)
 	}
 	if ts.calls[0].taskID != task.ID {
 		t.Errorf("taskID = %q, want %q", ts.calls[0].taskID, task.ID)
