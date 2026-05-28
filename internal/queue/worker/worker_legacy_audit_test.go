@@ -97,7 +97,7 @@ func TestRunLegacyTask_AuditEventsWritten(t *testing.T) {
 			if _, ok := rec["timestamp"]; !ok {
 				t.Error("task_start: missing timestamp")
 			}
-		case recordTypeTaskComplete, recordTypeTaskFail:
+		case recordTypeTaskComplete, recordTypeTaskFail, recordTypeTaskReview:
 			hasEnd = true
 			if rec["type"] != rt {
 				t.Errorf("end record: type = %v, want %q", rec["type"], rt)
@@ -117,7 +117,48 @@ func TestRunLegacyTask_AuditEventsWritten(t *testing.T) {
 		t.Errorf("no task_start record found in: %v", records)
 	}
 	if !hasEnd {
-		t.Errorf("no task_complete or task_fail record found in: %v", records)
+		t.Errorf("no task_complete, task_fail, or task_review record found in: %v", records)
+	}
+}
+
+func TestRunLegacyTask_AuditReviewHandoff_EmitsTaskReview(t *testing.T) {
+	t.Parallel()
+	auditPath := filepathJoinTemp(t, "audit-review.jsonl")
+	w, store := newLegacyAuditTest(t, auditPath)
+	store.profile.RequireReview = true
+
+	w.Process(context.Background(), store.task)
+
+	records := readAuditRecords(t, auditPath)
+	var hasStart, hasReview bool
+	for _, rec := range records {
+		rt, _ := rec["record_type"].(string)
+		switch rt {
+		case recordTypeTaskStart:
+			hasStart = true
+		case recordTypeTaskReview:
+			hasReview = true
+			if rec["type"] != recordTypeTaskReview {
+				t.Errorf("task_review: type = %v, want %q", rec["type"], recordTypeTaskReview)
+			}
+			if rec["command"] == "" || rec["command"] == nil {
+				t.Errorf("task_review missing command field: %v", rec)
+			}
+			if _, ok := rec["exit_code"]; !ok {
+				t.Errorf("task_review missing exit_code field: %v", rec)
+			}
+			if _, ok := rec["token_usage"]; !ok {
+				t.Errorf("task_review missing token_usage field: %v", rec)
+			}
+		case recordTypeTaskComplete:
+			t.Errorf("unexpected task_complete on review handoff run: %v", rec)
+		}
+	}
+	if !hasStart {
+		t.Error("no task_start record found")
+	}
+	if !hasReview {
+		t.Errorf("no task_review record found in: %v", records)
 	}
 }
 
