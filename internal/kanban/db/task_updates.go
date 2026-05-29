@@ -11,6 +11,9 @@ import (
 
 // QueueReadyTaskIDs transitions a set of READY tasks to QUEUED inside a transaction.
 func QueueReadyTaskIDs(ctx context.Context, tx *ImmediateTx, ids []string, now time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
 	args := []any{models.TaskStateQueued, FormatTime(now), models.TaskStateReady}
 	args = append(args, TaskIDsAsAny(ids)...)
 	result, err := tx.ExecContext(ctx, `
@@ -66,6 +69,9 @@ func FinishTaskResultSideEffects(ctx context.Context, tx *ImmediateTx, id string
 
 // ResetGhostTasks resets ghost/stale tasks back to READY and writes recovery events.
 func ResetGhostTasks(ctx context.Context, tx *ImmediateTx, ghosts []models.Task, ids []string, now time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
 	args := []any{models.TaskStateReady, FormatTime(now)}
 	args = append(args, TaskIDsAsAny(ids)...)
 	if _, err := tx.ExecContext(ctx, `
