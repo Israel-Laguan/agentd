@@ -121,15 +121,35 @@ Create a project from a draft plan.
 ```json
 {
   "project_name": "project-name",
+  "source_path": "/path/to/local/repo",
   "tasks": [
     { "title": "Task title", "description": "...", "agent_id": "researcher" }
   ]
 }
 ```
 
+Optional top-level `source_path` — local directory whose contents are copied into the project workspace before tasks become claimable. When set, root tasks are `READY` in the response (workspace already populated). When omitted, root tasks start `PENDING` until `POST /api/v1/projects/{id}/workspace/ready` is called. See [`workspace-seeding.md`](workspace-seeding.md).
+
 Optional per-task `agent_id` pre-assigns an agent at creation (default: `default`). Unknown IDs → `404 NOT_FOUND`.
 
+When `api.materialize_token` is set in daemon config, include header `X-Agentd-Materialize-Token: <token>` on this request.
+
 **Response**: Returns the created project and its tasks.
+
+**Test Coverage**: `internal/api/controllers/projects_test.go`, `internal/services/workspace_seeding_test.go`
+
+### POST /api/v1/projects/{id}/workspace/ready
+
+Signals that the project workspace has been populated manually. Transitions `PENDING` root tasks to `READY`.
+
+**Behavior:**
+- Validates the workspace directory is non-empty before unlocking.
+- Returns `409 STATE_CONFLICT` if the workspace is still empty.
+- When `api.materialize_token` is configured, requires the same `X-Agentd-Materialize-Token` header as materialize.
+
+**Response**: Returns the updated task list.
+
+**Test Coverage**: `internal/api/controllers/projects_test.go`
 
 ---
 
