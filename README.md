@@ -51,6 +51,7 @@ If you only have a Gemini API key:
      -d '{"provider":"gemini","model":"gemini-2.5-flash"}'
    ```
 6. For dev/smoke testing, set `healing.enabled: false` and `healing.outage_handoff_enabled: false` to suppress self-healing handoffs and `_system` outage tasks. Status defaults omit healing noise: `curl -s 'http://127.0.0.1:8765/api/v1/system/status'`.
+7. Materialize creates an empty project workspace. Seed it before workers run: pass `source_path` on `POST /api/v1/projects/materialize`, or rsync into `~/.agentd/projects/<id>/` then call `POST /api/v1/projects/<id>/workspace/ready`. See [`docs/workspace-seeding.md`](docs/workspace-seeding.md).
 
 See [`docs/config-reference.md`](docs/config-reference.md) for all Gemini config keys.
 
@@ -127,6 +128,7 @@ Run spawned agents under a non-sudoer system user. `agentd` blocks commands that
 | [`docs/architecture-flows.md`](docs/architecture-flows.md) | Extended flows: Manager's Loop, Memory Recall |
 | [`docs/frontdesk.md`](docs/frontdesk.md) | Chat intake decision flow, package boundaries, interface seams |
 | [`docs/reference.md`](docs/reference.md) | Feature catalog, task states, event types, config key reference |
+| [`docs/workspace-seeding.md`](docs/workspace-seeding.md) | Workspace seeding: `source_path` on materialize and `workspace/ready` two-phase flow |
 | [`docs/openai-compatible-providers.md`](docs/openai-compatible-providers.md) | Using Groq, Together AI, Poolside, and other OpenAI-compatible cloud vendors |
 | [`docs/llamacpp-quickstart.md`](docs/llamacpp-quickstart.md) | Local inference quickstart (llama.cpp, LM Studio, vLLM, Ollama) |
 | [`docs/guardrails.md`](docs/guardrails.md) | Size limits, layer boundaries, quality workflow (human-facing) |
