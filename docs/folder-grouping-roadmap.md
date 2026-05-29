@@ -83,7 +83,7 @@ Expected import touch points:
 - `internal/services/project_service.go`
 - `internal/queue/*` files that call store helpers
 
-**Status: partial.** [`internal/kanban/db/schema.sql`](../internal/kanban/db/schema.sql) holds the embedded schema (import path in [`internal/kanban/db.go`](../internal/kanban/db.go): `//go:embed db/schema.sql`). DAG and draft-plan normalization live in [`internal/kanban/domain`](../internal/kanban/domain) (`ValidateDAG`, `NormalizeDraftPlan`, `ValidateTaskCap`). **`internal/kanban/repo`** and a dedicated Go package **`internal/kanban/db`** (moving `tx`, `scan`, migrations, etc. out of package `kanban`) are not done yet—`*Store` methods remain in package `kanban`.
+**Status: implemented.** [`internal/kanban/db`](../internal/kanban/db) is a full Go package containing all SQLite infrastructure: `open.go` (DB open/migrate), `tx.go` (`ImmediateTx`, `BeginImmediate`, `SQLExecutor`, `SQLQueryer`), `time.go`, `rows.go`, `sql_helpers.go` (+ `NullString`), `retry.go` (generic `RetryOnBusy`), `scan.go` / `scan_settings.go` / `scan_task.go`, `hitl_sql.go`, `tasks_queries.go`, `query_helpers.go`, `task_updates.go`, and `materialize_insert.go`. Cycle detection (`EnsureNoCycle`) was extracted to [`internal/kanban/domain/cycle_check.go`](../internal/kanban/domain). The root `package kanban` uses a thin [`shim.go`](../internal/kanban/shim.go) with type aliases (`immediateTx = kdb.ImmediateTx`, etc.) and `var` function forwards so all existing root files compile unchanged. `*Store` methods remain in package `kanban`. Root file count dropped from 67 → 53.
 
 ## Phase 4: API Grouping
 

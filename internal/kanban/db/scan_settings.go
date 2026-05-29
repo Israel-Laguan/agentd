@@ -1,4 +1,4 @@
-package kanban
+package db
 
 import (
 	"database/sql"
@@ -7,10 +7,11 @@ import (
 	"agentd/internal/models"
 )
 
-func scanSettings(rows *sql.Rows) ([]models.Setting, error) {
+// ScanSettings scans all rows from a settings query result.
+func ScanSettings(rows *sql.Rows) ([]models.Setting, error) {
 	var out []models.Setting
 	for rows.Next() {
-		setting, err := scanSetting(rows)
+		setting, err := ScanSetting(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -22,13 +23,14 @@ func scanSettings(rows *sql.Rows) ([]models.Setting, error) {
 	return out, nil
 }
 
-func scanSetting(row scanner) (models.Setting, error) {
+// ScanSetting scans one row into a models.Setting.
+func ScanSetting(row Scanner) (models.Setting, error) {
 	var st models.Setting
 	var updatedAt string
 	if err := row.Scan(&st.Key, &st.Value, &updatedAt); err != nil {
 		return models.Setting{}, fmt.Errorf("scan setting: %w", err)
 	}
-	parsed, err := parseTime(updatedAt)
+	parsed, err := ParseTime(updatedAt)
 	if err != nil {
 		return models.Setting{}, err
 	}

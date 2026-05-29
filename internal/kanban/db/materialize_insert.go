@@ -1,4 +1,4 @@
-package kanban
+package db
 
 import (
 	"context"
@@ -8,7 +8,8 @@ import (
 	"agentd/internal/models"
 )
 
-func insertTask(ctx context.Context, tx sqlExecutor, tempID string, task models.Task) error {
+// InsertTask inserts a task row.
+func InsertTask(ctx context.Context, tx SQLExecutor, tempID string, task models.Task) error {
 	successCriteria, err := encodeSuccessCriteria(task.SuccessCriteria)
 	if err != nil {
 		return fmt.Errorf("encode success criteria for task %q: %w", tempID, err)
@@ -20,7 +21,7 @@ func insertTask(ctx context.Context, tx sqlExecutor, tempID string, task models.
 		)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, task.ProjectID, task.AgentID, task.Title, task.Description, string(task.State), string(task.Assignee),
-		nil, nil, nil, nil, task.RetryCount, task.TokenUsage, successCriteria, "[]", formatTime(task.CreatedAt), formatTime(task.UpdatedAt))
+		nil, nil, nil, nil, task.RetryCount, task.TokenUsage, successCriteria, "[]", FormatTime(task.CreatedAt), FormatTime(task.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert task %q: %w", tempID, err)
 	}
@@ -38,7 +39,8 @@ func encodeSuccessCriteria(criteria []string) (string, error) {
 	return string(data), nil
 }
 
-func insertRelations(ctx context.Context, tx sqlExecutor, plan models.DraftPlan, taskIDs map[string]string) error {
+// InsertRelations inserts dependency relations for a materialized plan.
+func InsertRelations(ctx context.Context, tx SQLExecutor, plan models.DraftPlan, taskIDs map[string]string) error {
 	for _, draft := range plan.Tasks {
 		if err := insertTaskRelations(ctx, tx, draft, taskIDs); err != nil {
 			return err
@@ -47,22 +49,18 @@ func insertRelations(ctx context.Context, tx sqlExecutor, plan models.DraftPlan,
 	return nil
 }
 
-func insertTaskRelations(
-	ctx context.Context,
-	tx sqlExecutor,
-	draft models.DraftTask,
-	taskIDs map[string]string,
-) error {
+func insertTaskRelations(ctx context.Context, tx SQLExecutor, draft models.DraftTask, taskIDs map[string]string) error {
 	childID := taskIDs[draft.ID()]
 	for _, parentTempID := range draft.DependsOn {
-		if err := insertTaskRelation(ctx, tx, taskIDs[parentTempID], childID); err != nil {
+		if err := InsertTaskRelation(ctx, tx, taskIDs[parentTempID], childID); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func insertTaskRelation(ctx context.Context, tx sqlExecutor, parentID, childID string) error {
+// InsertTaskRelation inserts a single BLOCKS dependency edge.
+func InsertTaskRelation(ctx context.Context, tx SQLExecutor, parentID, childID string) error {
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO task_relations (parent_task_id, child_task_id, relation_type)
 		VALUES (?, ?, ?)`, parentID, childID, models.TaskRelationBlocks)
@@ -70,15 +68,4 @@ func insertTaskRelation(ctx context.Context, tx sqlExecutor, parentID, childID s
 		return fmt.Errorf("insert task relation: %w", err)
 	}
 	return nil
-}
-
-// insertTaskRelationChecked inserts a dependency edge and verifies the
-// resulting graph remains acyclic. Use this for dynamic edge inserts
-// (subtask breakdown, follow-up appends) where the full DAG was not
-// pre-validated by MaterializePlan.
-func insertTaskRelationChecked(ctx context.Context, tx *immediateTx, parentID, childID string) error {
-	if err := ensureNoCycle(ctx, tx, parentID, childID); err != nil {
-		return err
-	}
-	return insertTaskRelation(ctx, tx, parentID, childID)
 }
