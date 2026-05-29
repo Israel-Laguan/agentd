@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"agentd/internal/gateway/correction"
@@ -86,6 +87,8 @@ func (r *Router) ProviderSupportsChatTools(provider string) bool {
 			return p.Capabilities().SupportsChatTools
 		}
 	}
+	slog.Debug("ProviderSupportsChatTools: provider not found in router, returning false",
+		"provider", provider)
 	return false
 }
 

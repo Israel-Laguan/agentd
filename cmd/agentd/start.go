@@ -75,7 +75,7 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	if cfg.Agentic.Audit.Enabled {
 		auditPath := config.ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path)
 		if err := queue.EnsureAuditFile(auditPath); err != nil {
-			slog.Warn("failed to initialize audit file",
+			slog.Error("failed to initialize audit file; audit events will not be written",
 				"path", auditPath, "error", err)
 		}
 	}
