@@ -6,7 +6,7 @@ import (
 )
 
 // UTCNow returns the current time in UTC with nanoseconds truncated to zero.
-func UTCNow() time.Time { return time.Now().UTC().Round(0) }
+func UTCNow() time.Time { return time.Now().UTC().Truncate(time.Second) }
 
 // FormatTime formats t as RFC3339Nano in UTC.
 func FormatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }

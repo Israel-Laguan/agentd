@@ -81,7 +81,7 @@ func SelectTasksByIDs(ctx context.Context, q SQLQueryer, ids []string) ([]models
 	return ScanTasks(rows)
 }
 
-// UnlockReadyChildren moves queued child tasks to READY when all parents are resolved.
+// UnlockReadyChildren moves pending child tasks to READY when all parents are resolved.
 func UnlockReadyChildren(ctx context.Context, tx *ImmediateTx, parentID string, now time.Time) error {
 	_, err := tx.ExecContext(ctx, `
 		UPDATE tasks
