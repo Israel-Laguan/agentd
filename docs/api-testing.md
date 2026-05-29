@@ -74,16 +74,7 @@ Reset the LLM circuit breaker without restarting the daemon. Use this after quot
 
 When `?provider=gemini` is supplied, `"provider"` in the response is `"gemini"`.
 
-**Error Responses** (all `503`, code `UNAVAILABLE`):
-- System service not configured (`SystemHandler.System` is nil) — `"message": "system service is not configured"`
-- Global reset unavailable (neither global resetter nor per-provider breakers; no `?provider=`) — `"message": "breaker reset not available"`
-- Per-provider reset unavailable (`?provider=<name>` supplied but `ProviderBreakers` is nil) — `"message": "per-provider breaker reset not available"`
-
-Example (global reset unavailable):
-
-```json
-{ "status": "error", "error": { "code": "UNAVAILABLE", "message": "breaker reset not available" } }
-```
+**Error Responses** (all `503`, code `UNAVAILABLE`): system service not configured; global reset unavailable; per-provider reset unavailable when `ProviderBreakers` is nil.
 
 **Test Coverage**:
 - No service (503): `internal/api/controllers/system_test.go:42`
@@ -380,38 +371,18 @@ Server-Sent Events (SSE) stream for real-time updates.
 
 ---
 
-## Task States Reference
+## Task States
 
-| State | Meaning |
-|-------|---------|
-| `PENDING` | Waiting for prerequisite tasks to complete |
-| `READY` | All dependencies met; eligible for worker claim |
-| `QUEUED` | Claimed by daemon; waiting for worker slot |
-| `RUNNING` | Worker actively executing the task |
-| `BLOCKED` | Parent paused until child tasks complete |
-| `COMPLETED` | Task finished successfully |
-| `FAILED` | Task exhausted retries or was evicted |
-| `FAILED_REQUIRES_HUMAN` | Task evicted after max retries; human review required |
-| `IN_CONSIDERATION` | Human comment interrupted task; awaiting re-evaluation |
+See [`reference.md` — Task States](reference.md#task-states).
 
 ---
 
 ## Running the Tests
 
-Prefer Makefile targets (race detector, workspace `GOCACHE`, reliable `GOMODCACHE`):
-
 ```sh
 make test-e2e
 make test PKG=./internal/api/...
-make check    # full gate before merge
+make check
 ```
 
-Scoped examples:
-
-```sh
-make test PKG=./internal/api/controllers/... RUN=TestGateway
-```
-
-**Expected Results**: All tests pass (e2e and API route tests).
-
-**Troubleshooting**: Missing modules, stale builds, or `go test` vs `make test` mismatches — [`REVIEW.md`](../REVIEW.md#go-toolchain-troubleshooting).
+Toolchain troubleshooting: [`REVIEW.md`](../REVIEW.md#go-toolchain-troubleshooting).

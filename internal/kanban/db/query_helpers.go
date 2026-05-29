@@ -1,4 +1,4 @@
-package kanban
+package db
 
 import (
 	"context"
@@ -8,9 +8,10 @@ import (
 	"agentd/internal/models"
 )
 
-func updateTaskStateInTx(
+// UpdateTaskStateInTx updates a task state in an immediate transaction.
+func UpdateTaskStateInTx(
 	ctx context.Context,
-	tx *immediateTx,
+	tx *ImmediateTx,
 	current *models.Task,
 	expectedUpdatedAt time.Time,
 	next models.TaskState,
@@ -34,20 +35,22 @@ func updateTaskStateInTx(
 		    last_heartbeat = CASE WHEN ? = ? THEN NULL ELSE last_heartbeat END,
 		    updated_at = ?
 		WHERE id = ? AND updated_at = ?`,
-		string(next), nullableTime(startedAt), nullableTime(completedAt),
+		string(next), NullableTime(startedAt), NullableTime(completedAt),
 		string(next), string(models.TaskStateBlocked),
 		string(next), string(models.TaskStateBlocked),
-		formatTime(now), current.ID, formatTime(expectedUpdatedAt))
+		FormatTime(now), current.ID, FormatTime(expectedUpdatedAt))
 	if err != nil {
 		return fmt.Errorf("update task state: %w", err)
 	}
-	return requireRowsAffected(result, 1, models.ErrOptimisticLock)
+	return RequireRowsAffected(result, 1, models.ErrOptimisticLock)
 }
 
-func finishTaskStateSideEffects(ctx context.Context, tx *immediateTx, id string, next models.TaskState, now time.Time) error {
+// FinishTaskStateSideEffects applies state-transition side effects after an
+// update.
+func FinishTaskStateSideEffects(ctx context.Context, tx *ImmediateTx, id string, next models.TaskState, now time.Time) error {
 	switch next {
 	case models.TaskStateCompleted, models.TaskStateFailed:
-		return unblockBlockedParentsWhenChildrenResolved(ctx, tx, id, now)
+		return UnblockBlockedParentsWhenChildrenResolved(ctx, tx, id, now)
 	default:
 		return nil
 	}

@@ -1,16 +1,18 @@
-package kanban
+package domain
 
 import (
 	"context"
 	"fmt"
 
+	kdb "agentd/internal/kanban/db"
 	"agentd/internal/models"
 )
 
-// ensureNoCycle verifies that inserting the edge (parentID -> childID) does not
-// create a cycle in the task dependency graph. It walks ancestors of parentID
-// via BFS; if childID is reachable from parentID the edge would form a loop.
-func ensureNoCycle(ctx context.Context, q sqlQueryer, parentID, childID string) error {
+// EnsureNoCycle verifies that inserting the edge (parentID -> childID) does
+// not create a cycle in the task dependency graph. It walks ancestors of
+// parentID via BFS; if childID is reachable from parentID the edge would form
+// a loop.
+func EnsureNoCycle(ctx context.Context, q kdb.SQLQueryer, parentID, childID string) error {
 	if parentID == childID {
 		return fmt.Errorf("%w: self-referencing edge %s", models.ErrCircularDependency, parentID)
 	}
@@ -25,7 +27,8 @@ func ensureNoCycle(ctx context.Context, q sqlQueryer, parentID, childID string) 
 		}
 		for _, ancestor := range ancestors {
 			if ancestor == childID {
-				return fmt.Errorf("%w: %s is an ancestor of %s", models.ErrCircularDependency, childID, parentID)
+				return fmt.Errorf("%w: %s is an ancestor of %s",
+					models.ErrCircularDependency, childID, parentID)
 			}
 			if _, seen := visited[ancestor]; !seen {
 				visited[ancestor] = struct{}{}
@@ -36,13 +39,13 @@ func ensureNoCycle(ctx context.Context, q sqlQueryer, parentID, childID string) 
 	return nil
 }
 
-func parentIDs(ctx context.Context, q sqlQueryer, taskID string) ([]string, error) {
+func parentIDs(ctx context.Context, q kdb.SQLQueryer, taskID string) ([]string, error) {
 	rows, err := q.QueryContext(ctx, `
 		SELECT parent_task_id FROM task_relations WHERE child_task_id = ?`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("cycle check parent lookup: %w", err)
 	}
-	defer closeRows(rows)
+	defer kdb.CloseRows(rows)
 	var ids []string
 	for rows.Next() {
 		var id string
