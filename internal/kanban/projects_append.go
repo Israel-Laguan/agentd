@@ -86,3 +86,12 @@ func linkChildrenToParent(ctx context.Context, tx *immediateTx, parentID string,
 	}
 	return nil
 }
+
+// insertTaskRelationChecked inserts a dependency edge and verifies the
+// insertion does not create a cycle in the task graph.
+func insertTaskRelationChecked(ctx context.Context, tx *immediateTx, parentID, childID string) error {
+	if err := ensureNoCycle(ctx, tx, parentID, childID); err != nil {
+		return err
+	}
+	return insertTaskRelation(ctx, tx, parentID, childID)
+}

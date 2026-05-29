@@ -1,4 +1,4 @@
-package kanban
+package db
 
 import (
 	"database/sql"
@@ -8,9 +8,11 @@ import (
 	"agentd/internal/models"
 )
 
-type scanner interface{ Scan(dest ...any) error }
+// Scanner is the minimal interface satisfied by *sql.Row and *sql.Rows.
+type Scanner interface{ Scan(dest ...any) error }
 
-func scanProject(row scanner) (*models.Project, error) {
+// ScanProject scans one row into a *models.Project.
+func ScanProject(row Scanner) (*models.Project, error) {
 	var p models.Project
 	var createdAt, updatedAt string
 	err := row.Scan(&p.ID, &p.Name, &p.OriginalInput, &p.WorkspacePath, &p.Status, &createdAt, &updatedAt)
@@ -20,11 +22,11 @@ func scanProject(row scanner) (*models.Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("scan project: %w", err)
 	}
-	created, err := parseTime(createdAt)
+	created, err := ParseTime(createdAt)
 	if err != nil {
 		return nil, err
 	}
-	updated, err := parseTime(updatedAt)
+	updated, err := ParseTime(updatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -33,10 +35,11 @@ func scanProject(row scanner) (*models.Project, error) {
 	return &p, nil
 }
 
-func scanProjects(rows *sql.Rows) ([]models.Project, error) {
+// ScanProjects scans all rows from a project query result.
+func ScanProjects(rows *sql.Rows) ([]models.Project, error) {
 	var out []models.Project
 	for rows.Next() {
-		project, err := scanProject(rows)
+		project, err := ScanProject(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -48,7 +51,8 @@ func scanProjects(rows *sql.Rows) ([]models.Project, error) {
 	return out, nil
 }
 
-func scanTask(row scanner) (*models.Task, error) {
+// ScanTask scans one row into a *models.Task.
+func ScanTask(row Scanner) (*models.Task, error) {
 	var t models.Task
 	values := taskScanValues{task: &t}
 	if err := scanTaskValues(row, &values); err != nil {
@@ -60,10 +64,11 @@ func scanTask(row scanner) (*models.Task, error) {
 	return &t, nil
 }
 
-func scanTasks(rows *sql.Rows) ([]models.Task, error) {
+// ScanTasks scans all rows from a task query result.
+func ScanTasks(rows *sql.Rows) ([]models.Task, error) {
 	var out []models.Task
 	for rows.Next() {
-		task, err := scanTask(rows)
+		task, err := ScanTask(rows)
 		if err != nil {
 			return nil, err
 		}

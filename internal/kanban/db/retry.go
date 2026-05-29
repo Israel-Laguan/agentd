@@ -1,4 +1,4 @@
-package kanban
+package db
 
 import (
 	"context"
@@ -28,7 +28,9 @@ func isSQLiteBusy(err error) bool {
 	return false
 }
 
-func retryOnBusy[T any](ctx context.Context, op func(context.Context) (T, error)) (T, error) {
+// RetryOnBusy retries op when SQLite returns BUSY or LOCKED, using
+// exponential back-off up to maxBusyRetries attempts.
+func RetryOnBusy[T any](ctx context.Context, op func(context.Context) (T, error)) (T, error) {
 	backoff := initialBackoff
 	for attempt := 0; ; attempt++ {
 		result, err := op(ctx)
@@ -45,8 +47,10 @@ func retryOnBusy[T any](ctx context.Context, op func(context.Context) (T, error)
 	}
 }
 
-func retryOnBusyNoResult(ctx context.Context, op func(context.Context) error) error {
-	_, err := retryOnBusy(ctx, func(ctx context.Context) (struct{}, error) {
+// RetryOnBusyNoResult is a convenience wrapper around RetryOnBusy for
+// operations that return only an error.
+func RetryOnBusyNoResult(ctx context.Context, op func(context.Context) error) error {
+	_, err := RetryOnBusy(ctx, func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, op(ctx)
 	})
 	return err

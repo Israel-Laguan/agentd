@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"agentd/internal/models"
+	kdb "agentd/internal/kanban/db"
 )
 
 func (s *Store) UpdateTaskDescription(
@@ -21,19 +22,19 @@ func (s *Store) UpdateTaskDescription(
 		}
 		defer rollbackUnlessCommitted(tx)
 
-		now := utcNow()
+		now := kdb.UTCNow()
 		result, err := tx.ExecContext(ctx, `
 			UPDATE tasks
 			SET description = ?, updated_at = ?
 			WHERE id = ? AND updated_at = ?`,
-			description, formatTime(now), id, formatTime(expectedUpdatedAt))
+			description, kdb.FormatTime(now), id, kdb.FormatTime(expectedUpdatedAt))
 		if err != nil {
 			return nil, fmt.Errorf("update task description: %w", err)
 		}
-		if err := requireRowsAffected(result, 1, models.ErrStateConflict); err != nil {
+		if err := kdb.RequireRowsAffected(result, 1, models.ErrStateConflict); err != nil {
 			return nil, err
 		}
-		task, err := selectTaskByID(ctx, tx, id)
+		task, err := kdb.SelectTaskByID(ctx, tx, id)
 		if err != nil {
 			return nil, err
 		}

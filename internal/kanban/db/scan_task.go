@@ -1,4 +1,4 @@
-package kanban
+package db
 
 import (
 	"database/sql"
@@ -10,6 +10,8 @@ import (
 	"agentd/internal/models"
 )
 
+// taskScanValues holds raw column values during a task row scan before
+// applying type conversions.
 type taskScanValues struct {
 	task            *models.Task
 	createdAt       string
@@ -24,7 +26,7 @@ type taskScanValues struct {
 	criteriaMet     string
 }
 
-func scanTaskValues(row scanner, values *taskScanValues) error {
+func scanTaskValues(row Scanner, values *taskScanValues) error {
 	t := values.task
 	err := row.Scan(
 		&t.ID, &t.ProjectID, &t.AgentID, &t.Title, &t.Description, &values.state, &values.assignee,
@@ -73,7 +75,7 @@ func applyOptionalTime(source sql.NullString, target **time.Time) error {
 	if !source.Valid {
 		return nil
 	}
-	ts, err := parseTime(source.String)
+	ts, err := ParseTime(source.String)
 	if err != nil {
 		return err
 	}
@@ -82,11 +84,11 @@ func applyOptionalTime(source sql.NullString, target **time.Time) error {
 }
 
 func applyEntityTimes(task *models.Task, createdAt, updatedAt string) error {
-	created, err := parseTime(createdAt)
+	created, err := ParseTime(createdAt)
 	if err != nil {
 		return err
 	}
-	updated, err := parseTime(updatedAt)
+	updated, err := ParseTime(updatedAt)
 	if err != nil {
 		return err
 	}

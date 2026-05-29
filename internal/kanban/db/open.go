@@ -1,4 +1,4 @@
-package kanban
+package db
 
 import (
 	"context"
@@ -15,10 +15,10 @@ import (
 	"agentd/internal/kanban/migrations"
 )
 
-//go:embed db/schema.sql
+//go:embed schema.sql
 var schemaFS embed.FS
 
-const schemaFile = "db/schema.sql"
+const schemaFile = "schema.sql"
 
 // Open opens a SQLite database, applies operational pragmas, and runs schema
 // migrations. The caller owns the returned database handle.
@@ -111,7 +111,7 @@ func tableHasColumn(ctx context.Context, db *sql.DB, table, column string) (bool
 	if err != nil {
 		return false, fmt.Errorf("read table info for %s: %w", table, err)
 	}
-	defer closeRows(rows)
+	defer CloseRows(rows)
 
 	for rows.Next() {
 		var cid int

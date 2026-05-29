@@ -8,7 +8,7 @@ import pathlib
 from collections import defaultdict
 
 
-DEFAULT_SKIP_DIRS = {".git", ".cursor", "node_modules", "bin", "dist", "build"}
+DEFAULT_SKIP_DIRS = {".git", ".cursor", "node_modules", "bin", "dist", "build", ".gomodcache", ".gocache", ".goenv", "vendor", ".golangci-cache", ".next"}
 
 
 def normalize(path: pathlib.Path) -> str:
