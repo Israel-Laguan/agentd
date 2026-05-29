@@ -14,6 +14,9 @@ func RequireRowsAffected(result sql.Result, want int64, errOnMismatch error) err
 		return fmt.Errorf("read rows affected: %w", err)
 	}
 	if affected != want {
+		if errOnMismatch == nil {
+			return fmt.Errorf("expected %d rows affected, got %d", want, affected)
+		}
 		return errOnMismatch
 	}
 	return nil

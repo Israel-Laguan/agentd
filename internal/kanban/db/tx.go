@@ -56,11 +56,12 @@ func (tx *ImmediateTx) Commit() error {
 	if tx.done {
 		return nil
 	}
-	if _, err := tx.conn.ExecContext(context.Background(), "COMMIT"); err != nil {
-		return err
-	}
 	tx.done = true
-	return tx.conn.Close()
+	_, err := tx.conn.ExecContext(context.Background(), "COMMIT")
+	if closeErr := tx.conn.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 // Rollback rolls back the transaction and releases the connection. Calling
@@ -69,12 +70,12 @@ func (tx *ImmediateTx) Rollback() error {
 	if tx.done {
 		return nil
 	}
-	if _, err := tx.conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
-		_ = tx.conn.Close()
-		return err
-	}
 	tx.done = true
-	return tx.conn.Close()
+	_, err := tx.conn.ExecContext(context.Background(), "ROLLBACK")
+	if closeErr := tx.conn.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 // RollbackUnlessCommitted is a defer-friendly helper that rolls back tx if it

@@ -7,6 +7,7 @@ package kanban
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	kdb "agentd/internal/kanban/db"
@@ -88,9 +89,6 @@ var (
 
 	// HITL / SQL fragment helpers
 	selfHealingHandoffExcludeSQL = kdb.SelfHealingHandoffExcludeSQL
-
-	// database open
-	Open = kdb.Open
 )
 
 // ---------------------------------------------------------------------------
@@ -105,6 +103,9 @@ func retryOnBusy[T any](ctx context.Context, op func(context.Context) (T, error)
 func retryOnBusyNoResult(ctx context.Context, op func(context.Context) error) error {
 	return kdb.RetryOnBusyNoResult(ctx, op)
 }
+
+// Open opens the SQLite database at path and configures the connection pool.
+func Open(path string) (*sql.DB, error) { return kdb.Open(path) }
 
 // ---------------------------------------------------------------------------
 // ensureNoCycle forwards to domain.EnsureNoCycle.
