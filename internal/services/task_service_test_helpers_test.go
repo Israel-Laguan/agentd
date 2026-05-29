@@ -82,7 +82,7 @@ func (m *minimalStore) GetTask(_ context.Context, id string) (*models.Task, erro
 }
 
 func (m *minimalStore) AddComment(_ context.Context, c models.Comment) error {
-	m.stubBoard.addCalls++
+	m.addCalls++
 	m.lastComment = c
 	return nil
 }
