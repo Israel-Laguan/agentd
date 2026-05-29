@@ -55,7 +55,6 @@ type minimalStore struct {
 	getProjErr    error
 	getTask       *models.Task
 	getTaskErr    error
-	addCalls      int
 	patchCalls    int
 	assignErr     error
 	splitErr      error
@@ -83,7 +82,7 @@ func (m *minimalStore) GetTask(_ context.Context, id string) (*models.Task, erro
 }
 
 func (m *minimalStore) AddComment(_ context.Context, c models.Comment) error {
-	m.addCalls++
+	m.stubBoard.addCalls++
 	m.lastComment = c
 	return nil
 }
@@ -98,6 +97,7 @@ func (m *minimalStore) UpdateTaskState(_ context.Context, _ string, _ time.Time,
 	}
 	updated := *m.getTask
 	updated.State = next
+	m.getTask = &updated
 	return &updated, nil
 }
 
