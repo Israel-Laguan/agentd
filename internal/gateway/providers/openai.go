@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -243,6 +244,10 @@ func (r openAIResponse) toAIResponse(defaultModel string, providerUsed string) s
 				}
 			}
 		}
+	}
+	if r.Usage.TotalTokens == 0 {
+		slog.Debug("openai provider returned zero total_tokens; usage data may be absent in this provider's response",
+			"provider", providerUsed, "model", model)
 	}
 	return spec.AIResponse{
 		Content:      content,
