@@ -40,13 +40,26 @@ describe('API (non-mock materialize)', () => {
     expect(body.tasks[0].title).toBe('Do thing');
   });
 
+  it('postApprovePlan accepts flat project id in response', async () => {
+    enableNonMock();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { id: 'flat-p1', tasks: [{ id: 'task-b' }] } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { postApprovePlan } = await NON_MOCK_ENV.importApi();
+    const result = await postApprovePlan({ name: 'Flat', description: '', tasks: [] });
+    expect(result.projectId).toBe('flat-p1');
+    expect(result.taskIds).toEqual(['task-b']);
+  });
+
   it('postApprovePlan sends materialize token header when env set', async () => {
     enableNonMock();
     process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN = 'secret-token';
     vi.resetModules();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: {} }),
+      json: async () => ({ data: { id: 'p1' } }),
     });
     vi.stubGlobal('fetch', fetchMock);
     const { postApprovePlan } = await NON_MOCK_ENV.importApi();
@@ -61,7 +74,7 @@ describe('API (non-mock materialize)', () => {
     vi.resetModules();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: {} }),
+      json: async () => ({ data: { id: 'p1' } }),
     });
     vi.stubGlobal('fetch', fetchMock);
     const { postApprovePlan } = await NON_MOCK_ENV.importApi();

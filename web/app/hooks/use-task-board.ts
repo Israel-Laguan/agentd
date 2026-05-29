@@ -55,10 +55,16 @@ export function useTaskBoard(
       .then((serverTask) => {
         if (dragVersionRef.current.get(taskId) !== dragVersion) return;
         setLocalTasks((tasks) =>
-          tasks.map((task) => (task.id === taskId ? serverTask : task))
+          tasks.map((task) =>
+            task.id === taskId
+              ? { ...task, state: serverTask.state, updated_at: serverTask.updated_at }
+              : task
+          )
         );
         setSelectedTask((prev) =>
-          prev?.id === taskId ? serverTask : prev
+          prev?.id === taskId
+            ? { ...prev, state: serverTask.state, updated_at: serverTask.updated_at }
+            : prev
         );
       })
       .catch((err) => {

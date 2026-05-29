@@ -115,12 +115,18 @@ export async function postApprovePlan(plan: DraftPlan): Promise<MaterializeResul
     throw new Error(`Failed to approve plan: ${res.status}`);
   }
 
-  const data = unwrapData<{
-    project?: Record<string, unknown>;
-    tasks?: Record<string, unknown>[];
-  }>(await res.json());
-  const projectId = String(data?.project?.id ?? data?.project?.ID ?? "");
-  const taskIds = (data?.tasks ?? [])
+  const data = unwrapData<Record<string, unknown>>(await res.json());
+  const project = (data?.project ?? data?.Project) as Record<string, unknown> | undefined;
+  const projectId = String(
+    project?.id ??
+      project?.ID ??
+      data?.project_id ??
+      data?.projectId ??
+      data?.id ??
+      data?.ID ??
+      ""
+  );
+  const taskIds = ((data?.tasks as Record<string, unknown>[] | undefined) ?? [])
     .map((t) => String(t.id ?? t.ID ?? ""))
     .filter(Boolean);
   if (!projectId) {
