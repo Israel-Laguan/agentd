@@ -27,6 +27,9 @@ func TestSystemPromptBuilder_AddSkillBlock(t *testing.T) {
 	globalIdx := strings.Index(prompt, "global instructions")
 	skillIdx := strings.Index(prompt, "MATCHED SKILLS")
 	taskIdx := strings.Index(prompt, "fix the deploy")
+	if globalIdx == -1 || skillIdx == -1 || taskIdx == -1 {
+		t.Fatalf("missing expected prompt sections: global=%d skills=%d task=%d", globalIdx, skillIdx, taskIdx)
+	}
 	if globalIdx >= skillIdx {
 		t.Fatal("skills should appear after global instructions")
 	}
