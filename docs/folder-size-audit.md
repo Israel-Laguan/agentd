@@ -11,9 +11,9 @@ Thresholds: high >= 10, low >= 5
 | `worker/skills/` | `wskills` | 3 | ✅ complete |
 | `worker/filecontext/` | `wfilecontext` | 7 | ✅ complete |
 | `worker/session/` | `wsession` | 4 | ✅ complete |
-| `worker/` (root) | `worker` | 195 | still large |
+| `worker/` (root) | `worker` | 196 | still large |
 
-Deeper extraction (subagent, hooks, tools, msgctx, etc.) was blocked by Go's same-package receiver constraint and heavy cross-dependencies on unexported root types (`ToolStatus`, `toolName*` constants, `ToolExecutor`, `Worker`). A follow-up task exists at `tasks/43-worker-subpackage-deep-split.md`.
+Deeper extraction (subagent, hooks, tools, msgctx, etc.) was blocked by Go's same-package receiver constraint and heavy cross-dependencies on unexported root types (`ToolStatus`, `toolName*` constants, `ToolExecutor`, `Worker).
 
 ## Folders With 10+ Files
 

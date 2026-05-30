@@ -1,4 +1,4 @@
-package wskills
+package markdown
 
 import (
 	"strings"
@@ -8,11 +8,7 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
-// ---------------------------------------------------------------------------
-// Markdown helpers (private copies; shared logic with instructions.go)
-// ---------------------------------------------------------------------------
-
-func headingText(heading *ast.Heading, source []byte) string {
+func HeadingText(heading *ast.Heading, source []byte) string {
 	var b strings.Builder
 	_ = ast.Walk(heading, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if entering {
@@ -25,7 +21,7 @@ func headingText(heading *ast.Heading, source []byte) string {
 	return strings.TrimSpace(b.String())
 }
 
-func splitH2Sections(content string) map[string]string {
+func SplitH2Sections(content string) map[string]string {
 	sections := make(map[string]string)
 	md := goldmark.New()
 	source := []byte(content)
@@ -48,7 +44,7 @@ func splitH2Sections(content string) map[string]string {
 					sections[currentHeading] = ""
 				}
 			}
-			currentHeading = headingText(heading, source)
+			currentHeading = HeadingText(heading, source)
 			if heading.Lines().Len() > 0 {
 				startOffset = heading.Lines().At(heading.Lines().Len() - 1).Stop
 				if startOffset < len(source) && source[startOffset] == '\n' {
