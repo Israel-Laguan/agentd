@@ -2,9 +2,22 @@
 
 Thresholds: high >= 10, low >= 5
 
+## Phase 1 Cleanup Progress
+
+`internal/queue/worker` (originally 210 files) had three subpackages extracted on branch `feat/clleanup-phase-1`:
+
+| Subpackage | Package name | Files | Status |
+|---|---|---|---|
+| `worker/skills/` | `wskills` | 3 | ✅ complete |
+| `worker/filecontext/` | `wfilecontext` | 7 | ✅ complete |
+| `worker/session/` | `wsession` | 4 | ✅ complete |
+| `worker/` (root) | `worker` | 195 | still large |
+
+Deeper extraction (subagent, hooks, tools, msgctx, etc.) was blocked by Go's same-package receiver constraint and heavy cross-dependencies on unexported root types (`ToolStatus`, `toolName*` constants, `ToolExecutor`, `Worker`). A follow-up task exists at `tasks/43-worker-subpackage-deep-split.md`.
+
 ## Folders With 10+ Files
 
-- 210: `internal/queue/worker`
+- 195: `internal/queue/worker`
 - 64: `internal/queue`
 - 58: `internal/config`
 - 53: `internal/kanban`

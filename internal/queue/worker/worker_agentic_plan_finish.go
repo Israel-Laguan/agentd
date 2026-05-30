@@ -6,11 +6,12 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 func (w *Worker) tryAgenticPrePlanRecovery(
 	ctx context.Context, task models.Task, turnID string, redoExhausted bool,
-	checkpointer *SessionCheckpointer, messages *[]gateway.PromptMessage,
+	checkpointer *wsession.SessionCheckpointer, messages *[]gateway.PromptMessage,
 	sessionRecoveryGen *int, sessionRecoveryUsed *bool, sessionRecoveryNeedsPlanInject *bool,
 ) bool {
 	if !redoExhausted || checkpointer == nil || sessionRecoveryGen == nil {
@@ -19,7 +20,7 @@ func (w *Worker) tryAgenticPrePlanRecovery(
 	if sessionRecoveryUsed != nil && *sessionRecoveryUsed {
 		return false
 	}
-	if restoreErr := checkpointer.BranchFrom(prePlanCheckpointLabel, messages); restoreErr != nil {
+	if restoreErr := checkpointer.BranchFrom(wsession.PrePlanCheckpointLabel, messages); restoreErr != nil {
 		slog.Warn("agentic pre_plan restore skipped",
 			"task_id", task.ID, "turn_id", turnID, "error", restoreErr)
 		return false
@@ -32,7 +33,7 @@ func (w *Worker) tryAgenticPrePlanRecovery(
 		*sessionRecoveryNeedsPlanInject = true
 	}
 	slog.Info("agentic session restored from pre_plan checkpoint",
-		"task_id", task.ID, "label", prePlanCheckpointLabel,
+		"task_id", task.ID, "label", wsession.PrePlanCheckpointLabel,
 		"session_recovery_gen", *sessionRecoveryGen)
 	return true
 }
@@ -69,7 +70,7 @@ func (w *Worker) tryAgenticRespecRewind(
 func (w *Worker) applyAgenticNoToolsPlanContent(
 	ctx context.Context, task models.Task, content string, workPlan *Plan, turnID string,
 	messages *[]gateway.PromptMessage, respecAttempts *int,
-	checkpointer *SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
+	checkpointer *wsession.SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
 	sessionRecoveryNeedsPlanInject *bool, budgetGuard *BudgetGuard, cm *ContextManager,
 ) (string, bool) {
 	if workPlan == nil {
@@ -94,7 +95,7 @@ func (w *Worker) finishAgenticTurnNoTools(
 	content string, workPlan *Plan, goalTracker *GoalTracker,
 	turnID string, turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
 	cm *ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
-	checkpointer *SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
+	checkpointer *wsession.SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
 	sessionRecoveryNeedsPlanInject *bool,
 ) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
 	content, rewind := w.applyAgenticNoToolsPlanContent(

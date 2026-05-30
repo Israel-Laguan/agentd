@@ -14,6 +14,8 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
+
+	wfilecontext "agentd/internal/queue/worker/filecontext"
 )
 
 const (
@@ -37,7 +39,7 @@ type ToolExecutor struct {
 	envVars       []string
 	wallTimeout   time.Duration
 	maxReadBytes  int64
-	filePipeline  *FilePipeline
+	filePipeline  *wfilecontext.FilePipeline
 
 	workspaceRoot     string
 	workspaceRootErr  error

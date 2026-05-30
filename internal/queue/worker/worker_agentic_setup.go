@@ -9,6 +9,8 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+
+	wfilecontext "agentd/internal/queue/worker/filecontext"
 )
 
 func (w *Worker) prepareAgenticRun(
@@ -61,20 +63,20 @@ func (w *Worker) newAgenticTaskToolExecutor(project models.Project, task models.
 			}
 			taskQuery += ctx
 		}
-		var embedder Embedder
+		var embedder wfilecontext.Embedder
 		if w.gateway != nil {
-			embedder = &GatewayEmbedder{
+			embedder = &wfilecontext.GatewayEmbedder{
 				Gateway: w.gateway,
 				Model:   w.fileContextCfg.EmbeddingModel,
 			}
 		}
-		ex.filePipeline = NewFilePipeline(FilePipelineConfig{
+		ex.filePipeline = wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
 			Workspace: project.WorkspacePath,
 			Store:     w.docStore,
 			Embedder:  embedder,
 			TopK:      w.fileContextCfg.TopK,
 			TaskQuery: taskQuery,
-			Pinned:    ParsePinnedPaths(taskQuery),
+			Pinned:    wfilecontext.ParsePinnedPaths(taskQuery),
 		})
 	}
 	return ex

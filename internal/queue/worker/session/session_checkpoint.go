@@ -1,4 +1,4 @@
-package worker
+package wsession
 
 import (
 	"context"
@@ -10,7 +10,8 @@ import (
 	"agentd/internal/gateway"
 )
 
-const prePlanCheckpointLabel = "pre_plan"
+const PrePlanCheckpointLabel = "pre_plan"
+const prePlanCheckpointLabel = PrePlanCheckpointLabel
 
 // SessionCheckpoint captures a point-in-time copy of conversation history.
 type SessionCheckpoint struct {
@@ -30,7 +31,7 @@ type CheckpointStore interface {
 }
 
 // clonePromptMessages returns a deep copy of messages for checkpoint snapshots.
-func clonePromptMessages(messages []gateway.PromptMessage) []gateway.PromptMessage {
+func ClonePromptMessages(messages []gateway.PromptMessage) []gateway.PromptMessage {
 	if len(messages) == 0 {
 		return nil
 	}
@@ -72,7 +73,7 @@ func (s *memoryCheckpointStore) Create(_ context.Context, sessionID string, mess
 		ID:        id,
 		SessionID: sessionID,
 		CreatedAt: time.Now().UTC(),
-		Messages:  clonePromptMessages(messages),
+		Messages:  ClonePromptMessages(messages),
 	}
 	order := append(s.sessionOrder[sessionID], id)
 	for len(order) > maxCheckpointsPerSession {
@@ -92,7 +93,7 @@ func (s *memoryCheckpointStore) Get(_ context.Context, checkpointID string) (*Se
 		return nil, fmt.Errorf("checkpoint %q not found", checkpointID)
 	}
 	dup := *cp
-	dup.Messages = clonePromptMessages(cp.Messages)
+	dup.Messages = ClonePromptMessages(cp.Messages)
 	return &dup, nil
 }
 
@@ -124,7 +125,7 @@ func (c *SessionCheckpointer) Checkpoint(label string, messages []gateway.Prompt
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.labels[label] = clonePromptMessages(messages)
+	c.labels[label] = ClonePromptMessages(messages)
 	return nil
 }
 
@@ -142,7 +143,7 @@ func (c *SessionCheckpointer) BranchFrom(label string, messages *[]gateway.Promp
 	if !ok {
 		return fmt.Errorf("checkpoint label %q not found for session %q", label, c.sessionID)
 	}
-	*messages = clonePromptMessages(saved)
+	*messages = ClonePromptMessages(saved)
 	return nil
 }
 

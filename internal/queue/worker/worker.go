@@ -15,6 +15,10 @@ import (
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
+
+	wskills "agentd/internal/queue/worker/skills"
+	wfilecontext "agentd/internal/queue/worker/filecontext"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 // DefaultMaxRetries is the baseline retry budget before eviction.
@@ -50,8 +54,8 @@ type Worker struct {
 	pluginMounter        PluginMounter
 	contextCfg           config.AgenticContextConfig
 	instructionLoader    *InstructionLoader
-	skillLoader          *SkillLoader
-	skillRouter          *SkillRouter
+	skillLoader          *wskills.SkillLoader
+	skillRouter          *wskills.SkillRouter
 	legacyHandoffTimeout time.Duration
 	externalTools             map[string]struct{}
 	auditLogger               *AuditLogger
@@ -61,10 +65,10 @@ type Worker struct {
 	tokenStore                TokenUsageStore
 	loopResultRecorder        func(LoopResult)
 	fileContextCfg            config.FileContextConfig
-	docStore                  *DocStore
+	docStore                  *wfilecontext.DocStore
 	planningCfg               config.AgenticPlanningConfig
 	messageEditor             *MessageEditor
-	checkpointStore           CheckpointStore
+	checkpointStore           wsession.CheckpointStore
 	topicGuard                *TopicGuard
 	modelRouter               *ModelRouter
 	toolManifest              *ToolManifest

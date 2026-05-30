@@ -12,6 +12,10 @@ import (
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
+
+	wfilecontext "agentd/internal/queue/worker/filecontext"
+	wskills "agentd/internal/queue/worker/skills"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 type WorkerOptions struct {
@@ -107,7 +111,7 @@ func (w *Worker) setupFileContext(opts WorkerOptions) {
 	if !opts.FileContext.Enabled || opts.FileContextCachePath == "" {
 		return
 	}
-	if docStore, err := NewDocStore(opts.FileContextCachePath); err == nil {
+	if docStore, err := wfilecontext.NewDocStore(opts.FileContextCachePath); err == nil {
 		w.docStore = docStore
 	} else {
 		slog.Warn("file context cache disabled", "error", err)
@@ -134,11 +138,11 @@ func (w *Worker) setupOptionalLoaders(opts WorkerOptions) {
 		}
 	}
 	if opts.SkillsProjectDir != "" || opts.SkillsGlobalDir != "" {
-		w.skillLoader = &SkillLoader{
+		w.skillLoader = &wskills.SkillLoader{
 			ProjectDir: opts.SkillsProjectDir,
 			GlobalDir:  opts.SkillsGlobalDir,
 		}
-		w.skillRouter = &SkillRouter{
+		w.skillRouter = &wskills.SkillRouter{
 			Threshold: opts.SkillsThreshold,
 			TopK:      opts.SkillsTopK,
 		}
@@ -193,7 +197,7 @@ func newWorkerCore(
 		tokenStore:              opts.TokenStore,
 		fileContextCfg:          opts.FileContext,
 		planningCfg:             opts.Planning,
-		checkpointStore:         NewMemoryCheckpointStore(),
+		checkpointStore:         wsession.NewMemoryCheckpointStore(),
 		healingEnabled:                !opts.HealingDisabled,
 		maxHealingTasks:               opts.MaxHealingTasks,
 		legacyMaxBreakdownDepth:       opts.Legacy.MaxBreakdownDepth,
