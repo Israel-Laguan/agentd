@@ -10,6 +10,7 @@ import (
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 func testContextManager(t *testing.T) *ContextManager {
@@ -57,7 +58,7 @@ func TestMessageEditor_Edit_PerCallCmOverride(t *testing.T) {
 	if resolveEditContextManager(sessionCM, defaultCM) != sessionCM {
 		t.Fatal("precondition: per-call cm must take precedence over editor default")
 	}
-	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, defaultCM)
+	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, defaultCM)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
@@ -85,7 +86,7 @@ func TestMessageEditor_Edit_PerCallCmOverride(t *testing.T) {
 func TestMessageEditor_Edit_TruncatesFromTurn(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, cm)
+	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
@@ -113,7 +114,7 @@ func TestMessageEditor_Edit_TruncatesFromTurn(t *testing.T) {
 func TestMessageEditor_Edit_RewritesUserContent(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, cm)
+	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "original task"},
@@ -134,7 +135,7 @@ func TestMessageEditor_Edit_RewritesUserContent(t *testing.T) {
 func TestMessageEditor_Edit_CheckpointsBeforeMutate(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	store := NewMemoryCheckpointStore()
+	store := wsession.NewMemoryCheckpointStore()
 	editor := NewMessageEditor(store, nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
@@ -179,7 +180,7 @@ func TestMessageEditor_Commit_AppendsOnly(t *testing.T) {
 func TestMessageEditor_Edit_NoCheckpointOnValidationFailure(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	store := NewMemoryCheckpointStore()
+	store := wsession.NewMemoryCheckpointStore()
 	editor := NewMessageEditor(store, nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
@@ -203,7 +204,7 @@ func TestMessageEditor_Edit_NoCheckpointOnValidationFailure(t *testing.T) {
 func TestMessageEditor_Edit_RejectsInvalidTurnIndex(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, cm)
+	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
@@ -220,7 +221,7 @@ func TestMessageEditor_Edit_RejectsInvalidTurnIndex(t *testing.T) {
 func TestMessageEditor_Edit_RejectsAssistantOnlyTurn(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	editor := NewMessageEditor(NewMemoryCheckpointStore(), nil, cm)
+	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
@@ -240,7 +241,7 @@ func TestMessageEditor_Edit_AuditRecord(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "audit.jsonl")
 	logger := NewAuditLogger(NewFileAuditSink(path), true)
 	cm := testContextManager(t)
-	editor := NewMessageEditor(NewMemoryCheckpointStore(), logger, cm)
+	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), logger, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},

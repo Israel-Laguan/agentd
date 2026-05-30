@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"agentd/internal/toolenv"
+
+	wsession "agentd/internal/queue/worker/session"
 )
 
 // --- CredentialInjectionHook tests ---
@@ -14,7 +16,7 @@ func TestCredentialInjectionHook_InjectsEnv(t *testing.T) {
 	const envKey = "TEST_INJECT_CRED_VALUE"
 	t.Setenv(envKey, "injected-secret")
 
-	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	store := wsession.NewEnvSecretStore(map[string]string{"github": envKey})
 	hook := CredentialInjectionHook(store)
 	ctx := HookContext{
 		ToolName:  "github",
@@ -46,7 +48,7 @@ func TestCredentialInjectionHook_InjectsEnv(t *testing.T) {
 
 func TestCredentialInjectionHook_SkipsUnmappedTool(t *testing.T) {
 	t.Parallel()
-	store := NewEnvSecretStore(map[string]string{"github": "GH_TOKEN"})
+	store := wsession.NewEnvSecretStore(map[string]string{"github": "GH_TOKEN"})
 	hook := CredentialInjectionHook(store)
 	ctx := HookContext{
 		ToolName:  "bash",
@@ -88,7 +90,7 @@ func TestCredentialInjectionHook_NilStore(t *testing.T) {
 func TestCredentialInjectionHook_NoEnvWhenUnset(t *testing.T) {
 	const envKey = "TEST_INJECT_UNSET_CRED"
 	t.Setenv(envKey, "")
-	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	store := wsession.NewEnvSecretStore(map[string]string{"github": envKey})
 	hook := CredentialInjectionHook(store)
 	ctx := HookContext{
 		ToolName:  "github",
@@ -114,7 +116,7 @@ func TestCredentialValidationSessionHook_PassesWhenSet(t *testing.T) {
 	const envKey = "TEST_CRED_VALIDATION_OK"
 	t.Setenv(envKey, "present-value")
 
-	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	store := wsession.NewEnvSecretStore(map[string]string{"github": envKey})
 	hook := CredentialValidationSessionHook(store)
 	err := hook.Fn(HookContext{})
 	if err != nil {
@@ -125,7 +127,7 @@ func TestCredentialValidationSessionHook_PassesWhenSet(t *testing.T) {
 func TestCredentialValidationSessionHook_FailsWhenMissing(t *testing.T) {
 	envKey := "TEST_MISSING_" + strings.ReplaceAll(t.Name(), "/", "_")
 	t.Setenv(envKey, "")
-	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	store := wsession.NewEnvSecretStore(map[string]string{"github": envKey})
 	hook := CredentialValidationSessionHook(store)
 	err := hook.Fn(HookContext{})
 	if err == nil {
@@ -151,7 +153,7 @@ func TestCredentials_NeverAppearInAuditPayload(t *testing.T) {
 	const envKey = "TEST_AUDIT_LEAK_CHECK"
 	t.Setenv(envKey, "super-secret-token-abc123")
 
-	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	store := wsession.NewEnvSecretStore(map[string]string{"github": envKey})
 	hc := NewHookChain()
 	hc.RegisterPre(CredentialInjectionHook(store))
 	hc.RegisterPre(CredentialDetectionHook())
@@ -190,7 +192,7 @@ func TestCredentials_DoNotLeakAcrossToolCalls(t *testing.T) {
 	t.Setenv(githubKey, secret)
 	t.Setenv(gitlabKey, "")
 
-	store := NewEnvSecretStore(map[string]string{
+	store := wsession.NewEnvSecretStore(map[string]string{
 		"github": githubKey,
 		"gitlab": gitlabKey,
 	})
@@ -291,7 +293,7 @@ func TestHookChain_SessionStart_CredentialValidation(t *testing.T) {
 	const envKey = "TEST_SESSION_HOOK_CRED"
 	t.Setenv(envKey, "ok")
 
-	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	store := wsession.NewEnvSecretStore(map[string]string{"github": envKey})
 	hc := NewHookChain()
 	hc.RegisterSessionStart(CredentialValidationSessionHook(store))
 
@@ -304,7 +306,7 @@ func TestHookChain_SessionStart_CredentialValidation(t *testing.T) {
 func TestHookChain_SessionStart_FailsOnMissingCredential(t *testing.T) {
 	envKey := "TEST_MISSING_" + strings.ReplaceAll(t.Name(), "/", "_")
 	t.Setenv(envKey, "")
-	store := NewEnvSecretStore(map[string]string{"github": envKey})
+	store := wsession.NewEnvSecretStore(map[string]string{"github": envKey})
 	hc := NewHookChain()
 	hc.RegisterSessionStart(CredentialValidationSessionHook(store))
 
