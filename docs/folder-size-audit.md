@@ -4,7 +4,7 @@ Thresholds: high >= 10, low >= 5
 
 ## Phase 1 Cleanup Progress
 
-`internal/queue/worker` (originally 210 files) had three subpackages extracted on branch `feat/clleanup-phase-1`:
+`internal/queue/worker` (originally 210 files) had three subpackages extracted on branch `feat/cleanup-phase-2`:
 
 | Subpackage | Package name | Files | Status |
 |---|---|---|---|

@@ -1,5 +1,19 @@
 {
   "files.watcherExclude": {
     "**/target": true
+  },
+  "problemMatchers": {
+    "$golangci-lint": {
+      "owner": "golangci-lint",
+      "pattern": [
+        {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(.*?)\\s+\\((\\w+)\\)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      ]
+    }
   }
 }

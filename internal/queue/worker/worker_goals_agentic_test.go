@@ -10,6 +10,7 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 func TestBuildSystemPromptContentAddsGoalInstructionsOnlyWithGoal(t *testing.T) {
@@ -45,7 +46,7 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 		store:   &mockCommitStore{text: &committedText},
 		gateway: &sequenceGateway{responses: []gateway.AIResponse{{Content: "[COMPLETED] a\nfinal response"}}},
 	}
-	w.messageEditor = NewMessageEditor(NewMemoryCheckpointStore(), nil, nil)
+	w.messageEditor = NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, nil)
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123"}, ProjectID: "project-123", AgentID: "agent-123"}
 	goalTracker := NewGoalTracker(task.ID, task.ProjectID)
 	goalTracker.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}})

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	wsession "agentd/internal/queue/worker/session"
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 // SessionManager coordinates in-task session lifecycle: topic anchor, comment polling, archive on drift.
@@ -104,10 +104,10 @@ func isHumanSteeringComment(author models.CommentAuthor) bool {
 
 // topicDriftPayload is persisted on TOPIC_DRIFT events.
 type topicDriftPayload struct {
-	Generation    int    `json:"generation"`
-	PriorTopic    string `json:"prior_topic"`
-	NewInput      string `json:"new_input"`
-	CheckpointID  string `json:"checkpoint_id"`
+	Generation   int    `json:"generation"`
+	PriorTopic   string `json:"prior_topic"`
+	NewInput     string `json:"new_input"`
+	CheckpointID string `json:"checkpoint_id"`
 }
 
 // ArchiveAndReset checkpoints the current transcript, emits TOPIC_DRIFT, and starts a fresh session.

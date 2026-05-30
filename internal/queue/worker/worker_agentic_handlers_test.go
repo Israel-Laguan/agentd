@@ -12,6 +12,7 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 // nilNilGetTaskStore documents defensive handling when GetTask returns (nil, nil).
@@ -142,7 +143,7 @@ func TestFinishAgenticTurnNoTools_RespecFailurePreservesMessages(t *testing.T) {
 		store:         &mockCommitStore{text: &committed},
 		gateway:       &respecFailGateway{},
 		planningCfg:   config.AgenticPlanningConfig{ComplexityThreshold: 1, MaxRedoPasses: 0},
-		messageEditor: NewMessageEditor(NewMemoryCheckpointStore(), nil, cm),
+		messageEditor: NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm),
 	}
 	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "do", OutputFormat: "text"}}}
 	messages := []gateway.PromptMessage{

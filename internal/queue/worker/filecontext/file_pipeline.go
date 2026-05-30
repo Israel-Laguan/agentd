@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-        "fmt"
-        "log/slog"
-        "os"
-        "path/filepath"
-        "strings"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 // FilePipeline orchestrates convert → cache → embed → select.
@@ -269,10 +269,10 @@ func evalWorkspaceRoot(workspacePath string) (string, error) {
 func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
 	clean := filepath.Clean(rel)
 	if clean == "." || clean == "" {
-		return "", fmt.Errorf("path is required")
+		return "", ErrPathRequired
 	}
 	if filepath.IsAbs(clean) {
-		return "", fmt.Errorf("absolute paths are not allowed")
+		return "", ErrAbsolutePathNotAllowed
 	}
 	workspaceRoot, err := evalWorkspaceRoot(workspacePath)
 	if err != nil {
@@ -285,7 +285,7 @@ func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
 	}
 	targetReal = filepath.Clean(targetReal)
 	if !isWithinRoot(workspaceRoot, targetReal) {
-		return "", fmt.Errorf("path escapes workspace")
+		return "", ErrPathEscapesWorkspace
 	}
 	return targetReal, nil
 }
