@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"agentd/internal/paths"
 )
 
 func TestResolveWorkspaceFile_RejectsEscape(t *testing.T) {
@@ -17,7 +19,7 @@ func TestResolveWorkspaceFile_RejectsEscape(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Remove(outside) })
 
-	_, err := resolveWorkspaceFile(workspace, "../outside_resolve_test.txt")
+	_, err := paths.ResolveWorkspaceFile(workspace, "../outside_resolve_test.txt")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -33,7 +35,7 @@ func TestResolveWorkspaceFile_ResolvesInside(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workspace, rel), []byte("ok"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	full, err := resolveWorkspaceFile(workspace, rel)
+	full, err := paths.ResolveWorkspaceFile(workspace, rel)
 	if err != nil {
 		t.Fatal(err)
 	}

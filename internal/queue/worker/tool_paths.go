@@ -7,8 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
+
+	"agentd/internal/paths"
 )
 
 func (t *ToolExecutor) getWorkspaceRoot() (string, error) {
@@ -44,7 +45,7 @@ func (t *ToolExecutor) resolvePath(relPath string, forWrite bool) (string, error
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve parent directory: %w", err)
 		}
-		if !isWithinRoot(workspaceRoot, parentReal) {
+		if !paths.IsWithinRoot(workspaceRoot, parentReal) {
 			return "", fmt.Errorf("path escapes workspace")
 		}
 		_, statErr := os.Lstat(candidate)
@@ -54,7 +55,7 @@ func (t *ToolExecutor) resolvePath(relPath string, forWrite bool) (string, error
 				return "", fmt.Errorf("failed to resolve path: %w", err)
 			}
 			targetReal = filepath.Clean(targetReal)
-			if !isWithinRoot(workspaceRoot, targetReal) {
+			if !paths.IsWithinRoot(workspaceRoot, targetReal) {
 				return "", fmt.Errorf("path escapes workspace")
 			}
 			return targetReal, nil
@@ -70,7 +71,7 @@ func (t *ToolExecutor) resolvePath(relPath string, forWrite bool) (string, error
 		return "", fmt.Errorf("failed to resolve path: %w", err)
 	}
 	targetReal = filepath.Clean(targetReal)
-	if !isWithinRoot(workspaceRoot, targetReal) {
+	if !paths.IsWithinRoot(workspaceRoot, targetReal) {
 		return "", fmt.Errorf("path escapes workspace")
 	}
 	return targetReal, nil
@@ -92,50 +93,6 @@ func evalExistingAncestor(path string) (string, error) {
 		}
 		current = parent
 	}
-}
-
-func isWithinRoot(root, candidate string) bool {
-	rel, err := filepath.Rel(root, candidate)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "..")
-}
-
-func evalWorkspaceRoot(workspacePath string) (string, error) {
-	root, err := filepath.EvalSymlinks(workspacePath)
-	if err != nil {
-		return "", fmt.Errorf("workspace path is invalid: %w", err)
-	}
-	return filepath.Clean(root), nil
-}
-
-// resolveWorkspaceFile resolves a workspace-relative path with symlink evaluation
-// and rejects paths that escape the workspace root.
-func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
-	clean := filepath.Clean(rel)
-	if clean == "." || clean == "" {
-		return "", fmt.Errorf("path is required")
-	}
-	if filepath.IsAbs(clean) {
-		return "", fmt.Errorf("absolute paths are not allowed")
-	}
-
-	workspaceRoot, err := evalWorkspaceRoot(workspacePath)
-	if err != nil {
-		return "", err
-	}
-
-	candidate := filepath.Clean(filepath.Join(workspacePath, clean))
-	targetReal, err := filepath.EvalSymlinks(candidate)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve path: %w", err)
-	}
-	targetReal = filepath.Clean(targetReal)
-	if !isWithinRoot(workspaceRoot, targetReal) {
-		return "", fmt.Errorf("path escapes workspace")
-	}
-	return targetReal, nil
 }
 
 // contextReader wraps an io.Reader and returns ctx.Err() on Read when cancelled.
