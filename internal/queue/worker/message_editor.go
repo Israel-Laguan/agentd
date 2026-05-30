@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"agentd/internal/gateway"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 // EditAnchorUserTurn is the turnIndex value that rewrites the anchor user message
@@ -30,7 +31,7 @@ type EditResult struct {
 
 // MessageEditor supports turn-level history rewrite and normal message commits.
 type MessageEditor struct {
-	checkpoints CheckpointStore
+	checkpoints wsession.CheckpointStore
 	audit       *AuditLogger
 	cm          *ContextManager
 }
@@ -46,7 +47,7 @@ func resolveEditContextManager(sessionCM, editorCM *ContextManager) *ContextMana
 }
 
 // NewMessageEditor returns an editor backed by checkpoints and optional audit logging.
-func NewMessageEditor(checkpoints CheckpointStore, audit *AuditLogger, cm *ContextManager) *MessageEditor {
+func NewMessageEditor(checkpoints wsession.CheckpointStore, audit *AuditLogger, cm *ContextManager) *MessageEditor {
 	if cm == nil {
 		cm = &ContextManager{}
 	}
@@ -167,14 +168,14 @@ func applyTurnEdit(messages []gateway.PromptMessage, turnIndex int, newContent s
 		return nil, errTurnNotUserEditable
 	}
 
-	rewritten := clonePromptMessages(target.Messages)
+	rewritten := wsession.ClonePromptMessages(target.Messages)
 	rewritten[userIdx].Content = newContent
 	// Truncate within turn: keep messages up to and including rewritten user only.
 	rewritten = rewritten[:userIdx+1]
 
-	out := clonePromptMessages(anchor)
+	out := wsession.ClonePromptMessages(anchor)
 	for i := 0; i < turnIndex; i++ {
-		out = append(out, clonePromptMessages(turns[i].Messages)...)
+		out = append(out, wsession.ClonePromptMessages(turns[i].Messages)...)
 	}
 	out = append(out, rewritten...)
 	return out, nil
@@ -192,7 +193,7 @@ func applyAnchorUserEdit(anchor []gateway.PromptMessage, newContent string) ([]g
 	if userIdx < 0 {
 		return nil, errAnchorUserNotFound
 	}
-	out := clonePromptMessages(anchor)
+	out := wsession.ClonePromptMessages(anchor)
 	out[userIdx].Content = newContent
 	return out, nil
 }

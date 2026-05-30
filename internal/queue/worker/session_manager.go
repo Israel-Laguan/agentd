@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	wsession "agentd/internal/queue/worker/session"
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -17,11 +18,11 @@ type SessionManager struct {
 	generation    int
 	topicAnchor   string
 	commentCursor time.Time
-	checkpoints   CheckpointStore
+	checkpoints   wsession.CheckpointStore
 }
 
 // NewSessionManager creates a session manager for a task attempt.
-func NewSessionManager(sessionID, initialTopic string, store CheckpointStore) *SessionManager {
+func NewSessionManager(sessionID, initialTopic string, store wsession.CheckpointStore) *SessionManager {
 	return &SessionManager{
 		sessionID:   sessionID,
 		topicAnchor: strings.TrimSpace(initialTopic),

@@ -8,6 +8,7 @@ import (
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 // processAgentic runs the inner agentic loop for a single task attempt.
@@ -52,7 +53,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 	guards := w.newAgenticLoopGuards(cancelCtx, task)
 
-	checkpointer := NewSessionCheckpointer(task.ID)
+	checkpointer := wsession.NewSessionCheckpointer(task.ID)
 	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, guards.budget, checkpointer)
 
 	sessionMgr := NewSessionManager(task.ID, extractAnchorUserContent(messages), w.checkpointStore)
@@ -70,13 +71,13 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 func (w *Worker) injectWorkPlanIfNeeded(
 	ctx context.Context, task models.Task, project models.Project,
 	messages []gateway.PromptMessage, budgetGuard *BudgetGuard,
-	checkpointer *SessionCheckpointer,
+	checkpointer *wsession.SessionCheckpointer,
 ) ([]gateway.PromptMessage, *Plan) {
 	if !w.shouldPlanWithBudget(task, budgetGuard) {
 		return messages, nil
 	}
 	if checkpointer != nil {
-		if err := checkpointer.Checkpoint(prePlanCheckpointLabel, messages); err != nil {
+		if err := checkpointer.Checkpoint(wsession.PrePlanCheckpointLabel, messages); err != nil {
 			slog.Warn("failed to checkpoint pre_plan", "task_id", task.ID, "error", err)
 		}
 	}
@@ -206,7 +207,7 @@ func (w *Worker) processAgenticIteration(
 	taskHooks *HookChain, taskCaps *capabilities.Registry,
 	toolTracker *toolFailureTracker, workPlan *Plan, turnID string, turnIndex int,
 	respecAttempts *int,
-	checkpointer *SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
+	checkpointer *wsession.SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
 	sessionRecoveryNeedsPlanInject *bool,
 ) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
 	if stop, guardErr := w.guardAgenticIteration(

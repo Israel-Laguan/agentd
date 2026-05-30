@@ -7,6 +7,8 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+
+	wskills "agentd/internal/queue/worker/skills"
 )
 
 func taskIntent(task models.Task) string {
@@ -95,7 +97,7 @@ func (w *Worker) enrichBuilderMatchedSkills(builder *SystemPromptBuilder, task m
 	intent := taskIntent(task)
 	matched := w.skillRouter.Match(intent, skills)
 	for _, sk := range matched {
-		builder.AddSkillBlock(FormatSkillBlock(sk))
+		builder.AddSkillBlock(wskills.FormatSkillBlock(sk))
 	}
 	if len(matched) > 0 {
 		slog.Debug("injected matched skills into system prompt", "task_id", task.ID, "count", len(matched))
