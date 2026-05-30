@@ -13,7 +13,7 @@ Triage each review comment individually. Post one targeted reply per comment thr
 
 ## Workflow
 
-```
+```markdown
 Task Progress:
 - [ ] Find the PR for the current branch
 - [ ] Fetch review comments (filter by bot if requested)

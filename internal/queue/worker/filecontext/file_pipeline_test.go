@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"agentd/internal/paths"
 )
 
 type fakeEmbedder struct {
@@ -269,7 +271,7 @@ func TestFilePipeline_Process_RejectsPathEscape(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected path escape error")
 	}
-	if !errors.Is(err, ErrPathEscapesWorkspace) {
+	if !errors.Is(err, paths.ErrPathEscapesWorkspace) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -278,8 +280,8 @@ func TestResolveWorkspaceFile_RequiresPath(t *testing.T) {
 	t.Parallel()
 	for _, rel := range []string{"", "."} {
 		_, err := resolveWorkspaceFile(t.TempDir(), rel)
-		if !errors.Is(err, ErrPathRequired) {
-			t.Fatalf("resolveWorkspaceFile(%q) error = %v, want %v", rel, err, ErrPathRequired)
+		if !errors.Is(err, paths.ErrPathRequired) {
+			t.Fatalf("resolveWorkspaceFile(%q) error = %v, want %v", rel, err, paths.ErrPathRequired)
 		}
 	}
 }
@@ -293,8 +295,8 @@ func TestResolveWorkspaceFile_RejectsAbsolutePath(t *testing.T) {
 	}
 
 	_, err := resolveWorkspaceFile(workspace, absolute)
-	if !errors.Is(err, ErrAbsolutePathNotAllowed) {
-		t.Fatalf("resolveWorkspaceFile absolute error = %v, want %v", err, ErrAbsolutePathNotAllowed)
+	if !errors.Is(err, paths.ErrAbsolutePathNotAllowed) {
+		t.Fatalf("resolveWorkspaceFile absolute error = %v, want %v", err, paths.ErrAbsolutePathNotAllowed)
 	}
 }
 
@@ -311,8 +313,8 @@ func TestResolveWorkspaceFile_RejectsSymlinkEscape(t *testing.T) {
 	}
 
 	_, err := resolveWorkspaceFile(workspace, "link.txt")
-	if !errors.Is(err, ErrPathEscapesWorkspace) {
-		t.Fatalf("resolveWorkspaceFile symlink escape error = %v, want %v", err, ErrPathEscapesWorkspace)
+	if !errors.Is(err, paths.ErrPathEscapesWorkspace) {
+		t.Fatalf("resolveWorkspaceFile symlink escape error = %v, want %v", err, paths.ErrPathEscapesWorkspace)
 	}
 }
 

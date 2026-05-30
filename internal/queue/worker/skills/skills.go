@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"agentd/internal/markdown"
 	"agentd/internal/paths"
 )
 
@@ -42,7 +43,7 @@ func parseSkillMD(content, sourcePath string) *Skill {
 		return sk
 	}
 
-	sections := splitH2Sections(content)
+	sections := markdown.SplitH2Sections(content)
 
 	// Extract skill name from the H1 heading.
 	sk.Name = extractSkillName(content)

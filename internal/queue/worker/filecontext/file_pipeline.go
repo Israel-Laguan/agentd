@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"agentd/internal/paths"
 )
 
 // FilePipeline orchestrates convert → cache → embed → select.
@@ -72,7 +73,7 @@ func (p *FilePipeline) ProcessRead(ctx context.Context, relPath, resolvedPath st
 func (p *FilePipeline) Process(ctx context.Context, relPaths []string) (string, error) {
 	docs := make([]*CachedDoc, 0, len(relPaths))
 	for _, rel := range relPaths {
-		full, err := resolveWorkspaceFile(p.workspace, rel)
+		full, err := paths.ResolveWorkspaceFile(p.workspace, rel)
 		if err != nil {
 			return "", err
 		}
@@ -224,7 +225,7 @@ func firstNTokens(text string, n int) string {
 
 // ParsePinnedPaths extracts workspace-relative paths from agentd file reference blocks.
 func ParsePinnedPaths(taskQuery string) []string {
-	var paths []string
+	var result []string
 	lines := strings.Split(taskQuery, "\n")
 	inRef := false
 	for _, line := range lines {
@@ -236,56 +237,17 @@ func ParsePinnedPaths(taskQuery string) []string {
 		if inRef && strings.HasPrefix(trim, "path:") {
 			p := strings.TrimSpace(strings.TrimPrefix(trim, "path:"))
 			if p != "" {
-				paths = append(paths, p)
+				result = append(result, p)
 			}
 		}
 		if inRef && trim == "" {
 			inRef = false
 		}
 	}
-	return paths
+	return result
 }
 
-// ---------------------------------------------------------------------------
-// Path helpers (private copies; shared logic with tool_paths.go)
-// ---------------------------------------------------------------------------
-
-func isWithinRoot(root, candidate string) bool {
-	rel, err := filepath.Rel(root, candidate)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "..")
-}
-
-func evalWorkspaceRoot(workspacePath string) (string, error) {
-	root, err := filepath.EvalSymlinks(workspacePath)
-	if err != nil {
-		return "", fmt.Errorf("workspace path is invalid: %w", err)
-	}
-	return filepath.Clean(root), nil
-}
-
+// ResolveWorkspaceFile is kept for backwards compatibility with tests.
 func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
-	clean := filepath.Clean(rel)
-	if clean == "." || clean == "" {
-		return "", ErrPathRequired
-	}
-	if filepath.IsAbs(clean) {
-		return "", ErrAbsolutePathNotAllowed
-	}
-	workspaceRoot, err := evalWorkspaceRoot(workspacePath)
-	if err != nil {
-		return "", err
-	}
-	candidate := filepath.Clean(filepath.Join(workspacePath, clean))
-	targetReal, err := filepath.EvalSymlinks(candidate)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve path: %w", err)
-	}
-	targetReal = filepath.Clean(targetReal)
-	if !isWithinRoot(workspaceRoot, targetReal) {
-		return "", ErrPathEscapesWorkspace
-	}
-	return targetReal, nil
+	return paths.ResolveWorkspaceFile(workspacePath, rel)
 }

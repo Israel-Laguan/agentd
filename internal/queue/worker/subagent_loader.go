@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"agentd/internal/markdown"
 )
 
 const (
@@ -104,7 +106,7 @@ func parseSubagentMD(content, sourcePath string) *SubagentDefinition {
 	}
 
 	def.Name = extractSubagentName(content)
-	sections := splitH2Sections(content)
+	sections := markdown.SplitH2Sections(content)
 
 	for heading, body := range sections {
 		normalized := strings.ToLower(strings.TrimSpace(heading))
