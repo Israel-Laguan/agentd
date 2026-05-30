@@ -19,7 +19,7 @@ build:
 	$(GO_ENV) $(GO) build -o bin/agentd ./cmd/agentd
 
 # Scoped runs: make test PKG=./internal/api/controllers/... RUN=TestGateway
-PKG ?= $(shell go list ./... | grep -v -E '^agentd/web$$|^agentd/docs$$')
+PKG ?= $(shell go list ./... | grep -vE '^agentd/(web|docs)$$' | sed 's|^agentd/|./|')
 RUN ?=
 TEST_FLAGS = -v -race -cover
 ifneq ($(strip $(RUN)),)

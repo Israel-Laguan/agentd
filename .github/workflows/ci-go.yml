@@ -39,7 +39,7 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      GOLANGCI_LINT_VERSION: v2.11.4
+      GOLANGCI_LINT_VERSION: v2.12.2
     steps:
       - uses: actions/checkout@v6
 
