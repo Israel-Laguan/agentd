@@ -3,6 +3,7 @@ package worker
 import (
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 func buildWorkerHooks(
@@ -18,7 +19,7 @@ func buildWorkerHooks(
 		hooks.RegisterPre(CredentialDetectionHook())
 	}
 	if len(opts.ToolCredentials) > 0 {
-		store := NewEnvSecretStore(opts.ToolCredentials)
+		store := wsession.NewEnvSecretStore(opts.ToolCredentials)
 		hooks.RegisterPre(CredentialInjectionHook(store))
 		hooks.RegisterSessionStart(CredentialValidationSessionHook(store))
 	}

@@ -1,13 +1,14 @@
-package worker
+package wfilecontext
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
+        "fmt"
+        "log/slog"
+        "os"
+        "path/filepath"
+        "strings"
 )
 
 // FilePipeline orchestrates convert → cache → embed → select.
@@ -243,4 +244,48 @@ func ParsePinnedPaths(taskQuery string) []string {
 		}
 	}
 	return paths
+}
+
+// ---------------------------------------------------------------------------
+// Path helpers (private copies; shared logic with tool_paths.go)
+// ---------------------------------------------------------------------------
+
+func isWithinRoot(root, candidate string) bool {
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "..")
+}
+
+func evalWorkspaceRoot(workspacePath string) (string, error) {
+	root, err := filepath.EvalSymlinks(workspacePath)
+	if err != nil {
+		return "", fmt.Errorf("workspace path is invalid: %w", err)
+	}
+	return filepath.Clean(root), nil
+}
+
+func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
+	clean := filepath.Clean(rel)
+	if clean == "." || clean == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	if filepath.IsAbs(clean) {
+		return "", fmt.Errorf("absolute paths are not allowed")
+	}
+	workspaceRoot, err := evalWorkspaceRoot(workspacePath)
+	if err != nil {
+		return "", err
+	}
+	candidate := filepath.Clean(filepath.Join(workspacePath, clean))
+	targetReal, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path: %w", err)
+	}
+	targetReal = filepath.Clean(targetReal)
+	if !isWithinRoot(workspaceRoot, targetReal) {
+		return "", fmt.Errorf("path escapes workspace")
+	}
+	return targetReal, nil
 }

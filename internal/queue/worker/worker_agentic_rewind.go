@@ -9,6 +9,7 @@ import (
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 const (
@@ -84,7 +85,7 @@ type agenticTurnLoopInput struct {
 	toolTracker      *toolFailureTracker
 	workPlan              *Plan
 	sessionMgr            *SessionManager
-	checkpointer          *SessionCheckpointer
+	checkpointer          *wsession.SessionCheckpointer
 	sessionRecoveryGen              int
 	sessionRecoveryUsed             bool
 	sessionRecoveryNeedsPlanInject  bool
