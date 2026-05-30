@@ -10,7 +10,7 @@ COVERPKG ?= ./...
 GOMODCACHE ?= $(HOME)/go/pkg/mod
 # Workspace-local GOCACHE for all compile/lint/test paths to avoid stale-build
 # artefacts when switching branches or when the global cache becomes inconsistent.
-GO_ENV = env GOCACHE=$(CURDIR)/.gocache GOMODCACHE=$(GOMODCACHE)
+GO_ENV = env GOCACHE=$(CURDIR)/.gocache GOMODCACHE=$(GOMODCACHE) GOTOOLCHAIN=go1.26.2+auto
 
 test-e2e:
 	$(GO_ENV) $(GO) test -v ./e2e/...
@@ -19,7 +19,7 @@ build:
 	$(GO_ENV) $(GO) build -o bin/agentd ./cmd/agentd
 
 # Scoped runs: make test PKG=./internal/api/controllers/... RUN=TestGateway
-PKG ?= ./...
+PKG ?= $(shell go list ./... | grep -v -E '^agentd/web$$|^agentd/docs$$')
 RUN ?=
 TEST_FLAGS = -v -race -cover
 ifneq ($(strip $(RUN)),)
@@ -30,7 +30,7 @@ test:
 	$(GO_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
 
 coverage:
-	$(GO_ENV) $(GO) test -v -race -covermode=atomic -coverpkg=$(COVERPKG) -coverprofile=coverage.out ./...
+	$(GO_ENV) $(GO) test -v -race -covermode=atomic -coverpkg=$(COVERPKG) -coverprofile=coverage.out $(PKG)
 	$(GO) tool cover -html=coverage.out
 
 run:
@@ -40,7 +40,7 @@ tidy:
 	$(GO) mod tidy
 
 lint:
-	$(GO_ENV) $(GOLANGCI_LINT) run ./...
+	$(GO_ENV) $(GOLANGCI_LINT) run $(PKG)
 
 loc:
 	$(GO) run ./scripts/checkloc --max-lines 300

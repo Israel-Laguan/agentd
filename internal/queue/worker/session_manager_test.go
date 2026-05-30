@@ -10,6 +10,7 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	wsession "agentd/internal/queue/worker/session"
 	"agentd/internal/testutil"
 )
 
@@ -55,7 +56,7 @@ func TestSessionManager_ArchiveAndReset_InheritsPrefsNotHistory(t *testing.T) {
 	w := NewWorker(nil, nil, nil, nil, &sessionEventSink{events: &events}, WorkerOptions{
 		InstructionsUserPrefsPath: prefsPath,
 	})
-	sm := NewSessionManager("task-1", "CSS styling help", NewMemoryCheckpointStore())
+	sm := NewSessionManager("task-1", "CSS styling help", wsession.NewMemoryCheckpointStore())
 
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-1"}, Title: "T", Description: "old task"}
 	project := models.Project{}

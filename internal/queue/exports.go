@@ -10,6 +10,7 @@ import (
 	"agentd/internal/queue/recovery"
 	"agentd/internal/queue/safety"
 	qw "agentd/internal/queue/worker"
+	wsession "agentd/internal/queue/worker/session"
 )
 
 type PIDProbe = safety.PIDProbe
@@ -40,7 +41,7 @@ func ValidateToolCredentials(toolCredentials map[string]string) error {
 	if len(toolCredentials) == 0 {
 		return nil
 	}
-	return qw.NewEnvSecretStore(toolCredentials).Validate()
+	return wsession.NewEnvSecretStore(toolCredentials).Validate()
 }
 
 const DefaultWorkerMaxRetries = qw.DefaultMaxRetries

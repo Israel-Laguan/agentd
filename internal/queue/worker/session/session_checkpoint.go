@@ -30,7 +30,7 @@ type CheckpointStore interface {
 	Get(ctx context.Context, checkpointID string) (*SessionCheckpoint, error)
 }
 
-// clonePromptMessages returns a deep copy of messages for checkpoint snapshots.
+// ClonePromptMessages returns a deep copy of messages for checkpoint snapshots.
 func ClonePromptMessages(messages []gateway.PromptMessage) []gateway.PromptMessage {
 	if len(messages) == 0 {
 		return nil
@@ -47,11 +47,13 @@ func ClonePromptMessages(messages []gateway.PromptMessage) []gateway.PromptMessa
 
 // memoryCheckpointStore is an in-process CheckpointStore for agentic sessions.
 type memoryCheckpointStore struct {
-	mu            sync.RWMutex
-	checkpoints   map[string]*SessionCheckpoint
-	sessionOrder  map[string][]string
-	nextID        int
+	mu           sync.RWMutex
+	checkpoints  map[string]*SessionCheckpoint
+	sessionOrder map[string][]string
+	nextID       int
 }
+
+var _ CheckpointStore = (*memoryCheckpointStore)(nil)
 
 // NewMemoryCheckpointStore returns an in-memory checkpoint store.
 func NewMemoryCheckpointStore() CheckpointStore {

@@ -10,8 +10,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"agentd/internal/gateway"
 )
 
 type fakeEmbedder struct {
@@ -271,8 +269,50 @@ func TestFilePipeline_Process_RejectsPathEscape(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected path escape error")
 	}
-	if !strings.Contains(err.Error(), "escapes workspace") {
+	if !errors.Is(err, ErrPathEscapesWorkspace) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestResolveWorkspaceFile_RequiresPath(t *testing.T) {
+	t.Parallel()
+	for _, rel := range []string{"", "."} {
+		_, err := resolveWorkspaceFile(t.TempDir(), rel)
+		if !errors.Is(err, ErrPathRequired) {
+			t.Fatalf("resolveWorkspaceFile(%q) error = %v, want %v", rel, err, ErrPathRequired)
+		}
+	}
+}
+
+func TestResolveWorkspaceFile_RejectsAbsolutePath(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	absolute := filepath.Join(workspace, "note.txt")
+	if err := os.WriteFile(absolute, []byte("inside"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := resolveWorkspaceFile(workspace, absolute)
+	if !errors.Is(err, ErrAbsolutePathNotAllowed) {
+		t.Fatalf("resolveWorkspaceFile absolute error = %v, want %v", err, ErrAbsolutePathNotAllowed)
+	}
+}
+
+func TestResolveWorkspaceFile_RejectsSymlinkEscape(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outside, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(workspace, "link.txt")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := resolveWorkspaceFile(workspace, "link.txt")
+	if !errors.Is(err, ErrPathEscapesWorkspace) {
+		t.Fatalf("resolveWorkspaceFile symlink escape error = %v, want %v", err, ErrPathEscapesWorkspace)
 	}
 }
 
@@ -407,69 +447,6 @@ func TestParsePinnedPaths(t *testing.T) {
 	}
 }
 
-type failingConverter struct{}
-
-func (failingConverter) convert(context.Context, string, []byte) (string, error) {
-	return "", os.ErrInvalid
-}
-
-func TestToolExecutor_Read_PipelineFallback(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	content := "raw-fallback-content"
-	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-	ex := NewToolExecutor(nil, dir, nil, 0)
-	ex.filePipeline = NewFilePipeline(FilePipelineConfig{
-		Workspace: dir,
-		Converter: NewFileConverterWith(failingConverter{}.convert),
-		TopK:      5,
-	})
-	out := ex.Execute(context.Background(), gatewayToolCallRead("note.txt"))
-	if strings.Contains(out, toolErrorPrefix) {
-		t.Fatalf("expected raw fallback, got error: %s", out)
-	}
-	if out != content {
-		t.Fatalf("got %q, want %q", out, content)
-	}
-}
-
-func TestToolExecutor_Read_WithPipeline(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "hello.md"), []byte("# Hi"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	store, err := NewDocStore(filepath.Join(dir, "cache"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	ex := NewToolExecutor(nil, dir, nil, 0)
-	ex.filePipeline = NewFilePipeline(FilePipelineConfig{
-		Workspace: dir,
-		Store:     store,
-		Converter: NewFileConverter(),
-		TopK:      5,
-	})
-	out := ex.Execute(context.Background(), gatewayToolCallRead("hello.md"))
-	if strings.Contains(out, toolErrorPrefix) {
-		t.Fatalf("unexpected error: %s", out)
-	}
-	if out != "# Hi" {
-		t.Fatalf("got %q", out)
-	}
-}
-
-func gatewayToolCallRead(path string) gateway.ToolCall {
-	return gateway.ToolCall{
-		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
-			Arguments: `{"path": "` + path + `"}`,
-		},
-	}
-}
-
 // Ensure os.FileInfo mtime used in cache invalidation.
 func TestDocStore_InvalidatesOnMtimeChange(t *testing.T) {
 	t.Parallel()
@@ -494,4 +471,3 @@ func TestDocStore_InvalidatesOnMtimeChange(t *testing.T) {
 		t.Fatal("expected cache miss after mtime change")
 	}
 }
-

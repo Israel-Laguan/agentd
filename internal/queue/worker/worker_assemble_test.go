@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"agentd/internal/models"
+	wskills "agentd/internal/queue/worker/skills"
 )
 
 func TestAssembleAgenticSystemPrompt_Basic(t *testing.T) {
@@ -142,8 +143,8 @@ Run tests, build, deploy
 	}
 
 	w := &Worker{
-		skillLoader: &SkillLoader{ProjectDir: ".agentd/skills"},
-		skillRouter: &SkillRouter{Threshold: 0.0, TopK: 3},
+		skillLoader: &wskills.SkillLoader{ProjectDir: ".agentd/skills"},
+		skillRouter: &wskills.SkillRouter{Threshold: 0.0, TopK: 3},
 	}
 
 	task := models.Task{
@@ -177,8 +178,8 @@ func TestBuildSystemPromptContent_GlobalSkillsEmptyWorkspace(t *testing.T) {
 	}
 
 	w := &Worker{
-		skillLoader: &SkillLoader{GlobalDir: globalDir},
-		skillRouter: &SkillRouter{Threshold: 0.0, TopK: 3},
+		skillLoader: &wskills.SkillLoader{GlobalDir: globalDir},
+		skillRouter: &wskills.SkillRouter{Threshold: 0.0, TopK: 3},
 	}
 	task := models.Task{
 		BaseEntity:  models.BaseEntity{ID: "t1"},
@@ -243,11 +244,11 @@ func TestAssembleAgenticSystemPrompt_MissingFilesAreNonFatal(t *testing.T) {
 			ProjectFile:         ".agentd/AGENTS.md",
 			UserPreferencesPath: "/nonexistent/prefs.yaml",
 		},
-		skillLoader: &SkillLoader{
+		skillLoader: &wskills.SkillLoader{
 			ProjectDir: ".agentd/skills",
 			GlobalDir:  "/nonexistent/skills",
 		},
-		skillRouter: &SkillRouter{Threshold: 0.1, TopK: 3},
+		skillRouter: &wskills.SkillRouter{Threshold: 0.1, TopK: 3},
 	}
 
 	task := models.Task{

@@ -1,8 +1,7 @@
 ---
-description: Verify changes are ready for code review using make and project guardrails
-alwaysApply: true
+name: code-review-ready
+description: Commands and checklist for preparing code before opening or updating a PR, including Makefile targets and verification gates.
 ---
-
 # Code Review Readiness
 
 Before opening or updating a PR, follow [`REVIEW.md`](REVIEW.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md). **CI merge gate:** `make check` (`loc` + `lint` + `test`).
@@ -26,7 +25,7 @@ If modules still look broken: re-export `GOMODCACHE="$HOME/go/pkg/mod"` (no fall
 
 ## Fast path (while iterating)
 
-Match scope to the diff — don’t run the full repo on every edit.
+Match scope to the diff — don't run the full repo on every edit.
 
 | Change | Command |
 | --- | --- |
@@ -42,7 +41,7 @@ make test PKG=./internal/api/controllers/... RUN=TestGateway
 make test PKG=./internal/queue/worker/...
 ```
 
-Full `make test` (no `PKG`) runs **race** on `./...` — slower but what CI runs. Use scoped `PKG`/`RUN` while editing; run `make check` before you’re done.
+Full `make test` (no `PKG`) runs **race** on `./...` — slower but what CI runs. Use scoped `PKG`/`RUN` while editing; run `make check` before you're done.
 
 ## Full verification (before PR)
 
