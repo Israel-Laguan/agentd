@@ -9,7 +9,7 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	wsession "agentd/internal/queue/worker/session"
+	wsession "agentd/internal/agent/session"
 )
 
 // SessionManager coordinates in-task session lifecycle: topic anchor, comment polling, archive on drift.

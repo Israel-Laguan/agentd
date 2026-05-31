@@ -7,7 +7,7 @@ import (
 
 	"agentd/internal/toolenv"
 
-	wsession "agentd/internal/queue/worker/session"
+	wsession "agentd/internal/agent/session"
 )
 
 // --- CredentialInjectionHook tests ---

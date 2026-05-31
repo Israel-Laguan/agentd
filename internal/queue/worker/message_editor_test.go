@@ -10,7 +10,7 @@ import (
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
-	wsession "agentd/internal/queue/worker/session"
+	wsession "agentd/internal/agent/session"
 )
 
 func testContextManager(t *testing.T) *ContextManager {

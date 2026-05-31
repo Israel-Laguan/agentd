@@ -6,7 +6,7 @@ import (
 	"regexp"
 
 	"agentd/internal/toolenv"
-	wsession "agentd/internal/queue/worker/session"
+	wsession "agentd/internal/agent/session"
 )
 
 // credentialPatterns matches common secret formats that should never

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"agentd/internal/models"
-	wskills "agentd/internal/queue/worker/skills"
+	wskills "agentd/internal/agent/skills"
 )
 
 func TestAssembleAgenticSystemPrompt_Basic(t *testing.T) {

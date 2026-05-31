@@ -13,9 +13,9 @@ import (
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
 
-	wfilecontext "agentd/internal/queue/worker/filecontext"
-	wskills "agentd/internal/queue/worker/skills"
-	wsession "agentd/internal/queue/worker/session"
+	wfilecontext "agentd/internal/agent/filecontext"
+	wskills "agentd/internal/agent/skills"
+	wsession "agentd/internal/agent/session"
 )
 
 type WorkerOptions struct {

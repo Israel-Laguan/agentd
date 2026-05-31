@@ -15,7 +15,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
 
-	wfilecontext "agentd/internal/queue/worker/filecontext"
+	wfilecontext "agentd/internal/agent/filecontext"
 )
 
 const (

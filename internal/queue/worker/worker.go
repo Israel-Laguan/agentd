@@ -16,9 +16,9 @@ import (
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
 
-	wskills "agentd/internal/queue/worker/skills"
-	wfilecontext "agentd/internal/queue/worker/filecontext"
-	wsession "agentd/internal/queue/worker/session"
+	wskills "agentd/internal/agent/skills"
+	wfilecontext "agentd/internal/agent/filecontext"
+	wsession "agentd/internal/agent/session"
 )
 
 // DefaultMaxRetries is the baseline retry budget before eviction.

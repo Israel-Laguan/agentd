@@ -1,4 +1,4 @@
-package wsession
+package session
 
 import (
 	"fmt"

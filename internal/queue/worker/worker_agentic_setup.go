@@ -12,7 +12,7 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	wfilecontext "agentd/internal/queue/worker/filecontext"
+	wfilecontext "agentd/internal/agent/filecontext"
 )
 
 func (w *Worker) prepareAgenticRun(

@@ -9,7 +9,7 @@ import (
 
 	"agentd/internal/gateway"
 
-	wfilecontext "agentd/internal/queue/worker/filecontext"
+	wfilecontext "agentd/internal/agent/filecontext"
 )
 
 func TestToolExecutor_Read_PipelineFallback(t *testing.T) {

@@ -1,4 +1,4 @@
-package wskills
+package skills
 
 import (
 	"fmt"

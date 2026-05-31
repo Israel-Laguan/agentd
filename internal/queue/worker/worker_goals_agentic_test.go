@@ -10,7 +10,7 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	wsession "agentd/internal/queue/worker/session"
+	wsession "agentd/internal/agent/session"
 )
 
 func TestBuildSystemPromptContentAddsGoalInstructionsOnlyWithGoal(t *testing.T) {
