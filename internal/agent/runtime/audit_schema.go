@@ -1,4 +1,4 @@
-package worker
+package runtime
 
 import (
 	"crypto/sha256"
@@ -11,14 +11,14 @@ import (
 )
 
 const (
-	recordTypeToolDispatch = "tool_dispatch"
-	recordTypeTurnSnapshot = "turn_snapshot"
-	recordTypeHistoryEdit  = "history_edit"
-	recordTypeTaskStart    = "task_start"
-	recordTypeTaskComplete = "task_complete"
-	recordTypeTaskFail     = "task_fail"
-	recordTypeTaskReview   = "task_review"
-	recordTypeDaemonStart  = "daemon_start"
+	RecordTypeToolDispatch = "tool_dispatch"
+	RecordTypeTurnSnapshot = "turn_snapshot"
+	RecordTypeHistoryEdit  = "history_edit"
+	RecordTypeTaskStart    = "task_start"
+	RecordTypeTaskComplete = "task_complete"
+	RecordTypeTaskFail     = "task_fail"
+	RecordTypeTaskReview   = "task_review"
+	RecordTypeDaemonStart  = "daemon_start"
 )
 
 // AuditRecord is a structured audit entry for a single tool dispatch.
@@ -121,7 +121,7 @@ func NewFileAuditSink(path string) *FileAuditSink {
 }
 
 func (s *FileAuditSink) WriteAudit(rec AuditRecord) error {
-	rec.RecordType = recordTypeToolDispatch
+	rec.RecordType = RecordTypeToolDispatch
 	rec.Type = rec.RecordType
 	if rec.TaskID == "" {
 		rec.TaskID = rec.SessionID
@@ -130,7 +130,7 @@ func (s *FileAuditSink) WriteAudit(rec AuditRecord) error {
 }
 
 func (s *FileAuditSink) WriteTurnSnapshot(rec TurnSnapshotRecord) error {
-	rec.RecordType = recordTypeTurnSnapshot
+	rec.RecordType = RecordTypeTurnSnapshot
 	rec.Type = rec.RecordType
 	if rec.TaskID == "" {
 		rec.TaskID = rec.SessionID
@@ -142,7 +142,7 @@ func (s *FileAuditSink) WriteTurnSnapshot(rec TurnSnapshotRecord) error {
 }
 
 func (s *FileAuditSink) WriteHistoryEdit(rec HistoryEditRecord) error {
-	rec.RecordType = recordTypeHistoryEdit
+	rec.RecordType = RecordTypeHistoryEdit
 	rec.Type = rec.RecordType
 	if rec.TaskID == "" {
 		rec.TaskID = rec.SessionID
@@ -162,7 +162,7 @@ func (s *FileAuditSink) WriteTaskEvent(rec TaskAuditRecord) error {
 
 func (s *FileAuditSink) WriteDaemonStart(rec DaemonStartRecord) error {
 	if rec.RecordType == "" {
-		rec.RecordType = recordTypeDaemonStart
+		rec.RecordType = RecordTypeDaemonStart
 	}
 	if rec.Type == "" {
 		rec.Type = rec.RecordType
@@ -203,14 +203,14 @@ func EnsureAuditFile(path string) error {
 	}
 	sink := NewFileAuditSink(path)
 	rec := DaemonStartRecord{
-		Type:       recordTypeDaemonStart,
-		RecordType: recordTypeDaemonStart,
+		Type:       RecordTypeDaemonStart,
+		RecordType: RecordTypeDaemonStart,
 		Timestamp:  time.Now().UTC(),
 	}
 	return sink.WriteDaemonStart(rec)
 }
 
-func hashArgs(args string) string {
+func HashArgs(args string) string {
 	sum := sha256.Sum256([]byte(args))
 	return hex.EncodeToString(sum[:])
 }

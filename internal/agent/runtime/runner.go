@@ -51,6 +51,7 @@ type IterationOutcome struct {
 // callbacks in the worker adapter for now.
 type Request struct {
 	TaskID string
+	Ports  Ports
 
 	Iterate                        func(ctx context.Context, turnID string, turnIndex int, state *IterationState) (IterationOutcome, error)
 	ResetForRewind                 func()

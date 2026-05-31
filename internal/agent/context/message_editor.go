@@ -1,4 +1,4 @@
-package worker
+package context
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
 	"agentd/internal/gateway"
 )
@@ -32,11 +33,13 @@ type EditResult struct {
 // MessageEditor supports turn-level history rewrite and normal message commits.
 type MessageEditor struct {
 	checkpoints wsession.CheckpointStore
-	audit       *AuditLogger
+	audit       *runtime.AuditLogger
 	cm          *ContextManager
 }
 
-func resolveEditContextManager(sessionCM, editorCM *ContextManager) *ContextManager {
+// ResolveEditContextManager picks the per-call session CM if non-nil,
+// falls back to the editor default, or creates a zero-value fallback.
+func ResolveEditContextManager(sessionCM, editorCM *ContextManager) *ContextManager {
 	if sessionCM != nil {
 		return sessionCM
 	}
@@ -47,7 +50,7 @@ func resolveEditContextManager(sessionCM, editorCM *ContextManager) *ContextMana
 }
 
 // NewMessageEditor returns an editor backed by checkpoints and optional audit logging.
-func NewMessageEditor(checkpoints wsession.CheckpointStore, audit *AuditLogger, cm *ContextManager) *MessageEditor {
+func NewMessageEditor(checkpoints wsession.CheckpointStore, audit *runtime.AuditLogger, cm *ContextManager) *MessageEditor {
 	if cm == nil {
 		cm = &ContextManager{}
 	}
@@ -76,7 +79,7 @@ func (e *MessageEditor) Edit(
 	}
 	before := len(*messages)
 
-	edited, err := applyTurnEdit(*messages, turnIndex, newContent, resolveEditContextManager(cm, e.cm))
+	edited, err := applyTurnEdit(*messages, turnIndex, newContent, ResolveEditContextManager(cm, e.cm))
 	if err != nil {
 		return EditResult{}, err
 	}
@@ -93,14 +96,14 @@ func (e *MessageEditor) Edit(
 	after := len(*messages)
 
 	if e.audit != nil && e.audit.Enabled() {
-		e.audit.RecordHistoryEdit(HistoryEditRecord{
+		e.audit.RecordHistoryEdit(runtime.HistoryEditRecord{
 			SessionID:      sessionID,
 			TurnID:         turnID,
 			TurnIndex:      turnIndex,
 			CheckpointID:   checkpointID,
 			MessagesBefore: before,
 			MessagesAfter:  after,
-			NewContentHash: hashArgs(newContent),
+			NewContentHash: runtime.HashArgs(newContent),
 		})
 	}
 
