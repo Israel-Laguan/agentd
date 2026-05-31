@@ -1,29 +1,29 @@
-package worker
+package tools
 
 // toolFailureTracker counts consecutive errors per tool name for LoopToolFailure.
-type toolFailureTracker struct {
+type ToolFailureTracker struct {
 	threshold int
 	streak    map[string]int
 }
 
-func newToolFailureTracker(threshold int) *toolFailureTracker {
+func NewToolFailureTracker(threshold int) *ToolFailureTracker {
 	if threshold <= 0 {
 		return nil
 	}
-	return &toolFailureTracker{
+	return &ToolFailureTracker{
 		threshold: threshold,
 		streak:    make(map[string]int),
 	}
 }
 
-func (t *toolFailureTracker) reset() {
+func (t *ToolFailureTracker) Reset() {
 	if t == nil {
 		return
 	}
 	clear(t.streak)
 }
 
-func (t *toolFailureTracker) Record(toolName string, status ToolStatus) (failed bool, streak int) {
+func (t *ToolFailureTracker) Record(toolName string, status ToolStatus) (failed bool, streak int) {
 	if t == nil {
 		return false, 0
 	}

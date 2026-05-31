@@ -1,4 +1,4 @@
-package worker
+package hooks
 
 import (
 	"fmt"
@@ -52,6 +52,10 @@ func resolveLimit(limits map[string]int, tool string) int {
 		return v
 	}
 	return limits["default"]
+}
+
+func ResolveLimit(limits map[string]int, tool string) int {
+	return resolveLimit(limits, tool)
 }
 
 // RateLimitHook returns a PreHook that enforces per-tool call limits

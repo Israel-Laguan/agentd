@@ -38,7 +38,7 @@ func TestToolExecutor_Read_RejectsOversizedFile(t *testing.T) {
 	}
 
 	ex := NewToolExecutor(nil, dir, nil, 0)
-	ex.maxReadBytes = 8
+	ex.SetMaxReadBytes(8)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
 			Name:      toolNameRead,

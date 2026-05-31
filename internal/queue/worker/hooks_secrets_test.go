@@ -237,8 +237,8 @@ func TestCredentials_DoNotLeakAcrossToolCalls(t *testing.T) {
 	if envContains(gitlabEnv, secret) {
 		t.Fatalf("gitlab BuildEnv %v must not contain github secret", gitlabEnv)
 	}
-	if envContains(executor.envVars, secret) {
-		t.Fatalf("github secret leaked into executor base envVars: %v", executor.envVars)
+	if envContains(executor.EnvVars(), secret) {
+		t.Fatalf("github secret leaked into executor base envVars: %v", executor.EnvVars())
 	}
 }
 

@@ -1,4 +1,4 @@
-package worker
+package hooks
 
 func appendPreVerdict(ctx HookContext, hookName, outcome string) {
 	if ctx.Verdicts == nil {

@@ -1,30 +1,30 @@
-package worker
+package hooks
 
 import (
 	"fmt"
 	"log/slog"
 	"regexp"
 
-	"agentd/internal/toolenv"
 	wsession "agentd/internal/agent/session"
+	"agentd/internal/toolenv"
 )
 
 // credentialPatterns matches common secret formats that should never
 // appear in tool arguments. Each pattern is compiled once at init and
 // tested against the raw arguments string.
 var credentialPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)sk-[A-Za-z0-9]{20,}`),                                                      // OpenAI-style API key
-	regexp.MustCompile(`(?i)["']?(?:api[_-]?key|apikey)["']?\s*[:=]\s*["']?[^"',\s]{8,}`),             // generic api_key / "api_key": "..."
+	regexp.MustCompile(`(?i)sk-[A-Za-z0-9]{20,}`),                                                                  // OpenAI-style API key
+	regexp.MustCompile(`(?i)["']?(?:api[_-]?key|apikey)["']?\s*[:=]\s*["']?[^"',\s]{8,}`),                          // generic api_key / "api_key": "..."
 	regexp.MustCompile(`(?i)["']?\b(?:secret|token|password|passwd|credential)\b["']?\s*[:=]\s*["']?[^"',\s]{8,}`), // generic secret/token/password assignments
 	// Bearer token: long opaque values, shorter tokens with a digit, or hyphenated/special tokens with
 	// at least 5 chars on one side of the delimiter (avoids prose like "bearer authentication" or "bearer x.y").
 	regexp.MustCompile(`(?i)bearer\s+(?:[A-Za-z0-9\-._~+/]{16,}|[A-Za-z0-9\-._~+/]{7}[0-9][A-Za-z0-9\-._~+/]*|[A-Za-z0-9\-._~+/]{5,}[\-._~+/][A-Za-z0-9\-._~+/]+|[A-Za-z0-9\-._~+/]+[\-._~+/][A-Za-z0-9\-._~+/]{5,})=*`),
-	regexp.MustCompile(`ghp_[A-Za-z0-9]{36,}`),                                                       // GitHub PAT
-	regexp.MustCompile(`gho_[A-Za-z0-9]{36,}`),                                                       // GitHub OAuth
-	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`),                                                // GitHub fine-grained PAT
-	regexp.MustCompile(`xox[bpras]-[A-Za-z0-9\-]{10,}`),                                              // Slack token
-	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),                                                            // AWS access key ID
-	regexp.MustCompile(`-----BEGIN\s+(RSA\s+)?PRIVATE KEY-----`),                                      // PEM private key
+	regexp.MustCompile(`ghp_[A-Za-z0-9]{36,}`),                   // GitHub PAT
+	regexp.MustCompile(`gho_[A-Za-z0-9]{36,}`),                   // GitHub OAuth
+	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{20,}`),           // GitHub fine-grained PAT
+	regexp.MustCompile(`xox[bpras]-[A-Za-z0-9\-]{10,}`),          // Slack token
+	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),                       // AWS access key ID
+	regexp.MustCompile(`-----BEGIN\s+(RSA\s+)?PRIVATE KEY-----`), // PEM private key
 }
 
 // CredentialDetectionHook returns a PreHook that vetoes tool calls

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	wfilecontext "agentd/internal/agent/filecontext"
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	wfilecontext "agentd/internal/agent/filecontext"
 )
 
 func (w *Worker) prepareAgenticRun(
@@ -72,14 +72,14 @@ func (w *Worker) newAgenticTaskToolExecutor(project models.Project, task models.
 				Model:   w.fileContextCfg.EmbeddingModel,
 			}
 		}
-		ex.filePipeline = wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
+		ex.SetFilePipeline(wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
 			Workspace: project.WorkspacePath,
 			Store:     w.docStore,
 			Embedder:  embedder,
 			TopK:      w.fileContextCfg.TopK,
 			TaskQuery: taskQuery,
 			Pinned:    wfilecontext.ParsePinnedPaths(taskQuery),
-		})
+		}))
 	}
 	return ex
 }
