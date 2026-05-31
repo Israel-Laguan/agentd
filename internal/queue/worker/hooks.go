@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"sync"
@@ -53,10 +54,10 @@ type HookContext struct {
 	// ResultStatus, ResultExitCode, and their Set flags are populated by the
 	// dispatch layer before RunPost so post-hooks (e.g. AuditHook) can derive
 	// exit codes from the classified ToolResult instead of re-parsing content.
-	ResultStatus       ToolStatus
-	ResultStatusSet    bool
-	ResultExitCode     int
-	ResultExitCodeSet  bool
+	ResultStatus      ToolStatus
+	ResultStatusSet   bool
+	ResultExitCode    int
+	ResultExitCodeSet bool
 	// TurnID identifies the agentic loop iteration (taskID:turnIndex).
 	TurnID string
 	// Verdicts, when non-nil, collects hook outcome strings during RunPre/RunPost.
@@ -304,4 +305,47 @@ func preVerdictOutcome(v HookVerdict) string {
 	default:
 		return "pass"
 	}
+}
+
+// DryRunHook returns a PreHook that intercepts all tool calls and
+// returns synthesized results without executing the real handler. The
+// verdict uses Veto with a populated Result so the dispatch layer skips
+// execution but still runs PostToolUse hooks (audit, scrubbing).
+func DryRunHook(enabled bool) PreHook {
+	return PreHook{
+		Name:   "dry-run",
+		Policy: FailClosed,
+		Fn: func(ctx HookContext) (HookVerdict, error) {
+			if !enabled {
+				return HookVerdict{}, nil
+			}
+			return HookVerdict{
+				Veto:   true,
+				Result: simulatedResult(ctx.ToolName),
+			}, nil
+		},
+	}
+}
+
+// simulatedResult returns a plausible synthesized response for each
+// built-in tool. Unknown tools receive a generic JSON acknowledgement.
+func simulatedResult(tool string) string {
+	switch tool {
+	case toolNameBash:
+		return "(simulated) command executed successfully"
+	case toolNameRead:
+		return "(simulated) file contents"
+	case toolNameWrite:
+		return marshalWriteResult()
+	default:
+		return "(simulated) tool executed successfully"
+	}
+}
+
+func marshalWriteResult() string {
+	out, _ := json.Marshal(map[string]any{
+		"success":   true,
+		"simulated": true,
+	})
+	return string(out)
 }
