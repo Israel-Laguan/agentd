@@ -64,10 +64,11 @@ func parseToolEnv(result string) (*toolExecEnvelope, error) {
 func parseToolExitCode(result string) int {
 	env, err := parseToolEnv(result)
 	if err != nil {
-		if strings.HasPrefix(result, `{"error"`) || strings.HasPrefix(result, `{"FatalError"`) {
+		trimmed := strings.TrimSpace(result)
+		if strings.HasPrefix(trimmed, `{"error"`) || strings.HasPrefix(trimmed, `{"FatalError"`) {
 			return -1
 		}
-		if strings.HasPrefix(result, `{"Success":false`) {
+		if strings.HasPrefix(trimmed, `{"Success":false`) {
 			return -1
 		}
 		return 0

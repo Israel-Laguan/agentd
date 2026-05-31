@@ -117,10 +117,8 @@ func (w *Worker) guardIterationAndBudget(
 		}
 		return &r, errIterationLimit
 	}
-	if reset, err := w.guardTopicDrift(ctx, task, project, profile, turnIndex, messages, sessionMgr); err != nil {
+	if _, err := w.guardTopicDrift(ctx, task, project, profile, turnIndex, messages, sessionMgr); err != nil {
 		return nil, err
-	} else if reset {
-		return nil, errTopicDriftReset
 	}
 	contextExhausted, err := w.prepareAgenticIteration(ctx, messages, iterationGuard, cm, ctxBudgetGuard, task)
 	if err != nil {

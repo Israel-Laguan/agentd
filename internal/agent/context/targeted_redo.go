@@ -125,7 +125,7 @@ func ReplaceSection(output, stepID, newBody string) string {
 	start := strings.Index(output, open)
 	if start < 0 {
 		// Append missing section at end.
-		return strings.TrimRight(output, "\n") + "\n\n" + open + "\n" + newBody + "\n" + close + "\n"
+		return strings.TrimRight(output, "\n") + "\n\n" + open + "\n" + strings.TrimSpace(newBody) + "\n" + close + "\n"
 	}
 	bodyStart := start + len(open)
 	endRel := strings.Index(output[bodyStart:], close)
