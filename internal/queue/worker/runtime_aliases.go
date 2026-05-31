@@ -4,6 +4,7 @@ import (
 	agentcontext "agentd/internal/agent/context"
 	agentruntime "agentd/internal/agent/runtime"
 	agentsubagent "agentd/internal/agent/subagent"
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 )
 
@@ -17,23 +18,30 @@ type AgentGoal = agentcontext.AgentGoal
 type GoalTracker = agentcontext.GoalTracker
 type GoalTrackerOption = agentcontext.GoalTrackerOption
 type CriteriaUpdater = agentcontext.CriteriaUpdater
+type Plan = agentcontext.Plan
+type PlanStep = agentcontext.PlanStep
+type MessageEditor = agentcontext.MessageEditor
+type EditResult = agentcontext.EditResult
 
 const (
 	CorrectionSourceTool     = agentcontext.CorrectionSourceTool
 	CorrectionSourceHuman    = agentcontext.CorrectionSourceHuman
 	CorrectionSourceReviewer = agentcontext.CorrectionSourceReviewer
 	DefaultStallThreshold    = agentcontext.DefaultStallThreshold
+	EditAnchorUserTurn       = agentcontext.EditAnchorUserTurn
 )
 
 var (
-	NewContextManager      = agentcontext.NewContextManager
-	DetectContradictions   = agentcontext.DetectContradictions
-	ParseCorrectionComment = agentcontext.ParseCorrectionComment
-	ParseGoalProgress      = agentcontext.ParseGoalProgress
-	NewGoalTracker         = agentcontext.NewGoalTracker
-	WithStallThreshold     = agentcontext.WithStallThreshold
-	WithCriteriaStore      = agentcontext.WithCriteriaStore
-	GoalFromTask           = agentcontext.GoalFromTask
+	NewContextManager           = agentcontext.NewContextManager
+	NewMessageEditor            = agentcontext.NewMessageEditor
+	resolveEditContextManager   = agentcontext.ResolveEditContextManager
+	DetectContradictions        = agentcontext.DetectContradictions
+	ParseCorrectionComment      = agentcontext.ParseCorrectionComment
+	ParseGoalProgress           = agentcontext.ParseGoalProgress
+	NewGoalTracker              = agentcontext.NewGoalTracker
+	WithStallThreshold          = agentcontext.WithStallThreshold
+	WithCriteriaStore           = agentcontext.WithCriteriaStore
+	GoalFromTask                = agentcontext.GoalFromTask
 )
 
 func totalChars(messages []gateway.PromptMessage) int {
@@ -88,6 +96,31 @@ var (
 	NewTopicGuard         = agentruntime.NewTopicGuard
 )
 
+type AuditLogger = agentruntime.AuditLogger
+type AuditSink = agentruntime.AuditSink
+type AuditRecord = agentruntime.AuditRecord
+type HistoryEditRecord = agentruntime.HistoryEditRecord
+type TurnSnapshotRecord = agentruntime.TurnSnapshotRecord
+type TaskAuditRecord = agentruntime.TaskAuditRecord
+type DaemonStartRecord = agentruntime.DaemonStartRecord
+type FileAuditSink = agentruntime.FileAuditSink
+
+var (
+	NewAuditLogger      = agentruntime.NewAuditLogger
+	NewFileAuditSink    = agentruntime.NewFileAuditSink
+	EnsureAuditFile     = agentruntime.EnsureAuditFile
+	StructuredAuditHook = agentruntime.StructuredAuditHook
+
+	normalizeOutputFormat     = agentcontext.NormalizeOutputFormat
+	ValidateOutput            = agentcontext.ValidateOutput
+	extractSection            = agentcontext.ExtractSection
+	formatPlanOutputForCommit = agentcontext.FormatPlanOutputForCommit
+	preparePlanCommitContent  = agentcontext.PreparePlanCommitContent
+	replaceSection            = agentcontext.ReplaceSection
+	stepValidationError       = agentcontext.StepValidationError
+)
+
+
 type SubagentStatus = agentsubagent.SubagentStatus
 type SubagentDefinition = agentsubagent.SubagentDefinition
 type SubagentResult = agentsubagent.SubagentResult
@@ -109,3 +142,22 @@ var (
 	DelegateToolDefinition         = agentsubagent.DelegateToolDefinition
 	DelegateParallelToolDefinition = agentsubagent.DelegateParallelToolDefinition
 )
+
+const (
+	recordTypeToolDispatch = agentruntime.RecordTypeToolDispatch
+	recordTypeTurnSnapshot = agentruntime.RecordTypeTurnSnapshot
+	recordTypeHistoryEdit  = agentruntime.RecordTypeHistoryEdit
+	recordTypeTaskStart    = agentruntime.RecordTypeTaskStart
+	recordTypeTaskComplete = agentruntime.RecordTypeTaskComplete
+	recordTypeTaskFail     = agentruntime.RecordTypeTaskFail
+	recordTypeTaskReview   = agentruntime.RecordTypeTaskReview
+	recordTypeDaemonStart  = agentruntime.RecordTypeDaemonStart
+)
+
+func newAuditLogger(cfg config.AuditConfig) *AuditLogger {
+	if !cfg.Enabled || cfg.Path == "" {
+		return nil
+	}
+	return NewAuditLogger(NewFileAuditSink(cfg.Path), true)
+}
+
