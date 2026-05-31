@@ -8,7 +8,7 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	wsession "agentd/internal/queue/worker/session"
+	wsession "agentd/internal/agent/session"
 )
 
 // processAgentic runs the inner agentic loop for a single task attempt.

@@ -10,7 +10,7 @@ import (
 	"agentd/internal/queue/recovery"
 	"agentd/internal/queue/safety"
 	qw "agentd/internal/queue/worker"
-	wsession "agentd/internal/queue/worker/session"
+	wsession "agentd/internal/agent/session"
 )
 
 type PIDProbe = safety.PIDProbe

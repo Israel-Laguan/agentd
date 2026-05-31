@@ -8,7 +8,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 
-	wskills "agentd/internal/queue/worker/skills"
+	wskills "agentd/internal/agent/skills"
 )
 
 func taskIntent(task models.Task) string {

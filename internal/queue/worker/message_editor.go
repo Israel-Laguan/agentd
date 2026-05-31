@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"agentd/internal/gateway"
-	wsession "agentd/internal/queue/worker/session"
+	wsession "agentd/internal/agent/session"
 )
 
 // EditAnchorUserTurn is the turnIndex value that rewrites the anchor user message
