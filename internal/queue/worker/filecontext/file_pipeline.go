@@ -16,11 +16,10 @@ import (
 
 // FilePipeline orchestrates convert → cache → embed → select.
 type FilePipeline struct {
-	workspace         string
-	workspaceRoot     string
-	workspaceRootErr  error
-	workspaceRootOnce sync.Once
-	converter         *FileConverter
+ 	workspace         string
+ 	workspaceRoot     string
+ 	workspaceRootMu   sync.Mutex
+ 	converter         *FileConverter
 	store             *DocStore
 	selector          *FileSelector
 	embedder          Embedder
@@ -263,8 +262,17 @@ func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
 }
 
 func (p *FilePipeline) getWorkspaceRoot() (string, error) {
-	p.workspaceRootOnce.Do(func() {
-		p.workspaceRoot, p.workspaceRootErr = paths.EvalWorkspaceRoot(p.workspace)
-	})
-	return p.workspaceRoot, p.workspaceRootErr
+	p.workspaceRootMu.Lock()
+	defer p.workspaceRootMu.Unlock()
+
+	if p.workspaceRoot != "" {
+		return p.workspaceRoot, nil
+	}
+
+	root, err := paths.EvalWorkspaceRoot(p.workspace)
+	if err != nil {
+		return "", err
+	}
+	p.workspaceRoot = root
+	return root, nil
 }
