@@ -68,10 +68,7 @@ jobs:
 
       - name: Install golangci-lint
         if: always()
-        run: |
-          git clone --depth 1 --branch v2.12.2 https://github.com/golangci/golangci-lint.git /tmp/golangci-lint
-          sed -i 's/^go 1\..*/go 1.26.2/' /tmp/golangci-lint/go.mod
-          cd /tmp/golangci-lint/cmd/golangci-lint && go build -o "$GOPATH/bin/golangci-lint"
+        run: go install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
 
       - name: LOC check
         if: always()
