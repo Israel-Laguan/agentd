@@ -50,7 +50,7 @@ do the actual work
 		AllowedTools: []string{"delegate"},
 	}
 
-	delegate := NewSubagentDelegate(gw, nil, workspace, nil, 0, 0).withMaxDelegationDepth(2)
+	delegate := NewSubagentDelegate(gw, nil, workspace, nil, 0, 0).WithMaxDelegationDepth(2)
 	result, err := delegate.Delegate(context.Background(), parentDef, "parent task", "", "", 0.2, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -89,7 +89,7 @@ func TestSubagentDelegate_ExecuteToolDepthExceeded(t *testing.T) {
 		},
 	}
 
-	result := delegate.executeTool(context.Background(), call, def, toolExec)
+	result := delegate.ExecuteTool(context.Background(), call, def, toolExec)
 	if !strings.Contains(result, "depth exceeded") {
 		t.Errorf("expected depth exceeded error, got: %s", result)
 	}

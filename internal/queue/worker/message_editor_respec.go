@@ -49,7 +49,7 @@ func anchorUserContent(messages []gateway.PromptMessage, cm *ContextManager) str
 	if cm == nil {
 		cm = &ContextManager{}
 	}
-	anchor, _ := cm.partitionAnchor(messages)
+	anchor, _ := cm.PartitionAnchor(messages)
 	for i := len(anchor) - 1; i >= 0; i-- {
 		if anchor[i].Role == "user" {
 			return anchor[i].Content

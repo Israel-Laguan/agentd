@@ -159,7 +159,7 @@ type agenticLoopGuards struct {
 
 func (w *Worker) newAgenticLoopGuards(cancelCtx context.Context, task models.Task) agenticLoopGuards {
 	cm, goalTracker := w.newAgenticContextManager(task)
-	contextBudget := cm.cfg.AnchorBudget + cm.cfg.WorkingBudget + cm.cfg.CompressedBudget
+	contextBudget := cm.TotalBudget()
 	return agenticLoopGuards{
 		iteration: NewIterationGuard(w.maxToolIterations),
 		budget:    NewBudgetGuard(w.budgetTracker, task.ID),

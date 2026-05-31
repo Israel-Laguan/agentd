@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
@@ -78,7 +79,7 @@ func TestSessionRecoveryPlanReinjection_ClearsNeedsPlanInjectAfterInject(t *test
 func TestResetAgenticStateForTopicDrift_ReplacesContextManager(t *testing.T) {
 	t.Parallel()
 	w := NewWorker(nil, nil, nil, nil, nil, WorkerOptions{})
-	oldCM := &ContextManager{taskID: "task-1", agentID: "agent-1"}
+	oldCM := NewContextManager(config.AgenticContextConfig{}, nil, "agent-1", "task-1")
 	in := agenticTurnLoopInput{
 		task: models.Task{BaseEntity: models.BaseEntity{ID: "task-1"}, AgentID: "agent-1"},
 		cm:   oldCM,

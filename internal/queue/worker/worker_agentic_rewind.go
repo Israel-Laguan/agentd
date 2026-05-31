@@ -2,9 +2,9 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 
+	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	rewindNone        = -1
-	rewindToFirstTurn = 0 // distinct from rewindNone: restart from turn 0 after respec edit
-	maxRewindStreak   = 3
+	rewindNone        = agentruntime.RewindNone
+	rewindToFirstTurn = agentruntime.RewindToFirstTurn // distinct from rewindNone: restart from turn 0 after respec edit
+	maxRewindStreak   = agentruntime.MaxRewindStreak
 )
 
 var (
-	errRewindStagnation = errors.New("rewind stagnation")
-	errTopicDriftReset  = errors.New("topic drift: session reset")
+	errRewindStagnation = agentruntime.ErrRewindStagnation
+	errTopicDriftReset  = agentruntime.ErrTopicDriftReset
 )
 
 // agenticRewindState tracks repeated rewinds to the same turn index.
@@ -50,7 +50,7 @@ func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 		in.toolTracker.Reset()
 	}
 	if in.iterationGuard != nil {
-		in.iterationGuard.reset()
+		in.iterationGuard.Reset()
 	}
 	if in.goalTracker != nil {
 		if g := GoalFromTask(in.task); g != nil {
@@ -58,7 +58,7 @@ func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 		}
 	}
 	if in.ctxBudgetGuard != nil {
-		in.ctxBudgetGuard.reset()
+		in.ctxBudgetGuard.Reset()
 	}
 }
 

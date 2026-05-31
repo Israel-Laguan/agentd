@@ -117,7 +117,7 @@ func buildTopicDriftAgenticTurnLoopInput(
 	profile := models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
 	sessionMgr := NewSessionManager(task.ID, "CSS styling", w.checkpointStore)
 	cm, goalTracker := w.newAgenticContextManager(task)
-	contextBudget := cm.cfg.AnchorBudget + cm.cfg.WorkingBudget + cm.cfg.CompressedBudget
+	contextBudget := cm.TotalBudget()
 	ctxBudgetGuard := NewContextBudgetGuard(contextBudget, w.contextWarningThreshold)
 	taskToolExecutor := w.newAgenticTaskToolExecutor(project, task)
 	taskHooks, taskCaps := w.mountAgenticHooks(project, profile)

@@ -2,10 +2,9 @@ package worker
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 
+	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -70,58 +69,49 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 
 // runAgenticTurnLoop drives the inner agentic turn loop until completion, stagnation, or error.
 func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) {
-	respecAttempts := 0
-	rewind := &agenticRewindState{}
-	for turnIndex := 0; ; {
-		turnID := fmt.Sprintf("%s:%d", in.task.ID, turnIndex)
-		cont, result, report, rewindTo, err := w.processAgenticIteration(
-			in.ctx, in.task, in.project, in.profile, in.messages, in.tools, in.toolToAdapter, in.taskToolExecutor,
-			in.iterationGuard, in.budgetGuard, in.deadlineGuard, in.ctxBudgetGuard, in.cm, in.goalTracker, in.sessionMgr,
-			in.taskHooks, in.taskCaps, in.toolTracker, in.workPlan, turnID, turnIndex, &respecAttempts,
-			in.checkpointer, &in.sessionRecoveryGen, &in.sessionRecoveryUsed, &in.sessionRecoveryNeedsPlanInject,
-		)
-		if err != nil {
-			if errors.Is(err, errTopicDriftReset) && rewindTo >= 0 {
-				rewind.reset()
-				turnIndex = rewindTo
-				resetAgenticStateForTopicDrift(&in, w)
-				continue
-			}
-			return LoopResult{}, false
-		}
-		if report {
-			w.recordLoopResult(result)
-			return result, true
-		}
-		if !cont {
-			return LoopResult{}, false
-		}
-		if rewindTo >= 0 {
-			if rewind.apply(rewindTo) {
-				slog.Warn("agentic rewind stagnation",
-					"task_id", in.task.ID,
-					"turn_index", turnIndex,
-					"rewind_to", rewindTo,
-					"streak", rewind.streak,
-				)
-				r := LoopResult{
-					Status: LoopTurnLimitExceeded,
-					Meta: w.buildLoopMeta(
-						turnIndex, in.budgetGuard.Usage(), totalChars(*in.messages), in.ctxBudgetGuard.TotalBudget(),
-						errRewindStagnation.Error(), "", "",
-					),
-				}
-				w.recordLoopResult(r)
-				return r, true
-			}
-			turnIndex = rewindTo
+	runner := agentruntime.NewTurnLoopRunner()
+	result, err := runner.Run(in.ctx, agentruntime.Request{
+		TaskID: in.task.ID,
+		Iterate: func(ctx context.Context, turnID string, turnIndex int, state *agentruntime.IterationState) (agentruntime.IterationOutcome, error) {
+			cont, result, report, rewindTo, err := w.processAgenticIteration(
+				ctx, in.task, in.project, in.profile, in.messages, in.tools, in.toolToAdapter, in.taskToolExecutor,
+				in.iterationGuard, in.budgetGuard, in.deadlineGuard, in.ctxBudgetGuard, in.cm, in.goalTracker, in.sessionMgr,
+				in.taskHooks, in.taskCaps, in.toolTracker, in.workPlan, turnID, turnIndex, &state.RespecAttempts,
+				in.checkpointer, &state.SessionRecoveryGen, &state.SessionRecoveryUsed, &state.SessionRecoveryNeedsPlanInject,
+			)
+			return agentruntime.IterationOutcome{
+				Continue: cont,
+				Result:   result,
+				Report:   report,
+				RewindTo: rewindTo,
+			}, err
+		},
+		ResetForTopicDrift: func() {
+			resetAgenticStateForTopicDrift(&in, w)
+		},
+		ResetForRewind: func() {
 			resetAgenticStateForRewind(in)
+		},
+		ApplySessionRecoveryPlanInject: func(state *agentruntime.IterationState) {
+			in.sessionRecoveryNeedsPlanInject = state.SessionRecoveryNeedsPlanInject
 			w.applySessionRecoveryPlanReinjection(&in)
-			continue
-		}
-		rewind.reset()
-		turnIndex++
+			state.SessionRecoveryNeedsPlanInject = in.sessionRecoveryNeedsPlanInject
+		},
+		RecordResult: w.recordLoopResult,
+		BuildRewindStagnationResult: func(turnIndex int) LoopResult {
+			return LoopResult{
+				Status: LoopTurnLimitExceeded,
+				Meta: w.buildLoopMeta(
+					turnIndex, in.budgetGuard.Usage(), totalChars(*in.messages), in.ctxBudgetGuard.TotalBudget(),
+					errRewindStagnation.Error(), "", "",
+				),
+			}
+		},
+	})
+	if err != nil {
+		return LoopResult{}, false
 	}
+	return result.LoopResult, result.Reported
 }
 
 func (w *Worker) generateAgenticTurn(
