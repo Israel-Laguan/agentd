@@ -83,7 +83,6 @@ linters:
     - govet
     - funlen
     - depguard
-
-issues:
-  exclude-paths:
-    - web/node_modules
+  exclusions:
+    paths:
+      - web/node_modules
