@@ -4,7 +4,20 @@ description: Commands and checklist for preparing code before opening or updatin
 ---
 # Code Review Readiness
 
-Before opening or updating a PR, follow [`REVIEW.md`](REVIEW.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md). **CI merge gate:** `make check` (`loc` + `lint` + `test`).
+## Environment conventions
+
+This project bakes compile/test/lint env into the Makefile. Local commands work without manual `GOTOOLCHAIN`/`GOMODCACHE` exports if you use `make`; only override when running tools bare.
+
+| Variable | Value |
+|---|---|
+| `GOTOOLCHAIN` | `go1.26.2+auto` |
+| `GOMODCACHE` | `$(HOME)/go/pkg/mod` |
+| `GOCACHE` | `$(pwd)/.gocache` |
+
+`make lint` resolves `golangci-lint` from `$(go env GOPATH)/bin/golangci-lint`. CI installs the same binary via:
+```sh
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+```
 
 ## Run Go commands reliably
 
