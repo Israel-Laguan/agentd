@@ -4,24 +4,29 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"agentd/internal/paths"
 )
 
 // FilePipeline orchestrates convert → cache → embed → select.
 type FilePipeline struct {
-	workspace string
-	converter *FileConverter
-	store     *DocStore
-	selector  *FileSelector
-	embedder  Embedder
-	topK      int
-	taskQuery string
-	pinned    map[string]struct{}
+	workspace         string
+	workspaceRoot     string
+	workspaceRootErr  error
+	workspaceRootOnce sync.Once
+	converter         *FileConverter
+	store             *DocStore
+	selector          *FileSelector
+	embedder          Embedder
+	topK              int
+	taskQuery         string
+	pinned            map[string]struct{}
 }
 
 type FilePipelineConfig struct {
@@ -71,9 +76,14 @@ func (p *FilePipeline) ProcessRead(ctx context.Context, relPath, resolvedPath st
 }
 
 func (p *FilePipeline) Process(ctx context.Context, relPaths []string) (string, error) {
+	workspaceRoot, err := p.getWorkspaceRoot()
+	if err != nil {
+		return "", fmt.Errorf("workspace path is invalid: %w", err)
+	}
+
 	docs := make([]*CachedDoc, 0, len(relPaths))
 	for _, rel := range relPaths {
-		full, err := paths.ResolveWorkspaceFile(p.workspace, rel)
+		full, err := paths.ResolveWorkspaceFileWithRoot(p.workspace, workspaceRoot, rel)
 		if err != nil {
 			return "", err
 		}
@@ -250,4 +260,11 @@ func ParsePinnedPaths(taskQuery string) []string {
 // ResolveWorkspaceFile is kept for backwards compatibility with tests.
 func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
 	return paths.ResolveWorkspaceFile(workspacePath, rel)
+}
+
+func (p *FilePipeline) getWorkspaceRoot() (string, error) {
+	p.workspaceRootOnce.Do(func() {
+		p.workspaceRoot, p.workspaceRootErr = paths.EvalWorkspaceRoot(p.workspace)
+	})
+	return p.workspaceRoot, p.workspaceRootErr
 }

@@ -30,18 +30,24 @@ func EvalWorkspaceRoot(workspacePath string) (string, error) {
 	return filepath.Clean(root), nil
 }
 
+// ResolveWorkspaceFile resolves a relative path within a workspace and validates it
+// stays within workspace boundaries. Deprecated: Use ResolveWorkspaceFileWithRoot for
+// better performance by caching workspace root evaluation.
 func ResolveWorkspaceFile(workspacePath, rel string) (string, error) {
+	workspaceRoot, err := EvalWorkspaceRoot(workspacePath)
+	if err != nil {
+		return "", fmt.Errorf("workspace path is invalid: %w", err)
+	}
+	return ResolveWorkspaceFileWithRoot(workspacePath, workspaceRoot, rel)
+}
+
+func ResolveWorkspaceFileWithRoot(workspacePath, workspaceRoot, rel string) (string, error) {
 	clean := filepath.Clean(rel)
 	if clean == "." || clean == "" {
 		return "", ErrPathRequired
 	}
 	if filepath.IsAbs(clean) {
 		return "", ErrAbsolutePathNotAllowed
-	}
-
-	workspaceRoot, err := EvalWorkspaceRoot(workspacePath)
-	if err != nil {
-		return "", fmt.Errorf("workspace path is invalid: %w", err)
 	}
 
 	candidate := filepath.Clean(filepath.Join(workspacePath, clean))
