@@ -133,13 +133,32 @@ func recordResult(req Request, result LoopResult) {
 	}
 }
 
+const maxRecentWindow = 5
+
 type rewindState struct {
-	lastTarget int
-	streak     int
+	lastTarget    int
+	streak        int
+	recentTargets []int
 }
 
 func (s *rewindState) apply(rewindTo int) (stagnation bool) {
-	if rewindTo == s.lastTarget {
+	// Track recent targets in a sliding window to detect alternating stagnation.
+	s.recentTargets = append(s.recentTargets, rewindTo)
+	if len(s.recentTargets) > maxRecentWindow {
+		s.recentTargets = s.recentTargets[len(s.recentTargets)-maxRecentWindow:]
+	}
+
+	// Check for alternating stagnation: if rewindTo appears in recent targets,
+	// we're oscillating between at least two targets.
+	occurrences := 0
+	for _, t := range s.recentTargets {
+		if t == rewindTo {
+			occurrences++
+		}
+	}
+	if occurrences >= 2 {
+		s.streak++
+	} else if rewindTo == s.lastTarget {
 		s.streak++
 	} else {
 		s.lastTarget = rewindTo
@@ -151,4 +170,5 @@ func (s *rewindState) apply(rewindTo int) (stagnation bool) {
 func (s *rewindState) reset() {
 	s.lastTarget = RewindNone
 	s.streak = 0
+	s.recentTargets = nil
 }

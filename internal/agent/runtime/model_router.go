@@ -96,6 +96,10 @@ func totalMessageChars(messages []gateway.PromptMessage) int {
 	total := 0
 	for _, msg := range messages {
 		total += len(msg.Content)
+		for _, tc := range msg.ToolCalls {
+			total += len(tc.Function.Name)
+			total += len(tc.Function.Arguments)
+		}
 	}
 	return total
 }
