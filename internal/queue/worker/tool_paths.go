@@ -14,12 +14,12 @@ import (
 
 func (t *ToolExecutor) getWorkspaceRoot() (string, error) {
 	t.workspaceRootOnce.Do(func() {
-		root, err := filepath.EvalSymlinks(t.workspacePath)
+		root, err := paths.EvalWorkspaceRoot(t.workspacePath)
 		if err != nil {
 			t.workspaceRootErr = fmt.Errorf("workspace path is invalid: %w", err)
 			return
 		}
-		t.workspaceRoot = filepath.Clean(root)
+		t.workspaceRoot = root
 	})
 	return t.workspaceRoot, t.workspaceRootErr
 }
@@ -66,15 +66,7 @@ func (t *ToolExecutor) resolvePath(relPath string, forWrite bool) (string, error
 		return "", fmt.Errorf("failed to stat path: %w", statErr)
 	}
 
-	targetReal, err := filepath.EvalSymlinks(candidate)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve path: %w", err)
-	}
-	targetReal = filepath.Clean(targetReal)
-	if !paths.IsWithinRoot(workspaceRoot, targetReal) {
-		return "", fmt.Errorf("path escapes workspace")
-	}
-	return targetReal, nil
+	return paths.ResolveWorkspaceFileWithRoot(t.workspacePath, workspaceRoot, clean)
 }
 
 func evalExistingAncestor(path string) (string, error) {
