@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"agentd/internal/models"
 	wskills "agentd/internal/agent/skills"
+	"agentd/internal/models"
 )
 
 func TestAssembleAgenticSystemPrompt_Basic(t *testing.T) {

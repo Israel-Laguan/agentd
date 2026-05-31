@@ -47,8 +47,8 @@ func TestNewWorker_DisableCredentialDetection_SkipsHook(t *testing.T) {
 	t.Setenv(envKey, "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij")
 
 	w := NewWorker(nil, nil, &fakeSuccessExecutor{}, nil, nil, WorkerOptions{
-		ToolCredentials:              map[string]string{"github": envKey},
-		DisableCredentialDetection:     true,
+		ToolCredentials:            map[string]string{"github": envKey},
+		DisableCredentialDetection: true,
 	})
 
 	call := gateway.ToolCall{

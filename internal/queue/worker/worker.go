@@ -16,67 +16,67 @@ import (
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
 
-	wskills "agentd/internal/agent/skills"
 	wfilecontext "agentd/internal/agent/filecontext"
 	wsession "agentd/internal/agent/session"
+	wskills "agentd/internal/agent/skills"
 )
 
 // DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
 
 type Worker struct {
-	store                models.KanbanStore
-	gateway              gateway.AIGateway
-	sandbox              sandbox.Executor
-	breaker              *safety.CircuitBreaker
-	providerBreakers     *safety.ProviderBreakers
-	sink                 models.EventSink
-	canceller            *CancelRegistry
-	tuner                *planning.ParameterTuner
-	retriever            MemoryRetriever
-	heartbeatInterval    time.Duration
-	sandboxWallTimeout   time.Duration
-	sandboxEnvAllowlist  []string
-	sandboxExtraEnv      []string
-	sandboxScrubber      sandbox.Scrubber
-	maxRetries           int
-	maxToolIterations    int
-	truncatorMax         int
-	characterBudget      int
-	toolExecutor         *ToolExecutor
-	toolTimeouts         config.ToolTimeoutsConfig
-	toolRetries          config.ToolRetriesConfig
-	toolRetrier          *RetryingExecutor
-	capabilities         *capabilities.Registry
-	tokenBudget          int
-	budgetTracker        spec.BudgetTracker
-	hooks                *HookChain
-	pluginMounter        PluginMounter
-	contextCfg           config.AgenticContextConfig
-	instructionLoader    *InstructionLoader
-	skillLoader          *wskills.SkillLoader
-	skillRouter          *wskills.SkillRouter
-	legacyHandoffTimeout time.Duration
-	externalTools             map[string]struct{}
-	auditLogger               *AuditLogger
-	contextWarningThreshold   float64
-	toolFailureStreak         int
-	tokenUsageHook            func(int)
-	tokenStore                TokenUsageStore
-	loopResultRecorder        func(LoopResult)
-	fileContextCfg            config.FileContextConfig
-	docStore                  *wfilecontext.DocStore
-	planningCfg               config.AgenticPlanningConfig
-	messageEditor             *MessageEditor
-	checkpointStore           wsession.CheckpointStore
-	topicGuard                *TopicGuard
-	modelRouter               *ModelRouter
-	toolManifest              *ToolManifest
-	capabilityRouter          *CapabilityRouter
-	batcher                   *TaskBatcher
-	promptLibrary             *PromptLibrary
-	healingEnabled            bool
-	maxHealingTasks           int
+	store                         models.KanbanStore
+	gateway                       gateway.AIGateway
+	sandbox                       sandbox.Executor
+	breaker                       *safety.CircuitBreaker
+	providerBreakers              *safety.ProviderBreakers
+	sink                          models.EventSink
+	canceller                     *CancelRegistry
+	tuner                         *planning.ParameterTuner
+	retriever                     MemoryRetriever
+	heartbeatInterval             time.Duration
+	sandboxWallTimeout            time.Duration
+	sandboxEnvAllowlist           []string
+	sandboxExtraEnv               []string
+	sandboxScrubber               sandbox.Scrubber
+	maxRetries                    int
+	maxToolIterations             int
+	truncatorMax                  int
+	characterBudget               int
+	toolExecutor                  *ToolExecutor
+	toolTimeouts                  config.ToolTimeoutsConfig
+	toolRetries                   config.ToolRetriesConfig
+	toolRetrier                   *RetryingExecutor
+	capabilities                  *capabilities.Registry
+	tokenBudget                   int
+	budgetTracker                 spec.BudgetTracker
+	hooks                         *HookChain
+	pluginMounter                 PluginMounter
+	contextCfg                    config.AgenticContextConfig
+	instructionLoader             *InstructionLoader
+	skillLoader                   *wskills.SkillLoader
+	skillRouter                   *wskills.SkillRouter
+	legacyHandoffTimeout          time.Duration
+	externalTools                 map[string]struct{}
+	auditLogger                   *AuditLogger
+	contextWarningThreshold       float64
+	toolFailureStreak             int
+	tokenUsageHook                func(int)
+	tokenStore                    TokenUsageStore
+	loopResultRecorder            func(LoopResult)
+	fileContextCfg                config.FileContextConfig
+	docStore                      *wfilecontext.DocStore
+	planningCfg                   config.AgenticPlanningConfig
+	messageEditor                 *MessageEditor
+	checkpointStore               wsession.CheckpointStore
+	topicGuard                    *TopicGuard
+	modelRouter                   *ModelRouter
+	toolManifest                  *ToolManifest
+	capabilityRouter              *CapabilityRouter
+	batcher                       *TaskBatcher
+	promptLibrary                 *PromptLibrary
+	healingEnabled                bool
+	maxHealingTasks               int
 	legacyMaxBreakdownDepth       int
 	legacyMaxSubtasksPerBreakdown int
 	legacyPreflightScore          int

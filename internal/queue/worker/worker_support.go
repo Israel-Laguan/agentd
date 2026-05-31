@@ -70,35 +70,6 @@ func (w *Worker) payload(task models.Task, project models.Project, command strin
 	}
 }
 
-// BuildSandboxEnv assembles environment variable pairs for sandbox execution.
-func BuildSandboxEnv(allowlist, extra []string) []string {
-	allowed := map[string]struct{}{}
-	for _, key := range allowlist {
-		trimmed := strings.TrimSpace(key)
-		if trimmed == "" {
-			continue
-		}
-		allowed[trimmed] = struct{}{}
-	}
-	env := make([]string, 0, len(allowed)+len(extra))
-	for _, pair := range os.Environ() {
-		parts := strings.SplitN(pair, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		if _, ok := allowed[parts[0]]; ok {
-			env = append(env, pair)
-		}
-	}
-	for _, pair := range extra {
-		if strings.TrimSpace(pair) == "" {
-			continue
-		}
-		env = append(env, pair)
-	}
-	return env
-}
-
 func (w *Worker) recoverPanic(ctx context.Context, task models.Task) {
 	if recovered := recover(); recovered != nil {
 		w.emit(ctx, task, "PANIC", fmt.Sprintf("worker panic: %v", recovered))

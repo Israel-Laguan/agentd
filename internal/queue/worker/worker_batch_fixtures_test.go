@@ -42,7 +42,7 @@ func (s *batchTestStore) MarkTaskRunning(_ context.Context, id string, _ time.Ti
 	return &t, nil
 }
 
-func (s *batchTestStore) UpdateTaskHeartbeat(context.Context, string) error { return nil }
+func (s *batchTestStore) UpdateTaskHeartbeat(context.Context, string) error         { return nil }
 func (s *batchTestStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 
 func (s *batchTestStore) UpdateTaskResult(_ context.Context, id string, _ time.Time, result models.TaskResult) (*models.Task, error) {

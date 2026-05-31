@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	wsession "agentd/internal/agent/session"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
-	wsession "agentd/internal/agent/session"
 )
 
 func testContextManager(t *testing.T) *ContextManager {

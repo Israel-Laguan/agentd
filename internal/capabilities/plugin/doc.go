@@ -9,9 +9,9 @@
 //   - Session: activated by name via AgentProfile.Plugins.
 //
 // The PluginLoader scans plugin directories, validates manifests,
-// checks required env vars, and mounts hooks into the worker HookChain
+// checks required env vars, and mounts hooks into the agent HookChain
 // and capabilities into the capabilities Registry. The Mounter type
-// implements worker.PluginMounter for project and session scopes.
+// supports project and session scopes.
 //
 // Dynamic runtime loading is not supported; a restart is required to
 // pick up new or changed plugins.

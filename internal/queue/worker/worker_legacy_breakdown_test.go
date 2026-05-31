@@ -177,10 +177,10 @@ func TestLegacyDispatchReject_HighComplexitySkipsGateway(t *testing.T) {
 	store := &legacyHandoffStore{
 		routingTestStore: routingTestStore{
 			task: models.Task{
-				BaseEntity: models.BaseEntity{ID: "task-reject"},
-				ProjectID:  "project-1",
-				AgentID:    "agent-1",
-				State:      models.TaskStateQueued,
+				BaseEntity:  models.BaseEntity{ID: "task-reject"},
+				ProjectID:   "project-1",
+				AgentID:     "agent-1",
+				State:       models.TaskStateQueued,
 				Description: "architect compare design analyse reason write draft generate migration plan",
 			},
 			project: models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}},

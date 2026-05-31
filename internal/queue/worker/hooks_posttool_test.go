@@ -129,16 +129,12 @@ func TestHookChainClone_DoesNotMutateOriginal(t *testing.T) {
 	})
 
 	// Original should still have only 1 post-hook
-	original.mu.RLock()
-	origLen := len(original.postHooks)
-	original.mu.RUnlock()
+	origLen := original.PostHookCount()
 	if origLen != 1 {
 		t.Fatalf("original should have 1 post-hook, got %d", origLen)
 	}
 
-	clone.mu.RLock()
-	cloneLen := len(clone.postHooks)
-	clone.mu.RUnlock()
+	cloneLen := clone.PostHookCount()
 	if cloneLen != 2 {
 		t.Fatalf("clone should have 2 post-hooks, got %d", cloneLen)
 	}
@@ -170,9 +166,7 @@ func TestNewWorker_SharedHookChainNotMutated(t *testing.T) {
 		Fn: func(_ HookContext, r string) (string, error) { return r, nil },
 	})
 
-	shared.mu.RLock()
-	beforeLen := len(shared.postHooks)
-	shared.mu.RUnlock()
+	beforeLen := shared.PostHookCount()
 
 	mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "ok\n", Success: true}}
 	_ = NewWorker(&mockAgenticStore{}, nil, mockSB, nil, nil, WorkerOptions{
@@ -180,9 +174,7 @@ func TestNewWorker_SharedHookChainNotMutated(t *testing.T) {
 		Hooks:             shared,
 	})
 
-	shared.mu.RLock()
-	afterLen := len(shared.postHooks)
-	shared.mu.RUnlock()
+	afterLen := shared.PostHookCount()
 
 	if afterLen != beforeLen {
 		t.Fatalf("shared HookChain mutated: had %d post-hooks, now %d", beforeLen, afterLen)

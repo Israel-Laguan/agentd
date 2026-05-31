@@ -16,7 +16,7 @@ const elicitationEmptyAnswerFallback = "(no comment provided — subtask marked 
 
 const (
 	hitlElicitationQuestionsPrefix = "agentd:hitl:elicitation-questions:"
-	hitlElicitationUsedPrefix       = "agentd:hitl:elicitation-used:"
+	hitlElicitationUsedPrefix      = "agentd:hitl:elicitation-used:"
 )
 
 func findLatestClarificationSubtask(children []models.Task) *models.Task {

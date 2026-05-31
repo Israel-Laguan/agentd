@@ -23,7 +23,7 @@ func (s *routingTestStore) MarkTaskRunning(_ context.Context, _ string, _ time.T
 	s.task.State = models.TaskStateRunning
 	return &s.task, nil
 }
-func (s *routingTestStore) UpdateTaskHeartbeat(context.Context, string) error { return nil }
+func (s *routingTestStore) UpdateTaskHeartbeat(context.Context, string) error         { return nil }
 func (s *routingTestStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 func (s *routingTestStore) IncrementRetryCount(_ context.Context, _ string, _ time.Time) (*models.Task, error) {
 	s.task.RetryCount++
@@ -186,7 +186,6 @@ func (g *routingTestGateway) ClassifyIntent(context.Context, string) (*gateway.I
 func (g *routingTestGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
-
 
 // routingTestSandbox records executions.
 type routingTestSandbox struct {

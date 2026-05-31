@@ -32,7 +32,7 @@ func TestTaskBatcher_Group_SameProjectAgent(t *testing.T) {
 		},
 	}
 	w := NewWorker(store, nil, nil, nil, nil, WorkerOptions{
-		Batching: config.BatchingConfig{Enabled: true, MaxBatchSize: 5},
+		Batching:     config.BatchingConfig{Enabled: true, MaxBatchSize: 5},
 		ToolManifest: config.ToolManifestConfig{Enabled: true, MinConfidence: 0.35},
 	})
 	tasks := []models.Task{

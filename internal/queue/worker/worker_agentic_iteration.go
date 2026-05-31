@@ -5,10 +5,10 @@ import (
 	"errors"
 	"log/slog"
 
+	wsession "agentd/internal/agent/session"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	wsession "agentd/internal/agent/session"
 )
 
 var (

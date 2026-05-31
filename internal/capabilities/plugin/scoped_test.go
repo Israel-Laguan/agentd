@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"agentd/internal/agent/hooks"
 	"agentd/internal/capabilities"
-	"agentd/internal/queue/worker"
 )
 
 func TestNewScopedPluginLoader_SetsScope(t *testing.T) {
@@ -110,7 +110,7 @@ func TestMountByNames_RegistersHooksAndCaps(t *testing.T) {
 	loader := NewScopedPluginLoader(dir, ScopeSession)
 	loader.envLookup = func(string) (string, bool) { return "", true }
 
-	chain := worker.NewHookChain()
+	chain := hooks.NewHookChain()
 	registry := capabilities.NewRegistry()
 	manifests, err := loader.MountByNames(
 		[]string{"sess-plug"}, chain, registry,

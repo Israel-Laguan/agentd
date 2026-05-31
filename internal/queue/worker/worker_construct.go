@@ -14,60 +14,60 @@ import (
 	"agentd/internal/sandbox"
 
 	wfilecontext "agentd/internal/agent/filecontext"
-	wskills "agentd/internal/agent/skills"
 	wsession "agentd/internal/agent/session"
+	wskills "agentd/internal/agent/skills"
 )
 
 type WorkerOptions struct {
-	MaxRetries                int
-	MaxToolIterations         int
-	TokenBudget               int
-	AgenticTruncatorMax       int
-	AgenticCharacterBudget    int
-	AgenticContext            config.AgenticContextConfig
-	Canceller                 *CancelRegistry
-	Tuner                     *planning.ParameterTuner
-	Retriever                 MemoryRetriever
-	HeartbeatInterval         time.Duration
-	SandboxWallTimeout        time.Duration
-	SandboxEnvAllowlist       []string
-	SandboxExtraEnv           []string
-	SandboxScrubPatterns      []string
-	Capabilities              *capabilities.Registry
-	Hooks                     *HookChain
-	PluginMounter             PluginMounter
-	InstructionsProjectFile   string
-	InstructionsUserPrefsPath string
-	SkillsProjectDir          string
-	SkillsGlobalDir           string
-	SkillsThreshold           float64
-	SkillsTopK                int
-	LegacyHandoffTimeout      time.Duration
-	ToolTimeouts              config.ToolTimeoutsConfig
-	ToolRetries               config.ToolRetriesConfig
-	ExternalTools             []string
-	ToolCredentials           map[string]string
+	MaxRetries                 int
+	MaxToolIterations          int
+	TokenBudget                int
+	AgenticTruncatorMax        int
+	AgenticCharacterBudget     int
+	AgenticContext             config.AgenticContextConfig
+	Canceller                  *CancelRegistry
+	Tuner                      *planning.ParameterTuner
+	Retriever                  MemoryRetriever
+	HeartbeatInterval          time.Duration
+	SandboxWallTimeout         time.Duration
+	SandboxEnvAllowlist        []string
+	SandboxExtraEnv            []string
+	SandboxScrubPatterns       []string
+	Capabilities               *capabilities.Registry
+	Hooks                      *HookChain
+	PluginMounter              PluginMounter
+	InstructionsProjectFile    string
+	InstructionsUserPrefsPath  string
+	SkillsProjectDir           string
+	SkillsGlobalDir            string
+	SkillsThreshold            float64
+	SkillsTopK                 int
+	LegacyHandoffTimeout       time.Duration
+	ToolTimeouts               config.ToolTimeoutsConfig
+	ToolRetries                config.ToolRetriesConfig
+	ExternalTools              []string
+	ToolCredentials            map[string]string
 	DisableCredentialDetection bool
-	Audit                     config.AuditConfig
-	ContextWarningThreshold   float64
-	ToolFailureStreak         int
-	TokenUsageHook            func(int)
+	Audit                      config.AuditConfig
+	ContextWarningThreshold    float64
+	ToolFailureStreak          int
+	TokenUsageHook             func(int)
 	// TokenStore, when set, persists per-call token usage to the task row in the
 	// database on every LLM call (agentic and legacy), independently of TokenUsageHook.
-	TokenStore                TokenUsageStore
-	FileContext               config.FileContextConfig
-	FileContextCachePath      string
-	Planning                  config.AgenticPlanningConfig
-	TopicGuard                config.TopicGuardConfig
-	ModelRouting              config.ModelRoutingConfig
-	ToolManifest              config.ToolManifestConfig
-	CapabilityRouting         config.CapabilityRoutingConfig
-	Batching                  config.BatchingConfig
-	PromptTemplatesPath       string
-	ProviderBreakers          *safety.ProviderBreakers
-	HealingDisabled           bool
-	MaxHealingTasks           int
-	Legacy                    config.LegacyConfig
+	TokenStore           TokenUsageStore
+	FileContext          config.FileContextConfig
+	FileContextCachePath string
+	Planning             config.AgenticPlanningConfig
+	TopicGuard           config.TopicGuardConfig
+	ModelRouting         config.ModelRoutingConfig
+	ToolManifest         config.ToolManifestConfig
+	CapabilityRouting    config.CapabilityRoutingConfig
+	Batching             config.BatchingConfig
+	PromptTemplatesPath  string
+	ProviderBreakers     *safety.ProviderBreakers
+	HealingDisabled      bool
+	MaxHealingTasks      int
+	Legacy               config.LegacyConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -164,40 +164,40 @@ func newWorkerCore(
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
 		providerBreakers: opts.ProviderBreakers,
-		canceller: opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
-		heartbeatInterval:    opts.HeartbeatInterval,
-		sandboxWallTimeout:   opts.SandboxWallTimeout,
-		sandboxEnvAllowlist:  append([]string(nil), opts.SandboxEnvAllowlist...),
-		sandboxExtraEnv:      append([]string(nil), opts.SandboxExtraEnv...),
-		sandboxScrubber:      scrubber,
-		maxRetries:           opts.MaxRetries,
-		maxToolIterations:    opts.MaxToolIterations,
-		truncatorMax:         opts.AgenticTruncatorMax,
-		characterBudget:      opts.AgenticCharacterBudget,
-		toolExecutor:         toolExecutor,
-		toolTimeouts:         opts.ToolTimeouts,
-		toolRetries:          opts.ToolRetries,
+		canceller:        opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
+		heartbeatInterval:   opts.HeartbeatInterval,
+		sandboxWallTimeout:  opts.SandboxWallTimeout,
+		sandboxEnvAllowlist: append([]string(nil), opts.SandboxEnvAllowlist...),
+		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
+		sandboxScrubber:     scrubber,
+		maxRetries:          opts.MaxRetries,
+		maxToolIterations:   opts.MaxToolIterations,
+		truncatorMax:        opts.AgenticTruncatorMax,
+		characterBudget:     opts.AgenticCharacterBudget,
+		toolExecutor:        toolExecutor,
+		toolTimeouts:        opts.ToolTimeouts,
+		toolRetries:         opts.ToolRetries,
 		toolRetrier: NewRetryingExecutor(RetryConfig{
 			MaxAttempts: opts.ToolRetries.MaxAttempts,
 			BaseDelay:   opts.ToolRetries.BaseDelay,
 			MaxDelay:    opts.ToolRetries.MaxDelay,
 		}),
-		capabilities:            opts.Capabilities,
-		tokenBudget:             opts.TokenBudget,
-		budgetTracker:           budgetTracker,
-		hooks:                   hooks,
-		pluginMounter:           opts.PluginMounter,
-		contextCfg:              opts.AgenticContext,
-		legacyHandoffTimeout:    opts.LegacyHandoffTimeout,
-		externalTools:           externalToolsSet(opts.ExternalTools),
-		auditLogger:             newAuditLogger(opts.Audit),
-		contextWarningThreshold: opts.ContextWarningThreshold,
-		toolFailureStreak:       opts.ToolFailureStreak,
-		tokenUsageHook:          opts.TokenUsageHook,
-		tokenStore:              opts.TokenStore,
-		fileContextCfg:          opts.FileContext,
-		planningCfg:             opts.Planning,
-		checkpointStore:         wsession.NewMemoryCheckpointStore(),
+		capabilities:                  opts.Capabilities,
+		tokenBudget:                   opts.TokenBudget,
+		budgetTracker:                 budgetTracker,
+		hooks:                         hooks,
+		pluginMounter:                 opts.PluginMounter,
+		contextCfg:                    opts.AgenticContext,
+		legacyHandoffTimeout:          opts.LegacyHandoffTimeout,
+		externalTools:                 externalToolsSet(opts.ExternalTools),
+		auditLogger:                   newAuditLogger(opts.Audit),
+		contextWarningThreshold:       opts.ContextWarningThreshold,
+		toolFailureStreak:             opts.ToolFailureStreak,
+		tokenUsageHook:                opts.TokenUsageHook,
+		tokenStore:                    opts.TokenStore,
+		fileContextCfg:                opts.FileContext,
+		planningCfg:                   opts.Planning,
+		checkpointStore:               wsession.NewMemoryCheckpointStore(),
 		healingEnabled:                !opts.HealingDisabled,
 		maxHealingTasks:               opts.MaxHealingTasks,
 		legacyMaxBreakdownDepth:       opts.Legacy.MaxBreakdownDepth,

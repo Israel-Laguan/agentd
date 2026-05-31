@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	wsession "agentd/internal/agent/session"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	wsession "agentd/internal/agent/session"
 )
 
 // processAgentic runs the inner agentic loop for a single task attempt.

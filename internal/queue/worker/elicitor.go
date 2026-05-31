@@ -11,7 +11,7 @@ import (
 
 const (
 	elicitationSkipMinDescriptionRunes = 200
-	maxElicitationQuestions              = 5
+	maxElicitationQuestions            = 5
 )
 
 const elicitorSystemPrompt = `You are a pre-task ambiguity analyzer for agentd. Given a task title, description, and optional file context, decide whether the task is specific enough to execute without human clarification.

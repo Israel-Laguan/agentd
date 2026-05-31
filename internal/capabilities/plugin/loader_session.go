@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"agentd/internal/agent/hooks"
 	"agentd/internal/capabilities"
-	"agentd/internal/queue/worker"
 )
 
 // LoadByNames loads only the plugins whose manifest name matches one of
@@ -65,7 +65,7 @@ func (pl *PluginLoader) LoadByNames(names []string) ([]LoadResult, error) {
 // their hooks and capabilities.
 func (pl *PluginLoader) MountByNames(
 	names []string,
-	chain *worker.HookChain, registry *capabilities.Registry,
+	chain *hooks.HookChain, registry *capabilities.Registry,
 ) ([]Manifest, error) {
 	results, err := pl.LoadByNames(names)
 	if err != nil {

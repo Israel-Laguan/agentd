@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	wsession "agentd/internal/agent/session"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	wsession "agentd/internal/agent/session"
 	"agentd/internal/testutil"
 )
 

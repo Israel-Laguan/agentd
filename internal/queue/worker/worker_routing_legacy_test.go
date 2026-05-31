@@ -109,8 +109,8 @@ func TestLegacyPath_NotAffectedByAgenticConfig(t *testing.T) {
 
 	// Configure with agentic truncation settings
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{
-		MaxRetries:              3,
-		MaxToolIterations:       50,
+		MaxRetries:             3,
+		MaxToolIterations:      50,
 		AgenticTruncatorMax:    30,     // Agentic config
 		AgenticCharacterBudget: 100000, // Agentic config
 	})
@@ -169,7 +169,7 @@ func TestLegacySystemPrompt_StatesOneCommandConstraint(t *testing.T) {
 // legacyHandoffStore extends routingTestStore to capture BlockTaskWithSubtasks calls.
 type legacyHandoffStore struct {
 	routingTestStore
-	mu          sync.Mutex
+	mu       sync.Mutex
 	blocked  bool
 	subtasks []models.DraftTask
 }
