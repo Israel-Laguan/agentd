@@ -1,4 +1,4 @@
-package worker
+package hooks
 
 import (
 	"crypto/sha256"
@@ -35,11 +35,19 @@ func (rc *ResultCache) isCacheable(tool string) bool {
 	return rc.cacheable[tool]
 }
 
+func (rc *ResultCache) IsCacheable(tool string) bool {
+	return rc.isCacheable(tool)
+}
+
 func (rc *ResultCache) get(key string) (string, bool) {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 	v, ok := rc.entries[key]
 	return v, ok
+}
+
+func (rc *ResultCache) Get(key string) (string, bool) {
+	return rc.get(key)
 }
 
 func (rc *ResultCache) set(key, result string) {
@@ -48,12 +56,26 @@ func (rc *ResultCache) set(key, result string) {
 	rc.entries[key] = result
 }
 
+func (rc *ResultCache) Set(key, result string) {
+	rc.set(key, result)
+}
+
+func (rc *ResultCache) EntryCount() int {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+	return len(rc.entries)
+}
+
 // cacheKey produces a deterministic key from the tool name and a
 // canonical JSON representation of the arguments.
 func cacheKey(toolName, argsJSON string) string {
 	canonical := canonicalizeArgs(argsJSON)
 	h := sha256.Sum256([]byte(canonical))
 	return fmt.Sprintf("%s:%x", toolName, h)
+}
+
+func CacheKey(toolName, argsJSON string) string {
+	return cacheKey(toolName, argsJSON)
 }
 
 // canonicalizeArgs re-serialises an arbitrary JSON object with sorted
@@ -78,6 +100,10 @@ func canonicalizeArgs(raw string) string {
 		parts = append(parts, fmt.Sprintf("%s:%s", keyJSON, obj[k]))
 	}
 	return "{" + strings.Join(parts, ",") + "}"
+}
+
+func CanonicalizeArgs(raw string) string {
+	return canonicalizeArgs(raw)
 }
 
 // CacheLookupHook returns a PreHook that short-circuits tool execution

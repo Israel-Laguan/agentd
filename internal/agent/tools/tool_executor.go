@@ -1,4 +1,4 @@
-package worker
+package tools
 
 import (
 	"context"
@@ -31,6 +31,15 @@ const (
 	// tool failures apart from file contents or command stdout that happen to
 	// be single-key {"error":"..."} JSON.
 	toolErrorPrefix = "\x1eagentd/tool-error\x1e"
+)
+
+const (
+	ToolNameBash             = toolNameBash
+	ToolNameRead             = toolNameRead
+	ToolNameWrite            = toolNameWrite
+	ToolNameDelegate         = toolNameDelegate
+	ToolNameDelegateParallel = toolNameDelegateParallel
+	ToolErrorPrefix          = toolErrorPrefix
 )
 
 type ToolExecutor struct {
@@ -131,6 +140,41 @@ func (t *ToolExecutor) BuildEnv(extra ...string) []string {
 	out = append(out, t.envVars...)
 	out = append(out, extra...)
 	return out
+}
+
+func (t *ToolExecutor) EnvVars() []string {
+	if t == nil {
+		return nil
+	}
+	return append([]string(nil), t.envVars...)
+}
+
+func (t *ToolExecutor) WorkspacePath() string {
+	if t == nil {
+		return ""
+	}
+	return t.workspacePath
+}
+
+func (t *ToolExecutor) WallTimeout() time.Duration {
+	if t == nil {
+		return 0
+	}
+	return t.wallTimeout
+}
+
+func (t *ToolExecutor) SetFilePipeline(filePipeline *wfilecontext.FilePipeline) {
+	if t == nil {
+		return
+	}
+	t.filePipeline = filePipeline
+}
+
+func (t *ToolExecutor) SetMaxReadBytes(maxReadBytes int64) {
+	if t == nil {
+		return
+	}
+	t.maxReadBytes = maxReadBytes
 }
 
 func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEnv ...string) string {
@@ -277,6 +321,10 @@ func sandboxFailureJSON(result sandbox.Result) string {
 	return toolErrorPrefix + string(payload)
 }
 
+func SandboxFailureJSON(result sandbox.Result) string {
+	return sandboxFailureJSON(result)
+}
+
 func jsonErrorf(format string, args ...any) string {
 	payload, err := json.Marshal(map[string]string{
 		"error": fmt.Sprintf(format, args...),
@@ -287,10 +335,22 @@ func jsonErrorf(format string, args ...any) string {
 	return toolErrorPrefix + string(payload)
 }
 
+func JSONErrorf(format string, args ...any) string {
+	return jsonErrorf(format, args...)
+}
+
 func isToolErrorPayload(raw string) bool {
 	return strings.HasPrefix(raw, toolErrorPrefix)
 }
 
+func IsToolErrorPayload(raw string) bool {
+	return isToolErrorPayload(raw)
+}
+
 func stripToolErrorPrefix(raw string) string {
 	return strings.TrimPrefix(raw, toolErrorPrefix)
+}
+
+func StripToolErrorPrefix(raw string) string {
+	return stripToolErrorPrefix(raw)
 }

@@ -19,10 +19,10 @@ var embeddedPromptTemplates []byte
 const (
 	TemplateCodePromptBuilder = "CODE_PROMPT_BUILDER"
 
-	slotLanguage   = "language"
-	slotFilename   = "filename"
-	slotSignature  = "signature"
-	slotTestCases  = "test_cases"
+	slotLanguage  = "language"
+	slotFilename  = "filename"
+	slotSignature = "signature"
+	slotTestCases = "test_cases"
 )
 
 // PromptTemplate is a named prompt with typed slots.
@@ -194,7 +194,7 @@ var (
 	pathLikeToken         = regexp.MustCompile(`(?i)[\w./-]+\.(go|py|ts|tsx|js|jsx|rs|java|rb|php|cs|cpp|c|h|swift|kt|scala|sh|sql|yaml|yml|json|md)`)
 	slotRegex             = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 	promptSectionHeaderRE = regexp.MustCompile(`(?im)^\s*(language|filename|signature|test cases|tests)\s*:`)
-	extToLanguage = map[string]string{
+	extToLanguage         = map[string]string{
 		"go": "go", "py": "python", "ts": "typescript", "tsx": "typescript",
 		"js": "javascript", "jsx": "javascript", "rs": "rust", "java": "java",
 		"rb": "ruby", "php": "php", "cs": "csharp", "cpp": "cpp", "c": "c",
@@ -274,8 +274,8 @@ func (w *Worker) shouldUseCodePromptTemplate(task models.Task, profile models.Ag
 	if w.toolManifest == nil {
 		return false
 	}
-	classification := w.toolManifest.classifier.Classify(task)
-	return classification.Type == TaskTypeCodeGen && classification.Confidence >= w.toolManifest.cfg.MinConfidence
+	classification := w.toolManifest.ClassifyTask(task)
+	return classification.Type == TaskTypeCodeGen && classification.Confidence >= w.toolManifest.MinConfidence()
 }
 
 func (w *Worker) promptTemplateForTask(task models.Task, profile models.AgentProfile) (name string, slots map[string]string, ok bool) {

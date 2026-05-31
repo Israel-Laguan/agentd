@@ -20,11 +20,11 @@ func TestToolExecutor_Read_PipelineFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	ex := NewToolExecutor(nil, dir, nil, 0)
-	ex.filePipeline = wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
+	ex.SetFilePipeline(wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
 		Workspace: dir,
 		Converter: wfilecontext.NewFileConverterWith(failingConvertFunc),
 		TopK:      5,
-	})
+	}))
 	out := ex.Execute(context.Background(), gatewayToolCallForRead("note.txt"))
 	if strings.Contains(out, toolErrorPrefix) {
 		t.Fatalf("expected raw fallback, got error: %s", out)
@@ -45,12 +45,12 @@ func TestToolExecutor_Read_WithPipeline(t *testing.T) {
 		t.Fatal(err)
 	}
 	ex := NewToolExecutor(nil, dir, nil, 0)
-	ex.filePipeline = wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
+	ex.SetFilePipeline(wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
 		Workspace: dir,
 		Store:     store,
 		Converter: wfilecontext.NewFileConverter(),
 		TopK:      5,
-	})
+	}))
 	out := ex.Execute(context.Background(), gatewayToolCallForRead("hello.md"))
 	if strings.Contains(out, toolErrorPrefix) {
 		t.Fatalf("unexpected error: %s", out)

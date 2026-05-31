@@ -5,10 +5,10 @@ import (
 	"errors"
 	"log/slog"
 
+	wsession "agentd/internal/agent/session"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	wsession "agentd/internal/agent/session"
 )
 
 const (
@@ -47,7 +47,7 @@ func (s *agenticRewindState) reset() {
 
 func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 	if in.toolTracker != nil {
-		in.toolTracker.reset()
+		in.toolTracker.Reset()
 	}
 	if in.iterationGuard != nil {
 		in.iterationGuard.reset()

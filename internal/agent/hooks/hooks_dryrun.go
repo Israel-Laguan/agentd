@@ -1,4 +1,4 @@
-package worker
+package hooks
 
 import (
 	"encoding/json"

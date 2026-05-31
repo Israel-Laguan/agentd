@@ -182,7 +182,7 @@ func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gatew
 	}
 
 	loader := &SubagentLoader{}
-	def, err := loader.LoadByName(toolExecutor.workspacePath, args.Subagent)
+	def, err := loader.LoadByName(toolExecutor.WorkspacePath(), args.Subagent)
 	if err != nil {
 		return jsonErrorf("failed to load subagent definition: %v", err)
 	}
@@ -190,9 +190,9 @@ func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gatew
 	delegate := NewSubagentDelegate(
 		w.gateway,
 		w.sandbox,
-		toolExecutor.workspacePath,
+		toolExecutor.WorkspacePath(),
 		toolExecutor.BuildEnv(callEnv...),
-		toolExecutor.wallTimeout,
+		toolExecutor.WallTimeout(),
 		0, // depth=0: parent is delegating
 	).WithCapabilities(w.capabilities, scopedCaps).
 		WithExternalTools(w.externalTools).
@@ -236,7 +236,7 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 		if task.Task == "" {
 			return jsonErrorf("task %d description is required", i)
 		}
-		def, err := loader.LoadByName(toolExecutor.workspacePath, task.Subagent)
+		def, err := loader.LoadByName(toolExecutor.WorkspacePath(), task.Subagent)
 		if err != nil {
 			return jsonErrorf("failed to load subagent definition for task %d: %v", i, err)
 		}
@@ -249,9 +249,9 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 	delegate := NewSubagentDelegate(
 		w.gateway,
 		w.sandbox,
-		toolExecutor.workspacePath,
+		toolExecutor.WorkspacePath(),
 		toolExecutor.BuildEnv(callEnv...),
-		toolExecutor.wallTimeout,
+		toolExecutor.WallTimeout(),
 		0,
 	).WithCapabilities(w.capabilities, scopedCaps).
 		WithExternalTools(w.externalTools).

@@ -1,4 +1,4 @@
-package worker
+package tools
 
 import (
 	"fmt"
@@ -48,14 +48,14 @@ type ToolError struct {
 
 // ToolResult is the structured outcome of a single tool execution.
 type ToolResult struct {
-	CallID       string
-	Status       ToolStatus
-	Content      string
-	Error        *ToolError
-	Retryable    bool
-	ElapsedMs    int64
-	ExitCode     int  // OS exit code when available (e.g. bash Success:false)
-	ExitCodeSet  bool // true when ExitCode was parsed from the sandbox envelope
+	CallID      string
+	Status      ToolStatus
+	Content     string
+	Error       *ToolError
+	Retryable   bool
+	ElapsedMs   int64
+	ExitCode    int  // OS exit code when available (e.g. bash Success:false)
+	ExitCodeSet bool // true when ExitCode was parsed from the sandbox envelope
 }
 
 // ForContext formats the result for injection into the model's context

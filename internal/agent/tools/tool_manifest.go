@@ -1,4 +1,4 @@
-package worker
+package tools
 
 import (
 	"log/slog"
@@ -27,7 +27,7 @@ var (
 	webResearchSignals = []string{"search", "fetch", "url", "web", "browse", "lookup"}
 	fullAgentSignals   = []string{"deploy", "migrate", "orchestrate", "multi-step", "delegate"}
 
-	taskManifestSignals map[string][]string
+	taskManifestSignals  map[string][]string
 	taskManifestMatchers map[string]map[string]*regexp.Regexp
 )
 
@@ -129,8 +129,8 @@ func topTwoScores(scores map[string]int) (topType string, top, second int) {
 
 // ToolManifest filters gateway tool definitions by task type and profile overrides.
 type ToolManifest struct {
-	cfg      config.ToolManifestConfig
-	mappings map[string][]string
+	cfg        config.ToolManifestConfig
+	mappings   map[string][]string
 	classifier *TaskClassifier
 }
 
@@ -159,12 +159,26 @@ func NewToolManifest(cfg config.ToolManifestConfig) *ToolManifest {
 	}
 }
 
+func (m *ToolManifest) MinConfidence() float64 {
+	if m == nil {
+		return 0
+	}
+	return m.cfg.MinConfidence
+}
+
+func (m *ToolManifest) ClassifyTask(task models.Task) TaskClassification {
+	if m == nil || m.classifier == nil {
+		return TaskClassification{Type: TaskTypeFullAgent}
+	}
+	return m.classifier.Classify(task)
+}
+
 func defaultToolManifestMappings() map[string][]string {
 	return map[string][]string{
-		TaskTypeSummarize:  {},
-		TaskTypeCodeGen:    {toolNameBash, toolNameRead, toolNameWrite},
-		TaskTypeDocQA:      {toolNameRead},
-		TaskTypeFullAgent:  nil, // nil = all tools
+		TaskTypeSummarize:   {},
+		TaskTypeCodeGen:     {toolNameBash, toolNameRead, toolNameWrite},
+		TaskTypeDocQA:       {toolNameRead},
+		TaskTypeFullAgent:   nil, // nil = all tools
 		TaskTypeWebResearch: nil,
 	}
 }
@@ -266,4 +280,12 @@ func filterToolsByNames(
 		}
 	}
 	return filtered, newIndex
+}
+
+func FilterToolsByNames(
+	tools []gateway.ToolDefinition,
+	index map[string]string,
+	allowed map[string]bool,
+) ([]gateway.ToolDefinition, map[string]string) {
+	return filterToolsByNames(tools, index, allowed)
 }

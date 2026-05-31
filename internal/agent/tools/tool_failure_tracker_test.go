@@ -1,10 +1,10 @@
-package worker
+package tools
 
 import "testing"
 
 func TestToolFailureTracker_StreakAndReset(t *testing.T) {
 	t.Parallel()
-	tr := newToolFailureTracker(3)
+	tr := NewToolFailureTracker(3)
 	if failed, _ := tr.Record("bash", ToolStatusError); failed {
 		t.Fatal("first error should not fail")
 	}
@@ -27,10 +27,10 @@ func TestToolFailureTracker_StreakAndReset(t *testing.T) {
 
 func TestToolFailureTracker_ResetClearsStreak(t *testing.T) {
 	t.Parallel()
-	tr := newToolFailureTracker(3)
+	tr := NewToolFailureTracker(3)
 	tr.Record("bash", ToolStatusError)
 	tr.Record("bash", ToolStatusError)
-	tr.reset()
+	tr.Reset()
 	if failed, n := tr.Record("bash", ToolStatusError); failed || n != 1 {
 		t.Fatalf("after reset: failed=%v n=%d, want streak 1", failed, n)
 	}
@@ -38,7 +38,7 @@ func TestToolFailureTracker_ResetClearsStreak(t *testing.T) {
 
 func TestToolFailureTracker_FatalImmediate(t *testing.T) {
 	t.Parallel()
-	tr := newToolFailureTracker(3)
+	tr := NewToolFailureTracker(3)
 	if failed, n := tr.Record("bash", ToolStatusFatal); !failed || n != 1 {
 		t.Fatalf("fatal: failed=%v n=%d", failed, n)
 	}
