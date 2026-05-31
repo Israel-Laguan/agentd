@@ -6,6 +6,10 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"agentd/internal/models"
+	wsession "agentd/internal/queue/worker/session"
+	"agentd/internal/sandbox"
 )
 
 // FailurePolicy determines how a hook error is treated by the chain runner.
@@ -53,10 +57,10 @@ type HookContext struct {
 	// ResultStatus, ResultExitCode, and their Set flags are populated by the
 	// dispatch layer before RunPost so post-hooks (e.g. AuditHook) can derive
 	// exit codes from the classified ToolResult instead of re-parsing content.
-	ResultStatus       ToolStatus
-	ResultStatusSet    bool
-	ResultExitCode     int
-	ResultExitCodeSet  bool
+	ResultStatus      ToolStatus
+	ResultStatusSet   bool
+	ResultExitCode    int
+	ResultExitCodeSet bool
 	// TurnID identifies the agentic loop iteration (taskID:turnIndex).
 	TurnID string
 	// Verdicts, when non-nil, collects hook outcome strings during RunPre/RunPost.
@@ -270,6 +274,29 @@ func resolveHooks(hc *HookChain) *HookChain {
 		return hc
 	}
 	return NewHookChain()
+}
+
+func buildWorkerHooks(
+	opts WorkerOptions,
+	toolExecutor *ToolExecutor,
+	sink models.EventSink,
+	scrubber sandbox.Scrubber,
+) *HookChain {
+	base := resolveHooks(opts.Hooks)
+	hooks := base.Clone()
+	hooks.RegisterPre(SchemaValidationHook(SchemaRegistryFromDefinitions(toolExecutor.Definitions())))
+	if !opts.DisableCredentialDetection {
+		hooks.RegisterPre(CredentialDetectionHook())
+	}
+	if len(opts.ToolCredentials) > 0 {
+		store := wsession.NewEnvSecretStore(opts.ToolCredentials)
+		hooks.RegisterPre(CredentialInjectionHook(store))
+		hooks.RegisterSessionStart(CredentialValidationSessionHook(store))
+	}
+	hooks.PrependPost(ScrubResultHook(scrubber))
+	hooks.RegisterPost(InjectionResistanceHook(externalToolsSet(opts.ExternalTools)))
+	hooks.RegisterPost(AuditHook(sink, scrubber))
+	return hooks
 }
 
 func policyLabel(p FailurePolicy) string {

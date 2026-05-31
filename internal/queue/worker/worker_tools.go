@@ -9,6 +9,7 @@ import (
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
+	"agentd/internal/models"
 	"agentd/internal/toolenv"
 )
 
@@ -36,6 +37,19 @@ func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gatewa
 // timeoutToolResult returns a structured ToolResult for a timed-out tool.
 func timeoutToolResult(callID string, timeout time.Duration) ToolResult {
 	return TimeoutResult(callID, timeout.Milliseconds())
+}
+
+// filterAgenticTools applies per-task tool manifest filtering when enabled.
+func (w *Worker) filterAgenticTools(
+	tools []gateway.ToolDefinition,
+	index map[string]string,
+	task models.Task,
+	profile models.AgentProfile,
+) ([]gateway.ToolDefinition, map[string]string) {
+	if w.toolManifest == nil {
+		return tools, index
+	}
+	return w.toolManifest.Filter(tools, index, task, profile)
 }
 
 func (w *Worker) dispatchToolWithProject(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, retry bool, callEnv []string, auditParent *HookContext) ToolResult {
@@ -96,6 +110,49 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 	}
 
 	return tr
+}
+
+func (w *Worker) runToolBody(ctx context.Context, sessionID, projectID string, call gateway.ToolCall, toolToAdapter map[string]string, toolExecutor *ToolExecutor, scopedCapabilities *capabilities.Registry, callEnv []string) ToolResult {
+	start := time.Now()
+	switch call.Function.Name {
+	case toolNameBash, toolNameRead, toolNameWrite:
+		raw := toolExecutor.Execute(ctx, call, callEnv...)
+		return classifyBuiltinToolResult(call.ID, call.Function.Name, raw, time.Since(start).Milliseconds())
+	case toolNameDelegate:
+		raw := w.executeDelegateWithCapabilities(ctx, call, toolExecutor, scopedCapabilities, callEnv)
+		return classifyDelegateRawResult(call.ID, raw, time.Since(start).Milliseconds())
+	case toolNameDelegateParallel:
+		raw := w.executeDelegateParallel(ctx, call, toolExecutor, scopedCapabilities, callEnv)
+		return classifyDelegateRawResult(call.ID, raw, time.Since(start).Milliseconds())
+	default:
+		raw := executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities, callEnv)
+		return classifyCapabilityRawResult(call.ID, raw, time.Since(start).Milliseconds())
+	}
+}
+
+// executeToolWithRetry runs body with a per-attempt timeout and optionally
+// retries via RetryingExecutor. Transient retryability is decided inside
+// RetryingExecutor.shouldRetry; non-retry paths return classify results unchanged.
+func (w *Worker) executeToolWithRetry(
+	ctx context.Context,
+	callID string,
+	timeout time.Duration,
+	retry bool,
+	body func(toolCtx context.Context) ToolResult,
+) ToolResult {
+	runAttempt := func(attemptCtx context.Context) ToolResult {
+		toolCtx, cancel := context.WithTimeout(attemptCtx, timeout)
+		defer cancel()
+		tr := body(toolCtx)
+		if toolCtx.Err() == context.DeadlineExceeded && attemptCtx.Err() == nil {
+			return timeoutToolResult(callID, timeout)
+		}
+		return tr
+	}
+	if retry && w.toolRetrier != nil {
+		return w.toolRetrier.Execute(ctx, runAttempt)
+	}
+	return runAttempt(ctx)
 }
 
 // executeAgenticTool is a wrapper around DispatchTool for backward compatibility.

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 )
 
 func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, profileAlreadyRouted bool) {
@@ -96,6 +97,25 @@ func (w *Worker) executeLegacyCommand(
 		return
 	}
 	w.commit(ctx, task, result, runErr)
+}
+
+func (w *Worker) commitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
+	if profile != nil && profile.RequireReview {
+		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
+			w.emit(ctx, task, "ERROR", err.Error())
+			w.failHard(ctx, task, err)
+			return
+		} else if done {
+			return
+		}
+		w.createReviewHandoff(ctx, task, content)
+		return
+	}
+	result := sandbox.Result{
+		Success: true,
+		Stdout:  content,
+	}
+	w.commit(ctx, task, result, nil)
 }
 
 type legacyTaskAudit struct {
