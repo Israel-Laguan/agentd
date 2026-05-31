@@ -88,7 +88,6 @@ type agenticTurnLoopInput struct {
 	workPlan                       *Plan
 	sessionMgr                     *SessionManager
 	checkpointer                   *wsession.SessionCheckpointer
-	sessionRecoveryGen             int
 	sessionRecoveryUsed            bool
 	sessionRecoveryNeedsPlanInject bool
 }

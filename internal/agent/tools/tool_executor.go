@@ -2,13 +2,6 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -129,9 +122,7 @@ func (t *ToolExecutor) Definitions() []gateway.ToolDefinition {
 	}
 }
 
-type bashArgs struct {
-	Command string `json:"command"`
-}
+
 
 // BuildEnv returns a copy of the executor base environment merged with extra
 // KEY=VALUE pairs for a single tool call without mutating executor state.
@@ -177,180 +168,5 @@ func (t *ToolExecutor) SetMaxReadBytes(maxReadBytes int64) {
 	t.maxReadBytes = maxReadBytes
 }
 
-func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEnv ...string) string {
-	var args bashArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return jsonErrorf("invalid arguments: %v", err)
-	}
 
-	if args.Command == "" {
-		return jsonErrorf("command is required")
-	}
 
-	payload := sandbox.Payload{
-		TaskID:        "tool",
-		ProjectID:     "",
-		WorkspacePath: t.workspacePath,
-		Command:       args.Command,
-		EnvVars:       t.BuildEnv(extraEnv...),
-		WallTimeout:   t.wallTimeout,
-	}
-
-	result, err := t.sandbox.Execute(ctx, payload)
-	if err != nil {
-		return jsonErrorf("execution failed: %v", err)
-	}
-
-	if !result.Success {
-		return sandboxFailureJSON(result)
-	}
-
-	output := result.Stdout
-	if result.Stderr != "" {
-		if output != "" {
-			output += "\n"
-		}
-		output += result.Stderr
-	}
-	return output
-}
-
-type readArgs struct {
-	Path string `json:"path"`
-}
-
-func (t *ToolExecutor) executeRead(ctx context.Context, argsJSON string) string {
-	if err := ctx.Err(); err != nil {
-		return jsonErrorf("read cancelled: %v", err)
-	}
-
-	var args readArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return jsonErrorf("invalid arguments: %v", err)
-	}
-
-	if args.Path == "" {
-		return jsonErrorf("path is required")
-	}
-
-	fullPath, err := t.resolvePath(args.Path, false)
-	if err != nil {
-		return jsonErrorf("%v", err)
-	}
-
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		return jsonErrorf("stat failed: %v", err)
-	}
-	if info.Size() > t.maxReadBytes {
-		return jsonErrorf("file too large: %d bytes (max %d)", info.Size(), t.maxReadBytes)
-	}
-
-	content, err := readFileWithContext(ctx, fullPath, t.maxReadBytes, info)
-	if err != nil {
-		if ctx.Err() != nil {
-			return jsonErrorf("read cancelled: %v", ctx.Err())
-		}
-		return jsonErrorf("read failed: %v", err)
-	}
-
-	if t.filePipeline != nil {
-		markdown, pipeErr := t.filePipeline.ProcessRead(ctx, args.Path, fullPath, content, info)
-		if pipeErr != nil {
-			if ctx.Err() != nil || errors.Is(pipeErr, context.Canceled) || errors.Is(pipeErr, context.DeadlineExceeded) {
-				return jsonErrorf("read cancelled: %v", pipeErr)
-			}
-			slog.Warn("file pipeline failed, returning raw content", "path", args.Path, "error", pipeErr)
-			return string(content)
-		}
-		return markdown
-	}
-
-	return string(content)
-}
-
-type writeArgs struct {
-	Path    string  `json:"path"`
-	Content *string `json:"content"`
-}
-
-func (t *ToolExecutor) executeWrite(ctx context.Context, argsJSON string) string {
-	if err := ctx.Err(); err != nil {
-		return jsonErrorf("write cancelled: %v", err)
-	}
-
-	var args writeArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return jsonErrorf("invalid arguments: %v", err)
-	}
-
-	if args.Path == "" {
-		return jsonErrorf("path is required")
-	}
-	if args.Content == nil {
-		return jsonErrorf("content is required")
-	}
-
-	fullPath, err := t.resolvePath(args.Path, true)
-	if err != nil {
-		return jsonErrorf("%v", err)
-	}
-
-	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return jsonErrorf("create directory failed: %v", err)
-	}
-
-	if err := os.WriteFile(fullPath, []byte(*args.Content), 0644); err != nil {
-		return jsonErrorf("write failed: %v", err)
-	}
-
-	return `{"success": true}`
-}
-
-func sandboxFailureJSON(result sandbox.Result) string {
-	payload, err := json.Marshal(map[string]any{
-		"Success":  false,
-		"ExitCode": result.ExitCode,
-		"Stdout":   result.Stdout,
-		"Stderr":   result.Stderr,
-	})
-	if err != nil {
-		return toolErrorPrefix + `{"error":"failed to encode sandbox failure payload"}`
-	}
-	return toolErrorPrefix + string(payload)
-}
-
-func SandboxFailureJSON(result sandbox.Result) string {
-	return sandboxFailureJSON(result)
-}
-
-func jsonErrorf(format string, args ...any) string {
-	payload, err := json.Marshal(map[string]string{
-		"error": fmt.Sprintf(format, args...),
-	})
-	if err != nil {
-		return toolErrorPrefix + `{"error":"failed to encode error payload"}`
-	}
-	return toolErrorPrefix + string(payload)
-}
-
-func JSONErrorf(format string, args ...any) string {
-	return jsonErrorf(format, args...)
-}
-
-func isToolErrorPayload(raw string) bool {
-	return strings.HasPrefix(raw, toolErrorPrefix)
-}
-
-func IsToolErrorPayload(raw string) bool {
-	return isToolErrorPayload(raw)
-}
-
-func stripToolErrorPrefix(raw string) string {
-	return strings.TrimPrefix(raw, toolErrorPrefix)
-}
-
-func StripToolErrorPrefix(raw string) string {
-	return stripToolErrorPrefix(raw)
-}
