@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"agentd/internal/agent/hooks"
 	"agentd/internal/capabilities"
-	"agentd/internal/queue/worker"
 )
 
 func seedPlugin(t *testing.T, base, dirName, manifest string) {
@@ -89,14 +89,14 @@ func TestPluginLoader_HooksRegisteredIntoChain(t *testing.T) {
 		}
 		t.Cleanup(func() { runScriptCommandHook = nil })
 
-		chain := worker.NewHookChain()
+		chain := hooks.NewHookChain()
 		registry := capabilities.NewRegistry()
 		manifests, err := loader.MountAll(chain, registry)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		assert.Equal(t, "security", manifests[0].Name)
 
-		verdict := chain.RunPre(worker.HookContext{
+		verdict := chain.RunPre(hooks.HookContext{
 			ToolName:  "bash",
 			Args:      `{"command":"ls"}`,
 			SessionID: "s1",
@@ -119,7 +119,7 @@ func TestPluginLoader_CapabilitiesRegistered(t *testing.T) {
 	loader := NewPluginLoader(dir)
 	loader.envLookup = func(string) (string, bool) { return "", true }
 
-	chain := worker.NewHookChain()
+	chain := hooks.NewHookChain()
 	registry := capabilities.NewRegistry()
 	_, err := loader.MountAll(chain, registry)
 	require.NoError(t, err)

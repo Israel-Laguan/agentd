@@ -306,7 +306,6 @@ func (g *workerTestGateway) Embed(ctx context.Context, req gateway.EmbedRequest)
 	return gateway.EmbedResponse{}, nil
 }
 
-
 type workerTestSandbox struct {
 	result   sandbox.Result
 	commands []string

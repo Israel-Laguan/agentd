@@ -139,10 +139,10 @@ func (w *Worker) buildPlanRequest(task models.Task, planContext string) gateway.
 			{Role: "system", Content: planSystemPrompt},
 			{Role: "user", Content: planContext},
 		},
-		JSONMode: true,
-		AgentID:  task.AgentID,
-		Role:     gateway.RoleMemory,
-		TaskID:   task.ID,
+		JSONMode:  true,
+		AgentID:   task.AgentID,
+		Role:      gateway.RoleMemory,
+		TaskID:    task.ID,
 		MaxTokens: planPhaseTokenReserve,
 	}
 }

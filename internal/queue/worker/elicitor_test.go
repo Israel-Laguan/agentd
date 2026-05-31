@@ -35,10 +35,10 @@ func (s *transitionEnforcingStore) UpdateTaskState(ctx context.Context, id strin
 }
 
 type elicitationSequenceGateway struct {
-	elicitationJSON   string
-	requests          []gateway.AIRequest
-	elicitationCalls  int
-	agenticCalls      int
+	elicitationJSON  string
+	requests         []gateway.AIRequest
+	elicitationCalls int
+	agenticCalls     int
 }
 
 func (g *elicitationSequenceGateway) isElicitorRequest(req gateway.AIRequest) bool {
@@ -108,7 +108,7 @@ func TestShouldSkipElicitation_FullySpecified(t *testing.T) {
 	desc := strings.Repeat("Implement the OAuth callback handler with PKCE. ", 15) +
 		"\n- must validate state\n- must use /auth/callback.go\nAcceptance: returns 302 on success."
 	task := models.Task{
-		Description:       desc,
+		Description:     desc,
 		SuccessCriteria: []string{"redirects on success"},
 	}
 	if !shouldSkipElicitation(task) {
@@ -261,9 +261,9 @@ func TestProcess_FullySpecifiedSkipsElicitation(t *testing.T) {
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "specified-proj",
 		Tasks: []models.DraftTask{{
-			Title:             "Billing webhook",
-			Description:       longDesc,
-			SuccessCriteria:   []string{"valid signature returns 200"},
+			Title:           "Billing webhook",
+			Description:     longDesc,
+			SuccessCriteria: []string{"valid signature returns 200"},
 		}},
 	})
 	if err != nil || len(tasks) == 0 {

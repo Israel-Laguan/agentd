@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"agentd/internal/queue/worker"
+	"agentd/internal/agent/hooks"
 )
 
 func writeScript(t *testing.T, dir, name, content string) string {
@@ -31,7 +31,7 @@ func TestShellPreHook_Allow(t *testing.T) {
 	hook := ShellPreHook(entry, dir)
 
 	withSerialShellHooks(func() {
-		verdict, err := hook.Fn(worker.HookContext{
+		verdict, err := hook.Fn(hooks.HookContext{
 			ToolName:  "bash",
 			Args:      `{"command":"ls"}`,
 			SessionID: "s1",
@@ -54,7 +54,7 @@ func TestShellPreHook_NoShebangFallsBackToSh(t *testing.T) {
 	hook := ShellPreHook(entry, dir)
 
 	withSerialShellHooks(func() {
-		verdict, err := hook.Fn(worker.HookContext{
+		verdict, err := hook.Fn(hooks.HookContext{
 			ToolName:  "bash",
 			SessionID: "s1",
 			Timestamp: time.Now(),
@@ -76,7 +76,7 @@ func TestShellPreHook_RespectsShebang(t *testing.T) {
 	hook := ShellPreHook(entry, dir)
 
 	withSerialShellHooks(func() {
-		verdict, err := hook.Fn(worker.HookContext{
+		verdict, err := hook.Fn(hooks.HookContext{
 			ToolName:  "bash",
 			SessionID: "s1",
 			Timestamp: time.Now(),
@@ -98,7 +98,7 @@ func TestShellPreHook_Veto(t *testing.T) {
 	hook := ShellPreHook(entry, dir)
 
 	withSerialShellHooks(func() {
-		verdict, err := hook.Fn(worker.HookContext{
+		verdict, err := hook.Fn(hooks.HookContext{
 			ToolName:  "bash",
 			Args:      `{"command":"rm -rf /"}`,
 			SessionID: "s1",
@@ -123,7 +123,7 @@ func TestShellPreHook_Timeout(t *testing.T) {
 	hook := ShellPreHook(entry, dir)
 
 	withSerialShellHooks(func() {
-		verdict, err := hook.Fn(worker.HookContext{
+		verdict, err := hook.Fn(hooks.HookContext{
 			ToolName:  "bash",
 			Timestamp: time.Now(),
 		})
@@ -151,7 +151,7 @@ exit 1
 	hook := ShellPreHook(entry, dir)
 
 	withSerialShellHooks(func() {
-		verdict, err := hook.Fn(worker.HookContext{
+		verdict, err := hook.Fn(hooks.HookContext{
 			ToolName:  "bash",
 			Args:      `{}`,
 			SessionID: "session-123",
@@ -174,7 +174,7 @@ func TestShellPostHook_MutatesResult(t *testing.T) {
 	hook := ShellPostHook(entry, dir)
 
 	withSerialShellHooks(func() {
-		result, err := hook.Fn(worker.HookContext{
+		result, err := hook.Fn(hooks.HookContext{
 			ToolName:  "bash",
 			Timestamp: time.Now(),
 		}, "original")
@@ -195,7 +195,7 @@ func TestShellPostHook_ErrorReturnsError(t *testing.T) {
 	hook := ShellPostHook(entry, dir)
 
 	withSerialShellHooks(func() {
-		_, err := hook.Fn(worker.HookContext{
+		_, err := hook.Fn(hooks.HookContext{
 			ToolName:  "bash",
 			Timestamp: time.Now(),
 		}, "original")
@@ -204,10 +204,10 @@ func TestShellPostHook_ErrorReturnsError(t *testing.T) {
 }
 
 func TestParsePolicy(t *testing.T) {
-	assert.Equal(t, worker.FailOpen, parsePolicy("fail_open"))
-	assert.Equal(t, worker.FailClosed, parsePolicy("fail_closed"))
-	assert.Equal(t, worker.FailClosed, parsePolicy(""))
-	assert.Equal(t, worker.FailClosed, parsePolicy("unknown"))
+	assert.Equal(t, hooks.FailOpen, parsePolicy("fail_open"))
+	assert.Equal(t, hooks.FailClosed, parsePolicy("fail_closed"))
+	assert.Equal(t, hooks.FailClosed, parsePolicy(""))
+	assert.Equal(t, hooks.FailClosed, parsePolicy("unknown"))
 }
 
 func TestParseTimeout(t *testing.T) {
@@ -242,7 +242,7 @@ exit 0
 	hook := ShellPreHook(entry, dir)
 
 	withSerialShellHooks(func() {
-		verdict, err := hook.Fn(worker.HookContext{
+		verdict, err := hook.Fn(hooks.HookContext{
 			ToolName:  "bash",
 			SessionID: "s1",
 			Timestamp: time.Now(),

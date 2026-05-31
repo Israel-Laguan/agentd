@@ -9,10 +9,10 @@ import (
 
 // Capability intent categories for external routing.
 const (
-	IntentGenerateImage   = "generate_image"
-	IntentRealTimeSearch  = "real_time_search"
-	IntentBrowseURL       = "browse_url"
-	IntentSpreadsheetOps  = "spreadsheet_ops"
+	IntentGenerateImage  = "generate_image"
+	IntentRealTimeSearch = "real_time_search"
+	IntentBrowseURL      = "browse_url"
+	IntentSpreadsheetOps = "spreadsheet_ops"
 )
 
 var (

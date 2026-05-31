@@ -10,7 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"agentd/internal/queue/worker"
+	"agentd/internal/agent/hooks"
+	agenttools "agentd/internal/agent/tools"
 )
 
 const defaultShellTimeout = 10 * time.Second
@@ -28,27 +29,27 @@ var runScriptCommandHook func(ctx context.Context, name string, env []string, ar
 // context via environment variables (HOOK_TOOL, HOOK_ARGS,
 // HOOK_SESSION, HOOK_TIMESTAMP). Exit code 0 means allow; non-zero
 // means veto with stdout as the reason.
-func ShellPreHook(entry HookEntry, pluginDir string) worker.PreHook {
+func ShellPreHook(entry HookEntry, pluginDir string) hooks.PreHook {
 	timeout := parseTimeout(entry.Timeout)
 	policy := parsePolicy(entry.Policy)
 	scriptPath := resolveScript(entry.Script, pluginDir)
 
-	return worker.PreHook{
+	return hooks.PreHook{
 		Name:   entry.Name,
 		Policy: policy,
-		Fn: func(ctx worker.HookContext) (worker.HookVerdict, error) {
+		Fn: func(ctx hooks.HookContext) (hooks.HookVerdict, error) {
 			stdout, err := runScript(scriptPath, timeout, ctx)
 			if err != nil {
 				reason := strings.TrimSpace(stdout)
 				if reason == "" {
 					reason = err.Error()
 				}
-				return worker.HookVerdict{
+				return hooks.HookVerdict{
 					Veto:   true,
 					Reason: reason,
 				}, nil
 			}
-			return worker.HookVerdict{}, nil
+			return hooks.HookVerdict{}, nil
 		},
 	}
 }
@@ -57,15 +58,15 @@ func ShellPreHook(entry HookEntry, pluginDir string) worker.PreHook {
 // the same environment variables plus HOOK_RESULT containing the tool
 // result. Stdout replaces the result; a non-zero exit triggers the
 // configured failure policy.
-func ShellPostHook(entry HookEntry, pluginDir string) worker.PostHook {
+func ShellPostHook(entry HookEntry, pluginDir string) hooks.PostHook {
 	timeout := parseTimeout(entry.Timeout)
 	policy := parsePolicy(entry.Policy)
 	scriptPath := resolveScript(entry.Script, pluginDir)
 
-	return worker.PostHook{
+	return hooks.PostHook{
 		Name:   entry.Name,
 		Policy: policy,
-		Fn: func(ctx worker.HookContext, result string) (string, error) {
+		Fn: func(ctx hooks.HookContext, result string) (string, error) {
 			stdout, err := runScriptWithResult(
 				scriptPath, timeout, ctx, result,
 			)
@@ -82,14 +83,14 @@ func ShellPostHook(entry HookEntry, pluginDir string) worker.PostHook {
 }
 
 func runScript(
-	script string, timeout time.Duration, ctx worker.HookContext,
+	script string, timeout time.Duration, ctx hooks.HookContext,
 ) (string, error) {
 	return execScript(script, timeout, hookEnv(ctx))
 }
 
 func runScriptWithResult(
 	script string, timeout time.Duration,
-	ctx worker.HookContext, result string,
+	ctx hooks.HookContext, result string,
 ) (string, error) {
 	env := hookEnv(ctx)
 	env = append(env, "HOOK_RESULT="+result)
@@ -102,7 +103,7 @@ func execScript(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	sandboxEnv := worker.BuildSandboxEnv(shellHookEnvAllowlist, env)
+	sandboxEnv := agenttools.BuildSandboxEnv(shellHookEnvAllowlist, env)
 	stdout, err := runScriptCommand(ctx, script, sandboxEnv)
 	if ctx.Err() != nil {
 		return stdout, fmt.Errorf("script timed out after %s", timeout)
@@ -146,7 +147,7 @@ func runScriptCommandImpl(ctx context.Context, name string, env []string, args .
 	return stdout.String(), err
 }
 
-func hookEnv(ctx worker.HookContext) []string {
+func hookEnv(ctx hooks.HookContext) []string {
 	return []string{
 		"HOOK_TOOL=" + ctx.ToolName,
 		"HOOK_ARGS=" + ctx.Args,
@@ -176,9 +177,9 @@ func parseTimeout(raw string) time.Duration {
 	return d
 }
 
-func parsePolicy(raw string) worker.FailurePolicy {
+func parsePolicy(raw string) hooks.FailurePolicy {
 	if raw == "fail_open" {
-		return worker.FailOpen
+		return hooks.FailOpen
 	}
-	return worker.FailClosed
+	return hooks.FailClosed
 }

@@ -85,7 +85,7 @@ func TestCacheHooks_BashNeverCached(t *testing.T) {
 	call.ID = "call_2"
 	_ = w.DispatchTool(context.Background(), "sess-1", call, nil, executor)
 
-	if len(rc.entries) != 0 {
+	if rc.EntryCount() != 0 {
 		t.Fatal("bash results should never be stored in cache")
 	}
 	if counting.calls != 2 {
@@ -107,16 +107,16 @@ func TestCacheHooks_DifferentArgsDifferentKeys(t *testing.T) {
 	ctx.Args = `{"path":"b.txt"}`
 	_, _ = CacheStoreHook(rc).Fn(ctx, "content-b")
 
-	if len(rc.entries) != 2 {
-		t.Fatalf("expected 2 cache entries, got %d", len(rc.entries))
+	if rc.EntryCount() != 2 {
+		t.Fatalf("expected 2 cache entries, got %d", rc.EntryCount())
 	}
 
 	keyA := cacheKey("read", `{"path":"a.txt"}`)
 	keyB := cacheKey("read", `{"path":"b.txt"}`)
-	if va, _ := rc.get(keyA); va != "content-a" {
+	if va, _ := rc.Get(keyA); va != "content-a" {
 		t.Fatalf("expected content-a, got %q", va)
 	}
-	if vb, _ := rc.get(keyB); vb != "content-b" {
+	if vb, _ := rc.Get(keyB); vb != "content-b" {
 		t.Fatalf("expected content-b, got %q", vb)
 	}
 }
@@ -126,7 +126,7 @@ func TestCacheHooks_ShortCircuitSkipsPostHooks(t *testing.T) {
 
 	rc := NewResultCache(map[string]bool{"read": true})
 	key := cacheKey("read", `{"path":"cached.txt"}`)
-	rc.set(key, "from-cache")
+	rc.Set(key, "from-cache")
 
 	postRan := false
 	hc := NewHookChain()
@@ -169,7 +169,7 @@ func TestCacheHooks_CachedReadErrorClassified(t *testing.T) {
 	cachedErr := toolErrorPrefix + `{"error":"stat failed: no such file"}`
 	rc := NewResultCache(map[string]bool{"read": true})
 	args := `{"path":"missing.txt"}`
-	rc.set(cacheKey("read", args), cachedErr)
+	rc.Set(cacheKey("read", args), cachedErr)
 
 	hc := NewHookChain()
 	hc.RegisterPre(CacheLookupHook(rc))

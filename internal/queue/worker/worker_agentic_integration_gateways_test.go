@@ -41,7 +41,6 @@ func (m *maxIterationsGateway) Embed(ctx context.Context, req gateway.EmbedReque
 	return gateway.EmbedResponse{}, nil
 }
 
-
 // tokenUsageGateway always returns tool calls with a fixed token usage per call.
 type tokenUsageGateway struct {
 	tokensPerCall int

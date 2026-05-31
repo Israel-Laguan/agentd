@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"agentd/internal/gateway"
 	wsession "agentd/internal/agent/session"
+	"agentd/internal/gateway"
 )
 
 // EditAnchorUserTurn is the turnIndex value that rewrites the anchor user message
@@ -94,13 +94,13 @@ func (e *MessageEditor) Edit(
 
 	if e.audit != nil && e.audit.Enabled() {
 		e.audit.RecordHistoryEdit(HistoryEditRecord{
-			SessionID:       sessionID,
-			TurnID:          turnID,
-			TurnIndex:       turnIndex,
-			CheckpointID:    checkpointID,
-			MessagesBefore:  before,
-			MessagesAfter:   after,
-			NewContentHash:  hashArgs(newContent),
+			SessionID:      sessionID,
+			TurnID:         turnID,
+			TurnIndex:      turnIndex,
+			CheckpointID:   checkpointID,
+			MessagesBefore: before,
+			MessagesAfter:  after,
+			NewContentHash: hashArgs(newContent),
 		})
 	}
 

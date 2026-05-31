@@ -132,8 +132,8 @@ func TestToolManifest_ProfileAllowedTools(t *testing.T) {
 	t.Parallel()
 	m := enabledToolManifest()
 	task := models.Task{
-		BaseEntity: models.BaseEntity{ID: "t6"},
-		Title:      "Implement everything",
+		BaseEntity:  models.BaseEntity{ID: "t6"},
+		Title:       "Implement everything",
 		Description: "Would normally be code_gen",
 	}
 	profile := models.AgentProfile{AllowedTools: []string{"read"}}

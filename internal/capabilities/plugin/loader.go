@@ -9,16 +9,16 @@ import (
 	"strconv"
 	"strings"
 
+	"agentd/internal/agent/hooks"
 	"agentd/internal/capabilities"
-	"agentd/internal/queue/worker"
 )
 
 // LoadResult contains the artefacts produced by a successful plugin
 // load: the parsed manifest and the hooks ready for registration.
 type LoadResult struct {
 	Manifest  Manifest
-	PreHooks  []worker.PreHook
-	PostHooks []worker.PostHook
+	PreHooks  []hooks.PreHook
+	PostHooks []hooks.PostHook
 	Scope     PluginScope
 }
 
@@ -94,7 +94,7 @@ func (pl *PluginLoader) LoadAll() ([]LoadResult, error) {
 // MountAll loads all plugins from the directory and registers their
 // hooks into the HookChain and capabilities into the Registry.
 func (pl *PluginLoader) MountAll(
-	chain *worker.HookChain, registry *capabilities.Registry,
+	chain *hooks.HookChain, registry *capabilities.Registry,
 ) ([]Manifest, error) {
 	results, err := pl.LoadAll()
 	if err != nil {
@@ -105,7 +105,7 @@ func (pl *PluginLoader) MountAll(
 
 func mountResults(
 	results []LoadResult, scope PluginScope,
-	chain *worker.HookChain, registry *capabilities.Registry,
+	chain *hooks.HookChain, registry *capabilities.Registry,
 ) []Manifest {
 	var manifests []Manifest
 	for _, r := range results {
@@ -178,14 +178,14 @@ func (pl *PluginLoader) validateEnv(m Manifest) error {
 }
 
 func buildHooks(m Manifest) LoadResult {
-	var pre []worker.PreHook
+	var pre []hooks.PreHook
 	for _, entry := range m.Hooks.PreToolUse {
 		if entry.Script != "" {
 			pre = append(pre, ShellPreHook(entry, m.Dir))
 		}
 	}
 
-	var post []worker.PostHook
+	var post []hooks.PostHook
 	for _, entry := range m.Hooks.PostToolUse {
 		if entry.Script != "" {
 			post = append(post, ShellPostHook(entry, m.Dir))

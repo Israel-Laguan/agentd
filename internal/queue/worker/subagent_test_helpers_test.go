@@ -58,7 +58,6 @@ func (m *subagentMockGateway) Embed(ctx context.Context, req spec.EmbedRequest) 
 	return spec.NoopEmbed(ctx, req)
 }
 
-
 type subagentTaskGateway struct{}
 
 func (subagentTaskGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {

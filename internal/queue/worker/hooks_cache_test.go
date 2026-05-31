@@ -8,7 +8,7 @@ import (
 func TestResultCache_GetMiss(t *testing.T) {
 	t.Parallel()
 	rc := NewResultCache(map[string]bool{"read": true})
-	if _, ok := rc.get("nonexistent"); ok {
+	if _, ok := rc.Get("nonexistent"); ok {
 		t.Fatal("expected cache miss")
 	}
 }
@@ -16,8 +16,8 @@ func TestResultCache_GetMiss(t *testing.T) {
 func TestResultCache_SetAndGet(t *testing.T) {
 	t.Parallel()
 	rc := NewResultCache(map[string]bool{"read": true})
-	rc.set("k", "v")
-	got, ok := rc.get("k")
+	rc.Set("k", "v")
+	got, ok := rc.Get("k")
 	if !ok || got != "v" {
 		t.Fatalf("expected (v, true), got (%q, %v)", got, ok)
 	}
@@ -26,13 +26,13 @@ func TestResultCache_SetAndGet(t *testing.T) {
 func TestResultCache_IsCacheable(t *testing.T) {
 	t.Parallel()
 	rc := NewResultCache(map[string]bool{"read": true})
-	if !rc.isCacheable("read") {
+	if !rc.IsCacheable("read") {
 		t.Fatal("read should be cacheable")
 	}
-	if rc.isCacheable("bash") {
+	if rc.IsCacheable("bash") {
 		t.Fatal("bash should not be cacheable")
 	}
-	if rc.isCacheable("write") {
+	if rc.IsCacheable("write") {
 		t.Fatal("write should not be cacheable")
 	}
 }
@@ -40,7 +40,7 @@ func TestResultCache_IsCacheable(t *testing.T) {
 func TestResultCache_NilMap(t *testing.T) {
 	t.Parallel()
 	rc := NewResultCache(nil)
-	if rc.isCacheable("read") {
+	if rc.IsCacheable("read") {
 		t.Fatal("nil map should make nothing cacheable")
 	}
 }
@@ -116,7 +116,7 @@ func TestCacheLookupHook_HitShortCircuits(t *testing.T) {
 	t.Parallel()
 	rc := NewResultCache(map[string]bool{"read": true})
 	key := cacheKey("read", `{"path":"a.txt"}`)
-	rc.set(key, "cached-content")
+	rc.Set(key, "cached-content")
 
 	hook := CacheLookupHook(rc)
 	verdict, err := hook.Fn(HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()})
@@ -172,7 +172,7 @@ func TestCacheStoreHook_StoresCacheableResult(t *testing.T) {
 	}
 
 	key := cacheKey("read", `{"path":"a.txt"}`)
-	cached, ok := rc.get(key)
+	cached, ok := rc.Get(key)
 	if !ok || cached != "file-contents" {
 		t.Fatalf("expected cached result, got (%q, %v)", cached, ok)
 	}
@@ -192,7 +192,7 @@ func TestCacheStoreHook_SkipsBash(t *testing.T) {
 		t.Fatalf("should passthrough, got %q", got)
 	}
 
-	if len(rc.entries) != 0 {
+	if rc.EntryCount() != 0 {
 		t.Fatal("bash result should not be cached")
 	}
 }
@@ -204,7 +204,7 @@ func TestCacheStoreHook_SkipsWrite(t *testing.T) {
 
 	ctx := HookContext{ToolName: "write", Args: `{"path":"a.txt","content":"x"}`, Timestamp: time.Now()}
 	_, _ = hook.Fn(ctx, `{"success": true}`)
-	if len(rc.entries) != 0 {
+	if rc.EntryCount() != 0 {
 		t.Fatal("write result should not be cached")
 	}
 }
@@ -240,7 +240,7 @@ func TestCacheStoreHook_PrefixesNonSuccessResult(t *testing.T) {
 	}
 
 	key := cacheKey("read", `{"path":"missing.txt"}`)
-	cached, ok := rc.get(key)
+	cached, ok := rc.Get(key)
 	if !ok {
 		t.Fatal("expected cached result")
 	}
@@ -271,7 +271,7 @@ func TestCacheStoreHook_DoesNotPrefixSuccessResult(t *testing.T) {
 	}
 
 	key := cacheKey("read", `{"path":"response.json"}`)
-	cached, ok := rc.get(key)
+	cached, ok := rc.Get(key)
 	if !ok || cached != content {
 		t.Fatalf("success payload stored as-is, got (%q, %v)", cached, ok)
 	}
