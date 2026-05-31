@@ -270,13 +270,6 @@ func (hc *HookChain) PostHookCount() int {
 	return len(hc.postHooks)
 }
 
-// resolveHooks returns hc if non-nil, otherwise a new empty HookChain.
-func resolveHooks(hc *HookChain) *HookChain {
-	if hc != nil {
-		return hc
-	}
-	return NewHookChain()
-}
 
 func policyLabel(p FailurePolicy) string {
 	if p == FailClosed {

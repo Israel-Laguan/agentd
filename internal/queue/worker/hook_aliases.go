@@ -44,5 +44,4 @@ var (
 	externalToolsSet         = agenthooks.ExternalToolsSet
 	isExternalTool           = agenthooks.IsExternalTool
 	wrapExternalContent      = agenthooks.WrapExternalContent
-	applyInjectionResistance = agenthooks.ApplyInjectionResistance
 )

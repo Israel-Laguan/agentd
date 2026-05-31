@@ -24,6 +24,5 @@ const (
 
 var (
 	isToolErrorPayload            = agenttools.IsToolErrorPayload
-	stripToolErrorPrefix          = agenttools.StripToolErrorPrefix
 	SchemaRegistryFromDefinitions = agenttools.SchemaRegistryFromDefinitions
 )

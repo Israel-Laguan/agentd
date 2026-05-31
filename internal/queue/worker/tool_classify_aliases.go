@@ -10,13 +10,6 @@ func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) To
 	return agenttools.ClassifyBuiltinToolResult(callID, toolName, raw, elapsedMs)
 }
 
-func classifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResult {
-	return agenttools.ClassifyPrecomputedReadResult(callID, raw, elapsedMs)
-}
-
-func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
-	return agenttools.ClassifyRawResult(callID, raw, elapsedMs)
-}
 
 func classifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	return agenttools.ClassifyCapabilityRawResult(callID, raw, elapsedMs)
