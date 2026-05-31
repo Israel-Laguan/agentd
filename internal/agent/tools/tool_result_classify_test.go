@@ -1,4 +1,4 @@
-package worker
+package tools
 
 import (
 	"strings"
@@ -79,8 +79,8 @@ func TestClassifyRawResult_JSONSuccessFalseNoExitCode(t *testing.T) {
 	if tr.ExitCodeSet {
 		t.Fatalf("ExitCodeSet = true, want false when ExitCode is absent")
 	}
-	if got := toolResultExitCode(tr); got != -1 {
-		t.Fatalf("toolResultExitCode() = %d, want -1", got)
+	if tr.ExitCodeSet {
+		t.Fatalf("ExitCodeSet = true, want false")
 	}
 	if tr.Error == nil || tr.Error.Message != "command failed" {
 		t.Fatalf("Error.Message = %v, want generic failure message", tr.Error)
@@ -89,8 +89,9 @@ func TestClassifyRawResult_JSONSuccessFalseNoExitCode(t *testing.T) {
 
 func TestParseToolExitCode_SuccessFalseNoExitCode(t *testing.T) {
 	t.Parallel()
-	if got := parseToolExitCode(`{"Success":false}`); got != -1 {
-		t.Fatalf("parseToolExitCode() = %d, want -1", got)
+	tr := classifyRawResult("c1", `{"Success":false}`, 10)
+	if tr.ExitCodeSet {
+		t.Fatalf("ExitCodeSet = true, want false")
 	}
 }
 

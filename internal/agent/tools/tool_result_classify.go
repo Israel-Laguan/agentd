@@ -1,4 +1,4 @@
-package worker
+package tools
 
 import (
 	"encoding/json"
@@ -8,30 +8,34 @@ import (
 
 // classifyPrecomputedToolResult classifies a hook-supplied result (cache hit,
 // short-circuit) using the same rules as the normal execution path for that tool.
-func classifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
+func ClassifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
 	switch toolName {
 	case toolNameBash:
 		// Hooks may inject sandbox transport JSON (e.g. {"FatalError":...}) for bash.
-		return classifyRawResult(callID, raw, elapsedMs)
+		return ClassifyRawResult(callID, raw, elapsedMs)
 	case toolNameRead:
-		return classifyPrecomputedReadResult(callID, raw, elapsedMs)
+		return ClassifyPrecomputedReadResult(callID, raw, elapsedMs)
 	case toolNameWrite:
-		return classifyBuiltinToolResult(callID, toolName, raw, elapsedMs)
+		return ClassifyBuiltinToolResult(callID, toolName, raw, elapsedMs)
 	case toolNameDelegate, toolNameDelegateParallel:
-		return classifyDelegateRawResult(callID, raw, elapsedMs)
+		return ClassifyDelegateRawResult(callID, raw, elapsedMs)
 	default:
-		return classifyCapabilityRawResult(callID, raw, elapsedMs)
+		return ClassifyCapabilityRawResult(callID, raw, elapsedMs)
 	}
+}
+
+func classifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
+	return ClassifyPrecomputedToolResult(callID, toolName, raw, elapsedMs)
 }
 
 // classifyBuiltinToolResult classifies built-in tool (bash, read, write) output.
 // Read and write success paths return raw file bytes or {"success":true}; bash
 // success returns raw stdout. Sandbox and jsonErrorf failures use toolErrorPrefix
 // so arbitrary command stdout is never inferred from JSON shape alone.
-func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
+func ClassifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
 	if isToolErrorPayload(raw) {
-		return classifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+		return ClassifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
 	}
 	switch toolName {
 	case toolNameRead:
@@ -39,33 +43,41 @@ func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) To
 		return SuccessResult(callID, raw, elapsedMs)
 	case toolNameWrite:
 		if isJSONErrorEnvelope(trimmed) {
-			return classifyRawResult(callID, trimmed, elapsedMs)
+			return ClassifyRawResult(callID, trimmed, elapsedMs)
 		}
 		return SuccessResult(callID, raw, elapsedMs)
 	case toolNameBash:
 		return SuccessResult(callID, raw, elapsedMs)
 	default:
-		return classifyRawResult(callID, raw, elapsedMs)
+		return ClassifyRawResult(callID, raw, elapsedMs)
 	}
+}
+
+func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
+	return ClassifyBuiltinToolResult(callID, toolName, raw, elapsedMs)
 }
 
 // classifyPrecomputedReadResult classifies hook/cache read results. Errors are
 // distinguished by toolErrorPrefix (set by CacheStoreHook); file content that
 // happens to be a single-key {"error":...} JSON object is treated as success,
 // matching classifyBuiltinToolResult for live reads.
-func classifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResult {
+func ClassifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
 	if isToolErrorPayload(raw) {
-		return classifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+		return ClassifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
 	}
 	return SuccessResult(callID, raw, elapsedMs)
+}
+
+func classifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResult {
+	return ClassifyPrecomputedReadResult(callID, raw, elapsedMs)
 }
 
 // classifyRawResult inspects a raw tool output string and returns a
 // typed ToolResult. It uses the same JSON-envelope heuristics that
 // parseToolExitCode relied on, so callers that previously examined the
 // string can now switch on ToolResult.Status instead.
-func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
+func ClassifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
 	var env struct {
 		Success    *bool  `json:"Success"`
@@ -113,17 +125,25 @@ func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	return SuccessResult(callID, raw, elapsedMs)
 }
 
+func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
+	return ClassifyRawResult(callID, raw, elapsedMs)
+}
+
 // classifyCapabilityRawResult classifies MCP capability tool output without
 // applying sandbox-style heuristics to arbitrary JSON payloads.
-func classifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
+func ClassifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
 	if isToolErrorPayload(raw) {
-		return classifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+		return ClassifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
 	}
 	if isJSONErrorEnvelope(trimmed) {
-		return classifyRawResult(callID, trimmed, elapsedMs)
+		return ClassifyRawResult(callID, trimmed, elapsedMs)
 	}
 	return SuccessResult(callID, raw, elapsedMs)
+}
+
+func classifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
+	return ClassifyCapabilityRawResult(callID, raw, elapsedMs)
 }
 
 // isJSONErrorEnvelope reports whether raw is a single-key {"error":"..."} payload
@@ -139,45 +159,60 @@ func isJSONErrorEnvelope(raw string) bool {
 
 // classifyDelegateRawResult classifies delegate and delegate_parallel string results
 // without applying sandbox-style heuristics to SubagentResult JSON.
-func classifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
+func ClassifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
 	if isToolErrorPayload(raw) {
-		return classifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+		return ClassifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
 	}
 	if isJSONErrorEnvelope(trimmed) {
-		return classifyRawResult(callID, trimmed, elapsedMs)
+		return ClassifyRawResult(callID, trimmed, elapsedMs)
 	}
 	if strings.HasPrefix(trimmed, "[") {
-		var batch []SubagentResult
+		var batch []classifiedSubagentResult
 		if err := json.Unmarshal([]byte(trimmed), &batch); err == nil && len(batch) > 0 {
 			return classifySubagentBatch(callID, raw, batch, elapsedMs)
 		}
 	}
-	var sr SubagentResult
+	var sr classifiedSubagentResult
 	if err := json.Unmarshal([]byte(trimmed), &sr); err == nil && sr.Status != "" {
 		return subagentResultToToolResult(callID, raw, sr, elapsedMs)
 	}
 	return SuccessResult(callID, raw, elapsedMs)
 }
 
-func classifySubagentBatch(callID, raw string, batch []SubagentResult, elapsedMs int64) ToolResult {
+func classifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
+	return ClassifyDelegateRawResult(callID, raw, elapsedMs)
+}
+
+type classifiedSubagentResult struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+const (
+	classifiedSubagentStatusSuccess = "success"
+	classifiedSubagentStatusFailure = "failure"
+	classifiedSubagentStatusTimeout = "timeout"
+)
+
+func classifySubagentBatch(callID, raw string, batch []classifiedSubagentResult, elapsedMs int64) ToolResult {
 	for _, sr := range batch {
-		if sr.Status != SubagentStatusSuccess {
+		if sr.Status != classifiedSubagentStatusSuccess {
 			return subagentResultToToolResult(callID, raw, sr, elapsedMs)
 		}
 	}
 	return SuccessResult(callID, raw, elapsedMs)
 }
 
-func subagentResultToToolResult(callID, raw string, sr SubagentResult, elapsedMs int64) ToolResult {
+func subagentResultToToolResult(callID, raw string, sr classifiedSubagentResult, elapsedMs int64) ToolResult {
 	switch sr.Status {
-	case SubagentStatusSuccess:
+	case classifiedSubagentStatusSuccess:
 		return SuccessResult(callID, raw, elapsedMs)
-	case SubagentStatusTimeout:
+	case classifiedSubagentStatusTimeout:
 		tr := TimeoutResult(callID, elapsedMs)
 		tr.Content = raw
 		return tr
-	case SubagentStatusFailure:
+	case classifiedSubagentStatusFailure:
 		msg := sr.Error
 		if msg == "" {
 			msg = "subagent " + string(sr.Status)
