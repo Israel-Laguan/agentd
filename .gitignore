@@ -24,6 +24,7 @@ tasks/
 coverage.*
 *.coverprofile
 profile.cov
+checkminfunc
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
