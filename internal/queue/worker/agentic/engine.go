@@ -97,7 +97,6 @@ type Host interface {
 		project models.Project,
 		profile models.AgentProfile,
 		messages *[]gateway.PromptMessage,
-		taskCaps *capabilities.Registry,
 	) (agentruntime.LoopResult, bool, error)
 	RecordTurnSnapshot(
 		sessionID, projectID, provider, turnID string,

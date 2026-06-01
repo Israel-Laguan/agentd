@@ -182,7 +182,6 @@ func (h *topicDriftHost) TryExternalCapabilityRoute(
 	project models.Project,
 	profile models.AgentProfile,
 	messages *[]gateway.PromptMessage,
-	taskCaps *capabilities.Registry,
 ) (agentruntime.LoopResult, bool, error) {
 	return agentruntime.LoopResult{}, false, nil
 }
