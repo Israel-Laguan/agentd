@@ -90,13 +90,14 @@ type Host interface {
 		cm *agentcontext.ContextManager,
 		budget *agentruntime.BudgetGuard,
 	) (string, error)
-	RunSessionStart(ctx context.Context, task models.Task, project models.Project) error
+	RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error
 	TryExternalCapabilityRoute(
 		ctx context.Context,
 		task models.Task,
 		project models.Project,
 		profile models.AgentProfile,
 		messages *[]gateway.PromptMessage,
+		taskCaps *capabilities.Registry,
 	) (agentruntime.LoopResult, bool, error)
 	RecordTurnSnapshot(
 		sessionID, projectID, provider, turnID string,

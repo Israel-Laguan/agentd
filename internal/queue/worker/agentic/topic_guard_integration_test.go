@@ -173,7 +173,7 @@ func (h *topicDriftHost) GenerateRespecifiedUserTurn(
 ) (string, error) {
 	return "", nil
 }
-func (h *topicDriftHost) RunSessionStart(ctx context.Context, task models.Task, project models.Project) error {
+func (h *topicDriftHost) RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error {
 	return nil
 }
 func (h *topicDriftHost) TryExternalCapabilityRoute(
@@ -182,6 +182,7 @@ func (h *topicDriftHost) TryExternalCapabilityRoute(
 	project models.Project,
 	profile models.AgentProfile,
 	messages *[]gateway.PromptMessage,
+	taskCaps *capabilities.Registry,
 ) (agentruntime.LoopResult, bool, error) {
 	return agentruntime.LoopResult{}, false, nil
 }

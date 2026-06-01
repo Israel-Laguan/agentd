@@ -123,16 +123,28 @@ func (w *Worker) GenerateRespecifiedUserTurn(
 }
 
 // RunSessionStart is the public Host interface method.
-func (w *Worker) RunSessionStart(ctx context.Context, task models.Task, project models.Project) error {
-	if w.hooks == nil {
-		return nil
+func (w *Worker) RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error {
+	// Run worker-level hooks first.
+	if w.hooks != nil {
+		if err := w.hooks.RunSessionStart(agenthooks.HookContext{
+			SessionID: task.ID,
+			ProjectID: project.ID,
+			Timestamp: time.Now(),
+			ExecCtx:   ctx,
+		}); err != nil {
+			return err
+		}
 	}
-	return w.hooks.RunSessionStart(agenthooks.HookContext{
-		SessionID: task.ID,
-		ProjectID: project.ID,
-		Timestamp: time.Now(),
-		ExecCtx:   ctx,
-	})
+	// Then run task-scoped hooks from scoped plugins.
+	if taskHooks != nil {
+		return taskHooks.RunSessionStart(agenthooks.HookContext{
+			SessionID: task.ID,
+			ProjectID: project.ID,
+			Timestamp: time.Now(),
+			ExecCtx:   ctx,
+		})
+	}
+	return nil
 }
 
 // DispatchToolWithHooks is the public Host interface method.
