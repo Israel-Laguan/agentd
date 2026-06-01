@@ -89,6 +89,21 @@ func sampleElicitationJSON() string {
 	return string(b)
 }
 
+func TestRequestClarificationFromAgent_RejectsEmptyQuestion(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	w := &Worker{store: store}
+
+	task := models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-1", UpdatedAt: time.Now()},
+		ProjectID:  "proj-1",
+	}
+	err := w.RequestClarificationFromAgent(context.Background(), task, "   ", nil, "")
+	if err == nil {
+		t.Fatal("expected error for empty question")
+	}
+}
+
 func setupAgenticElicitationProfile(t *testing.T, store models.KanbanStore, ctx context.Context) {
 	t.Helper()
 	profile, err := store.GetAgentProfile(ctx, "default")

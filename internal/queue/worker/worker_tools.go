@@ -14,6 +14,15 @@ import (
 	"agentd/internal/models"
 )
 
+type delegateArgs struct {
+	Subagent string `json:"subagent"`
+	Task     string `json:"task"`
+}
+
+type delegateParallelArgs struct {
+	Tasks []delegateArgs `json:"tasks"`
+}
+
 // DispatchTool is the single entry point for tool execution in the agentic loop.
 // It handles both built-in tools (bash, read, write) and capability tools (MCP).
 // It intentionally does not accept project-scoped capability registries; scoped
@@ -264,4 +273,12 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 		return agenttools.JSONErrorf("failed to encode subagent results: %v", err)
 	}
 	return string(encoded)
+}
+
+func toolNamesFromDefinitions(tools []gateway.ToolDefinition) []string {
+	names := make([]string, 0, len(tools))
+	for _, t := range tools {
+		names = append(names, t.Name)
+	}
+	return names
 }

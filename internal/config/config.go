@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,13 @@ const (
 	uploadsDirName     = "uploads"
 	archivesDirName    = "archives"
 	cronFileName       = "agentd.crontab"
+)
+
+var (
+	ErrConfigRead      = errors.New("config read failed")
+	ErrDirsNotWritable = errors.New("directory not writable")
+	ErrLLMWarmup       = errors.New("LLM warmup failed")
+	ErrNoLLMProviders  = errors.New("no LLM providers available")
 )
 
 // Config contains local agentd filesystem paths and loaded config values.
@@ -249,4 +257,3 @@ func isConfigNotFound(err error) bool {
 	}
 	return false
 }
-

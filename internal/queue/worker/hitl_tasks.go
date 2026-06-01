@@ -12,6 +12,106 @@ import (
 	"agentd/internal/models"
 )
 
+type ClarificationMessage struct {
+	Question       string    `json:"question"`
+	Options        []string  `json:"options,omitempty"`
+	ContextSummary string    `json:"context_summary"`
+	TaskID         string    `json:"task_id"`
+	TaskUpdatedAt  time.Time `json:"task_updated_at"`
+	RequestedAt    time.Time `json:"requested_at"`
+}
+
+type ClarificationResponse struct {
+	Answer   string `json:"answer"`
+	Selected string `json:"selected,omitempty"`
+}
+
+type ClarificationInterface interface {
+	RequestClarification(ctx context.Context, msg ClarificationMessage) (ClarificationResponse, error)
+}
+
+type BlockingClarificationHandler struct {
+	store models.KanbanStore
+}
+
+func NewBlockingClarificationHandler(store models.KanbanStore) *BlockingClarificationHandler {
+	return &BlockingClarificationHandler{store: store}
+}
+
+func (h *BlockingClarificationHandler) RequestClarification(ctx context.Context, msg ClarificationMessage) (ClarificationResponse, error) {
+	detail := buildClarificationDetail(msg)
+
+	description := FormatForHuman(HITLMessage{
+		Summary: "Clarification needed from human",
+		Action:  "Answer the question below. Add your response as a comment on this subtask and mark it COMPLETED.",
+		Urgency: "blocking",
+		Detail:  detail,
+	})
+
+	_, subtasks, err := h.store.BlockTaskWithSubtasks(ctx, msg.TaskID, msg.TaskUpdatedAt, []models.DraftTask{{
+		Title:       models.HITLSubtaskTitleClarification + truncate(msg.Question, 80),
+		Description: description,
+		Assignee:    models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		return ClarificationResponse{}, fmt.Errorf("create clarification subtask: %w", err)
+	}
+	if err := recordHITLExpiry(ctx, h.store, msg.TaskID, time.Now().Add(DefaultApprovalTimeout)); err != nil {
+		return ClarificationResponse{}, fmt.Errorf("record clarification expiry: %w", err)
+	}
+
+	if len(subtasks) == 0 {
+		return ClarificationResponse{}, fmt.Errorf("no clarification subtask created")
+	}
+
+	return ClarificationResponse{}, nil
+}
+
+func buildClarificationDetail(msg ClarificationMessage) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Question: %s\n", msg.Question)
+	if len(msg.Options) > 0 {
+		b.WriteString("\nOptions:\n")
+		for i, opt := range msg.Options {
+			fmt.Fprintf(&b, "  %d. %s\n", i+1, opt)
+		}
+	}
+	if msg.ContextSummary != "" {
+		fmt.Fprintf(&b, "\nContext: %s\n", msg.ContextSummary)
+	}
+	return b.String()
+}
+
+func (w *Worker) RequestClarificationFromAgent(
+	ctx context.Context,
+	task models.Task,
+	question string,
+	options []string,
+	contextSummary string,
+) error {
+	if strings.TrimSpace(question) == "" {
+		err := fmt.Errorf("clarification question cannot be empty")
+		w.emit(ctx, task, "ERROR", err.Error())
+		return err
+	}
+	handler := NewBlockingClarificationHandler(w.store)
+	msg := ClarificationMessage{
+		Question:       question,
+		Options:        options,
+		ContextSummary: contextSummary,
+		TaskID:         task.ID,
+		TaskUpdatedAt:  task.UpdatedAt,
+		RequestedAt:    time.Now(),
+	}
+	_, err := handler.RequestClarification(ctx, msg)
+	if err != nil {
+		w.emit(ctx, task, "ERROR", fmt.Sprintf("clarification request failed: %v", err))
+		return err
+	}
+	w.emit(ctx, task, "CLARIFICATION_REQUESTED", truncate(question, 500))
+	return nil
+}
+
 const elicitationEmptyAnswerFallback = "(no comment provided — subtask marked complete without written answer)"
 
 const (
