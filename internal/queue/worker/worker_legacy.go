@@ -206,7 +206,8 @@ func (w *Worker) handleLegacyTaskBreakdown(ctx context.Context, task models.Task
 	if w.legacyMaxBreakdownDepth > 0 {
 		depth, err := w.legacyBreakdownDepth(ctx, task.ID)
 		if err != nil {
-			w.emit(ctx, task, "ERROR", err.Error())
+			cause := fmt.Sprintf("Legacy breakdown sanity check failed: %v", err)
+			w.rejectLegacyBreakdown(ctx, task, cause, healingCap)
 			return
 		}
 		if depth >= w.legacyMaxBreakdownDepth {
