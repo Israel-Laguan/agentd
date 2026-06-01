@@ -39,7 +39,7 @@ Files cluster around two responsibilities:
 
 Move agentic-specific files to `internal/queue/worker/agentic/`:
 
-```
+```text
 worker/agentic/
   ├── agentic.go          # processAgentic + main logic
   ├── handlers.go         # worker_agentic_handlers.go
@@ -77,7 +77,7 @@ Delete `aliases.go` and have `worker/*.go` import `internal/agent/*` directly. T
 
 Move entire `worker/` to `internal/agent/execution/` or similar:
 
-```
+```text
 internal/agent/
   ├── context/     (existing)
   ├── hooks/       (existing)
@@ -101,7 +101,7 @@ internal/agent/
 | Priority | Action | Effort | Status |
 |----------|--------|--------|--------|
 | 1 | Delete `aliases.go`, fix imports | Medium | DONE - now imports `internal/agent/*` directly |
-| 2 | Extract `agentic/` subpackage | Low | SKIPPED - tightly coupled to Worker via method receivers |
+| 2 | Extract `agentic/` subpackage | Low | IMPLEMENTED - moved agentic execution into `internal/queue/worker/agentic/` |
 | 3 | Merge `phase_splitter.go` → `worker_batch.go` | Low | SKIPPED - serves specific purpose in agentic iteration flows |
 | 4 | Consider moving to `internal/agent/execution/` | High | DEFERRED - too many import path changes |
 
@@ -111,7 +111,7 @@ internal/agent/
 
 1. **Aliases layer removal** - DONE. Files now use direct imports from `internal/agent/*`.
 
-2. **Agentic subpackage extraction** - Not feasible. Agentic files define methods on `*Worker`, making them tightly coupled to the worker implementation. Cannot extract without creating interface abstractions.
+2. **Agentic subpackage extraction** - IMPLEMENTED. Agentic execution now lives in `internal/queue/worker/agentic/`, including `engine.go`, `agentic.go`, `handlers.go`, `iteration.go`, `setup.go`, `rewind.go`, and `session.go`.
 
 3. **Small file merges** - Not worthwhile. Files like `phase_splitter.go` and `message_editor_respec.go` serve distinct purposes in the agentic iteration flow. Merging would reduce clarity.
 
@@ -119,8 +119,8 @@ internal/agent/
 
 The worker package is well-structured as-is:
 - Average file size of ~265 lines is acceptable
-- Two-theme organization is clear in file naming (`worker_agentic*.go` vs core worker)
-- The aliases layer, while conceptually redundant, provides convenience for the heavily-used types
+- Core worker orchestration and agentic execution are separated across the worker package and `internal/queue/worker/agentic/`
+- The aliases layer has been removed, and files import `internal/agent/*` dependencies directly
 
 ## Files by Category (Current Structure)
 
