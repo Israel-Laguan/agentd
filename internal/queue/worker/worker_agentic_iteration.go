@@ -117,7 +117,7 @@ func (w *Worker) guardIterationAndBudget(
 		}
 		return &r, errIterationLimit
 	}
-	if _, err := w.guardTopicDrift(ctx, task, project, profile, turnIndex, messages, sessionMgr); err != nil {
+	if err := w.guardTopicDrift(ctx, task, project, profile, turnIndex, messages, sessionMgr); err != nil {
 		return nil, err
 	}
 	contextExhausted, err := w.prepareAgenticIteration(ctx, messages, iterationGuard, cm, ctxBudgetGuard, task)
@@ -146,26 +146,26 @@ func (w *Worker) guardTopicDrift(
 	turnIndex int,
 	messages *[]gateway.PromptMessage,
 	sessionMgr *SessionManager,
-) (bool, error) {
+) error {
 	if turnIndex == 0 || w.topicGuard == nil || sessionMgr == nil {
-		return false, nil
+		return nil
 	}
 	newInput, ok := sessionMgr.PollNewHumanInput(ctx, w.store, task.ID)
 	if !ok || newInput == "" {
-		return false, nil
+		return nil
 	}
 	drift, err := w.topicGuard.DetectDrift(ctx, sessionMgr.TopicAnchor(), newInput, profile)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if !drift {
 		sessionMgr.AdvanceTopic(newInput)
-		return false, nil
+		return nil
 	}
 	if _, err := sessionMgr.ArchiveAndReset(ctx, w, task, project, profile, messages, newInput); err != nil {
-		return false, err
+		return err
 	}
-	return true, errTopicDriftReset
+	return errTopicDriftReset
 }
 
 func (w *Worker) recordAgenticTurnSnapshot(
