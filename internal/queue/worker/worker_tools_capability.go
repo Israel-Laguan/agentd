@@ -134,7 +134,6 @@ func (w *Worker) TryExternalCapabilityRoute(
 	project models.Project,
 	profile models.AgentProfile,
 	messages *[]gateway.PromptMessage,
-	taskCaps *capabilities.Registry,
 ) (agentruntime.LoopResult, bool, error) {
 	_ = project
 	if w.capabilityRouter == nil {
@@ -146,12 +145,7 @@ func (w *Worker) TryExternalCapabilityRoute(
 		return agentruntime.LoopResult{}, false, nil
 	}
 
-	// Use scoped registry first, then fall back to global.
-	registry := taskCaps
-	if registry == nil {
-		registry = w.capabilities
-	}
-	if registry == nil {
+	if w.capabilities == nil {
 		slog.Warn("capability routing: no capability registry; falling through to agentic loop",
 			"task_id", task.ID,
 			"intent", decision.Intent,
@@ -160,8 +154,7 @@ func (w *Worker) TryExternalCapabilityRoute(
 		return agentruntime.LoopResult{}, false, nil
 	}
 
-	registry, adapterName := resolveCapabilityRoute(ctx, decision.Adapter, decision.Adapter, w.capabilities, taskCaps)
-	if registry == nil {
+	if _, found := w.capabilities.GetAdapter(decision.Adapter); !found {
 		slog.Warn("capability routing: adapter not registered; falling through to agentic loop",
 			"task_id", task.ID,
 			"intent", decision.Intent,
@@ -170,7 +163,7 @@ func (w *Worker) TryExternalCapabilityRoute(
 		return agentruntime.LoopResult{}, false, nil
 	}
 
-	out, err := registry.CallTool(ctx, adapterName, decision.Tool, decision.Args)
+	out, err := w.capabilities.CallTool(ctx, decision.Adapter, decision.Tool, decision.Args)
 	if err != nil {
 		routeErr := fmt.Errorf("capability routing: %s/%s: %w", decision.Adapter, decision.Tool, err)
 		w.failHard(ctx, task, routeErr)

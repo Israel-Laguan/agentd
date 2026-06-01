@@ -147,7 +147,7 @@ func TestTryExternalCapabilityRoute_CommitsResultAndMessages(t *testing.T) {
 	}
 	profile := models.AgentProfile{ID: "agent-1"}
 
-	result, ok, err := w.TryExternalCapabilityRoute(context.Background(), task, models.Project{}, profile, &messages, nil)
+	result, ok, err := w.TryExternalCapabilityRoute(context.Background(), task, models.Project{}, profile, &messages)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestTryExternalCapabilityRoute_CallToolError_Terminal(t *testing.T) {
 	}
 	profile := models.AgentProfile{ID: "agent-1"}
 
-	_, ok, err := w.TryExternalCapabilityRoute(context.Background(), task, models.Project{}, profile, &messages, nil)
+	_, ok, err := w.TryExternalCapabilityRoute(context.Background(), task, models.Project{}, profile, &messages)
 	if err == nil {
 		t.Fatal("TryExternalCapabilityRoute() err = nil, want terminal error after failHard")
 	}
