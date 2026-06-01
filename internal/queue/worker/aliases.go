@@ -2,11 +2,15 @@ package worker
 
 import (
 	agentcontext "agentd/internal/agent/context"
+	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	agentsubagent "agentd/internal/agent/subagent"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 )
+
+// === Runtime Context Aliases ===
 
 type CorrectionSource = agentcontext.CorrectionSource
 type CorrectionRecord = agentcontext.CorrectionRecord
@@ -56,6 +60,8 @@ func parseGoalProgress(content string) (completed, blocked []string) {
 	return agentcontext.ParseGoalProgress(content)
 }
 
+// === Runtime Loop Aliases ===
+
 type IterationGuard = agentruntime.IterationGuard
 type BudgetGuard = agentruntime.BudgetGuard
 type DeadlineGuard = agentruntime.DeadlineGuard
@@ -96,6 +102,8 @@ var (
 	NewTopicGuard         = agentruntime.NewTopicGuard
 )
 
+// === Audit Aliases ===
+
 type AuditLogger = agentruntime.AuditLogger
 type AuditSink = agentruntime.AuditSink
 type AuditRecord = agentruntime.AuditRecord
@@ -120,6 +128,25 @@ var (
 	stepValidationError       = agentcontext.StepValidationError
 )
 
+const (
+	recordTypeToolDispatch = agentruntime.RecordTypeToolDispatch
+	recordTypeTurnSnapshot = agentruntime.RecordTypeTurnSnapshot
+	recordTypeHistoryEdit  = agentruntime.RecordTypeHistoryEdit
+	recordTypeTaskStart    = agentruntime.RecordTypeTaskStart
+	recordTypeTaskComplete = agentruntime.RecordTypeTaskComplete
+	recordTypeTaskFail     = agentruntime.RecordTypeTaskFail
+	recordTypeTaskReview   = agentruntime.RecordTypeTaskReview
+	recordTypeDaemonStart  = agentruntime.RecordTypeDaemonStart
+)
+
+func newAuditLogger(cfg config.AuditConfig) *AuditLogger {
+	if !cfg.Enabled || cfg.Path == "" {
+		return nil
+	}
+	return NewAuditLogger(NewFileAuditSink(cfg.Path), true)
+}
+
+// === Subagent Aliases ===
 
 type SubagentStatus = agentsubagent.SubagentStatus
 type SubagentDefinition = agentsubagent.SubagentDefinition
@@ -143,21 +170,126 @@ var (
 	DelegateParallelToolDefinition = agentsubagent.DelegateParallelToolDefinition
 )
 
+// === Hook Aliases ===
+
+type FailurePolicy = agenthooks.FailurePolicy
+type HookVerdict = agenthooks.HookVerdict
+type HookContext = agenthooks.HookContext
+type PreHook = agenthooks.PreHook
+type PostHook = agenthooks.PostHook
+type SessionStartHook = agenthooks.SessionStartHook
+type HookChain = agenthooks.HookChain
+type ResultCache = agenthooks.ResultCache
+type RateLimitCounter = agenthooks.RateLimitCounter
+type RateLimitStore = agenthooks.RateLimitStore
+
 const (
-	recordTypeToolDispatch = agentruntime.RecordTypeToolDispatch
-	recordTypeTurnSnapshot = agentruntime.RecordTypeTurnSnapshot
-	recordTypeHistoryEdit  = agentruntime.RecordTypeHistoryEdit
-	recordTypeTaskStart    = agentruntime.RecordTypeTaskStart
-	recordTypeTaskComplete = agentruntime.RecordTypeTaskComplete
-	recordTypeTaskFail     = agentruntime.RecordTypeTaskFail
-	recordTypeTaskReview   = agentruntime.RecordTypeTaskReview
-	recordTypeDaemonStart  = agentruntime.RecordTypeDaemonStart
+	FailOpen   = agenthooks.FailOpen
+	FailClosed = agenthooks.FailClosed
+
+	externalContentInstruction = agenthooks.ExternalContentInstruction
 )
 
-func newAuditLogger(cfg config.AuditConfig) *AuditLogger {
-	if !cfg.Enabled || cfg.Path == "" {
-		return nil
-	}
-	return NewAuditLogger(NewFileAuditSink(cfg.Path), true)
+var (
+	NewHookChain = agenthooks.NewHookChain
+
+	SchemaValidationHook            = agenthooks.SchemaValidationHook
+	CredentialDetectionHook         = agenthooks.CredentialDetectionHook
+	CredentialInjectionHook         = agenthooks.CredentialInjectionHook
+	CredentialValidationSessionHook = agenthooks.CredentialValidationSessionHook
+	ScrubResultHook                 = agenthooks.ScrubResultHook
+	InjectionResistanceHook         = agenthooks.InjectionResistanceHook
+	AuditHook                       = agenthooks.AuditHook
+	CacheLookupHook                 = agenthooks.CacheLookupHook
+	CacheStoreHook                  = agenthooks.CacheStoreHook
+	NewResultCache                  = agenthooks.NewResultCache
+	DryRunHook                      = agenthooks.DryRunHook
+	RateLimitHook                   = agenthooks.RateLimitHook
+	resolveLimit                    = agenthooks.ResolveLimit
+	NewRateLimitStore               = agenthooks.NewRateLimitStore
+	DenylistHook                    = agenthooks.DenylistHook
+	cacheKey                        = agenthooks.CacheKey
+	canonicalizeArgs                = agenthooks.CanonicalizeArgs
+
+	externalToolsSet    = agenthooks.ExternalToolsSet
+	isExternalTool      = agenthooks.IsExternalTool
+	wrapExternalContent = agenthooks.WrapExternalContent
+)
+
+// === Tool Aliases ===
+
+type ToolExecutor = agenttools.ToolExecutor
+type ToolResult = agenttools.ToolResult
+type ToolStatus = agenttools.ToolStatus
+type ToolError = agenttools.ToolError
+type RetryConfig = agenttools.RetryConfig
+type RetryDispatchFunc = agenttools.RetryDispatchFunc
+type RetryingExecutor = agenttools.RetryingExecutor
+type ToolManifest = agenttools.ToolManifest
+type TaskClassification = agenttools.TaskClassification
+type TaskClassifier = agenttools.TaskClassifier
+type toolFailureTracker = agenttools.ToolFailureTracker
+
+const (
+	toolNameBash             = agenttools.ToolNameBash
+	toolNameRead             = agenttools.ToolNameRead
+	toolNameWrite            = agenttools.ToolNameWrite
+	toolNameDelegate         = agenttools.ToolNameDelegate
+	toolNameDelegateParallel = agenttools.ToolNameDelegateParallel
+	toolErrorPrefix          = agenttools.ToolErrorPrefix
+
+	ToolStatusSuccess = agenttools.ToolStatusSuccess
+	ToolStatusError   = agenttools.ToolStatusError
+	ToolStatusTimeout = agenttools.ToolStatusTimeout
+	ToolStatusVetoed  = agenttools.ToolStatusVetoed
+	ToolStatusFatal   = agenttools.ToolStatusFatal
+
+	TaskTypeSummarize   = agenttools.TaskTypeSummarize
+	TaskTypeCodeGen     = agenttools.TaskTypeCodeGen
+	TaskTypeDocQA       = agenttools.TaskTypeDocQA
+	TaskTypeWebResearch = agenttools.TaskTypeWebResearch
+	TaskTypeFullAgent   = agenttools.TaskTypeFullAgent
+)
+
+var (
+	NewToolExecutor     = agenttools.NewToolExecutor
+	NewRetryingExecutor = agenttools.NewRetryingExecutor
+	NewToolManifest     = agenttools.NewToolManifest
+	NewTaskClassifier   = agenttools.NewTaskClassifier
+	BuildSandboxEnv     = agenttools.BuildSandboxEnv
+
+	SuccessResult           = agenttools.SuccessResult
+	ErrorResult             = agenttools.ErrorResult
+	NonRetryableErrorResult = agenttools.NonRetryableErrorResult
+	TimeoutResult           = agenttools.TimeoutResult
+	VetoedResult            = agenttools.VetoedResult
+	FatalResult             = agenttools.FatalResult
+
+	SchemaRegistryFromDefinitions = agenttools.SchemaRegistryFromDefinitions
+	filterToolsByNames            = agenttools.FilterToolsByNames
+
+	jsonErrorf           = agenttools.JSONErrorf
+	sandboxFailureJSON   = agenttools.SandboxFailureJSON
+	isToolErrorPayload   = agenttools.IsToolErrorPayload
+	stripToolErrorPrefix = agenttools.StripToolErrorPrefix
+)
+
+func newToolFailureTracker(threshold int) *toolFailureTracker {
+	return agenttools.NewToolFailureTracker(threshold)
 }
 
+func classifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
+	return agenttools.ClassifyPrecomputedToolResult(callID, toolName, raw, elapsedMs)
+}
+
+func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
+	return agenttools.ClassifyBuiltinToolResult(callID, toolName, raw, elapsedMs)
+}
+
+func classifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
+	return agenttools.ClassifyCapabilityRawResult(callID, raw, elapsedMs)
+}
+
+func classifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
+	return agenttools.ClassifyDelegateRawResult(callID, raw, elapsedMs)
+}
