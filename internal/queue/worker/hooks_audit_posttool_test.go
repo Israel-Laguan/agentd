@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	agenthooks "agentd/internal/agent/hooks"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
@@ -16,8 +17,8 @@ import (
 func TestAuditHook_EmitsToolCallAndResult(t *testing.T) {
 	t.Parallel()
 	sink := &mockEventSink{}
-	hook := AuditHook(sink, sandbox.NewScrubber(nil))
-	ctx := HookContext{
+	hook := agenthooks.AuditHook(sink, sandbox.NewScrubber(nil))
+	ctx := agenthooks.HookContext{
 		ToolName: "bash", Args: `{"command":"ls"}`, CallID: "call_42",
 		SessionID: "task-1", ProjectID: "proj-1", Timestamp: time.Now().Add(-50 * time.Millisecond),
 	}
@@ -60,8 +61,8 @@ func assertAuditHookEvents(t *testing.T, sink *mockEventSink) {
 
 func TestAuditHook_NilSinkPassthrough(t *testing.T) {
 	t.Parallel()
-	hook := AuditHook(nil, nil)
-	got, err := hook.Fn(HookContext{ToolName: "bash", Timestamp: time.Now()}, "result")
+	hook := agenthooks.AuditHook(nil, nil)
+	got, err := hook.Fn(agenthooks.HookContext{ToolName: "bash", Timestamp: time.Now()}, "result")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -72,8 +73,8 @@ func TestAuditHook_NilSinkPassthrough(t *testing.T) {
 
 func TestAuditHook_FailOpenPolicy(t *testing.T) {
 	t.Parallel()
-	hook := AuditHook(&mockEventSink{}, nil)
-	if hook.Policy != FailOpen {
+	hook := agenthooks.AuditHook(&mockEventSink{}, nil)
+	if hook.Policy != agenthooks.FailOpen {
 		t.Fatalf("expected FailOpen, got %v", hook.Policy)
 	}
 }
@@ -95,12 +96,12 @@ func (m *cancelAwareEventSink) Emit(ctx context.Context, ev models.Event) error 
 func TestAuditHook_EmitsWhenExecCtxCanceled(t *testing.T) {
 	t.Parallel()
 	sink := &cancelAwareEventSink{}
-	hook := AuditHook(sink, nil)
+	hook := agenthooks.AuditHook(sink, nil)
 
 	execCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	ctx := HookContext{
+	ctx := agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      `{"command":"ls"}`,
 		CallID:    "call_canceled",
@@ -122,12 +123,12 @@ func TestAuditHook_ScrubsEventPayloads(t *testing.T) {
 	t.Parallel()
 	sink := &mockEventSink{}
 	scrubber := sandbox.NewScrubber(nil)
-	hook := AuditHook(sink, scrubber)
+	hook := agenthooks.AuditHook(sink, scrubber)
 
 	secretArgs := `{"command":"export API_KEY=sk-AAAAAAAAAAAAAAAAAAAAAA"}`
 	secretResult := "output with token=sk-BBBBBBBBBBBBBBBBBBBBBB"
 
-	_, err := hook.Fn(HookContext{
+	_, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      secretArgs,
 		CallID:    "call_secret",

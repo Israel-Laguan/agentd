@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -23,7 +24,7 @@ func testModelRoutingConfig() config.ModelRoutingConfig {
 func TestComplexityScorer_SummarizeLowScore(t *testing.T) {
 	t.Parallel()
 	task := models.Task{Description: "summarize this file"}
-	score := (ComplexityScorer{}).ScoreTask(task)
+	score := (agentruntime.ComplexityScorer{}).ScoreTask(task)
 	if score > 2 {
 		t.Fatalf("ScoreTask() = %d, want <= 2", score)
 	}
@@ -33,7 +34,7 @@ func TestComplexityScorer_ArchitectHighScore(t *testing.T) {
 	t.Parallel()
 	// Spec reasoning keywords combined with the acceptance architecture phrase.
 	task := models.Task{Description: "architect compare design analyse a microservice migration strategy"}
-	score := (ComplexityScorer{}).ScoreTask(task)
+	score := (agentruntime.ComplexityScorer{}).ScoreTask(task)
 	if score < 7 {
 		t.Fatalf("ScoreTask() = %d, want >= 7", score)
 	}
@@ -42,7 +43,7 @@ func TestComplexityScorer_ArchitectHighScore(t *testing.T) {
 func TestComplexityScorer_ArchitectPhraseAloneIsLow(t *testing.T) {
 	t.Parallel()
 	task := models.Task{Description: "architect a microservice migration strategy"}
-	score := (ComplexityScorer{}).ScoreTask(task)
+	score := (agentruntime.ComplexityScorer{}).ScoreTask(task)
 	if score > 2 {
 		t.Fatalf("ScoreTask() = %d, want <= 2 with only architect reasoning signal", score)
 	}
@@ -51,7 +52,7 @@ func TestComplexityScorer_ArchitectPhraseAloneIsLow(t *testing.T) {
 func TestComplexityScorer_NoSubstringFalsePositives(t *testing.T) {
 	t.Parallel()
 	task := models.Task{Description: "listening to information while rewriting"}
-	score := (ComplexityScorer{}).ScoreTask(task)
+	score := (agentruntime.ComplexityScorer{}).ScoreTask(task)
 	if score != 0 {
 		t.Fatalf("ScoreTask() = %d, want 0 (no substring keyword matches)", score)
 	}
@@ -63,7 +64,7 @@ func TestComplexityScorer_Clamped(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		b.WriteString("architect reason compare design analyse ")
 	}
-	score := (ComplexityScorer{}).ScoreTask(models.Task{Description: b.String()})
+	score := (agentruntime.ComplexityScorer{}).ScoreTask(models.Task{Description: b.String()})
 	if score != 10 {
 		t.Fatalf("ScoreTask() = %d, want 10 (clamped)", score)
 	}
@@ -71,7 +72,7 @@ func TestComplexityScorer_Clamped(t *testing.T) {
 
 func TestModelRouter_SummarizeRoutesCheap(t *testing.T) {
 	t.Parallel()
-	r := NewModelRouter(testModelRoutingConfig())
+	r := agentruntime.NewModelRouter(testModelRoutingConfig())
 	task := models.Task{Description: "summarize this file"}
 	provider, model, ok := r.Route(task, 0)
 	if !ok {
@@ -84,7 +85,7 @@ func TestModelRouter_SummarizeRoutesCheap(t *testing.T) {
 
 func TestModelRouter_ArchitectRoutesHigh(t *testing.T) {
 	t.Parallel()
-	r := NewModelRouter(testModelRoutingConfig())
+	r := agentruntime.NewModelRouter(testModelRoutingConfig())
 	task := models.Task{Description: "architect compare design analyse a microservice migration strategy"}
 	_, model, ok := r.Route(task, 0)
 	if !ok {
@@ -97,7 +98,7 @@ func TestModelRouter_ArchitectRoutesHigh(t *testing.T) {
 
 func TestModelRouter_ContextOverrideForcesHigh(t *testing.T) {
 	t.Parallel()
-	r := NewModelRouter(testModelRoutingConfig())
+	r := agentruntime.NewModelRouter(testModelRoutingConfig())
 	task := models.Task{Description: "summarize this file"}
 	provider, model, ok := r.Route(task, 150000)
 	if !ok {
@@ -118,7 +119,7 @@ func TestModelRouter_PartialTierFallback(t *testing.T) {
 		ContextTokenThreshold: 150000,
 		High:                  config.ModelTierTarget{Provider: "anthropic", Model: "claude-opus"},
 	}
-	r := NewModelRouter(cfg)
+	r := agentruntime.NewModelRouter(cfg)
 	if r == nil {
 		t.Fatal("NewModelRouter() = nil, want router with only high tier")
 	}
@@ -139,7 +140,7 @@ func TestModelRouter_PartialTierMidOnly(t *testing.T) {
 		ContextTokenThreshold: 150000,
 		Mid:                   config.ModelTierTarget{Provider: "anthropic", Model: "claude-sonnet"},
 	}
-	r := NewModelRouter(cfg)
+	r := agentruntime.NewModelRouter(cfg)
 	task := models.Task{Description: "architect compare design analyse migration"}
 	_, model, ok := r.Route(task, 0)
 	if !ok {
@@ -154,7 +155,7 @@ func TestEstimateContextTokens_LargeContext(t *testing.T) {
 	t.Parallel()
 	content := strings.Repeat("x", 600001) // 600001/4 > 150000
 	messages := []gateway.PromptMessage{{Role: "user", Content: content}}
-	tokens := EstimateContextTokens(messages, nil)
+	tokens := agentruntime.EstimateContextTokens(messages, nil)
 	if tokens < 150000 {
 		t.Fatalf("EstimateContextTokens() = %d, want >= 150000", tokens)
 	}
@@ -170,7 +171,7 @@ func TestTotalToolChars_NoDoubleCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal(tool): %v", err)
 	}
-	got := totalToolChars([]gateway.ToolDefinition{tool})
+	got := agentruntime.TotalToolChars([]gateway.ToolDefinition{tool})
 	if got != len(b) {
 		t.Fatalf("totalToolChars() = %d, want %d (marshaled JSON only)", got, len(b))
 	}
@@ -186,7 +187,7 @@ func TestEstimateContextTokens_IncludesTools(t *testing.T) {
 		Name:        "run_command",
 		Description: strings.Repeat("x", 600001),
 	}}
-	tokens := EstimateContextTokens(nil, tools)
+	tokens := agentruntime.EstimateContextTokens(nil, tools)
 	if tokens < 150000 {
 		t.Fatalf("EstimateContextTokens() = %d, want >= 150000 from tool defs", tokens)
 	}
@@ -194,18 +195,18 @@ func TestEstimateContextTokens_IncludesTools(t *testing.T) {
 
 func TestNewModelRouter_DisabledOrEmptyTiers(t *testing.T) {
 	t.Parallel()
-	if NewModelRouter(config.ModelRoutingConfig{Enabled: false}) != nil {
+	if agentruntime.NewModelRouter(config.ModelRoutingConfig{Enabled: false}) != nil {
 		t.Fatal("disabled config should return nil router")
 	}
 	cfg := config.ModelRoutingConfig{Enabled: true}
-	if NewModelRouter(cfg) != nil {
+	if agentruntime.NewModelRouter(cfg) != nil {
 		t.Fatal("enabled with no tier targets should return nil router")
 	}
 	cfg = config.ModelRoutingConfig{
 		Enabled: true,
 		High:    config.ModelTierTarget{Provider: "anthropic", Model: "claude-opus"},
 	}
-	if NewModelRouter(cfg) == nil {
+	if agentruntime.NewModelRouter(cfg) == nil {
 		t.Fatal("enabled with partial high tier should return non-nil router")
 	}
 }
@@ -213,7 +214,7 @@ func TestNewModelRouter_DisabledOrEmptyTiers(t *testing.T) {
 func TestApplyModelRouting_OverridesProfileModel(t *testing.T) {
 	t.Parallel()
 	w := &Worker{
-		modelRouter: NewModelRouter(testModelRoutingConfig()),
+		modelRouter: agentruntime.NewModelRouter(testModelRoutingConfig()),
 	}
 	profile := models.AgentProfile{Provider: "openai", Model: "gpt-4"}
 	task := models.Task{Description: "summarize this file"}
@@ -226,7 +227,7 @@ func TestApplyModelRouting_OverridesProfileModel(t *testing.T) {
 func TestApplyModelRouting_UnpinnedRoutesCheap(t *testing.T) {
 	t.Parallel()
 	w := &Worker{
-		modelRouter: NewModelRouter(testModelRoutingConfig()),
+		modelRouter: agentruntime.NewModelRouter(testModelRoutingConfig()),
 	}
 	profile := models.AgentProfile{Provider: "openai"}
 	task := models.Task{Description: "summarize this file"}
@@ -239,7 +240,7 @@ func TestApplyModelRouting_UnpinnedRoutesCheap(t *testing.T) {
 func TestApplyModelRouting_ContextOverrideHigh(t *testing.T) {
 	t.Parallel()
 	w := &Worker{
-		modelRouter: NewModelRouter(testModelRoutingConfig()),
+		modelRouter: agentruntime.NewModelRouter(testModelRoutingConfig()),
 	}
 	profile := models.AgentProfile{}
 	task := models.Task{Description: "summarize this file"}
@@ -256,7 +257,7 @@ func TestApplyModelRouting_ContextOverrideHigh(t *testing.T) {
 func TestApplyModelRouting_UsesFullToolsBeforeManifestFilter(t *testing.T) {
 	t.Parallel()
 	w := &Worker{
-		modelRouter:  NewModelRouter(testModelRoutingConfig()),
+		modelRouter:  agentruntime.NewModelRouter(testModelRoutingConfig()),
 		toolManifest: enabledToolManifest(),
 	}
 	task := models.Task{
@@ -273,7 +274,7 @@ func TestApplyModelRouting_UsesFullToolsBeforeManifestFilter(t *testing.T) {
 	if len(filtered) != 0 {
 		t.Fatalf("filtered tools len = %d, want 0 for summarize manifest", len(filtered))
 	}
-	if tokens := EstimateContextTokens(nil, filtered); tokens >= 150000 {
+	if tokens := agentruntime.EstimateContextTokens(nil, filtered); tokens >= 150000 {
 		t.Fatalf("filtered EstimateContextTokens() = %d, want below threshold", tokens)
 	}
 

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	agenthooks "agentd/internal/agent/hooks"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
@@ -32,7 +34,7 @@ func TestNewWorker_RegistersScrubAndAuditHooks(t *testing.T) {
 		WorkerOptions{MaxToolIterations: 5},
 	)
 
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	call := gateway.ToolCall{
 		ID:       "call_integration",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"cat secret"}`},
@@ -79,7 +81,7 @@ func TestAuditHook_DispatchToolEmitsConsistently(t *testing.T) {
 		WorkerOptions{MaxToolIterations: 5},
 	)
 
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	// Call through DispatchTool (no projectID)
 	call1 := gateway.ToolCall{
@@ -116,16 +118,16 @@ func TestAuditHook_DispatchToolEmitsConsistently(t *testing.T) {
 
 func TestHookChainClone_DoesNotMutateOriginal(t *testing.T) {
 	t.Parallel()
-	original := NewHookChain()
-	original.RegisterPost(PostHook{
-		Name: "existing", Policy: FailOpen,
-		Fn: func(_ HookContext, r string) (string, error) { return r, nil },
+	original := agenthooks.NewHookChain()
+	original.RegisterPost(agenthooks.PostHook{
+		Name: "existing", Policy: agenthooks.FailOpen,
+		Fn: func(_ agenthooks.HookContext, r string) (string, error) { return r, nil },
 	})
 
 	clone := original.Clone()
-	clone.RegisterPost(PostHook{
-		Name: "added", Policy: FailOpen,
-		Fn: func(_ HookContext, r string) (string, error) { return r + " cloned", nil },
+	clone.RegisterPost(agenthooks.PostHook{
+		Name: "added", Policy: agenthooks.FailOpen,
+		Fn: func(_ agenthooks.HookContext, r string) (string, error) { return r + " cloned", nil },
 	})
 
 	// Original should still have only 1 post-hook
@@ -142,17 +144,17 @@ func TestHookChainClone_DoesNotMutateOriginal(t *testing.T) {
 
 func TestHookChainPrependPost_RunsBeforeExisting(t *testing.T) {
 	t.Parallel()
-	hc := NewHookChain()
-	hc.RegisterPost(PostHook{
-		Name: "append", Policy: FailOpen,
-		Fn: func(_ HookContext, r string) (string, error) { return r + ":second", nil },
+	hc := agenthooks.NewHookChain()
+	hc.RegisterPost(agenthooks.PostHook{
+		Name: "append", Policy: agenthooks.FailOpen,
+		Fn: func(_ agenthooks.HookContext, r string) (string, error) { return r + ":second", nil },
 	})
-	hc.PrependPost(PostHook{
-		Name: "prepend", Policy: FailOpen,
-		Fn: func(_ HookContext, r string) (string, error) { return r + ":first", nil },
+	hc.PrependPost(agenthooks.PostHook{
+		Name: "prepend", Policy: agenthooks.FailOpen,
+		Fn: func(_ agenthooks.HookContext, r string) (string, error) { return r + ":first", nil },
 	})
 
-	got := hc.RunPost(HookContext{ToolName: "bash", Timestamp: time.Now()}, "start")
+	got := hc.RunPost(agenthooks.HookContext{ToolName: "bash", Timestamp: time.Now()}, "start")
 	if got != "start:first:second" {
 		t.Fatalf("expected 'start:first:second', got %q", got)
 	}
@@ -160,10 +162,10 @@ func TestHookChainPrependPost_RunsBeforeExisting(t *testing.T) {
 
 func TestNewWorker_SharedHookChainNotMutated(t *testing.T) {
 	t.Parallel()
-	shared := NewHookChain()
-	shared.RegisterPost(PostHook{
-		Name: "user-hook", Policy: FailOpen,
-		Fn: func(_ HookContext, r string) (string, error) { return r, nil },
+	shared := agenthooks.NewHookChain()
+	shared.RegisterPost(agenthooks.PostHook{
+		Name: "user-hook", Policy: agenthooks.FailOpen,
+		Fn: func(_ agenthooks.HookContext, r string) (string, error) { return r, nil },
 	})
 
 	beforeLen := shared.PostHookCount()
@@ -198,7 +200,7 @@ func TestErrorPathsRunThroughPostHooks(t *testing.T) {
 		WorkerOptions{MaxToolIterations: 5},
 	)
 
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	// Call an unknown tool — this used to bypass RunPost
 	call := gateway.ToolCall{
@@ -242,14 +244,14 @@ func TestAuditHook_ClassifiedBashErrorExitCode(t *testing.T) {
 		WorkerOptions{MaxToolIterations: 5},
 	)
 
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	call := gateway.ToolCall{
 		ID:       "call_bash_err",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"bad"}`},
 	}
 	tr := w.dispatchToolWithProject(context.Background(), "task-bash-err", "proj-bash-err", call, nil, executor, nil, false, nil, nil)
 
-	if tr.Status != ToolStatusError {
+	if tr.Status != agenttools.ToolStatusError {
 		t.Fatalf("expected error status, got %s", tr.Status)
 	}
 	forCtx := tr.ForContext()

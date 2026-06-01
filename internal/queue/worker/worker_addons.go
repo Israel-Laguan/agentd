@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/safety"
@@ -114,7 +115,7 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 
 // === Corrections Logic ===
 
-func (w *Worker) ingestHumanCorrections(ctx context.Context, taskID string, cm *ContextManager) {
+func (w *Worker) ingestHumanCorrections(ctx context.Context, taskID string, cm *agentcontext.ContextManager) {
 	if cm == nil {
 		return
 	}
@@ -132,19 +133,19 @@ func (w *Worker) ingestHumanCorrections(ctx context.Context, taskID string, cm *
 		if !cm.MarkCommentCorrectionSeen(c) {
 			continue
 		}
-		if rec := ParseCorrectionComment(c.Body, source); rec != nil {
+		if rec := agentcontext.ParseCorrectionComment(c.Body, source); rec != nil {
 			cm.InjectCorrection(*rec)
 		}
 	}
 }
 
-func correctionSourceForCommentAuthor(author models.CommentAuthor) (CorrectionSource, bool) {
+func correctionSourceForCommentAuthor(author models.CommentAuthor) (agentcontext.CorrectionSource, bool) {
 	switch author {
 	case models.CommentAuthorUser, models.CommentAuthorFrontdesk:
-		return CorrectionSourceHuman, true
+		return agentcontext.CorrectionSourceHuman, true
 	default:
-		if strings.EqualFold(string(author), string(CorrectionSourceReviewer)) {
-			return CorrectionSourceReviewer, true
+		if strings.EqualFold(string(author), string(agentcontext.CorrectionSourceReviewer)) {
+			return agentcontext.CorrectionSourceReviewer, true
 		}
 		return "", false
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -76,7 +77,7 @@ func (g *planningSequenceGateway) Embed(context.Context, gateway.EmbedRequest) (
 }
 
 func samplePlanJSON() string {
-	p := Plan{Steps: []PlanStep{
+	p := agentcontext.Plan{Steps: []agentcontext.PlanStep{
 		{ID: "analyze", Action: "analyze task", OutputFormat: "text"},
 		{ID: "summarize", Action: "summarize", OutputFormat: "text"},
 	}}

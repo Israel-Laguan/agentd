@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	agentruntime "agentd/internal/agent/runtime"
 	wskills "agentd/internal/agent/skills"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 )
 
@@ -278,7 +280,7 @@ func TestAssembleAgenticSystemPrompt_NilPromptLibrary(t *testing.T) {
 		Title:       "Implement add",
 		Description: "Add function in math.go\nSignature:\nfunc Add(a, b int) int",
 	}
-	profile := models.AgentProfile{ToolManifestType: TaskTypeCodeGen}
+	profile := models.AgentProfile{ToolManifestType: agenttools.TaskTypeCodeGen}
 	messages := w.assembleAgenticSystemPrompt(context.Background(), task, models.Project{}, profile)
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
@@ -289,7 +291,7 @@ func TestAssembleAgenticSystemPrompt_NilPromptLibrary(t *testing.T) {
 }
 
 func TestAssembleAgenticSystemPrompt_CodeGenTemplate(t *testing.T) {
-	lib, err := NewPromptLibrary("")
+	lib, err := agentruntime.NewPromptLibrary("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +301,7 @@ func TestAssembleAgenticSystemPrompt_CodeGenTemplate(t *testing.T) {
 		Title:       "Implement add",
 		Description: "Add function in math.go\nSignature:\nfunc Add(a, b int) int\nTest cases:\n- Add(1,2) == 3",
 	}
-	profile := models.AgentProfile{ToolManifestType: TaskTypeCodeGen}
+	profile := models.AgentProfile{ToolManifestType: agenttools.TaskTypeCodeGen}
 	messages := w.assembleAgenticSystemPrompt(context.Background(), task, models.Project{}, profile)
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))

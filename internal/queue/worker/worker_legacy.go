@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
@@ -151,7 +152,7 @@ func (w *Worker) legacyBreakdownDepth(ctx context.Context, taskID string) (int, 
 }
 
 func (w *Worker) legacyDispatchRejectReason(task models.Task, _ models.AgentProfile) string {
-	score := (ComplexityScorer{}).ScoreTask(task)
+	score := (agentruntime.ComplexityScorer{}).ScoreTask(task)
 	if w.legacyRejectScore > 0 && score >= w.legacyRejectScore {
 		return fmt.Sprintf(
 			"Task complexity score %d exceeds legacy reject threshold %d; agentic mode is required.",
@@ -170,7 +171,7 @@ func (w *Worker) legacyDispatchRejectReason(task models.Task, _ models.AgentProf
 func (w *Worker) legacySeedMessages(task models.Task, _ models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := workerMessages(task, profile)
 	if w.legacyPreflightScore > 0 && !w.providerSupportsAgentic(profile) && !profile.SystemPrompt.Valid {
-		if (ComplexityScorer{}).ScoreTask(task) >= w.legacyPreflightScore {
+		if (agentruntime.ComplexityScorer{}).ScoreTask(task) >= w.legacyPreflightScore {
 			messages = append(messages, gateway.PromptMessage{
 				Role:    "user",
 				Content: legacyPreflightUserNote,

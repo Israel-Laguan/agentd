@@ -1,11 +1,14 @@
-package worker
+package agentic
 
 import (
 	"context"
 	"log/slog"
 
+	agentcontext "agentd/internal/agent/context"
+	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -30,7 +33,7 @@ func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 		in.iterationGuard.Reset()
 	}
 	if in.goalTracker != nil {
-		if g := GoalFromTask(in.task); g != nil {
+		if g := agentcontext.GoalFromTask(in.task); g != nil {
 			in.goalTracker.SetGoal(*g)
 		}
 	}
@@ -39,9 +42,9 @@ func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 	}
 }
 
-func resetAgenticStateForTopicDrift(in *agenticTurnLoopInput, w *Worker) {
+func resetAgenticStateForTopicDrift(in *agenticTurnLoopInput, e *Engine) {
 	resetAgenticStateForRewind(*in)
-	in.cm = w.newAgenticContextManagerOnly(in.task)
+	in.cm = e.newAgenticContextManagerOnly(in.task)
 }
 
 type agenticTurnLoopInput struct {
@@ -52,17 +55,17 @@ type agenticTurnLoopInput struct {
 	messages                       *[]gateway.PromptMessage
 	tools                          []gateway.ToolDefinition
 	toolToAdapter                  map[string]string
-	taskToolExecutor               *ToolExecutor
-	iterationGuard                 *IterationGuard
-	budgetGuard                    *BudgetGuard
-	deadlineGuard                  *DeadlineGuard
-	ctxBudgetGuard                 *ContextBudgetGuard
-	cm                             *ContextManager
-	goalTracker                    *GoalTracker
-	taskHooks                      *HookChain
+	taskToolExecutor               *agenttools.ToolExecutor
+	iterationGuard                 *agentruntime.IterationGuard
+	budgetGuard                    *agentruntime.BudgetGuard
+	deadlineGuard                  *agentruntime.DeadlineGuard
+	ctxBudgetGuard                 *agentruntime.ContextBudgetGuard
+	cm                             *agentcontext.ContextManager
+	goalTracker                    *agentcontext.GoalTracker
+	taskHooks                      *agenthooks.HookChain
 	taskCaps                       *capabilities.Registry
-	toolTracker                    *toolFailureTracker
-	workPlan                       *Plan
+	toolTracker                    *agenttools.ToolFailureTracker
+	workPlan                       *agentcontext.Plan
 	sessionMgr                     *SessionManager
 	checkpointer                   *wsession.SessionCheckpointer
 	sessionRecoveryUsed            bool
@@ -70,14 +73,14 @@ type agenticTurnLoopInput struct {
 }
 
 // applySessionRecoveryPlanReinjection injects the work plan once after a session-recovery rewind.
-func (w *Worker) applySessionRecoveryPlanReinjection(in *agenticTurnLoopInput) {
+func (e *Engine) applySessionRecoveryPlanReinjection(in *agenticTurnLoopInput) {
 	if in.sessionRecoveryNeedsPlanInject && in.workPlan != nil && in.messages != nil {
-		*in.messages = w.injectPlan(*in.messages, in.workPlan)
+		*in.messages = e.host.InjectPlan(*in.messages, in.workPlan)
 		in.sessionRecoveryNeedsPlanInject = false
 	}
 }
 
-func (w *Worker) tryAgenticPrePlanRecovery(
+func (e *Engine) tryAgenticPrePlanRecovery(
 	ctx context.Context, task models.Task, turnID string, redoExhausted bool,
 	checkpointer *wsession.SessionCheckpointer, messages *[]gateway.PromptMessage,
 	sessionRecoveryGen *int, sessionRecoveryUsed *bool, sessionRecoveryNeedsPlanInject *bool,
@@ -106,17 +109,17 @@ func (w *Worker) tryAgenticPrePlanRecovery(
 	return true
 }
 
-func (w *Worker) tryAgenticRespecRewind(
-	ctx context.Context, task models.Task, workPlan *Plan, content, turnID string,
+func (e *Engine) tryAgenticRespecRewind(
+	ctx context.Context, task models.Task, workPlan *agentcontext.Plan, content, turnID string,
 	messages *[]gateway.PromptMessage, respecAttempts *int,
-	cm *ContextManager, budgetGuard *BudgetGuard,
+	cm *agentcontext.ContextManager, budgetGuard *agentruntime.BudgetGuard,
 ) bool {
-	failing := ValidateOutput(content, *workPlan)
-	if len(failing) == 0 || respecAttempts == nil || *respecAttempts >= 1 || w.messageEditor == nil {
+	failing := agentcontext.ValidateOutput(content, *workPlan)
+	if len(failing) == 0 || respecAttempts == nil || *respecAttempts >= 1 || e.config.MessageEditor == nil {
 		return false
 	}
 	msgsForRespec := messagesWithoutLastAssistant(*messages)
-	newContent, respecErr := w.generateRespecifiedUserTurn(
+	newContent, respecErr := e.host.GenerateRespecifiedUserTurn(
 		ctx, task, workPlan, failing, msgsForRespec, cm, budgetGuard,
 	)
 	if respecErr != nil {
@@ -124,8 +127,8 @@ func (w *Worker) tryAgenticRespecRewind(
 			"task_id", task.ID, "turn_id", turnID, "error", respecErr)
 		return false
 	}
-	if _, editErr := w.messageEditor.Edit(
-		ctx, task.ID, turnID, messages, EditAnchorUserTurn, newContent, cm,
+	if _, editErr := e.config.MessageEditor.Edit(
+		ctx, task.ID, turnID, messages, agentcontext.EditAnchorUserTurn, newContent, cm,
 	); editErr != nil {
 		slog.Warn("agentic respec history edit skipped",
 			"task_id", task.ID, "turn_id", turnID, "error", editErr)
@@ -135,56 +138,56 @@ func (w *Worker) tryAgenticRespecRewind(
 	return true
 }
 
-func (w *Worker) applyAgenticNoToolsPlanContent(
-	ctx context.Context, task models.Task, content string, workPlan *Plan, turnID string,
+func (e *Engine) applyAgenticNoToolsPlanContent(
+	ctx context.Context, task models.Task, content string, workPlan *agentcontext.Plan, turnID string,
 	messages *[]gateway.PromptMessage, respecAttempts *int,
 	checkpointer *wsession.SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
-	sessionRecoveryNeedsPlanInject *bool, budgetGuard *BudgetGuard, cm *ContextManager,
+	sessionRecoveryNeedsPlanInject *bool, budgetGuard *agentruntime.BudgetGuard, cm *agentcontext.ContextManager,
 ) (string, bool) {
 	if workPlan == nil {
 		return content, false
 	}
-	if w.planningCfg.ComplexityThreshold <= 0 {
-		return preparePlanCommitContent(content, *workPlan), false
+	if e.config.PlanningCfg.ComplexityThreshold <= 0 {
+		return agentcontext.PreparePlanCommitContent(content, *workPlan), false
 	}
 	var redoExhausted bool
-	content, redoExhausted = w.repairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
-	if w.tryAgenticPrePlanRecovery(ctx, task, turnID, redoExhausted, checkpointer, messages, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject) {
+	content, redoExhausted = e.host.RepairOutputWithPlan(ctx, task, workPlan, content, budgetGuard)
+	if e.tryAgenticPrePlanRecovery(ctx, task, turnID, redoExhausted, checkpointer, messages, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject) {
 		return content, true
 	}
-	if w.tryAgenticRespecRewind(ctx, task, workPlan, content, turnID, messages, respecAttempts, cm, budgetGuard) {
+	if e.tryAgenticRespecRewind(ctx, task, workPlan, content, turnID, messages, respecAttempts, cm, budgetGuard) {
 		return content, true
 	}
-	return preparePlanCommitContent(content, *workPlan), false
+	return agentcontext.PreparePlanCommitContent(content, *workPlan), false
 }
 
-func (w *Worker) finishAgenticTurnNoTools(
+func (e *Engine) finishAgenticTurnNoTools(
 	ctx context.Context, task models.Task, profile models.AgentProfile,
-	content string, workPlan *Plan, goalTracker *GoalTracker,
-	turnID string, turnIndex int, budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard,
-	cm *ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
+	content string, workPlan *agentcontext.Plan, goalTracker *agentcontext.GoalTracker,
+	turnID string, turnIndex int, budgetGuard *agentruntime.BudgetGuard, ctxBudgetGuard *agentruntime.ContextBudgetGuard,
+	cm *agentcontext.ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
 	checkpointer *wsession.SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
 	sessionRecoveryNeedsPlanInject *bool,
-) (continueLoop bool, result LoopResult, report bool, rewindTo int, err error) {
-	content, rewind := w.applyAgenticNoToolsPlanContent(
+) (continueLoop bool, result agentruntime.LoopResult, report bool, rewindTo int, err error) {
+	content, rewind := e.applyAgenticNoToolsPlanContent(
 		ctx, task, content, workPlan, turnID, messages, respecAttempts,
 		checkpointer, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject, budgetGuard, cm,
 	)
 	if rewind {
-		return true, LoopResult{}, false, rewindToFirstTurn, nil
+		return true, agentruntime.LoopResult{}, false, rewindToFirstTurn, nil
 	}
-	stalled, stallErr := w.handleGoalProgress(ctx, task, goalTracker, content)
+	stalled, stallErr := e.handleGoalProgress(ctx, task, goalTracker, content)
 	if stalled || stallErr != nil {
 		if stallErr != nil {
-			w.handleGatewayError(ctx, task, stallErr)
+			e.host.HandleGatewayError(ctx, task, stallErr)
 		}
-		return false, LoopResult{}, false, rewindNone, stallErr
+		return false, agentruntime.LoopResult{}, false, rewindNone, stallErr
 	}
-	w.commitTextWithProfile(ctx, task, content, &profile)
-	r := LoopResult{
-		Status: LoopSuccessfulCompletion,
-		Meta: w.buildLoopMeta(
-			turnIndex, budgetGuard.Usage(), totalChars(*messages), ctxBudgetGuard.TotalBudget(),
+	e.host.CommitTextWithProfile(ctx, task, content, &profile)
+	r := agentruntime.LoopResult{
+		Status: agentruntime.LoopSuccessfulCompletion,
+		Meta: agentruntime.BuildLoopMeta(
+			turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(*messages), ctxBudgetGuard.TotalBudget(),
 			"", "", "",
 		),
 	}

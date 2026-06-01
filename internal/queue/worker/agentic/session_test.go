@@ -1,9 +1,7 @@
-package worker
+package agentic
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,13 +12,30 @@ import (
 	"agentd/internal/testutil"
 )
 
-type sessionEventSink struct {
-	events *[]models.Event
+type mockHost struct {
+	Host // embeds interface, will panic if un-mocked method is called
+	emitted []models.Event
 }
 
-func (s *sessionEventSink) Emit(_ context.Context, ev models.Event) error {
-	*s.events = append(*s.events, ev)
-	return nil
+func (m *mockHost) Emit(ctx context.Context, task models.Task, kind, payload string) {
+	m.emitted = append(m.emitted, models.Event{Type: models.EventType(kind), Payload: payload})
+}
+
+func (m *mockHost) AssembleAgenticSystemPromptWithUserContent(
+	ctx context.Context,
+	task models.Task,
+	project models.Project,
+	profile models.AgentProfile,
+	userContent string,
+) []gateway.PromptMessage {
+	sysPrompt := "sys"
+	if profile.ID == "concise-profile" {
+		sysPrompt += " User Preferences: tone: concise"
+	}
+	return []gateway.PromptMessage{
+		{Role: "system", Content: sysPrompt},
+		{Role: "user", Content: userContent},
+	}
 }
 
 func TestSessionManager_PollNewHumanInput(t *testing.T) {
@@ -46,21 +61,13 @@ func TestSessionManager_PollNewHumanInput(t *testing.T) {
 }
 
 func TestSessionManager_ArchiveAndReset_InheritsPrefsNotHistory(t *testing.T) {
-	dir := t.TempDir()
-	prefsPath := filepath.Join(dir, "prefs.yaml")
-	if err := os.WriteFile(prefsPath, []byte("preferences:\n  tone: concise\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	var events []models.Event
-	w := NewWorker(nil, nil, nil, nil, &sessionEventSink{events: &events}, WorkerOptions{
-		InstructionsUserPrefsPath: prefsPath,
-	})
+	host := &mockHost{}
+	e := NewEngine(Config{}, host)
 	sm := NewSessionManager("task-1", "CSS styling help", wsession.NewMemoryCheckpointStore())
 
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-1"}, Title: "T", Description: "old task"}
 	project := models.Project{}
-	profile := models.AgentProfile{}
+	profile := models.AgentProfile{ID: "concise-profile"}
 
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
@@ -70,7 +77,7 @@ func TestSessionManager_ArchiveAndReset_InheritsPrefsNotHistory(t *testing.T) {
 		{Role: "system", Content: "PREVIOUS CONTEXT SUMMARY (Compressed):\n- Work: css"},
 	}
 
-	_, err := sm.ArchiveAndReset(context.Background(), w, task, project, profile, &messages, "database migrations")
+	_, err := sm.ArchiveAndReset(context.Background(), e, task, project, profile, &messages, "database migrations")
 	if err != nil {
 		t.Fatalf("ArchiveAndReset: %v", err)
 	}
@@ -97,17 +104,14 @@ func TestSessionManager_ArchiveAndReset_InheritsPrefsNotHistory(t *testing.T) {
 	if messages[1].Role != "user" || messages[1].Content != "database migrations" {
 		t.Fatalf("user turn = %+v, want drift input as first turn", messages[1])
 	}
-	if len(events) != 1 || events[0].Type != models.EventTypeTopicDrift {
-		t.Fatalf("events = %#v, want TOPIC_DRIFT", events)
+	if len(host.emitted) != 1 || host.emitted[0].Type != models.EventTypeTopicDrift {
+		t.Fatalf("events = %#v, want TOPIC_DRIFT", host.emitted)
 	}
 }
 
 func TestSessionManager_ArchiveAndReset_SkipsCodeGenTemplateOnDrift(t *testing.T) {
-	lib, err := NewPromptLibrary("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	w := &Worker{promptLibrary: lib}
+	host := &mockHost{}
+	e := NewEngine(Config{}, host)
 	sm := NewSessionManager("task-1", "Implement add", nil)
 
 	task := models.Task{
@@ -115,14 +119,14 @@ func TestSessionManager_ArchiveAndReset_SkipsCodeGenTemplateOnDrift(t *testing.T
 		Title:       "Implement add",
 		Description: "Add function in math.go\nSignature:\nfunc Add(a, b int) int\nTest cases:\n- Add(1,2) == 3",
 	}
-	profile := models.AgentProfile{ToolManifestType: TaskTypeCodeGen}
+	profile := models.AgentProfile{}
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys with raw source code"},
 		{Role: "user", Content: "Implement add"},
 		{Role: "assistant", Content: "done"},
 	}
 
-	_, err = sm.ArchiveAndReset(context.Background(), w, task, models.Project{}, profile, &messages, "database migrations")
+	_, err := sm.ArchiveAndReset(context.Background(), e, task, models.Project{}, profile, &messages, "database migrations")
 	if err != nil {
 		t.Fatalf("ArchiveAndReset: %v", err)
 	}
@@ -132,8 +136,8 @@ func TestSessionManager_ArchiveAndReset_SkipsCodeGenTemplateOnDrift(t *testing.T
 	if strings.Contains(messages[0].Content, "raw source code") {
 		t.Fatalf("drift reset should not keep CODE_PROMPT_BUILDER system text: %q", messages[0].Content)
 	}
-	if !strings.Contains(messages[0].Content, "autonomous agent") {
-		t.Fatal("fresh session should use default instruction hierarchy")
+	if !strings.Contains(messages[0].Content, "sys") {
+		t.Fatal("fresh session should use host prompt output")
 	}
 	if messages[1].Role != "user" || messages[1].Content != "database migrations" {
 		t.Fatalf("user turn = %+v, want drift input", messages[1])

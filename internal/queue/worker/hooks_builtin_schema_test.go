@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	agenthooks "agentd/internal/agent/hooks"
 	"agentd/internal/gateway"
 )
 
@@ -20,13 +21,13 @@ func bashSchema() map[string]*gateway.FunctionParameters {
 	}
 }
 
-func schemaCtx(tool, args string) HookContext {
-	return HookContext{ToolName: tool, Args: args, Timestamp: time.Now()}
+func schemaCtx(tool, args string) agenthooks.HookContext {
+	return agenthooks.HookContext{ToolName: tool, Args: args, Timestamp: time.Now()}
 }
 
 func TestSchemaValidationHook_ValidArgs(t *testing.T) {
 	t.Parallel()
-	hook := SchemaValidationHook(bashSchema())
+	hook := agenthooks.SchemaValidationHook(bashSchema())
 	verdict, err := hook.Fn(schemaCtx("bash", `{"command":"echo hello"}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -38,7 +39,7 @@ func TestSchemaValidationHook_ValidArgs(t *testing.T) {
 
 func TestSchemaValidationHook_MissingRequired(t *testing.T) {
 	t.Parallel()
-	hook := SchemaValidationHook(bashSchema())
+	hook := agenthooks.SchemaValidationHook(bashSchema())
 	verdict, err := hook.Fn(schemaCtx("bash", `{}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -53,7 +54,7 @@ func TestSchemaValidationHook_MissingRequired(t *testing.T) {
 
 func TestSchemaValidationHook_UnknownArgument(t *testing.T) {
 	t.Parallel()
-	hook := SchemaValidationHook(bashSchema())
+	hook := agenthooks.SchemaValidationHook(bashSchema())
 	verdict, err := hook.Fn(schemaCtx("bash", `{"command":"echo hi","extra":"val"}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -68,7 +69,7 @@ func TestSchemaValidationHook_UnknownArgument(t *testing.T) {
 
 func TestSchemaValidationHook_WrongType(t *testing.T) {
 	t.Parallel()
-	hook := SchemaValidationHook(bashSchema())
+	hook := agenthooks.SchemaValidationHook(bashSchema())
 	verdict, err := hook.Fn(schemaCtx("bash", `{"command":42}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -83,7 +84,7 @@ func TestSchemaValidationHook_WrongType(t *testing.T) {
 
 func TestSchemaValidationHook_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	hook := SchemaValidationHook(bashSchema())
+	hook := agenthooks.SchemaValidationHook(bashSchema())
 	verdict, err := hook.Fn(schemaCtx("bash", `{broken`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -98,7 +99,7 @@ func TestSchemaValidationHook_InvalidJSON(t *testing.T) {
 
 func TestSchemaValidationHook_UnknownTool_Passes(t *testing.T) {
 	t.Parallel()
-	hook := SchemaValidationHook(bashSchema())
+	hook := agenthooks.SchemaValidationHook(bashSchema())
 	verdict, err := hook.Fn(schemaCtx("unknown_tool", `{"anything":"goes"}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -113,7 +114,7 @@ func TestSchemaValidationHook_EmptyArgs_NoRequired(t *testing.T) {
 	registry := map[string]*gateway.FunctionParameters{
 		"ping": {Type: "object", Properties: map[string]any{}},
 	}
-	hook := SchemaValidationHook(registry)
+	hook := agenthooks.SchemaValidationHook(registry)
 	verdict, err := hook.Fn(schemaCtx("ping", ``))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -125,7 +126,7 @@ func TestSchemaValidationHook_EmptyArgs_NoRequired(t *testing.T) {
 
 func TestSchemaValidationHook_EmptyArgs_WithRequired(t *testing.T) {
 	t.Parallel()
-	hook := SchemaValidationHook(bashSchema())
+	hook := agenthooks.SchemaValidationHook(bashSchema())
 	verdict, err := hook.Fn(schemaCtx("bash", ``))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -163,7 +164,7 @@ func TestSchemaValidationHook_TypeChecks(t *testing.T) {
 					Properties: map[string]any{"arg": map[string]any{"type": tt.propType}},
 				},
 			}
-			hook := SchemaValidationHook(registry)
+			hook := agenthooks.SchemaValidationHook(registry)
 			verdict, err := hook.Fn(schemaCtx("tool", `{"arg":`+tt.value+`}`))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -177,8 +178,8 @@ func TestSchemaValidationHook_TypeChecks(t *testing.T) {
 
 func TestSchemaValidationHook_FailClosedPolicy(t *testing.T) {
 	t.Parallel()
-	hook := SchemaValidationHook(nil)
-	if hook.Policy != FailClosed {
+	hook := agenthooks.SchemaValidationHook(nil)
+	if hook.Policy != agenthooks.FailClosed {
 		t.Fatalf("expected FailClosed policy, got %v", hook.Policy)
 	}
 }
@@ -195,8 +196,8 @@ func TestSchemaValidationHook_IntegrationViaHookChain(t *testing.T) {
 			Required: []string{"path", "content"},
 		},
 	}
-	hc := NewHookChain()
-	hc.RegisterPre(SchemaValidationHook(registry))
+	hc := agenthooks.NewHookChain()
+	hc.RegisterPre(agenthooks.SchemaValidationHook(registry))
 
 	verdict := hc.RunPre(schemaCtx("write", `{"path":"foo.txt"}`))
 	if !verdict.Veto {
@@ -209,9 +210,9 @@ func TestSchemaValidationHook_IntegrationViaHookChain(t *testing.T) {
 
 func TestDenylistAndSchema_ChainedOrder(t *testing.T) {
 	t.Parallel()
-	hc := NewHookChain()
-	hc.RegisterPre(DenylistHook("/workspace"))
-	hc.RegisterPre(SchemaValidationHook(bashSchema()))
+	hc := agenthooks.NewHookChain()
+	hc.RegisterPre(agenthooks.DenylistHook("/workspace"))
+	hc.RegisterPre(agenthooks.SchemaValidationHook(bashSchema()))
 
 	verdict := hc.RunPre(schemaCtx("bash", `{"command":"sudo rm -rf /"}`))
 	if !verdict.Veto {

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
@@ -29,7 +30,7 @@ func (s *slowSandbox) Execute(ctx context.Context, _ sandbox.Payload) (sandbox.R
 func TestDispatchTool_Timeout_ReturnsTypedResult(t *testing.T) {
 	t.Parallel()
 	sb := &slowSandbox{delay: 5 * time.Second}
-	executor := NewToolExecutor(sb, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(sb, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	w := &Worker{
 		toolExecutor: executor,
@@ -47,7 +48,7 @@ func TestDispatchTool_Timeout_ReturnsTypedResult(t *testing.T) {
 
 	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
 
-	if tr.Status != ToolStatusTimeout {
+	if tr.Status != agenttools.ToolStatusTimeout {
 		t.Fatalf("status = %s, want timeout", tr.Status)
 	}
 	forCtx := tr.ForContext()
@@ -59,7 +60,7 @@ func TestDispatchTool_Timeout_ReturnsTypedResult(t *testing.T) {
 func TestDispatchTool_Timeout_PerToolOverridesDefault(t *testing.T) {
 	t.Parallel()
 	sb := &slowSandbox{delay: 5 * time.Second}
-	executor := NewToolExecutor(sb, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(sb, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	w := &Worker{
 		toolExecutor: executor,
@@ -84,7 +85,7 @@ func TestDispatchTool_Timeout_PerToolOverridesDefault(t *testing.T) {
 		t.Fatalf("per-tool timeout (50ms) should have fired, but elapsed %v", elapsed)
 	}
 
-	if tr.Status != ToolStatusTimeout {
+	if tr.Status != agenttools.ToolStatusTimeout {
 		t.Fatalf("status = %s, want timeout", tr.Status)
 	}
 }
@@ -92,7 +93,7 @@ func TestDispatchTool_Timeout_PerToolOverridesDefault(t *testing.T) {
 func TestDispatchTool_Timeout_DefaultApplies(t *testing.T) {
 	t.Parallel()
 	sb := &slowSandbox{delay: 5 * time.Second}
-	executor := NewToolExecutor(sb, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(sb, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	w := &Worker{
 		toolExecutor: executor,
@@ -110,7 +111,7 @@ func TestDispatchTool_Timeout_DefaultApplies(t *testing.T) {
 
 	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
 
-	if tr.Status != ToolStatusTimeout {
+	if tr.Status != agenttools.ToolStatusTimeout {
 		t.Fatalf("default timeout should have fired; status = %s", tr.Status)
 	}
 }
@@ -118,7 +119,7 @@ func TestDispatchTool_Timeout_DefaultApplies(t *testing.T) {
 func TestDispatchTool_NoTimeout_FastTool(t *testing.T) {
 	t.Parallel()
 	sb := &mockExecSandbox{result: sandbox.Result{Stdout: "hello\n", Success: true}}
-	executor := NewToolExecutor(sb, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(sb, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	w := &Worker{
 		toolExecutor: executor,
@@ -136,7 +137,7 @@ func TestDispatchTool_NoTimeout_FastTool(t *testing.T) {
 	}
 
 	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
-	if tr.Status == ToolStatusTimeout {
+	if tr.Status == agenttools.ToolStatusTimeout {
 		t.Fatalf("fast tool should not timeout, got status %s", tr.Status)
 	}
 	if !strings.Contains(tr.Content, "hello") {
@@ -150,7 +151,7 @@ func TestDispatchTool_NoTimeout_FastTool(t *testing.T) {
 func TestDispatchToolWithHooks_Timeout(t *testing.T) {
 	t.Parallel()
 	sb := &slowSandbox{delay: 5 * time.Second}
-	executor := NewToolExecutor(sb, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(sb, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	w := &Worker{
 		toolExecutor: executor,
@@ -175,7 +176,7 @@ func TestDispatchToolWithHooks_Timeout(t *testing.T) {
 		t.Fatal("expected suspend=false")
 	}
 
-	if tr.Status != ToolStatusTimeout {
+	if tr.Status != agenttools.ToolStatusTimeout {
 		t.Fatalf("status = %s, want timeout", tr.Status)
 	}
 	forCtx := tr.ForContext()
@@ -187,7 +188,7 @@ func TestDispatchToolWithHooks_Timeout(t *testing.T) {
 func TestDispatchTool_Timeout_DistinguishableFromError(t *testing.T) {
 	t.Parallel()
 	sb := &slowSandbox{delay: 5 * time.Second}
-	executor := NewToolExecutor(sb, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(sb, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	w := &Worker{
 		toolExecutor: executor,
@@ -209,7 +210,7 @@ func TestDispatchTool_Timeout_DistinguishableFromError(t *testing.T) {
 		Success: false, ExitCode: 1,
 		Stdout: "", Stderr: "command not found",
 	}}
-	errExecutor := NewToolExecutor(errSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	errExecutor := agenttools.NewToolExecutor(errSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	w2 := &Worker{
 		toolExecutor: errExecutor,
 		toolTimeouts: config.ToolTimeoutsConfig{
@@ -222,10 +223,10 @@ func TestDispatchTool_Timeout_DistinguishableFromError(t *testing.T) {
 	}
 	errorTR := w2.DispatchTool(context.Background(), "s1", errorCall, nil, errExecutor)
 
-	if timeoutTR.Status != ToolStatusTimeout {
+	if timeoutTR.Status != agenttools.ToolStatusTimeout {
 		t.Fatalf("timeout result should have status=timeout, got %s", timeoutTR.Status)
 	}
-	if errorTR.Status == ToolStatusTimeout {
+	if errorTR.Status == agenttools.ToolStatusTimeout {
 		t.Fatal("error result should NOT have status=timeout")
 	}
 	timeoutCtx := timeoutTR.ForContext()

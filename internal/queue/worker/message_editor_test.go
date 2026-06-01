@@ -8,26 +8,28 @@ import (
 	"strings"
 	"testing"
 
+	agentcontext "agentd/internal/agent/context"
+	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 )
 
-func testContextManager(t *testing.T) *ContextManager {
+func testContextManager(t *testing.T) *agentcontext.ContextManager {
 	t.Helper()
-	return NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent", "task")
+	return agentcontext.NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent", "task")
 }
 
 func TestResolveEditContextManager_PerCallOverride(t *testing.T) {
 	t.Parallel()
-	editorCM := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-default", "task-default")
-	sessionCM := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-session", "task-session")
+	editorCM := agentcontext.NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-default", "task-default")
+	sessionCM := agentcontext.NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-session", "task-session")
 
 	tests := []struct {
 		name      string
-		sessionCM *ContextManager
-		editorCM  *ContextManager
-		want      *ContextManager
+		sessionCM *agentcontext.ContextManager
+		editorCM  *agentcontext.ContextManager
+		want      *agentcontext.ContextManager
 		wantFresh bool
 	}{
 		{"session overrides editor", sessionCM, editorCM, sessionCM, false},
@@ -37,7 +39,7 @@ func TestResolveEditContextManager_PerCallOverride(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := resolveEditContextManager(tc.sessionCM, tc.editorCM)
+			got := agentcontext.ResolveEditContextManager(tc.sessionCM, tc.editorCM)
 			if tc.wantFresh {
 				if got == nil {
 					t.Fatal("resolveEditContextManager() = nil, want non-nil default")
@@ -53,12 +55,12 @@ func TestResolveEditContextManager_PerCallOverride(t *testing.T) {
 
 func TestMessageEditor_Edit_PerCallCmOverride(t *testing.T) {
 	t.Parallel()
-	defaultCM := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-default", "task-default")
-	sessionCM := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-session", "task-session")
-	if resolveEditContextManager(sessionCM, defaultCM) != sessionCM {
+	defaultCM := agentcontext.NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-default", "task-default")
+	sessionCM := agentcontext.NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, nil, "agent-session", "task-session")
+	if agentcontext.ResolveEditContextManager(sessionCM, defaultCM) != sessionCM {
 		t.Fatal("precondition: per-call cm must take precedence over editor default")
 	}
-	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, defaultCM)
+	editor := agentcontext.NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, defaultCM)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
@@ -86,7 +88,7 @@ func TestMessageEditor_Edit_PerCallCmOverride(t *testing.T) {
 func TestMessageEditor_Edit_TruncatesFromTurn(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
+	editor := agentcontext.NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
@@ -114,13 +116,13 @@ func TestMessageEditor_Edit_TruncatesFromTurn(t *testing.T) {
 func TestMessageEditor_Edit_RewritesUserContent(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
+	editor := agentcontext.NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "original task"},
 		{Role: "assistant", Content: "bad"},
 	}
-	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, EditAnchorUserTurn, "new task spec", nil)
+	_, err := editor.Edit(context.Background(), "sess", "sess:0", &messages, agentcontext.EditAnchorUserTurn, "new task spec", nil)
 	if err != nil {
 		t.Fatalf("Edit: %v", err)
 	}
@@ -136,13 +138,13 @@ func TestMessageEditor_Edit_CheckpointsBeforeMutate(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
 	store := wsession.NewMemoryCheckpointStore()
-	editor := NewMessageEditor(store, nil, cm)
+	editor := agentcontext.NewMessageEditor(store, nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
 		{Role: "assistant", Content: "stale"},
 	}
-	result, err := editor.Edit(context.Background(), "sess-1", "sess-1:0", &messages, EditAnchorUserTurn, "task v2", nil)
+	result, err := editor.Edit(context.Background(), "sess-1", "sess-1:0", &messages, agentcontext.EditAnchorUserTurn, "task v2", nil)
 	if err != nil {
 		t.Fatalf("Edit: %v", err)
 	}
@@ -166,7 +168,7 @@ func TestMessageEditor_Edit_CheckpointsBeforeMutate(t *testing.T) {
 
 func TestMessageEditor_Commit_AppendsOnly(t *testing.T) {
 	t.Parallel()
-	editor := NewMessageEditor(nil, nil, nil)
+	editor := agentcontext.NewMessageEditor(nil, nil, nil)
 	messages := []gateway.PromptMessage{{Role: "user", Content: "hi"}}
 	editor.Commit(&messages, gateway.PromptMessage{Role: "assistant", Content: "ok"})
 	if len(messages) != 2 {
@@ -181,7 +183,7 @@ func TestMessageEditor_Edit_NoCheckpointOnValidationFailure(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
 	store := wsession.NewMemoryCheckpointStore()
-	editor := NewMessageEditor(store, nil, cm)
+	editor := agentcontext.NewMessageEditor(store, nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
@@ -192,7 +194,7 @@ func TestMessageEditor_Edit_NoCheckpointOnValidationFailure(t *testing.T) {
 		t.Fatal("expected error when no post-anchor turns exist")
 	}
 	messages = append([]gateway.PromptMessage(nil), baseline...)
-	result, err := editor.Edit(context.Background(), "sess", "sess:1", &messages, EditAnchorUserTurn, "task v2", nil)
+	result, err := editor.Edit(context.Background(), "sess", "sess:1", &messages, agentcontext.EditAnchorUserTurn, "task v2", nil)
 	if err != nil {
 		t.Fatalf("valid Edit: %v", err)
 	}
@@ -204,7 +206,7 @@ func TestMessageEditor_Edit_NoCheckpointOnValidationFailure(t *testing.T) {
 func TestMessageEditor_Edit_RejectsInvalidTurnIndex(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
+	editor := agentcontext.NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
@@ -221,7 +223,7 @@ func TestMessageEditor_Edit_RejectsInvalidTurnIndex(t *testing.T) {
 func TestMessageEditor_Edit_RejectsAssistantOnlyTurn(t *testing.T) {
 	t.Parallel()
 	cm := testContextManager(t)
-	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
+	editor := agentcontext.NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
@@ -239,15 +241,15 @@ func TestMessageEditor_Edit_RejectsAssistantOnlyTurn(t *testing.T) {
 func TestMessageEditor_Edit_AuditRecord(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "audit.jsonl")
-	logger := NewAuditLogger(NewFileAuditSink(path), true)
+	logger := agentruntime.NewAuditLogger(agentruntime.NewFileAuditSink(path), true)
 	cm := testContextManager(t)
-	editor := NewMessageEditor(wsession.NewMemoryCheckpointStore(), logger, cm)
+	editor := agentcontext.NewMessageEditor(wsession.NewMemoryCheckpointStore(), logger, cm)
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "sys"},
 		{Role: "user", Content: "task"},
 		{Role: "assistant", Content: "x"},
 	}
-	_, err := editor.Edit(context.Background(), "sess", "turn-1", &messages, EditAnchorUserTurn, "new", nil)
+	_, err := editor.Edit(context.Background(), "sess", "turn-1", &messages, agentcontext.EditAnchorUserTurn, "new", nil)
 	if err != nil {
 		t.Fatalf("Edit: %v", err)
 	}

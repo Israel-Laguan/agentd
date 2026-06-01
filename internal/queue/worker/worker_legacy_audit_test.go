@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/config"
 	"agentd/internal/models"
 )
@@ -80,10 +81,10 @@ func TestRunLegacyTask_AuditEventsWritten(t *testing.T) {
 	for _, rec := range records {
 		rt, _ := rec["record_type"].(string)
 		switch rt {
-		case recordTypeTaskStart:
+		case agentruntime.RecordTypeTaskStart:
 			hasStart = true
-			if rec["type"] != recordTypeTaskStart {
-				t.Errorf("task_start: type = %v, want %q", rec["type"], recordTypeTaskStart)
+			if rec["type"] != agentruntime.RecordTypeTaskStart {
+				t.Errorf("task_start: type = %v, want %q", rec["type"], agentruntime.RecordTypeTaskStart)
 			}
 			if rec["task_id"] != "task-legacy-audit" {
 				t.Errorf("task_start: task_id = %v, want task-legacy-audit", rec["task_id"])
@@ -97,7 +98,7 @@ func TestRunLegacyTask_AuditEventsWritten(t *testing.T) {
 			if _, ok := rec["timestamp"]; !ok {
 				t.Error("task_start: missing timestamp")
 			}
-		case recordTypeTaskComplete, recordTypeTaskFail, recordTypeTaskReview:
+		case agentruntime.RecordTypeTaskComplete, agentruntime.RecordTypeTaskFail, agentruntime.RecordTypeTaskReview:
 			hasEnd = true
 			if rec["type"] != rt {
 				t.Errorf("end record: type = %v, want %q", rec["type"], rt)
@@ -134,12 +135,12 @@ func TestRunLegacyTask_AuditReviewHandoff_EmitsTaskReview(t *testing.T) {
 	for _, rec := range records {
 		rt, _ := rec["record_type"].(string)
 		switch rt {
-		case recordTypeTaskStart:
+		case agentruntime.RecordTypeTaskStart:
 			hasStart = true
-		case recordTypeTaskReview:
+		case agentruntime.RecordTypeTaskReview:
 			hasReview = true
-			if rec["type"] != recordTypeTaskReview {
-				t.Errorf("task_review: type = %v, want %q", rec["type"], recordTypeTaskReview)
+			if rec["type"] != agentruntime.RecordTypeTaskReview {
+				t.Errorf("task_review: type = %v, want %q", rec["type"], agentruntime.RecordTypeTaskReview)
 			}
 			if rec["command"] == "" || rec["command"] == nil {
 				t.Errorf("task_review missing command field: %v", rec)
@@ -150,7 +151,7 @@ func TestRunLegacyTask_AuditReviewHandoff_EmitsTaskReview(t *testing.T) {
 			if _, ok := rec["token_usage"]; !ok {
 				t.Errorf("task_review missing token_usage field: %v", rec)
 			}
-		case recordTypeTaskComplete:
+		case agentruntime.RecordTypeTaskComplete:
 			t.Errorf("unexpected task_complete on review handoff run: %v", rec)
 		}
 	}
@@ -172,7 +173,7 @@ func TestRunLegacyTask_AuditComplete_HasCommand(t *testing.T) {
 	records := readAuditRecords(t, auditPath)
 	for _, rec := range records {
 		rt, _ := rec["record_type"].(string)
-		if rt == recordTypeTaskComplete {
+		if rt == agentruntime.RecordTypeTaskComplete {
 			// The mock gateway returns {"command":"echo ok"} so command should be set.
 			if rec["command"] == "" || rec["command"] == nil {
 				t.Errorf("task_complete missing command field: %v", rec)

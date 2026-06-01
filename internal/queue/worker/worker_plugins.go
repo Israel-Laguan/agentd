@@ -3,8 +3,13 @@ package worker
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
+	wfilecontext "agentd/internal/agent/filecontext"
+	agenthooks "agentd/internal/agent/hooks"
+	agentsubagent "agentd/internal/agent/subagent"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -17,11 +22,11 @@ import (
 // worker-global state.
 func (w *Worker) mountScopedPlugins(
 	project models.Project, profile models.AgentProfile,
-) (*HookChain, *capabilities.Registry) {
+) (*agenthooks.HookChain, *capabilities.Registry) {
 	if w.pluginMounter == nil {
 		return nil, nil
 	}
-	taskHooks := NewHookChain()
+	taskHooks := agenthooks.NewHookChain()
 	taskCaps := capabilities.NewRegistry()
 
 	if project.WorkspacePath != "" {
@@ -46,7 +51,7 @@ func (w *Worker) mountScopedPlugins(
 // agenticToolsWithExtras builds the tool definitions and adapter index,
 // merging any extra capabilities from scoped plugins.
 func (w *Worker) agenticToolsWithExtras(
-	ctx context.Context, toolExecutor *ToolExecutor, extra *capabilities.Registry,
+	ctx context.Context, toolExecutor *agenttools.ToolExecutor, extra *capabilities.Registry,
 ) ([]gateway.ToolDefinition, map[string]string) {
 	tools, adapterIndex := w.agenticTools(ctx, toolExecutor)
 	if extra == nil {
@@ -74,17 +79,17 @@ func (w *Worker) dispatchToolWithHooks(
 	taskUpdatedAt time.Time,
 	call gateway.ToolCall,
 	toolToAdapter map[string]string,
-	toolExecutor *ToolExecutor,
-	taskHooks *HookChain,
+	toolExecutor *agenttools.ToolExecutor,
+	taskHooks *agenthooks.HookChain,
 	scopedCapabilities *capabilities.Registry,
 	provider ...string,
-) (ToolResult, bool) {
+) (agenttools.ToolResult, bool) {
 	providerName := ""
 	if len(provider) > 0 {
 		providerName = provider[0]
 	}
 	var verdicts []string
-	hookCtx := HookContext{
+	hookCtx := agenthooks.HookContext{
 		ToolName:      call.Function.Name,
 		Args:          call.Function.Arguments,
 		CallID:        call.ID,
@@ -122,16 +127,16 @@ func (w *Worker) dispatchToolWithHooks(
 
 // applyTaskPreHooks runs task-scoped pre-hooks. When handled is true, tr and suspended are final.
 func (w *Worker) applyTaskPreHooks(
-	hookCtx HookContext,
+	hookCtx agenthooks.HookContext,
 	call gateway.ToolCall,
-	taskHooks *HookChain,
-) (tr ToolResult, suspended bool, callEnv []string, handled bool) {
+	taskHooks *agenthooks.HookChain,
+) (tr agenttools.ToolResult, suspended bool, callEnv []string, handled bool) {
 	if taskHooks == nil {
-		return ToolResult{}, false, nil, false
+		return agenttools.ToolResult{}, false, nil, false
 	}
 	verdict := taskHooks.RunPre(hookCtx)
 	if verdict.ShortCircuit {
-		tr = classifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0)
+		tr = agenttools.ClassifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, 0)
 		tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
 		return tr, verdict.Suspend, nil, true
 	}
@@ -139,29 +144,29 @@ func (w *Worker) applyTaskPreHooks(
 		// Suspend controls agentic loop pause and status: substitute answers
 		// continue as Success; human-review gates surface as Vetoed.
 		if verdict.Suspend {
-			tr = VetoedResult(call.ID, verdict.Result)
+			tr = agenttools.VetoedResult(call.ID, verdict.Result)
 			tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
 			return tr, true, nil, true
 		}
-		tr = SuccessResult(call.ID, verdict.Result, 0)
+		tr = agenttools.SuccessResult(call.ID, verdict.Result, 0)
 		tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
 		return tr, false, nil, true
 	}
 	if verdict.Veto {
-		tr = VetoedResult(call.ID, verdict.Reason)
+		tr = agenttools.VetoedResult(call.ID, verdict.Reason)
 		tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
 		return tr, verdict.Suspend, nil, true
 	}
 	if len(verdict.Env) > 0 {
 		callEnv = append(callEnv, verdict.Env...)
 	}
-	return ToolResult{}, false, callEnv, false
+	return agenttools.ToolResult{}, false, callEnv, false
 }
 
 // runDispatchPostHooks runs worker-level then task-scoped post-hooks.
 // Used when task pre-hooks veto before executeToolCore (which would normally
 // run worker post-hooks including audit).
-func (w *Worker) runDispatchPostHooks(hookCtx HookContext, tr ToolResult, taskHooks *HookChain) string {
+func (w *Worker) runDispatchPostHooks(hookCtx agenthooks.HookContext, tr agenttools.ToolResult, taskHooks *agenthooks.HookChain) string {
 	hookCtx.ResultStatus = tr.Status
 	hookCtx.ResultStatusSet = true
 	hookCtx.ResultExitCode = tr.ExitCode
@@ -177,7 +182,7 @@ func (w *Worker) runDispatchPostHooks(hookCtx HookContext, tr ToolResult, taskHo
 	return content
 }
 
-func (w *Worker) finalizeDispatchAudit(hookCtx HookContext, tr ToolResult) {
+func (w *Worker) finalizeDispatchAudit(hookCtx agenthooks.HookContext, tr agenttools.ToolResult) {
 	if w.budgetTracker != nil && hookCtx.SessionID != "" {
 		hookCtx.TokenCountAfter = w.budgetTracker.Usage(hookCtx.SessionID)
 	}
@@ -186,4 +191,52 @@ func (w *Worker) finalizeDispatchAudit(hookCtx HookContext, tr ToolResult) {
 		verdicts = *hookCtx.Verdicts
 	}
 	w.recordToolDispatch(hookCtx, tr, verdicts)
+}
+
+func (w *Worker) newAgenticTaskToolExecutor(project models.Project, task models.Task) *agenttools.ToolExecutor {
+	ex := agenttools.NewToolExecutor(
+		w.sandbox,
+		project.WorkspacePath,
+		agenttools.BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
+		w.sandboxWallTimeout,
+	)
+	if w.fileContextCfg.Enabled && w.docStore != nil {
+		taskQuery := strings.TrimSpace(task.Description)
+		if ctx := strings.TrimSpace(project.OriginalInput); ctx != "" {
+			if taskQuery != "" {
+				taskQuery += "\n"
+			}
+			taskQuery += ctx
+		}
+		var embedder wfilecontext.Embedder
+		if w.gateway != nil {
+			embedder = &wfilecontext.GatewayEmbedder{
+				Gateway: w.gateway,
+				Model:   w.fileContextCfg.EmbeddingModel,
+			}
+		}
+		ex.SetFilePipeline(wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
+			Workspace: project.WorkspacePath,
+			Store:     w.docStore,
+			Embedder:  embedder,
+			TopK:      w.fileContextCfg.TopK,
+			TaskQuery: taskQuery,
+			Pinned:    wfilecontext.ParsePinnedPaths(taskQuery),
+		}))
+	}
+	return ex
+}
+
+func (w *Worker) agenticTools(ctx context.Context, toolExecutor *agenttools.ToolExecutor) ([]gateway.ToolDefinition, map[string]string) {
+	tools := append([]gateway.ToolDefinition(nil), toolExecutor.Definitions()...)
+	tools = append(tools, agentsubagent.DelegateToolDefinition(), agentsubagent.DelegateParallelToolDefinition())
+	if w.capabilities == nil {
+		return tools, nil
+	}
+	capabilityTools, toolToAdapter, err := w.capabilities.GetToolsAndAdapterIndex(ctx)
+	if err != nil {
+		slog.Warn("failed to get capability tools", "error", err)
+		return tools, nil
+	}
+	return append(tools, capabilityTools...), toolToAdapter
 }

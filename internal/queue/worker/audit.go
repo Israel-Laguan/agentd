@@ -2,11 +2,12 @@ package worker
 
 import (
 	agenthooks "agentd/internal/agent/hooks"
+	agentruntime "agentd/internal/agent/runtime"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 )
 
-func (w *Worker) recordToolDispatch(hookCtx HookContext, tr ToolResult, verdicts []string) {
+func (w *Worker) recordToolDispatch(hookCtx agenthooks.HookContext, tr agenttools.ToolResult, verdicts []string) {
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
 		return
 	}
@@ -27,7 +28,7 @@ func (w *Worker) recordTurnSnapshot(
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
 		return
 	}
-	w.auditLogger.RecordTurnSnapshot(TurnSnapshotRecord{
+	w.auditLogger.RecordTurnSnapshot(agentruntime.TurnSnapshotRecord{
 		TaskID:       sessionID,
 		ProjectID:    projectID,
 		Provider:     provider,

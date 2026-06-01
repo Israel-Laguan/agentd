@@ -43,11 +43,11 @@ func TestBootstrapFromConfigUpsertsTasks(t *testing.T) {
 				Title:       "Cron Job",
 			},
 			{
-				ID:        "once-job",
-				RunAfter:  runAfter.Format(time.RFC3339),
-				ContextFn: "static",
+				ID:          "once-job",
+				RunAfter:    runAfter.Format(time.RFC3339),
+				ContextFn:   "static",
 				ContextArgs: map[string]string{"body": "once body"},
-				Title:     "Once Job",
+				Title:       "Once Job",
 			},
 		},
 	}

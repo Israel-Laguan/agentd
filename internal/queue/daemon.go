@@ -19,42 +19,42 @@ import (
 )
 
 type Daemon struct {
-	store                   models.KanbanStore
-	worker                  *qw.Worker
-	intake                  *frontdesk.IntakeProcessor
-	breaker                 *safety.CircuitBreaker
-	sem                     *safety.Semaphore
-	probe                   safety.PIDProbe
-	sink                    models.EventSink
-	taskInterval            time.Duration
-	maxTaskInterval         time.Duration
-	taskDeadline            time.Duration
-	intakeEvery             time.Duration
-	heartbeatInterval       time.Duration
-	staleAfter              time.Duration
-	handoffAfter            time.Duration
-	outageHandoffEnabled    bool
-	diskWatchdogEvery       time.Duration
-	diskWatchdogSchedule    cron.Schedule
-	hitlReconcileEvery      time.Duration
-	hitlReconcileSchedule   cron.Schedule
-	diskFreeThreshold       float64
-	diskCheckPath           string
-	diskStat                func(string) (float64, error)
-	librarian               *memory.Librarian
-	dreamer                 *memory.DreamAgent
-	curatorEvery            time.Duration
-	curatorSchedule         cron.Schedule
-	dreamEvery              time.Duration
-	dreamSchedule           cron.Schedule
-	channel                 Channel
-	queuedReconcileAfter    time.Duration
-	rateLimitedRequeueAfter time.Duration
-	rollingLedger           *RollingTokenLedger
-	scheduler               *Scheduler
-	schedulerTickEvery      time.Duration
+	store                    models.KanbanStore
+	worker                   *qw.Worker
+	intake                   *frontdesk.IntakeProcessor
+	breaker                  *safety.CircuitBreaker
+	sem                      *safety.Semaphore
+	probe                    safety.PIDProbe
+	sink                     models.EventSink
+	taskInterval             time.Duration
+	maxTaskInterval          time.Duration
+	taskDeadline             time.Duration
+	intakeEvery              time.Duration
+	heartbeatInterval        time.Duration
+	staleAfter               time.Duration
+	handoffAfter             time.Duration
+	outageHandoffEnabled     bool
+	diskWatchdogEvery        time.Duration
+	diskWatchdogSchedule     cron.Schedule
+	hitlReconcileEvery       time.Duration
+	hitlReconcileSchedule    cron.Schedule
+	diskFreeThreshold        float64
+	diskCheckPath            string
+	diskStat                 func(string) (float64, error)
+	librarian                *memory.Librarian
+	dreamer                  *memory.DreamAgent
+	curatorEvery             time.Duration
+	curatorSchedule          cron.Schedule
+	dreamEvery               time.Duration
+	dreamSchedule            cron.Schedule
+	channel                  Channel
+	queuedReconcileAfter     time.Duration
+	rateLimitedRequeueAfter  time.Duration
+	rollingLedger            *RollingTokenLedger
+	scheduler                *Scheduler
+	schedulerTickEvery       time.Duration
 	lastRollingLedgerRefresh time.Time
-	wg                      sync.WaitGroup
+	wg                       sync.WaitGroup
 }
 
 type DaemonOptions struct {
@@ -108,7 +108,7 @@ func NewDaemon(
 		taskDeadline: opts.TaskDeadline, intakeEvery: opts.IntakeInterval,
 		heartbeatInterval: opts.HeartbeatInterval, staleAfter: opts.StaleAfter, handoffAfter: opts.HandoffAfter,
 		outageHandoffEnabled: outageHandoffEnabled,
-		diskWatchdogEvery: opts.DiskWatchdogEvery, diskWatchdogSchedule: opts.DiskWatchdogSchedule,
+		diskWatchdogEvery:    opts.DiskWatchdogEvery, diskWatchdogSchedule: opts.DiskWatchdogSchedule,
 		hitlReconcileEvery: opts.HITLReconcileEvery, hitlReconcileSchedule: opts.HITLReconcileSchedule,
 		diskFreeThreshold: opts.DiskFreeThreshold, diskCheckPath: opts.DiskCheckPath,
 		diskStat:  safety.DiskFreePercent,

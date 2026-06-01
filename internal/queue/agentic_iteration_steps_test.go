@@ -10,6 +10,7 @@ import (
 
 	"github.com/cucumber/godog"
 
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/worker"
@@ -36,7 +37,7 @@ type agenticIterationScenario struct {
 	sandbox       *iterationSandbox
 	workerOpts    worker.WorkerOptions
 	budgetTracker *gateway.InMemoryBudgetTracker
-	budgetGuard   *worker.BudgetGuard
+	budgetGuard   *agentruntime.BudgetGuard
 }
 
 type iterationGateway struct {
@@ -88,7 +89,6 @@ func (g *iterationGateway) ClassifyIntent(ctx context.Context, s string) (*gatew
 func (g *iterationGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
-
 
 type iterationStore struct {
 	mu       sync.Mutex
@@ -231,7 +231,7 @@ func (state *agenticIterationScenario) gatewayReturnsToolCalls() error {
 }
 
 func (state *agenticIterationScenario) runAgenticLoop(n int) error {
-	ig := worker.NewIterationGuard(state.workerOpts.MaxToolIterations)
+	ig := agentruntime.NewIterationGuard(state.workerOpts.MaxToolIterations)
 	for i := 0; i < n; i++ {
 		if err := ig.BeforeIteration(); err != nil {
 			state.lastError = err
@@ -259,7 +259,7 @@ func (state *agenticIterationScenario) finalMessageInjected() error {
 }
 
 func (state *agenticIterationScenario) additionalCallAllowed() error {
-	ig := worker.NewIterationGuard(state.workerOpts.MaxToolIterations)
+	ig := agentruntime.NewIterationGuard(state.workerOpts.MaxToolIterations)
 	for i := 0; i < state.workerOpts.MaxToolIterations; i++ {
 		ig.AfterIteration(true)
 	}
@@ -278,7 +278,7 @@ func (state *agenticIterationScenario) setTokenBudget(n int) error {
 	state.tokenBudget = n
 	state.workerOpts.TokenBudget = n
 	state.budgetTracker = gateway.NewBudgetTracker(n)
-	state.budgetGuard = worker.NewBudgetGuard(state.budgetTracker, "task-1")
+	state.budgetGuard = agentruntime.NewBudgetGuard(state.budgetTracker, "task-1")
 	return nil
 }
 
@@ -339,7 +339,7 @@ func (state *agenticIterationScenario) deadlineInPast(n int) error {
 	// Wait to ensure deadline is definitely expired
 	time.Sleep(10 * time.Millisecond)
 	// Create deadline guard with expired context
-	dg := worker.NewDeadlineGuard(ctx)
+	dg := agentruntime.NewDeadlineGuard(ctx)
 	err := dg.BeforeIteration()
 	state.lastError = err
 	return nil
@@ -349,7 +349,7 @@ func (state *agenticIterationScenario) loopAttemptsIteration() error {
 	// Use the expired context from deadlineInPast step
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
 	defer cancel()
-	dg := worker.NewDeadlineGuard(ctx)
+	dg := agentruntime.NewDeadlineGuard(ctx)
 	err := dg.BeforeIteration()
 	state.lastError = err
 	return nil
@@ -373,7 +373,7 @@ func (state *agenticIterationScenario) gatewayNoToolCalls() error {
 }
 
 func (state *agenticIterationScenario) agenticLoopRuns() error {
-	ig := worker.NewIterationGuard(10)
+	ig := agentruntime.NewIterationGuard(10)
 	err := ig.BeforeIteration()
 	if err != nil {
 		state.lastError = err
@@ -398,7 +398,7 @@ func (state *agenticIterationScenario) taskUsesTokens(taskID string, tokens int)
 	if state.budgetTracker == nil {
 		state.budgetTracker = gateway.NewBudgetTracker(state.tokenBudget)
 	}
-	bg := worker.NewBudgetGuard(state.budgetTracker, taskID)
+	bg := agentruntime.NewBudgetGuard(state.budgetTracker, taskID)
 	bg.AfterCall(tokens)
 	return nil
 }
@@ -407,7 +407,7 @@ func (state *agenticIterationScenario) taskHasFullBudget(taskID string, budget i
 	if state.budgetTracker == nil {
 		return fmt.Errorf("budget tracker not initialized for step")
 	}
-	bg := worker.NewBudgetGuard(state.budgetTracker, taskID)
+	bg := agentruntime.NewBudgetGuard(state.budgetTracker, taskID)
 	if err := bg.BeforeCall(); err != nil {
 		return fmt.Errorf("expected full budget available but got error: %v", err)
 	}
@@ -425,7 +425,7 @@ func (state *agenticIterationScenario) taskBlockedFromCalls(taskID string) error
 	if state.budgetTracker == nil {
 		return fmt.Errorf("budget tracker not initialized for step")
 	}
-	bg := worker.NewBudgetGuard(state.budgetTracker, taskID)
+	bg := agentruntime.NewBudgetGuard(state.budgetTracker, taskID)
 	err := bg.BeforeCall()
 	if err == nil {
 		return fmt.Errorf("expected task to be blocked but call succeeded")

@@ -5,12 +5,14 @@ package queue
 import (
 	"context"
 
+	agentruntime "agentd/internal/agent/runtime"
+	wsession "agentd/internal/agent/session"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/recovery"
 	"agentd/internal/queue/safety"
 	qw "agentd/internal/queue/worker"
-	wsession "agentd/internal/agent/session"
 )
 
 type PIDProbe = safety.PIDProbe
@@ -34,7 +36,7 @@ var NewWorker = qw.NewWorker
 
 // EnsureAuditFile creates the audit file at path and writes a daemon_start marker.
 // Call at daemon startup when agentic.audit.enabled is true.
-var EnsureAuditFile = qw.EnsureAuditFile
+var EnsureAuditFile = agentruntime.EnsureAuditFile
 
 // ValidateToolCredentials checks that every mapped env var in toolCredentials is set.
 func ValidateToolCredentials(toolCredentials map[string]string) error {
@@ -75,7 +77,7 @@ const (
 	HealingStepHumanHandoff     = planning.HealingStepHumanHandoff
 )
 
-var BuildSandboxEnv = qw.BuildSandboxEnv
+var BuildSandboxEnv = agenttools.BuildSandboxEnv
 
 type CancelRegistry = qw.CancelRegistry
 

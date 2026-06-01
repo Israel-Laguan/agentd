@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/models"
 	"agentd/internal/queue/recovery"
 	"agentd/internal/queue/safety"
@@ -167,7 +168,7 @@ func (w *Worker) createPermissionHandoff(ctx context.Context, task models.Task, 
 	w.emit(ctx, task, "PERMISSION_HANDOFF", truncate(payload, 1000))
 }
 
-func (w *Worker) handleGoalStalled(ctx context.Context, task models.Task, gt *GoalTracker) error {
+func (w *Worker) handleGoalStalled(ctx context.Context, task models.Task, gt *agentcontext.GoalTracker) error {
 	goal := gt.Goal()
 	if goal == nil {
 		return nil

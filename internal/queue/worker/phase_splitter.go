@@ -8,6 +8,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	agentcontext "agentd/internal/agent/context"
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/spec"
@@ -39,7 +41,7 @@ const minExecutionTokenReserve = 1000
 // the same BudgetGuard as execution, so both phases share one task token budget.
 // When the budget is tight we skip planning so execution is less likely to stop
 // immediately with LoopBudgetExhausted.
-func (w *Worker) shouldPlanWithBudget(task models.Task, budgetGuard *BudgetGuard) bool {
+func (w *Worker) shouldPlanWithBudget(task models.Task, budgetGuard *agentruntime.BudgetGuard) bool {
 	if !w.shouldPlan(task) {
 		return false
 	}
@@ -105,8 +107,8 @@ func (w *Worker) buildPlanRequest(task models.Task, planContext string) gateway.
 
 func (w *Worker) generatePlan(
 	ctx context.Context, task models.Task, project models.Project,
-	budgetGuard *BudgetGuard,
-) (*Plan, error) {
+	budgetGuard *agentruntime.BudgetGuard,
+) (*agentcontext.Plan, error) {
 	planContext := w.buildPlanContext(task, project)
 	req := w.buildPlanRequest(task, planContext)
 	req.JSONMode = true
@@ -125,7 +127,7 @@ func (w *Worker) generatePlan(
 		if budgetGuard != nil {
 			budgetGuard.AfterCall(resp.TokenUsage)
 		}
-		var plan Plan
+		var plan agentcontext.Plan
 		if err := json.Unmarshal([]byte(resp.Content), &plan); err != nil {
 			if attempt == correction.MaxJSONAttempts-1 {
 				slog.Warn("agentic plan generation failed; continuing without plan",
@@ -149,7 +151,7 @@ func (w *Worker) generatePlan(
 	return nil, models.ErrInvalidJSONResponse
 }
 
-func (w *Worker) injectPlan(messages []gateway.PromptMessage, plan *Plan) []gateway.PromptMessage {
+func (w *Worker) injectPlan(messages []gateway.PromptMessage, plan *agentcontext.Plan) []gateway.PromptMessage {
 	if plan == nil {
 		return messages
 	}

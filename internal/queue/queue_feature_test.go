@@ -87,16 +87,16 @@ func registerLegacyQueueSteps(sc *godog.ScenarioContext) {
 func noopStep(context.Context) error { return nil }
 
 type queueScenario struct {
-	store      *queueStore
-	breaker    *CircuitBreaker
-	gateway    *queueGateway
-	sandbox    *queueSandbox
-	worker     *Worker
-	daemon     *Daemon
-	probe      StaticPIDProbe
-	sink       *queueSink
-	now        time.Time
-	maxRetries int
+	store         *queueStore
+	breaker       *CircuitBreaker
+	gateway       *queueGateway
+	sandbox       *queueSandbox
+	worker        *Worker
+	daemon        *Daemon
+	probe         StaticPIDProbe
+	sink          *queueSink
+	now           time.Time
+	maxRetries    int
 	ctx           context.Context
 	cancel        context.CancelFunc
 	done          chan error

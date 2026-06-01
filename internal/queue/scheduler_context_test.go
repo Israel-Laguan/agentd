@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/config"
 	"agentd/internal/models"
-	qw "agentd/internal/queue/worker"
 	"agentd/internal/testutil"
 )
 
@@ -85,12 +85,12 @@ func TestSchedulerUnknownContextFn(t *testing.T) {
 
 func TestTaskTypeKeywords(t *testing.T) {
 	cases := map[string]string{
-		qw.TaskTypeSummarize:   "summarize summary recap",
-		qw.TaskTypeCodeGen:     "implement fix refactor code",
-		qw.TaskTypeDocQA:       "explain document readme",
-		qw.TaskTypeWebResearch: "search fetch web url",
-		qw.TaskTypeFullAgent:   "orchestrate multi-step deploy",
-		"custom_type":          "custom_type",
+		agenttools.TaskTypeSummarize:   "summarize summary recap",
+		agenttools.TaskTypeCodeGen:     "implement fix refactor code",
+		agenttools.TaskTypeDocQA:       "explain document readme",
+		agenttools.TaskTypeWebResearch: "search fetch web url",
+		agenttools.TaskTypeFullAgent:   "orchestrate multi-step deploy",
+		"custom_type":                  "custom_type",
 	}
 	for taskType, want := range cases {
 		if got := taskTypeKeywords(taskType); got != want {
@@ -102,7 +102,7 @@ func TestTaskTypeKeywords(t *testing.T) {
 func TestBuildScheduledDescription(t *testing.T) {
 	entry := models.ScheduledTask{
 		DescriptionTemplate: "Template line",
-		TaskType:            qw.TaskTypeSummarize,
+		TaskType:            agenttools.TaskTypeSummarize,
 	}
 	got := buildScheduledDescription(entry, "context body")
 	for _, want := range []string{"Template line", "context body", "Scheduled task type:", "summarize summary recap"} {

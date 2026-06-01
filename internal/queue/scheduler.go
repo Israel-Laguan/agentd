@@ -11,9 +11,9 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/config"
 	"agentd/internal/models"
-	qw "agentd/internal/queue/worker"
 )
 
 type cachedCron struct {
@@ -31,12 +31,12 @@ type ContextProviderRegistry map[string]ContextProvider
 
 // Scheduler dispatches registry entries on a minute-resolution tick.
 type Scheduler struct {
-	store       models.ScheduledTaskStore
-	sink        models.EventSink
-	enabled     bool
-	projectID   string
-	providers   ContextProviderRegistry
-	cronByID    map[string]cachedCron
+	store     models.ScheduledTaskStore
+	sink      models.EventSink
+	enabled   bool
+	projectID string
+	providers ContextProviderRegistry
+	cronByID  map[string]cachedCron
 }
 
 // SchedulerOptions configures a Scheduler instance.
@@ -239,15 +239,15 @@ func buildScheduledDescription(entry models.ScheduledTask, contextBody string) s
 
 func taskTypeKeywords(taskType string) string {
 	switch taskType {
-	case qw.TaskTypeSummarize:
+	case agenttools.TaskTypeSummarize:
 		return "summarize summary recap"
-	case qw.TaskTypeCodeGen:
+	case agenttools.TaskTypeCodeGen:
 		return "implement fix refactor code"
-	case qw.TaskTypeDocQA:
+	case agenttools.TaskTypeDocQA:
 		return "explain document readme"
-	case qw.TaskTypeWebResearch:
+	case agenttools.TaskTypeWebResearch:
 		return "search fetch web url"
-	case qw.TaskTypeFullAgent:
+	case agenttools.TaskTypeFullAgent:
 		return "orchestrate multi-step deploy"
 	default:
 		return taskType

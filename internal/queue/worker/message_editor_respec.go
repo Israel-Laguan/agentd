@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	agentcontext "agentd/internal/agent/context"
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
@@ -12,8 +14,8 @@ import (
 
 func (w *Worker) buildTurnRespecRequest(
 	task models.Task,
-	plan *Plan,
-	failing []PlanStep,
+	plan *agentcontext.Plan,
+	failing []agentcontext.PlanStep,
 	originalUserContent string,
 ) gateway.AIRequest {
 	var b strings.Builder
@@ -24,7 +26,7 @@ func (w *Worker) buildTurnRespecRequest(
 	if plan != nil {
 		b.WriteString("Work plan:\n")
 		for _, step := range plan.Steps {
-			fmt.Fprintf(&b, "- %s: %s (format: %s)\n", step.ID, step.Action, normalizeOutputFormat(step.OutputFormat))
+			fmt.Fprintf(&b, "- %s: %s (format: %s)\n", step.ID, step.Action, agentcontext.NormalizeOutputFormat(step.OutputFormat))
 		}
 	}
 	if len(failing) > 0 {
@@ -45,9 +47,9 @@ func (w *Worker) buildTurnRespecRequest(
 	}
 }
 
-func anchorUserContent(messages []gateway.PromptMessage, cm *ContextManager) string {
+func anchorUserContent(messages []gateway.PromptMessage, cm *agentcontext.ContextManager) string {
 	if cm == nil {
-		cm = &ContextManager{}
+		cm = &agentcontext.ContextManager{}
 	}
 	anchor, _ := cm.PartitionAnchor(messages)
 	for i := len(anchor) - 1; i >= 0; i-- {
@@ -61,11 +63,11 @@ func anchorUserContent(messages []gateway.PromptMessage, cm *ContextManager) str
 func (w *Worker) generateRespecifiedUserTurn(
 	ctx context.Context,
 	task models.Task,
-	plan *Plan,
-	failing []PlanStep,
+	plan *agentcontext.Plan,
+	failing []agentcontext.PlanStep,
 	messages []gateway.PromptMessage,
-	cm *ContextManager,
-	budgetGuard *BudgetGuard,
+	cm *agentcontext.ContextManager,
+	budgetGuard *agentruntime.BudgetGuard,
 ) (string, error) {
 	if budgetGuard != nil {
 		if err := budgetGuard.BeforeCall(); err != nil {

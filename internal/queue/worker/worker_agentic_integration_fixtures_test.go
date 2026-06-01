@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
@@ -95,7 +96,7 @@ func assertMaxIterationsOutcome(t *testing.T, gw *maxIterationsGateway, store *m
 	if len(gw.requests) < 4 {
 		t.Fatalf("expected at least 4 recorded requests, got %d", len(gw.requests))
 	}
-	if !requestContainsUserMessage(gw.requests[3], iterationExceededMessage) {
+	if !requestContainsUserMessage(gw.requests[3], agentruntime.IterationExceededMessage) {
 		t.Errorf("grace request should include wrap-up user message, got %#v", gw.requests[3].Messages)
 	}
 	if store.task.RetryCount != 1 {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	agenthooks "agentd/internal/agent/hooks"
 	"agentd/internal/models"
 )
 
@@ -49,27 +50,27 @@ const DefaultApprovalTimeout = 30 * time.Minute
 //     a HUMAN approval subtask; the parent is BLOCKED and the loop stops
 //     until a human marks the subtask COMPLETED or FAILED (parent unblocks
 //     to READY when all children are terminal).
-func ApprovalGateHook(gatedTools []string, handler ApprovalHandler) PreHook {
+func ApprovalGateHook(gatedTools []string, handler ApprovalHandler) agenthooks.PreHook {
 	toolSet := make(map[string]struct{}, len(gatedTools))
 	for _, t := range gatedTools {
 		toolSet[strings.TrimSpace(t)] = struct{}{}
 	}
 
-	return PreHook{
+	return agenthooks.PreHook{
 		Name:   "approval-gate",
-		Policy: FailClosed,
-		Fn: func(ctx HookContext) (HookVerdict, error) {
+		Policy: agenthooks.FailClosed,
+		Fn: func(ctx agenthooks.HookContext) (agenthooks.HookVerdict, error) {
 			return evalApprovalGate(ctx, toolSet, handler)
 		},
 	}
 }
 
-func evalApprovalGate(ctx HookContext, toolSet map[string]struct{}, handler ApprovalHandler) (HookVerdict, error) {
+func evalApprovalGate(ctx agenthooks.HookContext, toolSet map[string]struct{}, handler ApprovalHandler) (agenthooks.HookVerdict, error) {
 	if len(toolSet) == 0 {
-		return HookVerdict{}, nil
+		return agenthooks.HookVerdict{}, nil
 	}
 	if _, gated := toolSet[ctx.ToolName]; !gated {
-		return HookVerdict{}, nil
+		return agenthooks.HookVerdict{}, nil
 	}
 
 	req := ApprovalRequest{
@@ -84,7 +85,7 @@ func evalApprovalGate(ctx HookContext, toolSet map[string]struct{}, handler Appr
 	}
 
 	if handler == nil {
-		return HookVerdict{
+		return agenthooks.HookVerdict{
 			Veto:   true,
 			Reason: "approval handler not configured",
 		}, nil
@@ -96,24 +97,24 @@ func evalApprovalGate(ctx HookContext, toolSet map[string]struct{}, handler Appr
 	}
 	resp, err := handler.RequestApproval(execCtx, req)
 	if err != nil {
-		return HookVerdict{
+		return agenthooks.HookVerdict{
 			Veto:   true,
 			Reason: fmt.Sprintf("approval request failed: %v", err),
 		}, nil
 	}
 
 	if resp.Approved {
-		return HookVerdict{}, nil
+		return agenthooks.HookVerdict{}, nil
 	}
 
 	if resp.Reason != "" {
-		return HookVerdict{
+		return agenthooks.HookVerdict{
 			Veto:   true,
 			Result: formatRejection(ctx.ToolName, resp.Reason),
 		}, nil
 	}
 
-	return HookVerdict{
+	return agenthooks.HookVerdict{
 		Veto:    true,
 		Suspend: true,
 		Result:  fmt.Sprintf("Tool call %q paused pending human approval. The task is now BLOCKED until a human reviews and approves.", ctx.ToolName),
