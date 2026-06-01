@@ -3,6 +3,7 @@ package worker
 import (
 	"testing"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -10,28 +11,21 @@ import (
 
 func testManifestTools() []gateway.ToolDefinition {
 	return []gateway.ToolDefinition{
-		{Name: toolNameBash},
-		{Name: toolNameRead},
-		{Name: toolNameWrite},
-		{Name: toolNameDelegate},
-		{Name: toolNameDelegateParallel},
+		{Name: agenttools.ToolNameBash},
+		{Name: agenttools.ToolNameRead},
+		{Name: agenttools.ToolNameWrite},
+		{Name: agenttools.ToolNameDelegate},
+		{Name: agenttools.ToolNameDelegateParallel},
 		{Name: "capability_tool"},
 	}
 }
 
 func testManifestIndex() map[string]string {
-	return map[string]string{
-		toolNameBash:             "builtin",
-		toolNameRead:             "builtin",
-		toolNameWrite:            "builtin",
-		toolNameDelegate:         "builtin",
-		toolNameDelegateParallel: "builtin",
-		"capability_tool":        "fake",
-	}
+	return map[string]string{agenttools.ToolNameBash: "builtin", agenttools.ToolNameRead: "builtin", agenttools.ToolNameWrite: "builtin", agenttools.ToolNameDelegate: "builtin", agenttools.ToolNameDelegateParallel: "builtin", "capability_tool": "fake"}
 }
 
-func enabledToolManifest() *ToolManifest {
-	return NewToolManifest(config.ToolManifestConfig{
+func enabledToolManifest() *agenttools.ToolManifest {
+	return agenttools.NewToolManifest(config.ToolManifestConfig{
 		Enabled:       true,
 		MinConfidence: 0.35,
 	})
@@ -39,14 +33,14 @@ func enabledToolManifest() *ToolManifest {
 
 func TestTaskClassifier_Summarize(t *testing.T) {
 	t.Parallel()
-	c := NewTaskClassifier(0.35)
+	c := agenttools.NewTaskClassifier(0.35)
 	got := c.Classify(models.Task{
 		BaseEntity:  models.BaseEntity{ID: "t1"},
 		Title:       "Summarize release notes",
 		Description: "Provide a short recap of the changelog",
 	})
-	if got.Type != TaskTypeSummarize {
-		t.Fatalf("Type = %q, want %q", got.Type, TaskTypeSummarize)
+	if got.Type != agenttools.TaskTypeSummarize {
+		t.Fatalf("Type = %q, want %q", got.Type, agenttools.TaskTypeSummarize)
 	}
 	if got.Confidence < 0.35 {
 		t.Fatalf("Confidence = %v, want >= 0.35", got.Confidence)
@@ -55,14 +49,14 @@ func TestTaskClassifier_Summarize(t *testing.T) {
 
 func TestTaskClassifier_CodeGen(t *testing.T) {
 	t.Parallel()
-	c := NewTaskClassifier(0.35)
+	c := agenttools.NewTaskClassifier(0.35)
 	got := c.Classify(models.Task{
 		BaseEntity:  models.BaseEntity{ID: "t2"},
 		Title:       "Fix login bug",
 		Description: "Implement patch and add test coverage",
 	})
-	if got.Type != TaskTypeCodeGen {
-		t.Fatalf("Type = %q, want %q (scores=%v)", got.Type, TaskTypeCodeGen, got.Scores)
+	if got.Type != agenttools.TaskTypeCodeGen {
+		t.Fatalf("Type = %q, want %q (scores=%v)", got.Type, agenttools.TaskTypeCodeGen, got.Scores)
 	}
 }
 
@@ -95,12 +89,12 @@ func TestToolManifest_CodeGenSubset(t *testing.T) {
 	if len(tools) != 3 {
 		t.Fatalf("tools len = %d, want 3", len(tools))
 	}
-	for _, name := range []string{toolNameBash, toolNameRead, toolNameWrite} {
+	for _, name := range []string{agenttools.ToolNameBash, agenttools.ToolNameRead, agenttools.ToolNameWrite} {
 		if !containsTool(tools, name) {
 			t.Fatalf("missing %q in %v", name, toolNamesFromDefinitions(tools))
 		}
 	}
-	for _, name := range []string{toolNameDelegate, toolNameDelegateParallel, "capability_tool"} {
+	for _, name := range []string{agenttools.ToolNameDelegate, agenttools.ToolNameDelegateParallel, "capability_tool"} {
 		if containsTool(tools, name) {
 			t.Fatalf("unexpected %q in filtered tools", name)
 		}
@@ -138,10 +132,10 @@ func TestToolManifest_ProfileAllowedTools(t *testing.T) {
 	}
 	profile := models.AgentProfile{AllowedTools: []string{"read"}}
 	tools, index := m.Filter(testManifestTools(), testManifestIndex(), task, profile)
-	if len(tools) != 1 || tools[0].Name != toolNameRead {
+	if len(tools) != 1 || tools[0].Name != agenttools.ToolNameRead {
 		t.Fatalf("tools = %v, want only read", toolNamesFromDefinitions(tools))
 	}
-	if len(index) != 1 || index[toolNameRead] != "builtin" {
+	if len(index) != 1 || index[agenttools.ToolNameRead] != "builtin" {
 		t.Fatalf("index = %v, want read→builtin", index)
 	}
 }
@@ -154,7 +148,7 @@ func TestToolManifest_ProfileForcedType(t *testing.T) {
 		Title:       "Implement feature",
 		Description: "Would classify as code_gen",
 	}
-	profile := models.AgentProfile{ToolManifestType: TaskTypeSummarize}
+	profile := models.AgentProfile{ToolManifestType: agenttools.TaskTypeSummarize}
 	tools, index := m.Filter(testManifestTools(), testManifestIndex(), task, profile)
 	if len(tools) != 0 {
 		t.Fatalf("tools len = %d, want 0 for forced summarize", len(tools))
@@ -166,19 +160,17 @@ func TestToolManifest_ProfileForcedType(t *testing.T) {
 
 func TestToolManifest_DisabledReturnsNil(t *testing.T) {
 	t.Parallel()
-	if NewToolManifest(config.ToolManifestConfig{Enabled: false}) != nil {
+	if agenttools.NewToolManifest(config.ToolManifestConfig{Enabled: false}) != nil {
 		t.Fatal("NewToolManifest(disabled) should return nil")
 	}
 }
 
 func TestToolManifest_WebResearchUserMapping(t *testing.T) {
 	t.Parallel()
-	m := NewToolManifest(config.ToolManifestConfig{
+	m := agenttools.NewToolManifest(config.ToolManifestConfig{
 		Enabled:       true,
 		MinConfidence: 0.35,
-		Mappings: map[string][]string{
-			TaskTypeWebResearch: {toolNameRead},
-		},
+		Mappings:      map[string][]string{agenttools.TaskTypeWebResearch: {agenttools.ToolNameRead}},
 	})
 	task := models.Task{
 		BaseEntity:  models.BaseEntity{ID: "t8"},
@@ -186,34 +178,32 @@ func TestToolManifest_WebResearchUserMapping(t *testing.T) {
 		Description: "Fetch URL and browse lookup results",
 	}
 	tools, index := m.Filter(testManifestTools(), testManifestIndex(), task, models.AgentProfile{})
-	if len(tools) != 1 || tools[0].Name != toolNameRead {
+	if len(tools) != 1 || tools[0].Name != agenttools.ToolNameRead {
 		t.Fatalf("tools = %v, want only read", toolNamesFromDefinitions(tools))
 	}
-	if len(index) != 1 || index[toolNameRead] != "builtin" {
+	if len(index) != 1 || index[agenttools.ToolNameRead] != "builtin" {
 		t.Fatalf("index = %v, want read→builtin", index)
 	}
 }
 
 func TestToolManifest_FullAgentRestrictedMapping(t *testing.T) {
 	t.Parallel()
-	m := NewToolManifest(config.ToolManifestConfig{
+	m := agenttools.NewToolManifest(config.ToolManifestConfig{
 		Enabled:       true,
 		MinConfidence: 0.35,
-		Mappings: map[string][]string{
-			TaskTypeFullAgent: {toolNameBash, toolNameRead},
-		},
+		Mappings:      map[string][]string{agenttools.TaskTypeFullAgent: {agenttools.ToolNameBash, agenttools.ToolNameRead}},
 	})
 	task := models.Task{
 		BaseEntity:  models.BaseEntity{ID: "t9"},
 		Title:       "General task",
 		Description: "Unrelated work",
 	}
-	profile := models.AgentProfile{ToolManifestType: TaskTypeFullAgent}
+	profile := models.AgentProfile{ToolManifestType: agenttools.TaskTypeFullAgent}
 	tools, index := m.Filter(testManifestTools(), testManifestIndex(), task, profile)
 	if len(tools) != 2 {
 		t.Fatalf("tools len = %d, want 2", len(tools))
 	}
-	for _, name := range []string{toolNameBash, toolNameRead} {
+	for _, name := range []string{agenttools.ToolNameBash, agenttools.ToolNameRead} {
 		if !containsTool(tools, name) {
 			t.Fatalf("missing %q in %v", name, toolNamesFromDefinitions(tools))
 		}
@@ -225,19 +215,17 @@ func TestToolManifest_FullAgentRestrictedMapping(t *testing.T) {
 
 func TestToolManifest_FullAgentEmptyMapping(t *testing.T) {
 	t.Parallel()
-	m := NewToolManifest(config.ToolManifestConfig{
+	m := agenttools.NewToolManifest(config.ToolManifestConfig{
 		Enabled:       true,
 		MinConfidence: 0.35,
-		Mappings: map[string][]string{
-			TaskTypeFullAgent: []string{},
-		},
+		Mappings:      map[string][]string{agenttools.TaskTypeFullAgent: []string{}},
 	})
 	task := models.Task{
 		BaseEntity:  models.BaseEntity{ID: "t10"},
 		Title:       "General task",
 		Description: "Unrelated work",
 	}
-	profile := models.AgentProfile{ToolManifestType: TaskTypeFullAgent}
+	profile := models.AgentProfile{ToolManifestType: agenttools.TaskTypeFullAgent}
 	tools, index := m.Filter(testManifestTools(), testManifestIndex(), task, profile)
 	if len(tools) != 0 {
 		t.Fatalf("tools len = %d, want 0", len(tools))
@@ -259,7 +247,7 @@ func TestFilterAgenticTools_NoManifestPassthrough(t *testing.T) {
 
 func TestFilterToolsByNames_EmptyAllowed(t *testing.T) {
 	t.Parallel()
-	tools, index := filterToolsByNames(testManifestTools(), testManifestIndex(), map[string]bool{})
+	tools, index := agenttools.FilterToolsByNames(testManifestTools(), testManifestIndex(), map[string]bool{})
 	if tools != nil || index != nil {
 		t.Fatalf("got tools=%v index=%v, want nil,nil", tools, index)
 	}

@@ -3,21 +3,22 @@ package worker
 import (
 	"testing"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/sandbox"
 )
 
 func TestToolStatus_String(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		status ToolStatus
+		status agenttools.ToolStatus
 		want   string
 	}{
-		{ToolStatusSuccess, "success"},
-		{ToolStatusError, "error"},
-		{ToolStatusTimeout, "timeout"},
-		{ToolStatusVetoed, "vetoed"},
-		{ToolStatusFatal, "fatal"},
-		{ToolStatus(99), "unknown"},
+		{agenttools.ToolStatusSuccess, "success"},
+		{agenttools.ToolStatusError, "error"},
+		{agenttools.ToolStatusTimeout, "timeout"},
+		{agenttools.ToolStatusVetoed, "vetoed"},
+		{agenttools.ToolStatusFatal, "fatal"},
+		{agenttools.ToolStatus(99), "unknown"},
 	}
 	for _, tt := range tests {
 		if got := tt.status.String(); got != tt.want {
@@ -28,7 +29,7 @@ func TestToolStatus_String(t *testing.T) {
 
 func TestForContext_Success(t *testing.T) {
 	t.Parallel()
-	tr := SuccessResult("c1", "file contents here", 50)
+	tr := agenttools.SuccessResult("c1", "file contents here", 50)
 	if got := tr.ForContext(); got != "file contents here" {
 		t.Fatalf("ForContext() = %q, want raw content", got)
 	}
@@ -36,7 +37,7 @@ func TestForContext_Success(t *testing.T) {
 
 func TestForContext_Vetoed(t *testing.T) {
 	t.Parallel()
-	tr := VetoedResult("c1", "dangerous command blocked")
+	tr := agenttools.VetoedResult("c1", "dangerous command blocked")
 	got := tr.ForContext()
 	want := "[POLICY] Tool call blocked: dangerous command blocked"
 	if got != want {
@@ -46,12 +47,12 @@ func TestForContext_Vetoed(t *testing.T) {
 
 func TestForContext_Vetoed_DescribesPolicyNotTechnicalFailure(t *testing.T) {
 	t.Parallel()
-	tr := VetoedResult("c1", "rm -rf / not allowed")
+	tr := agenttools.VetoedResult("c1", "rm -rf / not allowed")
 	got := tr.ForContext()
 	if got == "" {
 		t.Fatal("ForContext() should not be empty")
 	}
-	if tr.Status != ToolStatusVetoed {
+	if tr.Status != agenttools.ToolStatusVetoed {
 		t.Fatalf("Status = %s, want vetoed", tr.Status)
 	}
 	// Must describe a policy constraint, not a technical failure.
@@ -62,7 +63,7 @@ func TestForContext_Vetoed_DescribesPolicyNotTechnicalFailure(t *testing.T) {
 
 func TestForContext_Timeout(t *testing.T) {
 	t.Parallel()
-	tr := TimeoutResult("c1", 5000)
+	tr := agenttools.TimeoutResult("c1", 5000)
 	got := tr.ForContext()
 	want := "[TIMEOUT] tool did not respond within 5000ms"
 	if got != want {
@@ -72,7 +73,7 @@ func TestForContext_Timeout(t *testing.T) {
 
 func TestForContext_TimeoutUsesMutatedContent(t *testing.T) {
 	t.Parallel()
-	tr := TimeoutResult("c1", 5000)
+	tr := agenttools.TimeoutResult("c1", 5000)
 	tr.Content = "scrubbed timeout message"
 	got := tr.ForContext()
 	want := "[TIMEOUT] scrubbed timeout message"
@@ -83,7 +84,7 @@ func TestForContext_TimeoutUsesMutatedContent(t *testing.T) {
 
 func TestForContext_TimeoutEmptyContentFallback(t *testing.T) {
 	t.Parallel()
-	tr := ToolResult{CallID: "c1", Status: ToolStatusTimeout, ElapsedMs: 3000}
+	tr := agenttools.ToolResult{CallID: "c1", Status: agenttools.ToolStatusTimeout, ElapsedMs: 3000}
 	got := tr.ForContext()
 	want := "[TIMEOUT] Tool did not respond within 3000ms"
 	if got != want {
@@ -93,7 +94,7 @@ func TestForContext_TimeoutEmptyContentFallback(t *testing.T) {
 
 func TestForContext_RetryableError(t *testing.T) {
 	t.Parallel()
-	tr := ErrorResult("c1", "connection reset", "ECONNRESET", 100)
+	tr := agenttools.ErrorResult("c1", "connection reset", "ECONNRESET", 100)
 	got := tr.ForContext()
 	want := "[RETRYABLE ERROR] connection reset"
 	if got != want {
@@ -103,7 +104,7 @@ func TestForContext_RetryableError(t *testing.T) {
 
 func TestForContext_NonRetryableError(t *testing.T) {
 	t.Parallel()
-	tr := NonRetryableErrorResult("c1", "permission denied", "EPERM", 100)
+	tr := agenttools.NonRetryableErrorResult("c1", "permission denied", "EPERM", 100)
 	got := tr.ForContext()
 	want := "[ERROR] permission denied"
 	if got != want {
@@ -113,7 +114,7 @@ func TestForContext_NonRetryableError(t *testing.T) {
 
 func TestForContext_Fatal(t *testing.T) {
 	t.Parallel()
-	tr := FatalResult("c1", "sandbox crashed", 200)
+	tr := agenttools.FatalResult("c1", "sandbox crashed", 200)
 	got := tr.ForContext()
 	want := "[FATAL] Tool execution failed unrecoverably: sandbox crashed"
 	if got != want {
@@ -123,7 +124,7 @@ func TestForContext_Fatal(t *testing.T) {
 
 func TestForContext_FatalEmptyMessage(t *testing.T) {
 	t.Parallel()
-	tr := ToolResult{Status: ToolStatusFatal}
+	tr := agenttools.ToolResult{Status: agenttools.ToolStatusFatal}
 	got := tr.ForContext()
 	want := "[FATAL] Tool execution failed unrecoverably"
 	if got != want {
@@ -135,22 +136,18 @@ func TestToolResultExitCode(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
-		tr   ToolResult
+		tr   agenttools.ToolResult
 		want int
 	}{
-		{"success", SuccessResult("c1", "ok", 0), 0},
+		{"success", agenttools.SuccessResult("c1", "ok", 0), 0},
 		{
-			"bash_failure",
-			classifyBuiltinToolResult("c1", toolNameBash, sandboxFailureJSON(sandbox.Result{ExitCode: 127}), 0),
-			127,
+			"bash_failure", agenttools.ClassifyBuiltinToolResult("c1", agenttools.ToolNameBash, agenttools.SandboxFailureJSON(sandbox.Result{ExitCode: 127}), 0), 127,
 		},
 		{
-			"bash_failure_no_exit_code",
-			classifyBuiltinToolResult("c1", toolNameBash, sandboxFailureJSON(sandbox.Result{}), 0),
-			-1,
+			"bash_failure_no_exit_code", agenttools.ClassifyBuiltinToolResult("c1", agenttools.ToolNameBash, agenttools.SandboxFailureJSON(sandbox.Result{}), 0), -1,
 		},
-		{"vetoed", VetoedResult("c1", "blocked"), -1},
-		{"error_no_code", NonRetryableErrorResult("c1", "fail", "", 0), -1},
+		{"vetoed", agenttools.VetoedResult("c1", "blocked"), -1},
+		{"error_no_code", agenttools.NonRetryableErrorResult("c1", "fail", "", 0), -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -164,11 +161,11 @@ func TestToolResultExitCode(t *testing.T) {
 
 func TestSuccessResult_Fields(t *testing.T) {
 	t.Parallel()
-	tr := SuccessResult("call-1", "output", 42)
+	tr := agenttools.SuccessResult("call-1", "output", 42)
 	if tr.CallID != "call-1" {
 		t.Errorf("CallID = %q, want call-1", tr.CallID)
 	}
-	if tr.Status != ToolStatusSuccess {
+	if tr.Status != agenttools.ToolStatusSuccess {
 		t.Errorf("Status = %s, want success", tr.Status)
 	}
 	if tr.Content != "output" {
@@ -187,8 +184,8 @@ func TestSuccessResult_Fields(t *testing.T) {
 
 func TestErrorResult_Fields(t *testing.T) {
 	t.Parallel()
-	tr := ErrorResult("call-2", "oops", "E001", 10)
-	if tr.Status != ToolStatusError {
+	tr := agenttools.ErrorResult("call-2", "oops", "E001", 10)
+	if tr.Status != agenttools.ToolStatusError {
 		t.Errorf("Status = %s, want error", tr.Status)
 	}
 	if !tr.Retryable {
@@ -210,8 +207,8 @@ func TestErrorResult_Fields(t *testing.T) {
 
 func TestTimeoutResult_Fields(t *testing.T) {
 	t.Parallel()
-	tr := TimeoutResult("call-3", 3000)
-	if tr.Status != ToolStatusTimeout {
+	tr := agenttools.TimeoutResult("call-3", 3000)
+	if tr.Status != agenttools.ToolStatusTimeout {
 		t.Errorf("Status = %s, want timeout", tr.Status)
 	}
 	if !tr.Retryable {
@@ -224,8 +221,8 @@ func TestTimeoutResult_Fields(t *testing.T) {
 
 func TestVetoedResult_Fields(t *testing.T) {
 	t.Parallel()
-	tr := VetoedResult("call-4", "blocked")
-	if tr.Status != ToolStatusVetoed {
+	tr := agenttools.VetoedResult("call-4", "blocked")
+	if tr.Status != agenttools.ToolStatusVetoed {
 		t.Errorf("Status = %s, want vetoed", tr.Status)
 	}
 	if tr.Retryable {
@@ -238,8 +235,8 @@ func TestVetoedResult_Fields(t *testing.T) {
 
 func TestFatalResult_Fields(t *testing.T) {
 	t.Parallel()
-	tr := FatalResult("call-5", "crash", 500)
-	if tr.Status != ToolStatusFatal {
+	tr := agenttools.FatalResult("call-5", "crash", 500)
+	if tr.Status != agenttools.ToolStatusFatal {
 		t.Errorf("Status = %s, want fatal", tr.Status)
 	}
 	if tr.Retryable {
@@ -252,7 +249,7 @@ func TestFatalResult_Fields(t *testing.T) {
 
 func TestForContext_UsesContentNotErrorMessage(t *testing.T) {
 	t.Parallel()
-	tr := NonRetryableErrorResult("c1", "original secret", "", 10)
+	tr := agenttools.NonRetryableErrorResult("c1", "original secret", "", 10)
 	tr.Content = "scrubbed content"
 	got := tr.ForContext()
 	want := "[ERROR] scrubbed content"
@@ -263,7 +260,7 @@ func TestForContext_UsesContentNotErrorMessage(t *testing.T) {
 
 func TestForContext_VetoedUsesContentNotErrorMessage(t *testing.T) {
 	t.Parallel()
-	tr := VetoedResult("c1", "original reason")
+	tr := agenttools.VetoedResult("c1", "original reason")
 	tr.Content = "scrubbed reason"
 	got := tr.ForContext()
 	want := "[POLICY] Tool call blocked: scrubbed reason"
@@ -274,7 +271,7 @@ func TestForContext_VetoedUsesContentNotErrorMessage(t *testing.T) {
 
 func TestForContext_FatalUsesContentNotErrorMessage(t *testing.T) {
 	t.Parallel()
-	tr := FatalResult("c1", "original crash", 10)
+	tr := agenttools.FatalResult("c1", "original crash", 10)
 	tr.Content = "scrubbed crash"
 	got := tr.ForContext()
 	want := "[FATAL] Tool execution failed unrecoverably: scrubbed crash"

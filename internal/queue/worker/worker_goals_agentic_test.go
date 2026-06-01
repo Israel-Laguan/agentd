@@ -7,9 +7,7 @@ import (
 	"testing"
 	"time"
 
-	wsession "agentd/internal/agent/session"
-	"agentd/internal/config"
-	"agentd/internal/gateway"
+	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/models"
 )
 
@@ -40,70 +38,12 @@ func TestBuildSystemPromptContentAddsGoalInstructionsOnlyWithGoal(t *testing.T) 
 	}
 }
 
-func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
-	committedText := ""
-	w := &Worker{
-		store:   &mockCommitStore{text: &committedText},
-		gateway: &sequenceGateway{responses: []gateway.AIResponse{{Content: "[COMPLETED] a\nfinal response"}}},
-	}
-	w.messageEditor = NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, nil)
-	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123"}, ProjectID: "project-123", AgentID: "agent-123"}
-	goalTracker := NewGoalTracker(task.ID, task.ProjectID)
-	goalTracker.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}})
-	cm := NewContextManager(config.AgenticContextConfig{RollingThresholdTurns: 100}, w.gateway, task.AgentID, task.ID)
-	messages := []gateway.PromptMessage{{Role: "user", Content: "do work"}}
-
-	ctxBudget := NewContextBudgetGuard(60000, 0)
-	respecAttempts := 0
-	cont, result, report, _, err := w.processAgenticIteration(
-		context.Background(),
-		task,
-		models.Project{},
-		models.AgentProfile{},
-		&messages,
-		nil,
-		nil,
-		NewToolExecutor(nil, t.TempDir(), nil, 0),
-		NewIterationGuard(3),
-		NewBudgetGuard(nil, task.ID),
-		NewDeadlineGuard(context.Background()),
-		ctxBudget,
-		cm,
-		goalTracker,
-		nil,
-		NewHookChain(),
-		nil,
-		newToolFailureTracker(0),
-		nil,
-		"task-123:0",
-		0,
-		&respecAttempts,
-		nil, nil, nil, nil,
-	)
-	if err != nil {
-		t.Fatalf("processAgenticIteration() error = %v", err)
-	}
-	if cont {
-		t.Fatal("expected no-tool response to stop loop")
-	}
-	if !report || result.Status != LoopSuccessfulCompletion {
-		t.Fatalf("result = %+v report = %v, want successful completion", result, report)
-	}
-	if !strings.Contains(committedText, "final response") {
-		t.Fatalf("committed text = %q, want final response", committedText)
-	}
-	goal := goalTracker.Goal()
-	if len(goal.CompletedCriteria) != 1 || goal.CompletedCriteria[0] != "a" {
-		t.Fatalf("completed criteria = %v, want [a]", goal.CompletedCriteria)
-	}
-}
-
 func TestHandleGoalStalledPropagatesBlockError(t *testing.T) {
 	blockErr := errors.New("block failed")
 	w := &Worker{store: &mockCommitStore{blockErr: blockErr}}
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123", UpdatedAt: time.Now()}, ProjectID: "project-123"}
-	gt := NewGoalTracker(task.ID, task.ProjectID)
-	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: DefaultStallThreshold + 1})
+	gt := agentcontext.NewGoalTracker(task.ID, task.ProjectID)
+	gt.SetGoal(agentcontext.AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: agentcontext.DefaultStallThreshold + 1})
 
 	if err := w.handleGoalStalled(context.Background(), task, gt); !errors.Is(err, blockErr) {
 		t.Fatalf("handleGoalStalled() error = %v, want %v", err, blockErr)
@@ -116,8 +56,8 @@ func TestHandleGoalStalled_RefreshesTaskUpdatedAt(t *testing.T) {
 	w := &Worker{store: store}
 	staleAt := time.Now().Add(-time.Hour)
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-123", UpdatedAt: staleAt}, ProjectID: "project-123"}
-	gt := NewGoalTracker(task.ID, task.ProjectID)
-	gt.SetGoal(AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: DefaultStallThreshold + 1})
+	gt := agentcontext.NewGoalTracker(task.ID, task.ProjectID)
+	gt.SetGoal(agentcontext.AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: agentcontext.DefaultStallThreshold + 1})
 
 	if err := w.handleGoalStalled(context.Background(), task, gt); err != nil {
 		t.Fatalf("handleGoalStalled() error = %v", err)

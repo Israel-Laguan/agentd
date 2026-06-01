@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	agenthooks "agentd/internal/agent/hooks"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
 )
@@ -15,8 +17,8 @@ import (
 
 func TestDryRunHook_Disabled_AllowsExecution(t *testing.T) {
 	t.Parallel()
-	hook := DryRunHook(false)
-	ctx := HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
+	hook := agenthooks.DryRunHook(false)
+	ctx := agenthooks.HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
 	verdict, err := hook.Fn(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -28,8 +30,8 @@ func TestDryRunHook_Disabled_AllowsExecution(t *testing.T) {
 
 func TestDryRunHook_Enabled_VetoesBash(t *testing.T) {
 	t.Parallel()
-	hook := DryRunHook(true)
-	ctx := HookContext{ToolName: "bash", Args: `{"command":"echo hi"}`, Timestamp: time.Now()}
+	hook := agenthooks.DryRunHook(true)
+	ctx := agenthooks.HookContext{ToolName: "bash", Args: `{"command":"echo hi"}`, Timestamp: time.Now()}
 	verdict, err := hook.Fn(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -44,8 +46,8 @@ func TestDryRunHook_Enabled_VetoesBash(t *testing.T) {
 
 func TestDryRunHook_Enabled_VetoesRead(t *testing.T) {
 	t.Parallel()
-	hook := DryRunHook(true)
-	ctx := HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()}
+	hook := agenthooks.DryRunHook(true)
+	ctx := agenthooks.HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()}
 	verdict, err := hook.Fn(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -60,8 +62,8 @@ func TestDryRunHook_Enabled_VetoesRead(t *testing.T) {
 
 func TestDryRunHook_Enabled_VetoesWrite(t *testing.T) {
 	t.Parallel()
-	hook := DryRunHook(true)
-	ctx := HookContext{ToolName: "write", Args: `{"path":"a.txt","content":"x"}`, Timestamp: time.Now()}
+	hook := agenthooks.DryRunHook(true)
+	ctx := agenthooks.HookContext{ToolName: "write", Args: `{"path":"a.txt","content":"x"}`, Timestamp: time.Now()}
 	verdict, err := hook.Fn(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -83,8 +85,8 @@ func TestDryRunHook_Enabled_VetoesWrite(t *testing.T) {
 
 func TestDryRunHook_Enabled_UnknownTool(t *testing.T) {
 	t.Parallel()
-	hook := DryRunHook(true)
-	ctx := HookContext{ToolName: "custom_tool", Args: `{}`, Timestamp: time.Now()}
+	hook := agenthooks.DryRunHook(true)
+	ctx := agenthooks.HookContext{ToolName: "custom_tool", Args: `{}`, Timestamp: time.Now()}
 	verdict, err := hook.Fn(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -99,15 +101,15 @@ func TestDryRunHook_Enabled_UnknownTool(t *testing.T) {
 
 func TestDryRunHook_FailClosedPolicy(t *testing.T) {
 	t.Parallel()
-	hook := DryRunHook(true)
-	if hook.Policy != FailClosed {
+	hook := agenthooks.DryRunHook(true)
+	if hook.Policy != agenthooks.FailClosed {
 		t.Fatalf("expected FailClosed, got %d", hook.Policy)
 	}
 }
 
 func TestDryRunHook_Name(t *testing.T) {
 	t.Parallel()
-	hook := DryRunHook(true)
+	hook := agenthooks.DryRunHook(true)
 	if hook.Name != "dry-run" {
 		t.Fatalf("expected name 'dry-run', got %q", hook.Name)
 	}
@@ -117,13 +119,13 @@ func TestDryRunHook_Name(t *testing.T) {
 
 func TestDispatchTool_DryRun_SkipsExecution(t *testing.T) {
 	t.Parallel()
-	hc := NewHookChain()
-	hc.RegisterPre(DryRunHook(true))
+	hc := agenthooks.NewHookChain()
+	hc.RegisterPre(agenthooks.DryRunHook(true))
 
 	mockSB := &mockExecSandbox{result: sandbox.Result{
 		Stdout: "REAL EXECUTION", Success: true,
 	}}
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	w := &Worker{toolExecutor: executor, hooks: hc}
 
 	call := gateway.ToolCall{
@@ -132,7 +134,7 @@ func TestDispatchTool_DryRun_SkipsExecution(t *testing.T) {
 	}
 
 	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
-	if tr.Status != ToolStatusSuccess {
+	if tr.Status != agenttools.ToolStatusSuccess {
 		t.Fatalf("expected success status for transparent dry-run, got %s", tr.Status)
 	}
 	if tr.ForContext() != tr.Content {
@@ -148,21 +150,21 @@ func TestDispatchTool_DryRun_SkipsExecution(t *testing.T) {
 
 func TestDispatchTool_DryRun_PostHooksStillFire(t *testing.T) {
 	t.Parallel()
-	hc := NewHookChain()
-	hc.RegisterPre(DryRunHook(true))
+	hc := agenthooks.NewHookChain()
+	hc.RegisterPre(agenthooks.DryRunHook(true))
 
 	postHookRan := false
-	hc.RegisterPost(PostHook{
+	hc.RegisterPost(agenthooks.PostHook{
 		Name:   "observer",
-		Policy: FailOpen,
-		Fn: func(_ HookContext, result string) (string, error) {
+		Policy: agenthooks.FailOpen,
+		Fn: func(_ agenthooks.HookContext, result string) (string, error) {
 			postHookRan = true
 			return result + " [audited]", nil
 		},
 	})
 
 	mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "nope", Success: true}}
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	w := &Worker{toolExecutor: executor, hooks: hc}
 
 	call := gateway.ToolCall{
@@ -171,7 +173,7 @@ func TestDispatchTool_DryRun_PostHooksStillFire(t *testing.T) {
 	}
 
 	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
-	if tr.Status != ToolStatusSuccess {
+	if tr.Status != agenttools.ToolStatusSuccess {
 		t.Fatalf("expected success status for transparent dry-run, got %s", tr.Status)
 	}
 	if tr.ForContext() != tr.Content {
@@ -187,11 +189,11 @@ func TestDispatchTool_DryRun_PostHooksStillFire(t *testing.T) {
 
 func TestDispatchTool_DryRun_Disabled_ExecutesNormally(t *testing.T) {
 	t.Parallel()
-	hc := NewHookChain()
-	hc.RegisterPre(DryRunHook(false))
+	hc := agenthooks.NewHookChain()
+	hc.RegisterPre(agenthooks.DryRunHook(false))
 
 	mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "real output\n", Success: true}}
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	w := &Worker{toolExecutor: executor, hooks: hc}
 
 	call := gateway.ToolCall{
@@ -200,7 +202,7 @@ func TestDispatchTool_DryRun_Disabled_ExecutesNormally(t *testing.T) {
 	}
 
 	tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
-	if tr.Status != ToolStatusSuccess {
+	if tr.Status != agenttools.ToolStatusSuccess {
 		t.Fatalf("expected success status, got %s", tr.Status)
 	}
 	if strings.Contains(tr.Content, "(simulated)") {
@@ -226,11 +228,11 @@ func TestDispatchTool_DryRun_AllToolTypes(t *testing.T) {
 	for _, tt := range tools {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			hc := NewHookChain()
-			hc.RegisterPre(DryRunHook(true))
+			hc := agenthooks.NewHookChain()
+			hc.RegisterPre(agenthooks.DryRunHook(true))
 
 			mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "nope", Success: true}}
-			executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+			executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 			w := &Worker{toolExecutor: executor, hooks: hc}
 
 			call := gateway.ToolCall{
@@ -239,7 +241,7 @@ func TestDispatchTool_DryRun_AllToolTypes(t *testing.T) {
 			}
 
 			tr := w.DispatchTool(context.Background(), "s1", call, nil, executor)
-			if tr.Status != ToolStatusSuccess {
+			if tr.Status != agenttools.ToolStatusSuccess {
 				t.Fatalf("expected success status for transparent dry-run, got %s", tr.Status)
 			}
 			if tr.ForContext() != tr.Content {

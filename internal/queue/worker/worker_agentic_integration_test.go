@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -127,7 +128,7 @@ func TestAgenticLoop_GraceFinalIterationCompletesAfterWrapUp(t *testing.T) {
 	if gw.callCount != 2 {
 		t.Fatalf("expected 2 gateway calls (1 tool + 1 grace), got %d", gw.callCount)
 	}
-	if len(gw.requests) < 2 || !requestContainsUserMessage(gw.requests[1], iterationExceededMessage) {
+	if len(gw.requests) < 2 || !requestContainsUserMessage(gw.requests[1], agentruntime.IterationExceededMessage) {
 		t.Fatalf("grace request should include wrap-up user message, got %#v", gw.requests)
 	}
 	if store.committedResult == nil || !store.committedResult.Success {

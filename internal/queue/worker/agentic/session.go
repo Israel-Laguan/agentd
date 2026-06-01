@@ -1,4 +1,4 @@
-package worker
+package agentic
 
 import (
 	"context"
@@ -113,14 +113,14 @@ type topicDriftPayload struct {
 // ArchiveAndReset checkpoints the current transcript, emits TOPIC_DRIFT, and starts a fresh session.
 func (sm *SessionManager) ArchiveAndReset(
 	ctx context.Context,
-	w *Worker,
+	e *Engine,
 	task models.Task,
 	project models.Project,
 	profile models.AgentProfile,
 	messages *[]gateway.PromptMessage,
 	newInput string,
 ) (checkpointID string, err error) {
-	if sm == nil || w == nil || messages == nil {
+	if sm == nil || e == nil || messages == nil {
 		return "", fmt.Errorf("session manager: invalid reset state")
 	}
 	priorTopic := sm.topicAnchor
@@ -139,9 +139,9 @@ func (sm *SessionManager) ArchiveAndReset(
 		NewInput:     newInput,
 		CheckpointID: checkpointID,
 	})
-	w.emit(ctx, task, string(models.EventTypeTopicDrift), string(payload))
+	e.host.Emit(ctx, task, string(models.EventTypeTopicDrift), string(payload))
 
-	fresh := w.assembleAgenticSystemPromptWithUserContent(ctx, task, project, profile, newInput)
+	fresh := e.host.AssembleAgenticSystemPromptWithUserContent(ctx, task, project, profile, newInput)
 	*messages = fresh
 	return checkpointID, nil
 }

@@ -4,11 +4,13 @@ import (
 	"strings"
 	"testing"
 
+	agentruntime "agentd/internal/agent/runtime"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 )
 
 func TestLegacySeedMessages_CodeGenUsesJSONWorkerMessages(t *testing.T) {
-	lib, err := NewPromptLibrary("")
+	lib, err := agentruntime.NewPromptLibrary("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +19,7 @@ func TestLegacySeedMessages_CodeGenUsesJSONWorkerMessages(t *testing.T) {
 		Title:       "Implement add",
 		Description: "Add function in math.go\nSignature:\nfunc Add(a, b int) int",
 	}
-	profile := models.AgentProfile{ToolManifestType: TaskTypeCodeGen}
+	profile := models.AgentProfile{ToolManifestType: agenttools.TaskTypeCodeGen}
 
 	got := w.legacySeedMessages(task, models.Project{}, profile)
 	want := workerMessages(task, profile)

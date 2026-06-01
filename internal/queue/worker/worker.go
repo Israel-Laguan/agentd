@@ -16,9 +16,13 @@ import (
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
 
+	agentcontext "agentd/internal/agent/context"
 	wfilecontext "agentd/internal/agent/filecontext"
+	agenthooks "agentd/internal/agent/hooks"
+	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
 	wskills "agentd/internal/agent/skills"
+	agenttools "agentd/internal/agent/tools"
 )
 
 // DefaultMaxRetries is the baseline retry budget before eviction.
@@ -43,14 +47,14 @@ type Worker struct {
 	maxToolIterations             int
 	truncatorMax                  int
 	characterBudget               int
-	toolExecutor                  *ToolExecutor
+	toolExecutor                  *agenttools.ToolExecutor
 	toolTimeouts                  config.ToolTimeoutsConfig
 	toolRetries                   config.ToolRetriesConfig
-	toolRetrier                   *RetryingExecutor
+	toolRetrier                   *agenttools.RetryingExecutor
 	capabilities                  *capabilities.Registry
 	tokenBudget                   int
 	budgetTracker                 spec.BudgetTracker
-	hooks                         *HookChain
+	hooks                         *agenthooks.HookChain
 	pluginMounter                 PluginMounter
 	contextCfg                    config.AgenticContextConfig
 	instructionLoader             *InstructionLoader
@@ -58,7 +62,7 @@ type Worker struct {
 	skillRouter                   *wskills.SkillRouter
 	legacyHandoffTimeout          time.Duration
 	externalTools                 map[string]struct{}
-	auditLogger                   *AuditLogger
+	auditLogger                   *agentruntime.AuditLogger
 	contextWarningThreshold       float64
 	toolFailureStreak             int
 	tokenUsageHook                func(int)
@@ -67,14 +71,14 @@ type Worker struct {
 	fileContextCfg                config.FileContextConfig
 	docStore                      *wfilecontext.DocStore
 	planningCfg                   config.AgenticPlanningConfig
-	messageEditor                 *MessageEditor
+	messageEditor                 *agentcontext.MessageEditor
 	checkpointStore               wsession.CheckpointStore
-	topicGuard                    *TopicGuard
-	modelRouter                   *ModelRouter
-	toolManifest                  *ToolManifest
-	capabilityRouter              *CapabilityRouter
+	topicGuard                    *agentruntime.TopicGuard
+	modelRouter                   *agentruntime.ModelRouter
+	toolManifest                  *agenttools.ToolManifest
+	capabilityRouter              *agentruntime.CapabilityRouter
 	batcher                       *TaskBatcher
-	promptLibrary                 *PromptLibrary
+	promptLibrary                 *agentruntime.PromptLibrary
 	healingEnabled                bool
 	maxHealingTasks               int
 	legacyMaxBreakdownDepth       int
@@ -117,8 +121,8 @@ func (w *Worker) recordTaskTokenUsage(ctx context.Context, task models.Task, tok
 // mount project-scoped plugins (from workspace directories) and
 // session-scoped plugins (by name from AgentProfile.Plugins).
 type PluginMounter interface {
-	MountProject(workspacePath string, chain *HookChain, registry *capabilities.Registry) error
-	MountSession(names []string, chain *HookChain, registry *capabilities.Registry) error
+	MountProject(workspacePath string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
+	MountSession(names []string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
 }
 
 // Process handles task execution, supporting two modes:

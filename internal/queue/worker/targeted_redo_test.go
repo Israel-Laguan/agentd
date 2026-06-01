@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -13,7 +14,7 @@ import (
 
 func TestValidateOutputSections(t *testing.T) {
 	t.Parallel()
-	plan := Plan{Steps: []PlanStep{
+	plan := agentcontext.Plan{Steps: []agentcontext.PlanStep{
 		{ID: "a", OutputFormat: "text"},
 		{ID: "b", OutputFormat: "json"},
 		{ID: "c", OutputFormat: "list"},
@@ -28,15 +29,15 @@ hello
 - one
 <!-- /step:c -->
 `
-	if fail := ValidateOutput(ok, plan); len(fail) != 0 {
+	if fail := agentcontext.ValidateOutput(ok, plan); len(fail) != 0 {
 		t.Fatalf("valid output: failing %v", fail)
 	}
 	badJSON := strings.Replace(ok, `{"k":1}`, `not json`, 1)
-	if fail := ValidateOutput(badJSON, plan); len(fail) != 1 || fail[0].ID != "b" {
+	if fail := agentcontext.ValidateOutput(badJSON, plan); len(fail) != 1 || fail[0].ID != "b" {
 		t.Fatalf("json fail = %v", fail)
 	}
 	missing := strings.Replace(ok, "<!-- step:c -->", "", 1)
-	if fail := ValidateOutput(missing, plan); len(fail) == 0 {
+	if fail := agentcontext.ValidateOutput(missing, plan); len(fail) == 0 {
 		t.Fatal("expected missing section failure")
 	}
 }
@@ -47,12 +48,12 @@ func TestExtractReplaceSection(t *testing.T) {
 old
 <!-- /step:x -->
 tail`
-	body, ok := extractSection(out, "x")
+	body, ok := agentcontext.ExtractSection(out, "x")
 	if !ok || body != "old" {
 		t.Fatalf("extract = %q ok=%v", body, ok)
 	}
-	replaced := replaceSection(out, "x", "new")
-	body2, ok := extractSection(replaced, "x")
+	replaced := agentcontext.ReplaceSection(out, "x", "new")
+	body2, ok := agentcontext.ExtractSection(replaced, "x")
 	if !ok || body2 != "new" {
 		t.Fatalf("replace = %q ok=%v", body2, ok)
 	}
@@ -64,8 +65,8 @@ tail`
 func TestReplaceSection_MissingCloseTag(t *testing.T) {
 	t.Parallel()
 	out := "<!-- step:x -->\nold body without close\n"
-	replaced := replaceSection(out, "x", "fixed")
-	body, ok := extractSection(replaced, "x")
+	replaced := agentcontext.ReplaceSection(out, "x", "fixed")
+	body, ok := agentcontext.ExtractSection(replaced, "x")
 	if !ok || body != "fixed" {
 		t.Fatalf("replace missing close: body=%q ok=%v", body, ok)
 	}
@@ -74,12 +75,12 @@ func TestReplaceSection_MissingCloseTag(t *testing.T) {
 func TestReplaceSection_MissingCloseTag_PreservesLaterSections(t *testing.T) {
 	t.Parallel()
 	out := "<!-- step:x -->\nbroken\n<!-- step:y -->\ntail\n<!-- /step:y -->\n"
-	replaced := replaceSection(out, "x", "fixed")
-	body, ok := extractSection(replaced, "x")
+	replaced := agentcontext.ReplaceSection(out, "x", "fixed")
+	body, ok := agentcontext.ExtractSection(replaced, "x")
 	if !ok || body != "fixed" {
 		t.Fatalf("replace x: body=%q ok=%v", body, ok)
 	}
-	bodyY, ok := extractSection(replaced, "y")
+	bodyY, ok := agentcontext.ExtractSection(replaced, "y")
 	if !ok || bodyY != "tail" {
 		t.Fatalf("replace preserved y: body=%q ok=%v", bodyY, ok)
 	}
@@ -95,25 +96,25 @@ func TestValidateOutput_ListFormats(t *testing.T) {
 		{"nested", "  - nested item"},
 	}
 	for _, tc := range validCases {
-		plan := Plan{Steps: []PlanStep{{ID: tc.id, OutputFormat: "list"}}}
+		plan := agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: tc.id, OutputFormat: "list"}}}
 		out := fmt.Sprintf("<!-- step:%s -->\n%s\n<!-- /step:%s -->\n", tc.id, tc.body, tc.id)
-		if fail := ValidateOutput(out, plan); len(fail) != 0 {
+		if fail := agentcontext.ValidateOutput(out, plan); len(fail) != 0 {
 			t.Fatalf("%s list: failing %v", tc.id, fail)
 		}
 	}
-	plan := Plan{Steps: []PlanStep{{ID: "plain", OutputFormat: "list"}}}
+	plan := agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "plain", OutputFormat: "list"}}}
 	plain := `<!-- step:plain -->
 not a list
 <!-- /step:plain -->
 `
-	if fail := ValidateOutput(plain, plan); len(fail) != 1 || fail[0].ID != "plain" {
+	if fail := agentcontext.ValidateOutput(plain, plan); len(fail) != 1 || fail[0].ID != "plain" {
 		t.Fatalf("plain text list fail = %v", fail)
 	}
 }
 
 func TestFormatPlanOutputForCommit(t *testing.T) {
 	t.Parallel()
-	plan := Plan{Steps: []PlanStep{
+	plan := agentcontext.Plan{Steps: []agentcontext.PlanStep{
 		{ID: "analyze", OutputFormat: "text"},
 		{ID: "summarize", OutputFormat: "text"},
 	}}
@@ -124,7 +125,7 @@ first body
 second body
 <!-- /step:summarize -->
 `
-	got := formatPlanOutputForCommit(marked, plan)
+	got := agentcontext.FormatPlanOutputForCommit(marked, plan)
 	if strings.Contains(got, "<!-- step:") {
 		t.Fatalf("expected no step markers, got %q", got)
 	}
@@ -133,16 +134,16 @@ second body
 		t.Fatalf("formatPlanOutputForCommit() = %q, want %q", got, want)
 	}
 	plain := "unmarked output"
-	if formatPlanOutputForCommit(plain, plan) != plain {
+	if agentcontext.FormatPlanOutputForCommit(plain, plan) != plain {
 		t.Fatalf("unmarked output should be returned unchanged")
 	}
 }
 
 func TestFormatPlanOutputForCommit_EmptyMarkedSections(t *testing.T) {
 	t.Parallel()
-	plan := Plan{Steps: []PlanStep{{ID: "a", OutputFormat: "text"}}}
+	plan := agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "a", OutputFormat: "text"}}}
 	marked := "<!-- step:a -->\n<!-- /step:a -->\n"
-	got := formatPlanOutputForCommit(marked, plan)
+	got := agentcontext.FormatPlanOutputForCommit(marked, plan)
 	if strings.Contains(got, "<!-- step:") {
 		t.Fatalf("expected no step markers, got %q", got)
 	}
@@ -153,7 +154,7 @@ func TestFormatPlanOutputForCommit_EmptyMarkedSections(t *testing.T) {
 
 func TestPreparePlanCommitContent_ValidJoins(t *testing.T) {
 	t.Parallel()
-	plan := Plan{Steps: []PlanStep{
+	plan := agentcontext.Plan{Steps: []agentcontext.PlanStep{
 		{ID: "analyze", OutputFormat: "text"},
 		{ID: "summarize", OutputFormat: "text"},
 	}}
@@ -164,7 +165,7 @@ first body
 second body
 <!-- /step:summarize -->
 `
-	got := preparePlanCommitContent(marked, plan)
+	got := agentcontext.PreparePlanCommitContent(marked, plan)
 	if strings.Contains(got, "<!-- step:") {
 		t.Fatalf("expected no step markers, got %q", got)
 	}
@@ -176,7 +177,7 @@ second body
 
 func TestPreparePlanCommitContent_InvalidStripsNotJoins(t *testing.T) {
 	t.Parallel()
-	plan := Plan{Steps: []PlanStep{
+	plan := agentcontext.Plan{Steps: []agentcontext.PlanStep{
 		{ID: "a", OutputFormat: "text"},
 		{ID: "b", OutputFormat: "text"},
 	}}
@@ -185,8 +186,8 @@ good body
 <!-- /step:a -->
 extra trailing text
 `
-	got := preparePlanCommitContent(marked, plan)
-	joined := formatPlanOutputForCommit(marked, plan)
+	got := agentcontext.PreparePlanCommitContent(marked, plan)
+	joined := agentcontext.FormatPlanOutputForCommit(marked, plan)
 	if got == joined {
 		t.Fatalf("invalid plan should not use partial join: got %q, joined %q", got, joined)
 	}
@@ -241,7 +242,7 @@ func TestRepairLoop_CapsAtThreePasses(t *testing.T) {
 			MaxRedoPasses:       3,
 		},
 	}
-	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
+	plan := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
 	out := "<!-- step:only -->\n<!-- /step:only -->\n"
 	_, _ = w.repairOutputWithPlan(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, plan, out, nil)
 	if gw.redoCalls["only"] != 3 {
@@ -260,7 +261,7 @@ func TestRepairLoop_ExhaustedAfterThreeNoProgressPasses(t *testing.T) {
 			MaxRedoPasses: 0,
 		},
 	}
-	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
+	plan := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
 	out := "<!-- step:only -->\n<!-- /step:only -->\n"
 	_, exhausted := w.repairOutputWithPlan(
 		context.Background(),

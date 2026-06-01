@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
@@ -89,7 +90,7 @@ func (subagentTaskGateway) Embed(ctx context.Context, req spec.EmbedRequest) (sp
 
 func isErrorJSON(s string) bool {
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(s)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(s)), &payload); err != nil {
 		return false
 	}
 	_, ok := payload["error"]

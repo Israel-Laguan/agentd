@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	agenthooks "agentd/internal/agent/hooks"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -79,7 +81,7 @@ func retryTestWorker(t *testing.T, sb sandbox.Executor, allowTools ...string) *W
 	for _, name := range allowTools {
 		tools[name] = struct{}{}
 	}
-	executor := NewToolExecutor(sb, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(sb, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	return &Worker{
 		toolExecutor: executor,
 		toolTimeouts: config.ToolTimeoutsConfig{
@@ -91,12 +93,12 @@ func retryTestWorker(t *testing.T, sb sandbox.Executor, allowTools ...string) *W
 			MaxDelay:    5 * time.Millisecond,
 			Tools:       tools,
 		},
-		toolRetrier: NewRetryingExecutor(RetryConfig{
+		toolRetrier: agenttools.NewRetryingExecutor(agenttools.RetryConfig{
 			MaxAttempts: 3,
 			BaseDelay:   1 * time.Millisecond,
 			MaxDelay:    5 * time.Millisecond,
 		}),
-		hooks: NewHookChain(),
+		hooks: agenthooks.NewHookChain(),
 	}
 }
 
@@ -117,7 +119,7 @@ func TestDispatchToolWithHooks_RetryHidesIntermediateFailure(t *testing.T) {
 	if suspended {
 		t.Fatal("expected suspend=false")
 	}
-	if tr.Status != ToolStatusSuccess {
+	if tr.Status != agenttools.ToolStatusSuccess {
 		t.Fatalf("status = %s, want success", tr.Status)
 	}
 	if !strings.Contains(tr.Content, "ok") {
@@ -132,12 +134,12 @@ func TestDispatchToolWithHooks_SuspendNotRetried(t *testing.T) {
 	t.Parallel()
 	sb := &flakySandbox{failCount: 10}
 	w := retryTestWorker(t, sb, "bash")
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(PreHook{
+	taskHooks := agenthooks.NewHookChain()
+	taskHooks.RegisterPre(agenthooks.PreHook{
 		Name:   "suspend-gate",
-		Policy: FailOpen,
-		Fn: func(HookContext) (HookVerdict, error) {
-			return HookVerdict{Veto: true, Suspend: true, Result: "paused"}, nil
+		Policy: agenthooks.FailOpen,
+		Fn: func(agenthooks.HookContext) (agenthooks.HookVerdict, error) {
+			return agenthooks.HookVerdict{Veto: true, Suspend: true, Result: "paused"}, nil
 		},
 	})
 
@@ -191,7 +193,7 @@ func TestDispatchToolWithHooks_RetryAuditsOnce(t *testing.T) {
 	sb := &flakySandbox{failCount: 1}
 	sink := &mockEventSink{}
 	w := retryTestWorker(t, sb, "bash")
-	w.hooks.RegisterPost(AuditHook(sink, nil))
+	w.hooks.RegisterPost(agenthooks.AuditHook(sink, nil))
 
 	call := gateway.ToolCall{
 		ID:       "c1",
@@ -205,7 +207,7 @@ func TestDispatchToolWithHooks_RetryAuditsOnce(t *testing.T) {
 	if suspended {
 		t.Fatal("expected suspend=false")
 	}
-	if tr.Status != ToolStatusSuccess {
+	if tr.Status != agenttools.ToolStatusSuccess {
 		t.Fatalf("status = %s, want success", tr.Status)
 	}
 	if sb.callCount() != 2 {
@@ -242,7 +244,7 @@ func TestDispatchToolWithHooks_TimeoutRetry(t *testing.T) {
 	if suspended {
 		t.Fatal("expected suspend=false")
 	}
-	if tr.Status != ToolStatusSuccess {
+	if tr.Status != agenttools.ToolStatusSuccess {
 		t.Fatalf("status = %s, want success after timeout retry", tr.Status)
 	}
 	if !strings.Contains(tr.Content, "ok") {
@@ -273,7 +275,7 @@ func TestDispatchToolWithHooks_NonAllowlistedNoRetry(t *testing.T) {
 	if sb.callCount() != 1 {
 		t.Fatalf("expected 1 sandbox call without retry, got %d", sb.callCount())
 	}
-	if tr.Status != ToolStatusError {
+	if tr.Status != agenttools.ToolStatusError {
 		t.Fatalf("status = %s, want error", tr.Status)
 	}
 	if tr.Retryable {

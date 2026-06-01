@@ -1,63 +1,64 @@
-package worker
+package agentic
 
 import (
 	"context"
 	"log/slog"
 
+	agentcontext "agentd/internal/agent/context"
 	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
 
-// processAgentic runs the inner agentic loop for a single task attempt.
+// Process runs the inner agentic loop for a single task attempt.
 //
 // Returns (result, true) when the loop stopped with a typed LoopResult variant.
 // Returns (_, false) when exit was handled via handoff/suspend or failHard paths.
-func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (LoopResult, bool) {
-	cancelCtx, cleanup := w.setupAgenticCancel(ctx, task.ID)
+func (e *Engine) Process(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (agentruntime.LoopResult, bool) {
+	cancelCtx, cleanup := e.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
 	// prepareAgenticRun builds messages/tools before routing; session start and
 	// pre-task elicitation run after the fallback check so legacy path is unaffected.
 	messages, tools, toolToAdapter, _, profile, taskToolExecutor, taskHooks, taskCaps :=
-		w.prepareAgenticRun(ctx, task, project, profile)
-	if result, ok, err := w.tryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); err != nil {
-		return LoopResult{}, false
+		e.prepareAgenticRun(ctx, task, project, profile)
+	if result, ok, err := e.host.TryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); err != nil {
+		return agentruntime.LoopResult{}, false
 	} else if ok {
 		return result, true
 	}
-	if !w.providerSupportsAgentic(profile) {
+	if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
 		slog.Warn("agentic mode requested but routed provider does not support tool round-tripping; falling back to legacy mode",
 			"task_id", task.ID,
 			"provider", profile.Provider,
 		)
-		w.runLegacyTask(cancelCtx, task, project, profile, true)
-		return LoopResult{}, false
+		e.host.RunLegacyTask(cancelCtx, task, project, profile, true)
+		return agentruntime.LoopResult{}, false
 	}
 
-	if err := w.runSessionStart(cancelCtx, task, project); err != nil {
-		w.failHard(cancelCtx, task, err)
-		return LoopResult{}, false
+	if err := e.host.RunSessionStart(cancelCtx, task, project); err != nil {
+		e.host.FailHard(cancelCtx, task, err)
+		return agentruntime.LoopResult{}, false
 	}
 
-	task, blocked, err := w.runPreTaskElicitation(cancelCtx, task, project)
+	task, blocked, err := e.host.RunPreTaskElicitation(cancelCtx, task, project)
 	if err != nil {
-		w.failHard(cancelCtx, task, err)
-		return LoopResult{}, false
+		e.host.FailHard(cancelCtx, task, err)
+		return agentruntime.LoopResult{}, false
 	}
 	if blocked {
-		return LoopResult{}, false
+		return agentruntime.LoopResult{}, false
 	}
 
-	guards := w.newAgenticLoopGuards(cancelCtx, task)
+	guards := e.newAgenticLoopGuards(cancelCtx, task)
 
 	checkpointer := wsession.NewSessionCheckpointer(task.ID)
-	messages, workPlan := w.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, guards.budget, checkpointer)
+	messages, workPlan := e.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, guards.budget, checkpointer)
 
-	sessionMgr := NewSessionManager(task.ID, extractAnchorUserContent(messages), w.checkpointStore)
+	sessionMgr := NewSessionManager(task.ID, extractAnchorUserContent(messages), e.config.CheckpointStore)
 
-	return w.runAgenticTurnLoop(agenticTurnLoopInput{
+	return e.runAgenticTurnLoop(agenticTurnLoopInput{
 		ctx: cancelCtx, task: task, project: project, profile: profile, messages: &messages,
 		tools: tools, toolToAdapter: toolToAdapter, taskToolExecutor: taskToolExecutor,
 		iterationGuard: guards.iteration, budgetGuard: guards.budget, deadlineGuard: guards.deadline,
@@ -68,12 +69,12 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 }
 
 // runAgenticTurnLoop drives the inner agentic turn loop until completion, stagnation, or error.
-func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) {
+func (e *Engine) runAgenticTurnLoop(in agenticTurnLoopInput) (agentruntime.LoopResult, bool) {
 	runner := agentruntime.NewTurnLoopRunner()
 	result, err := runner.Run(in.ctx, agentruntime.Request{
 		TaskID: in.task.ID,
 		Iterate: func(ctx context.Context, turnID string, turnIndex int, state *agentruntime.IterationState) (agentruntime.IterationOutcome, error) {
-			cont, result, report, rewindTo, err := w.processAgenticIteration(
+			cont, result, report, rewindTo, err := e.processAgenticIteration(
 				ctx, in.task, in.project, in.profile, in.messages, in.tools, in.toolToAdapter, in.taskToolExecutor,
 				in.iterationGuard, in.budgetGuard, in.deadlineGuard, in.ctxBudgetGuard, in.cm, in.goalTracker, in.sessionMgr,
 				in.taskHooks, in.taskCaps, in.toolTracker, in.workPlan, turnID, turnIndex, &state.RespecAttempts,
@@ -87,53 +88,53 @@ func (w *Worker) runAgenticTurnLoop(in agenticTurnLoopInput) (LoopResult, bool) 
 			}, err
 		},
 		ResetForTopicDrift: func() {
-			resetAgenticStateForTopicDrift(&in, w)
+			resetAgenticStateForTopicDrift(&in, e)
 		},
 		ResetForRewind: func() {
 			resetAgenticStateForRewind(in)
 		},
 		ApplySessionRecoveryPlanInject: func(state *agentruntime.IterationState) {
 			in.sessionRecoveryNeedsPlanInject = state.SessionRecoveryNeedsPlanInject
-			w.applySessionRecoveryPlanReinjection(&in)
+			e.applySessionRecoveryPlanReinjection(&in)
 			state.SessionRecoveryNeedsPlanInject = in.sessionRecoveryNeedsPlanInject
 		},
-		RecordResult: w.recordLoopResult,
-		BuildRewindStagnationResult: func(turnIndex int) LoopResult {
-			return LoopResult{
-				Status: LoopTurnLimitExceeded,
-				Meta: w.buildLoopMeta(
-					turnIndex, in.budgetGuard.Usage(), totalChars(*in.messages), in.ctxBudgetGuard.TotalBudget(),
+		RecordResult: e.host.RecordLoopResult,
+		BuildRewindStagnationResult: func(turnIndex int) agentruntime.LoopResult {
+			return agentruntime.LoopResult{
+				Status: agentruntime.LoopTurnLimitExceeded,
+				Meta: agentruntime.BuildLoopMeta(
+					turnIndex, in.budgetGuard.Usage(), agentcontext.TotalChars(*in.messages), in.ctxBudgetGuard.TotalBudget(),
 					errRewindStagnation.Error(), "", "",
 				),
 			}
 		},
 	})
 	if err != nil {
-		return LoopResult{}, false
+		return agentruntime.LoopResult{}, false
 	}
 	return result.LoopResult, result.Reported
 }
 
-func (w *Worker) generateAgenticTurn(
+func (e *Engine) generateAgenticTurn(
 	ctx context.Context, task models.Task, profile models.AgentProfile,
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
-	budgetGuard *BudgetGuard, ctxBudgetGuard *ContextBudgetGuard, turnIndex int,
+	budgetGuard *agentruntime.BudgetGuard, ctxBudgetGuard *agentruntime.ContextBudgetGuard, turnIndex int,
 	sessionRecoveryGen int,
-) (gateway.AIResponse, *LoopResult, error) {
-	req := w.buildAgenticRequest(task, profile, *messages, tools, sessionRecoveryGen)
-	resp, err := w.gateway.Generate(ctx, req)
+) (gateway.AIResponse, *agentruntime.LoopResult, error) {
+	req := e.buildAgenticRequest(task, profile, *messages, tools, sessionRecoveryGen)
+	resp, err := e.config.Gateway.Generate(ctx, req)
 	if err != nil {
 		if budgetGuard.IsBudgetExceeded(err) {
-			r := LoopResult{
-				Status: LoopBudgetExhausted,
-				Meta: w.buildLoopMeta(
-					turnIndex, budgetGuard.Usage(), totalChars(*messages), ctxBudgetGuard.TotalBudget(),
+			r := agentruntime.LoopResult{
+				Status: agentruntime.LoopBudgetExhausted,
+				Meta: agentruntime.BuildLoopMeta(
+					turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(*messages), ctxBudgetGuard.TotalBudget(),
 					err.Error(), "", "token",
 				),
 			}
 			return gateway.AIResponse{}, &r, nil
 		}
-		w.handleGatewayError(ctx, task, err)
+		e.host.HandleGatewayError(ctx, task, err)
 		return gateway.AIResponse{}, nil, err
 	}
 	return resp, nil, nil

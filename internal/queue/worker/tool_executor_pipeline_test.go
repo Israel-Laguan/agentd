@@ -10,6 +10,7 @@ import (
 	"agentd/internal/gateway"
 
 	wfilecontext "agentd/internal/agent/filecontext"
+	agenttools "agentd/internal/agent/tools"
 )
 
 func TestToolExecutor_Read_PipelineFallback(t *testing.T) {
@@ -19,14 +20,14 @@ func TestToolExecutor_Read_PipelineFallback(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	ex.SetFilePipeline(wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
 		Workspace: dir,
 		Converter: wfilecontext.NewFileConverterWith(failingConvertFunc),
 		TopK:      5,
 	}))
 	out := ex.Execute(context.Background(), gatewayToolCallForRead("note.txt"))
-	if strings.Contains(out, toolErrorPrefix) {
+	if strings.Contains(out, agenttools.ToolErrorPrefix) {
 		t.Fatalf("expected raw fallback, got error: %s", out)
 	}
 	if out != content {
@@ -44,7 +45,7 @@ func TestToolExecutor_Read_WithPipeline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	ex.SetFilePipeline(wfilecontext.NewFilePipeline(wfilecontext.FilePipelineConfig{
 		Workspace: dir,
 		Store:     store,
@@ -52,7 +53,7 @@ func TestToolExecutor_Read_WithPipeline(t *testing.T) {
 		TopK:      5,
 	}))
 	out := ex.Execute(context.Background(), gatewayToolCallForRead("hello.md"))
-	if strings.Contains(out, toolErrorPrefix) {
+	if strings.Contains(out, agenttools.ToolErrorPrefix) {
 		t.Fatalf("unexpected error: %s", out)
 	}
 	if out != "# Hi" {
@@ -63,7 +64,7 @@ func TestToolExecutor_Read_WithPipeline(t *testing.T) {
 func gatewayToolCallForRead(path string) gateway.ToolCall {
 	return gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
+			Name:      agenttools.ToolNameRead,
 			Arguments: `{"path": "` + path + `"}`,
 		},
 	}

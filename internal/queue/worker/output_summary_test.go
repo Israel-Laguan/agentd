@@ -6,6 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 )
 
@@ -36,7 +37,7 @@ func TestOutputSummaryLengthBound(t *testing.T) {
 
 		for _, call := range seq.Calls {
 			output := generateRandomOutput(rnd)
-			w.emitToolResult(ctx, task, call, SuccessResult(call.ID, output, 100))
+			w.emitToolResult(ctx, task, call, agenttools.SuccessResult(call.ID, output, 100))
 		}
 
 		for _, ev := range sink.events {

@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
+	agentcontext "agentd/internal/agent/context"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
-	"agentd/internal/testutil"
 )
 
 func TestExecuteAgenticTool_CapabilityRegistry(t *testing.T) {
@@ -25,7 +26,7 @@ func TestExecuteAgenticTool_CapabilityRegistry(t *testing.T) {
 		},
 	})
 	w := &Worker{capabilities: registry}
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	ex := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 	toolToAdapter := map[string]string{"capability_tool": "fake"}
 	tr := w.executeAgenticTool(context.Background(), "", ex, gateway.ToolCall{
 		Function: gateway.ToolCallFunction{Name: "capability_tool", Arguments: `{"id":"1"}`},
@@ -54,7 +55,7 @@ func TestDispatchTool_ScopedCapabilityWithoutAdapterIndex(t *testing.T) {
 	})
 
 	w := &Worker{capabilities: capabilities.NewRegistry()} // Empty global registry
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	ex := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 
 	// Build a tool call for the scoped tool
 	call := gateway.ToolCall{
@@ -94,7 +95,7 @@ func TestAgenticToolsIncludesExecutorAndCapabilityTools(t *testing.T) {
 	})
 
 	w := &Worker{capabilities: registry}
-	executor := NewToolExecutor(nil, "", nil, 0)
+	executor := agenttools.NewToolExecutor(nil, "", nil, 0)
 
 	tools, _ := w.agenticTools(context.Background(), executor)
 	if len(tools) != 6 {
@@ -118,7 +119,7 @@ func TestProcessAgentic_CallsGatewayWithTools(t *testing.T) {
 	t.Parallel()
 
 	w := &Worker{}
-	executor := NewToolExecutor(nil, "", nil, 0)
+	executor := agenttools.NewToolExecutor(nil, "", nil, 0)
 
 	// Test with no capabilities registry
 	tools, toolToAdapter := w.agenticTools(context.Background(), executor)
@@ -155,7 +156,7 @@ func TestProcessAgentic_ExecutesToolCalls(t *testing.T) {
 
 	// Create a mock sandbox that returns expected result
 	mockSandbox := &mockExecSandbox{result: sandbox.Result{Stdout: "hello\n", Success: true}}
-	executor := NewToolExecutor(mockSandbox, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSandbox, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	// Worker now uses DispatchTool which uses the internal toolExecutor
 	w := &Worker{
@@ -225,7 +226,7 @@ func TestIngestHumanCorrections_DeduplicatesProcessedComments(t *testing.T) {
 		},
 	}
 	w := &Worker{store: store}
-	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
+	cm := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
 
 	w.ingestHumanCorrections(context.Background(), "task-1", cm)
 	w.ingestHumanCorrections(context.Background(), "task-1", cm)
@@ -234,7 +235,7 @@ func TestIngestHumanCorrections_DeduplicatesProcessedComments(t *testing.T) {
 	if len(corrections) != 1 {
 		t.Fatalf("expected 1 deduplicated correction, got %d", len(corrections))
 	}
-	if corrections[0].Source != CorrectionSourceHuman {
+	if corrections[0].Source != agentcontext.CorrectionSourceHuman {
 		t.Fatalf("expected human source, got %q", corrections[0].Source)
 	}
 	if len(store.listSinceArgs) != 2 {
@@ -262,7 +263,7 @@ func TestIngestHumanCorrections_ReprocessesEditedComment(t *testing.T) {
 		},
 	}
 	w := &Worker{store: store}
-	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
+	cm := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
 
 	w.ingestHumanCorrections(context.Background(), "task-1", cm)
 	store.comments[0].Body = "[CORRECT] was: older; is: newer"
@@ -287,7 +288,7 @@ func TestIngestHumanCorrections_MapsReviewerSource(t *testing.T) {
 		},
 	}
 	w := &Worker{store: store}
-	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
+	cm := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
 
 	w.ingestHumanCorrections(context.Background(), "task-1", cm)
 
@@ -295,149 +296,12 @@ func TestIngestHumanCorrections_MapsReviewerSource(t *testing.T) {
 	if len(corrections) != 1 {
 		t.Fatalf("expected 1 correction, got %d", len(corrections))
 	}
-	if corrections[0].Source != CorrectionSourceReviewer {
+	if corrections[0].Source != agentcontext.CorrectionSourceReviewer {
 		t.Fatalf("expected reviewer source, got %q", corrections[0].Source)
 	}
 }
 
-type refreshedTaskStore struct {
-	*testutil.FakeKanbanStore
-	freshUpdatedAt    time.Time
-	capturedUpdatedAt time.Time
-}
 
-func (s *refreshedTaskStore) GetTask(ctx context.Context, id string) (*models.Task, error) {
-	task, err := s.FakeKanbanStore.GetTask(ctx, id)
-	if err != nil || task == nil {
-		return task, err
-	}
-	task.UpdatedAt = s.freshUpdatedAt
-	return task, nil
-}
-
-func (s *refreshedTaskStore) BlockTaskWithSubtasks(ctx context.Context, id string, expectedUpdatedAt time.Time, subtasks []models.DraftTask) (*models.Task, []models.Task, error) {
-	s.capturedUpdatedAt = expectedUpdatedAt
-	return s.FakeKanbanStore.BlockTaskWithSubtasks(ctx, id, expectedUpdatedAt, subtasks)
-}
-
-func TestHandleAgenticToolCalls_ResumesAfterApproval(t *testing.T) {
-	t.Parallel()
-	store, w, parent, resp, ex, taskHooks, cm := setupApprovalResumeFixture(t)
-	ctx := context.Background()
-	var messages []gateway.PromptMessage
-
-	if abort, _, _ := w.handleAgenticToolCalls(ctx, parent, "", resp, &messages, nil, ex, taskHooks, nil, cm, newToolFailureTracker(0), 0, NewBudgetGuard(nil, parent.ID)); !abort {
-		t.Fatal("expected approval gate to suspend on first tool call")
-	}
-	if !store.blockCalled {
-		t.Fatal("expected BlockTaskWithSubtasks on first gated tool call")
-	}
-	completeApprovalSubtask(t, store, ctx, parent.ID)
-
-	parentAfter, err := store.GetTask(ctx, parent.ID)
-	if err != nil {
-		t.Fatalf("get parent after approval: %v", err)
-	}
-	if parentAfter.State != models.TaskStateReady {
-		t.Fatalf("parent state = %s, want READY after approval", parentAfter.State)
-	}
-
-	store.blockCalled = false
-	if abort, _, _ := w.handleAgenticToolCalls(ctx, *parentAfter, "", resp, &messages, nil, ex, taskHooks, nil, cm, newToolFailureTracker(0), 0, NewBudgetGuard(nil, parentAfter.ID)); abort {
-		t.Fatal("expected tool to proceed after human approval, not suspend again")
-	}
-	assertApprovalResumed(t, store, messages)
-}
-
-func setupApprovalResumeFixture(t *testing.T) (
-	*approvalMockStore, *Worker, models.Task, gateway.AIResponse, *ToolExecutor, *HookChain, *ContextManager,
-) {
-	t.Helper()
-	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}
-	ctx := context.Background()
-	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	parent := tasks[0]
-	handler := NewBlockingApprovalHandler(store)
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(ApprovalGateHook([]string{"deploy"}, handler))
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
-	resp := gateway.AIResponse{ToolCalls: []gateway.ToolCall{{
-		ID: "call-1", Function: gateway.ToolCallFunction{Name: "deploy", Arguments: `{}`},
-	}}}
-	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", parent.ID)
-	return store, &Worker{store: store}, parent, resp, ex, taskHooks, cm
-}
-
-func completeApprovalSubtask(t *testing.T, store *approvalMockStore, ctx context.Context, parentID string) {
-	t.Helper()
-	children, err := store.ListChildTasks(ctx, parentID)
-	if err != nil {
-		t.Fatalf("list children: %v", err)
-	}
-	if len(children) != 1 {
-		t.Fatalf("approval subtasks = %d, want 1", len(children))
-	}
-	if _, err := store.UpdateTaskState(ctx, children[0].ID, children[0].UpdatedAt, models.TaskStateCompleted); err != nil {
-		t.Fatalf("complete approval subtask: %v", err)
-	}
-}
-
-func assertApprovalResumed(t *testing.T, store *approvalMockStore, messages []gateway.PromptMessage) {
-	t.Helper()
-	if store.blockCalled {
-		t.Fatal("expected no second BlockTaskWithSubtasks after completed approval")
-	}
-	if len(messages) == 0 {
-		t.Fatal("expected tool result appended to messages")
-	}
-	if strings.Contains(messages[len(messages)-1].Content, "paused pending human approval") {
-		t.Fatalf("tool result should not re-block: %q", messages[len(messages)-1].Content)
-	}
-}
-
-func TestHandleAgenticToolCalls_RefreshesTaskUpdatedAt(t *testing.T) {
-	t.Parallel()
-	store := &refreshedTaskStore{FakeKanbanStore: testutil.NewFakeStore()}
-	ctx := context.Background()
-	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "p", Tasks: []models.DraftTask{{Title: "parent", Description: "d"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	parent := tasks[0]
-	store.freshUpdatedAt = parent.UpdatedAt.Add(time.Hour)
-
-	staleTask := parent
-	staleTask.UpdatedAt = parent.UpdatedAt.Add(-time.Hour)
-
-	handler := NewBlockingApprovalHandler(store)
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(ApprovalGateHook([]string{"deploy"}, handler))
-
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
-	w := &Worker{store: store}
-	resp := gateway.AIResponse{
-		ToolCalls: []gateway.ToolCall{{
-			ID:       "call-1",
-			Function: gateway.ToolCallFunction{Name: "deploy", Arguments: `{}`},
-		}},
-	}
-	var messages []gateway.PromptMessage
-	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", parent.ID)
-
-	if abort, _, _ := w.handleAgenticToolCalls(ctx, staleTask, "", resp, &messages, nil, ex, taskHooks, nil, cm, newToolFailureTracker(0), 0, NewBudgetGuard(nil, staleTask.ID)); !abort {
-		t.Fatal("expected approval gate to suspend agentic loop")
-	}
-	if !store.capturedUpdatedAt.Equal(store.freshUpdatedAt) {
-		t.Fatalf("BlockTaskWithSubtasks updatedAt = %v, want refreshed %v", store.capturedUpdatedAt, store.freshUpdatedAt)
-	}
-}
 
 func TestIngestHumanCorrections_SkipsUnknownAuthors(t *testing.T) {
 	store := &mockCommitStore{
@@ -457,7 +321,7 @@ func TestIngestHumanCorrections_SkipsUnknownAuthors(t *testing.T) {
 		},
 	}
 	w := &Worker{store: store}
-	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
+	cm := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
 
 	w.ingestHumanCorrections(context.Background(), "task-1", cm)
 

@@ -18,14 +18,14 @@ func TestSchedulerCronEveryFiveMinutes(t *testing.T) {
 		t.Fatalf("EnsureSystemProject: %v", err)
 	}
 	entry := models.ScheduledTask{
-		ID:       "health",
-		CronExpr: "*/5 * * * *",
-		Title:    "Health",
-		ContextFn: "static",
+		ID:          "health",
+		CronExpr:    "*/5 * * * *",
+		Title:       "Health",
+		ContextFn:   "static",
 		ContextArgs: map[string]string{"body": "check"},
-		Kind:     models.ScheduledTaskKindDispatch,
-		Enabled:  true,
-		ProjectID: project.ID,
+		Kind:        models.ScheduledTaskKindDispatch,
+		Enabled:     true,
+		ProjectID:   project.ID,
 	}
 	if err := store.UpsertScheduledTask(context.Background(), entry); err != nil {
 		t.Fatalf("UpsertScheduledTask: %v", err)

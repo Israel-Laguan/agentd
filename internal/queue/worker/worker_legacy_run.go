@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
@@ -130,8 +131,8 @@ func (w *Worker) beginLegacyTaskAudit(task models.Task, project models.Project, 
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
 		return &legacyTaskAudit{}
 	}
-	w.auditLogger.RecordTaskEvent(TaskAuditRecord{
-		RecordType: recordTypeTaskStart,
+	w.auditLogger.RecordTaskEvent(agentruntime.TaskAuditRecord{
+		RecordType: agentruntime.RecordTypeTaskStart,
 		TaskID:     task.ID,
 		ProjectID:  project.ID,
 		Provider:   provider,
@@ -143,14 +144,14 @@ func (w *Worker) finishLegacyTaskAudit(task models.Task, project models.Project,
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
 		return
 	}
-	recType := recordTypeTaskComplete
+	recType := agentruntime.RecordTypeTaskComplete
 	switch {
 	case audit.failed:
-		recType = recordTypeTaskFail
+		recType = agentruntime.RecordTypeTaskFail
 	case audit.reviewHandoff:
-		recType = recordTypeTaskReview
+		recType = agentruntime.RecordTypeTaskReview
 	}
-	w.auditLogger.RecordTaskEvent(TaskAuditRecord{
+	w.auditLogger.RecordTaskEvent(agentruntime.TaskAuditRecord{
 		RecordType: recType,
 		TaskID:     task.ID,
 		ProjectID:  project.ID,

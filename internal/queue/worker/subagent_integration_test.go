@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	agentsubagent "agentd/internal/agent/subagent"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 )
 
@@ -44,18 +46,18 @@ do the actual work
 		},
 	}
 
-	parentDef := SubagentDefinition{
+	parentDef := agentsubagent.SubagentDefinition{
 		Name:         "parent",
 		Purpose:      "delegate to nested",
 		AllowedTools: []string{"delegate"},
 	}
 
-	delegate := NewSubagentDelegate(gw, nil, workspace, nil, 0, 0).WithMaxDelegationDepth(2)
+	delegate := agentsubagent.NewSubagentDelegate(gw, nil, workspace, nil, 0, 0).WithMaxDelegationDepth(2)
 	result, err := delegate.Delegate(context.Background(), parentDef, "parent task", "", "", 0.2, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Status != SubagentStatusSuccess {
+	if result.Status != agentsubagent.SubagentStatusSuccess {
 		t.Fatalf("expected success, got %s: %s", result.Status, result.Error)
 	}
 	if !strings.Contains(result.Output, "parent complete") {
@@ -71,10 +73,10 @@ do the actual work
 func TestSubagentDelegate_ExecuteToolDepthExceeded(t *testing.T) {
 	t.Parallel()
 
-	delegate := NewSubagentDelegate(nil, nil, t.TempDir(), nil, 0, 0)
-	toolExec := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	delegate := agentsubagent.NewSubagentDelegate(nil, nil, t.TempDir(), nil, 0, 0)
+	toolExec := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 
-	def := SubagentDefinition{
+	def := agentsubagent.SubagentDefinition{
 		Name:         "test",
 		Purpose:      "test",
 		AllowedTools: []string{"delegate"},
@@ -104,7 +106,7 @@ func TestWorker_ExecuteDelegate_MissingSubagent(t *testing.T) {
 
 	w := &Worker{}
 	dir := t.TempDir()
-	toolExec := NewToolExecutor(nil, dir, nil, 0)
+	toolExec := agenttools.NewToolExecutor(nil, dir, nil, 0)
 
 	call := gateway.ToolCall{
 		ID:   "1",
@@ -125,7 +127,7 @@ func TestWorker_ExecuteDelegate_EmptyArgs(t *testing.T) {
 	t.Parallel()
 
 	w := &Worker{}
-	toolExec := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	toolExec := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 
 	call := gateway.ToolCall{
 		ID:   "1",
@@ -166,7 +168,7 @@ Help with a bounded task.
 		},
 	}
 	w := &Worker{gateway: gw}
-	toolExec := NewToolExecutor(nil, dir, nil, 0)
+	toolExec := agenttools.NewToolExecutor(nil, dir, nil, 0)
 
 	tr := w.DispatchTool(context.Background(), "session", gateway.ToolCall{
 		ID:   "delegate-call",
@@ -180,11 +182,11 @@ Help with a bounded task.
 	if strings.Contains(tr.Content, "hidden intermediate") {
 		t.Fatalf("parent-visible delegate result leaked subagent transcript: %s", tr.Content)
 	}
-	var payload SubagentResult
+	var payload agentsubagent.SubagentResult
 	if err := json.Unmarshal([]byte(tr.Content), &payload); err != nil {
 		t.Fatalf("invalid delegate JSON: %v out=%s", err, tr.Content)
 	}
-	if payload.Status != SubagentStatusSuccess || payload.Output != "final answer" {
+	if payload.Status != agentsubagent.SubagentStatusSuccess || payload.Output != "final answer" {
 		t.Fatalf("unexpected delegate result: %+v", payload)
 	}
 }
@@ -199,7 +201,7 @@ func TestWorker_ExecuteDelegateParallel(t *testing.T) {
 Help with bounded tasks.
 `)
 	w := &Worker{gateway: subagentTaskGateway{}}
-	toolExec := NewToolExecutor(nil, dir, nil, 0)
+	toolExec := agenttools.NewToolExecutor(nil, dir, nil, 0)
 
 	result := w.executeDelegateParallel(context.Background(), gateway.ToolCall{
 		ID:   "parallel-call",
@@ -213,7 +215,7 @@ Help with bounded tasks.
 		},
 	}, toolExec, nil, nil)
 
-	var payload []SubagentResult
+	var payload []agentsubagent.SubagentResult
 	if err := json.Unmarshal([]byte(result), &payload); err != nil {
 		t.Fatalf("invalid delegate_parallel JSON: %v out=%s", err, result)
 	}
@@ -229,7 +231,7 @@ func TestWorker_ExecuteDelegateParallel_InvalidArgs(t *testing.T) {
 	t.Parallel()
 
 	w := &Worker{}
-	toolExec := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	toolExec := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 	result := w.executeDelegateParallel(context.Background(), gateway.ToolCall{
 		ID:   "parallel-call",
 		Type: "function",

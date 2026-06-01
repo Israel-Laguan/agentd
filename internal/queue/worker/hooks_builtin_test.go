@@ -1,6 +1,7 @@
 package worker
 
 import (
+	agenthooks "agentd/internal/agent/hooks"
 	"strings"
 	"testing"
 	"time"
@@ -8,8 +9,8 @@ import (
 
 func TestDenylistHook_BlocksSudo(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      `{"command":"sudo rm -rf /"}`,
 		Timestamp: time.Now(),
@@ -24,8 +25,8 @@ func TestDenylistHook_BlocksSudo(t *testing.T) {
 
 func TestDenylistHook_BlocksForkBomb(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      `{"command":":(){:|:&};:"}`,
 		Timestamp: time.Now(),
@@ -40,8 +41,8 @@ func TestDenylistHook_BlocksForkBomb(t *testing.T) {
 
 func TestDenylistHook_BlocksRmRfSlash(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      `{"command":"rm -rf /"}`,
 		Timestamp: time.Now(),
@@ -56,8 +57,8 @@ func TestDenylistHook_BlocksRmRfSlash(t *testing.T) {
 
 func TestDenylistHook_AllowsSafeCommand(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      `{"command":"echo hello"}`,
 		Timestamp: time.Now(),
@@ -72,8 +73,8 @@ func TestDenylistHook_AllowsSafeCommand(t *testing.T) {
 
 func TestDenylistHook_CaseInsensitive(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      `{"command":"SUDO apt install vim"}`,
 		Timestamp: time.Now(),
@@ -102,8 +103,8 @@ func TestDenylistHook_DangerousPatterns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			hook := DenylistHook("/workspace")
-			verdict, err := hook.Fn(HookContext{
+			hook := agenthooks.DenylistHook("/workspace")
+			verdict, err := hook.Fn(agenthooks.HookContext{
 				ToolName:  "bash",
 				Args:      tt.command,
 				Timestamp: time.Now(),
@@ -120,8 +121,8 @@ func TestDenylistHook_DangerousPatterns(t *testing.T) {
 
 func TestDenylistHook_PathTraversal_ReadTool(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "read",
 		Args:      `{"path":"../../etc/passwd"}`,
 		Timestamp: time.Now(),
@@ -139,8 +140,8 @@ func TestDenylistHook_PathTraversal_ReadTool(t *testing.T) {
 
 func TestDenylistHook_PathTraversal_WriteTool(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "write",
 		Args:      `{"path":"../../.ssh/authorized_keys","content":"evil"}`,
 		Timestamp: time.Now(),
@@ -155,8 +156,8 @@ func TestDenylistHook_PathTraversal_WriteTool(t *testing.T) {
 
 func TestDenylistHook_PathTraversal_SafePath(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "read",
 		Args:      `{"path":"src/main.go"}`,
 		Timestamp: time.Now(),
@@ -171,8 +172,8 @@ func TestDenylistHook_PathTraversal_SafePath(t *testing.T) {
 
 func TestDenylistHook_PathTraversal_MCPTool(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "mcp_file_editor",
 		Args:      `{"file_path":"../../../etc/shadow"}`,
 		Timestamp: time.Now(),
@@ -187,8 +188,8 @@ func TestDenylistHook_PathTraversal_MCPTool(t *testing.T) {
 
 func TestDenylistHook_NoPathArgs_NoPanic(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      `{"command":"ls"}`,
 		Timestamp: time.Now(),
@@ -203,8 +204,8 @@ func TestDenylistHook_NoPathArgs_NoPanic(t *testing.T) {
 
 func TestDenylistHook_InvalidJSON_NoPanic(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	verdict, err := hook.Fn(HookContext{
+	hook := agenthooks.DenylistHook("/workspace")
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      `not json`,
 		Timestamp: time.Now(),
@@ -219,18 +220,18 @@ func TestDenylistHook_InvalidJSON_NoPanic(t *testing.T) {
 
 func TestDenylistHook_FailClosedPolicy(t *testing.T) {
 	t.Parallel()
-	hook := DenylistHook("/workspace")
-	if hook.Policy != FailClosed {
+	hook := agenthooks.DenylistHook("/workspace")
+	if hook.Policy != agenthooks.FailClosed {
 		t.Fatalf("expected FailClosed policy, got %v", hook.Policy)
 	}
 }
 
 func TestDenylistHook_IntegrationViaHookChain(t *testing.T) {
 	t.Parallel()
-	hc := NewHookChain()
-	hc.RegisterPre(DenylistHook("/workspace"))
+	hc := agenthooks.NewHookChain()
+	hc.RegisterPre(agenthooks.DenylistHook("/workspace"))
 
-	verdict := hc.RunPre(HookContext{
+	verdict := hc.RunPre(agenthooks.HookContext{
 		ToolName:  "bash",
 		Args:      `{"command":"sudo reboot"}`,
 		Timestamp: time.Now(),

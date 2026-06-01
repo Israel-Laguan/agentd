@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/safety"
@@ -65,7 +66,7 @@ func (w *Worker) payload(task models.Task, project models.Project, command strin
 		ProjectID:     task.ProjectID,
 		WorkspacePath: project.WorkspacePath,
 		Command:       command,
-		EnvVars:       BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
+		EnvVars:       agenttools.BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
 		WallTimeout:   w.sandboxWallTimeout,
 	}
 }

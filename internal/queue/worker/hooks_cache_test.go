@@ -1,13 +1,15 @@
 package worker
 
 import (
+	agenthooks "agentd/internal/agent/hooks"
+	agenttools "agentd/internal/agent/tools"
 	"testing"
 	"time"
 )
 
 func TestResultCache_GetMiss(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
 	if _, ok := rc.Get("nonexistent"); ok {
 		t.Fatal("expected cache miss")
 	}
@@ -15,7 +17,7 @@ func TestResultCache_GetMiss(t *testing.T) {
 
 func TestResultCache_SetAndGet(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
 	rc.Set("k", "v")
 	got, ok := rc.Get("k")
 	if !ok || got != "v" {
@@ -25,7 +27,7 @@ func TestResultCache_SetAndGet(t *testing.T) {
 
 func TestResultCache_IsCacheable(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
 	if !rc.IsCacheable("read") {
 		t.Fatal("read should be cacheable")
 	}
@@ -39,7 +41,7 @@ func TestResultCache_IsCacheable(t *testing.T) {
 
 func TestResultCache_NilMap(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(nil)
+	rc := agenthooks.NewResultCache(nil)
 	if rc.IsCacheable("read") {
 		t.Fatal("nil map should make nothing cacheable")
 	}
@@ -47,8 +49,8 @@ func TestResultCache_NilMap(t *testing.T) {
 
 func TestCacheKey_IdenticalArgs(t *testing.T) {
 	t.Parallel()
-	k1 := cacheKey("read", `{"path":"foo.txt"}`)
-	k2 := cacheKey("read", `{ "path" : "foo.txt" }`)
+	k1 := agenthooks.CacheKey("read", `{"path":"foo.txt"}`)
+	k2 := agenthooks.CacheKey("read", `{ "path" : "foo.txt" }`)
 	if k1 != k2 {
 		t.Fatalf("identical args should produce same key:\n  %s\n  %s", k1, k2)
 	}
@@ -56,8 +58,8 @@ func TestCacheKey_IdenticalArgs(t *testing.T) {
 
 func TestCacheKey_DifferentArgs(t *testing.T) {
 	t.Parallel()
-	k1 := cacheKey("read", `{"path":"a.txt"}`)
-	k2 := cacheKey("read", `{"path":"b.txt"}`)
+	k1 := agenthooks.CacheKey("read", `{"path":"a.txt"}`)
+	k2 := agenthooks.CacheKey("read", `{"path":"b.txt"}`)
 	if k1 == k2 {
 		t.Fatal("different args should produce different keys")
 	}
@@ -65,8 +67,8 @@ func TestCacheKey_DifferentArgs(t *testing.T) {
 
 func TestCacheKey_DifferentTools(t *testing.T) {
 	t.Parallel()
-	k1 := cacheKey("read", `{"path":"x.txt"}`)
-	k2 := cacheKey("write", `{"path":"x.txt"}`)
+	k1 := agenthooks.CacheKey("read", `{"path":"x.txt"}`)
+	k2 := agenthooks.CacheKey("write", `{"path":"x.txt"}`)
 	if k1 == k2 {
 		t.Fatal("different tool names should produce different keys")
 	}
@@ -74,8 +76,8 @@ func TestCacheKey_DifferentTools(t *testing.T) {
 
 func TestCacheKey_KeyOrderIrrelevant(t *testing.T) {
 	t.Parallel()
-	k1 := cacheKey("write", `{"path":"f","content":"c"}`)
-	k2 := cacheKey("write", `{"content":"c","path":"f"}`)
+	k1 := agenthooks.CacheKey("write", `{"path":"f","content":"c"}`)
+	k2 := agenthooks.CacheKey("write", `{"content":"c","path":"f"}`)
 	if k1 != k2 {
 		t.Fatalf("key order should not affect cache key:\n  %s\n  %s", k1, k2)
 	}
@@ -84,7 +86,7 @@ func TestCacheKey_KeyOrderIrrelevant(t *testing.T) {
 func TestCanonicalizeArgs_Empty(t *testing.T) {
 	t.Parallel()
 	for _, input := range []string{"", "  ", "{}"} {
-		if got := canonicalizeArgs(input); got != "{}" {
+		if got := agenthooks.CanonicalizeArgs(input); got != "{}" {
 			t.Fatalf("canonicalizeArgs(%q) = %q, want {}", input, got)
 		}
 	}
@@ -93,17 +95,17 @@ func TestCanonicalizeArgs_Empty(t *testing.T) {
 func TestCanonicalizeArgs_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	bad := "not-json"
-	if got := canonicalizeArgs(bad); got != bad {
+	if got := agenthooks.CanonicalizeArgs(bad); got != bad {
 		t.Fatalf("invalid JSON should be returned as-is, got %q", got)
 	}
 }
 
 func TestCacheLookupHook_MissPassesThrough(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
-	hook := CacheLookupHook(rc)
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
+	hook := agenthooks.CacheLookupHook(rc)
 
-	verdict, err := hook.Fn(HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()})
+	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,12 +116,12 @@ func TestCacheLookupHook_MissPassesThrough(t *testing.T) {
 
 func TestCacheLookupHook_HitShortCircuits(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
-	key := cacheKey("read", `{"path":"a.txt"}`)
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
+	key := agenthooks.CacheKey("read", `{"path":"a.txt"}`)
 	rc.Set(key, "cached-content")
 
-	hook := CacheLookupHook(rc)
-	verdict, err := hook.Fn(HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()})
+	hook := agenthooks.CacheLookupHook(rc)
+	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -133,10 +135,10 @@ func TestCacheLookupHook_HitShortCircuits(t *testing.T) {
 
 func TestCacheLookupHook_SkipsNonCacheableTool(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
-	hook := CacheLookupHook(rc)
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
+	hook := agenthooks.CacheLookupHook(rc)
 
-	verdict, err := hook.Fn(HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()})
+	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -147,8 +149,8 @@ func TestCacheLookupHook_SkipsNonCacheableTool(t *testing.T) {
 
 func TestCacheLookupHook_NilCache(t *testing.T) {
 	t.Parallel()
-	hook := CacheLookupHook(nil)
-	verdict, err := hook.Fn(HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()})
+	hook := agenthooks.CacheLookupHook(nil)
+	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,10 +161,10 @@ func TestCacheLookupHook_NilCache(t *testing.T) {
 
 func TestCacheStoreHook_StoresCacheableResult(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
-	hook := CacheStoreHook(rc)
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
+	hook := agenthooks.CacheStoreHook(rc)
 
-	ctx := HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()}
+	ctx := agenthooks.HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()}
 	got, err := hook.Fn(ctx, "file-contents")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -171,7 +173,7 @@ func TestCacheStoreHook_StoresCacheableResult(t *testing.T) {
 		t.Fatalf("hook should not mutate result, got %q", got)
 	}
 
-	key := cacheKey("read", `{"path":"a.txt"}`)
+	key := agenthooks.CacheKey("read", `{"path":"a.txt"}`)
 	cached, ok := rc.Get(key)
 	if !ok || cached != "file-contents" {
 		t.Fatalf("expected cached result, got (%q, %v)", cached, ok)
@@ -180,10 +182,10 @@ func TestCacheStoreHook_StoresCacheableResult(t *testing.T) {
 
 func TestCacheStoreHook_SkipsBash(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
-	hook := CacheStoreHook(rc)
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
+	hook := agenthooks.CacheStoreHook(rc)
 
-	ctx := HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
+	ctx := agenthooks.HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
 	got, err := hook.Fn(ctx, "output")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -199,10 +201,10 @@ func TestCacheStoreHook_SkipsBash(t *testing.T) {
 
 func TestCacheStoreHook_SkipsWrite(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
-	hook := CacheStoreHook(rc)
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
+	hook := agenthooks.CacheStoreHook(rc)
 
-	ctx := HookContext{ToolName: "write", Args: `{"path":"a.txt","content":"x"}`, Timestamp: time.Now()}
+	ctx := agenthooks.HookContext{ToolName: "write", Args: `{"path":"a.txt","content":"x"}`, Timestamp: time.Now()}
 	_, _ = hook.Fn(ctx, `{"success": true}`)
 	if rc.EntryCount() != 0 {
 		t.Fatal("write result should not be cached")
@@ -211,8 +213,8 @@ func TestCacheStoreHook_SkipsWrite(t *testing.T) {
 
 func TestCacheStoreHook_NilCache(t *testing.T) {
 	t.Parallel()
-	hook := CacheStoreHook(nil)
-	got, err := hook.Fn(HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()}, "data")
+	hook := agenthooks.CacheStoreHook(nil)
+	got, err := hook.Fn(agenthooks.HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()}, "data")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -223,14 +225,14 @@ func TestCacheStoreHook_NilCache(t *testing.T) {
 
 func TestCacheStoreHook_PrefixesNonSuccessResult(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
-	hook := CacheStoreHook(rc)
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
+	hook := agenthooks.CacheStoreHook(rc)
 
-	ctx := HookContext{
+	ctx := agenthooks.HookContext{
 		ToolName:        "read",
 		Args:            `{"path":"missing.txt"}`,
 		Timestamp:       time.Now(),
-		ResultStatus:    ToolStatusError,
+		ResultStatus:    agenttools.ToolStatusError,
 		ResultStatusSet: true,
 	}
 	payload := `{"error":"stat failed: no such file"}`
@@ -239,30 +241,30 @@ func TestCacheStoreHook_PrefixesNonSuccessResult(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	key := cacheKey("read", `{"path":"missing.txt"}`)
+	key := agenthooks.CacheKey("read", `{"path":"missing.txt"}`)
 	cached, ok := rc.Get(key)
 	if !ok {
 		t.Fatal("expected cached result")
 	}
-	if !isToolErrorPayload(cached) {
+	if !agenttools.IsToolErrorPayload(cached) {
 		t.Fatalf("cached error should be prefixed, got %q", cached)
 	}
-	if stripToolErrorPrefix(cached) != payload {
+	if agenttools.StripToolErrorPrefix(cached) != payload {
 		t.Fatalf("cached = %q, want prefixed %q", cached, payload)
 	}
 }
 
 func TestCacheStoreHook_DoesNotPrefixSuccessResult(t *testing.T) {
 	t.Parallel()
-	rc := NewResultCache(map[string]bool{"read": true})
-	hook := CacheStoreHook(rc)
+	rc := agenthooks.NewResultCache(map[string]bool{"read": true})
+	hook := agenthooks.CacheStoreHook(rc)
 
 	content := `{"error":"cached api failure"}`
-	ctx := HookContext{
+	ctx := agenthooks.HookContext{
 		ToolName:        "read",
 		Args:            `{"path":"response.json"}`,
 		Timestamp:       time.Now(),
-		ResultStatus:    ToolStatusSuccess,
+		ResultStatus:    agenttools.ToolStatusSuccess,
 		ResultStatusSet: true,
 	}
 	_, err := hook.Fn(ctx, content)
@@ -270,7 +272,7 @@ func TestCacheStoreHook_DoesNotPrefixSuccessResult(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	key := cacheKey("read", `{"path":"response.json"}`)
+	key := agenthooks.CacheKey("read", `{"path":"response.json"}`)
 	cached, ok := rc.Get(key)
 	if !ok || cached != content {
 		t.Fatalf("success payload stored as-is, got (%q, %v)", cached, ok)
@@ -279,7 +281,7 @@ func TestCacheStoreHook_DoesNotPrefixSuccessResult(t *testing.T) {
 
 func TestToolDefinition_ReadIsCacheable(t *testing.T) {
 	t.Parallel()
-	te := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	te := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 	for _, def := range te.Definitions() {
 		switch def.Name {
 		case "read":

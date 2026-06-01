@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	agentruntime "agentd/internal/agent/runtime"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
@@ -265,7 +267,7 @@ func TestAgenticFallbackPreservesRoutedProvider(t *testing.T) {
 		AgenticMode: true,
 	}
 	w, store, gw, sb := newRoutingTest(profile)
-	w.modelRouter = NewModelRouter(config.ModelRoutingConfig{
+	w.modelRouter = agentruntime.NewModelRouter(config.ModelRoutingConfig{
 		Enabled:               true,
 		ContextTokenThreshold: 150000,
 		Cheap:                 config.ModelTierTarget{Provider: "anthropic", Model: "claude-haiku"},
@@ -318,7 +320,7 @@ func TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback(t *tes
 		AgenticMode: true,
 	}
 	w, store, gw, sb := newRoutingTest(profile)
-	w.modelRouter = NewModelRouter(config.ModelRoutingConfig{
+	w.modelRouter = agentruntime.NewModelRouter(config.ModelRoutingConfig{
 		Enabled:               true,
 		ContextTokenThreshold: 150000,
 		Cheap:                 config.ModelTierTarget{Provider: "ollama", Model: "llama3"},
@@ -366,14 +368,14 @@ func TestProcessAgentic_ManifestFilterDoesNotShrinkRoutingEstimate(t *testing.T)
 			Parameters:  &gateway.FunctionParameters{Type: "object"},
 		}},
 	})
-	w.modelRouter = NewModelRouter(testModelRoutingConfig())
-	w.toolManifest = NewToolManifest(config.ToolManifestConfig{
+	w.modelRouter = agentruntime.NewModelRouter(testModelRoutingConfig())
+	w.toolManifest = agenttools.NewToolManifest(config.ToolManifestConfig{
 		Enabled:       true,
 		MinConfidence: 0.35,
 	})
 	w.capabilities = registry
 
-	store.profile.ToolManifestType = TaskTypeSummarize
+	store.profile.ToolManifestType = agenttools.TaskTypeSummarize
 	store.task.Description = testutil.AgenticTestTaskDescription()
 
 	w.Process(context.Background(), store.task)

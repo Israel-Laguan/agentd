@@ -33,7 +33,6 @@ func (*queueGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gatew
 	return gateway.EmbedResponse{}, nil
 }
 
-
 type queueSandbox struct {
 	result      sandbox.Result
 	err         error

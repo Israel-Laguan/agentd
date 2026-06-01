@@ -8,6 +8,9 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 
+	agentcontext "agentd/internal/agent/context"
+	agenthooks "agentd/internal/agent/hooks"
+	agentruntime "agentd/internal/agent/runtime"
 	wskills "agentd/internal/agent/skills"
 )
 
@@ -32,14 +35,14 @@ func (w *Worker) seedMessages(ctx context.Context, task models.Task, project mod
 	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
-func agenticToolUseSystemText(goal ...*AgentGoal) string {
+func agenticToolUseSystemText(goal ...*agentcontext.AgentGoal) string {
 	text := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
 When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.
 
-` + externalContentInstruction
+` + agenthooks.ExternalContentInstruction
 	if len(goal) == 0 || goal[0] == nil || len(goal[0].SuccessCriteria) == 0 {
 		return text
 	}
@@ -105,8 +108,8 @@ func (w *Worker) enrichBuilderMatchedSkills(builder *SystemPromptBuilder, task m
 }
 
 func (w *Worker) buildSystemPromptContent(task models.Task, project models.Project, profile models.AgentProfile) string {
-	var goal *AgentGoal
-	if g := GoalFromTask(task); g != nil {
+	var goal *agentcontext.AgentGoal
+	if g := agentcontext.GoalFromTask(task); g != nil {
 		goal = g
 	}
 	builder := NewSystemPromptBuilder().
@@ -127,7 +130,7 @@ func defaultTaskUserContent(task models.Task) string {
 func (w *Worker) buildPromptMessages(task models.Task, project models.Project, profile models.AgentProfile) (system, user string) {
 	systemPrefix := w.buildSystemPromptContent(task, project, profile)
 	if name, slots, ok := w.promptTemplateForTask(task, profile); ok {
-		rendered, err := w.promptLibrary.Render(name, RenderSession{SystemPrefix: systemPrefix}, slots)
+		rendered, err := w.promptLibrary.Render(name, agentruntime.RenderSession{SystemPrefix: systemPrefix}, slots)
 		if err != nil {
 			slog.Warn("prompt template render failed, using default messages",
 				"template", name, "task_id", task.ID, "error", err)

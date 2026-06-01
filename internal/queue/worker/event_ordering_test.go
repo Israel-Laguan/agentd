@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 )
 
@@ -37,7 +38,7 @@ func TestEventOrderingWithVaryingCallCounts(t *testing.T) {
 
 			for _, call := range seq.Calls {
 				w.emitToolCall(ctx, task, call)
-				w.emitToolResult(ctx, task, call, SuccessResult(call.ID, `{"Success":true}`, 100))
+				w.emitToolResult(ctx, task, call, agenttools.SuccessResult(call.ID, `{"Success":true}`, 100))
 			}
 
 			callPositions := make(map[string]int)

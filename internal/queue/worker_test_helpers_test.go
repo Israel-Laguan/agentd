@@ -92,7 +92,6 @@ func (*fakeGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gatewa
 	return gateway.EmbedResponse{}, nil
 }
 
-
 func (s *recordingSink) hasEvent(kind string) bool {
 	for _, event := range s.events {
 		if string(event.Type) == kind {

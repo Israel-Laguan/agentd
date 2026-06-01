@@ -1,6 +1,7 @@
 package worker
 
 import (
+	agenthooks "agentd/internal/agent/hooks"
 	"strings"
 	"sync"
 	"testing"
@@ -11,7 +12,7 @@ import (
 
 func TestRateLimitStore_IncrementAndCount(t *testing.T) {
 	t.Parallel()
-	s := NewRateLimitStore()
+	s := agenthooks.NewRateLimitStore()
 	if got := s.Count("bash"); got != 0 {
 		t.Fatalf("Count(bash) = %d, want 0", got)
 	}
@@ -28,7 +29,7 @@ func TestRateLimitStore_IncrementAndCount(t *testing.T) {
 
 func TestRateLimitStore_IsolatedTools(t *testing.T) {
 	t.Parallel()
-	s := NewRateLimitStore()
+	s := agenthooks.NewRateLimitStore()
 	s.Increment("bash")
 	s.Increment("bash")
 	s.Increment("read")
@@ -42,7 +43,7 @@ func TestRateLimitStore_IsolatedTools(t *testing.T) {
 
 func TestRateLimitStore_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
-	s := NewRateLimitStore()
+	s := agenthooks.NewRateLimitStore()
 	var wg sync.WaitGroup
 	n := 100
 	wg.Add(n)
@@ -63,7 +64,7 @@ func TestRateLimitStore_ConcurrentAccess(t *testing.T) {
 func TestResolveLimit_ExplicitTool(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"bash": 10, "default": 100}
-	if got := resolveLimit(limits, "bash"); got != 10 {
+	if got := agenthooks.ResolveLimit(limits, "bash"); got != 10 {
 		t.Fatalf("resolveLimit(bash) = %d, want 10", got)
 	}
 }
@@ -71,7 +72,7 @@ func TestResolveLimit_ExplicitTool(t *testing.T) {
 func TestResolveLimit_FallsBackToDefault(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"bash": 10, "default": 100}
-	if got := resolveLimit(limits, "read"); got != 100 {
+	if got := agenthooks.ResolveLimit(limits, "read"); got != 100 {
 		t.Fatalf("resolveLimit(read) = %d, want 100", got)
 	}
 }
@@ -79,7 +80,7 @@ func TestResolveLimit_FallsBackToDefault(t *testing.T) {
 func TestResolveLimit_NoDefault(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"bash": 10}
-	if got := resolveLimit(limits, "read"); got != 0 {
+	if got := agenthooks.ResolveLimit(limits, "read"); got != 0 {
 		t.Fatalf("resolveLimit(read) = %d, want 0", got)
 	}
 }
@@ -89,10 +90,10 @@ func TestResolveLimit_NoDefault(t *testing.T) {
 func TestRateLimitHook_VetoesOnExceed(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"bash": 3}
-	store := NewRateLimitStore()
-	hook := RateLimitHook(limits, store)
+	store := agenthooks.NewRateLimitStore()
+	hook := agenthooks.RateLimitHook(limits, store)
 
-	ctx := HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
+	ctx := agenthooks.HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
 	for i := 1; i <= 3; i++ {
 		verdict, err := hook.Fn(ctx)
 		if err != nil {
@@ -121,10 +122,10 @@ func TestRateLimitHook_VetoesOnExceed(t *testing.T) {
 func TestRateLimitHook_UsesDefaultLimit(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"default": 2}
-	store := NewRateLimitStore()
-	hook := RateLimitHook(limits, store)
+	store := agenthooks.NewRateLimitStore()
+	hook := agenthooks.RateLimitHook(limits, store)
 
-	ctx := HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()}
+	ctx := agenthooks.HookContext{ToolName: "read", Args: `{"path":"a.txt"}`, Timestamp: time.Now()}
 	for i := 1; i <= 2; i++ {
 		verdict, err := hook.Fn(ctx)
 		if err != nil {
@@ -147,12 +148,12 @@ func TestRateLimitHook_UsesDefaultLimit(t *testing.T) {
 func TestRateLimitHook_PerSessionIsolation(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"bash": 2}
-	store1 := NewRateLimitStore()
-	store2 := NewRateLimitStore()
-	hook1 := RateLimitHook(limits, store1)
-	hook2 := RateLimitHook(limits, store2)
+	store1 := agenthooks.NewRateLimitStore()
+	store2 := agenthooks.NewRateLimitStore()
+	hook1 := agenthooks.RateLimitHook(limits, store1)
+	hook2 := agenthooks.RateLimitHook(limits, store2)
 
-	ctx := HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
+	ctx := agenthooks.HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
 
 	// Exhaust store1
 	for i := 0; i < 2; i++ {
@@ -173,8 +174,8 @@ func TestRateLimitHook_PerSessionIsolation(t *testing.T) {
 
 func TestRateLimitHook_NilStore_WithLimits_Vetoes(t *testing.T) {
 	t.Parallel()
-	hook := RateLimitHook(map[string]int{"bash": 1}, nil)
-	verdict, err := hook.Fn(HookContext{ToolName: "bash", Timestamp: time.Now()})
+	hook := agenthooks.RateLimitHook(map[string]int{"bash": 1}, nil)
+	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "bash", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -188,8 +189,8 @@ func TestRateLimitHook_NilStore_WithLimits_Vetoes(t *testing.T) {
 
 func TestRateLimitHook_NilStore_NoLimits_Allows(t *testing.T) {
 	t.Parallel()
-	hook := RateLimitHook(nil, nil)
-	verdict, err := hook.Fn(HookContext{ToolName: "bash", Timestamp: time.Now()})
+	hook := agenthooks.RateLimitHook(nil, nil)
+	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "bash", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -200,8 +201,8 @@ func TestRateLimitHook_NilStore_NoLimits_Allows(t *testing.T) {
 
 func TestRateLimitHook_EmptyLimits(t *testing.T) {
 	t.Parallel()
-	hook := RateLimitHook(nil, NewRateLimitStore())
-	verdict, err := hook.Fn(HookContext{ToolName: "bash", Timestamp: time.Now()})
+	hook := agenthooks.RateLimitHook(nil, agenthooks.NewRateLimitStore())
+	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "bash", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -213,10 +214,10 @@ func TestRateLimitHook_EmptyLimits(t *testing.T) {
 func TestRateLimitHook_ZeroLimit_Unlimited(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"bash": 0, "default": 0}
-	store := NewRateLimitStore()
-	hook := RateLimitHook(limits, store)
+	store := agenthooks.NewRateLimitStore()
+	hook := agenthooks.RateLimitHook(limits, store)
 
-	ctx := HookContext{ToolName: "bash", Timestamp: time.Now()}
+	ctx := agenthooks.HookContext{ToolName: "bash", Timestamp: time.Now()}
 	for i := 0; i < 100; i++ {
 		verdict, err := hook.Fn(ctx)
 		if err != nil {
@@ -231,10 +232,10 @@ func TestRateLimitHook_ZeroLimit_Unlimited(t *testing.T) {
 func TestRateLimitHook_NegativeLimit_Vetoes(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"bash": -5}
-	store := NewRateLimitStore()
-	hook := RateLimitHook(limits, store)
+	store := agenthooks.NewRateLimitStore()
+	hook := agenthooks.RateLimitHook(limits, store)
 
-	verdict, err := hook.Fn(HookContext{ToolName: "bash", Timestamp: time.Now()})
+	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "bash", Timestamp: time.Now()})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -248,8 +249,8 @@ func TestRateLimitHook_NegativeLimit_Vetoes(t *testing.T) {
 
 func TestRateLimitHook_FailClosedPolicy(t *testing.T) {
 	t.Parallel()
-	hook := RateLimitHook(map[string]int{"bash": 1}, NewRateLimitStore())
-	if hook.Policy != FailClosed {
+	hook := agenthooks.RateLimitHook(map[string]int{"bash": 1}, agenthooks.NewRateLimitStore())
+	if hook.Policy != agenthooks.FailClosed {
 		t.Fatalf("expected FailClosed, got %d", hook.Policy)
 	}
 }
@@ -257,11 +258,11 @@ func TestRateLimitHook_FailClosedPolicy(t *testing.T) {
 func TestRateLimitHook_IntegrationViaHookChain(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"bash": 2}
-	store := NewRateLimitStore()
-	hc := NewHookChain()
-	hc.RegisterPre(RateLimitHook(limits, store))
+	store := agenthooks.NewRateLimitStore()
+	hc := agenthooks.NewHookChain()
+	hc.RegisterPre(agenthooks.RateLimitHook(limits, store))
 
-	ctx := HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
+	ctx := agenthooks.HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()}
 
 	for i := 0; i < 2; i++ {
 		v := hc.RunPre(ctx)
@@ -279,10 +280,10 @@ func TestRateLimitHook_IntegrationViaHookChain(t *testing.T) {
 func TestRateLimitHook_MessageFormat(t *testing.T) {
 	t.Parallel()
 	limits := map[string]int{"bash": 1}
-	store := NewRateLimitStore()
-	hook := RateLimitHook(limits, store)
+	store := agenthooks.NewRateLimitStore()
+	hook := agenthooks.RateLimitHook(limits, store)
 
-	ctx := HookContext{ToolName: "bash", Timestamp: time.Now()}
+	ctx := agenthooks.HookContext{ToolName: "bash", Timestamp: time.Now()}
 	if _, err := hook.Fn(ctx); err != nil {
 		t.Fatalf("first call: unexpected error: %v", err)
 	}

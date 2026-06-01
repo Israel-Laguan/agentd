@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	agenthooks "agentd/internal/agent/hooks"
 	"agentd/internal/models"
 	"agentd/internal/testutil"
 )
@@ -259,7 +260,7 @@ func TestBlockingApprovalHandler_SuspendsViaHook(t *testing.T) {
 	handler := NewBlockingApprovalHandler(store)
 	hook := ApprovalGateHook([]string{"deploy"}, handler)
 
-	verdict, err := hook.Fn(HookContext{
+	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:      "deploy",
 		Args:          `{}`,
 		SessionID:     parent.ID,

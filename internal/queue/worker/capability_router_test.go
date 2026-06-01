@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
@@ -14,30 +15,25 @@ import (
 	"agentd/internal/testutil"
 )
 
-func enabledCapabilityRouter() *CapabilityRouter {
-	return NewCapabilityRouter(config.CapabilityRoutingConfig{
+func enabledCapabilityRouter() *agentruntime.CapabilityRouter {
+	return agentruntime.NewCapabilityRouter(config.CapabilityRoutingConfig{
 		Enabled:       true,
 		MinConfidence: 0.35,
-		Mappings: map[string]string{
-			IntentGenerateImage:  "stability_api",
-			IntentRealTimeSearch: "serper_api",
-		},
-		Tools: map[string]string{
-			IntentGenerateImage: "generate",
-		},
+		Mappings:      map[string]string{agentruntime.IntentGenerateImage: "stability_api", agentruntime.IntentRealTimeSearch: "serper_api"},
+		Tools:         map[string]string{agentruntime.IntentGenerateImage: "generate"},
 	})
 }
 
 func TestIntentClassifier_BrowseURL_HTTPS(t *testing.T) {
 	t.Parallel()
-	c := NewIntentClassifier(0.35)
+	c := agentruntime.NewIntentClassifier(0.35)
 	task := models.Task{
 		Title:       "Browse https://example.com",
 		Description: "fetch page content from this url",
 	}
 	got := c.Classify(task)
-	if got.Intent != IntentBrowseURL {
-		t.Fatalf("Intent = %q, want %q", got.Intent, IntentBrowseURL)
+	if got.Intent != agentruntime.IntentBrowseURL {
+		t.Fatalf("Intent = %q, want %q", got.Intent, agentruntime.IntentBrowseURL)
 	}
 	if got.Confidence < 0.35 {
 		t.Fatalf("Confidence = %v, want >= 0.35", got.Confidence)
@@ -46,7 +42,7 @@ func TestIntentClassifier_BrowseURL_HTTPS(t *testing.T) {
 
 func TestIntentClassifier_TieReturnsNoIntent(t *testing.T) {
 	t.Parallel()
-	c := NewIntentClassifier(0)
+	c := agentruntime.NewIntentClassifier(0)
 	task := models.Task{
 		Title:       "latest url",
 		Description: "",
@@ -55,21 +51,21 @@ func TestIntentClassifier_TieReturnsNoIntent(t *testing.T) {
 	if got.Intent != "" {
 		t.Fatalf("Intent = %q, want empty on tied scores", got.Intent)
 	}
-	if got.Scores[IntentRealTimeSearch] != 1 || got.Scores[IntentBrowseURL] != 1 {
+	if got.Scores[agentruntime.IntentRealTimeSearch] != 1 || got.Scores[agentruntime.IntentBrowseURL] != 1 {
 		t.Fatalf("Scores = %+v, want 1 hit each on real_time_search and browse_url", got.Scores)
 	}
 }
 
 func TestIntentClassifier_GenerateImage(t *testing.T) {
 	t.Parallel()
-	c := NewIntentClassifier(0.35)
+	c := agentruntime.NewIntentClassifier(0.35)
 	task := models.Task{
 		Title:       "Generate an image",
 		Description: "Draw a logo illustration for the product",
 	}
 	got := c.Classify(task)
-	if got.Intent != IntentGenerateImage {
-		t.Fatalf("Intent = %q, want %q", got.Intent, IntentGenerateImage)
+	if got.Intent != agentruntime.IntentGenerateImage {
+		t.Fatalf("Intent = %q, want %q", got.Intent, agentruntime.IntentGenerateImage)
 	}
 	if got.Confidence < 0.35 {
 		t.Fatalf("Confidence = %v, want >= 0.35", got.Confidence)
@@ -93,12 +89,12 @@ func TestCapabilityRouter_ProfileForcedIntent(t *testing.T) {
 	t.Parallel()
 	r := enabledCapabilityRouter()
 	task := models.Task{Title: "Implement feature", Description: "Refactor code"}
-	profile := models.AgentProfile{CapabilityRouteIntent: IntentGenerateImage}
+	profile := models.AgentProfile{CapabilityRouteIntent: agentruntime.IntentGenerateImage}
 	decision, ok := r.Route(task, profile)
 	if !ok {
 		t.Fatal("Route() = false, want true for forced intent")
 	}
-	if decision.Intent != IntentGenerateImage || decision.Adapter != "stability_api" {
+	if decision.Intent != agentruntime.IntentGenerateImage || decision.Adapter != "stability_api" {
 		t.Fatalf("decision = %+v", decision)
 	}
 	if decision.Tool != "generate" {
@@ -110,7 +106,7 @@ func TestCapabilityRouter_AdaptTask(t *testing.T) {
 	t.Parallel()
 	r := enabledCapabilityRouter()
 	task := models.Task{Title: "Title", Description: "Body"}
-	args := r.AdaptTask(task, CapabilityRouteDecision{})
+	args := r.AdaptTask(task, agentruntime.CapabilityRouteDecision{})
 	if args["prompt"] != "Title\nBody" {
 		t.Fatalf("prompt = %v, want Title\\nBody", args["prompt"])
 	}
@@ -118,7 +114,7 @@ func TestCapabilityRouter_AdaptTask(t *testing.T) {
 
 func TestCapabilityRouter_DisabledReturnsNil(t *testing.T) {
 	t.Parallel()
-	if NewCapabilityRouter(config.CapabilityRoutingConfig{Enabled: false}) != nil {
+	if agentruntime.NewCapabilityRouter(config.CapabilityRoutingConfig{Enabled: false}) != nil {
 		t.Fatal("NewCapabilityRouter(disabled) should return nil")
 	}
 }
@@ -151,12 +147,12 @@ func TestTryExternalCapabilityRoute_CommitsResultAndMessages(t *testing.T) {
 	}
 	profile := models.AgentProfile{ID: "agent-1"}
 
-	result, ok, err := w.tryExternalCapabilityRoute(context.Background(), task, models.Project{}, profile, &messages)
+	result, ok, err := w.TryExternalCapabilityRoute(context.Background(), task, models.Project{}, profile, &messages)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !ok {
-		t.Fatal("tryExternalCapabilityRoute() = false, want true")
+		t.Fatal("TryExternalCapabilityRoute() = false, want true")
 	}
 	if result.Status != LoopSuccessfulCompletion {
 		t.Fatalf("status = %v, want successful_completion", result.Status)
@@ -198,9 +194,9 @@ func TestTryExternalCapabilityRoute_CallToolError_Terminal(t *testing.T) {
 	}
 	profile := models.AgentProfile{ID: "agent-1"}
 
-	_, ok, err := w.tryExternalCapabilityRoute(context.Background(), task, models.Project{}, profile, &messages)
+	_, ok, err := w.TryExternalCapabilityRoute(context.Background(), task, models.Project{}, profile, &messages)
 	if err == nil {
-		t.Fatal("tryExternalCapabilityRoute() err = nil, want terminal error after failHard")
+		t.Fatal("TryExternalCapabilityRoute() err = nil, want terminal error after failHard")
 	}
 	if ok {
 		t.Fatal("tryExternalCapabilityRoute() ok = true, want false")

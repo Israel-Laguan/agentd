@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"strings"
 
+	agentcontext "agentd/internal/agent/context"
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
 
 func (w *Worker) buildRedoRequest(
-	task models.Task, step PlanStep, errDesc, priorBody string,
+	task models.Task, step agentcontext.PlanStep, errDesc, priorBody string,
 ) gateway.AIRequest {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Repair ONLY step %q from the work plan.\n", step.ID)
@@ -22,7 +24,7 @@ func (w *Worker) buildRedoRequest(
 			fmt.Fprintf(&b, "  %s: %s\n", k, v)
 		}
 	}
-	fmt.Fprintf(&b, "Required output_format: %s\n", normalizeOutputFormat(step.OutputFormat))
+	fmt.Fprintf(&b, "Required output_format: %s\n", agentcontext.NormalizeOutputFormat(step.OutputFormat))
 	if errDesc != "" {
 		fmt.Fprintf(&b, "Validation error: %s\n", errDesc)
 	}
@@ -43,7 +45,7 @@ func (w *Worker) buildRedoRequest(
 
 func (w *Worker) repairSection(
 	ctx context.Context, task models.Task,
-	step PlanStep, errDesc, priorBody string, budgetGuard *BudgetGuard,
+	step agentcontext.PlanStep, errDesc, priorBody string, budgetGuard *agentruntime.BudgetGuard,
 ) (string, error) {
 	if budgetGuard != nil {
 		if err := budgetGuard.BeforeCall(); err != nil {
@@ -62,8 +64,8 @@ func (w *Worker) repairSection(
 }
 
 func (w *Worker) repairOutputWithPlan(
-	ctx context.Context, task models.Task, plan *Plan, output string,
-	budgetGuard *BudgetGuard,
+	ctx context.Context, task models.Task, plan *agentcontext.Plan, output string,
+	budgetGuard *agentruntime.BudgetGuard,
 ) (string, bool) {
 	if plan == nil || w.planningCfg.ComplexityThreshold <= 0 {
 		return output, false
@@ -72,7 +74,7 @@ func (w *Worker) repairOutputWithPlan(
 	passes := make(map[string]int)
 	consecutiveNoProgress := 0
 	for {
-		failing := ValidateOutput(output, *plan)
+		failing := agentcontext.ValidateOutput(output, *plan)
 		if len(failing) == 0 {
 			return output, false
 		}
@@ -81,14 +83,14 @@ func (w *Worker) repairOutputWithPlan(
 			if passes[step.ID] >= maxPasses {
 				continue
 			}
-			errDesc := stepValidationError(step, output)
-			prior, _ := extractSection(output, step.ID)
+			errDesc := agentcontext.StepValidationError(step, output)
+			prior, _ := agentcontext.ExtractSection(output, step.ID)
 			newBody, err := w.repairSection(ctx, task, step, errDesc, prior, budgetGuard)
 			passes[step.ID]++
 			if err != nil {
 				continue
 			}
-			output = replaceSection(output, step.ID, newBody)
+			output = agentcontext.ReplaceSection(output, step.ID, newBody)
 			progress = true
 		}
 		if !progress {

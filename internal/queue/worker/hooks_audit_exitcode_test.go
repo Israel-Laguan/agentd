@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
 )
@@ -24,14 +25,14 @@ func TestAuditHook_DelegateJSONErrorExitCode(t *testing.T) {
 		WorkerOptions{MaxToolIterations: 5},
 	)
 
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	call := gateway.ToolCall{
 		ID:       "call_delegate_err",
 		Function: gateway.ToolCallFunction{Name: "delegate", Arguments: `{}`},
 	}
 	tr := w.dispatchToolWithProject(context.Background(), "task-delegate-err", "proj-delegate-err", call, nil, executor, nil, false, nil, nil)
 
-	if tr.Status != ToolStatusError {
+	if tr.Status != agenttools.ToolStatusError {
 		t.Fatalf("expected error status, got %s", tr.Status)
 	}
 	if len(sink.events) != 2 {
@@ -62,14 +63,14 @@ func TestAuditHook_CapabilityJSONErrorExitCode(t *testing.T) {
 		WorkerOptions{MaxToolIterations: 5},
 	)
 
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	call := gateway.ToolCall{
 		ID:       "call_cap_err",
 		Function: gateway.ToolCallFunction{Name: "nonexistent_capability", Arguments: `{}`},
 	}
 	tr := w.dispatchToolWithProject(context.Background(), "task-cap-err", "proj-cap-err", call, nil, executor, nil, false, nil, nil)
 
-	if tr.Status != ToolStatusError {
+	if tr.Status != agenttools.ToolStatusError {
 		t.Fatalf("expected error status, got %s", tr.Status)
 	}
 	if len(sink.events) != 2 {
@@ -103,14 +104,14 @@ func TestAuditHook_BashExitCode127(t *testing.T) {
 		WorkerOptions{MaxToolIterations: 5},
 	)
 
-	executor := NewToolExecutor(mockSB, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 	call := gateway.ToolCall{
 		ID:       "call_bash_127",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"missing-cmd"}`},
 	}
 	tr := w.dispatchToolWithProject(context.Background(), "task-bash-127", "proj-bash-127", call, nil, executor, nil, false, nil, nil)
 
-	if tr.Status != ToolStatusError {
+	if tr.Status != agenttools.ToolStatusError {
 		t.Fatalf("expected error status, got %s", tr.Status)
 	}
 	if !tr.ExitCodeSet || tr.ExitCode != 127 {

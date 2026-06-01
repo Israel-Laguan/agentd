@@ -25,6 +25,7 @@ coverage.*
 *.coverprofile
 profile.cov
 checkminfunc
+folder_audit
 
 # Dependency directories (remove the comment below to include it)
 # vendor/

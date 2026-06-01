@@ -95,6 +95,9 @@ func checkFile(relPath string, minLines int) ([]violation, error) {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, filepath.Join(root, relPath), nil, parser.ParseComments)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -108,8 +111,8 @@ func checkFile(relPath string, minLines int) ([]violation, error) {
 		start := fset.Position(funcDecl.Body.Pos()).Line
 		end := fset.Position(funcDecl.Body.Rbrace).Line
 		lineCount := end - start - 1
-		if lineCount < 0 {
-			lineCount = 0
+		if lineCount < 1 {
+			lineCount = 1
 		}
 		if lineCount < minLines {
 			funcName := funcDecl.Name.Name

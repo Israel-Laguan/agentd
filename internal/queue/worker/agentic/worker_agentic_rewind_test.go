@@ -1,18 +1,32 @@
-package worker
+package agentic
 
 import (
 	"strings"
 	"testing"
 
+	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
 
+type rewindMockHost struct {
+	*noopHost
+}
+
+func (h *rewindMockHost) InjectPlan(messages []gateway.PromptMessage, plan *agentcontext.Plan) []gateway.PromptMessage {
+	if len(messages) == 0 {
+		return messages
+	}
+	messages[0].Content += "\nWORK PLAN"
+	return messages
+}
+
 func TestSessionRecoveryPlanReinjection_ClearsNeedsPlanInjectAfterInject(t *testing.T) {
 	t.Parallel()
-	w := NewWorker(nil, nil, nil, nil, nil, WorkerOptions{})
-	plan := &Plan{Steps: []PlanStep{{ID: "only", Action: "do", OutputFormat: "text"}}}
+	host := &rewindMockHost{noopHost: &noopHost{}}
+	e := &Engine{host: host}
+	plan := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "only", Action: "do", OutputFormat: "text"}}}
 	msgs := []gateway.PromptMessage{{Role: "system", Content: "base"}}
 	in := agenticTurnLoopInput{
 		sessionRecoveryUsed:            true,
@@ -20,11 +34,11 @@ func TestSessionRecoveryPlanReinjection_ClearsNeedsPlanInjectAfterInject(t *test
 		workPlan:                       plan,
 		messages:                       &msgs,
 	}
-	w.applySessionRecoveryPlanReinjection(&in)
+	e.applySessionRecoveryPlanReinjection(&in)
 	if strings.Count((*in.messages)[0].Content, "WORK PLAN") != 1 {
 		t.Fatalf("first reinject should leave one WORK PLAN block, got %q", (*in.messages)[0].Content)
 	}
-	w.applySessionRecoveryPlanReinjection(&in)
+	e.applySessionRecoveryPlanReinjection(&in)
 	if strings.Count((*in.messages)[0].Content, "WORK PLAN") != 1 {
 		t.Fatal("cleared sessionRecoveryNeedsPlanInject must prevent duplicate plan reinjection on later rewind")
 	}
@@ -35,13 +49,13 @@ func TestSessionRecoveryPlanReinjection_ClearsNeedsPlanInjectAfterInject(t *test
 
 func TestResetAgenticStateForTopicDrift_ReplacesContextManager(t *testing.T) {
 	t.Parallel()
-	w := NewWorker(nil, nil, nil, nil, nil, WorkerOptions{})
-	oldCM := NewContextManager(config.AgenticContextConfig{}, nil, "agent-1", "task-1")
+	e := &Engine{}
+	oldCM := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent-1", "task-1")
 	in := agenticTurnLoopInput{
 		task: models.Task{BaseEntity: models.BaseEntity{ID: "task-1"}, AgentID: "agent-1"},
 		cm:   oldCM,
 	}
-	resetAgenticStateForTopicDrift(&in, w)
+	resetAgenticStateForTopicDrift(&in, e)
 	if in.cm == nil {
 		t.Fatal("expected non-nil context manager after topic drift reset")
 	}

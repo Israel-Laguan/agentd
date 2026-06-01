@@ -39,7 +39,6 @@ func (g *curatorTestGateway) Embed(ctx context.Context, req gateway.EmbedRequest
 	return gateway.EmbedResponse{}, nil
 }
 
-
 type closedBreaker struct{}
 
 func (b *closedBreaker) IsOpen() bool { return false }

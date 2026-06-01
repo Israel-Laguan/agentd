@@ -13,9 +13,13 @@ import (
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
 
+	agentcontext "agentd/internal/agent/context"
 	wfilecontext "agentd/internal/agent/filecontext"
+	agenthooks "agentd/internal/agent/hooks"
+	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
 	wskills "agentd/internal/agent/skills"
+	agenttools "agentd/internal/agent/tools"
 )
 
 type WorkerOptions struct {
@@ -34,7 +38,7 @@ type WorkerOptions struct {
 	SandboxExtraEnv            []string
 	SandboxScrubPatterns       []string
 	Capabilities               *capabilities.Registry
-	Hooks                      *HookChain
+	Hooks                      *agenthooks.HookChain
 	PluginMounter              PluginMounter
 	InstructionsProjectFile    string
 	InstructionsUserPrefsPath  string
@@ -122,7 +126,7 @@ func (w *Worker) setupPromptLibrary(opts WorkerOptions) {
 	if opts.PromptTemplatesPath == "" {
 		return
 	}
-	lib, err := NewPromptLibrary(opts.PromptTemplatesPath)
+	lib, err := agentruntime.NewPromptLibrary(opts.PromptTemplatesPath)
 	if err != nil {
 		slog.Warn("prompt template library disabled", "path", opts.PromptTemplatesPath, "error", err)
 		return
@@ -158,8 +162,8 @@ func newWorkerCore(
 	opts WorkerOptions,
 	scrubber sandbox.Scrubber,
 	budgetTracker spec.BudgetTracker,
-	toolExecutor *ToolExecutor,
-	hooks *HookChain,
+	toolExecutor *agenttools.ToolExecutor,
+	hooks *agenthooks.HookChain,
 ) *Worker {
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
@@ -177,7 +181,7 @@ func newWorkerCore(
 		toolExecutor:        toolExecutor,
 		toolTimeouts:        opts.ToolTimeouts,
 		toolRetries:         opts.ToolRetries,
-		toolRetrier: NewRetryingExecutor(RetryConfig{
+		toolRetrier: agenttools.NewRetryingExecutor(agenttools.RetryConfig{
 			MaxAttempts: opts.ToolRetries.MaxAttempts,
 			BaseDelay:   opts.ToolRetries.BaseDelay,
 			MaxDelay:    opts.ToolRetries.MaxDelay,
@@ -189,7 +193,7 @@ func newWorkerCore(
 		pluginMounter:                 opts.PluginMounter,
 		contextCfg:                    opts.AgenticContext,
 		legacyHandoffTimeout:          opts.LegacyHandoffTimeout,
-		externalTools:                 externalToolsSet(opts.ExternalTools),
+		externalTools:                 agenthooks.ExternalToolsSet(opts.ExternalTools),
 		auditLogger:                   newAuditLogger(opts.Audit),
 		contextWarningThreshold:       opts.ContextWarningThreshold,
 		toolFailureStreak:             opts.ToolFailureStreak,
@@ -217,24 +221,31 @@ func NewWorker(
 	opts WorkerOptions,
 ) *Worker {
 	opts = normalizeOpts(opts)
-	envVars := BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
+	envVars := agenttools.BuildSandboxEnv(opts.SandboxEnvAllowlist, opts.SandboxExtraEnv)
 	var budgetTracker spec.BudgetTracker
 	if opts.TokenBudget > 0 {
 		budgetTracker = gateway.NewBudgetTracker(opts.TokenBudget)
 	}
 	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
-	toolExecutor := NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout)
+	toolExecutor := agenttools.NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout)
 	hooks := buildWorkerHooks(opts, toolExecutor, sink, scrubber)
 
 	w := newWorkerCore(store, gw, sb, breaker, sink, opts, scrubber, budgetTracker, toolExecutor, hooks)
-	w.topicGuard = NewTopicGuard(gw, opts.TopicGuard)
-	w.messageEditor = NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
-	w.modelRouter = NewModelRouter(opts.ModelRouting)
-	w.toolManifest = NewToolManifest(opts.ToolManifest)
-	w.capabilityRouter = NewCapabilityRouter(opts.CapabilityRouting)
+	w.topicGuard = agentruntime.NewTopicGuard(gw, opts.TopicGuard)
+	w.messageEditor = agentcontext.NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
+	w.modelRouter = agentruntime.NewModelRouter(opts.ModelRouting)
+	w.toolManifest = agenttools.NewToolManifest(opts.ToolManifest)
+	w.capabilityRouter = agentruntime.NewCapabilityRouter(opts.CapabilityRouting)
 	w.batcher = NewTaskBatcher(opts.Batching, w)
 	w.setupFileContext(opts)
 	w.setupPromptLibrary(opts)
 	w.setupOptionalLoaders(opts)
 	return w
+}
+
+func newAuditLogger(cfg config.AuditConfig) *agentruntime.AuditLogger {
+	if !cfg.Enabled || cfg.Path == "" {
+		return nil
+	}
+	return agentruntime.NewAuditLogger(agentruntime.NewFileAuditSink(cfg.Path), true)
 }

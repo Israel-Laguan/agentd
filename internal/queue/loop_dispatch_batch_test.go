@@ -178,7 +178,9 @@ func (s *dispatchBatchStore) SupersedeMemories(context.Context, []string, string
 func (s *dispatchBatchStore) ListUnsupersededMemories(context.Context) ([]models.Memory, error) {
 	return nil, nil
 }
-func (s *dispatchBatchStore) UpsertAgentProfile(context.Context, models.AgentProfile) error { return nil }
+func (s *dispatchBatchStore) UpsertAgentProfile(context.Context, models.AgentProfile) error {
+	return nil
+}
 func (s *dispatchBatchStore) ListAgentProfiles(context.Context) ([]models.AgentProfile, error) {
 	return nil, nil
 }

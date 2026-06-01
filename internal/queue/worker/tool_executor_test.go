@@ -11,18 +11,19 @@ import (
 	"syscall"
 	"testing"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
 )
 
 func TestToolExecutor_UnknownTool_ReturnsValidJSON(t *testing.T) {
 	t.Parallel()
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	ex := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{Name: `weird"name`, Arguments: `{}`},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v\nout=%s", err, out)
 	}
 	if payload["error"] == "" {
@@ -37,16 +38,16 @@ func TestToolExecutor_Read_RejectsOversizedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	ex.SetMaxReadBytes(8)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
+			Name:      agenttools.ToolNameRead,
 			Arguments: `{"path": "big.txt"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -67,10 +68,10 @@ func (fakeSuccessExecutor) Execute(ctx context.Context, payload sandbox.Payload)
 func TestToolExecutor_Bash_Success(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	ex := NewToolExecutor(fakeSuccessExecutor{}, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(fakeSuccessExecutor{}, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameBash,
+			Name:      agenttools.ToolNameBash,
 			Arguments: `{"command": "cat test.txt"}`,
 		},
 	})
@@ -81,15 +82,15 @@ func TestToolExecutor_Bash_Success(t *testing.T) {
 
 func TestToolExecutor_Bash_ValidationFailure(t *testing.T) {
 	t.Parallel()
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	ex := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameBash,
+			Name:      agenttools.ToolNameBash,
 			Arguments: `{}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -105,15 +106,15 @@ func (fakeFailingExecutor) Execute(ctx context.Context, payload sandbox.Payload)
 
 func TestToolExecutor_Bash_SandboxFailure(t *testing.T) {
 	t.Parallel()
-	ex := NewToolExecutor(fakeFailingExecutor{}, t.TempDir(), nil, 0)
+	ex := agenttools.NewToolExecutor(fakeFailingExecutor{}, t.TempDir(), nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameBash,
+			Name:      agenttools.ToolNameBash,
 			Arguments: `{"command": "echo test"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -129,10 +130,10 @@ func TestToolExecutor_Read_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
+			Name:      agenttools.ToolNameRead,
 			Arguments: `{"path": "myfile.txt"}`,
 		},
 	})
@@ -150,18 +151,18 @@ func TestToolExecutor_Read_ErrorShapedFileContent_ClassifiedAsSuccess(t *testing
 		t.Fatal(err)
 	}
 
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	raw := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
+			Name:      agenttools.ToolNameRead,
 			Arguments: `{"path": "response.json"}`,
 		},
 	})
 	if raw != content {
 		t.Fatalf("raw = %q, want file bytes %q", raw, content)
 	}
-	tr := classifyBuiltinToolResult("c1", toolNameRead, raw, 0)
-	if tr.Status != ToolStatusSuccess {
+	tr := agenttools.ClassifyBuiltinToolResult("c1", agenttools.ToolNameRead, raw, 0)
+	if tr.Status != agenttools.ToolStatusSuccess {
 		t.Fatalf("Status = %s, want success for error-shaped file content", tr.Status)
 	}
 	if tr.ForContext() != content {
@@ -171,15 +172,15 @@ func TestToolExecutor_Read_ErrorShapedFileContent_ClassifiedAsSuccess(t *testing
 
 func TestToolExecutor_Read_ValidationFailure(t *testing.T) {
 	t.Parallel()
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	ex := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
+			Name:      agenttools.ToolNameRead,
 			Arguments: `{}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -198,15 +199,15 @@ func TestToolExecutor_Read_RejectsFIFO(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
+			Name:      agenttools.ToolNameRead,
 			Arguments: `{"path": "pipe"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -220,15 +221,15 @@ func TestToolExecutor_Read_RejectsFIFO(t *testing.T) {
 func TestToolExecutor_Write_Success(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameWrite,
+			Name:      agenttools.ToolNameWrite,
 			Arguments: `{"path": "newfile.txt", "content": "written content"}`,
 		},
 	})
 	var payload map[string]any
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] != nil {
@@ -246,16 +247,16 @@ func TestToolExecutor_Write_Success(t *testing.T) {
 
 func TestToolExecutor_Write_ValidationFailure(t *testing.T) {
 	t.Parallel()
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	ex := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameWrite,
+			Name:      agenttools.ToolNameWrite,
 			Arguments: `{}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -265,15 +266,15 @@ func TestToolExecutor_Write_ValidationFailure(t *testing.T) {
 
 func TestToolExecutor_Write_ValidationFailure_MissingContent(t *testing.T) {
 	t.Parallel()
-	ex := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	ex := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameWrite,
+			Name:      agenttools.ToolNameWrite,
 			Arguments: `{"path":"foo.txt"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -287,15 +288,15 @@ func TestToolExecutor_Write_ValidationFailure_MissingContent(t *testing.T) {
 func TestToolExecutor_Write_AllowsEmptyContent(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameWrite,
+			Name:      agenttools.ToolNameWrite,
 			Arguments: `{"path":"empty.txt","content":""}`,
 		},
 	})
 	var payload map[string]any
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] != nil {
@@ -321,15 +322,15 @@ func TestToolExecutor_Read_CancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(ctx, gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
+			Name:      agenttools.ToolNameRead,
 			Arguments: `{"path": "file.txt"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -340,16 +341,16 @@ func TestToolExecutor_Read_CancelledContext(t *testing.T) {
 func TestDispatchTool_SchemaValidation_UnknownArgument(t *testing.T) {
 	t.Parallel()
 	mockSB := &fakeSuccessExecutor{}
-	executor := NewToolExecutor(mockSB, t.TempDir(), nil, 0)
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), nil, 0)
 	w := NewWorker(nil, nil, mockSB, nil, nil, WorkerOptions{})
 
 	tr := w.DispatchTool(context.Background(), "test-session", gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameBash,
+			Name:      agenttools.ToolNameBash,
 			Arguments: `{"command":"echo hi","extra":"val"}`,
 		},
 	}, nil, executor)
-	if tr.Status != ToolStatusVetoed {
+	if tr.Status != agenttools.ToolStatusVetoed {
 		t.Fatalf("expected schema veto, got status %s content %q", tr.Status, tr.Content)
 	}
 	if strings.Contains(tr.Content, "hello world") {

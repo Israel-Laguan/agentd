@@ -19,13 +19,6 @@ const (
 	LoopToolFailure          = agentruntime.LoopToolFailure
 )
 
-func (w *Worker) buildLoopMeta(
-	turnCount, tokenUsage, contextChars, contextBudget int,
-	lastError, toolName, budgetKind string,
-) LoopMeta {
-	return agentruntime.BuildLoopMeta(turnCount, tokenUsage, contextChars, contextBudget, lastError, toolName, budgetKind)
-}
-
 func (w *Worker) recordLoopResult(result LoopResult) {
 	if w.loopResultRecorder != nil {
 		w.loopResultRecorder(result)

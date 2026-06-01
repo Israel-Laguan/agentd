@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	agenthooks "agentd/internal/agent/hooks"
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -22,33 +24,33 @@ type stubMounter struct {
 }
 
 func (s *stubMounter) MountProject(
-	_ string, chain *HookChain, _ *capabilities.Registry,
+	_ string, chain *agenthooks.HookChain, _ *capabilities.Registry,
 ) error {
 	s.projectCalled = true
 	if s.projectErr != nil {
 		return s.projectErr
 	}
-	chain.RegisterPre(PreHook{
-		Name: "proj-hook", Policy: FailOpen,
-		Fn: func(HookContext) (HookVerdict, error) {
-			return HookVerdict{}, nil
+	chain.RegisterPre(agenthooks.PreHook{
+		Name: "proj-hook", Policy: agenthooks.FailOpen,
+		Fn: func(agenthooks.HookContext) (agenthooks.HookVerdict, error) {
+			return agenthooks.HookVerdict{}, nil
 		},
 	})
 	return nil
 }
 
 func (s *stubMounter) MountSession(
-	names []string, chain *HookChain, _ *capabilities.Registry,
+	names []string, chain *agenthooks.HookChain, _ *capabilities.Registry,
 ) error {
 	s.sessionCalled = true
 	s.sessionNames = names
 	if s.sessionErr != nil {
 		return s.sessionErr
 	}
-	chain.RegisterPre(PreHook{
-		Name: "sess-hook", Policy: FailOpen,
-		Fn: func(HookContext) (HookVerdict, error) {
-			return HookVerdict{}, nil
+	chain.RegisterPre(agenthooks.PreHook{
+		Name: "sess-hook", Policy: agenthooks.FailOpen,
+		Fn: func(agenthooks.HookContext) (agenthooks.HookVerdict, error) {
+			return agenthooks.HookVerdict{}, nil
 		},
 	})
 	return nil
@@ -126,7 +128,7 @@ func TestMountScopedPlugins_ErrorsAreNonFatal(t *testing.T) {
 
 func TestDispatchToolWithHooks_NilHooksPassesThrough(t *testing.T) {
 	t.Parallel()
-	w := &Worker{hooks: NewHookChain()}
+	w := &Worker{hooks: agenthooks.NewHookChain()}
 	call := gateway.ToolCall{
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "unknown-tool"},
@@ -140,13 +142,13 @@ func TestDispatchToolWithHooks_NilHooksPassesThrough(t *testing.T) {
 
 func TestDispatchToolWithHooks_PreHookVeto(t *testing.T) {
 	t.Parallel()
-	w := &Worker{hooks: NewHookChain()}
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(PreHook{
+	w := &Worker{hooks: agenthooks.NewHookChain()}
+	taskHooks := agenthooks.NewHookChain()
+	taskHooks.RegisterPre(agenthooks.PreHook{
 		Name:   "blocker",
-		Policy: FailOpen,
-		Fn: func(HookContext) (HookVerdict, error) {
-			return HookVerdict{Veto: true, Reason: "denied"}, nil
+		Policy: agenthooks.FailOpen,
+		Fn: func(agenthooks.HookContext) (agenthooks.HookVerdict, error) {
+			return agenthooks.HookVerdict{Veto: true, Reason: "denied"}, nil
 		},
 	})
 
@@ -157,18 +159,18 @@ func TestDispatchToolWithHooks_PreHookVeto(t *testing.T) {
 	result, suspended := w.dispatchToolWithHooks(
 		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
 	)
-	assert.Equal(t, ToolStatusVetoed, result.Status)
+	assert.Equal(t, agenttools.ToolStatusVetoed, result.Status)
 	assert.Equal(t, "denied", result.Content)
 	assert.False(t, suspended)
 }
 
 func TestDispatchToolWithHooks_PostHookModifiesResult(t *testing.T) {
 	t.Parallel()
-	w := &Worker{hooks: NewHookChain()}
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPost(PostHook{
+	w := &Worker{hooks: agenthooks.NewHookChain()}
+	taskHooks := agenthooks.NewHookChain()
+	taskHooks.RegisterPost(agenthooks.PostHook{
 		Name: "tagger",
-		Fn: func(_ HookContext, result string) (string, error) {
+		Fn: func(_ agenthooks.HookContext, result string) (string, error) {
 			return result + " [tagged]", nil
 		},
 	})
@@ -186,13 +188,13 @@ func TestDispatchToolWithHooks_PostHookModifiesResult(t *testing.T) {
 
 func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
 	t.Parallel()
-	w := &Worker{hooks: NewHookChain()}
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(PreHook{
+	w := &Worker{hooks: agenthooks.NewHookChain()}
+	taskHooks := agenthooks.NewHookChain()
+	taskHooks.RegisterPre(agenthooks.PreHook{
 		Name:   "shortcut",
-		Policy: FailOpen,
-		Fn: func(HookContext) (HookVerdict, error) {
-			return HookVerdict{Veto: true, ShortCircuit: true, Result: "cached"}, nil
+		Policy: agenthooks.FailOpen,
+		Fn: func(agenthooks.HookContext) (agenthooks.HookVerdict, error) {
+			return agenthooks.HookVerdict{Veto: true, ShortCircuit: true, Result: "cached"}, nil
 		},
 	})
 
@@ -212,18 +214,18 @@ func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
 
 func TestDispatchToolWithHooks_ShortCircuitRunsPostHooks(t *testing.T) {
 	t.Parallel()
-	w := &Worker{hooks: NewHookChain()}
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(PreHook{
+	w := &Worker{hooks: agenthooks.NewHookChain()}
+	taskHooks := agenthooks.NewHookChain()
+	taskHooks.RegisterPre(agenthooks.PreHook{
 		Name:   "shortcut",
-		Policy: FailOpen,
-		Fn: func(HookContext) (HookVerdict, error) {
-			return HookVerdict{Veto: true, ShortCircuit: true, Result: "cached"}, nil
+		Policy: agenthooks.FailOpen,
+		Fn: func(agenthooks.HookContext) (agenthooks.HookVerdict, error) {
+			return agenthooks.HookVerdict{Veto: true, ShortCircuit: true, Result: "cached"}, nil
 		},
 	})
-	taskHooks.RegisterPost(PostHook{
+	taskHooks.RegisterPost(agenthooks.PostHook{
 		Name: "tagger",
-		Fn: func(_ HookContext, result string) (string, error) {
+		Fn: func(_ agenthooks.HookContext, result string) (string, error) {
 			return result + " [scrubbed]", nil
 		},
 	})
@@ -241,18 +243,18 @@ func TestDispatchToolWithHooks_ShortCircuitRunsPostHooks(t *testing.T) {
 
 func TestDispatchToolWithHooks_SuspendRunsPostHooks(t *testing.T) {
 	t.Parallel()
-	w := &Worker{hooks: NewHookChain()}
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(PreHook{
+	w := &Worker{hooks: agenthooks.NewHookChain()}
+	taskHooks := agenthooks.NewHookChain()
+	taskHooks.RegisterPre(agenthooks.PreHook{
 		Name:   "suspend-gate",
-		Policy: FailOpen,
-		Fn: func(HookContext) (HookVerdict, error) {
-			return HookVerdict{Veto: true, Suspend: true, Result: "pause message"}, nil
+		Policy: agenthooks.FailOpen,
+		Fn: func(agenthooks.HookContext) (agenthooks.HookVerdict, error) {
+			return agenthooks.HookVerdict{Veto: true, Suspend: true, Result: "pause message"}, nil
 		},
 	})
-	taskHooks.RegisterPost(PostHook{
+	taskHooks.RegisterPost(agenthooks.PostHook{
 		Name: "tagger",
-		Fn: func(_ HookContext, result string) (string, error) {
+		Fn: func(_ agenthooks.HookContext, result string) (string, error) {
 			return result + " [scrubbed]", nil
 		},
 	})
@@ -270,18 +272,18 @@ func TestDispatchToolWithHooks_SuspendRunsPostHooks(t *testing.T) {
 
 func TestDispatchToolWithHooks_VetoResultRunsPostHooks(t *testing.T) {
 	t.Parallel()
-	w := &Worker{hooks: NewHookChain()}
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(PreHook{
+	w := &Worker{hooks: agenthooks.NewHookChain()}
+	taskHooks := agenthooks.NewHookChain()
+	taskHooks.RegisterPre(agenthooks.PreHook{
 		Name:   "reject-gate",
-		Policy: FailOpen,
-		Fn: func(HookContext) (HookVerdict, error) {
-			return HookVerdict{Veto: true, Result: "rejected"}, nil
+		Policy: agenthooks.FailOpen,
+		Fn: func(agenthooks.HookContext) (agenthooks.HookVerdict, error) {
+			return agenthooks.HookVerdict{Veto: true, Result: "rejected"}, nil
 		},
 	})
-	taskHooks.RegisterPost(PostHook{
+	taskHooks.RegisterPost(agenthooks.PostHook{
 		Name: "tagger",
-		Fn: func(_ HookContext, result string) (string, error) {
+		Fn: func(_ agenthooks.HookContext, result string) (string, error) {
 			return result + " [tagged]", nil
 		},
 	})
@@ -299,8 +301,8 @@ func TestDispatchToolWithHooks_VetoResultRunsPostHooks(t *testing.T) {
 
 func TestAgenticToolsWithExtras_NilExtra(t *testing.T) {
 	t.Parallel()
-	w := &Worker{hooks: NewHookChain()}
-	te := NewToolExecutor(nil, t.TempDir(), nil, 0)
+	w := &Worker{hooks: agenthooks.NewHookChain()}
+	te := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 	tools, idx := w.agenticToolsWithExtras(t.Context(), te, nil)
 	assert.NotEmpty(t, tools, "built-in tools should always be present")
 	assert.Nil(t, idx, "no capability adapter index without capabilities")
@@ -309,16 +311,16 @@ func TestAgenticToolsWithExtras_NilExtra(t *testing.T) {
 // Verify HookContext is populated correctly for scoped hooks.
 func TestDispatchToolWithHooks_HookContextFields(t *testing.T) {
 	t.Parallel()
-	w := &Worker{hooks: NewHookChain()}
+	w := &Worker{hooks: agenthooks.NewHookChain()}
 
-	var captured HookContext
-	taskHooks := NewHookChain()
-	taskHooks.RegisterPre(PreHook{
+	var captured agenthooks.HookContext
+	taskHooks := agenthooks.NewHookChain()
+	taskHooks.RegisterPre(agenthooks.PreHook{
 		Name:   "capture",
-		Policy: FailOpen,
-		Fn: func(hc HookContext) (HookVerdict, error) {
+		Policy: agenthooks.FailOpen,
+		Fn: func(hc agenthooks.HookContext) (agenthooks.HookVerdict, error) {
 			captured = hc
-			return HookVerdict{}, nil
+			return agenthooks.HookVerdict{}, nil
 		},
 	})
 

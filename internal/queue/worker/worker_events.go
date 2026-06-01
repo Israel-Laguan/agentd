@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
@@ -95,7 +96,7 @@ func truncateToMax(input string, maxLength int) string {
 }
 
 // emitToolResult emits a TOOL_RESULT event from a structured ToolResult.
-func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gateway.ToolCall, tr ToolResult) {
+func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gateway.ToolCall, tr agenttools.ToolResult) {
 	if w.sink == nil {
 		return
 	}
@@ -143,18 +144,18 @@ func (w *Worker) emitToolResult(ctx context.Context, task models.Task, call gate
 }
 
 // toolResultExitCode maps a ToolResult status to a conventional exit code.
-func toolResultExitCode(tr ToolResult) int {
-	if tr.Status == ToolStatusSuccess {
+func toolResultExitCode(tr agenttools.ToolResult) int {
+	if tr.Status == agenttools.ToolStatusSuccess {
 		return 0
 	}
 	if tr.ExitCodeSet {
-		if tr.ExitCode == 0 && tr.Status != ToolStatusSuccess {
+		if tr.ExitCode == 0 && tr.Status != agenttools.ToolStatusSuccess {
 			return -1
 		}
 		return tr.ExitCode
 	}
 	switch tr.Status {
-	case ToolStatusError, ToolStatusTimeout, ToolStatusVetoed, ToolStatusFatal:
+	case agenttools.ToolStatusError, agenttools.ToolStatusTimeout, agenttools.ToolStatusVetoed, agenttools.ToolStatusFatal:
 		return -1
 	default:
 		return parseToolExitCode(tr.Content)

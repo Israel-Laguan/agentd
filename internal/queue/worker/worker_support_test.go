@@ -7,6 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
@@ -44,7 +45,7 @@ func TestEmitToolResultValidJSONWithoutSuccessIsSuccessfulOutput(t *testing.T) {
 	}
 	result := `{"answer":42}`
 
-	w.emitToolResult(context.Background(), task, call, SuccessResult(call.ID, result, 25))
+	w.emitToolResult(context.Background(), task, call, agenttools.SuccessResult(call.ID, result, 25))
 
 	if len(sink.events) != 1 {
 		t.Fatalf("events = %d, want 1", len(sink.events))
@@ -73,9 +74,9 @@ func TestEmitToolResultExplicitJSONFailures(t *testing.T) {
 		name   string
 		result string
 	}{
-		{name: "error", result: jsonErrorf("boom")},
+		{name: "error", result: agenttools.JSONErrorf("boom")},
 		{name: "fatal", result: `{"FatalError":"boom"}`},
-		{name: "success false", result: sandboxFailureJSON(sandbox.Result{ExitCode: 1})},
+		{name: "success false", result: agenttools.SandboxFailureJSON(sandbox.Result{ExitCode: 1})},
 	}
 
 	for _, tc := range tests {
@@ -91,9 +92,9 @@ func TestEmitToolResultExplicitJSONFailures(t *testing.T) {
 				Function: gateway.ToolCallFunction{Name: "bash"},
 			}
 
-			tr := classifyBuiltinToolResult(call.ID, toolNameBash, tc.result, 25)
+			tr := agenttools.ClassifyBuiltinToolResult(call.ID, agenttools.ToolNameBash, tc.result, 25)
 			if tc.name == "fatal" {
-				tr = classifyPrecomputedToolResult(call.ID, toolNameBash, tc.result, 25)
+				tr = agenttools.ClassifyPrecomputedToolResult(call.ID, agenttools.ToolNameBash, tc.result, 25)
 			}
 			w.emitToolResult(context.Background(), task, call, tr)
 
@@ -129,7 +130,7 @@ func TestEmitToolResultJSONEnvelopeByteCounts(t *testing.T) {
 	}
 	result := `{"Success":true,"ExitCode":0,"Stdout":"hello","Stderr":"warn"}`
 
-	w.emitToolResult(context.Background(), task, call, SuccessResult(call.ID, result, 25))
+	w.emitToolResult(context.Background(), task, call, agenttools.SuccessResult(call.ID, result, 25))
 
 	if len(sink.events) != 1 {
 		t.Fatalf("events = %d, want 1", len(sink.events))

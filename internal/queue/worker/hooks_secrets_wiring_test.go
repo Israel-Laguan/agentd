@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
@@ -25,7 +26,7 @@ func TestNewWorker_CredentialDetectionBlocksArgs(t *testing.T) {
 			Arguments: `{"command":"git clone https://ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij@github.com/org/repo"}`,
 		},
 	}
-	executor := NewToolExecutor(&fakeSuccessExecutor{}, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(&fakeSuccessExecutor{}, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	tr, suspended := w.dispatchToolWithHooks(
 		context.Background(), "sess-wiring", "proj-wiring", "", time.Now(),
@@ -34,7 +35,7 @@ func TestNewWorker_CredentialDetectionBlocksArgs(t *testing.T) {
 	if suspended {
 		t.Fatal("expected suspend=false")
 	}
-	if tr.Status != ToolStatusVetoed {
+	if tr.Status != agenttools.ToolStatusVetoed {
 		t.Fatalf("status = %s, want vetoed for credential in args", tr.Status)
 	}
 	if !strings.Contains(tr.Content, "credential pattern") {
@@ -58,7 +59,7 @@ func TestNewWorker_DisableCredentialDetection_SkipsHook(t *testing.T) {
 			Arguments: `{"command":"git clone https://ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij@github.com/org/repo"}`,
 		},
 	}
-	executor := NewToolExecutor(&fakeSuccessExecutor{}, t.TempDir(), BuildSandboxEnv(nil, nil), 0)
+	executor := agenttools.NewToolExecutor(&fakeSuccessExecutor{}, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
 
 	tr, suspended := w.dispatchToolWithHooks(
 		context.Background(), "sess-wiring-disable", "proj-wiring-disable", "", time.Now(),
@@ -67,8 +68,8 @@ func TestNewWorker_DisableCredentialDetection_SkipsHook(t *testing.T) {
 	if suspended {
 		t.Fatal("expected suspend=false")
 	}
-	if tr.Status != ToolStatusSuccess {
-		t.Fatalf("status = %s, want %s when credential detection disabled", tr.Status, ToolStatusSuccess)
+	if tr.Status != agenttools.ToolStatusSuccess {
+		t.Fatalf("status = %s, want %s when credential detection disabled", tr.Status, agenttools.ToolStatusSuccess)
 	}
 }
 
@@ -82,16 +83,16 @@ func TestWorker_runSessionStart_FailsOnMissingCredential(t *testing.T) {
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-session-start"}}
 	project := models.Project{BaseEntity: models.BaseEntity{ID: "proj-session-start"}}
 
-	err := w.runSessionStart(context.Background(), task, project)
+	err := w.RunSessionStart(context.Background(), task, project)
 	if err == nil {
-		t.Fatal("runSessionStart() = nil, want error for missing credential")
+		t.Fatal("RunSessionStart() = nil, want error for missing credential")
 	}
 	if !strings.Contains(err.Error(), "github") {
 		t.Fatalf("error %q does not mention tool name", err.Error())
 	}
 }
 
-func TestWorker_runSessionStart_SucceedsWhenCredentialsPresent(t *testing.T) {
+func TestWorker_RunSessionStart_SucceedsWhenCredentialsPresent(t *testing.T) {
 	const envKey = "TEST_PRESENT_SESSION_START"
 	t.Setenv(envKey, "present-value")
 
@@ -101,7 +102,7 @@ func TestWorker_runSessionStart_SucceedsWhenCredentialsPresent(t *testing.T) {
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-session-start-ok"}}
 	project := models.Project{BaseEntity: models.BaseEntity{ID: "proj-session-start-ok"}}
 
-	if err := w.runSessionStart(context.Background(), task, project); err != nil {
-		t.Fatalf("runSessionStart() = %v, want nil", err)
+	if err := w.RunSessionStart(context.Background(), task, project); err != nil {
+		t.Fatalf("RunSessionStart() = %v, want nil", err)
 	}
 }

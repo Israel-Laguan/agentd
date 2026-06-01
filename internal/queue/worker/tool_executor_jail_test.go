@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
 )
@@ -20,15 +21,15 @@ func TestToolExecutor_Bash_PathJail(t *testing.T) {
 		t.Fatal(err)
 	}
 	sb := &sandbox.BashExecutor{Root: root, Inactivity: time.Second}
-	ex := NewToolExecutor(sb, workspace, nil, 0)
+	ex := agenttools.NewToolExecutor(sb, workspace, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameBash,
+			Name:      agenttools.ToolNameBash,
 			Arguments: `{"command": "cat ../../../etc/passwd"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v\nout=%s", err, out)
 	}
 	if payload["error"] == "" {
@@ -39,15 +40,15 @@ func TestToolExecutor_Bash_PathJail(t *testing.T) {
 func TestToolExecutor_Read_PathJail(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
+			Name:      agenttools.ToolNameRead,
 			Arguments: `{"path": "../../../etc/passwd"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -58,15 +59,15 @@ func TestToolExecutor_Read_PathJail(t *testing.T) {
 func TestToolExecutor_Write_PathJail(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameWrite,
+			Name:      agenttools.ToolNameWrite,
 			Arguments: `{"path": "../../../tmp/evil.txt", "content": "malicious"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -85,15 +86,15 @@ func TestToolExecutor_Read_PathJail_Symlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameRead,
+			Name:      agenttools.ToolNameRead,
 			Arguments: `{"path": "link"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -113,15 +114,15 @@ func TestToolExecutor_Write_PathJail_SymlinkParent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameWrite,
+			Name:      agenttools.ToolNameWrite,
 			Arguments: `{"path": "evil/new.txt", "content": "pwned"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -150,15 +151,15 @@ func TestToolExecutor_Write_PathJail_Symlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ex := NewToolExecutor(nil, dir, nil, 0)
+	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
 	out := ex.Execute(context.Background(), gateway.ToolCall{
 		Function: gateway.ToolCallFunction{
-			Name:      toolNameWrite,
+			Name:      agenttools.ToolNameWrite,
 			Arguments: `{"path": "link", "content": "pwned"}`,
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(stripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {

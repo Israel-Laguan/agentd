@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	agentcontext "agentd/internal/agent/context"
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -29,7 +31,7 @@ func TestShouldPlanWithBudget(t *testing.T) {
 		planningCfg: config.AgenticPlanningConfig{ComplexityThreshold: 100},
 		tokenBudget: 10000,
 	}
-	g := NewBudgetGuard(nil, "t1")
+	g := agentruntime.NewBudgetGuard(nil, "t1")
 	if !w.shouldPlanWithBudget(long, g) {
 		t.Fatal("ample budget should allow planning")
 	}
@@ -41,7 +43,7 @@ func TestShouldPlanWithBudget(t *testing.T) {
 		t.Fatal("budget below plan+execution reserve should skip planning")
 	}
 	tracker := gateway.NewBudgetTracker(5000)
-	gUsed := NewBudgetGuard(tracker, "t1")
+	gUsed := agentruntime.NewBudgetGuard(tracker, "t1")
 	tracker.Add("t1", 4000)
 	wUsed := &Worker{
 		planningCfg: config.AgenticPlanningConfig{ComplexityThreshold: 100},
@@ -71,10 +73,10 @@ func TestShouldPlan(t *testing.T) {
 
 func TestPlan_Validate(t *testing.T) {
 	t.Parallel()
-	if err := (&Plan{Steps: []PlanStep{{ID: "a", Action: "do"}}}).Validate(); err != nil {
+	if err := (&agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "a", Action: "do"}}}).Validate(); err != nil {
 		t.Fatalf("valid plan: %v", err)
 	}
-	dup := &Plan{Steps: []PlanStep{
+	dup := &agentcontext.Plan{Steps: []agentcontext.PlanStep{
 		{ID: "a", Action: "one"},
 		{ID: "a", Action: "two"},
 	}}
@@ -87,7 +89,7 @@ func TestPlan_Validate_RejectsInvalidStepID(t *testing.T) {
 	t.Parallel()
 	cases := []string{"bad id", "<!--", "UPPER", ""}
 	for _, id := range cases {
-		p := &Plan{Steps: []PlanStep{{ID: id, Action: "do"}}}
+		p := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: id, Action: "do"}}}
 		if err := p.Validate(); err == nil {
 			t.Fatalf("id %q: expected validation error", id)
 		}
@@ -96,7 +98,7 @@ func TestPlan_Validate_RejectsInvalidStepID(t *testing.T) {
 
 func TestPlan_Validate_NormalizesStepID(t *testing.T) {
 	t.Parallel()
-	p := &Plan{Steps: []PlanStep{{ID: " analyze ", Action: " review "}}}
+	p := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: " analyze ", Action: " review "}}}
 	if err := p.Validate(); err != nil {
 		t.Fatalf("valid plan with padded id: %v", err)
 	}
@@ -111,7 +113,7 @@ func TestPlan_Validate_NormalizesStepID(t *testing.T) {
 func TestInjectPlan_EmptyMessages(t *testing.T) {
 	t.Parallel()
 	w := &Worker{}
-	plan := &Plan{Steps: []PlanStep{{ID: "analyze", Action: "review", OutputFormat: "text"}}}
+	plan := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "analyze", Action: "review", OutputFormat: "text"}}}
 	msgs := w.injectPlan(nil, plan)
 	if len(msgs) != 1 || msgs[0].Role != "system" {
 		t.Fatalf("expected single system message, got %v", msgs)
@@ -124,7 +126,7 @@ func TestInjectPlan_EmptyMessages(t *testing.T) {
 func TestInjectPlan(t *testing.T) {
 	t.Parallel()
 	w := &Worker{}
-	plan := &Plan{Steps: []PlanStep{{ID: "analyze", Action: "review", OutputFormat: "text"}}}
+	plan := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "analyze", Action: "review", OutputFormat: "text"}}}
 	msgs := w.injectPlan([]gateway.PromptMessage{
 		{Role: "system", Content: "base"},
 		{Role: "user", Content: "task"},

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	agentcontext "agentd/internal/agent/context"
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
@@ -16,7 +18,7 @@ import (
 func TestAgenticLoop_ContextWarningSummarize(t *testing.T) {
 	t.Parallel()
 	track := &summarizeTrackingGateway{}
-	cm := NewContextManager(config.AgenticContextConfig{
+	cm := agentcontext.NewContextManager(config.AgenticContextConfig{
 		AnchorBudget:          100,
 		WorkingBudget:         200,
 		CompressedBudget:      100,
@@ -39,9 +41,9 @@ func TestAgenticLoop_ContextWarningSummarize(t *testing.T) {
 		{Role: "assistant", Content: big},
 	}
 
-	ctxBudget := NewContextBudgetGuard(400, 0.5)
-	if warn, _ := ctxBudget.Check(totalChars(messages)); !warn {
-		t.Fatalf("expected warn at %d chars", totalChars(messages))
+	ctxBudget := agentruntime.NewContextBudgetGuard(400, 0.5)
+	if warn, _ := ctxBudget.Check(agentcontext.TotalChars(messages)); !warn {
+		t.Fatalf("expected warn at %d chars", agentcontext.TotalChars(messages))
 	}
 	if _, err := cm.PrepareContextForceSummarize(context.Background(), messages); err != nil {
 		t.Fatalf("PrepareContextForceSummarize: %v", err)

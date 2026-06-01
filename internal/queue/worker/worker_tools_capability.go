@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/toolenv"
@@ -26,7 +27,7 @@ import (
 func executeCapabilityTool(ctx context.Context, call gateway.ToolCall, toolToAdapter map[string]string, global, scoped *capabilities.Registry, callEnv []string) string {
 	args, err := parseCapabilityArgs(call.Function.Arguments)
 	if err != nil {
-		return jsonErrorf("invalid arguments: %v", err)
+		return agenttools.JSONErrorf("invalid arguments: %v", err)
 	}
 	adapterName := ""
 	if toolToAdapter != nil {
@@ -35,16 +36,16 @@ func executeCapabilityTool(ctx context.Context, call gateway.ToolCall, toolToAda
 
 	registry, adapterName := resolveCapabilityRoute(ctx, call.Function.Name, adapterName, global, scoped)
 	if registry == nil {
-		return jsonErrorf("unknown tool: %s", call.Function.Name)
+		return agenttools.JSONErrorf("unknown tool: %s", call.Function.Name)
 	}
 	toolCtx := toolenv.With(ctx, callEnv)
 	out, err := registry.CallTool(toolCtx, adapterName, call.Function.Name, args)
 	if err != nil {
-		return jsonErrorf("capability tool failed: %v", err)
+		return agenttools.JSONErrorf("capability tool failed: %v", err)
 	}
 	encoded, err := json.Marshal(out)
 	if err != nil {
-		return jsonErrorf("capability tool result encode failed: %v", err)
+		return agenttools.JSONErrorf("capability tool result encode failed: %v", err)
 	}
 	return string(encoded)
 }

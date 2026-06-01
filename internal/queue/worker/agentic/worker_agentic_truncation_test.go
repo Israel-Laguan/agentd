@@ -1,4 +1,4 @@
-package worker
+package agentic
 
 import (
 	"context"
@@ -7,16 +7,18 @@ import (
 	"strings"
 	"testing"
 
+	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
 )
 
-func testTruncationWorker(t *testing.T, truncatorMax, characterBudget int) *Worker {
+func testTruncationEngine(t *testing.T, truncatorMax, characterBudget int) *Engine {
 	t.Helper()
-	return &Worker{
-		truncatorMax:    truncatorMax,
-		characterBudget: characterBudget,
+	return &Engine{
+		config: Config{
+			TruncatorMax:    truncatorMax,
+			CharacterBudget: characterBudget,
+		},
 	}
 }
 
@@ -61,10 +63,10 @@ func syntheticToolExchangeHistory(exchanges int) []gateway.PromptMessage {
 func TestApplyAgenticTruncation_UnderLimitNoOp(t *testing.T) {
 	t.Parallel()
 
-	w := testTruncationWorker(t, 30, 0)
+	e := testTruncationEngine(t, 30, 0)
 	in := syntheticLongHistory(8)
 
-	got, err := w.applyAgenticTruncation(context.Background(), in)
+	got, err := e.applyAgenticTruncation(context.Background(), in)
 	if err != nil {
 		t.Fatalf("applyAgenticTruncation() error = %v", err)
 	}
@@ -76,10 +78,10 @@ func TestApplyAgenticTruncation_UnderLimitNoOp(t *testing.T) {
 func TestApplyAgenticTruncation_OverMaxMessages(t *testing.T) {
 	t.Parallel()
 
-	w := testTruncationWorker(t, 30, 0)
+	e := testTruncationEngine(t, 30, 0)
 	in := syntheticLongHistory(60)
 
-	got, err := w.applyAgenticTruncation(context.Background(), in)
+	got, err := e.applyAgenticTruncation(context.Background(), in)
 	if err != nil {
 		t.Fatalf("applyAgenticTruncation() error = %v", err)
 	}
@@ -98,38 +100,38 @@ func TestApplyAgenticTruncation_InheritedGatewayCharacterBudget(t *testing.T) {
 	t.Parallel()
 
 	const gatewayDefault = 12000
-	w := testTruncationWorker(t, 100, gatewayDefault)
+	e := testTruncationEngine(t, 100, gatewayDefault)
 	in := []gateway.PromptMessage{
 		{Role: "system", Content: "system"},
 		{Role: "user", Content: "task"},
 		{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("z", 20000)},
 	}
 
-	got, err := w.applyAgenticTruncation(context.Background(), in)
+	got, err := e.applyAgenticTruncation(context.Background(), in)
 	if err != nil {
 		t.Fatalf("applyAgenticTruncation() error = %v", err)
 	}
-	if totalChars(got) > gatewayDefault {
-		t.Fatalf("totalChars(got) = %d, want <= %d (inherited gateway default)", totalChars(got), gatewayDefault)
+	if agentcontext.TotalChars(got) > gatewayDefault {
+		t.Fatalf("totalChars(got) = %d, want <= %d (inherited gateway default)", agentcontext.TotalChars(got), gatewayDefault)
 	}
 }
 
 func TestApplyAgenticTruncation_CharacterBudget(t *testing.T) {
 	t.Parallel()
 
-	w := testTruncationWorker(t, 100, 500)
+	e := testTruncationEngine(t, 100, 500)
 	in := []gateway.PromptMessage{
 		{Role: "system", Content: "system"},
 		{Role: "user", Content: "task"},
 		{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("z", 2000)},
 	}
 
-	got, err := w.applyAgenticTruncation(context.Background(), in)
+	got, err := e.applyAgenticTruncation(context.Background(), in)
 	if err != nil {
 		t.Fatalf("applyAgenticTruncation() error = %v", err)
 	}
-	if totalChars(got) > 500 {
-		t.Fatalf("totalChars(got) = %d, want <= 500", totalChars(got))
+	if agentcontext.TotalChars(got) > 500 {
+		t.Fatalf("totalChars(got) = %d, want <= 500", agentcontext.TotalChars(got))
 	}
 	if got[0].Role != "system" {
 		t.Fatalf("system anchor missing: %#v", got[0])
@@ -139,10 +141,10 @@ func TestApplyAgenticTruncation_CharacterBudget(t *testing.T) {
 func TestApplyAgenticTruncation_ToolPairConsistency(t *testing.T) {
 	t.Parallel()
 
-	w := testTruncationWorker(t, 6, 0)
+	e := testTruncationEngine(t, 6, 0)
 	in := syntheticToolExchangeHistory(8)
 
-	got, err := w.applyAgenticTruncation(context.Background(), in)
+	got, err := e.applyAgenticTruncation(context.Background(), in)
 	if err != nil {
 		t.Fatalf("applyAgenticTruncation() error = %v", err)
 	}
@@ -152,33 +154,13 @@ func TestApplyAgenticTruncation_ToolPairConsistency(t *testing.T) {
 func TestBuildAgenticRequest_SkipTruncation(t *testing.T) {
 	t.Parallel()
 
-	w := &Worker{}
+	e := &Engine{host: &noopHost{}}
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "t1"}, AgentID: "a1"}
 	profile := models.AgentProfile{Provider: "openai", Model: "gpt-4"}
 
-	req := w.buildAgenticRequest(task, profile, nil, nil, 0)
+	req := e.buildAgenticRequest(task, profile, nil, nil, 0)
 	if !req.SkipTruncation {
 		t.Fatal("expected SkipTruncation=true on agentic AIRequest")
-	}
-}
-
-func TestAgenticGenerate_RequestSkipTruncation(t *testing.T) {
-	t.Parallel()
-
-	gw := &sequenceGateway{responses: integrationSequenceResponses()}
-	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
-		"pwd": {Success: true, ExitCode: 0, Stdout: "/home/user\n"},
-	}}
-	_, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
-	w.Process(context.Background(), task)
-
-	if len(gw.requests) == 0 {
-		t.Fatal("expected at least one gateway request")
-	}
-	for i, req := range gw.requests {
-		if !req.SkipTruncation {
-			t.Fatalf("request[%d]: expected SkipTruncation=true", i)
-		}
 	}
 }
 
