@@ -208,9 +208,5 @@ func hasExplicitConstraints(task models.Task) bool {
 	if elicitationFilePathPattern.MatchString(desc) {
 		return true
 	}
-	// Multi-section specs usually have several paragraph breaks; avoid skipping long prose.
-	if strings.Count(desc, "\n") >= 5 {
-		return true
-	}
 	return false
 }

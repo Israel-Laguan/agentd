@@ -137,6 +137,7 @@ func recordHITLExpiry(ctx context.Context, store models.KanbanStore, taskID stri
 
 func parseHITLExpiry(comments []models.Comment) (time.Time, bool) {
 	var latest time.Time
+	var latestAt time.Time
 	var found bool
 	for _, c := range comments {
 		if !strings.HasPrefix(c.Body, models.HITLExpiresAtCommentPrefix) {
@@ -147,8 +148,9 @@ func parseHITLExpiry(comments []models.Comment) (time.Time, bool) {
 		if err != nil {
 			continue
 		}
-		if !found || t.After(latest) {
+		if !found || c.CreatedAt.After(latestAt) {
 			latest = t
+			latestAt = c.CreatedAt
 			found = true
 		}
 	}

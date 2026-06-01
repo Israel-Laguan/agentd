@@ -25,10 +25,10 @@ func resultPayload(result sandbox.Result) string {
 	return fmt.Sprintf("exit=%d duration=%s\n%s", result.ExitCode, result.Duration, result.Stdout)
 }
 
-func promptPayload(command string, detection safety.PromptDetection, result sandbox.Result) string {
+func detectionPayload(pattern, command string, result sandbox.Result) string {
 	return fmt.Sprintf(
 		"pattern=%s command=%q exit=%d duration=%s\n%s",
-		detection.Pattern,
+		pattern,
 		command,
 		result.ExitCode,
 		result.Duration,
@@ -36,15 +36,12 @@ func promptPayload(command string, detection safety.PromptDetection, result sand
 	)
 }
 
+func promptPayload(command string, detection safety.PromptDetection, result sandbox.Result) string {
+	return detectionPayload(detection.Pattern, command, result)
+}
+
 func permissionPayload(command string, detection safety.PermissionDetection, result sandbox.Result) string {
-	return fmt.Sprintf(
-		"pattern=%s command=%q exit=%d duration=%s\n%s",
-		detection.Pattern,
-		command,
-		result.ExitCode,
-		result.Duration,
-		truncate(strings.TrimSpace(result.Stderr+"\n"+result.Stdout), 1000),
-	)
+	return detectionPayload(detection.Pattern, command, result)
 }
 
 func truncate(value string, max int) string {
@@ -95,6 +92,10 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		w.handleGatewayError(ctx, task, err)
 		return
 	}
+	if plan == nil {
+		w.emit(ctx, task, "ERROR", "gateway returned nil plan")
+		return
+	}
 	plan.Tasks = planning.RetitlePhaseContinuationTasks(plan.Tasks, planning.NextPhaseNumber(task.Title))
 	created, err := w.store.AppendTasksToProject(ctx, project.ID, task.ID, plan.Tasks)
 	if err != nil {
@@ -114,6 +115,9 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 // === Corrections Logic ===
 
 func (w *Worker) ingestHumanCorrections(ctx context.Context, taskID string, cm *ContextManager) {
+	if cm == nil {
+		return
+	}
 	comments, err := w.store.ListCommentsSince(ctx, taskID, cm.CommentHighWater())
 	if err != nil {
 		slog.Warn("failed to list task comments for corrections", "task_id", taskID, "error", err)

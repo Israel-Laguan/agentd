@@ -48,4 +48,4 @@ loc:
 minfunc:
 	$(GO) run ./scripts/checkminfunc --min-lines 3 --warn
 
-check: loc lint test
+check: loc minfunc lint test

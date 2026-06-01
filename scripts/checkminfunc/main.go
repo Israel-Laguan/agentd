@@ -73,7 +73,7 @@ func check(minLines int) ([]violation, error) {
 		}
 		v, err := checkFile(relPath, minLines)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("check %s: %w", relPath, err)
 		}
 		violations = append(violations, v...)
 	}
@@ -107,14 +107,14 @@ func checkFile(relPath string, minLines int) ([]violation, error) {
 
 		start := fset.Position(funcDecl.Body.Pos()).Line
 		end := fset.Position(funcDecl.Body.End()).Line
-		lineCount := end - start - 1
+		bodyLines := end - start + 1
 
-		if lineCount > 0 && lineCount < minLines {
+		if len(funcDecl.Body.List) > 0 && bodyLines < minLines {
 			funcName := funcDecl.Name.Name
 			if funcDecl.Recv != nil {
 				funcName = fmt.Sprintf("(%s).%s", typeName(funcDecl.Recv.List[0].Type), funcName)
 			}
-			violations = append(violations, violation{funcName, relPath, start, lineCount})
+			violations = append(violations, violation{funcName, relPath, start, bodyLines})
 		}
 		return true
 	})
@@ -174,9 +174,19 @@ func fnmatch(pattern, name string) bool {
 	var re strings.Builder
 	re.WriteByte('^')
 	for i := 0; i < len(pattern); i++ {
+		if i+2 < len(pattern) && pattern[i:i+3] == "**" {
+			if pattern[i+2] == '/' {
+				re.WriteString("(?:.*/)?")
+				i += 2
+				continue
+			}
+			re.WriteString(".*")
+			i++
+			continue
+		}
 		switch pattern[i] {
 		case '*':
-			re.WriteString(".*")
+			re.WriteString("[^/]*")
 		case '?':
 			re.WriteByte('.')
 		default:
