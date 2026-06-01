@@ -8,12 +8,41 @@ import (
 
 	wfilecontext "agentd/internal/agent/filecontext"
 	agenthooks "agentd/internal/agent/hooks"
+	agentruntime "agentd/internal/agent/runtime"
+	wsession "agentd/internal/agent/session"
 	agentsubagent "agentd/internal/agent/subagent"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 )
+
+func buildWorkerHooks(
+	opts WorkerOptions,
+	toolExecutor *agenttools.ToolExecutor,
+	sink models.EventSink,
+	scrubber sandbox.Scrubber,
+) *agenthooks.HookChain {
+	base := opts.Hooks
+	if base == nil {
+		base = agenthooks.NewHookChain()
+	}
+	hooks := base.Clone()
+	hooks.RegisterPre(agenthooks.SchemaValidationHook(agenttools.SchemaRegistryFromDefinitions(toolExecutor.Definitions())))
+	if !opts.DisableCredentialDetection {
+		hooks.RegisterPre(agenthooks.CredentialDetectionHook())
+	}
+	if len(opts.ToolCredentials) > 0 {
+		store := wsession.NewEnvSecretStore(opts.ToolCredentials)
+		hooks.RegisterPre(agenthooks.CredentialInjectionHook(store))
+		hooks.RegisterSessionStart(agenthooks.CredentialValidationSessionHook(store))
+	}
+	hooks.PrependPost(agenthooks.ScrubResultHook(scrubber))
+	hooks.RegisterPost(agenthooks.InjectionResistanceHook(agenthooks.ExternalToolsSet(opts.ExternalTools)))
+	hooks.RegisterPost(agenthooks.AuditHook(sink, scrubber))
+	return hooks
+}
 
 // mountScopedPlugins loads project-scoped and session-scoped plugins,
 // returning a task-local HookChain and capabilities Registry that
@@ -191,6 +220,41 @@ func (w *Worker) finalizeDispatchAudit(hookCtx agenthooks.HookContext, tr agentt
 		verdicts = *hookCtx.Verdicts
 	}
 	w.recordToolDispatch(hookCtx, tr, verdicts)
+}
+
+func (w *Worker) recordToolDispatch(hookCtx agenthooks.HookContext, tr agenttools.ToolResult, verdicts []string) {
+	if w.auditLogger == nil || !w.auditLogger.Enabled() {
+		return
+	}
+	w.auditLogger.RecordToolDispatch(
+		agenthooks.HookContext(hookCtx),
+		agenttools.ToolResult(tr),
+		verdicts,
+		hookCtx.TokenCountAfter,
+	)
+}
+
+func (w *Worker) recordTurnSnapshot(
+	sessionID, projectID, provider, turnID string,
+	messageCount, tokenCount int,
+	activeTools []string,
+	goalProgress float64,
+) {
+	if w.auditLogger == nil || !w.auditLogger.Enabled() {
+		return
+	}
+	w.auditLogger.RecordTurnSnapshot(agentruntime.TurnSnapshotRecord{
+		TaskID:       sessionID,
+		ProjectID:    projectID,
+		Provider:     provider,
+		TokenUsage:   tokenCount,
+		SessionID:    sessionID,
+		TurnID:       turnID,
+		MessageCount: messageCount,
+		TokenCount:   tokenCount,
+		ActiveTools:  append([]string(nil), activeTools...),
+		GoalProgress: goalProgress,
+	})
 }
 
 func (w *Worker) newAgenticTaskToolExecutor(project models.Project, task models.Task) *agenttools.ToolExecutor {
