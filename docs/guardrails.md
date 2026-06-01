@@ -7,7 +7,7 @@ This repository uses strict guardrails to keep code focused, testable, and maint
 | Limit | Value | Rationale |
 | --- | --- | --- |
 | Function length | 60 lines max | Functions longer than 60 lines typically do more than one thing. Splitting improves readability and testability. Enforced by `funlen` and `revive` `function-length`. |
-| Function length | 3 lines min | Functions with fewer lines are likely trivial renames or wrappers that add no value. Enforced by `scripts/checkminfunc` (`make minfunc`). |
+| Function length | 3 lines min | Functions with fewer lines are likely trivial renames or wrappers that add no value. Checked by `scripts/checkminfunc` (`make minfunc`). |
 | Function statements | 40 statements max | Tight statement budget forces early extraction of helpers and keeps the call stack shallow. Enforced by `revive` `function-length`. |
 | File size | 300 lines max (regular), 500 max (tests), 400 max (docs) | Large files accumulate hidden coupling. Splitting by behavior keeps packages navigable. Enforced by `scripts/checkloc` (`make loc`). |
 | Cyclomatic complexity | 15 max | High cyclomatic complexity correlates with defect density. Lower complexity makes branch coverage achievable. Enforced by `cyclop`. |
@@ -64,7 +64,7 @@ make check       # loc + lint + test (full quality gate)
 
 - [ ] `make check` passes with zero warnings.
 - [ ] No new blanket linter suppressions (`//nolint`, `// revive:disable`).
-- [ ] New functions are under 60 lines and 40 statements.
+- [ ] New functions are under 60 lines and 40 statements (and at least 3 lines).
 - [ ] New files are under 300 lines (regular), 500 lines (tests), or 400 lines (docs).
 - [ ] `internal/models` has no outward imports.
 - [ ] Tests accompany behavior changes (unit tests first for pure logic).

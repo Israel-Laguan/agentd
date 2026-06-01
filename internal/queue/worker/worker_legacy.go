@@ -147,10 +147,10 @@ func (w *Worker) legacyBreakdownDepth(ctx context.Context, taskID string) (int, 
 		depth++
 		current = parents[0].ID
 	}
-	return depth, nil
+	return depth, fmt.Errorf("legacy breakdown depth exceeded sanity cap %d", legacyBreakdownDepthSanityCap)
 }
 
-func (w *Worker) legacyDispatchRejectReason(task models.Task, profile models.AgentProfile) string {
+func (w *Worker) legacyDispatchRejectReason(task models.Task, _ models.AgentProfile) string {
 	score := (ComplexityScorer{}).ScoreTask(task)
 	if w.legacyRejectScore > 0 && score >= w.legacyRejectScore {
 		return fmt.Sprintf(
@@ -180,6 +180,18 @@ func (w *Worker) legacySeedMessages(task models.Task, _ models.Project, profile 
 	return messages
 }
 
+func (w *Worker) rejectLegacyBreakdown(ctx context.Context, task models.Task, cause string, healingCap bool) {
+	if healingCap {
+		w.createHealingHandoff(ctx, task, planning.HealingAction{
+			Type:     planning.HealingActionHuman,
+			StepName: planning.HealingStepHumanHandoff,
+			Reason:   cause,
+		}, cause)
+		return
+	}
+	w.createLegacyModeHandoff(ctx, task, cause, nil)
+}
+
 func (w *Worker) handleLegacyTaskBreakdown(ctx context.Context, task models.Task, subtasks []workerSubtask, healingCap bool) {
 	if len(subtasks) == 0 {
 		w.handleAgentFailure(ctx, task, "worker reported task too complex without subtasks")
@@ -188,15 +200,7 @@ func (w *Worker) handleLegacyTaskBreakdown(ctx context.Context, task models.Task
 	if w.legacyMaxSubtasksPerBreakdown > 0 && len(subtasks) > w.legacyMaxSubtasksPerBreakdown {
 		cause := fmt.Sprintf("Model returned %d subtasks but legacy mode allows at most %d per breakdown.",
 			len(subtasks), w.legacyMaxSubtasksPerBreakdown)
-		if healingCap {
-			w.createHealingHandoff(ctx, task, planning.HealingAction{
-				Type:     planning.HealingActionHuman,
-				StepName: planning.HealingStepHumanHandoff,
-				Reason:   cause,
-			}, cause)
-			return
-		}
-		w.createLegacyModeHandoff(ctx, task, cause, nil)
+		w.rejectLegacyBreakdown(ctx, task, cause, healingCap)
 		return
 	}
 	if w.legacyMaxBreakdownDepth > 0 {
@@ -208,15 +212,7 @@ func (w *Worker) handleLegacyTaskBreakdown(ctx context.Context, task models.Task
 		if depth >= w.legacyMaxBreakdownDepth {
 			cause := fmt.Sprintf("Legacy breakdown depth %d reached limit %d; further decomposition is not supported.",
 				depth, w.legacyMaxBreakdownDepth)
-			if healingCap {
-				w.createHealingHandoff(ctx, task, planning.HealingAction{
-					Type:     planning.HealingActionHuman,
-					StepName: planning.HealingStepHumanHandoff,
-					Reason:   cause,
-				}, cause)
-				return
-			}
-			w.createLegacyModeHandoff(ctx, task, cause, nil)
+			w.rejectLegacyBreakdown(ctx, task, cause, healingCap)
 			return
 		}
 	}
