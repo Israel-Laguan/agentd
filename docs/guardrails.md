@@ -7,6 +7,7 @@ This repository uses strict guardrails to keep code focused, testable, and maint
 | Limit | Value | Rationale |
 | --- | --- | --- |
 | Function length | 60 lines max | Functions longer than 60 lines typically do more than one thing. Splitting improves readability and testability. Enforced by `funlen` and `revive` `function-length`. |
+| Function length | 3 lines min | Functions with fewer lines are likely trivial renames or wrappers that add no value. Enforced by `scripts/checkminfunc` (`make minfunc`). |
 | Function statements | 40 statements max | Tight statement budget forces early extraction of helpers and keeps the call stack shallow. Enforced by `revive` `function-length`. |
 | File size | 300 lines max (regular), 500 max (tests), 400 max (docs) | Large files accumulate hidden coupling. Splitting by behavior keeps packages navigable. Enforced by `scripts/checkloc` (`make loc`). |
 | Cyclomatic complexity | 15 max | High cyclomatic complexity correlates with defect density. Lower complexity makes branch coverage achievable. Enforced by `cyclop`. |
