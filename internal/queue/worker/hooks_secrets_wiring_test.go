@@ -83,7 +83,7 @@ func TestWorker_runSessionStart_FailsOnMissingCredential(t *testing.T) {
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-session-start"}}
 	project := models.Project{BaseEntity: models.BaseEntity{ID: "proj-session-start"}}
 
-	err := w.RunSessionStart(context.Background(), task, project)
+	err := w.RunSessionStart(context.Background(), task, project, nil)
 	if err == nil {
 		t.Fatal("RunSessionStart() = nil, want error for missing credential")
 	}
@@ -102,7 +102,7 @@ func TestWorker_RunSessionStart_SucceedsWhenCredentialsPresent(t *testing.T) {
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-session-start-ok"}}
 	project := models.Project{BaseEntity: models.BaseEntity{ID: "proj-session-start-ok"}}
 
-	if err := w.RunSessionStart(context.Background(), task, project); err != nil {
+	if err := w.RunSessionStart(context.Background(), task, project, nil); err != nil {
 		t.Fatalf("RunSessionStart() = %v, want nil", err)
 	}
 }

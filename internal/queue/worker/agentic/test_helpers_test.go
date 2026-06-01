@@ -105,11 +105,11 @@ func (h *noopHost) GenerateRespecifiedUserTurn(_ context.Context, _ models.Task,
 	return "", nil
 }
 
-func (h *noopHost) RunSessionStart(_ context.Context, _ models.Task, _ models.Project) error {
+func (h *noopHost) RunSessionStart(_ context.Context, _ models.Task, _ models.Project, _ *agenthooks.HookChain) error {
 	return nil
 }
 
-func (h *noopHost) TryExternalCapabilityRoute(_ context.Context, _ models.Task, _ models.Project, _ models.AgentProfile, _ *[]gateway.PromptMessage) (agentruntime.LoopResult, bool, error) {
+func (h *noopHost) TryExternalCapabilityRoute(_ context.Context, _ models.Task, _ models.Project, _ models.AgentProfile, _ *[]gateway.PromptMessage, _ *capabilities.Registry) (agentruntime.LoopResult, bool, error) {
 	return agentruntime.LoopResult{}, false, nil
 }
 
