@@ -22,29 +22,6 @@ var (
 	errTopicDriftReset  = agentruntime.ErrTopicDriftReset
 )
 
-// agenticRewindState tracks repeated rewinds to the same turn index.
-type agenticRewindState struct {
-	lastTarget int
-	streak     int
-}
-
-// apply records a rewind request. Returns stagnation when the same target repeats
-// more than maxRewindStreak times.
-func (s *agenticRewindState) apply(rewindTo int) (stagnation bool) {
-	if rewindTo == s.lastTarget {
-		s.streak++
-	} else {
-		s.lastTarget = rewindTo
-		s.streak = 1
-	}
-	return s.streak > maxRewindStreak
-}
-
-func (s *agenticRewindState) reset() {
-	s.lastTarget = rewindNone
-	s.streak = 0
-}
-
 func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 	if in.toolTracker != nil {
 		in.toolTracker.Reset()
