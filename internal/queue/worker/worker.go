@@ -23,6 +23,7 @@ import (
 	wsession "agentd/internal/agent/session"
 	wskills "agentd/internal/agent/skills"
 	agenttools "agentd/internal/agent/tools"
+	"agentd/internal/queue/worker/agentic"
 )
 
 // DefaultMaxRetries is the baseline retry budget before eviction.
@@ -181,4 +182,31 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		return
 	}
 	w.runLegacyTask(ctx, task, *project, *profile, false)
+}
+
+func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (LoopResult, bool) {
+	engine := agentic.NewEngine(agentic.Config{
+		Store:                   w.store,
+		Gateway:                 w.gateway,
+		Sandbox:                 w.sandbox,
+		SandboxEnvAllowlist:     w.sandboxEnvAllowlist,
+		SandboxExtraEnv:         w.sandboxExtraEnv,
+		SandboxWallTimeout:      w.sandboxWallTimeout,
+		FileContextCfg:          w.fileContextCfg,
+		DocStore:                w.docStore,
+		ContextCfg:              w.contextCfg,
+		MaxToolIterations:       w.maxToolIterations,
+		BudgetTracker:           w.budgetTracker,
+		ContextWarningThreshold: w.contextWarningThreshold,
+		ToolFailureStreak:       w.toolFailureStreak,
+		TruncatorMax:            w.truncatorMax,
+		CharacterBudget:         w.characterBudget,
+		PlanningCfg:             w.planningCfg,
+		MessageEditor:           w.messageEditor,
+		CheckpointStore:         w.checkpointStore,
+		TopicGuard:              w.topicGuard,
+		ModelRouter:             w.modelRouter,
+		Capabilities:            w.capabilities,
+	}, w)
+	return engine.Process(ctx, task, project, profile)
 }
