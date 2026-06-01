@@ -106,13 +106,17 @@ func checkFile(relPath string, minLines int) ([]violation, error) {
 		}
 
 		start := fset.Position(funcDecl.Body.Pos()).Line
-
-		if len(funcDecl.Body.List) < minLines {
+		end := fset.Position(funcDecl.Body.Rbrace).Line
+		lineCount := end - start - 1
+		if lineCount < 0 {
+			lineCount = 0
+		}
+		if lineCount < minLines {
 			funcName := funcDecl.Name.Name
 			if funcDecl.Recv != nil {
 				funcName = fmt.Sprintf("(%s).%s", typeName(funcDecl.Recv.List[0].Type), funcName)
 			}
-			violations = append(violations, violation{funcName, relPath, start, len(funcDecl.Body.List)})
+			violations = append(violations, violation{funcName, relPath, start, lineCount})
 		}
 		return true
 	})
