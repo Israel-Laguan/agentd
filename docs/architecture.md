@@ -2,7 +2,7 @@
 
 This document maps the long-lived system nodes, data flows, failure points, and invariants for `agentd`. It describes the intended architecture without tying it to short-lived implementation delta IDs.
 
-For the foundational implementation baseline, see the Phase 1 contract in [`docs/phase1-skeleton.md`](phase1-skeleton.md).
+The foundational implementation baseline is defined in the [Foundational Baseline Contract](#foundational-baseline-contract).
 
 ## System Nodes
 
@@ -85,6 +85,58 @@ graph LR
 
 - **Today:** [`internal/memory/librarian.go`](../internal/memory/librarian.go) implements chunked map-reduce summarization of completed task logs into durable `{symptom, solution}` memories. Archives are written by [`internal/memory/archiver.go`](../internal/memory/archiver.go), and the `memory-curator` cron job drives the pipeline. [`internal/memory/recall.go`](../internal/memory/recall.go) provides FTS5-based recall with 500ms hard timeouts, namespace isolation (GLOBAL + current project + user preferences), and access-count tracking. [`internal/memory/dream.go`](../internal/memory/dream.go) implements the Dream Agent for nightly consolidation of redundant memories via LLM merge. User preferences are stored as `USER_PREFERENCE`-scoped memories and injected into chat prompts.
 - **Spec role:** The Librarian curates completed task logs into durable lessons, archives raw artifacts, recalls relevant context before LLM calls, consolidates redundant knowledge, and helps future workers avoid repeated mistakes.
+
+## Foundational Baseline Contract
+
+This section defines the durable contract for the board, task lifecycle, and store boundary. It is a permanent architectural baseline; later phases may add capabilities on top of it but must preserve these invariants.
+
+### Baseline Scope
+
+- Go project layout and bootstrap (`cmd`, `internal`, module wiring).
+- Domain entities and enums in `internal/models`.
+- SQLite schema and migrations in `internal/kanban`.
+- Store-level CRUD and lifecycle guards for projects and tasks.
+- Later-phase capabilities such as gateway fallback, sandbox execution, queue orchestration, SSE, and CLI UX polish sit on top of this baseline.
+
+### Required Data Model
+
+The minimum durable entities are:
+
+- `projects`: identity, intent (`original_input`), workspace path, status, timestamps.
+- `tasks`: identity, project foreign key, title/description, assignee, lifecycle state, runtime metadata, timestamps.
+- `task_relations`: parent/child edges and relation type.
+- `events`: immutable timeline entries for task/project activity.
+- `settings`: runtime key/value configuration.
+
+### Task Lifecycle Contract
+
+Task state is constrained to:
+
+`PENDING`, `READY`, `QUEUED`, `RUNNING`, `BLOCKED`, `COMPLETED`, `FAILED`, `FAILED_REQUIRES_HUMAN`, `IN_CONSIDERATION`.
+
+Transitions are validated at the model/store layer. Invalid transitions must fail with `ErrInvalidStateTransition`. Concurrent writes must fail deterministically with optimistic-lock/state-conflict errors.
+
+### Schema + Migration Contract
+
+- Fresh bootstrap must initialize schema and set `settings.schema_version` to current.
+- Migrations must preserve existing task rows and enforce current constraints.
+- Foreign keys and check constraints are mandatory.
+- `task_relations.relation_type` supports `BLOCKS`, `SPAWNED_BY`, and `DEPENDS_ON`.
+
+### Store CRUD Contract
+
+The store must guarantee:
+
+- Materializing a valid plan inserts one project, task rows, and valid relations atomically.
+- Claiming ready tasks is atomic under concurrency.
+- Updating task state/result respects lifecycle guards and optimistic locking.
+- Not-found and invalid-transition behavior is deterministic and test-covered.
+
+### Verification Checklist
+
+- `internal/models` tests pass for enum/state invariants.
+- `internal/kanban` tests pass for schema/migration/store invariants.
+- README and architecture docs point to this contract as the baseline.
 
 ## Data Flows
 

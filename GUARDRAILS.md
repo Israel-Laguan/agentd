@@ -127,4 +127,4 @@ Do not mix groups. Do not use aliases unless there is a name collision.
 
 If your change affects the Board/Store layer, task lifecycle states, or the worker execution cycle, read the relevant failure analysis sections to understand the existing safety mechanisms.
 **Reason:** This system has carefully designed invariants (optimistic locking, sandbox jailing, token budgets, circuit breakers, context truncation) that prevent catastrophic failure modes. Changing one component without understanding its invariants can introduce "The Gutter" — recursive failure loops documented in `docs/architecture.md`.
-**Provenance:** Architectural invariants documented in `docs/architecture.md` and `docs/phase1-skeleton.md`.
+**Provenance:** Architectural invariants documented in `docs/architecture.md`.

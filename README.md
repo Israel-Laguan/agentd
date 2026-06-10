@@ -2,7 +2,7 @@
 
 `agentd` is a local-first daemon for turning approved project plans into durable Kanban tasks.
 
-Phase 1 hardening baseline: [`docs/phase1-skeleton.md`](docs/phase1-skeleton.md).
+Foundational baseline contract: [`docs/architecture.md#foundational-baseline-contract`](docs/architecture.md#foundational-baseline-contract).
 
 ## Core Components
 
@@ -132,7 +132,7 @@ Run spawned agents under a non-sudoer system user. `agentd` blocks commands that
 | [`docs/openai-compatible-providers.md`](docs/openai-compatible-providers.md) | Using Groq, Together AI, Poolside, and other OpenAI-compatible cloud vendors |
 | [`docs/llamacpp-quickstart.md`](docs/llamacpp-quickstart.md) | Local inference quickstart (llama.cpp, LM Studio, vLLM, Ollama) |
 | [`docs/guardrails.md`](docs/guardrails.md) | Size limits, layer boundaries, quality workflow (human-facing) |
-| [`docs/phase1-skeleton.md`](docs/phase1-skeleton.md) | Phase 1 hardening baseline contract |
+| [`docs/architecture.md#foundational-baseline-contract`](docs/architecture.md#foundational-baseline-contract) | Foundational baseline contract |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute |
 | [`REVIEW.md`](REVIEW.md) | PR review checklist (build, lint, tests, Go cache) |
 | [`STYLEGUIDE.md`](STYLEGUIDE.md) | Coding conventions and style guide |
