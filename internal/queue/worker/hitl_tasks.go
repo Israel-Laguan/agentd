@@ -21,50 +21,29 @@ type ClarificationMessage struct {
 	RequestedAt    time.Time `json:"requested_at"`
 }
 
-type ClarificationResponse struct {
-	Answer   string `json:"answer"`
-	Selected string `json:"selected,omitempty"`
+type BlockTaskWithSubtasksAndCommentsStore interface {
+	BlockTaskWithSubtasksAndComments(
+		ctx context.Context,
+		taskID string,
+		expectedUpdatedAt time.Time,
+		subtasks []models.DraftTask,
+		comments []models.Comment,
+	) (*models.Task, []models.Task, error)
 }
 
-type ClarificationInterface interface {
-	RequestClarification(ctx context.Context, msg ClarificationMessage) (ClarificationResponse, error)
-}
-
-type BlockingClarificationHandler struct {
-	store models.KanbanStore
-}
-
-func NewBlockingClarificationHandler(store models.KanbanStore) *BlockingClarificationHandler {
-	return &BlockingClarificationHandler{store: store}
-}
-
-func (h *BlockingClarificationHandler) RequestClarification(ctx context.Context, msg ClarificationMessage) (ClarificationResponse, error) {
-	detail := buildClarificationDetail(msg)
-
-	description := FormatForHuman(HITLMessage{
-		Summary: "Clarification needed from human",
-		Action:  "Answer the question below. Add your response as a comment on this subtask and mark it COMPLETED.",
-		Urgency: "blocking",
-		Detail:  detail,
-	})
-
-	_, subtasks, err := h.store.BlockTaskWithSubtasks(ctx, msg.TaskID, msg.TaskUpdatedAt, []models.DraftTask{{
-		Title:       models.HITLSubtaskTitleClarification + truncate(msg.Question, 80),
-		Description: description,
-		Assignee:    models.TaskAssigneeHuman,
-	}})
-	if err != nil {
-		return ClarificationResponse{}, fmt.Errorf("create clarification subtask: %w", err)
+func blockForClarification(
+	ctx context.Context,
+	store models.KanbanStore,
+	taskID string,
+	expectedUpdatedAt time.Time,
+	subtasks []models.DraftTask,
+	comments []models.Comment,
+) (*models.Task, []models.Task, error) {
+	atomicStore, ok := store.(BlockTaskWithSubtasksAndCommentsStore)
+	if !ok {
+		return nil, nil, fmt.Errorf("kanban store does not support atomic clarification handoff")
 	}
-	if err := recordHITLExpiry(ctx, h.store, msg.TaskID, time.Now().Add(DefaultApprovalTimeout)); err != nil {
-		return ClarificationResponse{}, fmt.Errorf("record clarification expiry: %w", err)
-	}
-
-	if len(subtasks) == 0 {
-		return ClarificationResponse{}, fmt.Errorf("no clarification subtask created")
-	}
-
-	return ClarificationResponse{}, nil
+	return atomicStore.BlockTaskWithSubtasksAndComments(ctx, taskID, expectedUpdatedAt, subtasks, comments)
 }
 
 func buildClarificationDetail(msg ClarificationMessage) string {
@@ -94,7 +73,6 @@ func (w *Worker) RequestClarificationFromAgent(
 		w.emit(ctx, task, "ERROR", err.Error())
 		return err
 	}
-	handler := NewBlockingClarificationHandler(w.store)
 	msg := ClarificationMessage{
 		Question:       question,
 		Options:        options,
@@ -103,10 +81,26 @@ func (w *Worker) RequestClarificationFromAgent(
 		TaskUpdatedAt:  task.UpdatedAt,
 		RequestedAt:    time.Now(),
 	}
-	_, err := handler.RequestClarification(ctx, msg)
+	detail := buildClarificationDetail(msg)
+
+	description := FormatForHuman(HITLMessage{
+		Summary: "Clarification needed from human",
+		Action:  "Answer the question below. Add your response as a comment on this subtask and mark it COMPLETED.",
+		Urgency: "blocking",
+		Detail:  detail,
+	})
+
+	_, subtasks, err := blockForClarification(ctx, w.store, task.ID, task.UpdatedAt, []models.DraftTask{{
+		Title:       models.HITLSubtaskTitleClarification + truncate(question, 80),
+		Description: description,
+		Assignee:    models.TaskAssigneeHuman,
+	}}, []models.Comment{hitlExpiryComment(time.Now().Add(DefaultApprovalTimeout))})
 	if err != nil {
 		w.emit(ctx, task, "ERROR", fmt.Sprintf("clarification request failed: %v", err))
-		return err
+		return fmt.Errorf("create clarification subtask: %w", err)
+	}
+	if len(subtasks) == 0 {
+		return fmt.Errorf("no clarification subtask created")
 	}
 	w.emit(ctx, task, "CLARIFICATION_REQUESTED", truncate(question, 500))
 	return nil

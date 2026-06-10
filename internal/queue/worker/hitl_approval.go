@@ -18,11 +18,16 @@ func approvalSubtaskTitle(toolName string) string {
 }
 
 func recordHITLExpiry(ctx context.Context, store models.KanbanStore, taskID string, expiresAt time.Time) error {
-	return store.AddComment(ctx, models.Comment{
-		TaskID: taskID,
+	comment := hitlExpiryComment(expiresAt)
+	comment.TaskID = taskID
+	return store.AddComment(ctx, comment)
+}
+
+func hitlExpiryComment(expiresAt time.Time) models.Comment {
+	return models.Comment{
 		Author: models.CommentAuthorWorkerAgent,
 		Body:   models.HITLExpiresAtCommentPrefix + expiresAt.UTC().Format(time.RFC3339),
-	})
+	}
 }
 
 func parseHITLExpiry(comments []models.Comment) (time.Time, bool) {
@@ -52,14 +57,17 @@ func hitlExpired(comments []models.Comment, now time.Time) bool {
 	return ok && now.After(expiresAt)
 }
 
-func isApprovalConsumed(comments []models.Comment, subtaskID string) bool {
-	marker := hitlApprovalUsedPrefix + subtaskID
+func isHITLMarkerConsumed(comments []models.Comment, marker string) bool {
 	for _, c := range comments {
-		if strings.HasPrefix(c.Body, marker) {
+		if c.Body == marker {
 			return true
 		}
 	}
 	return false
+}
+
+func isApprovalConsumed(comments []models.Comment, subtaskID string) bool {
+	return isHITLMarkerConsumed(comments, hitlApprovalUsedPrefix+subtaskID)
 }
 
 func markApprovalUsed(ctx context.Context, store models.KanbanStore, parentID, subtaskID string) error {
@@ -71,13 +79,7 @@ func markApprovalUsed(ctx context.Context, store models.KanbanStore, parentID, s
 }
 
 func isApprovalRejectionConsumed(comments []models.Comment, subtaskID string) bool {
-	marker := hitlApprovalRejectionUsedPrefix + subtaskID
-	for _, c := range comments {
-		if strings.HasPrefix(c.Body, marker) {
-			return true
-		}
-	}
-	return false
+	return isHITLMarkerConsumed(comments, hitlApprovalRejectionUsedPrefix+subtaskID)
 }
 
 func markApprovalRejectionUsed(ctx context.Context, store models.KanbanStore, parentID, subtaskID string) error {

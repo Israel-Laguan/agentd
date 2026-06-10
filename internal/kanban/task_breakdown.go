@@ -62,6 +62,65 @@ func (s *Store) BlockTaskWithSubtasks(
 	return r.blocked, r.children, nil
 }
 
+func (s *Store) BlockTaskWithSubtasksAndComments(
+	ctx context.Context,
+	taskID string,
+	expectedUpdatedAt time.Time,
+	subtasks []models.DraftTask,
+	comments []models.Comment,
+) (*models.Task, []models.Task, error) {
+	if len(subtasks) == 0 {
+		return nil, nil, models.ErrInvalidDraftPlan
+	}
+	if err := s.validateTaskAgentIDs(ctx, subtasks); err != nil {
+		return nil, nil, err
+	}
+	type result struct {
+		blocked  *models.Task
+		children []models.Task
+	}
+	r, err := retryOnBusy(ctx, func(ctx context.Context) (result, error) {
+		tx, err := beginImmediate(ctx, s.db)
+		if err != nil {
+			return result{}, fmt.Errorf("begin block task with subtasks and comments: %w", err)
+		}
+		defer rollbackUnlessCommitted(tx)
+
+		parent, err := selectTaskByID(ctx, tx, taskID)
+		if err != nil {
+			return result{}, err
+		}
+		if parent.State != models.TaskStateRunning && parent.State != models.TaskStateReady {
+			return result{}, fmt.Errorf("%w: %s -> %s", models.ErrInvalidStateTransition, parent.State, models.TaskStateBlocked)
+		}
+
+		now := utcNow()
+		if err := blockTask(ctx, tx, parent.ID, expectedUpdatedAt, now); err != nil {
+			return result{}, err
+		}
+		children, err := insertReadySubtasks(ctx, tx, parent.ProjectID, parent.ID, subtasks, now)
+		if err != nil {
+			return result{}, err
+		}
+		commentBase := now.Add(-time.Duration(len(comments)-1) * time.Nanosecond)
+		for i, comment := range comments {
+			commentTime := commentBase.Add(time.Duration(i) * time.Nanosecond)
+			if err := insertCommentEvent(ctx, tx, parent.ID, parent.ProjectID, comment, commentTime); err != nil {
+				return result{}, err
+			}
+		}
+		blocked, err := selectTaskByID(ctx, tx, parent.ID)
+		if err != nil {
+			return result{}, err
+		}
+		return result{blocked, children}, commitTx(tx, "block task with subtasks and comments")
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return r.blocked, r.children, nil
+}
+
 func blockTask(ctx context.Context, tx *immediateTx, taskID string, expectedUpdatedAt time.Time, now time.Time) error {
 	result, err := tx.ExecContext(ctx, `
 		UPDATE tasks

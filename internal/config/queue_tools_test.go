@@ -248,62 +248,70 @@ func TestScaleBareNumber_AtLimit(t *testing.T) {
 	}
 }
 
-func TestParseViperDuration(t *testing.T) {
+func TestParseViperDuration_BareNumericString(t *testing.T) {
 	t.Parallel()
 
 	fallback := 200 * time.Millisecond
 	unit := time.Millisecond
 
 	tests := []struct {
-		name    string
-		set     func(*viper.Viper)
-		want    time.Duration
-		wantSet bool
+		name  string
+		value string
+		want  time.Duration
 	}{
-		{
-			name: "bare int",
-			set: func(v *viper.Viper) {
-				v.Set("delay", 500)
-			},
-			want:    500 * time.Millisecond,
-			wantSet: true,
-		},
-		{
-			name: "duration string",
-			set: func(v *viper.Viper) {
-				v.Set("delay", "300ms")
-			},
-			want:    300 * time.Millisecond,
-			wantSet: true,
-		},
-		{
-			name:    "unset uses fallback",
-			set:     func(*viper.Viper) {},
-			want:    fallback,
-			wantSet: false,
-		},
-		{
-			name: "overflow bare int",
-			set: func(v *viper.Viper) {
-				v.Set("delay", int64(math.MaxInt64))
-			},
-			want:    fallback,
-			wantSet: true,
-		},
+		{name: "bare numeric string milliseconds", value: "500", want: 500 * time.Millisecond},
+		{name: "bare numeric string seconds", value: "120", want: 120 * time.Millisecond},
+		{name: "trimmed bare numeric string", value: " 500 ", want: 500 * time.Millisecond},
+		{name: "invalid string uses fallback", value: "not-a-duration", want: fallback},
+		{name: "empty string uses fallback", value: "", want: fallback},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			v := viper.New()
-			tc.set(v)
-			got := parseViperDuration(v, "delay", fallback, unit)
-			if got != tc.want {
-				t.Fatalf("parseViperDuration() = %v, want %v", got, tc.want)
-			}
-			if tc.wantSet && !v.IsSet("delay") {
-				t.Fatal("expected key to be set")
-			}
+			assertParseViperDurationBareNumericString(t, fallback, unit, tc.value, tc.want)
 		})
+	}
+}
+
+func assertParseViperDurationBareNumericString(t *testing.T, fallback, unit time.Duration, value string, want time.Duration) {
+	t.Helper()
+
+	v := viper.New()
+	v.Set("delay", value)
+	got := parseViperDuration(v, "delay", fallback, unit)
+	if got != want {
+		t.Fatalf("parseViperDuration(%q) = %v, want %v", value, got, want)
+	}
+	if !v.IsSet("delay") {
+		t.Fatal("expected key to be set")
+	}
+}
+
+func TestToolRetriesBareNumericString_Viper(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setQueueDefaults(v)
+	v.Set("queue.tool_retries.base_delay", "500")
+	v.Set("queue.tool_retries.max_delay", "3000")
+	cfg := loadQueueConfig(v)
+
+	if cfg.ToolRetries.BaseDelay != 500*time.Millisecond {
+		t.Fatalf("base_delay = %v, want 500ms", cfg.ToolRetries.BaseDelay)
+	}
+	if cfg.ToolRetries.MaxDelay != 3*time.Second {
+		t.Fatalf("max_delay = %v, want 3s", cfg.ToolRetries.MaxDelay)
+	}
+}
+
+func TestToolTimeoutsBareNumericString_Viper(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setQueueDefaults(v)
+	v.Set("queue.tool_timeouts.bash", "120")
+	cfg := loadQueueConfig(v)
+
+	if got := cfg.ToolTimeouts.Lookup("bash", 0); got != 120*time.Second {
+		t.Fatalf("bash timeout = %v, want 120s", got)
 	}
 }

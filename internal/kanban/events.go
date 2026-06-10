@@ -29,17 +29,10 @@ func (s *Store) AddComment(ctx context.Context, c models.Comment) error {
 		if err != nil {
 			return fmt.Errorf("resolve task for comment: %w", err)
 		}
-		if strings.TrimSpace(c.Body) == "" {
-			c.Body = strings.TrimSpace(c.Content)
+		if err := insertCommentEvent(ctx, tx, c.TaskID, task.ProjectID, c, now); err != nil {
+			return err
 		}
 		author := models.NormalizeCommentAuthor(string(c.Author))
-		payload := fmt.Sprintf("%s: %s", author, c.Body)
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO events (id, project_id, task_id, type, payload, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			c.ID, task.ProjectID, c.TaskID, models.EventTypeComment, payload, formatTime(now), formatTime(now)); err != nil {
-			return fmt.Errorf("add comment event: %w", err)
-		}
 		if author != models.CommentAuthorUser {
 			return commitTx(tx, "add comment")
 		}
@@ -58,6 +51,24 @@ func (s *Store) AddComment(ctx context.Context, c models.Comment) error {
 		}
 		return nil
 	})
+}
+
+func insertCommentEvent(ctx context.Context, tx *immediateTx, taskID, projectID string, c models.Comment, now time.Time) error {
+	if c.ID == "" {
+		c.ID = uuid.NewString()
+	}
+	if strings.TrimSpace(c.Body) == "" {
+		c.Body = strings.TrimSpace(c.Content)
+	}
+	author := models.NormalizeCommentAuthor(string(c.Author))
+	payload := models.FormatCommentPayload(author, c.Body)
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO events (id, project_id, task_id, type, payload, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		c.ID, projectID, taskID, models.EventTypeComment, payload, formatTime(now), formatTime(now)); err != nil {
+		return fmt.Errorf("add comment event: %w", err)
+	}
+	return nil
 }
 
 // AddCommentAndPause satisfies the proposal-aligned board contract by forcing a

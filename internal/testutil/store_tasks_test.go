@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"testing"
+	"time"
 
 	"agentd/internal/models"
 )
@@ -27,6 +28,41 @@ func TestFakeKanbanStore_BlockedParentStaysBlockedWhenNonHITLChildFails(t *testi
 	}
 	if parentAfter.State != models.TaskStateBlocked {
 		t.Fatalf("parent state = %s, want BLOCKED", parentAfter.State)
+	}
+}
+
+func TestFakeKanbanStore_BlockTaskWithSubtasksAndCommentsSuccess(t *testing.T) {
+	ctx := context.Background()
+	store := NewFakeStore()
+	parent := seedRunningParent(t, store, ctx, "parent-atomic-comments")
+
+	blocked, children, err := store.BlockTaskWithSubtasksAndComments(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: "clarify",
+	}}, []models.Comment{
+		{Author: models.CommentAuthorWorkerAgent, Body: "agentd:hitl:elicitation-questions:[]"},
+		{Author: models.CommentAuthorWorkerAgent, Body: models.HITLExpiresAtCommentPrefix + time.Now().Add(time.Hour).UTC().Format(time.RFC3339)},
+	})
+	if err != nil {
+		t.Fatalf("BlockTaskWithSubtasksAndComments: %v", err)
+	}
+	if blocked.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", blocked.State)
+	}
+	if len(children) != 1 || children[0].Title != "clarify" {
+		t.Fatalf("children = %#v, want one child", children)
+	}
+	comments, err := store.ListComments(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListComments: %v", err)
+	}
+	if len(comments) != 2 {
+		t.Fatalf("comments = %d, want 2", len(comments))
+	}
+	if comments[0].Author != models.CommentAuthorWorkerAgent || comments[1].Author != models.CommentAuthorWorkerAgent {
+		t.Fatalf("comment authors = %s, %s; want WORKER_AGENT", comments[0].Author, comments[1].Author)
+	}
+	if !comments[1].CreatedAt.After(comments[0].CreatedAt) {
+		t.Fatalf("comment order = %s, %s; want expiry after questions", comments[0].CreatedAt, comments[1].CreatedAt)
 	}
 }
 

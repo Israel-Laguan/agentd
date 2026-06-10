@@ -89,15 +89,6 @@ func (s *FakeKanbanStore) IncrementRetryCount(_ context.Context, id string, _ ti
 	return &t, nil
 }
 
-func terminalCompletedAt(next models.TaskState, ts time.Time) *time.Time {
-	switch next {
-	case models.TaskStateCompleted, models.TaskStateFailed, models.TaskStateFailedRequiresHuman:
-		return &ts
-	default:
-		return nil
-	}
-}
-
 func (s *FakeKanbanStore) UpdateTaskDescription(_ context.Context, id string, expectedUpdatedAt time.Time, description string) (*models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -235,25 +226,43 @@ func (s *FakeKanbanStore) BlockTaskWithSubtasks(_ context.Context, id string, _ 
 	if !ok {
 		return nil, nil, models.ErrTaskNotFound
 	}
-	t.State = models.TaskStateBlocked
-	t.OSProcessID = nil
-	t.UpdatedAt = now()
-	s.tasks[id] = t
-	children := make([]models.Task, 0, len(drafts))
-	for _, d := range drafts {
-		child := models.Task{
-			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-			ProjectID:       t.ProjectID,
-			AgentID:         resolveTaskAgentID(d.AgentID),
-			Title:           d.Title,
-			Description:     d.Description,
-			State:           models.TaskStateReady,
-			Assignee:        d.Assignee,
-			SuccessCriteria: append([]string(nil), d.SuccessCriteria...),
-		}
-		s.tasks[child.ID] = child
-		s.childParents[child.ID] = append(s.childParents[child.ID], id)
-		children = append(children, child)
+	ts := now()
+	t = *s.blockParentTaskLocked(id, ts)
+	children := s.addDraftTasksLocked(t.ProjectID, id, drafts)
+	return &t, children, nil
+}
+
+func (s *FakeKanbanStore) BlockTaskWithSubtasksAndComments(
+	_ context.Context,
+	id string,
+	expectedUpdatedAt time.Time,
+	drafts []models.DraftTask,
+	comments []models.Comment,
+) (*models.Task, []models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(drafts) == 0 {
+		return nil, nil, models.ErrInvalidDraftPlan
+	}
+	if err := s.validateDraftAgentIDs(drafts); err != nil {
+		return nil, nil, err
+	}
+	t, ok := s.tasks[id]
+	if !ok {
+		return nil, nil, models.ErrTaskNotFound
+	}
+	if !t.UpdatedAt.Equal(expectedUpdatedAt) {
+		return nil, nil, models.ErrStateConflict
+	}
+	ts := now()
+	t = *s.blockParentTaskLocked(id, ts)
+	children := s.addDraftTasksLocked(t.ProjectID, id, drafts)
+	for i, c := range comments {
+		commentTime := ts.Add(time.Duration(i) * time.Nanosecond)
+		c.TaskID = id
+		c.CreatedAt = commentTime
+		c.UpdatedAt = commentTime
+		s.comments = append(s.comments, encodeCommentPayload(c))
 	}
 	return &t, children, nil
 }
@@ -267,29 +276,6 @@ func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, par
 	if _, ok := s.tasks[parentTaskID]; !ok {
 		return nil, models.ErrTaskNotFound
 	}
-	var created []models.Task
-	for _, d := range drafts {
-		task := models.Task{
-			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-			ProjectID:       projectID,
-			AgentID:         resolveTaskAgentID(d.AgentID),
-			Title:           d.Title,
-			Description:     d.Description,
-			State:           models.TaskStateReady,
-			Assignee:        d.Assignee,
-			SuccessCriteria: append([]string(nil), d.SuccessCriteria...),
-		}
-		s.tasks[task.ID] = task
-		s.childParents[task.ID] = append(s.childParents[task.ID], parentTaskID)
-		created = append(created, task)
-	}
+	created := s.addDraftTasksLocked(projectID, parentTaskID, drafts)
 	return created, nil
-}
-
-func pidSet(pids []int) map[int]struct{} {
-	s := make(map[int]struct{}, len(pids))
-	for _, p := range pids {
-		s[p] = struct{}{}
-	}
-	return s
 }
