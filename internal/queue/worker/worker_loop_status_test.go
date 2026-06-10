@@ -47,7 +47,13 @@ func TestHandleLoopResult_UnknownStatus_FallsThroughFailure(t *testing.T) {
 		if string(event.Type) == "LOOP_UNKNOWN_STATUS" {
 			found = true
 			if !strings.Contains(event.Payload, "status=unknown_loop_status(99)") {
-				t.Errorf("payload = %q", event.Payload)
+				t.Errorf("payload missing status: %q", event.Payload)
+			}
+			if !strings.Contains(event.Payload, "last_error=boom") {
+				t.Errorf("payload missing last_error: %q", event.Payload)
+			}
+			if !strings.Contains(event.Payload, "tool=bash") {
+				t.Errorf("payload missing tool: %q", event.Payload)
 			}
 			break
 		}

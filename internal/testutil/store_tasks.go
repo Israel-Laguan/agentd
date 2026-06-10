@@ -257,8 +257,9 @@ func (s *FakeKanbanStore) BlockTaskWithSubtasksAndComments(
 	ts := now()
 	t = *s.blockParentTaskLocked(id, ts)
 	children := s.addDraftTasksLocked(t.ProjectID, id, drafts)
+	commentBase := ts.Add(-time.Duration(len(comments)-1) * time.Nanosecond)
 	for i, c := range comments {
-		commentTime := ts.Add(time.Duration(i) * time.Nanosecond)
+		commentTime := commentBase.Add(time.Duration(i) * time.Nanosecond)
 		c.TaskID = id
 		c.CreatedAt = commentTime
 		c.UpdatedAt = commentTime
