@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -35,6 +36,125 @@ func TestBlockTaskWithSubtasksCreatesReadyChildrenAndBlocksParent(t *testing.T) 
 		t.Fatalf("child success criteria = %v, want [child one done]", children[0].SuccessCriteria)
 	}
 	assertRelationCount(t, store, parent.ID, 2)
+}
+
+func TestBlockTaskWithSubtasksAndCommentsCreatesChildrenAndCommentsInOrder(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	parent := seedTestTask(t, store, "parent-comments", models.TaskStateRunning)
+	expiry := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+
+	blocked, children, err := store.BlockTaskWithSubtasksAndComments(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: "clarify",
+	}}, []models.Comment{
+		{TaskID: parent.ID, Author: models.CommentAuthorWorkerAgent, Body: "agentd:hitl:elicitation-questions:[]"},
+		{TaskID: parent.ID, Author: models.CommentAuthorWorkerAgent, Body: models.HITLExpiresAtCommentPrefix + expiry},
+	})
+	if err != nil {
+		t.Fatalf("BlockTaskWithSubtasksAndComments() error = %v", err)
+	}
+	if blocked.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", blocked.State)
+	}
+	if len(children) != 1 || children[0].Title != "clarify" {
+		t.Fatalf("children = %#v, want one child", children)
+	}
+	comments, err := store.ListComments(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListComments: %v", err)
+	}
+	if len(comments) != 2 {
+		t.Fatalf("comments = %d, want 2", len(comments))
+	}
+	if comments[0].Author != models.CommentAuthorWorkerAgent || comments[1].Author != models.CommentAuthorWorkerAgent {
+		t.Fatalf("comment authors = %s, %s; want WORKER_AGENT", comments[0].Author, comments[1].Author)
+	}
+	if comments[0].Body != "agentd:hitl:elicitation-questions:[]" || comments[1].Body != models.HITLExpiresAtCommentPrefix+expiry {
+		t.Fatalf("comment bodies = %q, %q", comments[0].Body, comments[1].Body)
+	}
+	if !comments[1].CreatedAt.After(comments[0].CreatedAt) {
+		t.Fatalf("comment order = %s, %s; want expiry after questions", comments[0].CreatedAt, comments[1].CreatedAt)
+	}
+	assertRelationCount(t, store, parent.ID, 1)
+}
+
+func TestBlockTaskWithSubtasksAndCommentsRollsBackOnStateConflict(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	parent := seedTestTask(t, store, "parent-rollback", models.TaskStateRunning)
+
+	_, _, err := store.BlockTaskWithSubtasksAndComments(ctx, parent.ID, parent.UpdatedAt.Add(-time.Second), []models.DraftTask{{
+		Title: "child",
+	}}, []models.Comment{{
+		TaskID: parent.ID,
+		Author: models.CommentAuthorWorkerAgent,
+		Body:   "agentd:hitl:elicitation-questions:[]",
+	}})
+	if !errors.Is(err, models.ErrStateConflict) {
+		t.Fatalf("BlockTaskWithSubtasksAndComments() error = %v, want ErrStateConflict", err)
+	}
+	after, err := store.GetTask(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if after.State != models.TaskStateRunning || !after.UpdatedAt.Equal(parent.UpdatedAt) {
+		t.Fatalf("parent = state %s updated_at %s; want RUNNING %s", after.State, after.UpdatedAt, parent.UpdatedAt)
+	}
+	children, err := store.ListChildTasks(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListChildTasks: %v", err)
+	}
+	if len(children) != 0 {
+		t.Fatalf("children = %d, want 0", len(children))
+	}
+	comments, err := store.ListComments(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListComments: %v", err)
+	}
+	if len(comments) != 0 {
+		t.Fatalf("comments = %d, want 0", len(comments))
+	}
+	assertRelationCount(t, store, parent.ID, 0)
+}
+
+func TestBlockTaskWithSubtasksAndCommentsUnknownAgentRollsBack(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	parent := seedTestTask(t, store, "parent-bad-agent", models.TaskStateRunning)
+
+	_, _, err := store.BlockTaskWithSubtasksAndComments(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title:   "ghost child",
+		AgentID: "ghost",
+	}}, []models.Comment{{
+		TaskID: parent.ID,
+		Author: models.CommentAuthorWorkerAgent,
+		Body:   "agentd:hitl:elicitation-questions:[]",
+	}})
+	if !errors.Is(err, models.ErrAgentProfileNotFound) {
+		t.Fatalf("BlockTaskWithSubtasksAndComments() error = %v, want ErrAgentProfileNotFound", err)
+	}
+	after, err := store.GetTask(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if after.State != models.TaskStateRunning || !after.UpdatedAt.Equal(parent.UpdatedAt) {
+		t.Fatalf("parent = state %s updated_at %s; want RUNNING %s", after.State, after.UpdatedAt, parent.UpdatedAt)
+	}
+	children, err := store.ListChildTasks(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListChildTasks: %v", err)
+	}
+	if len(children) != 0 {
+		t.Fatalf("children = %d, want 0", len(children))
+	}
+	comments, err := store.ListComments(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListComments: %v", err)
+	}
+	if len(comments) != 0 {
+		t.Fatalf("comments = %d, want 0", len(comments))
+	}
+	assertRelationCount(t, store, parent.ID, 0)
 }
 
 func TestBlockedParentResumesAfterAllChildrenComplete(t *testing.T) {

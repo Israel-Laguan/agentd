@@ -131,10 +131,10 @@ func formatRejection(tool, reason string) string {
 }
 
 // BlockingApprovalHandler implements ApprovalHandler by creating a
-// HUMAN subtask via the KanbanStore. It follows the suspension pattern
-// (like BlockingClarificationHandler): the handler creates the subtask
-// and returns immediately with Approved=false, causing the hook to
-// veto the tool call and leave the task BLOCKED.
+// HUMAN subtask via the KanbanStore. It follows the same suspension pattern
+// as the clarification handoff: the handler creates the subtask and returns
+// immediately with Approved=false, causing the hook to veto the tool call and
+// leave the task BLOCKED.
 type BlockingApprovalHandler struct {
 	store models.KanbanStore
 }

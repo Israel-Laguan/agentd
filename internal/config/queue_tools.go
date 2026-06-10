@@ -2,6 +2,8 @@ package config
 
 import (
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -154,11 +156,18 @@ func parseViperDuration(v *viper.Viper, key string, fallback, bareNumberUnit tim
 	}
 	switch raw := v.Get(key).(type) {
 	case string:
-		d, err := time.ParseDuration(raw)
-		if err != nil || d <= 0 {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
 			return fallback
 		}
-		return d
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+			return d
+		}
+		n, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return fallback
+		}
+		return scaleBareNumber(n, bareNumberUnit, fallback)
 	case int:
 		return scaleBareNumber(float64(raw), bareNumberUnit, fallback)
 	case int64:

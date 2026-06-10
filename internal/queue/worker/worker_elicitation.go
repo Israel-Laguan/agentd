@@ -100,9 +100,6 @@ func (w *Worker) requestElicitationFromAgent(
 	if len(questions) == 0 {
 		return fmt.Errorf("elicitation requires at least one question")
 	}
-	if err := recordElicitationQuestions(ctx, w.store, task.ID, questions); err != nil {
-		return err
-	}
 
 	detail := formatElicitationHITLDetail(questions, contextSummary)
 	description := FormatForHuman(HITLMessage{
@@ -113,11 +110,16 @@ func (w *Worker) requestElicitationFromAgent(
 	})
 
 	titleQuestion := questions[0].Question
-	_, subtasks, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
+	comments := []models.Comment{
+		elicitationQuestionsComment(task.ID, questions),
+		hitlExpiryComment(time.Now().Add(DefaultApprovalTimeout)),
+	}
+	comments[1].TaskID = task.ID
+	_, subtasks, err := blockForClarification(ctx, w.store, task.ID, task.UpdatedAt, []models.DraftTask{{
 		Title:       models.HITLSubtaskTitleClarification + truncate(titleQuestion, 80),
 		Description: description,
 		Assignee:    models.TaskAssigneeHuman,
-	}})
+	}}, comments)
 	if err != nil {
 		w.emit(ctx, task, "ERROR", fmt.Sprintf("elicitation request failed: %v", err))
 		return fmt.Errorf("create elicitation subtask: %w", err)
@@ -125,11 +127,17 @@ func (w *Worker) requestElicitationFromAgent(
 	if len(subtasks) == 0 {
 		return fmt.Errorf("no elicitation subtask created")
 	}
-	if err := recordHITLExpiry(ctx, w.store, task.ID, time.Now().Add(DefaultApprovalTimeout)); err != nil {
-		slog.Warn("failed to record elicitation expiry", "task_id", task.ID, "error", err)
-	}
 	w.emit(ctx, task, "CLARIFICATION_REQUESTED", truncate(titleQuestion, 500))
 	return nil
+}
+
+func elicitationQuestionsComment(taskID string, questions []ElicitationQuestion) models.Comment {
+	payload, _ := json.Marshal(questions)
+	return models.Comment{
+		TaskID: taskID,
+		Author: models.CommentAuthorWorkerAgent,
+		Body:   hitlElicitationQuestionsPrefix + string(payload),
+	}
 }
 
 func recordElicitationQuestions(ctx context.Context, store models.KanbanStore, taskID string, questions []ElicitationQuestion) error {

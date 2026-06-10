@@ -104,6 +104,58 @@ func TestRequestClarificationFromAgent_RejectsEmptyQuestion(t *testing.T) {
 	}
 }
 
+func TestRequestClarificationFromAgent_CreatesAtomicHandoff(t *testing.T) {
+	t.Parallel()
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "clarification-request-proj",
+		Tasks:       []models.DraftTask{{Title: "Clarify task", Description: "needs input"}},
+	})
+	if err != nil || len(tasks) == 0 {
+		t.Fatalf("materialize: %v", err)
+	}
+	running, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	w := &Worker{store: store}
+
+	err = w.RequestClarificationFromAgent(ctx, *running, "Which environment?", []string{"dev", "prod"}, "Need target before editing.")
+	if err != nil {
+		t.Fatalf("RequestClarificationFromAgent: %v", err)
+	}
+
+	parent, err := store.GetTask(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("get parent: %v", err)
+	}
+	if parent.State != models.TaskStateBlocked {
+		t.Fatalf("parent state = %s, want BLOCKED", parent.State)
+	}
+	children, err := store.ListChildTasks(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("list children: %v", err)
+	}
+	if len(children) != 1 || !strings.HasPrefix(children[0].Title, models.HITLSubtaskTitleClarification) {
+		t.Fatalf("children = %#v, want one clarification subtask", children)
+	}
+	comments, err := store.ListComments(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("list comments: %v", err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("comments = %d, want 1", len(comments))
+	}
+	if comments[0].Author != models.CommentAuthorWorkerAgent {
+		t.Fatalf("comment author = %s, want WORKER_AGENT", comments[0].Author)
+	}
+	expiresAt, ok := parseHITLExpiry(comments)
+	if !ok || expiresAt.IsZero() {
+		t.Fatalf("expiry ok=%v expires_at=%s; want parsed expiry", ok, expiresAt)
+	}
+}
+
 func setupAgenticElicitationProfile(t *testing.T, store models.KanbanStore, ctx context.Context) {
 	t.Helper()
 	profile, err := store.GetAgentProfile(ctx, "default")
@@ -210,29 +262,7 @@ func TestProcess_AmbiguousTaskBlocksForElicitation(t *testing.T) {
 	w := NewWorker(store, gw, &mockAgenticSandbox{}, nil, nil, WorkerOptions{MaxToolIterations: 3})
 	w.Process(ctx, *queued)
 
-	parent, err := store.GetTask(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("get parent: %v", err)
-	}
-	if parent.State != models.TaskStateBlocked {
-		t.Fatalf("parent state = %s, want BLOCKED", parent.State)
-	}
-	if gw.agenticCalls != 0 {
-		t.Fatalf("agentic gateway calls = %d, want 0 before clarification", gw.agenticCalls)
-	}
-	if gw.elicitationCalls != 1 {
-		t.Fatalf("elicitation calls = %d, want 1", gw.elicitationCalls)
-	}
-	if !gw.isElicitorRequest(gw.requests[0]) {
-		t.Fatalf("first request is not elicitor: role=%s", gw.requests[0].Role)
-	}
-	children, err := store.ListChildTasks(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("list children: %v", err)
-	}
-	if len(children) != 1 || !strings.HasPrefix(children[0].Title, models.HITLSubtaskTitleClarification) {
-		t.Fatalf("children = %#v, want one clarification subtask", children)
-	}
+	assertAmbiguousElicitationBlocked(t, store, ctx, task.ID, gw)
 }
 
 func TestTryConsumeElicitationAnswers_EnrichesDescription(t *testing.T) {

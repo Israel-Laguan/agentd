@@ -54,6 +54,19 @@ func (w *Worker) handleLoopResult(ctx context.Context, task models.Task, result 
 			payload = "required tool failed repeatedly"
 		}
 		w.handleAgentFailure(ctx, task, payload)
+	default:
+		parts := []string{"status=" + result.Status.String()}
+		if result.Meta.LastError != "" {
+			parts = append(parts, "last_error="+result.Meta.LastError)
+		}
+		if result.Meta.ToolName != "" {
+			parts = append(parts, "tool="+result.Meta.ToolName)
+		}
+		if len(parts) == 1 {
+			parts = append(parts, "unknown loop status")
+		}
+		w.emit(ctx, task, "LOOP_UNKNOWN_STATUS", strings.Join(parts, " "))
+		w.handleAgentFailure(ctx, task, strings.Join(parts, " "))
 	}
 }
 

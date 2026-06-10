@@ -52,6 +52,11 @@ func (w *Worker) applyModelRouting(
 	if !ok {
 		return profile
 	}
+	provider = strings.TrimSpace(provider)
+	model = strings.TrimSpace(model)
+	if provider == "" || model == "" {
+		return profile
+	}
 	profile.Provider = provider
 	profile.Model = model
 	return profile
