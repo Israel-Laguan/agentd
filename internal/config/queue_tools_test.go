@@ -260,7 +260,7 @@ func TestParseViperDuration_BareNumericString(t *testing.T) {
 		want  time.Duration
 	}{
 		{name: "bare numeric string milliseconds", value: "500", want: 500 * time.Millisecond},
-		{name: "bare numeric string seconds", value: "120", want: 120 * time.Millisecond},
+		{name: "bare numeric string 120ms", value: "120", want: 120 * time.Millisecond},
 		{name: "trimmed bare numeric string", value: " 500 ", want: 500 * time.Millisecond},
 		{name: "invalid string uses fallback", value: "not-a-duration", want: fallback},
 		{name: "empty string uses fallback", value: "", want: fallback},

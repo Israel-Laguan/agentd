@@ -100,6 +100,7 @@ func (w *Worker) RequestClarificationFromAgent(
 		return fmt.Errorf("create clarification subtask: %w", err)
 	}
 	if len(subtasks) == 0 {
+		w.emit(ctx, task, "ERROR", "clarification request failed: no clarification subtask created")
 		return fmt.Errorf("no clarification subtask created")
 	}
 	w.emit(ctx, task, "CLARIFICATION_REQUESTED", truncate(question, 500))

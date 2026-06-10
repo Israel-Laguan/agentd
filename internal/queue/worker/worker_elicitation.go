@@ -132,7 +132,11 @@ func (w *Worker) requestElicitationFromAgent(
 }
 
 func elicitationQuestionsComment(taskID string, questions []ElicitationQuestion) models.Comment {
-	payload, _ := json.Marshal(questions)
+	payload, err := json.Marshal(questions)
+	if err != nil {
+		slog.Warn("failed to marshal elicitation questions; using empty payload", "error", err)
+		payload = []byte("[]")
+	}
 	return models.Comment{
 		TaskID: taskID,
 		Author: models.CommentAuthorWorkerAgent,
