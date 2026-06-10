@@ -6,9 +6,9 @@ Thresholds: high >= 10, low >= 5
 
 ## Folders With 10+ Non-Test Go Files
 
-- 34 non-test Go, 87 tests, 0 other, 121 total: `internal/queue/worker`
-- 30 non-test Go, 28 tests, 0 other, 58 total: `internal/config`
+- 27 non-test Go, 79 tests, 0 other, 106 total: `internal/queue/worker`
 - 22 non-test Go, 31 tests, 0 other, 53 total: `internal/kanban`
+- 21 non-test Go, 22 tests, 0 other, 43 total: `internal/config`
 - 21 non-test Go, 43 tests, 0 other, 64 total: `internal/queue`
 - 17 non-test Go, 20 tests, 0 other, 37 total: `cmd/agentd`
 - 14 non-test Go, 0 tests, 1 other, 15 total: `internal/kanban/db`
@@ -30,7 +30,7 @@ Thresholds: high >= 10, low >= 5
 - 7 non-test Go, 12 tests, 0 other, 19 total: `internal/gateway/providers`
 - 7 non-test Go, 12 tests, 0 other, 19 total: `internal/memory`
 - 7 non-test Go, 6 tests, 0 other, 13 total: `internal/queue/safety`
-- 7 non-test Go, 1 tests, 0 other, 8 total: `internal/queue/worker/agentic`
+- 7 non-test Go, 8 tests, 0 other, 15 total: `internal/queue/worker/agentic`
 - 6 non-test Go, 4 tests, 0 other, 10 total: `internal/bus`
 - 6 non-test Go, 8 tests, 0 other, 14 total: `internal/frontdesk`
 - 6 non-test Go, 9 tests, 0 other, 15 total: `internal/services`
@@ -38,10 +38,10 @@ Thresholds: high >= 10, low >= 5
 
 ## Test-Heavy Folders With 10+ Go Test Files
 
-- 87 Go tests, 34 non-test Go, 0 other, 121 total: `internal/queue/worker`
+- 79 Go tests, 27 non-test Go, 0 other, 106 total: `internal/queue/worker`
 - 43 Go tests, 21 non-test Go, 0 other, 64 total: `internal/queue`
 - 31 Go tests, 22 non-test Go, 0 other, 53 total: `internal/kanban`
-- 28 Go tests, 30 non-test Go, 0 other, 58 total: `internal/config`
+- 22 Go tests, 21 non-test Go, 0 other, 43 total: `internal/config`
 - 20 Go tests, 17 non-test Go, 0 other, 37 total: `cmd/agentd`
 - 19 Go tests, 2 non-test Go, 0 other, 21 total: `internal/gateway`
 - 14 Go tests, 1 non-test Go, 0 other, 15 total: `internal/api`
