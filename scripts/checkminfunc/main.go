@@ -20,7 +20,7 @@ var (
 	minLines       = flag.Int("min-lines", 3, "minimum number of lines per function")
 	exclude        = flag.String("exclude", "", "comma-separated patterns to exclude")
 	warn           = flag.Bool("warn", false, "warn only, don't exit with error")
-	baselinePath   = flag.String("baseline", filepath.Join("scripts", "checkminfunc", "baseline.txt"), "path to accepted baseline")
+	baselinePath   = flag.String("baseline", filepath.Join("scripts", "checkminfunc", "baseline"), "path to accepted baseline")
 	updateBaseline = flag.Bool("update-baseline", false, "write current violations to the baseline file")
 )
 
@@ -41,11 +41,16 @@ func main() {
 		os.Exit(2)
 	}
 	if *updateBaseline {
+		hadBaseline := fileExists(*baselinePath)
 		if err := writeBaseline(*baselinePath, violations); err != nil {
 			fmt.Fprintf(os.Stderr, "checkminfunc: write baseline: %v\n", err)
 			os.Exit(2)
 		}
-		fmt.Printf("checkminfunc: updated baseline with %d function(s).\n", len(violations))
+		msg := fmt.Sprintf("checkminfunc: updated baseline with %d function(s).", len(violations))
+		if hadBaseline {
+			msg += fmt.Sprintf(" Previous baseline saved to %s.bak.", *baselinePath)
+		}
+		fmt.Println(msg)
 		return
 	}
 
@@ -56,8 +61,11 @@ func main() {
 	}
 	violations = newViolations(violations, accepted)
 	if len(violations) == 0 {
-		if len(accepted) == 0 {
+		switch {
+		case len(accepted) == 0:
 			fmt.Println("checkminfunc: no functions violate the minimum line limit.")
+		default:
+			fmt.Printf("checkminfunc: no new violations (%d function(s) in baseline).\n", len(accepted))
 		}
 		return
 	}
@@ -158,19 +166,6 @@ func sortViolations(violations []violation) {
 		}
 		return violations[i].line < violations[j].line
 	})
-}
-
-func typeName(expr ast.Expr) string {
-	switch t := expr.(type) {
-	case *ast.StarExpr:
-		return "*" + typeName(t.X)
-	case *ast.Ident:
-		return t.Name
-	case *ast.SelectorExpr:
-		return typeName(t.X) + "." + t.Sel.Name
-	default:
-		return ""
-	}
 }
 
 func trackedGoFiles() ([]string, error) {

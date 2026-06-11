@@ -52,7 +52,8 @@ Move map:
 - `openai.go`, `anthropic.go`, `ollama.go`, `horde.go`, `provider.go`, `http.go` -> `internal/gateway/providers/`
 - `router.go`, `intent.go`, `scope.go` -> `internal/gateway/routing/`
 - `truncate.go`, `truncate_test.go`, `truncator.go`, `truncation_strategy.go`, `truncation_head_tail.go` -> `internal/gateway/truncation/`
-- `correction.go`, `contract_adapter.go` -> `internal/gateway/correction/`
+- `correction.go` -> `internal/gateway/correction/`
+- `contract_adapter.go` -> `internal/gateway/routing/`
 
 Import touch points:
 
@@ -108,7 +109,7 @@ Import touch points:
 - `internal/api/controllers/chat_wire.go`
 - tests under `internal/api` and `internal/api/sse`
 
-**Status: implemented.** [`internal/api/server/`](../../internal/api/server) contains `NewServer`, `NewHandler`, `ServerDeps`, response helpers, and error-code aliases. The root [`internal/api/exports.go`](../../internal/api/exports.go) re-exports those symbols so `cmd/agentd` and tests keep `import "agentd/internal/api"`. Feature tests were not moved to `internal/api/tests/feature/` (optional).
+**Status: implemented.** [`internal/api/server/`](../../internal/api/server) contains `NewServer`, `NewHandler`, `ServerDeps`, response helpers, and error-code aliases. The root [`internal/api/exports.go`](../../internal/api/exports.go) re-exports those symbols so `cmd/agentd` and tests keep `import "agentd/internal/api"`. Feature tests were moved to [`internal/api/tests/feature/`](../../internal/api/tests/feature/).
 
 ## Root-Package Export/Shim Pattern
 
