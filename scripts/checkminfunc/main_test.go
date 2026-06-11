@@ -1,10 +1,35 @@
 package main
 
 import (
+	"go/ast"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestTypeName(t *testing.T) {
+	tests := []struct {
+		name string
+		expr ast.Expr
+		want string
+	}{
+		{name: "ident", expr: &ast.Ident{Name: "MyType"}, want: "MyType"},
+		{name: "selector", expr: &ast.SelectorExpr{X: &ast.Ident{Name: "pkg"}, Sel: &ast.Ident{Name: "Type"}}, want: "pkg.Type"},
+		{name: "star", expr: &ast.StarExpr{X: &ast.Ident{Name: "MyType"}}, want: "*MyType"},
+		{name: "index single", expr: &ast.IndexExpr{X: &ast.Ident{Name: "Map"}, Index: &ast.Ident{Name: "string"}}, want: "Map[string]"},
+		{name: "index list", expr: &ast.IndexListExpr{X: &ast.Ident{Name: "Map"}, Indices: []ast.Expr{&ast.Ident{Name: "string"}, &ast.Ident{Name: "int"}}}, want: "Map[string, int]"},
+		{name: "nested index", expr: &ast.IndexExpr{X: &ast.IndexListExpr{X: &ast.Ident{Name: "Either"}, Indices: []ast.Expr{&ast.Ident{Name: "string"}, &ast.Ident{Name: "error"}}}, Index: &ast.Ident{Name: "bool"}}, want: "Either[string, error][bool]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := typeName(tt.expr)
+			if got != tt.want {
+				t.Fatalf("typeName() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestReadBaselineMissingFile(t *testing.T) {
 	t.Parallel()
@@ -145,6 +170,36 @@ func TestWriteBaselineDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "a.go f\nb.go g\n"
+	if string(got) != want {
+		t.Fatalf("baseline = %q, want %q", got, want)
+	}
+}
+
+func TestWriteBaselineDirectoryCleansStaleFiles(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "baseline")
+	staleFile := filepath.Join(path, "part-001.txt")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staleFile, []byte("old.go oldFunc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	violations := []violation{
+		{name: "f", file: "a.go", line: 1, lines: 1},
+	}
+
+	if err := writeBaseline(path, violations); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(staleFile)
+	if err != nil {
+		t.Fatalf("new part-001.txt should exist: %v", err)
+	}
+	want := "a.go f\n"
 	if string(got) != want {
 		t.Fatalf("baseline = %q, want %q", got, want)
 	}
