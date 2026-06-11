@@ -167,9 +167,9 @@ List tasks for a project with optional filters.
 ```
 
 **Test Coverage**:
-- Basic listing: `internal/api/routes_test.go:24`
-- Unknown project: `internal/api/routes_test.go:43`
-- Bad state filter: `internal/api/routes_test.go:52`
+- Basic listing: `internal/api/tests/feature/routes_test.go:24`
+- Unknown project: `internal/api/tests/feature/routes_test.go:43`
+- Bad state filter: `internal/api/tests/feature/routes_test.go:52`
 
 ### PATCH /api/v1/tasks/{id}
 
@@ -199,9 +199,9 @@ Update a task's state.
 - `409 STATE_CONFLICT` - Invalid state transition
 
 **Test Coverage**:
-- Update state: `internal/api/routes_test.go:67`
-- Reject unknown state: `internal/api/routes_test.go:79`
-- Missing task: `internal/api/routes_test.go:88`
+- Update state: `internal/api/tests/feature/routes_test.go:67`
+- Reject unknown state: `internal/api/tests/feature/routes_test.go:79`
+- Missing task: `internal/api/tests/feature/routes_test.go:88`
 
 ### POST /api/v1/tasks/{id}/comments
 
@@ -224,8 +224,8 @@ Add a human comment to a task. This pauses the task to `IN_CONSIDERATION` state.
 - `400 BAD_REQUEST` - Empty content (validation failed)
 
 **Test Coverage**:
-- Add comment and pause: `internal/api/routes_test.go:137`
-- Invalid content: `internal/api/routes_test.go:119`
+- Add comment and pause: `internal/api/tests/feature/routes_test.go:137`
+- Invalid content: `internal/api/tests/feature/routes_test.go:119`
 
 ### POST /api/v1/tasks/{id}/assign
 
