@@ -2,6 +2,7 @@ package main
 
 import (
 	"go/ast"
+	"go/token"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,6 +20,17 @@ func TestTypeName(t *testing.T) {
 		{name: "index single", expr: &ast.IndexExpr{X: &ast.Ident{Name: "Map"}, Index: &ast.Ident{Name: "string"}}, want: "Map[string]"},
 		{name: "index list", expr: &ast.IndexListExpr{X: &ast.Ident{Name: "Map"}, Indices: []ast.Expr{&ast.Ident{Name: "string"}, &ast.Ident{Name: "int"}}}, want: "Map[string, int]"},
 		{name: "nested index", expr: &ast.IndexExpr{X: &ast.IndexListExpr{X: &ast.Ident{Name: "Either"}, Indices: []ast.Expr{&ast.Ident{Name: "string"}, &ast.Ident{Name: "error"}}}, Index: &ast.Ident{Name: "bool"}}, want: "Either[string, error][bool]"},
+		{name: "slice", expr: &ast.ArrayType{Elt: &ast.Ident{Name: "int"}}, want: "[]int"},
+		{name: "array", expr: &ast.ArrayType{Len: &ast.BasicLit{Value: "10"}, Elt: &ast.Ident{Name: "int"}}, want: "[10]int"},
+		{name: "map", expr: &ast.MapType{Key: &ast.Ident{Name: "string"}, Value: &ast.Ident{Name: "int"}}, want: "map[string]int"},
+		{name: "func", expr: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{{Name: "x"}}, Type: &ast.Ident{Name: "int"}}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: &ast.Ident{Name: "error"}}}}}, want: "func(x int) error"},
+		{name: "struct", expr: &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{{Name: "Name"}}, Type: &ast.Ident{Name: "string"}}}}}, want: "struct{Name string}"},
+		{name: "interface", expr: &ast.InterfaceType{Methods: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{{Name: "Close"}}, Type: &ast.FuncType{}}}}}, want: "interface{Close()}"},
+		{name: "chan", expr: &ast.ChanType{Dir: ast.RECV, Value: &ast.Ident{Name: "int"}}, want: "<-chan int"},
+		{name: "paren", expr: &ast.ParenExpr{X: &ast.Ident{Name: "int"}}, want: "(int)"},
+		{name: "basic lit", expr: &ast.BasicLit{Value: "10"}, want: "10"},
+		{name: "ellipsis", expr: &ast.Ellipsis{Elt: &ast.Ident{Name: "int"}}, want: "...int"},
+		{name: "type set", expr: &ast.BinaryExpr{Op: token.OR, X: &ast.UnaryExpr{Op: token.TILDE, X: &ast.Ident{Name: "int"}}, Y: &ast.Ident{Name: "string"}}, want: "~int | string"},
 	}
 
 	for _, tt := range tests {
@@ -153,10 +165,37 @@ func TestWriteBaseline(t *testing.T) {
 	}
 }
 
+func TestWriteBaselineExtensionlessFile(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "README")
+	violations := []violation{
+		{name: "f", file: "a.go", line: 1, lines: 1},
+	}
+
+	if err := writeBaseline(path, violations); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.IsDir() {
+		t.Fatalf("baseline path %q was created as a directory", path)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "a.go f\n" {
+		t.Fatalf("baseline = %q, want single extensionless file", got)
+	}
+}
+
 func TestWriteBaselineDirectory(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "baseline")
+	path := filepath.Join(t.TempDir(), "baseline") + string(os.PathSeparator)
 	violations := []violation{
 		{name: "f", file: "a.go", line: 1, lines: 1},
 		{name: "g", file: "b.go", line: 2, lines: 2},
