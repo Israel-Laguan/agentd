@@ -162,8 +162,9 @@ These support the outer system and **wrap** the inner agentic loop:
 | [`internal/gateway/providers/openai.go`](../internal/gateway/providers/openai.go) | OpenAI HTTP request/response shapes. |
 | [`internal/queue/worker/worker.go`](../internal/queue/worker/worker.go) | `Process`, gateway calls, sandbox orchestration. |
 | [`internal/queue/worker/worker_legacy.go`](../internal/queue/worker/worker_legacy.go) | `workerResponse`, `workerMessages`, legacy command/routing. |
-| [`internal/queue/worker/worker_support.go`](../internal/queue/worker/worker_support.go) | Sandbox env, heartbeat, tool result parsing, payload helpers. |
-| [`internal/queue/worker/worker_payloads.go`](../internal/queue/worker/worker_payloads.go) | Result/failure/prompt payload formatting for events. |
+| [`internal/queue/worker/worker_support.go`](../internal/queue/worker/worker_support.go) | Sandbox env, heartbeat, and tool result parsing. |
+| [`internal/queue/worker/worker_addons.go`](../internal/queue/worker/worker_addons.go) | Result/failure/prompt payload formatting. |
+| [`internal/queue/worker/worker_events.go`](../internal/queue/worker/worker_events.go) | Structured tool-call and tool-result event payloads. |
 | [`internal/queue/worker/worker_retry.go`](../internal/queue/worker/worker_retry.go) | Retry and healing. |
 | [`internal/queue/worker/worker_handoffs.go`](../internal/queue/worker/worker_handoffs.go) | Handoff creation. |
 | [`internal/queue/daemon.go`](../internal/queue/daemon.go) | Daemon lifecycle; starts outer loops. |

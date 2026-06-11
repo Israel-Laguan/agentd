@@ -49,6 +49,6 @@ minfunc:
 	$(GO) run ./scripts/checkminfunc --min-lines 3 --warn
 
 folder-audit:
-	$(GO) run ./scripts/folder_audit
+	$(GO) run ./scripts/folder_audit --out /tmp/folder-size-audit.md
 
 check: loc minfunc lint test

@@ -139,10 +139,10 @@ Run spawned agents under a non-sudoer system user. `agentd` blocks commands that
 
 ## Maintenance Scripts
 
-Generate folder-size audit report (default output: `docs/folder-size-audit.md`):
+Generate an ad-hoc folder-size audit report:
 
 ```sh
-go run ./scripts/folder_audit
+go run ./scripts/folder_audit --out /tmp/folder-size-audit.md
 ```
 
-The report ranks folders by non-test Go files and separately calls out test-heavy folders.
+The report ranks folders by non-test Go files and separately calls out test-heavy folders. It is intentionally not checked in; use it for temporary analysis.

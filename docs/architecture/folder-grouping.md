@@ -2,7 +2,7 @@
 
 This document describes the current folder organization for agentd's core internal packages, following the directory grouping effort that consolidated related code into focused subpackages.
 
-Related baseline report: [folder-size-audit.md](../folder-size-audit.md).
+The checked-in folder-size audit was an analysis artifact and has been removed. The current baseline snapshot is summarized below for architecture context.
 
 ## Overview
 
@@ -12,6 +12,41 @@ The codebase follows a consistent pattern of organizing internal packages into f
 2. Gateway (`internal/gateway`)
 3. Kanban (`internal/kanban`)
 4. API (`internal/api`)
+
+## Baseline Folder Snapshot
+
+The folder-size audit document was intentionally kept as transient analysis output rather than durable architecture documentation. The current baseline used by the grouping work is:
+
+- `internal/queue`: 21 root non-test Go files, 142 tests, 232 total files. Subpackages: `worker` (30 root non-test Go, 89 tests), `recovery` (2), `safety` (7), and `planning` (2).
+- `internal/queue/worker`: 30 root non-test Go files, 89 tests, 128 total files, plus 2 Gherkin feature specs in `features/`. The agentic execution subpackage has 7 non-test Go files.
+- `internal/gateway`: 2 root non-test Go files, 54 tests, 95 total files. Subpackages: `providers` (7), `routing` (8), `truncation` (10), `correction` (1), and `spec` (2).
+- `internal/kanban`: 22 root non-test Go files, 41 tests, 94 total files. Subpackages: `db` (14), `migrations` (8), and `domain` (3). Repository files remain in the root `kanban` package.
+- `internal/api`: 1 root non-test Go file, 31 tests, 56 total files. Subpackages include `controllers` (10), `server` (4), `sse` (3), and `tests/feature` (14 test files).
+- Feature spec directories are non-Go architecture artifacts: `internal/queue/worker/features` (2), `internal/sandbox/features` (3), `internal/kanban/features` (5), and `internal/api/features` (6).
+
+## Queue Worker Package Organization
+
+`internal/queue/worker` is the worker execution package. It is large by file count, but most files are small and the current grouping separates worker orchestration from agentic execution.
+
+Responsibilities are split across:
+
+- Worker orchestration: `worker.go`, `worker_construct.go`, `worker_support.go`, `worker_batch.go`, `worker_batch_process.go`, `batcher.go`, `worker_legacy.go`, `worker_legacy_run.go`, and `worker_retry.go`.
+- Agentic mode: `worker_agentic_host.go` at the worker root, plus `internal/queue/worker/agentic/` for `engine.go`, `agentic.go`, `handlers.go`, `iteration.go`, `setup.go`, `rewind.go`, and `session.go`.
+- User interaction: `worker_elicitation.go`, `elicitor.go`, `hitl_tasks.go`, `hitl_review.go`, and `hitl_approval.go`.
+- Hooks, tools, plugins, and instructions: `hooks_approval.go`, `worker_tools.go`, `worker_tools_capability.go`, `worker_plugins.go`, `instruction_loader.go`, `instructions.go`, `worker_events.go`, and `worker_addons.go`.
+
+The aliases layer was removed. Worker files now import `internal/agent/*` packages directly, which keeps dependencies explicit and avoids synchronizing a separate aliases file. Small-file merges and moving the entire worker package under `internal/agent/execution/` remain deferred because they would create broader import churn without a clear ownership benefit.
+
+## Migration Checklist
+
+Use this checklist when adding or revisiting a future folder grouping phase:
+
+1. Create target folders and move only one coherent slice at a time.
+2. Keep package names stable where possible to minimize import churn.
+3. Update imports and compile with `make test` or `make test PKG=./...`.
+4. Fix broken `_test.go` references, then rerun the same scoped test command.
+5. Update architecture documentation when moved paths are linked from durable docs.
+6. Stop and revert only the in-flight phase if tests fail repeatedly.
 
 ## Phase 1: Queue Grouping
 
@@ -26,7 +61,7 @@ Target folders:
 
 Move map:
 
-- `worker.go`, `worker_payloads.go`, `worker_support.go`, `task_runner.go` -> `internal/queue/worker/`
+- `worker.go`, `worker_addons.go`, `worker_support.go`, `worker_events.go`, `task_runner.go` -> `internal/queue/worker/`
 - `recover.go`, `prompt_recovery.go` -> `internal/queue/recovery/` (daemon outage handoff remains at `internal/queue/outage_handoff.go`)
 - `breaker.go`, `semaphore.go`, `permission_detector.go`, `prompt_detector.go`, `probe.go`, `disk_stat.go` -> `internal/queue/safety/` (`disk_watchdog.go` stays with `Daemon` methods in the root package)
 - `phase_planning.go`, `parameter_tuner.go` -> `internal/queue/planning/`
@@ -68,13 +103,12 @@ Import touch points:
 
 Target folders:
 
-- `internal/kanban/repo/`
 - `internal/kanban/db/`
 - `internal/kanban/domain/`
 
 Move map:
 
-- `tasks_repo.go`, `projects_repo.go`, `settings_repo.go`, `memories_repo.go`, `agent_profiles_repo.go` -> `internal/kanban/repo/`
+- repository files such as `tasks_repo.go`, `projects_repo.go`, `settings_repo.go`, `memories_repo.go`, and `agent_profiles_repo.go` stay in root `package kanban`
 - `db.go`, `tx.go`, `scan.go`, `rows.go`, `sql_helpers.go`, `migrations.go`, `migrations_legacy.go` -> `internal/kanban/db/`
 - `dag.go`, `plan_validation.go`, `task_running.go`, `task_updates.go`, `task_retry.go`, `task_breakdown.go`, `cycle_check.go` -> `internal/kanban/domain/`
 
@@ -84,7 +118,7 @@ Import touch points:
 - `internal/services/project_service.go`
 - `internal/queue/*` files that call store helpers
 
-**Status: implemented.** [`internal/kanban/db`](../../internal/kanban/db) is a full Go package containing all SQLite infrastructure: `open.go` (DB open/migrate), `tx.go` (`ImmediateTx`, `BeginImmediate`, `SQLExecutor`, `SQLQueryer`), `time.go`, `rows.go`, `sql_helpers.go` (+ `NullString`), `retry.go` (generic `RetryOnBusy`), `scan.go` / `scan_settings.go` / `scan_task.go`, `hitl_sql.go`, `tasks_queries.go`, `query_helpers.go`, `task_updates.go`, and `materialize_insert.go`. Cycle detection (`EnsureNoCycle`) was extracted to [`internal/kanban/domain/cycle_check.go`](../../internal/kanban/domain). The root `package kanban` uses a thin [`shim.go`](../../internal/kanban/shim.go) with type aliases (`immediateTx = kdb.ImmediateTx`, etc.) and `var` function forwards so all existing root files compile unchanged. Root file count dropped from 67 → 53.
+**Status: implemented.** [`internal/kanban/db`](../../internal/kanban/db) is a full Go package containing all SQLite infrastructure: `open.go` (DB open/migrate), `tx.go` (`ImmediateTx`, `BeginImmediate`, `SQLExecutor`, `SQLQueryer`), `time.go`, `rows.go`, `sql_helpers.go` (+ `NullString`), `retry.go` (generic `RetryOnBusy`), `scan.go` / `scan_settings.go` / `scan_task.go`, `hitl_sql.go`, `tasks_queries.go`, `query_helpers.go`, `task_updates.go`, and `materialize_insert.go`. Cycle detection (`EnsureNoCycle`) was extracted to [`internal/kanban/domain/cycle_check.go`](../../internal/kanban/domain). The root `package kanban` uses a thin [`shim.go`](../../internal/kanban/shim.go) with type aliases (`immediateTx = kdb.ImmediateTx`, etc.) and `var` function forwards so all existing root files compile unchanged. `*Store` methods and repository files intentionally remain in package `kanban`; `internal/kanban/repo/` was deferred and does not exist. Root file count dropped from 67 -> 53.
 
 ### Kanban Store Methods in Root Package
 
@@ -145,7 +179,7 @@ While the Kanban grouping effort extracted database and domain logic into focuse
 
 ### Remaining Repository Methods
 
-The following root-level repository files were not moved to `internal/kanban/repo/`:
+The following root-level repository files were not moved to a repo subpackage:
 - `tasks_repo.go`
 - `projects_repo.go`
 - `settings_repo.go`
