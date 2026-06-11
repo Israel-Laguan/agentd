@@ -138,3 +138,42 @@ Throughout the codebase, a consistent pattern is used to maintain backward compa
    - [`internal/api/exports.go`](../../internal/api/exports.go)
 
 This pattern allows existing call sites to continue using `import "agentd/internal/..."` without changes, while the actual implementation lives in well-organized subpackages. New code can import directly from subpackages when needed.
+
+## Follow-Up: Kanban Root-File Cleanup
+
+While the Kanban grouping effort extracted database and domain logic into focused subpackages (`internal/kanban/db/` and `internal/kanban/domain/`), a portion of the refactoring was intentionally deferred to a separate task. The following items remain outstanding:
+
+### Remaining Repository Methods
+
+The following root-level repository files were not moved to `internal/kanban/repo/`:
+- `tasks_repo.go`
+- `projects_repo.go`
+- `settings_repo.go`
+- `memories_repo.go`
+- `agent_profiles_repo.go`
+
+These files contain methods that interact with the `*Store` types remaining in the root package. The extraction requires careful refactoring to maintain the current API where callers use `kanban.NewTaskStore()`, `kanban.NewProjectStore()`, etc.
+
+### Domain Logic Files
+
+The following domain-related files remain in the root package and could be candidates for extraction to `internal/kanban/domain/`:
+- Task lifecycle management files
+- Task breakdown logic
+- Task retry handling
+- Task validation logic
+
+### Test and Interface Updates
+
+Any extraction work will require corresponding updates to:
+- Test files that reference the moved types
+- Interface definitions that couple to root package types
+- Any shim layer adjustments needed to maintain backward compatibility
+
+### Rationale for Deferral
+
+The decision to defer was based on:
+1. **Risk assessment**: The `*Store` methods are heavily used throughout the codebase; extracting them requires careful interface design
+2. **Scope**: The remaining root files have complex dependencies on each other and on the shim layer
+3. **Stability**: The current structure works; deferring avoids introducing regressions in a well-functioning system
+
+This work can be pursued as a follow-up project once the current architecture is validated and stable.
