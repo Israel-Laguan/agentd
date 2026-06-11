@@ -179,7 +179,7 @@ func backupBaselineIfExists(path string) error {
 }
 
 func isDirectoryPath(path string) bool {
-	return strings.HasSuffix(path, "/") || strings.HasSuffix(path, string(os.PathSeparator)) || filepath.Ext(path) == ""
+	return strings.HasSuffix(path, "/") || strings.HasSuffix(path, string(os.PathSeparator))
 }
 
 func newViolations(violations []violation, accepted map[string]struct{}) []violation {
