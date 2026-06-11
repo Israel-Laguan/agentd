@@ -20,7 +20,7 @@ var (
 	minLines       = flag.Int("min-lines", 3, "minimum number of lines per function")
 	exclude        = flag.String("exclude", "", "comma-separated patterns to exclude")
 	warn           = flag.Bool("warn", false, "warn only, don't exit with error")
-	baselinePath   = flag.String("baseline", filepath.Join("scripts", "checkminfunc", "baseline")+string(os.PathSeparator), "path to accepted baseline")
+	baselinePath   = flag.String("baseline", filepath.Join("scripts", "checkminfunc", "baseline"), "path to accepted baseline")
 	updateBaseline = flag.Bool("update-baseline", false, "write current violations to the baseline file")
 )
 
@@ -41,6 +41,10 @@ func main() {
 		os.Exit(2)
 	}
 	if *updateBaseline {
+		if err := validateBaselineWritePath(*baselinePath); err != nil {
+			fmt.Fprintf(os.Stderr, "checkminfunc: validate baseline: %v\n", err)
+			os.Exit(2)
+		}
 		hadBaseline := fileExists(*baselinePath)
 		if err := writeBaseline(*baselinePath, violations); err != nil {
 			fmt.Fprintf(os.Stderr, "checkminfunc: write baseline: %v\n", err)
@@ -166,6 +170,68 @@ func sortViolations(violations []violation) {
 		}
 		return violations[i].line < violations[j].line
 	})
+}
+
+func validateBaselineWritePath(path string) error {
+	if path == "" {
+		return fmt.Errorf("baseline path is empty")
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	rootReal, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return err
+	}
+
+	targetAbs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	targetReal, err := filepath.EvalSymlinks(targetAbs)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if info, lstatErr := os.Lstat(targetAbs); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("baseline path %q must not be a symlink", path)
+		}
+		targetReal, err = realExistingAncestor(targetAbs)
+		if err != nil {
+			return err
+		}
+	}
+
+	rel, err := filepath.Rel(rootReal, targetReal)
+	if err != nil {
+		return err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return fmt.Errorf("baseline path %q must be inside repository root %q", path, rootReal)
+	}
+	return nil
+}
+
+func realExistingAncestor(path string) (string, error) {
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return filepath.EvalSymlinks(path)
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+
+		parent := filepath.Dir(path)
+		if parent == path {
+			return filepath.Abs(path)
+		}
+		path = parent
+	}
 }
 
 func trackedGoFiles() ([]string, error) {

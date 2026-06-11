@@ -103,6 +103,9 @@ func binarySeparator(op token.Token) string {
 
 func fieldList(fields *ast.FieldList, braced bool, interfaceMethods bool) string {
 	if fields == nil {
+		if braced {
+			return "{}"
+		}
 		return "()"
 	}
 

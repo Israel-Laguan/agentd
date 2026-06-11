@@ -24,8 +24,11 @@ func TestTypeName(t *testing.T) {
 		{name: "array", expr: &ast.ArrayType{Len: &ast.BasicLit{Value: "10"}, Elt: &ast.Ident{Name: "int"}}, want: "[10]int"},
 		{name: "map", expr: &ast.MapType{Key: &ast.Ident{Name: "string"}, Value: &ast.Ident{Name: "int"}}, want: "map[string]int"},
 		{name: "func", expr: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{{Name: "x"}}, Type: &ast.Ident{Name: "int"}}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: &ast.Ident{Name: "error"}}}}}, want: "func(x int) error"},
+		{name: "func no params", expr: &ast.FuncType{Results: &ast.FieldList{List: []*ast.Field{{Type: &ast.Ident{Name: "error"}}}}}, want: "func() error"},
 		{name: "struct", expr: &ast.StructType{Fields: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{{Name: "Name"}}, Type: &ast.Ident{Name: "string"}}}}}, want: "struct{Name string}"},
+		{name: "empty struct", expr: &ast.StructType{}, want: "struct{}"},
 		{name: "interface", expr: &ast.InterfaceType{Methods: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{{Name: "Close"}}, Type: &ast.FuncType{}}}}}, want: "interface{Close()}"},
+		{name: "empty interface", expr: &ast.InterfaceType{}, want: "interface{}"},
 		{name: "chan", expr: &ast.ChanType{Dir: ast.RECV, Value: &ast.Ident{Name: "int"}}, want: "<-chan int"},
 		{name: "paren", expr: &ast.ParenExpr{X: &ast.Ident{Name: "int"}}, want: "(int)"},
 		{name: "basic lit", expr: &ast.BasicLit{Value: "10"}, want: "10"},
@@ -101,6 +104,44 @@ func TestReadBaselineDirectory(t *testing.T) {
 	}
 }
 
+func TestValidateBaselineWritePath(t *testing.T) {
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	root := t.TempDir()
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateBaselineWritePath(filepath.Join("scripts", "checkminfunc", "baseline")); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateBaselineWritePath(filepath.Join(root, "scripts", "baseline")); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateBaselineWritePath(filepath.Join(t.TempDir(), "baseline")); err == nil {
+		t.Fatal("expected outside-path validation error")
+	}
+
+	linkDir := filepath.Join(root, "linkdir")
+	if err := os.MkdirAll(linkDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "outside-baseline")
+	if err := os.Symlink(target, filepath.Join(linkDir, "baseline")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := validateBaselineWritePath(filepath.Join(linkDir, "baseline")); err == nil {
+		t.Fatal("expected symlink escape validation error")
+	}
+}
+
 func TestNewViolations(t *testing.T) {
 	t.Parallel()
 
@@ -118,6 +159,24 @@ func TestNewViolations(t *testing.T) {
 	}
 	if got[0].name != "g" {
 		t.Fatalf("newViolations returned %q, want g", got[0].name)
+	}
+}
+
+func TestNewViolationsEmptyAcceptedReturnsCopy(t *testing.T) {
+	t.Parallel()
+
+	violations := []violation{
+		{name: "f", file: "a.go", line: 1, lines: 1},
+	}
+
+	got := newViolations(violations, nil)
+	if len(got) != 1 {
+		t.Fatalf("newViolations returned %d entries, want 1", len(got))
+	}
+	got[0].name = "mutated"
+
+	if violations[0].name != "f" {
+		t.Fatalf("newViolations returned original slice; original violation became %q", violations[0].name)
 	}
 }
 
