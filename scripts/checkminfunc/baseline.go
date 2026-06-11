@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -70,22 +71,19 @@ func writeBaseline(path string, violations []violation) error {
 		return fmt.Errorf("baseline path is empty")
 	}
 	info, err := os.Stat(path)
-	switch {
-	case err == nil && info.IsDir():
-		return writeBaselineDir(path, violations)
-	case err == nil:
-		return writeBaselineFile(path, violations)
-	case os.IsNotExist(err):
-		if isDirectoryPath(path) {
+	if err == nil {
+		if info.IsDir() {
 			return writeBaselineDir(path, violations)
 		}
 		return writeBaselineFile(path, violations)
-	case err != nil:
-		return err
-	default:
-		// All cases above are exhaustive; this is unreachable
-		return writeBaselineFile(path, violations)
 	}
+	if !os.IsNotExist(err) {
+		return err
+	}
+	if isDirectoryPath(path) {
+		return writeBaselineDir(path, violations)
+	}
+	return writeBaselineFile(path, violations)
 }
 
 func writeBaselineDir(path string, violations []violation) error {
@@ -179,15 +177,23 @@ func backupBaselineIfExists(path string) error {
 }
 
 func isDirectoryPath(path string) bool {
-	return strings.HasSuffix(path, "/") || strings.HasSuffix(path, string(os.PathSeparator))
+	if strings.HasSuffix(path, "/") || strings.HasSuffix(path, string(os.PathSeparator)) {
+		return true
+	}
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	volume := filepath.VolumeName(path)
+	if volume == "" {
+		return false
+	}
+	rest := strings.TrimPrefix(path, volume)
+	return rest == "" || rest == `\` || rest == `/`
 }
 
 func newViolations(violations []violation, accepted map[string]struct{}) []violation {
-	if len(accepted) == 0 {
-		return violations
-	}
-
-	var out []violation
+	out := make([]violation, 0, len(violations))
 	for _, v := range violations {
 		if _, ok := accepted[violationKey(v)]; !ok {
 			out = append(out, v)
