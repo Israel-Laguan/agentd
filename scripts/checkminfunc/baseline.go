@@ -83,6 +83,7 @@ func writeBaseline(path string, violations []violation) error {
 	case err != nil:
 		return err
 	default:
+		// All cases above are exhaustive; this is unreachable
 		return writeBaselineFile(path, violations)
 	}
 }
@@ -95,6 +96,18 @@ func writeBaselineDir(path string, violations []violation) error {
 	if err := backupBaselineDirIfExists(path); err != nil {
 		return fmt.Errorf("backup baseline: %w", err)
 	}
+
+	// Clean up old part files before writing new ones
+	entries, err := filepath.Glob(filepath.Join(path, "part-*.txt"))
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := os.Remove(entry); err != nil {
+			return err
+		}
+	}
+
 	for start := 0; start < len(violations); start += baselineChunkSize {
 		end := start + baselineChunkSize
 		if end > len(violations) {
