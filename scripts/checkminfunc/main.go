@@ -17,9 +17,11 @@ import (
 )
 
 var (
-	minLines = flag.Int("min-lines", 3, "minimum number of lines per function")
-	exclude  = flag.String("exclude", "", "comma-separated patterns to exclude")
-	warn     = flag.Bool("warn", false, "warn only, don't exit with error")
+	minLines       = flag.Int("min-lines", 3, "minimum number of lines per function")
+	exclude        = flag.String("exclude", "", "comma-separated patterns to exclude")
+	warn           = flag.Bool("warn", false, "warn only, don't exit with error")
+	baselinePath   = flag.String("baseline", filepath.Join("scripts", "checkminfunc", "baseline.txt"), "path to accepted baseline")
+	updateBaseline = flag.Bool("update-baseline", false, "write current violations to the baseline file")
 )
 
 var defaultExcludes = []string{
@@ -38,12 +40,29 @@ func main() {
 		fmt.Fprintf(os.Stderr, "checkminfunc: %v\n", err)
 		os.Exit(2)
 	}
-	if len(violations) == 0 {
-		fmt.Println("checkminfunc: no functions violate the minimum line limit.")
+	if *updateBaseline {
+		if err := writeBaseline(*baselinePath, violations); err != nil {
+			fmt.Fprintf(os.Stderr, "checkminfunc: write baseline: %v\n", err)
+			os.Exit(2)
+		}
+		fmt.Printf("checkminfunc: updated baseline with %d function(s).\n", len(violations))
 		return
 	}
 
-	fmt.Printf("checkminfunc: %d function(s) have fewer than %d lines:\n", len(violations), *minLines)
+	accepted, err := readBaseline(*baselinePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "checkminfunc: read baseline: %v\n", err)
+		os.Exit(2)
+	}
+	violations = newViolations(violations, accepted)
+	if len(violations) == 0 {
+		if len(accepted) == 0 {
+			fmt.Println("checkminfunc: no functions violate the minimum line limit.")
+		}
+		return
+	}
+
+	fmt.Printf("checkminfunc: %d new function(s) have fewer than %d lines:\n", len(violations), *minLines)
 	for _, v := range violations {
 		fmt.Printf("  %4d  %s:%d  %s\n", v.lines, v.file, v.line, v.name)
 	}
@@ -56,7 +75,10 @@ func main() {
 	os.Exit(1)
 }
 
-type violation struct{ name, file string; line, lines int }
+type violation struct {
+	name, file  string
+	line, lines int
+}
 
 func check(minLines int) ([]violation, error) {
 	tracked, err := trackedGoFiles()

@@ -6,18 +6,18 @@ Thresholds: high >= 10, low >= 5
 
 ## Folders With 10+ Non-Test Go Files
 
-- 27 non-test Go, 79 tests, 0 other, 106 total: `internal/queue/worker`
+- 30 non-test Go, 81 tests, 0 other, 111 total: `internal/queue/worker`
+- 22 non-test Go, 22 tests, 0 other, 44 total: `internal/config`
 - 22 non-test Go, 31 tests, 0 other, 53 total: `internal/kanban`
-- 21 non-test Go, 22 tests, 0 other, 43 total: `internal/config`
 - 21 non-test Go, 43 tests, 0 other, 64 total: `internal/queue`
 - 17 non-test Go, 20 tests, 0 other, 37 total: `cmd/agentd`
 - 14 non-test Go, 0 tests, 1 other, 15 total: `internal/kanban/db`
 - 13 non-test Go, 9 tests, 0 other, 22 total: `internal/agent/context`
 - 12 non-test Go, 8 tests, 0 other, 20 total: `internal/models`
+- 12 non-test Go, 6 tests, 0 other, 18 total: `internal/testutil`
 - 11 non-test Go, 0 tests, 0 other, 11 total: `internal/agent/hooks`
 - 11 non-test Go, 6 tests, 1 other, 18 total: `internal/agent/runtime`
 - 11 non-test Go, 3 tests, 0 other, 14 total: `internal/agent/tools`
-- 11 non-test Go, 6 tests, 0 other, 17 total: `internal/testutil`
 - 10 non-test Go, 11 tests, 0 other, 21 total: `internal/api/controllers`
 - 10 non-test Go, 10 tests, 0 other, 20 total: `internal/gateway/truncation`
 - 10 non-test Go, 8 tests, 0 other, 18 total: `internal/sandbox`
@@ -38,13 +38,13 @@ Thresholds: high >= 10, low >= 5
 
 ## Test-Heavy Folders With 10+ Go Test Files
 
-- 79 Go tests, 27 non-test Go, 0 other, 106 total: `internal/queue/worker`
+- 81 Go tests, 30 non-test Go, 0 other, 111 total: `internal/queue/worker`
 - 43 Go tests, 21 non-test Go, 0 other, 64 total: `internal/queue`
 - 31 Go tests, 22 non-test Go, 0 other, 53 total: `internal/kanban`
-- 22 Go tests, 21 non-test Go, 0 other, 43 total: `internal/config`
+- 22 Go tests, 22 non-test Go, 0 other, 44 total: `internal/config`
 - 20 Go tests, 17 non-test Go, 0 other, 37 total: `cmd/agentd`
 - 19 Go tests, 2 non-test Go, 0 other, 21 total: `internal/gateway`
-- 14 Go tests, 1 non-test Go, 0 other, 15 total: `internal/api`
+- 14 Go tests, 0 non-test Go, 0 other, 14 total: `internal/api/tests/feature`
 - 12 Go tests, 7 non-test Go, 0 other, 19 total: `internal/gateway/providers`
 - 12 Go tests, 7 non-test Go, 0 other, 19 total: `internal/memory`
 - 11 Go tests, 10 non-test Go, 0 other, 21 total: `internal/api/controllers`
