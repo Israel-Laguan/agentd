@@ -81,15 +81,20 @@ type AgentProfile struct {
 | `AgenticMode` | Provider | Behavior |
 |---------------|----------|----------|
 | `false` (default) | any | Legacy single-shot JSON mode: one LLM call, one sandbox execution |
-| `true` | `openai`, `anthropic` | Agentic mode: inner loop with tool calling; shell via `bash` tool only |
-| `true` | other | Falls back to legacy mode with a warning log |
+| `true` | `openai` (incl. openai-compatible e.g. LiteLLM/Portkey/OpenRouter) | Agentic mode: inner loop with tool calling; shell via `bash` tool only |
+| `true` | `anthropic` (native) | **Single one tool turn only.** Multi-turn tool round-trip is broken (see [provider-tool-calling.md](provider-tool-calling.md)). For a working agentic loop on Anthropic-family models, use the managed proxy path (`adapter: openai`) instead. |
+| `true` | other (native, `SupportsChatTools: false`) | Falls back to legacy mode with a warning log |
 
 ### Enabling agentic mode
 
 To enable agentic mode for a profile:
 
 1. Set `AgenticMode: true` on the `AgentProfile`
-2. Use a provider that supports tool round-tripping (`openai` or `anthropic` today)
+2. Use a provider with reliable multi-turn tool round-tripping — `openai` and any
+   openai-compatible endpoint (including the LiteLLM/Portkey/OpenRouter managed
+   proxy, via `adapter: openai`). Native `anthropic` is single-turn only (see
+   [provider-tool-calling.md](provider-tool-calling.md)); for Anthropic-family
+   models, route through the managed proxy path with `adapter: openai` instead.
 
 The worker checks `profile.AgenticMode` at task processing time and routes to either:
 - Legacy path: `command()` → single sandbox run
@@ -114,7 +119,9 @@ Agentic and legacy modes use the same hardened [`BashExecutor`](../internal/sand
 
 ## Conversation persistence across BLOCKED → READY
 
-The inner loop accumulates `PromptMessage` history **in memory** for one `Worker.Process` call. If a gated tool suspends the loop (approval gate → task `BLOCKED`), a later `Process` after the human unblocks the parent **rebuilds** messages from [`assembleAgenticSystemPrompt`](../internal/queue/worker/worker_messages.go). Prior assistant/tool turns from the suspended attempt are **not** restored automatically; the model must re-issue tool calls or continue from the fresh system + user seed. Persisting partial transcripts is planned follow-up work (see roadmap task 11).
+The inner loop accumulates `PromptMessage` history **in memory** for one `Worker.Process` call. If a gated tool suspends the loop (approval gate → task `BLOCKED`), a later `Process` after the human unblocks the parent **rebuilds** messages from [`assembleAgenticSystemPrompt`](../internal/queue/worker/worker_messages.go). Prior assistant/tool turns from the suspended attempt are **not** restored automatically; the model must re-issue tool calls or continue from the fresh system + user seed. Persisting partial
+transcripts is planned follow-up work (see the forward milestones in the
+[roadmap](agentic-harness-roadmap.md)).
 
 ## How concepts map in agentd today
 
@@ -138,7 +145,7 @@ The inner loop accumulates `PromptMessage` history **in memory** for one `Worker
 | --- | --- |
 | Per-task messages | Built per invocation; [`PromptMessage`](../internal/gateway/spec/spec.go) includes `role`, `content`, `tool_calls`, and `tool_call_id`. In agentic mode, assistant messages carry `tool_calls` and tool result messages carry `tool_call_id`. |
 | Tool results in the model context | In agentic mode, tool results are appended as `role: tool` messages with `tool_call_id` for the next gateway call. In legacy mode, sandbox stdout/stderr become task result and **events**. Retry context uses `ExecutionPayload.PreviousAttempts`, not full chat history. |
-| Event stream | Persisted event types include `LOG`, `RESULT`, `FAILURE`, etc. — see [`internal/models/enums.go`](../internal/models/enums.go); no first-class tool-call events until the backlog item that adds them. |
+| Event stream | First-class tool events exist: `TOOL_CALL` and `TOOL_RESULT` are persisted event types carrying scrubbed/truncated payloads, emitted by worker + audit hooks and mapped to SSE `tool_called` / `tool_result` — see [`internal/models/enums.go`](../internal/models/enums.go), [`worker_events.go`](../internal/queue/worker/worker_events.go), and [`internal/api/sse/stream.go`](../internal/api/sse/stream.go). Cockpit rendering is [Milestone 19](../tasks/19-cockpit-tool-event-rendering.md). |
 
 ### Client / input surface
 
@@ -175,4 +182,6 @@ These support the outer system and **wrap** the inner agentic loop:
 
 - [docs/agentic-harness-roadmap.md](agentic-harness-roadmap.md) — Phased implementation roadmap and links to task prompts.
 - [docs/provider-tool-calling.md](provider-tool-calling.md) — Provider tool-call capability matrix and wire-format deltas.
-- [tasks/](../tasks/) — Dependency-ordered implementation prompts (`01`–`12`).
+- [tasks/](../tasks/) — Dependency-ordered implementation prompts. Completed MVP and completed
+  post-MVP work are recorded in [docs/agentic-harness-roadmap.md](agentic-harness-roadmap.md);
+  forward work is speced as self-contained milestones `13`–`19` under `tasks/`.
