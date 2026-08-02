@@ -48,7 +48,7 @@ type Host interface {
 	RegisterCancel(taskID string, cancel context.CancelFunc)
 	DeregisterCancel(taskID string)
 	HandleGatewayError(ctx context.Context, task models.Task, err error)
-	RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int)
+	RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails)
 	CommitTextWithProfile(ctx context.Context, task models.Task, text string, profile *models.AgentProfile)
 	DispatchToolWithHooks(
 		ctx context.Context,

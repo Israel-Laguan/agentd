@@ -28,7 +28,7 @@ func (h *noopHost) DeregisterCancel(_ string) {}
 
 func (h *noopHost) HandleGatewayError(_ context.Context, _ models.Task, _ error) {}
 
-func (h *noopHost) RecordTaskTokenUsage(_ context.Context, _ models.Task, _ int) {}
+func (h *noopHost) RecordTaskTokenUsage(_ context.Context, _ models.Task, _ int, _ gateway.UsageDetails) {}
 
 func (h *noopHost) CommitTextWithProfile(_ context.Context, _ models.Task, _ string, _ *models.AgentProfile) {
 }

@@ -13,8 +13,9 @@ import (
 
 // fakeTokenStore records AddTokenUsage calls for test assertions.
 type fakeTokenStore struct {
-	mu    sync.Mutex
-	calls []tokenUsageCall
+	mu           sync.Mutex
+	calls        []tokenUsageCall
+	detailsCalls []gateway.UsageDetails
 }
 
 type tokenUsageCall struct {
@@ -26,6 +27,14 @@ func (s *fakeTokenStore) AddTokenUsage(_ context.Context, taskID string, tokens 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls = append(s.calls, tokenUsageCall{taskID: taskID, tokens: tokens})
+	return nil
+}
+
+// AddUsageDetails records prompt-cache usage details for test assertions.
+func (s *fakeTokenStore) AddUsageDetails(_ context.Context, _ string, details gateway.UsageDetails) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.detailsCalls = append(s.detailsCalls, details)
 	return nil
 }
 
@@ -277,5 +286,94 @@ func TestTokenUsage_APIResponse_IncludesField(t *testing.T) {
 	}
 	if int(v.(float64)) != 42 {
 		t.Errorf("token_usage = %v, want 42", v)
+	}
+}
+
+// TestTokenUsage_AgenticPath_SurfacesCacheFieldsInEvent verifies that
+// prompt-cache usage details (M15) ride along the agentic TOKEN_USAGE event
+// payload and the additive AddUsageDetails store seam.
+func TestTokenUsage_AgenticPath_SurfacesCacheFieldsInEvent(t *testing.T) {
+	t.Parallel()
+	ts := &fakeTokenStore{}
+	sink := &mockEventSink{}
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		{
+			Content:      "[COMPLETED] done",
+			TokenUsage:   15,
+			UsageDetails: gateway.UsageDetails{
+				CachedTokens:     8,
+				CacheWriteTokens: 3,
+			},
+		},
+	}}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{}}
+	_, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
+	w.tokenStore = ts
+	w.sink = sink
+
+	w.Process(context.Background(), task)
+
+	var found bool
+	for _, ev := range sink.events {
+		if ev.Type == models.EventTypeTokenUsage {
+			found = true
+			// json.Marshal of models.TokenUsagePayload with omitempty cache fields
+			// produces keys in declaration order: tokens, cached_tokens, cache_write_tokens.
+			want := `{"tokens":15,"cached_tokens":8,"cache_write_tokens":3}`
+			if ev.Payload != want {
+				t.Errorf("payload = %q, want %q", ev.Payload, want)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected TOKEN_USAGE event carrying cache fields")
+	}
+	// The additive AddUsageDetails seam must also receive the cache details.
+	if len(ts.detailsCalls) != 1 {
+		t.Fatalf("AddUsageDetails calls = %d, want 1", len(ts.detailsCalls))
+	}
+	if ts.detailsCalls[0].CachedTokens != 8 || ts.detailsCalls[0].CacheWriteTokens != 3 {
+		t.Errorf("AddUsageDetails details = %+v, want cached=8 write=3", ts.detailsCalls[0])
+	}
+}
+
+// TestTokenUsage_LegacyPath_SurfacesCacheFieldsInEvent verifies the legacy
+// path threads UsageDetails through GenerateJSONWithUsage into the event payload.
+func TestTokenUsage_LegacyPath_SurfacesCacheFieldsInEvent(t *testing.T) {
+	t.Parallel()
+	ts := &fakeTokenStore{}
+	sink := &mockEventSink{}
+	cmd := workerResponse{Command: "echo hi"}
+	raw, _ := json.Marshal(cmd)
+	gw := &singleResponseGateway{
+		resp: gateway.AIResponse{
+			Content:      string(raw),
+			TokenUsage:   20,
+			UsageDetails: gateway.UsageDetails{
+				CachedTokens:     12,
+				CacheWriteTokens: 4,
+			},
+		},
+	}
+	_, w, task := newLegacyTokenUsageWorker(t, gw, ts)
+	w.sink = sink
+
+	w.Process(context.Background(), task)
+
+	var found bool
+	for _, ev := range sink.events {
+		if ev.Type == models.EventTypeTokenUsage {
+			found = true
+			want := `{"tokens":20,"cached_tokens":12,"cache_write_tokens":4}`
+			if ev.Payload != want {
+				t.Errorf("legacy payload = %q, want %q", ev.Payload, want)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected TOKEN_USAGE event carrying cache fields on legacy path")
+	}
+	if len(ts.detailsCalls) != 1 || ts.detailsCalls[0].CachedTokens != 12 || ts.detailsCalls[0].CacheWriteTokens != 4 {
+		t.Errorf("AddUsageDetails details = %+v, want cached=12 write=4", ts.detailsCalls)
 	}
 }

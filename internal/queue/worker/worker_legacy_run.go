@@ -44,8 +44,8 @@ func (w *Worker) prepareLegacyExecution(
 		return workerResponse{}, false
 	}
 
-	response, tokenUsage, err := w.command(ctx, task, project, profile)
-	w.recordTaskTokenUsage(ctx, task, tokenUsage)
+	response, tokenUsage, details, err := w.command(ctx, task, project, profile)
+	w.recordTaskTokenUsage(ctx, task, tokenUsage, details)
 	audit.command = response.Command
 	audit.tokenUsage = tokenUsage
 	if err != nil {

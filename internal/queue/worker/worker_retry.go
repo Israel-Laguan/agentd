@@ -165,8 +165,8 @@ func (w *Worker) breakdownCommand(ctx context.Context, task models.Task, project
 		profile.SystemPrompt.String = prompt
 	}
 	profile = w.routeLegacyProfile(ctx, task, project, profile)
-	resp, tokenUsage, err := w.command(ctx, task, project, profile)
-	w.recordTaskTokenUsage(ctx, task, tokenUsage)
+	resp, tokenUsage, details, err := w.command(ctx, task, project, profile)
+	w.recordTaskTokenUsage(ctx, task, tokenUsage, details)
 	return resp, err
 }
 
