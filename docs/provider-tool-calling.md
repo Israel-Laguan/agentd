@@ -20,28 +20,57 @@ backend returns `SupportsChatTools: true`.
 
 | Provider | `SupportsChatTools` | Status | Notes |
 | --- | --- | --- | --- |
-| OpenAI | `true` | Verified | Sends OpenAI-compatible `tools` and parses `tool_calls` in provider fixture tests. |
-| Anthropic | `true` | Verified | Maps `AIRequest.Tools` to `tools` with `name`, `description`, `input_schema`; parses `tool_use` content blocks; fixture tests cover request/response. |
+| OpenAI | `true` | Verified | Sends OpenAI-compatible `tools` and parses `tool_calls` in provider fixture tests. The hardened single wire path. |
+| Anthropic | `true` | ⚠️ Maintenance (single-turn) | Single-turn tools only; **multi-turn agentic requires the proxy path** (`adapter: openai` via LiteLLM / Portkey / OpenRouter). See §[Provider Deltas — Anthropic](#anthropic) for the two defects; native fixture tests are self-referential. Bug-fix only. |
 | Gemini | `true` | Verified | OpenAI-compatible endpoint via `name: gemini`, `adapter: openai` (legacy `adapter: gemini` alias is accepted). Sends `tools` and parses `tool_calls` like OpenAI. |
-| Ollama | `false` | Not wired | `/api/chat` supports a `tools` field and returns `message.tool_calls`, but support depends on server and model behavior. |
-| llama.cpp | `false` | Not wired | OpenAI-style function calling depends on runtime setup such as `llama-server --jinja`, chat templates, and model support. |
-| AI Horde | `false` | Unsupported | The current provider uses async text generation with prompt and Kobold-style generation parameters, not a chat tool-call contract. |
+| Ollama | `false` | ⚠️ Maintenance | `/api/chat` supports a `tools` field and returns `message.tool_calls`, but support depends on server and model behavior. Native adapter is bug-fix only; use the proxy path for agentic tools. |
+| llama.cpp | `false` | Frozen (openai-compatible) | OpenAI-style function calling depends on runtime setup such as `llama-server --jinja`, chat templates, and model support; runtime capability gating is planned (M17). Uses `adapter: openai` when available, so it rides the hardened path. |
+| AI Horde | `false` | ⚠️ Maintenance | The current provider uses async text generation with prompt and Kobold-style generation parameters, not a chat tool-call contract. Native adapter is bug-fix only; not tool-capable. |
+
+> ⚠️ **Maintenance-mode providers** — native `anthropic`, `ollama`, and `horde` adapters
+> are **bug-fix only** as of Milestone 13 (see [LLM connector strategy](llm-connector-strategy.md#provider-status-corrected)).
+> They are retained for the zero-dependency promise and direct-path use, but **do not**
+> receive new features or tool-path fixes. For agentic tool calling, add a `gateway.providers`
+> entry with `adapter: openai` pointing at the OpenAI-compatible endpoint exposed by a
+> managed proxy (LiteLLM / Portkey / OpenRouter) or the provider directly.
 
 ## Provider Deltas
 
 ### Anthropic
 
-Convert `AIRequest.Tools` from OpenAI function objects to Messages API tools:
-`name`, `description`, and `input_schema`. Tool results need Anthropic
-`tool_result` content blocks rather than OpenAI `role: tool` messages.
+> ⚠️ **Maintenance mode (single-turn tools only).** The native `anthropic` adapter is
+> bug-fix only. The agentic inner loop needs multi-turn tool round-tripping, which is
+> **broken** today — use the proxy path (`adapter: openai` via LiteLLM / Portkey /
+> OpenRouter) for agentic tool calling. See [LLM connector strategy](llm-connector-strategy.md#provider-status-corrected).
 
-Parse response `content` blocks with `type: "tool_use"` into
-`AIResponse.ToolCalls`. The block `input` object should be serialized into
-`ToolCallFunction.Arguments`; text blocks remain normal response content.
+The adapter maps `AIRequest.Tools` to Messages API `tools` (`name`, `description`,
+`input_schema`) and parses response `content` blocks with `type: "tool_use"` into
+`AIResponse.ToolCalls`, serializing the block `input` object into
+`ToolCallFunction.Arguments`; text blocks remain normal response content. This works
+for a **single** request/response turn only. The multi-turn loop is broken in two
+concrete places (`internal/gateway/providers/anthropic.go`):
 
-Implemented: request mapping, tool-use parsing, and fixture tests verified.
+1. **Response parsing** — `anthropicContentBlock` expects a *nested* `tool_use` object
+   (field `ToolUse` with `json:"tool_use"`), but Anthropic's Messages API returns
+   *flat* `tool_use` blocks (`{"type":"tool_use","id":"...","name":"...","input":{...}}`).
+   On a real response the nested field is never populated, so `ToolCalls` ends up empty.
+2. **Request building** — `splitSystemMessages` flattens every `PromptMessage` to
+   `{role, content}`, dropping assistant `ToolCalls` and the tool-role `ToolCallID`.
+   Anthropic requires `tool_result` content blocks inside the prior `user` message and
+   matching `tool_use` blocks in the assistant message, so a second turn can never carry
+   the prior tool result back.
+
+Fixture tests in `anthropic_test.go` marshal the app's own `anthropicResponse` struct
+(producing nested JSON), so they are **self-referential** and do not catch defect #1.
+Fixing the round-trip is out of scope for this docs-only milestone; until then the
+managed proxy path is the supported route for agentic tool calling.
 
 ### Ollama
+
+> ⚠️ **Maintenance mode.** The native `ollama` adapter is bug-fix only. `/api/chat`
+> supports a `tools` field, but agentic tool calling is not validated against this
+> adapter — use the proxy path (`adapter: openai` via LiteLLM / Portkey / OpenRouter)
+> for agentic tool calling. See [LLM connector strategy](llm-connector-strategy.md#provider-status-corrected).
 
 The current provider uses native `/api/chat`, not OpenAI-compatible
 `/v1/chat/completions`. Native chat accepts OpenAI-like `tools` objects with
@@ -62,6 +91,10 @@ handlers may have partial behavior, and parallel calls are opt-in. Keep
 `SupportsChatTools` false until fixture tests cover a known compatible setup.
 
 ### AI Horde
+
+> ⚠️ **Maintenance mode.** The native `horde` adapter is bug-fix only and async
+> text-only; it is not tool-capable. Use the proxy path for agentic tool calling.
+> See [LLM connector strategy](llm-connector-strategy.md#provider-status-corrected).
 
 The provider targets `/v2/generate/text/async`. The documented request model is
 prompt plus generation parameters, and status returns generated text rather than
@@ -90,6 +123,13 @@ surfaced to the task; execution continues in legacy mode.
 As a result, any provider listed as `SupportsChatTools: false` in the Capability Matrix above
 will use legacy mode even when `AgenticMode: true` is set on the agent profile. Run
 `agentd start -v` to see the fallback warning.
+
+> ⚠️ **Note on Anthropic.** The native `anthropic` adapter returns `SupportsChatTools: true`,
+> so `AgenticMode: true` enters `processAgentic` — but its **multi-turn** tool round-trip is
+> broken (see §[Provider Deltas — Anthropic](#anthropic)). It can complete at most a single
+> tool turn; a second turn cannot carry `tool_result` back. For a working agentic loop on
+> Anthropic-family models, route through LiteLLM / Portkey / OpenRouter with `adapter: openai`
+> (the **managed path** — see [LLM connector strategy](llm-connector-strategy.md)).
 
 See [`docs/agentic-harness.md`](agentic-harness.md) for the full agentic inner loop
 specification, sandbox model, and the behavior table that maps `AgenticMode` × provider to

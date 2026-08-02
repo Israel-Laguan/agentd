@@ -17,7 +17,41 @@ flowchart LR
   p1 --> p2 --> p3 --> p4 --> p5 --> p6
 ```
 
-Post-MVP items (tasks 08–12) extend observability, routing, truncation, tests, and additional providers; see the end of this document.
+Post-MVP items (tasks 08–12) extend observability, routing, truncation, tests, and additional providers;
+see the end of this document.
+
+## Implementation status
+
+- **Phases 1–6 (MVP): DONE.** Gateway tool schemas, tool-call parsing, prompt tool protocol, tool
+  executor registry, iteration/safety budgets, and the opt-in agentic inner loop are all
+  implemented and tested (`internal/gateway/`, `internal/agent/tools/`,
+  `internal/queue/worker/agentic/`).
+- **Tasks 08, 09, 10, 11: DONE** (tool-call events + SSE server side, provider capabilities +
+  fallback, agentic context truncation, agentic loop integration tests).
+- **Task 12 (provider expansion): RE-SCOPED.** Per-provider native tool formats are no longer the
+  growth path — see [Milestone 13](../tasks/13-llm-connector-strategy.md). The recommended approach
+  is the **two-topology connector model**: a hardened OpenAI Chat Completions wire path plus an
+  external proxy (LiteLLM / Portkey / OpenRouter) for provider diversity (see
+  `docs/llm-connector-strategy.md`, authored in Milestone 13).
+- **Forward work** is tracked as Milestones 13–19 below; each is a self-contained PR-scoped spec in
+  `tasks/`.
+
+---
+
+## Forward milestones (13–19)
+
+| Task | Topic | Status |
+| --- | --- | --- |
+| [13-llm-connector-strategy.md](../tasks/13-llm-connector-strategy.md) | Docs-only: two-topology model, keep/delegate table, non-goals, cache discipline, LiteLLM recipe, provider-claim corrections, roadmap bookkeeping. | Planned |
+| [14-cache-hygiene-stable-prefix.md](../tasks/14-cache-hygiene-stable-prefix.md) | Cache hygiene: stable prefix (memory-lesson ordering, deterministic tool lists) + byte-stability golden test. | Planned |
+| [15-cache-observability-usage-details.md](../tasks/15-cache-observability-usage-details.md) | Surface prompt-cache `cached_tokens` / DeepSeek cache fields via `AIResponse` usage details + TOKEN_USAGE events. | Planned |
+| [16-wire-contract-and-smoke-script.md](../tasks/16-wire-contract-and-smoke-script.md) | Openai-adapter wire-contract test suite + `scripts/llm-smoke.sh` conformance probe. | Planned |
+| [17-llamacpp-agentic-recipe.md](../tasks/17-llamacpp-agentic-recipe.md) | (Optional) llama.cpp agentic recipe + optional capability probe. | Planned - optional |
+| [18-litellm-correlation-metadata.md](../tasks/18-litellm-correlation-metadata.md) | (Optional) LiteLLM task-correlation metadata + startup topology log. | Planned - optional |
+| [19-cockpit-tool-event-rendering.md](../tasks/19-cockpit-tool-event-rendering.md) | Web/independent: render `tool_called` / `tool_result` SSE events in the cockpit. | Planned |
+
+Suggested execution order: `13 → (14, 16, 19 can run in parallel) → 15 (after 14) → 17/18 (after
+16)`.
 
 ---
 
@@ -31,7 +65,7 @@ Post-MVP items (tasks 08–12) extend observability, routing, truncation, tests,
 
 **Verification**: Existing tests pass; new test marshals an `AIRequest` with tools and asserts JSON body shape (and correct interaction with JSON mode when tools are set).
 
-**Task**: [tasks/01-tool-definitions-in-gateway-spec.md](../tasks/01-tool-definitions-in-gateway-spec.md)
+**Status**: Complete. Gateway tool schemas + OpenAI `tools` request wiring live in `internal/gateway/spec/spec.go` and `internal/gateway/providers/openai.go` with fixture tests.
 
 ---
 
@@ -45,7 +79,7 @@ Post-MVP items (tasks 08–12) extend observability, routing, truncation, tests,
 
 **Verification**: Unit test with stubbed OpenAI JSON containing `tool_calls` asserts populated `AIResponse.ToolCalls`.
 
-**Task**: [tasks/02-tool-call-parsing-in-responses.md](../tasks/02-tool-call-parsing-in-responses.md)
+**Status**: Complete. `AIResponse.ToolCalls` parsing lives in `internal/gateway/spec/spec.go` + `internal/gateway/providers/openai.go`, with fixture tests.
 
 ---
 
@@ -59,7 +93,7 @@ Post-MVP items (tasks 08–12) extend observability, routing, truncation, tests,
 
 **Verification**: Round-trip / marshal tests for multi-turn assistant+tool message lists.
 
-**Task**: [tasks/03-prompt-message-tool-protocol.md](../tasks/03-prompt-message-tool-protocol.md)
+**Status**: Complete. `PromptMessage.ToolCalls` / `ToolCallID` round-trip tested in `spec_test.go` and `providers/openai_test.go`.
 
 ---
 
@@ -73,7 +107,7 @@ Post-MVP items (tasks 08–12) extend observability, routing, truncation, tests,
 
 **Verification**: Unit tests for each tool’s argument validation and execution (mock sandbox where appropriate).
 
-**Task**: [tasks/04-tool-executor-registry.md](../tasks/04-tool-executor-registry.md)
+**Status**: Complete. Tool executor registry (`bash`, `read`, `write`) lives in `internal/agent/tools/` (`tool_executor.go` + jail/manifest/path tests).
 
 ---
 
@@ -87,7 +121,7 @@ Post-MVP items (tasks 08–12) extend observability, routing, truncation, tests,
 
 **Verification**: Unit tests for cap exhaustion and timeout interaction; no new bus event types in this phase.
 
-**Task**: [tasks/05-iteration-budget-and-safety.md](../tasks/05-iteration-budget-and-safety.md)
+**Status**: Complete. Iteration/deadline/budget guards live in `internal/agent/runtime/guards.go` and `internal/gateway/budget.go`; config `queue.max_tool_iterations`.
 
 ---
 
@@ -101,22 +135,19 @@ Post-MVP items (tasks 08–12) extend observability, routing, truncation, tests,
 
 **Verification**: Manual or automated scenario with agentic mode on; regression that default profile still uses `GenerateJSON` / single-shot path.
 
-**Tasks**:
-
-- [tasks/06-agentic-worker-mode-toggle.md](../tasks/06-agentic-worker-mode-toggle.md)
-- [tasks/07-worker-inner-loop-orchestration.md](../tasks/07-worker-inner-loop-orchestration.md)
+**Status**: Complete. `AgentProfile.AgenticMode` + `processAgentic` inner loop (`internal/queue/worker/worker.go`, `internal/queue/worker/agentic/`), incl. hooks, HITL, goals, subagents, model & capability routing.
 
 ---
 
-## Post-MVP (ordered by task id)
+## Completed & re-scoped post-MVP work
 
-| Task | Topic |
-| --- | --- |
-| [tasks/08-tool-call-events-and-sse-observability.md](../tasks/08-tool-call-events-and-sse-observability.md) | New event types and scrubbed payloads for cockpit / SSE. |
-| [tasks/09-provider-capabilities-and-fallback.md](../tasks/09-provider-capabilities-and-fallback.md) | Capability flags; unsupported providers stay on legacy path; OpenAI first. |
-| [tasks/10-context-truncation-for-tool-history.md](../tasks/10-context-truncation-for-tool-history.md) | Truncate accumulated inner history using existing strategies. |
-| [tasks/11-agentic-loop-integration-tests.md](../tasks/11-agentic-loop-integration-tests.md) | End-to-end worker tests with mock gateway. |
-| [tasks/12-provider-expansion-followups.md](../tasks/12-provider-expansion-followups.md) | Anthropic, Ollama-compatible, and other provider-specific tool formats. |
+| Task | Topic | Status |
+| --- | --- | --- |
+| 08 | Tool-call events and SSE observability | DONE (server side). `TOOL_CALL`/`TOOL_RESULT` events + scrubbed payloads + SSE mapping (`internal/api/sse/stream.go`). UI rendering tracked as [Milestone 19](../tasks/19-cockpit-tool-event-rendering.md). |
+| 09 | Provider capabilities and fallback | DONE. `SupportsChatTools` + `capabilities.chat_tools` + legacy fallback (`internal/gateway/providers/provider.go`). |
+| 10 | Context truncation for tool history | DONE. Agentic tool-pairwise-consistent truncation (`internal/gateway/truncation/truncation_agentic_*`). |
+| 11 | Agentic loop integration tests | DONE. Mock-gateway worker integration tests + godog features (`internal/queue/worker/worker_agentic_*_test.go`, `worker/features/`). |
+| 12 | Provider expansion followups | RE-SCOPED → [Milestone 13](../tasks/13-llm-connector-strategy.md) onward. Native tool formats are superseded by the proxy-based two-topology model. |
 
 ---
 

@@ -2,7 +2,14 @@
 
 agentd can route through any vendor that exposes an OpenAI-compatible chat completions API.
 Use the `gateway.providers` list with `adapter: openai` to add cloud vendors alongside — or
-instead of — the built-in `openai` slot.
+instead of — the built-in `openai` slot. This is the **direct path** for any single provider
+or local server.
+
+For the **managed path** (a single proxy fanning out to many providers, with key management,
+virtual keys, and provider wire-format translation handled for you), use a local
+[LiteLLM](https://docs.litellm.ai/) / Portkey / OpenRouter server and point an `adapter: openai`
+entry at it — see [`docs/llm-connector-strategy.md`](llm-connector-strategy.md) and
+[LiteLLM (managed proxy)](#litellm-managed-proxy) below.
 
 For local OpenAI-compatible servers (llama.cpp, LM Studio, vLLM), see
 [`docs/llamacpp-quickstart.md`](llamacpp-quickstart.md).
@@ -99,6 +106,52 @@ gateway:
       model: "meta-llama/Llama-3-70b-chat-hf"
   order: [groq, together]
 ```
+
+## LiteLLM (managed proxy)
+
+[LiteLLM](https://docs.litellm.ai/) is the recommended **managed path** for
+multi-provider deployments and for providers whose native adapter is in maintenance
+mode (Anthropic, Ollama, etc.). Run a local LiteLLM server and point agentd at its
+OpenAI-compatible `/v1/chat/completions` endpoint with `adapter: openai`:
+
+```yaml
+gateway:
+  providers:
+    - name: litellm
+      adapter: openai
+      base_url: "http://127.0.0.1:4000/v1"
+      api_key_env: LITELLM_API_KEY   # LiteLLM master_key
+      model: "poolside/laguna-m.1"   # LiteLLM model_name alias
+      capabilities: { chat_tools: true }
+  order: [litellm]
+```
+
+The full two-topology model, keep/delegate boundary, and provider-status claims
+are documented in [`docs/llm-connector-strategy.md`](llm-connector-strategy.md).
+
+### Notes
+
+- **One entry per model alias.** LiteLLM routes on its `model_name` (e.g.
+  `poolside/laguna-m.1`, `claude-3-opus-20240229`). Add a separate
+  `gateway.providers` entry per alias you want to cascade between, each pointing at
+  the same LiteLLM `base_url`. This preserves a distinct `ProviderUsed` identity in
+  logs and API responses and lets `gateway.order` fall back across aliases.
+- **Podman / container DNS.** When agentd runs in a Podman (rootless) container and
+  LiteLLM runs on the host, `localhost`/`127.0.0.1` from inside the container
+  refers to the *container*, not the host. Use `http://host.containers.internal:4000/v1`
+  (Podman) or `http://host.docker.internal:4000/v1` (Docker) as `base_url`, or run
+  both on the host network / the same container.
+- **Retry amplification. LiteLLM's router retries can collide with agentd's cascade.**
+  agentd's cascade (`internal/gateway/routing/router_cascade.go`) performs
+  1-attempt-per-candidate fallback across providers, and the in-task loop applies
+  its own iteration cap (see `queue.max_tool_iterations`). To avoid a provider error
+  being retried both by LiteLLM *and* by agentd's cascade (double-latency/quota
+  burn), set LiteLLM's per-route retry count low:
+  - In `litellm_config.yaml`, set `num_retries: 0` on the router, or `num_retries: 1`
+    only when the route points at a single upstream you want a single internal retry
+    for before agentd's cascade handles cross-provider fallback.
+  - Keep agentd-side timeouts (`gateway.*.timeout`) bounded so a stuck LiteLLM route
+    yields to the next provider rather than hanging the task.
 
 ## Tool Calling
 
