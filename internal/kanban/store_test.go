@@ -3,11 +3,15 @@ package kanban
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"agentd/internal/models"
 )
+
+var memtestID uint64
 
 func TestMaterializeAndClaim(t *testing.T) {
 	store := newTestStore(t)
@@ -173,7 +177,8 @@ func TestClaimNextReadyTasksAtomic(t *testing.T) {
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	db, err := Open("file::memory:?cache=shared")
+	id := atomic.AddUint64(&memtestID, 1)
+	db, err := Open(fmt.Sprintf("file:memtest%d?mode=memory&cache=shared", id))
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}

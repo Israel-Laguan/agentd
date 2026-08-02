@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	wskills "agentd/internal/agent/skills"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
@@ -24,19 +25,19 @@ func (f *fakeRetriever) Recall(ctx context.Context, intent, projectID, userID st
 	return f.memories
 }
 
-type fakeCapabilityAdapter struct {
+type goldenCapabilityAdapter struct {
 	name  string
 	tools []gateway.ToolDefinition
 }
 
-func (f *fakeCapabilityAdapter) Name() string { return f.name }
-func (f *fakeCapabilityAdapter) ListTools(ctx context.Context) ([]gateway.ToolDefinition, error) {
+func (f *goldenCapabilityAdapter) Name() string { return f.name }
+func (f *goldenCapabilityAdapter) ListTools(ctx context.Context) ([]gateway.ToolDefinition, error) {
 	return f.tools, nil
 }
-func (f *fakeCapabilityAdapter) CallTool(ctx context.Context, name string, args map[string]any) (any, error) {
+func (f *goldenCapabilityAdapter) CallTool(ctx context.Context, name string, args map[string]any) (any, error) {
 	return nil, nil
 }
-func (f *fakeCapabilityAdapter) Close() error { return nil }
+func (f *goldenCapabilityAdapter) Close() error { return nil }
 
 func TestCacheGolden_ByteStableFirstRequest(t *testing.T) {
 	t.Parallel()
@@ -48,7 +49,7 @@ func TestCacheGolden_ByteStableFirstRequest(t *testing.T) {
 		Description: "Add function in math.go",
 		ProjectID:   "proj-1",
 	}
-	project := models.Project{ID: "proj-1", WorkspacePath: t.TempDir()}
+	project := models.Project{BaseEntity: models.BaseEntity{ID: "proj-1"}, WorkspacePath: t.TempDir()}
 	profile := models.AgentProfile{}
 
 	w := &Worker{
@@ -58,23 +59,23 @@ func TestCacheGolden_ByteStableFirstRequest(t *testing.T) {
 			},
 		},
 		capabilities: capabilities.NewRegistry(),
-		skillLoader:  &agentruntime.SkillLoader{GlobalDir: t.TempDir()},
-		skillRouter:  &agentruntime.SkillRouter{Threshold: 1.0},
+		skillLoader:  &wskills.SkillLoader{GlobalDir: t.TempDir()},
+		skillRouter:  &wskills.SkillRouter{Threshold: 1.0},
 		toolManifest: nil,
 	}
 	// Two adapters contributing overlapping + unique tools; map iteration is
 	// intentionally nondeterministic so this guards against map-order leakage.
-	w.capabilities.Register("alpha", &fakeCapabilityAdapter{
+	w.capabilities.Register("alpha", &goldenCapabilityAdapter{
 		name:  "alpha",
 		tools: []gateway.ToolDefinition{{Name: "alpha_one", Description: "a"}, {Name: "shared", Description: "s"}},
 	})
-	w.capabilities.Register("zeta", &fakeCapabilityAdapter{
+	w.capabilities.Register("zeta", &goldenCapabilityAdapter{
 		name:  "zeta",
 		tools: []gateway.ToolDefinition{{Name: "zeta_two", Description: "z"}, {Name: "shared", Description: "s"}, {Name: "alpha_one", Description: "dup"}},
 	})
 
 	scoped := capabilities.NewRegistry()
-	scoped.Register("scoped-adapter", &fakeCapabilityAdapter{
+	scoped.Register("scoped-adapter", &goldenCapabilityAdapter{
 		name:  "scoped-adapter",
 		tools: []gateway.ToolDefinition{{Name: "scoped_three", Description: "sc"}},
 	})
@@ -99,7 +100,7 @@ func TestCacheGolden_ByteStableFirstRequest(t *testing.T) {
 	assert.Equal(t, t1, t2, "tools must be byte-identical across runs")
 
 	// Memory lessons must sit after the stable system prompt + task seed.
-	if len(messages := decodeMessages(t, m1); len(messages) >= 3 {
+	if messages := decodeMessages(t, m1); len(messages) >= 3 {
 		assert.Equal(t, "system", messages[0].Role, "message[0] must be the layered system prompt")
 		assert.Equal(t, "user", messages[1].Role, "message[1] must be the task seed user message")
 		assert.Equal(t, "system", messages[len(messages)-1].Role, "last message must be the memory lessons system message")
