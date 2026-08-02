@@ -36,6 +36,7 @@ func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *agentt
 	}
 
 	if len(def.AllowedTools) == 0 && len(def.ForbiddenTools) == 0 {
+		gateway.SortTools(allTools)
 		return allTools
 	}
 
@@ -53,6 +54,7 @@ func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *agentt
 		}
 		filtered = append(filtered, tool)
 	}
+	gateway.SortTools(filtered)
 	return filtered
 }
 
@@ -79,6 +81,7 @@ func (d *SubagentDelegate) capabilityToolDefinitions(ctx context.Context) []gate
 	}
 	appendTools(d.scopedCapabilities)
 	appendTools(d.capabilities)
+	gateway.SortTools(tools)
 	return tools
 }
 

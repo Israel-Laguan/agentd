@@ -127,9 +127,10 @@ breakpoints). Agentd owns the policy so the prefix it hands the proxy is stable.
 
 - **Stable-prefix ordering** for the assembled prompt:
   1. layered system prompt,
-  2. tool definitions,
+  2. tool definitions (sorted by name),
   3. stable context (task seed / intent — never mutates mid-session),
-  4. memory lessons,
+  4. memory lessons (appended after the task seed so the system-prompt + tool-defs
+     prefix is identical across tasks with the same profile/task),
   5. append-only tool-call / tool-result history (the only mutable tail).
 - **Determinism**: no timestamps, UUIDs, or wall-clock references in prompts or
   tool schemas; tool-definition ordering is sorted, not map-iterated; tool schemas

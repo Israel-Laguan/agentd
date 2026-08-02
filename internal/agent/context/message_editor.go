@@ -31,6 +31,9 @@ type EditResult struct {
 }
 
 // MessageEditor supports turn-level history rewrite and normal message commits.
+// Edits that rewrite the anchor user turn or replace tool-call/tool-result turns
+// are deliberate cache-breaking events: the serialized prompt prefix changes,
+// invalidating any provider prompt-cache hits for prior turns.
 type MessageEditor struct {
 	checkpoints wsession.CheckpointStore
 	audit       *runtime.AuditLogger

@@ -271,6 +271,7 @@ func filterToolsByNames(
 		return filtered, nil
 	}
 	if index == nil {
+		gateway.SortTools(filtered)
 		return filtered, nil
 	}
 	newIndex := make(map[string]string, len(filtered))
@@ -279,6 +280,7 @@ func filterToolsByNames(
 			newIndex[tool.Name] = adapter
 		}
 	}
+	gateway.SortTools(filtered)
 	return filtered, newIndex
 }
 

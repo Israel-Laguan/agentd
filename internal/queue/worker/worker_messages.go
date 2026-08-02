@@ -20,13 +20,16 @@ func taskIntent(task models.Task) string {
 	return task.Title + " " + task.Description
 }
 
-func (w *Worker) prependMemoryLessons(ctx context.Context, intent string, projectID string, messages []gateway.PromptMessage) []gateway.PromptMessage {
+// appendMemoryLessons appends an optional memory-lessons system message after the
+// stable system prompt + task seed. Placing lessons after the stable context keeps
+// the cache prefix stable across tasks while still surfacing durable memories.
+func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, projectID string, messages []gateway.PromptMessage) []gateway.PromptMessage {
 	if w.retriever == nil {
 		return messages
 	}
 	recalled := w.retriever.Recall(ctx, intent, projectID, "")
 	if lessons := memoryFormatLessons(recalled); lessons != "" {
-		return append([]gateway.PromptMessage{{Role: "system", Content: lessons}}, messages...)
+		return append(messages, gateway.PromptMessage{Role: "system", Content: lessons})
 	}
 	return messages
 }
@@ -34,7 +37,7 @@ func (w *Worker) prependMemoryLessons(ctx context.Context, intent string, projec
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := w.legacySeedMessages(task, project, profile)
 	intent := taskIntent(task)
-	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
+	return w.appendMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
 // applyModelRouting selects provider/model from complexity routing when enabled.
@@ -191,12 +194,16 @@ func (w *Worker) buildPromptMessages(task models.Task, project models.Project, p
 
 // assembleAgenticSystemPrompt builds the full layered system prompt for agentic
 // mode using the instruction hierarchy and skill router. It returns the initial
-// message list: [optional memory lessons, layered system prompt, user task].
+// message list: [layered system prompt, user task, optional memory lessons].
+//
+// Memory lessons are appended after the stable task seed so the provider
+// prompt-cache prefix remains stable across tasks (only the dynamic lessons
+// message changes between tasks with the same profile/task).
 //
 // This replaces the old buildAgenticMessages which modified an existing message
 // list in-place. The new implementation builds messages from scratch via
-// SystemPromptBuilder, separately prepends memory lessons, and appends a user
-// message. The legacy seedMessages path is still used by the non-agentic
+// SystemPromptBuilder, appends memory lessons, and appends a user message.
+// The legacy seedMessages path is still used by the non-agentic
 // command() path in worker_legacy.go.
 func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	systemPrompt, userContent := w.buildPromptMessages(task, project, profile)
@@ -205,7 +212,7 @@ func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Ta
 		{Role: "user", Content: userContent},
 	}
 	intent := taskIntent(task)
-	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
+	return w.appendMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
 // assembleAgenticSystemPromptWithUserContent builds the layered system prompt and sets the
@@ -225,5 +232,5 @@ func (w *Worker) assembleAgenticSystemPromptWithUserContent(
 		{Role: "user", Content: userContent},
 	}
 	intent := taskIntent(task)
-	return w.prependMemoryLessons(ctx, intent, task.ProjectID, messages)
+	return w.appendMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
