@@ -15,28 +15,32 @@ const MaxJSONAttempts = 3
 
 // GenerateJSON unmarshals provider JSON with validation and self-correction prompts.
 func GenerateJSON[T any](ctx context.Context, gw spec.AIGateway, req spec.AIRequest) (T, error) {
-	v, _, err := GenerateJSONWithUsage[T](ctx, gw, req)
+	v, _, _, err := GenerateJSONWithUsage[T](ctx, gw, req)
 	return v, err
 }
 
 // GenerateJSONWithUsage is like GenerateJSON but also returns the cumulative token
-// usage across all provider calls in the retry loop (retries cost tokens too).
-func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req spec.AIRequest) (T, int, error) {
+// usage across all provider calls in the retry loop (retries cost tokens too),
+// plus cumulative prompt-cache usage details (cached_tokens / cache_write_tokens).
+func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req spec.AIRequest) (T, int, spec.UsageDetails, error) {
 	var zero T
 	req.JSONMode = true
 	var totalUsage int
+	var details spec.UsageDetails
 	var lastRaw string
 	for attempt := 0; attempt < MaxJSONAttempts; attempt++ {
 		resp, err := gw.Generate(ctx, req)
 		if err != nil {
-			return zero, totalUsage, err
+			return zero, totalUsage, details, err
 		}
 		totalUsage += resp.TokenUsage
+		details.CachedTokens += resp.UsageDetails.CachedTokens
+		details.CacheWriteTokens += resp.UsageDetails.CacheWriteTokens
 		lastRaw = resp.Content
 		var out T
 		if err := json.Unmarshal([]byte(resp.Content), &out); err != nil {
 			if attempt == MaxJSONAttempts-1 {
-				return zero, totalUsage, WrapInvalidJSONError(err, lastRaw)
+				return zero, totalUsage, details, WrapInvalidJSONError(err, lastRaw)
 			}
 			req.Messages = append(req.Messages, PromptAfterInvalidJSON(err))
 			continue
@@ -50,15 +54,15 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 		if validatable != nil {
 			if err := validatable.Validate(); err != nil {
 				if attempt == MaxJSONAttempts-1 {
-					return zero, totalUsage, WrapInvalidJSONError(err, lastRaw)
+					return zero, totalUsage, details, WrapInvalidJSONError(err, lastRaw)
 				}
 				req.Messages = append(req.Messages, PromptAfterInvalidJSON(err))
 				continue
 			}
 		}
-		return out, totalUsage, nil
+		return out, totalUsage, details, nil
 	}
-	return zero, totalUsage, models.ErrInvalidJSONResponse
+	return zero, totalUsage, details, models.ErrInvalidJSONResponse
 }
 
 // PromptAfterInvalidJSON builds the corrective user message for invalid JSON.

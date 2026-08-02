@@ -203,6 +203,17 @@ type openAIResponse struct {
 	} `json:"choices"`
 	Usage struct {
 		TotalTokens int `json:"total_tokens"`
+		// PromptTokensDetails carries OpenAI prompt-token breakdowns
+		// (https://platform.openai.com/docs/api-reference/chat/object).
+		// CachedTokens is the prompt-cache read count. Absent on most providers.
+		PromptTokensDetails *struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details,omitempty"`
+		// PromptCacheHitTokens / PromptCacheMissTokens are DeepSeek's
+		// OpenAI-compatible cache fields. Hit = cache reads; miss = tokens
+		// written to cache. Absent on OpenAI proper.
+		PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
+		PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
 	} `json:"usage"`
 	Model string `json:"model"`
 }
@@ -249,11 +260,34 @@ func (r openAIResponse) toAIResponse(defaultModel string, providerUsed string) s
 		slog.Debug("openai provider returned zero total_tokens; usage data may be absent in this provider's response",
 			"provider", providerUsed, "model", model)
 	}
+	// Surface prompt-cache fields when the provider reports them. OpenAI
+	// exposes cached reads via prompt_tokens_details.cached_tokens; DeepSeek
+	// (OpenAI-compatible) exposes prompt_cache_hit_tokens (reads) and
+	// prompt_cache_miss_tokens (writes). Most providers omit all of these,
+	// leaving both fields at zero.
+	cached := 0
+	if r.Usage.PromptTokensDetails != nil {
+		cached = r.Usage.PromptTokensDetails.CachedTokens
+	}
+	if r.Usage.PromptCacheHitTokens > cached {
+		cached = r.Usage.PromptCacheHitTokens
+	}
+	cacheWrite := r.Usage.PromptCacheMissTokens
+	if cached > 0 || cacheWrite > 0 {
+		slog.Debug("openai provider parsed prompt-cache usage details",
+			"provider", providerUsed, "model", model,
+			"total_tokens", r.Usage.TotalTokens,
+			"cached_tokens", cached, "cache_write_tokens", cacheWrite)
+	}
 	return spec.AIResponse{
 		Content:      content,
 		TokenUsage:   r.Usage.TotalTokens,
 		ProviderUsed: providerUsed,
 		ModelUsed:    model,
 		ToolCalls:    toolCalls,
+		UsageDetails: spec.UsageDetails{
+			CachedTokens:     cached,
+			CacheWriteTokens: cacheWrite,
+		},
 	}
 }

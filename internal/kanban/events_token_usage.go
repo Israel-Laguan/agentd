@@ -11,11 +11,6 @@ import (
 	"agentd/internal/models"
 )
 
-// tokenUsagePayload is the JSON shape stored in TOKEN_USAGE event payloads.
-type tokenUsagePayload struct {
-	Tokens int `json:"tokens"`
-}
-
 // ListTokenUsageEventsSince returns per-call token usage events at or after since.
 func (s *Store) ListTokenUsageEventsSince(ctx context.Context, since time.Time) ([]models.TokenUsageEvent, error) {
 	rows, err := s.db.QueryContext(ctx, `
@@ -39,11 +34,16 @@ func (s *Store) ListTokenUsageEventsSince(ctx context.Context, since time.Time) 
 		if err != nil {
 			return nil, err
 		}
-		tokens, ok := parseTokenUsagePayload(payload)
-		if !ok || tokens <= 0 {
+		p, ok := parseTokenUsagePayload(payload)
+		if !ok || p.Tokens <= 0 {
 			continue
 		}
-		out = append(out, models.TokenUsageEvent{At: at, Tokens: tokens})
+		out = append(out, models.TokenUsageEvent{
+			At:               at,
+			Tokens:           p.Tokens,
+			CachedTokens:     p.CachedTokens,
+			CacheWriteTokens: p.CacheWriteTokens,
+		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate token usage events: %w", err)
@@ -51,13 +51,17 @@ func (s *Store) ListTokenUsageEventsSince(ctx context.Context, since time.Time) 
 	return out, nil
 }
 
-func parseTokenUsagePayload(payload string) (int, bool) {
-	var p tokenUsagePayload
+// parseTokenUsagePayload decodes a TOKEN_USAGE event payload into the shared
+// models.TokenUsagePayload shape. It tolerates both the JSON object form
+// ({"tokens":N,...}) and the legacy bare-integer form ("N"). Malformed
+// payloads return ok=false so callers can skip them.
+func parseTokenUsagePayload(payload string) (models.TokenUsagePayload, bool) {
+	var p models.TokenUsagePayload
 	if err := json.Unmarshal([]byte(payload), &p); err == nil && p.Tokens > 0 {
-		return p.Tokens, true
+		return p, true
 	}
 	if n, err := strconv.Atoi(strings.TrimSpace(payload)); err == nil && n > 0 {
-		return n, true
+		return models.TokenUsagePayload{Tokens: n}, true
 	}
-	return 0, false
+	return models.TokenUsagePayload{}, false
 }

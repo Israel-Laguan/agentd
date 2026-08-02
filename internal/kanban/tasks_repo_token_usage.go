@@ -3,6 +3,8 @@ package kanban
 import (
 	"context"
 	"fmt"
+
+	"agentd/internal/gateway/spec"
 )
 
 // AddTokenUsage atomically increments token_usage for the given task.
@@ -38,4 +40,14 @@ func (s *Store) SumTokenUsage(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("sum token usage: %w", err)
 	}
 	return total, nil
+}
+
+// AddUsageDetails is an additive, forward-compatible seam on the token-usage
+// store. M15 surfaces prompt-cache fields (cached_tokens / cache_write_tokens)
+// via the TOKEN_USAGE event payload, which is the observability surface; it does
+// not persist them to a dedicated DB column (deferred to a later milestone).
+// This no-op keeps the TokenUsageStore interface additive without breaking
+// existing callers of AddTokenUsage.
+func (s *Store) AddUsageDetails(_ context.Context, _ string, _ spec.UsageDetails) error {
+	return nil
 }

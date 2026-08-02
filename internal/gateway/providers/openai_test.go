@@ -2,8 +2,11 @@ package providers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -191,5 +194,115 @@ func TestNewOpenAI_UnknownOptionLogsWarning(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "thinking_mode") {
 		t.Errorf("expected warning to name the key; log = %q", buf.String())
+	}
+}
+
+// newOpenAICacheServer builds a test server that replies with the given usage
+// payload map, so cache-token parsing can be exercised across provider shapes.
+func newOpenAICacheServer(t *testing.T, usage map[string]any) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"model": "gpt-test",
+			"choices": []map[string]any{{
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "cached",
+				},
+			}},
+			"usage": usage,
+		}
+		writeOpenAIJSON(t, w, resp)
+	}))
+}
+
+func openAIUsageResponse(t *testing.T, usage map[string]any) spec.AIResponse {
+	t.Helper()
+	srv := newOpenAICacheServer(t, usage)
+	defer srv.Close()
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "gpt-test",
+	}, srv.Client())
+	resp, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+	return resp
+}
+
+// TestOpenAIUsage_ParsesPromptCacheReads verifies the OpenAI shape
+// (usage.prompt_tokens_details.cached_tokens) populates UsageDetails.CachedTokens.
+func TestOpenAIUsage_ParsesPromptCacheReads(t *testing.T) {
+	t.Parallel()
+	resp := openAIUsageResponse(t, map[string]any{
+		"total_tokens": 100,
+		"prompt_tokens_details": map[string]any{
+			"cached_tokens": 42,
+		},
+	})
+	if resp.TokenUsage != 100 {
+		t.Errorf("TokenUsage = %d, want 100", resp.TokenUsage)
+	}
+	if resp.UsageDetails.CachedTokens != 42 {
+		t.Errorf("CachedTokens = %d, want 42", resp.UsageDetails.CachedTokens)
+	}
+	if resp.UsageDetails.CacheWriteTokens != 0 {
+		t.Errorf("CacheWriteTokens = %d, want 0 (OpenAI exposes no writes)", resp.UsageDetails.CacheWriteTokens)
+	}
+}
+
+// TestOpenAIUsage_ParsesDeepSeekCacheFields verifies the DeepSeek
+// OpenAI-compatible shape (prompt_cache_hit_tokens / prompt_cache_miss_tokens)
+// maps reads to CachedTokens and misses (writes) to CacheWriteTokens.
+func TestOpenAIUsage_ParsesDeepSeekCacheFields(t *testing.T) {
+	t.Parallel()
+	resp := openAIUsageResponse(t, map[string]any{
+		"total_tokens": 50,
+		"prompt_cache_hit_tokens": 30,
+		"prompt_cache_miss_tokens": 20,
+	})
+	if resp.UsageDetails.CachedTokens != 30 {
+		t.Errorf("CachedTokens = %d, want 30 (prompt_cache_hit_tokens)", resp.UsageDetails.CachedTokens)
+	}
+	if resp.UsageDetails.CacheWriteTokens != 20 {
+		t.Errorf("CacheWriteTokens = %d, want 20 (prompt_cache_miss_tokens)", resp.UsageDetails.CacheWriteTokens)
+	}
+}
+
+// TestOpenAIUsage_ToleratesAbsentCacheFields verifies that providers which omit
+// cache fields (the common case) leave UsageDetails at zero without error.
+func TestOpenAIUsage_ToleratesAbsentCacheFields(t *testing.T) {
+	t.Parallel()
+	resp := openAIUsageResponse(t, map[string]any{
+		"total_tokens": 7,
+	})
+	if resp.TokenUsage != 7 {
+		t.Errorf("TokenUsage = %d, want 7", resp.TokenUsage)
+	}
+	if resp.UsageDetails.CachedTokens != 0 || resp.UsageDetails.CacheWriteTokens != 0 {
+		t.Errorf("UsageDetails = %+v, want zero (no cache fields reported)", resp.UsageDetails)
+	}
+}
+
+// TestOpenAIUsage_DeepSeekHitBeatsOpenAICachedWhenLarger verifies that when both
+// OpenAI and DeepSeek shapes are present, the larger cache-read count wins.
+func TestOpenAIUsage_DeepSeekHitBeatsOpenAICachedWhenLarger(t *testing.T) {
+	t.Parallel()
+	resp := openAIUsageResponse(t, map[string]any{
+		"total_tokens": 100,
+		"prompt_tokens_details": map[string]any{
+			"cached_tokens": 10,
+		},
+		"prompt_cache_hit_tokens": 25,
+		"prompt_cache_miss_tokens": 5,
+	})
+	if resp.UsageDetails.CachedTokens != 25 {
+		t.Errorf("CachedTokens = %d, want 25 (max of 10 and 25)", resp.UsageDetails.CachedTokens)
+	}
+	if resp.UsageDetails.CacheWriteTokens != 5 {
+		t.Errorf("CacheWriteTokens = %d, want 5", resp.UsageDetails.CacheWriteTokens)
 	}
 }

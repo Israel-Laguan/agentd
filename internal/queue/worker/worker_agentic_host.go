@@ -42,8 +42,8 @@ func (w *Worker) HandleGatewayError(ctx context.Context, task models.Task, err e
 }
 
 // RecordTaskTokenUsage is the public Host interface method.
-func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int) {
-	w.recordTaskTokenUsage(ctx, task, tokens)
+func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details gateway.UsageDetails) {
+	w.recordTaskTokenUsage(ctx, task, tokens, details)
 }
 
 // CommitTextWithProfile is the public Host interface method.

@@ -84,9 +84,23 @@ type Event struct {
 }
 
 // TokenUsageEvent is a timestamped per-call token count used to rebuild rolling budgets.
+// CachedTokens / CacheWriteTokens are prompt-cache observability fields that ride
+// along the TOKEN_USAGE event payload; they are not consumed by the rolling budget.
 type TokenUsageEvent struct {
-	At     time.Time
-	Tokens int
+	At               time.Time
+	Tokens           int
+	CachedTokens     int
+	CacheWriteTokens int
+}
+
+// TokenUsagePayload is the JSON shape stored in TOKEN_USAGE event payloads. It is
+// the single source of truth for both emission (worker) and parsing (kanban). Cache
+// fields are omitempty so legacy payloads ({"tokens":N}) and bare integers still
+// parse, and zero-cache calls still serialize to {"tokens":N}.
+type TokenUsagePayload struct {
+	Tokens           int `json:"tokens"`
+	CachedTokens     int `json:"cached_tokens,omitempty"`
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
 }
 
 // AgentProfile configures a concrete model/provider pair.

@@ -79,7 +79,7 @@ func (w *Worker) routeLegacyProfile(ctx context.Context, task models.Task, proje
 	return w.applyModelRouting(task, profile, messages, nil)
 }
 
-func (w *Worker) command(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (workerResponse, int, error) {
+func (w *Worker) command(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (workerResponse, int, gateway.UsageDetails, error) {
 	messages := w.seedMessages(ctx, task, project, profile)
 	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
 	req := gateway.AIRequest{
@@ -95,11 +95,11 @@ func (w *Worker) command(ctx context.Context, task models.Task, project models.P
 	}
 	// Legacy JSON command mode does not execute tool calls; do not advertise tools here.
 	req = w.applyTuning(req, task, profile, 0)
-	resp, tokenUsage, err := gateway.GenerateJSONWithUsage[workerResponse](ctx, w.gateway, req)
+	resp, tokenUsage, details, err := gateway.GenerateJSONWithUsage[workerResponse](ctx, w.gateway, req)
 	if err != nil {
-		return workerResponse{}, tokenUsage, err
+		return workerResponse{}, tokenUsage, details, err
 	}
-	return resp, tokenUsage, nil
+	return resp, tokenUsage, details, nil
 }
 
 func tuningAttempt(task models.Task, sessionRecoveryGen int) int {

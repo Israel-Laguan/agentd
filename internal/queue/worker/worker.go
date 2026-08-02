@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -98,11 +99,18 @@ type MemoryRetriever interface {
 // It is implemented by the kanban store and injected via WorkerOptions.TokenStore.
 type TokenUsageStore interface {
 	AddTokenUsage(ctx context.Context, taskID string, tokens int) error
+	// AddUsageDetails is an additive seam for prompt-cache usage details
+	// (cached_tokens / cache_write_tokens). Implementations may no-op when
+	// cache-token persistence is deferred; the TOKEN_USAGE event payload is
+	// the primary observability surface.
+	AddUsageDetails(ctx context.Context, taskID string, details spec.UsageDetails) error
 }
 
 // recordTaskTokenUsage feeds the optional rolling ledger hook, persists usage to
 // the task row, and emits a TOKEN_USAGE audit event when a sink is wired.
-func (w *Worker) recordTaskTokenUsage(ctx context.Context, task models.Task, tokens int) {
+// Cache usage details ride along the event payload and the additive
+// TokenUsageStore.AddUsageDetails seam.
+func (w *Worker) recordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails) {
 	if tokens <= 0 {
 		return
 	}
@@ -113,8 +121,23 @@ func (w *Worker) recordTaskTokenUsage(ctx context.Context, task models.Task, tok
 		if err := w.tokenStore.AddTokenUsage(ctx, task.ID, tokens); err != nil {
 			slog.Error("failed to persist token usage", "task_id", task.ID, "tokens", tokens, "err", err)
 		}
+		if err := w.tokenStore.AddUsageDetails(ctx, task.ID, details); err != nil {
+			slog.Error("failed to persist usage details", "task_id", task.ID, "err", err)
+		}
 	}
-	w.emit(ctx, task, string(models.EventTypeTokenUsage), fmt.Sprintf(`{"tokens":%d}`, tokens))
+	slog.Debug("recorded token usage",
+		"task_id", task.ID, "tokens", tokens,
+		"cached_tokens", details.CachedTokens, "cache_write_tokens", details.CacheWriteTokens)
+	payload, err := json.Marshal(models.TokenUsagePayload{
+		Tokens:           tokens,
+		CachedTokens:     details.CachedTokens,
+		CacheWriteTokens: details.CacheWriteTokens,
+	})
+	if err != nil {
+		slog.Error("failed to marshal token usage payload", "task_id", task.ID, "err", err)
+		return
+	}
+	w.emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
 }
 
 // PluginMounter loads and mounts plugins from a directory into a

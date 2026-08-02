@@ -57,23 +57,73 @@ func TestListTokenUsageEventsSince(t *testing.T) {
 func TestParseTokenUsagePayload(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		payload string
-		wantN   int
-		wantOk  bool
+		payload    string
+		wantN      int
+		wantCached int
+		wantWrite  int
+		wantOk     bool
 	}{
-		{`{"tokens":7}`, 7, true},
-		{`7`, 7, true},
-		{`  7  `, 7, true},
-		{`7junk`, 0, false},
-		{`junk`, 0, false},
-		{`0`, 0, false},
-		{`-3`, 0, false},
+		{`{"tokens":7}`, 7, 0, 0, true},
+		{`{"tokens":7,"cached_tokens":3,"cache_write_tokens":2}`, 7, 3, 2, true},
+		{`7`, 7, 0, 0, true},
+		{`  7  `, 7, 0, 0, true},
+		{`7junk`, 0, 0, 0, false},
+		{`junk`, 0, 0, 0, false},
+		{`0`, 0, 0, 0, false},
+		{`-3`, 0, 0, 0, false},
 	}
 	for _, tc := range cases {
-		n, ok := parseTokenUsagePayload(tc.payload)
-		if ok != tc.wantOk || n != tc.wantN {
-			t.Errorf("parseTokenUsagePayload(%q) = (%d, %v), want (%d, %v)",
-				tc.payload, n, ok, tc.wantN, tc.wantOk)
+		p, ok := parseTokenUsagePayload(tc.payload)
+		if ok != tc.wantOk || p.Tokens != tc.wantN || p.CachedTokens != tc.wantCached || p.CacheWriteTokens != tc.wantWrite {
+			t.Errorf("parseTokenUsagePayload(%q) = (%+v, %v), want tokens=%d cached=%d write=%d ok=%v",
+				tc.payload, p, ok, tc.wantN, tc.wantCached, tc.wantWrite, tc.wantOk)
 		}
+	}
+}
+
+// TestListTokenUsageEventsSince_CacheFields verifies that prompt-cache fields
+// stored in TOKEN_USAGE event payloads are surfaced through the parsed events
+// (M15: cache observability).
+func TestListTokenUsageEventsSince_CacheFields(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "token-events-cache",
+		Tasks:       []models.DraftTask{{Title: "a", Description: "one"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	task := tasks[0]
+	now := utcNow()
+	appendEvent := func(ts time.Time, payload, label string) {
+		t.Helper()
+		if err := store.AppendEvent(ctx, models.Event{
+			BaseEntity: models.BaseEntity{CreatedAt: ts, UpdatedAt: ts},
+			ProjectID:  task.ProjectID,
+			TaskID:     sql.NullString{String: task.ID, Valid: true},
+			Type:       models.EventTypeTokenUsage,
+			Payload:    payload,
+		}); err != nil {
+			t.Fatalf("append %s: %v", label, err)
+		}
+	}
+	appendEvent(now, `{"tokens":42,"cached_tokens":30,"cache_write_tokens":12}`, "openai cached")
+	appendEvent(now.Add(time.Minute), `{"tokens":8,"cached_tokens":5,"cache_write_tokens":3}`, "deepseek cached")
+
+	events, err := store.ListTokenUsageEventsSince(ctx, now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("ListTokenUsageEventsSince: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("events = %+v, want two entries", events)
+	}
+	if events[0].Tokens != 42 || events[0].CachedTokens != 30 || events[0].CacheWriteTokens != 12 {
+		t.Errorf("events[0] = %+v, want tokens=42 cached=30 write=12", events[0])
+	}
+	if events[1].Tokens != 8 || events[1].CachedTokens != 5 || events[1].CacheWriteTokens != 3 {
+		t.Errorf("events[1] = %+v, want tokens=8 cached=5 write=3", events[1])
 	}
 }

@@ -35,6 +35,7 @@ type (
 	ToolCall           = spec.ToolCall
 	ToolCallFunction   = spec.ToolCallFunction
 	FunctionParameters = spec.FunctionParameters
+	UsageDetails       = spec.UsageDetails
 	EmbedRequest       = spec.EmbedRequest
 	EmbedResponse      = spec.EmbedResponse
 )
@@ -131,8 +132,9 @@ func GenerateJSON[T any](ctx context.Context, gw AIGateway, req AIRequest) (T, e
 	return correction.GenerateJSON[T](ctx, gw, req)
 }
 
-// GenerateJSONWithUsage re-exports generic JSON repair with cumulative token usage.
-func GenerateJSONWithUsage[T any](ctx context.Context, gw AIGateway, req AIRequest) (T, int, error) {
+// GenerateJSONWithUsage re-exports generic JSON repair with cumulative token
+// usage (total tokens + cumulative prompt-cache usage details) across retries.
+func GenerateJSONWithUsage[T any](ctx context.Context, gw AIGateway, req AIRequest) (T, int, UsageDetails, error) {
 	return correction.GenerateJSONWithUsage[T](ctx, gw, req)
 }
 
