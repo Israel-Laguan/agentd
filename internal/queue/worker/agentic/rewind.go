@@ -25,6 +25,10 @@ var (
 	errTopicDriftReset  = agentruntime.ErrTopicDriftReset
 )
 
+// resetAgenticStateForRewind clears iteration/tool/goal/budget state ahead of a
+// topic-drift or manual rewind. Rewind rebuilds the prompt prefix from scratch,
+// which is a deliberate cache-breaking event: the history tail is discarded and
+// the new seed message bytes may differ.
 func resetAgenticStateForRewind(in agenticTurnLoopInput) {
 	if in.toolTracker != nil {
 		in.toolTracker.Reset()

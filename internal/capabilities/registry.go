@@ -84,6 +84,10 @@ func (r *Registry) GetToolsAndAdapterIndex(ctx context.Context) ([]gateway.ToolD
 		allTools = append(allTools, tools...)
 	}
 
+	// Canonical tool order by name so the serialized tools block is byte-stable
+	// across runs and provider prompt-cache prefix reuse is maximized.
+	gateway.SortTools(allTools)
+
 	return allTools, toolToAdapter, nil
 }
 

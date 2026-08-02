@@ -96,7 +96,9 @@ func (w *Worker) agenticToolsWithExtras(
 	for k, v := range extraIndex {
 		adapterIndex[k] = v
 	}
-	return append(tools, extraTools...), adapterIndex
+	tools = append(tools, extraTools...)
+	gateway.SortTools(tools)
+	return tools, adapterIndex
 }
 
 // dispatchToolWithHooks wraps dispatchToolWithProject and additionally
@@ -248,12 +250,16 @@ func (w *Worker) agenticTools(ctx context.Context, toolExecutor *agenttools.Tool
 	tools := append([]gateway.ToolDefinition(nil), toolExecutor.Definitions()...)
 	tools = append(tools, agentsubagent.DelegateToolDefinition(), agentsubagent.DelegateParallelToolDefinition())
 	if w.capabilities == nil {
+		gateway.SortTools(tools)
 		return tools, nil
 	}
 	capabilityTools, toolToAdapter, err := w.capabilities.GetToolsAndAdapterIndex(ctx)
 	if err != nil {
 		slog.Warn("failed to get capability tools", "error", err)
+		gateway.SortTools(tools)
 		return tools, nil
 	}
-	return append(tools, capabilityTools...), toolToAdapter
+	tools = append(tools, capabilityTools...)
+	gateway.SortTools(tools)
+	return tools, toolToAdapter
 }
