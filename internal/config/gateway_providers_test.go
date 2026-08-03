@@ -463,3 +463,53 @@ func TestLoadGatewayProviders_OptionsMapPassedThrough(t *testing.T) {
 		t.Fatalf(`Options["poll_interval"] = %v, want "5s"`, pi)
 	}
 }
+
+func TestLoadGatewayProviderConfigs_LlamaCppFlatSlotCapabilitiesAndOptions(t *testing.T) {
+	v := viper.New()
+	v.SetConfigType("yaml")
+	yaml := `gateway:
+  llamacpp:
+    base_url: http://127.0.0.1:8080
+    model: tool-model
+    capabilities:
+      chat_tools: true
+    options:
+      probe_tools: true
+`
+	if err := v.ReadConfig(strings.NewReader(yaml)); err != nil {
+		t.Fatalf("viper read config: %v", err)
+	}
+	_, _, _, llamaCpp, _, _ := loadGatewayProviderConfigs(v, nil, nil)
+
+	if llamaCpp.BaseURL != "http://127.0.0.1:8080" {
+		t.Errorf("BaseURL = %q", llamaCpp.BaseURL)
+	}
+	if llamaCpp.Model != "tool-model" {
+		t.Errorf("Model = %q", llamaCpp.Model)
+	}
+	if llamaCpp.Capabilities.ChatTools == nil || *llamaCpp.Capabilities.ChatTools != true {
+		t.Errorf("Capabilities.ChatTools = %v, want true", llamaCpp.Capabilities.ChatTools)
+	}
+	if llamaCpp.Options == nil {
+		t.Fatal("Options is nil")
+	}
+	probe, ok := llamaCpp.Options["probe_tools"]
+	if !ok {
+		t.Fatal(`Options["probe_tools"] not set`)
+	}
+	if probe != true {
+		t.Fatalf(`Options["probe_tools"] = %v, want true`, probe)
+	}
+}
+
+func TestLoadGatewayProviderConfigs_LlamaCppFlatSlotDefaults(t *testing.T) {
+	v := viper.New()
+	_, _, _, llamaCpp, _, _ := loadGatewayProviderConfigs(v, nil, nil)
+
+	if llamaCpp.Capabilities.ChatTools != nil {
+		t.Errorf("default Capabilities.ChatTools = %v, want nil", llamaCpp.Capabilities.ChatTools)
+	}
+	if llamaCpp.Options != nil {
+		t.Errorf("default Options = %v, want nil", llamaCpp.Options)
+	}
+}

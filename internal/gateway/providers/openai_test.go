@@ -260,8 +260,8 @@ func TestOpenAIUsage_ParsesPromptCacheReads(t *testing.T) {
 func TestOpenAIUsage_ParsesDeepSeekCacheFields(t *testing.T) {
 	t.Parallel()
 	resp := openAIUsageResponse(t, map[string]any{
-		"total_tokens": 50,
-		"prompt_cache_hit_tokens": 30,
+		"total_tokens":             50,
+		"prompt_cache_hit_tokens":  30,
 		"prompt_cache_miss_tokens": 20,
 	})
 	if resp.UsageDetails.CachedTokens != 30 {
@@ -296,7 +296,7 @@ func TestOpenAIUsage_DeepSeekHitBeatsOpenAICachedWhenLarger(t *testing.T) {
 		"prompt_tokens_details": map[string]any{
 			"cached_tokens": 10,
 		},
-		"prompt_cache_hit_tokens": 25,
+		"prompt_cache_hit_tokens":  25,
 		"prompt_cache_miss_tokens": 5,
 	})
 	if resp.UsageDetails.CachedTokens != 25 {
@@ -304,5 +304,128 @@ func TestOpenAIUsage_DeepSeekHitBeatsOpenAICachedWhenLarger(t *testing.T) {
 	}
 	if resp.UsageDetails.CacheWriteTokens != 5 {
 		t.Errorf("CacheWriteTokens = %d, want 5", resp.UsageDetails.CacheWriteTokens)
+	}
+}
+
+// TestOpenAI_SendTaskMetadata_Enabled verifies that when options.send_task_metadata
+// is true and the request carries TaskID/AgentID/Role, those fields appear in the
+// request body under metadata.
+func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		writeOpenAIJSON(t, w, openAIResponseBody("ok", "wire-test"))
+	}))
+	defer srv.Close()
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "wire-test",
+		Options: map[string]any{"send_task_metadata": true},
+	}, srv.Client())
+	_, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		TaskID:   "task-1",
+		AgentID:  "agent-2",
+		Role:     spec.RoleWorker,
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+	meta, ok := gotBody["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata = %v, want map", gotBody["metadata"])
+	}
+	if meta["task_id"] != "task-1" {
+		t.Errorf("metadata.task_id = %v, want task-1", meta["task_id"])
+	}
+	if meta["agent_id"] != "agent-2" {
+		t.Errorf("metadata.agent_id = %v, want agent-2", meta["agent_id"])
+	}
+	if meta["role"] != "worker" {
+		t.Errorf("metadata.role = %v, want worker", meta["role"])
+	}
+}
+
+// TestOpenAI_SendTaskMetadata_Disabled verifies that metadata is absent when
+// options.send_task_metadata is false (or missing) even if the request carries
+// TaskID/AgentID/Role.
+func TestOpenAI_SendTaskMetadata_Disabled(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		writeOpenAIJSON(t, w, openAIResponseBody("ok", "wire-test"))
+	}))
+	defer srv.Close()
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "wire-test",
+		Options: map[string]any{"send_task_metadata": false},
+	}, srv.Client())
+	_, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		TaskID:   "task-1",
+		AgentID:  "agent-2",
+		Role:     spec.RoleWorker,
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+	if _, has := gotBody["metadata"]; has {
+		t.Errorf("metadata present when option disabled; body = %#v", gotBody)
+	}
+}
+
+// TestOpenAI_SendTaskMetadata_NoTaskID verifies that metadata is absent when the
+// option is enabled but the request carries neither TaskID nor AgentID.
+func TestOpenAI_SendTaskMetadata_NoTaskID(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		writeOpenAIJSON(t, w, openAIResponseBody("ok", "wire-test"))
+	}))
+	defer srv.Close()
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "wire-test",
+		Options: map[string]any{"send_task_metadata": true},
+	}, srv.Client())
+	_, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+	if _, has := gotBody["metadata"]; has {
+		t.Errorf("metadata present when no task/agent id; body = %#v", gotBody)
+	}
+}
+
+// TestOpenAI_SendTaskMetadata_StringValue verifies that the option accepts a
+// YAML-decoded string value (e.g. "true").
+func TestOpenAI_SendTaskMetadata_StringValue(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		writeOpenAIJSON(t, w, openAIResponseBody("ok", "wire-test"))
+	}))
+	defer srv.Close()
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "wire-test",
+		Options: map[string]any{"send_task_metadata": "true"},
+	}, srv.Client())
+	_, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		TaskID:   "t1",
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+	if _, has := gotBody["metadata"]; !has {
+		t.Errorf("metadata missing when option is string \"true\"")
 	}
 }

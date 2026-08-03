@@ -1,0 +1,12 @@
+# lychee link-checker configuration.
+# We only validate *internal* links (local file references resolve) so the check
+# is fast, deterministic, and needs no network. External http(s)/mailto targets
+# are excluded to avoid flaky network checks in CI.
+exclude = [
+  "^https?://",
+  "^mailto:",
+  "^//"
+]
+
+# Don't spam progress bars in logs.
+no_progress = true

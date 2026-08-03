@@ -127,6 +127,14 @@ func ProviderSupportsChatTools(gw AIGateway, provider string) bool {
 	return false
 }
 
+// RunToolProbes invokes runtime tool-support probes on the underlying router,
+// if it implements them. Non-fatal: each probe swallows its own errors.
+func RunToolProbes(ctx context.Context, gw AIGateway) {
+	if r, ok := gw.(*routing.Router); ok {
+		r.RunToolProbes(ctx)
+	}
+}
+
 // GenerateJSON re-exports generic JSON repair.
 func GenerateJSON[T any](ctx context.Context, gw AIGateway, req AIRequest) (T, error) {
 	return correction.GenerateJSON[T](ctx, gw, req)

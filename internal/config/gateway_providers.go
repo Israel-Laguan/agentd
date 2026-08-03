@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 )
 
 func apiKeyFromConfigOrEnv(v *viper.Viper, process, dotenv map[string]string, configKey, envVar string) string {
@@ -44,6 +45,8 @@ func loadGatewayProviderConfigs(v *viper.Viper, process, dotenv map[string]strin
 			Model:         v.GetString("gateway.llamacpp.model"),
 			MaxInputChars: v.GetInt("gateway.llamacpp.max_input_chars"),
 			Timeout:       durationOrDefault(v.GetDuration("gateway.llamacpp.timeout"), 5*time.Minute),
+			Capabilities:  loadLlamaCppCapabilities(v),
+			Options:       loadLlamaCppOptions(v),
 		}, gateway.ProviderConfig{
 			Adapter: "horde", BaseURL: v.GetString("gateway.horde.base_url"),
 			APIKey: v.GetString("gateway.horde.api_key"), Model: v.GetString("gateway.horde.model"),
@@ -204,4 +207,19 @@ func (c GatewayConfig) gatewayProvidersByName() (map[string]gateway.ProviderConf
 		registerBuiltInGatewayProvider(byName, legacy.name, legacy.cfg)
 	}
 	return byName, nil
+}
+
+func loadLlamaCppCapabilities(v *viper.Viper) spec.ProviderCapabilities {
+	var caps spec.ProviderCapabilities
+	if err := v.UnmarshalKey("gateway.llamacpp.capabilities", &caps); err != nil {
+		slog.Warn("invalid gateway.llamacpp.capabilities", "err", err)
+	}
+	return caps
+}
+
+func loadLlamaCppOptions(v *viper.Viper) map[string]any {
+	if !v.IsSet("gateway.llamacpp.options") {
+		return nil
+	}
+	return v.GetStringMap("gateway.llamacpp.options")
 }

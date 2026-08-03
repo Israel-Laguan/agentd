@@ -33,15 +33,20 @@ If you only have a Gemini API key:
 1. Add `GEMINI_API_KEY=<key>` to `.env` (copy `.env.example`).
 2. Set `gateway.order: [gemini]` in `~/.agentd/config.yaml` (or export `AGENTD_GATEWAY_ORDER=gemini`).
 3. Run `agentd init` to seed the default agent profiles (empty `provider` / `model` → `gateway.order` cascade):
+
    ```sh
    agentd init
    ```
+
 4. Start with `--skip-llm-warmup` to avoid a billable startup probe on the free tier:
+
    ```sh
    agentd start --skip-llm-warmup
    ```
+
    With only `gemini` in `gateway.order`, seeded profiles already route to Gemini without further setup.
 5. (Optional) Pin explicit provider/model on each profile via the agent API:
+
    ```sh
    # list profile IDs
    curl http://127.0.0.1:8765/api/v1/agents
@@ -50,6 +55,7 @@ If you only have a Gemini API key:
      -H 'Content-Type: application/json' \
      -d '{"provider":"gemini","model":"gemini-2.5-flash"}'
    ```
+
 6. For dev/smoke testing, set `healing.enabled: false` and `healing.outage_handoff_enabled: false` to suppress self-healing handoffs and `_system` outage tasks. Status defaults omit healing noise: `curl -s 'http://127.0.0.1:8765/api/v1/system/status'`.
 7. Materialize creates an empty project workspace. Seed it before workers run: pass `source_path` on `POST /api/v1/projects/materialize`, or rsync into `~/.agentd/projects/<id>/` then call `POST /api/v1/projects/<id>/workspace/ready`. See [`docs/workspace-seeding.md`](docs/workspace-seeding.md).
 
