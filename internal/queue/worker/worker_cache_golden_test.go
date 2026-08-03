@@ -72,7 +72,7 @@ func buildTestWorker(t *testing.T) *Worker {
 	return w
 }
 
-func buildScopedCapabilities() capabilities.Registry {
+func buildScopedCapabilities() *capabilities.Registry {
 	scoped := capabilities.NewRegistry()
 	scoped.Register("scoped-adapter", &fakeCapabilityAdapter{
 		tools: []gateway.ToolDefinition{{Name: "scoped_three", Description: "sc"}},
@@ -80,7 +80,7 @@ func buildScopedCapabilities() capabilities.Registry {
 	return scoped
 }
 
-func executeRequest(t *testing.T, w *Worker, executor *agenttools.ToolExecutor, scoped capabilities.Registry, task models.Task, project models.Project, profile models.AgentProfile) ([]byte, []byte) {
+func executeRequest(t *testing.T, w *Worker, executor *agenttools.ToolExecutor, scoped *capabilities.Registry, task models.Task, project models.Project, profile models.AgentProfile) ([]byte, []byte) {
 	t.Helper()
 	messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
 	tools, _ := w.agenticToolsWithExtras(context.Background(), executor, scoped)
