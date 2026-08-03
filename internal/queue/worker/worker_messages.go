@@ -29,7 +29,7 @@ func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, project
 	}
 	recalled := w.retriever.Recall(ctx, intent, projectID, "")
 	if lessons := memoryFormatLessons(recalled); lessons != "" {
-		return append(messages, gateway.PromptMessage{Role: "system", Content: lessons})
+		return append([]gateway.PromptMessage{{Role: "system", Content: lessons}}, messages...)
 	}
 	return messages
 }
@@ -202,7 +202,7 @@ func (w *Worker) buildPromptMessages(task models.Task, project models.Project, p
 //
 // This replaces the old buildAgenticMessages which modified an existing message
 // list in-place. The new implementation builds messages from scratch via
-// SystemPromptBuilder, appends memory lessons, and appends a user message.
+// SystemPromptBuilder, appends a user message, then appends memory lessons.
 // The legacy seedMessages path is still used by the non-agentic
 // command() path in worker_legacy.go.
 func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {

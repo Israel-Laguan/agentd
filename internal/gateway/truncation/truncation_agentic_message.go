@@ -17,9 +17,17 @@ func (t *AgenticTruncator) applyBudgetTruncation(messages []spec.PromptMessage, 
 func (t *AgenticTruncator) applyMessageCountTruncation(messages []spec.PromptMessage) []spec.PromptMessage {
 	exchanges := findToolExchanges(messages)
 	out := make([]spec.PromptMessage, 0, t.MaxMessages)
-	out = append(out, messages[0]) // Keep system prompt
+	out = append(out, messages[0]) // Keep first system prompt
 
 	firstUserIdx := t.findFirstUserIndex(messages)
+	// Preserve all leading system messages before the first user so
+	// memory-lesson anchors are not dropped by message-count truncation.
+	for i := 1; firstUserIdx > 0 && i < firstUserIdx; i++ {
+		if messages[i].Role == "system" && len(out) < t.MaxMessages {
+			out = append(out, messages[i])
+		}
+	}
+
 	// Only append first user anchor if we haven't exceeded MaxMessages
 	if firstUserIdx > 0 && len(out) < t.MaxMessages {
 		out = append(out, messages[firstUserIdx])

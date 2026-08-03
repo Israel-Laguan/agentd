@@ -34,8 +34,10 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 			return zero, totalUsage, details, err
 		}
 		totalUsage += resp.TokenUsage
-		details.CachedTokens += resp.UsageDetails.CachedTokens
-		details.CacheWriteTokens += resp.UsageDetails.CacheWriteTokens
+		if resp.UsageDetails != nil {
+			details.CachedTokens += resp.UsageDetails.CachedTokens
+			details.CacheWriteTokens += resp.UsageDetails.CacheWriteTokens
+		}
 		lastRaw = resp.Content
 		var out T
 		if err := json.Unmarshal([]byte(resp.Content), &out); err != nil {

@@ -6,9 +6,16 @@ instead of — the built-in `openai` slot. This is the **direct path** for any s
 or local server.
 
 For the **managed path** (a single proxy fanning out to many providers, with key management,
-virtual keys, and provider wire-format translation handled for you), use a local
-[LiteLLM](https://docs.litellm.ai/) / Portkey / OpenRouter server and point an `adapter: openai`
-entry at it — see [`docs/llm-connector-strategy.md`](llm-connector-strategy.md) and
+virtual keys, and provider wire-format translation handled for you), use:
+
+- **[OpenRouter](https://openrouter.ai)** — managed multi-provider gateway at `https://openrouter.ai/api/v1`
+  with bearer auth (`OPENROUTER_API_KEY`). Point an `adapter: openai` entry at that base URL.
+- **[Portkey](https://portkey.ai)** — managed gateway with virtual keys and observability; configure
+  the `PORTKEY_API_KEY` and base URL per Portkey's docs.
+- **Local LiteLLM proxy** — run LiteLLM on `http://127.0.0.1:4000/v1` with the proxy master key
+  (keep the master key out of agentd; use a scoped virtual key in `LITELLM_API_KEY`).
+
+See [`docs/llm-connector-strategy.md`](llm-connector-strategy.md) and
 [LiteLLM (managed proxy)](#litellm-managed-proxy) below.
 
 For local OpenAI-compatible servers (llama.cpp, LM Studio, vLLM), see
@@ -147,11 +154,15 @@ are documented in [`docs/llm-connector-strategy.md`](llm-connector-strategy.md).
   its own iteration cap (see `queue.max_tool_iterations`). To avoid a provider error
   being retried both by LiteLLM *and* by agentd's cascade (double-latency/quota
   burn), set LiteLLM's per-route retry count low:
-  - In `litellm_config.yaml`, set `num_retries: 0` on the router, or `num_retries: 1`
-    only when the route points at a single upstream you want a single internal retry
-    for before agentd's cascade handles cross-provider fallback.
-  - Keep agentd-side timeouts (`gateway.*.timeout`) bounded so a stuck LiteLLM route
-    yields to the next provider rather than hanging the task.
+  - In `litellm_config.yaml`, place `num_retries` under `router_settings`:
+    ```yaml
+    router_settings:
+      num_retries: 0
+    ```
+    or `num_retries: 1` only when the route points at a single upstream you want a
+    single internal retry before agentd's cascade handles cross-provider fallback.
+  - Keep agentd-side timeouts (`gateway.providers[*].timeout`) bounded so a stuck
+    LiteLLM route yields to the next provider rather than hanging the task.
 
 ## Tool Calling
 

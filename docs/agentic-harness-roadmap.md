@@ -42,9 +42,9 @@ see the end of this document.
 
 | Task | Topic | Status |
 | --- | --- | --- |
-| [13-llm-connector-strategy.md](../tasks/13-llm-connector-strategy.md) | Docs-only: two-topology model, keep/delegate table, non-goals, cache discipline, LiteLLM recipe, provider-claim corrections, roadmap bookkeeping. | Planned |
-| [14-cache-hygiene-stable-prefix.md](../tasks/14-cache-hygiene-stable-prefix.md) | Cache hygiene: stable prefix (memory-lesson ordering, deterministic tool lists) + byte-stability golden test. | Planned |
-| [15-cache-observability-usage-details.md](../tasks/15-cache-observability-usage-details.md) | Surface prompt-cache `cached_tokens` / DeepSeek cache fields via `AIResponse` usage details + TOKEN_USAGE events. | Planned |
+| [13-llm-connector-strategy.md](../tasks/13-llm-connector-strategy.md) | Docs-only: two-topology model, keep/delegate table, non-goals, cache discipline, LiteLLM recipe, provider-claim corrections, roadmap bookkeeping. | Completed |
+| [14-cache-hygiene-stable-prefix.md](../tasks/14-cache-hygiene-stable-prefix.md) | Cache hygiene: stable prefix (memory-lesson ordering, deterministic tool lists) + byte-stability golden test. | Completed |
+| [15-cache-observability-usage-details.md](../tasks/15-cache-observability-usage-details.md) | Surface prompt-cache `cached_tokens` / DeepSeek cache fields via `AIResponse` usage details + TOKEN_USAGE events. | Completed |
 | [16-wire-contract-and-smoke-script.md](../tasks/16-wire-contract-and-smoke-script.md) | Openai-adapter wire-contract test suite + `scripts/llm-smoke.sh` conformance probe. | Planned |
 | [17-llamacpp-agentic-recipe.md](../tasks/17-llamacpp-agentic-recipe.md) | (Optional) llama.cpp agentic recipe + optional capability probe. | Planned - optional |
 | [18-litellm-correlation-metadata.md](../tasks/18-litellm-correlation-metadata.md) | (Optional) LiteLLM task-correlation metadata + startup topology log. | Planned - optional |

@@ -71,6 +71,10 @@ func TestParseTokenUsagePayload(t *testing.T) {
 		{`junk`, 0, 0, 0, false},
 		{`0`, 0, 0, 0, false},
 		{`-3`, 0, 0, 0, false},
+		// Negative cache counters must be rejected.
+		{`{"tokens":7,"cached_tokens":-1,"cache_write_tokens":2}`, 0, 0, 0, false},
+		{`{"tokens":7,"cached_tokens":3,"cache_write_tokens":-1}`, 0, 0, 0, false},
+		{`{"tokens":7,"cached_tokens":-5,"cache_write_tokens":-2}`, 0, 0, 0, false},
 	}
 	for _, tc := range cases {
 		p, ok := parseTokenUsagePayload(tc.payload)

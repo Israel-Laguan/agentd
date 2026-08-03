@@ -123,7 +123,7 @@ type AIResponse struct {
 	ProviderUsed string       `json:"provider_used"`
 	ModelUsed    string       `json:"model_used"`
 	ToolCalls    []ToolCall   `json:"tool_calls,omitempty"`
-	UsageDetails UsageDetails `json:"usage_details,omitempty"`
+	UsageDetails *UsageDetails `json:"usage_details,omitempty"`
 }
 
 // ProviderCapabilities declares optional backend capabilities for a provider entry.
