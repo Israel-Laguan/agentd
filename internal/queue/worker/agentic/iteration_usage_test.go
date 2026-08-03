@@ -68,7 +68,7 @@ func newUsageTestGuards(t *testing.T, task models.Task, messages *[]gateway.Prom
 		cm,
 		goalTracker,
 		NewSessionManager(task.ID, "do work", nil),
-		&respecAttempts,
+		&respecAttempts
 }
 
 // TestProcessAgenticIteration_ForwardsNonZeroUsageDetails verifies that when the
