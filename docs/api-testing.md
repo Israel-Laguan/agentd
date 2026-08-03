@@ -358,6 +358,8 @@ Server-Sent Events (SSE) stream for real-time updates.
 
 **Note**: Events are only emitted during active daemon processing. When idle, no events are streamed.
 
+For the event-name mapping and the `tool_called` / `tool_result` payload contract, see [SSE events & tool-event payloads](sse-events.md).
+
 ---
 
 ## Error Codes

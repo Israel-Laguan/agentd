@@ -29,12 +29,12 @@ see the end of this document.
 - **Tasks 08, 09, 10, 11: DONE** (tool-call events + SSE server side, provider capabilities +
   fallback, agentic context truncation, agentic loop integration tests).
 - **Task 12 (provider expansion): RE-SCOPED.** Per-provider native tool formats are no longer the
-  growth path — see [Milestone 13](../tasks/13-llm-connector-strategy.md). The recommended approach
+  growth path — see [Milestone 13](llm-connector-strategy.md). The recommended approach
   is the **two-topology connector model**: a hardened OpenAI Chat Completions wire path plus an
   external proxy (LiteLLM / Portkey / OpenRouter) for provider diversity (see
   `docs/llm-connector-strategy.md`, authored in Milestone 13).
-- **Forward work** is tracked as Milestones 13–19 below; each is a self-contained PR-scoped spec in
-  `tasks/`.
+- **Milestones 13–19** are tracked below; each began as a self-contained PR-scoped spec in
+  `tasks/` (completed-work specs are removed as the work ships).
 
 ---
 
@@ -42,13 +42,13 @@ see the end of this document.
 
 | Task | Topic | Status |
 | --- | --- | --- |
-| [13-llm-connector-strategy.md](../tasks/13-llm-connector-strategy.md) | Docs-only: two-topology model, keep/delegate table, non-goals, cache discipline, LiteLLM recipe, provider-claim corrections, roadmap bookkeeping. | Completed |
-| [14-cache-hygiene-stable-prefix.md](../tasks/14-cache-hygiene-stable-prefix.md) | Cache hygiene: stable prefix (memory-lesson ordering, deterministic tool lists) + byte-stability golden test. | Completed |
-| [15-cache-observability-usage-details.md](../tasks/15-cache-observability-usage-details.md) | Surface prompt-cache `cached_tokens` / DeepSeek cache fields via `AIResponse` usage details + TOKEN_USAGE events. | Completed |
-| [16-wire-contract-and-smoke-script.md](../tasks/16-wire-contract-and-smoke-script.md) | Openai-adapter wire-contract test suite + `scripts/llm-smoke.sh` conformance probe. | Planned |
-| [17-llamacpp-agentic-recipe.md](../tasks/17-llamacpp-agentic-recipe.md) | (Optional) llama.cpp agentic recipe + optional capability probe. | Planned - optional |
-| [18-litellm-correlation-metadata.md](../tasks/18-litellm-correlation-metadata.md) | (Optional) LiteLLM task-correlation metadata + startup topology log. | Planned - optional |
-| [19-cockpit-tool-event-rendering.md](../tasks/19-cockpit-tool-event-rendering.md) | Web/independent: render `tool_called` / `tool_result` SSE events in the cockpit. | Planned |
+| 13-llm-connector-strategy | Docs-only: two-topology model, keep/delegate table, non-goals, cache discipline, LiteLLM recipe, provider-claim corrections, roadmap bookkeeping. | Completed (spec removed) |
+| 14-cache-hygiene-stable-prefix | Cache hygiene: stable prefix (memory-lesson ordering, deterministic tool lists) + byte-stability golden test. | Completed (spec removed) |
+| 15-cache-observability-usage-details | Surface prompt-cache `cached_tokens` / DeepSeek cache fields via `AIResponse` usage details + TOKEN_USAGE events. | Completed (spec removed) |
+| 16-wire-contract-and-smoke-script | Openai-adapter wire-contract test suite + `scripts/llm-smoke.sh` conformance probe. | Completed (spec removed) |
+| 17-llamacpp-agentic-recipe | (Optional) llama.cpp agentic recipe + optional capability probe. | Completed (spec removed) |
+| 18-litellm-correlation-metadata | (Optional) LiteLLM task-correlation metadata + startup topology log. | Completed (spec removed) |
+| 19-cockpit-tool-event-rendering | Web/independent: render `tool_called` / `tool_result` SSE events in the cockpit. | Completed (spec removed) |
 
 Suggested execution order: `13 → (14, 16, 19 can run in parallel) → 15 (after 14) → 17/18 (after
 16)`.
@@ -143,11 +143,11 @@ Suggested execution order: `13 → (14, 16, 19 can run in parallel) → 15 (afte
 
 | Task | Topic | Status |
 | --- | --- | --- |
-| 08 | Tool-call events and SSE observability | DONE (server side). `TOOL_CALL`/`TOOL_RESULT` events + scrubbed payloads + SSE mapping (`internal/api/sse/stream.go`). UI rendering tracked as [Milestone 19](../tasks/19-cockpit-tool-event-rendering.md). |
+| 08 | Tool-call events and SSE observability | DONE (server side). `TOOL_CALL`/`TOOL_RESULT` events + scrubbed payloads + SSE mapping (`internal/api/sse/stream.go`). UI rendering is complete — see the [tool-event payload contract](sse-events.md#tool-event-payload-contract) and `web/`. |
 | 09 | Provider capabilities and fallback | DONE. `SupportsChatTools` + `capabilities.chat_tools` + legacy fallback (`internal/gateway/providers/provider.go`). |
 | 10 | Context truncation for tool history | DONE. Agentic tool-pairwise-consistent truncation (`internal/gateway/truncation/truncation_agentic_*`). |
 | 11 | Agentic loop integration tests | DONE. Mock-gateway worker integration tests + godog features (`internal/queue/worker/worker_agentic_*_test.go`, `worker/features/`). |
-| 12 | Provider expansion followups | RE-SCOPED → [Milestone 13](../tasks/13-llm-connector-strategy.md) onward. Native tool formats are superseded by the proxy-based two-topology model. |
+| 12 | Provider expansion followups | RE-SCOPED → [Milestone 13](llm-connector-strategy.md) onward. Native tool formats are superseded by the proxy-based two-topology model. |
 
 ---
 

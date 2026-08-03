@@ -145,7 +145,7 @@ transcripts is planned follow-up work (see the forward milestones in the
 | --- | --- |
 | Per-task messages | Built per invocation; [`PromptMessage`](../internal/gateway/spec/spec.go) includes `role`, `content`, `tool_calls`, and `tool_call_id`. In agentic mode, assistant messages carry `tool_calls` and tool result messages carry `tool_call_id`. |
 | Tool results in the model context | In agentic mode, tool results are appended as `role: tool` messages with `tool_call_id` for the next gateway call. In legacy mode, sandbox stdout/stderr become task result and **events**. Retry context uses `ExecutionPayload.PreviousAttempts`, not full chat history. |
-| Event stream | First-class tool events exist: `TOOL_CALL` and `TOOL_RESULT` are persisted event types carrying scrubbed/truncated payloads, emitted by worker + audit hooks and mapped to SSE `tool_called` / `tool_result` — see [`internal/models/enums.go`](../internal/models/enums.go), [`worker_events.go`](../internal/queue/worker/worker_events.go), and [`internal/api/sse/stream.go`](../internal/api/sse/stream.go). Cockpit rendering is [Milestone 19](../tasks/19-cockpit-tool-event-rendering.md). |
+| Event stream | First-class tool events exist: `TOOL_CALL` and `TOOL_RESULT` are persisted event types carrying scrubbed/truncated payloads, emitted by worker + audit hooks and mapped to SSE `tool_called` / `tool_result` — see [`internal/models/enums.go`](../internal/models/enums.go), [`worker_events.go`](../internal/queue/worker/worker_events.go), and [`internal/api/sse/stream.go`](../internal/api/sse/stream.go). Cockpit rendering is complete — see the [tool-event payload contract](sse-events.md#tool-event-payload-contract) and `web/`. |
 
 ### Client / input surface
 
@@ -182,6 +182,7 @@ These support the outer system and **wrap** the inner agentic loop:
 
 - [docs/agentic-harness-roadmap.md](agentic-harness-roadmap.md) — Phased implementation roadmap and links to task prompts.
 - [docs/provider-tool-calling.md](provider-tool-calling.md) — Provider tool-call capability matrix and wire-format deltas.
-- [tasks/](../tasks/) — Dependency-ordered implementation prompts. Completed MVP and completed
-  post-MVP work are recorded in [docs/agentic-harness-roadmap.md](agentic-harness-roadmap.md);
-  forward work is speced as self-contained milestones `13`–`19` under `tasks/`.
+- The roadmap records completed MVP, completed post-MVP work, and milestones `13`–`19` in
+  [docs/agentic-harness-roadmap.md](agentic-harness-roadmap.md). Per-milestone spec files lived
+  under `tasks/` and were removed as each milestone shipped; the long-term design lives in `docs/`
+  (e.g. [llm-connector-strategy.md](llm-connector-strategy.md), [api-testing.md](api-testing.md)).

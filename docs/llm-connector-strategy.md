@@ -167,6 +167,28 @@ gateway:
   order: [litellm]
 ```
 
+## Wire contract guarantees
+
+`adapter: openai` is the single wire path both topologies depend on, so its
+behavior is a stable contract. `internal/gateway/providers/wire_contract_test.go`
+pins seven dimensions against a shared `httptest` fixture endpoint; any change to
+the adapter that breaks one is a contract regression:
+
+| Dimension | Guarantee |
+| --- | --- |
+| tools request shape | `tools[]` serializes as `{type:"function", function:{name, description, parameters}}` |
+| tool_calls response | Assistant `tool_calls` parse into `AIResponse.ToolCalls` (`id`, `type`, `function.{name,arguments}`) |
+| tool_call_id round-trip | A prior assistant `tool_calls` + a `role:"tool"` message with `tool_call_id` round-trips on the next request |
+| error / HTTP-status mapping | 429→`ErrLLMQuotaExceeded`, 5xx→`ErrLLMUnreachable`, 4xx→rejected error |
+| timeout behavior | Context deadline / provider `Timeout` surfaces as `ErrLLMUnreachable` |
+| JSON mode × tools | `response_format` is set only when `JSONMode` is on **and** no `tools` are present (tools win) |
+| embeddings passthrough | `Embed` maps request inputs to positional vectors (incl. `nil` for missing indices) |
+
+Both the direct path (llama.cpp / OpenAI / vLLM) and the managed path
+(LiteLLM / Portkey / OpenRouter) must satisfy these. The conformance smoke
+script below certifies a *runtime* endpoint against the user-facing subset.
+
+
 ## Wire-contract smoke script
 
 The single OpenAI Chat Completions wire path (`adapter: openai`) is what both
@@ -230,6 +252,7 @@ Milestone 13 files:
 - `go build ./... && go test ./docs/...` — existing tests pass (link validation +
   provider-tool-calling parity test).
 - Link check: a `grep` for backtick-relative `tasks/` references in `docs/` must point
-  only at task files that exist under `tasks/` (`13`–`19` all exist).
+  only at task files that exist under `tasks/` (per-milestone spec files are removed once the
+  work ships; `docs/` no longer references `tasks/`).
 - Reviewer confirms the provider claims (Anthropic "single-turn", ollama/horde
   "maintenance") match the code evidence cited above.
