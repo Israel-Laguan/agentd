@@ -167,6 +167,43 @@ gateway:
   order: [litellm]
 ```
 
+## Wire-contract smoke script
+
+The single OpenAI Chat Completions wire path (`adapter: openai`) is what both
+the direct (llama.cpp / OpenAI / vLLM) and managed (LiteLLM / Portkey /
+OpenRouter) topologies depend on. `scripts/llm-smoke.sh` is a POSIX-sh probe
+that certifies any endpoint satisfies the three essential contract checks:
+
+| Probe | What it exercises | Pass criteria |
+|---|---|---|
+| text-generation | `/v1/chat/completions` with a plain user turn | HTTP 2xx + non-empty `content` |
+| json-mode | `response_format: {type: json_object}` + JSON instruction | Content parses as JSON |
+| tool-calling | `tools` definition with one function | Response contains `tool_calls` → `SUPPORTED`; otherwise `NOT SUPPORTED` |
+
+### Direct path (llama.cpp / vLLM / OpenAI)
+
+```sh
+scripts/llm-smoke.sh http://127.0.0.1:8080/v1 llama-cpp-model sk-llama
+```
+
+### Managed path (LiteLLM)
+
+```sh
+scripts/llm-smoke.sh http://127.0.0.1:4000/v1 poolside/laguna-m.1 "$LITELLM_VIRTUAL_KEY"
+```
+
+### Verdict interpretation
+
+- **PASS** — the endpoint satisfies this contract dimension.
+- **FAIL** — the endpoint returned an error or malformed response for this probe.
+- **SUPPORTED** — the endpoint supports tool calling.
+- **NOT SUPPORTED** — the endpoint does not return `tool_calls` (expected for some models/providers).
+
+The script exits non-zero only on hard connectivity failures (DNS resolution or
+TCP connection refused). HTTP-level failures (401, 4xx, 5xx) are reported as
+FAIL/NOT SUPPORTED but do not stop the run, so you can see the full capability
+table for the model.
+
 ## Files
 
 **Milestone 13 itself is docs + config only**: the native adapters are **not**
