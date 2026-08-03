@@ -158,10 +158,12 @@ are documented in [`docs/llm-connector-strategy.md`](llm-connector-strategy.md).
   being retried both by LiteLLM *and* by agentd's cascade (double-latency/quota
   burn), set LiteLLM's per-route retry count low:
   - In `litellm_config.yaml`, place `num_retries` under `router_settings`:
+
     ```yaml
     router_settings:
       num_retries: 0
     ```
+
     or `num_retries: 1` only when the route points at a single upstream you want a
     single internal retry before agentd's cascade handles cross-provider fallback.
   - Keep agentd-side timeouts (`gateway.providers[*].timeout`) bounded so a stuck

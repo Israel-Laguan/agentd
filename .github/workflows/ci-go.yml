@@ -14,6 +14,11 @@ on:
       - "scripts/**"
       - "README.md"
       - "config.reference.yaml"
+      - "docs/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".markdownlint.json"
+      - ".lychee.toml"
       - ".github/workflows/ci-go.yml"
   pull_request:
     paths:
@@ -25,6 +30,11 @@ on:
       - "scripts/**"
       - "README.md"
       - "config.reference.yaml"
+      - "docs/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".markdownlint.json"
+      - ".lychee.toml"
       - ".github/workflows/ci-go.yml"
 
 concurrency:
@@ -114,11 +124,45 @@ jobs:
               'golangci-lint failed. See file annotations and the Lint step log for details.'
             );
 
+      - name: Setup Node
+        if: always()
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install markdownlint-cli2
+        if: always()
+        run: npm ci
+
+      - name: Lint Markdown (markdownlint-cli2)
+        if: always()
+        id: lint_md
+        continue-on-error: true
+        run: make lint-md
+
+      - name: Enforce Markdown lint
+        if: always() && steps.lint_md.outcome == 'failure'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.setFailed(
+              'Markdown lint failed. Run make lint-md locally and fix the reported rule violations.'
+            );
+
+      - name: Check docs links (lychee)
+        if: always()
+        uses: lycheeverse/lychee-action@v2
+        with:
+          fail: true
+          args: --config .lychee.toml README.md docs
+
+
       - name: Test
         if: always()
         id: test
         continue-on-error: true
         run: make test
+
 
       - name: Enforce tests
         if: always() && steps.test.outcome == 'failure'

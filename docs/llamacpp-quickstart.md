@@ -161,13 +161,13 @@ enable `chat_tools`/`probe_tools`. See
 [Provider tool calling](provider-tool-calling.md#llamacpp) and
 [LLM connector strategy](llm-connector-strategy.md#wire-contract-smoke-script).
 
-
 ## Using Other OpenAI-Compatible Providers
 
 Simply change the config in `~/.agentd/config.yaml`.
 For cloud vendors (Groq, Together AI, Poolside), see [`docs/openai-compatible-providers.md`](openai-compatible-providers.md).
 
 ### Ollama
+
 ```yaml
 gateway:
   order: [ollama]
@@ -177,6 +177,7 @@ gateway:
 ```
 
 ### OpenAI (API key required)
+
 ```yaml
 gateway:
   order: [openai]

@@ -150,16 +150,19 @@ Import touch points:
 Throughout the codebase, a consistent pattern is used to maintain backward compatibility while reorganizing code into focused subpackages. This pattern involves:
 
 1. **Type Aliases**: The root package defines type aliases that point to types in subpackages. For example, in `internal/kanban/shim.go`:
+
    ```go
    type immediateTx = kdb.ImmediateTx
    ```
 
 2. **Variable Forwards**: The root package provides `var` declarations that forward to subpackage implementations:
+
    ```go
    var EnsureNoCycle = domain.EnsureNoCycle
    ```
 
 3. **Function Re-exports**: Public functions from subpackages are re-exported at the root level:
+
    ```go
    func NewServer(deps ServerDeps) *server.Server {
        return server.NewServer(deps)
@@ -180,6 +183,7 @@ While the Kanban grouping effort extracted database and domain logic into focuse
 ### Remaining Repository Methods
 
 The following root-level repository files were not moved to a repo subpackage:
+
 - `tasks_repo.go`
 - `projects_repo.go`
 - `settings_repo.go`
@@ -191,6 +195,7 @@ These files contain methods that interact with the `*Store` types remaining in t
 ### Domain Logic Files
 
 The following domain-related files remain in the root package and could be candidates for extraction to `internal/kanban/domain/`:
+
 - Task lifecycle management files
 - Task breakdown logic
 - Task retry handling
@@ -199,6 +204,7 @@ The following domain-related files remain in the root package and could be candi
 ### Test and Interface Updates
 
 Any extraction work will require corresponding updates to:
+
 - Test files that reference the moved types
 - Interface definitions that couple to root package types
 - Any shim layer adjustments needed to maintain backward compatibility
@@ -206,6 +212,7 @@ Any extraction work will require corresponding updates to:
 ### Rationale for Deferral
 
 The decision to defer was based on:
+
 1. **Risk assessment**: The `*Store` methods are heavily used throughout the codebase; extracting them requires careful interface design
 2. **Scope**: The remaining root files have complex dependencies on each other and on the shim layer
 3. **Stability**: The current structure works; deferring avoids introducing regressions in a well-functioning system

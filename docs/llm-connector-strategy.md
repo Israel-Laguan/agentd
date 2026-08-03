@@ -188,7 +188,6 @@ Both the direct path (llama.cpp / OpenAI / vLLM) and the managed path
 (LiteLLM / Portkey / OpenRouter) must satisfy these. The conformance smoke
 script below certifies a *runtime* endpoint against the user-facing subset.
 
-
 ## Wire-contract smoke script
 
 The single OpenAI Chat Completions wire path (`adapter: openai`) is what both
@@ -197,7 +196,7 @@ OpenRouter) topologies depend on. `scripts/llm-smoke.sh` is a POSIX-sh probe
 that certifies any endpoint satisfies the three essential contract checks:
 
 | Probe | What it exercises | Pass criteria |
-|---|---|---|
+| --- | --- | --- |
 | text-generation | `/v1/chat/completions` with a plain user turn | HTTP 2xx + non-empty `content` |
 | json-mode | `response_format: {type: json_object}` + JSON instruction | Content parses as JSON |
 | tool-calling | `tools` definition with one function | Response contains `tool_calls` → `SUPPORTED`; otherwise `NOT SUPPORTED` |

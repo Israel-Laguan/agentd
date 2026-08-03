@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test coverage run tidy lint lint-install loc minfunc folder-audit check test-e2e podman-test
+.PHONY: build test coverage run tidy lint lint-install loc minfunc folder-audit check test-e2e podman-test lint-md lint-links lint-docs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -58,4 +58,17 @@ minfunc:
 folder-audit:
 	$(GO) run ./scripts/folder_audit --out /tmp/folder-size-audit.md
 
-check: loc minfunc lint test
+# Docs linting. Dependencies: `npm install` (markdownlint-cli2) and `lychee`
+# (single binary, see .lychee.toml). These target README + docs/**.
+MARKDOWNLINT ?= npx markdownlint-cli2
+LYCHEE ?= lychee
+
+lint-md:
+	$(MARKDOWNLINT) "docs/**/*.md" "README.md"
+
+lint-links:
+	$(LYCHEE) --config .lychee.toml README.md docs
+
+lint-docs: lint-md lint-links
+
+check: loc minfunc lint test lint-docs

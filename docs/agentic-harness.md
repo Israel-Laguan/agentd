@@ -79,7 +79,7 @@ type AgentProfile struct {
 ### Behavior
 
 | `AgenticMode` | Provider | Behavior |
-|---------------|----------|----------|
+| --------------- | ---------- | ---------- |
 | `false` (default) | any | Legacy single-shot JSON mode: one LLM call, one sandbox execution |
 | `true` | `openai` (incl. openai-compatible e.g. LiteLLM/Portkey/OpenRouter) | Agentic mode: inner loop with tool calling; shell via `bash` tool only |
 | `true` | `anthropic` (native) | **Single one tool turn only.** Multi-turn tool round-trip is broken (see [provider-tool-calling.md](provider-tool-calling.md)). For a working agentic loop on Anthropic-family models, use the managed proxy path (`adapter: openai`) instead. |
@@ -97,6 +97,7 @@ To enable agentic mode for a profile:
    models, route through the managed proxy path with `adapter: openai` instead.
 
 The worker checks `profile.AgenticMode` at task processing time and routes to either:
+
 - Legacy path: `command()` → single sandbox run
 - Agentic path: `processAgentic()` → inner loop with tool calling
 
@@ -112,8 +113,8 @@ Agentic and legacy modes use the same hardened [`BashExecutor`](../internal/sand
 
 **Rules:**
 
-1. Agentic mode normally uses the inner tool loop only. If model routing selects a provider without tool round-tripping, [`processAgentic`](../internal/queue/worker/worker_agentic.go) falls back to `runLegacyTask` / `command()` and **preserves the provider and model selected by routing** (no second model routing pass).
-2. When both model routing and the per-task tool manifest are enabled, routing token estimates use the **full** tool registry (`routingTools`); [`filterAgenticTools`](../internal/queue/worker/worker_tool_manifest.go) runs afterward and only affects tools sent in turn-loop gateway requests. This prevents manifest-reduced tool lists from understating context size and routing to a cheaper tier than `context_token_threshold` intends.
+1. Agentic mode normally uses the inner tool loop only. If model routing selects a provider without tool round-tripping, [`processAgentic`](../internal/queue/worker/worker.go) falls back to `runLegacyTask` / `command()` and **preserves the provider and model selected by routing** (no second model routing pass).
+2. When both model routing and the per-task tool manifest are enabled, routing token estimates use the **full** tool registry (`routingTools`); [`filterAgenticTools`](../internal/queue/worker/worker_tools.go) runs afterward and only affects tools sent in turn-loop gateway requests. This prevents manifest-reduced tool lists from understating context size and routing to a cheaper tier than `context_token_threshold` intends.
 3. Each `bash` tool invocation is a separate sandbox execution (subject to hooks, timeouts, and scrubbing).
 4. Non-empty final assistant text without further `tool_calls` closes the task; it is stored as the task result payload, not executed as a shell command.
 
@@ -130,7 +131,7 @@ transcripts is planned follow-up work (see the forward milestones in the
 | Concept | agentd today |
 | --- | --- |
 | Shell execution | [`internal/sandbox/executor.go`](../internal/sandbox/executor.go) — `BashExecutor.Execute()` with sudo blocking, path jailing, ulimits, scrubbing, inactivity timeout. |
-| Read/write as **LLM-invokable** tools | Exposed as `bash`, `read`, and `write` tool definitions via `ToolExecutor` in [`tool_executor.go`](../internal/queue/worker/tool_executor.go). In agentic mode (`AgenticMode: true`), these tools are advertised to the LLM and executed through the inner loop. Legacy JSON `command` path still drives the sandbox when agentic mode is off. |
+| Read/write as **LLM-invokable** tools | Exposed as `bash`, `read`, and `write` tool definitions via `ToolExecutor` in [`tool_executor.go`](../internal/agent/tools/tool_executor.go). In agentic mode (`AgenticMode: true`), these tools are advertised to the LLM and executed through the inner loop. Legacy JSON `command` path still drives the sandbox when agentic mode is off. |
 
 ### Tool definitions and parsing
 

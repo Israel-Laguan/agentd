@@ -1,0 +1,12 @@
+{
+  "name": "agentd-docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Root docs tooling (Markdown linting). No runtime dependency of the agentd module.",
+  "scripts": {
+    "lint:md": "markdownlint-cli2 \"docs/**/*.md\" \"README.md\""
+  },
+  "devDependencies": {
+    "markdownlint-cli2": "^0.23.2"
+  }
+}
