@@ -32,25 +32,20 @@ func (t *AgenticTruncator) withinLimits(messages []spec.PromptMessage, budget in
 }
 
 // finalizeTruncation performs final cleanup and budget enforcement.
-// Same convergence guard as applyBudgetTruncation: bail out when a pass no longer
-// shrinks the output, which can happen for budgets below the irreducible
-// truncation-marker overhead (best effort is a single marker).
+// It first strips dangling tool calls, then delegates to the shared
+// truncateWithBudgetLoop convergence guard. Without the guard the loop
+// would spin forever on budgets below the irreducible truncation-marker
+// overhead (best effort is a single marker).
 func (t *AgenticTruncator) finalizeTruncation(messages []spec.PromptMessage, budget int) []spec.PromptMessage {
 	out := t.removeDanglingToolCalls(messages)
-	for budget > 0 && totalChars(out) > budget {
-		prev := totalChars(out)
-		out = t.truncateToBudget(out, budget)
-		out = t.removeDanglingToolCalls(out)
-		if totalChars(out) >= prev {
-			break // no progress: budget below irreducible marker overhead
-		}
-	}
-	return out
+	return t.truncateWithBudgetLoop(out, budget)
 }
 
-// findFirstUserIndex finds the index of the first user message
+// findFirstUserIndex finds the index of the first user message.
+// Searches from index 0 so that a leading user message (not preceded by a
+// system prompt) is correctly identified as the task anchor.
 func (t *AgenticTruncator) findFirstUserIndex(messages []spec.PromptMessage) int {
-	for i := 1; i < len(messages); i++ {
+	for i := 0; i < len(messages); i++ {
 		if messages[i].Role == "user" {
 			return i
 		}
