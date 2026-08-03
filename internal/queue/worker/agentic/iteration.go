@@ -57,7 +57,11 @@ func (e *Engine) processAgenticIteration(
 		return false, agentruntime.LoopResult{}, false, rewindNone, err
 	}
 	budgetGuard.AfterCall(resp.TokenUsage)
-	e.host.RecordTaskTokenUsage(ctx, task, resp.TokenUsage, resp.UsageDetails)
+	detailsToRecord := spec.UsageDetails{}
+	if resp.UsageDetails != nil {
+		detailsToRecord = *resp.UsageDetails
+	}
+	e.host.RecordTaskTokenUsage(ctx, task, resp.TokenUsage, detailsToRecord)
 	if e.config.MessageEditor != nil {
 		e.config.MessageEditor.CommitAssistant(messages, resp)
 	} else {

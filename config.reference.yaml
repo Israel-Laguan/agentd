@@ -42,14 +42,15 @@ gateway:
   # order: [openai, vllm]
   #
   # LiteLLM managed proxy (recommended multi-provider path — see docs/llm-connector-strategy.md):
-  #   providers:
-  #     - name: litellm
-  #       adapter: openai
-  #       base_url: "http://127.0.0.1:4000/v1"
-  #       api_key_env: LITELLM_API_KEY      # LiteLLM master_key
-  #       model: "poolside/laguna-m.1"      # LiteLLM model_name alias
-  #       capabilities: { chat_tools: true }
-  #   order: [litellm]
+  # providers:
+  #   - name: litellm
+  #     adapter: openai
+  #     base_url: "http://127.0.0.1:4000/v1"
+  #     api_key_env: LITELLM_API_KEY      # Scoped LiteLLM virtual key (not the master key)
+  #     model: "poolside/laguna-m.1"      # LiteLLM model_name alias
+  #     capabilities:
+  #       chat_tools: true
+  # order: [litellm]
   warmup_enabled: true
   max_tasks_per_phase: 7
   openai:

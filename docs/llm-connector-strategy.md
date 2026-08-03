@@ -2,7 +2,9 @@
 
 This document declares agentd's **two-topology connector model** and the boundary
 that decides whether a piece of LLM-related behavior lives in agentd or in an
-external proxy. It is docs-only (Milestone 13); no Go code changes are expected.
+external proxy. **Milestone 13 is docs/config only**; the corresponding PR also
+includes internal Go changes for usage decoding, worker propagation, token events,
+prompt assembly, and golden tests.
 It **unblocks positioning** for all later milestones (M14–M19), which own the
 cache, observability, wire-contract, and provider-recipe work this doc defers.
 
@@ -13,18 +15,20 @@ matrix), [`openai-compatible-providers.md`](openai-compatible-providers.md)
 
 ## The two topologies
 
-### Direct path — zero dependencies, always works
+### Direct path — no managed proxy required
 
-```
+```text
 agentd ──HTTP──▶ llama.cpp / OpenAI / vLLM / Ollama / Gemini(v1) / LiteLLM
                      via adapter: openai (OpenAI Chat Completions wire format)
 ```
 
 `adapter: openai` is the hardened wire path (Phases 1–6 done, see
-`agentic-harness-roadmap.md`). Every topology rides it. For a single provider or
-a local server you can point a `gateway.providers` entry (or the built-in
-`openai` slot) at any OpenAI-compatible endpoint — this is the fastest way to
-agentic mode and needs nothing running but agentd itself.
+`agentic-harness-roadmap.md`). Every topology rides it. Local providers still
+require their HTTP servers to be running (e.g. llama.cpp server, Ollama, vLLM).
+For a single provider or local server you can point a `gateway.providers` entry
+(or the built-in `openai` slot) at any OpenAI-compatible endpoint. Ollama uses
+its `/v1/chat/completions` OpenAI-compatibility layer rather than the native
+`/api/chat` adapter path.
 
 ### Managed path — recommended for multi-provider / production
 
@@ -33,11 +37,12 @@ agentd ──HTTP──▶ LiteLLM (or Portkey / OpenRouter) ──▶ N provide
                 (OpenAI Chat Completions at /v1/chat/completions)
 ```
 
-agentd keeps **agent-side semantics** (tools, truncation, budgets, cascade,
-circuit breaker) and the proxy owns everything else (keys, retries, rate limits,
-budgets, caching, observability, wire-format translation). You get provider
-diversity, virtual keys, and Anthropic-native format translation for free, because
-the proxy speaks OpenAI-compatible Chat Completions back to agentd.
+agentd keeps **agent-side semantics** (tools, truncation, task-scoped token budgets,
+cache metrics/events, cascade, circuit breaker) and the proxy owns provider-account
+budgets, provider observability, keys, retries, rate limits, caching, and wire-format
+translation. You get provider diversity, virtual keys, and Anthropic-native format
+translation for free, because the proxy speaks OpenAI-compatible Chat Completions back
+to agentd.
 
 The boundary is sharp: if you want something a provider *does*, keep it in
 agentd. If you want something a provider *account* does, delegate it.
@@ -77,6 +82,7 @@ billing) instead varies by deployment and is a distraction from the agent contra
 | Cache observability (hit rate) | Keep & harden (M15) | Usage-details parsing + `TOKEN_USAGE` events |
 | Streaming / vision / `image_url` / Responses API / built-in tools | Deferred non-goal | Proxy or direct provider client |
 | Embeddings | Keep | Memory subsystem; also rides LiteLLM |
+
 ## Provider status (corrected)
 
 Native adapters that report `SupportsChatTools: true` but are **not** reliable for

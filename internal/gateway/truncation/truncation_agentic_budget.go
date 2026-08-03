@@ -48,6 +48,14 @@ func (t *AgenticTruncator) truncateToBudget(messages []spec.PromptMessage, budge
 		}
 	}
 
+	// Include all leading system messages before the first user so memory-lesson
+	// anchors are not dropped by middle-out truncation.
+	for i := 1; firstUserIdx > 0 && i < firstUserIdx; i++ {
+		if messages[i].Role == "system" {
+			out = append(out, messages[i])
+		}
+	}
+
 	// Add first user message if found
 	if firstUserIdx > 0 {
 		out = append(out, messages[firstUserIdx])

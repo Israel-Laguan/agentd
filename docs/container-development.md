@@ -1,8 +1,8 @@
 # Container-based development with Podman
 
-Use the container images in this repo to get **reproducible builds, tests, and lint**
+Use the container images in this repo to get **containerized builds, tests, and lint**
 without installing the Go 1.26 toolchain, sqlite libs, or golangci-lint locally.
-Everything runs inside `golang:1.26-alpine`; Podman is docker-compatible.
+Runtime commands run in an Alpine-based image; Podman is docker-compatible.
 
 ## Prerequisites
 
@@ -81,7 +81,7 @@ podman run --rm agentd-test sh -c '
 
 ```bash
 make build          # go build -o bin/agentd ./cmd/agentd (uses local Go)
-make test           # go test ./... (uses local Go, requires non-root for permission tests)
+make test           # go test ./... (requires non-root for permission tests)
 make lint-install   # install golangci-lint v2.12.2 locally
 make lint           # run golangci-lint v2
 make podman-test    # build Dockerfile.test and run go test as non-root

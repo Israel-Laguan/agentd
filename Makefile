@@ -43,7 +43,7 @@ lint:
 	$(GO_ENV) $(GOLANGCI_LINT) run $(PKG)
 
 lint-install:
-	go install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+	$(GO) install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 
 podman-test:
 	podman build -f Dockerfile.test -t agentd-test .

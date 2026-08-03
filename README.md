@@ -70,7 +70,7 @@ Use `AGENTD_HOME` or `--home` to override the default `~/.agentd` home directory
 
 ### Docker
 
-There is a single `Dockerfile` — no separate dev Dockerfile exists. It uses a multi-stage build:
+There is a `Dockerfile` for the runtime image and a `Dockerfile.test` for running tests inside a container as a non-root user. The runtime image uses a multi-stage build:
 
 1. **Build stage** (`golang:1.26-alpine`): compiles a static binary with `CGO_ENABLED=0`.
 2. **Runtime stage** (`alpine:latest`): installs `sqlite-libs`, creates a non-root `agentd` user, and copies the binary.

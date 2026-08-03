@@ -140,3 +140,26 @@ func TestRegistry_AdapterForTool(t *testing.T) {
 	_, ok = reg.AdapterForTool(context.Background(), "missing")
 	assert.False(t, ok)
 }
+
+func TestRegistry_GetToolsAndAdapterIndex_SortsToolsCanonically(t *testing.T) {
+	t.Parallel()
+	reg := NewRegistry()
+	reg.Register("zebra", &mockAdapter{
+		name:  "zebra",
+		tools: []gateway.ToolDefinition{{Name: "zeta_tool", Description: "z"}, {Name: "alpha_tool", Description: "a"}},
+	})
+	reg.Register("alpha", &mockAdapter{
+		name:  "alpha",
+		tools: []gateway.ToolDefinition{{Name: "beta_tool", Description: "b"}},
+	})
+
+	tools, _, err := reg.GetToolsAndAdapterIndex(context.Background())
+	require.NoError(t, err)
+	require.Len(t, tools, 3)
+
+	names := make([]string, len(tools))
+	for i, tool := range tools {
+		names[i] = tool.Name
+	}
+	assert.Equal(t, []string{"alpha_tool", "beta_tool", "zeta_tool"}, names)
+}

@@ -282,8 +282,8 @@ func TestOpenAIUsage_ToleratesAbsentCacheFields(t *testing.T) {
 	if resp.TokenUsage != 7 {
 		t.Errorf("TokenUsage = %d, want 7", resp.TokenUsage)
 	}
-	if resp.UsageDetails.CachedTokens != 0 || resp.UsageDetails.CacheWriteTokens != 0 {
-		t.Errorf("UsageDetails = %+v, want zero (no cache fields reported)", resp.UsageDetails)
+	if resp.UsageDetails != nil {
+		t.Errorf("UsageDetails = %+v, want nil (no cache fields reported)", resp.UsageDetails)
 	}
 }
 

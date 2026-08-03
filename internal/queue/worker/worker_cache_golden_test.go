@@ -17,32 +17,29 @@ import (
 	"agentd/internal/models"
 )
 
-type fakeRetriever struct {
-	memories []models.Memory
-}
-
-func (f *fakeRetriever) Recall(ctx context.Context, intent, projectID, userID string) []models.Memory {
-	return f.memories
-}
-
-type goldenCapabilityAdapter struct {
-	name  string
-	tools []gateway.ToolDefinition
-}
-
-func (f *goldenCapabilityAdapter) Name() string { return f.name }
-func (f *goldenCapabilityAdapter) ListTools(ctx context.Context) ([]gateway.ToolDefinition, error) {
-	return f.tools, nil
-}
-func (f *goldenCapabilityAdapter) CallTool(ctx context.Context, name string, args map[string]any) (any, error) {
-	return nil, nil
-}
-func (f *goldenCapabilityAdapter) Close() error { return nil }
-
 func TestCacheGolden_ByteStableFirstRequest(t *testing.T) {
 	t.Parallel()
 
-	// Stable inputs: same task, profile, project, lessons, and adapters.
+	task, project, profile := buildTestInputs(t)
+	w := buildTestWorker(t)
+	scoped := buildScopedCapabilities()
+	executor := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
+
+	runOnce := func() ([]byte, []byte) {
+		return executeRequest(t, w, executor, scoped, task, project, profile)
+	}
+
+	m1, t1 := runOnce()
+	m2, t2 := runOnce()
+
+	assert.Equal(t, m1, m2, "messages must be byte-identical across runs")
+	assert.Equal(t, t1, t2, "tools must be byte-identical across runs")
+
+	assertMessages(t, m1)
+	assertToolsSorted(t, t1)
+}
+
+func buildTestInputs(t *testing.T) (models.Task, models.Project, models.AgentProfile) {
 	task := models.Task{
 		BaseEntity:  models.BaseEntity{ID: "task-1"},
 		Title:       "Implement add",
@@ -51,9 +48,12 @@ func TestCacheGolden_ByteStableFirstRequest(t *testing.T) {
 	}
 	project := models.Project{BaseEntity: models.BaseEntity{ID: "proj-1"}, WorkspacePath: t.TempDir()}
 	profile := models.AgentProfile{}
+	return task, project, profile
+}
 
+func buildTestWorker(t *testing.T) *Worker {
 	w := &Worker{
-		retriever: &fakeRetriever{
+		retriever: &mockMemoryRetriever{
 			memories: []models.Memory{
 				{Scope: "LESSON", Symptom: sql.NullString{String: "slow build", Valid: true}, Solution: sql.NullString{String: "cache deps", Valid: true}},
 			},
@@ -63,51 +63,47 @@ func TestCacheGolden_ByteStableFirstRequest(t *testing.T) {
 		skillRouter:  &wskills.SkillRouter{Threshold: 1.0},
 		toolManifest: nil,
 	}
-	// Two adapters contributing overlapping + unique tools; map iteration is
-	// intentionally nondeterministic so this guards against map-order leakage.
-	w.capabilities.Register("alpha", &goldenCapabilityAdapter{
-		name:  "alpha",
+	w.capabilities.Register("alpha", &fakeCapabilityAdapter{
 		tools: []gateway.ToolDefinition{{Name: "alpha_one", Description: "a"}, {Name: "shared", Description: "s"}},
 	})
-	w.capabilities.Register("zeta", &goldenCapabilityAdapter{
-		name:  "zeta",
+	w.capabilities.Register("zeta", &fakeCapabilityAdapter{
 		tools: []gateway.ToolDefinition{{Name: "zeta_two", Description: "z"}, {Name: "shared", Description: "s"}, {Name: "alpha_one", Description: "dup"}},
 	})
+	return w
+}
 
+func buildScopedCapabilities() capabilities.Registry {
 	scoped := capabilities.NewRegistry()
-	scoped.Register("scoped-adapter", &goldenCapabilityAdapter{
-		name:  "scoped-adapter",
+	scoped.Register("scoped-adapter", &fakeCapabilityAdapter{
 		tools: []gateway.ToolDefinition{{Name: "scoped_three", Description: "sc"}},
 	})
+	return scoped
+}
 
-	executor := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
+func executeRequest(t *testing.T, w *Worker, executor *agenttools.ToolExecutor, scoped capabilities.Registry, task models.Task, project models.Project, profile models.AgentProfile) ([]byte, []byte) {
+	t.Helper()
+	messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
+	tools, _ := w.agenticToolsWithExtras(context.Background(), executor, scoped)
+	tools, _ = w.filterAgenticTools(tools, nil, task, profile)
+	messagesBytes, err := json.Marshal(messages)
+	require.NoError(t, err)
+	toolsBytes, err := json.Marshal(tools)
+	require.NoError(t, err)
+	return messagesBytes, toolsBytes
+}
 
-	runOnce := func() ([]byte, []byte) {
-		messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
-		tools, _ := w.agenticToolsWithExtras(context.Background(), executor, scoped)
-		tools, _ = w.filterAgenticTools(tools, nil, task, profile)
-		messagesBytes, err := json.Marshal(messages)
-		require.NoError(t, err)
-		toolsBytes, err := json.Marshal(tools)
-		require.NoError(t, err)
-		return messagesBytes, toolsBytes
-	}
-
-	m1, t1 := runOnce()
-	m2, t2 := runOnce()
-
-	assert.Equal(t, m1, m2, "messages must be byte-identical across runs")
-	assert.Equal(t, t1, t2, "tools must be byte-identical across runs")
-
-	// Memory lessons must sit after the stable system prompt + task seed.
+func assertMessages(t *testing.T, m1 []byte) {
+	t.Helper()
 	if messages := decodeMessages(t, m1); len(messages) >= 3 {
-		assert.Equal(t, "system", messages[0].Role, "message[0] must be the layered system prompt")
-		assert.Equal(t, "user", messages[1].Role, "message[1] must be the task seed user message")
-		assert.Equal(t, "system", messages[len(messages)-1].Role, "last message must be the memory lessons system message")
-		assert.Contains(t, messages[len(messages)-1].Content, "LESSONS LEARNED")
+		assert.Equal(t, "system", messages[0].Role, "message[0] must be the memory lessons system message")
+		assert.Equal(t, "system", messages[1].Role, "message[1] must be the layered system prompt")
+		assert.Equal(t, "user", messages[2].Role, "message[2] must be the task seed user message")
+		assert.Contains(t, messages[0].Content, "LESSONS LEARNED")
 	}
+}
 
-	// Tool list must be sorted by name.
+func assertToolsSorted(t *testing.T, t1 []byte) {
+	t.Helper()
 	var tools []gateway.ToolDefinition
 	require.NoError(t, json.Unmarshal(t1, &tools))
 	names := make([]string, len(tools))

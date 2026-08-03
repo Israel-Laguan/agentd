@@ -228,38 +228,79 @@ type openAIToolCall struct {
 }
 
 func (r openAIResponse) toAIResponse(defaultModel string, providerUsed string) spec.AIResponse {
-	model := r.Model
-	if model == "" {
-		model = defaultModel
+	model := r.resolveModel(defaultModel)
+	content, toolCalls := r.extractResponseContent()
+
+	r.logZeroUsage(providerUsed, model)
+	cached, cacheWrite := r.extractCacheMetrics(providerUsed, model)
+
+	var usageDetails *spec.UsageDetails
+	if cached != 0 || cacheWrite != 0 {
+		usageDetails = &spec.UsageDetails{
+			CachedTokens:     cached,
+			CacheWriteTokens: cacheWrite,
+		}
 	}
+
+	return spec.AIResponse{
+		Content:      content,
+		TokenUsage:   r.Usage.TotalTokens,
+		ProviderUsed: providerUsed,
+		ModelUsed:    model,
+		ToolCalls:    toolCalls,
+		UsageDetails: usageDetails,
+	}
+}
+
+func (r openAIResponse) resolveModel(defaultModel string) string {
+	if r.Model != "" {
+		return r.Model
+	}
+	return defaultModel
+}
+
+func (r openAIResponse) extractResponseContent() (string, []spec.ToolCall) {
+	if len(r.Choices) == 0 {
+		return "", nil
+	}
+	msg := r.Choices[0].Message
 	content := ""
+	if msg.Content != nil {
+		content = *msg.Content
+	}
+	if content == "" && msg.ReasoningContent != nil {
+		content = *msg.ReasoningContent
+	}
 	var toolCalls []spec.ToolCall
-	if len(r.Choices) > 0 {
-		msg := r.Choices[0].Message
-		if msg.Content != nil {
-			content = *msg.Content
-		}
-		if content == "" && msg.ReasoningContent != nil {
-			content = *msg.ReasoningContent
-		}
-		if len(msg.ToolCalls) > 0 {
-			toolCalls = make([]spec.ToolCall, len(msg.ToolCalls))
-			for i, tc := range msg.ToolCalls {
-				toolCalls[i] = spec.ToolCall{
-					ID:   tc.ID,
-					Type: tc.Type,
-					Function: spec.ToolCallFunction{
-						Name:      tc.Function.Name,
-						Arguments: tc.Function.Arguments,
-					},
-				}
-			}
+	if len(msg.ToolCalls) > 0 {
+		toolCalls = r.convertToolCalls(msg.ToolCalls)
+	}
+	return content, toolCalls
+}
+
+func (r openAIResponse) convertToolCalls(tcList []openAIToolCall) []spec.ToolCall {
+	toolCalls := make([]spec.ToolCall, len(tcList))
+	for i, tc := range tcList {
+		toolCalls[i] = spec.ToolCall{
+			ID:   tc.ID,
+			Type: tc.Type,
+			Function: spec.ToolCallFunction{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			},
 		}
 	}
+	return toolCalls
+}
+
+func (r openAIResponse) logZeroUsage(providerUsed, model string) {
 	if r.Usage.TotalTokens == 0 {
 		slog.Debug("openai provider returned zero total_tokens; usage data may be absent in this provider's response",
 			"provider", providerUsed, "model", model)
 	}
+}
+
+func (r openAIResponse) extractCacheMetrics(providerUsed, model string) (int, int) {
 	// Surface prompt-cache fields when the provider reports them. OpenAI
 	// exposes cached reads via prompt_tokens_details.cached_tokens; DeepSeek
 	// (OpenAI-compatible) exposes prompt_cache_hit_tokens (reads) and
@@ -279,15 +320,5 @@ func (r openAIResponse) toAIResponse(defaultModel string, providerUsed string) s
 			"total_tokens", r.Usage.TotalTokens,
 			"cached_tokens", cached, "cache_write_tokens", cacheWrite)
 	}
-	return spec.AIResponse{
-		Content:      content,
-		TokenUsage:   r.Usage.TotalTokens,
-		ProviderUsed: providerUsed,
-		ModelUsed:    model,
-		ToolCalls:    toolCalls,
-		UsageDetails: spec.UsageDetails{
-			CachedTokens:     cached,
-			CacheWriteTokens: cacheWrite,
-		},
-	}
+	return cached, cacheWrite
 }

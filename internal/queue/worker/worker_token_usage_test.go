@@ -300,7 +300,7 @@ func TestTokenUsage_AgenticPath_SurfacesCacheFieldsInEvent(t *testing.T) {
 		{
 			Content:      "[COMPLETED] done",
 			TokenUsage:   15,
-			UsageDetails: gateway.UsageDetails{
+			UsageDetails: &gateway.UsageDetails{
 				CachedTokens:     8,
 				CacheWriteTokens: 3,
 			},
@@ -349,7 +349,7 @@ func TestTokenUsage_LegacyPath_SurfacesCacheFieldsInEvent(t *testing.T) {
 		resp: gateway.AIResponse{
 			Content:      string(raw),
 			TokenUsage:   20,
-			UsageDetails: gateway.UsageDetails{
+			UsageDetails: &gateway.UsageDetails{
 				CachedTokens:     12,
 				CacheWriteTokens: 4,
 			},

@@ -57,7 +57,8 @@ func (s *Store) ListTokenUsageEventsSince(ctx context.Context, since time.Time) 
 // payloads return ok=false so callers can skip them.
 func parseTokenUsagePayload(payload string) (models.TokenUsagePayload, bool) {
 	var p models.TokenUsagePayload
-	if err := json.Unmarshal([]byte(payload), &p); err == nil && p.Tokens > 0 {
+	if err := json.Unmarshal([]byte(payload), &p); err == nil &&
+		p.Tokens > 0 && p.CachedTokens >= 0 && p.CacheWriteTokens >= 0 {
 		return p, true
 	}
 	if n, err := strconv.Atoi(strings.TrimSpace(payload)); err == nil && n > 0 {
