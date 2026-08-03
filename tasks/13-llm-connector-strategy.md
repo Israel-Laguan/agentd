@@ -59,7 +59,7 @@ positioning for all later milestones.
        - name: litellm
          adapter: openai
          base_url: "http://127.0.0.1:4000/v1"
-         api_key_env: LITELLM_API_KEY      # = LiteLLM master_key
+         api_key_env: LITELLM_API_KEY      # = scoped LiteLLM virtual key (not the master key)
          model: "poolside/laguna-m.1"      # LiteLLM model_name alias
          capabilities: { chat_tools: true }
      order: [litellm]
@@ -85,7 +85,7 @@ positioning for all later milestones.
 | llama.cpp direct adapter | Keep, frozen | Zero-dep promise; runtime-capability gating in M17 |
 | Native anthropic / ollama / horde adapters | Freeze → maintenance mode | Bug-fix only; tool path is the proxy |
 | New provider intake | Delegate | No new native adapters |
-| Key management / virtual keys / rotation | Delegate | LiteLLM master key + virtual keys |
+| Key management / virtual keys / rotation | Delegate | LiteLLM scoped virtual keys (not the master key) |
 | Per-account spend / budgets | Delegate | LiteLLM budgets |
 | Per-`task` token budget | Keep & harden | `gateway/budget.go`, task-scoped |
 | Provider rate limits (RPM) | Delegate | agentd keeps its concurrency semaphore |

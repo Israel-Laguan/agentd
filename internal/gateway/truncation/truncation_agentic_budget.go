@@ -148,7 +148,7 @@ func (t *AgenticTruncator) truncateAnchorsToBudget(messages []spec.PromptMessage
 		msg := m
 		markerLen := utf8.RuneCountInString(TruncationMarker)
 		if remaining <= 0 {
-			msg.Content = TruncationMarker
+			break
 		} else if utf8.RuneCountInString(msg.Content) > remaining {
 			keep := remaining - markerLen
 			if keep < 0 {

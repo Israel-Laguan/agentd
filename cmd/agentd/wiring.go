@@ -45,6 +45,7 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 		gw = gw.WithRoleRouting(routes)
 	}
 	gw.WithTruncation(cfg.Gateway.TruncatorImpl(gw, breaker), cfg.Gateway.Truncator.MaxInputChars)
+	gateway.RunToolProbes(ctx, gw)
 	for _, p := range providerConfigs {
 		if gw.ProviderSupportsChatTools(p.Name) {
 			slog.Info("provider supports chat tools", "provider", p.Name)

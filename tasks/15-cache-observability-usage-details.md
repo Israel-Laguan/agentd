@@ -1,23 +1,24 @@
 # Milestone 15 — Cache observability: usage details
 
-**Status**: not started · **PR scope**: one code PR · **Depends on**: M14 (measures what M14
+**Status**: done · **PR scope**: one code PR · **Depends on**: M14 (measures what M14
 fixes — can be authored in parallel but merged after). **Relates to**: strategy "Cache
 observability: keep & harden".
 
 ## Goal
 
 Surface prompt-cache hit rates so operators can verify the M14 wins and monitor effective cost.
-Today `AIResponse` carries only a single `TokenUsage int`, and the openai adapter parses only
-`usage.total_tokens` — every provider cache-token field is dropped on the floor.
 
 ## Background / current state (verified)
 
-- `spec.AIResponse` (`internal/gateway/spec/spec.go:110-116`) has only:
-  `Content, TokenUsage int, ProviderUsed, ModelUsed, ToolCalls`.
+- `spec.AIResponse` (`internal/gateway/spec/spec.go:110-116`) now carries:
+  `Content, TokenUsage int, ProviderUsed, ModelUsed, ToolCalls, UsageDetails *UsageDetails`.
 - openai adapter (`internal/gateway/providers/openai.go:204-254`): `Usage struct { TotalTokens,
-  PromptTokens, CompletionTokens }`; only `TotalTokens` is copied into `TokenUsage`.
-- Worker `TOKEN_USAGE` event path: `TokenUsageStore.AddTokenUsage(taskID, tokens int)`
-  (see `worker_token_usage_test.go` for wiring). Cache fields would need to ride along.
+  PromptTokens, CompletionTokens, PromptCacheHitTokens, PromptCacheMissTokens }`; cache fields
+  are parsed via `extractCacheMetrics` and propagated into `AIResponse.UsageDetails`.
+- Worker `TOKEN_USAGE` event path (`internal/queue/worker/worker_token_usage.go`):
+  `TokenUsageStore.AddUsageDetails(ctx, taskID, details)` threads `UsageDetails` into the event
+  payload alongside `TokenUsage`. Tests in `worker_token_usage_test.go:292-337` verify the cache
+  fields land on both agentic and legacy paths.
 
 ## Scope (in)
 

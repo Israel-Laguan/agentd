@@ -23,16 +23,18 @@ so `AgenticMode: true` silently falls back to legacy JSON mode.
    model), enable agentic mode with an explicit opt-in:
    ```yaml
    gateway:
-     llamacpp:
-       base_url: "http://127.0.0.1:8080"
-       model: "<tool-capable-model>"
-       capabilities: { chat_tools: true }
+     providers:
+       - name: llamacpp
+         adapter: llamacpp
+         base_url: "http://127.0.0.1:8080"
+         model: "<tool-capable-model>"
+         capabilities: { chat_tools: true }
    ```
 2. Optional startup capability probe (small, low-risk): instead of relying on the static flag, add
    a one-time probe (a minimal tool-calling request, e.g. at startup or on `warmup_enabled`) that
    sets/refines the effective `SupportsChatTools` for a llamacpp entry and logs the verdict. Keep it
    off by default to avoid surprising extra traffic — gate behind a config option (e.g.
-   `gateway.llamacpp.probe_tools: true`).
+   `options: { probe_tools: true }` on the provider entry).
 3. Update the capability matrix row for llama.cpp with the recipe link and the "verified per model"
    caveat.
 

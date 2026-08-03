@@ -28,6 +28,11 @@ type Capabilities struct {
 	SupportsChatTools bool
 }
 
+// ToolProber can refine SupportsChatTools with a runtime tool-call probe.
+type ToolProber interface {
+	ProbeTools(context.Context) bool
+}
+
 func providerName(cfg spec.ProviderConfig, fallback spec.Provider) spec.Provider {
 	if cfg.Name != "" {
 		return spec.Provider(cfg.Name)

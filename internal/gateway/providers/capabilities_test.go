@@ -46,6 +46,16 @@ func TestProviderCapabilitiesConfigOverride(t *testing.T) {
 			}, nil),
 			want: false,
 		},
+		{
+			name:    "llamacpp enable via config",
+			backend: NewLlamaCpp(spec.ProviderConfig{
+				BaseURL:      "http://localhost:8080",
+				Model:        "llama-test",
+				Capabilities: spec.ProviderCapabilities{ChatTools: boolPtr(true)},
+			}, nil),
+			want: true,
+		},
+
 	}
 
 	for _, tt := range tests {

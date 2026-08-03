@@ -1,6 +1,6 @@
 # Milestone 14 — Cache hygiene: stable prefix
 
-**Status**: not started · **PR scope**: one code PR · **Depends on**: M13 (positioning only —
+**Status**: done · **PR scope**: one code PR · **Depends on**: M13 (positioning only —
 not a hard build dependency). **Relates to**: strategy "Cache policy: keep & harden".
 
 ## Goal
@@ -11,17 +11,14 @@ Two small, high-leverage fixes plus a regression guard.
 
 ## Background / current state (verified)
 
-- `prependMemoryLessons` (`internal/queue/worker/worker_messages.go:23-32`, called at `:208` and
-  `:228`) inserts **retrieval-dynamic memory lessons at index 0**, *before* the stable layered
-  system prompt. Every time recalled lessons change, the cache prefix for everything after (system
-  prompt + tools + history) is busted across tasks. Lessons should move **after** the stable system
-  prompt block.
-- Capability/plugin tool definitions are collected by iterating a Go map:
-  `for n := range r.adapters` in `internal/capabilities/registry.go:59` (and the subagent/plugin
-  equivalents `internal/agent/subagent/subagent_tools.go`, `internal/capabilities/plugin/loader.go`).
-  Go map iteration order is nondeterministic, so when ≥2 adapters contribute tools the serialized
-  `tools` block can differ request-to-request, breaking the prefix non-deterministically. Tool lists
-  must be sorted canonically (by name) before they enter `AIRequest.Tools`.
+- Memory lessons are appended after the stable system prompt via `appendMemoryLessons`
+  (`internal/queue/worker/worker_messages.go:23-26`, called at `:208`, `:215`, and `:235`).
+  There is no `prependMemoryLessons` in the repo; lessons now sit *after* the stable layered
+  system prompt block, so the cache prefix for everything before them stays constant across tasks.
+- Capability/plugin tool definitions are collected by iterating a Go map, but the result is now
+  sorted canonically by name: `internal/capabilities/registry.go:63` and `internal/capabilities/registry.go:115`
+  both call `sort.Strings(names)` before assembling `AIRequest.Tools`. The serialized `tools` block
+  is therefore deterministic request-to-request.
 - Core bash/read/write definitions are a fixed literal in
   `internal/agent/tools/tool_executor.go` `Definitions()` — already deterministic; leave as-is but
   keep it that way.
