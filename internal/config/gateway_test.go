@@ -251,6 +251,73 @@ func TestDurationOrDefault(t *testing.T) {
 	}
 }
 
+func TestGatewayConfig_ConnectorTopology(t *testing.T) {
+	t.Parallel()
+	mkCfg := func(name, model string) gateway.ProviderConfig {
+		return gateway.ProviderConfig{
+			Name:          name,
+			Adapter:       "openai",
+			BaseURL:       "http://127.0.0.1:4000/v1",
+			APIKey:        "test",
+			Model:         model,
+			MaxInputChars: 0,
+			Timeout:       5 * time.Minute,
+		}
+	}
+	litellm := mkCfg("litellm", "poolside/laguna-m.1")
+	openai := mkCfg("openai", "gpt-4o-mini")
+	ollama := mkCfg("ollama", "llama3:8b")
+	portkey := mkCfg("portkey", "")
+	openrouter := mkCfg("openrouter", "")
+
+	topology := func(cfg GatewayConfig, configs []gateway.ProviderConfig) string {
+		return cfg.ConnectorTopology(configs)
+	}
+
+	// No role routes: all roles fall back to first provider in order (litellm).
+	got := topology(GatewayConfig{
+		Order: []string{"litellm", "openai", "ollama"},
+	}, []gateway.ProviderConfig{litellm, openai, ollama})
+	want := "chat=managed(litellm/poolside/laguna-m.1) worker=managed(litellm/poolside/laguna-m.1) memory=managed(litellm/poolside/laguna-m.1)"
+	if got != want {
+		t.Errorf("no routes: got %q, want %q", got, want)
+	}
+
+	// With role routes: each role maps to its explicit provider/model.
+	got = topology(GatewayConfig{
+		Order: []string{"litellm", "openai", "ollama"},
+		RoleModels: RoleModelsConfig{
+			Chat:   RoleModelConfig{Provider: "openai", Model: "gpt-4o"},
+			Worker: RoleModelConfig{Provider: "litellm"},
+			Memory: RoleModelConfig{Provider: "ollama"},
+		},
+	}, []gateway.ProviderConfig{litellm, openai, ollama})
+	want = "chat=direct(openai/gpt-4o) worker=managed(litellm/poolside/laguna-m.1) memory=direct(ollama/llama3:8b)"
+	if got != want {
+		t.Errorf("with routes: got %q, want %q", got, want)
+	}
+
+	// Portkey recognized as managed, openrouter too; un-routed memory falls back
+	// to the first provider in order (portkey).
+	got = topology(GatewayConfig{
+		Order: []string{"portkey", "openrouter"},
+		RoleModels: RoleModelsConfig{
+			Chat:   RoleModelConfig{Provider: "portkey"},
+			Worker: RoleModelConfig{Provider: "openrouter"},
+		},
+	}, []gateway.ProviderConfig{portkey, openrouter})
+	want = "chat=managed(portkey/) worker=managed(openrouter/) memory=managed(portkey/)"
+	if got != want {
+		t.Errorf("managed proxies: got %q, want %q", got, want)
+	}
+
+	// Empty provider list: safe fallback with empty strings.
+	got = topology(GatewayConfig{}, nil)
+	if got != "chat=direct(/) worker=direct(/) memory=direct(/)" {
+		t.Errorf("empty configs: got %q", got)
+	}
+}
+
 func TestGatewayConfig_ProviderConfigs_TwoOpenAIAdapters(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"openai", "poolside"},
@@ -406,9 +473,9 @@ func TestProviderConfigs_NormalizesAdapterType(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"custom"},
 		Providers: []gateway.ProviderConfig{{
-			Name:   "custom",
-			Adapter:   " OpenAI ",
-			APIKey: "sk-test",
+			Name:    "custom",
+			Adapter: " OpenAI ",
+			APIKey:  "sk-test",
 		}},
 	}
 	configs, err := cfg.ProviderConfigs()
@@ -427,7 +494,7 @@ func TestProviderConfigs_UnknownAdapter(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"custom"},
 		Providers: []gateway.ProviderConfig{{
-			Name: "custom",
+			Name:    "custom",
 			Adapter: "foo",
 		}},
 	}
@@ -447,10 +514,10 @@ func TestProviderConfigs_UnknownHealthValue(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"custom"},
 		Providers: []gateway.ProviderConfig{{
-			Name:   "custom",
+			Name:    "custom",
 			Adapter: "openai",
-			APIKey: "sk-test",
-			Health: "undefined_probe",
+			APIKey:  "sk-test",
+			Health:  "undefined_probe",
 		}},
 	}
 	_, err := cfg.ProviderConfigs()
@@ -483,9 +550,9 @@ func TestProviderConfigs_KnownHealthValues_Valid(t *testing.T) {
 			cfg := GatewayConfig{
 				Order: []string{"p"},
 				Providers: []gateway.ProviderConfig{{
-					Name:   "p",
+					Name:    "p",
 					Adapter: "openai",
-					Health: tc.mode,
+					Health:  tc.mode,
 				}},
 			}
 			if _, err := cfg.ProviderConfigs(); err != nil {

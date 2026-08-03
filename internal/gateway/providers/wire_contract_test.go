@@ -37,8 +37,9 @@ func wireContractOpenAI(t *testing.T, srv *httptest.Server) *OpenAI {
 
 // TestWireContract_ErrorStatusMapping is the explicit error/HTTP-status
 // dimension of the wire contract. 429→quota, 5xx→unreachable, 4xx→rejected.
+// It may run standalone (top level) or as a subtest of TestOpenAIWireContract,
+// so it does not call t.Parallel() itself; its subtests do.
 func TestWireContract_ErrorStatusMapping(t *testing.T) {
-	t.Parallel()
 	cases := []struct {
 		name       string
 		status     int
@@ -133,15 +134,15 @@ func TestOpenAIWireContract(t *testing.T) {
 				"model": "wire-test",
 				"choices": []map[string]any{{
 					"message": map[string]any{
-						"role": "assistant",
+						"role":    "assistant",
 						"content": nil,
 						"tool_calls": []map[string]any{{
-							"id": "call_1",
+							"id":   "call_1",
 							"type": "function",
 							"function": map[string]any{
 								"name":      "get_weather",
 								"arguments": `{"location":"Boston"}`,
-							}},
+							},
 						}},
 					},
 				}},
@@ -216,7 +217,12 @@ func TestOpenAIWireContract(t *testing.T) {
 			time.Sleep(200 * time.Millisecond)
 			writeOpenAIJSON(t, w, openAIResponseBody("late", "wire-test"))
 		})
-		_, err := wireContractOpenAI(t, srv).Generate(context.Background(), spec.AIRequest{
+		o := NewOpenAI(spec.ProviderConfig{
+			BaseURL: srv.URL + "/v1",
+			Model:   "wire-test",
+			Timeout: 50 * time.Millisecond,
+		}, srv.Client())
+		_, err := o.Generate(context.Background(), spec.AIRequest{
 			Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
 		})
 		if err == nil {
@@ -240,7 +246,7 @@ func TestOpenAIWireContract(t *testing.T) {
 				Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
 				JSONMode: true,
 				Tools: []spec.ToolDefinition{{
-					Name:        "get_weather",
+					Name:       "get_weather",
 					Parameters: &spec.FunctionParameters{},
 				}},
 			})

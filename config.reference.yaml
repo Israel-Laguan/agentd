@@ -50,6 +50,8 @@ gateway:
   #     model: "poolside/laguna-m.1"      # LiteLLM model_name alias
   #     capabilities:
   #       chat_tools: true
+  #     options:
+  #       send_task_metadata: true        # Optional: propagate task_id/agent_id/role for LiteLLM correlation
   # order: [litellm]
   warmup_enabled: true
   max_tasks_per_phase: 7

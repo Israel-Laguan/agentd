@@ -1,6 +1,6 @@
 # Milestone 18 — LiteLLM correlation metadata + topology log (optional)
 
-**Status**: not started (optional) · **PR scope**: one code PR · **Depends on**: M13 (recipe/M15
+**Status**: done · **PR scope**: one code PR · **Depends on**: M13 (recipe/M15
 fields). **Relates to**: strategy "spend/observability delegated to connector, but correlatable".
 
 ## Goal

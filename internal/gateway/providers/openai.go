@@ -22,7 +22,7 @@ func NewOpenAI(cfg spec.ProviderConfig, client *http.Client) *OpenAI {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	warnUnknownOptions("openai", nil, cfg.Options)
+	warnUnknownOptions("openai", []string{"send_task_metadata"}, cfg.Options)
 	return &OpenAI{cfg: cfg, client: client}
 }
 
@@ -51,6 +51,18 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	body := openAIRequest{
 		Model: model, Messages: messagesToOpenAI(req.Messages),
 		Temperature: req.Temperature, MaxTokens: req.MaxTokens,
+	}
+	if optionBool(o.cfg.Options, "send_task_metadata") && (req.TaskID != "" || req.AgentID != "") {
+		body.Metadata = map[string]string{}
+		if req.TaskID != "" {
+			body.Metadata["task_id"] = req.TaskID
+		}
+		if req.AgentID != "" {
+			body.Metadata["agent_id"] = req.AgentID
+		}
+		if req.Role != "" {
+			body.Metadata["role"] = string(req.Role)
+		}
 	}
 	// OpenAI does not allow response_format: json_object when tools are present.
 	if req.JSONMode && len(req.Tools) == 0 {
@@ -146,6 +158,7 @@ type openAIRequest struct {
 	MaxTokens      int               `json:"max_tokens,omitempty"`
 	ResponseFormat map[string]string `json:"response_format,omitempty"`
 	Tools          []openAITool      `json:"tools,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
 type openAIMessage struct {
