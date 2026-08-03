@@ -32,7 +32,7 @@ its `/v1/chat/completions` OpenAI-compatibility layer rather than the native
 
 ### Managed path — recommended for multi-provider / production
 
-```
+```text
 agentd ──HTTP──▶ LiteLLM (or Portkey / OpenRouter) ──▶ N providers
                 (OpenAI Chat Completions at /v1/chat/completions)
 ```
@@ -161,7 +161,7 @@ gateway:
     - name: litellm
       adapter: openai
       base_url: "http://127.0.0.1:4000/v1"
-      api_key_env: LITELLM_API_KEY   # LiteLLM master key
+      api_key_env: LITELLM_API_KEY   # scoped LiteLLM virtual key (not the master key)
       model: "poolside/laguna-m.1"   # LiteLLM model_name alias
       capabilities: { chat_tools: true }
   order: [litellm]
@@ -169,9 +169,13 @@ gateway:
 
 ## Files
 
-This milestone is docs + config only. No `internal/` Go is touched; the native
-adapters are **not** deleted or rewritten — only their documented status is
-corrected.
+**Milestone 13 itself is docs + config only**: the native adapters are **not**
+deleted or rewritten — only their documented status is corrected. The PR that
+carries this document also lands Milestones 14–15 (`internal/` changes for
+deterministic prompt/tool assembly, prompt-cache usage decoding, worker
+propagation, and `TOKEN_USAGE` events).
+
+Milestone 13 files:
 
 - `docs/llm-connector-strategy.md` (this file)
 - `docs/provider-tool-calling.md`
@@ -184,7 +188,8 @@ corrected.
 
 ## Verification
 
-- Docs-only PR: `git diff --stat` shows only docs/config changes.
+- Milestone 13 scope: `git diff --stat` shows only docs/config changes for the
+  files listed above.
 - `go build ./... && go test ./docs/...` — existing tests pass (link validation +
   provider-tool-calling parity test).
 - Link check: a `grep` for backtick-relative `tasks/` references in `docs/` must point

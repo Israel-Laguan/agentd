@@ -224,19 +224,19 @@ func TestAssembleAgenticSystemPrompt_WithMemoryLessons(t *testing.T) {
 	messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
 
 	if len(messages) != 3 {
-		t.Fatalf("expected 3 messages (lessons + system + user), got %d", len(messages))
+		t.Fatalf("expected 3 messages (system + user + lessons), got %d", len(messages))
 	}
 	if messages[0].Role != "system" {
 		t.Fatalf("expected first message role system, got %s", messages[0].Role)
 	}
-	if messages[1].Role != "system" {
-		t.Fatalf("expected second message role system, got %s", messages[1].Role)
+	if messages[1].Role != "user" {
+		t.Fatalf("expected second message role user, got %s", messages[1].Role)
 	}
-	if messages[2].Role != "user" {
-		t.Fatalf("expected third message role user, got %s", messages[2].Role)
+	if messages[2].Role != "system" {
+		t.Fatalf("expected third message role system, got %s", messages[2].Role)
 	}
-	if !strings.Contains(messages[0].Content, "LESSONS LEARNED") {
-		t.Fatalf("missing memory lessons in first message: %q", messages[0].Content)
+	if !strings.Contains(messages[2].Content, "LESSONS LEARNED") {
+		t.Fatalf("missing memory lessons in last message: %q", messages[2].Content)
 	}
 }
 

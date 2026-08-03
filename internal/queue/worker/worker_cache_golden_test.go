@@ -95,10 +95,10 @@ func executeRequest(t *testing.T, w *Worker, executor *agenttools.ToolExecutor, 
 func assertMessages(t *testing.T, m1 []byte) {
 	t.Helper()
 	if messages := decodeMessages(t, m1); len(messages) >= 3 {
-		assert.Equal(t, "system", messages[0].Role, "message[0] must be the memory lessons system message")
-		assert.Equal(t, "system", messages[1].Role, "message[1] must be the layered system prompt")
-		assert.Equal(t, "user", messages[2].Role, "message[2] must be the task seed user message")
-		assert.Contains(t, messages[0].Content, "LESSONS LEARNED")
+		assert.Equal(t, "system", messages[0].Role, "message[0] must be the layered system prompt")
+		assert.Equal(t, "user", messages[1].Role, "message[1] must be the task seed user message")
+		assert.Equal(t, "system", messages[2].Role, "message[2] must be the memory lessons system message")
+		assert.Contains(t, messages[2].Content, "LESSONS LEARNED")
 	}
 }
 

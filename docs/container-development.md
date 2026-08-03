@@ -91,7 +91,7 @@ podman run --rm agentd-test sh -c '
 ## Quick reference
 
 ```bash
-make build          # go build -o bin/agentd ./cmd/agentd (uses local Go)
+make build          # go build -o bin/agentd ./cmd/agentd (host go; GOTOOLCHAIN=go1.26.2+auto may fetch 1.26.2)
 make test           # go test ./... (requires non-root for permission tests)
 make lint-install   # install golangci-lint v2.12.2 locally
 make lint           # run golangci-lint v2

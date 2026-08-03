@@ -33,22 +33,21 @@ func (e *Engine) processAgenticIteration(
 	checkpointer *wsession.SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
 	sessionRecoveryNeedsPlanInject *bool,
 ) (continueLoop bool, result agentruntime.LoopResult, report bool, rewindTo int, err error) {
-	if stop, guardErr := e.guardAgenticIteration(
+	stop, guardErr := e.guardAgenticIteration(
 		ctx, task, project, profile, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
 		ctxBudgetGuard, cm, goalTracker, sessionMgr, turnID, turnIndex,
-	); stop != nil {
+	)
+	if stop != nil {
 		return false, *stop, true, rewindNone, nil
-	} else if guardErr != nil {
+	}
+	if guardErr != nil {
 		if errors.Is(guardErr, errTopicDriftReset) {
 			return true, agentruntime.LoopResult{}, false, rewindToFirstTurn, errTopicDriftReset
 		}
 		return false, agentruntime.LoopResult{}, false, rewindNone, guardErr
 	}
-
 	recoveryGen := 0
-	if sessionRecoveryGen != nil {
-		recoveryGen = *sessionRecoveryGen
-	}
+	if sessionRecoveryGen != nil { recoveryGen = *sessionRecoveryGen }
 	resp, stop, err := e.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex, recoveryGen)
 	if stop != nil {
 		return false, *stop, true, rewindNone, nil
@@ -67,16 +66,13 @@ func (e *Engine) processAgenticIteration(
 	} else {
 		appendAssistantMessage(messages, resp)
 	}
-
 	if len(resp.ToolCalls) == 0 {
-		cont, res, rep, rewind, finErr := e.finishAgenticTurnNoTools(
+		return e.finishAgenticTurnNoTools(
 			ctx, task, profile, resp.Content, workPlan, goalTracker,
 			turnID, turnIndex, budgetGuard, ctxBudgetGuard, cm, messages, respecAttempts,
 			checkpointer, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject,
 		)
-		return cont, res, rep, rewind, finErr
 	}
-
 	cont, res, rep, finErr := e.continueAgenticAfterTools(
 		ctx, task, profile, resp, messages, toolToAdapter, toolExecutor,
 		taskHooks, taskCaps, cm, goalTracker, toolTracker,

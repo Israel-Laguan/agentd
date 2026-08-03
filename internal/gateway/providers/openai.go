@@ -44,18 +44,15 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		ctx, cancel = context.WithTimeout(ctx, o.cfg.Timeout)
 		defer cancel()
 	}
-	model := o.cfg.Model
-	if req.Model != "" {
-		model = req.Model
+	model := req.Model
+	if model == "" {
+		model = o.cfg.Model
 	}
 	body := openAIRequest{
-		Model:       model,
-		Messages:    messagesToOpenAI(req.Messages),
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
+		Model: model, Messages: messagesToOpenAI(req.Messages),
+		Temperature: req.Temperature, MaxTokens: req.MaxTokens,
 	}
 	// OpenAI does not allow response_format: json_object when tools are present.
-	// When tools are provided, we omit response_format to avoid conflicts.
 	if req.JSONMode && len(req.Tools) == 0 {
 		body.ResponseFormat = map[string]string{"type": "json_object"}
 	}
@@ -100,11 +97,7 @@ func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedRe
 	if model == "" {
 		model = "text-embedding-3-small"
 	}
-	body := openAIEmbedRequest{
-		Model: model,
-		Input: req.Input,
-	}
-	data, _, err := postJSON(ctx, o.client, o.embeddingsURL(), body, o.cfg.APIKey)
+	data, _, err := postJSON(ctx, o.client, o.embeddingsURL(), openAIEmbedRequest{Model: model, Input: req.Input}, o.cfg.APIKey)
 	if err != nil {
 		return spec.EmbedResponse{}, err
 	}
@@ -123,11 +116,7 @@ func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedRe
 	if modelUsed == "" {
 		modelUsed = model
 	}
-	return spec.EmbedResponse{
-		Vectors:      vectors,
-		ProviderUsed: string(o.Name()),
-		ModelUsed:    modelUsed,
-	}, nil
+	return spec.EmbedResponse{Vectors: vectors, ProviderUsed: string(o.Name()), ModelUsed: modelUsed}, nil
 }
 
 type openAIEmbedRequest struct {
@@ -170,17 +159,11 @@ type openAIMessage struct {
 func messagesToOpenAI(msgs []spec.PromptMessage) []openAIMessage {
 	out := make([]openAIMessage, len(msgs))
 	for i, m := range msgs {
-		om := openAIMessage{
-			Role:       m.Role,
-			Name:       m.Name,
-			ToolCalls:  m.ToolCalls,
-			ToolCallID: m.ToolCallID,
-		}
+		om := openAIMessage{Role: m.Role, Name: m.Name, ToolCalls: m.ToolCalls, ToolCallID: m.ToolCallID}
 		if m.Role == "assistant" && len(m.ToolCalls) > 0 && m.Content == "" {
 			om.Content = nil
 		} else {
-			content := m.Content
-			om.Content = &content
+			om.Content = &m.Content
 		}
 		out[i] = om
 	}
@@ -227,28 +210,19 @@ type openAIToolCall struct {
 	} `json:"function"`
 }
 
-func (r openAIResponse) toAIResponse(defaultModel string, providerUsed string) spec.AIResponse {
+func (r openAIResponse) toAIResponse(defaultModel, providerUsed string) spec.AIResponse {
 	model := r.resolveModel(defaultModel)
 	content, toolCalls := r.extractResponseContent()
-
 	r.logZeroUsage(providerUsed, model)
 	cached, cacheWrite := r.extractCacheMetrics(providerUsed, model)
-
 	var usageDetails *spec.UsageDetails
 	if cached != 0 || cacheWrite != 0 {
-		usageDetails = &spec.UsageDetails{
-			CachedTokens:     cached,
-			CacheWriteTokens: cacheWrite,
-		}
+		usageDetails = &spec.UsageDetails{CachedTokens: cached, CacheWriteTokens: cacheWrite}
 	}
-
 	return spec.AIResponse{
-		Content:      content,
-		TokenUsage:   r.Usage.TotalTokens,
-		ProviderUsed: providerUsed,
-		ModelUsed:    model,
-		ToolCalls:    toolCalls,
-		UsageDetails: usageDetails,
+		Content: content, TokenUsage: r.Usage.TotalTokens,
+		ProviderUsed: providerUsed, ModelUsed: model,
+		ToolCalls: toolCalls, UsageDetails: usageDetails,
 	}
 }
 
@@ -267,8 +241,7 @@ func (r openAIResponse) extractResponseContent() (string, []spec.ToolCall) {
 	content := ""
 	if msg.Content != nil {
 		content = *msg.Content
-	}
-	if content == "" && msg.ReasoningContent != nil {
+	} else if msg.ReasoningContent != nil {
 		content = *msg.ReasoningContent
 	}
 	var toolCalls []spec.ToolCall
@@ -295,17 +268,14 @@ func (r openAIResponse) convertToolCalls(tcList []openAIToolCall) []spec.ToolCal
 
 func (r openAIResponse) logZeroUsage(providerUsed, model string) {
 	if r.Usage.TotalTokens == 0 {
-		slog.Debug("openai provider returned zero total_tokens; usage data may be absent in this provider's response",
+		slog.Debug("openai provider returned zero total_tokens; usage data may be absent",
 			"provider", providerUsed, "model", model)
 	}
 }
 
 func (r openAIResponse) extractCacheMetrics(providerUsed, model string) (int, int) {
-	// Surface prompt-cache fields when the provider reports them. OpenAI
-	// exposes cached reads via prompt_tokens_details.cached_tokens; DeepSeek
-	// (OpenAI-compatible) exposes prompt_cache_hit_tokens (reads) and
-	// prompt_cache_miss_tokens (writes). Most providers omit all of these,
-	// leaving both fields at zero.
+	// Surface prompt-cache: OpenAI uses prompt_tokens_details.cached_tokens;
+	// DeepSeek uses prompt_cache_hit_tokens (reads) and prompt_cache_miss_tokens (writes).
 	cached := 0
 	if r.Usage.PromptTokensDetails != nil {
 		cached = r.Usage.PromptTokensDetails.CachedTokens
@@ -316,8 +286,7 @@ func (r openAIResponse) extractCacheMetrics(providerUsed, model string) (int, in
 	cacheWrite := r.Usage.PromptCacheMissTokens
 	if cached > 0 || cacheWrite > 0 {
 		slog.Debug("openai provider parsed prompt-cache usage details",
-			"provider", providerUsed, "model", model,
-			"total_tokens", r.Usage.TotalTokens,
+			"provider", providerUsed, "model", model, "total_tokens", r.Usage.TotalTokens,
 			"cached_tokens", cached, "cache_write_tokens", cacheWrite)
 	}
 	return cached, cacheWrite

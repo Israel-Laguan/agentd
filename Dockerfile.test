@@ -11,19 +11,19 @@ WORKDIR /src
 # sandbox BashExecutor tests invoke (the runtime image also ships bash).
 RUN apk add --no-cache sqlite-libs bash
 
+ENV GOCACHE=/tmp/.gocache \
+    GOMODCACHE=/tmp/.gomodcache \
+    GOTOOLCHAIN=local
+
 COPY go.mod go.sum ./
-RUN go mod download
+RUN mkdir -p /tmp/.gocache /tmp/.gomodcache && go mod download
 
 COPY . .
 
 # Create a non-root user matching the project's runtime user conventions.
 RUN adduser -D -s /bin/bash tester \
-    && mkdir -p /tmp/.gocache /tmp/.gomodcache \
     && chown -R tester:tester /src /tmp/.gocache /tmp/.gomodcache
 USER tester
-ENV GOCACHE=/tmp/.gocache \
-    GOMODCACHE=/tmp/.gomodcache \
-    GOTOOLCHAIN=local
 
 # Run the same test command the project uses, sans -race (musl + race detector
 # requires additional setup; permission tests are the priority here).

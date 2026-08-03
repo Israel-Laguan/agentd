@@ -29,7 +29,7 @@ func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, project
 	}
 	recalled := w.retriever.Recall(ctx, intent, projectID, "")
 	if lessons := memoryFormatLessons(recalled); lessons != "" {
-		return append([]gateway.PromptMessage{{Role: "system", Content: lessons}}, messages...)
+		return append(messages, gateway.PromptMessage{Role: "system", Content: lessons})
 	}
 	return messages
 }

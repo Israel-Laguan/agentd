@@ -27,19 +27,35 @@ func (t *AgenticTruncator) truncateToBudget(messages []spec.PromptMessage, budge
 		return messages
 	}
 
-	// Reserve space for markers that will be added during truncation
-	// Max overhead: TruncationMarker + space + CollapseMarker + space
 	markerOverhead := utf8.RuneCountInString(TruncationMarker) + utf8.RuneCountInString(CollapseMarker) + 2
 	effectiveBudget := budget - markerOverhead
-	// Clamp: don't let the floor exceed the caller budget
 	if effectiveBudget < 0 {
 		effectiveBudget = 0
 	}
 
-	// Always keep system prompt (first message)
+	anchors := t.buildAnchorsFromMessages(messages)
+	anchorChars := t.calcAnchorChars(anchors)
+	remainingBudget := effectiveBudget - anchorChars
+
+	if remainingBudget <= 0 {
+		return t.truncateAnchorsToBudget(anchors, effectiveBudget)
+	}
+
+	middle := t.collectMiddleMessages(messages, anchors)
+	if totalChars(middle) <= remainingBudget {
+		return append(anchors, middle...)
+	}
+
+	return append(anchors, t.truncateMiddleToBudget(middle, remainingBudget)...)
+}
+
+// buildAnchorsFromMessages builds anchor messages (system prompt + leading system + first user).
+func (t *AgenticTruncator) buildAnchorsFromMessages(messages []spec.PromptMessage) []spec.PromptMessage {
+	if len(messages) == 0 {
+		return nil
+	}
 	out := []spec.PromptMessage{messages[0]}
 
-	// Find first user message (anchor)
 	firstUserIdx := -1
 	for i := 1; i < len(messages); i++ {
 		if messages[i].Role == "user" {
@@ -48,65 +64,92 @@ func (t *AgenticTruncator) truncateToBudget(messages []spec.PromptMessage, budge
 		}
 	}
 
-	// Include all leading system messages before the first user so memory-lesson
-	// anchors are not dropped by middle-out truncation.
 	for i := 1; firstUserIdx > 0 && i < firstUserIdx; i++ {
 		if messages[i].Role == "system" {
 			out = append(out, messages[i])
 		}
 	}
 
-	// Add first user message if found
 	if firstUserIdx > 0 {
 		out = append(out, messages[firstUserIdx])
 	}
-
-	// Calculate budget remaining after anchors
-	anchorChars := 0
-	for _, m := range out {
-		anchorChars += utf8.RuneCountInString(m.Content)
-	}
-	remainingBudget := effectiveBudget - anchorChars
-
-	if remainingBudget <= 0 {
-		// Anchors alone exceed budget - truncate them
-		return t.truncateAnchorsToBudget(out, effectiveBudget)
-	}
-
-	// Collect non-anchor messages (middle content)
-	middle := []spec.PromptMessage{}
-	if firstUserIdx > 0 {
-		middle = messages[firstUserIdx+1:]
-	} else if len(messages) > 1 {
-		middle = messages[1:]
-	}
-
-	// If middle fits in remaining budget, include all
-	if totalChars(middle) <= remainingBudget {
-		out = append(out, middle...)
-		return out
-	}
-
-	// Need to truncate middle content - take from the end (most recent)
-	out = append(out, t.truncateMiddleToBudget(middle, remainingBudget)...)
-
 	return out
 }
 
-// truncateAnchorsToBudget truncates anchor messages themselves when they exceed budget
+// calcAnchorChars calculates total character count of anchor messages.
+func (t *AgenticTruncator) calcAnchorChars(messages []spec.PromptMessage) int {
+	total := 0
+	for _, m := range messages {
+		total += utf8.RuneCountInString(m.Content)
+	}
+	return total
+}
+
+// collectMiddleMessages collects non-anchor messages for truncation.
+func (t *AgenticTruncator) collectMiddleMessages(all, anchors []spec.PromptMessage) []spec.PromptMessage {
+	if len(all) <= 1 {
+		return nil
+	}
+	firstUserIdx := -1
+	for i := 1; i < len(all); i++ {
+		if all[i].Role == "user" {
+			firstUserIdx = i
+			break
+		}
+	}
+	if firstUserIdx > 0 {
+		return all[firstUserIdx+1:]
+	}
+	return all[1:]
+}
+
+// truncateAnchorsToBudget truncates anchor messages themselves when they exceed budget.
+// Non-user anchors are processed first; the first user anchor is guaranteed to get
+// at least the truncation marker so the user's actual task is not silently dropped.
 func (t *AgenticTruncator) truncateAnchorsToBudget(messages []spec.PromptMessage, budget int) []spec.PromptMessage {
 	out := make([]spec.PromptMessage, 0, len(messages))
 	remaining := budget
 
+	var userAnchors []spec.PromptMessage
+	var otherAnchors []spec.PromptMessage
 	for _, m := range messages {
+		if m.Role == "user" {
+			userAnchors = append(userAnchors, m)
+		} else {
+			otherAnchors = append(otherAnchors, m)
+		}
+	}
+
+	// Process non-user anchors first so the user anchor gets whatever budget remains.
+	for _, m := range otherAnchors {
 		if remaining <= 0 {
 			break
 		}
 		msg := m
-		// Reserve space for marker before slicing
 		markerLen := utf8.RuneCountInString(TruncationMarker)
 		if utf8.RuneCountInString(msg.Content) > remaining {
-			// Reserve space for marker
+			keep := remaining - markerLen
+			if keep < 0 {
+				keep = 0
+			}
+			// Use rune-based slicing
+			runes := []rune(msg.Content)
+			msg.Content = string(runes[:keep]) + TruncationMarker
+			remaining -= utf8.RuneCountInString(msg.Content)
+		} else {
+			remaining -= utf8.RuneCountInString(msg.Content)
+		}
+		out = append(out, msg)
+	}
+
+	// Ensure user anchor gets at least the truncation marker so the user's task
+	// is represented even in a zero-budget scenario.
+	for _, m := range userAnchors {
+		msg := m
+		markerLen := utf8.RuneCountInString(TruncationMarker)
+		if remaining <= 0 {
+			msg.Content = TruncationMarker
+		} else if utf8.RuneCountInString(msg.Content) > remaining {
 			keep := remaining - markerLen
 			if keep < 0 {
 				keep = 0
