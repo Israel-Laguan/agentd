@@ -4,13 +4,13 @@ import (
 	"agentd/internal/gateway/spec"
 )
 
-// applyBudgetTruncation handles character budget truncation.
-// The loop shrinks the message list until it fits the budget. A convergence guard
-// breaks the loop when a pass no longer reduces the character count — this happens
-// when the budget is below the irreducible truncation-marker overhead, where the
-// best-effort result (a single marker) still exceeds the budget. Without this guard
-// the loop would spin forever.
-func (t *AgenticTruncator) applyBudgetTruncation(messages []spec.PromptMessage, budget int) []spec.PromptMessage {
+// truncateWithBudgetLoop repeatedly applies truncateToBudget + removeDanglingToolCalls
+// until the message list fits within budget or no further progress can be made.
+// The convergence guard breaks when a pass no longer reduces the character count,
+// which happens when the budget is below the irreducible truncation-marker overhead,
+// where the best-effort result (a single marker) still exceeds the budget. Without
+// this guard the loop would spin forever.
+func (t *AgenticTruncator) truncateWithBudgetLoop(messages []spec.PromptMessage, budget int) []spec.PromptMessage {
 	for budget > 0 && totalChars(messages) > budget {
 		prev := totalChars(messages)
 		messages = t.truncateToBudget(messages, budget)
@@ -20,6 +20,12 @@ func (t *AgenticTruncator) applyBudgetTruncation(messages []spec.PromptMessage, 
 		}
 	}
 	return messages
+}
+
+// applyBudgetTruncation handles character budget truncation by delegating to
+// truncateWithBudgetLoop, the shared convergence-guarded shrinking loop.
+func (t *AgenticTruncator) applyBudgetTruncation(messages []spec.PromptMessage, budget int) []spec.PromptMessage {
+	return t.truncateWithBudgetLoop(messages, budget)
 }
 
 // applyMessageCountTruncation handles message count truncation with tool exchange awareness

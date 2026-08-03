@@ -327,15 +327,9 @@ func TestProperty6_ToolExchangesDroppedBeforeAnchors(t *testing.T) {
 // Validates: Requirement 5.1
 // ============================================================================
 
-// TestProperty7_CharacterBudgetEnforcement tests that for any message history where
-// character budget is specified and total characters exceed budget, the output
-// SHALL have total characters within budget.
-//
-// **Validates: Requirement 5.1**
-func TestProperty7_CharacterBudgetEnforcement(t *testing.T) {
-	r := rand.New(rand.NewSource(testSeed + 6))
-
-	// First, test very-small-budget cases to catch marker/overhead regressions
+// testSmallBudgetCases checks very-small-budget cases to catch
+// marker/overhead regressions.
+func testSmallBudgetCases(t *testing.T, r *rand.Rand) {
 	smallBudgets := []int{1, 2, 5, 10}
 	markerLen := utf8.RuneCountInString(TruncationMarker)
 	// Add budgets up to marker length
@@ -366,6 +360,18 @@ func TestProperty7_CharacterBudgetEnforcement(t *testing.T) {
 				budget, resultTotal, allowed)
 		}
 	}
+}
+
+// TestProperty7_CharacterBudgetEnforcement tests that for any message history where
+// character budget is specified and total characters exceed budget, the output
+// SHALL have total characters within budget.
+//
+// **Validates: Requirement 5.1**
+func TestProperty7_CharacterBudgetEnforcement(t *testing.T) {
+	r := rand.New(rand.NewSource(testSeed + 6))
+
+	// First, test very-small-budget cases to catch marker/overhead regressions
+	testSmallBudgetCases(t, r)
 
 	// Then test regular budget ranges
 	for i := 0; i < propertyTestIterations; i++ {

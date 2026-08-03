@@ -57,7 +57,7 @@ func (t *AgenticTruncator) buildAnchorsFromMessages(messages []spec.PromptMessag
 	out := []spec.PromptMessage{messages[0]}
 
 	firstUserIdx := -1
-	for i := 1; i < len(messages); i++ {
+	for i := 0; i < len(messages); i++ {
 		if messages[i].Role == "user" {
 			firstUserIdx = i
 			break
@@ -91,7 +91,7 @@ func (t *AgenticTruncator) collectMiddleMessages(all, anchors []spec.PromptMessa
 		return nil
 	}
 	firstUserIdx := -1
-	for i := 1; i < len(all); i++ {
+	for i := 0; i < len(all); i++ {
 		if all[i].Role == "user" {
 			firstUserIdx = i
 			break
