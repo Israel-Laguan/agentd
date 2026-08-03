@@ -39,6 +39,9 @@ go.work.sum
 # env file
 .env
 
+# Node modules (root docs tooling)
+node_modules/
+
 # Editor/IDE
 # .idea/
 # .vscode/

@@ -107,6 +107,23 @@ func NewRouterFromConfigs(configs []spec.ProviderConfig) (*Router, error) {
 	return router, nil
 }
 
+// RunToolProbes runs runtime tool-support probes on backends that implement
+// ToolProber. Each probe is self-gating (opt-in via config) and non-fatal;
+// errors are logged and treated as "not supported".
+func (r *Router) RunToolProbes(ctx context.Context) {
+	if r == nil {
+		return
+	}
+	for _, p := range r.providers {
+		if p == nil {
+			continue
+		}
+		if prober, ok := p.(providers.ToolProber); ok {
+			prober.ProbeTools(ctx)
+		}
+	}
+}
+
 // WithTruncation sets the truncator and optional max message size override.
 func (r *Router) WithTruncation(truncator spec.Truncator, maxMessageChars int) *Router {
 	if truncator != nil {

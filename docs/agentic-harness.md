@@ -97,6 +97,7 @@ To enable agentic mode for a profile:
    models, route through the managed proxy path with `adapter: openai` instead.
 
 The worker checks `profile.AgenticMode` at task processing time and routes to either:
+
 - Legacy path: `command()` → single sandbox run
 - Agentic path: `processAgentic()` → inner loop with tool calling
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +27,11 @@ type EmbedBackend interface {
 // Capabilities represents the capabilities of a provider.
 type Capabilities struct {
 	SupportsChatTools bool
+}
+
+// ToolProber can refine SupportsChatTools with a runtime tool-call probe.
+type ToolProber interface {
+	ProbeTools(context.Context) bool
 }
 
 func providerName(cfg spec.ProviderConfig, fallback spec.Provider) spec.Provider {
@@ -91,6 +97,31 @@ func optionDuration(opts map[string]any, key string, def time.Duration) time.Dur
 	default:
 		slog.Error("option: expected duration or string", "key", key, "type", fmt.Sprintf("%T", val))
 		return def
+	}
+}
+
+// optionBool retrieves a bool from an adapter options map.
+// val may be a bool or a string accepted by strconv.ParseBool (as decoded from
+// YAML). Falls back to false on missing key or unparseable value, logging an
+// error in the latter case.
+func optionBool(opts map[string]any, key string) bool {
+	val, ok := opts[key]
+	if !ok {
+		return false
+	}
+	switch v := val.(type) {
+	case bool:
+		return v
+	case string:
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			slog.Error("option: invalid bool", "key", key, "value", v, "err", err)
+			return false
+		}
+		return b
+	default:
+		slog.Error("option: expected bool or string", "key", key, "type", fmt.Sprintf("%T", val))
+		return false
 	}
 }
 

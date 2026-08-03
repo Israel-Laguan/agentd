@@ -34,12 +34,14 @@ curl -X POST http://127.0.0.1:8765/api/v1/projects/materialize \
 ```
 
 **Behavior:**
+
 - The server creates the project and workspace directory.
 - All files from `source_path` are recursively copied into the workspace.
 - Only after the copy completes are tasks transitioned from `PENDING` to `READY`.
 - Workers cannot claim the tasks until the copy finishes.
 
 **Guarantees:**
+
 - Tasks are `READY` in the response — workspace is already populated.
 - No race window: copy is synchronous within the HTTP request.
 
@@ -66,6 +68,7 @@ curl -X POST http://127.0.0.1:8765/api/v1/projects/$PROJECT_ID/workspace/ready
 ```
 
 **Behavior:**
+
 - `POST /api/v1/projects/{id}/workspace/ready` checks that the workspace
   directory is non-empty.
 - If empty, returns `409 Conflict` with error message.
@@ -80,7 +83,8 @@ encounters an empty workspace directory at dispatch time. This helps detect
 misconfigured pipelines where neither Option A nor Option B was used.
 
 The warning event has type `WARNING` and payload:
-```
+
+```text
 workspace empty at dispatch time; consider using source_path on materialize or calling POST /workspace/ready after seeding
 ```
 
@@ -91,7 +95,7 @@ for monitoring.
 
 ## Task State Machine
 
-```
+```text
            source_path set              source_path empty
                │                              │
                ▼                              ▼
@@ -135,6 +139,7 @@ Signals that workspace content has been seeded externally. Transitions all
 `PENDING` tasks for the project to `READY`.
 
 **Responses:**
+
 - `200 OK` — Tasks unlocked. Body: `{"data": {"tasks": [...]}}`
 - `409 Conflict` — Workspace directory is empty.
 

@@ -316,8 +316,8 @@ The detailed Manager's Loop and Memory Recall flows were moved to [`docs/archite
 
 ## Architectural Conventions
 
-9. **The `_system` project is the durable home for operator-level tasks.** Outage alerts, disk alerts, and reboot recovery reviews are attached to a well-known `_system` project created by [`internal/kanban/system_project.go`](../internal/kanban/system_project.go). De-duplication via `EnsureProjectTask` prevents repeated open tasks from the same alert source.
+1. **The `_system` project is the durable home for operator-level tasks.** Outage alerts, disk alerts, and reboot recovery reviews are attached to a well-known `_system` project created by [`internal/kanban/system_project.go`](../internal/kanban/system_project.go). De-duplication via `EnsureProjectTask` prevents repeated open tasks from the same alert source.
 
-10. **HUMAN child tasks under BLOCKED parents.** When the worker detects a condition requiring human action (interactive prompt, permission failure, provider exhaustion, healing failure), it blocks the parent task and creates a HUMAN-assigned child task. The parent automatically returns to `READY` after all children complete, so the original work resumes without re-creation.
+2. **HUMAN child tasks under BLOCKED parents.** When the worker detects a condition requiring human action (interactive prompt, permission failure, provider exhaustion, healing failure), it blocks the parent task and creates a HUMAN-assigned child task. The parent automatically returns to `READY` after all children complete, so the original work resumes without re-creation.
 
-11. **Config precedence.** CLI flags such as `--home` and `--workers` are highest for their own values. For config keys: explicit `--config <file>` > `AGENTD_*` environment variables > auto-discovered `<home>/config.yaml` > compiled defaults. Source: [`internal/config/config.go`](../internal/config/config.go) and [`internal/config/override.go`](../internal/config/override.go).
+3. **Config precedence.** CLI flags such as `--home` and `--workers` are highest for their own values. For config keys: explicit `--config <file>` > `AGENTD_*` environment variables > auto-discovered `<home>/config.yaml` > compiled defaults. Source: [`internal/config/config.go`](../internal/config/config.go) and [`internal/config/override.go`](../internal/config/override.go).

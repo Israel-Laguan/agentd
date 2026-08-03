@@ -16,7 +16,7 @@ This repository uses strict guardrails to keep code focused, testable, and maint
 
 Packages in `internal/` follow inward-facing dependency rules:
 
-```
+```text
  ┌──────────────────────────────────────────────────────────────┐
  │  Outward Layers (may import inward, never the reverse)      │
  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │

@@ -113,6 +113,7 @@ Built-in slot for Google's OpenAI-compatible Gemini endpoint (uses the `openai` 
 | `gateway.gemini.timeout` | `5m` | Per-request HTTP timeout |
 
 Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First Run with Gemini Only](../README.md#first-run-with-gemini-only).
+
 - **ollama / llamacpp**: local inference endpoints; set `model` to match your deployed model.
 - **horde**: AI Horde fallback; anonymous key `0000000000` is valid.
 - **max_input_chars**: `0` inherits `gateway.truncator.max_input_chars`.

@@ -33,6 +33,7 @@ Returns system health, memory usage, circuit breaker state, and task summary.
 **Query Parameters:** `include_healing`, `include_system` (default false; set `true` to count self-healing handoff subtasks or include `_system`).
 
 **Response**:
+
 ```json
 {
   "status": "success",
@@ -65,6 +66,7 @@ Reset the LLM circuit breaker without restarting the daemon. Use this after quot
 | `provider` | Reset only the named provider's breaker (e.g. `?provider=gemini`). Omit to reset the global breaker and all per-provider breakers. |
 
 **Response**:
+
 ```json
 {
   "status": "success",
@@ -77,6 +79,7 @@ When `?provider=gemini` is supplied, `"provider"` in the response is `"gemini"`.
 **Error Responses** (all `503`, code `UNAVAILABLE`): system service not configured; global reset unavailable; per-provider reset unavailable when `ProviderBreakers` is nil.
 
 **Test Coverage**:
+
 - No service (503): `internal/api/controllers/system_test.go:42`
 - No resetter (503): `internal/api/controllers/system_test.go:52`
 - Global reset success (200): `internal/api/controllers/system_test.go:66`
@@ -94,6 +97,7 @@ List all projects.
 **Query Parameters:** `include_system` (default false).
 
 **Response**:
+
 ```json
 {
   "status": "success",
@@ -109,6 +113,7 @@ List all projects.
 Create a project from a draft plan.
 
 **Request Body**:
+
 ```json
 {
   "project_name": "project-name",
@@ -134,6 +139,7 @@ When `api.materialize_token` is set in daemon config, include header `X-Agentd-M
 Signals that the project workspace has been populated manually. Transitions `PENDING` root tasks to `READY`.
 
 **Behavior:**
+
 - Validates the workspace directory is non-empty before unlocking.
 - Returns `409 STATE_CONFLICT` if the workspace is still empty.
 - When `api.materialize_token` is configured, requires the same `X-Agentd-Materialize-Token` header as materialize.
@@ -151,6 +157,7 @@ Signals that the project workspace has been populated manually. Transitions `PEN
 List tasks for a project with optional filters.
 
 **Query Parameters**:
+
 - `state` - Filter by state (comma-separated): `PENDING`, `READY`, `QUEUED`, `RUNNING`, `BLOCKED`, `COMPLETED`, `FAILED`, `IN_CONSIDERATION`
 - `assignee` - Filter by assignee: `HUMAN`, `SYSTEM`, or agent ID
 - `include_healing` - When `true`, include self-healing handoff subtasks. Default: excluded.
@@ -158,6 +165,7 @@ List tasks for a project with optional filters.
 - `offset` - Pagination offset
 
 **Response**:
+
 ```json
 {
   "status": "success",
@@ -167,6 +175,7 @@ List tasks for a project with optional filters.
 ```
 
 **Test Coverage**:
+
 - Basic listing: `internal/api/tests/feature/routes_test.go:24`
 - Unknown project: `internal/api/tests/feature/routes_test.go:43`
 - Bad state filter: `internal/api/tests/feature/routes_test.go:52`
@@ -176,6 +185,7 @@ List tasks for a project with optional filters.
 Update a task's state.
 
 **Request Body**:
+
 ```json
 { "state": "COMPLETED" }
 ```
@@ -183,6 +193,7 @@ Update a task's state.
 **Valid States**: `PENDING`, `IN_CONSIDERATION`, `RUNNING`, `BLOCKED`, `FAILED`, `COMPLETED`
 
 **Response**:
+
 ```json
 {
   "status": "success",
@@ -195,10 +206,12 @@ Update a task's state.
 ```
 
 **Error Responses**:
+
 - `404 NOT_FOUND` - Task not found
 - `409 STATE_CONFLICT` - Invalid state transition
 
 **Test Coverage**:
+
 - Update state: `internal/api/tests/feature/routes_test.go:67`
 - Reject unknown state: `internal/api/tests/feature/routes_test.go:79`
 - Missing task: `internal/api/tests/feature/routes_test.go:88`
@@ -208,11 +221,13 @@ Update a task's state.
 Add a human comment to a task. This pauses the task to `IN_CONSIDERATION` state.
 
 **Request Body**:
+
 ```json
 { "content": "Please review this task" }
 ```
 
 **Response**:
+
 ```json
 {
   "status": "success",
@@ -221,9 +236,11 @@ Add a human comment to a task. This pauses the task to `IN_CONSIDERATION` state.
 ```
 
 **Error Responses**:
+
 - `400 BAD_REQUEST` - Empty content (validation failed)
 
 **Test Coverage**:
+
 - Add comment and pause: `internal/api/tests/feature/routes_test.go:137`
 - Invalid content: `internal/api/tests/feature/routes_test.go:119`
 
@@ -232,6 +249,7 @@ Add a human comment to a task. This pauses the task to `IN_CONSIDERATION` state.
 Assign a task to an agent. Reassignment of a `RUNNING` task returns `409 STATE_CONFLICT`; unknown `agent_id` → `404 NOT_FOUND`. Prefer `agent_id` on materialize when known upfront.
 
 **Request Body**:
+
 ```json
 { "agent_id": "default" }
 ```
@@ -241,6 +259,7 @@ Assign a task to an agent. Reassignment of a `RUNNING` task returns `409 STATE_C
 Split a task into subtasks.
 
 **Request Body**:
+
 ```json
 {
   "subtasks": [
@@ -263,6 +282,7 @@ Retry a failed task. Allowed from `FAILED`, `BLOCKED`, or `FAILED_REQUIRES_HUMAN
 List all agent profiles.
 
 **Response**:
+
 ```json
 {
   "status": "success",
@@ -291,6 +311,7 @@ List all agent profiles.
 Get a specific agent profile.
 
 **Test Coverage**:
+
 - `default` agent: `e2e/http_test.go:70`
 - `qa` agent: `e2e/http_test.go:87`
 - `researcher` agent: `e2e/http_test.go:104`
@@ -312,6 +333,7 @@ Sparse update. Set `agentic_mode` to `true` or `false` to enable or disable agen
 OpenAI-compatible chat completions endpoint.
 
 **Request Body**:
+
 ```json
 {
   "model": "agentd",
@@ -323,6 +345,7 @@ OpenAI-compatible chat completions endpoint.
 ```
 
 **Response**:
+
 ```json
 {
   "id": "chatcmpl-xxx",
@@ -353,10 +376,13 @@ OpenAI-compatible chat completions endpoint.
 Server-Sent Events (SSE) stream for real-time updates.
 
 **Query Parameters**:
+
 - `task_id` - Filter events by task
 - `project_id` - Filter events by project
 
 **Note**: Events are only emitted during active daemon processing. When idle, no events are streamed.
+
+For the event-name mapping and the `tool_called` / `tool_result` payload contract, see [SSE events & tool-event payloads](sse-events.md).
 
 ---
 
