@@ -3,12 +3,16 @@
 import { motion } from "framer-motion";
 import { Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ToolEventList } from "@/app/components/logs/tool-event-list";
+import { useToolEventStream } from "@/app/hooks/use-tool-event-stream";
 
 interface LogsViewProps {
   tasks: Task[];
 }
 
 export function LogsView({ tasks }: LogsViewProps) {
+  const { entries, connected } = useToolEventStream();
+
   return (
     <motion.div
       key="logs"
@@ -24,6 +28,24 @@ export function LogsView({ tasks }: LogsViewProps) {
           <span className="animate-pulse">● System Live</span>
         </div>
 
+        {/* TOOL ACTIVITY — live tool_called / tool_result stream */}
+        <button
+          type="button"
+          className="mb-2 w-full flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-text-dim/70 hover:text-text transition-colors"
+        >
+          <span>Tool Activity</span>
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              connected ? "bg-accent" : "bg-blue"
+            )}
+          />
+        </button>
+        <div className="mb-6">
+          <ToolEventList entries={entries} />
+        </div>
+
+        {/* AGENT LOG LINES */}
         {tasks
           .flatMap((t) => t.logs)
           .sort((a, b) => a.timestamp - b.timestamp)
@@ -59,3 +81,4 @@ export function LogsView({ tasks }: LogsViewProps) {
     </motion.div>
   );
 }
+
