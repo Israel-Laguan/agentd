@@ -31,12 +31,19 @@ func (t *AgenticTruncator) withinLimits(messages []spec.PromptMessage, budget in
 	return len(messages) <= t.MaxMessages && (budget <= 0 || totalChars(messages) <= budget)
 }
 
-// finalizeTruncation performs final cleanup and budget enforcement
+// finalizeTruncation performs final cleanup and budget enforcement.
+// Same convergence guard as applyBudgetTruncation: bail out when a pass no longer
+// shrinks the output, which can happen for budgets below the irreducible
+// truncation-marker overhead (best effort is a single marker).
 func (t *AgenticTruncator) finalizeTruncation(messages []spec.PromptMessage, budget int) []spec.PromptMessage {
 	out := t.removeDanglingToolCalls(messages)
 	for budget > 0 && totalChars(out) > budget {
+		prev := totalChars(out)
 		out = t.truncateToBudget(out, budget)
 		out = t.removeDanglingToolCalls(out)
+		if totalChars(out) >= prev {
+			break // no progress: budget below irreducible marker overhead
+		}
 	}
 	return out
 }
