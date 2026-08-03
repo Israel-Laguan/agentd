@@ -24,6 +24,17 @@ tests silently succeed when they should fail. `Dockerfile.test` creates a
 dedicated `tester` user and runs `go test` as that user, matching the project's
 runtime user conventions.
 
+### Why the test image installs `bash`
+
+The `Dockerfile.test` image also installs `bash` (not just `sqlite-libs`). The
+sandbox `BashExecutor` and the plugin pre/post hooks shell out to `/bin/bash`,
+so tests such as `TestBashExecutor*`, `TestShellPreHook_*`, and the
+`cmd/agentd` non-writable-directory checks fail with
+`exec: "bash": executable file not found in $PATH` when `bash` is missing.
+Alpine's base `golang` image does not ship `bash` by default, so it must be
+installed explicitly. Do not remove `bash` from the `apk add` line unless those
+tests have been reworked to use `sh`.
+
 ## Build
 
 ```bash
@@ -91,6 +102,14 @@ podman run --rm agentd start -v     # run agentd start (verbose)
 ```
 
 ## Troubleshooting
+
+### `exec: "bash": executable file not found in $PATH`
+
+The sandbox `BashExecutor`, plugin hooks, and some `cmd/agentd` permission
+checks run commands through `/bin/bash`. If you rebuilt the test image from a
+`Dockerfile.test` that omits `bash` (or swapped the base image to one without
+it), those tests fail with this error. Rebuild from the committed `Dockerfile.test`,
+which installs `bash` via `apk add --no-cache sqlite-libs bash`.
 
 ### `go: downloading go1.26.2 ... no such file or directory`
 

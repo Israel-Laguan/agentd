@@ -57,7 +57,7 @@ func (e *Engine) processAgenticIteration(
 		return false, agentruntime.LoopResult{}, false, rewindNone, err
 	}
 	budgetGuard.AfterCall(resp.TokenUsage)
-	detailsToRecord := spec.UsageDetails{}
+	detailsToRecord := gateway.UsageDetails{}
 	if resp.UsageDetails != nil {
 		detailsToRecord = *resp.UsageDetails
 	}

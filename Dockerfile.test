@@ -7,8 +7,9 @@
 FROM golang:1.26-alpine AS tester
 WORKDIR /src
 
-# Install sqlite libs so modernc.org/sqlite tests can run.
-RUN apk add --no-cache sqlite-libs
+# Install sqlite libs so modernc.org/sqlite tests can run, and bash which the
+# sandbox BashExecutor tests invoke (the runtime image also ships bash).
+RUN apk add --no-cache sqlite-libs bash
 
 COPY go.mod go.sum ./
 RUN go mod download
