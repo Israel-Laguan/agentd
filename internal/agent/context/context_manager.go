@@ -141,13 +141,17 @@ func (cm *ContextManager) TotalBudget() int {
 
 // PrepareContext partitions messages into zones and applies compression if needed.
 func (cm *ContextManager) PrepareContext(ctx context.Context, messages []spec.PromptMessage) ([]spec.PromptMessage, error) {
-	return cm.prepareContext(ctx, messages, false)
+	const forceSummarize = false
+	prepared, err := cm.prepareContext(ctx, messages, forceSummarize)
+	return prepared, err
 }
 
 // PrepareContextForceSummarize runs PrepareContext but forces rolling summarization
 // even when turn count is below RollingThresholdTurns (context warning path).
 func (cm *ContextManager) PrepareContextForceSummarize(ctx context.Context, messages []spec.PromptMessage) ([]spec.PromptMessage, error) {
-	return cm.prepareContext(ctx, messages, true)
+	const forceSummarize = true
+	prepared, err := cm.prepareContext(ctx, messages, forceSummarize)
+	return prepared, err
 }
 
 func (cm *ContextManager) prepareContext(ctx context.Context, messages []spec.PromptMessage, forceSummarize bool) ([]spec.PromptMessage, error) {
@@ -155,8 +159,8 @@ func (cm *ContextManager) prepareContext(ctx context.Context, messages []spec.Pr
 		return messages, nil
 	}
 	messages = stripCorrectionMessages(messages)
-	anchor, remaining := cm.partitionAnchor(messages)
-	turns := cm.groupTurns(remaining)
+	anchor, remaining := cm.PartitionAnchor(messages)
+	turns := cm.GroupTurns(remaining)
 
 	var out []spec.PromptMessage
 	shouldSummarize := forceSummarize || len(turns) > cm.cfg.RollingThresholdTurns
@@ -174,7 +178,7 @@ func (cm *ContextManager) prepareContext(ctx context.Context, messages []spec.Pr
 	out = cm.injectPendingCorrections(out)
 
 	totalBudget := cm.cfg.AnchorBudget + cm.cfg.WorkingBudget + cm.cfg.CompressedBudget
-	if totalBudget > 0 && totalChars(out) > totalBudget {
+	if totalBudget > 0 && TotalChars(out) > totalBudget {
 		out = cm.enforceBudget(out, totalBudget)
 	}
 	return out, nil

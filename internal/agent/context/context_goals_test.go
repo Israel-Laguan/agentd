@@ -46,7 +46,7 @@ func TestParseGoalProgress(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, b := parseGoalProgress(tt.content)
+			c, b := ParseGoalProgress(tt.content)
 			if !reflect.DeepEqual(c, tt.wantCompleted) {
 				t.Errorf("completed = %v, want %v", c, tt.wantCompleted)
 			}

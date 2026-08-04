@@ -36,7 +36,9 @@ func (g *AgentGoal) ProgressRatio() float64 {
 // IsStalled returns true when the goal has been active for more than
 // the given threshold turns with less than 10% progress.
 func (g *AgentGoal) IsStalled(threshold int) bool {
-	return g.TurnsActive > threshold && g.ProgressRatio() < 0.1
+	active := g.TurnsActive > threshold
+	lowProgress := g.ProgressRatio() < 0.1
+	return active && lowProgress
 }
 
 // MarkCompleted adds criteria to the completed set, de-duplicating

@@ -6,7 +6,7 @@ import (
 	"agentd/internal/models"
 )
 
-// parseGoalProgress extracts completed and blocked criteria markers from the
+// ParseGoalProgress extracts completed and blocked criteria markers from the
 // model's response text. The model is expected to emit lines like:
 //
 //	[COMPLETED] criterion text
@@ -31,10 +31,6 @@ func ParseGoalProgress(content string) (completed, blocked []string) {
 		}
 	}
 	return completed, blocked
-}
-
-func parseGoalProgress(content string) (completed, blocked []string) {
-	return ParseGoalProgress(content)
 }
 
 // GoalFromTask extracts a goal from a task's SuccessCriteria and
