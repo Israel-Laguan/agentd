@@ -8,7 +8,9 @@ import (
 	"agentd/internal/gateway/spec"
 )
 
-func (cm *ContextManager) partitionAnchor(messages []spec.PromptMessage) ([]spec.PromptMessage, []spec.PromptMessage) {
+// PartitionAnchor separates the system/task anchor from the remaining turn
+// history.
+func (cm *ContextManager) PartitionAnchor(messages []spec.PromptMessage) ([]spec.PromptMessage, []spec.PromptMessage) {
 	if len(messages) == 0 {
 		return nil, nil
 	}
@@ -29,12 +31,6 @@ func (cm *ContextManager) partitionAnchor(messages []spec.PromptMessage) ([]spec
 	return messages[:anchorEnd], messages[anchorEnd:]
 }
 
-// PartitionAnchor separates the system/task anchor from the remaining turn
-// history.
-func (cm *ContextManager) PartitionAnchor(messages []spec.PromptMessage) ([]spec.PromptMessage, []spec.PromptMessage) {
-	return cm.partitionAnchor(messages)
-}
-
 func (cm *ContextManager) hasAssistant(t Turn) bool {
 	for _, m := range t.Messages {
 		if m.Role == "assistant" {
@@ -44,7 +40,8 @@ func (cm *ContextManager) hasAssistant(t Turn) bool {
 	return false
 }
 
-func (cm *ContextManager) groupTurns(messages []spec.PromptMessage) []Turn {
+// GroupTurns groups messages into logical interaction turns.
+func (cm *ContextManager) GroupTurns(messages []spec.PromptMessage) []Turn {
 	var turns []Turn
 	var currentTurn Turn
 	for _, m := range messages {
@@ -63,11 +60,6 @@ func (cm *ContextManager) groupTurns(messages []spec.PromptMessage) []Turn {
 		turns = append(turns, currentTurn)
 	}
 	return turns
-}
-
-// GroupTurns groups messages into logical interaction turns.
-func (cm *ContextManager) GroupTurns(messages []spec.PromptMessage) []Turn {
-	return cm.groupTurns(messages)
 }
 
 func (cm *ContextManager) applyRollingSummarization(ctx context.Context, anchor []spec.PromptMessage, turns []Turn) ([]spec.PromptMessage, error) {

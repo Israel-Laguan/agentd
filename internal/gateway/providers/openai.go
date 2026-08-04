@@ -52,16 +52,9 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		Model: model, Messages: messagesToOpenAI(req.Messages),
 		Temperature: req.Temperature, MaxTokens: req.MaxTokens,
 	}
-	if optionBool(o.cfg.Options, "send_task_metadata") && (req.TaskID != "" || req.AgentID != "" || req.Role != "") {
-		body.Metadata = map[string]string{}
-		if req.TaskID != "" {
-			body.Metadata["task_id"] = req.TaskID
-		}
-		if req.AgentID != "" {
-			body.Metadata["agent_id"] = req.AgentID
-		}
-		if req.Role != "" {
-			body.Metadata["role"] = string(req.Role)
+	if optionBool(o.cfg.Options, "send_task_metadata") {
+		if md := o.buildMetadata(req); md != nil {
+			body.Metadata = md
 		}
 	}
 	// OpenAI does not allow response_format: json_object when tools are present.
@@ -87,6 +80,26 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 
 func (o *OpenAI) url() string {
 	return strings.TrimRight(o.cfg.BaseURL, "/") + "/chat/completions"
+}
+
+// buildMetadata collects task/agent/role identifiers into the metadata map
+// sent to OpenAI-compatible providers when send_task_metadata is enabled.
+// It returns nil when none of the fields are present.
+func (o *OpenAI) buildMetadata(req spec.AIRequest) map[string]string {
+	md := make(map[string]string, 3)
+	if req.TaskID != "" {
+		md["task_id"] = req.TaskID
+	}
+	if req.AgentID != "" {
+		md["agent_id"] = req.AgentID
+	}
+	if req.Role != "" {
+		md["role"] = string(req.Role)
+	}
+	if len(md) == 0 {
+		return nil
+	}
+	return md
 }
 
 // Capabilities implements Backend.

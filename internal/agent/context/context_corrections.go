@@ -13,7 +13,9 @@ const correctionPrefix = "[CORRECTION]"
 
 // IsCorrectionMessage returns true if the message content starts with the correction prefix.
 func IsCorrectionMessage(content string) bool {
-	return strings.HasPrefix(strings.TrimSpace(content), correctionPrefix)
+	trimmed := strings.TrimSpace(content)
+	matches := strings.HasPrefix(trimmed, correctionPrefix)
+	return matches
 }
 
 // InjectCorrection stores a correction record for later context injection.
@@ -222,7 +224,7 @@ func (cm *ContextManager) injectPendingCorrections(messages []spec.PromptMessage
 		return filtered
 	}
 
-	anchor, rest := cm.partitionAnchor(filtered)
+	anchor, rest := cm.PartitionAnchor(filtered)
 	corrMsgs := make([]spec.PromptMessage, 0, len(corrections))
 	for _, c := range corrections {
 		corrMsgs = append(corrMsgs, spec.PromptMessage{
