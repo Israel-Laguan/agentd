@@ -52,7 +52,7 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		Model: model, Messages: messagesToOpenAI(req.Messages),
 		Temperature: req.Temperature, MaxTokens: req.MaxTokens,
 	}
-	if optionBool(o.cfg.Options, "send_task_metadata") && (req.TaskID != "" || req.AgentID != "") {
+	if optionBool(o.cfg.Options, "send_task_metadata") && (req.TaskID != "" || req.AgentID != "" || req.Role != "") {
 		body.Metadata = map[string]string{}
 		if req.TaskID != "" {
 			body.Metadata["task_id"] = req.TaskID

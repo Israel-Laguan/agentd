@@ -11,10 +11,12 @@
 // real event body, so consumers JSON.parse the envelope and then the payload.
 // This module maps internal event type identifiers to the SSE event names
 // clients subscribe to. Extend it here as more event types are surfaced.
-export const SSE_EVENT_NAME: Record<string, string> = {
+export const SSE_EVENT_NAME = {
   TOOL_CALL: "tool_called",
   TOOL_RESULT: "tool_result",
-};
+} as const;
+
+export type SseEventType = keyof typeof SSE_EVENT_NAME;
 
 // The SSE event names we currently consume.
 export const TOOL_CALL_EVENT_NAME = SSE_EVENT_NAME["TOOL_CALL"];
@@ -35,9 +37,9 @@ export function parseSseEnvelope(data: string): SseEnvelope | null {
     if (typeof parsed !== "object" || parsed === null) return null;
     const topic = typeof parsed.topic === "string" ? parsed.topic : "";
     const type = typeof parsed.type === "string" ? parsed.type : "";
-    const payload = typeof parsed.payload === "string" ? parsed.payload : "";
+    if (typeof parsed.payload !== "string") return null;
     if (!type) return null;
-    return { topic, type, payload };
+    return { topic, type, payload: parsed.payload };
   } catch {
     return null;
   }

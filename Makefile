@@ -58,13 +58,14 @@ minfunc:
 folder-audit:
 	$(GO) run ./scripts/folder_audit --out /tmp/folder-size-audit.md
 
-# Docs linting. Dependencies: `npm install` (markdownlint-cli2) and `lychee`
-# (single binary, see .lychee.toml). These cover docs/** plus root-level guides.
-MARKDOWNLINT ?= npx markdownlint-cli2
+# Docs linting. Dependencies: `npm install` (markdownlint-cli2 via the root
+# package.json script) and `lychee` (single binary, see .lychee.toml). These
+# cover docs/** plus root-level guides. The file set for Markdown linting lives
+# in package.json's `lint:md` script (single source of truth), invoked here.
 LYCHEE ?= lychee
 
 lint-md:
-	$(MARKDOWNLINT) "docs/**/*.md" "README.md" "CONTRIBUTING.md" "GUARDRAILS.md" "REVIEW.md" "STYLEGUIDE.md"
+	npm run lint:md
 
 lint-links:
 	$(LYCHEE) --config .lychee.toml README.md docs

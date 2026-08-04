@@ -109,7 +109,7 @@ gateway:
       adapter: llamacpp
       base_url: "http://127.0.0.1:8080"
       model: "<tool-capable-model>"
-      capabilities: { chat_tools: true }
+      capabilities: { chat_tools: false }
       options:
         probe_tools: true   # optional: refine the flag with a one-time startup probe
   order: [llamacpp]
@@ -118,7 +118,8 @@ gateway:
 OpenAI-compatible responses can include `tool_calls`; some templates and generic
 handlers may have partial behavior, and parallel calls are opt-in. Without a
 verified setup, leave `SupportsChatTools` at its `false` default — `AgenticMode:
-true` then silently falls back to the legacy JSON mode (see the AgenticMode Gate
+true` then falls back to the legacy JSON mode with a warning log (see the
+AgenticMode Gate
 below). Use `scripts/llm-smoke.sh` (M16) to certify a given `llama-server` +
 model combination before enabling `chat_tools`/`probe_tools`.
 

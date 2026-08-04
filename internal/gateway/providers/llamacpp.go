@@ -144,16 +144,5 @@ func (l *LlamaCpp) ProbeTools(ctx context.Context) bool {
 }
 
 func probeToolsEnabled(cfg spec.ProviderConfig) bool {
-	val, ok := cfg.Options["probe_tools"]
-	if !ok {
-		return false
-	}
-	switch v := val.(type) {
-	case bool:
-		return v
-	case string:
-		return strings.EqualFold(v, "true") || v == "1"
-	default:
-		return false
-	}
+	return optionBool(cfg.Options, "probe_tools")
 }

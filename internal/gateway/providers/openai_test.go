@@ -431,6 +431,38 @@ func TestOpenAI_SendTaskMetadata_NoTaskID(t *testing.T) {
 	}
 }
 
+// TestOpenAI_SendTaskMetadata_RoleOnly verifies that metadata is sent when the
+// option is enabled and the request carries only Role context (no TaskID /
+// AgentID). This covers the regression where role-only requests were dropped.
+func TestOpenAI_SendTaskMetadata_RoleOnly(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		writeOpenAIJSON(t, w, openAIResponseBody("ok", "wire-test"))
+	}))
+	defer srv.Close()
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "wire-test",
+		Options: map[string]any{"send_task_metadata": true},
+	}, srv.Client())
+	_, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		Role:     spec.RoleWorker,
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+	meta, ok := gotBody["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata = %v, want map (role-only request must emit metadata)", gotBody["metadata"])
+	}
+	if meta["role"] != "worker" {
+		t.Errorf("metadata.role = %v, want worker", meta["role"])
+	}
+}
+
 // TestOpenAI_SendTaskMetadata_StringValue verifies that the option accepts a
 // YAML-decoded string value (e.g. "true").
 func TestOpenAI_SendTaskMetadata_StringValue(t *testing.T) {

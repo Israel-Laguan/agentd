@@ -250,8 +250,8 @@ Milestone 13 files:
   files listed above.
 - `go build ./... && go test ./docs/...` — existing tests pass (link validation +
   provider-tool-calling parity test).
-- Link check: a `grep` for backtick-relative `tasks/` references in `docs/` must point
-  only at task files that exist under `tasks/` (per-milestone spec files are removed once the
-  work ships; `docs/` no longer references `tasks/`).
+- Link check: a `grep` for relative `tasks/` references in `docs/` must point only at
+  task files that still exist under `tasks/` (per-milestone spec files remain tracked there,
+  so every referenced path must resolve).
 - Reviewer confirms the provider claims (Anthropic "single-turn", ollama/horde
   "maintenance") match the code evidence cited above.

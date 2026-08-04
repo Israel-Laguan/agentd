@@ -17,17 +17,24 @@ The `event:` name is the SSE-friendly alias of `type`.
 
 ## Event-name mapping
 
-agentd emits a fixed set of event types (`internal/models/enums.go`); each is
-mapped to an SSE event name in `internal/api/sse/stream.go`:
+agentd's persisted, enum-backed event types live in `internal/models/enums.go`,
+but workers and bus bridges also publish additional arbitrary string types, so
+the live inventory is a superset of that enum. The SSE `event:` name is the
+SSE-friendly alias (`eventName`) of the Kafka/bus `type`, which is lowercased;
+unknown types fall back to their lowercased type string. Consumers should match
+on the `event:` name and safely ignore unrecognized frames. Known tool-event
+types map as follows in `internal/api/sse/stream.go`:
 
 | Event type | SSE event name | Emitted by | Payload |
 | --- | --- | --- | --- |
-| `TOOL_CALL` | `tool_called` | `emitToolCall` (`worker_events.go`) + AuditHook (`hooks_builtin_audit.go`) | `ToolCallEvent` |
-| `TOOL_RESULT` | `tool_result` | `emitToolResult` (`worker_events.go`) + AuditHook | `ToolResultEvent` |
+| `TOOL_CALL` | `tool_called` | AuditHook (`internal/agent/hooks/hooks_builtin_audit.go`) | `ToolCallEvent` |
+| `TOOL_RESULT` | `tool_result` | AuditHook (`internal/agent/hooks/hooks_builtin_audit.go`) | `ToolResultEvent` |
 
-Other event types (`TASK_*`, `AGENT_*`, `MEMORY_*`, …) follow the same
-`type` → SSE-name mapping in `stream.go`. When adding a new event type, extend
-the map there and add the matching alias to any consumer (e.g.
+The live agentic dispatch path publishes these two via the AuditHook; the
+`emitToolCall` / `emitToolResult` helpers in `worker_events.go` are primarily
+exercised by tests. Other event types (`TASK_*`, `AGENT_*`, `MEMORY_*`, …) follow
+the same `type` → SSE-name mapping in `stream.go`. When adding a new event type,
+extend the map there and add the matching alias to any consumer (e.g.
 `web/lib/sse-events.ts`).
 
 ## Tool-event payload contract
@@ -52,10 +59,10 @@ fields are length-capped (`internal/queue/worker/worker_events.go`).
 | --- | --- | --- |
 | `tool_name` | string | Name of the tool that produced the result |
 | `call_id` | string | Matches the originating `tool_called` call id |
-| `exit_code` | int | Conventional exit code (`0` = success; `-1` for error/timeout/vetoed/fatal) |
+| `exit_code` | int | Conventional exit code (`0` = success; preserves an explicit tool exit code; `-1` when an error/timeout/vetoed/fatal outcome has no explicit exit code) |
 | `duration_ms` | int64 | Tool execution wall-clock duration in milliseconds |
 | `output_summary` | string | Scrubbed tool output, truncated to ≤1000 chars (`maxOutputSummaryLength`); truncation suffix `...[truncated]` |
-| `stdout_bytes` | int | Length of captured stdout |
+| `stdout_bytes` | int | Captured stdout length for structured sandbox results; falls back to result-content length when no stdout envelope is available |
 | `stderr_bytes` | int | Length of captured stderr |
 
 Consumers pair a `tool_result` to its earlier `tool_called` by shared `call_id`

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { API, USE_MOCK } from "@/lib/api-config";
 import { TOOL_CALL_EVENT_NAME, TOOL_RESULT_EVENT_NAME } from "@/lib/sse-events";
 import {
-  ToolCallRecord,
   ToolEventEntry,
   ToolRawEvent,
   buildToolEventGroups,
@@ -18,6 +17,7 @@ const MAX_TOOL_EVENTS = 200;
 
 interface ToolEventStreamState {
   entries: ToolEventEntry[];
+  rawEvents: ToolRawEvent[];
   connected: boolean;
 }
 
@@ -37,33 +37,22 @@ interface ToolEventStreamState {
 export function useToolEventStream(taskId?: string): ToolEventStreamState {
   const [state, setState] = useState<ToolEventStreamState>(
     USE_MOCK
-      ? { entries: buildToolEventGroups(SAMPLE_TOOL_EVENTS), connected: false }
-      : { entries: [], connected: false }
+      ? { rawEvents: SAMPLE_TOOL_EVENTS, entries: buildToolEventGroups(SAMPLE_TOOL_EVENTS), connected: false }
+      : { rawEvents: [], entries: [], connected: false }
   );
 
   // Keep the rendered entry list and connection status in state; the effect
-  // below re-runs (reopening the stream) whenever taskId changes.
+  // below re-runs (reopening the stream) whenever taskId changes. handleRaw
+  // folds each incoming raw event into the accumulated rawEvents list and
+  // delegates pairing to buildToolEventGroups (single source of truth).
   const handleRaw = useCallback((raw: ToolRawEvent) => {
     setState((prev) => {
-      // Rebuild the ordered entry list, pairing results with earlier calls.
-      const callsByCallId = new Map<string, ToolCallRecord>();
-      const entries: ToolEventEntry[] = [];
-      for (const entry of prev.entries) {
-        if (entry.kind === "call") {
-          callsByCallId.set(entry.call.call_id, entry.call);
-          entries.push(entry);
-        } else {
-          entries.push({ ...entry, call: entry.call ?? callsByCallId.get(entry.result.call_id) });
-        }
-      }
-      if ("output_summary" in raw) {
-        const call = callsByCallId.get(raw.call_id);
-        entries.push({ kind: "result", result: raw, ...(call ? { call } : {}) });
-      } else {
-        callsByCallId.set(raw.call_id, raw);
-        entries.push({ kind: "call", call: raw });
-      }
-      return { connected: prev.connected, entries: entries.slice(-MAX_TOOL_EVENTS) };
+      const rawEvents = [...prev.rawEvents, raw].slice(-MAX_TOOL_EVENTS);
+      return {
+        rawEvents,
+        entries: buildToolEventGroups(rawEvents),
+        connected: prev.connected,
+      };
     });
   }, []);
 
@@ -72,7 +61,7 @@ export function useToolEventStream(taskId?: string): ToolEventStreamState {
 
     // Reset prior activity so a taskId change does not render the previous
     // task's entries or stale connection state before reopening the stream.
-    setState({ entries: [], connected: false });
+    setState({ rawEvents: [], entries: [], connected: false });
 
     // EventSource isn't available in jsdom; in real builds it is. Guard so
     // tests rendering this hook in mock mode never touch it.
