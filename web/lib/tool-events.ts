@@ -81,10 +81,16 @@ export function parseToolEventFromSseData(data: string): ToolRawEvent | null {
   }
 
   switch (envelope.type) {
-    case "TOOL_CALL":
-      return parseToolCallRecord(body);
-    case "TOOL_RESULT":
-      return parseToolResultRecord(body);
+    case "TOOL_CALL": {
+      const record = parseToolCallRecord(body);
+      if (!record.call_id) return null;
+      return record;
+    }
+    case "TOOL_RESULT": {
+      const record = parseToolResultRecord(body);
+      if (!record.call_id) return null;
+      return record;
+    }
     default:
       return null;
   }

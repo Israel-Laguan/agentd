@@ -64,21 +64,29 @@ describe("parseToolEventFromSseData", () => {
     expect(parseToolEventFromSseData("not json")).toBeNull();
   });
 
-  it("coerces missing numeric fields to zero and missing strings to empty", () => {
+  it("rejects TOOL_RESULT with empty call_id", () => {
     const data = JSON.stringify({
       type: "TOOL_RESULT",
       payload: JSON.stringify({ tool_name: "bash" }),
     });
+    expect(parseToolEventFromSseData(data)).toBeNull();
+  });
+
+  it("coerces missing numeric fields to zero while preserving call_id", () => {
+    const data = JSON.stringify({
+      type: "TOOL_RESULT",
+      payload: JSON.stringify({ tool_name: "bash", call_id: "c1" }),
+    });
     const evt = parseToolEventFromSseData(data);
     expect(evt).toEqual({
       tool_name: "bash",
-      call_id: "",
+      call_id: "c1",
       exit_code: 0,
       duration_ms: 0,
       output_summary: "",
       stdout_bytes: 0,
       stderr_bytes: 0,
-    });
+    } satisfies ToolResultRecord);
   });
 });
 
@@ -130,9 +138,9 @@ describe("buildToolEventGroups", () => {
     const lastResult = entries.find(
       (e) => e.kind === "result" && e.result.call_id === "c2"
     );
-    if (lastResult?.kind === "result") {
-      expect(lastResult.call?.tool_name).toBe("bash");
-    }
+    expect(lastResult).toBeDefined();
+    expect(lastResult!.kind).toBe("result");
+    expect(lastResult!.call?.tool_name).toBe("bash");
   });
 });
 

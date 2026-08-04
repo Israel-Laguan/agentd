@@ -166,10 +166,15 @@ jobs:
 
       - name: Check docs links (lychee)
         if: always()
-        uses: lycheeverse/lychee-action@v2
-        with:
-          fail: true
-          args: --config .lychee.toml README.md docs
+        run: |
+          # Install lychee so the shared `make lint-links` target (single source
+          # of truth for the file set and config) is what runs in CI, matching
+          # the local `make check` gate.
+          curl -sSLo /tmp/lychee.tar.gz \
+            "https://github.com/lycheeverse/lychee/releases/latest/download/lychee-$(uname -m)-unknown-linux-gnu.tar.gz"
+          tar -xzf /tmp/lychee.tar.gz -C /tmp
+          sudo mv /tmp/lychee /usr/local/bin/lychee
+          make lint-links
 
       - name: Test
         if: always()

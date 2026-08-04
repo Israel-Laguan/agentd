@@ -19,6 +19,9 @@ EOF
 }
 
 BASE_URL="${LLM_BASE_URL:-${1:-}}"
+# Normalise: drop a trailing slash so appending "/chat/completions" never
+# produces a double-slash path (e.g. http://host/v1/ → http://host/v1).
+BASE_URL="${BASE_URL%/}"
 MODEL="${LLM_MODEL:-${2:-}}"
 API_KEY="${LLM_API_KEY:-${3:-}}"
 

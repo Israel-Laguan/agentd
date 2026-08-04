@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,37 +92,43 @@ func TestLlamaCpp_Timeout_ZeroDoesNotEnforceTimeout(t *testing.T) {
 }
 
 func TestLlamaCpp_Generate_SendsToolsWhenPresent(t *testing.T) {
+	// Capture handler-side validation failures and assert them after Generate
+	// returns (the handler's single request completes before Generate returns,
+	// so no extra synchronization is needed). Avoids calling testing.T methods
+	// from the HTTP handler goroutine. The handler always replies 200 so a
+	// validation failure surfaces via handlerErrs instead of failing Generate.
+	var handlerErrs []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
+			handlerErrs = append(handlerErrs, fmt.Sprintf("unexpected path: %s", r.URL.Path))
 		}
-		var body map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		// Request-level model takes precedence over the configured model.
-		if body["model"] != "request-model" {
-			t.Errorf("model = %v, want request-model", body["model"])
-		}
-		tools, ok := body["tools"].([]any)
-		if !ok || len(tools) == 0 {
-			t.Fatal("expected tools array in request body")
-		}
-		tool, ok := tools[0].(map[string]any)
-		if !ok {
-			t.Fatalf("tools[0] type = %T", tools[0])
-		}
-		fn, ok := tool["function"].(map[string]any)
-		if !ok {
-			t.Fatal("function is not a map")
-		}
-		if fn["name"] != "get_weather" {
-			t.Errorf("tool name = %q, want get_weather", fn["name"])
-		}
-		// JSON mode is set but tools are present, so response_format must be
-		// omitted (the JSON-mode/tool guard).
-		if _, has := body["response_format"]; has {
-			t.Error("expected no response_format when tools present even with JSONMode")
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			handlerErrs = append(handlerErrs, fmt.Sprintf("decode request: %v", err))
+		} else {
+			// Request-level model takes precedence over the configured model.
+			if req["model"] != "request-model" {
+				handlerErrs = append(handlerErrs, fmt.Sprintf("model = %v, want request-model", req["model"]))
+			}
+			tools, ok := req["tools"].([]any)
+			if !ok || len(tools) == 0 {
+				handlerErrs = append(handlerErrs, "expected tools array in request body")
+			} else if tool, ok := tools[0].(map[string]any); ok {
+				if fn, ok := tool["function"].(map[string]any); ok {
+					if fn["name"] != "get_weather" {
+						handlerErrs = append(handlerErrs, fmt.Sprintf("tool name = %q, want get_weather", fn["name"]))
+					}
+				} else {
+					handlerErrs = append(handlerErrs, "function is not a map")
+				}
+			} else {
+				handlerErrs = append(handlerErrs, fmt.Sprintf("tools[0] type = %T", tools[0]))
+			}
+			// JSON mode is set but tools are present, so response_format must be
+			// omitted (the JSON-mode/tool guard).
+			if _, has := req["response_format"]; has {
+				handlerErrs = append(handlerErrs, "expected no response_format when tools present even with JSONMode")
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(openAIResponseBody("ok", "request-model"))
@@ -147,6 +155,9 @@ func TestLlamaCpp_Generate_SendsToolsWhenPresent(t *testing.T) {
 	}
 	if resp.ModelUsed != "request-model" {
 		t.Errorf("ModelUsed = %q, want request-model", resp.ModelUsed)
+	}
+	if len(handlerErrs) > 0 {
+		t.Errorf("handler validation errors:\n  %s", strings.Join(handlerErrs, "\n  "))
 	}
 }
 
@@ -219,7 +230,12 @@ func TestLlamaCpp_ProbeTools_NoOpWhenDisabled(t *testing.T) {
 }
 
 func TestLlamaCpp_ProbeTools_Supported(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	// Verify the probe request actually sends a tool definition (not just that a
+	// fabricated response is parsed as supported) so a regression that drops the
+	// tool payload is caught.
+	var reqBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"model": "gpt-4",
@@ -253,6 +269,22 @@ func TestLlamaCpp_ProbeTools_Supported(t *testing.T) {
 	if l.Capabilities().SupportsChatTools != true {
 		t.Error("Capabilities().SupportsChatTools = false after supported probe")
 	}
+	// The probe request must include the tool definition.
+	tools, ok := reqBody["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		t.Fatalf("probe request did not send a tools array; body = %#v", reqBody)
+	}
+	tool, ok := tools[0].(map[string]any)
+	if !ok {
+		t.Fatalf("tools[0] type = %T", tools[0])
+	}
+	fn, ok := tool["function"].(map[string]any)
+	if !ok {
+		t.Fatalf("function missing in probe tool; tool = %#v", tool)
+	}
+	if fn["name"] != "get_weather" {
+		t.Errorf("probe tool name = %q, want get_weather", fn["name"])
+	}
 }
 
 func TestLlamaCpp_ProbeTools_NotSupported(t *testing.T) {
@@ -276,8 +308,12 @@ func TestLlamaCpp_ProbeTools_NotSupported(t *testing.T) {
 }
 
 func TestLlamaCpp_ProbeTools_NetworkError(t *testing.T) {
+	// Use a closed httptest server so the failure is deterministic (no reliance
+	// on a fixed port like 1 staying unused on the machine).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	srv.Close()
 	l := NewLlamaCpp(spec.ProviderConfig{
-		BaseURL: "http://127.0.0.1:1",
+		BaseURL: srv.URL,
 		Model:   "gpt-4",
 		Options: map[string]any{"probe_tools": true},
 	}, &http.Client{Timeout: 100 * time.Millisecond})
@@ -318,9 +354,11 @@ func TestLlamaCpp_ProbeTools_Idempotent(t *testing.T) {
 }
 
 func TestLlamaCpp_ProbeTools_ConfiguredTrueNetworkError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	srv.Close()
 	chatTools := true
 	l := NewLlamaCpp(spec.ProviderConfig{
-		BaseURL:      "http://127.0.0.1:1",
+		BaseURL:      srv.URL,
 		Model:        "gpt-4",
 		Capabilities: spec.ProviderCapabilities{ChatTools: &chatTools},
 		Options:      map[string]any{"probe_tools": true},

@@ -34,7 +34,7 @@ see the end of this document.
   external proxy (LiteLLM / Portkey / OpenRouter) for provider diversity (see
   `docs/llm-connector-strategy.md`, authored in Milestone 13).
 - **Milestones 13–19** are tracked below; each began as a self-contained PR-scoped spec in
-  `tasks/` (completed-work specs are removed as the work ships).
+  `tasks/` (the spec files remain tracked there; the work they describe has landed).
 
 ---
 
@@ -42,13 +42,13 @@ see the end of this document.
 
 | Task | Topic | Status |
 | --- | --- | --- |
-| 13-llm-connector-strategy | Docs-only: two-topology model, keep/delegate table, non-goals, cache discipline, LiteLLM recipe, provider-claim corrections, roadmap bookkeeping. | Completed (spec removed) |
-| 14-cache-hygiene-stable-prefix | Cache hygiene: stable prefix (memory-lesson ordering, deterministic tool lists) + byte-stability golden test. | Completed (spec removed) |
-| 15-cache-observability-usage-details | Surface prompt-cache `cached_tokens` / DeepSeek cache fields via `AIResponse` usage details + TOKEN_USAGE events. | Completed (spec removed) |
-| 16-wire-contract-and-smoke-script | Openai-adapter wire-contract test suite + `scripts/llm-smoke.sh` conformance probe. | Completed (spec removed) |
-| 17-llamacpp-agentic-recipe | (Optional) llama.cpp agentic recipe + optional capability probe. | Completed (spec removed) |
-| 18-litellm-correlation-metadata | (Optional) LiteLLM task-correlation metadata + startup topology log. | Completed (spec removed) |
-| 19-cockpit-tool-event-rendering | Web/independent: render `tool_called` / `tool_result` SSE events in the cockpit. | Completed (spec removed) |
+| [13-llm-connector-strategy](../tasks/13-llm-connector-strategy.md) | Docs-only: two-topology model, keep/delegate table, non-goals, cache discipline, LiteLLM recipe, provider-claim corrections, roadmap bookkeeping. | Completed |
+| [14-cache-hygiene-stable-prefix](../tasks/14-cache-hygiene-stable-prefix.md) | Cache hygiene: stable prefix (memory-lesson ordering, deterministic tool lists) + byte-stability golden test. | Completed |
+| [15-cache-observability-usage-details](../tasks/15-cache-observability-usage-details.md) | Surface prompt-cache `cached_tokens` / DeepSeek cache fields via `AIResponse` usage details + TOKEN_USAGE events. | Completed |
+| [16-wire-contract-and-smoke-script](../tasks/16-wire-contract-and-smoke-script.md) | Openai-adapter wire-contract test suite + `scripts/llm-smoke.sh` conformance probe. | Completed |
+| [17-llamacpp-agentic-recipe](../tasks/17-llamacpp-agentic-recipe.md) | (Optional) llama.cpp agentic recipe + optional capability probe. | Completed |
+| [18-litellm-correlation-metadata](../tasks/18-litellm-correlation-metadata.md) | (Optional) LiteLLM task-correlation metadata + startup topology log. | Completed |
+| [19-cockpit-tool-event-rendering](../tasks/19-cockpit-tool-event-rendering.md) | Web/independent: render `tool_called` / `tool_result` SSE events in the cockpit. | Completed |
 
 Suggested execution order: `13 → (14, 16, 19 can run in parallel) → 15 (after 14) → 17/18 (after
 16)`.

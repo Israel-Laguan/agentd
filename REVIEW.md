@@ -7,7 +7,12 @@ Playbook for reviewers checking a PR branch before approving. Authors should fol
 - Go 1.26+
 - GNU Make
 - [`golangci-lint`](https://golangci-lint.run/) at `$(go env GOPATH)/bin/golangci-lint` (same path the Makefile uses)
-- For PRs that touch `web/`: Node.js and `npm ci` in `web/`
+- Node.js 22+ with npm — required to run `make lint-md` (markdownlint-cli2). Run `npm ci` at the repo root once (`lint:md` drives the checker).
+- [`lychee`](https://github.com/lycheeverse/lychee) link-checker binary — required for `make lint-links` (single binary; install per its README).
+- For PRs that touch `web/`: additionally `npm ci` in `web/`.
+
+> `make check` (the required merge gate) runs `lint-docs` = `lint-md` + `lint-links`, so the
+> Node and lychee prerequisites above are mandatory for a clean gate, not just `web/` PRs.
 
 ## Checkout the PR branch
 
