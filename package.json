@@ -4,7 +4,7 @@
   "private": true,
   "description": "Root docs tooling (Markdown linting). No runtime dependency of the agentd module.",
   "scripts": {
-    "lint:md": "markdownlint-cli2 \"docs/**/*.md\" \"README.md\""
+    "lint:md": "markdownlint-cli2 \"docs/**/*.md\" \"README.md\" \"CONTRIBUTING.md\" \"GUARDRAILS.md\" \"REVIEW.md\" \"STYLEGUIDE.md\""
   },
   "devDependencies": {
     "markdownlint-cli2": "^0.23.2"

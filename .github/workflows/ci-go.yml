@@ -101,6 +101,21 @@ jobs:
             }
             core.setFailed(detail);
 
+      - name: Min function check
+        if: always()
+        id: minfunc_check
+        continue-on-error: true
+        run: make minfunc
+
+      - name: Enforce min function check
+        if: always() && steps.minfunc_check.outcome == 'failure'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.setFailed(
+              'minfunc failed. Functions with fewer than the minimum lines were found. Run make minfunc locally and remove the trivial wrappers.'
+            );
+
       - name: Register golangci-lint problem matcher
         if: always()
         run: echo "::add-matcher::.github/golangci-lint-matcher.json"

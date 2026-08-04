@@ -279,6 +279,29 @@ func (p *fakeProvider) Capabilities() providers.Capabilities {
 	return providers.Capabilities{SupportsChatTools: true}
 }
 
+// fakeProber extends fakeProvider with a ToolProber implementation so
+// RunToolProbes forwarding can be instrumented in the gateway package tests.
+type fakeProber struct {
+	fakeProvider
+	probed int
+}
+
+func (p *fakeProber) ProbeTools(_ context.Context) bool {
+	p.probed++
+	return true
+}
+
+func TestRunToolProbes_ForwardsToRouterBackends(t *testing.T) {
+	prober := &fakeProber{fakeProvider: fakeProvider{providerName: "prober"}}
+	router := NewRouter(prober)
+
+	RunToolProbes(context.Background(), router)
+
+	if prober.probed != 1 {
+		t.Errorf("prober probe count = %d, want 1", prober.probed)
+	}
+}
+
 type sequenceProvider struct {
 	values   []string
 	requests []AIRequest

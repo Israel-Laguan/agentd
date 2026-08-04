@@ -55,7 +55,7 @@ make lint                                 # static checks and architecture guard
 Before committing or opening a PR:
 
 ```sh
-make check       # loc + lint + test (full quality gate)
+make check       # loc + minfunc + lint + test + lint-docs (full quality gate)
 ```
 
 `make test` / `make build` set workspace `GOCACHE` and default `GOMODCACHE` so tests work in normal shells and IDE agents. Troubleshooting: [`REVIEW.md`](../REVIEW.md#go-toolchain-troubleshooting).

@@ -98,6 +98,10 @@ func TestLlamaCpp_Generate_SendsToolsWhenPresent(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
+		// Request-level model takes precedence over the configured model.
+		if body["model"] != "request-model" {
+			t.Errorf("model = %v, want request-model", body["model"])
+		}
 		tools, ok := body["tools"].([]any)
 		if !ok || len(tools) == 0 {
 			t.Fatal("expected tools array in request body")
@@ -113,17 +117,21 @@ func TestLlamaCpp_Generate_SendsToolsWhenPresent(t *testing.T) {
 		if fn["name"] != "get_weather" {
 			t.Errorf("tool name = %q, want get_weather", fn["name"])
 		}
+		// JSON mode is set but tools are present, so response_format must be
+		// omitted (the JSON-mode/tool guard).
 		if _, has := body["response_format"]; has {
-			t.Error("expected no response_format when tools present")
+			t.Error("expected no response_format when tools present even with JSONMode")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(openAIResponseBody("ok", "gpt-4"))
+		_ = json.NewEncoder(w).Encode(openAIResponseBody("ok", "request-model"))
 	}))
 	defer srv.Close()
 
-	l := NewLlamaCpp(spec.ProviderConfig{BaseURL: srv.URL, Model: "gpt-4"}, srv.Client())
-	_, err := l.Generate(context.Background(), spec.AIRequest{
+	l := NewLlamaCpp(spec.ProviderConfig{BaseURL: srv.URL, Model: "configured-model"}, srv.Client())
+	resp, err := l.Generate(context.Background(), spec.AIRequest{
 		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		Model:    "request-model",
+		JSONMode: true,
 		Tools: []spec.ToolDefinition{{
 			Name:        "get_weather",
 			Description: "Get weather",
@@ -136,6 +144,9 @@ func TestLlamaCpp_Generate_SendsToolsWhenPresent(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
+	}
+	if resp.ModelUsed != "request-model" {
+		t.Errorf("ModelUsed = %q, want request-model", resp.ModelUsed)
 	}
 }
 
@@ -303,5 +314,43 @@ func TestLlamaCpp_ProbeTools_Idempotent(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("probe request count = %d after second call, want 1", count)
+	}
+}
+
+func TestLlamaCpp_ProbeTools_ConfiguredTrueNetworkError(t *testing.T) {
+	chatTools := true
+	l := NewLlamaCpp(spec.ProviderConfig{
+		BaseURL:      "http://127.0.0.1:1",
+		Model:        "gpt-4",
+		Capabilities: spec.ProviderCapabilities{ChatTools: &chatTools},
+		Options:      map[string]any{"probe_tools": true},
+	}, &http.Client{Timeout: 100 * time.Millisecond})
+	if got := l.ProbeTools(context.Background()); got {
+		t.Error("ProbeTools = true, want false on network error")
+	}
+	if l.Capabilities().SupportsChatTools != false {
+		t.Error("Capabilities().SupportsChatTools = true after network error with chat_tools configured true")
+	}
+}
+
+func TestLlamaCpp_ProbeTools_ConfiguredTrueDecodeError(t *testing.T) {
+	chatTools := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("not valid json"))
+	}))
+	defer srv.Close()
+
+	l := NewLlamaCpp(spec.ProviderConfig{
+		BaseURL:      srv.URL,
+		Model:        "gpt-4",
+		Capabilities: spec.ProviderCapabilities{ChatTools: &chatTools},
+		Options:      map[string]any{"probe_tools": true},
+	}, srv.Client())
+	if got := l.ProbeTools(context.Background()); got {
+		t.Error("ProbeTools = true, want false on decode error")
+	}
+	if l.Capabilities().SupportsChatTools != false {
+		t.Error("Capabilities().SupportsChatTools = true after decode error with chat_tools configured true")
 	}
 }

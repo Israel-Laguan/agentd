@@ -14,7 +14,7 @@
 git clone <repo-url>
 cd agentd
 make tidy        # download dependencies
-make check       # run full quality gate (loc + lint + test)
+make check       # run full quality gate (loc + minfunc + lint + test + lint-docs)
 ```
 
 ## Development Workflow
@@ -38,7 +38,7 @@ All compile/lint/test targets use `GOCACHE=$(pwd)/.gocache` and `GOMODCACHE` fro
 | `make coverage` | Run tests with coverage report |
 | `make lint` | Run `golangci-lint` (includes `depguard`, `cyclop`, `funlen`, `revive`) |
 | `make loc` | Check tracked file line counts: 300 default, 500 for `*_test.go`, 400 under `docs/` (see [`docs/guardrails.md`](docs/guardrails.md) / [`GUARDRAILS.md`](GUARDRAILS.md)) |
-| `make check` | `loc` + `lint` + `test` (full quality gate) |
+| `make check` | `loc` + `minfunc` + `lint` + `test` + `lint-docs` (full quality gate) |
 | `make tidy` | Run `go mod tidy` |
 
 ## Code Standards

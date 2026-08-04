@@ -94,7 +94,7 @@ the `llamacpp` provider entry. At startup, `Router.RunToolProbes`
 every backend that implements `providers.ToolProber` to probe itself. The
 llama.cpp adapter sends one minimal tool-calling request, caches the verdict in
 `effectiveTools`, and refines the effective `SupportsChatTools` for that entry;
-network/parse failures are logged and treated as "not supported". The probe is
+network/parse failures are logged and cache `effectiveTools = false` so `Capabilities()` reports "not supported" instead of falling back to the configured value. The probe is
 self-gating (no traffic unless `probe_tools: true`), idempotent, and never
 errors. See `internal/gateway/providers/llamacpp.go` (`ProbeTools`) and the
 `TestLlamaCpp_ProbeTools_*` suite.

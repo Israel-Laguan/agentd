@@ -29,8 +29,7 @@ export function LogsView({ tasks }: LogsViewProps) {
         </div>
 
         {/* TOOL ACTIVITY — live tool_called / tool_result stream */}
-        <button
-          type="button"
+        <h2
           className="mb-2 w-full flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-text-dim/70 hover:text-text transition-colors"
         >
           <span>Tool Activity</span>
@@ -40,7 +39,7 @@ export function LogsView({ tasks }: LogsViewProps) {
               connected ? "bg-accent" : "bg-blue"
             )}
           />
-        </button>
+        </h2>
         <div className="mb-6">
           <ToolEventList entries={entries} />
         </div>

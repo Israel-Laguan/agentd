@@ -123,12 +123,16 @@ func (l *LlamaCpp) ProbeTools(ctx context.Context) bool {
 	data, _, err := postJSON(probeCtx, l.client, l.url(), body, "")
 	if err != nil {
 		slog.Warn("llamacpp tool probe failed", "provider", l.Name(), "err", err)
+		unsupported := false
+		l.effectiveTools = &unsupported
 		return false
 	}
 
 	var decoded openAIResponse
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		slog.Warn("llamacpp tool probe decode failed", "provider", l.Name(), "err", err)
+		unsupported := false
+		l.effectiveTools = &unsupported
 		return false
 	}
 

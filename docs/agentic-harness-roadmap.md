@@ -147,7 +147,7 @@ Suggested execution order: `13 → (14, 16, 19 can run in parallel) → 15 (afte
 | 09 | Provider capabilities and fallback | DONE. `SupportsChatTools` + `capabilities.chat_tools` + legacy fallback (`internal/gateway/providers/provider.go`). |
 | 10 | Context truncation for tool history | DONE. Agentic tool-pairwise-consistent truncation (`internal/gateway/truncation/truncation_agentic_*`). |
 | 11 | Agentic loop integration tests | DONE. Mock-gateway worker integration tests + godog features (`internal/queue/worker/worker_agentic_*_test.go`, `worker/features/`). |
-| 12 | Provider expansion followups | RE-SCOPED → [Milestone 13](llm-connector-strategy.md) onward. Native tool formats are superseded by the proxy-based two-topology model. |
+| 12 | Provider expansion follow-ups | RE-SCOPED → [Milestone 13](llm-connector-strategy.md) onward. Native tool formats are superseded by the proxy-based two-topology model. |
 
 ---
 

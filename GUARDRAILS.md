@@ -27,6 +27,7 @@ Subagents do not receive `delegate` or `delegate_parallel` unless those tool nam
 
 **Trigger:** Creating or editing any Go file
 **Instruction:**
+
 - Files must not exceed 300 lines; test files (*_test.go) allow 500 lines and paths matching `docs/**` allow 400 lines (enforced by `make loc` / `scripts/checkloc`).
 - Functions must not exceed 60 lines and 40 statements (enforced by `funlen` / `revive`).
 - Cyclomatic complexity must not exceed 15 (enforced by `cyclop`).
@@ -59,6 +60,7 @@ Subagents do not receive `delegate` or `delegate_parallel` unless those tool nam
 
 **Trigger:** Defining or returning errors
 **Instruction:**
+
 1. Define sentinel errors as `var ErrXxx = errors.New("...")` in a package-level `errors.go` file (see `internal/models/errors.go` for the canonical pattern).
 2. Wrap errors with `fmt.Errorf("%w: context", ErrSentinel)`. Never use `%v` with sentinels.
 3. Check errors with `errors.Is(err, ErrSentinel)`, never string comparison.
@@ -82,6 +84,7 @@ Subagents do not receive `delegate` or `delegate_parallel` unless those tool nam
 
 **Trigger:** Writing or editing imports in any Go file
 **Instruction:** Group imports in three sections separated by blank lines:
+
 1. Standard library (`context`, `errors`, `fmt`, `net/http`, ...).
 2. External dependencies (`github.com/...`, `modernc.org/...`).
 3. Internal packages (`agentd/internal/...`).
@@ -105,6 +108,7 @@ Do not mix groups. Do not use aliases unless there is a name collision.
 
 **Trigger:** Adding or modifying behavior in any `internal/` package
 **Instruction:**
+
 1. Write unit tests alongside behavior changes in `*_test.go` files. Use table-driven tests for multi-case scenarios.
 2. Use `t.Helper()` in test helper functions.
 3. For flows and integrations, add Godog BDD `.feature` files with step definitions.
@@ -120,6 +124,7 @@ Do not mix groups. Do not use aliases unless there is a name collision.
 
 **Trigger:** Making changes that cross package boundaries, add new packages, modify the worker/queue/gateway pipeline, or touch `internal/models/interfaces.go`
 **Instruction:** Before writing code, read the relevant architecture docs:
+
 - `docs/architecture.md` — system nodes, data flows, architectural invariants.
 - `docs/architecture-flows.md` — Manager's Loop, Memory Recall extended flows.
 - `docs/frontdesk.md` — chat intake decision flow, package boundaries, interface seams.
