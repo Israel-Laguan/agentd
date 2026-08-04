@@ -28,7 +28,7 @@ Run these on the PR branch. Order is fastest-fail first; `make check` is the req
 | Lint | `make lint` | `golangci-lint` + [`depguard`](.golangci.yml) architecture rules |
 | Tests (while iterating) | `make test PKG=./path/... RUN=TestName` | Race-enabled tests for one package or test |
 | Tests (full) | `make test` | Race-enabled tests for `./...` |
-| Full gate | `make check` | `loc` + `lint` + `test` (required before merge) |
+| Full gate | `make check` | `loc` + `minfunc` + `lint` + `test` + `lint-docs` (required before merge) |
 | E2E (if API/queue touched) | `make test-e2e` | `./e2e/...` |
 | Web (if `web/` changed) | `cd web && npm run build && npm run lint` | Next.js build + ESLint |
 

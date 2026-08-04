@@ -5,6 +5,12 @@ agentd streams real-time updates over Server-Sent Events at
 for the endpoint). This page documents the event-name mapping and the stable
 payload contract for tool events — the live agentic-loop activity stream.
 
+> ⚠️ **Trusted-local only.** The events stream currently has no authentication,
+> authorization, or tenant-ownership checks before subscriptions are created.
+> Deploy behind a trusted-local network (or a reverse proxy enforcing access
+> control) until those checks are added. Do not expose the endpoint directly to
+> untrusted networks.
+
 Every SSE frame carries a named `event:` line and a `data:` line whose value is a
 JSON envelope: `{"topic":"task:<id>","type":"<EVENT_TYPE>","payload":"<JSON string>"}`.
 The `event:` name is the SSE-friendly alias of `type`.

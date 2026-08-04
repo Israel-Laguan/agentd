@@ -70,6 +70,10 @@ export function useToolEventStream(taskId?: string): ToolEventStreamState {
   useEffect(() => {
     if (USE_MOCK) return; // static sample; no live stream in mock mode
 
+    // Reset prior activity so a taskId change does not render the previous
+    // task's entries or stale connection state before reopening the stream.
+    setState({ entries: [], connected: false });
+
     // EventSource isn't available in jsdom; in real builds it is. Guard so
     // tests rendering this hook in mock mode never touch it.
     if (typeof EventSource === "undefined") return;
@@ -82,6 +86,7 @@ export function useToolEventStream(taskId?: string): ToolEventStreamState {
     // Flip the live indicator once the connection is established (async
     // callback, not a synchronous effect-body update).
     source.onopen = () => setState((prev) => ({ ...prev, connected: true }));
+    source.onerror = () => setState((prev) => ({ ...prev, connected: false }));
 
     const onToolCall = (event: MessageEvent) => {
       const raw = parseToolEventFromSseData(event.data);
@@ -93,9 +98,11 @@ export function useToolEventStream(taskId?: string): ToolEventStreamState {
 
     return () => {
       source.onopen = null;
+      source.onerror = null;
       source.removeEventListener(TOOL_CALL_EVENT_NAME, onToolCall);
       source.removeEventListener(TOOL_RESULT_EVENT_NAME, onToolCall);
       source.close();
+      setState((prev) => ({ ...prev, connected: false }));
     };
   }, [handleRaw, taskId]);
 

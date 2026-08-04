@@ -43,7 +43,7 @@ Keys used by every `providers` entry:
 | `api_key_env` | Environment variable holding the API key (preferred over inline `api_key`) |
 | `model` | Model name as the vendor expects it |
 | `capabilities.chat_tools` | Override tool-calling support; the `openai` adapter defaults to `true` |
-| `options.send_task_metadata` | Opt-in LiteLLM correlation: when `true`, the adapter includes `metadata.task_id`, `metadata.agent_id`, and `metadata.role` on requests that carry `TaskID`/`AgentID`/`Role`. Defaults to `false` (no metadata sent). |
+| `options.send_task_metadata` | Opt-in LiteLLM correlation: when `true` and `TaskID` or `AgentID` is present, the adapter includes those fields and includes `metadata.role` when `Role` is also set. Defaults to `false` (no metadata sent). |
 
 List the vendor name(s) in `gateway.order`. agentd tries each provider in order and advances
 to the next on error, so cascade fallback works automatically.

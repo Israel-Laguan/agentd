@@ -34,8 +34,10 @@ else
 	exit 2
 fi
 
-TMPFILE="${TMPDIR:-/tmp}/llm_smoke_body.$$"
-cleanup_tmp() { rm -f "$TMPFILE"; }
+TMPFILE=$(mktemp "${TMPDIR:-/tmp}/llm_smoke_body.XXXXXX") || exit 2
+PAYLOADFILE=$(mktemp "${TMPDIR:-/tmp}/llm_smoke_payload.XXXXXX") || exit 2
+chmod 600 "$TMPFILE" "$PAYLOADFILE" 2>/dev/null || true
+cleanup_tmp() { rm -f "$TMPFILE" "$PAYLOADFILE"; }
 trap cleanup_tmp EXIT INT TERM
 
 do_post() {
@@ -52,19 +54,20 @@ do_post() {
 			-d "$payload" 2>/dev/null) || true
 		[ -n "$http_code" ] || http_code="000"
 	else
-		payloadfile="${TMPFILE}.payload"
-		printf '%s' "$payload" > "$payloadfile"
-		wget -q -O "$TMPFILE" \
+		printf '%s' "$payload" > "$PAYLOADFILE"
+		resp=$(wget -q -O "$TMPFILE" --server-response \
 			--header="Content-Type: application/json" \
 			${API_KEY:+--header="Authorization: Bearer $API_KEY"} \
-			--post-file="$payloadfile" \
+			--post-file="$PAYLOADFILE" \
 			--timeout=30 \
-			"$BASE_URL/chat/completions" 2>/dev/null || true
-		rm -f "$payloadfile"
-		if [ -s "$TMPFILE" ]; then
-			http_code="200"
-		else
-			http_code="000"
+			"$BASE_URL/chat/completions" 2>&1 || true)
+		http_code=$(printf '%s\n' "$resp" | sed -n 's/.*HTTP\/[0-9.]* \([0-9][0-9][0-9]\).*/\1/p' | tail -1)
+		if [ -z "$http_code" ]; then
+			if [ -s "$TMPFILE" ]; then
+				http_code="200"
+			else
+				http_code="000"
+			fi
 		fi
 	fi
 
@@ -97,6 +100,25 @@ is_json() {
 	esac
 }
 
+is_success_status() {
+	case "$1" in
+	2*) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+has_tool_calls() {
+	body="$1"
+	if command -v jq >/dev/null 2>&1; then
+		count=$(printf '%s' "$body" | jq '.choices[0].message.tool_calls | length' 2>/dev/null) || return 1
+		[ "${count:-0}" -gt 0 ] 2>/dev/null && return 0
+		return 1
+	fi
+	# Fallback without jq: require a tool_calls array opener, not a bare
+	# substring that could appear in an error message body.
+	printf '%s' "$body" | grep -q '"tool_calls"[[:space:]]*:[[:space:]]*\['
+}
+
 HARD_FAIL=0
 TEXT_RESULT=""
 JSON_RESULT=""
@@ -119,7 +141,7 @@ else
 fi
 
 # 2. JSON mode
-payload='{"model":"'"${MODEL}"'","messages":[{"role":"user","content":"Return JSON: {"ok": true}"}],"response_format":{"type":"json_object"}}'
+payload='{"model":"'"${MODEL}"'","messages":[{"role":"user","content":"Return a JSON object with ok set to true."}],"response_format":{"type":"json_object"}}'
 status=$(do_post "$payload")
 if [ "$status" = "HARD_FAIL" ]; then
 	JSON_RESULT="FAIL (connectivity)"
@@ -144,7 +166,7 @@ if [ "$status" = "HARD_FAIL" ]; then
 	HARD_FAIL=1
 else
 	body=$(cat "$TMPFILE" 2>/dev/null || true)
-	if printf '%s' "$body" | grep -q '"tool_calls"'; then
+	if is_success_status "$status" && has_tool_calls "$body"; then
 		TOOL_RESULT="SUPPORTED"
 	else
 		TOOL_RESULT="NOT SUPPORTED"

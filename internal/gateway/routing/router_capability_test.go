@@ -39,6 +39,30 @@ func (p *mockProvider) Capabilities() providers.Capabilities {
 	return p.capabilities
 }
 
+// proberProvider implements providers.Backend and providers.ToolProber so
+// RunToolProbes dispatch can be instrumented in tests.
+type proberProvider struct {
+	mockProvider
+	probed int
+}
+
+func (p *proberProvider) ProbeTools(_ context.Context) bool {
+	p.probed++
+	return true
+}
+
+func TestRouter_RunToolProbes_DispatchAndSkip(t *testing.T) {
+	prober := &proberProvider{mockProvider: mockProvider{providerName: "prober"}}
+	nonProber := &mockProvider{providerName: "plain"}
+
+	router := NewRouter(prober, nonProber, nil)
+	router.RunToolProbes(context.Background())
+
+	if prober.probed != 1 {
+		t.Errorf("prober probe count = %d, want 1", prober.probed)
+	}
+}
+
 // TestExplicitProviderUnsupportedToolsError tests that when a provider is explicitly
 // requested and doesn't support tools, an error is returned with the provider name
 // and "tools not supported" message.

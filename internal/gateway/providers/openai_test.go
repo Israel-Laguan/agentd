@@ -197,6 +197,34 @@ func TestNewOpenAI_UnknownOptionLogsWarning(t *testing.T) {
 	}
 }
 
+func TestOpenAI_EmptyContentFallsBackToReasoningContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeOpenAIJSON(t, w, map[string]any{
+			"model": "gpt-test",
+			"choices": []map[string]any{{
+				"message": map[string]any{
+					"role":              "assistant",
+					"content":           "",
+					"reasoning_content": "thinking about the answer",
+				},
+			}},
+			"usage": map[string]int{"total_tokens": 4},
+		})
+	}))
+	defer srv.Close()
+
+	o := NewOpenAI(spec.ProviderConfig{BaseURL: srv.URL + "/v1", Model: "gpt-test"}, srv.Client())
+	resp, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+	if resp.Content != "thinking about the answer" {
+		t.Errorf("Content = %q, want reasoning_content fallback", resp.Content)
+	}
+}
+
 // newOpenAICacheServer builds a test server that replies with the given usage
 // payload map, so cache-token parsing can be exercised across provider shapes.
 func newOpenAICacheServer(t *testing.T, usage map[string]any) *httptest.Server {

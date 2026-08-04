@@ -22,6 +22,9 @@ describe("formatDurationMs", () => {
   it("renders minutes and seconds beyond 1min", () => {
     expect(formatDurationMs(90_000)).toBe("1m 30s");
   });
+  it("rounds total seconds before splitting minutes and seconds", () => {
+    expect(formatDurationMs(119_500)).toBe("2m 0s");
+  });
   it("handles negative/invalid as 0ms", () => {
     expect(formatDurationMs(-5)).toBe("0ms");
     expect(formatDurationMs(Number.NaN)).toBe("0ms");

@@ -67,7 +67,7 @@ Run tests through Make (sets `GOCACHE` and `GOMODCACHE` correctly):
 
 ```sh
 make test PKG=./internal/api/...    # while editing
-make check                          # loc + lint + test — before push
+make check                          # loc + minfunc + lint + test + lint-docs — before push
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`REVIEW.md`](REVIEW.md) for targets, scoped `PKG`/`RUN`, and troubleshooting.
