@@ -24,7 +24,7 @@ backend returns `SupportsChatTools: true`.
 | Anthropic | `true` | ⚠️ Maintenance (single-turn) | Single-turn tools only; **multi-turn agentic requires the proxy path** (`adapter: openai` via LiteLLM / Portkey / OpenRouter). See §[Provider Deltas — Anthropic](#anthropic) for the two defects; native fixture tests are self-referential. Bug-fix only. |
 | Gemini | `true` | Verified | OpenAI-compatible endpoint via `name: gemini`, `adapter: openai` (legacy `adapter: gemini` alias is accepted). Sends `tools` and parses `tool_calls` like OpenAI. |
 | Ollama | `false` | ⚠️ Maintenance | `/api/chat` supports a `tools` field and returns `message.tool_calls`, but support depends on server and model behavior. Native adapter is bug-fix only; use the proxy path for agentic tools. |
-| llama.cpp | `false` | Frozen (openai-compatible) | OpenAI-style function calling depends on runtime setup such as `llama-server --jinja`, chat templates, and model support; runtime capability gating is planned (M17). Uses `adapter: openai` when available, so it rides the hardened path. |
+| llama.cpp | `false` | Frozen (openai-compatible) | OpenAI-style function calling depends on runtime setup such as `llama-server --jinja`, chat templates, and model support; runtime capability gating is **available** as an opt-in probe (M17 — `options.probe_tools: true`; see §[llama.cpp](#llamacpp)). Uses `adapter: openai` when available, so it rides the hardened path. |
 | AI Horde | `false` | ⚠️ Maintenance | The current provider uses async text generation with prompt and Kobold-style generation parameters, not a chat tool-call contract. Native adapter is bug-fix only; not tool-capable. |
 
 > ⚠️ **Maintenance-mode providers** — native `anthropic`, `ollama`, and `horde` adapters
@@ -83,12 +83,44 @@ fixture tests cover passthrough, parsing, and version/model gating.
 ### llama.cpp
 
 The provider targets `/v1/chat/completions`, but function calling is only a
-valid claim for known-compatible server startup and model/template combinations.
-Runtime capability detection should come before flipping the provider flag.
+valid claim for known-compatible server startup and model/template combinations
+(e.g. `llama-server --jinja` with a tool-capable model). Runtime capability
+detection should come before flipping the provider flag.
+
+**Runtime capability probe (opt-in).** Instead of relying on the static
+`SupportsChatTools: false` default, enable `options: { probe_tools: true }` on
+the `llamacpp` provider entry. At startup, `Router.RunToolProbes`
+(`internal/gateway/routing/router.go`, wired from `cmd/agentd/wiring.go`) asks
+every backend that implements `providers.ToolProber` to probe itself. The
+llama.cpp adapter sends one minimal tool-calling request, caches the verdict in
+`effectiveTools`, and refines the effective `SupportsChatTools` for that entry;
+network/parse failures are logged and treated as "not supported". The probe is
+self-gating (no traffic unless `probe_tools: true`), idempotent, and never
+errors. See `internal/gateway/providers/llamacpp.go` (`ProbeTools`) and the
+`TestLlamaCpp_ProbeTools_*` suite.
+
+**Agentic recipe (known-good setup).** For a tool-capable model served with
+`llama-server --jinja`, opt into agentic tool calling explicitly:
+
+```yaml
+gateway:
+  providers:
+    - name: llamacpp
+      adapter: llamacpp
+      base_url: "http://127.0.0.1:8080"
+      model: "<tool-capable-model>"
+      capabilities: { chat_tools: true }
+      options:
+        probe_tools: true   # optional: refine the flag with a one-time startup probe
+  order: [llamacpp]
+```
 
 OpenAI-compatible responses can include `tool_calls`; some templates and generic
-handlers may have partial behavior, and parallel calls are opt-in. Keep
-`SupportsChatTools` false until fixture tests cover a known compatible setup.
+handlers may have partial behavior, and parallel calls are opt-in. Without a
+verified setup, leave `SupportsChatTools` at its `false` default — `AgenticMode:
+true` then silently falls back to the legacy JSON mode (see the AgenticMode Gate
+below). Use `scripts/llm-smoke.sh` (M16) to certify a given `llama-server` +
+model combination before enabling `chat_tools`/`probe_tools`.
 
 ### AI Horde
 

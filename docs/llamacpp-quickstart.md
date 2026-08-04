@@ -133,6 +133,34 @@ curl http://127.0.0.1:8765/v1/chat/completions \
 agentd ask "Create a todo list web application in React using REST API"
 ```
 
+## Agentic tool calling (optional)
+
+By default the llama.cpp adapter reports `SupportsChatTools: false`, so
+`AgenticMode: true` silently falls back to legacy JSON mode. Native tool calling
+depends on server startup (`llama-server --jinja`), the chat template, and the
+model — it cannot be asserted statically.
+
+For a known tool-capable setup, opt in explicitly and (optionally) let agentd
+probe the server once at startup to refine the flag:
+
+```yaml
+gateway:
+  providers:
+    - name: llamacpp
+      adapter: llamacpp
+      base_url: "http://127.0.0.1:8080"
+      model: "<tool-capable-model>"
+      capabilities: { chat_tools: true }
+      options:
+        probe_tools: true   # one-time startup probe; refines SupportsChatTools
+  order: [llamacpp]
+```
+
+Certify your `llama-server` + model combination first with the smoke script, then
+enable `chat_tools`/`probe_tools`. See
+[Provider tool calling](provider-tool-calling.md#llamacpp) and
+[LLM connector strategy](llm-connector-strategy.md#wire-contract-smoke-script).
+
 ## Using Other OpenAI-Compatible Providers
 
 Simply change the config in `~/.agentd/config.yaml`.

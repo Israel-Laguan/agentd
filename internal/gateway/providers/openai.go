@@ -254,7 +254,8 @@ func (r openAIResponse) extractResponseContent() (string, []spec.ToolCall) {
 	content := ""
 	if msg.Content != nil {
 		content = *msg.Content
-	} else if msg.ReasoningContent != nil {
+	}
+	if content == "" && msg.ReasoningContent != nil {
 		content = *msg.ReasoningContent
 	}
 	var toolCalls []spec.ToolCall

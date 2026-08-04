@@ -167,6 +167,64 @@ gateway:
   order: [litellm]
 ```
 
+## Wire contract guarantees
+
+`adapter: openai` is the single wire path both topologies depend on, so its
+behavior is a stable contract. `internal/gateway/providers/wire_contract_test.go`
+pins seven dimensions against a shared `httptest` fixture endpoint; any change to
+the adapter that breaks one is a contract regression:
+
+| Dimension | Guarantee |
+| --- | --- |
+| tools request shape | `tools[]` serializes as `{type:"function", function:{name, description, parameters}}` |
+| tool_calls response | Assistant `tool_calls` parse into `AIResponse.ToolCalls` (`id`, `type`, `function.{name,arguments}`) |
+| tool_call_id round-trip | A prior assistant `tool_calls` + a `role:"tool"` message with `tool_call_id` round-trips on the next request |
+| error / HTTP-status mapping | 429→`ErrLLMQuotaExceeded`, 5xx→`ErrLLMUnreachable`, 4xx→rejected error |
+| timeout behavior | Context deadline / provider `Timeout` surfaces as `ErrLLMUnreachable` |
+| JSON mode × tools | `response_format` is set only when `JSONMode` is on **and** no `tools` are present (tools win) |
+| embeddings passthrough | `Embed` maps request inputs to positional vectors (incl. `nil` for missing indices) |
+
+Both the direct path (llama.cpp / OpenAI / vLLM) and the managed path
+(LiteLLM / Portkey / OpenRouter) must satisfy these. The conformance smoke
+script below certifies a *runtime* endpoint against the user-facing subset.
+
+## Wire-contract smoke script
+
+The single OpenAI Chat Completions wire path (`adapter: openai`) is what both
+the direct (llama.cpp / OpenAI / vLLM) and managed (LiteLLM / Portkey /
+OpenRouter) topologies depend on. `scripts/llm-smoke.sh` is a POSIX-sh probe
+that certifies any endpoint satisfies the three essential contract checks:
+
+| Probe | What it exercises | Pass criteria |
+| --- | --- | --- |
+| text-generation | `/v1/chat/completions` with a plain user turn | HTTP 2xx + non-empty `content` |
+| json-mode | `response_format: {type: json_object}` + JSON instruction | Content parses as JSON |
+| tool-calling | `tools` definition with one function | Response contains `tool_calls` → `SUPPORTED`; otherwise `NOT SUPPORTED` |
+
+### Direct path (llama.cpp / vLLM / OpenAI)
+
+```sh
+scripts/llm-smoke.sh http://127.0.0.1:8080/v1 llama-cpp-model sk-llama
+```
+
+### Managed path (LiteLLM)
+
+```sh
+scripts/llm-smoke.sh http://127.0.0.1:4000/v1 poolside/laguna-m.1 "$LITELLM_VIRTUAL_KEY"
+```
+
+### Verdict interpretation
+
+- **PASS** — the endpoint satisfies this contract dimension.
+- **FAIL** — the endpoint returned an error or malformed response for this probe.
+- **SUPPORTED** — the endpoint supports tool calling.
+- **NOT SUPPORTED** — the endpoint does not return `tool_calls` (expected for some models/providers).
+
+The script exits non-zero only on hard connectivity failures (DNS resolution or
+TCP connection refused). HTTP-level failures (401, 4xx, 5xx) are reported as
+FAIL/NOT SUPPORTED but do not stop the run, so you can see the full capability
+table for the model.
+
 ## Files
 
 **Milestone 13 itself is docs + config only**: the native adapters are **not**
@@ -193,6 +251,7 @@ Milestone 13 files:
 - `go build ./... && go test ./docs/...` — existing tests pass (link validation +
   provider-tool-calling parity test).
 - Link check: a `grep` for backtick-relative `tasks/` references in `docs/` must point
-  only at task files that exist under `tasks/` (`13`–`19` all exist).
+  only at task files that exist under `tasks/` (per-milestone spec files are removed once the
+  work ships; `docs/` no longer references `tasks/`).
 - Reviewer confirms the provider claims (Anthropic "single-turn", ollama/horde
   "maintenance") match the code evidence cited above.
