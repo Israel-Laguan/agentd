@@ -173,7 +173,7 @@ jobs:
           curl -sSLo /tmp/lychee.tar.gz \
             "https://github.com/lycheeverse/lychee/releases/latest/download/lychee-$(uname -m)-unknown-linux-gnu.tar.gz"
           tar -xzf /tmp/lychee.tar.gz -C /tmp
-          sudo mv /tmp/lychee /usr/local/bin/lychee
+          sudo mv /tmp/lychee-*/lychee /usr/local/bin/lychee
           make lint-links
 
       - name: Test
