@@ -56,12 +56,19 @@ export function useToolEventStream(taskId?: string): ToolEventStreamState {
     });
   }, []);
 
+  // Reset prior activity when taskId changes so the previous task's entries or
+  // stale connection state are not rendered for the new stream. This is done
+  // during render (the React-recommended way to clear derived state for a new
+  // input) rather than synchronously inside an effect, which would trigger
+  // cascading renders. Mock mode keeps its static sample, so it never resets.
+  const [prevTaskId, setPrevTaskId] = useState(taskId);
+  if (!USE_MOCK && prevTaskId !== taskId) {
+    setPrevTaskId(taskId);
+    setState({ rawEvents: [], entries: [], connected: false });
+  }
+
   useEffect(() => {
     if (USE_MOCK) return; // static sample; no live stream in mock mode
-
-    // Reset prior activity so a taskId change does not render the previous
-    // task's entries or stale connection state before reopening the stream.
-    setState({ rawEvents: [], entries: [], connected: false });
 
     // EventSource isn't available in jsdom; in real builds it is. Guard so
     // tests rendering this hook in mock mode never touch it.
