@@ -63,6 +63,12 @@ func TestExcluded(t *testing.T) {
 	if !excluded("vendor/foo/bar", defaultExcludes) {
 		t.Fatal("expected vendor path to be excluded")
 	}
+	// Generated lockfiles are not hand-written source and are exempt.
+	for _, path := range []string{"package-lock.json", "web/package-lock.json", "go.sum"} {
+		if !excluded(path, defaultExcludes) {
+			t.Fatalf("expected generated lockfile %q to be excluded", path)
+		}
+	}
 	if excluded("internal/foo.go", defaultExcludes) {
 		t.Fatal("expected internal path not to be excluded")
 	}

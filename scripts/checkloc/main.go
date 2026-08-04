@@ -24,6 +24,7 @@ var defaultExcludes = []string{
 	"*.min.js",
 	"*.min.css",
 	"go.sum",
+	"package-lock.json",
 	"web/package-lock.json",
 }
 

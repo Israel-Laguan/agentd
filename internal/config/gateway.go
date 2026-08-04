@@ -2,29 +2,12 @@ package config
 
 import (
 	"fmt"
-	"log/slog"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/viper"
 
 	"agentd/internal/gateway"
 )
-
-type AuthConfig struct {
-	Type  string `json:"type" mapstructure:"type"`
-	Token string `json:"token" mapstructure:"token"`
-}
-
-type CapabilityManifest struct {
-	Type      string     `json:"type" mapstructure:"type"`
-	Name      string     `json:"name" mapstructure:"name"`
-	ServerURL string     `json:"server_url,omitempty" mapstructure:"server_url"`
-	Command   string     `json:"command,omitempty" mapstructure:"command"`
-	Args      []string   `json:"args,omitempty" mapstructure:"args"`
-	Auth      AuthConfig `json:"auth,omitempty" mapstructure:"auth"`
-}
 
 type RoleModelConfig struct {
 	Provider string `mapstructure:"provider"`
@@ -201,76 +184,6 @@ func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {
 	return configs, nil
 }
 
-// managedProviderNames reports provider names that are recognized as managed
-// proxies (LiteLLM, Portkey, OpenRouter). Classification is name-based so
-// operators can control it via the gateway.providers[*].name field.
-var managedProviderNames = map[string]struct{}{
-	"litellm":    {},
-	"portkey":    {},
-	"openrouter": {},
-}
-
-// ConnectorTopology returns a log-friendly single-line summary of the effective
-// connector topology per role, e.g. "chat=direct(openai/gpt-4o-mini) worker=managed(litellm/poolside/laguna-m.1)".
-func (c GatewayConfig) ConnectorTopology(configs []gateway.ProviderConfig) string {
-	type roleInfo struct {
-		provider string
-		model    string
-		managed  bool
-	}
-	infos := make(map[gateway.Role]roleInfo)
-
-	// Build a lookup from provider name to config for model resolution.
-	nameToCfg := make(map[string]gateway.ProviderConfig, len(configs))
-	for _, cfg := range configs {
-		nameToCfg[strings.ToLower(cfg.Name)] = cfg
-	}
-
-	defaultProvider := ""
-	if len(configs) > 0 {
-		defaultProvider = strings.ToLower(configs[0].Name)
-	}
-
-	resolve := func(provider, model string) (string, string, bool) {
-		p := strings.ToLower(strings.TrimSpace(provider))
-		if p == "" {
-			p = defaultProvider
-		}
-		cfg, ok := nameToCfg[p]
-		if !ok {
-			return p, model, false
-		}
-		m := strings.TrimSpace(model)
-		if m == "" {
-			m = cfg.Model
-		}
-		_, managed := managedProviderNames[p]
-		return p, m, managed
-	}
-
-	for _, role := range []gateway.Role{gateway.RoleChat, gateway.RoleWorker, gateway.RoleMemory} {
-		provider, model, managed := "", "", false
-		if target, ok := c.RoleRoutes()[role]; ok {
-			provider, model, managed = resolve(target.Provider, target.Model)
-		} else {
-			provider, model, managed = resolve(defaultProvider, "")
-		}
-		infos[role] = roleInfo{provider: provider, model: model, managed: managed}
-	}
-
-	order := []string{string(gateway.RoleChat), string(gateway.RoleWorker), string(gateway.RoleMemory)}
-	parts := make([]string, 0, len(order))
-	for _, role := range order {
-		info := infos[gateway.Role(role)]
-		label := "direct"
-		if info.managed {
-			label = "managed"
-		}
-		parts = append(parts, fmt.Sprintf("%s=%s(%s/%s)", role, label, info.provider, info.model))
-	}
-	return strings.Join(parts, " ")
-}
-
 func (c TruncationConfig) StrategyImpl() gateway.TruncationStrategy {
 	switch c.Strategy {
 	case gateway.TruncationStrategyHeadTail:
@@ -289,35 +202,4 @@ func durationOrDefault(value, fallback time.Duration) time.Duration {
 		return value
 	}
 	return fallback
-}
-
-func loadMCPServers(v *viper.Viper) ([]CapabilityManifest, error) {
-	if v.IsSet("gateway.mcp_servers") {
-		var caps []CapabilityManifest
-		if err := v.UnmarshalKey("gateway.mcp_servers", &caps); err != nil {
-			return nil, fmt.Errorf("invalid gateway.mcp_servers: %w", err)
-		}
-		for i := range caps {
-			if caps[i].Auth.Token != "" {
-				caps[i].Auth.Token = os.ExpandEnv(caps[i].Auth.Token)
-			}
-		}
-		return caps, nil
-	}
-
-	// Backward compat: fall back to the old gateway.capabilities key, deprecated in favour of
-	// gateway.mcp_servers. Will be removed in a future release.
-	var legacy []CapabilityManifest
-	if err := v.UnmarshalKey("gateway.capabilities", &legacy); err != nil {
-		return nil, fmt.Errorf("invalid gateway.capabilities: %w", err)
-	}
-	for i := range legacy {
-		if legacy[i].Auth.Token != "" {
-			legacy[i].Auth.Token = os.ExpandEnv(legacy[i].Auth.Token)
-		}
-	}
-	if len(legacy) > 0 {
-		slog.Warn("gateway.capabilities is deprecated; rename the config key to gateway.mcp_servers")
-	}
-	return legacy, nil
 }
