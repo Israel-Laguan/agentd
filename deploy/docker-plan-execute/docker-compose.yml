@@ -1,0 +1,89 @@
+# Docker scenario: agentd creates a plan and executes it, routed through litellm.
+#
+#   mockllm  <--  litellm proxy (model: mock/agentd)  <--  agentd  <--  tester
+#
+# - mockllm  : fake OpenAI-compatible backend (no real LLM keys needed).
+# - litellm  : real litellm proxy forwarding model "mock/agentd" to mockllm.
+# - agentd   : daemon; seeded agents cascade to litellm; workers execute tasks.
+# - tester   : one-shot container that materializes a plan, waits for execution,
+#              and asserts the tasks ran through litellm (reads PLAN_RESULTS.log).
+#
+# Run the whole thing:
+#   cd deploy/docker-plan-execute
+#   docker compose up --build --abort-on-container-exit
+#
+# Or just follow along:
+#   docker compose build
+#   docker compose up -d mockllm litellm agentd
+#   docker compose run --rm tester            # materialize + assert
+
+services:
+  mockllm:
+    build:
+      context: ./mockllm
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  litellm:
+    image: litellm/litellm:main
+    command: ["--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    expose:
+      - "4000"
+    depends_on:
+      mockllm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness').status==200 else 1)"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  agentd:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      LITELLM_API_KEY: "sk-test"
+      AGENTD_API_ADDRESS: "0.0.0.0:8765"
+    volumes:
+      # Read-only scenario config (passed via --config).
+      - ./agentd/config.yaml:/etc/agentd/config.yaml:ro
+      # Seed directory copied into each materialized project workspace.
+      - ./seed:/srv/seed:ro
+      # Shared so the tester can read execution evidence written by the sandbox.
+      - agentd-projects:/home/agentd/projects
+    command: >
+      sh -c "agentd --config /etc/agentd/config.yaml init &&
+             exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"
+    ports:
+      - "8765:8765"
+    depends_on:
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      # The runtime image ships busybox wget (no curl), so probe with that.
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8765/api/v1/system/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  tester:
+    image: alpine:3.20
+    volumes:
+      - ./run-e2e.sh:/run-e2e.sh:ro
+      - agentd-projects:/home/agentd/projects:ro
+    depends_on:
+      agentd:
+        condition: service_healthy
+    command: ["sh", "/run-e2e.sh"]
+
+volumes:
+  agentd-projects:

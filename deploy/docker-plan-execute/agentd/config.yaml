@@ -1,0 +1,41 @@
+# agentd configuration for the docker plan+execute scenario.
+#
+# The only gateway provider is the litellm proxy running in the same compose
+# network. All seeded agent profiles (default/researcher/qa) leave provider and
+# model empty, so they cascade to gateway.order -> litellm -> mock/agentd.
+#
+# Passed to the daemon with: agentd --config /etc/agentd/config.yaml
+
+home: /home/agentd
+db_path: /home/agentd/global.db
+projects_dir: /home/agentd/projects
+uploads_dir: /home/agentd/uploads
+
+api:
+  address: "0.0.0.0:8765"
+
+gateway:
+  order: [litellm]
+  providers:
+    - name: litellm
+      adapter: openai
+      base_url: "http://litellm:4000/v1"
+      api_key_env: LITELLM_API_KEY      # agentd container exports LITELLM_API_KEY=sk-test
+      model: "mock/agentd"
+      capabilities:
+        chat_tools: true
+      options:
+        # M18: propagate task_id/agent_id/role to litellm for spend correlation.
+        send_task_metadata: true
+  warmup_enabled: false
+  budget:
+    tokens_per_task: 50000
+  role_models:
+    chat:  { provider: "", model: "" }
+    worker: { provider: "", model: "" }
+    memory: { provider: "", model: "" }
+
+# Keep the scenario quiet: no self-healing handoffs or outage tasks.
+healing:
+  enabled: false
+  outage_handoff_enabled: false
