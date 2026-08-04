@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -93,20 +94,25 @@ func TestLlamaCpp_Timeout_ZeroDoesNotEnforceTimeout(t *testing.T) {
 
 func TestLlamaCpp_Generate_SendsToolsWhenPresent(t *testing.T) {
 	// Capture handler-side validation failures and assert them after Generate
-	// returns (the handler's single request completes before Generate returns,
-	// so no extra synchronization is needed). Avoids calling testing.T methods
-	// from the HTTP handler goroutine. The handler always replies 200 so a
-	// validation failure surfaces via handlerErrs instead of failing Generate.
+	// returns. Use synchronization to avoid data races between the HTTP handler
+	// goroutine and the main test goroutine.
+	var mu sync.Mutex
 	var handlerErrs []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
+			mu.Lock()
 			handlerErrs = append(handlerErrs, fmt.Sprintf("unexpected path: %s", r.URL.Path))
+			mu.Unlock()
 		}
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			mu.Lock()
 			handlerErrs = append(handlerErrs, fmt.Sprintf("decode request: %v", err))
+			mu.Unlock()
 		} else {
+			mu.Lock()
 			assertSendsToolsRequest(req, &handlerErrs)
+			mu.Unlock()
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(openAIResponseBody("ok", "request-model"))
@@ -134,6 +140,8 @@ func TestLlamaCpp_Generate_SendsToolsWhenPresent(t *testing.T) {
 	if resp.ModelUsed != "request-model" {
 		t.Errorf("ModelUsed = %q, want request-model", resp.ModelUsed)
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	if len(handlerErrs) > 0 {
 		t.Errorf("handler validation errors:\n  %s", strings.Join(handlerErrs, "\n  "))
 	}
@@ -243,7 +251,8 @@ func TestLlamaCpp_ProbeTools_NoOpWhenDisabled(t *testing.T) {
 func TestLlamaCpp_ProbeTools_Supported(t *testing.T) {
 	// Verify the probe request actually sends a tool definition (not just that a
 	// fabricated response is parsed as supported) so a regression that drops the
-	// tool payload is caught.
+	// tool payload is caught. Use synchronization to avoid data races.
+	var mu sync.Mutex
 	var reqBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&reqBody)
@@ -281,6 +290,8 @@ func TestLlamaCpp_ProbeTools_Supported(t *testing.T) {
 		t.Error("Capabilities().SupportsChatTools = false after supported probe")
 	}
 	// The probe request must include the tool definition.
+	mu.Lock()
+	defer mu.Unlock()
 	tools, ok := reqBody["tools"].([]any)
 	if !ok || len(tools) == 0 {
 		t.Fatalf("probe request did not send a tools array; body = %#v", reqBody)

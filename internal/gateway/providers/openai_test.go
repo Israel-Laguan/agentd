@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"agentd/internal/gateway/spec"
@@ -340,9 +341,14 @@ func TestOpenAIUsage_DeepSeekHitBeatsOpenAICachedWhenLarger(t *testing.T) {
 // request body under metadata.
 func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 	t.Parallel()
+	var mu sync.Mutex
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		gotBody = body
+		mu.Unlock()
 		writeOpenAIJSON(t, w, openAIResponseBody("ok", "wire-test"))
 	}))
 	defer srv.Close()
@@ -360,6 +366,8 @@ func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	meta, ok := gotBody["metadata"].(map[string]any)
 	if !ok {
 		t.Fatalf("metadata = %v, want map", gotBody["metadata"])
@@ -380,9 +388,14 @@ func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 // TaskID/AgentID/Role.
 func TestOpenAI_SendTaskMetadata_Disabled(t *testing.T) {
 	t.Parallel()
+	var mu sync.Mutex
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		gotBody = body
+		mu.Unlock()
 		writeOpenAIJSON(t, w, openAIResponseBody("ok", "wire-test"))
 	}))
 	defer srv.Close()
@@ -400,6 +413,8 @@ func TestOpenAI_SendTaskMetadata_Disabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	if _, has := gotBody["metadata"]; has {
 		t.Errorf("metadata present when option disabled; body = %#v", gotBody)
 	}
@@ -409,9 +424,14 @@ func TestOpenAI_SendTaskMetadata_Disabled(t *testing.T) {
 // option is enabled but the request carries neither TaskID nor AgentID.
 func TestOpenAI_SendTaskMetadata_NoTaskID(t *testing.T) {
 	t.Parallel()
+	var mu sync.Mutex
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		gotBody = body
+		mu.Unlock()
 		writeOpenAIJSON(t, w, openAIResponseBody("ok", "wire-test"))
 	}))
 	defer srv.Close()
@@ -426,6 +446,8 @@ func TestOpenAI_SendTaskMetadata_NoTaskID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	if _, has := gotBody["metadata"]; has {
 		t.Errorf("metadata present when no task/agent id; body = %#v", gotBody)
 	}
@@ -436,9 +458,14 @@ func TestOpenAI_SendTaskMetadata_NoTaskID(t *testing.T) {
 // AgentID). This covers the regression where role-only requests were dropped.
 func TestOpenAI_SendTaskMetadata_RoleOnly(t *testing.T) {
 	t.Parallel()
+	var mu sync.Mutex
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		gotBody = body
+		mu.Unlock()
 		writeOpenAIJSON(t, w, openAIResponseBody("ok", "wire-test"))
 	}))
 	defer srv.Close()
@@ -454,6 +481,8 @@ func TestOpenAI_SendTaskMetadata_RoleOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	meta, ok := gotBody["metadata"].(map[string]any)
 	if !ok {
 		t.Fatalf("metadata = %v, want map (role-only request must emit metadata)", gotBody["metadata"])

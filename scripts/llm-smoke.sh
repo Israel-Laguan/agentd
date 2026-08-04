@@ -25,6 +25,17 @@ BASE_URL="${BASE_URL%/}"
 MODEL="${LLM_MODEL:-${2:-}}"
 API_KEY="${LLM_API_KEY:-${3:-}}"
 
+# Security: Never send API_KEY over plaintext HTTP to non-loopback hosts.
+# Only allow credentials over HTTPS or HTTP to localhost/127.0.0.1
+should_send_credentials() {
+    case "$BASE_URL" in
+        https://*) return 0 ;;
+        http://localhost*:*) return 0 ;;
+        http://127.0.0.1*:*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 [ -n "$BASE_URL" ] || usage
 [ -n "$MODEL" ] || usage
 
@@ -47,20 +58,30 @@ do_post() {
 	payload="$1"
 	: > "$TMPFILE"
 
+	# Only include authorization header if credentials should be sent
+	AUTH_HEADER=""
+	if should_send_credentials && [ -n "$API_KEY" ]; then
+		AUTH_HEADER="-H Authorization: Bearer $API_KEY"
+	fi
+
 	if [ "$CURL_BIN" = "curl" ]; then
 		http_code=$(curl -sS -o "$TMPFILE" -w "%{http_code}" \
 			-X POST \
 			-H "Content-Type: application/json" \
-			${API_KEY:+-H "Authorization: Bearer $API_KEY"} \
+			${AUTH_HEADER:+$AUTH_HEADER} \
 			--connect-timeout 10 --max-time 30 \
 			"$BASE_URL/chat/completions" \
 			-d "$payload" 2>/dev/null) || true
 		[ -n "$http_code" ] || http_code="000"
 	else
 		printf '%s' "$payload" > "$PAYLOADFILE"
+		AUTH_WGET_HEADER=""
+		if [ -n "$AUTH_HEADER" ]; then
+			AUTH_WGET_HEADER="--header=Authorization: Bearer $API_KEY"
+		fi
 		resp=$(wget -q -O "$TMPFILE" --server-response \
 			--header="Content-Type: application/json" \
-			${API_KEY:+--header="Authorization: Bearer $API_KEY"} \
+			${AUTH_WGET_HEADER:+$AUTH_WGET_HEADER} \
 			--post-file="$PAYLOADFILE" \
 			--timeout=30 \
 			"$BASE_URL/chat/completions" 2>&1 || true)

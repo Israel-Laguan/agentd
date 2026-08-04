@@ -167,11 +167,13 @@ jobs:
       - name: Check docs links (lychee)
         if: always()
         run: |
-          # Install lychee so the shared `make lint-links` target (single source
-          # of truth for the file set and config) is what runs in CI, matching
-          # the local `make check` gate.
-          curl -sSLo /tmp/lychee.tar.gz \
-            "https://github.com/lycheeverse/lychee/releases/latest/download/lychee-$(uname -m)-unknown-linux-gnu.tar.gz"
+          # Install lychee from a pinned release for reproducibility and security.
+          # Using v0.15.1 as a known good release.
+          LYCHEE_VERSION="v0.15.1"
+          ASSET="lychee-$(uname -m)-unknown-linux-gnu.tar.gz"
+          URL="https://github.com/lycheeverse/lychee/releases/download/${LYCHEE_VERSION}/${ASSET}"
+          
+          curl -fsSL --proto '=https' --proto-redir '=https' -o /tmp/lychee.tar.gz "${URL}"
           tar -xzf /tmp/lychee.tar.gz -C /tmp
           sudo mv /tmp/lychee-*/lychee /usr/local/bin/lychee
           make lint-links

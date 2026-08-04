@@ -54,9 +54,11 @@ func (c GatewayConfig) ConnectorTopology(configs []gateway.ProviderConfig) strin
 		return p, m, managed
 	}
 
+	// Cache RoleRoutes() result to avoid repeated map allocations
+	roleRoutes := c.RoleRoutes()
 	for _, role := range []gateway.Role{gateway.RoleChat, gateway.RoleWorker, gateway.RoleMemory} {
 		provider, model, managed := "", "", false
-		if target, ok := c.RoleRoutes()[role]; ok {
+		if target, ok := roleRoutes[role]; ok {
 			provider, model, managed = resolve(target.Provider, target.Model)
 		} else {
 			provider, model, managed = resolve(defaultProvider, "")

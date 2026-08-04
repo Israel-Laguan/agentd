@@ -53,7 +53,7 @@ loc:
 	$(GO) run ./scripts/checkloc --max-lines 300
 
 minfunc:
-	$(GO) run ./scripts/checkminfunc --min-lines 3 --warn
+	$(GO) run ./scripts/checkminfunc --min-lines 3
 
 folder-audit:
 	$(GO) run ./scripts/folder_audit --out /tmp/folder-size-audit.md
@@ -68,7 +68,7 @@ lint-md:
 	npm run lint:md
 
 lint-links:
-	$(LYCHEE) --config .lychee.toml README.md docs
+	$(LYCHEE) --config .lychee.toml README.md docs CONTRIBUTING.md GUARDRAILS.md REVIEW.md STYLEGUIDE.md
 
 lint-docs: lint-md lint-links
 

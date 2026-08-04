@@ -7,6 +7,8 @@
 - Go 1.26+
 - GNU Make
 - SQLite (for development; the project uses `modernc.org/sqlite` which bundles a pure-Go driver)
+- Node.js 22+ with npm (for markdown linting)
+- [lychee](https://github.com/lycheeverse/lychee) link-checker binary (for link validation)
 
 ### Setup
 

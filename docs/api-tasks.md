@@ -14,7 +14,7 @@ List tasks for a project with optional filters.
 
 **Query Parameters**:
 
-- `state` - Filter by state (comma-separated): `PENDING`, `READY`, `QUEUED`, `RUNNING`, `BLOCKED`, `COMPLETED`, `FAILED`, `IN_CONSIDERATION`
+- `state` - Filter by state (comma-separated): `PENDING`, `READY`, `QUEUED`, `RUNNING`, `BLOCKED`, `COMPLETED`, `FAILED`, `FAILED_REQUIRES_HUMAN`, `IN_CONSIDERATION`
 - `assignee` - Filter by assignee: `HUMAN`, `SYSTEM`, or agent ID
 - `include_healing` - When `true`, include self-healing handoff subtasks. Default: excluded.
 - `limit` - Maximum results (default: 50)
@@ -26,7 +26,7 @@ List tasks for a project with optional filters.
 {
   "status": "success",
   "data": [...],
-  "meta": { "page": 1, "per_page": 10, "total": 5 }
+  "meta": { "page": 1, "per_page": 50, "total": 5 }
 }
 ```
 
@@ -46,7 +46,7 @@ Update a task's state.
 { "state": "COMPLETED" }
 ```
 
-**Valid States**: `PENDING`, `IN_CONSIDERATION`, `RUNNING`, `BLOCKED`, `FAILED`, `COMPLETED`
+**Valid States**: `PENDING`, `IN_CONSIDERATION`, `RUNNING`, `BLOCKED`, `FAILED`, `FAILED_REQUIRES_HUMAN`, `COMPLETED`
 
 **Response**:
 
@@ -93,7 +93,7 @@ Add a human comment to a task. This pauses the task to `IN_CONSIDERATION` state.
 
 **Error Responses**:
 
-- `400 BAD_REQUEST` - Empty content (validation failed)
+- `400 BAD_REQUEST` - Empty or blank content (validation failed)
 
 **Test Coverage**:
 
