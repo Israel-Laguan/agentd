@@ -81,3 +81,4 @@ export function LogsView({ tasks }: LogsViewProps) {
     </motion.div>
   );
 }
+

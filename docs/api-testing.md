@@ -389,7 +389,7 @@ For the event-name mapping and the `tool_called` / `tool_result` payload contrac
 ## Error Codes
 
 | Code | HTTP Status | Description |
-|------|-------------|-------------|
+| ------ | ------------- | ------------- |
 | `NOT_FOUND` | 404 | Resource not found |
 | `STATE_CONFLICT` | 409 | Invalid state transition |
 | `VALIDATION_FAILED` | 400 | Invalid request parameters |

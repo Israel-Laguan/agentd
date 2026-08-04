@@ -254,15 +254,15 @@ The intervention flow keeps humans out of process pipes. Humans write comments t
 **Failure Analysis:**
 
 - **Risk:** A human comments exactly as a worker finishes, and the worker marks the task `COMPLETED` before seeing the instruction.
-- **Mitigation:** [`internal/kanban/events.go`](../internal/kanban/events.go) inserts the comment, sets `IN_CONSIDERATION`, and bumps `tasks.updated_at` in one transaction. [`internal/kanban/task_updates.go`](../internal/kanban/task_updates.go) commits results with `UPDATE tasks ... WHERE id = ? AND updated_at = ? AND state = ?`, so the worker's stale completion write fails with `ErrStateConflict`.
+- **Mitigation:** [`internal/kanban/events.go`](../internal/kanban/events.go) inserts the comment, sets `IN_CONSIDERATION`, and bumps `tasks.updated_at` in one transaction. [`internal/kanban/db/task_updates.go`](../internal/kanban/db/task_updates.go) commits results with `UPDATE tasks ... WHERE id = ? AND updated_at = ? AND state = ?`, so the worker's stale completion write fails with `ErrStateConflict`.
 - **Status today:** Mitigated by optimistic locking and state transition checks.
 
 - **Risk:** A long comment thread bloats worker context.
 - **Mitigation:** Comment intake should summarize older comments into the task description before re-invoking Frontdesk or workers.
-- **Status today:** Mitigated. Comment intake in [`internal/queue/intake.go`](../internal/queue/intake.go) summarizes older comment-thread context when it exceeds half the truncator budget before re-invoking Frontdesk.
+- **Status today:** Mitigated. Comment intake in [`internal/frontdesk/intake.go`](../internal/frontdesk/intake.go) summarizes older comment-thread context when it exceeds half the truncator budget before re-invoking Frontdesk.
 
 - **Risk:** Cancellation cannot reach a running sandbox process.
-- **Mitigation:** [`internal/queue/worker/canceller.go`](../internal/queue/worker/canceller.go) cancels the worker context when the worker is local, and the sandbox kills the process group when context cancellation reaches command execution.
+- **Mitigation:** [`internal/queue/worker/worker_support.go`](../internal/queue/worker/worker_support.go) cancels the worker context when the worker is local, and the sandbox kills the process group when context cancellation reaches command execution.
 - **Status today:** Partly mitigated. In-process cancellation exists; cross-process or remote worker cancellation would need a durable signal path.
 
 ### Flow 4. Background Maintenance

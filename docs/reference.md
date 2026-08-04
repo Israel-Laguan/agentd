@@ -11,7 +11,7 @@ See [`architecture.md`](architecture.md) for system node diagrams, data flows, a
 ### Deprecation timeline
 
 | Phase | Date | Action |
-|-------|------|--------|
+| ------- | ------ | -------- |
 | Breaking change | 2026-05-27 | snake_case keys are now the only format returned |
 | Observation window | until 2026-06-27 | Monitor for integration failures; patch releases issued if critical regressions surface |
 | Stabilisation | 2026-07-01 | snake_case contract considered stable; no further compatibility shims planned |

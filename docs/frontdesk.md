@@ -78,7 +78,7 @@ graph LR
 ### Package responsibilities
 
 | Package | Owns | Does NOT own |
-|---------|------|-------------|
+| --------- | ------ | ------------- |
 | `internal/api/controllers` | HTTP decode/encode, request routing, error mapping, response envelope formatting | LLM prompts, JSON retry logic, truncation strategies, board persistence |
 | `internal/gateway` | LLM prompt construction, provider fallback, JSON self-correction, truncation enforcement, intent/scope system prompts | HTTP transport, board reads/writes, file stashing |
 | `internal/services` | Deterministic status aggregation, file stash I/O, plan materialization orchestration | LLM calls, HTTP routing |
@@ -108,7 +108,7 @@ chat := controllers.ChatHandler{
 ## Key Types
 
 | Role | Actual Type | Package | Notes |
-|------|-------------|---------|-------|
+| ------ | ------------- | --------- | ------- |
 | Chat controller | `ChatHandler` | `internal/api/controllers` | Holds `AIGateway`, `StatusSummarizer`, `FileStash`, `Truncator`, `Retriever` |
 | Gateway facade | `Router` | `internal/gateway/routing` (re-exported) | Implements `AIGateway` with provider fallback and truncation |
 | Intent classifier | `Router.ClassifyIntent` | `internal/gateway/routing` | Returns `IntentAnalysis{Intent, Reason}` |
@@ -123,7 +123,7 @@ chat := controllers.ChatHandler{
 Behavior is defined and verified through Gherkin BDD scenarios (run via Godog) and Go unit tests. See [`reference.md`](reference.md) for the full feature catalog.
 
 | Concern | Feature File |
-|---------|-------------|
+| --------- | ------------- |
 | Intake decision tree (intent classification, scope shield, status check, ambiguous) | [`openai_intake.feature`](../internal/api/features/openai_intake.feature) |
 | CLI draft-and-approve loop | [`cli_ask.feature`](../cmd/agentd/features/cli_ask.feature) |
 | Timeout resilience | [`chat_timeout.feature`](../internal/api/features/chat_timeout.feature) |

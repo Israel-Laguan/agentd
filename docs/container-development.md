@@ -12,7 +12,7 @@ Runtime commands run in an Alpine-based image; Podman is docker-compatible.
 ## Images
 
 | Dockerfile | Purpose | Default user |
-|---|---|---|
+| --- | --- | --- |
 | `Dockerfile` | Runtime image (`agentd` binary + sqlite-libs + bash) | `agentd` (non-root) |
 | `Dockerfile.test` | Test/lint image (Go toolchain + sqlite-libs + bash) | `tester` (non-root) |
 
