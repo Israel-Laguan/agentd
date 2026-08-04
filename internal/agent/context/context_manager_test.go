@@ -52,7 +52,7 @@ func TestPartitionAnchor(t *testing.T) {
 		{Role: "assistant", Content: "ast1"},
 		{Role: "tool", Content: "tool1"},
 	}
-	anchor, rest := cm.partitionAnchor(messages)
+	anchor, rest := cm.PartitionAnchor(messages)
 	if len(anchor) != 3 {
 		t.Errorf("expected 3 anchor messages, got %d", len(anchor))
 	}
@@ -73,7 +73,7 @@ func TestGroupTurns(t *testing.T) {
 		{Role: "user", Content: "user2"},
 		{Role: "assistant", Content: "ast2"},
 	}
-	turns := cm.groupTurns(messages)
+	turns := cm.GroupTurns(messages)
 	if len(turns) != 2 {
 		t.Fatalf("expected 2 turns, got %d", len(turns))
 	}
@@ -93,7 +93,7 @@ func TestGroupTurns_AssistantAfterToolSameTurn(t *testing.T) {
 		{Role: "tool", ToolCallID: "1", Content: "res1"},
 		{Role: "assistant", Content: "ast2"},
 	}
-	turns := cm.groupTurns(messages)
+	turns := cm.GroupTurns(messages)
 	if len(turns) != 2 {
 		t.Fatalf("expected 2 turns, got %d", len(turns))
 	}
@@ -115,7 +115,7 @@ func TestGroupTurns_AgenticToolCycles(t *testing.T) {
 		{Role: "tool", ToolCallID: "2", Content: "res2"},
 		{Role: "assistant", Content: "ast3"},
 	}
-	turns := cm.groupTurns(messages)
+	turns := cm.GroupTurns(messages)
 	if len(turns) != 3 {
 		t.Fatalf("expected 3 turns, got %d", len(turns))
 	}
@@ -275,12 +275,12 @@ func TestBudgetEnforcement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareContext failed: %v", err)
 	}
-	if totalChars(prepared) >= totalChars(messages) {
-		t.Errorf("expected total characters to be reduced, but got %d >= %d", totalChars(prepared), totalChars(messages))
+	if TotalChars(prepared) >= TotalChars(messages) {
+		t.Errorf("expected total characters to be reduced, but got %d >= %d", TotalChars(prepared), TotalChars(messages))
 	}
 	totalBudget := cfg.AnchorBudget + cfg.WorkingBudget + cfg.CompressedBudget
-	if totalChars(prepared) > totalBudget {
-		t.Errorf("prepared context exceeds budget: got %d > %d", totalChars(prepared), totalBudget)
+	if TotalChars(prepared) > totalBudget {
+		t.Errorf("prepared context exceeds budget: got %d > %d", TotalChars(prepared), totalBudget)
 	}
 	if prepared[0].Content != "sys" || prepared[1].Content != "task" {
 		t.Errorf("anchor messages were modified")

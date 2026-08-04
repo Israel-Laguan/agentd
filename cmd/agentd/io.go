@@ -8,6 +8,9 @@ import (
 )
 
 func closeStore(store *kanban.Store) {
+	if store == nil {
+		return
+	}
 	_ = store.Close()
 }
 

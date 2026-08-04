@@ -106,29 +106,7 @@ func TestLlamaCpp_Generate_SendsToolsWhenPresent(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			handlerErrs = append(handlerErrs, fmt.Sprintf("decode request: %v", err))
 		} else {
-			// Request-level model takes precedence over the configured model.
-			if req["model"] != "request-model" {
-				handlerErrs = append(handlerErrs, fmt.Sprintf("model = %v, want request-model", req["model"]))
-			}
-			tools, ok := req["tools"].([]any)
-			if !ok || len(tools) == 0 {
-				handlerErrs = append(handlerErrs, "expected tools array in request body")
-			} else if tool, ok := tools[0].(map[string]any); ok {
-				if fn, ok := tool["function"].(map[string]any); ok {
-					if fn["name"] != "get_weather" {
-						handlerErrs = append(handlerErrs, fmt.Sprintf("tool name = %q, want get_weather", fn["name"]))
-					}
-				} else {
-					handlerErrs = append(handlerErrs, "function is not a map")
-				}
-			} else {
-				handlerErrs = append(handlerErrs, fmt.Sprintf("tools[0] type = %T", tools[0]))
-			}
-			// JSON mode is set but tools are present, so response_format must be
-			// omitted (the JSON-mode/tool guard).
-			if _, has := req["response_format"]; has {
-				handlerErrs = append(handlerErrs, "expected no response_format when tools present even with JSONMode")
-			}
+			assertSendsToolsRequest(req, &handlerErrs)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(openAIResponseBody("ok", "request-model"))
@@ -158,6 +136,39 @@ func TestLlamaCpp_Generate_SendsToolsWhenPresent(t *testing.T) {
 	}
 	if len(handlerErrs) > 0 {
 		t.Errorf("handler validation errors:\n  %s", strings.Join(handlerErrs, "\n  "))
+	}
+}
+
+// assertSendsToolsRequest validates the JSON body of a tools request made by
+// Generate. Failures are appended to errs so they can be reported after
+// Generate returns (avoiding calls into testing.T from the handler goroutine).
+func assertSendsToolsRequest(req map[string]any, errs *[]string) {
+	// Request-level model takes precedence over the configured model.
+	if req["model"] != "request-model" {
+		*errs = append(*errs, fmt.Sprintf("model = %v, want request-model", req["model"]))
+	}
+	tools, ok := req["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		*errs = append(*errs, "expected tools array in request body")
+		return
+	}
+	tool, ok := tools[0].(map[string]any)
+	if !ok {
+		*errs = append(*errs, fmt.Sprintf("tools[0] type = %T", tools[0]))
+		return
+	}
+	fn, ok := tool["function"].(map[string]any)
+	if !ok {
+		*errs = append(*errs, "function is not a map")
+		return
+	}
+	if fn["name"] != "get_weather" {
+		*errs = append(*errs, fmt.Sprintf("tool name = %q, want get_weather", fn["name"]))
+	}
+	// JSON mode is set but tools are present, so response_format must be
+	// omitted (the JSON-mode/tool guard).
+	if _, has := req["response_format"]; has {
+		*errs = append(*errs, "expected no response_format when tools present even with JSONMode")
 	}
 }
 

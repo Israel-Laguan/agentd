@@ -9,23 +9,23 @@ import (
 )
 
 func (cm *ContextManager) enforceBudget(messages []spec.PromptMessage, totalBudget int) []spec.PromptMessage {
-	if totalBudget <= 0 || totalChars(messages) <= totalBudget {
+	if totalBudget <= 0 || TotalChars(messages) <= totalBudget {
 		return messages
 	}
 
 	// Find the point where working zone starts (after anchor and potential summary)
-	anchor, rest := cm.partitionAnchor(messages)
+	anchor, rest := cm.PartitionAnchor(messages)
 	summaryIdx := summaryMessageIndex(rest)
 	correctionEnd := correctionMessageEnd(rest)
 	fixed, working := fixedAndWorkingMessages(anchor, rest, summaryIdx, correctionEnd)
 
-	fixedChars := totalChars(fixed)
+	fixedChars := TotalChars(fixed)
 	remainingBudget := totalBudget - fixedChars
 	if remainingBudget <= 0 {
 		return fixed
 	}
 
-	return append(fixed, truncateWorkingMessages(working, remainingBudget)...)
+	return append(fixed, TruncateWorkingMessages(working, remainingBudget)...)
 }
 
 func summaryMessageIndex(messages []spec.PromptMessage) int {
@@ -71,7 +71,9 @@ func fixedAndWorkingMessages(
 	return fixed, working
 }
 
-func truncateWorkingMessages(working []spec.PromptMessage, budget int) []spec.PromptMessage {
+// TruncateWorkingMessages applies the context manager's middle-out truncation
+// strategy to a working message slice.
+func TruncateWorkingMessages(working []spec.PromptMessage, budget int) []spec.PromptMessage {
 	strategy := truncation.MiddleOutStrategy{}
 	truncated := make([]spec.PromptMessage, 0, len(working))
 	remaining := budget
@@ -90,12 +92,6 @@ func truncateWorkingMessages(working []spec.PromptMessage, budget int) []spec.Pr
 		truncated = append(truncated, tm)
 	}
 	return truncated
-}
-
-// TruncateWorkingMessages applies the context manager's middle-out truncation
-// strategy to a working message slice.
-func TruncateWorkingMessages(working []spec.PromptMessage, budget int) []spec.PromptMessage {
-	return truncateWorkingMessages(working, budget)
 }
 
 func truncateToolCalls(
@@ -130,8 +126,9 @@ func mergeSummaries(a, b TurnSummary) TurnSummary {
 	}
 }
 
-// totalChars counts the total character count in all message contents.
-func totalChars(messages []spec.PromptMessage) int {
+// TotalChars counts message content and tool-call characters using the context
+// manager's budget accounting.
+func TotalChars(messages []spec.PromptMessage) int {
 	total := 0
 	for _, m := range messages {
 		total += utf8.RuneCountInString(m.Content)
@@ -141,10 +138,4 @@ func totalChars(messages []spec.PromptMessage) int {
 		}
 	}
 	return total
-}
-
-// TotalChars counts message content and tool-call characters using the context
-// manager's budget accounting.
-func TotalChars(messages []spec.PromptMessage) int {
-	return totalChars(messages)
 }
