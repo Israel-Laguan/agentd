@@ -20,7 +20,7 @@ gateway:
     - name: litellm
       adapter: openai
       base_url: "http://litellm:4000/v1"
-      api_key_env: LITELLM_API_KEY      # agentd container exports LITELLM_API_KEY=sk-test
+      api_key_env: LITELLM_API_KEY      # matches the demo key in litellm/config.yaml + compose env
       model: "mock/agentd"
       capabilities:
         chat_tools: true

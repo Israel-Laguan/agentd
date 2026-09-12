@@ -56,7 +56,7 @@ JSON
 
 RESP=$(curl -sS -X POST "${BASE}/api/v1/projects/materialize" \
   -H "Content-Type: application/json" --data "@${BODY_FILE}")
-PID=$(printf '%s' "$RESP" | jq -r '.data.project.id // empty')
+PID=$(printf '%s' "$RESP" | jq -r '.data.project.id // empty' 2>/dev/null || echo '')
 if [ -z "$PID" ]; then
   fail "materialize did not return a project id"; echo "$RESP"; echo "RESULT: FAIL"; exit 1
 fi
@@ -68,17 +68,20 @@ EVIDENCE="/home/agentd/projects/${PID}/PLAN_RESULTS.log"
 log "waiting for tasks to execute (max 150s) ..."
 settled=0
 for i in $(seq 1 150); do
-  TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data // []')
+  TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data // []' || echo '[]')
   active=$(printf '%s' "$TASKS" | jq '[.[] | select(.state | test("READY|QUEUED|RUNNING|PENDING"))] | length')
   if [ "${active:-0}" -eq 0 ]; then settled=1; break; fi
   sleep 1
 done
 
-TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data // []')
-TOTAL=$(printf '%s' "$TASKS" | jq 'length')
-COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="COMPLETED")] | length')
-BLOCKED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="BLOCKED")] | length')
-PLAN_CONTAINER=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test("AGENT_PLAN"))] | length')
+TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data // []' || echo '[]')
+if ! printf '%s' "$TASKS" | jq . >/dev/null 2>&1; then
+  TASKS='[]'
+fi
+TOTAL=$(printf '%s' "$TASKS" | jq 'length' || echo 0)
+COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="COMPLETED")] | length' || echo 0)
+BLOCKED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="BLOCKED")] | length' || echo 0)
+PLAN_CONTAINER=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test("AGENT_PLAN"))] | length' || echo 0)
 
 if [ "$settled" -ne 1 ]; then
   fail "kanban did not settle; active tasks remain"
@@ -110,7 +113,7 @@ log "reading execution evidence: ${EVIDENCE}"
 if [ ! -f "$EVIDENCE" ]; then
   fail "PLAN_RESULTS.log was not written (tasks did not actually execute)"
 else
-  lines=$(grep -c "executed via litellm proxy" "$EVIDENCE" 2>/dev/null || echo 0)
+  lines=$(grep -c -F "executed via litellm proxy" "$EVIDENCE" 2>/dev/null || echo 0)
   if [ "${lines:-0}" -ge 1 ]; then
     pass "execution evidence present (${lines} command(s) ran via litellm)"
   else

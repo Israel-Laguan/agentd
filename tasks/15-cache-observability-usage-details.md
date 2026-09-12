@@ -1,6 +1,6 @@
 # Milestone 15 — Cache observability: usage details
 
-**Status**: not started · **PR scope**: one code PR · **Depends on**: M14 (measures what M14
+**Status**: completed · **PR scope**: one code PR · **Depends on**: M14 (measures what M14
 fixes — can be authored in parallel but merged after). **Relates to**: strategy "Cache
 observability: keep & harden".
 

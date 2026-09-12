@@ -1,6 +1,6 @@
 # Milestone 16 — Wire-contract suite + conformance smoke script
 
-**Status**: not started · **PR scope**: one code+tooling PR · **Depends on**: nothing hard
+**Status**: completed · **PR scope**: one code+tooling PR · **Depends on**: nothing hard
 (positioning from M13 helps docs). **Relates to**: strategy "OpenAI-compatible adapter = the ONE
 wire path".
 

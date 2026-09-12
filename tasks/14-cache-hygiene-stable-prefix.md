@@ -1,6 +1,6 @@
 # Milestone 14 — Cache hygiene: stable prefix
 
-**Status**: not started · **PR scope**: one code PR · **Depends on**: M13 (positioning only —
+**Status**: completed · **PR scope**: one code PR · **Depends on**: M13 (positioning only —
 not a hard build dependency). **Relates to**: strategy "Cache policy: keep & harden".
 
 ## Goal
