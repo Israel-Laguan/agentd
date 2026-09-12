@@ -84,8 +84,7 @@ BLOCKED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="BLOCKED")] | length'
 PLAN_CONTAINER=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test("AGENT_PLAN"))] | length' || echo 0)
 GEN_SUBTASKS=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test(":: Step"))] | length' || echo 0)
 GEN_COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select( (.title | test(":: Step")) and .state=="COMPLETED" )] | length' || echo 0)
-GEN_BLOCKED=$(printf '%s' "$TASKS" | jq '[.[] | select( (.title | test(":: Step")) and .state=="BLOCKED" )] | length' || echo 0)
-DIRECT_COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test("Generate a greeting script") and .state=="COMPLETED")] | length' || echo 0)
+DIRECT_COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select((.title | test("Generate a greeting script")) and .state=="COMPLETED")] | length' || echo 0)
 BLOCKED_IS_PLAN=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="BLOCKED" and (.title | test("AGENT_PLAN")))] | length' || echo 0)
 EXPECTED_COMPLETED=$((TOTAL - 1))
 
@@ -138,7 +137,7 @@ log "reading execution evidence: ${EVIDENCE}"
 if [ ! -f "$EVIDENCE" ]; then
   fail "PLAN_RESULTS.log was not written (tasks did not actually execute)"
 else
-  step_evidence=$(grep -c -E "AGENT_PLAN.*:: Step|:: Step.*executed via litellm" "$EVIDENCE" 2>/dev/null || echo 0)
+  step_evidence=$(grep -c -E "AGENT_PLAN.*:: Step|:: Step.*executed via litellm" "$EVIDENCE" 2>/dev/null || true)
   if [ "${step_evidence:-0}" -ge 1 ]; then
     pass "execution evidence present for generated subtask(s) (${step_evidence})"
   else
