@@ -105,7 +105,13 @@ jobs:
         if: always()
         id: minfunc_check
         continue-on-error: true
-        run: make minfunc
+        run: |
+          echo "=== minfunc baseline diagnostics ==="
+          ls -l scripts/checkminfunc/baseline || echo "ERROR: baseline file missing!"
+          wc -l scripts/checkminfunc/baseline 2>/dev/null || true
+          head -5 scripts/checkminfunc/baseline 2>/dev/null || true
+          echo "=== running make minfunc ==="
+          make minfunc
 
       - name: Enforce min function check
         if: always() && steps.minfunc_check.outcome == 'failure'
