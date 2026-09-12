@@ -17,7 +17,7 @@ func (s *Store) ListTasksByProject(ctx context.Context, projectID string) ([]mod
 	if err != nil {
 		return nil, fmt.Errorf("list tasks by project: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanTasks(rows)
 }
 
@@ -30,7 +30,7 @@ func (s *Store) ListChildTasks(ctx context.Context, parentID string) ([]models.T
 	if err != nil {
 		return nil, fmt.Errorf("list child tasks: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanTasks(rows)
 }
 
@@ -43,7 +43,7 @@ func (s *Store) ListParentTasks(ctx context.Context, childID string) ([]models.T
 	if err != nil {
 		return nil, fmt.Errorf("list parent tasks: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanTasks(rows)
 }
 
@@ -56,7 +56,7 @@ func (s *Store) ClaimNextReadyTasks(ctx context.Context, limit int) ([]models.Ta
 		if err != nil {
 			return nil, fmt.Errorf("begin claim ready tasks: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		ids, err := selectReadyTaskIDs(ctx, tx, limit)
 		if err != nil {
@@ -82,7 +82,7 @@ func (s *Store) MarkProjectTasksReady(ctx context.Context, projectID string) ([]
 		if err != nil {
 			return nil, fmt.Errorf("begin mark project tasks ready: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		now := utcNow()
 		_, err = tx.ExecContext(ctx, `
@@ -105,7 +105,7 @@ func (s *Store) MarkProjectTasksReady(ctx context.Context, projectID string) ([]
 		if err != nil {
 			return nil, fmt.Errorf("select unlocked tasks: %w", err)
 		}
-		defer closeRows(rows)
+		defer func() { _ = rows.Close() }()
 		tasks, err := scanTasks(rows)
 		if err != nil {
 			return nil, err
@@ -132,7 +132,7 @@ func (s *Store) UpdateTaskState(
 		if err != nil {
 			return nil, fmt.Errorf("begin task state update: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		now := utcNow()
 		if err := updateTaskStateInTx(ctx, tx, current, expectedUpdatedAt, next, now); err != nil {
@@ -160,7 +160,7 @@ func (s *Store) UpdateTaskResult(
 		if err != nil {
 			return nil, fmt.Errorf("begin task result update: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		now := utcNow()
 		if err := updateTaskResultState(ctx, tx, id, expectedUpdatedAt, result.Success, now); err != nil {
@@ -183,7 +183,7 @@ func (s *Store) ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]mod
 		if err != nil {
 			return nil, fmt.Errorf("begin ghost task reconciliation: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		ghosts, err := selectGhostTasks(ctx, tx, alivePIDs)
 		if err != nil {
@@ -214,7 +214,7 @@ func (s *Store) ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleT
 		if err != nil {
 			return nil, fmt.Errorf("begin stale task reconciliation: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		now := utcNow()
 		staleBefore := now.Add(-staleThreshold)
@@ -249,7 +249,7 @@ func (s *Store) ReconcileOrphanedQueued(ctx context.Context, minAge time.Duratio
 		if err != nil {
 			return nil, fmt.Errorf("begin orphaned queued reconciliation: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		now := utcNow()
 		staleBefore := now.Add(-minAge)

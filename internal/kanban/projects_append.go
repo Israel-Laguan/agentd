@@ -25,7 +25,7 @@ func (s *Store) AppendTasksToProject(
 		if err != nil {
 			return nil, fmt.Errorf("begin append tasks: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 		if _, err := selectTaskByID(ctx, tx, parentTaskID); err != nil {
 			return nil, err
 		}

@@ -73,7 +73,7 @@ func TestPrependReviewRejectionFeedback_InjectsOnce(t *testing.T) {
 	w := &Worker{store: store}
 	base := []gateway.PromptMessage{{Role: "system", Content: "sys"}, {Role: "user", Content: "task"}}
 
-	first, subtaskID := w.prependReviewRejectionFeedback(ctx, parent, base)
+	first, subtaskID := w.PrependReviewRejectionFeedback(ctx, parent, base)
 	if len(first) != len(base)+1 {
 		t.Fatalf("messages = %d, want %d", len(first), len(base)+1)
 	}
@@ -87,7 +87,7 @@ func TestPrependReviewRejectionFeedback_InjectsOnce(t *testing.T) {
 		t.Fatalf("mark rejection used: %v", err)
 	}
 
-	second, secondID := w.prependReviewRejectionFeedback(ctx, parent, base)
+	second, secondID := w.PrependReviewRejectionFeedback(ctx, parent, base)
 	if len(second) != len(base) {
 		t.Fatalf("second call messages = %d, want %d (rejection already consumed)", len(second), len(base))
 	}

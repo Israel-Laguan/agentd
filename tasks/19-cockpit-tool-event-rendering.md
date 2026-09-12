@@ -9,17 +9,14 @@ Surface `TOOL_CALL` / `TOOL_RESULT` events in agentd's web cockpit activity/task
 can watch the agentic loop as it works. The server already streams these as SSE events with scrubbed
 payloads; **zero web consumers exist today**.
 
-## Background / current state (verified)
+## Background / current state (historical, post M19)
 
-- Server event types: `models.EventTypeToolCall = "TOOL_CALL"`, `EventTypeToolResult =
-  "TOOL_RESULT"` (`internal/models/enums.go:159-160`).
-- Emitters: `internal/queue/worker/worker_events.go` (`emitToolCall`, `emitToolResult`) and the
-  `hooks_builtin_audit.go` AuditHook — payloads scrubbed + truncated (arguments ≤200 chars, output
-  ≤1000 chars).
-- SSE mapping: `internal/api/sse/stream.go:112-115` maps `TOOL_CALL`→`tool_called`,
-  `TOOL_RESULT`→`tool_result`; covered by `stream_test.go`.
-- Web grep: **no matches** for `tool_called` / `tool_result` / `TOOL_CALL` under `web/` — the UI
-  never consumes these event types.
+M19 implemented web rendering for tool events:
+
+- SSE consumers: `web/lib/sse-events.ts`, `web/app/hooks/use-tool-event-stream.ts` (and .test.ts).
+- Rendering + pairing: `web/app/components/logs/tool-event-list.tsx` + `tool-event-list.test.tsx`, `web/lib/tool-events.ts` + `tool-events.test.ts`.
+- Integration in logs view: `web/app/components/logs-view.tsx`.
+- Backend emitters/mapping were pre-existing (as described).
 
 ## Payload shapes (verify against the emitters when implementing)
 

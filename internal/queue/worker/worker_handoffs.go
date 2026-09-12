@@ -44,7 +44,7 @@ func FormatForHuman(msg HITLMessage) string {
 	return b.String()
 }
 
-func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err error) {
+func (w *Worker) HandleGatewayError(ctx context.Context, task models.Task, err error) {
 	if safety.ClassifiesAsBreakerFailure(err) {
 		if errors.Is(err, models.ErrLLMQuotaExceeded) {
 			if w.providerBreakers != nil {
@@ -69,7 +69,7 @@ func (w *Worker) handleGatewayError(ctx context.Context, task models.Task, err e
 func (w *Worker) handoffOrFail(ctx context.Context, task models.Task, err error) {
 	if !w.healingEnabled {
 		w.failTerminal(ctx, task, err, models.TaskStateFailed)
-		w.emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", "healing disabled; task failed: "+truncate(err.Error(), 500))
+		w.Emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", "healing disabled; task failed: "+truncate(err.Error(), 500))
 		return
 	}
 	w.createProviderExhaustedHandoff(ctx, task, err)
@@ -87,7 +87,7 @@ func (w *Worker) lookupProvider(ctx context.Context, task models.Task) string {
 
 func (w *Worker) recordLegacyHandoffExpiry(ctx context.Context, task models.Task) bool {
 	if err := recordHITLExpiry(ctx, w.store, task.ID, time.Now().Add(w.legacyHandoffTimeout)); err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return false
 	}
 	return true
@@ -102,13 +102,13 @@ func (w *Worker) handlePromptRecovery(
 ) {
 	detection := safety.DetectPrompt(result.Stdout, result.Stderr)
 	payload := promptPayload(command, detection, result)
-	w.emit(ctx, task, "PROMPT_DETECTED", truncate(payload, 1000))
+	w.Emit(ctx, task, "PROMPT_DETECTED", truncate(payload, 1000))
 
 	recoverable, recoveredCommand := recovery.CanRecover(command)
 	if recoverable && task.RetryCount == 0 {
 		retried, err := w.store.IncrementRetryCount(ctx, task.ID, task.UpdatedAt)
 		if err != nil {
-			w.emit(ctx, task, "ERROR", err.Error())
+			w.Emit(ctx, task, "ERROR", err.Error())
 			return
 		}
 		recoveredResult, runErr := w.sandbox.Execute(ctx, w.payload(*retried, project, recoveredCommand))
@@ -134,19 +134,19 @@ func (w *Worker) createPromptHandoff(ctx context.Context, task models.Task, payl
 		Assignee:    models.TaskAssigneeHuman,
 	}})
 	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	if !w.recordLegacyHandoffExpiry(ctx, task) {
 		return
 	}
-	w.emit(ctx, task, "PROMPT_HANDOFF", truncate(payload, 1000))
+	w.Emit(ctx, task, "PROMPT_HANDOFF", truncate(payload, 1000))
 }
 
 func (w *Worker) handlePermissionFailure(ctx context.Context, task models.Task, command string, result sandbox.Result) {
 	detection := safety.DetectPermission(result.Stdout, result.Stderr)
 	payload := permissionPayload(command, detection, result)
-	w.emit(ctx, task, "PERMISSION_DETECTED", truncate(payload, 1000))
+	w.Emit(ctx, task, "PERMISSION_DETECTED", truncate(payload, 1000))
 	w.createPermissionHandoff(ctx, task, payload)
 }
 
@@ -159,16 +159,16 @@ func (w *Worker) createPermissionHandoff(ctx context.Context, task models.Task, 
 		Assignee: models.TaskAssigneeHuman,
 	}})
 	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	if !w.recordLegacyHandoffExpiry(ctx, task) {
 		return
 	}
-	w.emit(ctx, task, "PERMISSION_HANDOFF", truncate(payload, 1000))
+	w.Emit(ctx, task, "PERMISSION_HANDOFF", truncate(payload, 1000))
 }
 
-func (w *Worker) handleGoalStalled(ctx context.Context, task models.Task, gt *agentcontext.GoalTracker) error {
+func (w *Worker) HandleGoalStalled(ctx context.Context, task models.Task, gt *agentcontext.GoalTracker) error {
 	goal := gt.Goal()
 	if goal == nil {
 		return nil
@@ -193,10 +193,10 @@ func (w *Worker) handleGoalStalled(ctx context.Context, task models.Task, gt *ag
 		Assignee:    models.TaskAssigneeHuman,
 	}})
 	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return err
 	}
-	w.emit(ctx, task, string(models.EventTypeGoalStalled), truncate(description, 1000))
+	w.Emit(ctx, task, string(models.EventTypeGoalStalled), truncate(description, 1000))
 	return nil
 }
 
@@ -236,13 +236,13 @@ func (w *Worker) createLegacyModeHandoff(ctx context.Context, task models.Task, 
 		Assignee:    models.TaskAssigneeHuman,
 	}})
 	if blockErr != nil {
-		w.emit(ctx, task, "ERROR", blockErr.Error())
+		w.Emit(ctx, task, "ERROR", blockErr.Error())
 		return
 	}
 	if !w.recordLegacyHandoffExpiry(ctx, task) {
 		return
 	}
-	w.emit(ctx, task, "LEGACY_MODE_HANDOFF", truncate(description, 1000))
+	w.Emit(ctx, task, "LEGACY_MODE_HANDOFF", truncate(description, 1000))
 }
 
 // createReviewHandoff blocks the task with a HUMAN subtask so a human
@@ -255,7 +255,7 @@ func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draf
 		task = *fresh
 	}
 	if err := persistDraftReviewComment(ctx, w.store, task.ID, draftOutput); err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	if strings.TrimSpace(draftOutput) != "" {
@@ -274,12 +274,12 @@ func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draf
 		Assignee:    models.TaskAssigneeHuman,
 	}})
 	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	if err := recordHITLExpiry(ctx, w.store, task.ID, time.Now().Add(DefaultApprovalTimeout)); err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
-	w.emit(ctx, task, "REVIEW_HANDOFF", truncate(draftOutput, 1000))
+	w.Emit(ctx, task, "REVIEW_HANDOFF", truncate(draftOutput, 1000))
 }

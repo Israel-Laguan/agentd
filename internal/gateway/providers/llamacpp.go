@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"agentd/internal/gateway/spec"
@@ -14,8 +13,7 @@ import (
 
 // LlamaCpp calls a llama.cpp /v1/chat/completions endpoint.
 type LlamaCpp struct {
-	cfg            spec.ProviderConfig
-	client         *http.Client
+	common
 	effectiveTools *bool
 }
 
@@ -25,17 +23,12 @@ func NewLlamaCpp(cfg spec.ProviderConfig, client *http.Client) *LlamaCpp {
 		client = http.DefaultClient
 	}
 	warnUnknownOptions("llamacpp", []string{"probe_tools"}, cfg.Options)
-	return &LlamaCpp{cfg: cfg, client: client}
-}
-
-// Name implements Backend.
-func (l *LlamaCpp) Name() spec.Provider {
-	return providerName(l.cfg, spec.ProviderLlamaCpp)
-}
-
-// MaxInputChars implements Backend.
-func (l *LlamaCpp) MaxInputChars() int {
-	return l.cfg.MaxInputChars
+	return &LlamaCpp{common: common{
+		name:             providerName(cfg, spec.ProviderLlamaCpp),
+		cfg:              cfg,
+		client:           client,
+		chatToolsDefault: false,
+	}}
 }
 
 // Generate implements Backend.
@@ -64,7 +57,7 @@ func (l *LlamaCpp) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRes
 			body.Tools[i] = openAITool{Type: "function", Function: t}
 		}
 	}
-	data, _, err := postJSON(ctx, l.client, l.url(), body, "")
+	data, _, err := postJSON(ctx, l.client, l.url("/v1/chat/completions"), body, "")
 	if err != nil {
 		return spec.AIResponse{}, err
 	}
@@ -75,16 +68,12 @@ func (l *LlamaCpp) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRes
 	return decoded.toAIResponse(model, string(l.Name())), nil
 }
 
-func (l *LlamaCpp) url() string {
-	return strings.TrimRight(l.cfg.BaseURL, "/") + "/v1/chat/completions"
-}
-
 // Capabilities implements Backend.
 func (l *LlamaCpp) Capabilities() Capabilities {
 	if l.effectiveTools != nil {
 		return Capabilities{SupportsChatTools: *l.effectiveTools}
 	}
-	return capabilitiesFromConfig(l.cfg, false)
+	return l.common.Capabilities()
 }
 
 // ProbeTools sends a minimal tool-calling request when options.probe_tools is enabled
@@ -120,7 +109,7 @@ func (l *LlamaCpp) ProbeTools(ctx context.Context) bool {
 		},
 	}
 
-	data, _, err := postJSON(probeCtx, l.client, l.url(), body, "")
+	data, _, err := postJSON(probeCtx, l.client, l.url("/v1/chat/completions"), body, "")
 	if err != nil {
 		slog.Warn("llamacpp tool probe failed", "provider", l.Name(), "err", err)
 		unsupported := false

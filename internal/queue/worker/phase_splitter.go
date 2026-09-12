@@ -41,7 +41,7 @@ const minExecutionTokenReserve = 1000
 // the same BudgetGuard as execution, so both phases share one task token budget.
 // When the budget is tight we skip planning so execution is less likely to stop
 // immediately with LoopBudgetExhausted.
-func (w *Worker) shouldPlanWithBudget(task models.Task, budgetGuard *agentruntime.BudgetGuard) bool {
+func (w *Worker) ShouldPlanWithBudget(task models.Task, budgetGuard *agentruntime.BudgetGuard) bool {
 	if !w.shouldPlan(task) {
 		return false
 	}
@@ -105,7 +105,7 @@ func (w *Worker) buildPlanRequest(task models.Task, planContext string) gateway.
 	}
 }
 
-func (w *Worker) generatePlan(
+func (w *Worker) GeneratePlan(
 	ctx context.Context, task models.Task, project models.Project,
 	budgetGuard *agentruntime.BudgetGuard,
 ) (*agentcontext.Plan, error) {
@@ -151,7 +151,7 @@ func (w *Worker) generatePlan(
 	return nil, models.ErrInvalidJSONResponse
 }
 
-func (w *Worker) injectPlan(messages []gateway.PromptMessage, plan *agentcontext.Plan) []gateway.PromptMessage {
+func (w *Worker) InjectPlan(messages []gateway.PromptMessage, plan *agentcontext.Plan) []gateway.PromptMessage {
 	if plan == nil {
 		return messages
 	}

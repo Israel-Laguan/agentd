@@ -32,14 +32,14 @@ func TestShouldPlanWithBudget(t *testing.T) {
 		tokenBudget: 10000,
 	}
 	g := agentruntime.NewBudgetGuard(nil, "t1")
-	if !w.shouldPlanWithBudget(long, g) {
+	if !w.ShouldPlanWithBudget(long, g) {
 		t.Fatal("ample budget should allow planning")
 	}
 	tight := &Worker{
 		planningCfg: config.AgenticPlanningConfig{ComplexityThreshold: 100},
 		tokenBudget: 2500,
 	}
-	if tight.shouldPlanWithBudget(long, g) {
+	if tight.ShouldPlanWithBudget(long, g) {
 		t.Fatal("budget below plan+execution reserve should skip planning")
 	}
 	tracker := gateway.NewBudgetTracker(5000)
@@ -49,7 +49,7 @@ func TestShouldPlanWithBudget(t *testing.T) {
 		planningCfg: config.AgenticPlanningConfig{ComplexityThreshold: 100},
 		tokenBudget: 5000,
 	}
-	if wUsed.shouldPlanWithBudget(long, gUsed) {
+	if wUsed.ShouldPlanWithBudget(long, gUsed) {
 		t.Fatal("high prior usage should skip planning")
 	}
 }
@@ -114,7 +114,7 @@ func TestInjectPlan_EmptyMessages(t *testing.T) {
 	t.Parallel()
 	w := &Worker{}
 	plan := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "analyze", Action: "review", OutputFormat: "text"}}}
-	msgs := w.injectPlan(nil, plan)
+	msgs := w.InjectPlan(nil, plan)
 	if len(msgs) != 1 || msgs[0].Role != "system" {
 		t.Fatalf("expected single system message, got %v", msgs)
 	}
@@ -127,7 +127,7 @@ func TestInjectPlan(t *testing.T) {
 	t.Parallel()
 	w := &Worker{}
 	plan := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "analyze", Action: "review", OutputFormat: "text"}}}
-	msgs := w.injectPlan([]gateway.PromptMessage{
+	msgs := w.InjectPlan([]gateway.PromptMessage{
 		{Role: "system", Content: "base"},
 		{Role: "user", Content: "task"},
 	}, plan)

@@ -26,7 +26,7 @@ func migrateToV2(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("begin schema migration v2: %w", err)
 	}
-	defer rollbackUnlessCommitted(tx)
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS tasks_new`); err != nil {
 		return fmt.Errorf("drop stale tasks_new: %w", err)
@@ -111,7 +111,7 @@ func migrateToV4(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("begin schema migration v4: %w", err)
 	}
-	defer rollbackUnlessCommitted(tx)
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS tasks_new`); err != nil {
 		return fmt.Errorf("drop stale tasks_new v4: %w", err)

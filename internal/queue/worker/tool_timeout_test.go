@@ -167,7 +167,7 @@ func TestDispatchToolWithHooks_Timeout(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sleep 10"}`},
 	}
 
-	tr, suspend := w.dispatchToolWithHooks(
+	tr, suspend := w.DispatchToolWithHooks(
 		context.Background(), "s1", "p1", "", time.Now(),
 		call, nil, executor, nil, nil,
 	)

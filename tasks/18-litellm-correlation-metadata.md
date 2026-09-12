@@ -8,14 +8,12 @@ fields). **Relates to**: strategy "spend/observability delegated to connector, b
 Attribute proxy-side spend and request logs to agentd tasks/agents, and make the effective
 connector topology visible at startup.
 
-## Background / current state (verified)
+## Background / current state (historical, post M18)
 
-- Provider entries accept adapter-specific `options` (`spec.ProviderConfig.Options`, per
-  `config-reference.md`); each adapter reads only known keys.
-- The openai adapter builds its body via `openaiRequest`; it currently has no per-request metadata
-  channel for correlation.
-- Startup currently logs provider capability lines (`provider supports chat tools`) but not an
-  explicit topology summary.
+M18 (optional) delivered metadata correlation + topology logging:
+
+- `send_task_metadata` option implemented; when enabled, `metadata` with task_id/agent_id/role is sent (see `internal/gateway/providers/openai.go:48`, fixture tests `openai_test.go:178` (TestOpenAI_SendTaskMetadata_*)).
+- Topology summary at startup: `cmd/agentd/wiring.go:56` + `internal/config/gateway_topology.go:19` + tests in `internal/config/gateway_topology_test.go`.
 
 ## Scope (in)
 

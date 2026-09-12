@@ -106,7 +106,7 @@ var NewProviderBreakers = safety.NewProviderBreakers
 // DefaultBreakerTimeout matches the circuit breaker open-state timeout.
 const DefaultBreakerTimeout = safety.DefaultBreakerTimeout
 
-func NewSemaphore(limit int) *safety.Semaphore { return safety.NewSemaphore(limit) }
+var NewSemaphore = safety.NewSemaphore
 
 type Semaphore = safety.Semaphore
 

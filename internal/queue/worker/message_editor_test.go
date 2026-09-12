@@ -168,7 +168,7 @@ func TestMessageEditor_Edit_CheckpointsBeforeMutate(t *testing.T) {
 
 func TestMessageEditor_Commit_AppendsOnly(t *testing.T) {
 	t.Parallel()
-	editor := agentcontext.NewMessageEditor(nil, nil, nil)
+	editor := agentcontext.NewMessageEditor(nil, nil, nil, "")
 	messages := []gateway.PromptMessage{{Role: "user", Content: "hi"}}
 	editor.Commit(&messages, gateway.PromptMessage{Role: "assistant", Content: "ok"})
 	if len(messages) != 2 {

@@ -59,7 +59,7 @@ func (s *stubMounter) MountSession(
 func TestMountScopedPlugins_NilMounter(t *testing.T) {
 	t.Parallel()
 	w := &Worker{}
-	hooks, caps := w.mountScopedPlugins(models.Project{}, models.AgentProfile{})
+	hooks, caps := w.MountAgenticHooks(models.Project{}, models.AgentProfile{})
 	assert.Nil(t, hooks)
 	assert.Nil(t, caps)
 }
@@ -69,7 +69,7 @@ func TestMountScopedPlugins_ProjectOnly(t *testing.T) {
 	m := &stubMounter{}
 	w := &Worker{pluginMounter: m}
 
-	hooks, caps := w.mountScopedPlugins(
+	hooks, caps := w.MountAgenticHooks(
 		models.Project{WorkspacePath: "/ws"},
 		models.AgentProfile{},
 	)
@@ -84,7 +84,7 @@ func TestMountScopedPlugins_SessionOnly(t *testing.T) {
 	m := &stubMounter{}
 	w := &Worker{pluginMounter: m}
 
-	hooks, caps := w.mountScopedPlugins(
+	hooks, caps := w.MountAgenticHooks(
 		models.Project{},
 		models.AgentProfile{Plugins: []string{"alpha"}},
 	)
@@ -100,7 +100,7 @@ func TestMountScopedPlugins_BothScopes(t *testing.T) {
 	m := &stubMounter{}
 	w := &Worker{pluginMounter: m}
 
-	hooks, caps := w.mountScopedPlugins(
+	hooks, caps := w.MountAgenticHooks(
 		models.Project{WorkspacePath: "/ws"},
 		models.AgentProfile{Plugins: []string{"beta"}},
 	)
@@ -118,7 +118,7 @@ func TestMountScopedPlugins_ErrorsAreNonFatal(t *testing.T) {
 	}
 	w := &Worker{pluginMounter: m}
 
-	hooks, caps := w.mountScopedPlugins(
+	hooks, caps := w.MountAgenticHooks(
 		models.Project{WorkspacePath: "/ws"},
 		models.AgentProfile{Plugins: []string{"alpha"}},
 	)
@@ -133,7 +133,7 @@ func TestDispatchToolWithHooks_NilHooksPassesThrough(t *testing.T) {
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "unknown-tool"},
 	}
-	result, suspended := w.dispatchToolWithHooks(
+	result, suspended := w.DispatchToolWithHooks(
 		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, nil, nil,
 	)
 	assert.Contains(t, result.Content, "unknown tool")
@@ -156,7 +156,7 @@ func TestDispatchToolWithHooks_PreHookVeto(t *testing.T) {
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "bash"},
 	}
-	result, suspended := w.dispatchToolWithHooks(
+	result, suspended := w.DispatchToolWithHooks(
 		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Equal(t, agenttools.ToolStatusVetoed, result.Status)
@@ -179,7 +179,7 @@ func TestDispatchToolWithHooks_PostHookModifiesResult(t *testing.T) {
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "unknown-tool"},
 	}
-	result, suspended := w.dispatchToolWithHooks(
+	result, suspended := w.DispatchToolWithHooks(
 		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Contains(t, result.Content, "[tagged]")
@@ -205,7 +205,7 @@ func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
 			Arguments: `{"command":"ls"}`,
 		},
 	}
-	result, suspended := w.dispatchToolWithHooks(
+	result, suspended := w.DispatchToolWithHooks(
 		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Equal(t, "cached", result.Content)
@@ -234,7 +234,7 @@ func TestDispatchToolWithHooks_ShortCircuitRunsPostHooks(t *testing.T) {
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "read"},
 	}
-	result, suspended := w.dispatchToolWithHooks(
+	result, suspended := w.DispatchToolWithHooks(
 		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Equal(t, "cached [scrubbed]", result.Content)
@@ -263,7 +263,7 @@ func TestDispatchToolWithHooks_SuspendRunsPostHooks(t *testing.T) {
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "deploy"},
 	}
-	result, suspended := w.dispatchToolWithHooks(
+	result, suspended := w.DispatchToolWithHooks(
 		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Equal(t, "pause message [scrubbed]", result.Content)
@@ -292,7 +292,7 @@ func TestDispatchToolWithHooks_VetoResultRunsPostHooks(t *testing.T) {
 		ID:       "c1",
 		Function: gateway.ToolCallFunction{Name: "deploy"},
 	}
-	result, suspended := w.dispatchToolWithHooks(
+	result, suspended := w.DispatchToolWithHooks(
 		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
 	)
 	assert.Equal(t, "rejected [tagged]", result.Content)
@@ -303,7 +303,7 @@ func TestAgenticToolsWithExtras_NilExtra(t *testing.T) {
 	t.Parallel()
 	w := &Worker{hooks: agenthooks.NewHookChain()}
 	te := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
-	tools, idx := w.agenticToolsWithExtras(t.Context(), te, nil)
+	tools, idx := w.AgenticToolsWithExtras(t.Context(), te, nil)
 	assert.NotEmpty(t, tools, "built-in tools should always be present")
 	assert.Nil(t, idx, "no capability adapter index without capabilities")
 }
@@ -330,7 +330,7 @@ func TestDispatchToolWithHooks_HookContextFields(t *testing.T) {
 	}
 
 	taskUpdatedAt := time.Now()
-	_, _ = w.dispatchToolWithHooks(
+	_, _ = w.DispatchToolWithHooks(
 		t.Context(), "sess-1", "proj-1", "", taskUpdatedAt, call, nil, nil, taskHooks, nil,
 	)
 

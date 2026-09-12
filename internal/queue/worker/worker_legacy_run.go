@@ -9,7 +9,7 @@ import (
 	"agentd/internal/sandbox"
 )
 
-func (w *Worker) runLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, profileAlreadyRouted bool) {
+func (w *Worker) RunLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, profileAlreadyRouted bool) {
 	if !profileAlreadyRouted {
 		profile = w.routeLegacyProfile(ctx, task, project, profile)
 	}
@@ -45,7 +45,7 @@ func (w *Worker) prepareLegacyExecution(
 	}
 
 	response, tokenUsage, details, err := w.command(ctx, task, project, profile)
-	w.recordTaskTokenUsage(ctx, task, tokenUsage, details)
+	w.RecordTaskTokenUsage(ctx, task, tokenUsage, details)
 	audit.command = response.Command
 	audit.tokenUsage = tokenUsage
 	if err != nil {
@@ -54,7 +54,7 @@ func (w *Worker) prepareLegacyExecution(
 			w.createLegacyModeHandoff(ctx, task, "Gateway could not return valid JSON after repair attempts.", err)
 			return workerResponse{}, false
 		}
-		w.handleGatewayError(ctx, task, err)
+		w.HandleGatewayError(ctx, task, err)
 		return workerResponse{}, false
 	}
 	if response.TooComplex {
@@ -76,8 +76,8 @@ func (w *Worker) executeLegacyCommand(
 ) {
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	w.registerCancel(task.ID, cancel)
-	defer w.deregisterCancel(task.ID)
+	w.RegisterCancel(task.ID, cancel)
+	defer w.DeregisterCancel(task.ID)
 
 	result, runErr := w.sandbox.Execute(execCtx, w.payload(task, project, command))
 	audit.exitCode = result.ExitCode
@@ -100,11 +100,11 @@ func (w *Worker) executeLegacyCommand(
 	w.commit(ctx, task, result, runErr)
 }
 
-func (w *Worker) commitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
+func (w *Worker) CommitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
 	if profile != nil && profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
-			w.emit(ctx, task, "ERROR", err.Error())
-			w.failHard(ctx, task, err)
+			w.Emit(ctx, task, "ERROR", err.Error())
+			w.FailHard(ctx, task, err)
 			return
 		} else if done {
 			return

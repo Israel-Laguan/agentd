@@ -9,25 +9,14 @@ Make first-request payloads **byte-stable and cache-ordered** so provider prompt
 (DeepSeek automatic prefixes, OpenAI `cached_tokens`, LiteLLM passthrough) actually pays off.
 Two small, high-leverage fixes plus a regression guard.
 
-## Background / current state (verified)
+## Background / current state (historical, post M14)
 
-- `prependMemoryLessons` (`internal/queue/worker/worker_messages.go:23-32`, called at `:208` and
-  `:228`) inserts **retrieval-dynamic memory lessons at index 0**, *before* the stable layered
-  system prompt. Every time recalled lessons change, the cache prefix for everything after (system
-  prompt + tools + history) is busted across tasks. Lessons should move **after** the stable system
-  prompt block.
-- Capability/plugin tool definitions are collected by iterating a Go map:
-  `for n := range r.adapters` in `internal/capabilities/registry.go:59` (and the subagent/plugin
-  equivalents `internal/agent/subagent/subagent_tools.go`, `internal/capabilities/plugin/loader.go`).
-  Go map iteration order is nondeterministic, so when ≥2 adapters contribute tools the serialized
-  `tools` block can differ request-to-request, breaking the prefix non-deterministically. Tool lists
-  must be sorted canonically (by name) before they enter `AIRequest.Tools`.
-- Core bash/read/write definitions are a fixed literal in
-  `internal/agent/tools/tool_executor.go` `Definitions()` — already deterministic; leave as-is but
-  keep it that way.
-- Per-task `ToolManifest.Filter` (`internal/agent/tools/tool_manifest.go`) intentionally shrinks the
-  tool set per task — acceptable within a task session, but it reduces cross-task prefix reuse.
-  Keep the behavior; make its output order-stable; document the tradeoff.
+M14 completed the cache-hygiene work:
+
+- Memory lessons are appended *after* the stable system+user prefix (see `assembleAgenticSystemPrompt` and `appendMemoryLessons` in `internal/queue/worker/worker_messages.go:199` and golden assertions in `worker_cache_golden_test.go:98`).
+- Tool lists are now deterministically sorted by name for byte-stable `tools` blocks (`internal/gateway/toolsort.go`, `internal/capabilities/registry.go:87`).
+- Byte-stability regression guard: `internal/queue/worker/worker_cache_golden_test.go:20` (TestCacheGolden_ByteStableFirstRequest) asserts messages and tools JSON are identical across runs.
+- Core tools and per-task filter kept as-documented; filter output made order-stable where needed.
 
 ## Scope (in)
 

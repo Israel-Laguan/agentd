@@ -81,7 +81,7 @@ func (s *Store) ListMemories(ctx context.Context, filter models.MemoryFilter) ([
 	if err != nil {
 		return nil, fmt.Errorf("list memories: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanMemories(rows)
 }
 
@@ -134,7 +134,7 @@ func (s *Store) RecallMemories(ctx context.Context, q models.RecallQuery) ([]mod
 	if err != nil {
 		return nil, fmt.Errorf("recall memories: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanMemories(rows)
 }
 
@@ -193,7 +193,7 @@ func (s *Store) ListUnsupersededMemories(ctx context.Context) ([]models.Memory, 
 	if err != nil {
 		return nil, fmt.Errorf("list unsuperseded memories: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanMemories(rows)
 }
 

@@ -384,7 +384,7 @@ func TestRunPreTaskElicitation_PendingChildReblocksRunningParent(t *testing.T) {
 		t.Fatalf("get project: %v", err)
 	}
 	w := &Worker{store: store}
-	_, blockedOut, err := w.runPreTaskElicitation(ctx, *running, *project)
+	_, blockedOut, err := w.RunPreTaskElicitation(ctx, *running, *project)
 	if err != nil {
 		t.Fatalf("runPreTaskElicitation: %v", err)
 	}

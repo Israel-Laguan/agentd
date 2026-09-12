@@ -24,7 +24,7 @@ func TestAssembleAgenticSystemPrompt_Basic(t *testing.T) {
 	project := models.Project{}
 	profile := models.AgentProfile{}
 
-	messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
+	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, project, profile)
 
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
@@ -55,7 +55,7 @@ func TestAssembleAgenticSystemPrompt_WithTaskSystemPrompt(t *testing.T) {
 		SystemPrompt: sql.NullString{String: "Be concise", Valid: true},
 	}
 
-	messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
+	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, project, profile)
 
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
@@ -106,7 +106,7 @@ func TestAssembleAgenticSystemPrompt_WithInstructions(t *testing.T) {
 	prefsPath := writeInstructionFixtures(t, dir)
 	w := &Worker{instructionLoader: &InstructionLoader{ProjectFile: "AGENTS.md", UserPreferencesPath: prefsPath}}
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "t1"}, Title: "Fix bug", Description: "Fix the login bug"}
-	messages := w.assembleAgenticSystemPrompt(context.Background(), task, models.Project{WorkspacePath: dir}, models.AgentProfile{})
+	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, models.Project{WorkspacePath: dir}, models.AgentProfile{})
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}
@@ -157,7 +157,7 @@ Run tests, build, deploy
 	project := models.Project{WorkspacePath: dir}
 	profile := models.AgentProfile{}
 
-	messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
+	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, project, profile)
 
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
@@ -221,7 +221,7 @@ func TestAssembleAgenticSystemPrompt_WithMemoryLessons(t *testing.T) {
 	project := models.Project{}
 	profile := models.AgentProfile{}
 
-	messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
+	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, project, profile)
 
 	if len(messages) != 3 {
 		t.Fatalf("expected 3 messages (system + user + lessons), got %d", len(messages))
@@ -262,7 +262,7 @@ func TestAssembleAgenticSystemPrompt_MissingFilesAreNonFatal(t *testing.T) {
 	profile := models.AgentProfile{}
 
 	// Should not panic or error even when files are missing
-	messages := w.assembleAgenticSystemPrompt(context.Background(), task, project, profile)
+	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, project, profile)
 
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
@@ -281,7 +281,7 @@ func TestAssembleAgenticSystemPrompt_NilPromptLibrary(t *testing.T) {
 		Description: "Add function in math.go\nSignature:\nfunc Add(a, b int) int",
 	}
 	profile := models.AgentProfile{ToolManifestType: agenttools.TaskTypeCodeGen}
-	messages := w.assembleAgenticSystemPrompt(context.Background(), task, models.Project{}, profile)
+	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, models.Project{}, profile)
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}
@@ -302,7 +302,7 @@ func TestAssembleAgenticSystemPrompt_CodeGenTemplate(t *testing.T) {
 		Description: "Add function in math.go\nSignature:\nfunc Add(a, b int) int\nTest cases:\n- Add(1,2) == 3",
 	}
 	profile := models.AgentProfile{ToolManifestType: agenttools.TaskTypeCodeGen}
-	messages := w.assembleAgenticSystemPrompt(context.Background(), task, models.Project{}, profile)
+	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, models.Project{}, profile)
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}

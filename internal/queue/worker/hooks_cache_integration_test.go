@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -191,8 +192,8 @@ func TestCacheHooks_CachedReadErrorClassified(t *testing.T) {
 	if tr.Status != agenttools.ToolStatusError {
 		t.Fatalf("expected error status for cached error payload, got %s", tr.Status)
 	}
-	if tr.Content != agenttools.StripToolErrorPrefix(cachedErr) {
-		t.Fatalf("content = %q, want %q", tr.Content, agenttools.StripToolErrorPrefix(cachedErr))
+	if tr.Content != strings.TrimPrefix(cachedErr, agenttools.ToolErrorPrefix) {
+		t.Fatalf("content = %q, want %q", tr.Content, strings.TrimPrefix(cachedErr, agenttools.ToolErrorPrefix))
 	}
 }
 

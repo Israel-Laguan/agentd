@@ -112,7 +112,7 @@ func TestDispatchToolWithHooks_RetryHidesIntermediateFailure(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo ok"}`},
 	}
 
-	tr, suspended := w.dispatchToolWithHooks(
+	tr, suspended := w.DispatchToolWithHooks(
 		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
 	)
 
@@ -148,7 +148,7 @@ func TestDispatchToolWithHooks_SuspendNotRetried(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo ok"}`},
 	}
 
-	tr, suspended := w.dispatchToolWithHooks(
+	tr, suspended := w.DispatchToolWithHooks(
 		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, taskHooks, nil,
 	)
 
@@ -173,7 +173,7 @@ func TestDispatchToolWithHooks_RetryExhaustion(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo ok"}`},
 	}
 
-	tr, suspended := w.dispatchToolWithHooks(
+	tr, suspended := w.DispatchToolWithHooks(
 		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
 	)
 
@@ -200,7 +200,7 @@ func TestDispatchToolWithHooks_RetryAuditsOnce(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo ok"}`},
 	}
 
-	tr, suspended := w.dispatchToolWithHooks(
+	tr, suspended := w.DispatchToolWithHooks(
 		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
 	)
 
@@ -237,7 +237,7 @@ func TestDispatchToolWithHooks_TimeoutRetry(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sleep 10"}`},
 	}
 
-	tr, suspended := w.dispatchToolWithHooks(
+	tr, suspended := w.DispatchToolWithHooks(
 		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
 	)
 
@@ -265,7 +265,7 @@ func TestDispatchToolWithHooks_NonAllowlistedNoRetry(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo ok"}`},
 	}
 
-	tr, suspended := w.dispatchToolWithHooks(
+	tr, suspended := w.DispatchToolWithHooks(
 		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
 	)
 

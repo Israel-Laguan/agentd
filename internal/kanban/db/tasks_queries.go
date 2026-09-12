@@ -36,7 +36,7 @@ func SelectReadyTaskIDs(ctx context.Context, q SQLQueryer, limit int) ([]string,
 	if err != nil {
 		return nil, fmt.Errorf("select ready task ids: %w", err)
 	}
-	defer CloseRows(rows)
+	defer func() { _ = rows.Close() }()
 
 	var ids []string
 	for rows.Next() {
@@ -77,7 +77,7 @@ func SelectTasksByIDs(ctx context.Context, q SQLQueryer, ids []string) ([]models
 	if err != nil {
 		return nil, fmt.Errorf("select tasks by ids: %w", err)
 	}
-	defer CloseRows(rows)
+	defer func() { _ = rows.Close() }()
 	return ScanTasks(rows)
 }
 
@@ -140,7 +140,7 @@ func SelectGhostTasks(ctx context.Context, q SQLQueryer, alivePIDs []int) ([]mod
 	if err != nil {
 		return nil, fmt.Errorf("select ghost tasks: %w", err)
 	}
-	defer CloseRows(rows)
+	defer func() { _ = rows.Close() }()
 	return ScanTasks(rows)
 }
 
@@ -153,7 +153,7 @@ func SelectOrphanedQueuedTasks(ctx context.Context, q SQLQueryer, staleBefore ti
 	if err != nil {
 		return nil, fmt.Errorf("select orphaned queued tasks: %w", err)
 	}
-	defer CloseRows(rows)
+	defer func() { _ = rows.Close() }()
 	return ScanTasks(rows)
 }
 
@@ -177,7 +177,7 @@ func SelectStaleTasks(ctx context.Context, q SQLQueryer, alivePIDs []int, staleB
 	if err != nil {
 		return nil, fmt.Errorf("select stale tasks: %w", err)
 	}
-	defer CloseRows(rows)
+	defer func() { _ = rows.Close() }()
 	return ScanTasks(rows)
 }
 

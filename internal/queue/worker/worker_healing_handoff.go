@@ -31,7 +31,7 @@ func (w *Worker) healingTaskCapReached(ctx context.Context, task models.Task) bo
 func (w *Worker) createProviderExhaustedHandoff(ctx context.Context, task models.Task, err error) {
 	if w.healingTaskCapReached(ctx, task) {
 		w.failTerminal(ctx, task, fmt.Errorf("max_healing_tasks cap reached: %w", err), models.TaskStateFailed)
-		w.emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", "max_healing_tasks cap reached; task failed: "+truncate(err.Error(), 500))
+		w.Emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", "max_healing_tasks cap reached; task failed: "+truncate(err.Error(), 500))
 		return
 	}
 	var cause string
@@ -47,19 +47,19 @@ func (w *Worker) createProviderExhaustedHandoff(ctx context.Context, task models
 		Assignee:    models.TaskAssigneeHuman,
 	}})
 	if blockErr != nil {
-		w.emit(ctx, task, "ERROR", blockErr.Error())
+		w.Emit(ctx, task, "ERROR", blockErr.Error())
 		return
 	}
 	if !w.recordLegacyHandoffExpiry(ctx, task) {
 		return
 	}
-	w.emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", truncate(description, 1000))
+	w.Emit(ctx, task, "PROVIDER_EXHAUSTED_HANDOFF", truncate(description, 1000))
 }
 
 func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, action planning.HealingAction, payload string) {
 	if w.healingTaskCapReached(ctx, task) {
 		w.failTerminal(ctx, task, fmt.Errorf("max_healing_tasks cap reached: %s", action.Reason), models.TaskStateFailed)
-		w.emit(ctx, task, "HEALING_HANDOFF", "max_healing_tasks cap reached; task failed: "+truncate(payload, 500))
+		w.Emit(ctx, task, "HEALING_HANDOFF", "max_healing_tasks cap reached; task failed: "+truncate(payload, 500))
 		return
 	}
 	description := fmt.Sprintf(
@@ -73,11 +73,11 @@ func (w *Worker) createHealingHandoff(ctx context.Context, task models.Task, act
 		Assignee:    models.TaskAssigneeHuman,
 	}})
 	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	if !w.recordLegacyHandoffExpiry(ctx, task) {
 		return
 	}
-	w.emit(ctx, task, "HEALING_HANDOFF", truncate(description, 1000))
+	w.Emit(ctx, task, "HEALING_HANDOFF", truncate(description, 1000))
 }

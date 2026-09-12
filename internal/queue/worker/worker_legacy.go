@@ -75,13 +75,13 @@ func workerMessages(task models.Task, profile models.AgentProfile) []gateway.Pro
 // routeLegacyProfile applies complexity routing for legacy JSON command mode.
 func (w *Worker) routeLegacyProfile(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) models.AgentProfile {
 	messages := w.seedMessages(ctx, task, project, profile)
-	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
-	return w.applyModelRouting(task, profile, messages, nil)
+	messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
+	return w.ApplyModelRouting(task, profile, messages, nil)
 }
 
 func (w *Worker) command(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (workerResponse, int, gateway.UsageDetails, error) {
 	messages := w.seedMessages(ctx, task, project, profile)
-	messages, _ = w.prependReviewRejectionFeedback(ctx, task, messages)
+	messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
 	req := gateway.AIRequest{
 		Messages:    messages,
 		Temperature: profile.Temperature,
@@ -94,7 +94,7 @@ func (w *Worker) command(ctx context.Context, task models.Task, project models.P
 		MaxTokens:   profile.MaxTokens,
 	}
 	// Legacy JSON command mode does not execute tool calls; do not advertise tools here.
-	req = w.applyTuning(req, task, profile, 0)
+	req = w.ApplyTuning(req, task, profile, 0)
 	resp, tokenUsage, details, err := gateway.GenerateJSONWithUsage[workerResponse](ctx, w.gateway, req)
 	if err != nil {
 		return workerResponse{}, tokenUsage, details, err
@@ -109,7 +109,7 @@ func tuningAttempt(task models.Task, sessionRecoveryGen int) int {
 	return task.RetryCount
 }
 
-func (w *Worker) applyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest {
+func (w *Worker) ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest {
 	attempt := tuningAttempt(task, sessionRecoveryGen)
 	if w.tuner == nil || attempt <= 0 {
 		return req

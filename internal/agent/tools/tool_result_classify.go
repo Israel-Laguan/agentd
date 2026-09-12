@@ -24,9 +24,6 @@ func ClassifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64
 	}
 }
 
-func classifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
-	return ClassifyPrecomputedToolResult(callID, toolName, raw, elapsedMs)
-}
 
 // classifyBuiltinToolResult classifies built-in tool (bash, read, write) output.
 // Read and write success paths return raw file bytes or {"success":true}; bash
@@ -34,8 +31,8 @@ func classifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64
 // so arbitrary command stdout is never inferred from JSON shape alone.
 func ClassifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
-	if isToolErrorPayload(raw) {
-		return ClassifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+	if strings.HasPrefix(raw, toolErrorPrefix) {
+		return ClassifyRawResult(callID, strings.TrimPrefix(trimmed, toolErrorPrefix), elapsedMs)
 	}
 	switch toolName {
 	case toolNameRead:
@@ -53,9 +50,6 @@ func ClassifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) To
 	}
 }
 
-func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) ToolResult {
-	return ClassifyBuiltinToolResult(callID, toolName, raw, elapsedMs)
-}
 
 // classifyPrecomputedReadResult classifies hook/cache read results. Errors are
 // distinguished by toolErrorPrefix (set by CacheStoreHook); file content that
@@ -63,15 +57,12 @@ func classifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) To
 // matching classifyBuiltinToolResult for live reads.
 func ClassifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
-	if isToolErrorPayload(raw) {
-		return ClassifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+	if strings.HasPrefix(raw, toolErrorPrefix) {
+		return ClassifyRawResult(callID, strings.TrimPrefix(trimmed, toolErrorPrefix), elapsedMs)
 	}
 	return SuccessResult(callID, raw, elapsedMs)
 }
 
-func classifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResult {
-	return ClassifyPrecomputedReadResult(callID, raw, elapsedMs)
-}
 
 // classifyRawResult inspects a raw tool output string and returns a
 // typed ToolResult. It uses the same JSON-envelope heuristics that
@@ -125,16 +116,13 @@ func ClassifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	return SuccessResult(callID, raw, elapsedMs)
 }
 
-func classifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
-	return ClassifyRawResult(callID, raw, elapsedMs)
-}
 
 // classifyCapabilityRawResult classifies MCP capability tool output without
 // applying sandbox-style heuristics to arbitrary JSON payloads.
 func ClassifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
-	if isToolErrorPayload(raw) {
-		return ClassifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+	if strings.HasPrefix(raw, toolErrorPrefix) {
+		return ClassifyRawResult(callID, strings.TrimPrefix(trimmed, toolErrorPrefix), elapsedMs)
 	}
 	if isJSONErrorEnvelope(trimmed) {
 		return ClassifyRawResult(callID, trimmed, elapsedMs)
@@ -142,9 +130,6 @@ func ClassifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult
 	return SuccessResult(callID, raw, elapsedMs)
 }
 
-func classifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
-	return ClassifyCapabilityRawResult(callID, raw, elapsedMs)
-}
 
 // isJSONErrorEnvelope reports whether raw is a single-key {"error":"..."} payload
 // produced by jsonErrorf.
@@ -161,8 +146,8 @@ func isJSONErrorEnvelope(raw string) bool {
 // without applying sandbox-style heuristics to SubagentResult JSON.
 func ClassifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
-	if isToolErrorPayload(raw) {
-		return ClassifyRawResult(callID, stripToolErrorPrefix(trimmed), elapsedMs)
+	if strings.HasPrefix(raw, toolErrorPrefix) {
+		return ClassifyRawResult(callID, strings.TrimPrefix(trimmed, toolErrorPrefix), elapsedMs)
 	}
 	if isJSONErrorEnvelope(trimmed) {
 		return ClassifyRawResult(callID, trimmed, elapsedMs)
@@ -180,9 +165,6 @@ func ClassifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	return SuccessResult(callID, raw, elapsedMs)
 }
 
-func classifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
-	return ClassifyDelegateRawResult(callID, raw, elapsedMs)
-}
 
 type classifiedSubagentResult struct {
 	Status string `json:"status"`

@@ -239,7 +239,7 @@ func TestFilterAgenticTools_NoManifestPassthrough(t *testing.T) {
 	t.Parallel()
 	w := &Worker{}
 	orig := testManifestTools()
-	tools, _ := w.filterAgenticTools(orig, testManifestIndex(), models.Task{}, models.AgentProfile{})
+	tools, _ := w.FilterAgenticTools(orig, testManifestIndex(), models.Task{}, models.AgentProfile{})
 	if len(tools) != len(orig) {
 		t.Fatalf("tools len = %d, want passthrough %d", len(tools), len(orig))
 	}

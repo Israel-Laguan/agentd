@@ -78,6 +78,4 @@ func (tx *ImmediateTx) Rollback() error {
 	return err
 }
 
-// RollbackUnlessCommitted is a defer-friendly helper that rolls back tx if it
-// has not been committed yet.
-func RollbackUnlessCommitted(tx interface{ Rollback() error }) { _ = tx.Rollback() }
+

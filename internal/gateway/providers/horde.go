@@ -29,8 +29,7 @@ const (
 
 // Horde calls the AI Horde async text API.
 type Horde struct {
-	cfg          spec.ProviderConfig
-	client       *http.Client
+	common
 	pollInterval time.Duration
 	timeout      time.Duration
 }
@@ -52,22 +51,16 @@ func NewHorde(cfg spec.ProviderConfig, client *http.Client) *Horde {
 	if strings.TrimSpace(cfg.APIKey) == "" {
 		cfg.APIKey = defaultHordeAPIKey
 	}
-	return &Horde{cfg: cfg, client: client, pollInterval: pollInterval, timeout: timeout}
-}
-
-// Name implements Backend.
-func (h *Horde) Name() spec.Provider {
-	return providerName(h.cfg, spec.ProviderHorde)
-}
-
-// MaxInputChars implements Backend.
-func (h *Horde) MaxInputChars() int {
-	return h.cfg.MaxInputChars
-}
-
-// Capabilities implements Backend.
-func (h *Horde) Capabilities() Capabilities {
-	return capabilitiesFromConfig(h.cfg, false)
+	return &Horde{
+		common: common{
+			name:             providerName(cfg, spec.ProviderHorde),
+			cfg:              cfg,
+			client:           client,
+			chatToolsDefault: false,
+		},
+		pollInterval: pollInterval,
+		timeout:      timeout,
+	}
 }
 
 // Generate implements Backend.
@@ -205,10 +198,6 @@ func (h *Horde) doJSON(ctx context.Context, method, url string, body any) ([]byt
 		return nil, fmt.Errorf("horde rejected request: status %d", resp.StatusCode)
 	}
 	return data, nil
-}
-
-func (h *Horde) url(path string) string {
-	return strings.TrimRight(h.cfg.BaseURL, "/") + path
 }
 
 func hordeMaxLength(maxTokens int) int {

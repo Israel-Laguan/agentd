@@ -6,15 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"agentd/internal/gateway/spec"
 )
 
 // OpenAI calls the OpenAI-compatible chat completions API.
 type OpenAI struct {
-	cfg    spec.ProviderConfig
-	client *http.Client
+	common
 }
 
 // NewOpenAI constructs an OpenAI backend using cfg (BaseURL should include /v1 prefix when needed).
@@ -23,18 +21,12 @@ func NewOpenAI(cfg spec.ProviderConfig, client *http.Client) *OpenAI {
 		client = http.DefaultClient
 	}
 	warnUnknownOptions("openai", []string{"send_task_metadata"}, cfg.Options)
-	return &OpenAI{cfg: cfg, client: client}
-}
-
-// Name implements Backend. Returns the configured provider type so that
-// OpenAI-compatible providers (e.g. Gemini) report their correct identity.
-func (o *OpenAI) Name() spec.Provider {
-	return providerName(o.cfg, spec.ProviderOpenAI)
-}
-
-// MaxInputChars implements Backend.
-func (o *OpenAI) MaxInputChars() int {
-	return o.cfg.MaxInputChars
+	return &OpenAI{common: common{
+		name:             providerName(cfg, spec.ProviderOpenAI),
+		cfg:              cfg,
+		client:           client,
+		chatToolsDefault: true,
+	}}
 }
 
 // Generate implements Backend.
@@ -67,7 +59,7 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 			body.Tools[i] = openAITool{Type: "function", Function: t}
 		}
 	}
-	data, _, err := postJSON(ctx, o.client, o.url(), body, o.cfg.APIKey)
+	data, _, err := postJSON(ctx, o.client, o.url("/chat/completions"), body, o.cfg.APIKey)
 	if err != nil {
 		return spec.AIResponse{}, err
 	}
@@ -76,10 +68,6 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		return spec.AIResponse{}, fmt.Errorf("decode openai response: %w", err)
 	}
 	return decoded.toAIResponse(model, string(o.Name())), nil
-}
-
-func (o *OpenAI) url() string {
-	return strings.TrimRight(o.cfg.BaseURL, "/") + "/chat/completions"
 }
 
 // buildMetadata collects task/agent/role identifiers into the metadata map
@@ -100,11 +88,6 @@ func (o *OpenAI) buildMetadata(req spec.AIRequest) map[string]string {
 		return nil
 	}
 	return md
-}
-
-// Capabilities implements Backend.
-func (o *OpenAI) Capabilities() Capabilities {
-	return capabilitiesFromConfig(o.cfg, true)
 }
 
 type openAIRequest struct {

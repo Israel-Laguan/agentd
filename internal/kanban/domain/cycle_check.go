@@ -45,7 +45,7 @@ func parentIDs(ctx context.Context, q kdb.SQLQueryer, taskID string) ([]string, 
 	if err != nil {
 		return nil, fmt.Errorf("cycle check parent lookup: %w", err)
 	}
-	defer kdb.CloseRows(rows)
+	defer func() { _ = rows.Close() }()
 	var ids []string
 	for rows.Next() {
 		var id string

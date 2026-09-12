@@ -41,7 +41,7 @@ func (w *Worker) seedMessages(ctx context.Context, task models.Task, project mod
 }
 
 // applyModelRouting selects provider/model from complexity routing when enabled.
-func (w *Worker) applyModelRouting(
+func (w *Worker) ApplyModelRouting(
 	task models.Task,
 	profile models.AgentProfile,
 	messages []gateway.PromptMessage,
@@ -205,7 +205,7 @@ func (w *Worker) buildPromptMessages(task models.Task, project models.Project, p
 // SystemPromptBuilder, appends a user message, then appends memory lessons.
 // The legacy seedMessages path is still used by the non-agentic
 // command() path in worker_legacy.go.
-func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
+func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	systemPrompt, userContent := w.buildPromptMessages(task, project, profile)
 	messages := []gateway.PromptMessage{
 		gateway.PromptMessage{Role: "system", Content: systemPrompt},
@@ -217,7 +217,7 @@ func (w *Worker) assembleAgenticSystemPrompt(ctx context.Context, task models.Ta
 
 // assembleAgenticSystemPromptWithUserContent builds the layered system prompt and sets the
 // anchor user turn to userContent (used after topic drift resets).
-func (w *Worker) assembleAgenticSystemPromptWithUserContent(
+func (w *Worker) AssembleAgenticSystemPromptWithUserContent(
 	ctx context.Context,
 	task models.Task,
 	project models.Project,

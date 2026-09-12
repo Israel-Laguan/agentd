@@ -23,7 +23,7 @@ func (s *Store) AddComment(ctx context.Context, c models.Comment) error {
 		if err != nil {
 			return fmt.Errorf("begin add comment: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		task, err := selectTaskByID(ctx, tx, c.TaskID)
 		if err != nil {
@@ -96,7 +96,7 @@ func (s *Store) ListComments(ctx context.Context, taskID string) ([]models.Comme
 	if err != nil {
 		return nil, fmt.Errorf("list comments: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanComments(rows)
 }
 
@@ -109,7 +109,7 @@ func (s *Store) ListCommentsSince(ctx context.Context, taskID string, since time
 	if err != nil {
 		return nil, fmt.Errorf("list comments since: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanComments(rows)
 }
 
@@ -151,7 +151,7 @@ func (s *Store) ListEventsByTask(ctx context.Context, taskID string) ([]models.E
 	if err != nil {
 		return nil, fmt.Errorf("list events by task: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanEvents(rows)
 }
 
@@ -224,7 +224,7 @@ func (s *Store) ListCompletedTasksOlderThan(ctx context.Context, age time.Durati
 	if err != nil {
 		return nil, fmt.Errorf("list completed tasks older than %v: %w", age, err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanTasks(rows)
 }
 

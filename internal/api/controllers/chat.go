@@ -153,17 +153,19 @@ func (h ChatHandler) completeStreaming(
 
 	writeFrame(chatChunkDelta{Role: "assistant"}, nil)
 
+	finishStop := finishReasonStop
 	content, err := h.Planner.PlanContent(r.Context(), req.ApprovedScopes, intent, files)
 	switch {
 	case errors.Is(err, frontdesk.ErrMultipleApprovedScopes):
-		writeFrame(chatChunkDelta{Content: "send one turn per scope using approved_scopes with exactly one entry"}, ptr(finishReasonStop))
+		writeFrame(chatChunkDelta{Content: "send one turn per scope using approved_scopes with exactly one entry"}, &finishStop)
 	case isAICoreTimeout(err):
-		writeFrame(chatChunkDelta{Content: systemTimeoutMessage}, ptr(finishReasonStop))
+		writeFrame(chatChunkDelta{Content: systemTimeoutMessage}, &finishStop)
 	case err != nil:
-		writeFrame(chatChunkDelta{Content: fmt.Sprintf("error: %v", err)}, ptr(finishReasonStop))
+		writeFrame(chatChunkDelta{Content: fmt.Sprintf("error: %v", err)}, &finishStop)
 	default:
 		toolCalls, finish := buildToolCalls(content, len(req.Tools) > 0)
-		writeFrame(chatChunkDelta{Content: string(content), ToolCalls: toolCalls}, ptr(finish))
+		f := finish
+		writeFrame(chatChunkDelta{Content: string(content), ToolCalls: toolCalls}, &f)
 	}
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	flusher.Flush()

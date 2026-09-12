@@ -60,7 +60,7 @@ func anchorUserContent(messages []gateway.PromptMessage, cm *agentcontext.Contex
 	return ""
 }
 
-func (w *Worker) generateRespecifiedUserTurn(
+func (w *Worker) GenerateRespecifiedUserTurn(
 	ctx context.Context,
 	task models.Task,
 	plan *agentcontext.Plan,
@@ -141,7 +141,7 @@ func (w *Worker) repairSection(
 	return strings.TrimSpace(resp.Content), nil
 }
 
-func (w *Worker) repairOutputWithPlan(
+func (w *Worker) RepairOutputWithPlan(
 	ctx context.Context, task models.Task, plan *agentcontext.Plan, output string,
 	budgetGuard *agentruntime.BudgetGuard,
 ) (string, bool) {

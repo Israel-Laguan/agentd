@@ -29,7 +29,7 @@ func (w *Worker) recordToolDispatch(hookCtx agenthooks.HookContext, tr agenttool
 	)
 }
 
-func (w *Worker) recordTurnSnapshot(
+func (w *Worker) RecordTurnSnapshot(
 	sessionID, projectID, provider, turnID string,
 	messageCount, tokenCount int,
 	activeTools []string,

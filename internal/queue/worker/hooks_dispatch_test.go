@@ -293,7 +293,7 @@ func TestDispatchToolWithHooks_VetoedRunsAuditHook(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo hi"}`},
 	}
 
-	tr, suspended := w.dispatchToolWithHooks(
+	tr, suspended := w.DispatchToolWithHooks(
 		context.Background(),
 		"task-veto-hooks",
 		"proj-veto-hooks",
@@ -304,6 +304,7 @@ func TestDispatchToolWithHooks_VetoedRunsAuditHook(t *testing.T) {
 		executor,
 		taskHooks,
 		nil,
+		"",
 	)
 	if tr.Status != agenttools.ToolStatusVetoed {
 		t.Fatalf("expected vetoed status, got %s", tr.Status)

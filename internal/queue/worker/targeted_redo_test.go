@@ -244,7 +244,7 @@ func TestRepairLoop_CapsAtThreePasses(t *testing.T) {
 	}
 	plan := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
 	out := "<!-- step:only -->\n<!-- /step:only -->\n"
-	_, _ = w.repairOutputWithPlan(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, plan, out, nil)
+	_, _ = w.RepairOutputWithPlan(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, plan, out, nil)
 	if gw.redoCalls["only"] != 3 {
 		t.Fatalf("redo calls for step = %d, want 3", gw.redoCalls["only"])
 	}
@@ -263,7 +263,7 @@ func TestRepairLoop_ExhaustedAfterThreeNoProgressPasses(t *testing.T) {
 	}
 	plan := &agentcontext.Plan{Steps: []agentcontext.PlanStep{{ID: "only", Action: "x", OutputFormat: "text"}}}
 	out := "<!-- step:only -->\n<!-- /step:only -->\n"
-	_, exhausted := w.repairOutputWithPlan(
+	_, exhausted := w.RepairOutputWithPlan(
 		context.Background(),
 		models.Task{BaseEntity: models.BaseEntity{ID: "t"}},
 		plan, out, nil,
