@@ -50,6 +50,10 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+    # The agentd image sets ENTRYPOINT ["agentd"]; a `command:` only overrides
+    # CMD and would be appended as args ("agentd sh -c ..."), which fails.
+    # Override the entrypoint so the shell one-liner below actually runs.
+    entrypoint: ["sh", "-c"]
     environment:
       LITELLM_API_KEY: "sk-test"
       AGENTD_API_ADDRESS: "0.0.0.0:8765"

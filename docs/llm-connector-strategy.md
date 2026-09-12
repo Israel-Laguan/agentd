@@ -2,11 +2,11 @@
 
 This document declares agentd's **two-topology connector model** and the boundary
 that decides whether a piece of LLM-related behavior lives in agentd or in an
-external proxy. **Milestone 13 is docs/config only**; the corresponding PR also
-includes internal Go changes for usage decoding, worker propagation, token events,
-prompt assembly, and golden tests.
-It **unblocks positioning** for all later milestones (M14–M19), which own the
-cache, observability, wire-contract, and provider-recipe work this doc defers.
+external proxy. **Milestone 13 is docs/config only**. Zero code changes are expected
+in this milestone; it unblocks the positioning for all later milestones (M14–M19).
+It declares the keep/delegate boundary, the canonical table, non-goals, cache
+discipline, LiteLLM recipe, and corrects stale provider claims (see provider-tool-calling.md).
+Later milestones own the code for cache, observability, wire-contract, and provider recipes.
 
 See also: [`provider-tool-calling.md`](provider-tool-calling.md) (capability
 matrix), [`openai-compatible-providers.md`](openai-compatible-providers.md)
@@ -62,26 +62,27 @@ billing) instead varies by deployment and is a distraction from the agent contra
 
 | Feature | Decision | Note |
 | --- | --- | --- |
-| Wire contract types (`spec/spec.go`: messages, tools, tool_calls) | Keep & harden | Agent-side contract; consolidated in M16 |
-| OpenAI-compatible adapter (incl. LiteLLM) | Keep & harden — THE ONE wire path | Both topologies ride it |
+| Wire contract types (`spec.go`: messages, tools, tool_calls) | Keep & harden | Agent-side contract; consolidated in M16 |
+| OpenAI-compatible adapter (incl. LiteLLM) | Keep & harden — the ONE wire path | Both topologies ride it |
 | llama.cpp direct adapter | Keep, frozen | Zero-dep promise; runtime-capability gating in M17 |
-| Native anthropic / ollama / horde adapters | Freeze → maintenance mode | Bug-fix only; tool path is the proxy (see below) |
+| Native anthropic / ollama / horde adapters | Freeze → maintenance mode | Bug-fix only; tool path is the proxy |
 | New provider intake | Delegate | No new native adapters |
 | Key management / virtual keys / rotation | Delegate | LiteLLM master key + virtual keys |
 | Per-account spend / budgets | Delegate | LiteLLM budgets |
-| Per-`task` token budget | Keep & harden | `internal/gateway/budget.go`, task-scoped |
+| Per-`task` token budget | Keep & harden | `gateway/budget.go`, task-scoped |
 | Provider rate limits (RPM) | Delegate | agentd keeps its concurrency semaphore |
 | Load balancing / upstream retries | Delegate | LiteLLM router; agentd cascade stays 1-attempt/candidate |
-| Cascade fallback + circuit breaker | Keep | `internal/gateway/routing/router_cascade.go`, `internal/queue/safety/breaker.go` |
-| Role routing (chat/worker/memory) | Keep & harden | `internal/gateway/routing/router.go` `WithRoleRouting`, `role_models` |
-| Agentic tool-history truncation (pairwise consistency) | Keep & harden | Crown jewel (`internal/gateway/truncation/`) |
-| Legacy JSON mode + repair | Keep & harden | `internal/gateway/routing/router.go` + `internal/gateway/correction/` |
+| Cascade fallback + circuit breaker | Keep | `router_cascade.go`, `queue/safety/breaker.go` |
+| Role routing (chat/worker/memory) | Keep & harden | `router.go` `WithRoleRouting`, `role_models` |
+| Agentic tool-history truncation (pairwise consistency) | Keep & harden | Crown jewel (`gateway/truncation/`) |
+| Legacy JSON mode + repair | Keep & harden | `routing/router.go` + `correction/` |
 | House rules / intent / scope / plan workflows | Keep | Agent behaviors |
 | Cache **policy** (prefix ordering, stable tools) | Keep & harden (M14) | Proxies can't fix a badly ordered prompt |
 | Cache **mechanics** (`cache_control` breakpoints) | Delegate | LiteLLM / Portkey inject Anthropic breakpoints |
-| Cache observability (hit rate) | Keep & harden (M15) | Usage-details parsing + `TOKEN_USAGE` events |
-| Streaming / vision / `image_url` / Responses API / built-in tools | Deferred non-goal | Proxy or direct provider client |
+| Cache observability (hit rate) | Keep & harden (M15) | Usage-details parsing + TOKEN_USAGE events |
+| Streaming / vision / Responses API / built-in tools | Deferred non-goal | Proxy or direct provider client |
 | Embeddings | Keep | Memory subsystem; also rides LiteLLM |
+| Secrets scrubbing before egress / content guardrails | Keep | Data protection must precede proxy egress |
 
 ## Provider status (corrected)
 
@@ -161,8 +162,8 @@ gateway:
     - name: litellm
       adapter: openai
       base_url: "http://127.0.0.1:4000/v1"
-      api_key_env: LITELLM_API_KEY   # scoped LiteLLM virtual key (not the master key)
-      model: "poolside/laguna-m.1"   # LiteLLM model_name alias
+      api_key_env: LITELLM_API_KEY      # = LiteLLM master_key
+      model: "poolside/laguna-m.1"      # LiteLLM model_name alias
       capabilities: { chat_tools: true }
   order: [litellm]
 ```
@@ -228,18 +229,16 @@ table for the model.
 ## Files
 
 **Milestone 13 itself is docs + config only**: the native adapters are **not**
-deleted or rewritten — only their documented status is corrected. The PR that
-carries this document also lands Milestones 14–15 (`internal/` changes for
-deterministic prompt/tool assembly, prompt-cache usage decoding, worker
-propagation, and `TOKEN_USAGE` events).
+deleted or rewritten — only their documented status is corrected. Zero code
+changes.
 
 Milestone 13 files:
 
-- `docs/llm-connector-strategy.md` (this file)
+- `docs/llm-connector-strategy.md` (new)
 - `docs/provider-tool-calling.md`
 - `docs/openai-compatible-providers.md`
-- `docs/agentic-harness.md`
 - `docs/agentic-harness-roadmap.md`
+- `docs/agentic-harness.md`
 - `config.reference.yaml`
 - `.env.example`
 - `CONTRIBUTING.md`

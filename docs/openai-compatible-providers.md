@@ -128,11 +128,9 @@ gateway:
     - name: litellm
       adapter: openai
       base_url: "http://127.0.0.1:4000/v1"
-      api_key_env: LITELLM_API_KEY   # scoped LiteLLM virtual key (not the master key)
-      model: "poolside/laguna-m.1"   # LiteLLM model_name alias
+      api_key_env: LITELLM_API_KEY      # = LiteLLM master_key
+      model: "poolside/laguna-m.1"      # LiteLLM model_name alias
       capabilities: { chat_tools: true }
-      options:
-        send_task_metadata: true      # optional: propagate task_id/agent_id/role for LiteLLM correlation
   order: [litellm]
 ```
 

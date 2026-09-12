@@ -68,13 +68,13 @@ EVIDENCE="/home/agentd/projects/${PID}/PLAN_RESULTS.log"
 log "waiting for tasks to execute (max 150s) ..."
 settled=0
 for i in $(seq 1 150); do
-  TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data.data // []')
+  TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data // []')
   active=$(printf '%s' "$TASKS" | jq '[.[] | select(.state | test("READY|QUEUED|RUNNING|PENDING"))] | length')
   if [ "${active:-0}" -eq 0 ]; then settled=1; break; fi
   sleep 1
 done
 
-TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data.data // []')
+TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data // []')
 TOTAL=$(printf '%s' "$TASKS" | jq 'length')
 COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="COMPLETED")] | length')
 BLOCKED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="BLOCKED")] | length')

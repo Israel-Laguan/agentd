@@ -1,6 +1,6 @@
 # Milestone 13 — LLM connector strategy (docs-only)
 
-**Status**: not started · **PR scope**: one docs-only PR · **Depends on**: nothing.
+**Status**: completed · **PR scope**: one docs-only PR · **Depends on**: nothing.
 **Relates to**: roadmap tasks 09, 12 (re-scoped), and the strategy decision to delegate provider
 diversity to an external proxy (LiteLLM / Portkey / OpenRouter or equivalent).
 

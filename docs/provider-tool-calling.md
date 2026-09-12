@@ -21,7 +21,7 @@ backend returns `SupportsChatTools: true`.
 | Provider | `SupportsChatTools` | Status | Notes |
 | --- | --- | --- | --- |
 | OpenAI | `true` | Verified | Sends OpenAI-compatible `tools` and parses `tool_calls` in provider fixture tests. The hardened single wire path. |
-| Anthropic | `true` | ⚠️ Maintenance (single-turn) | Single-turn tools only; **multi-turn agentic requires the proxy path** (`adapter: openai` via LiteLLM / Portkey / OpenRouter). See §[Provider Deltas — Anthropic](#anthropic) for the two defects; native fixture tests are self-referential. Bug-fix only. |
+| Anthropic | `true` | ⚠️ Maintenance (single-turn) | **single-turn tools only — multi-turn agentic requires the proxy path** (`adapter: openai` via LiteLLM / Portkey / OpenRouter). See §[Provider Deltas — Anthropic](#anthropic) for the two defects; native fixture tests are self-referential. Bug-fix only. |
 | Gemini | `true` | Verified | OpenAI-compatible endpoint via `name: gemini`, `adapter: openai` (legacy `adapter: gemini` alias is accepted). Sends `tools` and parses `tool_calls` like OpenAI. |
 | Ollama | `false` | ⚠️ Maintenance | `/api/chat` supports a `tools` field and returns `message.tool_calls`, but support depends on server and model behavior. Native adapter is bug-fix only; use the proxy path for agentic tools. |
 | llama.cpp | `false` | Frozen (openai-compatible) | OpenAI-style function calling depends on runtime setup such as `llama-server --jinja`, chat templates, and model support; runtime capability gating is **available** as an opt-in probe (M17 — `options.probe_tools: true`; see §[llama.cpp](#llamacpp)). Uses `adapter: openai` when available, so it rides the hardened path. |
