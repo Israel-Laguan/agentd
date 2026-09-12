@@ -61,7 +61,7 @@ func (rc *ResultCache) EntryCount() int {
 	return len(rc.entries)
 }
 
-// cacheKey produces a deterministic key from the tool name and a
+// CacheKey produces a deterministic key from the tool name and a
 // canonical JSON representation of the arguments.
 func CacheKey(toolName, argsJSON string) string {
 	canonical := CanonicalizeArgs(argsJSON)
