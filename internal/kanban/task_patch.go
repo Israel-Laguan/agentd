@@ -36,7 +36,7 @@ func (s *Store) UpdateTaskPatch(
 		if err != nil {
 			return nil, fmt.Errorf("begin task patch: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		now := utcNow()
 		// rowUpdatedAt tracks the current updated_at value of the row inside this

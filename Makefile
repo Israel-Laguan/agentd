@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test coverage run tidy lint lint-install loc minfunc folder-audit check test-e2e podman-test lint-md lint-links lint-docs
+.PHONY: build test coverage run tidy lint lint-install loc minfunc minfunc-accept folder-audit check test-e2e podman-test lint-md lint-links lint-docs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).

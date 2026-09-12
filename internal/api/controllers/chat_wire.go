@@ -100,4 +100,3 @@ func completion(model, content string, toolCalls []chatToolCall, finishReason st
 	}
 }
 
-func ptr[T any](v T) *T { return &v }

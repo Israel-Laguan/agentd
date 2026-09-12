@@ -28,7 +28,7 @@ func (s *Store) ListUnprocessedHumanComments(ctx context.Context) ([]models.Comm
 	if err != nil {
 		return nil, fmt.Errorf("list unprocessed human comments: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanCommentRefs(rows)
 }
 

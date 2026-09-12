@@ -1,39 +1,46 @@
 // Package api provides the HTTP daemon server, routing, and response helpers.
 package api
 
-import "agentd/internal/api/server"
+import (
+	"net/http"
+
+	"agentd/internal/api/httpx"
+	"agentd/internal/api/server"
+)
 
 // Server and handler wiring.
 type ServerDeps = server.ServerDeps
 
 var (
-	NewServer  = server.NewServer
+	NewServer = func(deps server.ServerDeps) *http.Server {
+		return &http.Server{Addr: deps.Addr, Handler: server.NewHandler(deps)}
+	}
 	NewHandler = server.NewHandler
 )
 
-// Response and pagination (re-exported from server for stable imports).
+// Response and pagination (re-exported from httpx for stable imports).
 type (
-	APIResponse[T any] = server.APIResponse[T]
-	Envelope           = server.Envelope
-	Meta               = server.Meta
-	APIError           = server.APIError
+	APIResponse[T any] = httpx.APIResponse[T]
+	Envelope           = httpx.Envelope
+	Meta               = httpx.Meta
+	APIError           = httpx.APIError
 )
 
 var (
-	WriteSuccess         = server.WriteSuccess
-	WriteError           = server.WriteError
-	WriteValidationError = server.WriteValidationError
-	WriteMappedError     = server.WriteMappedError
-	WriteJSON            = server.WriteJSON
-	MetaFromPagination   = server.MetaFromPagination
-	MapError             = server.MapError
+	WriteSuccess         = httpx.WriteSuccess
+	WriteError           = httpx.WriteError
+	WriteValidationError = httpx.WriteValidationError
+	WriteMappedError     = httpx.WriteMappedError
+	WriteJSON            = httpx.WriteJSON
+	MetaFromPagination   = httpx.MetaFromPagination
+	MapError             = httpx.MapError
 )
 
 const (
-	CodeBadRequest    = server.CodeBadRequest
-	CodeValidation    = server.CodeValidation
-	CodeNotFound      = server.CodeNotFound
-	CodeStateConflict = server.CodeStateConflict
-	CodeForbidden     = server.CodeForbidden
-	CodeInternal      = server.CodeInternal
+	CodeBadRequest    = httpx.CodeBadRequest
+	CodeValidation    = httpx.CodeValidation
+	CodeNotFound      = httpx.CodeNotFound
+	CodeStateConflict = httpx.CodeStateConflict
+	CodeForbidden     = httpx.CodeForbidden
+	CodeInternal      = httpx.CodeInternal
 )

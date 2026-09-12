@@ -111,7 +111,7 @@ func tableHasColumn(ctx context.Context, db *sql.DB, table, column string) (bool
 	if err != nil {
 		return false, fmt.Errorf("read table info for %s: %w", table, err)
 	}
-	defer CloseRows(rows)
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var cid int

@@ -75,42 +75,42 @@ func (w *Worker) handleTaskBreakdown(ctx context.Context, task models.Task, subt
 		return
 	}
 	if _, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, drafts); err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
-	w.emit(ctx, task, "TASK_BREAKDOWN", fmt.Sprintf("created %d subtasks", len(drafts)))
+	w.Emit(ctx, task, "TASK_BREAKDOWN", fmt.Sprintf("created %d subtasks", len(drafts)))
 }
 
 func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, project models.Project) {
 	tasks, err := w.store.ListTasksByProject(ctx, project.ID)
 	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	intent := planning.BuildPhaseIntent(task, project, tasks)
 	plan, err := w.gateway.GeneratePlan(ctx, intent)
 	if err != nil {
-		w.handleGatewayError(ctx, task, err)
+		w.HandleGatewayError(ctx, task, err)
 		return
 	}
 	if plan == nil {
-		w.emit(ctx, task, "ERROR", "gateway returned nil plan")
+		w.Emit(ctx, task, "ERROR", "gateway returned nil plan")
 		return
 	}
 	plan.Tasks = planning.RetitlePhaseContinuationTasks(plan.Tasks, planning.NextPhaseNumber(task.Title))
 	created, err := w.store.AppendTasksToProject(ctx, project.ID, task.ID, plan.Tasks)
 	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	if _, err := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
 		Success: true,
 		Payload: fmt.Sprintf("planned next phase with %d tasks", len(created)),
 	}); err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
-	w.emit(ctx, task, "PHASE_PLANNING", fmt.Sprintf("created %d phase tasks", len(created)))
+	w.Emit(ctx, task, "PHASE_PLANNING", fmt.Sprintf("created %d phase tasks", len(created)))
 }
 
 // === Corrections Logic ===

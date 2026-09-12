@@ -67,7 +67,7 @@ func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall, extra
 	case toolNameWrite:
 		return t.executeWrite(ctx, call.Function.Arguments)
 	default:
-		return jsonErrorf("unknown tool: %s", call.Function.Name)
+		return JSONErrorf("unknown tool: %s", call.Function.Name)
 	}
 }
 

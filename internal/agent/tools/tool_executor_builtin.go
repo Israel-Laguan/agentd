@@ -18,11 +18,11 @@ type bashArgs struct {
 func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEnv ...string) string {
 	var args bashArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return jsonErrorf("invalid arguments: %v", err)
+		return JSONErrorf("invalid arguments: %v", err)
 	}
 
 	if args.Command == "" {
-		return jsonErrorf("command is required")
+		return JSONErrorf("command is required")
 	}
 
 	payload := sandbox.Payload{
@@ -36,11 +36,11 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEn
 
 	result, err := t.sandbox.Execute(ctx, payload)
 	if err != nil {
-		return jsonErrorf("execution failed: %v", err)
+		return JSONErrorf("execution failed: %v", err)
 	}
 
 	if !result.Success {
-		return sandboxFailureJSON(result)
+		return SandboxFailureJSON(result)
 	}
 
 	output := result.Stdout
@@ -59,44 +59,44 @@ type readArgs struct {
 
 func (t *ToolExecutor) executeRead(ctx context.Context, argsJSON string) string {
 	if err := ctx.Err(); err != nil {
-		return jsonErrorf("read cancelled: %v", err)
+		return JSONErrorf("read cancelled: %v", err)
 	}
 
 	var args readArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return jsonErrorf("invalid arguments: %v", err)
+		return JSONErrorf("invalid arguments: %v", err)
 	}
 
 	if args.Path == "" {
-		return jsonErrorf("path is required")
+		return JSONErrorf("path is required")
 	}
 
 	fullPath, err := t.resolvePath(args.Path, false)
 	if err != nil {
-		return jsonErrorf("%v", err)
+		return JSONErrorf("%v", err)
 	}
 
 	info, err := os.Stat(fullPath)
 	if err != nil {
-		return jsonErrorf("stat failed: %v", err)
+		return JSONErrorf("stat failed: %v", err)
 	}
 	if info.Size() > t.maxReadBytes {
-		return jsonErrorf("file too large: %d bytes (max %d)", info.Size(), t.maxReadBytes)
+		return JSONErrorf("file too large: %d bytes (max %d)", info.Size(), t.maxReadBytes)
 	}
 
 	content, err := readFileWithContext(ctx, fullPath, t.maxReadBytes, info)
 	if err != nil {
 		if ctx.Err() != nil {
-			return jsonErrorf("read cancelled: %v", ctx.Err())
+			return JSONErrorf("read cancelled: %v", ctx.Err())
 		}
-		return jsonErrorf("read failed: %v", err)
+		return JSONErrorf("read failed: %v", err)
 	}
 
 	if t.filePipeline != nil {
 		markdown, pipeErr := t.filePipeline.ProcessRead(ctx, args.Path, fullPath, content, info)
 		if pipeErr != nil {
 			if ctx.Err() != nil || errors.Is(pipeErr, context.Canceled) || errors.Is(pipeErr, context.DeadlineExceeded) {
-				return jsonErrorf("read cancelled: %v", pipeErr)
+				return JSONErrorf("read cancelled: %v", pipeErr)
 			}
 			slog.Warn("file pipeline failed, returning raw content", "path", args.Path, "error", pipeErr)
 			return string(content)
@@ -114,33 +114,33 @@ type writeArgs struct {
 
 func (t *ToolExecutor) executeWrite(ctx context.Context, argsJSON string) string {
 	if err := ctx.Err(); err != nil {
-		return jsonErrorf("write cancelled: %v", err)
+		return JSONErrorf("write cancelled: %v", err)
 	}
 
 	var args writeArgs
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return jsonErrorf("invalid arguments: %v", err)
+		return JSONErrorf("invalid arguments: %v", err)
 	}
 
 	if args.Path == "" {
-		return jsonErrorf("path is required")
+		return JSONErrorf("path is required")
 	}
 	if args.Content == nil {
-		return jsonErrorf("content is required")
+		return JSONErrorf("content is required")
 	}
 
 	fullPath, err := t.resolvePath(args.Path, true)
 	if err != nil {
-		return jsonErrorf("%v", err)
+		return JSONErrorf("%v", err)
 	}
 
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return jsonErrorf("create directory failed: %v", err)
+		return JSONErrorf("create directory failed: %v", err)
 	}
 
 	if err := os.WriteFile(fullPath, []byte(*args.Content), 0644); err != nil {
-		return jsonErrorf("write failed: %v", err)
+		return JSONErrorf("write failed: %v", err)
 	}
 
 	return `{"success": true}`

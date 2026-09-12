@@ -64,7 +64,7 @@ func migrateToV13(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("begin schema migration v13: %w", err)
 	}
-	defer rollbackUnlessCommitted(tx)
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS scheduled_tasks_new`); err != nil {
 		return fmt.Errorf("drop stale scheduled_tasks_new: %w", err)

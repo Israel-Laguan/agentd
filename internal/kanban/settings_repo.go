@@ -15,7 +15,7 @@ func (s *Store) ListSettings(ctx context.Context) ([]models.Setting, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list settings: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanSettings(rows)
 }
 

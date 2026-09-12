@@ -110,7 +110,7 @@ type TokenUsageStore interface {
 // the task row, and emits a TOKEN_USAGE audit event when a sink is wired.
 // Cache usage details ride along the event payload and the additive
 // TokenUsageStore.AddUsageDetails seam.
-func (w *Worker) recordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails) {
+func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails) {
 	if tokens <= 0 {
 		return
 	}
@@ -137,7 +137,7 @@ func (w *Worker) recordTaskTokenUsage(ctx context.Context, task models.Task, tok
 		slog.Error("failed to marshal token usage payload", "task_id", task.ID, "err", err)
 		return
 	}
-	w.emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
+	w.Emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
 }
 
 // PluginMounter loads and mounts plugins from a directory into a
@@ -161,7 +161,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
 	project, profile, err := w.loadContext(ctx, task)
 	if err != nil {
-		w.failHard(ctx, task, err)
+		w.FailHard(ctx, task, err)
 		return
 	}
 	w.warnIfWorkspaceEmpty(ctx, task, project)
@@ -175,7 +175,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer stopHeartbeat()
 	if profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
-			w.failHard(ctx, task, err)
+			w.FailHard(ctx, task, err)
 			return
 		} else if done {
 			return
@@ -204,7 +204,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		}
 		return
 	}
-	w.runLegacyTask(ctx, task, *project, *profile, false)
+	w.RunLegacyTask(ctx, task, *project, *profile, false)
 }
 
 func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (LoopResult, bool) {

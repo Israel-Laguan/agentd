@@ -45,7 +45,7 @@ func TestHandleGoalStalledPropagatesBlockError(t *testing.T) {
 	gt := agentcontext.NewGoalTracker(task.ID, task.ProjectID)
 	gt.SetGoal(agentcontext.AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: agentcontext.DefaultStallThreshold + 1})
 
-	if err := w.handleGoalStalled(context.Background(), task, gt); !errors.Is(err, blockErr) {
+	if err := w.HandleGoalStalled(context.Background(), task, gt); !errors.Is(err, blockErr) {
 		t.Fatalf("handleGoalStalled() error = %v, want %v", err, blockErr)
 	}
 }
@@ -59,7 +59,7 @@ func TestHandleGoalStalled_RefreshesTaskUpdatedAt(t *testing.T) {
 	gt := agentcontext.NewGoalTracker(task.ID, task.ProjectID)
 	gt.SetGoal(agentcontext.AgentGoal{SuccessCriteria: []string{"a"}, TurnsActive: agentcontext.DefaultStallThreshold + 1})
 
-	if err := w.handleGoalStalled(context.Background(), task, gt); err != nil {
+	if err := w.HandleGoalStalled(context.Background(), task, gt); err != nil {
 		t.Fatalf("handleGoalStalled() error = %v", err)
 	}
 	if !store.blockCalled {

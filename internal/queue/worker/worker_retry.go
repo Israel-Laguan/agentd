@@ -24,7 +24,7 @@ const (
 	LoopToolFailure          = agentruntime.LoopToolFailure
 )
 
-func (w *Worker) recordLoopResult(result LoopResult) {
+func (w *Worker) RecordLoopResult(result LoopResult) {
 	if w.loopResultRecorder != nil {
 		w.loopResultRecorder(result)
 	}
@@ -41,7 +41,7 @@ func (w *Worker) handleLoopResult(ctx context.Context, task models.Task, result 
 		if payload == "" {
 			payload = "context or token budget exhausted"
 		}
-		w.emit(ctx, task, "LOOP_BUDGET_EXHAUSTED", payload)
+		w.Emit(ctx, task, "LOOP_BUDGET_EXHAUSTED", payload)
 		w.handleAgentFailure(ctx, task, payload)
 	case LoopTurnLimitExceeded:
 		w.handleIterationExceeded(ctx, task)
@@ -65,7 +65,7 @@ func (w *Worker) handleLoopResult(ctx context.Context, task models.Task, result 
 		if len(parts) == 1 {
 			parts = append(parts, "unknown loop status")
 		}
-		w.emit(ctx, task, "LOOP_UNKNOWN_STATUS", strings.Join(parts, " "))
+		w.Emit(ctx, task, "LOOP_UNKNOWN_STATUS", strings.Join(parts, " "))
 		w.handleAgentFailure(ctx, task, strings.Join(parts, " "))
 	}
 }
@@ -79,7 +79,7 @@ func (w *Worker) commit(ctx context.Context, task models.Task, result sandbox.Re
 // (e.g. HITL consumption markers) should use this instead of commit.
 func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result sandbox.Result, err error) bool {
 	if safety.ClassifiesAsBreakerFailure(err) {
-		w.handleGatewayError(ctx, task, err)
+		w.HandleGatewayError(ctx, task, err)
 		return false
 	}
 	if err != nil || !result.Success {
@@ -94,7 +94,7 @@ func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result s
 		Payload: resultPayload(result),
 	})
 	if updateErr != nil {
-		w.emit(ctx, task, "ERROR", updateErr.Error())
+		w.Emit(ctx, task, "ERROR", updateErr.Error())
 		return false
 	}
 	return true
@@ -103,19 +103,19 @@ func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result s
 func (w *Worker) handleAgentFailure(ctx context.Context, task models.Task, payload string) {
 	retried, err := w.store.IncrementRetryCount(ctx, task.ID, task.UpdatedAt)
 	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	if w.tuner != nil {
 		project, profile, err := w.loadContext(ctx, *retried)
 		if err != nil {
-			w.emit(ctx, *retried, "ERROR", err.Error())
+			w.Emit(ctx, *retried, "ERROR", err.Error())
 			return
 		}
 		action := w.tuner.ForAttempt(retried.RetryCount, *profile)
 		switch action.Type {
 		case planning.HealingActionTune:
-			w.emit(ctx, *retried, "TUNE", w.tunePayload(*profile, action, retried.RetryCount))
+			w.Emit(ctx, *retried, "TUNE", w.tunePayload(*profile, action, retried.RetryCount))
 			w.requeue(ctx, *retried, payload)
 			return
 		case planning.HealingActionSplit:
@@ -135,7 +135,7 @@ func (w *Worker) handleAgentFailure(ctx context.Context, task models.Task, paylo
 }
 
 func (w *Worker) handleHealingSplit(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
-	w.emit(ctx, task, "HEALING_SPLIT", fmt.Sprintf("attempt=%d step=%s", task.RetryCount, planning.HealingStepSplitTask))
+	w.Emit(ctx, task, "HEALING_SPLIT", fmt.Sprintf("attempt=%d step=%s", task.RetryCount, planning.HealingStepSplitTask))
 	response, err := w.breakdownCommand(ctx, task, project, profile)
 	if err != nil {
 		w.createHealingHandoff(ctx, task, planning.HealingAction{
@@ -166,7 +166,7 @@ func (w *Worker) breakdownCommand(ctx context.Context, task models.Task, project
 	}
 	profile = w.routeLegacyProfile(ctx, task, project, profile)
 	resp, tokenUsage, details, err := w.command(ctx, task, project, profile)
-	w.recordTaskTokenUsage(ctx, task, tokenUsage, details)
+	w.RecordTaskTokenUsage(ctx, task, tokenUsage, details)
 	return resp, err
 }
 
@@ -196,10 +196,10 @@ func (w *Worker) tunePayload(profile models.AgentProfile, action planning.Healin
 func (w *Worker) requeue(ctx context.Context, task models.Task, payload string) {
 	_, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateReady)
 	if err != nil && !errors.Is(err, models.ErrStateConflict) {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 	}
 	if strings.TrimSpace(payload) != "" {
-		w.emit(ctx, task, "RETRY", truncate(payload, 1000))
+		w.Emit(ctx, task, "RETRY", truncate(payload, 1000))
 	}
 }
 
@@ -209,22 +209,22 @@ func (w *Worker) evict(ctx context.Context, task models.Task, payload string) {
 		Payload: truncate(payload, 1000),
 	})
 	if err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	if _, err := w.store.UpdateTaskState(ctx, updated.ID, updated.UpdatedAt, models.TaskStateFailedRequiresHuman); err != nil {
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 	}
-	w.emit(ctx, task, "POISON_PILL_HANDOFF", "Task evicted after "+fmt.Sprintf("%d", w.maxRetries)+" retries. Last error: "+truncate(payload, 500))
+	w.Emit(ctx, task, "POISON_PILL_HANDOFF", "Task evicted after "+fmt.Sprintf("%d", w.maxRetries)+" retries. Last error: "+truncate(payload, 500))
 }
 
-func (w *Worker) failHard(ctx context.Context, task models.Task, err error) {
+func (w *Worker) FailHard(ctx context.Context, task models.Task, err error) {
 	_, updateErr := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
 		Success: false,
 		Payload: truncate(err.Error(), 1000),
 	})
 	if updateErr != nil {
-		w.emit(ctx, task, "ERROR", updateErr.Error())
+		w.Emit(ctx, task, "ERROR", updateErr.Error())
 	}
 }
 
@@ -236,7 +236,7 @@ func (w *Worker) failTerminal(ctx context.Context, task models.Task, err error, 
 		Payload: truncate(err.Error(), 1000),
 	})
 	if updateErr != nil {
-		w.emit(ctx, task, "ERROR", updateErr.Error())
+		w.Emit(ctx, task, "ERROR", updateErr.Error())
 		return
 	}
 	// UpdateTaskResult already moves RUNNING → FAILED; skip redundant transition.
@@ -245,10 +245,10 @@ func (w *Worker) failTerminal(ctx context.Context, task models.Task, err error, 
 	}
 	current, getErr := w.store.GetTask(ctx, task.ID)
 	if getErr != nil {
-		w.emit(ctx, task, "ERROR", getErr.Error())
+		w.Emit(ctx, task, "ERROR", getErr.Error())
 		return
 	}
 	if _, stateErr := w.store.UpdateTaskState(ctx, current.ID, current.UpdatedAt, state); stateErr != nil {
-		w.emit(ctx, task, "ERROR", stateErr.Error())
+		w.Emit(ctx, task, "ERROR", stateErr.Error())
 	}
 }

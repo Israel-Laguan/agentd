@@ -52,7 +52,7 @@ func (w *Worker) reblockTaskForPendingHITL(ctx context.Context, task models.Task
 }
 
 // runPreTaskElicitation consumes prior answers, skips well-specified tasks, or blocks for human input.
-func (w *Worker) runPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error) {
+func (w *Worker) RunPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error) {
 	if enriched, ok, err := w.tryConsumeElicitationAnswers(ctx, task); err != nil {
 		return task, false, err
 	} else if ok {
@@ -121,13 +121,13 @@ func (w *Worker) requestElicitationFromAgent(
 		Assignee:    models.TaskAssigneeHuman,
 	}}, comments)
 	if err != nil {
-		w.emit(ctx, task, "ERROR", fmt.Sprintf("elicitation request failed: %v", err))
+		w.Emit(ctx, task, "ERROR", fmt.Sprintf("elicitation request failed: %v", err))
 		return fmt.Errorf("create elicitation subtask: %w", err)
 	}
 	if len(subtasks) == 0 {
 		return fmt.Errorf("no elicitation subtask created")
 	}
-	w.emit(ctx, task, "CLARIFICATION_REQUESTED", truncate(titleQuestion, 500))
+	w.Emit(ctx, task, "CLARIFICATION_REQUESTED", truncate(titleQuestion, 500))
 	return nil
 }
 

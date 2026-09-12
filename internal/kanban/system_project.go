@@ -22,7 +22,7 @@ func (s *Store) EnsureSystemProject(ctx context.Context) (*models.Project, error
 		if err != nil {
 			return nil, fmt.Errorf("begin ensure system project: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		now := formatTime(utcNow())
 		_, err = tx.ExecContext(ctx, `
@@ -58,7 +58,7 @@ func (s *Store) EnsureProjectTask(ctx context.Context, projectID string, draft m
 		if err != nil {
 			return result{}, fmt.Errorf("begin ensure project task: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		if _, err := selectProjectByID(ctx, tx, projectID); err != nil {
 			return result{}, err

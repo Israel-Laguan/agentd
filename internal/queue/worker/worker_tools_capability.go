@@ -124,7 +124,7 @@ func (w *Worker) commitCapabilityRouteResult(
 			Content: text,
 		})
 	}
-	w.commitTextWithProfile(ctx, task, text, &profile)
+	w.CommitTextWithProfile(ctx, task, text, &profile)
 	return agentruntime.LoopResult{Status: agentruntime.LoopSuccessfulCompletion}
 }
 
@@ -166,13 +166,13 @@ func (w *Worker) TryExternalCapabilityRoute(
 	out, err := w.capabilities.CallTool(ctx, decision.Adapter, decision.Tool, decision.Args)
 	if err != nil {
 		routeErr := fmt.Errorf("capability routing: %s/%s: %w", decision.Adapter, decision.Tool, err)
-		w.failHard(ctx, task, routeErr)
+		w.FailHard(ctx, task, routeErr)
 		return agentruntime.LoopResult{}, false, routeErr
 	}
 
 	text, err := encodeCapabilityResult(out)
 	if err != nil {
-		w.failHard(ctx, task, err)
+		w.FailHard(ctx, task, err)
 		return agentruntime.LoopResult{}, false, err
 	}
 

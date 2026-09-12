@@ -11,13 +11,13 @@ provide a script that certifies any endpoint (llama.cpp direct, LiteLLM managed,
 satisfies the contract. This operationalizes "the direct path should work — and here's the verdict
 for your model."
 
-## Background / current state (verified)
+## Background / current state (historical, post M16)
 
-- The openai adapter (`internal/gateway/providers/openai.go`) already handles Chat Completions,
-  tools, `tool_calls`, embeddings. Much fixture coverage exists in `openai_test.go`,
-  `openai_timeout_test.go`, `gateway_feature_tool_test.go`, but it is not organized/described as
-  *the* contract both topologies rely on.
-- No standalone conformance probe exists today.
+M16 delivered the wire contract suite and smoke script:
+
+- Explicit contract tests consolidated in `internal/gateway/providers/wire_contract_test.go` (covers tools, tool_calls, roundtrips, errors, timeouts, JSON mode, embeddings against httptest fixture).
+- Conformance smoke: `scripts/llm-smoke.sh` (executable, POSIX, exercises /v1/chat/completions, JSON, tools).
+- Documented in `docs/llm-connector-strategy.md` (see also `llm-connector-strategy.md:174`).
 
 ## Scope (in)
 

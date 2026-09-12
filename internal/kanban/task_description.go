@@ -20,7 +20,7 @@ func (s *Store) UpdateTaskDescription(
 		if err != nil {
 			return nil, fmt.Errorf("begin task description update: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		now := kdb.UTCNow()
 		result, err := tx.ExecContext(ctx, `

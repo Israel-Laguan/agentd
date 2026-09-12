@@ -50,7 +50,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	flush(w)
+	_ = http.NewResponseController(w).Flush()
 	for {
 		select {
 		case <-r.Context().Done():
@@ -84,7 +84,7 @@ func writeEvent(w http.ResponseWriter, evt bus.Signal) bool {
 	if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
 		return false
 	}
-	flush(w)
+	_ = http.NewResponseController(w).Flush()
 	return true
 }
 
@@ -121,6 +121,4 @@ func eventName(t string) string {
 	return strings.ToLower(t)
 }
 
-func flush(w http.ResponseWriter) {
-	_ = http.NewResponseController(w).Flush()
-}
+

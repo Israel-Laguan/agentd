@@ -21,7 +21,7 @@ func (s *Store) ReconcileExpiredBlockedTasks(ctx context.Context, now time.Time)
 		if err != nil {
 			return nil, fmt.Errorf("begin hitl timeout reconcile: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		parents, err := selectBlockedParentsWithOpenChildren(ctx, tx)
 		if err != nil {
@@ -67,7 +67,7 @@ func selectBlockedParentsWithOpenChildren(ctx context.Context, tx *immediateTx) 
 	if err != nil {
 		return nil, fmt.Errorf("select blocked parents: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanTasks(rows)
 }
 
@@ -80,7 +80,7 @@ func selectHITLExpiry(ctx context.Context, tx *immediateTx, taskID string) (time
 	if err != nil {
 		return time.Time{}, false, fmt.Errorf("select hitl expiry comments: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 
 	var latest time.Time
 	var found bool

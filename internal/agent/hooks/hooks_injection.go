@@ -92,7 +92,7 @@ func applyInjectionResistance(toolName, result string, externalTools map[string]
 	if statusSet && (status == ToolStatusVetoed || status == ToolStatusTimeout) {
 		return result
 	}
-	if isToolErrorPayload(result) {
+	if strings.HasPrefix(result, toolErrorPrefix) {
 		return result
 	}
 	return wrapExternalContent(toolName, result)

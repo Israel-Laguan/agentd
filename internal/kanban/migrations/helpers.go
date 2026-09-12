@@ -7,12 +7,6 @@ import (
 	"fmt"
 )
 
-func rollbackUnlessCommitted(tx interface{ Rollback() error }) { _ = tx.Rollback() }
-
-func closeRows(rows *sql.Rows) {
-	_ = rows.Close()
-}
-
 func tableExists(ctx context.Context, db *sql.DB, name string) (bool, error) {
 	var found string
 	err := db.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&found)
@@ -30,7 +24,7 @@ func tableHasColumn(ctx context.Context, db *sql.DB, table, column string) (bool
 	if err != nil {
 		return false, fmt.Errorf("read table info for %s: %w", table, err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var cid int

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -90,7 +91,7 @@ func (subagentTaskGateway) Embed(ctx context.Context, req spec.EmbedRequest) (sp
 
 func isErrorJSON(s string) bool {
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(s)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(s, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		return false
 	}
 	_, ok := payload["error"]

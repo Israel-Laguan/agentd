@@ -70,7 +70,7 @@ func (w *Worker) RequestClarificationFromAgent(
 ) error {
 	if strings.TrimSpace(question) == "" {
 		err := fmt.Errorf("clarification question cannot be empty")
-		w.emit(ctx, task, "ERROR", err.Error())
+		w.Emit(ctx, task, "ERROR", err.Error())
 		return err
 	}
 	msg := ClarificationMessage{
@@ -96,14 +96,14 @@ func (w *Worker) RequestClarificationFromAgent(
 		Assignee:    models.TaskAssigneeHuman,
 	}}, []models.Comment{hitlExpiryComment(time.Now().Add(DefaultApprovalTimeout))})
 	if err != nil {
-		w.emit(ctx, task, "ERROR", fmt.Sprintf("clarification request failed: %v", err))
+		w.Emit(ctx, task, "ERROR", fmt.Sprintf("clarification request failed: %v", err))
 		return fmt.Errorf("create clarification subtask: %w", err)
 	}
 	if len(subtasks) == 0 {
-		w.emit(ctx, task, "ERROR", "clarification request failed: no clarification subtask created")
+		w.Emit(ctx, task, "ERROR", "clarification request failed: no clarification subtask created")
 		return fmt.Errorf("no clarification subtask created")
 	}
-	w.emit(ctx, task, "CLARIFICATION_REQUESTED", truncate(question, 500))
+	w.Emit(ctx, task, "CLARIFICATION_REQUESTED", truncate(question, 500))
 	return nil
 }
 

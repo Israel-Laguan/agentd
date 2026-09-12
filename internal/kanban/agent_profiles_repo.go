@@ -31,7 +31,7 @@ func (s *Store) ListAgentProfiles(ctx context.Context) ([]models.AgentProfile, e
 	if err != nil {
 		return nil, fmt.Errorf("list agent profiles: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 
 	var out []models.AgentProfile
 	for rows.Next() {

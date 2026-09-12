@@ -218,7 +218,7 @@ func TestApplyModelRouting_OverridesProfileModel(t *testing.T) {
 	}
 	profile := models.AgentProfile{Provider: "openai", Model: "gpt-4"}
 	task := models.Task{Description: "summarize this file"}
-	got := w.applyModelRouting(task, profile, nil, nil)
+	got := w.ApplyModelRouting(task, profile, nil, nil, "")
 	if got.Model != "claude-haiku" || got.Provider != "anthropic" {
 		t.Fatalf("applyModelRouting() = %+v, want anthropic/claude-haiku", got)
 	}
@@ -231,7 +231,7 @@ func TestApplyModelRouting_UnpinnedRoutesCheap(t *testing.T) {
 	}
 	profile := models.AgentProfile{Provider: "openai"}
 	task := models.Task{Description: "summarize this file"}
-	got := w.applyModelRouting(task, profile, nil, nil)
+	got := w.ApplyModelRouting(task, profile, nil, nil, "")
 	if got.Model != "claude-haiku" || got.Provider != "anthropic" {
 		t.Fatalf("applyModelRouting() = %+v, want anthropic/claude-haiku", got)
 	}
@@ -246,7 +246,7 @@ func TestApplyModelRouting_ContextOverrideHigh(t *testing.T) {
 	task := models.Task{Description: "summarize this file"}
 	content := strings.Repeat("x", 600001)
 	messages := []gateway.PromptMessage{{Role: "user", Content: content}}
-	got := w.applyModelRouting(task, profile, messages, nil)
+	got := w.ApplyModelRouting(task, profile, messages, nil)
 	if got.Model != "claude-opus" {
 		t.Fatalf("applyModelRouting() model = %q, want claude-opus", got.Model)
 	}
@@ -270,7 +270,7 @@ func TestApplyModelRouting_UsesFullToolsBeforeManifestFilter(t *testing.T) {
 		Name:        "run_command",
 		Description: strings.Repeat("x", 600001),
 	}}
-	filtered, _ := w.filterAgenticTools(routingTools, nil, task, profile)
+	filtered, _ := w.FilterAgenticTools(routingTools, nil, task, profile)
 	if len(filtered) != 0 {
 		t.Fatalf("filtered tools len = %d, want 0 for summarize manifest", len(filtered))
 	}
@@ -278,11 +278,11 @@ func TestApplyModelRouting_UsesFullToolsBeforeManifestFilter(t *testing.T) {
 		t.Fatalf("filtered EstimateContextTokens() = %d, want below threshold", tokens)
 	}
 
-	routedFull := w.applyModelRouting(task, profile, nil, routingTools)
+	routedFull := w.ApplyModelRouting(task, profile, nil, routingTools)
 	if routedFull.Model != "claude-opus" || routedFull.Provider != "anthropic" {
 		t.Fatalf("routing with full tools = %s/%s, want anthropic/claude-opus", routedFull.Provider, routedFull.Model)
 	}
-	routedFiltered := w.applyModelRouting(task, profile, nil, filtered)
+	routedFiltered := w.ApplyModelRouting(task, profile, nil, filtered)
 	if routedFiltered.Model != "claude-haiku" || routedFiltered.Provider != "anthropic" {
 		t.Fatalf("routing with filtered tools = %s/%s, want anthropic/claude-haiku", routedFiltered.Provider, routedFiltered.Model)
 	}

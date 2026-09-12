@@ -23,7 +23,7 @@ func TestToolExecutor_UnknownTool_ReturnsValidJSON(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: `weird"name`, Arguments: `{}`},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v\nout=%s", err, out)
 	}
 	if payload["error"] == "" {
@@ -47,7 +47,7 @@ func TestToolExecutor_Read_RejectsOversizedFile(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -90,7 +90,7 @@ func TestToolExecutor_Bash_ValidationFailure(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -114,7 +114,7 @@ func TestToolExecutor_Bash_SandboxFailure(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -180,7 +180,7 @@ func TestToolExecutor_Read_ValidationFailure(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -207,7 +207,7 @@ func TestToolExecutor_Read_RejectsFIFO(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -229,7 +229,7 @@ func TestToolExecutor_Write_Success(t *testing.T) {
 		},
 	})
 	var payload map[string]any
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] != nil {
@@ -256,7 +256,7 @@ func TestToolExecutor_Write_ValidationFailure(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -274,7 +274,7 @@ func TestToolExecutor_Write_ValidationFailure_MissingContent(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {
@@ -296,7 +296,7 @@ func TestToolExecutor_Write_AllowsEmptyContent(t *testing.T) {
 		},
 	})
 	var payload map[string]any
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] != nil {
@@ -330,7 +330,7 @@ func TestToolExecutor_Read_CancelledContext(t *testing.T) {
 		},
 	})
 	var payload map[string]string
-	if err := json.Unmarshal([]byte(agenttools.StripToolErrorPrefix(out)), &payload); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(out, agenttools.ToolErrorPrefix)), &payload); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if payload["error"] == "" {

@@ -142,7 +142,7 @@ func cacheStoredPayload(ctx HookContext, result string) string {
 	if !ctx.ResultStatusSet || ctx.ResultStatus == ToolStatusSuccess {
 		return result
 	}
-	if isToolErrorPayload(result) {
+	if strings.HasPrefix(result, toolErrorPrefix) {
 		return result
 	}
 	return toolErrorPrefix + result

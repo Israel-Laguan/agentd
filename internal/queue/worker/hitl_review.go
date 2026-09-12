@@ -93,7 +93,7 @@ func latestFailedReviewRejection(
 	return reason, review.ID, true
 }
 
-func (w *Worker) prependReviewRejectionFeedback(
+func (w *Worker) PrependReviewRejectionFeedback(
 	ctx context.Context,
 	task models.Task,
 	messages []gateway.PromptMessage,

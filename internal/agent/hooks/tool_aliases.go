@@ -23,6 +23,5 @@ const (
 )
 
 var (
-	isToolErrorPayload            = agenttools.IsToolErrorPayload
 	SchemaRegistryFromDefinitions = agenttools.SchemaRegistryFromDefinitions
 )

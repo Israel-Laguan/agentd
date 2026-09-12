@@ -24,7 +24,7 @@ func TestHandleGatewayError_HealingDisabled_FailsTask(t *testing.T) {
 	}
 	task := tasks[0]
 
-	w.handleGatewayError(context.Background(), task, models.ErrLLMQuotaExceeded)
+	w.HandleGatewayError(context.Background(), task, models.ErrLLMQuotaExceeded)
 
 	children, _ := store.ListChildTasks(context.Background(), task.ID)
 	if len(children) > 0 {
@@ -64,7 +64,7 @@ func TestHandleGatewayError_HealingEnabled_CreatesHandoff(t *testing.T) {
 	}
 	task := tasks[0]
 
-	w.handleGatewayError(context.Background(), task, models.ErrLLMQuotaExceeded)
+	w.HandleGatewayError(context.Background(), task, models.ErrLLMQuotaExceeded)
 
 	children, _ := store.ListChildTasks(context.Background(), task.ID)
 	humanCount := 0

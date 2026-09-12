@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,25 @@ type Capabilities struct {
 // ToolProber can refine SupportsChatTools with a runtime tool-call probe.
 type ToolProber interface {
 	ProbeTools(context.Context) bool
+}
+
+type common struct {
+	name             spec.Provider
+	cfg              spec.ProviderConfig
+	client           *http.Client
+	chatToolsDefault bool
+}
+
+func (c common) Name() spec.Provider { return c.name }
+
+func (c common) MaxInputChars() int { return c.cfg.MaxInputChars }
+
+func (c common) Capabilities() Capabilities {
+	return capabilitiesFromConfig(c.cfg, c.chatToolsDefault)
+}
+
+func (c common) url(suffix string) string {
+	return strings.TrimRight(c.cfg.BaseURL, "/") + suffix
 }
 
 func providerName(cfg spec.ProviderConfig, fallback spec.Provider) spec.Provider {

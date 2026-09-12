@@ -44,9 +44,6 @@ var (
 	formatTime = kdb.FormatTime
 	utcNow     = kdb.UTCNow
 
-	// row helpers
-	closeRows = kdb.CloseRows
-
 	// sql helpers
 	requireRowsAffected = kdb.RequireRowsAffected
 	placeholders        = kdb.Placeholders
@@ -54,8 +51,9 @@ var (
 
 	// tx helpers
 	beginImmediate          = kdb.BeginImmediate
-	rollbackUnlessCommitted = kdb.RollbackUnlessCommitted
 	commitTx                = kdb.CommitTx
+	closeRows               = func(rows *sql.Rows) { _ = rows.Close() }
+	rollbackUnlessCommitted = func(tx interface{ Rollback() error }) { _ = tx.Rollback() }
 
 	// scan helpers
 	scanProject  = kdb.ScanProject
@@ -91,26 +89,14 @@ var (
 	selfHealingHandoffExcludeSQL = kdb.SelfHealingHandoffExcludeSQL
 )
 
-// ---------------------------------------------------------------------------
-// Generic wrappers — Go generics cannot be aliased via var; thin wrappers are
-// the correct forwarding mechanism.
-// ---------------------------------------------------------------------------
-
 func retryOnBusy[T any](ctx context.Context, op func(context.Context) (T, error)) (T, error) {
 	return kdb.RetryOnBusy(ctx, op)
 }
 
-func retryOnBusyNoResult(ctx context.Context, op func(context.Context) error) error {
-	return kdb.RetryOnBusyNoResult(ctx, op)
-}
+var retryOnBusyNoResult = kdb.RetryOnBusyNoResult
 
 // Open opens the SQLite database at path and configures the connection pool.
-func Open(path string) (*sql.DB, error) { return kdb.Open(path) }
+var Open = kdb.Open
 
-// ---------------------------------------------------------------------------
 // ensureNoCycle forwards to domain.EnsureNoCycle.
-// ---------------------------------------------------------------------------
-
-func ensureNoCycle(ctx context.Context, q sqlQueryer, parentID, childID string) error {
-	return domain.EnsureNoCycle(ctx, q, parentID, childID)
-}
+var ensureNoCycle = domain.EnsureNoCycle

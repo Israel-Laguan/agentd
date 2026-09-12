@@ -34,11 +34,6 @@ type ServerDeps struct {
 	ProviderConfigs  []spec.ProviderConfig
 }
 
-// NewServer returns an http.Server with the API handler.
-func NewServer(deps ServerDeps) *http.Server {
-	return &http.Server{Addr: deps.Addr, Handler: NewHandler(deps)}
-}
-
 // NewHandler builds the API mux.
 func NewHandler(deps ServerDeps) http.Handler {
 	mux := http.NewServeMux()

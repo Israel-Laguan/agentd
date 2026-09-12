@@ -25,8 +25,8 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 	defer func() {
 		if r := recover(); r != nil {
 			for _, task := range tasks {
-				w.emit(ctx, task, "PANIC", fmt.Sprintf("worker batch panic: %v", r))
-				w.failHard(ctx, task, fmt.Errorf("worker batch panic: %v", r))
+				w.Emit(ctx, task, "PANIC", fmt.Sprintf("worker batch panic: %v", r))
+				w.FailHard(ctx, task, fmt.Errorf("worker batch panic: %v", r))
 			}
 		}
 	}()
@@ -37,7 +37,7 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 			err = fmt.Errorf("batch context missing for project=%q agent=%q", tasks[0].ProjectID, tasks[0].AgentID)
 		}
 		for _, task := range tasks {
-			w.failHard(ctx, task, err)
+			w.FailHard(ctx, task, err)
 		}
 		return
 	}
@@ -81,7 +81,7 @@ func (w *Worker) prepareBatchRunnable(
 		task = *running
 		if profile.RequireReview {
 			if done, finErr := w.tryFinalizeApprovedReview(ctx, task); finErr != nil {
-				w.failHard(ctx, task, finErr)
+				w.FailHard(ctx, task, finErr)
 				continue
 			} else if done {
 				continue
@@ -106,7 +106,7 @@ func (w *Worker) processBatchAgentic(
 	resp, err := w.runBatchTextGateway(ctx, tasks, project, profile)
 	if err != nil {
 		for _, task := range tasks {
-			w.handleGatewayError(ctx, task, err)
+			w.HandleGatewayError(ctx, task, err)
 		}
 		return
 	}
@@ -121,7 +121,7 @@ func (w *Worker) processBatchAgentic(
 			continue
 		}
 		p := profile
-		w.commitTextWithProfile(ctx, task, slot.Content, &p)
+		w.CommitTextWithProfile(ctx, task, slot.Content, &p)
 	}
 }
 
@@ -134,7 +134,7 @@ func (w *Worker) processBatchLegacy(
 	resp, err := w.runBatchLegacyGateway(ctx, tasks, project, profile)
 	if err != nil {
 		for _, task := range tasks {
-			w.handleGatewayError(ctx, task, err)
+			w.HandleGatewayError(ctx, task, err)
 		}
 		return
 	}
@@ -169,8 +169,8 @@ func (w *Worker) applyBatchLegacySlot(
 	}
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	w.registerCancel(task.ID, cancel)
-	defer w.deregisterCancel(task.ID)
+	w.RegisterCancel(task.ID, cancel)
+	defer w.DeregisterCancel(task.ID)
 	result, runErr := w.sandbox.Execute(execCtx, w.payload(task, project, slot.Command))
 	if w.isPromptHang(result, runErr) {
 		w.handlePromptRecovery(ctx, task, project, slot.Command, result)

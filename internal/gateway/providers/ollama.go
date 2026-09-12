@@ -5,15 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"agentd/internal/gateway/spec"
 )
 
 // Ollama calls a local Ollama /api/chat endpoint.
 type Ollama struct {
-	cfg    spec.ProviderConfig
-	client *http.Client
+	common
 }
 
 // NewOllama constructs an Ollama backend.
@@ -22,17 +20,12 @@ func NewOllama(cfg spec.ProviderConfig, client *http.Client) *Ollama {
 		client = http.DefaultClient
 	}
 	warnUnknownOptions("ollama", nil, cfg.Options)
-	return &Ollama{cfg: cfg, client: client}
-}
-
-// Name implements Backend.
-func (o *Ollama) Name() spec.Provider {
-	return providerName(o.cfg, spec.ProviderOllama)
-}
-
-// MaxInputChars implements Backend.
-func (o *Ollama) MaxInputChars() int {
-	return o.cfg.MaxInputChars
+	return &Ollama{common: common{
+		name:             providerName(cfg, spec.ProviderOllama),
+		cfg:              cfg,
+		client:           client,
+		chatToolsDefault: false,
+	}}
 }
 
 // Generate implements Backend.
@@ -54,7 +47,7 @@ func (o *Ollama) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	if req.JSONMode {
 		body.Format = "json"
 	}
-	data, _, err := postJSON(ctx, o.client, o.url(), body, "")
+	data, _, err := postJSON(ctx, o.client, o.url("/api/chat"), body, "")
 	if err != nil {
 		return spec.AIResponse{}, err
 	}
@@ -63,15 +56,6 @@ func (o *Ollama) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		return spec.AIResponse{}, fmt.Errorf("decode ollama response: %w", err)
 	}
 	return decoded.toAIResponse(model, string(o.Name())), nil
-}
-
-func (o *Ollama) url() string {
-	return strings.TrimRight(o.cfg.BaseURL, "/") + "/api/chat"
-}
-
-// Capabilities implements Backend.
-func (o *Ollama) Capabilities() Capabilities {
-	return capabilitiesFromConfig(o.cfg, false)
 }
 
 type ollamaRequest struct {

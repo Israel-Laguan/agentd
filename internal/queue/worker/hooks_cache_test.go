@@ -3,6 +3,7 @@ package worker
 import (
 	agenthooks "agentd/internal/agent/hooks"
 	agenttools "agentd/internal/agent/tools"
+	"strings"
 	"testing"
 	"time"
 )
@@ -246,10 +247,10 @@ func TestCacheStoreHook_PrefixesNonSuccessResult(t *testing.T) {
 	if !ok {
 		t.Fatal("expected cached result")
 	}
-	if !agenttools.IsToolErrorPayload(cached) {
+	if !strings.HasPrefix(cached, agenttools.ToolErrorPrefix) {
 		t.Fatalf("cached error should be prefixed, got %q", cached)
 	}
-	if agenttools.StripToolErrorPrefix(cached) != payload {
+	if strings.TrimPrefix(cached, agenttools.ToolErrorPrefix) != payload {
 		t.Fatalf("cached = %q, want prefixed %q", cached, payload)
 	}
 }

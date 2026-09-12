@@ -32,7 +32,7 @@ func (s *Store) BlockTaskWithSubtasks(
 		if err != nil {
 			return result{}, fmt.Errorf("begin block task with subtasks: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		parent, err := selectTaskByID(ctx, tx, taskID)
 		if err != nil {
@@ -84,7 +84,7 @@ func (s *Store) BlockTaskWithSubtasksAndComments(
 		if err != nil {
 			return result{}, fmt.Errorf("begin block task with subtasks and comments: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		parent, err := selectTaskByID(ctx, tx, taskID)
 		if err != nil {

@@ -125,13 +125,16 @@ func TestAgentCreateRejectsUnknownProviderWhenGatewayIsRouter(t *testing.T) {
 
 func TestNewServerUsesHandler(t *testing.T) {
 	store := testutil.NewFakeStore()
-	srv := server.NewServer(server.ServerDeps{
-		Addr:       "127.0.0.1:0",
-		Store:      store,
-		Gateway:    stubGateway{},
-		Bus:        bus.NewInProcess(),
-		Summarizer: frontdesk.NewStatusSummarizer(store),
-	})
+	srv := &http.Server{
+		Addr:    "127.0.0.1:0",
+		Handler: server.NewHandler(server.ServerDeps{
+			Addr:       "127.0.0.1:0",
+			Store:      store,
+			Gateway:    stubGateway{},
+			Bus:        bus.NewInProcess(),
+			Summarizer: frontdesk.NewStatusSummarizer(store),
+		}),
+	}
 	if srv.Handler == nil {
 		t.Fatal("nil handler")
 	}

@@ -9,7 +9,7 @@ import (
 
 func TestClassifyRawResult_SuccessPlainText(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", "hello world", 10)
+	tr := ClassifyRawResult("c1", "hello world", 10)
 	if tr.Status != ToolStatusSuccess {
 		t.Fatalf("Status = %s, want success", tr.Status)
 	}
@@ -20,7 +20,7 @@ func TestClassifyRawResult_SuccessPlainText(t *testing.T) {
 
 func TestClassifyRawResult_JSONError(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", `{"error":"file not found"}`, 10)
+	tr := ClassifyRawResult("c1", `{"error":"file not found"}`, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -34,7 +34,7 @@ func TestClassifyRawResult_JSONError(t *testing.T) {
 
 func TestClassifyRawResult_JSONFatal(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", `{"FatalError":"crash"}`, 10)
+	tr := ClassifyRawResult("c1", `{"FatalError":"crash"}`, 10)
 	if tr.Status != ToolStatusFatal {
 		t.Fatalf("Status = %s, want fatal", tr.Status)
 	}
@@ -42,7 +42,7 @@ func TestClassifyRawResult_JSONFatal(t *testing.T) {
 
 func TestClassifyRawResult_JSONTimeout(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", `{"status":"timeout"}`, 5000)
+	tr := ClassifyRawResult("c1", `{"status":"timeout"}`, 5000)
 	if tr.Status != ToolStatusTimeout {
 		t.Fatalf("Status = %s, want timeout", tr.Status)
 	}
@@ -51,7 +51,7 @@ func TestClassifyRawResult_JSONTimeout(t *testing.T) {
 func TestClassifyRawResult_JSONSuccessFalse(t *testing.T) {
 	t.Parallel()
 	raw := `{"Success":false,"ExitCode":1}`
-	tr := classifyRawResult("c1", raw, 10)
+	tr := ClassifyRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -72,7 +72,7 @@ func TestClassifyRawResult_JSONSuccessFalse(t *testing.T) {
 func TestClassifyRawResult_JSONSuccessFalseNoExitCode(t *testing.T) {
 	t.Parallel()
 	raw := `{"Success":false}`
-	tr := classifyRawResult("c1", raw, 10)
+	tr := ClassifyRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -89,7 +89,7 @@ func TestClassifyRawResult_JSONSuccessFalseNoExitCode(t *testing.T) {
 
 func TestParseToolExitCode_SuccessFalseNoExitCode(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", `{"Success":false}`, 10)
+	tr := ClassifyRawResult("c1", `{"Success":false}`, 10)
 	if tr.ExitCodeSet {
 		t.Fatalf("ExitCodeSet = true, want false")
 	}
@@ -98,7 +98,7 @@ func TestParseToolExitCode_SuccessFalseNoExitCode(t *testing.T) {
 func TestClassifyRawResult_JSONSuccessFalsePreservesStdoutStderr(t *testing.T) {
 	t.Parallel()
 	raw := `{"Success":false,"ExitCode":1,"Stdout":"partial output","Stderr":"boom"}`
-	tr := classifyRawResult("c1", raw, 10)
+	tr := ClassifyRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -116,7 +116,7 @@ func TestClassifyRawResult_JSONSuccessFalsePreservesStdoutStderr(t *testing.T) {
 
 func TestClassifyRawResult_JSONSuccessTrue(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", `{"Success":true,"ExitCode":0}`, 10)
+	tr := ClassifyRawResult("c1", `{"Success":true,"ExitCode":0}`, 10)
 	if tr.Status != ToolStatusSuccess {
 		t.Fatalf("Status = %s, want success", tr.Status)
 	}
@@ -124,7 +124,7 @@ func TestClassifyRawResult_JSONSuccessTrue(t *testing.T) {
 
 func TestClassifyRawResult_MalformedJSONWithErrorPrefix(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", `{"error":broken`, 10)
+	tr := ClassifyRawResult("c1", `{"error":broken`, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -132,7 +132,7 @@ func TestClassifyRawResult_MalformedJSONWithErrorPrefix(t *testing.T) {
 
 func TestClassifyRawResult_MalformedJSONWithFatalPrefix(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", `{"FatalError":broken`, 10)
+	tr := ClassifyRawResult("c1", `{"FatalError":broken`, 10)
 	if tr.Status != ToolStatusFatal {
 		t.Fatalf("Status = %s, want fatal", tr.Status)
 	}
@@ -140,7 +140,7 @@ func TestClassifyRawResult_MalformedJSONWithFatalPrefix(t *testing.T) {
 
 func TestClassifyRawResult_MalformedJSONWithLeadingWhitespace(t *testing.T) {
 	t.Parallel()
-	tr := classifyRawResult("c1", "\n {\"error\":broken", 10)
+	tr := ClassifyRawResult("c1", "\n {\"error\":broken", 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -148,7 +148,7 @@ func TestClassifyRawResult_MalformedJSONWithLeadingWhitespace(t *testing.T) {
 
 func TestClassifyDelegateRawResult_JSONErrorEnvelope(t *testing.T) {
 	t.Parallel()
-	tr := classifyDelegateRawResult("c1", `{"error":"delegation failed: boom"}`, 10)
+	tr := ClassifyDelegateRawResult("c1", `{"error":"delegation failed: boom"}`, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -160,7 +160,7 @@ func TestClassifyDelegateRawResult_JSONErrorEnvelope(t *testing.T) {
 func TestClassifyDelegateRawResult_SubagentSuccess(t *testing.T) {
 	t.Parallel()
 	raw := `{"status":"success","output":"done","iterations":2}`
-	tr := classifyDelegateRawResult("c1", raw, 10)
+	tr := ClassifyDelegateRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusSuccess {
 		t.Fatalf("Status = %s, want success", tr.Status)
 	}
@@ -172,7 +172,7 @@ func TestClassifyDelegateRawResult_SubagentSuccess(t *testing.T) {
 func TestClassifyDelegateRawResult_SubagentFailure(t *testing.T) {
 	t.Parallel()
 	raw := `{"status":"failure","error":"task failed","iterations":1}`
-	tr := classifyDelegateRawResult("c1", raw, 10)
+	tr := ClassifyDelegateRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -187,7 +187,7 @@ func TestClassifyDelegateRawResult_SubagentFailure(t *testing.T) {
 func TestClassifyDelegateRawResult_SubagentTimeout(t *testing.T) {
 	t.Parallel()
 	raw := `{"status":"timeout","error":"max iterations reached","iterations":20}`
-	tr := classifyDelegateRawResult("c1", raw, 10)
+	tr := ClassifyDelegateRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusTimeout {
 		t.Fatalf("Status = %s, want timeout", tr.Status)
 	}
@@ -206,7 +206,7 @@ func TestClassifyDelegateRawResult_SubagentTimeout(t *testing.T) {
 func TestClassifyDelegateRawResult_ParallelWithFailure(t *testing.T) {
 	t.Parallel()
 	raw := `[{"status":"success","output":"ok","iterations":1},{"status":"failure","error":"parallel fail","iterations":1}]`
-	tr := classifyDelegateRawResult("c1", raw, 10)
+	tr := ClassifyDelegateRawResult("c1", raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -220,7 +220,7 @@ func TestClassifyDelegateRawResult_ParallelWithFailure(t *testing.T) {
 
 func TestClassifyCapabilityRawResult_JSONErrorEnvelope(t *testing.T) {
 	t.Parallel()
-	tr := classifyCapabilityRawResult("c1", `{"error":"unknown tool: x"}`, 10)
+	tr := ClassifyCapabilityRawResult("c1", `{"error":"unknown tool: x"}`, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -240,7 +240,7 @@ func TestClassifyBuiltinToolResult_ReadArbitraryJSON(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			tr := classifyBuiltinToolResult("c1", toolNameRead, tc.raw, 10)
+			tr := ClassifyBuiltinToolResult("c1", toolNameRead, tc.raw, 10)
 			if tr.Status != ToolStatusSuccess {
 				t.Fatalf("Status = %s, want success", tr.Status)
 			}
@@ -257,7 +257,7 @@ func TestClassifyBuiltinToolResult_ReadArbitraryJSON(t *testing.T) {
 func TestClassifyBuiltinToolResult_ReadJSONErrorEnvelopeIsSuccess(t *testing.T) {
 	t.Parallel()
 	raw := `{"error":"file not found"}`
-	tr := classifyBuiltinToolResult("c1", toolNameRead, raw, 10)
+	tr := ClassifyBuiltinToolResult("c1", toolNameRead, raw, 10)
 	if tr.Status != ToolStatusSuccess {
 		t.Fatalf("Status = %s, want success (file content, not tool error)", tr.Status)
 	}
@@ -271,8 +271,8 @@ func TestClassifyBuiltinToolResult_ReadJSONErrorEnvelopeIsSuccess(t *testing.T) 
 
 func TestClassifyBuiltinToolResult_ReadPrefixedToolError(t *testing.T) {
 	t.Parallel()
-	raw := jsonErrorf("file not found")
-	tr := classifyBuiltinToolResult("c1", toolNameRead, raw, 10)
+	raw := JSONErrorf("file not found")
+	tr := ClassifyBuiltinToolResult("c1", toolNameRead, raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -284,7 +284,7 @@ func TestClassifyBuiltinToolResult_ReadPrefixedToolError(t *testing.T) {
 func TestClassifyBuiltinToolResult_BashStdoutJSONErrorEnvelope(t *testing.T) {
 	t.Parallel()
 	raw := `{"error":"some text"}`
-	tr := classifyBuiltinToolResult("c1", toolNameBash, raw, 10)
+	tr := ClassifyBuiltinToolResult("c1", toolNameBash, raw, 10)
 	if tr.Status != ToolStatusSuccess {
 		t.Fatalf("Status = %s, want success (stdout, not tool error)", tr.Status)
 	}
@@ -295,7 +295,7 @@ func TestClassifyBuiltinToolResult_BashStdoutJSONErrorEnvelope(t *testing.T) {
 
 func TestClassifyBuiltinToolResult_BashPrefixedToolError(t *testing.T) {
 	t.Parallel()
-	tr := classifyBuiltinToolResult("c1", toolNameBash, jsonErrorf("execution failed: boom"), 10)
+	tr := ClassifyBuiltinToolResult("c1", toolNameBash, JSONErrorf("execution failed: boom"), 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -314,7 +314,7 @@ func TestClassifyBuiltinToolResult_BashStdoutArbitraryJSON(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			tr := classifyBuiltinToolResult("c1", toolNameBash, tc.raw, 10)
+			tr := ClassifyBuiltinToolResult("c1", toolNameBash, tc.raw, 10)
 			if tr.Status != ToolStatusSuccess {
 				t.Fatalf("Status = %s, want success", tr.Status)
 			}
@@ -327,11 +327,11 @@ func TestClassifyBuiltinToolResult_BashStdoutArbitraryJSON(t *testing.T) {
 
 func TestClassifyBuiltinToolResult_BashSandboxFailure(t *testing.T) {
 	t.Parallel()
-	raw := sandboxFailureJSON(sandbox.Result{
+	raw := SandboxFailureJSON(sandbox.Result{
 		ExitCode: 127,
 		Stderr:   "not found",
 	})
-	tr := classifyBuiltinToolResult("c1", toolNameBash, raw, 10)
+	tr := ClassifyBuiltinToolResult("c1", toolNameBash, raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -343,7 +343,7 @@ func TestClassifyBuiltinToolResult_BashSandboxFailure(t *testing.T) {
 func TestClassifyPrecomputedReadResult_ErrorShapedFileContent(t *testing.T) {
 	t.Parallel()
 	raw := `{"error":"cached api failure"}`
-	tr := classifyPrecomputedReadResult("c1", raw, 10)
+	tr := ClassifyPrecomputedReadResult("c1", raw, 10)
 	if tr.Status != ToolStatusSuccess {
 		t.Fatalf("Status = %s, want success for error-shaped file content", tr.Status)
 	}
@@ -358,7 +358,7 @@ func TestClassifyPrecomputedReadResult_ErrorShapedFileContent(t *testing.T) {
 func TestClassifyPrecomputedReadResult_PrefixedToolError(t *testing.T) {
 	t.Parallel()
 	raw := toolErrorPrefix + `{"error":"stat failed: no such file"}`
-	tr := classifyPrecomputedReadResult("c1", raw, 10)
+	tr := ClassifyPrecomputedReadResult("c1", raw, 10)
 	if tr.Status != ToolStatusError {
 		t.Fatalf("Status = %s, want error", tr.Status)
 	}
@@ -369,7 +369,7 @@ func TestClassifyPrecomputedReadResult_PrefixedToolError(t *testing.T) {
 
 func TestClassifyPrecomputedToolResult_BashFatalEnvelope(t *testing.T) {
 	t.Parallel()
-	tr := classifyPrecomputedToolResult("c1", toolNameBash, `{"FatalError":"sandbox crash"}`, 10)
+	tr := ClassifyPrecomputedToolResult("c1", toolNameBash, `{"FatalError":"sandbox crash"}`, 10)
 	if tr.Status != ToolStatusFatal {
 		t.Fatalf("Status = %s, want fatal", tr.Status)
 	}
@@ -388,7 +388,7 @@ func TestClassifyCapabilityRawResult_ArbitraryJSON(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			tr := classifyCapabilityRawResult("c1", tc.raw, 10)
+			tr := ClassifyCapabilityRawResult("c1", tc.raw, 10)
 			if tr.Status != ToolStatusSuccess {
 				t.Fatalf("Status = %s, want success", tr.Status)
 			}

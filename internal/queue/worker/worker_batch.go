@@ -62,7 +62,7 @@ func (w *Worker) buildBatchRequest(
 	var system string
 	if agenticText {
 		system = w.buildSystemPromptContent(tasks[0], project, profile) + "\n\n" + batchTextSystemSuffix
-		profile = w.applyModelRouting(tasks[0], profile, nil, nil)
+		profile = w.ApplyModelRouting(tasks[0], profile, nil, nil)
 	} else {
 		system = legacyJSONCommandSystemContent(profile) + "\n\n" + batchLegacySystemSuffix
 	}
@@ -81,7 +81,7 @@ func (w *Worker) buildBatchRequest(
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,
 	}
-	req = w.applyTuning(req, tasks[0], profile, 0)
+	req = w.ApplyTuning(req, tasks[0], profile, 0)
 	return req
 }
 
@@ -121,7 +121,7 @@ func (w *Worker) processRunningTask(
 	}
 	if profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
-			w.failHard(ctx, task, err)
+			w.FailHard(ctx, task, err)
 			return
 		} else if done {
 			return
@@ -137,7 +137,7 @@ func (w *Worker) processRunningTask(
 		}
 		return
 	}
-	w.runLegacyTask(ctx, task, project, profile, false)
+	w.RunLegacyTask(ctx, task, project, profile, false)
 }
 
 type batchTextSlot struct {

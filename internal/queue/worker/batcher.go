@@ -175,7 +175,7 @@ func (w *Worker) requiresAgenticTools(
 ) bool {
 	toolExec := w.newAgenticTaskToolExecutor(project, task)
 	tools, index := w.agenticTools(ctx, toolExec)
-	tools, _ = w.filterAgenticTools(tools, index, task, profile)
+	tools, _ = w.FilterAgenticTools(tools, index, task, profile)
 	return len(tools) > 0
 }
 

@@ -31,7 +31,7 @@ func (s *Store) ListProjectsPage(ctx context.Context, params models.PaginationPa
 	if err != nil {
 		return models.PaginatedResult[models.Project]{}, fmt.Errorf("list projects page: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	projects, err := scanProjects(rows)
 	if err != nil {
 		return models.PaginatedResult[models.Project]{}, err
@@ -86,7 +86,7 @@ func (s *Store) ListTasks(ctx context.Context, filter models.TaskFilter) (models
 	if err != nil {
 		return models.PaginatedResult[models.Task]{}, fmt.Errorf("list tasks page: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	tasks, err := scanTasks(rows)
 	if err != nil {
 		return models.PaginatedResult[models.Task]{}, err

@@ -12,7 +12,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -o /agentd ./cmd/agentd
 
-FROM alpine:latest
+FROM alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
 RUN apk add --no-cache sqlite-libs bash
 COPY --from=builder /agentd /usr/local/bin/agentd
 RUN adduser -D -s /bin/bash agentd

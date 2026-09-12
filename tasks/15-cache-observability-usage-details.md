@@ -10,14 +10,13 @@ Surface prompt-cache hit rates so operators can verify the M14 wins and monitor 
 Today `AIResponse` carries only a single `TokenUsage int`, and the openai adapter parses only
 `usage.total_tokens` — every provider cache-token field is dropped on the floor.
 
-## Background / current state (verified)
+## Background / current state (historical, post M15)
 
-- `spec.AIResponse` (`internal/gateway/spec/spec.go:110-116`) has only:
-  `Content, TokenUsage int, ProviderUsed, ModelUsed, ToolCalls`.
-- openai adapter (`internal/gateway/providers/openai.go:204-254`): `Usage struct { TotalTokens,
-  PromptTokens, CompletionTokens }`; only `TotalTokens` is copied into `TokenUsage`.
-- Worker `TOKEN_USAGE` event path: `TokenUsageStore.AddTokenUsage(taskID, tokens int)`
-  (see `worker_token_usage_test.go` for wiring). Cache fields would need to ride along.
+M15 added UsageDetails for cache observability:
+
+- `UsageDetails` (CachedTokens, CacheWriteTokens) added to `internal/gateway/spec/spec.go` and `AIResponse`.
+- OpenAI provider parses `prompt_tokens_details.cached_tokens`, DeepSeek `prompt_cache_*_tokens` etc. (see `internal/gateway/providers/openai.go:144` and tests in `openai_test.go:104` (TestOpenAIUsage_ParsesPromptCacheReads, TestOpenAIUsage_ParsesDeepSeekCacheFields, ...)).
+- Propagation: `AddUsageDetails` on token store + worker tests in `internal/queue/worker/worker_token_usage_test.go`.
 
 ## Scope (in)
 

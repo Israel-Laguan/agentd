@@ -30,7 +30,7 @@ func (s *Store) MaterializePlan(ctx context.Context, plan models.DraftPlan) (*mo
 		if err != nil {
 			return result{}, fmt.Errorf("begin materialize plan: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		now := utcNow()
 		project := newProject(normalized, now)
@@ -70,7 +70,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]models.Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	return scanProjects(rows)
 }
 

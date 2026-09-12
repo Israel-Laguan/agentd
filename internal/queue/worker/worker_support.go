@@ -73,8 +73,8 @@ func (w *Worker) payload(task models.Task, project models.Project, command strin
 
 func (w *Worker) recoverPanic(ctx context.Context, task models.Task) {
 	if recovered := recover(); recovered != nil {
-		w.emit(ctx, task, "PANIC", fmt.Sprintf("worker panic: %v", recovered))
-		w.failHard(ctx, task, fmt.Errorf("worker panic: %v", recovered))
+		w.Emit(ctx, task, "PANIC", fmt.Sprintf("worker panic: %v", recovered))
+		w.FailHard(ctx, task, fmt.Errorf("worker panic: %v", recovered))
 	}
 }
 
@@ -92,7 +92,7 @@ func (w *Worker) startHeartbeat(ctx context.Context, taskID string) func() {
 	}
 }
 
-func (w *Worker) emit(ctx context.Context, task models.Task, kind, payload string) {
+func (w *Worker) Emit(ctx context.Context, task models.Task, kind, payload string) {
 	if w.sink == nil {
 		return
 	}
@@ -169,13 +169,13 @@ func (w *Worker) heartbeatLoop(ctx context.Context, taskID string) {
 	}
 }
 
-func (w *Worker) registerCancel(taskID string, cancel context.CancelFunc) {
+func (w *Worker) RegisterCancel(taskID string, cancel context.CancelFunc) {
 	if w.canceller != nil {
 		w.canceller.Register(taskID, cancel)
 	}
 }
 
-func (w *Worker) deregisterCancel(taskID string) {
+func (w *Worker) DeregisterCancel(taskID string) {
 	if w.canceller != nil {
 		w.canceller.Deregister(taskID)
 	}
@@ -203,7 +203,7 @@ func (w *Worker) isPermissionFailure(result sandbox.Result, err error) bool {
 }
 
 func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {
-	w.commitTextWithProfile(ctx, task, content, nil)
+	w.CommitTextWithProfile(ctx, task, content, nil)
 }
 
 func (w *Worker) handleIterationExceeded(ctx context.Context, task models.Task) {

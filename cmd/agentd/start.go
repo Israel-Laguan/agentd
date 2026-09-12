@@ -266,14 +266,17 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 	if err != nil {
 		return nil, fmt.Errorf("gateway provider configs: %w", err)
 	}
-	return api.NewServer(api.ServerDeps{
-		Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus,
-		Project: deps.project, Tasks: taskService, System: systemService,
-		Summarizer: summarizer, FileStash: fileStash,
-		Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars,
-		Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken,
-		ProviderConfigs: providerCfgs,
-	}), nil
+	return &http.Server{
+		Addr:    cfg.API.Address,
+		Handler: api.NewHandler(api.ServerDeps{
+			Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus,
+			Project: deps.project, Tasks: taskService, System: systemService,
+			Summarizer: summarizer, FileStash: fileStash,
+			Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars,
+			Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken,
+			ProviderConfigs: providerCfgs,
+		}),
+	}, nil
 }
 
 type startOptions struct {

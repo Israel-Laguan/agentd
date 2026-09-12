@@ -31,7 +31,7 @@ func TestDispatchToolWithHooks_WritesStructuredAudit(t *testing.T) {
 			Arguments: `{"command":"echo audit"}`,
 		},
 	}
-	_, _ = w.dispatchToolWithHooks(
+	_, _ = w.DispatchToolWithHooks(
 		context.Background(), "sess-d", "proj-d", "sess-d:0", time.Now(),
 		call, nil, w.toolExecutor, nil, nil, "openai",
 	)

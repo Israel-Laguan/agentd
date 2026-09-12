@@ -23,7 +23,7 @@ func (s *Store) ListScheduledTasks(ctx context.Context) ([]models.ScheduledTask,
 	if err != nil {
 		return nil, fmt.Errorf("list scheduled tasks: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 	var out []models.ScheduledTask
 	for rows.Next() {
 		t, err := scanScheduledTask(rows)
@@ -143,7 +143,7 @@ func (s *Store) insertReadyTaskInTx(
 		if err != nil {
 			return nil, fmt.Errorf("begin insert ready task: %w", err)
 		}
-		defer rollbackUnlessCommitted(tx)
+		defer func() { _ = tx.Rollback() }()
 
 		if _, err := selectProjectByID(ctx, tx, projectID); err != nil {
 			return nil, err

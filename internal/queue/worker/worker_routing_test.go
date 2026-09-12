@@ -285,7 +285,7 @@ func TestAgenticFallbackPreservesRoutedProvider(t *testing.T) {
 		{Role: "user", Content: task.Description},
 	}
 	tools := []gateway.ToolDefinition{{Name: "bash", Description: "run shell commands"}}
-	routed := w.applyModelRouting(task, profile, agenticMessages, tools)
+	routed := w.ApplyModelRouting(task, profile, agenticMessages, tools)
 	if routed.Provider != "ollama" || routed.Model != "llama3" {
 		t.Fatalf("agentic route = %s/%s, want ollama/llama3", routed.Provider, routed.Model)
 	}

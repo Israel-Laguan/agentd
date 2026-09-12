@@ -48,7 +48,7 @@ func buildWorkerHooks(
 // augment the worker-level globals. Mount only registers hooks and
 // capabilities into the provided chain/registry; it does not mutate
 // worker-global state.
-func (w *Worker) mountScopedPlugins(
+func (w *Worker) MountAgenticHooks(
 	project models.Project, profile models.AgentProfile,
 ) (*agenthooks.HookChain, *capabilities.Registry) {
 	if w.pluginMounter == nil {
@@ -73,12 +73,43 @@ func (w *Worker) mountScopedPlugins(
 			)
 		}
 	}
+	if len(profile.GatedTools) > 0 {
+		if taskHooks == nil {
+			taskHooks = agenthooks.NewHookChain()
+		}
+		handler := NewBlockingApprovalHandler(w.store)
+		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
+	}
 	return taskHooks, taskCaps
+}
+
+func (w *Worker) RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error {
+	// Run worker-level hooks first.
+	if w.hooks != nil {
+		if err := w.hooks.RunSessionStart(agenthooks.HookContext{
+			SessionID: task.ID,
+			ProjectID: project.ID,
+			Timestamp: time.Now(),
+			ExecCtx:   ctx,
+		}); err != nil {
+			return err
+		}
+	}
+	// Then run task-scoped hooks from scoped plugins.
+	if taskHooks != nil {
+		return taskHooks.RunSessionStart(agenthooks.HookContext{
+			SessionID: task.ID,
+			ProjectID: project.ID,
+			Timestamp: time.Now(),
+			ExecCtx:   ctx,
+		})
+	}
+	return nil
 }
 
 // agenticToolsWithExtras builds the tool definitions and adapter index,
 // merging any extra capabilities from scoped plugins.
-func (w *Worker) agenticToolsWithExtras(
+func (w *Worker) AgenticToolsWithExtras(
 	ctx context.Context, toolExecutor *agenttools.ToolExecutor, extra *capabilities.Registry,
 ) ([]gateway.ToolDefinition, map[string]string) {
 	tools, adapterIndex := w.agenticTools(ctx, toolExecutor)
@@ -103,7 +134,7 @@ func (w *Worker) agenticToolsWithExtras(
 
 // dispatchToolWithHooks wraps dispatchToolWithProject and additionally
 // runs task-scoped plugin hooks (pre and post) around the call.
-func (w *Worker) dispatchToolWithHooks(
+func (w *Worker) DispatchToolWithHooks(
 	ctx context.Context,
 	sessionID, projectID, turnID string,
 	taskUpdatedAt time.Time,
@@ -112,12 +143,9 @@ func (w *Worker) dispatchToolWithHooks(
 	toolExecutor *agenttools.ToolExecutor,
 	taskHooks *agenthooks.HookChain,
 	scopedCapabilities *capabilities.Registry,
-	provider ...string,
+	providerName string,
 ) (agenttools.ToolResult, bool) {
-	providerName := ""
-	if len(provider) > 0 {
-		providerName = provider[0]
-	}
+
 	var verdicts []string
 	hookCtx := agenthooks.HookContext{
 		ToolName:      call.Function.Name,

@@ -22,7 +22,7 @@ func (s *Store) ListTokenUsageEventsSince(ctx context.Context, since time.Time) 
 	if err != nil {
 		return nil, fmt.Errorf("list token usage events since: %w", err)
 	}
-	defer closeRows(rows)
+	defer func() { _ = rows.Close() }()
 
 	var out []models.TokenUsageEvent
 	for rows.Next() {

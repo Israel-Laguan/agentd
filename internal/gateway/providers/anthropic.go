@@ -15,8 +15,7 @@ const anthropicAPIVersion = "2023-06-01"
 
 // Anthropic calls the Anthropic Messages API.
 type Anthropic struct {
-	cfg    spec.ProviderConfig
-	client *http.Client
+	common
 }
 
 // NewAnthropic constructs an Anthropic backend.
@@ -25,17 +24,12 @@ func NewAnthropic(cfg spec.ProviderConfig, client *http.Client) *Anthropic {
 		client = http.DefaultClient
 	}
 	warnUnknownOptions("anthropic", nil, cfg.Options)
-	return &Anthropic{cfg: cfg, client: client}
-}
-
-// Name implements Backend.
-func (a *Anthropic) Name() spec.Provider {
-	return providerName(a.cfg, spec.ProviderAnthropic)
-}
-
-// MaxInputChars implements Backend.
-func (a *Anthropic) MaxInputChars() int {
-	return a.cfg.MaxInputChars
+	return &Anthropic{common: common{
+		name:             providerName(cfg, spec.ProviderAnthropic),
+		cfg:              cfg,
+		client:           client,
+		chatToolsDefault: true,
+	}}
 }
 
 // Generate implements Backend.
@@ -88,11 +82,6 @@ func (a *Anthropic) post(ctx context.Context, body anthropicRequest) ([]byte, er
 		"anthropic-version": anthropicAPIVersion,
 	})
 	return data, err
-}
-
-// Capabilities implements Backend.
-func (a *Anthropic) Capabilities() Capabilities {
-	return capabilitiesFromConfig(a.cfg, true)
 }
 
 func splitSystemMessages(messages []spec.PromptMessage) (string, []anthropicMessage) {

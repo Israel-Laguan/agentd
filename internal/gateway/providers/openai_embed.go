@@ -4,14 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"agentd/internal/gateway/spec"
 )
 
-func (o *OpenAI) embeddingsURL() string {
-	return strings.TrimRight(o.cfg.BaseURL, "/") + "/embeddings"
-}
+
 
 var _ EmbedBackend = (*OpenAI)(nil)
 
@@ -29,7 +26,7 @@ func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedRe
 	if model == "" {
 		model = "text-embedding-3-small"
 	}
-	data, _, err := postJSON(ctx, o.client, o.embeddingsURL(), openAIEmbedRequest{Model: model, Input: req.Input}, o.cfg.APIKey)
+	data, _, err := postJSON(ctx, o.client, o.url("/embeddings"), openAIEmbedRequest{Model: model, Input: req.Input}, o.cfg.APIKey)
 	if err != nil {
 		return spec.EmbedResponse{}, err
 	}
