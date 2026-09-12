@@ -52,13 +52,13 @@ All compile/lint/test targets use `GOCACHE=$(pwd)/.gocache` and `GOMODCACHE` fro
 ### Provider intake — no new native adapters
 
 **No new native provider adapters.** New providers are added as LiteLLM model
-aliases or openai-compatible `gateway.providers` entries (see
-[`docs/llm-connector-strategy.md`](docs/llm-connector-strategy.md)). The native
+aliases or openai-compatible `gateway.providers` entries. The native
 provider adapters (`anthropic`, `ollama`, `horde`) are in **maintenance mode**
 (bug-fix only) and must not gain new features. The `adapter: openai` wire format
 is the single hardened path and underpins the two-topology connector model: a
 **direct path** for a single endpoint, and a **managed proxy path** (LiteLLM /
-Portkey / OpenRouter) for provider diversity.
+Portkey / OpenRouter) for provider diversity. See
+[`docs/llm-connector-strategy.md`](docs/llm-connector-strategy.md).
 
 ## Testing
 
