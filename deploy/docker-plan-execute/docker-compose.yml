@@ -31,7 +31,7 @@ services:
       retries: 20
 
   litellm:
-    image: litellm/litellm:main
+    image: litellm/litellm:1.100.0@sha256:d524416722079cef3cba09d498daae97b79068d759fb13f560c31eccf3e545e9
     command: ["--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
@@ -65,10 +65,8 @@ services:
       # Shared so the tester can read execution evidence written by the sandbox.
       - agentd-projects:/home/agentd/projects
     command: >
-      sh -c "agentd --config /etc/agentd/config.yaml init &&
-             exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"
-    ports:
-      - "8765:8765"
+      agentd --config /etc/agentd/config.yaml init &&
+             exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v
     depends_on:
       litellm:
         condition: service_healthy

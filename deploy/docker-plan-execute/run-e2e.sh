@@ -54,7 +54,7 @@ cat > "$BODY_FILE" <<JSON
 }
 JSON
 
-RESP=$(curl -sS -X POST "${BASE}/api/v1/projects/materialize" \
+RESP=$(curl -sS --connect-timeout 3 --max-time 30 -X POST "${BASE}/api/v1/projects/materialize" \
   -H "Content-Type: application/json" --data "@${BODY_FILE}")
 PID=$(printf '%s' "$RESP" | jq -r '.data.project.id // empty' 2>/dev/null || echo '')
 if [ -z "$PID" ]; then
@@ -82,18 +82,24 @@ TOTAL=$(printf '%s' "$TASKS" | jq 'length' || echo 0)
 COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="COMPLETED")] | length' || echo 0)
 BLOCKED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="BLOCKED")] | length' || echo 0)
 PLAN_CONTAINER=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test("AGENT_PLAN"))] | length' || echo 0)
+GEN_SUBTASKS=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test(":: Step"))] | length' || echo 0)
+GEN_COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select( (.title | test(":: Step")) and .state=="COMPLETED" )] | length' || echo 0)
+GEN_BLOCKED=$(printf '%s' "$TASKS" | jq '[.[] | select( (.title | test(":: Step")) and .state=="BLOCKED" )] | length' || echo 0)
+DIRECT_COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test("Generate a greeting script") and .state=="COMPLETED")] | length' || echo 0)
+BLOCKED_IS_PLAN=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="BLOCKED" and (.title | test("AGENT_PLAN")))] | length' || echo 0)
+EXPECTED_COMPLETED=$((TOTAL - 1))
 
 if [ "$settled" -ne 1 ]; then
   fail "kanban did not settle; active tasks remain"
 else
-  pass "kanban settled (${TOTAL} tasks, ${COMPLETED} completed, ${BLOCKED} blocked)"
+  pass "kanban settled (${TOTAL} tasks, ${COMPLETED} completed, ${BLOCKED} blocked; only AGENT_PLAN parent blocked)"
 fi
 
 # --- assertions --------------------------------------------------------------
-if [ "${TOTAL}" -ge 3 ]; then
-  pass "agent created a plan (${TOTAL} tasks > 2 seeded: decomposition happened)"
+if [ "${GEN_SUBTASKS}" -eq 2 ]; then
+  pass "generated plan subtasks present (${GEN_SUBTASKS})"
 else
-  fail "no plan decomposition observed (only ${TOTAL} tasks)"
+  fail "expected exactly 2 generated plan subtasks, got ${GEN_SUBTASKS}"
 fi
 
 if [ "${PLAN_CONTAINER}" -ge 1 ]; then
@@ -102,10 +108,29 @@ else
   fail "AGENT_PLAN task missing"
 fi
 
-if [ "${COMPLETED}" -ge 1 ]; then
-  pass "${COMPLETED} task(s) completed"
+if [ "${BLOCKED}" -eq 1 ] && [ "${BLOCKED_IS_PLAN}" -eq 1 ]; then
+  pass "exactly one BLOCKED task and it contains AGENT_PLAN (the only allowed blocked)"
 else
-  fail "no tasks completed"
+  fail "expected exactly 1 BLOCKED which is the AGENT_PLAN parent (got ${BLOCKED} blocked, ${BLOCKED_IS_PLAN} plan-blocked)"
+fi
+
+if [ "${GEN_COMPLETED}" -eq "${GEN_SUBTASKS}" ]; then
+  pass "all ${GEN_COMPLETED} generated plan subtask(s) completed (GEN_COMPLETED == GEN_SUBTASKS)"
+else
+  fail "GEN_COMPLETED (${GEN_COMPLETED}) != GEN_SUBTASKS (${GEN_SUBTASKS}); not all generated subtasks completed"
+fi
+
+if [ "${DIRECT_COMPLETED}" -eq 1 ]; then
+  pass "original direct greeting task is COMPLETED"
+else
+  fail "original direct greeting task not completed"
+fi
+
+# strict: only the plan parent is BLOCKED; everything else must be COMPLETED
+if [ "${COMPLETED}" -eq "${EXPECTED_COMPLETED}" ] && [ "${BLOCKED}" -eq 1 ]; then
+  pass "strict: only the one plan parent is BLOCKED, all other tasks COMPLETED"
+else
+  fail "strict failure: expected ${TOTAL} tasks with ${EXPECTED_COMPLETED} COMPLETED and 1 BLOCKED, got ${COMPLETED} COMPLETED + ${BLOCKED} BLOCKED"
 fi
 
 # --- verify execution evidence written by the sandbox through litellm -------
@@ -113,11 +138,11 @@ log "reading execution evidence: ${EVIDENCE}"
 if [ ! -f "$EVIDENCE" ]; then
   fail "PLAN_RESULTS.log was not written (tasks did not actually execute)"
 else
-  lines=$(grep -c -F "executed via litellm proxy" "$EVIDENCE" 2>/dev/null || echo 0)
-  if [ "${lines:-0}" -ge 1 ]; then
-    pass "execution evidence present (${lines} command(s) ran via litellm)"
+  step_evidence=$(grep -c -E "AGENT_PLAN.*:: Step|:: Step.*executed via litellm" "$EVIDENCE" 2>/dev/null || echo 0)
+  if [ "${step_evidence:-0}" -ge 1 ]; then
+    pass "execution evidence present for generated subtask(s) (${step_evidence})"
   else
-    fail "PLAN_RESULTS.log exists but contains no litellm execution lines"
+    fail "PLAN_RESULTS.log exists but no execution evidence for generated plan subtasks (direct greeting cannot satisfy)"
   fi
   log "----- PLAN_RESULTS.log -----"
   sed 's/^/    /' "$EVIDENCE" 2>/dev/null || true

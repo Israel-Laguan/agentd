@@ -1,3 +1,1 @@
-This workspace is seeded into the agentd project so materialized tasks start
-READY. The mock LLM writes its execution evidence to PLAN_RESULTS.log inside
-this directory at runtime.
+This directory is used as source_path to seed the materialized project workspace. Execution evidence (PLAN_RESULTS.log) is written by sandboxed commands into the project workspace (not back into the read-only seed).

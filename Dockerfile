@@ -16,6 +16,7 @@ FROM alpine:latest
 RUN apk add --no-cache sqlite-libs bash
 COPY --from=builder /agentd /usr/local/bin/agentd
 RUN adduser -D -s /bin/bash agentd
+RUN mkdir -p /home/agentd/projects /home/agentd/uploads /home/agentd/archives && chown -R agentd:agentd /home/agentd
 USER agentd
 WORKDIR /home/agentd
 ENTRYPOINT ["agentd"]
