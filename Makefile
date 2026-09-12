@@ -55,6 +55,11 @@ loc:
 minfunc:
 	$(GO) run ./scripts/checkminfunc --min-lines 3
 
+# Accept current set of short functions into the baseline (use when a short
+# function is intentional, e.g. interface method or trivial helper).
+minfunc-accept:
+	$(GO) run ./scripts/checkminfunc --min-lines 3 --update-baseline
+
 folder-audit:
 	$(GO) run ./scripts/folder_audit --out /tmp/folder-size-audit.md
 
