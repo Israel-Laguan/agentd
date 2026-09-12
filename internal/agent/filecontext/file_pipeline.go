@@ -49,7 +49,7 @@ func NewFilePipeline(cfg FilePipelineConfig) *FilePipeline {
 	}
 	pinned := make(map[string]struct{}, len(cfg.Pinned))
 	for _, p := range cfg.Pinned {
-		pinned[normalizePathKey(p)] = struct{}{}
+		pinned[filepath.ToSlash(filepath.Clean(p))] = struct{}{}
 	}
 	return &FilePipeline{
 		workspace: cfg.Workspace,
@@ -108,7 +108,8 @@ func (p *FilePipeline) Process(ctx context.Context, relPaths []string) (string, 
 }
 
 func (p *FilePipeline) ingest(ctx context.Context, relPath, resolvedPath string, raw []byte, info os.FileInfo, embed bool) (*CachedDoc, error) {
-	hash := contentHash(raw)
+	sum := sha256.Sum256(raw)
+	hash := hex.EncodeToString(sum[:])
 	size := info.Size()
 	mtime := info.ModTime().Unix()
 
@@ -208,11 +209,6 @@ func formatDocsForInjection(docs []*CachedDoc) string {
 	return b.String()
 }
 
-func contentHash(raw []byte) string {
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:])
-}
-
 func estimateTokenCount(text string) int {
 	n := len(text) / 4
 	if n < 1 {
@@ -254,11 +250,6 @@ func ParsePinnedPaths(taskQuery string) []string {
 		}
 	}
 	return result
-}
-
-// ResolveWorkspaceFile is kept for backwards compatibility with tests.
-func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
-	return paths.ResolveWorkspaceFile(workspacePath, rel)
 }
 
 func (p *FilePipeline) getWorkspaceRoot() (string, error) {

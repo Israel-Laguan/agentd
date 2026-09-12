@@ -82,7 +82,7 @@ func (s *FileSelector) scoreDocs(docs []*CachedDoc, queryVec []float32, docVecs 
 			score = cosineSimilarityFloat32(queryVec, docVecs[i])
 		}
 		if pinned != nil {
-			if _, ok := pinned[normalizePathKey(d.Path)]; ok {
+			if _, ok := pinned[filepath.ToSlash(filepath.Clean(d.Path))]; ok {
 				score = 2.0
 			}
 		}
@@ -105,7 +105,7 @@ func (s *FileSelector) topScored(scored []scoredDoc, pinned map[string]struct{})
 		if pinned == nil {
 			continue
 		}
-		key := normalizePathKey(item.doc.Path)
+		key := filepath.ToSlash(filepath.Clean(item.doc.Path))
 		if _, ok := pinned[key]; !ok {
 			continue
 		}
@@ -120,7 +120,7 @@ func (s *FileSelector) topScored(scored []scoredDoc, pinned map[string]struct{})
 		if len(out) >= s.topK {
 			break
 		}
-		key := normalizePathKey(item.doc.Path)
+		key := filepath.ToSlash(filepath.Clean(item.doc.Path))
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -146,8 +146,4 @@ func cosineSimilarityFloat32(a, b []float32) float64 {
 		return 0
 	}
 	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
-}
-
-func normalizePathKey(p string) string {
-	return filepath.ToSlash(filepath.Clean(p))
 }
