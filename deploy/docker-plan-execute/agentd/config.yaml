@@ -28,14 +28,16 @@ gateway:
         # M18: propagate task_id/agent_id/role to litellm for spend correlation.
         send_task_metadata: true
   warmup_enabled: false
-  budget:
-    tokens_per_task: 50000
   role_models:
     chat:  { provider: "", model: "" }
     worker: { provider: "", model: "" }
     memory: { provider: "", model: "" }
 
+queue:
+  token_budget: 50000
+
 # Keep the scenario quiet: no self-healing handoffs or outage tasks.
 healing:
   enabled: false
   outage_handoff_enabled: false
+

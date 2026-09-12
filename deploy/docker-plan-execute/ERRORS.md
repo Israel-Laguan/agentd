@@ -27,8 +27,7 @@ agentd  ──>  litellm proxy (model: mock/agentd)  ──>  mockllm (OpenAI-co
   daemon never starts. The `agentd` healthcheck (`wget ... /api/v1/system/status`)
   then never passes, so the `tester` (which `depends_on: agentd: healthy`) never
   launches, and `docker compose up --abort-on-container-exit` fails/exits.
-- **Fix applied:** Added `entrypoint: ["sh", "-c"]` to the `agentd` service so the
-  `command:` shell one-liner runs as intended.
+- **Fix applied:** Used `entrypoint: ["sh", "-c"]` + stripped the leading `sh -c ` prefix from the `command:` value (leaving just the `agentd && exec` one-liner as the string for `-c`).
 
 ### E2 — `run-e2e.sh` reads tasks from the wrong JSON path (`.data.data`)
 - **File:** `run-e2e.sh` lines 71 and 77
@@ -103,8 +102,7 @@ candidates for the next round of failures.
 ---
 
 ## Files changed this chat
-- `deploy/docker-plan-execute/docker-compose.yml` — added `entrypoint: ["sh","-c"]`
-  to the `agentd` service (fixes E1).
+- `deploy/docker-plan-execute/docker-compose.yml` — added `entrypoint: ["sh", "-c"]` and stripped `sh -c ` prefix from `command:` (fixes E1).
 - `deploy/docker-plan-execute/run-e2e.sh` — `.data.data` → `.data` (fixes E2).
 
 ## Next chat (retry plan)

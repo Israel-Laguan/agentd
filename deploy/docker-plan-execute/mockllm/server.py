@@ -72,12 +72,13 @@ def chat_completion(body: dict) -> dict:
     if PLAN_MARKER in title:
         sys.stderr.write(f"[mockllm] decomposing plan for task_id={task_id}\n")
         sys.stderr.flush()
+        safe_title = title.replace(PLAN_MARKER, "").strip() or title
         content = json.dumps({
             "too_complex": True,
             "subtasks": [
-                {"title": f"{title} :: Step 1 - scaffold",
+                {"title": f"{safe_title} :: Step 1 - scaffold",
                  "description": "Create the scaffold for the requested work."},
-                {"title": f"{title} :: Step 2 - implement",
+                {"title": f"{safe_title} :: Step 2 - implement",
                  "description": "Implement the core of the requested work."},
             ],
         })
