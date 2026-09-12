@@ -1,6 +1,6 @@
 # Milestone 19 — Cockpit tool-event rendering (web, independent)
 
-**Status**: not started · **PR scope**: one web PR · **Depends on**: nothing (backend already
+**Status**: completed · **PR scope**: one web PR · **Depends on**: nothing (backend already
 emits the events) · **Relates to**: roadmap task 08 (server half done; UI half missing).
 
 ## Goal

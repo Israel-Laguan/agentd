@@ -1,6 +1,6 @@
 # Milestone 17 — llama.cpp agentic recipe (optional)
 
-**Status**: not started (optional) · **PR scope**: one small docs+config PR · **Depends on**: M16
+**Status**: completed (optional) · **PR scope**: one small docs+config PR · **Depends on**: M16
 (the smoke script is the verification tool). **Relates to**: strategy "llama.cpp direct adapter:
 keep, frozen; runtime-capability gating".
 

@@ -7,8 +7,10 @@
 # Run with: litellm --config /app/config.yaml --host 0.0.0.0 --port 4000
 
 general_settings:
-  # Single shared key the agentd container must send (set LITELLM_API_KEY=sk-test).
-  master_key: "sk-test"
+  # DEMO-ONLY key for the isolated docker-plan-execute test network.
+  # Never use a real secret here. The matching value is injected via
+  # LITELLM_API_KEY in docker-compose for the agentd service.
+  master_key: "sk-demo-litellm-plan-execute-only"
 
 model_list:
   - model_name: mock/agentd

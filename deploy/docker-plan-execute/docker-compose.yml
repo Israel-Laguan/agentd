@@ -55,7 +55,7 @@ services:
     # Override the entrypoint so the shell one-liner below actually runs.
     entrypoint: ["sh", "-c"]
     environment:
-      LITELLM_API_KEY: "sk-test"
+      LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
       AGENTD_API_ADDRESS: "0.0.0.0:8765"
     volumes:
       # Read-only scenario config (passed via --config).
