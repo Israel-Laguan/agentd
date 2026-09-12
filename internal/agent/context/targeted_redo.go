@@ -12,10 +12,6 @@ var orderedListLinePattern = regexp.MustCompile(`^\d+\.\s`)
 // stepMarkerPattern matches <!-- step:id --> and <!-- /step:id --> markers.
 var stepMarkerPattern = regexp.MustCompile(`<!--\s*/?step:[^>]+-->\n?`)
 
-func StripStepMarkers(output string) string {
-	return strings.TrimSpace(stepMarkerPattern.ReplaceAllString(output, ""))
-}
-
 func isMarkdownListLine(trim string) bool {
 	if strings.HasPrefix(trim, "- ") || strings.HasPrefix(trim, "* ") || strings.HasPrefix(trim, "+ ") {
 		return true
@@ -102,7 +98,7 @@ func FormatPlanOutputForCommit(output string, plan Plan) string {
 	}
 	if len(parts) == 0 {
 		if strings.Contains(output, "<!-- step:") {
-			return StripStepMarkers(output)
+			return strings.TrimSpace(stepMarkerPattern.ReplaceAllString(output, ""))
 		}
 		return output
 	}
@@ -114,7 +110,7 @@ func FormatPlanOutputForCommit(output string, plan Plan) string {
 // partial join of only non-empty sections.
 func PreparePlanCommitContent(output string, plan Plan) string {
 	if len(ValidateOutput(output, plan)) > 0 {
-		return StripStepMarkers(output)
+		return strings.TrimSpace(stepMarkerPattern.ReplaceAllString(output, ""))
 	}
 	return FormatPlanOutputForCommit(output, plan)
 }

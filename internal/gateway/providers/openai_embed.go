@@ -60,7 +60,7 @@ func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedRe
 		vectors[item.Index] = item.Embedding
 	}
 	
-	// Validate that we got exactly one embedding per input
+	// Validate that we got exactly one embedding per input (no missing, no dups -- dups checked above)
 	if len(decoded.Data) != len(vectors) {
 		return spec.EmbedResponse{}, fmt.Errorf("expected %d embeddings, got %d", len(vectors), len(decoded.Data))
 	}

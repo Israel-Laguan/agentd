@@ -102,7 +102,12 @@ type HookChain struct {
 
 // NewHookChain returns a HookChain with empty hook lists.
 func NewHookChain() *HookChain {
-	return &HookChain{}
+	hc := &HookChain{
+		preHooks:     []PreHook{},
+		postHooks:    []PostHook{},
+		sessionHooks: []SessionStartHook{},
+	}
+	return hc
 }
 
 // RegisterPre appends a pre-tool hook to the chain.

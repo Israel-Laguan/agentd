@@ -300,8 +300,9 @@ func wireContractEmbeddingsPassthrough(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(openAIEmbedResponse{
 			Model: "text-embedding-3-small",
 			Data: []openAIEmbedData{
-				{Index: 0, Embedding: []float32{1, 0}},
 				{Index: 2, Embedding: []float32{0, 1}},
+				{Index: 0, Embedding: []float32{1, 0}},
+				{Index: 1, Embedding: []float32{0, 0}},
 			},
 		})
 	})
@@ -318,8 +319,8 @@ func wireContractEmbeddingsPassthrough(t *testing.T) {
 	if resp.Vectors[0] == nil || resp.Vectors[0][0] != 1 {
 		t.Fatalf("vectors[0] = %v, want [1,0]", resp.Vectors[0])
 	}
-	if resp.Vectors[1] != nil {
-		t.Fatalf("vectors[1] = %v, want nil", resp.Vectors[1])
+	if resp.Vectors[1] == nil || resp.Vectors[1][0] != 0 {
+		t.Fatalf("vectors[1] = %v, want [0,0]", resp.Vectors[1])
 	}
 	if resp.Vectors[2] == nil || resp.Vectors[2][1] != 1 {
 		t.Fatalf("vectors[2] = %v, want [0,1]", resp.Vectors[2])

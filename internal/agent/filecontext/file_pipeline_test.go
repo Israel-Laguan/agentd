@@ -2,6 +2,8 @@ package filecontext
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"os/exec"
@@ -203,7 +205,7 @@ func TestFileSelector_PinnedAlwaysIncluded(t *testing.T) {
 	}
 	pinnedPath := filepath.Join("docs", "pinned.md")
 	docs = append(docs, &CachedDoc{Path: pinnedPath, Markdown: strings.Repeat("noise ", 50)})
-	pinned := map[string]struct{}{normalizePathKey(pinnedPath): {}}
+	pinned := map[string]struct{}{filepath.ToSlash(filepath.Clean(pinnedPath)): {}}
 	selected, err := sel.Select(context.Background(), strings.Repeat("alpha ", 30), docs, pinned)
 	if err != nil {
 		t.Fatal(err)
@@ -276,6 +278,11 @@ func TestFilePipeline_Process_RejectsPathEscape(t *testing.T) {
 	}
 }
 
+// resolveWorkspaceFile is a test helper delegating to the paths impl.
+func resolveWorkspaceFile(workspacePath, rel string) (string, error) {
+	return paths.ResolveWorkspaceFile(workspacePath, rel)
+}
+
 func TestResolveWorkspaceFile_RequiresPath(t *testing.T) {
 	t.Parallel()
 	for _, rel := range []string{"", "."} {
@@ -325,7 +332,8 @@ func TestFilePipeline_CacheHitBackfillsEmbedding(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := []byte("same content for embed backfill")
-	hash := contentHash(content)
+	sum := sha256.Sum256(content)
+	hash := hex.EncodeToString(sum[:])
 	doc := &CachedDoc{
 		ContentHash: hash,
 		Path:        "first.txt",
@@ -369,7 +377,8 @@ func TestFilePipeline_CacheHitPreservesPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := []byte("same content")
-	hash := contentHash(content)
+	sum := sha256.Sum256(content)
+	hash := hex.EncodeToString(sum[:])
 	doc := &CachedDoc{
 		ContentHash: hash,
 		Path:        "first.txt",
@@ -428,7 +437,7 @@ func TestFileSelector_PinnedExceedsTopK(t *testing.T) {
 	docs := make([]*CachedDoc, 0, 3)
 	for i := 0; i < 3; i++ {
 		p := filepath.Join("docs", "pin"+string(rune('a'+i))+".md")
-		pinned[normalizePathKey(p)] = struct{}{}
+		pinned[filepath.ToSlash(filepath.Clean(p))] = struct{}{}
 		docs = append(docs, &CachedDoc{Path: p, Markdown: strings.Repeat("noise ", 50)})
 	}
 	selected, err := sel.Select(context.Background(), strings.Repeat("alpha ", 30), docs, pinned)

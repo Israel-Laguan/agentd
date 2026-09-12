@@ -31,33 +31,28 @@ func NewResultCache(cacheableTools map[string]bool) *ResultCache {
 	}
 }
 
-func (rc *ResultCache) isCacheable(tool string) bool {
-	return rc.cacheable[tool]
-}
-
 func (rc *ResultCache) IsCacheable(tool string) bool {
-	return rc.isCacheable(tool)
+	if rc == nil {
+		return false
+	}
+	c := rc.cacheable
+	if c == nil {
+		return false
+	}
+	return c[tool]
 }
 
-func (rc *ResultCache) get(key string) (string, bool) {
+func (rc *ResultCache) Get(key string) (string, bool) {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 	v, ok := rc.entries[key]
 	return v, ok
 }
 
-func (rc *ResultCache) Get(key string) (string, bool) {
-	return rc.get(key)
-}
-
-func (rc *ResultCache) set(key, result string) {
+func (rc *ResultCache) Set(key, result string) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 	rc.entries[key] = result
-}
-
-func (rc *ResultCache) Set(key, result string) {
-	rc.set(key, result)
 }
 
 func (rc *ResultCache) EntryCount() int {
@@ -68,19 +63,15 @@ func (rc *ResultCache) EntryCount() int {
 
 // cacheKey produces a deterministic key from the tool name and a
 // canonical JSON representation of the arguments.
-func cacheKey(toolName, argsJSON string) string {
-	canonical := canonicalizeArgs(argsJSON)
+func CacheKey(toolName, argsJSON string) string {
+	canonical := CanonicalizeArgs(argsJSON)
 	h := sha256.Sum256([]byte(canonical))
 	return fmt.Sprintf("%s:%x", toolName, h)
 }
 
-func CacheKey(toolName, argsJSON string) string {
-	return cacheKey(toolName, argsJSON)
-}
-
-// canonicalizeArgs re-serialises an arbitrary JSON object with sorted
+// CanonicalizeArgs re-serialises an arbitrary JSON object with sorted
 // keys so that semantically identical arguments always hash identically.
-func canonicalizeArgs(raw string) string {
+func CanonicalizeArgs(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" || trimmed == "{}" {
 		return "{}"
@@ -102,10 +93,6 @@ func canonicalizeArgs(raw string) string {
 	return "{" + strings.Join(parts, ",") + "}"
 }
 
-func CanonicalizeArgs(raw string) string {
-	return canonicalizeArgs(raw)
-}
-
 // CacheLookupHook returns a PreHook that short-circuits tool execution
 // when the cache already holds a result for the same (tool, args) pair.
 // The cached result is returned as the veto reason so the dispatch layer
@@ -115,11 +102,11 @@ func CacheLookupHook(cache *ResultCache) PreHook {
 		Name:   "cache-lookup",
 		Policy: FailOpen,
 		Fn: func(ctx HookContext) (HookVerdict, error) {
-			if cache == nil || !cache.isCacheable(ctx.ToolName) {
+			if cache == nil || !cache.IsCacheable(ctx.ToolName) {
 				return HookVerdict{}, nil
 			}
-			key := cacheKey(ctx.ToolName, ctx.Args)
-			if result, ok := cache.get(key); ok {
+			key := CacheKey(ctx.ToolName, ctx.Args)
+			if result, ok := cache.Get(key); ok {
 				return HookVerdict{
 					Veto:         true,
 					ShortCircuit: true,
@@ -138,11 +125,11 @@ func CacheStoreHook(cache *ResultCache) PostHook {
 		Name:   "cache-store",
 		Policy: FailOpen,
 		Fn: func(ctx HookContext, result string) (string, error) {
-			if cache == nil || !cache.isCacheable(ctx.ToolName) {
+			if cache == nil || !cache.IsCacheable(ctx.ToolName) {
 				return result, nil
 			}
-			key := cacheKey(ctx.ToolName, ctx.Args)
-			cache.set(key, cacheStoredPayload(ctx, result))
+			key := CacheKey(ctx.ToolName, ctx.Args)
+			cache.Set(key, cacheStoredPayload(ctx, result))
 			return result, nil
 		},
 	}

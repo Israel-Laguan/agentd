@@ -36,12 +36,8 @@ func NewDocStore(dir string) (*DocStore, error) {
 	return &DocStore{dir: dir}, nil
 }
 
-func (s *DocStore) cachePath(hash string) string {
-	return filepath.Join(s.dir, hash+".json")
-}
-
 func (s *DocStore) Get(hash string, size int64, mtime int64) (*CachedDoc, bool) {
-	path := s.cachePath(hash)
+	path := filepath.Join(s.dir, hash+".json")
 	lock := flock.New(path + ".lock")
 	if err := lock.RLock(); err != nil {
 		return nil, false
@@ -66,7 +62,7 @@ func (s *DocStore) Put(doc *CachedDoc) error {
 	if doc == nil || doc.ContentHash == "" {
 		return errors.New("invalid cached doc")
 	}
-	path := s.cachePath(doc.ContentHash)
+	path := filepath.Join(s.dir, doc.ContentHash+".json")
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
