@@ -15,8 +15,8 @@ func assertMigratedV13StrictScheduledTasks(t *testing.T, ctx context.Context, db
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "14" {
-		t.Fatalf("schema version = %q, want 14", version)
+	if version != "15" {
+		t.Fatalf("schema version = %q, want 15", version)
 	}
 	var createSQL string
 	if err := db.QueryRowContext(ctx, `
@@ -28,7 +28,7 @@ func assertMigratedV13StrictScheduledTasks(t *testing.T, ctx context.Context, db
 	}
 }
 
-func TestMigrateToV13CreatesStrictScheduledTasks(t *testing.T) {
+func TestMigrationCreatesStrictScheduledTasks(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v13?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -47,7 +47,7 @@ func TestMigrateToV13CreatesStrictScheduledTasks(t *testing.T) {
 	assertMigratedV13StrictScheduledTasks(t, ctx, db)
 }
 
-func TestMigrateToV13RebuildsNonStrictTable(t *testing.T) {
+func TestMigrationRebuildsNonStrictTable(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v13-rebuild?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)

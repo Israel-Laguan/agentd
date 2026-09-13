@@ -198,11 +198,11 @@ func (s *kanbanScenario) seedTask(title string, state models.TaskState, osPID *i
 	_, err = s.store.db.ExecContext(context.Background(), `
 		INSERT INTO tasks (
 			id, project_id, agent_id, title, description, state, assignee,
-			os_process_id, started_at, last_heartbeat, retry_count, token_usage, created_at, updated_at
+			os_process_id, started_at, last_heartbeat, retry_count, token_usage, cached_token_usage, cache_write_token_usage, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, task.ProjectID, task.AgentID, task.Title, task.Description, task.State, task.Assignee,
-		nullableProcessID(task.OSProcessID), nil, nil, task.RetryCount, task.TokenUsage,
+		nullableProcessID(task.OSProcessID), nil, nil, task.RetryCount, task.TokenUsage, 0, 0,
 		formatTime(task.CreatedAt), formatTime(task.UpdatedAt))
 	if err != nil {
 		return models.Task{}, fmt.Errorf("insert acceptance task %q: %w", title, err)

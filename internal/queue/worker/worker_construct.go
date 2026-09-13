@@ -58,8 +58,12 @@ type WorkerOptions struct {
 	TokenUsageHook             func(int)
 	// TokenStore, when set, persists per-call token usage to the task row in the
 	// database on every LLM call (agentic and legacy), independently of TokenUsageHook.
-	TokenStore           TokenUsageStore
-	FileContext          config.FileContextConfig
+	TokenStore TokenUsageStore
+	// DisableTokenRecording, when true, makes RecordTaskTokenUsage skip the TokenStore
+	// calls. Intended for tests that use real stores but minimal schemas or that
+	// want to avoid token side effects.
+	DisableTokenRecording bool
+	FileContext           config.FileContextConfig
 	FileContextCachePath string
 	Planning             config.AgenticPlanningConfig
 	TopicGuard           config.TopicGuardConfig
@@ -199,6 +203,7 @@ func newWorkerCore(
 		toolFailureStreak:             opts.ToolFailureStreak,
 		tokenUsageHook:                opts.TokenUsageHook,
 		tokenStore:                    opts.TokenStore,
+		disableTokenRecording:         opts.DisableTokenRecording,
 		fileContextCfg:                opts.FileContext,
 		planningCfg:                   opts.Planning,
 		checkpointStore:               wsession.NewMemoryCheckpointStore(),

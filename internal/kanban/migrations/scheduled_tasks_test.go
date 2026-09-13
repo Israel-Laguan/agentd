@@ -9,7 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestMigrateToV12CreatesScheduledTasksTable(t *testing.T) {
+func TestMigrationCreatesScheduledTasksTable(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v12?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -29,8 +29,8 @@ func TestMigrateToV12CreatesScheduledTasksTable(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "14" {
-		t.Fatalf("schema version = %q, want 14", version)
+	if version != "15" {
+		t.Fatalf("schema version = %q, want 15", version)
 	}
 
 	var tableExists int
@@ -52,7 +52,7 @@ func TestMigrateToV12CreatesScheduledTasksTable(t *testing.T) {
 	}
 }
 
-func TestMigrateToV12RepairsMissingRunAfterIndex(t *testing.T) {
+func TestMigrationRepairsMissingRunAfterIndex(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v12-repair?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -75,8 +75,8 @@ func TestMigrateToV12RepairsMissingRunAfterIndex(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "14" {
-		t.Fatalf("schema version = %q, want 14", version)
+	if version != "15" {
+		t.Fatalf("schema version = %q, want 15", version)
 	}
 
 	var idxCount int

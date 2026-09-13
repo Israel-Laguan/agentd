@@ -8,7 +8,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestMigrateToV14AddsCriteriaMetColumn(t *testing.T) {
+func TestMigrationAddsCriteriaMetColumn(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v14?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -28,8 +28,8 @@ func TestMigrateToV14AddsCriteriaMetColumn(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "14" {
-		t.Fatalf("schema version = %q, want 14", version)
+	if version != "15" {
+		t.Fatalf("schema version = %q, want 15", version)
 	}
 
 	var hasColumn int
@@ -47,6 +47,15 @@ func TestMigrateToV14AddsCriteriaMetColumn(t *testing.T) {
 	}
 	if criteriaMet != "[]" {
 		t.Fatalf("criteria_met = %q, want []", criteriaMet)
+	}
+
+	// v15 also added cache columns as part of full Run to current
+	var hasCached int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name = 'cached_token_usage'`).Scan(&hasCached); err != nil {
+		t.Fatalf("check cached_token_usage: %v", err)
+	}
+	if hasCached != 1 {
+		t.Fatalf("cached_token_usage present = %d, want 1", hasCached)
 	}
 }
 
@@ -77,6 +86,8 @@ CREATE TABLE tasks (
     last_heartbeat TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
     token_usage INTEGER NOT NULL DEFAULT 0,
+    cached_token_usage INTEGER NOT NULL DEFAULT 0,
+    cache_write_token_usage INTEGER NOT NULL DEFAULT 0,
     success_criteria TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -95,7 +106,7 @@ VALUES ('project', 'Project', 'input', 'workspace', 'ACTIVE', '2026-05-28T10:00:
 
 INSERT INTO tasks (
     id, project_id, agent_id, title, description, state, assignee,
-    os_process_id, started_at, last_heartbeat, retry_count, token_usage, success_criteria, created_at, updated_at
+    os_process_id, started_at, last_heartbeat, retry_count, token_usage, cached_token_usage, cache_write_token_usage, success_criteria, created_at, updated_at
 )
-VALUES ('task', 'project', 'default', 'Task', 'description', 'READY', 'SYSTEM', NULL, NULL, NULL, 0, 0, '["file exists"]', '2026-05-28T10:00:00Z', '2026-05-28T10:00:00Z');
+VALUES ('task', 'project', 'default', 'Task', 'description', 'READY', 'SYSTEM', NULL, NULL, NULL, 0, 0, 0, 0, '["file exists"]', '2026-05-28T10:00:00Z', '2026-05-28T10:00:00Z');
 `

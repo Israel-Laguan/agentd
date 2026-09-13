@@ -18,6 +18,7 @@ var managedProviderNames = map[string]struct{}{
 
 // ConnectorTopology returns a log-friendly single-line summary of the effective
 // connector topology per role, e.g. "chat=direct(openai/gpt-4o-mini) worker=managed(litellm/poolside/laguna-m.1)".
+// Emitted at startup as slog "connector topology" with the "topology" value.
 func (c GatewayConfig) ConnectorTopology(configs []gateway.ProviderConfig) string {
 	type roleInfo struct {
 		provider string
