@@ -43,3 +43,13 @@ func tableHasColumn(ctx context.Context, db *sql.DB, table, column string) (bool
 	}
 	return false, nil
 }
+
+func readTableSQL(ctx context.Context, db *sql.DB, tableName string) (string, error) {
+	var createSQL string
+	err := db.QueryRowContext(ctx, `
+		SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, tableName).Scan(&createSQL)
+	if err != nil {
+		return "", err
+	}
+	return createSQL, nil
+}

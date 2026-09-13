@@ -150,16 +150,6 @@ func migrateToV4(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func readTableSQL(ctx context.Context, db *sql.DB, tableName string) (string, error) {
-	var createSQL string
-	err := db.QueryRowContext(ctx, `
-		SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, tableName).Scan(&createSQL)
-	if err != nil {
-		return "", err
-	}
-	return createSQL, nil
-}
-
 const createTasksV4SQL = `
 CREATE TABLE tasks_new (
     id TEXT PRIMARY KEY NOT NULL,
