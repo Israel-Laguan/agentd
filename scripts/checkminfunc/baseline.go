@@ -161,11 +161,11 @@ func backupBaselineDirIfExists(path string) (string, error) {
 	for _, entry := range entries {
 		data, err := os.ReadFile(entry)
 		if err != nil {
-			os.RemoveAll(backupDir)
+			_ = os.RemoveAll(backupDir)
 			return "", err
 		}
 		if err := os.WriteFile(filepath.Join(backupDir, filepath.Base(entry)), data, 0o644); err != nil {
-			os.RemoveAll(backupDir)
+			_ = os.RemoveAll(backupDir)
 			return "", err
 		}
 	}
@@ -183,20 +183,11 @@ func backupBaselineIfExists(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tmpFile, err := os.CreateTemp("", "checkminfunc-baseline-*.bak")
-	if err != nil {
+	bakPath := path + ".bak"
+	if err := os.WriteFile(bakPath, data, 0o644); err != nil {
 		return "", err
 	}
-	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
-		return "", err
-	}
-	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpFile.Name())
-		return "", err
-	}
-	return tmpFile.Name(), nil
+	return bakPath, nil
 }
 
 func isDirectoryPath(path string) bool {
@@ -227,9 +218,4 @@ func newViolations(violations []violation, accepted map[string]struct{}) []viola
 
 func violationKey(v violation) string {
 	return fmt.Sprintf("%s %s", v.file, v.name)
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

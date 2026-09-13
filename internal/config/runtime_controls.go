@@ -34,10 +34,22 @@ type DiskConfig struct {
 	FreeThresholdPercent float64
 }
 
+func loadDiskConfig(v *viper.Viper) DiskConfig {
+	return DiskConfig{FreeThresholdPercent: v.GetFloat64("disk.free_threshold_percent")}
+}
+
 const defaultHeartbeatStaleAfter = 2 * time.Minute
 
 type HeartbeatConfig struct {
 	StaleAfter time.Duration
+}
+
+func loadHeartbeatConfig(v *viper.Viper) HeartbeatConfig {
+	return HeartbeatConfig{StaleAfter: v.GetDuration("heartbeat.stale_after")}
+}
+
+func loadBreakerConfig(v *viper.Viper) BreakerConfig {
+	return BreakerConfig{HandoffAfter: v.GetDuration("breaker.handoff_after")}
 }
 
 const (

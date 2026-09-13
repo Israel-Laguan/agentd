@@ -52,6 +52,9 @@ internal/config/health.go isHordeHealthy
 internal/config/health.go isLlamaCppHealthy
 internal/config/health.go isOllamaHealthy
 internal/config/override_log.go envKeyForConfigKey
+internal/config/runtime_controls.go loadDiskConfig
+internal/config/runtime_controls.go loadHeartbeatConfig
+internal/config/runtime_controls.go loadBreakerConfig
 internal/config/show.go normalizeCompare
 internal/config/show.go fileConfigOverridePrefix
 internal/frontdesk/intake.go NewIntakeProcessor
@@ -163,4 +166,3 @@ internal/queue/worker/worker_support.go (*Worker).isPermissionFailure
 internal/queue/worker/worker_support.go (*Worker).handleIterationExceeded
 internal/queue/worker/worker_tools.go (*Worker).DispatchTool
 internal/queue/worker/worker_tools.go (*Worker).dispatchToolWithProject
-scripts/checkminfunc/baseline.go fileExists
