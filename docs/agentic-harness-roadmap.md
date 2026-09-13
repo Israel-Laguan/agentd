@@ -33,8 +33,8 @@ see the end of this document.
   is the **two-topology connector model**: a hardened OpenAI Chat Completions wire path plus an
   external proxy (LiteLLM / Portkey / OpenRouter) for provider diversity (see
   `docs/llm-connector-strategy.md`, authored in Milestone 13).
-- **Milestones 13–19** are tracked below; each began as a self-contained PR-scoped spec in
-  `tasks/` (the spec files remain tracked there; the work they describe has landed).
+- **Milestones 13–19**: completed (see table below). Milestone 13 produced
+  `docs/llm-connector-strategy.md`; later items were tracked via code changes and this roadmap.
 
 ---
 
@@ -42,13 +42,13 @@ see the end of this document.
 
 | Task | Topic | Status |
 | --- | --- | --- |
-| [13-llm-connector-strategy](../tasks/13-llm-connector-strategy.md) | Docs-only: two-topology model, keep/delegate table, non-goals, cache discipline, LiteLLM recipe, provider-claim corrections, roadmap bookkeeping. | Completed |
-| [14-cache-hygiene-stable-prefix](../tasks/14-cache-hygiene-stable-prefix.md) | Cache hygiene: stable prefix (memory-lesson ordering, deterministic tool lists) + byte-stability golden test. | Completed |
-| [15-cache-observability-usage-details](../tasks/15-cache-observability-usage-details.md) | Surface prompt-cache `cached_tokens` / DeepSeek cache fields via `AIResponse` usage details + TOKEN_USAGE events. | Completed |
-| [16-wire-contract-and-smoke-script](../tasks/16-wire-contract-and-smoke-script.md) | Openai-adapter wire-contract test suite + `scripts/llm-smoke.sh` conformance probe. | Completed |
-| [17-llamacpp-agentic-recipe](../tasks/17-llamacpp-agentic-recipe.md) | (Optional) llama.cpp agentic recipe + optional capability probe. | Completed |
-| [18-litellm-correlation-metadata](../tasks/18-litellm-correlation-metadata.md) | (Optional) LiteLLM task-correlation metadata + startup topology log. | Completed |
-| [19-cockpit-tool-event-rendering](../tasks/19-cockpit-tool-event-rendering.md) | Web/independent: render `tool_called` / `tool_result` SSE events in the cockpit. | Completed |
+| 13 | [LLM connector strategy](llm-connector-strategy.md) | DONE. Two-topology model, keep/delegate table, cache discipline, LiteLLM recipe, provider-claim corrections. |
+| 14 | Cache hygiene (stable prefix) | DONE. Memory-lesson ordering + deterministic tool lists + byte-stability golden test. |
+| 15 | Cache observability (usage details) | DONE. `cached_tokens` / DeepSeek fields via `AIResponse.UsageDetails` + `TOKEN_USAGE` events. |
+| 16 | Wire contract + smoke script | DONE. OpenAI adapter wire-contract tests + `scripts/llm-smoke.sh`. |
+| 17 | llama.cpp agentic recipe | DONE. `options.probe_tools` + runtime `ProbeTools` capability probe. |
+| 18 | LiteLLM correlation metadata | DONE. Task/agent/role ids passed via metadata for external correlation. |
+| 19 | Cockpit tool event rendering | DONE. `tool_called` / `tool_result` SSE events rendered in the web UI. |
 
 Suggested execution order: `13 → (14, 16, 19 can run in parallel) → 15 (after 14) → 17/18 (after
 16)`.

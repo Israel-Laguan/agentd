@@ -14,8 +14,6 @@ bin/
 .golangci-cache/
 .gomodcache/
 /agentd
-tasks/*
-!tasks/*.md
 
 # Test binary, built with `go test -c`
 *.test

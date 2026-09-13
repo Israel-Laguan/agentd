@@ -181,9 +181,6 @@ These support the outer system and **wrap** the inner agentic loop:
 
 ## See also
 
-- [docs/agentic-harness-roadmap.md](agentic-harness-roadmap.md) — Phased implementation roadmap and links to task prompts.
+- [docs/agentic-harness-roadmap.md](agentic-harness-roadmap.md) — Phased implementation roadmap.
 - [docs/provider-tool-calling.md](provider-tool-calling.md) — Provider tool-call capability matrix and wire-format deltas.
-- The roadmap records completed MVP, completed post-MVP work, and milestones `13`–`19` in
-  [docs/agentic-harness-roadmap.md](agentic-harness-roadmap.md). Per-milestone spec files are
-  tracked under `tasks/`; the long-term design lives in `docs/` (e.g.
-  [llm-connector-strategy.md](llm-connector-strategy.md), [api-testing.md](api-testing.md)).
+- Long-term connector design lives in [docs/llm-connector-strategy.md](llm-connector-strategy.md).
