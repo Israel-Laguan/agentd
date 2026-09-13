@@ -30,7 +30,6 @@ const (
 
 type immediateTx = kdb.ImmediateTx
 type sqlExecutor = kdb.SQLExecutor
-type sqlQueryer = kdb.SQLQueryer
 type scanner = kdb.Scanner
 
 // ---------------------------------------------------------------------------

@@ -135,8 +135,9 @@ func TestTokenUsage_AgenticPath_WritesSingleTurn(t *testing.T) {
 
 	// Exercise DisableTokenRecording via the public option (was previously dead code).
 	ts2 := &fakeTokenStore{}
-	_, wDisable, task2 := newAgenticIntegrationWorker(t, gw, sb, 10)
-	wDisable = NewWorker(store, gw, sb, nil, nil, WorkerOptions{
+	gw2 := &sequenceGateway{responses: []gateway.AIResponse{{Content: "[COMPLETED] done", TokenUsage: 15}}}
+	store2, _, task2 := newAgenticIntegrationWorker(t, gw2, sb, 10)
+	wDisable := NewWorker(store2, gw2, sb, nil, nil, WorkerOptions{
 		MaxToolIterations:     5,
 		TokenStore:            ts2,
 		DisableTokenRecording: true,
