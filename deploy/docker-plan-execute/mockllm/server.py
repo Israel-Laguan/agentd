@@ -64,7 +64,7 @@ def chat_completion(body: dict) -> dict:
     # Log correlation metadata so litellm/M18 wiring is observable in docker logs.
     if md or body.get("user"):
         sys.stderr.write(
-            f"[mockllm] correlation task_id={md.get('task_id') or body.get('user')} "
+            f"[mockllm] correlation task_id={task_id} "
             f"agent_id={md.get('agent_id')} role={md.get('role')}\n"
         )
         sys.stderr.flush()

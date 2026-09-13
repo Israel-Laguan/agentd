@@ -220,8 +220,8 @@ func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 	if meta["role"] != "worker" {
 		t.Errorf("metadata.role = %v, want worker", meta["role"])
 	}
-	if gotBody["user"] != "task-1" {
-		t.Errorf("user = %v, want task-1", gotBody["user"])
+	if _, has := gotBody["user"]; has {
+		t.Errorf("user should be absent (we use metadata for correlation); body=%#v", gotBody)
 	}
 }
 
@@ -368,7 +368,7 @@ func TestOpenAI_SendTaskMetadata_StringValue(t *testing.T) {
 	if _, has := gotBody["metadata"]; !has {
 		t.Errorf("metadata missing when option is string \"true\"")
 	}
-	if gotBody["user"] != "t1" {
-		t.Errorf("user = %v, want t1", gotBody["user"])
+	if _, has := gotBody["user"]; has {
+		t.Errorf("user should not be set (correlation uses metadata only); body=%#v", gotBody)
 	}
 }

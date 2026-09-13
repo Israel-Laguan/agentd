@@ -22,16 +22,18 @@ func TestMigrationSkipsWhenBlockedAlreadyInSchema(t *testing.T) {
 		t.Fatalf("create v1 schema with BLOCKED: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
-		t.Fatalf("Run() error = %v", err)
+	// Apply only v2 (stop after V2) to isolate the skip logic for BLOCKED-in-schema.
+	// Full Run() would run v4 which also rebuilds the tasks table, masking whether v2 skipped.
+	if err := applyMigration(ctx, db, 1, 2, migrateToV2); err != nil {
+		t.Fatalf("apply v2: %v", err)
 	}
 
 	var version string
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "15" {
-		t.Fatalf("schema version = %q, want 15", version)
+	if version != "2" {
+		t.Fatalf("schema version = %q, want 2", version)
 	}
 
 	var createSQL string

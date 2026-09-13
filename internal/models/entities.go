@@ -24,24 +24,24 @@ type Project struct {
 // Task is the durable unit of work moved by the Kanban state machine.
 type Task struct {
 	BaseEntity
-	ProjectID       string       `json:"project_id"`
-	AgentID         string       `json:"agent_id"`
-	Title           string       `json:"title"`
-	Description     string       `json:"description"`
-	State           TaskState    `json:"state"`
-	Assignee        TaskAssignee `json:"assignee"`
-	OSProcessID     *int         `json:"os_process_id,omitempty"`
-	StartedAt       *time.Time   `json:"started_at,omitempty"`
-	CompletedAt     *time.Time   `json:"completed_at,omitempty"`
-	LastHeartbeat   *time.Time   `json:"last_heartbeat,omitempty"`
-	RetryCount             int  `json:"retry_count"`
-	TokenUsage             int  `json:"token_usage"`
-	CachedTokenUsage       int  `json:"cached_token_usage"`
-	CacheWriteTokenUsage   int  `json:"cache_write_token_usage"`
-	SuccessCriteria        []string `json:"success_criteria"`
-	CriteriaMet     []string     `json:"criteria_met"`
-	DependsOn       []string     `json:"depends_on"`
-	Logs            string       `json:"logs"`
+	ProjectID            string       `json:"project_id"`
+	AgentID              string       `json:"agent_id"`
+	Title                string       `json:"title"`
+	Description          string       `json:"description"`
+	State                TaskState    `json:"state"`
+	Assignee             TaskAssignee `json:"assignee"`
+	OSProcessID          *int         `json:"os_process_id,omitempty"`
+	StartedAt            *time.Time   `json:"started_at,omitempty"`
+	CompletedAt          *time.Time   `json:"completed_at,omitempty"`
+	LastHeartbeat        *time.Time   `json:"last_heartbeat,omitempty"`
+	RetryCount           int          `json:"retry_count"`
+	TokenUsage           int          `json:"token_usage"`
+	CachedTokenUsage     int          `json:"cached_token_usage"`
+	CacheWriteTokenUsage int          `json:"cache_write_token_usage"`
+	SuccessCriteria      []string     `json:"success_criteria"`
+	CriteriaMet          []string     `json:"criteria_met"`
+	DependsOn            []string     `json:"depends_on"`
+	Logs                 string       `json:"logs"`
 }
 
 // TaskResult is the durable outcome reported by a worker after running a task.
@@ -146,7 +146,7 @@ type AgentProfile struct {
 	// AllowedTools, when non-empty, bypasses classifier and manifest; only listed
 	// tools are advertised to the model.
 	AllowedTools []string
-	UpdatedAt         time.Time
+	UpdatedAt    time.Time
 }
 
 // Memory stores lessons learned globally or per project.

@@ -190,7 +190,7 @@ func TestWriteBaselineBackup(t *testing.T) {
 	}
 
 	violations := []violation{{name: "g", file: "b.go", line: 2, lines: 2}}
-	if err := writeBaseline(path, violations); err != nil {
+	if err := writeBaseline(path, violations, 3); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path + ".bak")
@@ -211,7 +211,7 @@ func TestWriteBaseline(t *testing.T) {
 		{name: "g", file: "b.go", line: 2, lines: 2},
 	}
 
-	if err := writeBaseline(path, violations); err != nil {
+	if err := writeBaseline(path, violations, 3); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
@@ -232,7 +232,7 @@ func TestWriteBaselineExtensionlessFile(t *testing.T) {
 		{name: "f", file: "a.go", line: 1, lines: 1},
 	}
 
-	if err := writeBaseline(path, violations); err != nil {
+	if err := writeBaseline(path, violations, 3); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(path)
@@ -261,7 +261,7 @@ func TestWriteBaselineDirectory(t *testing.T) {
 		{name: "g", file: "b.go", line: 2, lines: 2},
 	}
 
-	if err := writeBaseline(path, violations); err != nil {
+	if err := writeBaseline(path, violations, 3); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(filepath.Join(path, "part-001.txt"))
@@ -290,7 +290,7 @@ func TestWriteBaselineDirectoryCleansStaleFiles(t *testing.T) {
 		{name: "f", file: "a.go", line: 1, lines: 1},
 	}
 
-	if err := writeBaseline(path, violations); err != nil {
+	if err := writeBaseline(path, violations, 3); err != nil {
 		t.Fatal(err)
 	}
 

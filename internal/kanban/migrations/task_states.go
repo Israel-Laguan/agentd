@@ -56,7 +56,7 @@ func migrateToV2(ctx context.Context, db *sql.DB) error {
 		INSERT INTO settings (key, value, updated_at)
 		VALUES (?, ?, datetime('now'))
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-		schemaVersionKey, strconv.Itoa(currentSchemaVersion)); err != nil {
+		schemaVersionKey, "2"); err != nil {
 		return fmt.Errorf("set schema version v2: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

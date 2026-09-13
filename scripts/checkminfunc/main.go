@@ -46,7 +46,7 @@ func main() {
 			os.Exit(2)
 		}
 		hadBaseline := fileExists(*baselinePath)
-		if err := writeBaseline(*baselinePath, violations); err != nil {
+		if err := writeBaseline(*baselinePath, violations, *minLines); err != nil {
 			fmt.Fprintf(os.Stderr, "checkminfunc: write baseline: %v\n", err)
 			os.Exit(2)
 		}
