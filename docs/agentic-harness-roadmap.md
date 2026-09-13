@@ -38,7 +38,7 @@ see the end of this document.
 
 ---
 
-## Forward milestones (13–19)
+## Milestones 13–19 (completed)
 
 | Task | Topic | Status |
 | --- | --- | --- |
@@ -50,8 +50,8 @@ see the end of this document.
 | 18 | LiteLLM correlation metadata | DONE. Task/agent/role ids passed via metadata for external correlation. |
 | 19 | Cockpit tool event rendering | DONE. `tool_called` / `tool_result` SSE events rendered in the web UI. |
 
-Suggested execution order: `13 → (14, 16, 19 can run in parallel) → 15 (after 14) → 17/18 (after
-16)`.
+Completed execution order (historical, all done): `13 → (14, 16, 19 in parallel) → 15 (after
+14) → 17/18 (after 16)`.
 
 ---
 

@@ -211,3 +211,8 @@ func newViolations(violations []violation, accepted map[string]struct{}) []viola
 func violationKey(v violation) string {
 	return fmt.Sprintf("%s %s", v.file, v.name)
 }
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}

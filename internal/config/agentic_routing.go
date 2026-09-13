@@ -13,11 +13,6 @@ type ToolManifestConfig struct {
 	Mappings map[string][]string
 }
 
-func setToolManifestDefaults(v *viper.Viper) {
-	v.SetDefault("agentic.tool_manifest.enabled", false)
-	v.SetDefault("agentic.tool_manifest.min_confidence", DefaultToolManifestMinConfidence)
-}
-
 func loadToolManifestConfig(v *viper.Viper) ToolManifestConfig {
 	return ToolManifestConfig{
 		Enabled:       v.GetBool("agentic.tool_manifest.enabled"),
@@ -82,26 +77,13 @@ type CapabilityRoutingConfig struct {
 	Tools map[string]string
 }
 
-func setCapabilityRoutingDefaults(v *viper.Viper) {
-	v.SetDefault("agentic.capability_routing.enabled", false)
-	v.SetDefault("agentic.capability_routing.min_confidence", DefaultCapabilityRoutingMinConfidence)
-}
-
 func loadCapabilityRoutingConfig(v *viper.Viper) CapabilityRoutingConfig {
 	return CapabilityRoutingConfig{
 		Enabled:       v.GetBool("agentic.capability_routing.enabled"),
 		MinConfidence: loadConfidence(v, "agentic.capability_routing.min_confidence", DefaultCapabilityRoutingMinConfidence),
-		Mappings:      loadCapabilityRoutingMappings(v),
-		Tools:         loadCapabilityRoutingTools(v),
+		Mappings:      loadStringStringMap(v, "agentic.capability_routing.mappings"),
+		Tools:         loadStringStringMap(v, "agentic.capability_routing.tools"),
 	}
-}
-
-func loadCapabilityRoutingMappings(v *viper.Viper) map[string]string {
-	return loadStringStringMap(v, "agentic.capability_routing.mappings")
-}
-
-func loadCapabilityRoutingTools(v *viper.Viper) map[string]string {
-	return loadStringStringMap(v, "agentic.capability_routing.tools")
 }
 
 func loadStringStringMap(v *viper.Viper, key string) map[string]string {

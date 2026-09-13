@@ -293,9 +293,9 @@ func materializePlannerStore(t *testing.T, store *testutil.FakeKanbanStore) {
 
 func TestMarshalContent(t *testing.T) {
 	data := map[string]string{"key": "value"}
-	bytes, err := marshalContent(data)
+	bytes, err := json.Marshal(data)
 	if err != nil {
-		t.Errorf("marshalContent() error = %v", err)
+		t.Errorf("json.Marshal() error = %v", err)
 	}
 	if len(bytes) == 0 {
 		t.Error("bytes should not be empty")
@@ -303,17 +303,17 @@ func TestMarshalContent(t *testing.T) {
 }
 
 type mockGateway struct {
-	intent          *spec.IntentAnalysis
-	intentErr       error
-	intentCalls     int
-	scope           *spec.ScopeAnalysis
-	scopeErr        error
-	analyzeCalls    int
-	plan            *models.DraftPlan
-	planErr         error
-	planCalls       int
-	lastPlanIntent  string
-	lastHouseRules  string
+	intent         *spec.IntentAnalysis
+	intentErr      error
+	intentCalls    int
+	scope          *spec.ScopeAnalysis
+	scopeErr       error
+	analyzeCalls   int
+	plan           *models.DraftPlan
+	planErr        error
+	planCalls      int
+	lastPlanIntent string
+	lastHouseRules string
 }
 
 type contractMockGateway struct {

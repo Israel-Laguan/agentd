@@ -131,7 +131,7 @@ type providerResolveCache struct {
 
 func buildProviderResolveCache(state viperLoadState) providerResolveCache {
 	fileProviders, fileErr := gatewayProvidersFromViper(state.fileV)
-	effectiveProviders, effErr := loadGatewayProvidersNoWarn(state.v, state.process, state.dotenv)
+	effectiveProviders, effErr := loadGatewayProvidersWithWarnings(state.v, state.process, state.dotenv, false)
 	return providerResolveCache{
 		fileProviders:      fileProviders,
 		effectiveProviders: effectiveProviders,
@@ -152,7 +152,7 @@ func fileConfigOverridePrefix(state viperLoadState) string {
 }
 
 func resolveProviderConfigSource(name, field string, state viperLoadState, cache providerResolveCache) ConfigSource {
-	key := providerDisplayKey(name, field)
+	key := providerConfigKeyPrefix + name + "]." + field
 	src := ConfigSource{Key: key}
 
 	if cache.fileErr != nil {

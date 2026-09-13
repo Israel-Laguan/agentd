@@ -3,12 +3,9 @@
 package queue
 
 import (
-	"context"
-
 	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
 	agenttools "agentd/internal/agent/tools"
-	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/recovery"
 	"agentd/internal/queue/safety"
@@ -19,9 +16,9 @@ type PIDProbe = safety.PIDProbe
 type StaticPIDProbe = safety.StaticPIDProbe
 type GopsutilProbe = safety.GopsutilProbe
 
-func BootReconcile(ctx context.Context, store models.KanbanStore, probe safety.PIDProbe, sink models.EventSink) error {
-	return recovery.BootReconcile(ctx, store, probe, sink)
-}
+// BootReconcile re-exports recovery.BootReconcile for stable imports from cmd
+// and integration tests rooted at internal/queue.
+var BootReconcile = recovery.BootReconcile
 
 const (
 	RebootRecoveryHandoffEventType = recovery.RebootRecoveryHandoffEventType
@@ -56,17 +53,12 @@ const (
 	HealingActionHuman = planning.HealingActionHuman
 )
 
-func IsPhasePlanningTask(title string) bool {
-	return planning.IsPhasePlanningTask(title)
-}
+var IsPhasePlanningTask = planning.IsPhasePlanningTask
 
-func NextPhaseNumber(title string) int {
-	return planning.NextPhaseNumber(title)
-}
+var NextPhaseNumber = planning.NextPhaseNumber
 
-func RetitlePhaseContinuationTasks(tasks []models.DraftTask, phase int) []models.DraftTask {
-	return planning.RetitlePhaseContinuationTasks(tasks, phase)
-}
+// RetitlePhaseContinuationTasks re-exports planning.RetitlePhaseContinuationTasks.
+var RetitlePhaseContinuationTasks = planning.RetitlePhaseContinuationTasks
 
 const (
 	HealingStepLowerTemperature = planning.HealingStepLowerTemperature

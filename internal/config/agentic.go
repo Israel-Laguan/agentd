@@ -9,13 +9,13 @@ import (
 // AgenticConfig holds agent-loop settings documented under the top-level
 // agentic: key in config.reference.yaml.
 const (
-	DefaultContextWarningThreshold = 0.85
-	DefaultToolFailureStreak       = 3
-	DefaultFileContextTopK         = 5
-	DefaultFileContextCachePath    = "file-cache"
-	DefaultFileContextEmbedModel   = "text-embedding-3-small"
-	DefaultPlanningMaxRedoPasses   = 3
-	DefaultPlanContextMaxChars     = 4000
+	DefaultContextWarningThreshold   = 0.85
+	DefaultToolFailureStreak         = 3
+	DefaultFileContextTopK           = 5
+	DefaultFileContextCachePath      = "file-cache"
+	DefaultFileContextEmbedModel     = "text-embedding-3-small"
+	DefaultPlanningMaxRedoPasses     = 3
+	DefaultPlanContextMaxChars       = 4000
 	DefaultTopicGuardSensitivity     = 0.5
 	DefaultModelRoutingContextTokens = 150000
 	DefaultPromptTemplatesPath       = "prompt_templates.json"
@@ -121,9 +121,12 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.topic_guard.sensitivity", DefaultTopicGuardSensitivity)
 	v.SetDefault("agentic.model_routing.enabled", false)
 	v.SetDefault("agentic.model_routing.context_token_threshold", DefaultModelRoutingContextTokens)
-	setToolManifestDefaults(v)
-	setCapabilityRoutingDefaults(v)
-	setBatchingDefaults(v)
+	v.SetDefault("agentic.tool_manifest.enabled", false)
+	v.SetDefault("agentic.tool_manifest.min_confidence", DefaultToolManifestMinConfidence)
+	v.SetDefault("agentic.capability_routing.enabled", false)
+	v.SetDefault("agentic.capability_routing.min_confidence", DefaultCapabilityRoutingMinConfidence)
+	v.SetDefault("agentic.batching.enabled", false)
+	v.SetDefault("agentic.batching.max_batch_size", DefaultBatchingMaxBatchSize)
 	setSchedulerDefaults(v)
 	v.SetDefault("agentic.prompt_templates_path", DefaultPromptTemplatesPath)
 }
@@ -147,12 +150,12 @@ func loadAgenticConfig(v *viper.Viper) (AgenticConfig, error) {
 			Enabled: v.GetBool("agentic.audit.enabled"),
 			Path:    v.GetString("agentic.audit.path"),
 		},
-		FileContext: loadFileContextConfig(v),
-		Planning:     loadAgenticPlanningConfig(v),
-		TopicGuard:     loadTopicGuardConfig(v),
-		ModelRouting:   loadModelRoutingConfig(v),
-		ToolManifest:       loadToolManifestConfig(v),
-		CapabilityRouting: loadCapabilityRoutingConfig(v),
+		FileContext:         loadFileContextConfig(v),
+		Planning:            loadAgenticPlanningConfig(v),
+		TopicGuard:          loadTopicGuardConfig(v),
+		ModelRouting:        loadModelRoutingConfig(v),
+		ToolManifest:        loadToolManifestConfig(v),
+		CapabilityRouting:   loadCapabilityRoutingConfig(v),
 		Batching:            loadBatchingConfig(v),
 		PromptTemplatesPath: v.GetString("agentic.prompt_templates_path"),
 		Scheduler:           scheduler,

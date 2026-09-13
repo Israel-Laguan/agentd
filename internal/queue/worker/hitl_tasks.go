@@ -114,10 +114,6 @@ const (
 	hitlElicitationUsedPrefix      = "agentd:hitl:elicitation-used:"
 )
 
-func findLatestClarificationSubtask(children []models.Task) *models.Task {
-	return findLatestChildByTitlePrefix(children, models.HITLSubtaskTitleClarification)
-}
-
 func findPendingClarificationSubtask(children []models.Task) *models.Task {
 	var pending *models.Task
 	for i := range children {
@@ -181,7 +177,7 @@ func (w *Worker) tryConsumeElicitationAnswers(ctx context.Context, task models.T
 	if err != nil {
 		return task, false, fmt.Errorf("list elicitation children: %w", err)
 	}
-	clarification := findLatestClarificationSubtask(children)
+	clarification := findLatestChildByTitlePrefix(children, models.HITLSubtaskTitleClarification)
 	if clarification == nil || clarification.State != models.TaskStateCompleted {
 		return task, false, nil
 	}

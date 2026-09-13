@@ -30,6 +30,7 @@ var defaultExcludes = []string{
 	"build/**",
 	"**/generated/**",
 	"**/*_test.go",
+	"internal/testutil/**",
 }
 
 func main() {

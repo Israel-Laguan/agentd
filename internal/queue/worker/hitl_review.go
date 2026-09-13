@@ -79,7 +79,7 @@ func latestFailedReviewRejection(
 	if err != nil {
 		return "", "", false
 	}
-	review := findLatestReviewSubtask(children)
+	review := findLatestChildByTitlePrefix(children, models.HITLSubtaskTitleReview)
 	if review == nil || review.State != models.TaskStateFailed {
 		return "", "", false
 	}
@@ -162,7 +162,7 @@ func (w *Worker) tryFinalizeApprovedReview(ctx context.Context, task models.Task
 	if err != nil {
 		return false, fmt.Errorf("list review subtasks: %w", err)
 	}
-	review := findLatestReviewSubtask(children)
+	review := findLatestChildByTitlePrefix(children, models.HITLSubtaskTitleReview)
 	if review == nil || review.State != models.TaskStateCompleted {
 		return false, nil
 	}

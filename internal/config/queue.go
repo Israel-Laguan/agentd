@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	DefaultTaskDeadline               = 10 * time.Minute
-	DefaultQueuedReconcileAfter       = 10 * time.Minute
-	DefaultPollMaxInterval            = 10 * time.Second
-	DefaultMaxToolIterations          = 10
-	DefaultTokenBudget                = 0
+	DefaultTaskDeadline           = 10 * time.Minute
+	DefaultQueuedReconcileAfter   = 10 * time.Minute
+	DefaultPollMaxInterval        = 10 * time.Second
+	DefaultMaxToolIterations      = 10
+	DefaultTokenBudget            = 0
 	DefaultAgenticTruncatorMax    = 30
 	DefaultAgenticCharacterBudget = 0 // 0 = inherit gateway.truncator.max_input_chars at daemon startup
 
@@ -48,8 +48,8 @@ const (
 
 	DefaultLegacyHandoffTimeout = 7 * 24 * time.Hour
 
-	DefaultRollingTokenWindow = 5 * time.Hour
-	DefaultRollingTokenLimit    = 0 // 0 = disabled
+	DefaultRollingTokenWindow     = 5 * time.Hour
+	DefaultRollingTokenLimit      = 0 // 0 = disabled
 	DefaultRollingProjectedTokens = 4096
 )
 
@@ -96,22 +96,22 @@ type HITLConfig struct {
 }
 
 type QueueConfig struct {
-	TaskDeadline               time.Duration
-	QueuedReconcileAfter       time.Duration
-	PollMaxInterval            time.Duration
-	MaxToolIterations          int
-	TokenBudget                int
+	TaskDeadline           time.Duration
+	QueuedReconcileAfter   time.Duration
+	PollMaxInterval        time.Duration
+	MaxToolIterations      int
+	TokenBudget            int
 	AgenticTruncatorMax    int
 	AgenticCharacterBudget int // 0 = inherit gateway.truncator.max_input_chars (see EffectiveAgenticCharacterBudget)
-	AgenticContext             AgenticContextConfig
-	Instructions               InstructionsConfig
-	Skills                     SkillsConfig
-	HITL                       HITLConfig
-	Legacy                     LegacyConfig
-	ToolTimeouts               ToolTimeoutsConfig
-	ToolRetries                ToolRetriesConfig
-	RollingTokenWindow         time.Duration
-	RollingTokenLimit          int
+	AgenticContext         AgenticContextConfig
+	Instructions           InstructionsConfig
+	Skills                 SkillsConfig
+	HITL                   HITLConfig
+	Legacy                 LegacyConfig
+	ToolTimeouts           ToolTimeoutsConfig
+	ToolRetries            ToolRetriesConfig
+	RollingTokenWindow     time.Duration
+	RollingTokenLimit      int
 }
 
 func setQueueDefaults(v *viper.Viper) {
@@ -175,11 +175,11 @@ func loadAgenticCharacterBudget(v *viper.Viper) int {
 
 func loadQueueConfig(v *viper.Viper) QueueConfig {
 	return QueueConfig{
-		TaskDeadline:               v.GetDuration("queue.task_deadline"),
-		QueuedReconcileAfter:       v.GetDuration("queue.queued_reconcile_after"),
-		PollMaxInterval:            v.GetDuration("queue.poll_max_interval"),
-		MaxToolIterations:          v.GetInt("queue.max_tool_iterations"),
-		TokenBudget:                v.GetInt("queue.token_budget"),
+		TaskDeadline:           v.GetDuration("queue.task_deadline"),
+		QueuedReconcileAfter:   v.GetDuration("queue.queued_reconcile_after"),
+		PollMaxInterval:        v.GetDuration("queue.poll_max_interval"),
+		MaxToolIterations:      v.GetInt("queue.max_tool_iterations"),
+		TokenBudget:            v.GetInt("queue.token_budget"),
 		AgenticTruncatorMax:    v.GetInt("queue.agentic_truncator_max"),
 		AgenticCharacterBudget: loadAgenticCharacterBudget(v),
 		AgenticContext: AgenticContextConfig{
@@ -202,9 +202,9 @@ func loadQueueConfig(v *viper.Viper) QueueConfig {
 		HITL: HITLConfig{
 			LegacyHandoffTimeout: v.GetDuration("queue.hitl.legacy_handoff_timeout"),
 		},
-		Legacy:     loadLegacyConfig(v),
-		ToolTimeouts: loadToolTimeoutsConfig(v),
-		ToolRetries:  loadToolRetriesConfig(v),
+		Legacy:             loadLegacyConfig(v),
+		ToolTimeouts:       loadToolTimeoutsConfig(v),
+		ToolRetries:        loadToolRetriesConfig(v),
 		RollingTokenWindow: v.GetDuration("queue.rolling_token_window"),
 		RollingTokenLimit:  v.GetInt("queue.rolling_token_limit"),
 	}

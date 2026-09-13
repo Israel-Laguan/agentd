@@ -53,12 +53,12 @@ func TestTruncateHelper(t *testing.T) {
 func TestPromptAndPermissionPayload(t *testing.T) {
 	res := sandbox.Result{ExitCode: 1, Duration: time.Second, Stderr: "e", Stdout: "o"}
 	pd := safety.PromptDetection{Pattern: "sudo"}
-	got := promptPayload("ls", pd, res)
+	got := detectionPayload(pd.Pattern, "ls", res)
 	if got == "" {
 		t.Fatal("empty prompt payload")
 	}
 	pp := safety.PermissionDetection{Pattern: "denied"}
-	got2 := permissionPayload("x", pp, res)
+	got2 := detectionPayload(pp.Pattern, "x", res)
 	if got2 == "" {
 		t.Fatal("empty permission payload")
 	}

@@ -4,8 +4,16 @@ import (
 	"context"
 	"testing"
 
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
+
+// testUsageDetails returns a spec.UsageDetails for kanban tests.
+// The gateway/spec import is explicitly allowed by the
+// kanban-test-isolation depguard rule (lightweight types only).
+func testUsageDetails(cached, write int) spec.UsageDetails {
+	return spec.UsageDetails{CachedTokens: cached, CacheWriteTokens: write}
+}
 
 func TestAddTokenUsage_AccumulatesAndSum(t *testing.T) {
 	t.Parallel()

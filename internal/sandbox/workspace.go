@@ -58,7 +58,7 @@ func (m *FSWorkspaceManager) SecureDelete(ctx context.Context, projectID string)
 	if err != nil {
 		return err
 	}
-	if samePath(dir, m.Root) {
+	if filepath.Clean(dir) == filepath.Clean(m.Root) {
 		return fmt.Errorf("%w: refusing to delete workspace root", models.ErrSandboxViolation)
 	}
 	if err := os.RemoveAll(dir); err != nil {
@@ -77,7 +77,7 @@ func JailPath(workspaceRoot, requested string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve requested path: %w", err)
 	}
-	if !samePath(path, root) && !strings.HasPrefix(path, root+string(os.PathSeparator)) {
+	if filepath.Clean(path) != filepath.Clean(root) && !strings.HasPrefix(path, root+string(os.PathSeparator)) {
 		return "", fmt.Errorf("%w: %s escapes %s", models.ErrSandboxViolation, path, root)
 	}
 	return path, nil
@@ -147,9 +147,4 @@ func (m *FSWorkspaceManager) IsWorkspacePopulated(_ context.Context, projectID s
 		return false, err
 	}
 	return len(entries) > 0, nil
-}
-
-func samePath(a, b string) bool {
-	rel, err := filepath.Rel(a, b)
-	return err == nil && rel == "."
 }

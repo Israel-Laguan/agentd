@@ -177,13 +177,13 @@ func (h *BlockingApprovalHandler) resolveExistingApproval(
 	if err != nil {
 		return ApprovalResponse{}, true, fmt.Errorf("list approval subtasks: %w", err)
 	}
-	latest := findLatestApprovalSubtask(children, req.ToolName)
+	latest := findLatestChildByExactTitle(children, approvalSubtaskTitle(req.ToolName))
 	if latest == nil {
 		return ApprovalResponse{}, false, nil
 	}
 	switch latest.State {
 	case models.TaskStateCompleted:
-		if isApprovalConsumed(comments, latest.ID) {
+		if isHITLMarkerConsumed(comments, hitlApprovalUsedPrefix+latest.ID) {
 			return ApprovalResponse{}, false, nil
 		}
 		if err := markApprovalUsed(ctx, h.store, req.TaskID, latest.ID); err != nil {
@@ -191,7 +191,7 @@ func (h *BlockingApprovalHandler) resolveExistingApproval(
 		}
 		return ApprovalResponse{Approved: true}, true, nil
 	case models.TaskStateFailed:
-		if isApprovalRejectionConsumed(comments, latest.ID) {
+		if isHITLMarkerConsumed(comments, hitlApprovalRejectionUsedPrefix+latest.ID) {
 			return ApprovalResponse{}, false, nil
 		}
 		reason := rejectionReasonFromSubtask(ctx, h.store, latest.ID)

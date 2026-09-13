@@ -89,15 +89,13 @@ func canonicalGatewayProvider(cfg gateway.ProviderConfig) gateway.ProviderConfig
 	return cfg
 }
 
-func genericGatewayAPIKeyEnv(providerName string) string {
-	normalized := strings.ToUpper(strings.ReplaceAll(providerName, "-", "_"))
-	return "AGENTD_GATEWAY_" + normalized + "_API_KEY"
-}
-
+// loadGatewayProviders loads providers with missing-API-key warnings enabled.
+// It is a thin alias kept for call-site readability and existing tests.
 func loadGatewayProviders(v *viper.Viper, process, dotenv map[string]string) ([]gateway.ProviderConfig, error) {
 	return loadGatewayProvidersWithWarnings(v, process, dotenv, true)
 }
 
+// loadGatewayProvidersNoWarn loads providers without missing-API-key warnings.
 func loadGatewayProvidersNoWarn(v *viper.Viper, process, dotenv map[string]string) ([]gateway.ProviderConfig, error) {
 	return loadGatewayProvidersWithWarnings(v, process, dotenv, false)
 }

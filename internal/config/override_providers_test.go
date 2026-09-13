@@ -22,8 +22,8 @@ func TestMonitoredGatewayFlatKeys_DiscoversCustomProvider(t *testing.T) {
 
 	keys := monitoredGatewayFlatKeys(fv)
 	want := map[string]bool{
-		"gateway.order":            true,
-		"gateway.poolside.api_key": true,
+		"gateway.order":             true,
+		"gateway.poolside.api_key":  true,
 		"gateway.poolside.base_url": true,
 	}
 	if len(keys) != len(want) {
