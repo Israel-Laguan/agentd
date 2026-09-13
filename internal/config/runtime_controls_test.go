@@ -65,13 +65,13 @@ func TestDiskConfig(t *testing.T) {
 		t.Errorf("expected default %v, got %v", defaultDiskFreeThresholdPercent, got)
 	}
 
-	cfg := DiskConfig{FreeThresholdPercent: v.GetFloat64("disk.free_threshold_percent")}
+	cfg := loadDiskConfig(v)
 	if cfg.FreeThresholdPercent != defaultDiskFreeThresholdPercent {
 		t.Errorf("expected %v, got %v", defaultDiskFreeThresholdPercent, cfg.FreeThresholdPercent)
 	}
 
 	v.Set("disk.free_threshold_percent", 20.0)
-	cfg = DiskConfig{FreeThresholdPercent: v.GetFloat64("disk.free_threshold_percent")}
+	cfg = loadDiskConfig(v)
 	if cfg.FreeThresholdPercent != 20.0 {
 		t.Errorf("expected 20.0, got %v", cfg.FreeThresholdPercent)
 	}
