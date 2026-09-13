@@ -13,10 +13,6 @@ const (
 	hitlApprovalRejectionUsedPrefix = "agentd:hitl:approval-rejection-used:"
 )
 
-func approvalSubtaskTitle(toolName string) string {
-	return models.HITLSubtaskTitleApproveTool + toolName
-}
-
 func recordHITLExpiry(ctx context.Context, store models.KanbanStore, taskID string, expiresAt time.Time) error {
 	comment := hitlExpiryComment(expiresAt)
 	comment.TaskID = taskID
@@ -50,11 +46,6 @@ func parseHITLExpiry(comments []models.Comment) (time.Time, bool) {
 		}
 	}
 	return latest, found
-}
-
-func hitlExpired(comments []models.Comment, now time.Time) bool {
-	expiresAt, ok := parseHITLExpiry(comments)
-	return ok && now.After(expiresAt)
 }
 
 func isHITLMarkerConsumed(comments []models.Comment, marker string) bool {

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -190,7 +191,7 @@ func assertLegacyReviewCommittedStdout(t *testing.T, store *captureResultStore, 
 	if store.lastResult == nil {
 		t.Fatal("expected committed task result")
 	}
-	wantPayload := resultPayload(sandbox.Result{Success: true, Stdout: strings.TrimSpace(sbResult.Stdout)})
+	wantPayload := fmt.Sprintf("exit=%d duration=%s\n%s", 0, time.Duration(0), strings.TrimSpace(sbResult.Stdout))
 	if store.lastResult.Payload != wantPayload {
 		t.Fatalf("committed payload = %q, want %q", store.lastResult.Payload, wantPayload)
 	}

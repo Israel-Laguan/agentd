@@ -27,13 +27,6 @@ func providerName(p gateway.ProviderConfig) string {
 	return strings.TrimSpace(p.Adapter)
 }
 
-func providerAPIKeyEnv(p gateway.ProviderConfig) string {
-	if keys := providerAPIKeyEnvCandidates(p); len(keys) > 0 {
-		return keys[0]
-	}
-	return ""
-}
-
 func providerAPIKeyEnvCandidates(p gateway.ProviderConfig) []string {
 	keys := make([]string, 0, 2)
 	if env := strings.TrimSpace(p.APIKeyEnv); env != "" {
@@ -41,7 +34,7 @@ func providerAPIKeyEnvCandidates(p gateway.ProviderConfig) []string {
 	}
 	if name := providerName(p); name != "" {
 		generic := "AGENTD_GATEWAY_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_")) + "_API_KEY"
-		if generic != "" && (len(keys) == 0 || keys[0] != generic) {
+		if len(keys) == 0 || keys[0] != generic {
 			keys = append(keys, generic)
 		}
 	}
@@ -93,7 +86,7 @@ func providerShowKeys(fv *viper.Viper) []string {
 		if name == "" {
 			continue
 		}
-		if strings.TrimSpace(p.APIKey) != "" || providerAPIKeyEnv(p) != "" {
+		if strings.TrimSpace(p.APIKey) != "" || len(providerAPIKeyEnvCandidates(p)) > 0 {
 			keys = append(keys, providerConfigKeyPrefix+name+"].api_key")
 		}
 		if strings.TrimSpace(p.BaseURL) != "" {

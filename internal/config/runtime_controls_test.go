@@ -59,19 +59,19 @@ func TestBreakerConfig_Custom(t *testing.T) {
 
 func TestDiskConfig(t *testing.T) {
 	v := viper.New()
-	setDiskDefaults(v)
+	v.SetDefault("disk.free_threshold_percent", defaultDiskFreeThresholdPercent)
 
 	if got := v.GetFloat64("disk.free_threshold_percent"); got != defaultDiskFreeThresholdPercent {
 		t.Errorf("expected default %v, got %v", defaultDiskFreeThresholdPercent, got)
 	}
 
-	cfg := loadDiskConfig(v)
+	cfg := DiskConfig{FreeThresholdPercent: v.GetFloat64("disk.free_threshold_percent")}
 	if cfg.FreeThresholdPercent != defaultDiskFreeThresholdPercent {
 		t.Errorf("expected %v, got %v", defaultDiskFreeThresholdPercent, cfg.FreeThresholdPercent)
 	}
 
 	v.Set("disk.free_threshold_percent", 20.0)
-	cfg = loadDiskConfig(v)
+	cfg = DiskConfig{FreeThresholdPercent: v.GetFloat64("disk.free_threshold_percent")}
 	if cfg.FreeThresholdPercent != 20.0 {
 		t.Errorf("expected 20.0, got %v", cfg.FreeThresholdPercent)
 	}

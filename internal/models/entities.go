@@ -105,6 +105,16 @@ type TokenUsagePayload struct {
 	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
 }
 
+// UsageDetails carries prompt-cache token fields surfaced by providers that
+// support automatic prompt caching. These are observability-only fields: the
+// daemon does no hit-rate math on them. CachedTokens counts prompt-cache reads;
+// CacheWriteTokens counts prompt-cache writes. Many providers omit these fields
+// entirely, in which case both stay zero.
+type UsageDetails struct {
+	CachedTokens     int `json:"cached_tokens,omitempty"`
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+}
+
 // AgentProfile configures a concrete model/provider pair.
 type AgentProfile struct {
 	ID           string

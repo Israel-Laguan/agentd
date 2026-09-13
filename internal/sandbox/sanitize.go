@@ -47,7 +47,7 @@ func validateAbsolutePathTokens(command, workspace string) error {
 		if err != nil {
 			return fmt.Errorf("%w: invalid absolute path", models.ErrSandboxViolation)
 		}
-				if filepath.Clean(path) == filepath.Clean(workspace) || strings.HasPrefix(path, workspace+string(os.PathSeparator)) {
+		if filepath.Clean(path) == filepath.Clean(workspace) || strings.HasPrefix(path, workspace+string(os.PathSeparator)) {
 			continue
 		}
 		return fmt.Errorf("%w: absolute path escapes workspace", models.ErrSandboxViolation)
@@ -70,7 +70,7 @@ func validateChangeDirTargets(command, workspace string) error {
 		if err != nil {
 			return fmt.Errorf("%w: invalid directory target", models.ErrSandboxViolation)
 		}
-				if filepath.Clean(resolved) == filepath.Clean(workspace) || strings.HasPrefix(resolved, workspace+string(os.PathSeparator)) {
+		if filepath.Clean(resolved) == filepath.Clean(workspace) || strings.HasPrefix(resolved, workspace+string(os.PathSeparator)) {
 			continue
 		}
 		return fmt.Errorf("%w: directory change escapes workspace", models.ErrSandboxViolation)

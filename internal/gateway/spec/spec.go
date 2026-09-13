@@ -106,23 +106,18 @@ type Validatable interface {
 	Validate() error
 }
 
-// UsageDetails carries prompt-cache token fields surfaced by providers that
-// support automatic prompt caching. These are observability-only fields: the
-// daemon does no hit-rate math on them. CachedTokens counts prompt-cache reads;
-// CacheWriteTokens counts prompt-cache writes. Many providers omit these fields
-// entirely, in which case both stay zero.
-type UsageDetails struct {
-	CachedTokens     int `json:"cached_tokens,omitempty"`       // prompt cache reads
-	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`  // prompt cache writes
-}
+// UsageDetails is a re-export alias to the definition in models (shared bottom
+// layer). This lets gateway code keep using spec.UsageDetails while persistence
+// (kanban) and queue interfaces can depend on models instead of gateway/spec.
+type UsageDetails = models.UsageDetails
 
 // AIResponse is the provider-neutral output shape for model calls.
 type AIResponse struct {
-	Content      string       `json:"content"`
-	TokenUsage   int          `json:"token_usage"`
-	ProviderUsed string       `json:"provider_used"`
-	ModelUsed    string       `json:"model_used"`
-	ToolCalls    []ToolCall   `json:"tool_calls,omitempty"`
+	Content      string        `json:"content"`
+	TokenUsage   int           `json:"token_usage"`
+	ProviderUsed string        `json:"provider_used"`
+	ModelUsed    string        `json:"model_used"`
+	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"`
 	UsageDetails *UsageDetails `json:"usage_details,omitempty"`
 }
 

@@ -21,10 +21,6 @@ func failurePayload(result sandbox.Result, err error) string {
 	return strings.TrimSpace(result.Stderr + "\n" + result.Stdout)
 }
 
-func resultPayload(result sandbox.Result) string {
-	return fmt.Sprintf("exit=%d duration=%s\n%s", result.ExitCode, result.Duration, result.Stdout)
-}
-
 func detectionPayload(pattern, command string, result sandbox.Result) string {
 	return fmt.Sprintf(
 		"pattern=%s command=%q exit=%d duration=%s\n%s",

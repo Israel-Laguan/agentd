@@ -96,7 +96,7 @@ func (w *Worker) MountAgenticHooks(
 // RunSessionStart runs the worker's SessionStart hooks (e.g. credential
 // validation) followed by any task-scoped hooks supplied by MountAgenticHooks.
 func (w *Worker) RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error {
-	hc := sessionHookCtx(task, project, ctx)
+	hc := agenthooks.HookContext{SessionID: task.ID, ProjectID: project.ID, Timestamp: time.Now(), ExecCtx: ctx}
 	if w.hooks != nil {
 		if err := w.hooks.RunSessionStart(hc); err != nil {
 			return err
@@ -106,10 +106,6 @@ func (w *Worker) RunSessionStart(ctx context.Context, task models.Task, project 
 		return taskHooks.RunSessionStart(hc)
 	}
 	return nil
-}
-
-func sessionHookCtx(task models.Task, project models.Project, ctx context.Context) agenthooks.HookContext {
-	return agenthooks.HookContext{SessionID: task.ID, ProjectID: project.ID, Timestamp: time.Now(), ExecCtx: ctx}
 }
 
 // AgenticToolsWithExtras builds the tool definitions and adapter index,

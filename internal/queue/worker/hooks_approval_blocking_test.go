@@ -74,7 +74,7 @@ func TestBlockingApprovalHandler_GrantsCompletedApprovalDespiteExpiredComments(t
 		t.Fatalf("add expiry comment: %v", err)
 	}
 	_, created, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{{
-		Title: approvalSubtaskTitle("deploy"), Assignee: models.TaskAssigneeHuman,
+		Title: models.HITLSubtaskTitleApproveTool + "deploy", Assignee: models.TaskAssigneeHuman,
 	}})
 	if err != nil {
 		t.Fatalf("block: %v", err)
@@ -106,7 +106,7 @@ func TestBlockingApprovalHandler_GrantsCompletedApproval(t *testing.T) {
 	}
 	parent := tasks[0]
 	_, created, err := store.BlockTaskWithSubtasks(context.Background(), parent.ID, parent.UpdatedAt, []models.DraftTask{{
-		Title: approvalSubtaskTitle("deploy"), Assignee: models.TaskAssigneeHuman,
+		Title: models.HITLSubtaskTitleApproveTool + "deploy", Assignee: models.TaskAssigneeHuman,
 	}})
 	if err != nil {
 		t.Fatalf("block: %v", err)
@@ -149,7 +149,7 @@ func TestBlockingApprovalHandler_RejectionConsumedOnce(t *testing.T) {
 	}
 	parent := tasks[0]
 	_, created, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
-		Title: approvalSubtaskTitle("deploy"), Assignee: models.TaskAssigneeHuman,
+		Title: models.HITLSubtaskTitleApproveTool + "deploy", Assignee: models.TaskAssigneeHuman,
 	}})
 	if err != nil {
 		t.Fatalf("block: %v", err)
@@ -207,7 +207,7 @@ func TestBlockingApprovalHandler_RejectionAllowsNewApprovalSubtask(t *testing.T)
 	}
 	parent := tasks[0]
 	_, created, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
-		Title: approvalSubtaskTitle("deploy"), Assignee: models.TaskAssigneeHuman,
+		Title: models.HITLSubtaskTitleApproveTool + "deploy", Assignee: models.TaskAssigneeHuman,
 	}})
 	if err != nil {
 		t.Fatalf("block: %v", err)

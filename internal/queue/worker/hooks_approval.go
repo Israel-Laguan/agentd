@@ -164,8 +164,11 @@ func (h *BlockingApprovalHandler) RequestApproval(ctx context.Context, req Appro
 	if resp, ok, err := h.resolveExistingApproval(ctx, req, comments); err != nil || ok {
 		return resp, err
 	}
-	if hitlExpired(comments, time.Now()) {
-		return ApprovalResponse{}, fmt.Errorf("approval timed out")
+	{
+		expiresAt, ok := parseHITLExpiry(comments)
+		if ok && time.Now().After(expiresAt) {
+			return ApprovalResponse{}, fmt.Errorf("approval timed out")
+		}
 	}
 	return h.blockForApproval(ctx, req, timeout)
 }
@@ -177,7 +180,7 @@ func (h *BlockingApprovalHandler) resolveExistingApproval(
 	if err != nil {
 		return ApprovalResponse{}, true, fmt.Errorf("list approval subtasks: %w", err)
 	}
-	latest := findLatestChildByExactTitle(children, approvalSubtaskTitle(req.ToolName))
+	latest := findLatestChildByExactTitle(children, models.HITLSubtaskTitleApproveTool+req.ToolName)
 	if latest == nil {
 		return ApprovalResponse{}, false, nil
 	}
@@ -217,7 +220,7 @@ func (h *BlockingApprovalHandler) blockForApproval(ctx context.Context, req Appr
 		Detail:  fmt.Sprintf("Tool: %s\nArguments: %s\nRationale: %s\nCallID: %s", req.ToolName, truncateApprovalArgs(req.Arguments), req.Rationale, req.CallID),
 	})
 	_, subtasks, err := h.store.BlockTaskWithSubtasks(ctx, req.TaskID, req.TaskUpdatedAt, []models.DraftTask{{
-		Title: approvalSubtaskTitle(req.ToolName), Description: description, Assignee: models.TaskAssigneeHuman,
+		Title: models.HITLSubtaskTitleApproveTool + req.ToolName, Description: description, Assignee: models.TaskAssigneeHuman,
 	}})
 	if err != nil {
 		return ApprovalResponse{}, fmt.Errorf("create approval subtask: %w", err)

@@ -52,6 +52,8 @@ internal/config/health.go isHordeHealthy
 internal/config/health.go isLlamaCppHealthy
 internal/config/health.go isOllamaHealthy
 internal/config/override_log.go envKeyForConfigKey
+internal/config/runtime_controls.go setDiskDefaults
+internal/config/runtime_controls.go loadDiskConfig
 internal/config/show.go normalizeCompare
 internal/config/show.go fileConfigOverridePrefix
 internal/frontdesk/intake.go NewIntakeProcessor
@@ -136,6 +138,7 @@ internal/services/task_service.go NewTaskService
 scripts/checkminfunc/baseline.go violationKey
 cmd/agentd/io.go writeLine
 cmd/agentd/io.go writeFormat
+internal/agent/context/context_corrections.go sameCorrection
 internal/agent/runtime/audit_schema.go HashArgs
 internal/agent/runtime/model_router.go EstimateContextTokens
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).withMaxDelegationDepth
