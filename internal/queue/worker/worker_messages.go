@@ -16,9 +16,7 @@ import (
 	agenttools "agentd/internal/agent/tools"
 )
 
-func taskIntent(task models.Task) string {
-	return task.Title + " " + task.Description
-}
+
 
 // appendMemoryLessons appends an optional memory-lessons system message after the
 // stable system prompt + task seed. Placing lessons after the stable context keeps
@@ -36,7 +34,7 @@ func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, project
 
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := w.legacySeedMessages(task, project, profile)
-	intent := taskIntent(task)
+	intent := task.Title + " " + task.Description
 	return w.appendMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
@@ -127,7 +125,7 @@ func (w *Worker) enrichBuilderMatchedSkills(builder *SystemPromptBuilder, task m
 	if len(skills) == 0 {
 		return
 	}
-	intent := taskIntent(task)
+	intent := task.Title + " " + task.Description
 	matched := w.skillRouter.Match(intent, skills)
 	for _, sk := range matched {
 		builder.AddSkillBlock(wskills.FormatSkillBlock(sk))
@@ -153,9 +151,7 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 	return builder.Build()
 }
 
-func defaultTaskUserContent(task models.Task) string {
-	return fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
-}
+
 
 func (w *Worker) shouldUseCodePromptTemplate(task models.Task, profile models.AgentProfile) bool {
 	if strings.EqualFold(strings.TrimSpace(profile.ToolManifestType), agenttools.TaskTypeCodeGen) {
@@ -189,7 +185,7 @@ func (w *Worker) buildPromptMessages(task models.Task, project models.Project, p
 			return rendered.System, rendered.User
 		}
 	}
-	return systemPrefix, defaultTaskUserContent(task)
+	return systemPrefix, fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
 }
 
 // assembleAgenticSystemPrompt builds the full layered system prompt for agentic
@@ -211,7 +207,7 @@ func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Ta
 		gateway.PromptMessage{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userContent},
 	}
-	intent := taskIntent(task)
+	intent := task.Title + " " + task.Description
 	return w.appendMemoryLessons(ctx, intent, task.ProjectID, messages)
 }
 
@@ -231,6 +227,6 @@ func (w *Worker) AssembleAgenticSystemPromptWithUserContent(
 		gateway.PromptMessage{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userContent},
 	}
-	intent := taskIntent(task)
+	intent := task.Title + " " + task.Description
 	return w.appendMemoryLessons(ctx, intent, task.ProjectID, messages)
 }

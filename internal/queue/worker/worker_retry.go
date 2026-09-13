@@ -91,7 +91,7 @@ func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result s
 	}
 	_, updateErr := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
 		Success: true,
-		Payload: resultPayload(result),
+		Payload: fmt.Sprintf("exit=%d duration=%s\n%s", result.ExitCode, result.Duration, result.Stdout),
 	})
 	if updateErr != nil {
 		w.Emit(ctx, task, "ERROR", updateErr.Error())

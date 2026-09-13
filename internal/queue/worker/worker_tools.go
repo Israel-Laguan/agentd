@@ -44,11 +44,6 @@ func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gatewa
 	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil, retry, nil, nil)
 }
 
-// timeoutToolResult returns a structured ToolResult for a timed-out tool.
-func timeoutToolResult(callID string, timeout time.Duration) agenttools.ToolResult {
-	return agenttools.TimeoutResult(callID, timeout.Milliseconds())
-}
-
 // FilterAgenticTools applies per-task tool manifest filtering when enabled.
 func (w *Worker) FilterAgenticTools(
 	tools []gateway.ToolDefinition,
@@ -155,7 +150,7 @@ func (w *Worker) executeToolWithRetry(
 		defer cancel()
 		tr := body(toolCtx)
 		if toolCtx.Err() == context.DeadlineExceeded && attemptCtx.Err() == nil {
-			return timeoutToolResult(callID, timeout)
+			return agenttools.TimeoutResult(callID, timeout.Milliseconds())
 		}
 		return tr
 	}

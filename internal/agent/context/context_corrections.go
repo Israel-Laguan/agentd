@@ -25,7 +25,7 @@ func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) bool {
 	defer cm.mu.Unlock()
 
 	for _, existing := range cm.corrections {
-		if sameCorrection(existing, rec) {
+		if existing.Contradiction == rec.Contradiction && existing.CorrectFact == rec.CorrectFact {
 			return false
 		}
 	}
@@ -36,10 +36,7 @@ func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) bool {
 	return true
 }
 
-func sameCorrection(a, b CorrectionRecord) bool {
-	return a.Contradiction == b.Contradiction &&
-		a.CorrectFact == b.CorrectFact
-}
+
 
 // MarkCommentCorrectionSeen records a task comment as processed for correction parsing.
 func (cm *ContextManager) MarkCommentCorrectionSeen(c models.Comment) bool {
@@ -163,7 +160,7 @@ func (cm *ContextManager) CheckToolResult(toolOutput string) []CorrectionRecord 
 
 func hasCorrection(records []CorrectionRecord, rec CorrectionRecord) bool {
 	for _, existing := range records {
-		if sameCorrection(existing, rec) {
+		if existing.Contradiction == rec.Contradiction && existing.CorrectFact == rec.CorrectFact {
 			return true
 		}
 	}

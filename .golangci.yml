@@ -67,9 +67,6 @@ linters:
         kanban-test-isolation:
           files:
             - "**/internal/kanban/**_test.go"
-          list-mode: lax
-          allow:
-            - "agentd/internal/gateway/spec"
           deny:
             - pkg: "agentd/internal/queue"
               desc: "kanban tests should not depend on queue"

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"agentd/internal/gateway/spec"
+	"agentd/internal/models"
 )
 
 // AddTokenUsage atomically increments token_usage for the given task.
@@ -44,7 +44,7 @@ func (s *Store) SumTokenUsage(ctx context.Context) (int, error) {
 
 // AddUsageDetails atomically increments the cached token columns for the given task.
 // It is a no-op when both values are <= 0 and returns an error when taskID is unknown.
-func (s *Store) AddUsageDetails(ctx context.Context, taskID string, details spec.UsageDetails) error {
+func (s *Store) AddUsageDetails(ctx context.Context, taskID string, details models.UsageDetails) error {
 	cached := details.CachedTokens
 	write := details.CacheWriteTokens
 	if cached < 0 {

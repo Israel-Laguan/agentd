@@ -46,14 +46,14 @@ func main() {
 			fmt.Fprintf(os.Stderr, "checkminfunc: validate baseline: %v\n", err)
 			os.Exit(2)
 		}
-		hadBaseline := fileExists(*baselinePath)
-		if err := writeBaseline(*baselinePath, violations, *minLines); err != nil {
+		backupPath, err := writeBaseline(*baselinePath, violations, *minLines)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "checkminfunc: write baseline: %v\n", err)
 			os.Exit(2)
 		}
 		msg := fmt.Sprintf("checkminfunc: updated baseline with %d function(s).", len(violations))
-		if hadBaseline {
-			msg += fmt.Sprintf(" Previous baseline saved to %s.bak.", *baselinePath)
+		if backupPath != "" {
+			msg += fmt.Sprintf(" Previous baseline saved to %s.", backupPath)
 		}
 		fmt.Println(msg)
 		return

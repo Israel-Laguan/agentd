@@ -119,6 +119,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 		ledger := rollingLedger
 		tokenHook = func(tokens int) { ledger.LogCall(tokens) }
 	}
+	ts, _ := store.(queue.TokenUsageStore)
 	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, queue.WorkerOptions{
 		Canceller:                 deps.canceller,
 		Tuner:                     queue.NewParameterTuner(cfg.Healing),
@@ -155,7 +156,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 		ContextWarningThreshold: cfg.Agentic.ContextWarningThreshold,
 		ToolFailureStreak:       cfg.Agentic.ToolFailureStreak,
 		TokenUsageHook:          tokenHook,
-		TokenStore:              tokenUsageStore(store),
+		TokenStore:              ts,
 		FileContext:               cfg.Agentic.FileContext,
 		FileContextCachePath: config.ResolveFileContextCachePath(cfg.HomeDir, cfg.Agentic.FileContext.CachePath),
 		Planning:                  cfg.Agentic.Planning,

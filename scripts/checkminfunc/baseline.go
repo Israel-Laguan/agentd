@@ -66,9 +66,9 @@ func readBaselineFile(path string) (map[string]struct{}, error) {
 	return accepted, nil
 }
 
-func writeBaseline(path string, violations []violation, minLines int) error {
+func writeBaseline(path string, violations []violation, minLines int) (string, error) {
 	if path == "" {
-		return fmt.Errorf("baseline path is empty")
+		return "", fmt.Errorf("baseline path is empty")
 	}
 	info, err := os.Stat(path)
 	if err == nil {
@@ -78,7 +78,7 @@ func writeBaseline(path string, violations []violation, minLines int) error {
 		return writeBaselineFile(path, violations, true, minLines)
 	}
 	if !os.IsNotExist(err) {
-		return err
+		return "", err
 	}
 	if isDirectoryPath(path) {
 		return writeBaselineDir(path, violations, minLines)
@@ -86,23 +86,24 @@ func writeBaseline(path string, violations []violation, minLines int) error {
 	return writeBaselineFile(path, violations, true, minLines)
 }
 
-func writeBaselineDir(path string, violations []violation, minLines int) error {
+func writeBaselineDir(path string, violations []violation, minLines int) (string, error) {
 	const baselineChunkSize = 200
 	if err := os.MkdirAll(path, 0o755); err != nil {
-		return err
+		return "", err
 	}
-	if err := backupBaselineDirIfExists(path); err != nil {
-		return fmt.Errorf("backup baseline: %w", err)
+	backup, err := backupBaselineDirIfExists(path)
+	if err != nil {
+		return "", fmt.Errorf("backup baseline: %w", err)
 	}
 
 	// Clean up old part files before writing new ones
 	entries, err := filepath.Glob(filepath.Join(path, "part-*.txt"))
 	if err != nil {
-		return err
+		return "", err
 	}
 	for _, entry := range entries {
 		if err := os.Remove(entry); err != nil {
-			return err
+			return "", err
 		}
 	}
 
@@ -112,19 +113,20 @@ func writeBaselineDir(path string, violations []violation, minLines int) error {
 			end = len(violations)
 		}
 		name := fmt.Sprintf("part-%03d.txt", start/baselineChunkSize+1)
-		if err := writeBaselineFile(filepath.Join(path, name), violations[start:end], false, minLines); err != nil {
-			return err
+		if _, err := writeBaselineFile(filepath.Join(path, name), violations[start:end], false, minLines); err != nil {
+			return "", err
 		}
 	}
-	return nil
+	return backup, nil
 }
 
-func writeBaselineFile(path string, violations []violation, withHeader bool, minLines int) error {
+func writeBaselineFile(path string, violations []violation, withHeader bool, minLines int) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+		return "", err
 	}
-	if err := backupBaselineIfExists(path); err != nil {
-		return fmt.Errorf("backup baseline: %w", err)
+	backup, err := backupBaselineIfExists(path)
+	if err != nil {
+		return "", fmt.Errorf("backup baseline: %w", err)
 	}
 
 	var out strings.Builder
@@ -138,48 +140,63 @@ func writeBaselineFile(path string, violations []violation, withHeader bool, min
 		out.WriteString(violationKey(v))
 		out.WriteByte('\n')
 	}
-	return os.WriteFile(path, []byte(out.String()), 0o644)
+	if err := os.WriteFile(path, []byte(out.String()), 0o644); err != nil {
+		return "", err
+	}
+	return backup, nil
 }
 
-func backupBaselineDirIfExists(path string) error {
+func backupBaselineDirIfExists(path string) (string, error) {
 	entries, err := filepath.Glob(filepath.Join(path, "*.txt"))
 	if err != nil {
-		return err
+		return "", err
 	}
 	if len(entries) == 0 {
-		return nil
+		return "", nil
 	}
-	backupDir := strings.TrimRight(path, `/\`) + ".bak"
-	if err := os.RemoveAll(backupDir); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(backupDir, 0o755); err != nil {
-		return err
+	backupDir, err := os.MkdirTemp("", "checkminfunc-baseline-*")
+	if err != nil {
+		return "", err
 	}
 	for _, entry := range entries {
 		data, err := os.ReadFile(entry)
 		if err != nil {
-			return err
+			os.RemoveAll(backupDir)
+			return "", err
 		}
 		if err := os.WriteFile(filepath.Join(backupDir, filepath.Base(entry)), data, 0o644); err != nil {
-			return err
+			os.RemoveAll(backupDir)
+			return "", err
 		}
 	}
-	return nil
+	return backupDir, nil
 }
 
-func backupBaselineIfExists(path string) error {
+func backupBaselineIfExists(path string) (string, error) {
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return "", nil
 		}
-		return err
+		return "", err
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return os.WriteFile(path+".bak", data, 0o644)
+	tmpFile, err := os.CreateTemp("", "checkminfunc-baseline-*.bak")
+	if err != nil {
+		return "", err
+	}
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		return "", err
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpFile.Name())
+		return "", err
+	}
+	return tmpFile.Name(), nil
 }
 
 func isDirectoryPath(path string) bool {

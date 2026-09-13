@@ -18,16 +18,16 @@ func TestFindLatestApprovalSubtask_ExactTitleOnly(t *testing.T) {
 	children := []models.Task{
 		{
 			BaseEntity: models.BaseEntity{ID: "deploy-prod", UpdatedAt: newer},
-			Title:      approvalSubtaskTitle("deploy-prod"),
+			Title:      models.HITLSubtaskTitleApproveTool + "deploy-prod",
 			State:      models.TaskStateCompleted,
 		},
 		{
 			BaseEntity: models.BaseEntity{ID: "deploy", UpdatedAt: older},
-			Title:      approvalSubtaskTitle("deploy"),
+			Title:      models.HITLSubtaskTitleApproveTool + "deploy",
 			State:      models.TaskStateCompleted,
 		},
 	}
-		got := findLatestChildByExactTitle(children, approvalSubtaskTitle("deploy"))
+	got := findLatestChildByExactTitle(children, models.HITLSubtaskTitleApproveTool+"deploy")
 	if got == nil {
 		t.Fatal("expected deploy approval subtask")
 		return

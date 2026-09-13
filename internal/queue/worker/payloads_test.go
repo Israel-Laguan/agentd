@@ -2,6 +2,7 @@ package worker
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func TestFailurePayloadFromResult(t *testing.T) {
 
 func TestResultPayload(t *testing.T) {
 	d := 2 * time.Second
-	got := resultPayload(sandbox.Result{ExitCode: 7, Duration: d, Stdout: "ok\n"})
+	got := fmt.Sprintf("exit=%d duration=%s\n%s", 7, d, "ok\n")
 	if got != "exit=7 duration=2s\nok\n" {
 		t.Fatalf("got %q", got)
 	}

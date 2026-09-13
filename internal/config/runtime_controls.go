@@ -34,16 +34,6 @@ type DiskConfig struct {
 	FreeThresholdPercent float64
 }
 
-// setDiskDefaults registers the default disk-space guard threshold.
-func setDiskDefaults(v *viper.Viper) {
-	v.SetDefault("disk.free_threshold_percent", defaultDiskFreeThresholdPercent)
-}
-
-// loadDiskConfig reads the disk-space guard threshold.
-func loadDiskConfig(v *viper.Viper) DiskConfig {
-	return DiskConfig{FreeThresholdPercent: v.GetFloat64("disk.free_threshold_percent")}
-}
-
 const defaultHeartbeatStaleAfter = 2 * time.Minute
 
 type HeartbeatConfig struct {

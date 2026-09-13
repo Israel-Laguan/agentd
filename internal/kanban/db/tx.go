@@ -45,10 +45,11 @@ func (tx *ImmediateTx) Commit() error {
 		return nil
 	}
 	tx.done = true
-	if _, err := tx.ExecContext(context.Background(), "COMMIT"); err != nil {
-		return err
+	_, err := tx.ExecContext(context.Background(), "COMMIT")
+	if closeErr := tx.Close(); closeErr != nil && err == nil {
+		err = closeErr
 	}
-	return tx.Close()
+	return err
 }
 
 // Rollback rolls back the transaction and releases the connection. Calling
@@ -58,8 +59,9 @@ func (tx *ImmediateTx) Rollback() error {
 		return nil
 	}
 	tx.done = true
-	if _, err := tx.ExecContext(context.Background(), "ROLLBACK"); err != nil {
-		return err
+	_, err := tx.ExecContext(context.Background(), "ROLLBACK")
+	if closeErr := tx.Close(); closeErr != nil && err == nil {
+		err = closeErr
 	}
-	return tx.Close()
+	return err
 }
