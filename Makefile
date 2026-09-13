@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test coverage run tidy lint lint-install loc minfunc minfunc-accept folder-audit check test-e2e podman-test lint-md lint-links lint-docs
+.PHONY: build test coverage run tidy lint lint-install loc minfunc minfunc-accept folder-audit check test-e2e podman-test lint-md lint-links lint-docs smoke-contract
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -28,6 +28,10 @@ endif
 
 test:
 	$(GO_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
+
+smoke-contract:
+	$(GO_ENV) $(GO) test -count=1 ./internal/gateway/providers -run 'WireContract|TestWireContract_ErrorStatusMapping|TestOpenAIWireContract'
+	@echo "Runtime smoke: scripts/llm-smoke.sh <base_url> <model> [key]"
 
 coverage:
 	$(GO_ENV) $(GO) test -v -race -covermode=atomic -coverpkg=$(COVERPKG) -coverprofile=coverage.out $(PKG)

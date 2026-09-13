@@ -8,16 +8,16 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestMigrateToV9AddsAgenticModeColumn(t *testing.T) {
-	db, err := sql.Open("sqlite", "file:migrate-v9?mode=memory&cache=shared")
+func TestMigrationAddsSuccessCriteriaColumn(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:migrate-v8?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
 	ctx := context.Background()
-	if _, err := db.ExecContext(ctx, v8SchemaSQL); err != nil {
-		t.Fatalf("create v8 schema: %v", err)
+	if _, err := db.ExecContext(ctx, v7SchemaSQL); err != nil {
+		t.Fatalf("create v7 schema: %v", err)
 	}
 
 	if err := Run(ctx, db); err != nil {
@@ -28,29 +28,29 @@ func TestMigrateToV9AddsAgenticModeColumn(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "14" {
-		t.Fatalf("schema version = %q, want 14", version)
+	if version != "15" {
+		t.Fatalf("schema version = %q, want 15", version)
 	}
 
 	var hasColumn int
 	if err := db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM pragma_table_info('agent_profiles') WHERE name = 'agentic_mode'`).Scan(&hasColumn); err != nil {
-		t.Fatalf("check agent_profiles.agentic_mode column: %v", err)
+		SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name = 'success_criteria'`).Scan(&hasColumn); err != nil {
+		t.Fatalf("check tasks.success_criteria column: %v", err)
 	}
 	if hasColumn != 1 {
-		t.Fatalf("agentic_mode column present = %d, want 1", hasColumn)
+		t.Fatalf("success_criteria column present = %d, want 1", hasColumn)
 	}
 
-	var agenticMode int
-	if err := db.QueryRowContext(ctx, `SELECT agentic_mode FROM agent_profiles WHERE id = 'default'`).Scan(&agenticMode); err != nil {
-		t.Fatalf("read agentic_mode: %v", err)
+	var successCriteria string
+	if err := db.QueryRowContext(ctx, `SELECT success_criteria FROM tasks WHERE id = 'task'`).Scan(&successCriteria); err != nil {
+		t.Fatalf("read success_criteria: %v", err)
 	}
-	if agenticMode != 0 {
-		t.Fatalf("agentic_mode = %d, want 0", agenticMode)
+	if successCriteria != "[]" {
+		t.Fatalf("success_criteria = %q, want []", successCriteria)
 	}
 }
 
-const v8SchemaSQL = `
+const v7SchemaSQL = `
 CREATE TABLE projects (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
@@ -75,7 +75,6 @@ CREATE TABLE tasks (
     last_heartbeat TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
     token_usage INTEGER NOT NULL DEFAULT 0,
-    success_criteria TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(success_criteria) AND json_type(success_criteria) = 'array'),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 ) STRICT;
@@ -98,8 +97,14 @@ CREATE TABLE settings (
     updated_at TEXT NOT NULL
 ) STRICT;
 
-INSERT INTO settings (key, value, updated_at) VALUES ('schema_version', '8', datetime('now'));
+INSERT INTO settings (key, value, updated_at) VALUES ('schema_version', '7', datetime('now'));
 
-INSERT INTO agent_profiles (id, name, provider, model, updated_at)
-VALUES ('default', 'Default', 'openai', 'gpt-4', '2026-05-21T10:00:00Z');
+INSERT INTO projects (id, name, original_input, workspace_path, status, created_at, updated_at)
+VALUES ('project', 'Project', 'input', 'workspace', 'ACTIVE', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
+
+INSERT INTO tasks (
+    id, project_id, agent_id, title, description, state, assignee,
+    os_process_id, started_at, last_heartbeat, retry_count, token_usage, created_at, updated_at
+)
+VALUES ('task', 'project', 'default', 'Task', 'description', 'READY', 'SYSTEM', NULL, NULL, NULL, 0, 0, '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
 `

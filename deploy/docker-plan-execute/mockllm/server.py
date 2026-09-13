@@ -57,14 +57,14 @@ def build_command(task_id: str, title: str) -> str:
 
 
 def chat_completion(body: dict) -> dict:
-    task_id = (body.get("metadata") or {}).get("task_id", "unknown")
+    md = body.get("metadata") or {}
+    task_id = md.get("task_id") or body.get("user") or "unknown"
     title = extract_task_title(body)
 
     # Log correlation metadata so litellm/M18 wiring is observable in docker logs.
-    md = body.get("metadata") or {}
-    if md:
+    if md or body.get("user"):
         sys.stderr.write(
-            f"[mockllm] correlation task_id={md.get('task_id')} "
+            f"[mockllm] correlation task_id={md.get('task_id') or body.get('user')} "
             f"agent_id={md.get('agent_id')} role={md.get('role')}\n"
         )
         sys.stderr.flush()

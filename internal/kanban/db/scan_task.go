@@ -30,7 +30,7 @@ func scanTaskValues(row Scanner, values *taskScanValues) error {
 	t := values.task
 	err := row.Scan(
 		&t.ID, &t.ProjectID, &t.AgentID, &t.Title, &t.Description, &values.state, &values.assignee,
-		&values.osPID, &values.startedAt, &values.completedAt, &values.lastHeartbeat, &t.RetryCount, &t.TokenUsage,
+		&values.osPID, &values.startedAt, &values.completedAt, &values.lastHeartbeat, &t.RetryCount, &t.TokenUsage, &t.CachedTokenUsage, &t.CacheWriteTokenUsage,
 		&values.successCriteria, &values.criteriaMet, &values.createdAt, &values.updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {

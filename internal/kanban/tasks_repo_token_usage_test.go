@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
 
@@ -89,4 +90,41 @@ func TestAddTokenUsage_NoOpForNonPositive(t *testing.T) {
 			t.Fatal("GetTask for unknown taskID: want error, got nil")
 		}
 	})
+}
+
+func TestAddUsageDetails_PersistsCacheTokens(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "cache-tokens",
+		Tasks:       []models.DraftTask{{Title: "a", Description: "one"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+
+	details := spec.UsageDetails{CachedTokens: 12, CacheWriteTokens: 3}
+	if err := store.AddUsageDetails(ctx, tasks[0].ID, details); err != nil {
+		t.Fatalf("AddUsageDetails: %v", err)
+	}
+
+	got, err := store.GetTask(ctx, tasks[0].ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.CachedTokenUsage != 12 || got.CacheWriteTokenUsage != 3 {
+		t.Errorf("got cached=%d write=%d, want 12/3", got.CachedTokenUsage, got.CacheWriteTokenUsage)
+	}
+
+	// additive
+	details2 := spec.UsageDetails{CachedTokens: 5, CacheWriteTokens: 1}
+	if err := store.AddUsageDetails(ctx, tasks[0].ID, details2); err != nil {
+		t.Fatalf("AddUsageDetails second: %v", err)
+	}
+	got, _ = store.GetTask(ctx, tasks[0].ID)
+	if got.CachedTokenUsage != 17 || got.CacheWriteTokenUsage != 4 {
+		t.Errorf("after second: cached=%d write=%d", got.CachedTokenUsage, got.CacheWriteTokenUsage)
+	}
 }

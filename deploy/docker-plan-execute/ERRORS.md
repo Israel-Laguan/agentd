@@ -46,14 +46,6 @@ agentd  ──>  litellm proxy (model: mock/agentd)  ──>  mockllm (OpenAI-co
 
 ## CONFIRMED MINOR (non-blocking, left as-is)
 
-### E3 — `send_task_metadata` emits a startup warning
-- **File:** `agentd/config.yaml` (`gateway.providers.options.send_task_metadata: true`)
-- **Detail:** In `internal/gateway/providers/openai.go` the option is passed to
-  `warnUnknownOptions("openai", []string{"send_task_metadata"}, …)`, which logs
-  `slog.Warn("unknown provider option ignored", …)`. The option is still honored
-  (it builds the `metadata` map at lines 55–57), so it is cosmetic only. No fix
-  needed, but expect one WARN line in the agentd logs.
-
 ---
 
 ## UNCERTAIN / RISK ITEMS (verify on next real run)
@@ -62,11 +54,8 @@ These could not be confirmed without a live run. They are the most likely
 candidates for the next round of failures.
 
 ### R1 — litellm may strip the `metadata` field (M18 correlation claim)
-- **File:** `mockllm/server.py` (reads `body.get("metadata")`), `agentd` OpenAI
-  provider (sends `metadata: {task_id, agent_id, role}`).
-- **Risk:** agentd sends `metadata` as a top-level OpenAI request field. litellm
-  treats `metadata` as its own spend-tracking field and may NOT forward it to the
-  upstream `mockllm`. If so, the correlation log line in mockllm will never print.
+- **File:** `mockllm/server.py`, `agentd` OpenAI provider (sends `metadata` + `user` for task correlation).
+- **Risk:** litellm may consume `metadata` internally and not forward. We now also set the standard `user` field (TaskID) which is more likely to passthrough. Verify logs contain correlation.
   The script does **not** assert on metadata, so this does not fail the e2e — but
   the "What it proves" bullet about correlation flowing through litellm would be
   unfounded. **Verify** by grepping `docker compose logs mockllm` for

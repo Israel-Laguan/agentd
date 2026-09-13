@@ -8,7 +8,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestMigrateToV3AddsMemoriesFTSColumnsAndTriggers(t *testing.T) {
+func TestMigrationAddsMemoriesFTSColumnsAndTriggers(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v3?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -28,8 +28,8 @@ func TestMigrateToV3AddsMemoriesFTSColumnsAndTriggers(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "14" {
-		t.Fatalf("schema version = %q, want 14", version)
+	if version != "15" {
+		t.Fatalf("schema version = %q, want 15", version)
 	}
 
 	for _, col := range []string{"last_accessed_at", "access_count", "superseded_by"} {
@@ -63,7 +63,7 @@ func TestMigrateToV3AddsMemoriesFTSColumnsAndTriggers(t *testing.T) {
 	}
 }
 
-func TestMigrateToV3SkipsWhenFTSAlreadyExists(t *testing.T) {
+func TestMigrationSkipsWhenFTSAlreadyExists(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v3-fts-skip?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -93,12 +93,12 @@ func TestMigrateToV3SkipsWhenFTSAlreadyExists(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "14" {
-		t.Fatalf("schema version = %q, want 14", version)
+	if version != "15" {
+		t.Fatalf("schema version = %q, want 15", version)
 	}
 }
 
-func TestMigrateToV3SkipsWithoutMemoriesTable(t *testing.T) {
+func TestMigrationSkipsWithoutMemoriesTable(t *testing.T) {
 	db, err := sql.Open("sqlite", "file:migrate-v3-skip?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
@@ -118,8 +118,8 @@ func TestMigrateToV3SkipsWithoutMemoriesTable(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "14" {
-		t.Fatalf("schema version = %q, want 14", version)
+	if version != "15" {
+		t.Fatalf("schema version = %q, want 15", version)
 	}
 
 	var tableExists int

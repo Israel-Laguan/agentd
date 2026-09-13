@@ -42,12 +42,25 @@ func (s *Store) SumTokenUsage(ctx context.Context) (int, error) {
 	return total, nil
 }
 
-// AddUsageDetails is an additive, forward-compatible seam on the token-usage
-// store. M15 surfaces prompt-cache fields (cached_tokens / cache_write_tokens)
-// via the TOKEN_USAGE event payload, which is the observability surface; it does
-// not persist them to a dedicated DB column (deferred to a later milestone).
-// This no-op keeps the TokenUsageStore interface additive without breaking
-// existing callers of AddTokenUsage.
-func (s *Store) AddUsageDetails(_ context.Context, _ string, _ spec.UsageDetails) error {
+// AddUsageDetails atomically increments the cached token columns for the given task.
+// It is a no-op when both values are <= 0 and returns an error when taskID is unknown.
+func (s *Store) AddUsageDetails(ctx context.Context, taskID string, details spec.UsageDetails) error {
+	if details.CachedTokens <= 0 && details.CacheWriteTokens <= 0 {
+		return nil
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE tasks SET cached_token_usage = cached_token_usage + ?, cache_write_token_usage = cache_write_token_usage + ? WHERE id = ?`,
+		details.CachedTokens, details.CacheWriteTokens, taskID,
+	)
+	if err != nil {
+		return fmt.Errorf("add usage details: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("add usage details rows affected: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("add usage details: task %q not found", taskID)
+	}
 	return nil
 }

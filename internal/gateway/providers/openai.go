@@ -48,6 +48,11 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		if md := o.buildMetadata(req); md != nil {
 			body.Metadata = md
 		}
+		if req.TaskID != "" {
+			body.User = req.TaskID
+		} else if req.AgentID != "" {
+			body.User = req.AgentID
+		}
 	}
 	// OpenAI does not allow response_format: json_object when tools are present.
 	if req.JSONMode && len(req.Tools) == 0 {
@@ -98,6 +103,7 @@ type openAIRequest struct {
 	ResponseFormat map[string]string `json:"response_format,omitempty"`
 	Tools          []openAITool      `json:"tools,omitempty"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
+	User           string            `json:"user,omitempty"`
 }
 
 type openAIMessage struct {

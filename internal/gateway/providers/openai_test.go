@@ -220,6 +220,9 @@ func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 	if meta["role"] != "worker" {
 		t.Errorf("metadata.role = %v, want worker", meta["role"])
 	}
+	if gotBody["user"] != "task-1" {
+		t.Errorf("user = %v, want task-1", gotBody["user"])
+	}
 }
 
 // TestOpenAI_SendTaskMetadata_Disabled verifies that metadata is absent when
@@ -257,6 +260,9 @@ func TestOpenAI_SendTaskMetadata_Disabled(t *testing.T) {
 	if _, has := gotBody["metadata"]; has {
 		t.Errorf("metadata present when option disabled; body = %#v", gotBody)
 	}
+	if _, has := gotBody["user"]; has {
+		t.Errorf("user present when option disabled; body = %#v", gotBody)
+	}
 }
 
 // TestOpenAI_SendTaskMetadata_NoTaskID verifies that metadata is absent when the
@@ -289,6 +295,9 @@ func TestOpenAI_SendTaskMetadata_NoTaskID(t *testing.T) {
 	defer mu.Unlock()
 	if _, has := gotBody["metadata"]; has {
 		t.Errorf("metadata present when no task/agent id; body = %#v", gotBody)
+	}
+	if _, has := gotBody["user"]; has {
+		t.Errorf("user present when no task/agent id; body = %#v", gotBody)
 	}
 }
 
@@ -329,6 +338,9 @@ func TestOpenAI_SendTaskMetadata_RoleOnly(t *testing.T) {
 	if meta["role"] != "worker" {
 		t.Errorf("metadata.role = %v, want worker", meta["role"])
 	}
+	if _, has := gotBody["user"]; has {
+		t.Errorf("user present for role-only; body = %#v", gotBody)
+	}
 }
 
 // TestOpenAI_SendTaskMetadata_StringValue verifies that the option accepts a
@@ -355,5 +367,8 @@ func TestOpenAI_SendTaskMetadata_StringValue(t *testing.T) {
 	}
 	if _, has := gotBody["metadata"]; !has {
 		t.Errorf("metadata missing when option is string \"true\"")
+	}
+	if gotBody["user"] != "t1" {
+		t.Errorf("user = %v, want t1", gotBody["user"])
 	}
 }

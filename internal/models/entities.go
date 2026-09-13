@@ -34,9 +34,11 @@ type Task struct {
 	StartedAt       *time.Time   `json:"started_at,omitempty"`
 	CompletedAt     *time.Time   `json:"completed_at,omitempty"`
 	LastHeartbeat   *time.Time   `json:"last_heartbeat,omitempty"`
-	RetryCount      int          `json:"retry_count"`
-	TokenUsage      int          `json:"token_usage"`
-	SuccessCriteria []string     `json:"success_criteria"`
+	RetryCount             int  `json:"retry_count"`
+	TokenUsage             int  `json:"token_usage"`
+	CachedTokenUsage       int  `json:"cached_token_usage"`
+	CacheWriteTokenUsage   int  `json:"cache_write_token_usage"`
+	SuccessCriteria        []string `json:"success_criteria"`
 	CriteriaMet     []string     `json:"criteria_met"`
 	DependsOn       []string     `json:"depends_on"`
 	Logs            string       `json:"logs"`

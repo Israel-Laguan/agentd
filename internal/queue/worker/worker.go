@@ -69,6 +69,7 @@ type Worker struct {
 	toolFailureStreak             int
 	tokenUsageHook                func(int)
 	tokenStore                    TokenUsageStore
+	disableTokenRecording         bool
 	loopResultRecorder            func(LoopResult)
 	fileContextCfg                config.FileContextConfig
 	docStore                      *wfilecontext.DocStore
@@ -99,10 +100,7 @@ type MemoryRetriever interface {
 // It is implemented by the kanban store and injected via WorkerOptions.TokenStore.
 type TokenUsageStore interface {
 	AddTokenUsage(ctx context.Context, taskID string, tokens int) error
-	// AddUsageDetails is an additive seam for prompt-cache usage details
-	// (cached_tokens / cache_write_tokens). Implementations may no-op when
-	// cache-token persistence is deferred; the TOKEN_USAGE event payload is
-	// the primary observability surface.
+	// AddUsageDetails persists prompt-cache usage details (cached + write).
 	AddUsageDetails(ctx context.Context, taskID string, details spec.UsageDetails) error
 }
 
@@ -117,7 +115,7 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 	if w.tokenUsageHook != nil {
 		w.tokenUsageHook(tokens)
 	}
-	if w.tokenStore != nil {
+	if w.tokenStore != nil && !w.disableTokenRecording {
 		if err := w.tokenStore.AddTokenUsage(ctx, task.ID, tokens); err != nil {
 			slog.Error("failed to persist token usage", "task_id", task.ID, "tokens", tokens, "err", err)
 		}
