@@ -23,9 +23,7 @@ type FileConverter struct {
 }
 
 func NewFileConverter() *FileConverter {
-	conv := defaultConvert
-	fc := &FileConverter{convert: conv}
-	return fc
+	return &FileConverter{convert: defaultConvert}
 }
 
 func NewFileConverterWith(fn ConverterFunc) *FileConverter {
