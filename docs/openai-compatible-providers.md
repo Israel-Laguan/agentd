@@ -43,7 +43,7 @@ Keys used by every `providers` entry:
 | `api_key_env` | Environment variable holding the API key (preferred over inline `api_key`) |
 | `model` | Model name as the vendor expects it |
 | `capabilities.chat_tools` | Override tool-calling support; the `openai` adapter defaults to `true` |
-| `options.send_task_metadata` | Opt-in correlation: when `true`, sends `metadata` map (task_id/agent_id/role) and top-level `user` (TaskID or AgentID) for passthrough. Only when at least one id present. Defaults `false`. |
+| `options.send_task_metadata` | Opt-in correlation: when `true`, sends `metadata` map (task_id/agent_id/role when any of the three is non-empty) for passthrough on compatible gateways (e.g. LiteLLM). We do not set the top-level `user` field (OpenAI semantic for end-user id). Defaults `false`. |
 
 List the vendor name(s) in `gateway.order`. agentd tries each provider in order and advances
 to the next on error, so cascade fallback works automatically.

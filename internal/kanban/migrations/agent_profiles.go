@@ -19,7 +19,7 @@ func migrateToV7(ctx context.Context, db *sql.DB) error {
 		ddl  string
 	}{
 		{"role", `ALTER TABLE agent_profiles ADD COLUMN role TEXT NOT NULL DEFAULT 'CODE_GEN'`},
-		{"max_tokens", `ALTER TABLE agent_profiles ADD COLUMN max_tokens INTEGER NOT NULL DEFAULT 0`},
+		{"max_tokens", `ALTER TABLE agent_profiles ADD COLUMN max_tokens INTEGER NOT NULL DEFAULT 0 CHECK (max_tokens >= 0)`},
 	}
 	for _, col := range additions {
 		has, err := tableHasColumn(ctx, db, "agent_profiles", col.name)

@@ -132,6 +132,19 @@ func TestTokenUsage_AgenticPath_WritesSingleTurn(t *testing.T) {
 		t.Errorf("taskID = %q, want %q", ts.calls[0].taskID, task.ID)
 	}
 	_ = store
+
+	// Exercise DisableTokenRecording via the public option (was previously dead code).
+	ts2 := &fakeTokenStore{}
+	_, wDisable, task2 := newAgenticIntegrationWorker(t, gw, sb, 10)
+	wDisable = NewWorker(store, gw, sb, nil, nil, WorkerOptions{
+		MaxToolIterations:     5,
+		TokenStore:            ts2,
+		DisableTokenRecording: true,
+	})
+	wDisable.Process(context.Background(), task2)
+	if got := ts2.callCount(); got != 0 {
+		t.Fatalf("with DisableTokenRecording calls = %d, want 0", got)
+	}
 }
 
 func TestTokenUsage_EmitsTokenUsageEvent(t *testing.T) {

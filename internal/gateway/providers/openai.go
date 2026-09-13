@@ -48,11 +48,9 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		if md := o.buildMetadata(req); md != nil {
 			body.Metadata = md
 		}
-		if req.TaskID != "" {
-			body.User = req.TaskID
-		} else if req.AgentID != "" {
-			body.User = req.AgentID
-		}
+		// Note: we intentionally do not set top-level "user". It is a safety/end-user
+		// identifier per OpenAI spec (and affects their caching). Correlation uses
+		// the metadata map instead (passthrough on LiteLLM etc).
 	}
 	// OpenAI does not allow response_format: json_object when tools are present.
 	if req.JSONMode && len(req.Tools) == 0 {

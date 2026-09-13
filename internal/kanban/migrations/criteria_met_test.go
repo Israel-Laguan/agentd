@@ -86,8 +86,6 @@ CREATE TABLE tasks (
     last_heartbeat TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
     token_usage INTEGER NOT NULL DEFAULT 0,
-    cached_token_usage INTEGER NOT NULL DEFAULT 0,
-    cache_write_token_usage INTEGER NOT NULL DEFAULT 0,
     success_criteria TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -106,7 +104,7 @@ VALUES ('project', 'Project', 'input', 'workspace', 'ACTIVE', '2026-05-28T10:00:
 
 INSERT INTO tasks (
     id, project_id, agent_id, title, description, state, assignee,
-    os_process_id, started_at, last_heartbeat, retry_count, token_usage, cached_token_usage, cache_write_token_usage, success_criteria, created_at, updated_at
+    os_process_id, started_at, last_heartbeat, retry_count, token_usage, success_criteria, created_at, updated_at
 )
-VALUES ('task', 'project', 'default', 'Task', 'description', 'READY', 'SYSTEM', NULL, NULL, NULL, 0, 0, 0, 0, '["file exists"]', '2026-05-28T10:00:00Z', '2026-05-28T10:00:00Z');
+VALUES ('task', 'project', 'default', 'Task', 'description', 'READY', 'SYSTEM', NULL, NULL, NULL, 0, 0, '["file exists"]', '2026-05-28T10:00:00Z', '2026-05-28T10:00:00Z');
 `

@@ -15,14 +15,9 @@ func migrateToV3(ctx context.Context, db *sql.DB) error {
 		return setSchemaVersion(ctx, db, 3)
 	}
 
-	ftsExists, err := tableExists(ctx, db, "memories_fts")
-	if err != nil {
-		return fmt.Errorf("check memories_fts table: %w", err)
-	}
-	if ftsExists {
-		return setSchemaVersion(ctx, db, 3)
-	}
-
+	// Always run column/FTS setup when the memories table exists. The operations
+	// below are idempotent, so a pre-existing (but possibly incomplete) memories_fts
+	// will have its columns, population, and triggers ensured.
 	columns := []struct {
 		name string
 		ddl  string

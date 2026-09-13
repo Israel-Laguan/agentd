@@ -45,12 +45,20 @@ func (s *Store) SumTokenUsage(ctx context.Context) (int, error) {
 // AddUsageDetails atomically increments the cached token columns for the given task.
 // It is a no-op when both values are <= 0 and returns an error when taskID is unknown.
 func (s *Store) AddUsageDetails(ctx context.Context, taskID string, details spec.UsageDetails) error {
-	if details.CachedTokens <= 0 && details.CacheWriteTokens <= 0 {
+	cached := details.CachedTokens
+	write := details.CacheWriteTokens
+	if cached < 0 {
+		cached = 0
+	}
+	if write < 0 {
+		write = 0
+	}
+	if cached <= 0 && write <= 0 {
 		return nil
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE tasks SET cached_token_usage = cached_token_usage + ?, cache_write_token_usage = cache_write_token_usage + ? WHERE id = ?`,
-		details.CachedTokens, details.CacheWriteTokens, taskID,
+		cached, write, taskID,
 	)
 	if err != nil {
 		return fmt.Errorf("add usage details: %w", err)

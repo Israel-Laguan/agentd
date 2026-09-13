@@ -55,39 +55,41 @@ func (w *Worker) MountAgenticHooks(
 	var taskHooks *agenthooks.HookChain
 	var taskCaps *capabilities.Registry
 
+	// Mount project/session plugins first so their pre-hooks run before any
+	// approval gate (plugin validation/observability should see the call).
+	if w.pluginMounter != nil {
+		if taskHooks == nil {
+			taskHooks = agenthooks.NewHookChain()
+		}
+		if taskCaps == nil {
+			taskCaps = capabilities.NewRegistry()
+		}
+		if project.WorkspacePath != "" {
+			if err := w.pluginMounter.MountProject(project.WorkspacePath, taskHooks, taskCaps); err != nil {
+				slog.Warn("failed to load project-scoped plugins",
+					"workspace", project.WorkspacePath,
+					"error", err,
+				)
+			}
+		}
+		if len(profile.Plugins) > 0 {
+			if err := w.pluginMounter.MountSession(profile.Plugins, taskHooks, taskCaps); err != nil {
+				slog.Warn("failed to load session-scoped plugins",
+					"plugins", profile.Plugins,
+					"error", err,
+				)
+			}
+		}
+	}
+
 	if len(profile.GatedTools) > 0 {
-		taskHooks = agenthooks.NewHookChain()
+		if taskHooks == nil {
+			taskHooks = agenthooks.NewHookChain()
+		}
 		handler := NewBlockingApprovalHandler(w.store)
 		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
 	}
 
-	if w.pluginMounter == nil {
-		return taskHooks, taskCaps
-	}
-
-	if taskHooks == nil {
-		taskHooks = agenthooks.NewHookChain()
-	}
-	if taskCaps == nil {
-		taskCaps = capabilities.NewRegistry()
-	}
-
-	if project.WorkspacePath != "" {
-		if err := w.pluginMounter.MountProject(project.WorkspacePath, taskHooks, taskCaps); err != nil {
-			slog.Warn("failed to load project-scoped plugins",
-				"workspace", project.WorkspacePath,
-				"error", err,
-			)
-		}
-	}
-	if len(profile.Plugins) > 0 {
-		if err := w.pluginMounter.MountSession(profile.Plugins, taskHooks, taskCaps); err != nil {
-			slog.Warn("failed to load session-scoped plugins",
-				"plugins", profile.Plugins,
-				"error", err,
-			)
-		}
-	}
 	return taskHooks, taskCaps
 }
 
