@@ -83,16 +83,12 @@ func WrapExternalContent(toolName, result string) string {
 }
 
 // applyInjectionResistance wraps external tool results when appropriate.
-// status/statusSet come from ToolResult classification in the worker hook path;
-// isToolErrorPayload covers jsonErrorf strings on the subagent path.
+// status/statusSet come from ToolResult classification in the worker hook path.
 func applyInjectionResistance(toolName, result string, externalTools map[string]struct{}, status ToolStatus, statusSet bool) string {
 	if !isExternalTool(toolName, externalTools) {
 		return result
 	}
 	if statusSet && (status == ToolStatusVetoed || status == ToolStatusTimeout) {
-		return result
-	}
-	if strings.HasPrefix(result, toolErrorPrefix) {
 		return result
 	}
 	return wrapExternalContent(toolName, result)

@@ -43,19 +43,34 @@ func buildWorkerHooks(
 	return hooks
 }
 
-// mountScopedPlugins loads project-scoped and session-scoped plugins,
-// returning a task-local HookChain and capabilities Registry that
-// augment the worker-level globals. Mount only registers hooks and
-// capabilities into the provided chain/registry; it does not mutate
-// worker-global state.
+// MountAgenticHooks loads project-scoped and session-scoped plugins (when a
+// PluginMounter is configured) and registers ApprovalGateHook for any
+// GatedTools in the profile. It returns a task-local HookChain and
+// capabilities Registry that augment worker-level globals. It only
+// registers into the returned values; it does not mutate worker-global state.
+// Returns nil, nil when there is no mounter and no gated tools.
 func (w *Worker) MountAgenticHooks(
 	project models.Project, profile models.AgentProfile,
 ) (*agenthooks.HookChain, *capabilities.Registry) {
-	if w.pluginMounter == nil {
-		return nil, nil
+	var taskHooks *agenthooks.HookChain
+	var taskCaps *capabilities.Registry
+
+	if len(profile.GatedTools) > 0 {
+		taskHooks = agenthooks.NewHookChain()
+		handler := NewBlockingApprovalHandler(w.store)
+		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
 	}
-	taskHooks := agenthooks.NewHookChain()
-	taskCaps := capabilities.NewRegistry()
+
+	if w.pluginMounter == nil {
+		return taskHooks, taskCaps
+	}
+
+	if taskHooks == nil {
+		taskHooks = agenthooks.NewHookChain()
+	}
+	if taskCaps == nil {
+		taskCaps = capabilities.NewRegistry()
+	}
 
 	if project.WorkspacePath != "" {
 		if err := w.pluginMounter.MountProject(project.WorkspacePath, taskHooks, taskCaps); err != nil {
@@ -73,16 +88,11 @@ func (w *Worker) MountAgenticHooks(
 			)
 		}
 	}
-	if len(profile.GatedTools) > 0 {
-		if taskHooks == nil {
-			taskHooks = agenthooks.NewHookChain()
-		}
-		handler := NewBlockingApprovalHandler(w.store)
-		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
-	}
 	return taskHooks, taskCaps
 }
 
+// RunSessionStart runs the worker's SessionStart hooks (e.g. credential
+// validation) followed by any task-scoped hooks supplied by MountAgenticHooks.
 func (w *Worker) RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error {
 	// Run worker-level hooks first.
 	if w.hooks != nil {
@@ -107,8 +117,8 @@ func (w *Worker) RunSessionStart(ctx context.Context, task models.Task, project 
 	return nil
 }
 
-// agenticToolsWithExtras builds the tool definitions and adapter index,
-// merging any extra capabilities from scoped plugins.
+// AgenticToolsWithExtras builds the tool definitions and adapter index,
+// merging any extra capabilities from scoped plugins (from MountAgenticHooks).
 func (w *Worker) AgenticToolsWithExtras(
 	ctx context.Context, toolExecutor *agenttools.ToolExecutor, extra *capabilities.Registry,
 ) ([]gateway.ToolDefinition, map[string]string) {
@@ -132,7 +142,7 @@ func (w *Worker) AgenticToolsWithExtras(
 	return tools, adapterIndex
 }
 
-// dispatchToolWithHooks wraps dispatchToolWithProject and additionally
+// DispatchToolWithHooks wraps dispatchToolWithProject and additionally
 // runs task-scoped plugin hooks (pre and post) around the call.
 func (w *Worker) DispatchToolWithHooks(
 	ctx context.Context,

@@ -169,7 +169,7 @@ func TestDispatchToolWithHooks_Timeout(t *testing.T) {
 
 	tr, suspend := w.DispatchToolWithHooks(
 		context.Background(), "s1", "p1", "", time.Now(),
-		call, nil, executor, nil, nil,
+		call, nil, executor, nil, nil, "",
 	)
 
 	if suspend {

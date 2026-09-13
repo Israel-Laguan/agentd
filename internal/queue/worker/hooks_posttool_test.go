@@ -95,7 +95,7 @@ func TestAuditHook_DispatchToolEmitsConsistently(t *testing.T) {
 		ID:       "call_b",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"echo b"}`},
 	}
-	_ = w.dispatchToolWithProject(context.Background(), "task-b", "proj-b", call2, nil, executor, nil, false, nil, nil, "")
+	_ = w.dispatchToolWithProject(context.Background(), "task-b", "proj-b", call2, nil, executor, nil, false, nil, nil)
 
 	// Both should emit TOOL_CALL + TOOL_RESULT = 4 events total
 	if len(sink.events) != 4 {
@@ -207,7 +207,7 @@ func TestErrorPathsRunThroughPostHooks(t *testing.T) {
 		ID:       "call_unknown",
 		Function: gateway.ToolCallFunction{Name: "nonexistent", Arguments: `{}`},
 	}
-	tr := w.dispatchToolWithProject(context.Background(), "task-err", "proj-err", call, nil, executor, nil, false, nil, nil, "")
+	tr := w.dispatchToolWithProject(context.Background(), "task-err", "proj-err", call, nil, executor, nil, false, nil, nil)
 
 	// Result should contain error message
 	if !strings.Contains(tr.Content, "unknown tool") {
@@ -249,7 +249,7 @@ func TestAuditHook_ClassifiedBashErrorExitCode(t *testing.T) {
 		ID:       "call_bash_err",
 		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"bad"}`},
 	}
-	tr := w.dispatchToolWithProject(context.Background(), "task-bash-err", "proj-bash-err", call, nil, executor, nil, false, nil, nil, "")
+	tr := w.dispatchToolWithProject(context.Background(), "task-bash-err", "proj-bash-err", call, nil, executor, nil, false, nil, nil)
 
 	if tr.Status != agenttools.ToolStatusError {
 		t.Fatalf("expected error status, got %s", tr.Status)

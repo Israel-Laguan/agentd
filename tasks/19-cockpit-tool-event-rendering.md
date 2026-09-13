@@ -6,8 +6,8 @@ emits the events) · **Relates to**: roadmap task 08 (server half done; UI half 
 ## Goal
 
 Surface `TOOL_CALL` / `TOOL_RESULT` events in agentd's web cockpit activity/task view so operators
-can watch the agentic loop as it works. The server already streams these as SSE events with scrubbed
-payloads; **zero web consumers exist today**.
+can watch the agentic loop as it works. The server streams these as SSE events with scrubbed
+payloads (M19 added the web consumers).
 
 ## Background / current state (historical, post M19)
 
@@ -16,7 +16,7 @@ M19 implemented web rendering for tool events:
 - SSE consumers: `web/lib/sse-events.ts`, `web/app/hooks/use-tool-event-stream.ts` (and .test.ts).
 - Rendering + pairing: `web/app/components/logs/tool-event-list.tsx` + `tool-event-list.test.tsx`, `web/lib/tool-events.ts` + `tool-events.test.ts`.
 - Integration in logs view: `web/app/components/logs-view.tsx`.
-- Backend emitters/mapping were pre-existing (as described).
+- Backend emitters/mapping were pre-existing (unchanged by M19).
 
 ## Payload shapes (verify against the emitters when implementing)
 

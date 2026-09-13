@@ -49,7 +49,7 @@ func timeoutToolResult(callID string, timeout time.Duration) agenttools.ToolResu
 	return agenttools.TimeoutResult(callID, timeout.Milliseconds())
 }
 
-// filterAgenticTools applies per-task tool manifest filtering when enabled.
+// FilterAgenticTools applies per-task tool manifest filtering when enabled.
 func (w *Worker) FilterAgenticTools(
 	tools []gateway.ToolDefinition,
 	index map[string]string,

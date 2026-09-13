@@ -113,7 +113,7 @@ func TestDispatchToolWithHooks_RetryHidesIntermediateFailure(t *testing.T) {
 	}
 
 	tr, suspended := w.DispatchToolWithHooks(
-		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
+		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil, "",
 	)
 
 	if suspended {
@@ -149,7 +149,7 @@ func TestDispatchToolWithHooks_SuspendNotRetried(t *testing.T) {
 	}
 
 	tr, suspended := w.DispatchToolWithHooks(
-		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, taskHooks, nil,
+		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, taskHooks, nil, "",
 	)
 
 	if !suspended {
@@ -174,7 +174,7 @@ func TestDispatchToolWithHooks_RetryExhaustion(t *testing.T) {
 	}
 
 	tr, suspended := w.DispatchToolWithHooks(
-		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
+		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil, "",
 	)
 
 	if suspended {
@@ -201,7 +201,7 @@ func TestDispatchToolWithHooks_RetryAuditsOnce(t *testing.T) {
 	}
 
 	tr, suspended := w.DispatchToolWithHooks(
-		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
+		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil, "",
 	)
 
 	if suspended {
@@ -238,7 +238,7 @@ func TestDispatchToolWithHooks_TimeoutRetry(t *testing.T) {
 	}
 
 	tr, suspended := w.DispatchToolWithHooks(
-		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
+		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil, "",
 	)
 
 	if suspended {
@@ -266,7 +266,7 @@ func TestDispatchToolWithHooks_NonAllowlistedNoRetry(t *testing.T) {
 	}
 
 	tr, suspended := w.DispatchToolWithHooks(
-		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil,
+		context.Background(), "s1", "p1", "", time.Now(), call, nil, w.toolExecutor, nil, nil, "",
 	)
 
 	if suspended {

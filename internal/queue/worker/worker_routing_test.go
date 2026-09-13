@@ -295,7 +295,7 @@ func TestAgenticFallbackPreservesRoutedProvider(t *testing.T) {
 		t.Fatalf("legacy-only route provider = %q, want anthropic (proves re-route would differ)", legacyRouted.Provider)
 	}
 
-	w.runLegacyTask(context.Background(), task, store.project, routed, true)
+	w.RunLegacyTask(context.Background(), task, store.project, routed, true)
 
 	if len(gw.requests) != 1 {
 		t.Fatalf("expected 1 gateway request, got %d", len(gw.requests))
