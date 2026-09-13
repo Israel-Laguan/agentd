@@ -101,7 +101,6 @@ type openAIRequest struct {
 	ResponseFormat map[string]string `json:"response_format,omitempty"`
 	Tools          []openAITool      `json:"tools,omitempty"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
-	User           string            `json:"user,omitempty"`
 }
 
 type openAIMessage struct {

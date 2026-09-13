@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
 
@@ -105,7 +104,7 @@ func TestAddUsageDetails_PersistsCacheTokens(t *testing.T) {
 		t.Fatalf("materialize: %v", err)
 	}
 
-	details := spec.UsageDetails{CachedTokens: 12, CacheWriteTokens: 3}
+	details := testUsageDetails(12, 3)
 	if err := store.AddUsageDetails(ctx, tasks[0].ID, details); err != nil {
 		t.Fatalf("AddUsageDetails: %v", err)
 	}
@@ -119,7 +118,7 @@ func TestAddUsageDetails_PersistsCacheTokens(t *testing.T) {
 	}
 
 	// additive
-	details2 := spec.UsageDetails{CachedTokens: 5, CacheWriteTokens: 1}
+	details2 := testUsageDetails(5, 1)
 	if err := store.AddUsageDetails(ctx, tasks[0].ID, details2); err != nil {
 		t.Fatalf("AddUsageDetails second: %v", err)
 	}
