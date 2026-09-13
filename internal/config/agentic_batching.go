@@ -13,11 +13,6 @@ type BatchingConfig struct {
 	MaxBatchSize int
 }
 
-func setBatchingDefaults(v *viper.Viper) {
-	v.SetDefault("agentic.batching.enabled", false)
-	v.SetDefault("agentic.batching.max_batch_size", DefaultBatchingMaxBatchSize)
-}
-
 func loadBatchingConfig(v *viper.Viper) BatchingConfig {
 	max := v.GetInt("agentic.batching.max_batch_size")
 	if max < 1 {

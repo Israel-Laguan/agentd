@@ -143,13 +143,14 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	v.SetDefault("db_path", cfg.DBPath)
 	v.SetDefault("projects_dir", cfg.ProjectsDir)
 	v.SetDefault("uploads_dir", cfg.UploadsDir)
-	setAPIDefaults(v)
+	v.SetDefault("api.address", defaultAPIAddress)
+	v.SetDefault("api.materialize_token", "")
 	setGatewayDefaults(v)
 	setSandboxDefaults(v)
 	setHealingDefaults(v)
-	setBreakerDefaults(v)
-	setDiskDefaults(v)
-	setHeartbeatDefaults(v)
+	v.SetDefault("breaker.handoff_after", defaultBreakerHandoffAfter.String())
+	v.SetDefault("disk.free_threshold_percent", defaultDiskFreeThresholdPercent)
+	v.SetDefault("heartbeat.stale_after", defaultHeartbeatStaleAfter.String())
 	setLibrarianDefaults(v)
 	setQueueDefaults(v)
 	setAgenticDefaults(v)
@@ -185,9 +186,9 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	}
 	cfg.Sandbox = loadSandboxConfig(v)
 	cfg.Healing = loadHealingConfig(v)
-	cfg.Breaker = loadBreakerConfig(v)
-	cfg.Disk = loadDiskConfig(v)
-	cfg.Heartbeat = loadHeartbeatConfig(v)
+	cfg.Breaker = BreakerConfig{HandoffAfter: v.GetDuration("breaker.handoff_after")}
+	cfg.Disk = DiskConfig{FreeThresholdPercent: v.GetFloat64("disk.free_threshold_percent")}
+	cfg.Heartbeat = HeartbeatConfig{StaleAfter: v.GetDuration("heartbeat.stale_after")}
 	cfg.Librarian = loadLibrarianConfig(v)
 	cfg.Queue = loadQueueConfig(v)
 	cfg.Queue.Skills.GlobalDir = resolveSkillsGlobalDir(cfg.HomeDir, cfg.Queue.Skills.GlobalDir)

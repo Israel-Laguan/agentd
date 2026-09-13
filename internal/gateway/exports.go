@@ -9,7 +9,6 @@ import (
 	"agentd/internal/gateway/routing"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/gateway/truncation"
-	"agentd/internal/models"
 )
 
 // TruncationMarker is re-exported for tests and callers that check log output.
@@ -152,12 +151,8 @@ type Validatable = spec.Validatable
 // BreakerChecker for summarize truncator and queue integration.
 type BreakerChecker = spec.BreakerChecker
 
-// MiddleOut is a convenience wrapper for middle-out string truncation.
-func MiddleOut(input string, maxChars int) string {
-	return truncation.MiddleOut(input, maxChars)
-}
+// MiddleOut re-exports truncation.MiddleOut for stable imports.
+var MiddleOut = truncation.MiddleOut
 
-// EnforcePhaseCap trims oversized draft plans (used by tests and extensions).
-func EnforcePhaseCap(plan models.DraftPlan, maxTasksPerPhase int) models.DraftPlan {
-	return correction.EnforcePhaseCap(plan, maxTasksPerPhase)
-}
+// EnforcePhaseCap re-exports correction.EnforcePhaseCap for stable imports.
+var EnforcePhaseCap = correction.EnforcePhaseCap

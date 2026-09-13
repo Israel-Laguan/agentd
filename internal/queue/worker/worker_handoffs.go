@@ -101,7 +101,7 @@ func (w *Worker) handlePromptRecovery(
 	result sandbox.Result,
 ) {
 	detection := safety.DetectPrompt(result.Stdout, result.Stderr)
-	payload := promptPayload(command, detection, result)
+	payload := detectionPayload(detection.Pattern, command, result)
 	w.Emit(ctx, task, "PROMPT_DETECTED", truncate(payload, 1000))
 
 	recoverable, recoveredCommand := recovery.CanRecover(command)
@@ -116,7 +116,7 @@ func (w *Worker) handlePromptRecovery(
 			w.commit(ctx, *retried, recoveredResult, nil)
 			return
 		}
-		payload = promptPayload(recoveredCommand, detection, recoveredResult)
+		payload = detectionPayload(detection.Pattern, recoveredCommand, recoveredResult)
 		if runErr != nil {
 			payload += "\nRecovery error: " + runErr.Error()
 		}
@@ -145,7 +145,7 @@ func (w *Worker) createPromptHandoff(ctx context.Context, task models.Task, payl
 
 func (w *Worker) handlePermissionFailure(ctx context.Context, task models.Task, command string, result sandbox.Result) {
 	detection := safety.DetectPermission(result.Stdout, result.Stderr)
-	payload := permissionPayload(command, detection, result)
+	payload := detectionPayload(detection.Pattern, command, result)
 	w.Emit(ctx, task, "PERMISSION_DETECTED", truncate(payload, 1000))
 	w.createPermissionHandoff(ctx, task, payload)
 }

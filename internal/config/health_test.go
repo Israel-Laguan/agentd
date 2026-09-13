@@ -268,10 +268,10 @@ func TestCheckProviders_CustomProvider_AdapterDefaultOpenAI(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"poolside"},
 		Providers: []gateway.ProviderConfig{{
-			Name:   "poolside",
+			Name:    "poolside",
 			Adapter: "openai",
-			APIKey: "poolside-key",
-			Model:  "poolside-model",
+			APIKey:  "poolside-key",
+			Model:   "poolside-model",
 		}},
 	}
 	result := CheckProviders(cfg)
@@ -290,11 +290,11 @@ func TestCheckProviders_CustomProvider_HealthAPIKey(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"poolside"},
 		Providers: []gateway.ProviderConfig{{
-			Name:   "poolside",
+			Name:    "poolside",
 			Adapter: "openai",
-			APIKey: "poolside-key",
-			Model:  "poolside-model",
-			Health: "api_key",
+			APIKey:  "poolside-key",
+			Model:   "poolside-model",
+			Health:  "api_key",
 		}},
 	}
 	result := CheckProviders(cfg)
@@ -337,10 +337,10 @@ func TestCheckProviders_HealthAPIKey_OverridesAdapter(t *testing.T) {
 	cfg := GatewayConfig{
 		Order: []string{"local"},
 		Providers: []gateway.ProviderConfig{{
-			Name:   "local",
+			Name:    "local",
 			Adapter: "ollama",
-			APIKey: "sk-override",
-			Health: "api_key",
+			APIKey:  "sk-override",
+			Health:  "api_key",
 		}},
 	}
 	result := CheckProviders(cfg)

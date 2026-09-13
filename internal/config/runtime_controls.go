@@ -15,11 +15,6 @@ type APIConfig struct {
 	MaterializeToken string
 }
 
-func setAPIDefaults(v *viper.Viper) {
-	v.SetDefault("api.address", defaultAPIAddress)
-	v.SetDefault("api.materialize_token", "")
-}
-
 func loadAPIConfig(v *viper.Viper) APIConfig {
 	return APIConfig{
 		Address:          v.GetString("api.address"),
@@ -33,24 +28,18 @@ type BreakerConfig struct {
 	HandoffAfter time.Duration
 }
 
-func setBreakerDefaults(v *viper.Viper) {
-	v.SetDefault("breaker.handoff_after", defaultBreakerHandoffAfter.String())
-}
-
-func loadBreakerConfig(v *viper.Viper) BreakerConfig {
-	return BreakerConfig{HandoffAfter: v.GetDuration("breaker.handoff_after")}
-}
-
 const defaultDiskFreeThresholdPercent = 10.0
 
 type DiskConfig struct {
 	FreeThresholdPercent float64
 }
 
+// setDiskDefaults registers the default disk-space guard threshold.
 func setDiskDefaults(v *viper.Viper) {
 	v.SetDefault("disk.free_threshold_percent", defaultDiskFreeThresholdPercent)
 }
 
+// loadDiskConfig reads the disk-space guard threshold.
 func loadDiskConfig(v *viper.Viper) DiskConfig {
 	return DiskConfig{FreeThresholdPercent: v.GetFloat64("disk.free_threshold_percent")}
 }
@@ -59,14 +48,6 @@ const defaultHeartbeatStaleAfter = 2 * time.Minute
 
 type HeartbeatConfig struct {
 	StaleAfter time.Duration
-}
-
-func setHeartbeatDefaults(v *viper.Viper) {
-	v.SetDefault("heartbeat.stale_after", defaultHeartbeatStaleAfter.String())
-}
-
-func loadHeartbeatConfig(v *viper.Viper) HeartbeatConfig {
-	return HeartbeatConfig{StaleAfter: v.GetDuration("heartbeat.stale_after")}
 }
 
 const (

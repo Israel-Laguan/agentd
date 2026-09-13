@@ -28,12 +28,12 @@ func TestLoadSchedulerConfigParsesTasks(t *testing.T) {
 	v.Set("agentic.scheduler.tick_interval", "2m")
 	v.Set("agentic.scheduler.tasks", []map[string]interface{}{
 		{
-			"id":          "job",
-			"cron_expr":   "*/5 * * * *",
-			"task_type":   "summarize",
-			"context_fn":  "static",
+			"id":           "job",
+			"cron_expr":    "*/5 * * * *",
+			"task_type":    "summarize",
+			"context_fn":   "static",
 			"context_args": map[string]interface{}{"body": "hi"},
-			"title":       "Job",
+			"title":        "Job",
 		},
 	})
 	cfg, err := loadSchedulerConfig(v)

@@ -9,7 +9,6 @@ import (
 	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
-	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
 )
 
@@ -35,14 +34,6 @@ func detectionPayload(pattern, command string, result sandbox.Result) string {
 		result.Duration,
 		truncate(strings.TrimSpace(result.Stderr+"\n"+result.Stdout), 1000),
 	)
-}
-
-func promptPayload(command string, detection safety.PromptDetection, result sandbox.Result) string {
-	return detectionPayload(detection.Pattern, command, result)
-}
-
-func permissionPayload(command string, detection safety.PermissionDetection, result sandbox.Result) string {
-	return detectionPayload(detection.Pattern, command, result)
 }
 
 func truncate(value string, max int) string {

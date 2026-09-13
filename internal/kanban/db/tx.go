@@ -19,9 +19,9 @@ type SQLQueryer interface {
 
 // ImmediateTx is a SQLite "BEGIN IMMEDIATE" transaction that holds a single
 // dedicated connection for the duration of the transaction. It implements
-// SQLExecutor and SQLQueryer.
+// SQLExecutor and SQLQueryer via the embedded *sql.Conn.
 type ImmediateTx struct {
-	conn *sql.Conn
+	*sql.Conn
 	done bool
 }
 
@@ -36,19 +36,7 @@ func BeginImmediate(ctx context.Context, db *sql.DB) (*ImmediateTx, error) {
 		_ = conn.Close()
 		return nil, fmt.Errorf("begin immediate transaction: %w", err)
 	}
-	return &ImmediateTx{conn: conn}, nil
-}
-
-func (tx *ImmediateTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return tx.conn.ExecContext(ctx, query, args...)
-}
-
-func (tx *ImmediateTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return tx.conn.QueryContext(ctx, query, args...)
-}
-
-func (tx *ImmediateTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return tx.conn.QueryRowContext(ctx, query, args...)
+	return &ImmediateTx{Conn: conn}, nil
 }
 
 // Commit commits the transaction and releases the connection.
@@ -57,11 +45,10 @@ func (tx *ImmediateTx) Commit() error {
 		return nil
 	}
 	tx.done = true
-	_, err := tx.conn.ExecContext(context.Background(), "COMMIT")
-	if closeErr := tx.conn.Close(); closeErr != nil && err == nil {
-		err = closeErr
+	if _, err := tx.ExecContext(context.Background(), "COMMIT"); err != nil {
+		return err
 	}
-	return err
+	return tx.Close()
 }
 
 // Rollback rolls back the transaction and releases the connection. Calling
@@ -71,11 +58,8 @@ func (tx *ImmediateTx) Rollback() error {
 		return nil
 	}
 	tx.done = true
-	_, err := tx.conn.ExecContext(context.Background(), "ROLLBACK")
-	if closeErr := tx.conn.Close(); closeErr != nil && err == nil {
-		err = closeErr
+	if _, err := tx.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+		return err
 	}
-	return err
+	return tx.Close()
 }
-
-

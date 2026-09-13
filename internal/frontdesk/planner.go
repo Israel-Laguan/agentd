@@ -77,7 +77,7 @@ func (p *Planner) PlanContent(
 		if strings.TrimSpace(classification.Reason) != "" {
 			msg += " (" + strings.TrimSpace(classification.Reason) + ")"
 		}
-		return marshalContent(FeasibilityClarification{
+		return json.Marshal(FeasibilityClarification{
 			Kind:    "feasibility_clarification",
 			Message: msg,
 			Reason:  classification.Reason,
@@ -85,7 +85,7 @@ func (p *Planner) PlanContent(
 	case "plan_request":
 		return p.analyzeAndPlan(planCtx, intent, files)
 	default:
-		return marshalContent(IntentClarification{
+		return json.Marshal(IntentClarification{
 			Kind:    "intent_clarification",
 			Message: "I'm not sure what you need. You can ask for a status update or describe work you'd like to plan.",
 		})
@@ -97,7 +97,7 @@ func (p *Planner) statusReport(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return marshalContent(report)
+	return json.Marshal(report)
 }
 
 func (p *Planner) analyzeAndPlan(ctx context.Context, intent string, files []FileRef) ([]byte, error) {
@@ -106,7 +106,7 @@ func (p *Planner) analyzeAndPlan(ctx context.Context, intent string, files []Fil
 		return nil, err
 	}
 	if !analysis.SingleScope {
-		return marshalContent(ScopeClarification{
+		return json.Marshal(ScopeClarification{
 			Kind:    "scope_clarification",
 			Message: "Multiple projects detected. Resend one turn per scope using approved_scopes.",
 			Scopes:  analysis.Scopes,
@@ -143,11 +143,7 @@ func (p *Planner) planApprovedScope(ctx context.Context, intent, approvedScope s
 	if err != nil {
 		return nil, err
 	}
-	return marshalContent(plan)
-}
-
-func marshalContent(value any) ([]byte, error) {
-	return json.Marshal(value)
+	return json.Marshal(plan)
 }
 
 func (p *Planner) ctxWithHouseRules(ctx context.Context) context.Context {

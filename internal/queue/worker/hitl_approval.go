@@ -66,20 +66,12 @@ func isHITLMarkerConsumed(comments []models.Comment, marker string) bool {
 	return false
 }
 
-func isApprovalConsumed(comments []models.Comment, subtaskID string) bool {
-	return isHITLMarkerConsumed(comments, hitlApprovalUsedPrefix+subtaskID)
-}
-
 func markApprovalUsed(ctx context.Context, store models.KanbanStore, parentID, subtaskID string) error {
 	return store.AddComment(ctx, models.Comment{
 		TaskID: parentID,
 		Author: models.CommentAuthorWorkerAgent,
 		Body:   hitlApprovalUsedPrefix + subtaskID,
 	})
-}
-
-func isApprovalRejectionConsumed(comments []models.Comment, subtaskID string) bool {
-	return isHITLMarkerConsumed(comments, hitlApprovalRejectionUsedPrefix+subtaskID)
 }
 
 func markApprovalRejectionUsed(ctx context.Context, store models.KanbanStore, parentID, subtaskID string) error {
@@ -116,12 +108,4 @@ func findLatestChildByExactTitle(children []models.Task, title string) *models.T
 		}
 	}
 	return latest
-}
-
-func findLatestApprovalSubtask(children []models.Task, toolName string) *models.Task {
-	return findLatestChildByExactTitle(children, approvalSubtaskTitle(toolName))
-}
-
-func findLatestReviewSubtask(children []models.Task) *models.Task {
-	return findLatestChildByTitlePrefix(children, models.HITLSubtaskTitleReview)
 }

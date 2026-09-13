@@ -27,7 +27,7 @@ func TestFindLatestApprovalSubtask_ExactTitleOnly(t *testing.T) {
 			State:      models.TaskStateCompleted,
 		},
 	}
-	got := findLatestApprovalSubtask(children, "deploy")
+		got := findLatestChildByExactTitle(children, approvalSubtaskTitle("deploy"))
 	if got == nil {
 		t.Fatal("expected deploy approval subtask")
 		return

@@ -72,9 +72,3 @@ func (s *Store) AddUsageDetails(ctx context.Context, taskID string, details spec
 	}
 	return nil
 }
-
-// testUsageDetails returns a spec.UsageDetails for use by kanban tests only.
-// It keeps the test file itself free of a gateway import (depguard isolation).
-func testUsageDetails(cached, write int) spec.UsageDetails {
-	return spec.UsageDetails{CachedTokens: cached, CacheWriteTokens: write}
-}

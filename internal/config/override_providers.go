@@ -11,11 +11,6 @@ import (
 
 const providerConfigKeyPrefix = "gateway.providers[name="
 
-// providerDisplayKey is the stable label for gateway.providers entries in logs and config show.
-func providerDisplayKey(name, field string) string {
-	return providerConfigKeyPrefix + name + "]." + field
-}
-
 func parseProviderConfigKey(key string) (name, field string, ok bool) {
 	if !strings.HasPrefix(key, providerConfigKeyPrefix) {
 		return "", "", false
@@ -45,7 +40,7 @@ func providerAPIKeyEnvCandidates(p gateway.ProviderConfig) []string {
 		keys = append(keys, env)
 	}
 	if name := providerName(p); name != "" {
-		generic := genericGatewayAPIKeyEnv(name)
+		generic := "AGENTD_GATEWAY_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_")) + "_API_KEY"
 		if generic != "" && (len(keys) == 0 || keys[0] != generic) {
 			keys = append(keys, generic)
 		}
@@ -99,10 +94,10 @@ func providerShowKeys(fv *viper.Viper) []string {
 			continue
 		}
 		if strings.TrimSpace(p.APIKey) != "" || providerAPIKeyEnv(p) != "" {
-			keys = append(keys, providerDisplayKey(name, "api_key"))
+			keys = append(keys, providerConfigKeyPrefix+name+"].api_key")
 		}
 		if strings.TrimSpace(p.BaseURL) != "" {
-			keys = append(keys, providerDisplayKey(name, "base_url"))
+			keys = append(keys, providerConfigKeyPrefix+name+"].base_url")
 		}
 	}
 	return keys
@@ -114,7 +109,7 @@ func detectProviderEntryOverrides(fv, v *viper.Viper, dotenv, process map[string
 	if err != nil || len(fileProviders) == 0 {
 		return nil
 	}
-	effectiveProviders, err := loadGatewayProvidersNoWarn(v, process, dotenv)
+	effectiveProviders, err := loadGatewayProvidersWithWarnings(v, process, dotenv, false)
 	if err != nil {
 		return nil
 	}
@@ -151,7 +146,7 @@ func detectProviderAPIKeyOverride(
 		return configOverride{}, false
 	}
 	return configOverride{
-		Key:            providerDisplayKey(name, "api_key"),
+		Key:            providerConfigKeyPrefix + name + "].api_key",
 		EnvVar:         envKey,
 		EffectiveValue: maskIfSensitive("api_key", envVal),
 		FileValue:      maskIfSensitive("api_key", fileKey),
