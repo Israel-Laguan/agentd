@@ -7,7 +7,6 @@ package kanban
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	kdb "agentd/internal/kanban/db"
@@ -52,7 +51,6 @@ var (
 	// tx helpers
 	beginImmediate          = kdb.BeginImmediate
 	commitTx                = kdb.CommitTx
-	closeRows               = func(rows *sql.Rows) { _ = rows.Close() }
 	rollbackUnlessCommitted = func(tx interface{ Rollback() error }) { _ = tx.Rollback() }
 
 	// scan helpers

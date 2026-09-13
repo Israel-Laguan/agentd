@@ -218,7 +218,7 @@ func TestApplyModelRouting_OverridesProfileModel(t *testing.T) {
 	}
 	profile := models.AgentProfile{Provider: "openai", Model: "gpt-4"}
 	task := models.Task{Description: "summarize this file"}
-	got := w.ApplyModelRouting(task, profile, nil, nil, "")
+	got := w.ApplyModelRouting(task, profile, nil, nil)
 	if got.Model != "claude-haiku" || got.Provider != "anthropic" {
 		t.Fatalf("applyModelRouting() = %+v, want anthropic/claude-haiku", got)
 	}
@@ -231,7 +231,7 @@ func TestApplyModelRouting_UnpinnedRoutesCheap(t *testing.T) {
 	}
 	profile := models.AgentProfile{Provider: "openai"}
 	task := models.Task{Description: "summarize this file"}
-	got := w.ApplyModelRouting(task, profile, nil, nil, "")
+	got := w.ApplyModelRouting(task, profile, nil, nil)
 	if got.Model != "claude-haiku" || got.Provider != "anthropic" {
 		t.Fatalf("applyModelRouting() = %+v, want anthropic/claude-haiku", got)
 	}

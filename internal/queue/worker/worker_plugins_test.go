@@ -64,6 +64,14 @@ func TestMountScopedPlugins_NilMounter(t *testing.T) {
 	assert.Nil(t, caps)
 }
 
+func TestMountAgenticHooks_NilMounter_GatedRegistersApproval(t *testing.T) {
+	t.Parallel()
+	w := &Worker{}
+	hooks, caps := w.MountAgenticHooks(models.Project{}, models.AgentProfile{GatedTools: []string{"deploy", "shell"}})
+	require.NotNil(t, hooks, "gated tools must get a hook chain even without pluginMounter (P0 fix)")
+	assert.Nil(t, caps)
+}
+
 func TestMountScopedPlugins_ProjectOnly(t *testing.T) {
 	t.Parallel()
 	m := &stubMounter{}
@@ -134,7 +142,7 @@ func TestDispatchToolWithHooks_NilHooksPassesThrough(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "unknown-tool"},
 	}
 	result, suspended := w.DispatchToolWithHooks(
-		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, nil, nil,
+		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, nil, nil, "",
 	)
 	assert.Contains(t, result.Content, "unknown tool")
 	assert.False(t, suspended)
@@ -157,7 +165,7 @@ func TestDispatchToolWithHooks_PreHookVeto(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "bash"},
 	}
 	result, suspended := w.DispatchToolWithHooks(
-		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
+		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil, "",
 	)
 	assert.Equal(t, agenttools.ToolStatusVetoed, result.Status)
 	assert.Equal(t, "denied", result.Content)
@@ -180,7 +188,7 @@ func TestDispatchToolWithHooks_PostHookModifiesResult(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "unknown-tool"},
 	}
 	result, suspended := w.DispatchToolWithHooks(
-		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
+		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil, "",
 	)
 	assert.Contains(t, result.Content, "[tagged]")
 	assert.False(t, suspended)
@@ -206,7 +214,7 @@ func TestDispatchToolWithHooks_ShortCircuit(t *testing.T) {
 		},
 	}
 	result, suspended := w.DispatchToolWithHooks(
-		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
+		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil, "",
 	)
 	assert.Equal(t, "cached", result.Content)
 	assert.False(t, suspended)
@@ -235,7 +243,7 @@ func TestDispatchToolWithHooks_ShortCircuitRunsPostHooks(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "read"},
 	}
 	result, suspended := w.DispatchToolWithHooks(
-		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
+		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil, "",
 	)
 	assert.Equal(t, "cached [scrubbed]", result.Content)
 	assert.False(t, suspended)
@@ -264,7 +272,7 @@ func TestDispatchToolWithHooks_SuspendRunsPostHooks(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "deploy"},
 	}
 	result, suspended := w.DispatchToolWithHooks(
-		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
+		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil, "",
 	)
 	assert.Equal(t, "pause message [scrubbed]", result.Content)
 	assert.True(t, suspended)
@@ -293,7 +301,7 @@ func TestDispatchToolWithHooks_VetoResultRunsPostHooks(t *testing.T) {
 		Function: gateway.ToolCallFunction{Name: "deploy"},
 	}
 	result, suspended := w.DispatchToolWithHooks(
-		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil,
+		t.Context(), "s1", "p1", "", time.Now(), call, nil, nil, taskHooks, nil, "",
 	)
 	assert.Equal(t, "rejected [tagged]", result.Content)
 	assert.False(t, suspended)
@@ -331,7 +339,7 @@ func TestDispatchToolWithHooks_HookContextFields(t *testing.T) {
 
 	taskUpdatedAt := time.Now()
 	_, _ = w.DispatchToolWithHooks(
-		t.Context(), "sess-1", "proj-1", "", taskUpdatedAt, call, nil, nil, taskHooks, nil,
+		t.Context(), "sess-1", "proj-1", "", taskUpdatedAt, call, nil, nil, taskHooks, nil, "",
 	)
 
 	assert.Equal(t, "bash", captured.ToolName)
