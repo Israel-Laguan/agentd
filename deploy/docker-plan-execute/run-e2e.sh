@@ -70,7 +70,7 @@ settled=0
 for i in $(seq 1 150); do
   TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data // []' || echo '[]')
   active=$(printf '%s' "$TASKS" | jq '[.[] | select(.state | test("READY|QUEUED|RUNNING|PENDING"))] | length')
-  if [ "${active:-0}" -eq 0 ]; then settled=1; break; fi
+  if [ "${active:-0}" -eq 0 ] && [ "$(printf '%s' "$TASKS" | jq 'length')" -gt 0 ]; then settled=1; break; fi
   sleep 1
 done
 
@@ -137,8 +137,13 @@ log "reading execution evidence: ${EVIDENCE}"
 if [ ! -f "$EVIDENCE" ]; then
   fail "PLAN_RESULTS.log was not written (tasks did not actually execute)"
 else
-  step_evidence=$(grep -c -E "AGENT_PLAN.*:: Step|:: Step.*executed via litellm" "$EVIDENCE" 2>/dev/null || true)
-  if [ "${step_evidence:-0}" -ge 1 ]; then
+  step_evidence=0
+  for task_id in $(printf '%s' "$TASKS" | jq -r '.[] | select(.title | test(":: Step")) | .id'); do
+    if grep -q "task=${task_id} .*executed via litellm" "$EVIDENCE"; then
+      step_evidence=$((step_evidence+1))
+    fi
+  done
+  if [ "${step_evidence}" -eq "${GEN_SUBTASKS}" ]; then
     pass "execution evidence present for generated subtask(s) (${step_evidence})"
   else
     fail "PLAN_RESULTS.log exists but no execution evidence for generated plan subtasks (direct greeting cannot satisfy)"
