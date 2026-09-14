@@ -22,3 +22,7 @@ Document and script the first reliability beat chosen in SP-001.
 ## Notes
 
 -
+
+## Notes
+
+SP-001 decision: **restart mid-task** is Beat 1. Stub: `docs/harness-reliability.md`. Connector HUMAN stays in `docs/demo.md`.
