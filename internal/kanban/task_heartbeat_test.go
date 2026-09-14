@@ -132,3 +132,39 @@ func assertTaskReadyWithoutHeartbeat(t *testing.T, store *Store, ctx context.Con
 		t.Fatalf("task = %#v, want READY without pid or heartbeat", task)
 	}
 }
+
+func TestReconcileGhostTasksResetsDeadPID(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	running := createRunningTask(t, store, ctx, 99999)
+
+	recovered, err := store.ReconcileGhostTasks(ctx, []int{1, 2})
+	if err != nil {
+		t.Fatalf("ReconcileGhostTasks() error = %v", err)
+	}
+	if len(recovered) != 1 || recovered[0].ID != running.ID {
+		t.Fatalf("recovered = %#v, want task %s", recovered, running.ID)
+	}
+	assertTaskReadyWithoutHeartbeat(t, store, ctx, running.ID)
+}
+
+func TestReconcileGhostTasksPreservesAlivePID(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	running := createRunningTask(t, store, ctx, 4242)
+
+	recovered, err := store.ReconcileGhostTasks(ctx, []int{4242})
+	if err != nil {
+		t.Fatalf("ReconcileGhostTasks() error = %v", err)
+	}
+	if len(recovered) != 0 {
+		t.Fatalf("recovered = %#v, want none", recovered)
+	}
+	got, err := store.GetTask(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("GetTask() error = %v", err)
+	}
+	if got.State != models.TaskStateRunning || got.OSProcessID == nil {
+		t.Fatalf("task = %#v, want RUNNING with pid", got)
+	}
+}
