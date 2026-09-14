@@ -201,9 +201,11 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 
 ---
 
-## Open questions
+## Open questions (resolved — SP-002)
 
-1. Exact threshold default and whether Frontdesk can force `tiered: true|false` per task.
-2. Pack storage: workspace file vs SQLite blob vs both.
-3. Whether verify should own test command selection or only run decision-specified checks.
-4. How agentic inner loop interacts with execute step (likely: execute profile may set `AgenticMode`; context/decision stay JSON/structured).
+1. **Threshold default:** `tiered.enabled` default `false`; when enabled, `tiered.complexity_threshold` default **`200`** (`EstimateTaskComplexity`). `0` disables splitting. Per-task Frontdesk override = later; v1 config-only.
+2. **Pack storage:** workspace file `context_pack.vN.json` + board pointer (path/version). No SQLite blob in v1.
+3. **Verify:** runs **decision-specified** checks only; classifies outcomes; does not invent tests.
+4. **Agentic mode:** allowed on **execute** (and escalate) profiles only; context/decision stay structured / tool-bounded as specified above.
+
+See [SP-002](../tasks/sprints/S01-positioning-and-demo/spikes/SP-002-tiered-open-questions.md).

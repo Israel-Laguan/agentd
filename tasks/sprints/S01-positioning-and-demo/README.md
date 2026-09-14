@@ -23,7 +23,7 @@ Cold readers get the one-liner in under 30 seconds; an operator can run the gove
 | [T-005](tasks/T-005-link-demo-from-readme.md) | task | Link demo from README Quickstart | done | P1 |
 | [SP-003](spikes/SP-003-demo-path-dry-run.md) | spike | Demo path dry-run (blocks T-004) | done | P0 |
 | [SP-001](spikes/SP-001-reliability-beat.md) | spike | Pick first harness reliability beat | done | P1 |
-| [SP-002](spikes/SP-002-tiered-open-questions.md) | spike | Lock tiered-execution open questions | ready | P2 |
+| [SP-002](spikes/SP-002-tiered-open-questions.md) | spike | Lock tiered-execution open questions | done | P2 |
 
 ## Spike order (what blocks what)
 
