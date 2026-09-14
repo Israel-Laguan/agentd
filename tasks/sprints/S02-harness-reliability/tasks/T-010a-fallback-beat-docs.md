@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P1 |
 | Sprint | S02-harness-reliability |
 | Parent | US-003 |
@@ -23,6 +23,10 @@ Document Beat 2 in `docs/harness-reliability.md` — the provider-fallback/break
 
 ## Done when
 
-- [ ] Both scenarios have pass criteria and commands
-- [ ] Reuses mock/LiteLLM; no billable requirement
-- [ ] Diff within budget
+- [x] Both scenarios have pass criteria and commands
+- [x] Reuses mock/LiteLLM; no billable requirement
+- [x] Diff within budget
+
+## Notes
+
+Beat 2 section in `docs/harness-reliability.md` + `scripts/demo/provider-fallback.sh` (prepare-cascade|prepare-breaker|probe-*|status|stop).
