@@ -4,7 +4,7 @@
 | --- | --- |
 | Window | 2026-09-29 → 2026-10-13 |
 | Goal | Prove the house — restart and fallback degrade to board state, not silent stuck RUNNING; PRs stay ≤25 files / &lt;1k LOC |
-| Status | planned |
+| Status | active |
 | Based on | [S01 retro](../S01-positioning-and-demo/retro/RETRO.md) |
 
 ## Goal
@@ -18,8 +18,8 @@ Ship the first runnable harness reliability demos on top of the S01 demo path. A
 | ID | Type | Title | PR | Status | Priority |
 | --- | --- | --- | --- | --- | --- |
 | [US-003](stories/US-003-harness-reliability-pack.md) | story | Harness reliability pack | — | ready | P0 |
-| [SP-004](spikes/SP-004-env-preflight.md) | spike | Env/tooling pre-flight | none | ready | P0 |
-| [T-006a](tasks/T-006a-restart-beat-docs.md) | task | Restart beat docs/script | **A** | ready | P0 |
+| [SP-004](spikes/SP-004-env-preflight.md) | spike | Env/tooling pre-flight | none | done | P0 |
+| [T-006a](tasks/T-006a-restart-beat-docs.md) | task | Restart beat docs/script | **A** | done | P0 |
 | [T-006b](tasks/T-006b-restart-reconcile-tests.md) | task | Restart reconcile tests | **B** | ready | P0 |
 | [T-006c](tasks/T-006c-restart-reconcile-fix.md) | task | Restart prod fix (if needed) | **C** | backlog | P0 |
 | [T-010a](tasks/T-010a-fallback-beat-docs.md) | task | Fallback beat docs/script | **D** | ready | P1 |

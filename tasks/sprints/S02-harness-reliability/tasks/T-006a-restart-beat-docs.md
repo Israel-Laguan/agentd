@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P0 |
 | Sprint | S02-harness-reliability |
 | Parent | US-003 |
@@ -24,10 +24,10 @@ Make Beat 1 (restart mid-task) runnable from docs without code changes.
 
 ## Done when
 
-- [ ] Pass criteria written (no silent stuck `RUNNING`; same `--home`)
-- [ ] Exact kill/restart/`curl` sequence
-- [ ] Points to existing reconcile behavior; does not re-prove connector HUMAN (`docs/demo.md`)
-- [ ] `git diff --stat` within PR-A budget
+- [x] Pass criteria written (no silent stuck `RUNNING`; same `--home`)
+- [x] Exact kill/restart/`curl` sequence
+- [x] Points to existing reconcile behavior; does not re-prove connector HUMAN (`docs/demo.md`)
+- [x] `git diff --stat` within PR-A budget
 
 ## Notes
 

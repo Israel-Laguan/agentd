@@ -2,34 +2,90 @@
 
 Prove the **house**, not the coding model. Positioning: [why-agentd.md](why-agentd.md), plan Phase 2: [product-plan.md](product-plan.md).
 
-Governance demo (approve → board → connector HUMAN) lives in [demo.md](demo.md) — do that first.
+Governance demo (approve → board → connector HUMAN) lives in [demo.md](demo.md) — do that **first**. Do not re-prove dead-`base_url` HUMAN here.
+
+Helper script: [`scripts/demo/restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh).
 
 ## Beat 1 (S02) — Restart mid-task
 
-**Status:** chosen in [SP-001](../tasks/sprints/S01-positioning-and-demo/spikes/SP-001-reliability-beat.md); script/doc expansion is [T-006](../tasks/backlog/tasks/T-006-harness-reliability-doc.md).
+**Chosen in** [SP-001](../tasks/sprints/S01-positioning-and-demo/spikes/SP-001-reliability-beat.md).  
+**Tickets:** [T-006a](../tasks/sprints/S02-harness-reliability/tasks/T-006a-restart-beat-docs.md) (this doc/script), [T-006b](../tasks/sprints/S02-harness-reliability/tasks/T-006b-restart-reconcile-tests.md) (tests).
 
-**Pass criteria:** after killing `agentd` during an in-flight task and starting again with the same home, the board has no silent stuck `RUNNING`; work resumes or fails to an explicit state.
+### Pass criteria
 
-**Sketch:**
+After an **unclean** kill of `agentd` while work is in flight (or claimed), then `start` again with the **same** `--home` / `AGENTD_HOME`:
+
+1. The board must **not** leave a task stuck in `RUNNING` with no live worker forever.
+2. At least one allowed outcome must hold for the in-flight task:
+   - returns to `READY` / `QUEUED` and can be claimed again, **or**
+   - progresses toward `COMPLETED`, **or**
+   - reaches an **explicit** failure / handoff board state (not a silent hang).
+3. SQLite home remains usable (daemon starts; `GET /api/v1/system/status` succeeds).
+
+Ghost/stale reconcile (`ReconcileGhostTasks` / `ReconcileStaleTasks` + heartbeat loop) is the mechanism under test — see `internal/queue/features/ghost_reconciliation.feature` and `heartbeat_reconciliation.feature`.
+
+### Prerequisites
+
+- `make build` → `./bin/agentd`
+- Throwaway home recommended: `export AGENTD_HOME=/tmp/agentd-restart-demo`
+- A configured provider so `start` comes up (LiteLLM/Poolside/mock, **or** a dummy openai-compatible slot — see script `prepare`). Empty keys → process exits with `no LLM providers available` (SP-004).
+
+### Operator sequence
 
 ```sh
-# with AGENTD_HOME set and a READY/RUNNING task visible…
-kill -KILL <agentd-pid>    # unclean stop (non-graceful)
-./bin/agentd --home "$AGENTD_HOME" start --skip-llm-warmup
-curl -sS "http://127.0.0.1:8765/api/v1/projects/$PROJECT_ID/tasks"
-curl -sS "http://127.0.0.1:8765/api/v1/system/status"
+export AGENTD_HOME=/tmp/agentd-restart-demo
+export API_ADDR=127.0.0.1:18765   # must match config api.address
+
+# A) home + daemon (dummy upstream is enough to listen)
+./scripts/demo/restart-mid-task.sh prepare
+
+# B) put a task on the board (pick one):
+#    - follow docs/demo.md ask→approve→workspace/ready with a working connector, or
+#    - materialize a DraftPlan via POST /api/v1/projects/materialize, seed workspace, POST …/workspace/ready
+# Optional: leave a worker RUNNING by using a slow/mock LLM.
+
+PROJECT_ID=…   # from GET /api/v1/projects
+
+# C) before
+./scripts/demo/restart-mid-task.sh status
+curl -sS "http://${API_ADDR}/api/v1/projects/$PROJECT_ID/tasks"
+
+# D) unclean stop + same-home start
+./scripts/demo/restart-mid-task.sh cycle
+# equivalent:
+#   kill -KILL "$(pgrep -f "./bin/agentd --home $AGENTD_HOME start")"
+#   ./bin/agentd --home "$AGENTD_HOME" start --skip-llm-warmup
+
+# E) after — assert pass criteria
+curl -sS "http://${API_ADDR}/api/v1/projects/$PROJECT_ID/tasks"
+curl -sS "http://${API_ADDR}/api/v1/system/status"
 ```
+
+### What “good” looks like
+
+| Before kill | After restart (examples) |
+| --- | --- |
+| `RUNNING` | `READY` / `QUEUED` / `COMPLETED` / `BLOCKED`+HUMAN / `FAILED*` — **not** eternal `RUNNING` |
+| Daemon PID gone | New PID; API 200 on `/api/v1/system/status` |
+
+### Out of scope for Beat 1
+
+- Provider cascade / breaker HUMAN (Beat 2 / [demo.md](demo.md))
+- Permission/`sudo` HUMAN
+- Tiered execution
 
 ## Later beats
 
-| Beat | Intent |
-| --- | --- |
-| Provider fallback | Kill primary; cascade continues or opens system/HUMAN task |
-| Disk / watchdog | Watchdog surfaces durable event or task |
-| Memory recall | Repeated failure class hits librarian/FTS lesson |
-| Permission → HUMAN | Sandbox violation → human child (encore; not Beat 1) |
+| Beat | Intent | S02 ticket |
+| --- | --- | --- |
+| Provider fallback | Cascade or breaker/HUMAN | [T-010a](../tasks/sprints/S02-harness-reliability/tasks/T-010a-fallback-beat-docs.md) |
+| Disk / watchdog | Durable watchdog signal | later |
+| Memory recall | Librarian/FTS on repeat failure | later |
+| Permission → HUMAN | Sandbox violation | later encore |
 
 ## Related
 
 - Connector inject HUMAN: [demo.md](demo.md)
 - SP-003 run log: [SP-003](../tasks/sprints/S01-positioning-and-demo/spikes/SP-003-demo-path-dry-run.md)
+- SP-004 pre-flight: [SP-004](../tasks/sprints/S02-harness-reliability/spikes/SP-004-env-preflight.md)
+- S02 PR budgets: [PR-PLAN.md](../tasks/sprints/S02-harness-reliability/PR-PLAN.md)
