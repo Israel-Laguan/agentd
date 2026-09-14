@@ -19,7 +19,6 @@ Automated coverage that unclean stop + restart cannot leave a silent stuck `RUNN
 
 - `internal/queue/**/*_test.go`
 - `internal/queue/features/*.feature`
-- `internal/kanban/**/*_test.go` **only if** asserting store reconcile helpers
 - **No** production `.go` in this PR
 
 ## Done when

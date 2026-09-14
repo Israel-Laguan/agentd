@@ -14,9 +14,9 @@ Cold readers get the one-liner in under 30 seconds; an operator can run the gove
 
 | ID | Type | Title | Status | Priority |
 | --- | --- | --- | --- | --- |
-| [US-001](stories/US-001-clear-positioning.md) | story | Clear public positioning | in-progress | P0 |
+| [US-001](stories/US-001-clear-positioning.md) | story | Clear public positioning | carry → S02 | P0 |
 | [US-002](stories/US-002-ten-minute-demo.md) | story | 10-minute governance demo | done | P0 |
-| [T-001](tasks/T-001-github-about-topics.md) | task | GitHub About + topics | in-progress | P0 |
+| [T-001](tasks/T-001-github-about-topics.md) | task | GitHub About + topics | carry → S02/PR-H | P0 |
 | [T-002](tasks/T-002-readme-hero.md) | task | README hero + what/not | done | P0 |
 | [T-003](tasks/T-003-why-agentd.md) | task | docs/why-agentd.md contrast | done | P0 |
 | [T-004](tasks/T-004-demo-doc.md) | task | docs/demo.md 10-minute path | done | P0 |
@@ -49,4 +49,4 @@ Cold readers get the one-liner in under 30 seconds; an operator can run the gove
 - [`retro/RETRO.md`](retro/RETRO.md) filled 2026-09-14 — GH pre-flight gap recorded as SP-004 + weekly refinement action.
 - S02 planned as `S02-harness-reliability` (Phase 2.1–2.3).
 
-> `US-001`/`T-001` status: `in-progress` — `gh repo edit` About/topics instruction is prepared; required `gh repo view --json description,repositoryTopics` traceability/screenshot per `retro/RETRO.md` (due 2026-09-15) is still outstanding. See `tasks/T-001-github-about-topics.md:21` unchecked item.
+> `US-001`/`T-001` status: `carry → S02/PR-H` (was `in-progress` at close) — `gh repo edit` About/topics instruction is prepared; required `gh repo view --json description,repositoryTopics` traceability/screenshot per `retro/RETRO.md` (due 2026-09-15) is outstanding and tracked in S02 as `T-001` carry. See `tasks/T-001-github-about-topics.md:21` unchecked item and `tasks/sprints/S02-harness-reliability/README.md:29`.

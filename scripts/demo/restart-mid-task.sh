@@ -30,7 +30,10 @@ ensure_bin() {
 }
 
 pid_for_home() {
-  pgrep -f "^${BIN} --home ${HOME_DIR} start" || true
+  local esc_bin esc_home
+  esc_bin=$(printf '%s' "$BIN" | sed 's/[][\\.^$*+?(){}|]/\\&/g')
+  esc_home=$(printf '%s' "$HOME_DIR" | sed 's/[][\\.^$*+?(){}|]/\\&/g')
+  pgrep -f "^${esc_bin} --home ${esc_home} start([[:space:]]|$)" || true
 }
 
 cmd_prepare() {
@@ -60,7 +63,32 @@ YAML
   fi
   nohup "$BIN" --home "$HOME_DIR" start --skip-llm-warmup > "$HOME_DIR/daemon.log" 2>&1 &
   sleep 1
-  echo "started pid=$(pid_for_home) api=$API_URL log=$HOME_DIR/daemon.log"
+  local pid
+  pid="$(pid_for_home)"
+  if [[ -z "$pid" ]]; then
+    echo "daemon failed to start (no PID for --home $HOME_DIR)" >&2
+    cat "$HOME_DIR/daemon.log" >&2 || true
+    return 1
+  fi
+  # Poll API briefly; daemon may still be binding.
+  local i
+  for i in 1 2 3 4 5; do
+    if curl -sS -m 2 "$API_URL/api/v1/system/status" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.5
+    if [[ -z "$(pid_for_home)" ]]; then
+      echo "daemon exited after start (PID $pid gone)" >&2
+      cat "$HOME_DIR/daemon.log" >&2 || true
+      return 1
+    fi
+    if [[ "$i" -eq 5 ]]; then
+      echo "daemon PID $pid running but API $API_URL not responding" >&2
+      cat "$HOME_DIR/daemon.log" >&2 || true
+      return 1
+    fi
+  done
+  echo "started pid=$pid api=$API_URL log=$HOME_DIR/daemon.log"
 }
 
 cmd_status() {
@@ -97,19 +125,50 @@ cmd_kill() {
   fi
   echo "SIGKILL $pids"
   kill -KILL $pids
-  sleep 0.5
+  # Wait for PID to be reaped (avoid zombie race before restart).
+  local i
+  for i in 1 2 3 4 5 6; do
+    if [[ -z "$(pid_for_home)" ]]; then
+      break
+    fi
+    sleep 0.5
+  done
   echo "remaining: $(pid_for_home || echo none)"
 }
 
 cmd_restart() {
   ensure_bin
   if [[ -n "$(pid_for_home)" ]]; then
-    echo "still running; refuse restart (kill first)"
+    echo "still running; refuse restart (kill first)" >&2
     return 1
   fi
   nohup "$BIN" --home "$HOME_DIR" start --skip-llm-warmup > "$HOME_DIR/daemon.log" 2>&1 &
   sleep 1
-  echo "restarted pid=$(pid_for_home)"
+  local pid
+  pid="$(pid_for_home)"
+  if [[ -z "$pid" ]]; then
+    echo "daemon failed to restart (no PID for --home $HOME_DIR)" >&2
+    cat "$HOME_DIR/daemon.log" >&2 || true
+    return 1
+  fi
+  local i
+  for i in 1 2 3 4 5; do
+    if curl -sS -m 2 "$API_URL/api/v1/system/status" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.5
+    if [[ -z "$(pid_for_home)" ]]; then
+      echo "daemon exited after restart (PID $pid gone)" >&2
+      cat "$HOME_DIR/daemon.log" >&2 || true
+      return 1
+    fi
+    if [[ "$i" -eq 5 ]]; then
+      echo "daemon PID $pid running but API $API_URL not responding after restart" >&2
+      cat "$HOME_DIR/daemon.log" >&2 || true
+      return 1
+    fi
+  done
+  echo "restarted pid=$pid api=$API_URL"
 }
 
 cmd_cycle() {

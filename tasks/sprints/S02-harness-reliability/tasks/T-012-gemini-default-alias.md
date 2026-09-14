@@ -21,7 +21,7 @@ Remove stale `gemini-2.5-flash` default from main tree (config default + docs + 
 - `config.reference.yaml`
 - `docs/config-reference.md`
 - `README.md` (example JSON only if still present)
-- Tests currently hard-coding `gemini-2.5-flash` under `internal/**`, `cmd/agentd/**` (~11 hits)
+- Tests currently hard-coding `gemini-2.5-flash` under `internal/**`, `cmd/agentd/**` (14 hits across 7 test files)
 
 ## Explicitly excluded
 

@@ -19,8 +19,8 @@ Make Beat 1 (restart mid-task) runnable from docs without code changes.
 
 - `docs/harness-reliability.md`
 - `scripts/demo/restart-mid-task.sh` (optional)
-- `README.md` or `docs/why-agentd.md` — single link only
-- `tasks/sprints/S02-harness-reliability/**` status updates
+- `README.md` (one link) or `docs/demo.md` (link only)
+- `tasks/sprints/S02-*/**` status updates
 
 ## Done when
 
