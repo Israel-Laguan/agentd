@@ -13,7 +13,7 @@
 
 ## Goal
 
-Document Beat 2: (1) two-provider cascade success via secondary; (2) single-entry dead URL → breaker OPEN / HUMAN.
+Document Beat 2 in `docs/harness-reliability.md` — the provider-fallback/breaker mechanism, distinct from `docs/demo.md`'s connector-HUMAN approval demo: (1) two-provider cascade success via secondary; (2) single-entry dead URL → breaker OPEN / HUMAN handoff (breaker state, not the governance loop re-proved in `demo.md`).
 
 ## Allowed paths
 
