@@ -72,10 +72,13 @@ cmd_status() {
 import json, urllib.request, os
 base = os.environ.get("API_URL", "http://127.0.0.1:18765")
 try:
-    projects = json.load(urllib.request.urlopen(base + "/api/v1/projects", timeout=5))["data"]
+    payload = json.load(urllib.request.urlopen(base + "/api/v1/projects", timeout=5))
+    projects = payload.get("data") or []
 except Exception as e:
     print("projects error:", e)
     raise SystemExit(0)
+if not projects:
+    print("(no projects)")
 for p in projects:
     print(p.get("name"), p.get("id"))
     tasks = json.load(urllib.request.urlopen(
