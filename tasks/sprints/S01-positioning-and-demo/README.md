@@ -4,7 +4,7 @@
 | --- | --- |
 | Window | 2026-09-14 → 2026-09-28 |
 | Goal | Make agentd’s control-plane slot obvious, and ship a documented 10-minute approve→board→HUMAN demo path |
-| Status | done |
+| Status | in-progress |
 
 ## Goal
 
