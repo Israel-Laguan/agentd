@@ -1,8 +1,16 @@
 # agentd
 
-`agentd` is a local-first daemon for turning approved project plans into durable Kanban tasks.
+Local daemon that turns an approved plan into a durable Kanban board and runs sandboxed workers against it — model-agnostic, SQLite source of truth.
+
+- **What it is:** a local-first **control-plane harness** (board + workers + memory). Human-approved plans become durable tasks; workers run against that board with heartbeats, retries, and handoffs.
+- **What it is not:** another coding CLI or chat loop that happens to edit files. It does not compete with Claude Code / OpenHands / Cursor on editor UX or SWE-bench.
+- **Why local-first:** SQLite is the source of truth, one Go binary, cheap/local providers welcome (Ollama, llama.cpp, LiteLLM, Poolside, …). Unattended runs degrade into board tickets (`HUMAN`), not a stuck transcript.
 
 Foundational baseline contract: [`docs/architecture.md#foundational-baseline-contract`](docs/architecture.md#foundational-baseline-contract).
+
+Why agentd (vs Claude Code / OpenHands / agent-kanban / HAR): [`docs/why-agentd.md`](docs/why-agentd.md).
+
+Product plan / positioning: [`docs/product-plan.md`](docs/product-plan.md). Sprint board: [`tasks/README.md`](tasks/README.md).
 
 ## Core Components
 
@@ -25,6 +33,9 @@ CLI commands: `init`, `start`, `status`, `comment`, `config`, `project`, `sugges
 make build
 ./bin/agentd init
 ```
+
+**Governance demo (approve → board → HUMAN):** see [`docs/demo.md`](docs/demo.md) — about 10 minutes with a connector you control.
+
 
 ### First Run with Gemini Only
 
