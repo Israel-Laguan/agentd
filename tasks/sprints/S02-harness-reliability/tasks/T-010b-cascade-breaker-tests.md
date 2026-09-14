@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P1 |
 | Sprint | S02-harness-reliability |
 | Parent | US-003 |
@@ -23,6 +23,10 @@ Tests for cascade-to-secondary and breaker-open / handoff classification — wit
 
 ## Done when
 
-- [ ] Unreachable primary + healthy secondary → success path covered
-- [ ] Unreachable-only → breaker failure classification / open path covered
-- [ ] Diff within budget; no unrelated provider adapter edits
+- [x] Unreachable primary + healthy secondary → success path covered
+- [x] Unreachable-only → breaker failure classification / open path covered
+- [x] Diff within budget; no unrelated provider adapter edits
+
+## Notes
+
+Added `beat2_provider_fallback.feature` + `beat2_provider_fallback_test.go` (gateway) and `beat2_breaker_test.go` (queue/safety). Extends existing cascade/breaker coverage; no prod edits.

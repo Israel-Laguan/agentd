@@ -4,7 +4,7 @@ Prove the **house**, not the coding model. Positioning: [why-agentd.md](why-agen
 
 Governance demo (approve → board → connector HUMAN) lives in [demo.md](demo.md) — do that **first**. Do not re-prove dead-`base_url` HUMAN here.
 
-Helper script: [`scripts/demo/restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh).
+Helper scripts: [`restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh) (Beat 1), [`provider-fallback.sh`](../scripts/demo/provider-fallback.sh) (Beat 2).
 
 ## Beat 1 (S02) — Restart mid-task
 
@@ -74,11 +74,78 @@ curl -sS "http://${API_ADDR}/api/v1/system/status"
 - Permission/`sudo` HUMAN
 - Tiered execution
 
+
+## Beat 2 (S02) — Provider fallback / breaker
+
+**Tickets:** [T-010a](../tasks/sprints/S02-harness-reliability/tasks/T-010a-fallback-beat-docs.md) (this doc/script), [T-010b](../tasks/sprints/S02-harness-reliability/tasks/T-010b-cascade-breaker-tests.md) (tests).
+
+Distinct from [demo.md](demo.md)’s connector-HUMAN **governance** loop. Beat 2 proves the **house**: cascade to a healthy secondary, or open the breaker / hand off when nothing answers — without a billable cloud dependency (mock HTTP, LiteLLM, or dead `127.0.0.1:1` slots).
+
+### Pass criteria
+
+**Scenario A — cascade success**
+
+1. Gateway `order` has ≥2 openai-compatible entries (or any adapters).
+2. Primary is unreachable (dead `base_url` / refusing mock).
+3. Secondary answers successfully.
+4. Request completes with `ProviderUsed` = secondary; board work is not stuck eternal `RUNNING` solely because primary died.
+
+**Scenario B — breaker / HUMAN (exhaustion)**
+
+1. Only one provider configured **or** every entry in `order` is unreachable.
+2. Failures classify as breaker failures (`ErrLLMUnreachable` / quota).
+3. After the configured failure threshold, breaker is **OPEN**.
+4. With outage handoff enabled long enough, a `_system` HUMAN diagnostic appears (title contains “System Offline” / AI API) — **breaker state**, not the approve→HUMAN path in `demo.md`.
+
+Mechanism pointers: gateway cascade (`internal/gateway/features/cascading_fallback.feature`), breaker (`internal/queue/features/circuit_breaker.feature`), handoff (`outage_handoff.feature`).
+
+### Prerequisites
+
+- `make build` → `./bin/agentd`
+- Throwaway home: `export AGENTD_HOME=/tmp/agentd-fallback-demo`
+- No billable keys required — script uses local mock HTTP + dead ports.
+
+### Operator sequence
+
+```sh
+export AGENTD_HOME=/tmp/agentd-fallback-demo
+export API_ADDR=127.0.0.1:18776
+
+# A) two-slot config: dead primary + live mock secondary
+./scripts/demo/provider-fallback.sh prepare-cascade
+./scripts/demo/provider-fallback.sh probe-cascade
+# expect: HTTP 200 from mock secondary path / ProviderUsed secondary in logs
+
+# B) single dead slot → exhaustion
+./scripts/demo/provider-fallback.sh prepare-breaker
+./scripts/demo/provider-fallback.sh probe-breaker
+# expect: ErrLLMUnreachable-class failure; after N failures breaker OPEN
+# optional: leave daemon running until outage handoff creates HUMAN under _system
+
+./scripts/demo/provider-fallback.sh status
+./scripts/demo/provider-fallback.sh stop
+```
+
+### What “good” looks like
+
+| Setup | Expected |
+| --- | --- |
+| Dead primary + healthy secondary | Success via secondary (`ProviderUsed` ≠ primary) |
+| All dead / single dead | Cascade exhausts → `ErrLLMUnreachable`; breaker OPEN after threshold; eventual `_system` HUMAN if handoff threshold met |
+| Never | Silent hang forever on primary with no board signal |
+
+### Out of scope for Beat 2
+
+- Restart mid-task (Beat 1)
+- Permission/`sudo` HUMAN
+- Re-proving ask→approve→connector HUMAN (`demo.md`)
+- Tiered execution
+
 ## Later beats
 
 | Beat | Intent | S02 ticket |
 | --- | --- | --- |
-| Provider fallback | Cascade or breaker/HUMAN | [T-010a](../tasks/sprints/S02-harness-reliability/tasks/T-010a-fallback-beat-docs.md) |
+| Provider fallback (**Beat 2**, above) | Cascade or breaker/HUMAN | [T-010a](../tasks/sprints/S02-harness-reliability/tasks/T-010a-fallback-beat-docs.md) |
 | Disk / watchdog | Durable watchdog signal | later |
 | Memory recall | Librarian/FTS on repeat failure | later |
 | Permission → HUMAN | Sandbox violation | later encore |

@@ -22,8 +22,8 @@ Ship the first runnable harness reliability demos on top of the S01 demo path. A
 | [T-006a](tasks/T-006a-restart-beat-docs.md) | task | Restart beat docs/script | **A** | done | P0 |
 | [T-006b](tasks/T-006b-restart-reconcile-tests.md) | task | Restart reconcile tests | **B** | done | P0 |
 | [T-006c](tasks/T-006c-restart-reconcile-fix.md) | task | Restart prod fix (if needed) | **C** | backlog | P0 |
-| [T-010a](tasks/T-010a-fallback-beat-docs.md) | task | Fallback beat docs/script | **D** | ready | P1 |
-| [T-010b](tasks/T-010b-cascade-breaker-tests.md) | task | Cascade/breaker tests | **E** | ready | P1 |
+| [T-010a](tasks/T-010a-fallback-beat-docs.md) | task | Fallback beat docs/script | **D** | done | P1 |
+| [T-010b](tasks/T-010b-cascade-breaker-tests.md) | task | Cascade/breaker tests | **E** | done | P1 |
 | [T-011](tasks/T-011-litellm-first-run-docs.md) | task | LiteLLM-first README | **F** | ready | P1 |
 | [T-012](tasks/T-012-gemini-default-alias.md) | task | Drop stale gemini-2.5 default | **G** | ready | P2 |
 | [T-001](../S01-positioning-and-demo/tasks/T-001-github-about-topics.md) | task | GitHub About/topics (carry) | **H** | carry | P0 |
