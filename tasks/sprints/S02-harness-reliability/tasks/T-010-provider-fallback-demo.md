@@ -8,7 +8,7 @@
 | Sprint | S02-harness-reliability |
 | Parent | US-003 |
 | Estimate | M |
-| Links | [product-plan Phase 2 H2](../../../docs/product-plan.md), [demo.md](../../../docs/demo.md), [SP-003](../../S01-positioning-and-demo/spikes/SP-003-demo-path-dry-run.md) |
+| Links | [product-plan Phase 2 H2](../../../../docs/product-plan.md), [demo.md](../../../../docs/demo.md), [SP-003](../../S01-positioning-and-demo/spikes/SP-003-demo-path-dry-run.md) |
 
 ## Goal
 
@@ -16,8 +16,9 @@ Document and script the provider fallback/beat: killing the primary provider cau
 
 ## Done when
 
-- [ ] `docs/harness-reliability.md` Beat 2 added with pass criteria
-- [ ] Commands listed: single-entry `gateway.order` + dead `base_url: http://127.0.0.1:1` (or kill LiteLLM/mock) → trigger LLM call → assert breaker `OPEN` or new `HUMAN`/system task
+- [ ] `docs/harness-reliability.md` Beat 2 added with pass criteria covering two distinct scenarios:
+  - Provider fallback (two-candidate cascade): one unreachable preferred provider + one healthy secondary provider in `gateway.order` → trigger LLM call → assert the request succeeds through the secondary
+  - Provider exhaustion (single-entry outage): single-entry `gateway.order` + dead `base_url: http://127.0.0.1:1` (or kill LiteLLM/mock) → generate three unreachable failures → assert breaker `OPEN` or new `HUMAN`/system task
 
 ## Notes
 

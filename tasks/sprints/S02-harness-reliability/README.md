@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Window | 2026-09-29 → 2026-10-13 |
-| Goal | Prove the house — restart, fallback, and watchdog degrade to board state, not silent stuck RUNNING |
+| Goal | Prove the house — restart and fallback degrade to board state, not silent stuck RUNNING |
 | Status | planned |
 
 ## Goal
@@ -14,7 +14,7 @@ Ship the first runnable harness reliability demos on top of the S01 demo path. A
 
 | ID | Type | Title | Status | Priority |
 | --- | --- | --- | --- | --- |
-| [US-003](../backlog/stories/US-003-harness-reliability-pack.md) → `stories/US-003-harness-reliability-pack.md` | story | Harness reliability pack | ready | P0 |
+| [US-003](../../backlog/stories/US-003-harness-reliability-pack.md) → `stories/US-003-harness-reliability-pack.md` | story | Harness reliability pack | ready | P0 |
 | [T-006](tasks/T-006-harness-reliability-doc.md) | task | docs/harness-reliability.md + restart mid-task beat | ready | P0 |
 | [T-010](tasks/T-010-provider-fallback-demo.md) | task | Provider fallback beat (cascade / breaker) | ready | P1 |
 | [SP-004](spikes/SP-004-env-preflight.md) | spike | Env/tooling pre-flight (gh, make, Go, AGENTD_HOME) | ready | P1 |
@@ -45,6 +45,6 @@ Fill `retro/RETRO.md` at sprint end (include whether SP-004 + refinement ceremon
 
 ## Links
 
-- Product plan Phase 2: `docs/product-plan.md#phase-2--harness-reliability-story-not-swe-bench`
-- Prior demo: `docs/demo.md`, `docs/harness-reliability.md` (stub)
+- Product plan Phase 2: `../../../docs/product-plan.md#phase-2--harness-reliability-story-not-swe-bench`
+- Prior demo: `../../../docs/demo.md`, `../../../docs/harness-reliability.md` (stub)
 - S01 retro: `../S01-positioning-and-demo/retro/RETRO.md`

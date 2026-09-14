@@ -14,7 +14,7 @@ Governance demo (approve → board → connector HUMAN) lives in [demo.md](demo.
 
 ```sh
 # with AGENTD_HOME set and a READY/RUNNING task visible…
-kill <agentd-pid>          # unclean stop
+kill -KILL <agentd-pid>    # unclean stop (non-graceful)
 ./bin/agentd --home "$AGENTD_HOME" start --skip-llm-warmup
 curl -sS "http://127.0.0.1:8765/api/v1/projects/$PROJECT_ID/tasks"
 curl -sS "http://127.0.0.1:8765/api/v1/system/status"

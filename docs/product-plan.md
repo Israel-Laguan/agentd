@@ -187,7 +187,7 @@ Phase 4 runs continuously; do not block demos on it.
 
 **Status:** design bet — not shipped as a product surface yet.  
 **Spec:** [tiered-execution.md](tiered-execution.md)  
-**Hard rule:** complexity gate — simple tasks stay one-shot; the pipeline runs only above threshold.  
+**Hard rule:** complexity gate — simple tasks stay one-shot; the pipeline runs only at/above threshold.    
 **Goal:** spend strong models only where judgment is scarce; keep gathering and mechanical edits on small/cheap models. Save money and wall-clock without relying on “please don’t search again” prompts.
 
 ### Pipeline shape

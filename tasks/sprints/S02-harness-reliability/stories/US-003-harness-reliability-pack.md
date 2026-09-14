@@ -11,7 +11,7 @@
 
 ## Story
 
-As an **adopter evaluating harnesses**, I want **scripted demos of restart, fallback, and watchdog**, so that **I trust unattended runs without a SWE-bench score.**
+As an **adopter evaluating harnesses**, I want **scripted demos of restart and fallback**, so that **I trust unattended runs without a SWE-bench score.**
 
 ## Acceptance criteria
 

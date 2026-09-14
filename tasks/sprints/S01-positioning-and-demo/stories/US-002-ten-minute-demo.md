@@ -18,7 +18,7 @@ As an **operator**, I want **a scripted path from ask → approve → board → 
 - [x] `docs/demo.md` lists exact commands and expected board states — `docs/demo.md:1`
 - [x] Path includes human plan approval and at least one permission/HUMAN beat — connector inject `BLOCKED + Manual review: AI providers unavailable` (SP-003 GO)
 - [x] README Quickstart links the 10-minute path — `README.md:37`
-- [x] Cold run by someone familiar with Go tooling finishes in ~10 minutes (or documents blockers) — SP-003 run log `spikes/SP-003-demo-path-dry-run.md:100` passes; full cold run repeat covered by `handoff_after: 10s` recipe
+- [x] Cold run by someone familiar with Go tooling finishes in ~10 minutes (or documents blockers) — SP-003 run log `spikes/SP-003-demo-path-dry-run.md:100` passes
 
 ## Notes
 

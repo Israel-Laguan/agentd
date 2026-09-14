@@ -3,11 +3,11 @@
 | Field | Value |
 | --- | --- |
 | Type | user-story |
-| Status | backlog |
+| Status | retired (superseded) |
 | Priority | P1 |
-| Sprint | backlog |
+| Sprint | S02-harness-reliability |
 | Persona | adopter |
-| Links | [product-plan Phase 2](../../../docs/product-plan.md) |
+| Links | [product-plan Phase 2](../../../docs/product-plan.md), [canonical S02 copy](../sprints/S02-harness-reliability/stories/US-003-harness-reliability-pack.md) |
 
 ## Story
 
@@ -20,4 +20,4 @@ As an **adopter evaluating harnesses**, I want **scripted demos of restart, fall
 
 ## Notes
 
-Pull after S01 / SP-001.
+Superseded by the active S02 copy: `../sprints/S02-harness-reliability/stories/US-003-harness-reliability-pack.md` (pulled after S01 / SP-001). Kept for history only — do not schedule from this backlog record.
