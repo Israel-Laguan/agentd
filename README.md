@@ -36,7 +36,6 @@ make build
 
 **Governance demo (approve → board → HUMAN):** see [`docs/demo.md`](docs/demo.md) — about 10 minutes with a connector you control.
 
-
 ### First Run with Gemini Only
 
 If you only have a Gemini API key:
