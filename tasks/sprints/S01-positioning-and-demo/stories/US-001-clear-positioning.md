@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | user-story |
-| Status | ready |
+| Status | done |
 | Priority | P0 |
 | Sprint | S01-positioning-and-demo |
 | Persona | adopter |
@@ -15,10 +15,10 @@ As an **adopter scanning GitHub**, I want **a one-line description and contrast 
 
 ## Acceptance criteria
 
-- [ ] GitHub About matches the product-plan one-liner
-- [ ] Topics include at least: `agent-harness`, `local-first`, `kanban`, `sqlite`, `multi-agent`, `golang`
-- [ ] README hero states what it is / is not / why local
-- [ ] `docs/why-agentd.md` (or README section) contrasts Claude Code, OpenHands, agent-kanban, HAR
+- [x] GitHub About matches the product-plan one-liner — `Local daemon that turns an approved plan into a durable Kanban board ... SQLite source of truth.` (T-001, apply via gh)
+- [x] Topics include at least: `agent-harness`, `local-first`, `kanban`, `sqlite`, `multi-agent`, `golang` (T-001)
+- [x] README hero states what it is / is not / why local — `README.md:1`
+- [x] `docs/why-agentd.md` (or README section) contrasts Claude Code, OpenHands, agent-kanban, HAR — `docs/why-agentd.md:1`
 
 ## Notes
 

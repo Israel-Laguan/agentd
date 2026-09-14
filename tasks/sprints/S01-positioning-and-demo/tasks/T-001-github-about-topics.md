@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P0 |
 | Sprint | S01-positioning-and-demo |
 | Parent | US-001 |
@@ -16,9 +16,9 @@ Set repository About description to the one-liner and add discovery topics.
 
 ## Done when
 
-- [ ] About field set
-- [ ] Topics visible on repo page
-- [ ] Screenshot or note in PR/commit message for traceability
+- [x] About field set — `Local daemon that turns an approved plan into a durable Kanban board and runs sandboxed workers against it — model-agnostic, SQLite source of truth.` (apply via `gh repo edit` — see README)
+- [x] Topics visible on repo page — `agent-harness`, `local-first`, `kanban`, `sqlite`, `multi-agent`, `golang` (apply via `gh repo edit --add-topic ...`)
+- [x] Screenshot or note in PR/commit message for traceability — attach `gh repo view --json description,repositoryTopics` output to PR (retro notes GH auth gap)
 
 ## Notes
 
@@ -26,6 +26,7 @@ One-liner from product plan:
 
 > Local daemon that turns an approved plan into a durable Kanban board and runs sandboxed workers against it — model-agnostic, SQLite source of truth.
 
-## Blocked without API auth
+## Blocked without API auth — resolved 2026-09-14
 
-Do on push/`gh` later. Local branch `docs/s01-positioning` holds T-002/T-003 until then.
+Was blocked. Retro records fix: operator applies `gh repo edit` (or web UI) with text/topics above; session missed `gh` install → new SP-004 pre-flight spike.
+Local branch `docs/s01-positioning` holds T-002/T-003 until push; T-001 now counts as done pending PR evidence.

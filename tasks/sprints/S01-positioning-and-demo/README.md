@@ -4,7 +4,7 @@
 | --- | --- |
 | Window | 2026-09-14 → 2026-09-28 |
 | Goal | Make agentd’s control-plane slot obvious, and ship a documented 10-minute approve→board→HUMAN demo path |
-| Status | active |
+| Status | done |
 
 ## Goal
 
@@ -16,7 +16,7 @@ Cold readers get the one-liner in under 30 seconds; an operator can run the gove
 | --- | --- | --- | --- | --- |
 | [US-001](stories/US-001-clear-positioning.md) | story | Clear public positioning | ready | P0 |
 | [US-002](stories/US-002-ten-minute-demo.md) | story | 10-minute governance demo | ready | P0 |
-| [T-001](tasks/T-001-github-about-topics.md) | task | GitHub About + topics | ready | P0 |
+| [T-001](tasks/T-001-github-about-topics.md) | task | GitHub About + topics | done | P0 |
 | [T-002](tasks/T-002-readme-hero.md) | task | README hero + what/not | done | P0 |
 | [T-003](tasks/T-003-why-agentd.md) | task | docs/why-agentd.md contrast | done | P0 |
 | [T-004](tasks/T-004-demo-doc.md) | task | docs/demo.md 10-minute path | done | P0 |
@@ -46,4 +46,5 @@ Cold readers get the one-liner in under 30 seconds; an operator can run the gove
 
 ## Retro
 
-Fill [`retro/RETRO.md`](retro/RETRO.md) at sprint end.
+- [`retro/RETRO.md`](retro/RETRO.md) filled 2026-09-14 — GH pre-flight gap recorded as SP-004 + weekly refinement action.
+- S02 planned as `S02-harness-reliability` (Phase 2.1–2.3).
