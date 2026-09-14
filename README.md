@@ -36,6 +36,8 @@ make build
 
 **Governance demo (approve → board → HUMAN):** see [`docs/demo.md`](docs/demo.md) — about 10 minutes with a connector you control.
 
+**Harness reliability (restart mid-task):** see [`docs/harness-reliability.md`](docs/harness-reliability.md) and `scripts/demo/restart-mid-task.sh`.
+
 ### First Run with Gemini Only
 
 If you only have a Gemini API key:
