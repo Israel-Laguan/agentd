@@ -183,8 +183,28 @@ func backupBaselineIfExists(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".checkminfunc-baseline-*.bak")
+	if err != nil {
+		return "", err
+	}
+	tmpPath := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpPath); _ = tmp.Close() }
+	if _, err := tmp.Write(data); err != nil {
+		cleanup()
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
+	if err := os.Chmod(tmpPath, 0o644); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
 	bakPath := path + ".bak"
-	if err := os.WriteFile(bakPath, data, 0o644); err != nil {
+	if err := os.Rename(tmpPath, bakPath); err != nil {
+		_ = os.Remove(tmpPath)
 		return "", err
 	}
 	return bakPath, nil

@@ -307,3 +307,59 @@ func TestWriteBaselineDirectoryCleansStaleFiles(t *testing.T) {
 		t.Fatalf("baseline = %q, want %q", got, want)
 	}
 }
+
+func TestWriteBaselineBackupDoesNotFollowSymlink(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "baseline.txt")
+	original := "a.go f\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	target := filepath.Join(dir, "sensitive.txt")
+	if err := os.WriteFile(target, []byte("SECRET"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bakPath := path + ".bak"
+	if err := os.Symlink(target, bakPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	violations := []violation{{name: "g", file: "b.go", line: 2, lines: 2}}
+	backupPath, err := writeBaseline(path, violations, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backupPath != bakPath {
+		t.Fatalf("backupPath = %q, want %q", backupPath, bakPath)
+	}
+
+	// .bak must be regular file (symlink entry replaced by rename, not followed)
+	info, err := os.Lstat(bakPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal(".bak must not be a symlink after backup")
+	}
+
+	// target must be untouched
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "SECRET" {
+		t.Fatalf("target overwritten to %q", got)
+	}
+
+	// backup contains the original data
+	got, err = os.ReadFile(bakPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Fatalf("backup = %q, want %q", got, original)
+	}
+}
