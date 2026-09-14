@@ -23,4 +23,4 @@ As an **adopter scanning GitHub**, I want **a one-line description and contrast 
 ## Notes
 
 - Children: T-001, T-002, T-003
-- * `in-progress` — first two ACs depend on `T-001` `gh repo edit` About/topics apply. Instruction is prepared; `gh repo view --json description,repositoryTopics` traceability is the outstanding repo-admin action carried per `retro/RETRO.md` (due 2026-09-15) and `tasks/T-001-github-about-topics.md:21`. Close is conditional on that PR evidence.
+- **in-progress** — first two ACs depend on `T-001` `gh repo edit` About/topics apply. Instruction is prepared; `gh repo view --json description,repositoryTopics` traceability is the outstanding repo-admin action carried per `retro/RETRO.md` (due 2026-09-15) and `tasks/T-001-github-about-topics.md:21`. Close is conditional on that PR evidence.
