@@ -14,8 +14,8 @@ Cold readers get the one-liner in under 30 seconds; an operator can run the gove
 
 | ID | Type | Title | Status | Priority |
 | --- | --- | --- | --- | --- |
-| [US-001](stories/US-001-clear-positioning.md) | story | Clear public positioning | ready | P0 |
-| [US-002](stories/US-002-ten-minute-demo.md) | story | 10-minute governance demo | ready | P0 |
+| [US-001](stories/US-001-clear-positioning.md) | story | Clear public positioning | done | P0 |
+| [US-002](stories/US-002-ten-minute-demo.md) | story | 10-minute governance demo | done | P0 |
 | [T-001](tasks/T-001-github-about-topics.md) | task | GitHub About + topics | done | P0 |
 | [T-002](tasks/T-002-readme-hero.md) | task | README hero + what/not | done | P0 |
 | [T-003](tasks/T-003-why-agentd.md) | task | docs/why-agentd.md contrast | done | P0 |

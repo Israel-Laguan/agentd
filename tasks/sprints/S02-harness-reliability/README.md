@@ -45,6 +45,6 @@ Fill `retro/RETRO.md` at sprint end (include whether SP-004 + refinement ceremon
 
 ## Links
 
-- Product plan Phase 2: `docs/product-plan.md#phase-2`
+- Product plan Phase 2: `docs/product-plan.md#phase-2--harness-reliability-story-not-swe-bench`
 - Prior demo: `docs/demo.md`, `docs/harness-reliability.md` (stub)
 - S01 retro: `../S01-positioning-and-demo/retro/RETRO.md`

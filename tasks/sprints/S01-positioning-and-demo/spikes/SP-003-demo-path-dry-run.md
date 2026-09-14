@@ -7,7 +7,7 @@
 | Priority | P0 |
 | Sprint | S01-positioning-and-demo |
 | Time box | 2–4 hours |
-| Links | [US-002](../stories/US-002-ten-minute-demo.md), [T-004](../tasks/T-004-demo-doc.md), [llm-connector-strategy](../../../docs/llm-connector-strategy.md), [frontdesk](../../../docs/frontdesk.md) |
+| Links | [US-002](../stories/US-002-ten-minute-demo.md), [T-004](../tasks/T-004-demo-doc.md), [llm-connector-strategy](../../../../docs/llm-connector-strategy.md), [frontdesk](../../../../docs/frontdesk.md) |
 
 ## Question
 
@@ -15,7 +15,7 @@ Can we (1) run ask→approve→board with a connector we control, then (2) **inj
 
 ## Prerequisite: how the LLM connector works (reviewed)
 
-agentd’s model is **two topologies** ([`docs/llm-connector-strategy.md`](../../../docs/llm-connector-strategy.md)):
+agentd’s model is **two topologies** ([`docs/llm-connector-strategy.md`](../../../../docs/llm-connector-strategy.md)):
 
 ```text
 Direct:  agentd ──HTTP──▶ openai-compatible endpoint (OpenAI / Gemini-openai / Ollama / llama.cpp / LiteLLM)

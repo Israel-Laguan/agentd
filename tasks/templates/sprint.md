@@ -4,7 +4,7 @@
 | --- | --- |
 | Window | YYYY-MM-DD → YYYY-MM-DD |
 | Goal | one sentence |
-| Status | planned \| active \| closed |
+| Status | planned \| active \| done |
 
 ## Goal
 

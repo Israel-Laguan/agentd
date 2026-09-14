@@ -16,7 +16,7 @@ Do we have the tooling to complete gh-gated and make-gated work without the S01 
 ## Method
 
 1. Check `gh auth status`, `gh --version`; if missing, document install (`gh auth login` vs `GH_TOKEN`) and note whether to carry gh-gated tasks.
-2. Check `make --version`, `go version`, `AGENTD_HOME=/tmp/<throwaway>` init smoke (`make build && ./bin/agentd --home /tmp/agentd-sp004 init`).
+2. Check `make --version`, `go version`, and an `AGENTD_HOME=/tmp/agentd-sp004` init smoke (`make build && ./bin/agentd --home /tmp/agentd-sp004 init`).
 3. Run one board smoke: `agentd start --skip-llm-warmup` + `curl /api/v1/system/status`.
 4. Document pass/fail per tool and whether S02 T-010 needs mock-only path.
 

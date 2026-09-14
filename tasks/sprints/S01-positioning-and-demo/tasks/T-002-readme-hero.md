@@ -8,7 +8,7 @@
 | Sprint | S01-positioning-and-demo |
 | Parent | US-001 |
 | Estimate | M |
-| Links | [product-plan 0.3](../../../docs/product-plan.md), [README](../../../README.md) |
+| Links | [product-plan 0.3](../../../../docs/product-plan.md), [README](../../../../README.md) |
 
 ## Goal
 

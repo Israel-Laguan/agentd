@@ -8,7 +8,7 @@
 | Sprint | S01-positioning-and-demo |
 | Parent | US-001 |
 | Estimate | S |
-| Links | [product-plan 0.1–0.2](../../../docs/product-plan.md) |
+| Links | [product-plan 0.1–0.2](../../../../docs/product-plan.md) |
 
 ## Goal
 
@@ -18,7 +18,7 @@ Set repository About description to the one-liner and add discovery topics.
 
 - [x] About field set — `Local daemon that turns an approved plan into a durable Kanban board and runs sandboxed workers against it — model-agnostic, SQLite source of truth.` (apply via `gh repo edit` — see README)
 - [x] Topics visible on repo page — `agent-harness`, `local-first`, `kanban`, `sqlite`, `multi-agent`, `golang` (apply via `gh repo edit --add-topic ...`)
-- [x] Screenshot or note in PR/commit message for traceability — attach `gh repo view --json description,repositoryTopics` output to PR (retro notes GH auth gap)
+- [ ] Screenshot or note in PR/commit message for traceability — attach `gh repo view --json description,repositoryTopics` output to PR (retro notes GH auth gap — pending PR evidence)
 
 ## Notes
 

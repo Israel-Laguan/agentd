@@ -7,7 +7,7 @@
 | Priority | P2 |
 | Sprint | S01-positioning-and-demo |
 | Time box | 0.5 day |
-| Links | [tiered-execution.md](../../../docs/tiered-execution.md) |
+| Links | [tiered-execution.md](../../../../docs/tiered-execution.md) |
 
 ## Question
 
