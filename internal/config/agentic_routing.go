@@ -1,6 +1,10 @@
 package config
 
-import "github.com/spf13/viper"
+import (
+	"encoding/json"
+
+	"github.com/spf13/viper"
+)
 
 const DefaultToolManifestMinConfidence = 0.35
 
@@ -41,6 +45,11 @@ func loadToolManifestConfig(v *viper.Viper) ToolManifestConfig {
 	if v.IsSet("agentic.tool_manifest.mappings") {
 		if raw := v.Get("agentic.tool_manifest.mappings"); raw != nil {
 			switch m := raw.(type) {
+			case string:
+				var parsed map[string][]string
+				if json.Unmarshal([]byte(m), &parsed) == nil {
+					tmMappings = parsed
+				}
 			case map[string]interface{}:
 				tmMappings = make(map[string][]string, len(m))
 				for k, val := range m {
@@ -92,6 +101,12 @@ func loadStringStringMap(v *viper.Viper, key string) map[string]string {
 		return nil
 	}
 	switch m := raw.(type) {
+	case string:
+		var out map[string]string
+		if json.Unmarshal([]byte(m), &out) == nil {
+			return out
+		}
+		return nil
 	case map[string]interface{}:
 		out := make(map[string]string, len(m))
 		for k, val := range m {
