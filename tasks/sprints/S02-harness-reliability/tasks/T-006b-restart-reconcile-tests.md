@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P0 |
 | Sprint | S02-harness-reliability |
 | Parent | US-003 |
@@ -23,11 +23,13 @@ Automated coverage that unclean stop + restart cannot leave a silent stuck `RUNN
 
 ## Done when
 
-- [ ] Feature or unit tests cover ghost and/or stale reconcile outcomes used by Beat 1
-- [ ] Failures name the board state expected
-- [ ] If a production bug is found → stop; open **T-006c / PR-C** instead of stuffing a fix here
-- [ ] Diff within budget
+- [x] Feature or unit tests cover ghost and/or stale reconcile outcomes used by Beat 1
+- [x] Failures name the board state expected
+- [x] No production bug found — T-006c stays backlog
+- [x] Diff within budget
 
 ## Notes
 
 Existing cues: `ghost_reconciliation.feature`, `heartbeat_reconciliation.feature`, `ReconcileGhostTasks` / `ReconcileStaleTasks`.
+
+Added `internal/queue/features/restart_mid_task.feature`, `internal/queue/restart_mid_task_test.go`, and `TestReconcileGhostTasks*` in `internal/kanban/task_heartbeat_test.go`. T-006c not needed.

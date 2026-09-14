@@ -20,7 +20,7 @@ Ship the first runnable harness reliability demos on top of the S01 demo path. A
 | [US-003](stories/US-003-harness-reliability-pack.md) | story | Harness reliability pack | — | ready | P0 |
 | [SP-004](spikes/SP-004-env-preflight.md) | spike | Env/tooling pre-flight | none | done | P0 |
 | [T-006a](tasks/T-006a-restart-beat-docs.md) | task | Restart beat docs/script | **A** | done | P0 |
-| [T-006b](tasks/T-006b-restart-reconcile-tests.md) | task | Restart reconcile tests | **B** | ready | P0 |
+| [T-006b](tasks/T-006b-restart-reconcile-tests.md) | task | Restart reconcile tests | **B** | done | P0 |
 | [T-006c](tasks/T-006c-restart-reconcile-fix.md) | task | Restart prod fix (if needed) | **C** | backlog | P0 |
 | [T-010a](tasks/T-010a-fallback-beat-docs.md) | task | Fallback beat docs/script | **D** | ready | P1 |
 | [T-010b](tasks/T-010b-cascade-breaker-tests.md) | task | Cascade/breaker tests | **E** | ready | P1 |
