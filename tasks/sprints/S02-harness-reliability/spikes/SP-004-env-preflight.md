@@ -13,7 +13,7 @@
 
 Do we have the tooling to complete gh-gated and make-gated work without the S01 surprise?
 
-## Run log (2026-09-14, acer)
+## Run log (2026-09-14, acer — S01 carry-over; S02 window is 2026-09-29 → 2026-10-13)
 
 | Check | Result |
 | --- | --- |
