@@ -22,4 +22,4 @@ As an **operator on a hard task**, I want **context→decision→execute→verif
 
 ## Notes
 
-Blocked on SP-002 answers; implementation = M1–M5 in tiered-execution spec.
+Unblocked — SP-002 answers recorded (done 2026-09-14); implementation = M1–M5 in tiered-execution spec.

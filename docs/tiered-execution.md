@@ -21,7 +21,8 @@ Save **money and wall-clock**. Soft prompt discipline is not the mechanism.
 | `tiered.enabled == false` | Always one-shot (current worker path) |
 | Complexity score **below** threshold | One-shot; no DAG split |
 | Complexity score **at/above** threshold | Materialize `context → decision → execute → verify` children (and optional escalate) |
-| Threshold `0` or unset while feature on | Treat as **disabled** (same spirit as `ComplexityThreshold: 0` skipping plan phase today) |
+| Threshold `0` while feature on | Treat as **disabled** — `0` disables splitting (same spirit as `ComplexityThreshold: 0` skipping plan phase today) |
+| Threshold unset while `tiered.enabled: true` | Defaults to `200` (`EstimateTaskComplexity`); split only at/above that score |
 
 Reuse the existing scoring idea (`EstimateTaskComplexity`: title + description length + newlines*10) as v1. Later we can add signals (file count hints, labels, Frontdesk plan step count) without changing the gate rule: **below threshold = one worker invocation**.
 
@@ -111,7 +112,7 @@ v1 can map new step kinds onto existing roles + dedicated **AgentProfile** rows 
 ```yaml
 tiered:
   enabled: false
-  complexity_threshold: 200   # 0 = off; align spirit with agentic.planning.complexity_threshold
+  complexity_threshold: 200   # 0 disables splitting; unset defaults to 200 when tiered.enabled: true (align with agentic.planning.complexity_threshold)
   models:
     context:  { provider: ollama, model: "…" }      # small
     decision: { provider: gemini, model: "…" }      # mid

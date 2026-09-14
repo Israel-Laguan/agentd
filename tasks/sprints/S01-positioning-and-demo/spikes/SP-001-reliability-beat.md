@@ -32,8 +32,8 @@ Which single reliability beat should be the first scripted demo after the 10-min
 ### Rough command list (for T-006 / `docs/harness-reliability.md`)
 
 1. Run demo steps 0–4 so a task is `RUNNING` (or about to be claimed).
-2. `kill` the `agentd start` process ( unclean; no graceful drain ).
-3. `agentd start --skip-llm-warmup` again with the same `--home`.
+2. `kill -KILL` the `agentd start` process ( unclean; no graceful drain ).
+3. `./bin/agentd --home "$AGENTD_HOME" start --skip-llm-warmup` again (same home as the initial run).
 4. Expect: no permanent stuck `RUNNING` without a live worker — ghost/stale reconcile returns work to `READY`/`QUEUED` or fails to a clear board state; task progresses or shows an explicit handoff.
 5. Capture before/after `GET …/tasks` + `system/status`.
 

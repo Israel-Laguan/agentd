@@ -12,7 +12,7 @@
 
 ## Goal
 
-Document exact commands: init → ask → approve → start → watch board/SSE → one failure becoming HUMAN.
+Document exact commands: init → ask → approve → materialize → `POST /api/v1/projects/{id}/workspace/ready` → start → watch board/SSE → one failure becoming HUMAN.
 
 ## Done when
 

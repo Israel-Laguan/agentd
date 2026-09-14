@@ -41,8 +41,16 @@ Put the matching key in `$AGENTD_HOME/.env`. Start LiteLLM separately.
 **Option B — local mock OpenAI** (fully offline; good for CI/docs rehearsals): any process that speaks `POST /v1/chat/completions` and returns intent / scope / DraftPlan / worker JSON. See SP-003 run log for a minimal mock shape.
 
 ```sh
+# agentd start blocks in the foreground (API server + worker loop).
+# Run it in a SECOND terminal, or background it — do not run it inline
+# before the ask/approve/board steps.
 ./bin/agentd --home "$AGENTD_HOME" start --skip-llm-warmup
+
+# background option (logs to file):
+# ./bin/agentd --home "$AGENTD_HOME" start --skip-llm-warmup &> "$AGENTD_HOME/agentd.log" &
 ```
+
+Wait for `API server listening on 127.0.0.1:…` in the daemon terminal, then proceed.
 
 API default in this doc: `http://127.0.0.1:8765` (or whatever you set in `api.address`).
 
