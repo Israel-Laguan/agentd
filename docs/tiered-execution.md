@@ -23,7 +23,7 @@ Save **money and wall-clock**. Soft prompt discipline is not the mechanism.
 | Complexity score **at/above** threshold | Materialize `context → decision → execute → verify` children (and optional escalate) |
 | Threshold `0` or unset while feature on | Treat as **disabled** (same spirit as `ComplexityThreshold: 0` skipping plan phase today) |
 
-Reuse the existing scoring idea (`EstimateTaskComplexity`: title + description length + newlines) as v1. Later we can add signals (file count hints, labels, Frontdesk plan step count) without changing the gate rule: **below threshold = one worker invocation**.
+Reuse the existing scoring idea (`EstimateTaskComplexity`: title + description length + newlines*10) as v1. Later we can add signals (file count hints, labels, Frontdesk plan step count) without changing the gate rule: **below threshold = one worker invocation**.
 
 Rationale: queue/heartbeat/DAG overhead on tiny tasks can cost more than any model savings.
 
@@ -111,7 +111,7 @@ v1 can map new step kinds onto existing roles + dedicated **AgentProfile** rows 
 ```yaml
 tiered:
   enabled: false
-  complexity_threshold: 100   # 0 = off; align spirit with agentic.planning.complexity_threshold
+  complexity_threshold: 200   # 0 = off; align spirit with agentic.planning.complexity_threshold
   models:
     context:  { provider: ollama, model: "…" }      # small
     decision: { provider: gemini, model: "…" }      # mid

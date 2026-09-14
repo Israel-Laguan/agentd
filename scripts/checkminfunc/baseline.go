@@ -194,6 +194,10 @@ func backupBaselineIfExists(path string) (string, error) {
 		cleanup()
 		return "", err
 	}
+	if err := tmp.Sync(); err != nil {
+		cleanup()
+		return "", err
+	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpPath)
 		return "", err

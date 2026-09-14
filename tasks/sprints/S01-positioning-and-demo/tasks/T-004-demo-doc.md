@@ -8,7 +8,7 @@
 | Sprint | S01-positioning-and-demo |
 | Parent | US-002 |
 | Estimate | L |
-| Links | [product-plan Phase 1](../../../docs/product-plan.md), [frontdesk](../../../docs/frontdesk.md) |
+| Links | [product-plan Phase 1](../../../../docs/product-plan.md), [frontdesk](../../../../docs/frontdesk.md) |
 
 ## Goal
 

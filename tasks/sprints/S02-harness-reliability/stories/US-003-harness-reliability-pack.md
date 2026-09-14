@@ -7,7 +7,7 @@
 | Priority | P0 |
 | Sprint | S02-harness-reliability |
 | Persona | adopter |
-| Links | [product-plan Phase 2](../../../docs/product-plan.md) |
+| Links | [product-plan Phase 2](../../../../docs/product-plan.md) |
 
 ## Story
 
@@ -20,4 +20,4 @@ As an **adopter evaluating harnesses**, I want **scripted demos of restart, fall
 
 ## Notes
 
-Pulled from backlog after S01 / SP-001. Children: T-006, T-010. SP-004 pre-flight gates gh-dependent steps. S01 retro: `../S01-positioning-and-demo/retro/RETRO.md`.
+Pulled from backlog after S01 / SP-001. Children: T-006, T-010. SP-004 pre-flight gates gh-dependent steps. S01 retro: `../../S01-positioning-and-demo/retro/RETRO.md`.

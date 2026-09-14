@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"log/slog"
 
 	"github.com/spf13/viper"
 )
@@ -47,7 +48,9 @@ func loadToolManifestConfig(v *viper.Viper) ToolManifestConfig {
 			switch m := raw.(type) {
 			case string:
 				var parsed map[string][]string
-				if json.Unmarshal([]byte(m), &parsed) == nil {
+				if err := json.Unmarshal([]byte(m), &parsed); err != nil {
+					slog.Warn("invalid agentic.tool_manifest.mappings JSON", "err", err)
+				} else {
 					tmMappings = parsed
 				}
 			case map[string]interface{}:
@@ -103,10 +106,11 @@ func loadStringStringMap(v *viper.Viper, key string) map[string]string {
 	switch m := raw.(type) {
 	case string:
 		var out map[string]string
-		if json.Unmarshal([]byte(m), &out) == nil {
-			return out
+		if err := json.Unmarshal([]byte(m), &out); err != nil {
+			slog.Warn("invalid JSON for config key", "key", key, "err", err)
+			return nil
 		}
-		return nil
+		return out
 	case map[string]interface{}:
 		out := make(map[string]string, len(m))
 		for k, val := range m {

@@ -7,7 +7,7 @@
 | Priority | P1 |
 | Sprint | S01-positioning-and-demo |
 | Time box | 0.5 day |
-| Links | [product-plan Phase 2](../../../docs/product-plan.md), [demo.md](../../../docs/demo.md), [T-006](../../../backlog/tasks/T-006-harness-reliability-doc.md) |
+| Links | [product-plan Phase 2](../../../../docs/product-plan.md), [demo.md](../../../../docs/demo.md), [T-006](../../../backlog/tasks/T-006-harness-reliability-doc.md) |
 
 ## Question
 
@@ -21,7 +21,7 @@ Which single reliability beat should be the first scripted demo after the 10-min
 | --- | --- |
 | **Restart mid-task** | **GO for S02** — unique to a durable board harness; proves claim/heartbeat/ghost reconcile, not just “LLM died.” |
 | Permission → HUMAN | Defer — real, but fiddly to script; overlaps the demo’s already-proven HUMAN story less cleanly than restart. |
-| Dead connector → HUMAN | **Already the climax of [`docs/demo.md`](../../../docs/demo.md)** (SP-003). Do not spend S02 re-proving it; link demo.md instead. |
+| Dead connector → HUMAN | **Already the climax of [`docs/demo.md`](../../../../docs/demo.md)** (SP-003). Do not spend S02 re-proving it; link demo.md instead. |
 
 ### Why restart first
 
@@ -44,7 +44,7 @@ Permission encore (later beat): force a `sudo` (or equivalent) sandbox violation
 - [x] Decision written here
 - [x] Go/no-go: **restart mid-task = S02 work**; permission deferred; connector HUMAN = demo.md
 - [x] Rough command list above
-- [x] Stub [`docs/harness-reliability.md`](../../../docs/harness-reliability.md) pointed at T-006
+- [x] Stub [`docs/harness-reliability.md`](../../../../docs/harness-reliability.md) pointed at T-006
 
 ## Out of scope
 

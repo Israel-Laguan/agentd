@@ -167,11 +167,11 @@ Phase 4 runs continuously; do not block demos on it.
 
 ---
 
-## Immediate next actions
+## Immediate next actions (done in S01 — kept for history)
 
-1. Apply Phase 0.1–0.4 (About, topics, README hero, why-agentd contrast).
-2. Author `docs/demo.md` (Phase 1.1) from the current Quickstart + Frontdesk + HUMAN-task path.
-3. Pick one reliability beat (restart mid-task or permission → HUMAN) and turn it into a scripted demo for Phase 2.
+1. ✓ Done: Apply Phase 0.1–0.4 (About, topics, README hero, `docs/why-agentd.md` contrast).
+2. ✓ Done: Author `docs/demo.md` (Phase 1.1) from the current Quickstart + Frontdesk + HUMAN-task path.
+3. ✓ Done: Pick one reliability beat — **restart mid-task** (SP-001 → T-006/`docs/harness-reliability.md`); connector HUMAN stays in `docs/demo.md`.
 
 ---
 
