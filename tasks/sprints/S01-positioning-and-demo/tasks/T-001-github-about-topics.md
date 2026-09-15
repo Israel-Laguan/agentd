@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | in-progress |
+| Status | done |
 | Priority | P0 |
 | Sprint | S01-positioning-and-demo |
 | Parent | US-001 |
