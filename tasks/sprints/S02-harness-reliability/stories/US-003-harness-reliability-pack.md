@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | user-story |
-| Status | ready |
+| Status | done |
 | Priority | P0 |
 | Sprint | S02-harness-reliability |
 | Persona | adopter |
@@ -15,8 +15,8 @@ As an **adopter evaluating harnesses**, I want **scripted demos of restart and f
 
 ## Acceptance criteria
 
-- [ ] At least restart mid-task and provider fallback documented and runnable
-- [ ] Linked from README or why-agentd
+- [x] At least restart mid-task and provider fallback documented and runnable
+- [x] Linked from README or why-agentd
 
 ## Notes
 

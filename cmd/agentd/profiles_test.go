@@ -34,7 +34,7 @@ var initProfileHintCases = []initProfileHintCase{
 			Order: []string{"gemini"},
 			Gemini: gateway.ProviderConfig{
 				APIKey: "test-key",
-				Model:  "gemini-2.0-flash",
+				Model:  "gemini-2.5-flash",
 			},
 		},
 		want: []string{
