@@ -9,6 +9,21 @@ HOME_DIR="${AGENTD_HOME:-/tmp/agentd-restart-demo}"
 API_ADDR="${API_ADDR:-127.0.0.1:18765}"
 API_URL="http://${API_ADDR}"
 
+validate_inputs() {
+  if [[ "$BIN" == *";"* || "$BIN" == *"|"* || "$BIN" == *"&"* || "$BIN" == *"\`"* ]]; then
+    echo "invalid BIN contains shell metacharacters" >&2
+    return 1
+  fi
+  if [[ "$HOME_DIR" != /* ]]; then
+    echo "HOME_DIR must be absolute: $HOME_DIR" >&2
+    return 1
+  fi
+  if ! [[ "$API_ADDR" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+$ ]]; then
+    echo "invalid API_ADDR=$API_ADDR (want ip:port)" >&2
+    return 1
+  fi
+}
+
 usage() {
   cat <<USAGE
 Usage: AGENTD_HOME=... $0 <prepare|status|kill|restart|cycle>
@@ -40,45 +55,48 @@ pid_for_home() {
 # Args: $1 = action label ("start" or "restart") used in log messages.
 start_daemon() {
   local action="${1:-start}"
+  validate_inputs || return 1
   nohup "$BIN" --home "$HOME_DIR" start --skip-llm-warmup > "$HOME_DIR/daemon.log" 2>&1 &
-  sleep 1
-  local pid
-  pid="$(pid_for_home)"
+  # Poll for PID with timeout (handles slow startup).
+  local pid=""
+  local i
+  for i in 1 2 3 4 5 6; do
+    pid="$(pid_for_home)"
+    if [[ -n "$pid" ]]; then
+      break
+    fi
+    sleep 0.5
+  done
   if [[ -z "$pid" ]]; then
-    echo "daemon failed to $action (no PID for --home $HOME_DIR)" >&2
+    echo "daemon failed to $action (no PID for --home $HOME_DIR after 3s)" >&2
     cat "$HOME_DIR/daemon.log" >&2 || true
     return 1
   fi
   # Poll API briefly; daemon may still be binding.
-  local i
   for i in 1 2 3 4 5; do
     if curl -fsS -m 2 "$API_URL/api/v1/system/status" >/dev/null 2>&1 && [[ "$(pid_for_home)" == "$pid" ]]; then
-      break
+      if [[ "$action" == "restart" ]]; then
+        echo "restarted pid=$pid api=$API_URL"
+      else
+        echo "started pid=$pid api=$API_URL log=$HOME_DIR/daemon.log"
+      fi
+      return 0
     fi
     sleep 0.5
+    # Detect daemon exit during poll window.
     if [[ -z "$(pid_for_home)" ]]; then
-      echo "daemon exited after $action (PID $pid gone)" >&2
-      cat "$HOME_DIR/daemon.log" >&2 || true
-      return 1
-    fi
-    if [[ "$i" -eq 5 ]]; then
-      if [[ "$action" == "restart" ]]; then
-        echo "daemon PID $pid running but API $API_URL not responding after restart" >&2
-      else
-        echo "daemon PID $pid running but API $API_URL not responding" >&2
-      fi
+      echo "daemon exited during $action (PID $pid gone)" >&2
       cat "$HOME_DIR/daemon.log" >&2 || true
       return 1
     fi
   done
-  if [[ "$action" == "restart" ]]; then
-    echo "restarted pid=$pid api=$API_URL"
-  else
-    echo "started pid=$pid api=$API_URL log=$HOME_DIR/daemon.log"
-  fi
+  echo "daemon PID $pid running but API $API_URL not responding after $action" >&2
+  cat "$HOME_DIR/daemon.log" >&2 || true
+  return 1
 }
 
 cmd_prepare() {
+  validate_inputs || return 1
   ensure_bin
   mkdir -p "$HOME_DIR"
   if [[ ! -f "$HOME_DIR/config.yaml" ]]; then
@@ -111,7 +129,7 @@ cmd_status() {
   curl -sS -m 5 "$API_URL/api/v1/system/status" || echo "(api down)"
   echo
   echo "=== projects/tasks ==="
-  python3 - <<'PY' || true
+  API_URL="$API_URL" python3 - <<'PY' || true
 import json, urllib.request, os
 base = os.environ.get("API_URL", "http://127.0.0.1:18765")
 try:
