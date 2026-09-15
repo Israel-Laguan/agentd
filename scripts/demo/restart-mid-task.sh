@@ -10,7 +10,7 @@ API_ADDR="${API_ADDR:-127.0.0.1:18765}"
 API_URL="http://${API_ADDR}"
 
 validate_inputs() {
-  if [[ "$BIN" =~ [\;\|\&\`\$\(\)\{\}\<\>] ]]; then
+  if [[ "$BIN" =~ [\;\|\&\`\$\(\)\{\}\<\>\"\\] ]]; then
     echo "invalid BIN contains shell metacharacters" >&2
     return 1
   fi
