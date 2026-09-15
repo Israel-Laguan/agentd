@@ -9,7 +9,7 @@
 | Parent | US-003 (close Phase 2) |
 | Estimate | M |
 | PR | **PR-D** — ≤10 files / <600 LOC |
-| Links | [product-plan Phase 2.4](../../../docs/product-plan.md), [harness-reliability.md](../../../docs/harness-reliability.md) |
+| Links | [product-plan Phase 2.4](../../../../docs/product-plan.md), [harness-reliability.md](../../../../docs/harness-reliability.md) |
 
 ## Goal
 

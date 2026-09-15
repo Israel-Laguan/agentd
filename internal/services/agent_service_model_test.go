@@ -83,7 +83,7 @@ func TestAgentServicePatchUnknownModelWarns(t *testing.T) {
 	svc := services.NewAgentService(store, nil)
 	svc.Lister = fakeProviderRegistry{
 		names:  []string{"gemini"},
-		models: map[string][]string{"gemini": {"gemini-2.0-flash"}},
+		models: map[string][]string{"gemini": {"gemini-2.5-flash"}},
 	}
 	provider := "gemini"
 	model := "unknown-model"

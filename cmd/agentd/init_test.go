@@ -200,7 +200,7 @@ func TestInitDoesNotOverwriteExistingProfile(t *testing.T) {
 		t.Fatalf("GetAgentProfile: %v", err)
 	}
 	p.Provider = "gemini"
-	p.Model = "gemini-2.0-flash"
+	p.Model = "gemini-2.5-flash"
 	if err := store.UpsertAgentProfile(context.Background(), *p); err != nil {
 		t.Fatalf("UpsertAgentProfile (patch): %v", err)
 	}
@@ -217,8 +217,8 @@ func TestInitDoesNotOverwriteExistingProfile(t *testing.T) {
 	if got.Provider != "gemini" {
 		t.Errorf("Provider = %q after re-seed, want %q", got.Provider, "gemini")
 	}
-	if got.Model != "gemini-2.0-flash" {
-		t.Errorf("Model = %q after re-seed, want %q", got.Model, "gemini-2.0-flash")
+	if got.Model != "gemini-2.5-flash" {
+		t.Errorf("Model = %q after re-seed, want %q", got.Model, "gemini-2.5-flash")
 	}
 }
 
@@ -243,7 +243,7 @@ func TestInitResetProfilesFlag(t *testing.T) {
 		t.Fatalf("GetAgentProfile: %v", err)
 	}
 	p.Provider = "gemini"
-	p.Model = "gemini-2.0-flash"
+	p.Model = "gemini-2.5-flash"
 	if err := store.UpsertAgentProfile(context.Background(), *p); err != nil {
 		t.Fatalf("UpsertAgentProfile (patch): %v", err)
 	}
@@ -319,7 +319,7 @@ func patchDefaultProfileGemini(t *testing.T, store *kanban.Store) {
 		t.Fatalf("GetAgentProfile: %v", err)
 	}
 	p.Provider = "gemini"
-	p.Model = "gemini-2.0-flash"
+	p.Model = "gemini-2.5-flash"
 	if err := store.UpsertAgentProfile(context.Background(), *p); err != nil {
 		t.Fatalf("UpsertAgentProfile (patch): %v", err)
 	}
@@ -331,7 +331,7 @@ func assertDefaultProfileGemini(t *testing.T, store *kanban.Store) {
 	if err != nil {
 		t.Fatalf("GetAgentProfile: %v", err)
 	}
-	if got.Provider != "gemini" || got.Model != "gemini-2.0-flash" {
+	if got.Provider != "gemini" || got.Model != "gemini-2.5-flash" {
 		t.Fatalf("profile = %+v, want patched gemini values preserved", got)
 	}
 }

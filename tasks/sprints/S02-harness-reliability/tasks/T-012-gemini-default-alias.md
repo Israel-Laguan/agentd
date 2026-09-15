@@ -30,5 +30,5 @@ Remove stale `gemini-2.5-flash` default from main tree (config default + docs + 
 
 ## Done when
 
-- [ ] `grep -r gemini-2.5-flash` on main-tree paths above is empty (or only historical notes)
-- [ ] Diff within budget
+- [x] `grep -r gemini-2.5-flash` on main-tree paths above is empty (or only historical notes)
+- [x] Diff within budget

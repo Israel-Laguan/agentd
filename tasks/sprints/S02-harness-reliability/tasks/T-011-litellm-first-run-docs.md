@@ -24,6 +24,6 @@ README “First Run” leads with LiteLLM/Poolside (or mock), not stale Gemini-o
 
 ## Done when
 
-- [ ] First-run section does not steer new users into dead `gemini-2.5-flash` as the primary path
-- [ ] Points at LiteLLM aliases / Poolside
-- [ ] Diff within budget
+- [x] First-run section does not steer new users into dead `gemini-2.5-flash` as the primary path
+- [x] Points at LiteLLM aliases / Poolside
+- [x] Diff within budget

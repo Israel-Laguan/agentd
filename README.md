@@ -73,9 +73,19 @@ The simplest path is a connector you control — not a stale model id baked into
    agentd start --skip-llm-warmup
    ```
 
-**Option B — local mock (fully offline):** any process that speaks `POST /v1/chat/completions`. See [`docs/demo.md`](docs/demo.md) for a worked example.
+**Option B — local mock (fully offline):** any process that speaks `POST /v1/chat/completions`. See [`docs/demo.md`](docs/demo.md) for a worked example. Minimal config to point at a local mock:
 
-**Option C — Gemini only:** if you only have a Gemini API key, add `GEMINI_API_KEY=<key>` to `.env` and set `gateway.order: [gemini]` (or export `AGENTD_GATEWAY_ORDER=gemini`). Use `--skip-llm-warmup` to avoid a billable startup probe on the free tier. See [`docs/config-reference.md`](docs/config-reference.md) for all Gemini config keys.
+   ```yaml
+   gateway:
+     order: [mock]
+     providers:
+       - name: mock
+         adapter: openai
+         base_url: "http://127.0.0.1:18080/v1"
+         model: "mock-model"
+   ```
+
+**Option C — Gemini only:** if you only have a Gemini API key, add `GEMINI_API_KEY=<key>` to `.env` and set `gateway.order: [gemini]` (or export `AGENTD_GATEWAY_ORDER=gemini`). Run `agentd init` then `agentd start --skip-llm-warmup` to start the daemon without a billable startup probe on the free tier. See [`docs/config-reference.md`](docs/config-reference.md) for all Gemini config keys.
 
 **(Optional)** Pin explicit provider/model on each profile via the agent API:
 
@@ -85,7 +95,7 @@ curl http://127.0.0.1:8765/api/v1/agents
 # patch each one
 curl -X PATCH http://127.0.0.1:8765/api/v1/agents/<id> \
   -H 'Content-Type: application/json' \
-  -d '{"provider":"litellm","model":"poolside/laguna-m.1"}'
+  -d '{"provider":"<provider>","model":"<model>"}'
 ```
 
 **Dev/smoke testing:** set `healing.enabled: false` and `healing.outage_handoff_enabled: false` to suppress self-healing handoffs and `_system` outage tasks. Status defaults omit healing noise: `curl -s 'http://127.0.0.1:8765/api/v1/system/status'`.

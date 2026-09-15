@@ -108,7 +108,7 @@ Built-in slot for Google's OpenAI-compatible Gemini endpoint (uses the `openai` 
 | --- | --- | --- |
 | `gateway.gemini.base_url` | `https://generativelanguage.googleapis.com/v1beta/openai` | OpenAI-compatible base URL |
 | `gateway.gemini.api_key` | `""` | Inline key; prefer `GEMINI_API_KEY` in `.env` |
-| `gateway.gemini.model` | `gemini-2.0-flash` | Model name for cascade and warmup |
+| `gateway.gemini.model` | `gemini-2.5-flash` | Model name for cascade and warmup |
 | `gateway.gemini.max_input_chars` | `0` | `0` inherits `gateway.truncator.max_input_chars` |
 | `gateway.gemini.timeout` | `5m` | Per-request HTTP timeout |
 
