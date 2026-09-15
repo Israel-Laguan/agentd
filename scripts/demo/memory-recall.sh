@@ -15,32 +15,7 @@ HOME_DIR="${AGENTD_HOME:-/tmp/agentd-recall-demo}"
 API_ADDR="${API_ADDR:-127.0.0.1:18795}"
 API_URL="http://${API_ADDR}"
 
-validate_inputs() {
-  if [[ "$BIN" =~ [\;\|\&\`\$\(\)\{\}\<\>\"\\] ]]; then
-    echo "invalid BIN contains shell metacharacters" >&2
-    return 1
-  fi
-  if [[ "$HOME_DIR" != /* ]]; then
-    echo "HOME_DIR must be absolute: $HOME_DIR" >&2
-    return 1
-  fi
-  if [[ "$API_ADDR" =~ ^\[([^]]+)\]:([0-9]+)$ ]]; then
-    local port="${BASH_REMATCH[2]}"
-    if (( 10#$port < 1 || 10#$port > 65535 )); then
-      echo "invalid API_ADDR=$API_ADDR (bad port)" >&2
-      return 1
-    fi
-  elif [[ "$API_ADDR" =~ : ]]; then
-    local port="${API_ADDR##*:}"
-    if ! [[ "$port" =~ ^[0-9]+$ ]] || (( 10#$port < 1 || 10#$port > 65535 )); then
-      echo "invalid API_ADDR=$API_ADDR (port must be 1-65535)" >&2
-      return 1
-    fi
-  else
-    echo "invalid API_ADDR=$API_ADDR (want host:port)" >&2
-    return 1
-  fi
-}
+source "$ROOT/scripts/demo/lib/demo-common.sh"
 
 usage() {
   cat <<USAGE
@@ -54,52 +29,6 @@ Usage: AGENTD_HOME=... $0 <prepare|seed|probe|status|stop>
 
 Env: AGENTD_HOME (default $HOME_DIR), API_ADDR (default $API_ADDR), BIN
 USAGE
-}
-
-ensure_bin() {
-  if [[ ! -x "$BIN" ]]; then
-    make -C "$ROOT" build
-  fi
-}
-
-pid_for_home() {
-  local esc_bin esc_home
-  esc_bin=$(printf '%s' "$BIN" | sed 's/[][\\.^$*+?(){}|]/\\&/g')
-  esc_home=$(printf '%s' "$HOME_DIR" | sed 's/[][\\.^$*+?(){}|]/\\&/g')
-  pgrep -f "^${esc_bin} --home ${esc_home} start([[:space:]]|$)" || true
-}
-
-start_daemon() {
-  local action="${1:-start}"
-  validate_inputs || return 1
-  nohup "$BIN" --home "$HOME_DIR" start --skip-llm-warmup > "$HOME_DIR/daemon.log" 2>&1 &
-  local pid=""
-  local i
-  for i in 1 2 3 4 5 6; do
-    pid="$(pid_for_home)"
-    if [[ -n "$pid" ]]; then break; fi
-    sleep 0.5
-  done
-  if [[ -z "$pid" ]]; then
-    echo "daemon failed to $action (no PID for --home $HOME_DIR after 3s)" >&2
-    cat "$HOME_DIR/daemon.log" >&2 || true
-    return 1
-  fi
-  for i in 1 2 3 4 5; do
-    if curl -fsS -m 2 "$API_URL/api/v1/system/status" >/dev/null 2>&1 && [[ "$(pid_for_home)" == "$pid" ]]; then
-      echo "started pid=$pid api=$API_URL log=$HOME_DIR/daemon.log"
-      return 0
-    fi
-    sleep 0.5
-    if [[ -z "$(pid_for_home)" ]]; then
-      echo "daemon exited during $action (PID $pid gone)" >&2
-      cat "$HOME_DIR/daemon.log" >&2 || true
-      return 1
-    fi
-  done
-  echo "daemon PID $pid running but API not responding after $action" >&2
-  cat "$HOME_DIR/daemon.log" >&2 || true
-  return 1
 }
 
 cmd_prepare() {
@@ -263,16 +192,8 @@ cmd_stop() {
     echo "No daemon running for --home $HOME_DIR"
     return 0
   fi
-  kill "$pid" 2>/dev/null || true
-  for i in 1 2 3 4 5; do
-    if [[ -z "$(pid_for_home)" ]]; then
-      echo "stopped pid=$pid"
-      return 0
-    fi
-    sleep 0.5
-  done
-  kill -9 "$pid" 2>/dev/null || true
-  echo "force-killed pid=$pid"
+  stop_daemon
+  echo "stopped pid=$pid"
 }
 
 case "${1:-}" in
