@@ -279,6 +279,9 @@ librarian:
 tiered:
   enabled: false
   complexity_threshold: 200  # 0 disables splitting when enabled; unset defaults to 200
+  context_pack:
+    max_paths: 40   # cap on workspace paths in a ContextPack
+    max_chars: 48000  # cap on total chars across summary/excerpts/constraints/unknowns
   # Optional per-step model overrides (v1 — leave empty to inherit gateway routing).
   # models:
   #   context:  {provider: ollama, model: "llama3:8b"}       # small / local
