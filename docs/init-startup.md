@@ -23,7 +23,7 @@ Seeded profiles start with empty `provider` / `model` and follow `gateway.order`
 
 Enable agentic mode per profile via PATCH (`agentic_mode: true`); empty provider works with agentic when at least one configured backend in order supports chat tools.
 
-For Gemini-only setups, cascade routing is usually enough; optionally PATCH explicit `provider` / `model` (see [README § First Run with Gemini Only](../README.md#first-run-with-gemini-only)).
+For Gemini-only setups, cascade routing is usually enough; optionally PATCH explicit `provider` / `model` (see [README § First Run](../README.md#first-run)).
 
 If any step fails, the CLI now says what part of init failed and shows the wrapped error chain.
 

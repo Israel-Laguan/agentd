@@ -38,40 +38,59 @@ make build
 
 **Harness reliability (restart mid-task):** see [`docs/harness-reliability.md`](docs/harness-reliability.md) and `scripts/demo/restart-mid-task.sh`.
 
-### First Run with Gemini Only
+### First Run
 
-If you only have a Gemini API key:
+**Recommended: LiteLLM / Poolside (or local mock)**
 
-1. Add `GEMINI_API_KEY=<key>` to `.env` (copy `.env.example`).
-2. Set `gateway.order: [gemini]` in `~/.agentd/config.yaml` (or export `AGENTD_GATEWAY_ORDER=gemini`).
-3. Run `agentd init` to seed the default agent profiles (empty `provider` / `model` → `gateway.order` cascade):
+The simplest path is a connector you control — not a stale model id baked into docs.
+
+**Option A — LiteLLM (recommended):**
+
+1. Start a local LiteLLM proxy (see [docs/llm-connector-strategy.md](docs/llm-connector-strategy.md)).
+2. Add `LITELLM_API_KEY=<key>` to `.env` (copy `.env.example`).
+3. Point `gateway.order` at LiteLLM in `~/.agentd/config.yaml`:
+
+   ```yaml
+   gateway:
+     order: [litellm]
+     providers:
+       - name: litellm
+         adapter: openai
+         base_url: "http://127.0.0.1:4000/v1"
+         api_key_env: LITELLM_API_KEY
+         model: "poolside/laguna-m.1"   # or another alias from your LiteLLM config
+   ```
+
+4. Run `agentd init` to seed default agent profiles (empty `provider` / `model` → `gateway.order` cascade):
 
    ```sh
    agentd init
    ```
 
-4. Start with `--skip-llm-warmup` to avoid a billable startup probe on the free tier:
+5. Start the daemon:
 
    ```sh
    agentd start --skip-llm-warmup
    ```
 
-   With only `gemini` in `gateway.order`, seeded profiles already route to Gemini without further setup.
-5. (Optional) Pin explicit provider/model on each profile via the agent API:
+**Option B — local mock (fully offline):** any process that speaks `POST /v1/chat/completions`. See [`docs/demo.md`](docs/demo.md) for a worked example.
 
-   ```sh
-   # list profile IDs
-   curl http://127.0.0.1:8765/api/v1/agents
-   # patch each one
-   curl -X PATCH http://127.0.0.1:8765/api/v1/agents/<id> \
-     -H 'Content-Type: application/json' \
-     -d '{"provider":"gemini","model":"gemini-2.5-flash"}'
-   ```
+**Option C — Gemini only:** if you only have a Gemini API key, add `GEMINI_API_KEY=<key>` to `.env` and set `gateway.order: [gemini]` (or export `AGENTD_GATEWAY_ORDER=gemini`). Use `--skip-llm-warmup` to avoid a billable startup probe on the free tier. See [`docs/config-reference.md`](docs/config-reference.md) for all Gemini config keys.
 
-6. For dev/smoke testing, set `healing.enabled: false` and `healing.outage_handoff_enabled: false` to suppress self-healing handoffs and `_system` outage tasks. Status defaults omit healing noise: `curl -s 'http://127.0.0.1:8765/api/v1/system/status'`.
-7. Materialize creates an empty project workspace. Seed it before workers run: pass `source_path` on `POST /api/v1/projects/materialize`, or rsync into `~/.agentd/projects/<id>/` then call `POST /api/v1/projects/<id>/workspace/ready`. See [`docs/workspace-seeding.md`](docs/workspace-seeding.md).
+**(Optional)** Pin explicit provider/model on each profile via the agent API:
 
-See [`docs/config-reference.md`](docs/config-reference.md) for all Gemini config keys.
+```sh
+# list profile IDs
+curl http://127.0.0.1:8765/api/v1/agents
+# patch each one
+curl -X PATCH http://127.0.0.1:8765/api/v1/agents/<id> \
+  -H 'Content-Type: application/json' \
+  -d '{"provider":"litellm","model":"poolside/laguna-m.1"}'
+```
+
+**Dev/smoke testing:** set `healing.enabled: false` and `healing.outage_handoff_enabled: false` to suppress self-healing handoffs and `_system` outage tasks. Status defaults omit healing noise: `curl -s 'http://127.0.0.1:8765/api/v1/system/status'`.
+
+**Workspace seeding:** materialize creates an empty project workspace. Seed it before workers run: pass `source_path` on `POST /api/v1/projects/materialize`, or rsync into `~/.agentd/projects/<id>/` then call `POST /api/v1/projects/<id>/workspace/ready`. See [`docs/workspace-seeding.md`](docs/workspace-seeding.md).
 
 ## Development
 
@@ -109,7 +128,7 @@ agentd -v init                 # Initialize with verbose logging
 
 `init` creates directories (`projects/`, `uploads/`, `archives/`), initializes the SQLite database, writes `agentd.crontab`, and seeds the `default`, `researcher`, and `qa` agent profiles with empty `provider` / `model` (tasks follow `gateway.order`). Re-running `init` **preserves** any operator PATCH to those profiles; use `--reset-profiles` to force defaults.
 
-Init prints hints for cascade routing, optional `PATCH /api/v1/agents/<id>` to pin provider/model, and (when Gemini is configured) `agentd start --skip-llm-warmup`. See [First Run with Gemini Only](#first-run-with-gemini-only) and [`docs/init-startup.md`](docs/init-startup.md) for the full init/start flow and error surfaces.
+Init prints hints for cascade routing, optional `PATCH /api/v1/agents/<id>` to pin provider/model, and (when Gemini is configured) `agentd start --skip-llm-warmup`. See [First Run](#first-run) and [`docs/init-startup.md`](docs/init-startup.md) for the full init/start flow and error surfaces.
 
 ## Configuration
 
