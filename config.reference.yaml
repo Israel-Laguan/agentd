@@ -86,7 +86,7 @@ gateway:
     #   poll_interval: "4s"
   gemini:
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
-    model: "gemini-2.5-flash"
+    model: "gemini-2.0-flash"
     api_key: ""
     max_input_chars: 0
     timeout: "5m"

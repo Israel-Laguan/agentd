@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P2 |
 | Sprint | S02-harness-reliability |
 | Parent | S01 retro action |
