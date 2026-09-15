@@ -3,9 +3,9 @@
 | Field | Value |
 | --- | --- |
 | Type | user-story |
-| Status | backlog |
+| Status | ready |
 | Priority | P1 |
-| Sprint | backlog |
+| Sprint | S03-tiered-foundation |
 | Persona | operator |
 | Links | [tiered-execution.md](../../../docs/tiered-execution.md) |
 

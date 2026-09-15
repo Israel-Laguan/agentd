@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P0 |
 | Sprint | S02-harness-reliability |
 | Parent | US-003 |
