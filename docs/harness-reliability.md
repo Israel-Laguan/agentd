@@ -11,7 +11,7 @@ Helper scripts: [`restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh) (Be
 **Chosen in** [SP-001](../tasks/sprints/S01-positioning-and-demo/spikes/SP-001-reliability-beat.md).  
 **Tickets:** [T-006a](../tasks/sprints/S02-harness-reliability/tasks/T-006a-restart-beat-docs.md) (this doc/script), [T-006b](../tasks/sprints/S02-harness-reliability/tasks/T-006b-restart-reconcile-tests.md) (tests).
 
-### Pass criteria
+### Beat 1 — Pass criteria
 
 After an **unclean** kill of `agentd` while work is in flight (or claimed), then `start` again with the **same** `--home` / `AGENTD_HOME`:
 
@@ -24,13 +24,13 @@ After an **unclean** kill of `agentd` while work is in flight (or claimed), then
 
 Ghost/stale reconcile (`ReconcileGhostTasks` / `ReconcileStaleTasks` + heartbeat loop) is the mechanism under test — see `internal/queue/features/ghost_reconciliation.feature` and `heartbeat_reconciliation.feature`.
 
-### Prerequisites
+### Beat 1 — Prerequisites
 
 - `make build` → `./bin/agentd`
 - Throwaway home recommended: `export AGENTD_HOME=/tmp/agentd-restart-demo`
 - A configured provider so `start` comes up (LiteLLM/Poolside/mock, **or** a dummy openai-compatible slot — see script `prepare`). Empty keys → process exits with `no LLM providers available` (SP-004).
 
-### Operator sequence
+### Beat 1 — Operator sequence
 
 ```sh
 export AGENTD_HOME=/tmp/agentd-restart-demo
@@ -74,14 +74,13 @@ curl -sS "http://${API_ADDR}/api/v1/system/status"
 - Permission/`sudo` HUMAN
 - Tiered execution
 
-
 ## Beat 2 (S02) — Provider fallback / breaker
 
 **Tickets:** [T-010a](../tasks/sprints/S02-harness-reliability/tasks/T-010a-fallback-beat-docs.md) (this doc/script), [T-010b](../tasks/sprints/S02-harness-reliability/tasks/T-010b-cascade-breaker-tests.md) (tests).
 
 Distinct from [demo.md](demo.md)’s connector-HUMAN **governance** loop. Beat 2 proves the **house**: cascade to a healthy secondary, or open the breaker / hand off when nothing answers — without a billable cloud dependency (mock HTTP, LiteLLM, or dead `127.0.0.1:1` slots).
 
-### Pass criteria
+### Beat 2 — Pass criteria
 
 **Scenario A — cascade success**
 
@@ -99,13 +98,13 @@ Distinct from [demo.md](demo.md)’s connector-HUMAN **governance** loop. Beat 2
 
 Mechanism pointers: gateway cascade (`internal/gateway/features/cascading_fallback.feature`), breaker (`internal/queue/features/circuit_breaker.feature`), handoff (`outage_handoff.feature`).
 
-### Prerequisites
+### Beat 2 — Prerequisites
 
 - `make build` → `./bin/agentd`
 - Throwaway home: `export AGENTD_HOME=/tmp/agentd-fallback-demo`
 - No billable keys required — script uses local mock HTTP + dead ports.
 
-### Operator sequence
+### Beat 2 — Operator sequence
 
 ```sh
 export AGENTD_HOME=/tmp/agentd-fallback-demo
@@ -126,7 +125,7 @@ export API_ADDR=127.0.0.1:18776
 ./scripts/demo/provider-fallback.sh stop
 ```
 
-### What “good” looks like
+### Beat 2 2014 What 201cgood201d looks like
 
 | Setup | Expected |
 | --- | --- |
