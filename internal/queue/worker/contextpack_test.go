@@ -16,6 +16,7 @@ func TestContextPack_Validate_Valid(t *testing.T) {
 		TaskID:  "t1",
 		Summary: "gather context",
 		Paths:   []string{"src/main.go"},
+		Budget:  ContextBudget{MaxPaths: 40, MaxChars: 48000, PathCount: 1, CharCount: 14},
 	}
 	if err := cp.Validate(); err != nil {
 		t.Fatalf("expected valid pack: %v", err)
@@ -259,6 +260,8 @@ func TestWriteContextPack_RoundTrip(t *testing.T) {
 		Unknowns:     []string{"is there a test runner?"},
 		Budget:       ContextBudget{MaxPaths: 40, MaxChars: 48000, PathCount: 2},
 	}
+	cp.Budget.CharCount = cp.CharCount()
+	cp.Budget.PathCount = len(cp.Paths)
 	if err := WriteContextPack(dir, cp); err != nil {
 		t.Fatalf("WriteContextPack: %v", err)
 	}

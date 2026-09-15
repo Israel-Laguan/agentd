@@ -282,13 +282,12 @@ tiered:
   context_pack:
     max_paths: 40   # cap on workspace paths in a ContextPack
     max_chars: 48000  # cap on total chars across summary/excerpts/constraints/unknowns
-  # Optional per-step model overrides (v1 — leave empty to inherit gateway routing).
-  # models:
-  #   context:  {provider: ollama, model: "llama3:8b"}       # small / local
-  #   decision: {provider: gemini, model: "gemini-2.5-flash"} # mid
-  #   execute:  {provider: ollama, model: "llama3:8b"}        # small
-  #   verify:   {provider: gemini, model: "gemini-2.5-flash"} # mid
-  #   escalate: {provider: anthropic, model: "claude-3-opus-20240229"} # strong
+  # Per-role model overrides are configured via gateway.role_models.
+  # See gateway section above for the role_models mapping.
+  # Tiered step profiles route through role_models by step kind:
+  # context→memory, decision→worker, execute→worker, verify→worker, escalate→worker.
+  # Step kind overrides take precedence over the mapped role default (per internal/config/tiered.go).
+  # No tiered.models.<kind> configuration is supported by TieredConfig or loadTieredConfig.
 
 plugins:
   enabled: false

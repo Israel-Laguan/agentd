@@ -168,7 +168,10 @@ export AGENTD_HOME=/tmp/agentd-disk-demo
 export API_ADDR=127.0.0.1:18785
 
 # A) prepare: start daemon; threshold is derived from observed free space (+5%, min 1% above current)
-#    so free_percent < threshold is guaranteed without a real disk fill; scratch dir created at $AGENTD_HOME/scratch
+#    so free_percent < threshold is guaranteed without a real disk fill; scratch dir created at $AGENTD_HOME/scratch.
+#    NOTE: When observed free_pct is 100, derive_threshold caps at 100 and checkDiskSpace
+#    returns immediately (freePercent >= threshold). In that case inject a disk-stat value
+#    (e.g. DISK_THRESHOLD=99) or report the environment as unsupported.
 ./scripts/demo/disk-watchdog.sh prepare
 
 # B) inject fault: (re)create scratch dir $AGENTD_HOME/scratch and ensure config free_threshold_percent
