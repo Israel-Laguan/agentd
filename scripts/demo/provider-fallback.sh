@@ -62,7 +62,7 @@ stop_mock() {
   [[ -f "$MOCK_PID_FILE" ]] || return 0
   local pid
   pid="$(cat "$MOCK_PID_FILE" 2>/dev/null || true)"
-  if [[ "$pid" =~ ^[0-9]+$ ]] && ps -p "$pid" -o args= 2>/dev/null | grep -Fq -- "agentd-provider-fallback-mock:${MOCK_PORT}"; then
+  if [[ "$pid" =~ ^[0-9]+$ ]] && ps -p "$pid" -o args= 2>/dev/null | grep -Fq -- "mock-provider.py"; then
     kill "$pid" 2>/dev/null || true
     sleep 0.3
     ps -p "$pid" >/dev/null 2>&1 && kill -KILL "$pid" 2>/dev/null || true
@@ -230,10 +230,12 @@ cmd_probe_breaker() {
   else
     echo "unexpected: dead port answered" >&2; return 1
   fi
-  if [[ -n "$breaker_state" ]]; then
-    echo "$breaker_state" | grep -q "failure_count" && echo "found failure_count" || echo "no failure_count in status (check daemon version)"
-    echo "$breaker_state" | grep -q "last_error" && echo "found last_error" || true
+  if [[ -z "$breaker_state" ]]; then
+    echo "FAIL: breaker never reached OPEN state after $attempt attempts" >&2
+    return 1
   fi
+  echo "$breaker_state" | grep -q "failure_count" && echo "found failure_count" || echo "no failure_count in status (check daemon version)"
+  echo "$breaker_state" | grep -q "last_error" && echo "found last_error" || true
   echo "Pass criterion B: ErrLLMUnreachable + breaker OPEN after threshold."
   echo "Coverage: circuit_breaker.feature + outage_handoff.feature."
   API_URL="$API_URL" python3 "$PYTHON" projects 2>/dev/null || true
