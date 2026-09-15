@@ -159,7 +159,7 @@ Mechanism: `Daemon.checkDiskSpace` → `safety.DiskFreePercent` → `EnsureProje
 
 - `make build` → `./bin/agentd`
 - Throwaway home: `export AGENTD_HOME=/tmp/agentd-disk-demo`
-- No billable keys required — the demo uses fault injection via a tiny scratch threshold, never a real disk fill.
+- No billable keys required — the demo uses fault injection via a derived threshold (observed free +5%) plus a `scratch/` marker dir, never a real disk fill.
 
 ### Beat 2.3 — Operator sequence
 
@@ -167,16 +167,17 @@ Mechanism: `Daemon.checkDiskSpace` → `safety.DiskFreePercent` → `EnsureProje
 export AGENTD_HOME=/tmp/agentd-disk-demo
 export API_ADDR=127.0.0.1:18785
 
-# A) prepare: start daemon with a high threshold so fault injection triggers it
+# A) prepare: start daemon; threshold is derived from observed free space (+5%, min 1% above current)
+#    so free_percent < threshold is guaranteed without a real disk fill; scratch dir created at $AGENTD_HOME/scratch
 ./scripts/demo/disk-watchdog.sh prepare
 
-# B) inject fault: create a tiny scratch dir and set disk_check_path to it
-#    (threshold defaults to 99% so even a healthy disk looks "full")
+# B) inject fault: (re)create scratch dir $AGENTD_HOME/scratch and ensure config free_threshold_percent
+#    is set to derived value (observed free +5%, capped at 99) — no filesystem fill needed
 ./scripts/demo/disk-watchdog.sh inject-fault
 
-# C) probe: verify the HUMAN task appeared
+# C) probe: verify HUMAN task, SSE event, and deduplication (exactly 1 task, assignee=HUMAN)
 ./scripts/demo/disk-watchdog.sh probe
-# expect: _system project with HUMAN task "Disk space critical..."
+# expect: _system project with HUMAN task "Disk space critical..." + DISK_SPACE_CRITICAL in SSE/daemon.log
 
 # D) cleanup
 ./scripts/demo/disk-watchdog.sh stop
@@ -214,12 +215,12 @@ Prove product-plan Phase 2.4: on a repeated failure class, Librarian/FTS surface
 
 ### Beat 2.4 — Pass criteria
 
-1. A seeded `{symptom, solution}` memory is retrievable via `Retriever.Recall` when a matching intent arrives.
-2. `FormatLessons` renders the recalled pair into a system prompt block labeled **"LESSONS LEARNED"**.
+1. A seeded `{symptom, solution}` USER_PREFERENCE memory is retrievable via `Retriever.Recall` (FTS by intent) when a matching intent arrives.
+2. `FormatPreferences` renders the recalled pair into a system prompt block labeled **"USER PREFERENCES"** (lesson-scope `FormatLessons` is exercised in `recall_test.go` with `GLOBAL`/`TASK_CURATION` scopes).
 3. Namespace isolation holds: project-scoped memories do not leak across projects.
 4. Recall timeout is respected: a slow store returns empty results, not a hang.
 
-Mechanism: `Retriever.Recall` → `Store.RecallMemories` (FTS by intent, scoped to GLOBAL + project + user prefs) → `FormatLessons` / `FormatPreferences`. Tests: `internal/memory/recall_test.go`, features: `recall_namespace.feature`, `recall_timeout.feature`.
+Mechanism: `Retriever.Recall` → `Store.RecallMemories` (FTS by intent, scoped to GLOBAL + project + user prefs) → `FormatLessons` / `FormatPreferences`. The demo seeds via `POST /api/v1/preferences` (USER_PREFERENCE scope; `Symptom="preference"`, `Solution="Symptom: … → Solution: …"`), probes via `GET /api/v1/system/status` asserting `total_memories>0` and `preferences_count>0`, plus a retrieval-and-formatting assertion that the seeded symptom/solution appears in the simulated `FormatPreferences` output (see `scripts/demo/memory-recall.sh:cmd_probe`). Tests: `internal/memory/recall_test.go`, features: `recall_namespace.feature`, `recall_timeout.feature`.
 
 ### Beat 2.4 — Prerequisites
 
@@ -236,13 +237,13 @@ export API_ADDR=127.0.0.1:18795
 # A) start daemon with a mock provider
 ./scripts/demo/memory-recall.sh prepare
 
-# B) seed a {symptom, solution} pair via the preferences API
+# B) seed a {symptom, solution} pair via the preferences API (JSON-encoded via python3; handles quotes/backslashes)
 ./scripts/demo/memory-recall.sh seed "EOFError when parsing JSON" "Add try/except around json.loads with fallback to raw text"
-# expect: HTTP 201 saved
+# expect: HTTP 201 saved; payload built with json.dumps so special chars are safe
 
-# C) probe: verify recall works by checking system status memory count
+# C) probe: verify retrieval + formatting (asserts seeded symptom/solution in FormatPreferences output, not just count)
 ./scripts/demo/memory-recall.sh probe
-# expect: memory section shows at least 1 USER_PREFERENCE memory
+# expect: memory section total>0 preferences>0 + simulated FormatPreferences contains symptom/solution
 
 # D) cleanup
 ./scripts/demo/memory-recall.sh stop
@@ -252,7 +253,7 @@ export API_ADDR=127.0.0.1:18795
 
 | Condition | Expected |
 | --- | --- |
-| Seeded `{symptom, solution}` | Recall returns the pair; `FormatLessons` renders it |
+| Seeded `{symptom, solution}` (USER_PREFERENCE) | Recall returns the pair; `FormatPreferences` renders `Symptom: … → Solution: …` |
 | Different project scope | Project memory does not leak to other projects |
 | Slow DB (timeout) | Recall returns empty within timeout; no hang |
 | No memories seeded | Recall returns empty; chat proceeds without context |
