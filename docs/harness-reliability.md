@@ -4,7 +4,7 @@ Prove the **house**, not the coding model. Positioning: [why-agentd.md](why-agen
 
 Governance demo (approve → board → connector HUMAN) lives in [demo.md](demo.md) — do that **first**. Do not re-prove dead-`base_url` HUMAN here.
 
-Helper scripts: [`restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh) (Beat 1), [`provider-fallback.sh`](../scripts/demo/provider-fallback.sh) (Beat 2), [`disk-watchdog.sh`](../scripts/demo/disk-watchdog.sh) (Beat 2.3).
+Helper scripts: [`restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh) (Beat 1), [`provider-fallback.sh`](../scripts/demo/provider-fallback.sh) (Beat 2), [`disk-watchdog.sh`](../scripts/demo/disk-watchdog.sh) (Beat 2.3), [`memory-recall.sh`](../scripts/demo/memory-recall.sh) (Beat 2.4).
 
 ## Beat 1 (S02) — Restart mid-task
 
@@ -202,6 +202,74 @@ export API_ADDR=127.0.0.1:18785
 ### Out of scope for Beat 2.3
 
 - Prod changes to `disk_watchdog.go` — gap found → split to follow-up ticket (S02 PR-C pattern)
+- Restart mid-task (Beat 1)
+- Provider fallback (Beat 2)
+- Tiered execution
+
+## Beat 2.4 (S03) — Memory recall on repeat failure
+
+**Tickets:** [T-014](../tasks/sprints/S03-tiered-foundation/tasks/T-014-memory-recall-beat.md).
+
+Prove product-plan Phase 2.4: on a repeated failure class, Librarian/FTS surfaces a prior `{symptom, solution}` instead of re-burning tokens. The recall mechanism already exists (`internal/memory/recall.go`); this beat packages it as a runnable demo with seeded fixtures.
+
+### Beat 2.4 — Pass criteria
+
+1. A seeded `{symptom, solution}` memory is retrievable via `Retriever.Recall` when a matching intent arrives.
+2. `FormatLessons` renders the recalled pair into a system prompt block labeled **"LESSONS LEARNED"**.
+3. Namespace isolation holds: project-scoped memories do not leak across projects.
+4. Recall timeout is respected: a slow store returns empty results, not a hang.
+
+Mechanism: `Retriever.Recall` → `Store.RecallMemories` (FTS by intent, scoped to GLOBAL + project + user prefs) → `FormatLessons` / `FormatPreferences`. Tests: `internal/memory/recall_test.go`, features: `recall_namespace.feature`, `recall_timeout.feature`.
+
+### Beat 2.4 — Prerequisites
+
+- `make build` → `./bin/agentd`
+- Throwaway home: `export AGENTD_HOME=/tmp/agentd-recall-demo`
+- No billable keys required — the demo uses a mock LLM and seeds memories via the preferences API.
+
+### Beat 2.4 — Operator sequence
+
+```sh
+export AGENTD_HOME=/tmp/agentd-recall-demo
+export API_ADDR=127.0.0.1:18795
+
+# A) start daemon with a mock provider
+./scripts/demo/memory-recall.sh prepare
+
+# B) seed a {symptom, solution} pair via the preferences API
+./scripts/demo/memory-recall.sh seed "EOFError when parsing JSON" "Add try/except around json.loads with fallback to raw text"
+# expect: HTTP 201 saved
+
+# C) probe: verify recall works by checking system status memory count
+./scripts/demo/memory-recall.sh probe
+# expect: memory section shows at least 1 USER_PREFERENCE memory
+
+# D) cleanup
+./scripts/demo/memory-recall.sh stop
+```
+
+### Beat 2.4 — What "good" looks like
+
+| Condition | Expected |
+| --- | --- |
+| Seeded `{symptom, solution}` | Recall returns the pair; `FormatLessons` renders it |
+| Different project scope | Project memory does not leak to other projects |
+| Slow DB (timeout) | Recall returns empty within timeout; no hang |
+| No memories seeded | Recall returns empty; chat proceeds without context |
+
+### Beat 2.4 — Test coverage
+
+- `TestRetriever_NamespaceIsolation` — GLOBAL + project scope isolation
+- `TestRetriever_TimeoutFallback` — slow store returns within timeout
+- `TestRetriever_NilRetriever` — nil retriever returns nil
+- `TestFormatLessons` — renders symptom/solution pairs
+- `recall_namespace.feature` — 2 scenarios (global/project recall, user prefs)
+- `recall_timeout.feature` — 1 scenario (slow DB fallback)
+
+### Out of scope for Beat 2.4
+
+- Prod changes to recall/librarian paths — gap found → split to follow-up ticket (S02 PR-C pattern)
+- Dream consolidation tuning, embedding-model swaps
 - Restart mid-task (Beat 1)
 - Provider fallback (Beat 2)
 - Tiered execution
