@@ -31,7 +31,7 @@ func TestGatewayListEmpty(t *testing.T) {
 func TestGatewayListProviders(t *testing.T) {
 	h := controllers.GatewayHandler{
 		Configs: []controllers.ProviderEntry{
-			{Name: "gemini", Adapter: "openai", Models: []string{"gemini-2.5-flash"}},
+			{Name: "gemini", Adapter: "openai", Models: []string{"gemini-2.0-flash"}},
 			{Name: "local", Adapter: "ollama", Models: []string{"llama3:8b"}},
 		},
 	}
@@ -58,7 +58,7 @@ func TestGatewayListProviders(t *testing.T) {
 	if first.Name != "gemini" || first.Adapter != "openai" {
 		t.Errorf("first = %+v", first)
 	}
-	if len(first.Models) != 1 || first.Models[0] != "gemini-2.5-flash" {
+	if len(first.Models) != 1 || first.Models[0] != "gemini-2.0-flash" {
 		t.Errorf("first.Models = %v", first.Models)
 	}
 }

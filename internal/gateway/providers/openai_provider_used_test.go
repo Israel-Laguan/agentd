@@ -40,7 +40,7 @@ func TestOpenAIGenerate_GeminiLegacyAdapterAliasProviderUsed(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeOpenAIJSON(t, w, openAIResponseBody("ok", "gemini-2.5-flash"))
+		writeOpenAIJSON(t, w, openAIResponseBody("ok", "gemini-2.0-flash"))
 	}))
 	defer srv.Close()
 
@@ -48,7 +48,7 @@ func TestOpenAIGenerate_GeminiLegacyAdapterAliasProviderUsed(t *testing.T) {
 		Adapter: "gemini",
 		BaseURL: srv.URL + "/v1",
 		APIKey:  "gem-key",
-		Model:   "gemini-2.5-flash",
+		Model:   "gemini-2.0-flash",
 	})
 	if err != nil {
 		t.Fatalf("AppendFromConfig() error = %v", err)

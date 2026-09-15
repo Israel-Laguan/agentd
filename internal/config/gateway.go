@@ -78,7 +78,7 @@ func setGatewayDefaults(v *viper.Viper) {
 	v.SetDefault("gateway.horde.poll_interval", "4s")
 	v.SetDefault("gateway.gemini.api_key", "")
 	v.SetDefault("gateway.gemini.base_url", "https://generativelanguage.googleapis.com/v1beta/openai")
-	v.SetDefault("gateway.gemini.model", "gemini-2.5-flash")
+	v.SetDefault("gateway.gemini.model", "gemini-2.0-flash")
 	v.SetDefault("gateway.gemini.max_input_chars", 0)
 	v.SetDefault("gateway.gemini.timeout", "5m")
 	v.SetDefault("gateway.max_tasks_per_phase", 7)

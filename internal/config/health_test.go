@@ -138,7 +138,7 @@ func TestCheckProviders_OpenAICompatibleAdapterWithAPIKey(t *testing.T) {
 func TestCheckProviders_GeminiKey(t *testing.T) {
 	cfg := GatewayConfig{
 		Order:  []string{"gemini"},
-		Gemini: gateway.ProviderConfig{APIKey: "gemini-test-key", Model: "gemini-2.5-flash"},
+		Gemini: gateway.ProviderConfig{APIKey: "gemini-test-key", Model: "gemini-2.0-flash"},
 	}
 	result := CheckProviders(cfg)
 	if !result.Available {
