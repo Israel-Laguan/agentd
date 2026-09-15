@@ -8,7 +8,7 @@
 | Sprint | S04-tiered-pipeline |
 | Estimate | L |
 | PR | **PR-A** — ≤15 files / <600 LOC |
-| Links | [tiered-execution M3](../../../docs/tiered-execution.md) |
+| Links | [tiered-execution M3](../../../../docs/tiered-execution.md) |
 
 ## Goal
 
@@ -26,5 +26,6 @@ Split a complex READY task into typed DAG children (`context → decision → ex
 ## Notes
 
 - Reuse `SPAWNED_BY` / `DEPENDS_ON` relations already in the models
-- Profile templates: `tier-context`, `tier-decision`, `tier-execute`, `tier-verify` (map to `gateway.role_models`)
-- Splitter runs inside the worker dispatch path, after `ShouldRunTiered` gate
+- Step-kind → role mapping (exact): `context` → `gateway.role_models[\"memory\"]` (cheap), `decision` → `gateway.role_models[\"worker\"]` mid-tier, `execute` → `gateway.role_models[\"worker\"]` cheap, `verify` → `gateway.role_models[\"worker\"]` mid-tier, `escalate` → strong `gateway.role_models[\"worker\"]`. `tiered.models.<kind>` overrides take precedence over the mapped role default (per `internal/config/tiered.go`).
+- Profile templates: `tier-context`, `tier-decision`, `tier-execute`, `tier-verify` (map to `gateway.role_models` as above)
+- Splitter runs inside the worker dispatch path, after `ShouldRunTiered` gate; T-016 owns step-kind dispatch and mode tool allowlists

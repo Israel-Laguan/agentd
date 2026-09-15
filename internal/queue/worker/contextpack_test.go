@@ -97,13 +97,28 @@ func TestContextPack_CharCount(t *testing.T) {
 	}
 }
 
+func TestContextPack_CharCount_IncludesCommandsRun(t *testing.T) {
+	t.Parallel()
+	cp := &ContextPack{
+		Summary:     "hi",
+		CommandsRun: []CommandRun{{Cmd: "echo hello", Outcome: "ok"}},
+	}
+	// hi=2 + echo hello=10 + ok=2 =14
+	got := cp.CharCount()
+	if got != 14 {
+		t.Fatalf("CharCount() = %d, want 14", got)
+	}
+}
+
 func TestContextPack_EnforceBudget_PathsExceeded(t *testing.T) {
 	t.Parallel()
 	cp := &ContextPack{
 		Version: 1, TaskID: "t1", Summary: "s",
 		Paths: []string{"a", "b", "c", "d", "e"},
 	}
-	cp.EnforceBudget(ContextPackConfig{MaxPaths: 3, MaxChars: 100000})
+	if _, err := cp.EnforceBudget(ContextPackConfig{MaxPaths: 3, MaxChars: 100000}); err != nil {
+		t.Fatalf("EnforceBudget error = %v", err)
+	}
 	if len(cp.Paths) != 3 {
 		t.Fatalf("Paths len = %d, want 3", len(cp.Paths))
 	}
@@ -122,7 +137,9 @@ func TestContextPack_EnforceBudget_TextOverflow(t *testing.T) {
 		Paths:    []string{"a"},
 		Unknowns: []string{strings.Repeat("x", 200)},
 	}
-	cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 100})
+	if _, err := cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 100}); err != nil {
+		t.Fatalf("EnforceBudget error = %v", err)
+	}
 	if len(cp.Unknowns) != 0 {
 		t.Fatalf("Unknowns should be trimmed, got %d entries", len(cp.Unknowns))
 	}
@@ -134,7 +151,10 @@ func TestContextPack_EnforceBudget_NoopWhenUnderBudget(t *testing.T) {
 		Version: 1, TaskID: "t1", Summary: "short",
 		Paths: []string{"a.go"},
 	}
-	truncated := cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 48000})
+	truncated, err := cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 48000})
+	if err != nil {
+		t.Fatalf("EnforceBudget error = %v", err)
+	}
 	if truncated {
 		t.Fatal("should not truncate when under budget")
 	}
@@ -149,12 +169,77 @@ func TestContextPack_EnforceBudget_DefaultsWhenZero(t *testing.T) {
 		Version: 1, TaskID: "t1", Summary: "s",
 		Paths: []string{"a"},
 	}
-	cp.EnforceBudget(ContextPackConfig{})
+	if _, err := cp.EnforceBudget(ContextPackConfig{}); err != nil {
+		t.Fatalf("EnforceBudget error = %v", err)
+	}
 	if cp.Budget.MaxPaths != DefaultMaxContextPackPaths {
 		t.Fatalf("Budget.MaxPaths = %d, want %d", cp.Budget.MaxPaths, DefaultMaxContextPackPaths)
 	}
 	if cp.Budget.MaxChars != DefaultMaxContextPackChars {
 		t.Fatalf("Budget.MaxChars = %d, want %d", cp.Budget.MaxChars, DefaultMaxContextPackChars)
+	}
+}
+
+func TestContextPack_EnforceBudget_OversizedSummary(t *testing.T) {
+	t.Parallel()
+	cp := &ContextPack{
+		Version: 1, TaskID: "t1", Summary: strings.Repeat("x", 200),
+		Paths: []string{"a"},
+	}
+	_, err := cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 100})
+	if err == nil || !strings.Contains(err.Error(), "required content") {
+		t.Fatalf("expected required content error for oversized summary, got %v", err)
+	}
+}
+
+func TestContextPack_EnforceBudget_OversizedExcerpts(t *testing.T) {
+	t.Parallel()
+	cp := &ContextPack{
+		Version: 1, TaskID: "t1", Summary: "ok",
+		Paths: []string{"a"},
+		Excerpts: []ContextExcerpt{{Path: "a.go", Note: strings.Repeat("n", 200), Span: strings.Repeat("s", 200)}},
+	}
+	_, err := cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 100})
+	if err == nil || !strings.Contains(err.Error(), "required content") {
+		t.Fatalf("expected required content error for oversized excerpts, got %v", err)
+	}
+}
+
+func TestContextPack_EnforceBudget_OversizedCommandsRun(t *testing.T) {
+	t.Parallel()
+	cp := &ContextPack{
+		Version: 1, TaskID: "t1", Summary: "ok",
+		Paths: []string{"a"},
+		CommandsRun: []CommandRun{{Cmd: strings.Repeat("c", 200), Outcome: strings.Repeat("o", 200)}},
+	}
+	_, err := cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 100})
+	if err == nil || !strings.Contains(err.Error(), "required content") {
+		t.Fatalf("expected required content error for oversized CommandsRun, got %v", err)
+	}
+}
+
+func TestContextPack_EnforceBudget_TrimsOptionalKeepsRequired(t *testing.T) {
+	t.Parallel()
+	cp := &ContextPack{
+		Version: 1, TaskID: "t1", Summary: "ok",
+		Paths:       []string{"a"},
+		Constraints: []string{strings.Repeat("c", 50)},
+		Unknowns:    []string{strings.Repeat("u", 50)},
+		CommandsRun: []CommandRun{{Cmd: "ls", Outcome: "ok"}},
+	}
+	// required = 2 + 2+2 =6, optional 100, budget 50 => optional trimmed but required stays
+	truncated, err := cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 50})
+	if err != nil {
+		t.Fatalf("EnforceBudget error = %v", err)
+	}
+	if !truncated {
+		t.Fatal("expected truncation")
+	}
+	if len(cp.Unknowns) != 0 || len(cp.Constraints) != 0 {
+		t.Fatalf("expected optional trimmed, got unknowns=%d constraints=%d", len(cp.Unknowns), len(cp.Constraints))
+	}
+	if cp.CharCount() > 50 {
+		t.Fatalf("CharCount %d still over budget 50", cp.CharCount())
 	}
 }
 

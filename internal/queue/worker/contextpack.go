@@ -115,6 +115,10 @@ func (cp *ContextPack) CharCount() int {
 		n += utf8.RuneCountInString(e.Note)
 		n += utf8.RuneCountInString(e.Span)
 	}
+	for _, cr := range cp.CommandsRun {
+		n += utf8.RuneCountInString(cr.Cmd)
+		n += utf8.RuneCountInString(cr.Outcome)
+	}
 	for _, c := range cp.Constraints {
 		n += utf8.RuneCountInString(c)
 	}
@@ -125,9 +129,12 @@ func (cp *ContextPack) CharCount() int {
 }
 
 // EnforceBudget truncates paths and overflow text to fit the budget.
-// Paths beyond max_paths are dropped. Text overflow goes to unknowns.
-// Returns the pack (mutated in place) and whether any truncation occurred.
-func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool) {
+// Paths beyond max_paths are dropped. Text overflow trims optional fields
+// (unknowns, then constraints). CommandsRun, Summary and Excerpts are
+// required content counted toward the budget; if they alone exceed MaxChars
+// the pack is over budget and an error is returned.
+// Returns whether any truncation occurred.
+func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err error) {
 	if cfg.MaxPaths <= 0 {
 		cfg.MaxPaths = DefaultMaxContextPackPaths
 	}
@@ -144,28 +151,30 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool) {
 	charCount := cp.CharCount()
 	cp.Budget.CharCount = charCount
 	if charCount > cfg.MaxChars {
-		// Trim unknowns first (they overflow target), then constraints.
-		remaining := cfg.MaxChars
-		remaining -= utf8.RuneCountInString(cp.Summary)
+		// Compute required content size (summary + excerpts + commands_run).
+		required := utf8.RuneCountInString(cp.Summary)
 		for i := range cp.Excerpts {
-			remaining -= utf8.RuneCountInString(cp.Excerpts[i].Note)
-			remaining -= utf8.RuneCountInString(cp.Excerpts[i].Span)
+			required += utf8.RuneCountInString(cp.Excerpts[i].Note)
+			required += utf8.RuneCountInString(cp.Excerpts[i].Span)
 		}
-		for i := range cp.Constraints {
-			remaining -= utf8.RuneCountInString(cp.Constraints[i])
+		for i := range cp.CommandsRun {
+			required += utf8.RuneCountInString(cp.CommandsRun[i].Cmd)
+			required += utf8.RuneCountInString(cp.CommandsRun[i].Outcome)
 		}
-		for i := range cp.Unknowns {
-			remaining -= utf8.RuneCountInString(cp.Unknowns[i])
+		if required > cfg.MaxChars {
+			cp.Budget.CharCount = charCount
+			return truncated, fmt.Errorf("context pack required content %d chars exceeds budget %d (summary+excerpts+commands_run)", required, cfg.MaxChars)
 		}
-		if remaining < 0 {
-			// Sum exceeds budget — trim unknowns then constraints.
-			cp.Unknowns = nil
-			cp.Constraints = nil
-			truncated = true
-		}
+		// Required fits — trim optional content.
+		cp.Unknowns = nil
+		cp.Constraints = nil
+		truncated = true
 		cp.Budget.CharCount = cp.CharCount()
+		if cp.Budget.CharCount > cfg.MaxChars {
+			return truncated, fmt.Errorf("context pack still over budget after trimming optional content: %d > %d", cp.Budget.CharCount, cfg.MaxChars)
+		}
 	}
-	return truncated
+	return truncated, nil
 }
 
 // PackFilePath returns the workspace-relative file path for a context pack
