@@ -97,7 +97,10 @@ import json, os, pathlib
 p=os.path.join(os.environ.get('AGENTD_HOME','/tmp/agentd-recall-demo'),'last_seed.json')
 import json as j
 j.dump({'symptom':os.environ['SYMPTOM'],'solution':os.environ['SOLUTION']}, open(p,'w'))
-" 2>/dev/null || true
+" 2>/dev/null || {
+    echo "Failed to persist last_seed.json — run seed again" >&2
+    return 1
+  }
     echo "Seeded USER_PREFERENCE memory (FormatPreferences path):"
     echo "  Symptom:  $symptom"
     echo "  Solution: $solution"

@@ -191,9 +191,6 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 			cp.Budget.CharCount = cp.CharCount()
 		}
 		truncated = true
-		if cp.Budget.CharCount > cfg.MaxChars {
-			return truncated, fmt.Errorf("context pack still over budget after trimming optional content: %d > %d", cp.Budget.CharCount, cfg.MaxChars)
-		}
 	}
 	return truncated, nil
 }

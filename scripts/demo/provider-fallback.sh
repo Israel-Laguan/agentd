@@ -185,11 +185,10 @@ cmd_probe_breaker() {
        -H 'Content-Type: application/json' \
        -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' 2>&1)" || true
      resp="$(cat /tmp/cr_probe_resp 2>/dev/null)"
-     if [[ "$http_code" != "200" ]]; then
-       echo "attempt $attempt: expected HTTP 200, got ${http_code:-unknown} (curl error or non-200 response)" >&2
-       sleep 0.5
-       continue
-     fi
+      if [[ "$http_code" != "200" ]]; then
+        echo "attempt $attempt: expected HTTP 200, got ${http_code:-unknown} (curl error or non-200 response)" >&2
+        return 1
+      fi
      if ! echo "$resp" | grep -Fq "$systemTimeoutMessage"; then
        echo "attempt $attempt: response missing systemTimeoutMessage" >&2
        sleep 0.5
