@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-import json, os, sys
+import json, os, sys, urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-port = int(os.environ["MOCK_PORT"])
-log_path = os.environ["MOCK_LOG"]
+port = None
+log_path = None
+
+def _normalize_url(base):
+    return base.rstrip("/")
 
 class H(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -18,8 +21,11 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
     def do_POST(self):
         n = int(self.headers.get("Content-Length", "0"))
-        if n:
-            self.rfile.read(n)
+        while n > 0:
+            chunk = self.rfile.read(n)
+            if not chunk:
+                break
+            n -= len(chunk)
         payload = {"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"fallback ok from secondary"},"finish_reason":"stop"}],"model":"mock-secondary"}
         raw = json.dumps(payload).encode()
         self.send_response(200)
@@ -29,24 +35,26 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
 def run():
+    global port, log_path
+    port = int(os.environ["MOCK_PORT"])
+    log_path = os.environ["MOCK_LOG"]
     HTTPServer(("127.0.0.1", port), H).serve_forever()
 
 def api_status(api_url):
-    import urllib.request
     try:
-        return json.load(urllib.request.urlopen(api_url + "/api/v1/system/status", timeout=3))
+        return json.load(urllib.request.urlopen(_normalize_url(api_url) + "/api/v1/system/status", timeout=3))
     except Exception:
         return None
 
 def api_projects(api_url):
     try:
-        return json.load(urllib.request.urlopen(api_url + "/api/v1/projects", timeout=5))
+        return json.load(urllib.request.urlopen(_normalize_url(api_url) + "/api/v1/projects", timeout=5))
     except Exception:
         return None
 
 def api_tasks(api_url, project_id):
     try:
-        return json.load(urllib.request.urlopen(f"{api_url}/api/v1/projects/{project_id}/tasks?include_healing=true", timeout=5))
+        return json.load(urllib.request.urlopen(f"{_normalize_url(api_url)}/api/v1/projects/{project_id}/tasks?include_healing=true", timeout=5))
     except Exception:
         return None
 
@@ -64,5 +72,6 @@ if __name__ == "__main__":
         if p:
             for proj in p.get("data") or []:
                 print(proj.get("name"), proj.get("id"))
-                for t in api_tasks(base, proj["id"]).get("data", []):
+                tasks = api_tasks(base, proj["id"])
+                for t in (tasks.get("data", []) if tasks else []):
                     print(" ", t.get("state"), t.get("assignee"), t.get("title"))
