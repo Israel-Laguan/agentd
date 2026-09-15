@@ -24,6 +24,20 @@ func EstimateTaskComplexity(task models.Task) int {
 	return title + desc + newlines*10
 }
 
+// ShouldRunTiered reports whether the task should enter the tiered pipeline.
+// Returns false when the tiered feature is disabled or the task scores below
+// the complexity threshold (including threshold 0, which explicitly disables
+// splitting). When disabled, the caller must use the existing one-shot path.
+func (w *Worker) ShouldRunTiered(task models.Task) bool {
+	if !w.tieredCfg.Enabled {
+		return false
+	}
+	if w.tieredCfg.ComplexityThreshold <= 0 {
+		return false
+	}
+	return EstimateTaskComplexity(task) >= w.tieredCfg.ComplexityThreshold
+}
+
 func (w *Worker) shouldPlan(task models.Task) bool {
 	return w.planningCfg.ComplexityThreshold > 0 &&
 		EstimateTaskComplexity(task) >= w.planningCfg.ComplexityThreshold

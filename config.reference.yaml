@@ -272,6 +272,21 @@ librarian:
   dream_cluster_min_size: 3
   dream_similarity_threshold: 0.7
 
+# Tiered execution pipeline (Phase 5, milestones M1–M2).
+# When disabled (default), the worker always runs one-shot.
+# When enabled, tasks at or above complexity_threshold are split into
+# typed DAG steps (context → decision → execute → verify → escalate).
+tiered:
+  enabled: false
+  complexity_threshold: 200  # 0 disables splitting when enabled; unset defaults to 200
+  # Optional per-step model overrides (v1 — leave empty to inherit gateway routing).
+  # models:
+  #   context:  {provider: ollama, model: "llama3:8b"}       # small / local
+  #   decision: {provider: gemini, model: "gemini-2.5-flash"} # mid
+  #   execute:  {provider: ollama, model: "llama3:8b"}        # small
+  #   verify:   {provider: gemini, model: "gemini-2.5-flash"} # mid
+  #   escalate: {provider: anthropic, model: "claude-3-haiku-20240307"} # strong
+
 plugins:
   enabled: false
   path: "~/.agentd/plugins"

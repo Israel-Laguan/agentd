@@ -46,6 +46,7 @@ type Config struct {
 	Librarian   LibrarianConfig
 	Queue       QueueConfig
 	Agentic     AgenticConfig
+	Tiered      TieredConfig
 	Channel     ChannelConfig
 	Cron        CronSchedule
 }
@@ -154,6 +155,7 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	setLibrarianDefaults(v)
 	setQueueDefaults(v)
 	setAgenticDefaults(v)
+	setTieredDefaults(v)
 	setChannelDefaults(v)
 	return v
 }
@@ -198,6 +200,7 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	}
 	cfg.Agentic.Audit.Path = ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path)
 	cfg.Agentic.PromptTemplatesPath = ResolvePromptTemplatesPath(cfg.HomeDir, cfg.Agentic.PromptTemplatesPath)
+	cfg.Tiered = loadTieredConfig(v)
 	cfg.Channel = loadChannelConfig(v)
 	var cron CronSchedule
 	cron, err = LoadCron(cfg.CronPath)

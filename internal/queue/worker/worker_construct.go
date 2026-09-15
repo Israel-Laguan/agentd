@@ -66,6 +66,7 @@ type WorkerOptions struct {
 	FileContext           config.FileContextConfig
 	FileContextCachePath string
 	Planning             config.AgenticPlanningConfig
+	Tiered               config.TieredConfig
 	TopicGuard           config.TopicGuardConfig
 	ModelRouting         config.ModelRoutingConfig
 	ToolManifest         config.ToolManifestConfig
@@ -206,6 +207,7 @@ func newWorkerCore(
 		disableTokenRecording:         opts.DisableTokenRecording,
 		fileContextCfg:                opts.FileContext,
 		planningCfg:                   opts.Planning,
+		tieredCfg:                     opts.Tiered,
 		checkpointStore:               wsession.NewMemoryCheckpointStore(),
 		healingEnabled:                !opts.HealingDisabled,
 		maxHealingTasks:               opts.MaxHealingTasks,
