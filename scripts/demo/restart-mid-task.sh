@@ -18,12 +18,9 @@ validate_inputs() {
     echo "HOME_DIR must be absolute: $HOME_DIR" >&2
     return 1
   fi
-  if [[ "$API_ADDR" =~ ^\[.*\] ]]; then
-    local addr="${API_ADDR#\[}"
-    local host_port="${addr%\]}"
-    local host="${host_port%%\]*}"
-    local port="${host_port##*:}"
-    if [[ -z "$port" ]] || ! [[ "$port" =~ ^[0-9]+$ ]] || (( 10#$port < 1 || 10#$port > 65535 )); then
+  if [[ "$API_ADDR" =~ ^\[([^]]+)\]:([0-9]+)$ ]]; then
+    local port="${BASH_REMATCH[2]}"
+    if (( 10#$port < 1 || 10#$port > 65535 )); then
       echo "invalid API_ADDR=$API_ADDR (bad port)" >&2
       return 1
     fi

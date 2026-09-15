@@ -21,12 +21,10 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
     def do_POST(self):
         n = int(self.headers.get("Content-Length", "0"))
-        body = b""
         while n > 0:
             chunk = self.rfile.read(min(n, 65536))
             if not chunk:
                 break
-            body += chunk
             n -= len(chunk)
         payload = {"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"fallback ok from secondary"},"finish_reason":"stop"}],"model":"mock-secondary"}
         raw = json.dumps(payload).encode()
@@ -43,8 +41,8 @@ def run():
         print(f"MOCK_PORT must be 1024-65535, got {port}", file=sys.stderr)
         sys.exit(1)
     log_path = os.environ["MOCK_LOG"]
-    if not log_path or ".." in log_path or not log_path.startswith("/"):
-        print(f"MOCK_LOG must be an absolute path without '..': {log_path}", file=sys.stderr)
+    if not log_path or not os.path.isabs(log_path) or os.path.realpath(log_path) != log_path:
+        print(f"MOCK_LOG must be an absolute, canonical path: {log_path}", file=sys.stderr)
         sys.exit(1)
     HTTPServer(("127.0.0.1", port), H).serve_forever()
 
