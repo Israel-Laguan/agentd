@@ -76,7 +76,8 @@ func DefaultContextPackConfig() ContextPackConfig {
 	}
 }
 
-// Validate checks the ContextPack for structural correctness.
+// Validate checks the ContextPack for structural correctness and
+// ensures Budget counters are consistent with the serialized content.
 func (cp *ContextPack) Validate() error {
 	if cp.Version != ContextPackVersion {
 		return fmt.Errorf("context pack version %d, want %d", cp.Version, ContextPackVersion)
@@ -104,6 +105,12 @@ func (cp *ContextPack) Validate() error {
 		if e.Path == "" {
 			return fmt.Errorf("context pack excerpt %d: path is required", i)
 		}
+	}
+	if cp.Budget.PathCount != len(cp.Paths) {
+		return fmt.Errorf("context pack budget path_count %d does not match paths len %d", cp.Budget.PathCount, len(cp.Paths))
+	}
+	if cp.Budget.CharCount != cp.CharCount() {
+		return fmt.Errorf("context pack budget char_count %d does not match computed char count %d", cp.Budget.CharCount, cp.CharCount())
 	}
 	return nil
 }
@@ -203,6 +210,8 @@ func PackFilePath(version int) string {
 
 // WriteContextPack serializes the pack to a JSON file in the workspace dir.
 func WriteContextPack(workspace string, cp *ContextPack) error {
+	cp.Budget.PathCount = len(cp.Paths)
+	cp.Budget.CharCount = cp.CharCount()
 	if err := cp.Validate(); err != nil {
 		return fmt.Errorf("write context pack: %w", err)
 	}
@@ -242,6 +251,8 @@ func NewContextPack(taskID, parentTaskID, summary string, paths []string, cfg Co
 	if cfg.MaxChars <= 0 {
 		cfg.MaxChars = DefaultMaxContextPackChars
 	}
+	charCount := 0
+	charCount += utf8.RuneCountInString(summary)
 	return &ContextPack{
 		Version:      ContextPackVersion,
 		TaskID:       taskID,
@@ -253,6 +264,7 @@ func NewContextPack(taskID, parentTaskID, summary string, paths []string, cfg Co
 			MaxPaths:  cfg.MaxPaths,
 			MaxChars:  cfg.MaxChars,
 			PathCount: len(paths),
+			CharCount: charCount,
 		},
 	}
 }
