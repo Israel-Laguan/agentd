@@ -218,7 +218,9 @@ func TestReadContextPack_BadFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.json")
-	os.WriteFile(path, []byte("not json"), 0644)
+	if err := os.WriteFile(path, []byte("not json"), 0644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
 	_, err := ReadContextPack(path)
 	if err == nil || !strings.Contains(err.Error(), "unmarshal") {
 		t.Fatalf("expected unmarshal error, got: %v", err)

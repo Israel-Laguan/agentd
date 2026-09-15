@@ -171,6 +171,9 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool) {
 // PackFilePath returns the workspace-relative file path for a context pack
 // at the given version.
 func PackFilePath(version int) string {
+	if version <= 0 {
+		version = ContextPackVersion
+	}
 	return fmt.Sprintf(ContextPackFileName, version)
 }
 
