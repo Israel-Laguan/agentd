@@ -13,19 +13,14 @@ MOCK_PID_FILE="$HOME_DIR/mock.pid"
 PYTHON="${ROOT}/scripts/demo/mock-provider.py"
 systemTimeoutMessage="[SYSTEM] Communication with AI core timed out. Please try your request again."
 
+source "$ROOT/scripts/demo/lib/demo-common.sh"
+
 validate_inputs() {
   if ! [[ "$MOCK_PORT" =~ ^[0-9]+$ ]] || (( MOCK_PORT < 1024 || MOCK_PORT > 65535 )); then
     echo "invalid MOCK_PORT=$MOCK_PORT (want 1024-65535)" >&2
     return 1
   fi
-  if [[ "$BIN" =~ [\;\|\&\`\$\(\)\{\}\<\>\"\\] ]]; then
-    echo "invalid BIN contains shell metacharacters" >&2
-    return 1
-  fi
-  if [[ "$HOME_DIR" != /* ]]; then
-    echo "HOME_DIR must be absolute: $HOME_DIR" >&2
-    return 1
-  fi
+  validate_bin_home || return 1
   local mock_log="$HOME_DIR/mock.log"
   if [[ "$(realpath -m "$mock_log")" != "$(realpath -m "$HOME_DIR")"* ]]; then
     echo "MOCK_LOG escapes HOME_DIR" >&2
@@ -48,17 +43,6 @@ Env: AGENTD_HOME, API_ADDR, MOCK_PORT, BIN
 USAGE
 }
 
-ensure_bin() {
-  [[ -x "$BIN" ]] || make -C "$ROOT" build
-}
-
-pid_for_home() {
-  local esc_bin esc_home
-  esc_bin=$(printf '%s' "$BIN" | sed 's/[][\\.^$*+?(){}|]/\\&/g')
-  esc_home=$(printf '%s' "$HOME_DIR" | sed 's/[][\\.^$*+?(){}|]/\\&/g')
-  pgrep -f "^${esc_bin} --home ${esc_home} start([[:space:]]|$)" || true
-}
-
 stop_mock() {
   [[ -f "$MOCK_PID_FILE" ]] || return 0
   local pid
@@ -71,20 +55,6 @@ stop_mock() {
     echo "stop_mock: PID $pid does not appear to be mock, skipping kill" >&2
   fi
   rm -f "$MOCK_PID_FILE"
-}
-
-stop_daemon() {
-  local pids pid
-  pids="$(pid_for_home)"
-  [[ -z "$pids" ]] && return 0
-  for pid in $pids; do
-    [[ "$pid" =~ ^[0-9]+$ ]] && ps -p "$pid" -o args= 2>/dev/null | grep -qF -- "--home $HOME_DIR" && kill -TERM "$pid" 2>/dev/null || true
-  done
-  sleep 0.5
-  pids="$(pid_for_home)"
-  for pid in $pids; do
-    [[ "$pid" =~ ^[0-9]+$ ]] && ps -p "$pid" -o args= 2>/dev/null | grep -qF -- "--home $HOME_DIR" && kill -KILL "$pid" 2>/dev/null || true
-  done
 }
 
 start_mock() {
@@ -210,15 +180,25 @@ cmd_probe_breaker() {
    echo "=== breaker exhaustion via gateway $API_URL/v1/chat/completions ==="
    local attempt breaker_state=""
    for attempt in 1 2 3 4 5; do
-     local resp
-     if resp="$(curl -fsS -m 5 -X POST "$API_URL/v1/chat/completions" \
+     local resp http_code
+     http_code="$(curl -sS -o /tmp/cr_probe_resp -w '%{http_code}' -m 5 -X POST "$API_URL/v1/chat/completions" \
        -H 'Content-Type: application/json' \
-       -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' 2>&1)"; then
-       echo "$resp" | grep -Fq "$systemTimeoutMessage" || { echo "attempt $attempt: response missing systemTimeoutMessage" >&2; }
-       echo "attempt $attempt: got HTTP 200 with systemTimeoutMessage (expected for ErrLLMUnreachable)"
-     else
-       echo "attempt $attempt: curl error (unexpected): $resp" >&2
+       -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' 2>&1)" || true
+     resp="$(cat /tmp/cr_probe_resp 2>/dev/null)"
+     if [[ "$http_code" != "200" ]]; then
+       echo "attempt $attempt: expected HTTP 200, got ${http_code:-unknown} (curl error or non-200 response)" >&2
+       sleep 0.5
+       continue
      fi
+     if ! echo "$resp" | grep -Fq "$systemTimeoutMessage"; then
+       echo "attempt $attempt: response missing systemTimeoutMessage" >&2
+       sleep 0.5
+       continue
+     fi
+     echo "attempt $attempt: got HTTP 200 with systemTimeoutMessage (expected for ErrLLMUnreachable)"
+     break
+   done
+   for attempt in 1 2 3 4 5; do
      local status
      status="$(curl -fsS -m 2 "$API_URL/api/v1/system/status" 2>/dev/null || true)"
      if echo "$status" | grep -Fq '"breaker":{"state":"OPEN"'; then
@@ -243,7 +223,7 @@ cmd_probe_breaker() {
    echo "Coverage: circuit_breaker.feature + outage_handoff.feature."
    API_URL="$API_URL" python3 "$PYTHON" projects 2>/dev/null || true
    [[ -f "$HOME_DIR/daemon.log" ]] && { echo "=== recent daemon log ==="; tail -n 20 "$HOME_DIR/daemon.log" || true; }
- }
+  }
 
 cmd_status() {
   echo "=== system/status ==="

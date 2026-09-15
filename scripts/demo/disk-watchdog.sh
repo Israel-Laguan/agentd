@@ -13,8 +13,11 @@ HOME_DIR="${AGENTD_HOME:-/tmp/agentd-disk-demo}"
 API_ADDR="${API_ADDR:-127.0.0.1:18785}"
 API_URL="http://${API_ADDR}"
 # NOTE: WATCHDOG_INTERVAL is a configurable daemon schedule knob but does NOT
-# change the actual cron/daemon polling interval (default ~10m). The demo
-# relies on polling via the API rather than a timed cron trigger.
+# change the actual cron/daemon polling interval (default ~10m); the demo polls
+# the API for the task instead of relying on a timed cron trigger.
+WATCHDOG_INTERVAL="${WATCHDOG_INTERVAL:-10m}"
+
+source "$ROOT/scripts/demo/lib/demo-common.sh"
 
 # Derive THRESHOLD deterministically so free_percent < threshold is guaranteed.
 derive_threshold() {
@@ -30,39 +33,23 @@ derive_threshold() {
 
 if [[ -n "${DISK_THRESHOLD:-}" ]]; then
   THRESHOLD="$DISK_THRESHOLD"
-else
+elif [[ -d "$HOME_DIR" ]]; then
   # Lazy derive: if HOME_DIR exists use observed free, else 100 guarantees trigger.
-  if [[ -d "$HOME_DIR" ]]; then
-    THRESHOLD="$(derive_threshold)"
-  else
-    THRESHOLD="100"
-  fi
+  THRESHOLD="$(derive_threshold)"
+else
+  THRESHOLD="100"
 fi
 
-validate_inputs() {
-  if [[ "$BIN" =~ [\;\|\&\`\$\(\)\{\}\<\>\"\\] ]]; then
-    echo "invalid BIN contains shell metacharacters" >&2
-    return 1
-  fi
-  if [[ "$HOME_DIR" != /* ]]; then
-    echo "HOME_DIR must be absolute: $HOME_DIR" >&2
-    return 1
-  fi
-  if [[ "$API_ADDR" =~ ^\[([^]]+)\]:([0-9]+)$ ]]; then
-    local port="${BASH_REMATCH[2]}"
-    if (( 10#$port < 1 || 10#$port > 65535 )); then
-      echo "invalid API_ADDR=$API_ADDR (bad port)" >&2
-      return 1
-    fi
-  elif [[ "$API_ADDR" =~ : ]]; then
-    local port="${API_ADDR##*:}"
-    if ! [[ "$port" =~ ^[0-9]+$ ]] || (( 10#$port < 1 || 10#$port > 65535 )); then
-      echo "invalid API_ADDR=$API_ADDR (port must be 1-65535)" >&2
-      return 1
-    fi
-  else
-    echo "invalid API_ADDR=$API_ADDR (want host:port)" >&2
-    return 1
+# rewrite_threshold_config keeps config.yaml aligned with the derived threshold.
+rewrite_threshold_config() {
+  if grep -q "free_threshold_percent" "$HOME_DIR/config.yaml" 2>/dev/null; then
+    python3 -c "
+import sys, pathlib, re
+p=sys.argv[1]; thr=sys.argv[2]
+t=pathlib.Path(p).read_text()
+t=re.sub(r'free_threshold_percent:\s*[0-9.]+', f'free_threshold_percent: {thr}', t)
+pathlib.Path(p).write_text(t)
+" "$HOME_DIR/config.yaml" "$THRESHOLD" 2>/dev/null || true
   fi
 }
 
@@ -83,52 +70,6 @@ Env:
   WATCHDOG_INTERVAL watchdog check interval (default $WATCHDOG_INTERVAL)
   BIN               (default $BIN)
 USAGE
-}
-
-ensure_bin() {
-  if [[ ! -x "$BIN" ]]; then
-    make -C "$ROOT" build
-  fi
-}
-
-pid_for_home() {
-  local esc_bin esc_home
-  esc_bin=$(printf '%s' "$BIN" | sed 's/[][\\.^$*+?(){}|]/\\&/g')
-  esc_home=$(printf '%s' "$HOME_DIR" | sed 's/[][\\.^$*+?(){}|]/\\&/g')
-  pgrep -f "^${esc_bin} --home ${esc_home} start([[:space:]]|$)" || true
-}
-
-start_daemon() {
-  local action="${1:-start}"
-  validate_inputs || return 1
-  nohup "$BIN" --home "$HOME_DIR" start --skip-llm-warmup > "$HOME_DIR/daemon.log" 2>&1 &
-  local pid=""
-  local i
-  for i in 1 2 3 4 5 6; do
-    pid="$(pid_for_home)"
-    if [[ -n "$pid" ]]; then break; fi
-    sleep 0.5
-  done
-  if [[ -z "$pid" ]]; then
-    echo "daemon failed to $action (no PID for --home $HOME_DIR after 3s)" >&2
-    cat "$HOME_DIR/daemon.log" >&2 || true
-    return 1
-  fi
-  for i in 1 2 3 4 5; do
-    if curl -fsS -m 2 "$API_URL/api/v1/system/status" >/dev/null 2>&1 && [[ "$(pid_for_home)" == "$pid" ]]; then
-      echo "started pid=$pid api=$API_URL log=$HOME_DIR/daemon.log"
-      return 0
-    fi
-    sleep 0.5
-    if [[ -z "$(pid_for_home)" ]]; then
-      echo "daemon exited during $action (PID $pid gone)" >&2
-      cat "$HOME_DIR/daemon.log" >&2 || true
-      return 1
-    fi
-  done
-  echo "daemon PID $pid running but API not responding after $action" >&2
-  cat "$HOME_DIR/daemon.log" >&2 || true
-  return 1
 }
 
 cmd_prepare() {
@@ -164,21 +105,10 @@ healing:
 YAML
   else
     # Ensure existing config uses the derived threshold.
-    if grep -q "free_threshold_percent" "$HOME_DIR/config.yaml" 2>/dev/null; then
-      python3 -c "
-import sys
-p=sys.argv[1]; thr=sys.argv[2]
-import pathlib
-t=pathlib.Path(p).read_text()
-import re
-t=re.sub(r'free_threshold_percent:\s*[0-9.]+', f'free_threshold_percent: {thr}', t)
-pathlib.Path(p).write_text(t)
-" "$HOME_DIR/config.yaml" "$THRESHOLD" 2>/dev/null || true
-    fi
+    rewrite_threshold_config
   fi
-  # Set the watchdog interval via cron/daemon config if supported,
-  # otherwise the default 10m interval applies. For demo purposes
-  # we rely on the API being ready and poll for the task.
+  # Watchdog interval stays at the daemon default (see WATCHDOG_INTERVAL note);
+  # the demo polls the API rather than waiting on a cron trigger.
   start_daemon
   echo ""
   echo "=== Prepare complete ==="
@@ -193,15 +123,7 @@ cmd_inject_fault() {
     THRESHOLD="$(derive_threshold)"
   fi
   # Update config.yaml with the derived threshold so the daemon uses it.
-  if [[ -f "$HOME_DIR/config.yaml" ]]; then
-    python3 -c "
-import sys, pathlib, re
-p=sys.argv[1]; thr=sys.argv[2]
-t=pathlib.Path(p).read_text()
-t=re.sub(r'free_threshold_percent:\s*[0-9.]+', f'free_threshold_percent: {thr}', t)
-pathlib.Path(p).write_text(t)
-" "$HOME_DIR/config.yaml" "$THRESHOLD" 2>/dev/null || true
-  fi
+  rewrite_threshold_config
   echo "Fault injection: scratch dir $HOME_DIR/scratch created; threshold ${THRESHOLD}% derived from observed free space guarantees free_percent < threshold."
   echo "Config updated to free_threshold_percent: ${THRESHOLD} (no real disk fill)."
 }
@@ -218,8 +140,7 @@ cmd_probe() {
   system_pid=$(echo "$resp" | python3 -c "
 import sys, json
 raw = json.load(sys.stdin)
-projects = raw.get('data', raw)
-for p in projects:
+for p in raw.get('data', raw):
     if p.get('name') == '_system':
         print(p['id'])
         break
@@ -241,19 +162,14 @@ raw = json.load(sys.stdin)
 tasks = raw.get('data', raw)
 matches = [t for t in tasks if 'Disk space critical' in t.get('title','')]
 human = [t for t in matches if t.get('assignee')=='HUMAN']
-count = len(matches)
-human_count = len(human)
-if count==0:
-    print('FAIL: no Disk space critical task found')
-    sys.exit(1)
-if human_count==0:
-    print(f'FAIL: Disk space critical task assignee not HUMAN (found {matches[0].get(\"assignee\")})')
-    sys.exit(2)
-if count!=1:
-    print(f'FAIL: expected exactly 1 Disk space critical task, found {count} (dedup broken)')
-    sys.exit(3)
+if len(matches)==0:
+    print('FAIL: no Disk space critical task found'); sys.exit(1)
+if len(human)==0:
+    print(f'FAIL: Disk space critical task assignee not HUMAN (found {matches[0].get(\"assignee\")})'); sys.exit(2)
+if len(matches)!=1:
+    print(f'FAIL: expected exactly 1 Disk space critical task, found {len(matches)} (dedup broken)'); sys.exit(3)
 t=human[0]
-print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={count}\")
+print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={len(matches)}\")
 " 2>/dev/null)
   local probe_status=$?
   if (( probe_status != 0 )); then
@@ -273,29 +189,21 @@ print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={
     sse_hit="log"
     echo "  Log: DISK_SPACE_CRITICAL observed in daemon.log (SSE not reachable but event persisted)"
   else
-    # Try task events via API if SSE not available.
+    # SSE window missed: re-check daemon.log after the task-fetch delay.
     local events_resp
-     events_resp=$(curl -fsS -m 5 "$API_URL/api/v1/projects/$system_pid/tasks" 2>/dev/null | python3 -c "
+    events_resp=$(curl -fsS -m 5 "$API_URL/api/v1/projects/$system_pid/tasks" 2>/dev/null | python3 -c "
 import sys, json
-raw=json.load(sys.stdin)
-tasks=raw.get('data', raw)
-for t in tasks:
+raw = json.load(sys.stdin)
+for t in raw.get('data', raw):
     if 'Disk space critical' in t.get('title',''):
         print(t.get('id',''))
         break
 " 2>/dev/null || true)
-    if [[ -n "$events_resp" ]]; then
-      # Check daemon log as authoritative fallback; without SSE we warn but don't fail if task exists.
-      echo "  SSE not observed in 3s window — checking daemon.log fallback..."
-      if grep -q "DISK_SPACE_CRITICAL" "$HOME_DIR/daemon.log" 2>/dev/null; then
-        sse_hit="log"
-        echo "  Log: DISK_SPACE_CRITICAL observed in daemon.log"
-      else
-        echo "FAIL: DISK_SPACE_CRITICAL not observed in SSE stream nor daemon.log" >&2
-        return 1
-      fi
+    if [[ -n "$events_resp" ]] && grep -q "DISK_SPACE_CRITICAL" "$HOME_DIR/daemon.log" 2>/dev/null; then
+      sse_hit="log"
+      echo "  SSE not observed in 3s window — DISK_SPACE_CRITICAL observed in daemon.log"
     else
-      echo "FAIL: DISK_SPACE_CRITICAL not observed in SSE stream" >&2
+      echo "FAIL: DISK_SPACE_CRITICAL not observed in SSE stream nor daemon.log" >&2
       return 1
     fi
   fi
@@ -310,8 +218,8 @@ for t in tasks:
   local dedup_count
   dedup_count=$(echo "$tasks_resp2" | python3 -c "
 import sys, json
-raw=json.load(sys.stdin)
-tasks=raw.get('data', raw)
+raw = json.load(sys.stdin)
+tasks = raw.get('data', raw)
 print(sum(1 for t in tasks if 'Disk space critical' in t.get('title','')))
 " 2>/dev/null) || dedup_count="?"
   if [[ "$dedup_count" != "1" ]]; then
@@ -358,23 +266,15 @@ cmd_stop() {
     echo "No daemon running for --home $HOME_DIR"
     return 0
   fi
-  kill "$pid" 2>/dev/null || true
-  for i in 1 2 3 4 5; do
-    if [[ -z "$(pid_for_home)" ]]; then
-      echo "stopped pid=$pid"
-      return 0
-    fi
-    sleep 0.5
-  done
-  kill -9 "$pid" 2>/dev/null || true
-  echo "force-killed pid=$pid"
+  stop_daemon
+  echo "stopped pid=$pid"
 }
 
 case "${1:-}" in
-  prepare)     cmd_prepare ;;
+  prepare)      cmd_prepare ;;
   inject-fault) cmd_inject_fault ;;
-  probe)       cmd_probe ;;
-  status)      cmd_status ;;
-  stop)        cmd_stop ;;
-  *)           usage; exit 1 ;;
+  probe)        cmd_probe ;;
+  status)       cmd_status ;;
+  stop)         cmd_stop ;;
+  *)            usage; exit 1 ;;
 esac
