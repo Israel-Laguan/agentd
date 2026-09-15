@@ -207,12 +207,16 @@ cmd_probe_cascade() {
 
 cmd_probe_breaker() {
   echo "=== breaker exhaustion via gateway $API_URL/v1/chat/completions ==="
-  local attempt breaker_state=""
+  local attempt breaker_state="" error_body=""
   for attempt in 1 2 3 4 5; do
-    if ! curl -fsS -m 5 -X POST "$API_URL/v1/chat/completions" \
+    local resp
+    if ! resp="$(curl -sS -m 5 -X POST "$API_URL/v1/chat/completions" \
       -H 'Content-Type: application/json' \
-      -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' >/dev/null 2>&1; then
+      -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' 2>&1)"; then
       echo "attempt $attempt: gateway returned error (expected for dead primary)"
+      if [[ -z "$error_body" ]] && [[ "$resp" == *"ErrLLMUnreachable"* ]]; then
+        error_body="$resp"
+      fi
     else
       echo "attempt $attempt: unexpected success" >&2
     fi
@@ -236,6 +240,10 @@ cmd_probe_breaker() {
   fi
   echo "$breaker_state" | grep -q "failure_count" && echo "found failure_count" || echo "no failure_count in status (check daemon version)"
   echo "$breaker_state" | grep -q "last_error" && echo "found last_error" || true
+  if [[ -z "$error_body" ]]; then
+    echo "FAIL: no response body captured with ErrLLMUnreachable" >&2
+    return 1
+  fi
   echo "Pass criterion B: ErrLLMUnreachable + breaker OPEN after threshold."
   echo "Coverage: circuit_breaker.feature + outage_handoff.feature."
   API_URL="$API_URL" python3 "$PYTHON" projects 2>/dev/null || true
