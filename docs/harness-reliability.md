@@ -4,7 +4,7 @@ Prove the **house**, not the coding model. Positioning: [why-agentd.md](why-agen
 
 Governance demo (approve → board → connector HUMAN) lives in [demo.md](demo.md) — do that **first**. Do not re-prove dead-`base_url` HUMAN here.
 
-Helper scripts: [`restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh) (Beat 1), [`provider-fallback.sh`](../scripts/demo/provider-fallback.sh) (Beat 2).
+Helper scripts: [`restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh) (Beat 1), [`provider-fallback.sh`](../scripts/demo/provider-fallback.sh) (Beat 2), [`disk-watchdog.sh`](../scripts/demo/disk-watchdog.sh) (Beat 2.3).
 
 ## Beat 1 (S02) — Restart mid-task
 
@@ -140,13 +140,79 @@ export API_ADDR=127.0.0.1:18776
 - Re-proving ask→approve→connector HUMAN (`demo.md`)
 - Tiered execution
 
+## Beat 2.3 (S03) — Disk / resource watchdog
+
+**Tickets:** [T-013](../tasks/sprints/S03-tiered-foundation/tasks/T-013-disk-watchdog-beat.md).
+
+Prove product-plan Phase 2.3: a disk/resource crunch surfaces a durable event or board task — no silent death. The watchdog implementation already exists (`internal/queue/disk_watchdog.go`); this beat packages it as a runnable demo with fault injection.
+
+### Beat 2.3 — Pass criteria
+
+1. When free disk space falls below `disk.free_threshold_percent`, the watchdog creates a `_system` HUMAN task titled **"Disk space critical. Please run cleanup or expand storage."**
+2. A `DISK_SPACE_CRITICAL` SSE event is emitted with path, free percent, and threshold.
+3. Deduplication: repeated low-disk checks do **not** create additional tasks while one is already open.
+4. Above threshold: no task, no event — the watchdog is silent.
+
+Mechanism: `Daemon.checkDiskSpace` → `safety.DiskFreePercent` → `EnsureProjectTask` (HUMAN assignee) → `sink.Emit(DISK_SPACE_CRITICAL)`. Tests: `internal/queue/disk_watchdog_test.go`. Feature: `internal/queue/features/disk_watchdog.feature`.
+
+### Beat 2.3 — Prerequisites
+
+- `make build` → `./bin/agentd`
+- Throwaway home: `export AGENTD_HOME=/tmp/agentd-disk-demo`
+- No billable keys required — the demo uses fault injection via a tiny scratch threshold, never a real disk fill.
+
+### Beat 2.3 — Operator sequence
+
+```sh
+export AGENTD_HOME=/tmp/agentd-disk-demo
+export API_ADDR=127.0.0.1:18785
+
+# A) prepare: start daemon with a high threshold so fault injection triggers it
+./scripts/demo/disk-watchdog.sh prepare
+
+# B) inject fault: create a tiny scratch dir and set disk_check_path to it
+#    (threshold defaults to 99% so even a healthy disk looks "full")
+./scripts/demo/disk-watchdog.sh inject-fault
+
+# C) probe: verify the HUMAN task appeared
+./scripts/demo/disk-watchdog.sh probe
+# expect: _system project with HUMAN task "Disk space critical..."
+
+# D) cleanup
+./scripts/demo/disk-watchdog.sh stop
+```
+
+### Beat 2.3 — What "good" looks like
+
+| Condition | Expected |
+| --- | --- |
+| Free space **below** threshold | `_system` HUMAN task + `DISK_SPACE_CRITICAL` event |
+| Free space **above** threshold | No task, no event |
+| Repeated low-disk check | Deduplicated — single task, single event |
+| Daemon restart after cleanup | Watchdog resumes; no stale RUNNING tasks |
+
+### Beat 2.3 — Test coverage
+
+- `TestDiskWatchdogCreatesHumanTask` — creates HUMAN task + DISK_SPACE_CRITICAL event
+- `TestDiskWatchdogDeduplicatesOpenTask` — second check does not duplicate
+- `TestDiskWatchdogNoAlertAboveThreshold` — above threshold = no alert
+- `TestDiskWatchdogDelayUsesEveryWhenConfigured` — interval config respected
+- `disk_watchdog.feature` — 3 scenarios matching the above
+
+### Out of scope for Beat 2.3
+
+- Prod changes to `disk_watchdog.go` — gap found → split to follow-up ticket (S02 PR-C pattern)
+- Restart mid-task (Beat 1)
+- Provider fallback (Beat 2)
+- Tiered execution
+
 ## Later beats
 
-| Beat | Intent | S02 ticket |
+| Beat | Intent | Ticket |
 | --- | --- | --- |
 | Provider fallback (**Beat 2**, above) | Cascade or breaker/HUMAN | [T-010a](../tasks/sprints/S02-harness-reliability/tasks/T-010a-fallback-beat-docs.md) |
-| Disk / watchdog | Durable watchdog signal | later |
-| Memory recall | Librarian/FTS on repeat failure | later |
+| Disk / watchdog (**Beat 2.3**, above) | Durable watchdog signal | [T-013](../tasks/sprints/S03-tiered-foundation/tasks/T-013-disk-watchdog-beat.md) |
+| Memory recall | Librarian/FTS on repeat failure | [T-014](../tasks/sprints/S03-tiered-foundation/tasks/T-014-memory-recall-beat.md) |
 | Permission → HUMAN | Sandbox violation | later encore |
 
 ## Related
