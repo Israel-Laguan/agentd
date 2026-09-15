@@ -11,7 +11,7 @@ func TestRouterKnownModels(t *testing.T) {
 
 	router, err := NewRouterFromConfigs([]spec.ProviderConfig{
 		{Name: "openai", Adapter: "openai", Model: "gpt-4o-mini"},
-		{Name: "gemini", Adapter: "openai", Model: "gemini-2.0-flash"},
+		{Name: "gemini", Adapter: "openai", Model: "gemini-2.5-flash"},
 	})
 	if err != nil {
 		t.Fatalf("NewRouterFromConfigs: %v", err)

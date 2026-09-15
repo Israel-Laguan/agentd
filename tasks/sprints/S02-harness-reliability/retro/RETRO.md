@@ -3,13 +3,13 @@
 | Field | Value |
 | --- | --- |
 | Sprint | S02-harness-reliability |
-| Date | 2026-09-15 |
+| Date | 2026-10-13 |
 
 ## Went well
 
 - Beat 1 shipped complete (docs + script + tests): restart reconcile coverage proves unclean kills reset dead-PID tasks to `READY` and preserve live `RUNNING` (`tasks/.../T-006b-restart-reconcile-tests.md:1`); T-006b found **no prod gap**, so T-006c correctly stayed `backlog` — the reconcile logic was already right.
 - Beat 2 shipped complete: secondary-provider fallback, `ErrLLMUnreachable` classification, breaker-open threshold all covered (`tasks/.../T-010b-cascade-breaker-tests.md:1`).
-- S01 retro actions closed: README First Run now leads with LiteLLM/Poolside/mock instead of stale Gemini-only (`README.md:41`); default swapped `gemini-2.5-flash` → `gemini-2.0-flash` with zero main-tree hits remaining; SP-004 pre-flight done.
+- S01 retro actions closed: README First Run now leads with LiteLLM/Poolside/mock instead of stale Gemini-only (`README.md:41`); default reverted to `gemini-2.5-flash` after discovering `gemini-2.0-flash` was shut down; SP-004 pre-flight done.
 - PR budgets held: PR-F landed 3 in-scope files (~48 net lines, budget ≤5/<250); PR-G landed 10 code files, 34 changed lines (budget ≤15/<400).
 
 ## Went poorly
