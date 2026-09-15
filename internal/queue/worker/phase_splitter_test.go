@@ -148,3 +148,58 @@ func TestBuildPlanContext_Truncates(t *testing.T) {
 		t.Fatalf("expected truncation marker in %q", ctx)
 	}
 }
+
+func TestShouldRunTiered_Disabled(t *testing.T) {
+	t.Parallel()
+	w := &Worker{tieredCfg: config.TieredConfig{Enabled: false, ComplexityThreshold: 200}}
+	task := models.Task{Title: "x", Description: strings.Repeat("a", 300)}
+	if w.ShouldRunTiered(task) {
+		t.Fatal("ShouldRunTiered should return false when disabled")
+	}
+}
+
+func TestShouldRunTiered_Enabled_BelowThreshold(t *testing.T) {
+	t.Parallel()
+	w := &Worker{tieredCfg: config.TieredConfig{Enabled: true, ComplexityThreshold: 200}}
+	short := models.Task{Title: "x", Description: "y"}
+	if w.ShouldRunTiered(short) {
+		t.Fatal("ShouldRunTiered should return false for short task below threshold")
+	}
+}
+
+func TestShouldRunTiered_Enabled_AtThreshold(t *testing.T) {
+	t.Parallel()
+	w := &Worker{tieredCfg: config.TieredConfig{Enabled: true, ComplexityThreshold: 100}}
+	// title 2 + desc 98 = 100 (at threshold)
+	task := models.Task{Title: "ab", Description: strings.Repeat("a", 98)}
+	if !w.ShouldRunTiered(task) {
+		t.Fatal("ShouldRunTiered should return true at threshold")
+	}
+}
+
+func TestShouldRunTiered_Enabled_AboveThreshold(t *testing.T) {
+	t.Parallel()
+	w := &Worker{tieredCfg: config.TieredConfig{Enabled: true, ComplexityThreshold: 100}}
+	long := models.Task{Title: "x", Description: strings.Repeat("a", 200)}
+	if !w.ShouldRunTiered(long) {
+		t.Fatal("ShouldRunTiered should return true above threshold")
+	}
+}
+
+func TestShouldRunTiered_Enabled_BelowThreshold_OneShot(t *testing.T) {
+	t.Parallel()
+	w := &Worker{tieredCfg: config.TieredConfig{Enabled: true, ComplexityThreshold: 200}}
+	simple := models.Task{Title: "x", Description: "y"}
+	if w.ShouldRunTiered(simple) {
+		t.Fatal("simple task should stay one-shot even when tiered is enabled")
+	}
+}
+
+func TestShouldRunTiered_ThresholdZero_DisablesSplitting(t *testing.T) {
+	t.Parallel()
+	w := &Worker{tieredCfg: config.TieredConfig{Enabled: true, ComplexityThreshold: 0}}
+	long := models.Task{Title: "x", Description: strings.Repeat("a", 500)}
+	if w.ShouldRunTiered(long) {
+		t.Fatal("threshold 0 should disable splitting even when enabled")
+	}
+}

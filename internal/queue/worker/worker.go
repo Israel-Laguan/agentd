@@ -74,6 +74,7 @@ type Worker struct {
 	fileContextCfg                config.FileContextConfig
 	docStore                      *wfilecontext.DocStore
 	planningCfg                   config.AgenticPlanningConfig
+	tieredCfg                     config.TieredConfig
 	messageEditor                 *agentcontext.MessageEditor
 	checkpointStore               wsession.CheckpointStore
 	topicGuard                    *agentruntime.TopicGuard
