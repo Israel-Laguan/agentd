@@ -29,4 +29,4 @@ One-liner from product plan:
 ## Blocked without API auth — resolved 2026-09-14 (traceability pending 2026-09-15, status `in-progress`)
 
 Was blocked. Retro records fix: operator applies `gh repo edit` (or web UI) with text/topics above; session missed `gh` install → new SP-004 pre-flight spike.
-Local branch `docs/s01-positioning` holds T-002/T-003 until push; T-001 is `in-progress` pending PR evidence (`gh repo view --json description,repositoryTopics` screenshot — retro action due 2026-09-15, see `retro/RETRO.md`). Parent `US-001` is likewise `in-progress` conditional on that verification.
+Local branch `docs/s01-positioning` holds T-002/T-003 until push; T-001 is `in-progress` pending traceability evidence (`gh repo view --json description,repositoryTopics` output — retro action due 2026-09-15, see `retro/RETRO.md`). Parent `US-001` is likewise `in-progress` conditional on that verification.

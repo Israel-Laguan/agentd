@@ -272,6 +272,23 @@ librarian:
   dream_cluster_min_size: 3
   dream_similarity_threshold: 0.7
 
+# Tiered execution pipeline (Phase 5, milestones M1–M2).
+# When disabled (default), the worker always runs one-shot.
+# When enabled, tasks at or above complexity_threshold are split into
+# typed DAG steps (context → decision → execute → verify → escalate).
+tiered:
+  enabled: false
+  complexity_threshold: 200  # 0 disables splitting when enabled; unset defaults to 200
+  context_pack:
+    max_paths: 40   # cap on workspace paths in a ContextPack
+    max_chars: 48000  # cap on total chars across summary/excerpts/constraints/unknowns
+  # Per-role model overrides are configured via gateway.role_models.
+  # See gateway section above for the role_models mapping.
+  # Tiered step profiles route through role_models by step kind:
+  # context→memory, decision→worker, execute→worker, verify→worker, escalate→worker.
+  # Step kind overrides take precedence over the mapped role default (per internal/config/tiered.go).
+  # No tiered.models.<kind> configuration is supported by TieredConfig or loadTieredConfig.
+
 plugins:
   enabled: false
   path: "~/.agentd/plugins"

@@ -107,8 +107,6 @@ func buildStartRuntime(ctx context.Context, cfg config.Config, store models.Kanb
 }
 
 func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, rollingLedger *queue.RollingTokenLedger) *queue.Worker {
-	workerRetriever := &memory.Retriever{Store: store, Cfg: cfg.Librarian}
-
 	userPrefsPath := ""
 	if cfg.Queue.Instructions.UserPreferencesFile != "" {
 		userPrefsPath = filepath.Join(cfg.HomeDir, cfg.Queue.Instructions.UserPreferencesFile)
@@ -116,39 +114,41 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 
 	var tokenHook func(int)
 	if rollingLedger != nil && rollingLedger.Enabled() {
-		ledger := rollingLedger
-		tokenHook = func(tokens int) { ledger.LogCall(tokens) }
+		tokenHook = func(tokens int) { rollingLedger.LogCall(tokens) }
 	}
+	opts := buildWorkerOptions(store, deps, cfg, userPrefsPath, tokenHook)
+	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, opts)
+}
+
+func buildWorkerOptions(store models.KanbanStore, deps runtimeDeps, cfg config.Config, userPrefsPath string, tokenHook func(int)) queue.WorkerOptions {
+	workerRetriever := &memory.Retriever{Store: store, Cfg: cfg.Librarian}
 	ts, _ := store.(queue.TokenUsageStore)
-	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, queue.WorkerOptions{
-		Canceller:                 deps.canceller,
-		Tuner:                     queue.NewParameterTuner(cfg.Healing),
-		Retriever:                 workerRetriever,
-		HeartbeatInterval:         cfg.Cron.Heartbeat,
-		SandboxWallTimeout:        cfg.Sandbox.WallTimeout,
-		SandboxEnvAllowlist:       cfg.Sandbox.EnvAllowlist,
-		SandboxExtraEnv:           cfg.Sandbox.ExtraEnv,
-		SandboxScrubPatterns:      cfg.Sandbox.ScrubPatterns,
-		MaxToolIterations:         cfg.Queue.MaxToolIterations,
-		TokenBudget:               cfg.Queue.TokenBudget,
-		AgenticTruncatorMax: cfg.Queue.AgenticTruncatorMax,
-		AgenticCharacterBudget: config.EffectiveAgenticCharacterBudget(
-			cfg.Queue.AgenticCharacterBudget,
-			cfg.Gateway.Truncator.MaxInputChars,
-		),
-		AgenticContext:            cfg.Queue.AgenticContext,
-		InstructionsProjectFile:   cfg.Queue.Instructions.ProjectFile,
-		InstructionsUserPrefsPath: userPrefsPath,
-		SkillsProjectDir:          cfg.Queue.Skills.ProjectDir,
-		SkillsGlobalDir:           cfg.Queue.Skills.GlobalDir,
-		SkillsThreshold:           cfg.Queue.Skills.Threshold,
-		SkillsTopK:                cfg.Queue.Skills.TopK,
-		LegacyHandoffTimeout:      cfg.Queue.HITL.LegacyHandoffTimeout,
-		ToolTimeouts:              cfg.Queue.ToolTimeouts,
-		ToolRetries:               cfg.Queue.ToolRetries,
-		ExternalTools:             cfg.Agentic.ExternalTools,
-		ToolCredentials:              cfg.Agentic.ToolCredentials,
-		DisableCredentialDetection:     cfg.Agentic.DisableCredentialDetection,
+	return queue.WorkerOptions{
+		Canceller:                  deps.canceller,
+		Tuner:                      queue.NewParameterTuner(cfg.Healing),
+		Retriever:                  workerRetriever,
+		HeartbeatInterval:          cfg.Cron.Heartbeat,
+		SandboxWallTimeout:         cfg.Sandbox.WallTimeout,
+		SandboxEnvAllowlist:        cfg.Sandbox.EnvAllowlist,
+		SandboxExtraEnv:            cfg.Sandbox.ExtraEnv,
+		SandboxScrubPatterns:       cfg.Sandbox.ScrubPatterns,
+		MaxToolIterations:          cfg.Queue.MaxToolIterations,
+		TokenBudget:                cfg.Queue.TokenBudget,
+		AgenticTruncatorMax:        cfg.Queue.AgenticTruncatorMax,
+		AgenticCharacterBudget:     config.EffectiveAgenticCharacterBudget(cfg.Queue.AgenticCharacterBudget, cfg.Gateway.Truncator.MaxInputChars),
+		AgenticContext:             cfg.Queue.AgenticContext,
+		InstructionsProjectFile:    cfg.Queue.Instructions.ProjectFile,
+		InstructionsUserPrefsPath:  userPrefsPath,
+		SkillsProjectDir:           cfg.Queue.Skills.ProjectDir,
+		SkillsGlobalDir:            cfg.Queue.Skills.GlobalDir,
+		SkillsThreshold:            cfg.Queue.Skills.Threshold,
+		SkillsTopK:                 cfg.Queue.Skills.TopK,
+		LegacyHandoffTimeout:       cfg.Queue.HITL.LegacyHandoffTimeout,
+		ToolTimeouts:               cfg.Queue.ToolTimeouts,
+		ToolRetries:                cfg.Queue.ToolRetries,
+		ExternalTools:              cfg.Agentic.ExternalTools,
+		ToolCredentials:            cfg.Agentic.ToolCredentials,
+		DisableCredentialDetection: cfg.Agentic.DisableCredentialDetection,
 		Audit: config.AuditConfig{
 			Enabled: cfg.Agentic.Audit.Enabled,
 			Path:    config.ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path),
@@ -157,16 +157,17 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 		ToolFailureStreak:       cfg.Agentic.ToolFailureStreak,
 		TokenUsageHook:          tokenHook,
 		TokenStore:              ts,
-		FileContext:               cfg.Agentic.FileContext,
-		FileContextCachePath: config.ResolveFileContextCachePath(cfg.HomeDir, cfg.Agentic.FileContext.CachePath),
-		Planning:                  cfg.Agentic.Planning,
-		TopicGuard:                cfg.Agentic.TopicGuard,
-		ModelRouting:              cfg.Agentic.ModelRouting,
-		ProviderBreakers:          deps.providerBreakers,
-		HealingDisabled:           !cfg.Healing.Enabled,
-		MaxHealingTasks:           cfg.Healing.MaxHealingTasks,
-		Legacy:                    cfg.Queue.Legacy,
-	})
+		FileContext:             cfg.Agentic.FileContext,
+		FileContextCachePath:    config.ResolveFileContextCachePath(cfg.HomeDir, cfg.Agentic.FileContext.CachePath),
+		Planning:                cfg.Agentic.Planning,
+		Tiered:                  cfg.Tiered,
+		TopicGuard:              cfg.Agentic.TopicGuard,
+		ModelRouting:            cfg.Agentic.ModelRouting,
+		ProviderBreakers:        deps.providerBreakers,
+		HealingDisabled:         !cfg.Healing.Enabled,
+		MaxHealingTasks:         cfg.Healing.MaxHealingTasks,
+		Legacy:                  cfg.Queue.Legacy,
+	}
 }
 
 func buildIntake(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *frontdesk.IntakeProcessor {
@@ -268,7 +269,7 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 		return nil, fmt.Errorf("gateway provider configs: %w", err)
 	}
 	return &http.Server{
-		Addr:    cfg.API.Address,
+		Addr: cfg.API.Address,
 		Handler: api.NewHandler(api.ServerDeps{
 			Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus,
 			Project: deps.project, Tasks: taskService, System: systemService,
@@ -281,6 +282,6 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 }
 
 type startOptions struct {
-	workers        int
-	skipLLMWarmup  bool
+	workers       int
+	skipLLMWarmup bool
 }
