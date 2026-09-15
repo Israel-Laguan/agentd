@@ -4,7 +4,7 @@
 | --- | --- |
 | Window | 2026-09-29 → 2026-10-13 |
 | Goal | Prove the house — restart and fallback degrade to board state, not silent stuck RUNNING; PRs stay ≤25 files / &lt;1k LOC |
-| Status | active |
+| Status | done |
 | Based on | [S01 retro](../S01-positioning-and-demo/retro/RETRO.md) |
 
 ## Goal
@@ -24,8 +24,8 @@ Ship the first runnable harness reliability demos on top of the S01 demo path. A
 | [T-006c](tasks/T-006c-restart-reconcile-fix.md) | task | Restart prod fix (if needed) | **C** | backlog | P0 |
 | [T-010a](tasks/T-010a-fallback-beat-docs.md) | task | Fallback beat docs/script | **D** | done | P1 |
 | [T-010b](tasks/T-010b-cascade-breaker-tests.md) | task | Cascade/breaker tests | **E** | done | P1 |
-| [T-011](tasks/T-011-litellm-first-run-docs.md) | task | LiteLLM-first README | **F** | ready | P1 |
-| [T-012](tasks/T-012-gemini-default-alias.md) | task | Drop stale gemini-2.5 default | **G** | ready | P2 |
+| [T-011](tasks/T-011-litellm-first-run-docs.md) | task | LiteLLM-first README | **F** | done | P1 |
+| [T-012](tasks/T-012-gemini-default-alias.md) | task | Drop stale gemini-2.5 default | **G** | done | P2 |
 | [T-001](../S01-positioning-and-demo/tasks/T-001-github-about-topics.md) | task | GitHub About/topics (carry) | **H** | carry | P0 |
 
 Wrappers (tracking only): [T-006](tasks/T-006-harness-reliability-doc.md), [T-010](tasks/T-010-provider-fallback-demo.md).

@@ -50,7 +50,7 @@ tasks/
 | Series | Next free (seeded) |
 | --- | --- |
 | US- | US-006 |
-| T- | T-013 |
+| T- | T-015 |
 | B- | B-001 |
 | SP- | SP-005 |
 
@@ -62,4 +62,4 @@ Update this table when you mint IDs.
 
 ## Linking to product plan
 
-Active sprint: [`sprints/S02-harness-reliability/`](sprints/S02-harness-reliability/) (see `PR-PLAN.md`). Sprint goals should cite phases in [`docs/product-plan.md`](../docs/product-plan.md). Spikes for tiered execution cite [`docs/tiered-execution.md`](../docs/tiered-execution.md).
+Active sprint: [`sprints/S03-tiered-foundation/`](sprints/S03-tiered-foundation/) (see `PR-PLAN.md`). Sprint goals should cite phases in [`docs/product-plan.md`](../docs/product-plan.md). Spikes for tiered execution cite [`docs/tiered-execution.md`](../docs/tiered-execution.md).

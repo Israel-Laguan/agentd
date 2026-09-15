@@ -3,11 +3,12 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | backlog |
+| Status | ready |
 | Priority | P1 |
-| Sprint | backlog |
+| Sprint | S03-tiered-foundation |
 | Parent | US-004 |
 | Estimate | M |
+| PR | **PR-A** — ≤10 files / <500 LOC |
 | Links | [tiered-execution M1](../../../docs/tiered-execution.md) |
 
 ## Goal
