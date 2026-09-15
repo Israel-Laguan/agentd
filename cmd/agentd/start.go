@@ -114,8 +114,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 
 	var tokenHook func(int)
 	if rollingLedger != nil && rollingLedger.Enabled() {
-		ledger := rollingLedger
-		tokenHook = func(tokens int) { ledger.LogCall(tokens) }
+		tokenHook = func(tokens int) { rollingLedger.LogCall(tokens) }
 	}
 	opts := buildWorkerOptions(store, deps, cfg, userPrefsPath, tokenHook)
 	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, opts)

@@ -194,10 +194,11 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 // PackFilePath returns the workspace-relative file path for a context pack
 // at the given version.
 func PackFilePath(version int) string {
-	if version <= 0 {
-		version = ContextPackVersion
+	v := version
+	if v <= 0 {
+		v = ContextPackVersion
 	}
-	return fmt.Sprintf(ContextPackFileName, version)
+	return fmt.Sprintf(ContextPackFileName, v)
 }
 
 // WriteContextPack serializes the pack to a JSON file in the workspace dir.
