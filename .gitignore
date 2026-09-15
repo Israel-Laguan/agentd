@@ -47,3 +47,7 @@ node_modules/
 .kiro/
 .windsurf/
 opencode.json
+
+# Python
+__pycache__/
+*.pyc

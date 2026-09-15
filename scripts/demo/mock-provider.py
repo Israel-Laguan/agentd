@@ -21,10 +21,12 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
     def do_POST(self):
         n = int(self.headers.get("Content-Length", "0"))
+        body = b""
         while n > 0:
-            chunk = self.rfile.read(n)
+            chunk = self.rfile.read(min(n, 65536))
             if not chunk:
                 break
+            body += chunk
             n -= len(chunk)
         payload = {"id":"chatcmpl-mock","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"fallback ok from secondary"},"finish_reason":"stop"}],"model":"mock-secondary"}
         raw = json.dumps(payload).encode()
@@ -37,7 +39,13 @@ class H(BaseHTTPRequestHandler):
 def run():
     global port, log_path
     port = int(os.environ["MOCK_PORT"])
+    if not (1024 <= port <= 65535):
+        print(f"MOCK_PORT must be 1024-65535, got {port}", file=sys.stderr)
+        sys.exit(1)
     log_path = os.environ["MOCK_LOG"]
+    if not log_path or ".." in log_path or not log_path.startswith("/"):
+        print(f"MOCK_LOG must be an absolute path without '..': {log_path}", file=sys.stderr)
+        sys.exit(1)
     HTTPServer(("127.0.0.1", port), H).serve_forever()
 
 def api_status(api_url):
@@ -54,6 +62,10 @@ def api_projects(api_url):
 
 def api_tasks(api_url, project_id):
     try:
+        import re
+        if not re.match(r'^[a-zA-Z0-9_\-]+$', project_id):
+            print(f"Invalid project_id: {project_id}", file=sys.stderr)
+            return None
         return json.load(urllib.request.urlopen(f"{_normalize_url(api_url)}/api/v1/projects/{project_id}/tasks?include_healing=true", timeout=5))
     except Exception:
         return None

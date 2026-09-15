@@ -10,7 +10,7 @@ API_ADDR="${API_ADDR:-127.0.0.1:18765}"
 API_URL="http://${API_ADDR}"
 
 validate_inputs() {
-  if [[ "$BIN" == *";"* || "$BIN" == *"|"* || "$BIN" == *"&"* || "$BIN" == *"\`"* ]]; then
+  if [[ "$BIN" =~ [\;\|\&\`\$\(\)\{\}\<\>] ]]; then
     echo "invalid BIN contains shell metacharacters" >&2
     return 1
   fi
@@ -23,13 +23,13 @@ validate_inputs() {
     local host_port="${addr%\]}"
     local host="${host_port%%\]*}"
     local port="${host_port##*:}"
-    if [[ -z "$port" ]] || ! [[ "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+    if [[ -z "$port" ]] || ! [[ "$port" =~ ^[0-9]+$ ]] || (( 10#$port < 1 || 10#$port > 65535 )); then
       echo "invalid API_ADDR=$API_ADDR (bad port)" >&2
       return 1
     fi
   elif [[ "$API_ADDR" =~ : ]]; then
     local port="${API_ADDR##*:}"
-    if ! [[ "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+    if ! [[ "$port" =~ ^[0-9]+$ ]] || (( 10#$port < 1 || 10#$port > 65535 )); then
       echo "invalid API_ADDR=$API_ADDR (port must be 1-65535)" >&2
       return 1
     fi
@@ -111,7 +111,6 @@ start_daemon() {
 }
 
 cmd_prepare() {
-  validate_inputs || return 1
   ensure_bin
   mkdir -p "$HOME_DIR"
   if [[ ! -f "$HOME_DIR/config.yaml" ]]; then
