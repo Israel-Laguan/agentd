@@ -49,7 +49,7 @@ tasks/
 
 | Series | Next free (seeded) |
 | --- | --- |
-| US- | US-006 |
+| US- | US-007 |
 | T- | T-015 |
 | B- | B-001 |
 | SP- | SP-005 |

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestContextPack_Validate_Valid(t *testing.T) {
@@ -343,6 +344,9 @@ func TestNewContextPack(t *testing.T) {
 	}
 	if cp.Budget.PathCount != 2 {
 		t.Fatalf("Budget.PathCount = %d, want 2", cp.Budget.PathCount)
+	}
+	if cp.Budget.CharCount != utf8.RuneCountInString("gathered info") {
+		t.Fatalf("Budget.CharCount = %d, want %d", cp.Budget.CharCount, utf8.RuneCountInString("gathered info"))
 	}
 	if cp.CreatedAt.IsZero() {
 		t.Fatal("CreatedAt should not be zero")

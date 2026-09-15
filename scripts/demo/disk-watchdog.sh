@@ -42,15 +42,19 @@ fi
 
 # rewrite_threshold_config keeps config.yaml aligned with the derived threshold.
 rewrite_threshold_config() {
-  if grep -q "free_threshold_percent" "$HOME_DIR/config.yaml" 2>/dev/null; then
-    python3 -c "
+  python3 -c "
 import sys, pathlib, re
 p=sys.argv[1]; thr=sys.argv[2]
 t=pathlib.Path(p).read_text()
-t=re.sub(r'free_threshold_percent:\s*[0-9.]+', f'free_threshold_percent: {thr}', t)
+if re.search(r'free_threshold_percent:\s*[0-9.]+', t):
+    t=re.sub(r'free_threshold_percent:\s*[0-9.]+', f'free_threshold_percent: {thr}', t)
+else:
+    t=t.replace('healing:\n  enabled: false', f'disk:\n  free_threshold_percent: {thr}\nhealing:\n  enabled: false')
 pathlib.Path(p).write_text(t)
-" "$HOME_DIR/config.yaml" "$THRESHOLD" 2>/dev/null || true
-  fi
+" "$HOME_DIR/config.yaml" "$THRESHOLD" 2>/dev/null || {
+    echo "Failed to rewrite config.yaml with disk threshold" >&2
+    return 1
+  }
 }
 
 usage() {
@@ -105,7 +109,7 @@ healing:
 YAML
   else
     # Ensure existing config uses the derived threshold.
-    rewrite_threshold_config
+    rewrite_threshold_config || return 1
   fi
   # Watchdog interval stays at the daemon default (see WATCHDOG_INTERVAL note);
   # the demo polls the API rather than waiting on a cron trigger.
@@ -123,7 +127,7 @@ cmd_inject_fault() {
     THRESHOLD="$(derive_threshold)"
   fi
   # Update config.yaml with the derived threshold so the daemon uses it.
-  rewrite_threshold_config
+  rewrite_threshold_config || return 1
   echo "Fault injection: scratch dir $HOME_DIR/scratch created; threshold ${THRESHOLD}% derived from observed free space guarantees free_percent < threshold."
   echo "Config updated to free_threshold_percent: ${THRESHOLD} (no real disk fill)."
 }
@@ -155,7 +159,7 @@ for p in raw.get('data', raw):
     echo "Failed to fetch tasks for _system project" >&2
     return 1
   }
-  local probe_result
+local probe_result=""
   probe_result=$(echo "$tasks_resp" | python3 -c "
 import sys, json
 raw = json.load(sys.stdin)
@@ -170,7 +174,7 @@ if len(matches)!=1:
     print(f'FAIL: expected exactly 1 Disk space critical task, found {len(matches)} (dedup broken)'); sys.exit(3)
 t=human[0]
 print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={len(matches)}\")
-" 2>/dev/null)
+" 2>/dev/null) || true
   local probe_status=$?
   if (( probe_status != 0 )); then
     echo "$probe_result"
