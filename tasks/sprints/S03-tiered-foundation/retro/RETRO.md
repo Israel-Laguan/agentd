@@ -17,7 +17,6 @@
 ## Went poorly
 
 - T-014 (memory-recall.sh) was not committed with the rest of the PR-D work — needed a follow-up prompt. Status hygiene still lags the work (task files not flipped to `done` in the same commit).
-- T-001 (GitHub About/topics) carries again — same `gh` auth gap since S01. Should either fix the auth or move to `cancelled`.
 - No cost/latency baseline captured for M1/M2 — we can't yet measure the token/$ improvement that M3-M5 promises. Need a harness before the pipeline gets complex.
 
 ## Surprises
@@ -31,12 +30,10 @@
 | Action | Owner | Due |
 | --- | --- | --- |
 | Flip T-007/T-008/T-013/T-014 + US-004 to `done` in task files | sprint owner | S03 close |
-| Decide T-001 fate: fix `gh` auth or cancel | repo admin | S04 planning |
 | Groom M3-M5 for S04: splitter, worker allowlists, escalation ladder, cost harness | facilitator | before S04 start |
 | Capture cost/latency baseline on a fixed task pack before M3 lands | sprint owner | S04 early |
 
 ## Carry into next sprint
 
 - **S04 = tiered M3-M5** (`decision → execute → verify` DAG with allowlists, escalation ladder + HUMAN handoff, cost/latency harness demo) — the hard part of the cost wedge.
-- T-001 (GitHub About/topics) carries again or gets cancelled — operator's call.
 - Process carry: flip task statuses in the same commit as the work (S02 + S03 retro action, still open).

@@ -21,7 +21,6 @@ Complete the cost wedge (product-plan Phase 5, milestones M3–M5) on top of the
 | T-016 | task | Tiered M3 — Worker modes (context/decision/execute/verify) | **B** | ready | P1 |
 | T-017 | task | Tiered M4 — Escalation ladder + NEEDS_CONTEXT | **C** | ready | P1 |
 | T-018 | task | Tiered M5 — Cost/latency harness demo | **D** | ready | P2 |
-| T-001 | task | GitHub About/topics (carry) | **E** | carry | P0 |
 
 ## Suggested order
 
@@ -29,7 +28,6 @@ Complete the cost wedge (product-plan Phase 5, milestones M3–M5) on top of the
 PR-A (T-015 DAG splitter) → PR-B (T-016 worker modes)
 PR-C (T-017 escalation) after PR-B
 PR-D (T-018 cost harness) after PR-C
-PR-E (T-001) when gh auth works
 ```
 
 ## Explicitly out of scope
@@ -47,7 +45,6 @@ PR-E (T-001) when gh auth works
 - Worker modes need tool allowlists per step kind — broad search forbidden outside pack paths
 - Escalation ladder must degrade to HUMAN without a stuck loop (S02 reliability story)
 - Cost harness needs a fixed task pack for reproducible measurement — cannot use random tasks
-- T-001 still gated on `gh` auth (carried since S01)
 
 ## Retro
 

@@ -11,6 +11,7 @@ API_URL="http://${API_ADDR}"
 MOCK_PORT="${MOCK_PORT:-18777}"
 MOCK_PID_FILE="$HOME_DIR/mock.pid"
 PYTHON="${ROOT}/scripts/demo/mock-provider.py"
+systemTimeoutMessage="[SYSTEM] Communication with AI core timed out. Please try your request again."
 
 validate_inputs() {
   if ! [[ "$MOCK_PORT" =~ ^[0-9]+$ ]] || (( MOCK_PORT < 1024 || MOCK_PORT > 65535 )); then
@@ -206,47 +207,43 @@ cmd_probe_cascade() {
 }
 
 cmd_probe_breaker() {
-  echo "=== breaker exhaustion via gateway $API_URL/v1/chat/completions ==="
-  local attempt breaker_state="" error_body=""
-  for attempt in 1 2 3 4 5; do
-    local resp
-    if ! resp="$(curl -fsS -m 5 -X POST "$API_URL/v1/chat/completions" \
-      -H 'Content-Type: application/json' \
-      -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' 2>&1)"; then
-      error_body="$resp"
-      echo "attempt $attempt: gateway returned error (expected for dead primary)"
-    else
-      echo "attempt $attempt: unexpected success" >&2
-    fi
-    local status
-    status="$(curl -fsS -m 2 "$API_URL/api/v1/system/status" 2>/dev/null || true)"
-    if echo "$status" | grep -Fq '"breaker":{"state":"OPEN"'; then
-      breaker_state="$status"
-      echo "breaker telemetry: $status"
-      break
-    fi
-    sleep 0.5
-  done
-  if ! curl -sS -m 2 "http://127.0.0.1:1/v1/models" >/dev/null 2>&1; then
-    echo "primary dead port unreachable (good)"
-  else
-    echo "unexpected: dead port answered" >&2; return 1
-  fi
-  if [[ -z "$breaker_state" ]]; then
-    echo "FAIL: breaker never reached OPEN state after $attempt attempts" >&2
-    return 1
-  fi
-  echo "$breaker_state" | grep -q "failure_count" && echo "found failure_count" || echo "no failure_count in status (check daemon version)"
-  echo "$breaker_state" | grep -q "last_error" && echo "found last_error" || true
-  if [[ -z "$error_body" ]]; then
-    echo "FAIL: no response body captured with ErrLLMUnreachable" >&2
-    return 1
-  fi
-  echo "Pass criterion B: ErrLLMUnreachable + breaker OPEN after exhaustion."
-  echo "Coverage: circuit_breaker.feature + outage_handoff.feature."
-  API_URL="$API_URL" python3 "$PYTHON" projects 2>/dev/null || true
-  [[ -f "$HOME_DIR/daemon.log" ]] && { echo "=== recent daemon log ==="; tail -n 20 "$HOME_DIR/daemon.log" || true; }
-}
+   echo "=== breaker exhaustion via gateway $API_URL/v1/chat/completions ==="
+   local attempt breaker_state=""
+   for attempt in 1 2 3 4 5; do
+     local resp
+     if resp="$(curl -fsS -m 5 -X POST "$API_URL/v1/chat/completions" \
+       -H 'Content-Type: application/json' \
+       -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' 2>&1)"; then
+       echo "$resp" | grep -Fq "$systemTimeoutMessage" || { echo "attempt $attempt: response missing systemTimeoutMessage" >&2; }
+       echo "attempt $attempt: got HTTP 200 with systemTimeoutMessage (expected for ErrLLMUnreachable)"
+     else
+       echo "attempt $attempt: curl error (unexpected): $resp" >&2
+     fi
+     local status
+     status="$(curl -fsS -m 2 "$API_URL/api/v1/system/status" 2>/dev/null || true)"
+     if echo "$status" | grep -Fq '"breaker":{"state":"OPEN"'; then
+       breaker_state="$status"
+       echo "breaker telemetry: $status"
+       break
+     fi
+     sleep 0.5
+   done
+   if ! curl -sS -m 2 "http://127.0.0.1:1/v1/models" >/dev/null 2>&1; then
+     echo "primary dead port unreachable (good)"
+   else
+     echo "unexpected: dead port answered" >&2; return 1
+   fi
+   if [[ -z "$breaker_state" ]]; then
+     echo "FAIL: breaker never reached OPEN state after $attempt attempts" >&2
+     return 1
+   fi
+   echo "$breaker_state" | grep -q "failure_count" && echo "found failure_count" || echo "no failure_count in status (check daemon version)"
+   echo "$breaker_state" | grep -q "last_error" && echo "found last_error" || true
+   echo "Pass criterion B: ErrLLMUnreachable (HTTP 200 + systemTimeoutMessage) + breaker OPEN after exhaustion."
+   echo "Coverage: circuit_breaker.feature + outage_handoff.feature."
+   API_URL="$API_URL" python3 "$PYTHON" projects 2>/dev/null || true
+   [[ -f "$HOME_DIR/daemon.log" ]] && { echo "=== recent daemon log ==="; tail -n 20 "$HOME_DIR/daemon.log" || true; }
+ }
 
 cmd_status() {
   echo "=== system/status ==="
