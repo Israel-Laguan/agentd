@@ -41,7 +41,7 @@ func TestBeat1UncleanKillLeavesNoStuckRunning(t *testing.T) {
 	// Explicit board signal (handoff / recovery events), not a silent hang.
 	var sawRecovery, sawHandoff bool
 	for _, ev := range sink.events {
-		if ev.Type == models.EventTypeRecovery || strings.Contains(ev.Payload, "ghost") {
+		if ev.Type == models.EventTypeRecovery && (strings.Contains(ev.Payload, "Recovered Ghost Task") || strings.Contains(ev.Payload, "reset ghost task")) {
 			sawRecovery = true
 		}
 		if ev.Type == RebootRecoveryHandoffEventType {

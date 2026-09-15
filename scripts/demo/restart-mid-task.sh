@@ -52,7 +52,7 @@ start_daemon() {
   # Poll API briefly; daemon may still be binding.
   local i
   for i in 1 2 3 4 5; do
-    if curl -fsS -m 2 "$API_URL/api/v1/system/status" >/dev/null 2>&1; then
+    if curl -fsS -m 2 "$API_URL/api/v1/system/status" >/dev/null 2>&1 && [[ "$(pid_for_home)" == "$pid" ]]; then
       break
     fi
     sleep 0.5

@@ -32,4 +32,4 @@ Automated coverage that unclean stop + restart cannot leave a silent stuck `RUNN
 
 Existing cues: `ghost_reconciliation.feature`, `heartbeat_reconciliation.feature`, `ReconcileGhostTasks` / `ReconcileStaleTasks`.
 
-Added `internal/queue/features/restart_mid_task.feature`, `internal/queue/restart_mid_task_test.go`, and `TestReconcileGhostTasks*` in `internal/kanban/task_heartbeat_test.go`. T-006c not needed.
+Added `internal/queue/features/restart_mid_task.feature` and `internal/queue/restart_mid_task_test.go`. T-006c not needed.

@@ -26,6 +26,9 @@ func TestBeat2CascadeToSecondary(t *testing.T) {
 	if resp.ProviderUsed != "secondary" {
 		t.Fatalf("ProviderUsed = %q, want secondary", resp.ProviderUsed)
 	}
+	if resp.Content != "fallback ok" {
+		t.Fatalf("Content = %q, want %q", resp.Content, "fallback ok")
+	}
 	if primary.calls != 1 {
 		t.Fatalf("primary calls = %d, want 1", primary.calls)
 	}
