@@ -322,7 +322,7 @@ func TestReadContextPack_MissingFile(t *testing.T) {
 
 func TestNewContextPack(t *testing.T) {
 	t.Parallel()
-	cp := NewContextPack("t1", "p1", "gathered info", []string{"a.go", "b.go"})
+	cp := NewContextPack("t1", "p1", "gathered info", []string{"a.go", "b.go"}, ContextPackConfig{MaxPaths: 40, MaxChars: 48000})
 	if cp.Version != 1 {
 		t.Fatalf("Version = %d, want 1", cp.Version)
 	}
@@ -348,7 +348,7 @@ func TestNewContextPack(t *testing.T) {
 
 func TestContextPack_JSON_RoundTrip_RawBytes(t *testing.T) {
 	t.Parallel()
-	cp := NewContextPack("t42", "", "summary", []string{"x.go"})
+	cp := NewContextPack("t42", "", "summary", []string{"x.go"}, ContextPackConfig{MaxPaths: 40, MaxChars: 48000})
 	cp.Excerpts = append(cp.Excerpts, ContextExcerpt{Path: "x.go", Note: "entry"})
 	cp.Constraints = []string{"no rewrite"}
 	data, err := json.Marshal(cp)

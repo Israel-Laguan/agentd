@@ -143,6 +143,17 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 	}
 	if len(cp.Paths) > cfg.MaxPaths {
 		cp.Paths = cp.Paths[:cfg.MaxPaths]
+		allowed := make(map[string]struct{}, len(cp.Paths))
+		for _, p := range cp.Paths {
+			allowed[p] = struct{}{}
+		}
+		kept := cp.Excerpts[:0]
+		for _, e := range cp.Excerpts {
+			if _, ok := allowed[e.Path]; ok {
+				kept = append(kept, e)
+			}
+		}
+		cp.Excerpts = kept
 		truncated = true
 	}
 	cp.Budget.MaxPaths = cfg.MaxPaths
@@ -165,11 +176,14 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 			cp.Budget.CharCount = charCount
 			return truncated, fmt.Errorf("context pack required content %d chars exceeds budget %d (summary+excerpts+commands_run)", required, cfg.MaxChars)
 		}
-		// Required fits — trim optional content.
+		// Required fits — trim optional content incrementally.
 		cp.Unknowns = nil
-		cp.Constraints = nil
-		truncated = true
 		cp.Budget.CharCount = cp.CharCount()
+		if cp.Budget.CharCount > cfg.MaxChars {
+			cp.Constraints = nil
+			cp.Budget.CharCount = cp.CharCount()
+		}
+		truncated = true
 		if cp.Budget.CharCount > cfg.MaxChars {
 			return truncated, fmt.Errorf("context pack still over budget after trimming optional content: %d > %d", cp.Budget.CharCount, cfg.MaxChars)
 		}
@@ -213,11 +227,20 @@ func ReadContextPack(path string) (*ContextPack, error) {
 	if err := json.Unmarshal(data, &cp); err != nil {
 		return nil, fmt.Errorf("unmarshal context pack: %w", err)
 	}
+	if err := cp.Validate(); err != nil {
+		return nil, fmt.Errorf("validate context pack: %w", err)
+	}
 	return &cp, nil
 }
 
 // NewContextPack creates a minimal valid ContextPack for the given task.
-func NewContextPack(taskID, parentTaskID, summary string, paths []string) *ContextPack {
+func NewContextPack(taskID, parentTaskID, summary string, paths []string, cfg ContextPackConfig) *ContextPack {
+	if cfg.MaxPaths <= 0 {
+		cfg.MaxPaths = DefaultMaxContextPackPaths
+	}
+	if cfg.MaxChars <= 0 {
+		cfg.MaxChars = DefaultMaxContextPackChars
+	}
 	return &ContextPack{
 		Version:      ContextPackVersion,
 		TaskID:       taskID,
@@ -226,8 +249,8 @@ func NewContextPack(taskID, parentTaskID, summary string, paths []string) *Conte
 		Summary:      summary,
 		Paths:        paths,
 		Budget: ContextBudget{
-			MaxPaths:  DefaultMaxContextPackPaths,
-			MaxChars:  DefaultMaxContextPackChars,
+			MaxPaths:  cfg.MaxPaths,
+			MaxChars:  cfg.MaxChars,
 			PathCount: len(paths),
 		},
 	}

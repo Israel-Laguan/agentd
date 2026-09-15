@@ -12,7 +12,9 @@ BIN="${BIN:-$ROOT/bin/agentd}"
 HOME_DIR="${AGENTD_HOME:-/tmp/agentd-disk-demo}"
 API_ADDR="${API_ADDR:-127.0.0.1:18785}"
 API_URL="http://${API_ADDR}"
-WATCHDOG_INTERVAL="${WATCHDOG_INTERVAL:-5s}"
+# NOTE: WATCHDOG_INTERVAL is a configurable daemon schedule knob but does NOT
+# change the actual cron/daemon polling interval (default ~10m). The demo
+# relies on polling via the API rather than a timed cron trigger.
 
 # Derive THRESHOLD deterministically so free_percent < threshold is guaranteed.
 derive_threshold() {
@@ -29,11 +31,11 @@ derive_threshold() {
 if [[ -n "${DISK_THRESHOLD:-}" ]]; then
   THRESHOLD="$DISK_THRESHOLD"
 else
-  # Lazy derive: if HOME_DIR exists use observed free, else 99 ensures trigger on healthy FS.
+  # Lazy derive: if HOME_DIR exists use observed free, else 100 guarantees trigger.
   if [[ -d "$HOME_DIR" ]]; then
     THRESHOLD="$(derive_threshold)"
   else
-    THRESHOLD="99"
+    THRESHOLD="100"
   fi
 fi
 
@@ -190,6 +192,16 @@ cmd_inject_fault() {
   if [[ -z "${DISK_THRESHOLD:-}" ]]; then
     THRESHOLD="$(derive_threshold)"
   fi
+  # Update config.yaml with the derived threshold so the daemon uses it.
+  if [[ -f "$HOME_DIR/config.yaml" ]]; then
+    python3 -c "
+import sys, pathlib, re
+p=sys.argv[1]; thr=sys.argv[2]
+t=pathlib.Path(p).read_text()
+t=re.sub(r'free_threshold_percent:\s*[0-9.]+', f'free_threshold_percent: {thr}', t)
+pathlib.Path(p).write_text(t)
+" "$HOME_DIR/config.yaml" "$THRESHOLD" 2>/dev/null || true
+  fi
   echo "Fault injection: scratch dir $HOME_DIR/scratch created; threshold ${THRESHOLD}% derived from observed free space guarantees free_percent < threshold."
   echo "Config updated to free_threshold_percent: ${THRESHOLD} (no real disk fill)."
 }
@@ -198,14 +210,15 @@ cmd_probe() {
   validate_inputs || return 1
   echo "Checking for _system HUMAN task..."
   local resp
-  resp=$(curl -fsS -m 5 "$API_URL/api/v1/projects" 2>/dev/null) || {
+  resp=$(curl -fsS -m 5 "$API_URL/api/v1/projects?include_system=true" 2>/dev/null) || {
     echo "API not reachable at $API_URL — is the daemon running?" >&2
     return 1
   }
   local system_pid
   system_pid=$(echo "$resp" | python3 -c "
 import sys, json
-projects = json.load(sys.stdin)
+raw = json.load(sys.stdin)
+projects = raw.get('data', raw)
 for p in projects:
     if p.get('name') == '_system':
         print(p['id'])
@@ -224,7 +237,8 @@ for p in projects:
   local probe_result
   probe_result=$(echo "$tasks_resp" | python3 -c "
 import sys, json
-tasks = json.load(sys.stdin)
+raw = json.load(sys.stdin)
+tasks = raw.get('data', raw)
 matches = [t for t in tasks if 'Disk space critical' in t.get('title','')]
 human = [t for t in matches if t.get('assignee')=='HUMAN']
 count = len(matches)
@@ -261,9 +275,10 @@ print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={
   else
     # Try task events via API if SSE not available.
     local events_resp
-    events_resp=$(curl -fsS -m 5 "$API_URL/api/v1/projects/$system_pid/tasks" 2>/dev/null | python3 -c "
+     events_resp=$(curl -fsS -m 5 "$API_URL/api/v1/projects/$system_pid/tasks" 2>/dev/null | python3 -c "
 import sys, json
-tasks=json.load(sys.stdin)
+raw=json.load(sys.stdin)
+tasks=raw.get('data', raw)
 for t in tasks:
     if 'Disk space critical' in t.get('title',''):
         print(t.get('id',''))
@@ -295,7 +310,8 @@ for t in tasks:
   local dedup_count
   dedup_count=$(echo "$tasks_resp2" | python3 -c "
 import sys, json
-tasks=json.load(sys.stdin)
+raw=json.load(sys.stdin)
+tasks=raw.get('data', raw)
 print(sum(1 for t in tasks if 'Disk space critical' in t.get('title','')))
 " 2>/dev/null) || dedup_count="?"
   if [[ "$dedup_count" != "1" ]]; then
@@ -318,9 +334,10 @@ cmd_status() {
   curl -fsS -m 5 "$API_URL/api/v1/system/status" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "(status unavailable)"
   echo ""
   echo "--- All projects ---"
-  curl -fsS -m 5 "$API_URL/api/v1/projects" 2>/dev/null | python3 -c "
+  curl -fsS -m 5 "$API_URL/api/v1/projects?include_system=true" 2>/dev/null | python3 -c "
 import sys, json
-projects = json.load(sys.stdin)
+raw = json.load(sys.stdin)
+projects = raw.get('data', raw)
 for p in projects:
     print(f\"  {p['id']}  {p['name']}  ({p.get('status', '?')})\")
 " 2>/dev/null || echo "(projects unavailable)"

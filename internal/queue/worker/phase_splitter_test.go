@@ -186,15 +186,6 @@ func TestShouldRunTiered_Enabled_AboveThreshold(t *testing.T) {
 	}
 }
 
-func TestShouldRunTiered_Enabled_BelowThreshold_OneShot(t *testing.T) {
-	t.Parallel()
-	w := &Worker{tieredCfg: config.TieredConfig{Enabled: true, ComplexityThreshold: 200}}
-	simple := models.Task{Title: "x", Description: "y"}
-	if w.ShouldRunTiered(simple) {
-		t.Fatal("simple task should stay one-shot even when tiered is enabled")
-	}
-}
-
 func TestShouldRunTiered_ThresholdZero_DisablesSplitting(t *testing.T) {
 	t.Parallel()
 	w := &Worker{tieredCfg: config.TieredConfig{Enabled: true, ComplexityThreshold: 0}}

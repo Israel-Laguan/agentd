@@ -9,12 +9,6 @@ const (
 	DefaultTieredMaxChars           = 48000
 )
 
-// TieredModelTarget maps a pipeline step kind to a provider and model.
-type TieredModelTarget struct {
-	Provider string
-	Model    string
-}
-
 // TieredContextPackConfig holds budget defaults for ContextPack creation.
 type TieredContextPackConfig struct {
 	MaxPaths int
@@ -32,9 +26,21 @@ type TieredConfig struct {
 	// Unset while enabled defaults to 200.
 	ComplexityThreshold int
 	// ContextPack holds budget limits for the sealed handoff artifact.
+	// These values are wired into NewContextPack and EnforceBudget calls.
 	ContextPack TieredContextPackConfig
-	// Models maps step kinds to provider/model overrides (v1 — optional).
-	Models map[string]TieredModelTarget
+}
+
+// ContextPackConfig returns the budget config from the tiered config,
+// with defaults applied. This is wired into NewContextPack and EnforceBudget.
+func (tc TieredConfig) ContextPackConfig() TieredContextPackConfig {
+	cfg := tc.ContextPack
+	if cfg.MaxPaths <= 0 {
+		cfg.MaxPaths = DefaultTieredMaxPaths
+	}
+	if cfg.MaxChars <= 0 {
+		cfg.MaxChars = DefaultTieredMaxChars
+	}
+	return cfg
 }
 
 func setTieredDefaults(v *viper.Viper) {
@@ -57,15 +63,6 @@ func loadTieredConfig(v *viper.Viper) TieredConfig {
 	if maxChars <= 0 {
 		maxChars = DefaultTieredMaxChars
 	}
-	models := make(map[string]TieredModelTarget)
-	for _, kind := range []string{"context", "decision", "execute", "verify", "escalate"} {
-		prefix := "tiered.models." + kind
-		provider := v.GetString(prefix + ".provider")
-		model := v.GetString(prefix + ".model")
-		if provider != "" || model != "" {
-			models[kind] = TieredModelTarget{Provider: provider, Model: model}
-		}
-	}
 	return TieredConfig{
 		Enabled:             v.GetBool("tiered.enabled"),
 		ComplexityThreshold: threshold,
@@ -73,6 +70,5 @@ func loadTieredConfig(v *viper.Viper) TieredConfig {
 			MaxPaths: maxPaths,
 			MaxChars: maxChars,
 		},
-		Models: models,
 	}
 }

@@ -1,9 +1,9 @@
-# US-004: Tiered execution pipeline (continued)
+# US-006: Tiered execution pipeline (continued)
 
 | Field | Value |
 | --- | --- |
 | Type | story |
-| Status | in-progress |
+| Status | ready |
 | Sprint | S04-tiered-pipeline |
 | Parent | product-plan Phase 5 |
 

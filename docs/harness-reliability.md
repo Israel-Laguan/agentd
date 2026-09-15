@@ -241,9 +241,9 @@ export API_ADDR=127.0.0.1:18795
 ./scripts/demo/memory-recall.sh seed "EOFError when parsing JSON" "Add try/except around json.loads with fallback to raw text"
 # expect: HTTP 201 saved; payload built with json.dumps so special chars are safe
 
-# C) probe: verify retrieval + formatting (asserts seeded symptom/solution in FormatPreferences output, not just count)
+# C) probe: verify daemon health and retrieval + formatting assertion
 ./scripts/demo/memory-recall.sh probe
-# expect: memory section total>0 preferences>0 + simulated FormatPreferences contains symptom/solution
+# expect: runtime memory section present + FormatPreferences contains symptom/solution
 
 # D) cleanup
 ./scripts/demo/memory-recall.sh stop
