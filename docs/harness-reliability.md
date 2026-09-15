@@ -125,7 +125,7 @@ export API_ADDR=127.0.0.1:18776
 ./scripts/demo/provider-fallback.sh stop
 ```
 
-### Beat 2 2014 What 201cgood201d looks like
+### Beat 2 — What "good" looks like
 
 | Setup | Expected |
 | --- | --- |
