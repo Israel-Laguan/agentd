@@ -4,7 +4,7 @@
 | --- | --- |
 | Window | 2026-10-14 → 2026-10-28 |
 | Goal | Land tiered execution M1–M2 (no behavior change when off) and close the Phase 2 reliability story with disk-watchdog and memory-recall beats |
-| Status | planned |
+| Status | done |
 | Based on | [S02 retro](../S02-harness-reliability/retro/RETRO.md) |
 
 ## Goal
@@ -17,12 +17,12 @@ Start the cost wedge (product-plan Phase 5, milestones M1–M2) on top of the S0
 
 | ID | Type | Title | PR | Status | Priority |
 | --- | --- | --- | --- | --- | --- |
-| [US-004](stories/US-004-tiered-execution-mvp.md) | story | Tiered execution MVP | — | ready | P1 |
-| [T-007](tasks/T-007-tiered-m1-config-gate.md) | task | Tiered M1 — config + complexity gate | **A** | ready | P1 |
-| [T-008](tasks/T-008-contextpack-schema.md) | task | Tiered M2 — ContextPack schema + reader | **B** | ready | P1 |
-| [T-013](tasks/T-013-disk-watchdog-beat.md) | task | Beat 2.3 — disk/resource watchdog | **C** | ready | P1 |
-| [T-014](tasks/T-014-memory-recall-beat.md) | task | Beat 2.4 — memory recall on repeat failure | **D** | ready | P2 |
-| [T-001](../S01-positioning-and-demo/tasks/T-001-github-about-topics.md) | task | GitHub About/topics (carry) | — | in-progress | P0 |
+| [US-004](stories/US-004-tiered-execution-mvp.md) | story | Tiered execution MVP | — | in-progress | P1 |
+| [T-007](tasks/T-007-tiered-m1-config-gate.md) | task | Tiered M1 — config + complexity gate | **A** | done | P1 |
+| [T-008](tasks/T-008-contextpack-schema.md) | task | Tiered M2 — ContextPack schema + reader | **B** | done | P1 |
+| [T-013](tasks/T-013-disk-watchdog-beat.md) | task | Beat 2.3 — disk/resource watchdog | **C** | done | P1 |
+| [T-014](tasks/T-014-memory-recall-beat.md) | task | Beat 2.4 — memory recall on repeat failure | **D** | done | P2 |
+| [T-001](../S01-positioning-and-demo/tasks/T-001-github-about-topics.md) | task | GitHub About/topics (carry) | **E** | in-progress | P0 |
 
 ## Suggested order
 

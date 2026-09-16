@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P1 |
 | Sprint | S03-tiered-foundation |
 | Parent | US-004 |

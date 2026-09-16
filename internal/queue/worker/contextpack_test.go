@@ -378,6 +378,38 @@ func TestReadContextPack_BackfillsMissingBudgetCounters(t *testing.T) {
 	}
 }
 
+func TestReadContextPack_ExplicitZeroCountersFail(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cases := map[string]string{
+		"explicit path_count zero": `{
+  "version": 1,
+  "task_id": "zero-path",
+  "created_at": "2026-01-15T10:00:00Z",
+  "summary": "zero path",
+  "paths": ["a.go", "b.go"],
+  "budget": {"max_paths": 40, "max_chars": 48000, "path_count": 0, "char_count": 9}
+}`,
+		"explicit char_count zero": `{
+  "version": 1,
+  "task_id": "zero-char",
+  "created_at": "2026-01-15T10:00:00Z",
+  "summary": "zero char",
+  "paths": ["a.go"],
+  "budget": {"max_paths": 40, "max_chars": 48000, "path_count": 1, "char_count": 0}
+}`,
+	}
+	for name, doc := range cases {
+		path := filepath.Join(dir, strings.ReplaceAll(name, " ", "_")+".json")
+		if err := os.WriteFile(path, []byte(doc), 0o644); err != nil {
+			t.Fatalf("os.WriteFile: %v", err)
+		}
+		if _, err := ReadContextPack(path); err == nil {
+			t.Fatalf("%s: expected explicit zero counter to fail validation", name)
+		}
+	}
+}
+
 func TestContextPack_Validate_MismatchedCountersStillFail(t *testing.T) {
 	t.Parallel()
 	// BackfillBudgetCounters only fills zero-valued counters; an explicit

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P2 |
 | Sprint | S03-tiered-foundation |
 | Parent | US-003 (close Phase 2) |
@@ -29,11 +29,15 @@ Prove product-plan Phase 2.4: on a repeated failure class, Librarian/FTS surface
 
 ## Done when
 
-- [ ] A repeated failure class retrieves the seeded `{symptom, solution}` via recall/FTS in tests
-- [ ] Scenario documented and reproducible offline
-- [ ] Linked from `docs/harness-reliability.md`
-- [ ] Diff within budget
+- [x] A repeated failure class retrieves the seeded `{symptom, solution}` via recall/FTS in tests — `internal/memory/recall_test.go` (`TestRetriever_NamespaceIsolation`, `TestRetriever_TimeoutFallback`, `TestRetriever_NilRetriever`, `TestFormatLessons`), features `internal/memory/features/recall_namespace.feature` and `recall_timeout.feature`
+- [x] Scenario documented and reproducible offline — `scripts/demo/memory-recall.sh` seeds a `USER_PREFERENCE` `{symptom, solution}` pair through the preferences API (no billable keys, mock provider) and asserts retrieval + `FormatPreferences` rendering
+- [x] Linked from `docs/harness-reliability.md` — Beat 2.4 section + helper-script list
+- [x] Diff within budget — docs + demo + tests only; **no prod change to recall/librarian paths** (S02 PR-C pattern)
 
 ## Notes
 
 Pairs with S02 Beat 1/2: reliability story stays board-visible (recall → task context), never a silent loop.
+
+No production gap found — `internal/memory/recall.go` already satisfied Phase 2.4, so the "gap found → split" branch was not needed.
+
+Shipped under **PR-D** (`docs/s03-memory-recall-beat`). The demo script lagged the rest of PR-D by one commit (retro: "went poorly"); it is now in-tree and syntax-checked.

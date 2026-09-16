@@ -29,9 +29,26 @@
 
 | Action | Owner | Due |
 | --- | --- | --- |
-| Flip T-007/T-008/T-013/T-014 + US-004 to `done` in task files | sprint owner | S03 close |
+| Flip T-007/T-008/T-013/T-014 to `done` in task files | sprint owner | S03 close ✅ |
+| US-004 → `in-progress` (not `done`): criteria 3–4 + DAG half of criterion 2 are S04 (T-015–T-017) | sprint owner | S03 close ✅ |
+| T-001 carry: remains `in-progress` — `gh` not authenticated at close; repo About one-liner verified set via public page, **topics not yet applied** (0 present) | sprint owner | PR-E / S04 |
 | Groom M3-M5 for S04: splitter, worker allowlists, escalation ladder, cost harness | facilitator | before S04 start |
 | Capture cost/latency baseline on a fixed task pack before M3 lands | sprint owner | S04 early |
+
+## Close verification (2026-09-16)
+
+Run at S03 close:
+
+- `go test ./...` → EXIT=0; `go vet ./...` → EXIT=0 (clean).
+- S03 deliverables in tree: `internal/config/tiered.go` + `internal/queue/worker/phase_splitter.go:ShouldRunTiered`; `internal/queue/worker/contextpack.go` (Validate/EnforceBudget/Read/Write, 22 tests); `internal/queue/disk_watchdog.go` + `disk_watchdog_test.go` + `features/disk_watchdog.feature`; `internal/memory/recall.go` + `recall_test.go` + `recall_*feature`.
+- Beats proven offline: `scripts/demo/disk-watchdog.sh` (threshold above free space — no real disk fill), `scripts/demo/memory-recall.sh` (mock LLM + preferences API seeding). `bash -n` clean on all demo scripts (shellcheck not installed locally — noted as a gap).
+- `git diff --stat main...HEAD` baseline = 0 (S03 merged); the uncommitted diff at close (67 insertions / 5 files) = backfill-hygiene + demo probe validation, split from the earlier PR-A/PR-B/PR-C/PR-D merges.
+- No production gap found by either beat → S02 PR-C "gap → follow-up" branch was a clean skip both times.
+
+### Scope corrections vs retro narrative
+
+- The retro's "went well"/"actions" implied US-004 could be `done` in S03. Per US-003 precedent (a story is `done` only when its *written* criteria are met), US-004's criteria 3–4 and the DAG half of criterion 2 are S04 work (T-015–T-017). US-004 is therefore `in-progress`, not `done`.
+- T-001 was marked `done` by `e5ca7877` on the assumption of a manual `gh repo edit`; `4da3364e` reverted it and at this close `gh` is unauthenticated and repo topics are 0 — so it stays `in-progress` under PR-E, with the About one-liner verified set via the public repo page.
 
 ## Carry into next sprint
 
