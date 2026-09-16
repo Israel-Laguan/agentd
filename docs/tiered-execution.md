@@ -79,9 +79,13 @@ The cost win depends on a **versioned artifact**, not on the model “rememberin
   "commands_run": [{"cmd": "…", "outcome": "…"}],
   "constraints": ["must not…", "API X is source of truth"],
   "unknowns": ["…"],
-  "budget": {"max_paths": 40, "max_chars": 48000}
+  "budget": {"max_paths": 40, "max_chars": 48000, "path_count": 1, "char_count": 42}
 }
 ```
+
+`budget.path_count` / `budget.char_count` are populated by `WriteContextPack`;
+readers backfill them when absent so packs serialized before the counters became
+mandatory still validate.
 
 ### Invariants
 

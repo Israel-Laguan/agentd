@@ -21,6 +21,7 @@ validate_inputs() {
     return 1
   fi
   validate_bin_home || return 1
+  validate_api_addr || return 1
   local mock_log="$HOME_DIR/mock.log"
   if [[ "$(realpath -m "$mock_log")" != "$(realpath -m "$HOME_DIR")"* ]]; then
     echo "MOCK_LOG escapes HOME_DIR" >&2
@@ -180,11 +181,13 @@ cmd_probe_breaker() {
    echo "=== breaker exhaustion via gateway $API_URL/v1/chat/completions ==="
    local attempt breaker_state=""
    for attempt in 1 2 3 4 5; do
-     local resp http_code
-     http_code="$(curl -sS -o /tmp/cr_probe_resp -w '%{http_code}' -m 5 -X POST "$API_URL/v1/chat/completions" \
+     local resp http_code probe_resp
+     probe_resp="$(mktemp "${TMPDIR:-/tmp}/agentd-probe.XXXXXX")" || return 1
+     http_code="$(curl -sS -o "$probe_resp" -w '%{http_code}' -m 5 -X POST "$API_URL/v1/chat/completions" \
        -H 'Content-Type: application/json' \
        -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' 2>&1)" || true
-     resp="$(cat /tmp/cr_probe_resp 2>/dev/null)"
+     resp="$(cat "$probe_resp" 2>/dev/null || true)"
+     rm -f "$probe_resp"
       if [[ "$http_code" != "200" ]]; then
         echo "attempt $attempt: expected HTTP 200, got ${http_code:-unknown} (curl error or non-200 response)" >&2
         return 1
@@ -195,7 +198,10 @@ cmd_probe_breaker() {
        continue
      fi
      echo "attempt $attempt: got HTTP 200 with systemTimeoutMessage (expected for ErrLLMUnreachable)"
-     break
+     # Keep issuing requests: the breaker needs 3 consecutive
+     # ErrLLMUnreachable failures to reach OPEN, so stop only once the
+     # attempts are exhausted (or a hard error above returns).
+     continue
    done
    for attempt in 1 2 3 4 5; do
      local status
