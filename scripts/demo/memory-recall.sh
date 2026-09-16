@@ -89,14 +89,14 @@ print(json.dumps({'user_id':'demo','text':text}))
     echo "HOME_DIR does not exist: $HOME_DIR (run '$0 prepare' first)" >&2
     return 1
   fi
-  # Wrap the probe in a group so the shell's own redirection-failure message is
-  # swallowed by the group's stderr redirect (the probe's own 2>/dev/null never
-  # applies when the redirect itself is what fails).
-  if ! { : > "$seed_file.tmp"; } 2>/dev/null; then
+  # Probe writability with a unique temp file so a pre-existing symlink or
+  # hard link at a predictable path can never have its target truncated.
+  local probe_tmp
+  if ! probe_tmp=$(mktemp "$HOME_DIR/.writability-probe.XXXXXX" 2>/dev/null); then
     echo "HOME_DIR is not writable: $HOME_DIR (cannot persist $seed_file)" >&2
     return 1
   fi
-  rm -f "$seed_file.tmp"
+  rm -f "$probe_tmp"
   resp=$(curl -fsS -m 5 -X POST "$API_URL/api/v1/preferences" \
     -H "Content-Type: application/json" \
     -d "$payload" 2>/dev/null) || {

@@ -160,6 +160,7 @@ for p in raw.get('data', raw):
     return 1
   }
 local probe_result=""
+  local probe_status=0
   probe_result=$(echo "$tasks_resp" | python3 -c "
 import sys, json
 raw = json.load(sys.stdin)
@@ -174,8 +175,7 @@ if len(matches)!=1:
     print(f'FAIL: expected exactly 1 Disk space critical task, found {len(matches)} (dedup broken)'); sys.exit(3)
 t=human[0]
 print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={len(matches)}\")
-" 2>/dev/null) || true
-  local probe_status=$?
+" 2>/dev/null) || probe_status=$?
   if (( probe_status != 0 )); then
     echo "$probe_result"
     echo "The watchdog runs on an interval. Wait and retry, or check: $0 status"

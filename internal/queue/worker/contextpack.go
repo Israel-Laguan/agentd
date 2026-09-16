@@ -142,11 +142,27 @@ func (cp *ContextPack) CharCount() int {
 // (and the v1 sketch in docs/tiered-execution.md) therefore load unmodified.
 // Any explicit non-zero counter is left untouched so mismatches still fail
 // Validate.
+//
+// NOTE: this zero-check helper cannot distinguish an absent field from an
+// explicit zero. ReadContextPack performs presence-aware backfill instead, so
+// explicit zeros reach Validate and are rejected as mismatches. Keep this
+// helper for programmatic callers that never serialized an explicit zero.
 func (cp *ContextPack) BackfillBudgetCounters() {
 	if cp.Budget.PathCount == 0 {
 		cp.Budget.PathCount = len(cp.Paths)
 	}
 	if cp.Budget.CharCount == 0 {
+		cp.Budget.CharCount = cp.CharCount()
+	}
+}
+
+// backfillAbsentBudgetCounters fills only counters whose JSON fields were
+// absent from the serialized pack.
+func (cp *ContextPack) backfillAbsentBudgetCounters(pathCountPresent, charCountPresent bool) {
+	if !pathCountPresent && cp.Budget.PathCount == 0 {
+		cp.Budget.PathCount = len(cp.Paths)
+	}
+	if !charCountPresent && cp.Budget.CharCount == 0 {
 		cp.Budget.CharCount = cp.CharCount()
 	}
 }
@@ -242,7 +258,8 @@ func WriteContextPack(workspace string, cp *ContextPack) error {
 
 // ReadContextPack reads and unmarshals a context pack from a JSON file.
 // Budget counters missing from older v1 packs are backfilled before
-// validation so previously written packs remain readable.
+// validation so previously written packs remain readable. Explicit zero
+// counters are preserved so Validate can reject them as mismatches.
 func ReadContextPack(path string) (*ContextPack, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -252,7 +269,15 @@ func ReadContextPack(path string) (*ContextPack, error) {
 	if err := json.Unmarshal(data, &cp); err != nil {
 		return nil, fmt.Errorf("unmarshal context pack: %w", err)
 	}
-	cp.BackfillBudgetCounters()
+	var raw struct {
+		Budget map[string]json.RawMessage `json:"budget"`
+	}
+	pathCountPresent, charCountPresent := true, true
+	if err := json.Unmarshal(data, &raw); err == nil && raw.Budget != nil {
+		_, pathCountPresent = raw.Budget["path_count"]
+		_, charCountPresent = raw.Budget["char_count"]
+	}
+	cp.backfillAbsentBudgetCounters(pathCountPresent, charCountPresent)
 	if err := cp.Validate(); err != nil {
 		return nil, fmt.Errorf("validate context pack: %w", err)
 	}
