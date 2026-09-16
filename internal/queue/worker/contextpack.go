@@ -112,26 +112,22 @@ func (cp *ContextPack) Validate() error {
 	return nil
 }
 
-func stringLen(s string) int {
-	return utf8.RuneCountInString(s)
-}
-
 // CharCount returns the total character count across all text fields.
 func (cp *ContextPack) CharCount() int {
-	n := stringLen(cp.Summary)
+	n := utf8.RuneCountInString(cp.Summary)
 	for _, e := range cp.Excerpts {
-		n += stringLen(e.Note)
-		n += stringLen(e.Span)
+		n += utf8.RuneCountInString(e.Note)
+		n += utf8.RuneCountInString(e.Span)
 	}
 	for _, cr := range cp.CommandsRun {
-		n += stringLen(cr.Cmd)
-		n += stringLen(cr.Outcome)
+		n += utf8.RuneCountInString(cr.Cmd)
+		n += utf8.RuneCountInString(cr.Outcome)
 	}
 	for _, c := range cp.Constraints {
-		n += stringLen(c)
+		n += utf8.RuneCountInString(c)
 	}
 	for _, u := range cp.Unknowns {
-		n += stringLen(u)
+		n += utf8.RuneCountInString(u)
 	}
 	return n
 }
@@ -158,14 +154,14 @@ func (cp *ContextPack) backfillAbsentBudgetCounters(pathCountPresent, charCountP
 
 // requiredContentChars returns the char count of required fields.
 func (cp *ContextPack) requiredContentChars() int {
-	n := stringLen(cp.Summary)
+	n := utf8.RuneCountInString(cp.Summary)
 	for i := range cp.Excerpts {
-		n += stringLen(cp.Excerpts[i].Note)
-		n += stringLen(cp.Excerpts[i].Span)
+		n += utf8.RuneCountInString(cp.Excerpts[i].Note)
+		n += utf8.RuneCountInString(cp.Excerpts[i].Span)
 	}
 	for i := range cp.CommandsRun {
-		n += stringLen(cp.CommandsRun[i].Cmd)
-		n += stringLen(cp.CommandsRun[i].Outcome)
+		n += utf8.RuneCountInString(cp.CommandsRun[i].Cmd)
+		n += utf8.RuneCountInString(cp.CommandsRun[i].Outcome)
 	}
 	return n
 }
@@ -297,11 +293,6 @@ func NewContextPack(taskID, parentTaskID, summary string, paths []string, cfg Co
 		CreatedAt:    time.Now().UTC(),
 		Summary:      summary,
 		Paths:        paths,
-		Budget: ContextBudget{
-			MaxPaths:  cfg.MaxPaths,
-			MaxChars:  cfg.MaxChars,
-			PathCount: len(paths),
-			CharCount: stringLen(summary),
-		},
+		Budget:       ContextBudget{MaxPaths: cfg.MaxPaths, MaxChars: cfg.MaxChars, PathCount: len(paths), CharCount: utf8.RuneCountInString(summary)},
 	}
 }
