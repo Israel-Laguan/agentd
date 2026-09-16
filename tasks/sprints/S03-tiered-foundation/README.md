@@ -22,7 +22,7 @@ Start the cost wedge (product-plan Phase 5, milestones M1–M2) on top of the S0
 | [T-008](tasks/T-008-contextpack-schema.md) | task | Tiered M2 — ContextPack schema + reader | **B** | done | P1 |
 | [T-013](tasks/T-013-disk-watchdog-beat.md) | task | Beat 2.3 — disk/resource watchdog | **C** | done | P1 |
 | [T-014](tasks/T-014-memory-recall-beat.md) | task | Beat 2.4 — memory recall on repeat failure | **D** | done | P2 |
-| [T-001](../S01-positioning-and-demo/tasks/T-001-github-about-topics.md) | task | GitHub About/topics (carry) | **E** | in-progress | P0 |
+| [T-001](../S01-positioning-and-demo/tasks/T-001-github-about-topics.md) | task | GitHub About/topics (carry) | **E** | done | P0 |
 
 ## Suggested order
 
