@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -272,10 +273,18 @@ func ReadContextPack(path string) (*ContextPack, error) {
 	var raw struct {
 		Budget map[string]json.RawMessage `json:"budget"`
 	}
-	pathCountPresent, charCountPresent := true, true
+	// Absent until proven present: a legacy pack may omit budget entirely
+	// (or send null), in which case both counters must backfill.
+	pathCountPresent, charCountPresent := false, false
 	if err := json.Unmarshal(data, &raw); err == nil && raw.Budget != nil {
-		_, pathCountPresent = raw.Budget["path_count"]
-		_, charCountPresent = raw.Budget["char_count"]
+		for k := range raw.Budget {
+			switch strings.ToLower(k) {
+			case "path_count":
+				pathCountPresent = true
+			case "char_count":
+				charCountPresent = true
+			}
+		}
 	}
 	cp.backfillAbsentBudgetCounters(pathCountPresent, charCountPresent)
 	if err := cp.Validate(); err != nil {

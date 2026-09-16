@@ -26,4 +26,4 @@ Implement ContextPack schema, size limits, and a context step that writes the pa
 - Surface: `ContextPack` schema + `Validate()` + `EnforceBudget()` + `WriteContextPack`/`ReadContextPack` + `NewContextPack` in `internal/queue/worker/contextpack.go`; budget defaults from `internal/config/tiered.go` (`ContextPackConfig()`).
 - Budget enforcement trims optional fields first (`unknowns`, then `constraints`); oversized required content (`summary`/`excerpts`/`commands_run`) fails loudly.
 - `ReadContextPack` backfills budget counters that are *absent* from older v1 packs, while preserving explicit zeros so `Validate` still rejects genuine mismatches.
-- Shipped under **PR-B** (`feat/s03-tiered-m2-contextpack`); 22 tests, no prod gap found.
+- Shipped under **PR-B** (`feat/s03-tiered-m2-contextpack`); 28 tests, no prod gap found.

@@ -9,7 +9,7 @@
 
 - All 4 tickets shipped: T-007 (M1 gate), T-008 (ContextPack M2), T-013 (Beat 2.3), T-014 (Beat 2.4). Phase 2 reliability story is now closed — every beat from restart to disk-watchdog to memory-recall is documented and demoed.
 - M1 gate is provably inert when off: tests prove disabled / below-threshold / boundary-zero all stay one-shot. No behavior change in existing worker path — the tiered pipeline builds on solid ground.
-- ContextPack schema landed clean: versioned struct, Validate(), EnforceBudget(), WriteContextPack/ReadContextPack round-trip. 22 tests covering schema, size limits, error paths. No prod gap found.
+- ContextPack schema landed clean: versioned struct, Validate(), EnforceBudget(), WriteContextPack/ReadContextPack round-trip. 28 tests covering schema, size limits, error paths. No prod gap found.
 - Beat demos follow the established pattern (prepare/probe/stop) with fault injection that never touches a real disk or live LLM. Shell-metacharacter validation included from the start (S02 retro action applied).
 - PR budgets held: 13 files / ~1131 insertions across 3 commits. No mixing of tiered runtime + beat docs + prod fixes.
 - Full test suite passes (`go test ./...` clean, `go vet` clean).
@@ -35,12 +35,12 @@
 | Groom M3-M5 for S04: splitter, worker allowlists, escalation ladder, cost harness | facilitator | before S04 start |
 | Capture cost/latency baseline on a fixed task pack before M3 lands | sprint owner | S04 early |
 
-## Close verification (2026-09-16)
+## Close verification (2026-10-28)
 
 Run at S03 close:
 
 - `go test ./...` → EXIT=0; `go vet ./...` → EXIT=0 (clean).
-- S03 deliverables in tree: `internal/config/tiered.go` + `internal/queue/worker/phase_splitter.go:ShouldRunTiered`; `internal/queue/worker/contextpack.go` (Validate/EnforceBudget/Read/Write, 22 tests); `internal/queue/disk_watchdog.go` + `disk_watchdog_test.go` + `features/disk_watchdog.feature`; `internal/memory/recall.go` + `recall_test.go` + `recall_*feature`.
+- S03 deliverables in tree: `internal/config/tiered.go` + `internal/queue/worker/phase_splitter.go:ShouldRunTiered`; `internal/queue/worker/contextpack.go` (Validate/EnforceBudget/Read/Write, 28 tests); `internal/queue/disk_watchdog.go` + `disk_watchdog_test.go` + `features/disk_watchdog.feature`; `internal/memory/recall.go` + `recall_test.go` + `recall_*feature`.
 - Beats proven offline: `scripts/demo/disk-watchdog.sh` (threshold above free space — no real disk fill), `scripts/demo/memory-recall.sh` (mock LLM + preferences API seeding). `bash -n` clean on all demo scripts (shellcheck not installed locally — noted as a gap).
 - `git diff --stat main...HEAD` baseline = 0 (S03 merged); the uncommitted diff at close (67 insertions / 5 files) = backfill-hygiene + demo probe validation, split from the earlier PR-A/PR-B/PR-C/PR-D merges.
 - No production gap found by either beat → S02 PR-C "gap → follow-up" branch was a clean skip both times.
