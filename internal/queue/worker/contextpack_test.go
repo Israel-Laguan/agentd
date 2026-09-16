@@ -198,7 +198,7 @@ func TestContextPack_EnforceBudget_OversizedExcerpts(t *testing.T) {
 	t.Parallel()
 	cp := &ContextPack{
 		Version: 1, TaskID: "t1", Summary: "ok",
-		Paths: []string{"a"},
+		Paths:    []string{"a"},
 		Excerpts: []ContextExcerpt{{Path: "a.go", Note: strings.Repeat("n", 200), Span: strings.Repeat("s", 200)}},
 	}
 	_, err := cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 100})
@@ -211,7 +211,7 @@ func TestContextPack_EnforceBudget_OversizedCommandsRun(t *testing.T) {
 	t.Parallel()
 	cp := &ContextPack{
 		Version: 1, TaskID: "t1", Summary: "ok",
-		Paths: []string{"a"},
+		Paths:       []string{"a"},
 		CommandsRun: []CommandRun{{Cmd: strings.Repeat("c", 200), Outcome: strings.Repeat("o", 200)}},
 	}
 	_, err := cp.EnforceBudget(ContextPackConfig{MaxPaths: 40, MaxChars: 100})
@@ -321,6 +321,83 @@ func TestReadContextPack_MissingFile(t *testing.T) {
 	_, err := ReadContextPack("/nonexistent/path.json")
 	if err == nil {
 		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestReadContextPack_BackfillsMissingBudgetCounters(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// Legacy v1 pack: budget counters were not written before they became
+	// mandatory (matches the v1 sketch in docs/tiered-execution.md).
+	legacy := `{
+  "version": 1,
+  "task_id": "legacy-task",
+  "created_at": "2026-01-15T10:00:00Z",
+  "summary": "legacy pack",
+  "paths": ["src/main.go", "config.yaml"],
+  "budget": {"max_paths": 40, "max_chars": 48000}
+}`
+	path := filepath.Join(dir, PackFilePath(1))
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	got, err := ReadContextPack(path)
+	if err != nil {
+		t.Fatalf("ReadContextPack: %v", err)
+	}
+	if got.Budget.PathCount != len(got.Paths) {
+		t.Fatalf("Budget.PathCount = %d, want %d", got.Budget.PathCount, len(got.Paths))
+	}
+	if got.Budget.CharCount != got.CharCount() {
+		t.Fatalf("Budget.CharCount = %d, want %d", got.Budget.CharCount, got.CharCount())
+	}
+
+	// A pack that recorded only one of the two counters must keep the value it
+	// has and backfill only the missing one.
+	partial := `{
+  "version": 1,
+  "task_id": "partial-task",
+  "created_at": "2026-01-15T10:00:00Z",
+  "summary": "partial pack",
+  "paths": ["src/main.go", "config.yaml"],
+  "budget": {"max_paths": 40, "max_chars": 48000, "path_count": 2}
+}`
+	partialPath := filepath.Join(dir, "partial.json")
+	if err := os.WriteFile(partialPath, []byte(partial), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	got, err = ReadContextPack(partialPath)
+	if err != nil {
+		t.Fatalf("ReadContextPack(partial): %v", err)
+	}
+	if got.Budget.PathCount != 2 {
+		t.Fatalf("Budget.PathCount = %d, want 2 (explicit counter must be untouched)", got.Budget.PathCount)
+	}
+	if got.Budget.CharCount != got.CharCount() {
+		t.Fatalf("Budget.CharCount = %d, want %d", got.Budget.CharCount, got.CharCount())
+	}
+}
+
+func TestContextPack_Validate_MismatchedCountersStillFail(t *testing.T) {
+	t.Parallel()
+	// BackfillBudgetCounters only fills zero-valued counters; an explicit
+	// counter that disagrees with the serialized content must still fail.
+	pathMismatch := &ContextPack{
+		Version: 1, TaskID: "t1", Summary: "summary",
+		Paths:  []string{"a.go"},
+		Budget: ContextBudget{MaxPaths: 40, MaxChars: 48000, PathCount: 7, CharCount: 7},
+	}
+	if err := pathMismatch.Validate(); err == nil || !strings.Contains(err.Error(), "path_count") {
+		t.Fatalf("expected path_count mismatch error, got: %v", err)
+	}
+	// "summary" is 7 runes, so 8 is a genuine mismatch.
+	charMismatch := &ContextPack{
+		Version: 1, TaskID: "t1", Summary: "summary",
+		Paths:  []string{"a.go"},
+		Budget: ContextBudget{MaxPaths: 40, MaxChars: 48000, PathCount: 1, CharCount: 8},
+	}
+	if err := charMismatch.Validate(); err == nil || !strings.Contains(err.Error(), "char_count") {
+		t.Fatalf("expected char_count mismatch error, got: %v", err)
 	}
 }
 

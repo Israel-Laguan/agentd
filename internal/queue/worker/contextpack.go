@@ -135,6 +135,22 @@ func (cp *ContextPack) CharCount() int {
 	return n
 }
 
+// BackfillBudgetCounters fills in budget counters that were absent from a
+// serialized v1 pack. Zero is unambiguous here: Validate requires at least one
+// path and a non-empty summary, so a valid pack always has a positive
+// PathCount and CharCount. Packs written before the counters became mandatory
+// (and the v1 sketch in docs/tiered-execution.md) therefore load unmodified.
+// Any explicit non-zero counter is left untouched so mismatches still fail
+// Validate.
+func (cp *ContextPack) BackfillBudgetCounters() {
+	if cp.Budget.PathCount == 0 {
+		cp.Budget.PathCount = len(cp.Paths)
+	}
+	if cp.Budget.CharCount == 0 {
+		cp.Budget.CharCount = cp.CharCount()
+	}
+}
+
 // EnforceBudget truncates paths and overflow text to fit the budget.
 // Paths beyond max_paths are dropped. Text overflow trims optional fields
 // (unknowns, then constraints). CommandsRun, Summary and Excerpts are
@@ -225,6 +241,8 @@ func WriteContextPack(workspace string, cp *ContextPack) error {
 }
 
 // ReadContextPack reads and unmarshals a context pack from a JSON file.
+// Budget counters missing from older v1 packs are backfilled before
+// validation so previously written packs remain readable.
 func ReadContextPack(path string) (*ContextPack, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -234,6 +252,7 @@ func ReadContextPack(path string) (*ContextPack, error) {
 	if err := json.Unmarshal(data, &cp); err != nil {
 		return nil, fmt.Errorf("unmarshal context pack: %w", err)
 	}
+	cp.BackfillBudgetCounters()
 	if err := cp.Validate(); err != nil {
 		return nil, fmt.Errorf("validate context pack: %w", err)
 	}
