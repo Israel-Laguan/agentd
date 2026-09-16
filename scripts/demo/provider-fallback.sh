@@ -179,7 +179,7 @@ cmd_probe_cascade() {
 
 cmd_probe_breaker() {
    echo "=== breaker exhaustion via gateway $API_URL/v1/chat/completions ==="
-   local attempt breaker_state=""
+   local attempt breaker_state="" validation_failed=0
    for attempt in 1 2 3 4 5; do
      local resp http_code probe_resp
      probe_resp="$(mktemp "${TMPDIR:-/tmp}/agentd-probe.XXXXXX")" || return 1
@@ -194,8 +194,9 @@ cmd_probe_breaker() {
       fi
       if ! echo "$resp" | grep -Fq "$systemTimeoutMessage"; then
         echo "attempt $attempt: response missing systemTimeoutMessage" >&2
-        echo "FAIL: breaker probe saw a response missing systemTimeoutMessage" >&2
-        return 1
+        validation_failed=1
+        sleep 0.5
+        continue
       fi
      echo "attempt $attempt: got HTTP 200 with systemTimeoutMessage (expected for ErrLLMUnreachable)"
      # Keep issuing requests: the breaker needs 3 consecutive
@@ -203,6 +204,10 @@ cmd_probe_breaker() {
      # attempts are exhausted (or a hard error above returns).
       continue
     done
+   if (( validation_failed != 0 )); then
+     echo "FAIL: breaker probe saw a response missing systemTimeoutMessage" >&2
+     return 1
+   fi
     for attempt in 1 2 3 4 5; do
      local status
      status="$(curl -fsS -m 2 "$API_URL/api/v1/system/status" 2>/dev/null || true)"

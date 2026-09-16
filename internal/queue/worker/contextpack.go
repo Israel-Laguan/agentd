@@ -195,6 +195,7 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 			}
 		}
 		cp.Excerpts = kept
+		truncated = true
 	}
 	cp.Budget.MaxPaths = cfg.MaxPaths
 	cp.Budget.MaxChars = cfg.MaxChars
@@ -205,8 +206,14 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 		if required > cfg.MaxChars {
 			return truncated, fmt.Errorf("context pack required content %d chars exceeds budget %d (summary+excerpts+commands_run)", required, cfg.MaxChars)
 		}
+		// Required fits — trim optional content incrementally so clearing
+		// Unknowns alone can preserve safety-critical Constraints.
 		cp.Unknowns = nil
-		cp.Constraints = nil
+		cp.Budget.CharCount = cp.CharCount()
+		if cp.Budget.CharCount > cfg.MaxChars {
+			cp.Constraints = nil
+			cp.Budget.CharCount = cp.CharCount()
+		}
 		truncated = true
 	}
 	cp.Budget.CharCount = cp.CharCount()
