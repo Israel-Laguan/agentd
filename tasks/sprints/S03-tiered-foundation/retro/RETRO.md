@@ -31,7 +31,7 @@
 | --- | --- | --- |
 | Flip T-007/T-008/T-013/T-014 to `done` in task files | sprint owner | S03 close ✅ |
 | US-004 → `in-progress` (not `done`): criteria 3–4 + DAG half of criterion 2 are S04 (T-015–T-017) | sprint owner | S03 close ✅ |
-| T-001 carry: remains `in-progress` — `gh` not authenticated at close; repo About one-liner verified set via public page, **topics not yet applied** (0 present) | sprint owner | PR-E / S04 |
+| T-001 → `done` — operator applied About one-liner + topics manually via `gh repo edit` (per user); `gh repo view --json` traceability output not captured here (`gh` unauthenticated) | sprint owner | S03 close ✅ |
 | Groom M3-M5 for S04: splitter, worker allowlists, escalation ladder, cost harness | facilitator | before S04 start |
 | Capture cost/latency baseline on a fixed task pack before M3 lands | sprint owner | S04 early |
 
@@ -48,7 +48,7 @@ Run at S03 close:
 ### Scope corrections vs retro narrative
 
 - The retro's "went well"/"actions" implied US-004 could be `done` in S03. Per US-003 precedent (a story is `done` only when its *written* criteria are met), US-004's criteria 3–4 and the DAG half of criterion 2 are S04 work (T-015–T-017). US-004 is therefore `in-progress`, not `done`.
-- T-001 was marked `done` by `e5ca7877` on the assumption of a manual `gh repo edit`; `4da3364e` reverted it and at this close `gh` is unauthenticated and repo topics are 0 — so it stays `in-progress` under PR-E, with the About one-liner verified set via the public repo page.
+- T-001: `gh` was unauthenticated in this session and a public-page HTML scrape did not surface topic tags (likely JS-rendered), so programmatic confirmation was unavailable. Operator confirmed T-001 completed (About set + topics applied manually via `gh repo edit`); marked `done` on operator authority, with traceability via manual application (not the `gh repo view --json` snapshot the task originally asked for).
 
 ## Carry into next sprint
 
