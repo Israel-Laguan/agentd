@@ -82,6 +82,21 @@ print(json.dumps({'user_id':'demo','text':text}))
     return 1
   }
   local resp
+  # Preflight local persistence before the POST: each POST inserts a new
+  # memory, so a failed marker write must never push the operator to re-seed.
+  local seed_file="$HOME_DIR/last_seed.json"
+  if [[ ! -d "$HOME_DIR" ]]; then
+    echo "HOME_DIR does not exist: $HOME_DIR (run '$0 prepare' first)" >&2
+    return 1
+  fi
+  # Wrap the probe in a group so the shell's own redirection-failure message is
+  # swallowed by the group's stderr redirect (the probe's own 2>/dev/null never
+  # applies when the redirect itself is what fails).
+  if ! { : > "$seed_file.tmp"; } 2>/dev/null; then
+    echo "HOME_DIR is not writable: $HOME_DIR (cannot persist $seed_file)" >&2
+    return 1
+  fi
+  rm -f "$seed_file.tmp"
   resp=$(curl -fsS -m 5 -X POST "$API_URL/api/v1/preferences" \
     -H "Content-Type: application/json" \
     -d "$payload" 2>/dev/null) || {
@@ -92,13 +107,13 @@ print(json.dumps({'user_id':'demo','text':text}))
   status=$(echo "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('status','') or d.get('status',''))" 2>/dev/null) || true
   if [[ "$status" == "saved" ]]; then
     # Persist last seed for probe's retrieval assertion.
-    SYMPTOM="$symptom" SOLUTION="$solution" python3 -c "
-import json, os, pathlib
-p=os.path.join(os.environ.get('AGENTD_HOME','/tmp/agentd-recall-demo'),'last_seed.json')
-import json as j
-j.dump({'symptom':os.environ['SYMPTOM'],'solution':os.environ['SOLUTION']}, open(p,'w'))
+    SYMPTOM="$symptom" SOLUTION="$solution" SEED_FILE="$seed_file" python3 -c "
+import json, os
+with open(os.environ['SEED_FILE'], 'w') as f:
+    json.dump({'symptom': os.environ['SYMPTOM'], 'solution': os.environ['SOLUTION']}, f)
 " 2>/dev/null || {
-    echo "Failed to persist last_seed.json — run seed again" >&2
+    echo "USER_PREFERENCE was saved, but $seed_file could not be written." >&2
+    echo "Do NOT re-run seed (it would insert a duplicate memory). Write $seed_file manually, then run '$0 probe'." >&2
     return 1
   }
     echo "Seeded USER_PREFERENCE memory (FormatPreferences path):"

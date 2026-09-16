@@ -286,7 +286,8 @@ tiered:
   # See gateway section above for the role_models mapping.
   # Tiered step profiles route through role_models by step kind:
   # context→memory, decision→worker, execute→worker, verify→worker, escalate→worker.
-  # Step kind overrides take precedence over the mapped role default (per internal/config/tiered.go).
+  # Step kind overrides take precedence over the mapped role default
+  # (see tasks/sprints/S04-tiered-pipeline/tasks/T-015-tiered-m3-splitter.md).
   # No tiered.models.<kind> configuration is supported by TieredConfig or loadTieredConfig.
 
 plugins:
