@@ -96,7 +96,6 @@ func (g *fakeGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gate
 	return gateway.EmbedResponse{}, nil
 }
 
-
 type fakeBreaker struct{ open bool }
 
 func (b *fakeBreaker) IsOpen() bool { return b.open }

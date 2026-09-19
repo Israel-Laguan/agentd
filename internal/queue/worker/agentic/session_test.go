@@ -13,7 +13,7 @@ import (
 )
 
 type mockHost struct {
-	Host // embeds interface, will panic if un-mocked method is called
+	Host    // embeds interface, will panic if un-mocked method is called
 	emitted []models.Event
 }
 

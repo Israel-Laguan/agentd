@@ -24,7 +24,7 @@ var tieredStepToolAllowlists = map[TieredStepKind][]string{
 // tieredStepSystemPrompts provides per-step system prompt suffixes that
 // guide the LLM to produce the expected output format.
 var tieredStepSystemPrompts = map[TieredStepKind]string{
-	TieredStepContext: contextStepPrompt,
+	TieredStepContext:  contextStepPrompt,
 	TieredStepDecision: decisionStepPrompt,
 	TieredStepExecute:  executeStepPrompt,
 	TieredStepVerify:   verifyStepPrompt,

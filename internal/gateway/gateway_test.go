@@ -245,7 +245,6 @@ func (*sequenceGateway) Embed(context.Context, EmbedRequest) (EmbedResponse, err
 	return EmbedResponse{}, nil
 }
 
-
 type fakeProvider struct {
 	providerName string
 	resp         AIResponse

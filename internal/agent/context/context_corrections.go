@@ -36,8 +36,6 @@ func (cm *ContextManager) InjectCorrection(rec CorrectionRecord) bool {
 	return true
 }
 
-
-
 // MarkCommentCorrectionSeen records a task comment as processed for correction parsing.
 func (cm *ContextManager) MarkCommentCorrectionSeen(c models.Comment) bool {
 	cm.mu.Lock()

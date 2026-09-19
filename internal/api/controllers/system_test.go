@@ -83,7 +83,7 @@ func TestSystemResetSuccess(t *testing.T) {
 
 // stubProviderBreakers implements services.ProviderBreakersProbe for tests.
 type stubProviderBreakers struct {
-	resetProvider string
+	resetProvider  string
 	resetAllCalled bool
 }
 

@@ -63,8 +63,8 @@ func TestApplyTieredStepProfile_ToolAllowlists(t *testing.T) {
 		AllowedTools: nil,
 	}
 	tests := []struct {
-		kind        TieredStepKind
-		wantTools   []string
+		kind      TieredStepKind
+		wantTools []string
 	}{
 		{TieredStepContext, []string{"read", "grep", "glob", "list"}},
 		{TieredStepDecision, []string{"read", "grep", "glob", "list"}},

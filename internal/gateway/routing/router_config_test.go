@@ -111,7 +111,7 @@ func TestRouter_ProviderRouting_PoolsideVsOpenAI(t *testing.T) {
 	router := NewRouter(openai, poolside)
 
 	resp, err := router.Generate(context.Background(), spec.AIRequest{
-		Messages:  []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
 		Provider: "poolside",
 	})
 	if err != nil {

@@ -78,25 +78,10 @@ func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, par
 	return created, nil
 }
 
-func (s *FakeKanbanStore) PersistTieredDAG(_ context.Context, parentID string, expectedParentUpdatedAt time.Time, children []models.TieredDAGTask) ([]models.Task, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(children) == 0 {
-		return nil, models.ErrInvalidDraftPlan
-	}
-	parent, ok := s.tasks[parentID]
-	if !ok {
-		return nil, models.ErrTaskNotFound
-	}
-	if !parent.UpdatedAt.Equal(expectedParentUpdatedAt) {
-		return nil, models.ErrStateConflict
-	}
-	if parent.State != models.TaskStateRunning && parent.State != models.TaskStateReady {
-		return nil, models.ErrInvalidStateTransition
-	}
-	// Resolve and validate everything before mutating any state, so a bad
-	// plan fails the whole call the way the real store's transaction does.
-	ts := now()
+// resolveTieredChildrenLocked validates the plan against existing state and
+// resolves IDs and timestamps without mutating any task state, so a bad
+// plan fails the whole call the way the real store's transaction does.
+func (s *FakeKanbanStore) resolveTieredChildrenLocked(ts time.Time, children []models.TieredDAGTask) ([]models.Task, error) {
 	resolved := make([]models.Task, 0, len(children))
 	persisted := make(map[string]struct{}, len(children))
 	for _, child := range children {
@@ -128,6 +113,30 @@ func (s *FakeKanbanStore) PersistTieredDAG(_ context.Context, parentID string, e
 		}
 		persisted[t.ID] = struct{}{}
 		resolved = append(resolved, t)
+	}
+	return resolved, nil
+}
+
+func (s *FakeKanbanStore) PersistTieredDAG(_ context.Context, parentID string, expectedParentUpdatedAt time.Time, children []models.TieredDAGTask) ([]models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(children) == 0 {
+		return nil, models.ErrInvalidDraftPlan
+	}
+	parent, ok := s.tasks[parentID]
+	if !ok {
+		return nil, models.ErrTaskNotFound
+	}
+	if !parent.UpdatedAt.Equal(expectedParentUpdatedAt) {
+		return nil, models.ErrStateConflict
+	}
+	if parent.State != models.TaskStateRunning && parent.State != models.TaskStateReady {
+		return nil, models.ErrInvalidStateTransition
+	}
+	ts := now()
+	resolved, err := s.resolveTieredChildrenLocked(ts, children)
+	if err != nil {
+		return nil, err
 	}
 	s.blockParentTaskLocked(parentID, ts)
 	tasks := make([]models.Task, 0, len(resolved))

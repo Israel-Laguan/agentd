@@ -8,8 +8,6 @@ import (
 	"agentd/internal/gateway/spec"
 )
 
-
-
 var _ EmbedBackend = (*OpenAI)(nil)
 
 // Embed implements EmbedBackend using the OpenAI embeddings API.
@@ -37,7 +35,7 @@ func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedRe
 	vectors := make([][]float32, len(req.Input))
 	// Track which indexes we've seen to detect duplicates
 	seenIndexes := make(map[int]bool)
-	
+
 	for _, item := range decoded.Data {
 		// Validate index range
 		if item.Index < 0 || item.Index >= len(vectors) {
@@ -48,15 +46,15 @@ func (o *OpenAI) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedRe
 			return spec.EmbedResponse{}, fmt.Errorf("duplicate embedding index %d", item.Index)
 		}
 		seenIndexes[item.Index] = true
-		
+
 		// Validate embedding is not empty
 		if len(item.Embedding) == 0 {
 			return spec.EmbedResponse{}, fmt.Errorf("empty embedding at index %d", item.Index)
 		}
-		
+
 		vectors[item.Index] = item.Embedding
 	}
-	
+
 	// Validate that we got exactly one embedding per input (no missing, no dups -- dups checked above)
 	if len(decoded.Data) != len(vectors) {
 		return spec.EmbedResponse{}, fmt.Errorf("expected %d embeddings, got %d", len(vectors), len(decoded.Data))

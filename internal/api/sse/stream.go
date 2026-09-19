@@ -120,5 +120,3 @@ func eventName(t string) string {
 	}
 	return strings.ToLower(t)
 }
-
-

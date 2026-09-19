@@ -47,7 +47,9 @@ func (e *Engine) processAgenticIteration(
 		return false, agentruntime.LoopResult{}, false, rewindNone, guardErr
 	}
 	recoveryGen := 0
-	if sessionRecoveryGen != nil { recoveryGen = *sessionRecoveryGen }
+	if sessionRecoveryGen != nil {
+		recoveryGen = *sessionRecoveryGen
+	}
 	resp, stop, err := e.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex, recoveryGen)
 	if stop != nil {
 		return false, *stop, true, rewindNone, nil

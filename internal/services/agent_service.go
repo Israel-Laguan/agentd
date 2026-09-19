@@ -39,13 +39,13 @@ func NewAgentService(store models.KanbanStore, bus AgentBus) *AgentService {
 // AgentPatch is a sparse update payload. Nil fields are left untouched on
 // the existing profile.
 type AgentPatch struct {
-	Name         *string
-	Provider     *string
-	Model        *string
-	Temperature  *float64
-	SystemPrompt *string
-	Role         *string
-	MaxTokens    *int
+	Name                  *string
+	Provider              *string
+	Model                 *string
+	Temperature           *float64
+	SystemPrompt          *string
+	Role                  *string
+	MaxTokens             *int
 	AgenticMode           *bool
 	CapabilityRouteIntent *string
 }

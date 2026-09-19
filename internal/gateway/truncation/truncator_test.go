@@ -92,7 +92,6 @@ func (g *summaryGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec
 	return spec.NoopEmbed(ctx, req)
 }
 
-
 type openBreaker struct{}
 
 func (openBreaker) IsOpen() bool { return true }

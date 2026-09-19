@@ -60,22 +60,22 @@ var (
 	scanSettings = kdb.ScanSettings
 
 	// task select / query helpers
-	taskSelectColumns          = kdb.TaskSelectColumns
-	selectTaskSQL              = kdb.SelectTaskSQL
-	selectReadyTaskIDs         = kdb.SelectReadyTaskIDs
-	selectTaskByID             = kdb.SelectTaskByID
-	selectTasksByIDs           = kdb.SelectTasksByIDs
-	selectGhostTasks           = kdb.SelectGhostTasks
-	selectStaleTasks           = kdb.SelectStaleTasks
+	taskSelectColumns         = kdb.TaskSelectColumns
+	selectTaskSQL             = kdb.SelectTaskSQL
+	selectReadyTaskIDs        = kdb.SelectReadyTaskIDs
+	selectTaskByID            = kdb.SelectTaskByID
+	selectTasksByIDs          = kdb.SelectTasksByIDs
+	selectGhostTasks          = kdb.SelectGhostTasks
+	selectStaleTasks          = kdb.SelectStaleTasks
 	selectOrphanedQueuedTasks = kdb.SelectOrphanedQueuedTasks
 
 	// state update helpers
-	updateTaskStateInTx          = kdb.UpdateTaskStateInTx
-	finishTaskStateSideEffects   = kdb.FinishTaskStateSideEffects
-	queueReadyTaskIDs            = kdb.QueueReadyTaskIDs
-	updateTaskResultState        = kdb.UpdateTaskResultState
-	finishTaskResultSideEffects  = kdb.FinishTaskResultSideEffects
-	resetGhostTasks              = kdb.ResetGhostTasks
+	updateTaskStateInTx         = kdb.UpdateTaskStateInTx
+	finishTaskStateSideEffects  = kdb.FinishTaskStateSideEffects
+	queueReadyTaskIDs           = kdb.QueueReadyTaskIDs
+	updateTaskResultState       = kdb.UpdateTaskResultState
+	finishTaskResultSideEffects = kdb.FinishTaskResultSideEffects
+	resetGhostTasks             = kdb.ResetGhostTasks
 
 	// materialization helpers
 	insertTask         = kdb.InsertTask

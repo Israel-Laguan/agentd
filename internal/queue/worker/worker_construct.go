@@ -64,19 +64,19 @@ type WorkerOptions struct {
 	// want to avoid token side effects.
 	DisableTokenRecording bool
 	FileContext           config.FileContextConfig
-	FileContextCachePath string
-	Planning             config.AgenticPlanningConfig
-	Tiered               config.TieredConfig
-	TopicGuard           config.TopicGuardConfig
-	ModelRouting         config.ModelRoutingConfig
-	ToolManifest         config.ToolManifestConfig
-	CapabilityRouting    config.CapabilityRoutingConfig
-	Batching             config.BatchingConfig
-	PromptTemplatesPath  string
-	ProviderBreakers     *safety.ProviderBreakers
-	HealingDisabled      bool
-	MaxHealingTasks      int
-	Legacy               config.LegacyConfig
+	FileContextCachePath  string
+	Planning              config.AgenticPlanningConfig
+	Tiered                config.TieredConfig
+	TopicGuard            config.TopicGuardConfig
+	ModelRouting          config.ModelRoutingConfig
+	ToolManifest          config.ToolManifestConfig
+	CapabilityRouting     config.CapabilityRoutingConfig
+	Batching              config.BatchingConfig
+	PromptTemplatesPath   string
+	ProviderBreakers      *safety.ProviderBreakers
+	HealingDisabled       bool
+	MaxHealingTasks       int
+	Legacy                config.LegacyConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {

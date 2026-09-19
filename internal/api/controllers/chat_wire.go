@@ -99,4 +99,3 @@ func completion(model, content string, toolCalls []chatToolCall, finishReason st
 		}},
 	}
 }
-

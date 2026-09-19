@@ -40,10 +40,10 @@ type gatewayScenario struct {
 	schemaGWCallCount int
 
 	// Provider cancellation fields
-	providerResp    AIResponse
-	providerErr     error
-	probeAdapter    string // openai or ollama wire protocol under test
-	probeProvider   string // provider name from the Given step
+	providerResp  AIResponse
+	providerErr   error
+	probeAdapter  string // openai or ollama wire protocol under test
+	probeProvider string // provider name from the Given step
 
 	// JSON syntax self-correction (Router.Generate JSONMode)
 	jsonSeq *sequenceProvider

@@ -286,8 +286,8 @@ func TestFinishAgenticTurnNoTools_RespecFailurePreservesMessages(t *testing.T) {
 	host := &handlersMockHost{committedText: &committed}
 	e := &Engine{
 		config: Config{
-			Gateway:     &respecFailGateway{},
-			PlanningCfg: config.AgenticPlanningConfig{ComplexityThreshold: 1, MaxRedoPasses: 0},
+			Gateway:       &respecFailGateway{},
+			PlanningCfg:   config.AgenticPlanningConfig{ComplexityThreshold: 1, MaxRedoPasses: 0},
 			MessageEditor: agentcontext.NewMessageEditor(wsession.NewMemoryCheckpointStore(), nil, cm),
 		},
 		host: host,

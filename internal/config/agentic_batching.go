@@ -26,4 +26,3 @@ func loadBatchingConfig(v *viper.Viper) BatchingConfig {
 		MaxBatchSize: batchMax,
 	}
 }
-

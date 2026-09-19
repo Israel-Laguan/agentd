@@ -122,8 +122,6 @@ func (t *ToolExecutor) Definitions() []gateway.ToolDefinition {
 	}
 }
 
-
-
 // BuildEnv returns a copy of the executor base environment merged with extra
 // KEY=VALUE pairs for a single tool call without mutating executor state.
 func (t *ToolExecutor) BuildEnv(extra ...string) []string {
@@ -167,6 +165,3 @@ func (t *ToolExecutor) SetMaxReadBytes(maxReadBytes int64) {
 	}
 	t.maxReadBytes = maxReadBytes
 }
-
-
-

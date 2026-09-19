@@ -223,7 +223,6 @@ func (g *memGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gatew
 	return gateway.EmbedResponse{}, nil
 }
 
-
 type memBreaker struct{ open bool }
 
 func (b *memBreaker) IsOpen() bool { return b.open }
