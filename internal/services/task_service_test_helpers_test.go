@@ -201,6 +201,7 @@ func (m *minimalStore) ListParentTasksByRelation(context.Context, string, models
 func (m *minimalStore) ListChildTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
 	return nil, nil
 }
+
 func (m *minimalStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }
