@@ -60,6 +60,19 @@ func (s *Store) ListParentTasksByRelation(ctx context.Context, childID string, r
 	return scanTasks(rows)
 }
 
+func (s *Store) ListChildTasksByRelation(ctx context.Context, parentID string, relationType models.TaskRelationType) ([]models.Task, error) {
+	rows, err := s.db.QueryContext(ctx, taskSelectColumns("tasks")+`
+		FROM tasks
+		INNER JOIN task_relations tr ON tr.child_task_id = tasks.id
+		WHERE tr.parent_task_id = ? AND tr.relation_type = ?
+		ORDER BY tasks.created_at`, parentID, string(relationType))
+	if err != nil {
+		return nil, fmt.Errorf("list child tasks by relation: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanTasks(rows)
+}
+
 func (s *Store) ClaimNextReadyTasks(ctx context.Context, limit int) ([]models.Task, error) {
 	if limit <= 0 {
 		limit = 1
@@ -202,25 +215,9 @@ func (s *Store) ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]mod
 		if err != nil {
 			return nil, err
 		}
-		if len(ghosts) == 0 {
-			return nil, commitTx(tx, "empty ghost task reconciliation")
-		}
-		ids := make([]string, 0, len(ghosts))
-		for _, task := range ghosts {
-			ids = append(ids, task.ID)
-		}
-		now := utcNow()
-		if err := resetGhostTasks(ctx, tx, ghosts, ids, now); err != nil {
-			return nil, err
-		}
-		recovered, err := selectTasksByIDs(ctx, tx, ids)
-		if err != nil {
-			return nil, err
-		}
-		return recovered, commitTx(tx, "ghost task reconciliation")
+		return reconcileAndRecover(ctx, tx, ghosts, resetGhostTasks, "ghost task reconciliation")
 	})
 }
-
 func (s *Store) ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleThreshold time.Duration) ([]models.Task, error) {
 	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
@@ -235,24 +232,9 @@ func (s *Store) ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleT
 		if err != nil {
 			return nil, err
 		}
-		if len(stale) == 0 {
-			return nil, commitTx(tx, "empty stale task reconciliation")
-		}
-		ids := make([]string, 0, len(stale))
-		for _, task := range stale {
-			ids = append(ids, task.ID)
-		}
-		if err := resetGhostTasks(ctx, tx, stale, ids, now); err != nil {
-			return nil, err
-		}
-		recovered, err := selectTasksByIDs(ctx, tx, ids)
-		if err != nil {
-			return nil, err
-		}
-		return recovered, commitTx(tx, "stale task reconciliation")
+		return reconcileAndRecover(ctx, tx, stale, resetGhostTasks, "stale task reconciliation")
 	})
 }
-
 func (s *Store) ReconcileOrphanedQueued(ctx context.Context, minAge time.Duration) ([]models.Task, error) {
 	if minAge <= 0 {
 		return nil, nil
@@ -270,20 +252,21 @@ func (s *Store) ReconcileOrphanedQueued(ctx context.Context, minAge time.Duratio
 		if err != nil {
 			return nil, err
 		}
-		if len(orphaned) == 0 {
-			return nil, commitTx(tx, "empty orphaned queued reconciliation")
-		}
-		ids := make([]string, 0, len(orphaned))
-		for _, task := range orphaned {
-			ids = append(ids, task.ID)
-		}
-		if err := resetGhostTasks(ctx, tx, orphaned, ids, now); err != nil {
-			return nil, err
-		}
-		recovered, err := selectTasksByIDs(ctx, tx, ids)
-		if err != nil {
-			return nil, err
-		}
-		return recovered, commitTx(tx, "orphaned queued reconciliation")
+		return reconcileAndRecover(ctx, tx, orphaned, resetGhostTasks, "orphaned queued reconciliation")
 	})
+}
+
+func reconcileAndRecover(ctx context.Context, tx *immediateTx, ghosts []models.Task, reset func(context.Context, *immediateTx, []models.Task, []string, time.Time) error, commitMsg string) ([]models.Task, error) {
+	if len(ghosts) == 0 {
+		return nil, commitTx(tx, commitMsg)
+	}
+	ids := make([]string, 0, len(ghosts))
+	for _, task := range ghosts {
+		ids = append(ids, task.ID)
+	}
+	now := utcNow()
+	if err := reset(ctx, tx, ghosts, ids, now); err != nil {
+		return nil, err
+	}
+	return selectTasksByIDs(ctx, tx, ids)
 }

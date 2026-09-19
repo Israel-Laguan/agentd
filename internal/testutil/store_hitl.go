@@ -28,6 +28,23 @@ func (s *FakeKanbanStore) ListChildTasks(_ context.Context, parentID string) ([]
 	return out, nil
 }
 
+func (s *FakeKanbanStore) ListChildTasksByRelation(_ context.Context, parentID string, relationType models.TaskRelationType) ([]models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []models.Task
+	for childID, rels := range s.childParentRelations {
+		for _, rel := range rels {
+			if rel.parentID == parentID && rel.relationType == relationType {
+				if t, ok := s.tasks[childID]; ok {
+					out = append(out, t)
+				}
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 func (s *FakeKanbanStore) ListParentTasks(_ context.Context, childID string) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

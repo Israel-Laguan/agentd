@@ -184,6 +184,9 @@ func (s *batchTestStore) ListParentTasksByRelation(context.Context, string, mode
 	return nil, nil
 }
 
+func (s *batchTestStore) ListChildTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *batchTestStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

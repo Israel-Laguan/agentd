@@ -367,6 +367,9 @@ func (s *workerStore) ListParentTasks(context.Context, string) ([]models.Task, e
 	return nil, nil
 }
 
+func (s *workerStore) ListChildTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *workerStore) ListParentTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
 	return nil, nil
 }

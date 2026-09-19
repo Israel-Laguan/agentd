@@ -232,8 +232,7 @@ func (w *Worker) tryDispatchTieredStep(ctx context.Context, task models.Task, pr
 	if err != nil {
 		slog.Error("tiered: failed to look up SPAWNED_BY parents",
 			"task_id", task.ID, "error", err)
-		w.FailHard(ctx, task, fmt.Errorf("tiered SPAWNED_BY lookup failed: %w", err))
-		return true
+		return false
 	}
 	if len(parents) == 0 {
 		slog.Error("tiered step has no SPAWNED_BY origin parent",

@@ -345,6 +345,9 @@ func (m *mockAgenticStore) ListParentTasksByRelation(context.Context, string, mo
 	return nil, nil
 }
 
+func (m *mockAgenticStore) ListChildTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
 func (m *mockAgenticStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

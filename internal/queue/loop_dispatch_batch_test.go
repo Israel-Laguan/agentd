@@ -235,6 +235,9 @@ func (s *dispatchBatchStore) ListParentTasksByRelation(context.Context, string, 
 	return nil, nil
 }
 
+func (s *dispatchBatchStore) ListChildTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *dispatchBatchStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

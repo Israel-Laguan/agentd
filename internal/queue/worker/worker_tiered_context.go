@@ -56,10 +56,8 @@ func (w *Worker) processTieredContextStep(ctx context.Context, task models.Task,
 // version so a malformed or unpersisted tiered artifact doesn't leave the
 // step (and the DAG built on top of it) looking successful.
 func (w *Worker) failTieredStep(ctx context.Context, task models.Task, reason string) {
-	if _, err := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
-		Success: false,
-		Payload: truncate(reason, 1000),
-	}); err != nil {
+	result := models.TaskResult{Success: false, Payload: truncate(reason, 1000)}
+	if _, err := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, result); err != nil {
 		if errors.Is(err, models.ErrStateConflict) {
 			// The step left RUNNING at the expected version before we could
 			// record the failure (e.g. a concurrent commit or heartbeat bump
@@ -79,6 +77,19 @@ func (w *Worker) failTieredStep(ctx context.Context, task models.Task, reason st
 					"task_id", task.ID, "reason", reason)
 				return
 			}
+			if current.State == models.TaskStateRunning {
+				// Still legitimately RUNNING (e.g. a heartbeat bumped
+				// UpdatedAt) — retry once against the fresh version instead
+				// of leaving the step stuck looking active.
+				if _, retryErr := w.store.UpdateTaskResult(ctx, current.ID, current.UpdatedAt, result); retryErr != nil {
+					slog.Error("tiered: retry failed to record step failure after state conflict",
+						"task_id", task.ID, "reason", reason, "error", retryErr, "current_state", current.State)
+					w.Emit(ctx, task, "TIERED_STEP_FAIL_CONFLICT",
+						"escalation required: could not record failure ("+reason+"): "+retryErr.Error())
+					return
+				}
+				return
+			}
 			slog.Error("tiered: failed to record step failure; task no longer RUNNING at expected version",
 				"task_id", task.ID, "reason", reason, "error", err, "current_state", current.State)
 			w.Emit(ctx, task, "TIERED_STEP_FAIL_CONFLICT",
@@ -86,6 +97,34 @@ func (w *Worker) failTieredStep(ctx context.Context, task models.Task, reason st
 			return
 		}
 		w.Emit(ctx, task, "ERROR", err.Error())
+	}
+}
+
+// failTieredDependents finds all tasks that DEPENDS_ON the given task
+// and marks them as failed so the pipeline does not remain stuck waiting
+// for steps that can never execute because their predecessor failed.
+// It also resolves the blocked origin task so the pipeline is not left
+// in an indeterminate state.
+func (w *Worker) failTieredDependents(ctx context.Context, failedTask models.Task, originTask models.Task) {
+	dependents, err := w.store.ListChildTasksByRelation(ctx, failedTask.ID, models.TaskRelationDependsOn)
+	if err != nil {
+		slog.Error("tiered: failed to look up dependent tasks",
+			"task_id", failedTask.ID, "error", err)
+		return
+	}
+	for _, dep := range dependents {
+		slog.Warn("tiered: failing dependent step due to predecessor failure",
+			"task_id", dep.ID, "step", dep.AgentID, "predecessor", failedTask.ID)
+		w.failTieredStep(ctx, dep, "Predecessor step failed; dependent step cancelled")
+	}
+	if _, err := w.store.UpdateTaskResult(ctx, originTask.ID, originTask.UpdatedAt, models.TaskResult{
+		Success: false,
+		Payload: truncate("Tiered step failed; pipeline cancelled", 1000),
+	}); err != nil {
+		if !errors.Is(err, models.ErrStateConflict) {
+			slog.Error("tiered: failed to resolve origin task after tiered step failure",
+				"task_id", originTask.ID, "error", err)
+		}
 	}
 }
 
