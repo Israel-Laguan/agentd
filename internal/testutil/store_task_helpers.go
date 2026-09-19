@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"context"
 	"time"
 
 	"agentd/internal/models"
@@ -55,4 +56,57 @@ func (s *FakeKanbanStore) newTaskFromDraft(projectID string, ts time.Time, d mod
 		Assignee:        d.Assignee,
 		SuccessCriteria: append([]string(nil), d.SuccessCriteria...),
 	}
+}
+
+func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, parentTaskID string, drafts []models.DraftTask) ([]models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.validateDraftAgentIDs(drafts); err != nil {
+		return nil, err
+	}
+	if _, ok := s.tasks[parentTaskID]; !ok {
+		return nil, models.ErrTaskNotFound
+	}
+	created := s.addDraftTasksLocked(projectID, parentTaskID, drafts)
+	return created, nil
+}
+
+func (s *FakeKanbanStore) PersistTieredDAG(_ context.Context, parentID string, expectedParentUpdatedAt time.Time, children []models.TieredDAGTask) ([]models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(children) == 0 {
+		return nil, models.ErrInvalidDraftPlan
+	}
+	parent, ok := s.tasks[parentID]
+	if !ok {
+		return nil, models.ErrTaskNotFound
+	}
+	if !parent.UpdatedAt.Equal(expectedParentUpdatedAt) {
+		return nil, models.ErrStateConflict
+	}
+	if parent.State != models.TaskStateRunning && parent.State != models.TaskStateReady {
+		return nil, models.ErrInvalidStateTransition
+	}
+	ts := now()
+	s.blockParentTaskLocked(parentID, ts)
+	tasks := make([]models.Task, 0, len(children))
+	for _, child := range children {
+		t := child.Task
+		if t.ID == "" {
+			t.ID = s.nextID()
+		}
+		if t.CreatedAt.IsZero() {
+			t.CreatedAt = ts
+		}
+		if t.UpdatedAt.IsZero() {
+			t.UpdatedAt = ts
+		}
+		s.tasks[t.ID] = t
+		s.childParents[t.ID] = append(s.childParents[t.ID], parentID)
+		if child.DependsOnID != "" {
+			s.childParents[t.ID] = append(s.childParents[t.ID], child.DependsOnID)
+		}
+		tasks = append(tasks, t)
+	}
+	return tasks, nil
 }
