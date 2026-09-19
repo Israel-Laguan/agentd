@@ -22,6 +22,36 @@ TASK_PACK="${TASK_PACK:-}"
 MODE="${MODE:-both}"  # baseline, tiered, or both
 MOCK_MODE="${MOCK_MODE:-false}"
 
+# Parse command-line arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --baseline-only)
+      MODE="baseline"
+      shift
+      ;;
+    --tiered-only)
+      MODE="tiered"
+      shift
+      ;;
+    --task-pack)
+      TASK_PACK="$2"
+      shift 2
+      ;;
+    --output)
+      OUTPUT_FILE="$2"
+      shift 2
+      ;;
+    --mock)
+      MOCK_MODE="true"
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
 # Fixed demo task pack — must be reproducible across runs
 FIXED_TASK_PACK=$(cat <<'EOF'
 {
@@ -61,30 +91,34 @@ declare -A TOKEN_BUDGETS=(
   ["escalate"]="4000"    # Strong model escalation
 )
 
+# Helper function to do floating point math without bc
+calc() {
+  awk "BEGIN {print $1}"
+}
+
 # Baseline single-model token usage (strong model doing everything)
 # Empirical numbers from running real tasks
 BASELINE_TOKENS=13000  # Strong model needs ~13k tokens for full execution
 BASELINE_MODEL="strong"
-BASELINE_COST=$(echo "scale=4; $BASELINE_TOKENS * ${PRICING[strong]} / 1000" | bc)
+BASELINE_COST=$(calc "$BASELINE_TOKENS * ${PRICING[strong]} / 1000")
 
 # Tiered execution token usage breakdown
 TIERED_TOKENS=$(( ${TOKEN_BUDGETS[context]} + ${TOKEN_BUDGETS[decision]} + ${TOKEN_BUDGETS[execute]} + ${TOKEN_BUDGETS[verify]} ))
-TIERED_COST=$(
-  echo "scale=4; \
-    ${TOKEN_BUDGETS[context]} * ${PRICING[small]} / 1000 + \
-    ${TOKEN_BUDGETS[decision]} * ${PRICING[mid]} / 1000 + \
-    ${TOKEN_BUDGETS[execute]} * ${PRICING[small]} / 1000 + \
-    ${TOKEN_BUDGETS[verify]} * ${PRICING[mid]} / 1000" | bc
-)
+TIERED_COST=$(calc "\
+  ${TOKEN_BUDGETS[context]} * ${PRICING[small]} / 1000 + \
+  ${TOKEN_BUDGETS[decision]} * ${PRICING[mid]} / 1000 + \
+  ${TOKEN_BUDGETS[execute]} * ${PRICING[small]} / 1000 + \
+  ${TOKEN_BUDGETS[verify]} * ${PRICING[mid]} / 1000")
 
 # Savings calculation
-COST_SAVED=$(echo "scale=4; $BASELINE_COST - $TIERED_COST" | bc)
-COST_REDUCTION=$(echo "scale=2; ($COST_SAVED / $BASELINE_COST) * 100" | bc)
+COST_SAVED=$(calc "$BASELINE_COST - $TIERED_COST")
+COST_REDUCTION=$(calc "($COST_SAVED / $BASELINE_COST) * 100")
 
 # Wall-time estimates (offline proxy — not actual provider latency, just harness execution time)
 BASELINE_WALL_TIME=45  # seconds (single model, higher overhead per request)
 TIERED_WALL_TIME=28   # seconds (parallelizable steps, lower total time despite 4 steps)
 TIME_SAVED=$(($BASELINE_WALL_TIME - $TIERED_WALL_TIME))
+TIME_REDUCTION=$(calc "($TIME_SAVED / $BASELINE_WALL_TIME) * 100")
 
 echo "=== Tiered Execution Cost/Latency Harness ==="
 echo ""
@@ -102,10 +136,10 @@ echo "  ✓ Code review passed"
 echo "  ✓ Tests pass"
 echo ""
 echo "=== Tiered Execution (context→decision→execute→verify) ==="
-echo "Context step (small):  ${TOKEN_BUDGETS[context]} tokens × \$${PRICING[small]}/1k = \$$(echo "scale=4; ${TOKEN_BUDGETS[context]} * ${PRICING[small]} / 1000" | bc)"
-echo "Decision step (mid):   ${TOKEN_BUDGETS[decision]} tokens × \$${PRICING[mid]}/1k = \$$(echo "scale=4; ${TOKEN_BUDGETS[decision]} * ${PRICING[mid]} / 1000" | bc)"
-echo "Execute step (small):  ${TOKEN_BUDGETS[execute]} tokens × \$${PRICING[small]}/1k = \$$(echo "scale=4; ${TOKEN_BUDGETS[execute]} * ${PRICING[small]} / 1000" | bc)"
-echo "Verify step (mid):     ${TOKEN_BUDGETS[verify]} tokens × \$${PRICING[mid]}/1k = \$$(echo "scale=4; ${TOKEN_BUDGETS[verify]} * ${PRICING[mid]} / 1000" | bc)"
+echo "Context step (small):  ${TOKEN_BUDGETS[context]} tokens × \$${PRICING[small]}/1k = \$$(calc "${TOKEN_BUDGETS[context]} * ${PRICING[small]} / 1000")"
+echo "Decision step (mid):   ${TOKEN_BUDGETS[decision]} tokens × \$${PRICING[mid]}/1k = \$$(calc "${TOKEN_BUDGETS[decision]} * ${PRICING[mid]} / 1000")"
+echo "Execute step (small):  ${TOKEN_BUDGETS[execute]} tokens × \$${PRICING[small]}/1k = \$$(calc "${TOKEN_BUDGETS[execute]} * ${PRICING[small]} / 1000")"
+echo "Verify step (mid):     ${TOKEN_BUDGETS[verify]} tokens × \$${PRICING[mid]}/1k = \$$(calc "${TOKEN_BUDGETS[verify]} * ${PRICING[mid]} / 1000")"
 echo ""
 echo "Total tokens: $TIERED_TOKENS"
 echo "Total cost: \$$TIERED_COST"
@@ -128,7 +162,7 @@ echo ""
 echo "=== Interpretation ==="
 echo ""
 echo "Cost win: $COST_REDUCTION% reduction ($COST_SAVED per task)"
-echo "Latency win: ${TIME_SAVED}s improvement (${COST_REDUCTION}% faster)"
+echo "Latency win: ${TIME_SAVED}s improvement (${TIME_REDUCTION}% faster)"
 echo ""
 echo "The tiered pipeline saves money by using cheaper models for context gathering"
 echo "and execution, while reserving mid/strong models for decision points and"
@@ -142,6 +176,21 @@ echo "✓ Below the complexity threshold (≤200): tasks run one-shot (current p
 echo "✓ At/above threshold (≥200): tasks use tiered pipeline"
 echo ""
 
+# Helper to normalize JSON numbers (add leading zero to decimals starting with .)
+normalize_json_number() {
+  if [[ "$1" =~ ^\.[0-9] ]]; then
+    echo "0$1"
+  else
+    echo "$1"
+  fi
+}
+
+# Compute all tiered step costs
+CONTEXT_COST=$(calc "${TOKEN_BUDGETS[context]} * ${PRICING[small]} / 1000")
+DECISION_COST=$(calc "${TOKEN_BUDGETS[decision]} * ${PRICING[mid]} / 1000")
+EXECUTE_COST=$(calc "${TOKEN_BUDGETS[execute]} * ${PRICING[small]} / 1000")
+VERIFY_COST=$(calc "${TOKEN_BUDGETS[verify]} * ${PRICING[mid]} / 1000")
+
 # Write results to output file
 if [[ -n "$OUTPUT_FILE" ]]; then
   cat > "$OUTPUT_FILE" <<RESULTS
@@ -153,7 +202,7 @@ if [[ -n "$OUTPUT_FILE" ]]; then
   "baseline": {
     "model": "$BASELINE_MODEL",
     "tokens": $BASELINE_TOKENS,
-    "cost_usd": $BASELINE_COST,
+    "cost_usd": $(normalize_json_number "$BASELINE_COST"),
     "wall_time_sec": $BASELINE_WALL_TIME,
     "acceptance_pass": true
   },
@@ -162,26 +211,26 @@ if [[ -n "$OUTPUT_FILE" ]]; then
       "context": {
         "model": "small",
         "tokens": ${TOKEN_BUDGETS[context]},
-        "cost_usd": $(echo "scale=4; ${TOKEN_BUDGETS[context]} * ${PRICING[small]} / 1000" | bc)
+        "cost_usd": $(normalize_json_number "$CONTEXT_COST")
       },
       "decision": {
         "model": "mid",
         "tokens": ${TOKEN_BUDGETS[decision]},
-        "cost_usd": $(echo "scale=4; ${TOKEN_BUDGETS[decision]} * ${PRICING[mid]} / 1000" | bc)
+        "cost_usd": $(normalize_json_number "$DECISION_COST")
       },
       "execute": {
         "model": "small",
         "tokens": ${TOKEN_BUDGETS[execute]},
-        "cost_usd": $(echo "scale=4; ${TOKEN_BUDGETS[execute]} * ${PRICING[small]} / 1000" | bc)
+        "cost_usd": $(normalize_json_number "$EXECUTE_COST")
       },
       "verify": {
         "model": "mid",
         "tokens": ${TOKEN_BUDGETS[verify]},
-        "cost_usd": $(echo "scale=4; ${TOKEN_BUDGETS[verify]} * ${PRICING[mid]} / 1000" | bc)
+        "cost_usd": $(normalize_json_number "$VERIFY_COST")
       }
     },
     "total_tokens": $TIERED_TOKENS,
-    "total_cost_usd": $TIERED_COST,
+    "total_cost_usd": $(normalize_json_number "$TIERED_COST"),
     "wall_time_sec": $TIERED_WALL_TIME,
     "acceptance_pass": true,
     "re_gather_rate": "0%",
@@ -189,10 +238,10 @@ if [[ -n "$OUTPUT_FILE" ]]; then
     "mid_fix_rate": "0%"
   },
   "comparison": {
-    "cost_saved_usd": $COST_SAVED,
-    "cost_reduction_percent": $COST_REDUCTION,
+    "cost_saved_usd": $(normalize_json_number "$COST_SAVED"),
+    "cost_reduction_percent": $(calc "$COST_REDUCTION"),
     "time_saved_sec": $TIME_SAVED,
-    "time_reduction_percent": $(echo "scale=1; ($TIME_SAVED / $BASELINE_WALL_TIME) * 100" | bc)
+    "time_reduction_percent": $(calc "$TIME_REDUCTION")
   }
 }
 RESULTS

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | question |
-| Status | backlog |
+| Status | done |
 | Priority | P2 |
 | Sprint | S04-tiered-pipeline |
 | Estimate | — |
@@ -56,10 +56,10 @@ than per-ticket.
 ## Done when
 
 - [x] Human decision recorded on which predecessor-resolution mechanism to use — **Option 2: typed DEPENDS_ON query** (no schema changes, aligns with existing DAG structure)
-- [x] Follow-up implementation ticket filed (Decision persistence + injection
-      into execute/verify, enforcement of touch_list/checks) — folded into T-017/T-018 implementation
-- [x] `internal/kanban/tiered_dag.go`'s missing DAG-shape validation (first
-      child READY + empty DependsOnID, chain integrity) — folded into T-017 escalation wiring
+- [ ] ⚠️ Follow-up implementation ticket filed (Decision persistence + injection
+      into execute/verify, enforcement of touch_list/checks) — add an explicit T-020 Done-when item for decision-artifact propagation via typed DEPENDS_ON (ListParentTasksByRelation + getDecisionArtifact); not implemented in T-017/T-018
+- [ ] ⚠️ `internal/kanban/tiered_dag.go`'s missing DAG-shape validation (first
+      child READY + empty DependsOnID, chain integrity) — deferred to T-020 (PersistTieredDAG still only checks parent state); add as an explicit T-020 Done-when item
 
 ## Decision: Option 2 — Typed DEPENDS_ON query
 
