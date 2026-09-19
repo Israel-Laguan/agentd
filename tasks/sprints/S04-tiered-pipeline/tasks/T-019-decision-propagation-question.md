@@ -20,7 +20,11 @@ no DB column and is never restored on load). A same-day fix pass
 at (`task.DependsOn[0]` indexing, `injectContextPack` losing its mutation,
 the recursive re-tiering gate) by leaning on the existing `ListParentTasks`
 (SPAWNED_BY) fallback, which already resolves correctly today because the
-DAG's origin task is reliably the oldest row in `task_relations`.
+DAG's origin task is created (and therefore ordered first by
+`tasks.created_at`) before the split — `ListParentTasks` orders by
+`tasks.created_at`, and every `task_relations` row for the DAG is inserted
+in one transaction in `PersistTieredDAG`, so the children share the same
+relation timestamp and the origin's earlier task row is what wins.
 
 That fallback does **not** give a reliable handle on the *immediate
 predecessor step* (e.g. decision's own task, from execute's point of view) —

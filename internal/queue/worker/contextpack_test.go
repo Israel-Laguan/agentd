@@ -266,7 +266,7 @@ func TestWriteContextPack_RoundTrip(t *testing.T) {
 	if err := WriteContextPack(dir, cp); err != nil {
 		t.Fatalf("WriteContextPack: %v", err)
 	}
-	path := filepath.Join(dir, PackFilePath(1))
+	path := filepath.Join(dir, PackFilePath("p1", 1))
 	got, err := ReadContextPack(path)
 	if err != nil {
 		t.Fatalf("ReadContextPack: %v", err)
@@ -337,7 +337,7 @@ func TestReadContextPack_BackfillsMissingBudgetCounters(t *testing.T) {
   "paths": ["src/main.go", "config.yaml"],
   "budget": {"max_paths": 40, "max_chars": 48000}
 }`
-	path := filepath.Join(dir, PackFilePath(1))
+	path := filepath.Join(dir, "legacy_pack.json")
 	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
 		t.Fatalf("os.WriteFile: %v", err)
 	}
@@ -484,8 +484,11 @@ func TestContextPack_JSON_RoundTrip_RawBytes(t *testing.T) {
 
 func TestPackFilePath(t *testing.T) {
 	t.Parallel()
-	got := PackFilePath(1)
-	if got != "context_pack.v1.json" {
-		t.Fatalf("PackFilePath(1) = %q, want context_pack.v1.json", got)
+	got := PackFilePath("p1", 1)
+	if got != "context_pack.p1.v1.json" {
+		t.Fatalf("PackFilePath(\"p1\", 1) = %q, want context_pack.p1.v1.json", got)
+	}
+	if legacy := PackFilePath("", 1); legacy != "context_pack.v1.json" {
+		t.Fatalf("PackFilePath(\"\", 1) = %q, want context_pack.v1.json", legacy)
 	}
 }

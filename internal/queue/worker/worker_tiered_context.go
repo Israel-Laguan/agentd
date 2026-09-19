@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -15,8 +16,26 @@ import (
 // to gather workspace context, then intercepts the committed text to
 // parse, validate, and persist the ContextPack.
 func (w *Worker) processTieredContextStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, parentTask models.Task) {
+	// A tiered context step must run through the agentic engine: legacy
+	// one-shot mode produces a shell command, not a ContextPack. If the
+	// selected provider cannot round-trip tools, the engine would fall back
+	// to legacy execution and commit a *successful* result with no pack,
+	// letting decision/execute/verify run without the required artifact.
+	// Fail the step up front instead.
+	if !w.providerSupportsAgentic(profile) {
+		slog.Warn("tiered context: provider does not support chat tools; failing step",
+			"task_id", task.ID, "provider", profile.Provider)
+		w.Emit(ctx, task, "TIERED_CONTEXT_PROVIDER_UNSUPPORTED", profile.Provider)
+		w.failTieredStep(ctx, task, "tiered context step requires a provider with chat-tool support; got provider "+profile.Provider)
+		return
+	}
 	result, ok := w.processAgentic(ctx, task, project, profile)
 	if !ok {
+		// The engine exits without a LoopResult when it handed off, suspended,
+		// or fell back to legacy execution. No ContextPack can be parsed here,
+		// so record the failure (or surface the conflict if the step was
+		// already resolved) rather than leaving the DAG looking satisfied.
+		w.failTieredStep(ctx, task, "tiered context step produced no ContextPack result")
 		return
 	}
 	if !result.IsTerminalSuccess() {
@@ -30,7 +49,7 @@ func (w *Worker) processTieredContextStep(ctx context.Context, task models.Task,
 	if err := w.validateAndWritePack(ctx, *committed, project, pack); err != nil {
 		return
 	}
-	w.Emit(ctx, task, "TIERED_CONTEXT_PACK_WRITTEN", PackFilePath(pack.Version))
+	w.Emit(ctx, task, "TIERED_CONTEXT_PACK_WRITTEN", PackFilePath(pack.ParentTaskID, pack.Version))
 }
 
 // failTieredStep records a failed result against the task's latest known
@@ -41,6 +60,18 @@ func (w *Worker) failTieredStep(ctx context.Context, task models.Task, reason st
 		Success: false,
 		Payload: truncate(reason, 1000),
 	}); err != nil {
+		if errors.Is(err, models.ErrStateConflict) {
+			// The step left RUNNING at the expected version before we could
+			// record the failure (e.g. a concurrent commit or heartbeat bump
+			// moved it out from under us). The step may now look COMPLETED
+			// without its artifact — surface it as an escalation signal
+			// instead of silently swallowing the conflict.
+			slog.Error("tiered: failed to record step failure; task no longer RUNNING at expected version",
+				"task_id", task.ID, "reason", reason, "error", err)
+			w.Emit(ctx, task, "TIERED_STEP_FAIL_CONFLICT",
+				"escalation required: could not record failure ("+reason+"): "+err.Error())
+			return
+		}
 		w.Emit(ctx, task, "ERROR", err.Error())
 	}
 }
@@ -111,16 +142,23 @@ func (w *Worker) validateAndWritePack(ctx context.Context, task models.Task, pro
 	return nil
 }
 
-// injectContextPack reads the ContextPack from the workspace and prepends
-// its summary to the task description so the downstream step has context.
-// It returns the (possibly modified) task; callers must use the returned
-// value, since task is passed by value here.
+// injectContextPack reads the ContextPack for this pipeline (scoped to the
+// origin task) and prepends its summary to the task description so the
+// downstream step has context. It returns the (possibly modified) task;
+// callers must use the returned value, since task is passed by value here.
 func (w *Worker) injectContextPack(task models.Task, parentTask models.Task, project models.Project) models.Task {
-	packPath := filepath.Join(project.WorkspacePath, PackFilePath(ContextPackVersion))
+	packPath := filepath.Join(project.WorkspacePath, PackFilePath(parentTask.ID, ContextPackVersion))
 	pack, err := ReadContextPack(packPath)
 	if err != nil {
 		slog.Warn("tiered: failed to read ContextPack for injection",
 			"task_id", task.ID, "path", packPath, "error", err)
+		return task
+	}
+	// Defense in depth: never inject a pack produced by a different pipeline
+	// if the scoped file still carries another task's lineage.
+	if pack.ParentTaskID != "" && pack.ParentTaskID != parentTask.ID {
+		slog.Warn("tiered: ContextPack lineage mismatch, skipping injection",
+			"task_id", task.ID, "expected_parent", parentTask.ID, "pack_parent", pack.ParentTaskID)
 		return task
 	}
 	summary := fmt.Sprintf(
