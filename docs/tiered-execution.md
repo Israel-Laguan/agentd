@@ -111,21 +111,7 @@ Today the gateway already routes by role (`RoleChat`, `RoleWorker`, `RoleMemory`
 | verify | `verify` | `tier-verify` |
 | escalate | `escalate` or strong `worker` | `tier-escalate` |
 
-v1 can map new step kinds onto existing roles + dedicated **AgentProfile** rows (provider/model pins) without a full UI matrix. Config sketch:
-
-```yaml
-tiered:
-  enabled: false
-  complexity_threshold: 200   # 0 disables splitting; unset defaults to 200 when tiered.enabled: true (align with agentic.planning.complexity_threshold)
-  models:
-    context:  { provider: ollama, model: "…" }      # small
-    decision: { provider: gemini, model: "…" }      # mid
-    execute:  { provider: ollama, model: "…" }      # small
-    verify:   { provider: gemini, model: "…" }      # mid
-    escalate: { provider: anthropic, model: "…" }   # strong
-```
-
-Exact keys follow `config.reference.yaml` style when implemented.
+**As implemented (M3):** there is no `tiered.models.<kind>` config key — `internal/config.TieredConfig` / `loadTieredConfig` never read one, and `gateway.role_models` (`RoleModelsConfig`) is a flat one-model-per-role map (`chat` / `worker` / `memory`), not a set of tiers within a role. Step-kind differentiation instead comes from dedicated **AgentProfile** rows named after the step's profile template (`tier-context`, `tier-decision`, `tier-execute`, `tier-verify`; `tier-escalate` reserved for M4). `SplitIntoTieredDAG` (`internal/queue/worker/splitter.go`) stamps each child task's `AgentID` with its profile name; profile lookup resolves the actual provider/model, falling back to the matching `gateway.role_models` entry when a profile leaves provider/model blank — the same fallback relationship documented in `config.reference.yaml`. Seeding/configuring the `tier-*` profiles themselves is a separate concern from the splitter.
 
 ---
 
@@ -161,6 +147,7 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 - Targeted redo after plan steps (`targeted_redo.go`)
 - Workforce profiles, DAG relations, HUMAN / healing handoffs
 - Agentic inner loop (opt-in) — stays subordinate; tiered steps may use legacy or agentic mode per profile
+- Tiered DAG splitter (`SplitIntoTieredDAG`, `internal/queue/worker/splitter.go`) — pure constructor from a gated parent task to `context → decision → execute → verify` children with `SPAWNED_BY`/`DEPENDS_ON` relations and step-kind profile stamps; persistence and dispatch wiring land in T-016
 
 ---
 
@@ -190,7 +177,7 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 | --- | --- |
 | M1 | Gate + config + no behavior change when disabled |
 | M2 | ContextPack schema + context worker (read-only) writing pack |
-| M3 | Decision → execute → verify DAG with allowlists |
+| M3 | Decision → execute → verify DAG with allowlists — **splitter done** (`SplitIntoTieredDAG`, T-015); step-kind dispatch + tool allowlists is T-016 |
 | M4 | Escalation ladder + HUMAN handoff |
 | M5 | Cost/latency harness demo (pairs with product-plan Phase 2) |
 
