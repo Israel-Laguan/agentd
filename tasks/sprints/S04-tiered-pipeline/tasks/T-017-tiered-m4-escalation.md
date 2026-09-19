@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | in-progress |
 | Priority | P1 |
 | Sprint | S04-tiered-pipeline |
 | Estimate | L |
