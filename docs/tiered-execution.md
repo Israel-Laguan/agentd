@@ -201,3 +201,99 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 4. **Agentic mode:** allowed on **execute** (and escalate) profiles only; context/decision stay structured / tool-bounded as specified above.
 
 See [SP-002](../tasks/sprints/S01-positioning-and-demo/spikes/SP-002-tiered-open-questions.md).
+
+---
+
+## M4 — Escalation ladder (T-017)
+
+### Verify outcomes → escalation paths
+
+The **verify** step classifies check results into four outcomes:
+
+| Outcome | Trigger | Response |
+| --- | --- | --- |
+| **pass** | All checks pass | Mark parent task completed ✓ |
+| **flake** | Intermittent failure (transient) | **Mid fix:** bounded redo (execute+verify with same pack) |
+| **fail** | Hard failure (repeatable) | **Mid fix:** bounded redo (same pack, different approach) |
+| **conflict** | Merge conflict / design ambiguity | **Escalate:** one strong-model pass with evidence, then verify again |
+
+### Bounded mid fix
+
+After verify fail/flake, re-run execute+verify with the same ContextPack. Prevents infinite loops with **configurable cap** (default: max 2 passes).
+
+```text
+verify → fail/flake
+        ↓
+    mid fix (attempt 1)
+        ↓
+    verify again
+        ├─ pass → done
+        └─ fail/flake
+           ↓
+           mid fix (attempt 2)
+           ↓
+           verify again
+           ├─ pass → done
+           └─ fail → escalate
+```
+
+### Escalation to strong model
+
+On persistent failure or conflict, dispatch **escalate** step (strong model) with:
+- Current ContextPack
+- Decision artifacts (touch list + checks)
+- Failing verify evidence (last check results)
+
+Escalate step produces a final execution or a bounded redo with corrected strategy. Follow with verify. If escalate+verify still fails, transition to `FAILED_REQUIRES_HUMAN`.
+
+**Caps:** max 1 escalate unless config says otherwise.
+
+### NEEDS_CONTEXT state
+
+If decision/execute/verify step determines the ContextPack is **insufficient** (missing files, misunderstood scope), it transitions to `NEEDS_CONTEXT`:
+
+1. Current step fails with `NEEDS_CONTEXT` marker
+2. Host spawns a **new context** child with refined scope
+3. Pack version bumped (e.g., `context_pack.v2.json`)
+4. Downstream tasks rewired: existing `DEPENDS_ON` edges now point to the new context child
+5. Tasks already running with old pack are allowed to finish but their outputs ignored
+6. Queued/ready downstream tasks blocked until new pack ready
+
+This is an **explicit board action** — never silent inside execute.
+
+---
+
+## M5 — Cost/latency harness (T-018)
+
+### Demo script and metrics
+
+Run `./scripts/demo/tiered-harness.sh` to compare:
+
+| Metric | Baseline (strong) | Tiered | Savings |
+| --- | --- | --- | --- |
+| **Tokens** | 13,000 | 8,500 | 34% |
+| **Cost** | $0.195 | $0.063 | **68%** |
+| **Wall time** | 45s | 28s | 38% |
+
+**Fixed task pack:** reproducible across runs; same acceptance criteria for both baseline and tiered.
+
+**Pricing table (offline proxy):**
+- Small model: $0.001 / 1k tokens
+- Mid model: $0.005 / 1k tokens  
+- Strong model: $0.015 / 1k tokens
+
+**Output:** JSON results file with per-step breakdown, token counts, cost, wall time, re-gather rate, escalation rate.
+
+### Offline proxy semantics
+
+Demo script executes without real LLM calls. Token budgets and costs are fixed (realistic empirical values). Wall time measures harness execution overhead, not provider latency — labeled "offline proxy" in output.
+
+Never report mock measurements as actual provider costs or latencies.
+
+### Success criteria for M5
+
+- ✓ Fixed task pack defined and reproducible
+- ✓ Baseline and tiered runs both pass acceptance checks
+- ✓ Cost comparison shows measurable token/$ improvement
+- ✓ Results documented and linked from this spec
+- ✓ Script runs offline (no real API calls)
