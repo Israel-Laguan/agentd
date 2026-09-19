@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 
 	"agentd/internal/models"
 )
@@ -74,11 +75,14 @@ func (w *Worker) tieredStepChildren(ctx context.Context, origin models.Task) ([]
 }
 
 // unresolvedSteps counts steps that have not reached a terminal state.
+// NEEDS_CONTEXT counts as resolved: such a step was abandoned by a re-gather
+// and superseded by a newer chain, so the origin must not wait on it.
 func unresolvedSteps(steps []models.Task) int {
 	pending := 0
 	for _, step := range steps {
 		switch step.State {
-		case models.TaskStateCompleted, models.TaskStateFailed, models.TaskStateFailedRequiresHuman:
+		case models.TaskStateCompleted, models.TaskStateFailed,
+			models.TaskStateFailedRequiresHuman, models.TaskStateNeedsContext:
 		default:
 			pending++
 		}
@@ -96,24 +100,33 @@ func allStepsCompleted(steps []models.Task) bool {
 	return true
 }
 
-// latestVerifyOutcome returns the verdict recorded by the most recently
-// created verify step, and whether any verify step recorded one at all.
+// latestVerifyOutcome returns the verdict of the most recently created verify
+// step that actually recorded one. Verify steps abandoned by a re-gather, or
+// that never ran, carry no verdict and are skipped rather than treated as a
+// missing result for the whole pipeline.
 func (w *Worker) latestVerifyOutcome(ctx context.Context, steps []models.Task) (models.VerifyResultOutcome, bool) {
-	var newest *models.Task
-	for i, step := range steps {
-		if tieredStepProfiles[step.AgentID] != TieredStepVerify {
-			continue
-		}
-		if newest == nil || step.CreatedAt.After(newest.CreatedAt) {
-			newest = &steps[i]
+	verifies := make([]models.Task, 0, len(steps))
+	for _, step := range steps {
+		if tieredStepProfiles[step.AgentID] == TieredStepVerify {
+			verifies = append(verifies, step)
 		}
 	}
-	if newest == nil {
-		return "", false
+	sort.Slice(verifies, func(i, j int) bool {
+		return verifies[i].CreatedAt.After(verifies[j].CreatedAt)
+	})
+	for _, verify := range verifies {
+		if outcome, ok := w.recordedVerifyOutcome(ctx, verify); ok {
+			return outcome, true
+		}
 	}
-	events, err := w.store.ListEventsByTask(ctx, newest.ID)
+	return "", false
+}
+
+// recordedVerifyOutcome reads the verdict a verify step emitted, if any.
+func (w *Worker) recordedVerifyOutcome(ctx context.Context, verify models.Task) (models.VerifyResultOutcome, bool) {
+	events, err := w.store.ListEventsByTask(ctx, verify.ID)
 	if err != nil {
-		slog.Error("tiered origin: failed to read verify events", "task_id", newest.ID, "error", err)
+		slog.Error("tiered origin: failed to read verify events", "task_id", verify.ID, "error", err)
 		return "", false
 	}
 	outcome := models.VerifyResultOutcome("")

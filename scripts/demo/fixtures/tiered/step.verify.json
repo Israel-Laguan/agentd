@@ -1,0 +1,8 @@
+{
+  "results": [
+    {"check": "go build ./...", "outcome": "pass", "detail": ""},
+    {"check": "go test ./internal/queue/worker", "outcome": "pass", "detail": "ok agentd/internal/queue/worker"},
+    {"check": "go vet ./internal/queue/worker", "outcome": "pass", "detail": ""}
+  ],
+  "overall": "pass"
+}

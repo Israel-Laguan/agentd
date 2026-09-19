@@ -28,8 +28,8 @@ func TestMigrationAddsRoleAndMaxTokensColumns(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "15" {
-		t.Fatalf("schema version = %q, want 15", version)
+	if version != "16" {
+		t.Fatalf("schema version = %q, want 16", version)
 	}
 
 	for _, col := range []string{"role", "max_tokens"} {
@@ -190,8 +190,8 @@ func TestMigrationAddsDisableTopicDriftColumn(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "15" {
-		t.Fatalf("schema version = %q, want 15", version)
+	if version != "16" {
+		t.Fatalf("schema version = %q, want 16", version)
 	}
 
 	var hasColumn int
@@ -224,8 +224,8 @@ func TestMigrationAddsCapabilityRouteIntentColumn(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "15" {
-		t.Fatalf("schema version = %q, want 15", version)
+	if version != "16" {
+		t.Fatalf("schema version = %q, want 16", version)
 	}
 
 	var hasColumn int

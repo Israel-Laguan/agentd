@@ -1,6 +1,6 @@
 # Tiered execution pipeline
 
-**Status:** design spec (not implemented as a product surface yet)  
+**Status:** implemented through M5 (S04 + T-020). Gate, DAG split, step modes, sealed ContextPack, escalation ladder, NEEDS_CONTEXT re-gather and the cost harness are wired and tested. Not yet covered: `tiered.*` config keys for the ladder caps, pack generation numbering, and any wall-clock measurement.  
 **Parent plan:** [product-plan.md](product-plan.md) Phase 5  
 **Related:** [agentic-harness.md](agentic-harness.md), [architecture.md](architecture.md), existing `EstimateTaskComplexity` / `agentic.planning.complexity_threshold` in `internal/queue/worker/phase_splitter.go` and `internal/config/agentic.go`
 
@@ -8,7 +8,9 @@
 
 Spend strong models only where judgment is scarce. For **hard** tasks, split execution into typed steps with different model tiers and **sealed artifacts**, so cheap models gather and apply while mid/strong models decide, verify, and escalate — without relying on “don’t search again” prompts.
 
-Save **money and wall-clock**. Soft prompt discipline is not the mechanism.
+Save **money**. Soft prompt discipline is not the mechanism.
+
+On wall-clock: it remains a design goal, not a demonstrated result — see [M5](#m5--costlatency-harness-t-018), which deliberately reports no latency number. Measured cost savings come with a measured token *increase*.
 
 ---
 
@@ -91,7 +93,7 @@ mandatory still validate.
 
 1. Context step **must** write ContextPack to workspace/board storage and attach its id/path on the child tasks.
 2. Decision / execute / verify inject the pack; default tool policy **forbids** broad search (repo-wide glob/grep outside `paths`).
-3. Re-gather is an **explicit** board action: fail with `NEEDS_CONTEXT`, spawn/redo **context**, bump pack `version`. Never a silent side quest inside execute.
+3. Re-gather is an **explicit** board action: signal `NEEDS_CONTEXT`, append a fresh **context** chain, rewrite the pack. Never a silent side quest inside execute. (Pack *generation* numbering is not implemented — `version` is the schema version; see the NEEDS_CONTEXT section.)
 4. Escalation and mid-fix **keep** the current pack unless a new context task is created.
 5. Packs have size limits; overflow goes to `unknowns` or forces a second context pass with a narrower question — not an unbounded dump into the next model.
 
@@ -111,7 +113,7 @@ Today the gateway already routes by role (`RoleChat`, `RoleWorker`, `RoleMemory`
 | verify | `verify` | `tier-verify` |
 | escalate | `escalate` or strong `worker` | `tier-escalate` |
 
-**As implemented (M3):** there is no `tiered.models.<kind>` config key — `internal/config.TieredConfig` / `loadTieredConfig` never read one, and `gateway.role_models` (`RoleModelsConfig`) is a flat one-model-per-role map (`chat` / `worker` / `memory`), not a set of tiers within a role. Step-kind differentiation instead comes from dedicated **AgentProfile** rows named after the step's profile template (`tier-context`, `tier-decision`, `tier-execute`, `tier-verify`; `tier-escalate` reserved for M4). `SplitIntoTieredDAG` (`internal/queue/worker/splitter.go`) stamps each child task's `AgentID` with its profile name; profile lookup resolves the actual provider/model, falling back to the matching `gateway.role_models` entry when a profile leaves provider/model blank — the same fallback relationship documented in `config.reference.yaml`. Seeding/configuring the `tier-*` profiles themselves is a separate concern from the splitter.
+**As implemented (M3):** there is no `tiered.models.<kind>` config key — `internal/config.TieredConfig` / `loadTieredConfig` never read one, and `gateway.role_models` (`RoleModelsConfig`) is a flat one-model-per-role map (`chat` / `worker` / `memory`), not a set of tiers within a role. Step-kind differentiation instead comes from dedicated **AgentProfile** rows named after the step's profile template (`tier-context`, `tier-decision`, `tier-execute`, `tier-verify`, `tier-escalate`). `SplitIntoTieredDAG` (`internal/queue/worker/splitter.go`) stamps each child task's `AgentID` with its profile name; profile lookup resolves the actual provider/model, falling back to the matching `gateway.role_models` entry when a profile leaves provider/model blank — the same fallback relationship documented in `config.reference.yaml`. All five `tier-*` profiles are seeded by `agentd init` (`cmd/agentd/profiles.go`) with empty provider/model so the `gateway.role_models` fallback picks the actual tier models; `cmd/agentd.TestSeededProfilesCoverTieredSteps` fails if a step kind is added without a matching profile.
 
 ---
 
@@ -123,7 +125,7 @@ On verify failure:
 2. **Conflict / design ambiguity** — one escalate (strong) pass with pack + failing evidence.
 3. **Still blocked** — `HUMAN` (or existing healing / permission handoff paths). Do not spin.
 
-Caps: max mid-fix passes, max one escalate unless config says otherwise. Always durable board states — no stuck `RUNNING` chat.
+Caps: max 2 mid-fix passes, max 1 escalate. Both are constants in `internal/queue/worker/escalation.go`, counted from the steps on the board so they survive a restart; neither is a config key yet. Always durable board states — no stuck `RUNNING` chat.
 
 ---
 
@@ -261,14 +263,25 @@ The origin itself is never completed by a step. `PersistTieredDAG` leaves it `BL
 
 If decision/execute/verify step determines the ContextPack is **insufficient** (missing files, misunderstood scope), it transitions to `NEEDS_CONTEXT`:
 
-1. Current step fails with `NEEDS_CONTEXT` marker
-2. Host spawns a **new context** child with refined scope
-3. Pack version bumped (e.g., `context_pack.v2.json`)
-4. Downstream tasks rewired: existing `DEPENDS_ON` edges now point to the new context child
-5. Tasks already running with old pack are allowed to finish but their outputs ignored
-6. Queued/ready downstream tasks blocked until new pack ready
+A decision, execute, or verify step that finds the pack insufficient emits
+`{"needs_context": true, "reason": "…"}` instead of its normal output. That
+outranks any verdict it would otherwise report.
 
 This is an **explicit board action** — never silent inside execute.
+
+### NEEDS_CONTEXT as implemented (T-020)
+
+1. The signal is read from the step's committed `RESULT` event and recorded as a `TIERED_NEEDS_CONTEXT` event.
+2. Stale sibling steps (`PENDING` / `READY` / `QUEUED`) are parked in `NEEDS_CONTEXT` so nothing downstream runs against the old pack. Steps already `RUNNING` are left to finish; their output is superseded.
+3. A **fresh `context → decision → execute → verify` chain** is appended to the origin, carrying the stated reason into the new context step.
+4. Appending re-blocks the origin, so the pipeline cannot resolve while the re-gather is outstanding.
+
+Two deviations from the sketch above, both deliberate:
+
+- **No edge rewiring.** Rather than repointing existing `DEPENDS_ON` edges (which would need a relation-mutation store method), the new chain depends on the new context step by construction. The abandoned steps stay on the board in `NEEDS_CONTEXT` as a record of what was discarded.
+- **No pack generation number.** `ContextPackVersion` is the *schema* version and `Validate()` rejects anything else, so `context_pack.v2.json` would mean "schema v2", not "second attempt". The re-gather rewrites the pack at the same path; the generation is visible on the board as a second context step, not in the filename. Numbering generations needs the pack format to carry a field for it.
+
+`NEEDS_CONTEXT` is a real persisted state: it is in the `tasks.state` CHECK constraint as of schema v16, and `internal/kanban.TestTaskStateCheckConstraintParity` fails if the Go enum and the constraint ever drift apart again.
 
 ---
 
@@ -276,15 +289,19 @@ This is an **explicit board action** — never silent inside execute.
 
 ### Demo script and metrics
 
-Run `./scripts/demo/tiered-harness.sh` to compare:
+Run `./scripts/demo/tiered-harness.sh`. Every number below is derived from the seeded fixtures in `scripts/demo/fixtures/tiered/` — edit a fixture and the numbers move:
 
-| Metric | Baseline (strong) | Tiered | Savings |
+| Metric | Baseline (strong) | Tiered | Delta |
 | --- | --- | --- | --- |
-| **Tokens** | 13,000 | 8,500 | 34% |
-| **Cost** | $0.195 | $0.0225 | **88%** |
-| **Wall time** | 45s | 28s | 38% |
+| **Tokens** | 947 | 2,728 | **2.88× more** |
+| **Cost** | $0.0142 | $0.0081 | **43% less** |
+| **Wall time** | not measured | not measured | see below |
 
-**Fixed task pack:** reproducible across runs; same acceptance criteria for both baseline and tiered.
+**Tiered execution spends more tokens, not fewer.** Every step re-reads the sealed pack, so total token count goes *up*. The entire saving comes from tier assignment: the two largest steps (context and execute) run on the small model because the pack means they never re-crawl the repository. This is a price-per-token play, not a token-efficiency play.
+
+Earlier revisions of this table claimed a 34% *token reduction*. That was never measured and is not what the pipeline does — the shape of the win is the opposite. Read the token row as a cost the design pays, not a benefit.
+
+**Fixed task pack:** `scripts/demo/fixtures/tiered/task.json`, reproducible across runs; both arms must satisfy the same acceptance criterion, which the harness reads from the seeded verify verdict rather than asserting.
 
 **Pricing table (offline proxy):**
 
@@ -292,18 +309,21 @@ Run `./scripts/demo/tiered-harness.sh` to compare:
 - Mid model: $0.005 / 1k tokens
 - Strong model: $0.015 / 1k tokens
 
-**Output:** JSON results file with per-step breakdown, token counts, cost, wall time, re-gather rate, escalation rate.
+**Output:** JSON results file with the per-step breakdown, token counts, costs, and the token ratio.
 
 ### Offline proxy semantics
 
-Demo script executes without real LLM calls. Token budgets and costs are fixed (realistic empirical values). Wall time measures harness execution overhead, not provider latency — labeled "offline proxy" in output.
+The harness makes no LLM calls. Token counts come from the actual byte size of the seeded request and response fixtures at a documented 4-bytes-per-token proxy; costs are those counts against the pricing table above.
 
-Never report mock measurements as actual provider costs or latencies.
+**Wall-clock latency is deliberately not reported.** Reading fixtures takes microseconds and says nothing about provider latency, so there is no honest offline number to print. Any latency claim needs a live run against real providers. Earlier revisions reported a 38% wall-time win derived from two hardcoded constants; it has been removed rather than restated.
+
+Never report proxy measurements as actual provider costs.
 
 ### Success criteria for M5
 
 - ✓ Fixed task pack defined and reproducible
-- ✓ Baseline and tiered runs both pass acceptance checks
-- ✓ Cost comparison shows measurable token/$ improvement
+- ✓ Both arms satisfy the same acceptance criterion (seeded verify verdict, enforced by the harness)
+- ✓ Cost comparison derived from seeded fixtures, not hardcoded constants
 - ✓ Results documented and linked from this spec
 - ✓ Script runs offline (no real API calls)
+- ✗ Wall-clock comparison — needs a live run; not claimed offline

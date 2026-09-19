@@ -1,0 +1,10 @@
+{
+  "touch_list": [
+    "internal/queue/worker/worker_tiered_verify.go",
+    "internal/queue/worker/worker_tiered_origin.go",
+    "internal/queue/worker/escalation.go",
+    "internal/queue/worker/worker.go"
+  ],
+  "checks": ["go build ./...", "go test ./internal/queue/worker", "go vet ./internal/queue/worker"],
+  "rationale": "Intercept the verify step to classify its VerifyResult, resolve the blocked origin through UpdateTaskResult once its steps resolve, and guard the split gate so a finished origin is never re-split."
+}

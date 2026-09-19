@@ -1,0 +1,15 @@
+{
+  "id": "hard-task-001",
+  "title": "Implement tiered execution with cost measurement",
+  "description": "Add a feature that splits complex tasks into context, decision, execute, verify steps with per-step cost tracking and model tier assignment.",
+  "acceptance_criteria": [
+    "DAG children created with correct step kinds",
+    "Each step runs with assigned model tier",
+    "Cost measured per step",
+    "Verify classifies outcomes correctly",
+    "Re-gather triggers on NEEDS_CONTEXT",
+    "Escalation degrades to HUMAN without loops"
+  ],
+  "complexity_score": 250,
+  "target_domains": ["worker", "models", "config"]
+}
