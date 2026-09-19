@@ -23,6 +23,10 @@ func (s *approvalMockStore) BlockTaskWithSubtasks(ctx context.Context, id string
 	return s.FakeKanbanStore.BlockTaskWithSubtasks(ctx, id, expectedUpdatedAt, subtasks)
 }
 
+func (s *approvalMockStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
+
 func TestBlockingApprovalHandler_ReturnsNotApproved(t *testing.T) {
 	t.Parallel()
 	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}

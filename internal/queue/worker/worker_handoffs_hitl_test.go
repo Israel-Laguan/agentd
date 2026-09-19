@@ -255,3 +255,7 @@ func (s *reviewMockStore) BlockTaskWithSubtasks(_ context.Context, taskID string
 	}
 	return &models.Task{}, created, nil
 }
+
+func (s *reviewMockStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}

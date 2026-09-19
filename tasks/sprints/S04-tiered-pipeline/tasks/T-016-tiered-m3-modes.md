@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | done |
 | Priority | P1 |
 | Sprint | S04-tiered-pipeline |
 | Estimate | XL |
@@ -16,14 +16,14 @@ Implement worker dispatch modes for each step kind. Context reads and writes a C
 
 ## Done when
 
-- [ ] Context mode: reads task + workspace, emits ContextPack JSON; host orchestration persists via `WriteContextPack` API and attaches pack path to child tasks (context worker remains read-only, no write tool)
-- [ ] Decision mode: reads pack, produces touch list + checks (JSON output)
-- [ ] Execute mode: applies edits/commands within decision allowlist only
-- [ ] Verify mode: runs decision-specified checks, classifies outcome
-- [ ] Tool allowlists enforced: context = read/search/list (no write); execute = write/bash within bounds
-- [ ] Broad search (repo-wide glob/grep) forbidden outside pack paths for decision/execute/verify
-- [ ] Tests: each mode produces correct output, tool restriction enforced, pack injection works
-- [ ] No prod changes to existing legacy/agentic paths
+- [x] Context mode: reads task + workspace, emits ContextPack JSON; host orchestration persists via `WriteContextPack` API and attaches pack path to child tasks (context worker remains read-only, no write tool)
+- [x] Decision mode: reads pack, produces touch list + checks (JSON output)
+- [x] Execute mode: applies edits/commands within decision allowlist only
+- [x] Verify mode: runs decision-specified checks, classifies outcome
+- [x] Tool allowlists enforced: context = read/search/list (no write); execute = write/bash within bounds
+- [x] Broad search (repo-wide glob/grep) forbidden outside pack paths for decision/execute/verify
+- [x] Tests: each mode produces correct output, tool restriction enforced, pack injection works
+- [x] No prod changes to existing legacy/agentic paths
 
 ## Notes
 

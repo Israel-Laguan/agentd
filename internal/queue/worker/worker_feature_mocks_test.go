@@ -210,6 +210,10 @@ func (s *workerTestStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ t
 	return &models.Task{}, nil, nil
 }
 
+func (s *workerTestStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *workerTestStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

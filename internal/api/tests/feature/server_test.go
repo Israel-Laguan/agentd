@@ -271,6 +271,9 @@ func (s *apiStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) ([]m
 func (s *apiStore) AppendTasksToProject(context.Context, string, string, []models.DraftTask) ([]models.Task, error) {
 	return nil, nil
 }
+func (s *apiStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *apiStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	return &models.Project{BaseEntity: models.BaseEntity{ID: "system"}, Name: "_system"}, nil
 }

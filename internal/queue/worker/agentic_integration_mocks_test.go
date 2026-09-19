@@ -333,6 +333,10 @@ func (m *mockAgenticStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ 
 	return &m.task, nil, nil
 }
 
+func (m *mockAgenticStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockAgenticStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

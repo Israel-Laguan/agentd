@@ -232,6 +232,9 @@ func (s *queueStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) ([
 func (s *queueStore) AppendTasksToProject(context.Context, string, string, []models.DraftTask) ([]models.Task, error) {
 	return nil, nil
 }
+func (s *queueStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
 
 func (s *queueStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	return &models.Project{BaseEntity: models.BaseEntity{ID: "system"}, Name: "_system"}, nil

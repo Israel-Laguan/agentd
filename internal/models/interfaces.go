@@ -71,6 +71,9 @@ type KanbanStore interface {
 	ListChildTasks(ctx context.Context, parentID string) ([]Task, error)
 	ListParentTasks(ctx context.Context, childID string) ([]Task, error)
 	ReconcileExpiredBlockedTasks(ctx context.Context, now time.Time) ([]Task, error)
+	// PersistTieredDAG atomically blocks the parent and inserts pre-built
+	// tiered step children with SPAWNED_BY and DEPENDS_ON relations.
+	PersistTieredDAG(ctx context.Context, parentID string, expectedParentUpdatedAt time.Time, children []TieredDAGTask) ([]Task, error)
 	AppendTasksToProject(ctx context.Context, projectID, parentTaskID string, drafts []DraftTask) ([]Task, error)
 	AddComment(ctx context.Context, c Comment) error
 	ListComments(ctx context.Context, taskID string) ([]Comment, error)

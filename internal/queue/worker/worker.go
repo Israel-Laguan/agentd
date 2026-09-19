@@ -184,6 +184,14 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.handlePhasePlanning(ctx, task, *project)
 		return
 	}
+	// Tiered pipeline gate: when enabled and the task exceeds the complexity
+	// threshold, split it into a context→decision→execute→verify DAG and
+	// block the parent. The child tasks will be picked up by the queue and
+	// dispatched through processTieredStep below.
+	if w.ShouldRunTiered(task) {
+		w.persistTieredDAG(ctx, task)
+		return
+	}
 	// Guard: if this provider's circuit breaker is open, create an immediate
 	// handoff rather than wasting a slot on a call that will fail with 429.
 	if w.providerBreakers != nil && profile.Provider != "" {
@@ -193,6 +201,32 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 					models.ErrLLMQuotaExceeded, profile.Provider))
 			return
 		}
+	}
+	// Tiered step detection: child tasks created by SplitIntoTieredDAG carry
+	// an AgentID matching a tiered step profile (tier-context, tier-decision,
+	// tier-execute, tier-verify). Dispatch them through the tiered pipeline.
+	if w.isTieredStep(task) {
+		parentTask, err := w.store.GetTask(ctx, task.DependsOn[0])
+		if err != nil && len(task.DependsOn) > 0 {
+			// Fallback: try to find parent via SPAWNED_BY relation
+			parents, _ := w.store.ListParentTasks(ctx, task.ID)
+			if len(parents) > 0 {
+				parentTask = &parents[0]
+			}
+		}
+		if parentTask == nil {
+			// For context step (no DependsOn), find parent via SPAWNED_BY
+			parents, _ := w.store.ListParentTasks(ctx, task.ID)
+			if len(parents) > 0 {
+				parentTask = &parents[0]
+			}
+		}
+		if parentTask != nil {
+			w.processTieredStep(ctx, task, *project, *profile, w.tieredStepKind(task), *parentTask)
+			return
+		}
+		slog.Warn("tiered step detected but parent not found; falling back to legacy",
+			"task_id", task.ID, "agent_id", task.AgentID)
 	}
 	// AgenticMode selects processAgentic. Model routing (Task 43) and external capability
 	// routing (Task 45) run inside processAgentic after tools are assembled; capability

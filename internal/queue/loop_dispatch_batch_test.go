@@ -225,6 +225,9 @@ func (s *dispatchBatchStore) AppendTasksToProject(context.Context, string, strin
 func (s *dispatchBatchStore) BlockTaskWithSubtasks(context.Context, string, time.Time, []models.DraftTask) (*models.Task, []models.Task, error) {
 	return nil, nil, nil
 }
+func (s *dispatchBatchStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *dispatchBatchStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

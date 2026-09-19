@@ -204,6 +204,9 @@ func (m *minimalStore) ReconcileExpiredBlockedTasks(context.Context, time.Time) 
 func (m *minimalStore) AppendTasksToProject(context.Context, string, string, []models.DraftTask) ([]models.Task, error) {
 	return nil, nil
 }
+func (m *minimalStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
 
 // fullStore embeds minimalStore and adds no-op implementations for
 // the remaining KanbanStore surface that this test does not exercise.
