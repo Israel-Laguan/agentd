@@ -265,6 +265,9 @@ func (s *apiStore) ListParentTasksByRelation(context.Context, string, models.Tas
 	return nil, nil
 }
 
+func (s *apiStore) ListChildTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *apiStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

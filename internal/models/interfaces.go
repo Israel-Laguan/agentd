@@ -69,6 +69,7 @@ type KanbanStore interface {
 	ReconcileOrphanedQueued(ctx context.Context, minAge time.Duration) ([]Task, error)
 	BlockTaskWithSubtasks(ctx context.Context, taskID string, expectedUpdatedAt time.Time, subtasks []DraftTask) (*Task, []Task, error)
 	ListChildTasks(ctx context.Context, parentID string) ([]Task, error)
+	ListChildTasksByRelation(ctx context.Context, parentID string, relationType TaskRelationType) ([]Task, error)
 	ListParentTasks(ctx context.Context, childID string) ([]Task, error)
 	// ListParentTasksByRelation returns parent tasks connected by a specific
 	// relation type (e.g. SPAWNED_BY). Used by the tiered pipeline to

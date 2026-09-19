@@ -109,6 +109,7 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 			slog.Error("tiered: ContextPack injection failed; failing step",
 				"task_id", task.ID, "step", stepKind, "error", err)
 			w.failTieredStep(ctx, task, "ContextPack injection failed: "+err.Error())
+			w.failTieredDependents(ctx, task, parentTask)
 			return
 		}
 	}
