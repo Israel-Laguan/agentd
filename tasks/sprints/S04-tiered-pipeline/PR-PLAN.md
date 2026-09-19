@@ -20,14 +20,14 @@ Before `gh pr create`:
 
 ```sh
 git diff --stat main...HEAD
-# files changed within the PR's own range in the table above (e.g. PR-B/PR-C's 20-50), insertions+deletions ideally < 1000
+# files changed within the PR's own range in the table above (e.g. PR-B/PR-C's 20-50), insertions+deletions within the PR's own LOC cap (e.g. PR-A <600, PR-B <800)
 ```
 
 If over budget: split tests vs prod, or runtime vs docs. Never "just one more file" from another package. Escalation PR that exposes a prod gap stops at tests+docs; the fix gets its own ticket (S02 PR-C pattern).
 
 **PR-B floor (20 files minimum):** step-kind dispatch + mode switching genuinely touches worker_*.go, agentic/, and contextpack*.go across several files plus matching tests — landing under 20 there likely means dispatch wiring was left incomplete (e.g. only one mode wired, or tests skipped for some step kinds). Verify actual completeness against T-016's "Done when" list rather than adding files just to clear the floor.
 
-**PR-C floor (20 files minimum) — merged T-017 + T-018:** originally separate PRs; **operator decision 2026-09-19** merged them to clear the 20-file floor. This reverses the sprint's earlier "no bundling runtime changes + cost harness + escalation" and README's "PRs that mix runtime changes + cost harness + escalation" rules (both now superseded for PR-C specifically). Tradeoff accepted knowingly: the escalation ladder (new states, HUMAN handoff — a real runtime behavior change) and the cost harness (T-018, explicitly no-prod-change demo script + docs) now review together despite different risk profiles. Landing under 20 files likely means either escalation's state machine or the harness's fixed task pack was left incomplete — verify against both T-017's and T-018's "Done when" lists, not by padding.
+**PR-C floor (20 files minimum) — merged T-017 + T-018:** originally separate PRs; **operator decision 2026-09-19** merged them to clear the 20-file floor. This reverses the old PR-PLAN rule "Prefer smaller. No bundling runtime changes + cost harness + escalation." and README's "PRs that mix runtime changes + cost harness + escalation" rule (both now superseded for PR-C specifically). Tradeoff accepted knowingly: the escalation ladder (new states, HUMAN handoff — a real runtime behavior change) and the cost harness (T-018, explicitly no-prod-change demo script + docs) now review together despite different risk profiles. Landing under 20 files likely means either escalation's state machine or the harness's fixed task pack was left incomplete — verify against both T-017's and T-018's "Done when" lists, not by padding.
 
 PR-A keeps its own ≤15 files/<600 LOC ceiling with no floor — its actual scope (T-015, a pure constructor) is legitimately small, and the sprint's "prefer smaller" instinct still applies wherever a floor isn't explicitly set.
 

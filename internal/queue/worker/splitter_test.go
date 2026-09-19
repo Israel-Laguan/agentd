@@ -35,6 +35,12 @@ func TestSplitIntoTieredDAG_StepOrderAndProfiles(t *testing.T) {
 		if got := children[i].AgentID; got != want {
 			t.Fatalf("children[%d].AgentID = %q, want %q", i, got, want)
 		}
+		if !children[i].CreatedAt.Equal(now) {
+			t.Fatalf("children[%d].CreatedAt = %v, want %v", i, children[i].CreatedAt, now)
+		}
+		if !children[i].UpdatedAt.Equal(now) {
+			t.Fatalf("children[%d].UpdatedAt = %v, want %v", i, children[i].UpdatedAt, now)
+		}
 	}
 }
 
@@ -113,15 +119,33 @@ func TestSplitIntoTieredDAG_InheritsProjectAndAssignee(t *testing.T) {
 	now := time.Now()
 	parent := testTieredParent()
 	children, _ := SplitIntoTieredDAG(parent, now)
+	seenIDs := make(map[string]struct{}, len(children))
 	for i, child := range children {
 		if child.ID == "" {
 			t.Fatalf("children[%d].ID is empty", i)
 		}
+		if _, dup := seenIDs[child.ID]; dup {
+			t.Fatalf("children[%d].ID %q is not unique", i, child.ID)
+		}
+		seenIDs[child.ID] = struct{}{}
 		if child.ProjectID != parent.ProjectID {
 			t.Fatalf("children[%d].ProjectID = %q, want %q", i, child.ProjectID, parent.ProjectID)
 		}
 		if child.Assignee != parent.Assignee {
 			t.Fatalf("children[%d].Assignee = %q, want %q", i, child.Assignee, parent.Assignee)
+		}
+	}
+}
+
+func TestSplitIntoTieredDAG_InvalidAssigneeFallsBackToSystem(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	parent := testTieredParent()
+	parent.Assignee = "" // invalid
+	children, _ := SplitIntoTieredDAG(parent, now)
+	for i, child := range children {
+		if child.Assignee != models.TaskAssigneeSystem {
+			t.Fatalf("children[%d].Assignee = %q, want %q", i, child.Assignee, models.TaskAssigneeSystem)
 		}
 	}
 }

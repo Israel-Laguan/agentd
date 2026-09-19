@@ -412,8 +412,7 @@ func TestReadContextPack_ExplicitZeroCountersFail(t *testing.T) {
 
 func TestContextPack_Validate_MismatchedCountersStillFail(t *testing.T) {
 	t.Parallel()
-	// BackfillBudgetCounters only fills zero-valued counters; an explicit
-	// counter that disagrees with the serialized content must still fail.
+	// An explicit counter that disagrees with the serialized content must fail.
 	pathMismatch := &ContextPack{
 		Version: 1, TaskID: "t1", Summary: "summary",
 		Paths:  []string{"a.go"},

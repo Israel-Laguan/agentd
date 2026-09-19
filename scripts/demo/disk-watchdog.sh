@@ -141,14 +141,18 @@ cmd_probe() {
     return 1
   }
   local system_pid
-  system_pid=$(echo "$resp" | python3 -c "
+  local _sys_tmp
+  _sys_tmp=$(mktemp "${TMPDIR:-/tmp}/agentd-sys.XXXXXX") || return 1
+  echo "$resp" > "$_sys_tmp"
+  system_pid=$(python3 -c "
 import sys, json
-raw = json.load(sys.stdin)
+raw = json.load(open(sys.argv[1]))
 for p in raw.get('data', raw):
     if p.get('name') == '_system':
         print(p['id'])
         break
-" 2>/dev/null) || true
+" "$_sys_tmp" 2>/dev/null) || true
+  rm -f "$_sys_tmp"
   if [[ -z "$system_pid" ]]; then
     echo "No _system project yet — watchdog may not have fired."
     echo "Wait a few seconds and try again, or check: $0 status"
@@ -161,9 +165,12 @@ for p in raw.get('data', raw):
   }
   local probe_result=""
   local probe_status=0
-  probe_result=$(echo "$tasks_resp" | python3 -c "
+  local _probe_tmp
+  _probe_tmp=$(mktemp "${TMPDIR:-/tmp}/agentd-probe.XXXXXX") || return 1
+  echo "$tasks_resp" > "$_probe_tmp"
+  probe_result=$(python3 -c "
 import sys, json
-raw = json.load(sys.stdin)
+raw = json.load(open(sys.argv[1]))
 tasks = raw.get('data', raw)
 matches = [t for t in tasks if 'Disk space critical' in t.get('title','')]
 human = [t for t in matches if t.get('assignee')=='HUMAN']
@@ -175,7 +182,8 @@ if len(matches)!=1:
     print(f'FAIL: expected exactly 1 Disk space critical task, found {len(matches)} (dedup broken)'); sys.exit(3)
 t=human[0]
 print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={len(matches)}\")
-" 2>/dev/null) || probe_status=$?
+" "$_probe_tmp" 2>/dev/null) || probe_status=$?
+  rm -f "$_probe_tmp"
   if (( probe_status != 0 )); then
     echo "$probe_result"
     echo "The watchdog runs on an interval. Wait and retry, or check: $0 status"
@@ -195,14 +203,18 @@ print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={
   else
     # SSE window missed: re-check daemon.log after the task-fetch delay.
     local events_resp
-    events_resp=$(curl -fsS -m 5 "$API_URL/api/v1/projects/$system_pid/tasks" 2>/dev/null | python3 -c "
+    local _evt_tmp
+    _evt_tmp=$(mktemp "${TMPDIR:-/tmp}/agentd-evt.XXXXXX") || return 1
+    curl -fsS -m 5 "$API_URL/api/v1/projects/$system_pid/tasks" 2>/dev/null > "$_evt_tmp"
+    events_resp=$(python3 -c "
 import sys, json
-raw = json.load(sys.stdin)
+raw = json.load(open(sys.argv[1]))
 for t in raw.get('data', raw):
     if 'Disk space critical' in t.get('title',''):
         print(t.get('id',''))
         break
-" 2>/dev/null || true)
+" "$_evt_tmp" 2>/dev/null || true)
+    rm -f "$_evt_tmp"
     if [[ -n "$events_resp" ]] && grep -q "DISK_SPACE_CRITICAL" "$HOME_DIR/daemon.log" 2>/dev/null; then
       sse_hit="log"
       echo "  SSE not observed in 3s window — DISK_SPACE_CRITICAL observed in daemon.log"
@@ -220,12 +232,16 @@ for t in raw.get('data', raw):
     return 1
   }
   local dedup_count
-  dedup_count=$(echo "$tasks_resp2" | python3 -c "
+  local _dedup_tmp
+  _dedup_tmp=$(mktemp "${TMPDIR:-/tmp}/agentd-dedup.XXXXXX") || return 1
+  echo "$tasks_resp2" > "$_dedup_tmp"
+  dedup_count=$(python3 -c "
 import sys, json
-raw = json.load(sys.stdin)
+raw = json.load(open(sys.argv[1]))
 tasks = raw.get('data', raw)
 print(sum(1 for t in tasks if 'Disk space critical' in t.get('title','')))
-" 2>/dev/null) || dedup_count="?"
+" "$_dedup_tmp" 2>/dev/null) || dedup_count="?"
+  rm -f "$_dedup_tmp"
   if [[ "$dedup_count" != "1" ]]; then
     echo "FAIL: deduplication broken — expected 1 Disk space critical task, found $dedup_count after re-poll" >&2
     return 1
