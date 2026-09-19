@@ -133,6 +133,8 @@ cmd_inject_fault() {
 }
 
 cmd_probe() {
+  local _probe_cleanup_tmp=()
+  trap 'rm -f "${_probe_cleanup_tmp[@]}"' EXIT
   validate_inputs || return 1
   echo "Checking for _system HUMAN task..."
   local resp
@@ -143,6 +145,7 @@ cmd_probe() {
   local system_pid
   local _sys_tmp
   _sys_tmp=$(mktemp "${TMPDIR:-/tmp}/agentd-sys.XXXXXX") || return 1
+  _probe_cleanup_tmp+=("$_sys_tmp")
   echo "$resp" > "$_sys_tmp"
   system_pid=$(python3 -c "
 import sys, json
@@ -152,7 +155,6 @@ for p in raw.get('data', raw):
         print(p['id'])
         break
 " "$_sys_tmp" 2>/dev/null) || true
-  rm -f "$_sys_tmp"
   if [[ -z "$system_pid" ]]; then
     echo "No _system project yet — watchdog may not have fired."
     echo "Wait a few seconds and try again, or check: $0 status"
@@ -167,6 +169,7 @@ for p in raw.get('data', raw):
   local probe_status=0
   local _probe_tmp
   _probe_tmp=$(mktemp "${TMPDIR:-/tmp}/agentd-probe.XXXXXX") || return 1
+  _probe_cleanup_tmp+=("$_probe_tmp")
   echo "$tasks_resp" > "$_probe_tmp"
   probe_result=$(python3 -c "
 import sys, json
@@ -183,7 +186,6 @@ if len(matches)!=1:
 t=human[0]
 print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={len(matches)}\")
 " "$_probe_tmp" 2>/dev/null) || probe_status=$?
-  rm -f "$_probe_tmp"
   if (( probe_status != 0 )); then
     echo "$probe_result"
     echo "The watchdog runs on an interval. Wait and retry, or check: $0 status"
@@ -205,7 +207,8 @@ print(f\"PASS: {t.get('state')} task '{t.get('title')}' (assignee=HUMAN) count={
     local events_resp
     local _evt_tmp
     _evt_tmp=$(mktemp "${TMPDIR:-/tmp}/agentd-evt.XXXXXX") || return 1
-    curl -fsS -m 5 "$API_URL/api/v1/projects/$system_pid/tasks" 2>/dev/null > "$_evt_tmp"
+    _probe_cleanup_tmp+=("$_evt_tmp")
+    curl -fsS -m 5 "$API_URL/api/v1/projects/$system_pid/tasks" 2>/dev/null > "$_evt_tmp" || true
     events_resp=$(python3 -c "
 import sys, json
 raw = json.load(open(sys.argv[1]))
@@ -214,7 +217,6 @@ for t in raw.get('data', raw):
         print(t.get('id',''))
         break
 " "$_evt_tmp" 2>/dev/null || true)
-    rm -f "$_evt_tmp"
     if [[ -n "$events_resp" ]] && grep -q "DISK_SPACE_CRITICAL" "$HOME_DIR/daemon.log" 2>/dev/null; then
       sse_hit="log"
       echo "  SSE not observed in 3s window — DISK_SPACE_CRITICAL observed in daemon.log"
@@ -234,6 +236,7 @@ for t in raw.get('data', raw):
   local dedup_count
   local _dedup_tmp
   _dedup_tmp=$(mktemp "${TMPDIR:-/tmp}/agentd-dedup.XXXXXX") || return 1
+  _probe_cleanup_tmp+=("$_dedup_tmp")
   echo "$tasks_resp2" > "$_dedup_tmp"
   dedup_count=$(python3 -c "
 import sys, json
@@ -241,7 +244,6 @@ raw = json.load(open(sys.argv[1]))
 tasks = raw.get('data', raw)
 print(sum(1 for t in tasks if 'Disk space critical' in t.get('title','')))
 " "$_dedup_tmp" 2>/dev/null) || dedup_count="?"
-  rm -f "$_dedup_tmp"
   if [[ "$dedup_count" != "1" ]]; then
     echo "FAIL: deduplication broken — expected 1 Disk space critical task, found $dedup_count after re-poll" >&2
     return 1
