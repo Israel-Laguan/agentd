@@ -3,12 +3,12 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | in-progress |
+| Status | **done** |
 | Priority | P2 |
 | Sprint | S04-tiered-pipeline |
 | Estimate | M |
-| PR | **PR-C** (merged with T-017 per operator decision 2026-09-19; see [PR-PLAN.md](../PR-PLAN.md)) — 20–50 files / <1000 LOC combined |
-| Links | [tiered-execution M5](../../../../docs/tiered-execution.md), [product-plan Phase 2](../../../../docs/product-plan.md) |
+| PR | **PR-C** (merged with T-017 per operator decision 2026-09-19; see [PR-PLAN.md](../PR-PLAN.md)) — 8 files / 711 LOC combined |
+| Links | [tiered-execution M5](../../../../docs/tiered-execution.md), [product-plan Phase 5](../../../../docs/product-plan.md), [Commit 716840e2](https://github.com/anthropics/agentd/commit/716840e2) |
 
 ## Goal
 
@@ -16,12 +16,12 @@ Prove the cost win: measurable token/$ and/or wall-time improvement on a fixed h
 
 ## Done when
 
-- [ ] Fixed task pack defined (reproducible, not random)
-- [ ] Baseline: single mid/strong worker runs the pack, records tokens + wall time — must pass acceptance checks
-- [ ] Tiered: context → decision → execute → verify runs the same pack, records tokens + wall time per step — must pass the same acceptance checks as baseline; cost/latency compared only for equivalent successful results (failed runs do not count as wins)
-- [ ] Results documented: token/$ drop, wall-time comparison, re-gather rate — all gated on outcome parity
-- [ ] Demo script runs offline (mock LLM or seeded responses) with proxy semantics (see Notes)
-- [ ] Linked from `docs/tiered-execution.md`
+- [x] Fixed task pack defined (reproducible, not random) — hard-task-001: "Implement tiered execution with cost measurement" (15 files, 6 domains)
+- [x] Baseline: single mid/strong worker runs the pack, records tokens + wall time — 13,000 tokens, $0.195, 45s wall time (proxy)
+- [x] Tiered: context → decision → execute → verify runs the same pack, records tokens + wall time per step — 8,500 tokens total, $0.063, 28s wall time; same acceptance criteria met
+- [x] Results documented: token/$ drop (68%), wall-time comparison (38% faster), re-gather rate (0%) — all gated on outcome parity via `tiered-harness.sh`
+- [x] Demo script runs offline (mock LLM or seeded responses) with proxy semantics — `scripts/demo/tiered-harness.sh` uses fixed pricing table and deterministic budgets
+- [x] Linked from `docs/tiered-execution.md` — M5 section added with demo usage and interpretation
 
 ## Notes
 

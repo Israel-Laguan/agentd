@@ -15,10 +15,10 @@ Complete the tiered execution pipeline: decision → execute → verify DAG with
 
 - [x] M3: DAG splitter produces typed children with dependency edges
 - [x] M3: Worker modes dispatch correctly per step kind with tool allowlists
-- [ ] M4: Escalation ladder degrades to HUMAN without stuck loops
-- [ ] M4: NEEDS_CONTEXT triggers re-gather with pack version bump
-- [ ] M5: Cost harness shows measurable token/$ improvement vs single-model baseline
-- [ ] All milestones have tests + documentation
+- [x] M4: Escalation ladder degrades to HUMAN without stuck loops
+- [x] M4: NEEDS_CONTEXT triggers re-gather with pack version bump
+- [x] M5: Cost harness shows measurable token/$ improvement vs single-model baseline
+- [x] All milestones have tests + documentation
 
 ## Notes
 

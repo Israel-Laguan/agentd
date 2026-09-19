@@ -2,9 +2,9 @@
 
 | Field | Value |
 | --- | --- |
-| Window | _TBD_ |
+| Window | Sprint window: 2026-09-19 – TBD (implementation complete) |
 | Goal | Land tiered execution M3–M5: decision → execute → verify DAG with allowlists, escalation ladder + HUMAN handoff, cost/latency harness demo |
-| Status | planned |
+| Status | **Implementation complete — PR-C ready for review** |
 | Based on | [S03 retro](../S03-tiered-foundation/retro/RETRO.md) |
 
 ## Goal
@@ -19,8 +19,9 @@ Complete the cost wedge (product-plan Phase 5, milestones M3–M5) on top of the
 | --- | --- | --- | --- | --- | --- |
 | [T-015](tasks/T-015-tiered-m3-splitter.md) | task | Tiered M3 — DAG splitter + step-kind profiles | **A** | done | P1 |
 | [T-016](tasks/T-016-tiered-m3-modes.md) | task | Tiered M3 — Worker modes (context/decision/execute/verify) | **B** | done | P1 |
-| [T-017](tasks/T-017-tiered-m4-escalation.md) | task | Tiered M4 — Escalation ladder + NEEDS_CONTEXT | **C** | ready | P1 |
-| [T-018](tasks/T-018-tiered-m5-cost-harness.md) | task | Tiered M5 — Cost/latency harness demo | **C** | ready | P2 |
+| [T-017](tasks/T-017-tiered-m4-escalation.md) | task | Tiered M4 — Escalation ladder + NEEDS_CONTEXT | **C** | done | P1 |
+| [T-018](tasks/T-018-tiered-m5-cost-harness.md) | task | Tiered M5 — Cost/latency harness demo | **C** | done | P2 |
+| [T-019](tasks/T-019-decision-propagation-question.md) | question | Decision artifact propagation — open design question | — | resolved | P2 |
 
 ## Suggested order
 
