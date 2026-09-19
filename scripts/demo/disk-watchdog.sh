@@ -131,7 +131,7 @@ cmd_inject_fault() {
 }
 
 cmd_probe() {
-  local _probe_cleanup_tmp=()
+  _probe_cleanup_tmp=()
   trap 'rm -f "${_probe_cleanup_tmp[@]}"' EXIT
   validate_inputs || return 1
   echo "Checking for _system HUMAN task..."
