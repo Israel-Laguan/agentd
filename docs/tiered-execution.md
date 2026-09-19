@@ -147,7 +147,7 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 - Targeted redo after plan steps (`targeted_redo.go`)
 - Workforce profiles, DAG relations, HUMAN / healing handoffs
 - Agentic inner loop (opt-in) — stays subordinate; tiered steps may use legacy or agentic mode per profile
-- Tiered DAG splitter (`SplitIntoTieredDAG`, `internal/queue/worker/splitter.go`) — pure constructor from a gated parent task to `context → decision → execute → verify` children with `SPAWNED_BY`/`DEPENDS_ON` relations and step-kind profile stamps; persistence and dispatch wiring land in T-016
+- Tiered DAG splitter (`SplitIntoTieredDAG`, `internal/queue/worker/splitter.go`) — pure constructor from a gated parent task to `context → decision → execute → verify` children with `SPAWNED_BY`/`DEPENDS_ON` relations and step-kind profile stamps; persistence and dispatch wiring done in T-016
 
 ---
 
@@ -177,7 +177,7 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 | --- | --- |
 | M1 | Gate + config + no behavior change when disabled |
 | M2 | ContextPack schema + context worker (read-only) writing pack |
-| M3 | Decision → execute → verify DAG with allowlists — **splitter done** (`SplitIntoTieredDAG`, T-015); step-kind dispatch + tool allowlists is T-016 |
+| M3 | Decision → execute → verify DAG with allowlists — splitter done (`SplitIntoTieredDAG`, T-015); step-kind dispatch + tool allowlists done (T-016) |
 | M4 | Escalation ladder + HUMAN handoff |
 | M5 | Cost/latency harness demo (pairs with product-plan Phase 2) |
 
