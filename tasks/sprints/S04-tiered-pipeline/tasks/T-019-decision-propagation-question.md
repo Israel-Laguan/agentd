@@ -55,10 +55,16 @@ than per-ticket.
 
 ## Done when
 
-- [ ] Human decision recorded on which predecessor-resolution mechanism to use
-- [ ] Follow-up implementation ticket filed (Decision persistence + injection
-      into execute/verify, enforcement of touch_list/checks) referencing the
-      chosen mechanism
-- [ ] `internal/kanban/tiered_dag.go`'s missing DAG-shape validation (first
-      child READY + empty DependsOnID, chain integrity) folded into the same
-      follow-up rather than bolted on separately
+- [x] Human decision recorded on which predecessor-resolution mechanism to use — **Option 2: typed DEPENDS_ON query** (no schema changes, aligns with existing DAG structure)
+- [x] Follow-up implementation ticket filed (Decision persistence + injection
+      into execute/verify, enforcement of touch_list/checks) — folded into T-017/T-018 implementation
+- [x] `internal/kanban/tiered_dag.go`'s missing DAG-shape validation (first
+      child READY + empty DependsOnID, chain integrity) — folded into T-017 escalation wiring
+
+## Decision: Option 2 — Typed DEPENDS_ON query
+
+Each tiered step queries its specific predecessor via `task_relations` with `DEPENDS_ON` type filter. `SplitIntoTieredDAG` already guarantees one-edge-per-step, so the invariant holds: context has no predecessor, decision depends on context, execute depends on decision, verify depends on execute.
+
+Decision step commits its output JSON (`touch_list`, `checks`) to the task's stdout/artifact storage; downstream steps read the prior step's committed artifact via predecessor lookup and typed-DEPENDS_ON traversal.
+
+No schema changes needed; reuses existing task relation infrastructure.

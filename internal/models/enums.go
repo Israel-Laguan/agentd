@@ -14,6 +14,7 @@ const (
 	TaskStateCompleted           TaskState = "COMPLETED"
 	TaskStateFailed              TaskState = "FAILED"
 	TaskStateFailedRequiresHuman TaskState = "FAILED_REQUIRES_HUMAN"
+	TaskStateNeedsContext        TaskState = "NEEDS_CONTEXT"
 	TaskStateInConsideration     TaskState = "IN_CONSIDERATION"
 )
 
@@ -43,6 +44,7 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 		TaskStateCompleted:           {},
 		TaskStateFailed:              {},
 		TaskStateFailedRequiresHuman: {},
+		TaskStateNeedsContext:        {},
 		TaskStateReady:               {},
 		TaskStateInConsideration:     {},
 	},
@@ -61,6 +63,10 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 		TaskStateReady:           {},
 		TaskStateInConsideration: {},
 	},
+	TaskStateNeedsContext: {
+		TaskStateReady:           {},
+		TaskStateInConsideration: {},
+	},
 	TaskStateInConsideration: {
 		TaskStatePending: {},
 		TaskStateReady:   {},
@@ -71,7 +77,7 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 // Valid reports whether the state is known to agentd.
 func (s TaskState) Valid() bool {
 	switch s {
-	case TaskStatePending, TaskStateReady, TaskStateQueued, TaskStateRunning, TaskStateBlocked, TaskStateCompleted, TaskStateFailed, TaskStateFailedRequiresHuman, TaskStateInConsideration:
+	case TaskStatePending, TaskStateReady, TaskStateQueued, TaskStateRunning, TaskStateBlocked, TaskStateCompleted, TaskStateFailed, TaskStateFailedRequiresHuman, TaskStateNeedsContext, TaskStateInConsideration:
 		return true
 	default:
 		return false
@@ -137,6 +143,26 @@ const (
 func (r TaskRelationType) Valid() bool {
 	switch r {
 	case TaskRelationBlocks, TaskRelationSpawnedBy, TaskRelationDependsOn:
+		return true
+	default:
+		return false
+	}
+}
+
+// VerifyResultOutcome classifies the result of a verify step.
+type VerifyResultOutcome string
+
+const (
+	VerifyOutcomePass    VerifyResultOutcome = "pass"
+	VerifyOutcomeFlake   VerifyResultOutcome = "flake"
+	VerifyOutcomeFail    VerifyResultOutcome = "fail"
+	VerifyOutcomeConflict VerifyResultOutcome = "conflict"
+)
+
+// Valid reports whether the verify outcome is known to agentd.
+func (v VerifyResultOutcome) Valid() bool {
+	switch v {
+	case VerifyOutcomePass, VerifyOutcomeFlake, VerifyOutcomeFail, VerifyOutcomeConflict:
 		return true
 	default:
 		return false
