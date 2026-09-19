@@ -42,8 +42,13 @@ func (w *Worker) tryResolveTieredOrigin(ctx context.Context, task models.Task) b
 
 	outcome, found := w.latestVerifyOutcome(ctx, steps)
 	if !found {
-		// No verify step ever recorded a verdict: fall back to the step states.
-		w.finishTieredOrigin(ctx, task, allStepsCompleted(steps), "tiered pipeline finished without a verify verdict")
+		// No verify step ever recorded a verdict — e.g. every verify attempt
+		// handed off, suspended, fell back to legacy execution, or exhausted
+		// its budget/turn-limit/tool-retries before classifying an outcome.
+		// All steps being COMPLETED does NOT mean the work was verified, so
+		// this must resolve as failure, never success: reporting success here
+		// would let unverified changes look done.
+		w.finishTieredOrigin(ctx, task, false, "tiered pipeline finished without a verify verdict")
 		return true
 	}
 	if outcome == models.VerifyOutcomePass {
@@ -88,16 +93,6 @@ func unresolvedSteps(steps []models.Task) int {
 		}
 	}
 	return pending
-}
-
-// allStepsCompleted reports whether every step succeeded.
-func allStepsCompleted(steps []models.Task) bool {
-	for _, step := range steps {
-		if step.State != models.TaskStateCompleted {
-			return false
-		}
-	}
-	return true
 }
 
 // latestVerifyOutcome returns the verdict of the most recently created verify

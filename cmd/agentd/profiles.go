@@ -99,9 +99,15 @@ func defaultAgentProfiles() []models.AgentProfile {
 // ErrAgentProfileNotFound, so all five ship with the defaults.
 //
 // Provider/model are left empty on purpose: profile lookup falls back to the
-// matching gateway.role_models entry, which is where an operator pins the
-// actual cheap/mid/strong models per tier. Seeding them here only guarantees
-// the steps resolve; it does not choose anyone's models.
+// gateway.role_models cascade. Note that today every agentic call (all five
+// tiered steps included) is dispatched with the same gateway.RoleWorker
+// route (internal/queue/worker/agentic/handlers.go) — there is no per-step
+// routing that automatically assigns a small/mid/strong model per tier.
+// Seeding these profiles here only guarantees the steps resolve; an operator
+// who wants the documented cheap/mid/strong cost tiers enforced at runtime
+// must PATCH distinct Provider/Model values onto each tier-* profile ID
+// directly (see initProfileHint). This is cost-modeling scaffolding, not an
+// enforced routing guarantee.
 func tieredAgentProfiles() []models.AgentProfile {
 	return []models.AgentProfile{
 		{

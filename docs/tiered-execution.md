@@ -294,10 +294,10 @@ Run `./scripts/demo/tiered-harness.sh`. Every number below is derived from the s
 | Metric | Baseline (strong) | Tiered | Delta |
 | --- | --- | --- | --- |
 | **Tokens** | 947 | 2,728 | **2.88× more** |
-| **Cost** | $0.0142 | $0.0081 | **43% less** |
+| **Cost** | $0.0142 | $0.0082 | **42.3% less** |
 | **Wall time** | not measured | not measured | see below |
 
-**Tiered execution spends more tokens, not fewer.** Every step re-reads the sealed pack, so total token count goes *up*. The entire saving comes from tier assignment: the two largest steps (context and execute) run on the small model because the pack means they never re-crawl the repository. This is a price-per-token play, not a token-efficiency play.
+**Tiered execution spends more tokens, not fewer.** Every step re-reads the sealed pack, so total token count goes *up*. Per-step token counts (context=515, decision=647, execute=843, verify=723): **execute is the largest step, followed by verify**, not context — context is in fact the smallest of the four. The saving does not come from routing the largest steps to the small model; execute happens to be both the largest step and small-tier, but verify — the second largest — is priced at the mid tier, and decision, smaller than verify, is also mid tier. The entire saving comes from tier assignment by step kind (context/execute priced small, decision/verify priced mid) regardless of each step's actual size — a price-per-token play, not a token-efficiency play.
 
 Earlier revisions of this table claimed a 34% *token reduction*. That was never measured and is not what the pipeline does — the shape of the win is the opposite. Read the token row as a cost the design pays, not a benefit.
 
