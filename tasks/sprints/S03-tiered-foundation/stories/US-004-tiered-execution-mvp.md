@@ -16,7 +16,7 @@ As an **operator on a hard task**, I want **context→decision→execute→verif
 ## Acceptance criteria
 
 - [x] Below complexity threshold: identical to one-shot — `ShouldRunTiered` returns `false` when `tiered.enabled: false` (default), when `complexity_threshold: 0`, and when the score is below threshold; no existing production path changed (`internal/queue/worker/phase_splitter.go`, T-007)
-- [ ] Above threshold: DAG children + ContextPack allowlists — **ContextPack allowlists/schema landed** (`internal/queue/worker/contextpack.go`, T-008); DAG children are **not** in S03 → [T-015](../../S04-tiered-pipeline/tasks/T-015-tiered-m3-splitter.md)/[T-016](../../S04-tiered-pipeline/tasks/T-016-tiered-m3-modes.md)
+- [x] Above threshold: DAG children + ContextPack allowlists — **ContextPack allowlists/schema landed** (`internal/queue/worker/contextpack.go`, T-008); DAG children + step-kind dispatch landed in S04 ([T-015](../../S04-tiered-pipeline/tasks/T-015-tiered-m3-splitter.md)/[T-016](../../S04-tiered-pipeline/tasks/T-016-tiered-m3-modes.md))
 - [ ] Re-gather only via explicit context redo / NEEDS_CONTEXT — not in S03 → [T-017](../../S04-tiered-pipeline/tasks/T-017-tiered-m4-escalation.md)
 - [ ] Escalate → HUMAN without stuck RUNNING — not in S03 → [T-017](../../S04-tiered-pipeline/tasks/T-017-tiered-m4-escalation.md)
 
