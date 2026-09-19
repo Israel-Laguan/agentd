@@ -47,6 +47,11 @@ done
 
 TASK_PACK="${TASK_PACK:-$FIXTURE_DIR/task.json}"
 
+case "$MODE" in
+  baseline|tiered|both) ;;
+  *) echo "invalid MODE: $MODE (expected baseline, tiered, or both)" >&2; exit 1 ;;
+esac
+
 # Pricing table (USD per 1k tokens), offline proxy for the three tiers.
 PRICE_SMALL=0.001
 PRICE_MID=0.005
@@ -102,10 +107,13 @@ VERIFY_OUT="$FIXTURE_DIR/step.verify.json"
 BASELINE_OUT="$FIXTURE_DIR/baseline.strong.txt"
 
 # Baseline acceptance criterion: the seeded baseline response must explicitly
-# state the implementation is complete. This mirrors the tiered arm's seeded
-# verify verdict below — both arms are judged against an explicit,
-# fixture-driven signal, not merely "the file is non-empty".
-BASELINE_ACCEPTANCE_MARKER="Implementation complete"
+# state the implementation is complete on its own result line. The marker is
+# anchored to the start of the line (`^Implementation complete:`) so a negated
+# or quoted mention ("not Implementation complete", `"Implementation complete"`
+# in prose) does not pass. This keeps the baseline arm comparable to the
+# tiered arm's structured `overall == pass` verify verdict: both require an
+# explicit success signal, not merely "the file is non-empty".
+BASELINE_ACCEPTANCE_MARKER="^Implementation complete:"
 
 echo "=== Tiered Execution Cost Harness ==="
 echo ""
@@ -125,7 +133,7 @@ if [[ "$MODE" == "baseline" || "$MODE" == "both" ]]; then
   BASELINE_TOKENS=$(tokens_of "$TASK_PACK" "$BASELINE_OUT")
   BASELINE_COST=$(cost_of "$BASELINE_TOKENS" "$PRICE_STRONG")
 
-  if grep -q "$BASELINE_ACCEPTANCE_MARKER" "$BASELINE_OUT"; then
+  if grep -q -- "$BASELINE_ACCEPTANCE_MARKER" "$BASELINE_OUT"; then
     BASELINE_ACCEPTANCE_PASS="true"
   else
     BASELINE_ACCEPTANCE_PASS="false"
