@@ -64,16 +64,16 @@ type ProviderBreakerEntry struct {
 
 // SystemStatus is the payload returned by /api/v1/system/status.
 type SystemStatus struct {
-	Status           *frontdesk.StatusReport          `json:"status,omitempty"`
-	Breaker          *BreakerSnapshot                 `json:"breaker,omitempty"`
-	ProviderBreakers map[string]ProviderBreakerEntry   `json:"provider_breakers,omitempty"`
-	Memory           MemorySnapshot                   `json:"memory"`
-	BuiltAt          time.Time                        `json:"built_at"`
-	TotalTokenUsage         int           `json:"total_token_usage"`
-	RollingBudgetEnabled    bool          `json:"rolling_budget_enabled,omitempty"`
-	RollingTokenLimit       int           `json:"rolling_token_limit,omitempty"`
-	RollingTokenRemaining   int           `json:"rolling_token_remaining"`
-	RollingTokenWindow      string        `json:"rolling_token_window,omitempty"`
+	Status                *frontdesk.StatusReport         `json:"status,omitempty"`
+	Breaker               *BreakerSnapshot                `json:"breaker,omitempty"`
+	ProviderBreakers      map[string]ProviderBreakerEntry `json:"provider_breakers,omitempty"`
+	Memory                MemorySnapshot                  `json:"memory"`
+	BuiltAt               time.Time                       `json:"built_at"`
+	TotalTokenUsage       int                             `json:"total_token_usage"`
+	RollingBudgetEnabled  bool                            `json:"rolling_budget_enabled,omitempty"`
+	RollingTokenLimit     int                             `json:"rolling_token_limit,omitempty"`
+	RollingTokenRemaining int                             `json:"rolling_token_remaining"`
+	RollingTokenWindow    string                          `json:"rolling_token_window,omitempty"`
 }
 
 // TokenCounter sums token usage across all persisted tasks.

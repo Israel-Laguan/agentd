@@ -16,16 +16,16 @@ import (
 
 // FilePipeline orchestrates convert → cache → embed → select.
 type FilePipeline struct {
- 	workspace         string
- 	workspaceRoot     string
- 	workspaceRootMu   sync.Mutex
- 	converter         *FileConverter
-	store             *DocStore
-	selector          *FileSelector
-	embedder          Embedder
-	topK              int
-	taskQuery         string
-	pinned            map[string]struct{}
+	workspace       string
+	workspaceRoot   string
+	workspaceRootMu sync.Mutex
+	converter       *FileConverter
+	store           *DocStore
+	selector        *FileSelector
+	embedder        Embedder
+	topK            int
+	taskQuery       string
+	pinned          map[string]struct{}
 }
 
 type FilePipelineConfig struct {

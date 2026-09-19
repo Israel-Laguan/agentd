@@ -275,7 +275,6 @@ func (hc *HookChain) PostHookCount() int {
 	return len(hc.postHooks)
 }
 
-
 func policyLabel(p FailurePolicy) string {
 	if p == FailClosed {
 		return "fail_closed"

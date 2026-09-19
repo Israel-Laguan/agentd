@@ -26,7 +26,7 @@ type Store struct {
 }
 
 var (
-	_ models.KanbanStore         = (*Store)(nil)
+	_ models.KanbanStore        = (*Store)(nil)
 	_ models.ScheduledTaskStore = (*Store)(nil)
 )
 var _ models.KanbanBoardContract = (*Store)(nil)

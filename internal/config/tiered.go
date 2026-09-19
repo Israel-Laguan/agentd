@@ -3,10 +3,10 @@ package config
 import "github.com/spf13/viper"
 
 const (
-	DefaultTieredEnabled            = false
+	DefaultTieredEnabled             = false
 	DefaultTieredComplexityThreshold = 200
-	DefaultTieredMaxPaths           = 40
-	DefaultTieredMaxChars           = 48000
+	DefaultTieredMaxPaths            = 40
+	DefaultTieredMaxChars            = 48000
 )
 
 // TieredContextPackConfig holds budget defaults for ContextPack creation.

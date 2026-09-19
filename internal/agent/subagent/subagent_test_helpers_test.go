@@ -18,7 +18,6 @@ func totalChars(messages []gateway.PromptMessage) int {
 	return agentcontext.TotalChars(messages)
 }
 
-
 type fakeCapabilityAdapter struct {
 	tools []gateway.ToolDefinition
 }
@@ -51,7 +50,6 @@ func (f fakeCapabilityCallAdapter) CallTool(_ context.Context, name string, args
 }
 
 func (f fakeCapabilityCallAdapter) Close() error { return nil }
-
 
 // ---------------------------------------------------------------------------
 // subagentMockGateway — minimal AIGateway for testing subagent delegation
@@ -97,7 +95,6 @@ func (m *subagentMockGateway) Embed(ctx context.Context, req spec.EmbedRequest) 
 	return spec.NoopEmbed(ctx, req)
 }
 
-
 type fakeSandbox struct {
 	result sandbox.Result
 }
@@ -105,5 +102,3 @@ type fakeSandbox struct {
 func (f *fakeSandbox) Execute(_ context.Context, _ sandbox.Payload) (sandbox.Result, error) {
 	return f.result, nil
 }
-
-

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"agentd/internal/models"
 	kdb "agentd/internal/kanban/db"
+	"agentd/internal/models"
 )
 
 func (s *Store) UpdateTaskDescription(

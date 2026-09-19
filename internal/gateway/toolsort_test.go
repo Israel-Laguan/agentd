@@ -29,7 +29,7 @@ func TestSortTools_DeterministicSameName(t *testing.T) {
 			Parameters: &FunctionParameters{
 				Type: "object",
 				Properties: map[string]any{
-					"q": map[string]any{"type": "string"},
+					"q":     map[string]any{"type": "string"},
 					"limit": map[string]any{"type": "integer"},
 				},
 			},

@@ -45,7 +45,6 @@ func (g *seqFakeGW) Embed(ctx context.Context, req spec.EmbedRequest) (spec.Embe
 	return spec.NoopEmbed(ctx, req)
 }
 
-
 type simplePayload struct {
 	Name string `json:"name"`
 }

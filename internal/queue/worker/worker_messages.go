@@ -16,8 +16,6 @@ import (
 	agenttools "agentd/internal/agent/tools"
 )
 
-
-
 // appendMemoryLessons appends an optional memory-lessons system message after the
 // stable system prompt + task seed. Placing lessons after the stable context keeps
 // the cache prefix stable across tasks while still surfacing durable memories.
@@ -150,8 +148,6 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 	}
 	return builder.Build()
 }
-
-
 
 func (w *Worker) shouldUseCodePromptTemplate(task models.Task, profile models.AgentProfile) bool {
 	if strings.EqualFold(strings.TrimSpace(profile.ToolManifestType), agenttools.TaskTypeCodeGen) {

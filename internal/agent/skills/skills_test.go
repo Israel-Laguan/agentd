@@ -378,4 +378,3 @@ func TestFormatSkillBlock_Nil(t *testing.T) {
 		t.Fatalf("expected empty block for nil skill, got %q", block)
 	}
 }
-

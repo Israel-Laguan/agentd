@@ -21,16 +21,16 @@ type Ports interface {
 }
 
 type PortsFuncs struct {
-	RecordTokenUsageFn         func(tokens int)
-	EmitToolCallFn             func(callID, name, args string)
-	EmitToolResultFn           func(callID, content string)
-	HandleGatewayErrorFn       func(ctx context.Context, err error) error
-	HandleGoalStalledFn        func(ctx context.Context) error
-	IngestHumanCorrectionsFn   func(ctx context.Context)
+	RecordTokenUsageFn          func(tokens int)
+	EmitToolCallFn              func(callID, name, args string)
+	EmitToolResultFn            func(callID, content string)
+	HandleGatewayErrorFn        func(ctx context.Context, err error) error
+	HandleGoalStalledFn         func(ctx context.Context) error
+	IngestHumanCorrectionsFn    func(ctx context.Context)
 	TryFinalizeApprovedReviewFn func(ctx context.Context) (bool, error)
-	CommitTextWithProfileFn    func(ctx context.Context, text string)
-	PersistGoalCriteriaFn      func(goals []Goal) error
-	EmitEventFn                func(eventType, payload string)
+	CommitTextWithProfileFn     func(ctx context.Context, text string)
+	PersistGoalCriteriaFn       func(goals []Goal) error
+	EmitEventFn                 func(eventType, payload string)
 }
 
 func (p *PortsFuncs) RecordTokenUsage(tokens int) {

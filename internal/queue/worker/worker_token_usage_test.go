@@ -312,8 +312,8 @@ func TestTokenUsage_AgenticPath_SurfacesCacheFieldsInEvent(t *testing.T) {
 	sink := &mockEventSink{}
 	gw := &sequenceGateway{responses: []gateway.AIResponse{
 		{
-			Content:      "[COMPLETED] done",
-			TokenUsage:   15,
+			Content:    "[COMPLETED] done",
+			TokenUsage: 15,
 			UsageDetails: &gateway.UsageDetails{
 				CachedTokens:     8,
 				CacheWriteTokens: 3,
@@ -361,8 +361,8 @@ func TestTokenUsage_LegacyPath_SurfacesCacheFieldsInEvent(t *testing.T) {
 	raw, _ := json.Marshal(cmd)
 	gw := &singleResponseGateway{
 		resp: gateway.AIResponse{
-			Content:      string(raw),
-			TokenUsage:   20,
+			Content:    string(raw),
+			TokenUsage: 20,
 			UsageDetails: &gateway.UsageDetails{
 				CachedTokens:     12,
 				CacheWriteTokens: 4,

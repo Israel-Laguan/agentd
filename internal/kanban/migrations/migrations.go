@@ -94,5 +94,3 @@ func setSchemaVersion(ctx context.Context, db *sql.DB, version int) error {
 	}
 	return nil
 }
-
-

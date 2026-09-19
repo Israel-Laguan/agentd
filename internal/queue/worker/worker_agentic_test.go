@@ -301,8 +301,6 @@ func TestIngestHumanCorrections_MapsReviewerSource(t *testing.T) {
 	}
 }
 
-
-
 func TestIngestHumanCorrections_SkipsUnknownAuthors(t *testing.T) {
 	store := &mockCommitStore{
 		comments: []models.Comment{

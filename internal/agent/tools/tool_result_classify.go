@@ -24,7 +24,6 @@ func ClassifyPrecomputedToolResult(callID, toolName, raw string, elapsedMs int64
 	}
 }
 
-
 // classifyBuiltinToolResult classifies built-in tool (bash, read, write) output.
 // Read and write success paths return raw file bytes or {"success":true}; bash
 // success returns raw stdout. Sandbox and jsonErrorf failures use toolErrorPrefix
@@ -50,7 +49,6 @@ func ClassifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) To
 	}
 }
 
-
 // classifyPrecomputedReadResult classifies hook/cache read results. Errors are
 // distinguished by toolErrorPrefix (set by CacheStoreHook); file content that
 // happens to be a single-key {"error":...} JSON object is treated as success,
@@ -62,7 +60,6 @@ func ClassifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResu
 	}
 	return SuccessResult(callID, raw, elapsedMs)
 }
-
 
 // classifyRawResult inspects a raw tool output string and returns a
 // typed ToolResult. It uses the same JSON-envelope heuristics that
@@ -116,7 +113,6 @@ func ClassifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	return SuccessResult(callID, raw, elapsedMs)
 }
 
-
 // classifyCapabilityRawResult classifies MCP capability tool output without
 // applying sandbox-style heuristics to arbitrary JSON payloads.
 func ClassifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult {
@@ -129,7 +125,6 @@ func ClassifyCapabilityRawResult(callID, raw string, elapsedMs int64) ToolResult
 	}
 	return SuccessResult(callID, raw, elapsedMs)
 }
-
 
 // isJSONErrorEnvelope reports whether raw is a single-key {"error":"..."} payload
 // produced by jsonErrorf.
@@ -164,7 +159,6 @@ func ClassifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
 	}
 	return SuccessResult(callID, raw, elapsedMs)
 }
-
 
 type classifiedSubagentResult struct {
 	Status string `json:"status"`

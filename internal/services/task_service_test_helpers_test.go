@@ -219,7 +219,7 @@ type fullStore struct {
 }
 
 func (f fullStore) ListComments(context.Context, string) ([]models.Comment, error) { return nil, nil }
-func (f fullStore) UpdateCriteriaMet(context.Context, string, []string) error       { return nil }
+func (f fullStore) UpdateCriteriaMet(context.Context, string, []string) error      { return nil }
 func (f fullStore) ListCommentsSince(context.Context, string, time.Time) ([]models.Comment, error) {
 	return nil, nil
 }
@@ -255,7 +255,7 @@ func (f fullStore) UpsertAgentProfile(context.Context, models.AgentProfile) erro
 func (f fullStore) ListAgentProfiles(context.Context) ([]models.AgentProfile, error) {
 	return nil, nil
 }
-func (f fullStore) DeleteAgentProfile(context.Context, string) error { return nil }
+func (f fullStore) DeleteAgentProfile(context.Context, string) error         { return nil }
 func (f fullStore) ListSettings(context.Context) ([]models.Setting, error)   { return nil, nil }
 func (f fullStore) GetSetting(context.Context, string) (string, bool, error) { return "", false, nil }
 func (f fullStore) SetSetting(context.Context, string, string) error         { return nil }

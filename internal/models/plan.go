@@ -87,17 +87,17 @@ type DraftTask struct {
 	// ReferenceID is the proposal-aligned ID and maps to JSON ref_id.
 	ReferenceID string `json:"ref_id,omitempty"`
 	// TempID remains for backward compatibility with existing tests and stores.
-	TempID          string       `json:"temp_id,omitempty"`
-	Title           string       `json:"title"`
-	Description     string       `json:"description"`
-	Assignee        TaskAssignee `json:"assignee"`
+	TempID      string       `json:"temp_id,omitempty"`
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	Assignee    TaskAssignee `json:"assignee"`
 	// AgentID optionally pre-assigns the task to a specific agent profile at
 	// creation time. When non-empty the materialized task row carries this
 	// agent_id, eliminating the race between dispatch and a separate assign
 	// call. Empty means the store default ("default") is used.
-	AgentID         string       `json:"agent_id,omitempty"`
-	DependsOn       []string     `json:"depends_on,omitempty"`
-	SuccessCriteria []string     `json:"success_criteria,omitempty"`
+	AgentID         string   `json:"agent_id,omitempty"`
+	DependsOn       []string `json:"depends_on,omitempty"`
+	SuccessCriteria []string `json:"success_criteria,omitempty"`
 }
 
 // UnmarshalJSON accepts both proposal snake_case and legacy camel-case keys.
