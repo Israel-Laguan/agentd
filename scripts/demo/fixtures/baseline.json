@@ -1,0 +1,9 @@
+{
+  "step": "baseline",
+  "model_tier": "strong",
+  "input_tokens": 9800,
+  "output_tokens": 3200,
+  "duration_ms": 41000,
+  "response": "Implemented the tiered execution feature end to end: added the context/decision/execute/verify DAG split, wired per-step cost tracking, and assigned model tiers per step. All acceptance criteria satisfied; tests pass.",
+  "acceptance_pass": true
+}

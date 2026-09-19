@@ -216,6 +216,14 @@ func (m *minimalStore) PersistTieredDAG(context.Context, string, time.Time, []mo
 	return nil, nil
 }
 
+func (m *minimalStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (m *minimalStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 // fullStore embeds minimalStore and adds no-op implementations for
 // the remaining KanbanStore surface that this test does not exercise.
 type fullStore struct {

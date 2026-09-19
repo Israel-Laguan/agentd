@@ -177,6 +177,14 @@ func (s *batchTestStore) BlockTaskWithSubtasks(context.Context, string, time.Tim
 func (s *batchTestStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
 	return nil, nil
 }
+
+func (s *batchTestStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *batchTestStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *batchTestStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

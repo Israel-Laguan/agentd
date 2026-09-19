@@ -80,6 +80,13 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 		TaskStateInConsideration:     {},
 		TaskStateFailedRequiresHuman: {},
 	},
+	// A tiered step can nominally COMPLETED (the model produced its
+	// artifact) and only afterward be judged to have read from an
+	// insufficient ContextPack — the NEEDS_CONTEXT re-gather is detected by
+	// parsing that already-committed output, not before it.
+	TaskStateCompleted: {
+		TaskStateNeedsContext: {},
+	},
 	TaskStateFailedRequiresHuman: {
 		TaskStateReady:           {},
 		TaskStateInConsideration: {},
@@ -178,9 +185,9 @@ func (r TaskRelationType) Valid() bool {
 type VerifyResultOutcome string
 
 const (
-	VerifyOutcomePass    VerifyResultOutcome = "pass"
-	VerifyOutcomeFlake   VerifyResultOutcome = "flake"
-	VerifyOutcomeFail    VerifyResultOutcome = "fail"
+	VerifyOutcomePass     VerifyResultOutcome = "pass"
+	VerifyOutcomeFlake    VerifyResultOutcome = "flake"
+	VerifyOutcomeFail     VerifyResultOutcome = "fail"
 	VerifyOutcomeConflict VerifyResultOutcome = "conflict"
 )
 

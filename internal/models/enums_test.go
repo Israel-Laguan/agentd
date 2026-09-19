@@ -21,6 +21,15 @@ func TestTaskStateValidAndTransitions(t *testing.T) {
 	if !TaskStateBlocked.CanTransitionTo(TaskStateFailedRequiresHuman) {
 		t.Fatal("BLOCKED should transition to FAILED_REQUIRES_HUMAN")
 	}
+	if !TaskStateCompleted.CanTransitionTo(TaskStateNeedsContext) {
+		t.Fatal("COMPLETED should transition to NEEDS_CONTEXT (tiered re-gather, detected post-commit)")
+	}
+	if !TaskStateRunning.CanTransitionTo(TaskStateNeedsContext) {
+		t.Fatal("RUNNING should transition to NEEDS_CONTEXT")
+	}
+	if TaskStateNeedsContext.CanTransitionTo(TaskStateCompleted) {
+		t.Fatal("NEEDS_CONTEXT should not transition directly to COMPLETED")
+	}
 }
 
 func TestTaskRelationTypeValidIncludesDependsOn(t *testing.T) {

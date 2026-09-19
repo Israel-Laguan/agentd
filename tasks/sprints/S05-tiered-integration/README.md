@@ -2,9 +2,9 @@
 
 | Field | Value |
 | --- | --- |
-| Window | _TBD_ |
+| Window | 2026-09-19 |
 | Goal | Close the gap between S04's escalation/cost-harness primitives and actual runtime behavior — wire, persist, migrate, measure |
-| Status | review |
+| Status | ready for review |
 | Based on | [S04 retro](../S04-tiered-pipeline/retro/RETRO.md) |
 
 ## Goal
@@ -15,7 +15,7 @@ S04 shipped the *pieces* of M4 (escalation ladder) and M5 (cost harness) — cla
 
 | ID | Type | Title | Status | Priority |
 | --- | --- | --- | --- | --- |
-| [T-020](tasks/T-020-tiered-verify-wiring-gap.md) | task | Wire escalation ladder into verify dispatch + fix metadata persistence + NEEDS_CONTEXT schema + real cost measurement | review | P1 |
+| [T-020](tasks/T-020-tiered-verify-wiring-gap.md) | task | Wire escalation ladder into verify dispatch + fix metadata persistence + NEEDS_CONTEXT schema + real cost measurement | done | P1 |
 
 ## Explicitly out of scope
 

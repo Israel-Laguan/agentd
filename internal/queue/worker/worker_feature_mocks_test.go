@@ -214,6 +214,14 @@ func (s *workerTestStore) PersistTieredDAG(context.Context, string, time.Time, [
 	return nil, nil
 }
 
+func (s *workerTestStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *workerTestStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *workerTestStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

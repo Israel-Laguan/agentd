@@ -79,6 +79,23 @@ type KanbanStore interface {
 	// PersistTieredDAG atomically blocks the parent and inserts pre-built
 	// tiered step children with SPAWNED_BY and DEPENDS_ON relations.
 	PersistTieredDAG(ctx context.Context, parentID string, expectedParentUpdatedAt time.Time, children []TieredDAGTask) ([]Task, error)
+	// SpawnTieredContinuation inserts one or more child tasks onto an
+	// already-BLOCKED tiered pipeline origin, wiring SPAWNED_BY (for
+	// tryDispatchTieredStep's origin lookup) and, when a task's DependsOnID
+	// is set, a DEPENDS_ON edge to that predecessor. Used by the escalation
+	// ladder (mid-fix redo, strong-model escalation) and NEEDS_CONTEXT
+	// re-gather, all of which spawn after the initial DAG split, when the
+	// origin is no longer RUNNING/READY (PersistTieredDAG's precondition).
+	SpawnTieredContinuation(ctx context.Context, originID string, children []TieredContinuationTask) ([]Task, error)
+	// RewireDependsOn redirects any task with a DEPENDS_ON edge to
+	// oldParentID onto newParentID instead, but only for dependents still
+	// PENDING or READY (a QUEUED/RUNNING dependent is left alone — it is
+	// already in flight against the old artifact and is allowed to finish,
+	// per the tiered NEEDS_CONTEXT re-gather contract). A READY dependent is
+	// additionally transitioned to BLOCKED so it cannot run against the
+	// stale predecessor while the new one is still in progress. Returns the
+	// rewired tasks.
+	RewireDependsOn(ctx context.Context, oldParentID, newParentID string) ([]Task, error)
 	AppendTasksToProject(ctx context.Context, projectID, parentTaskID string, drafts []DraftTask) ([]Task, error)
 	AddComment(ctx context.Context, c Comment) error
 	ListComments(ctx context.Context, taskID string) ([]Comment, error)

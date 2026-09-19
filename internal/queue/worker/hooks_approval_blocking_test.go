@@ -27,6 +27,14 @@ func (s *approvalMockStore) PersistTieredDAG(context.Context, string, time.Time,
 	return nil, nil
 }
 
+func (s *approvalMockStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *approvalMockStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func TestBlockingApprovalHandler_ReturnsNotApproved(t *testing.T) {
 	t.Parallel()
 	store := &approvalMockStore{FakeKanbanStore: testutil.NewFakeStore()}

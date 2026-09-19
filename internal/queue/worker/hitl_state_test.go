@@ -158,6 +158,14 @@ func (s *blockFailStore) PersistTieredDAG(context.Context, string, time.Time, []
 	return nil, nil
 }
 
+func (s *blockFailStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *blockFailStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func TestCreatePromptHandoff_NoExpiryWhenBlockFails(t *testing.T) {
 	t.Parallel()
 	store := &blockFailStore{FakeKanbanStore: testutil.NewFakeStore()}

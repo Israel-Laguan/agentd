@@ -259,3 +259,11 @@ func (s *reviewMockStore) BlockTaskWithSubtasks(_ context.Context, taskID string
 func (s *reviewMockStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
 	return nil, nil
 }
+
+func (s *reviewMockStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *reviewMockStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}

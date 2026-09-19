@@ -148,6 +148,14 @@ func (s *routingTestStore) PersistTieredDAG(context.Context, string, time.Time, 
 	return nil, nil
 }
 
+func (s *routingTestStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *routingTestStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *routingTestStore) ListParentTasks(_ context.Context, childID string) ([]models.Task, error) {
 	if s.parents == nil {
 		return nil, nil

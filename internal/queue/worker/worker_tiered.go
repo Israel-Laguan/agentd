@@ -19,7 +19,9 @@ var tieredStepToolAllowlists = map[TieredStepKind][]string{
 	TieredStepDecision: {"read", "grep", "glob", "list"},
 	TieredStepExecute:  {"read", "write", "bash", "grep", "glob"},
 	TieredStepVerify:   {"read", "bash", "grep", "glob"},
-	TieredStepEscalate: {"read", "write", "bash", "grep", "glob"},
+	// Escalate needs the union of execute+verify: it both fixes the
+	// conflict and re-runs checks to confirm the fix in one pass.
+	TieredStepEscalate: {"read", "write", "bash", "grep", "glob", "list"},
 }
 
 // tieredStepSystemPrompts provides per-step system prompt suffixes that
@@ -68,9 +70,13 @@ Rules:
 - touch_list contains workspace-relative paths
 - checks are shell commands to run in the verify step
 - do NOT modify any files — planning only
-If the ContextPack cannot answer this task (missing files, wrong scope), do
-NOT guess and do NOT search outside the pack. Emit exactly this instead:
-{"needs_context": true, "reason": "<what is missing>"}`
+- if the ContextPack is missing information you need (a referenced file
+  doesn't exist, a constraint is unclear, critical context was never
+  gathered), do NOT guess — output this instead as your ONLY output:
+  {"needs_context": true, "reason": "what is missing and why"}
+  This triggers a re-gather with a fresh ContextPack; it is the explicit,
+  correct response to insufficient context, never a silent guess inside a
+  normal Decision`
 
 const executeStepPrompt = `
 TIERED MODE: EXECUTE STEP
@@ -79,10 +85,7 @@ make the necessary changes, and run any build/lint commands needed.
 Rules:
 - only modify files in the touch_list
 - prefer small, focused edits
-- run tests after changes if the check commands suggest it
-If the ContextPack cannot answer this task (missing files, wrong scope), do
-NOT guess and do NOT search outside the pack. Emit exactly this instead:
-{"needs_context": true, "reason": "<what is missing>"}`
+- run tests after changes if the check commands suggest it`
 
 const verifyStepPrompt = `
 TIERED MODE: VERIFY STEP
@@ -96,20 +99,16 @@ Run the checks specified by the Decision step. For each check:
 }
 Rules:
 - overall is "pass" if all checks pass, "fail" otherwise
-- "flake" for intermittent failures, "conflict" for merge conflicts
-If the ContextPack cannot answer this task (missing files, wrong scope), do
-NOT guess and do NOT search outside the pack. Emit exactly this instead:
-{"needs_context": true, "reason": "<what is missing>"}`
+- "flake" for intermittent failures, "conflict" for merge conflicts`
 
 const escalateStepPrompt = `
 TIERED MODE: ESCALATE STEP
-A previous execute+verify cycle could not resolve this task. The failing
-verify evidence is included in your task description. Re-plan the approach
-and apply a corrected fix.
-Rules:
-- stay within the ContextPack paths; do not re-crawl the repository
-- prefer the smallest change that resolves the reported conflict
-- a verify step runs after you; do not mark the work done yourself`
+The bounded mid-fix attempts were exhausted, or verify reported a merge
+conflict. You are the strong-model escalation: read the ContextPack, the
+original task, and the verify evidence in your task description, then fix
+the underlying problem directly and re-run the checks yourself to confirm
+the fix holds. This is the last automated attempt before the task is
+handed off to a human — resolve it completely rather than partially.`
 
 // processTieredStep dispatches a single tiered step (context, decision,
 // execute, or verify) through the agentic engine with step-appropriate
@@ -123,15 +122,16 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 		return
 	}
 
-	// Every downstream step runs against the sealed pack.
-	var err error
-	task, err = w.injectContextPack(task, parentTask, project)
-	if err != nil {
-		slog.Error("tiered: ContextPack injection failed; failing step",
-			"task_id", task.ID, "step", stepKind, "error", err)
-		w.failTieredStep(ctx, task, "ContextPack injection failed: "+err.Error())
-		w.failTieredDependents(ctx, task, parentTask)
-		return
+	if stepKind == TieredStepDecision || stepKind == TieredStepExecute || stepKind == TieredStepVerify || stepKind == TieredStepEscalate {
+		var err error
+		task, err = w.injectContextPack(task, parentTask, project)
+		if err != nil {
+			slog.Error("tiered: ContextPack injection failed; failing step",
+				"task_id", task.ID, "step", stepKind, "error", err)
+			w.failTieredStep(ctx, task, "ContextPack injection failed: "+err.Error())
+			w.failTieredDependents(ctx, task, parentTask)
+			return
+		}
 	}
 
 	if stepKind == TieredStepVerify {
@@ -139,28 +139,22 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 		return
 	}
 
-	w.processTieredWorkStep(ctx, task, project, profile, parentTask)
-}
+	if stepKind == TieredStepEscalate {
+		w.processTieredEscalateStep(ctx, task, project, profile, parentTask)
+		return
+	}
 
-// processTieredWorkStep runs a decision, execute, or escalate step and honours
-// a NEEDS_CONTEXT signal before letting the step stand as done.
-func (w *Worker) processTieredWorkStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, parentTask models.Task) {
-	result, ok := w.processAgentic(ctx, task, project, profile)
-	if !ok {
+	if stepKind == TieredStepDecision {
+		w.processTieredDecisionStep(ctx, task, project, profile, parentTask)
 		return
 	}
-	if !result.IsTerminalSuccess() {
+
+	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
 		w.handleLoopResult(ctx, task, result)
-		return
-	}
-	if reason, needs := w.detectNeedsContext(ctx, task); needs {
-		if err := w.handleNeedsContext(ctx, task, parentTask, reason); err != nil {
-			slog.Error("tiered: re-gather failed", "task_id", task.ID, "error", err)
-			w.failTieredOrigin(ctx, parentTask, "re-gather failed: "+err.Error())
+		if result.IsTerminalSuccess() {
+			w.reconcileBlockedDependents(ctx, task.ID)
 		}
-		return
 	}
-	w.handleLoopResult(ctx, task, result)
 }
 
 // applyTieredStepProfile clones the profile and applies step-specific

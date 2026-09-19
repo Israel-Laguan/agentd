@@ -243,6 +243,14 @@ func (s *queueStore) PersistTieredDAG(context.Context, string, time.Time, []mode
 	return nil, nil
 }
 
+func (s *queueStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *queueStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *queueStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	return &models.Project{BaseEntity: models.BaseEntity{ID: "system"}, Name: "_system"}, nil
 }

@@ -228,6 +228,14 @@ func (s *dispatchBatchStore) BlockTaskWithSubtasks(context.Context, string, time
 func (s *dispatchBatchStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
 	return nil, nil
 }
+
+func (s *dispatchBatchStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *dispatchBatchStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *dispatchBatchStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

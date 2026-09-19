@@ -7,12 +7,25 @@ const (
 	DefaultTieredComplexityThreshold = 200
 	DefaultTieredMaxPaths            = 40
 	DefaultTieredMaxChars            = 48000
+	// DefaultTieredMaxMidFix caps bounded execute redos after a verify
+	// fail/flake before the escalation ladder gives up on mid-fix and
+	// escalates to the strong model instead.
+	DefaultTieredMaxMidFix = 2
+	// DefaultTieredMaxEscalate caps strong-model escalation attempts per
+	// pipeline run before handing off to a human.
+	DefaultTieredMaxEscalate = 1
 )
 
 // TieredContextPackConfig holds budget defaults for ContextPack creation.
 type TieredContextPackConfig struct {
 	MaxPaths int
 	MaxChars int
+}
+
+// TieredEscalationConfig holds the escalation ladder's retry caps.
+type TieredEscalationConfig struct {
+	MaxMidFix   int
+	MaxEscalate int
 }
 
 // TieredConfig controls the tiered execution pipeline (Phase 5, milestones M1–M2).
@@ -28,6 +41,20 @@ type TieredConfig struct {
 	// ContextPack holds budget limits for the sealed handoff artifact.
 	// These values are wired into NewContextPack and EnforceBudget calls.
 	ContextPack TieredContextPackConfig
+	// Escalation holds the mid-fix/escalate retry caps for the escalation ladder.
+	Escalation TieredEscalationConfig
+}
+
+// EscalationConfig returns the escalation ladder config with defaults applied.
+func (tc TieredConfig) EscalationConfig() TieredEscalationConfig {
+	cfg := tc.Escalation
+	if cfg.MaxMidFix <= 0 {
+		cfg.MaxMidFix = DefaultTieredMaxMidFix
+	}
+	if cfg.MaxEscalate <= 0 {
+		cfg.MaxEscalate = DefaultTieredMaxEscalate
+	}
+	return cfg
 }
 
 // ContextPackConfig returns the budget config from the tiered config,
@@ -48,6 +75,8 @@ func setTieredDefaults(v *viper.Viper) {
 	v.SetDefault("tiered.complexity_threshold", DefaultTieredComplexityThreshold)
 	v.SetDefault("tiered.context_pack.max_paths", DefaultTieredMaxPaths)
 	v.SetDefault("tiered.context_pack.max_chars", DefaultTieredMaxChars)
+	v.SetDefault("tiered.escalation.max_mid_fix", DefaultTieredMaxMidFix)
+	v.SetDefault("tiered.escalation.max_escalate", DefaultTieredMaxEscalate)
 }
 
 func loadTieredConfig(v *viper.Viper) TieredConfig {
@@ -63,12 +92,24 @@ func loadTieredConfig(v *viper.Viper) TieredConfig {
 	if maxChars <= 0 {
 		maxChars = DefaultTieredMaxChars
 	}
+	maxMidFix := v.GetInt("tiered.escalation.max_mid_fix")
+	if maxMidFix <= 0 {
+		maxMidFix = DefaultTieredMaxMidFix
+	}
+	maxEscalate := v.GetInt("tiered.escalation.max_escalate")
+	if maxEscalate <= 0 {
+		maxEscalate = DefaultTieredMaxEscalate
+	}
 	return TieredConfig{
 		Enabled:             v.GetBool("tiered.enabled"),
 		ComplexityThreshold: threshold,
 		ContextPack: TieredContextPackConfig{
 			MaxPaths: maxPaths,
 			MaxChars: maxChars,
+		},
+		Escalation: TieredEscalationConfig{
+			MaxMidFix:   maxMidFix,
+			MaxEscalate: maxEscalate,
 		},
 	}
 }
