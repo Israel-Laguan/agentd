@@ -18,6 +18,9 @@ const (
 	TieredStepDecision TieredStepKind = "decision"
 	TieredStepExecute  TieredStepKind = "execute"
 	TieredStepVerify   TieredStepKind = "verify"
+	// TieredStepEscalate is not part of the initial split; the escalation
+	// ladder appends it after a verify conflict.
+	TieredStepEscalate TieredStepKind = "escalate"
 )
 
 // tieredStepOrder is the fixed execution order of the M3 DAG: each step
@@ -38,6 +41,7 @@ var tieredStepProfile = map[TieredStepKind]string{
 	TieredStepDecision: "tier-decision",
 	TieredStepExecute:  "tier-execute",
 	TieredStepVerify:   "tier-verify",
+	TieredStepEscalate: "tier-escalate",
 }
 
 // SplitIntoTieredDAG builds the context -> decision -> execute -> verify

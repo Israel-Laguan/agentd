@@ -20,9 +20,10 @@ S04 shipped `internal/queue/worker/escalation.go` (classification + escalation h
 
 ## Done when
 
-- [ ] `worker_tiered.go`'s verify step completion path parses the `VerifyResult` JSON output, calls `ClassifyVerifyOutcome`, and calls `handleVerifyOutcome` — a real tiered run demonstrably triggers mid-fix on fail/flake and escalation on conflict
-- [ ] `getMetadata` actually reads and unmarshals `task.Logs`; round-trip test proves `mid_fix_passes`/`escalate_count` persist and increment across calls
-- [ ] Mid-fix cap (max 2, configurable) and escalate cap (max 1, configurable) are enforced with the fixed metadata read — test proves the 3rd mid-fix attempt routes to escalation, not another mid-fix
+- [x] `worker_tiered.go`'s verify step completion path parses the `VerifyResult` JSON output, calls `ClassifyVerifyOutcome`, and calls `handleVerifyOutcome` — `processTieredVerifyStep` (`worker_tiered_verify.go`) intercepts the verify step, reads the committed `RESULT` event, classifies it, and routes into the ladder. Call sites verified by grep, not just by green tests
+- [x] ~~`getMetadata` actually reads and unmarshals `task.Logs`~~ — **superseded**: `task.Logs` has no store setter (`KanbanStore` exposes no Logs write), so a Logs-backed counter was unimplementable without a new interface method this ticket forbids. Counters are now derived from the steps on the board instead — `countTieredSteps` counts verify/escalate children — which is restart-safe and needs no new storage. The dead `getMetadata`/`setMetadata`/`getDecisionArtifact` scaffolding was deleted
+- [x] Mid-fix cap (max 2) and escalate cap (max 1) are enforced — `TestScheduleMidFix_CapRoutesToEscalation` proves the 3rd attempt routes to escalation, `TestScheduleEscalation_CapHandsOffToHuman` proves exhaustion lands on `FAILED_REQUIRES_HUMAN`. Both caps are constants, not config keys (noted in the spec)
+- [x] The origin resolves through the supported path — `PersistTieredDAG` leaves it `BLOCKED` and `BLOCKED → COMPLETED` is illegal, so `tryResolveTieredOrigin` records the verdict via `UpdateTaskResult` after the store unblocks it. This also closes the re-split loop the wiring would otherwise have created (a resolved origin returning to `READY` was previously eligible for `ShouldRunTiered` again)
 - [ ] `internal/kanban/db/schema.sql` CHECK constraint includes `NEEDS_CONTEXT`; migration (if the project uses versioned migrations) or schema bump applied
 - [ ] Test asserts parity: every `models.TaskState` where `Valid()` is true is also accepted by the DB CHECK constraint (prevents this drift recurring — S04 retro action)
 - [ ] NEEDS_CONTEXT pack-rewire implemented: new context child spawned, pack version bumped, downstream `DEPENDS_ON` edges rewired to the new context child, stale-pack descendants blocked (per T-017's original spec, not yet built)
@@ -32,4 +33,9 @@ S04 shipped `internal/queue/worker/escalation.go` (classification + escalation h
 ## Notes
 
 - This ticket exists because "tests pass" was treated as equivalent to "wired and working" in S04 — the escalation tests validate the classifier in isolation, not the pipeline. Verify wiring by grepping for call sites, not just running `go test`, before closing this ticket.
+- **Wiring pass (2026-09-19):** the ladder is reachable from `Worker.Process`:
+  `Process → tryDispatchTieredStep → processTieredStep → processTieredVerifyStep → readVerifyResult → ClassifyVerifyOutcome → handleVerifyOutcome → scheduleMidFix/scheduleEscalation`,
+  and `Process → tryTieredOrigin → tryResolveTieredOrigin` for the origin. Confirmed by grepping non-test call sites. The new tests were mutation-checked (disabling mid-fix scheduling, and completing the origin regardless of verdict) and both mutants failed the suite, so the coverage is not vacuous.
+- A verify step that returns a terminal-success LLM answer still commits a *successful* task result before classification runs — that is why a non-pass verdict must append a redo rung (which re-blocks the origin) rather than relying on the step's own result to signal failure.
+- `tier-escalate` is now a registered step profile with its own allowlist and prompt. Like the other `tier-*` profiles it must be seeded for escalation to dispatch; an unseeded profile fails loudly with `ErrAgentProfileNotFound` rather than silently skipping the rung.
 - Reuse existing store methods — no new `KanbanStore` interface methods should be needed: `ListParentTasksByRelation`, `AppendTasksToProject`, `UpdateTaskState` (optimistic concurrency via `expectedUpdatedAt`), `PersistTieredDAG`.

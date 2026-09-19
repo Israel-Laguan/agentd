@@ -59,35 +59,6 @@ func TestClassifyVerifyOutcome_Conflict(t *testing.T) {
 	}
 }
 
-func TestHandleVerifyOutcome_Pass(t *testing.T) {
-	// This test validates that handleVerifyOutcome correctly routes a passing verify outcome.
-	// Full integration testing requires wiring into the actual tiered dispatch path (T-020).
-	parentTask := models.Task{
-		BaseEntity: models.BaseEntity{ID: "parent-1"},
-		Title:      "complex task",
-		State:      models.TaskStateBlocked,
-	}
-
-	verifyTask := models.Task{
-		BaseEntity: models.BaseEntity{ID: "verify-1"},
-		Title:      "verify step",
-		State:      models.TaskStateRunning,
-	}
-
-	result := VerifyResult{
-		Results: []CheckResult{
-			{Check: "all tests", Outcome: "pass", Detail: ""},
-		},
-		Overall: "pass",
-	}
-
-	// Verify the function signature exists and accepts the right parameters
-	// Full testing deferred to T-020 (requires wiring into worker_tiered.go)
-	_ = parentTask
-	_ = verifyTask
-	_ = result
-}
-
 func TestVerifyResultOutcome_Valid(t *testing.T) {
 	tests := []struct {
 		outcome models.VerifyResultOutcome

@@ -188,8 +188,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	// threshold, split it into a context→decision→execute→verify DAG and
 	// block the parent. The child tasks will be picked up by the queue and
 	// dispatched through processTieredStep below.
-	if !w.isTieredStep(task) && w.ShouldRunTiered(task) {
-		w.persistTieredDAG(ctx, task)
+	if w.tryTieredOrigin(ctx, task) {
 		return
 	}
 	// Guard: if this provider's circuit breaker is open, create an immediate
@@ -215,6 +214,25 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		return
 	}
 	w.RunLegacyTask(ctx, task, *project, *profile, false)
+}
+
+// tryTieredOrigin handles the pipeline-origin side of tiered execution: it
+// either resolves an origin whose DAG has already run, or splits a complex
+// task into one. An origin comes back here after its steps unblock it, so
+// resolving has to be tried first — splitting again would recurse forever.
+// It reports whether the task was handled.
+func (w *Worker) tryTieredOrigin(ctx context.Context, task models.Task) bool {
+	if w.isTieredStep(task) {
+		return false
+	}
+	if w.tryResolveTieredOrigin(ctx, task) {
+		return true
+	}
+	if !w.ShouldRunTiered(task) {
+		return false
+	}
+	w.persistTieredDAG(ctx, task)
+	return true
 }
 
 // tryDispatchTieredStep resolves the origin task for a tiered step child
