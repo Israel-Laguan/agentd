@@ -105,6 +105,16 @@ func (w *Worker) failTieredStep(ctx context.Context, task models.Task, reason st
 // for steps that can never execute because their predecessor failed.
 // It also resolves the blocked origin task so the pipeline is not left
 // in an indeterminate state.
+//
+// A plain (non-HITL) FAILED child does not satisfy the store's own
+// resolved-children condition (see kanban/db.ChildResolvedConditionSQL), so
+// the generic UnblockBlockedParentsWhenChildrenResolved side effect never
+// flips a BLOCKED origin back to READY on its own. And the origin is
+// virtually always BLOCKED at this point, not RUNNING, so a raw
+// UpdateTaskResult call here (which only accepts RUNNING) would silently
+// no-op via ErrStateConflict. failTieredOrigin handles both cases correctly:
+// RUNNING resolves via UpdateTaskResult, anything else transitions straight
+// to FAILED.
 func (w *Worker) failTieredDependents(ctx context.Context, failedTask models.Task, originTask models.Task) {
 	dependents, err := w.store.ListChildTasksByRelation(ctx, failedTask.ID, models.TaskRelationDependsOn)
 	if err != nil {
@@ -117,15 +127,7 @@ func (w *Worker) failTieredDependents(ctx context.Context, failedTask models.Tas
 			"task_id", dep.ID, "step", dep.AgentID, "predecessor", failedTask.ID)
 		w.failTieredStep(ctx, dep, "Predecessor step failed; dependent step cancelled")
 	}
-	if _, err := w.store.UpdateTaskResult(ctx, originTask.ID, originTask.UpdatedAt, models.TaskResult{
-		Success: false,
-		Payload: truncate("Tiered step failed; pipeline cancelled", 1000),
-	}); err != nil {
-		if !errors.Is(err, models.ErrStateConflict) {
-			slog.Error("tiered: failed to resolve origin task after tiered step failure",
-				"task_id", originTask.ID, "error", err)
-		}
-	}
+	w.failTieredOrigin(ctx, originTask, "Tiered step failed; pipeline cancelled")
 }
 
 // parseAndConfigurePack reads the committed task result, parses the ContextPack,

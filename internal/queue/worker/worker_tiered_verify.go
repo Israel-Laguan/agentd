@@ -32,6 +32,15 @@ func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, 
 	}
 	if !result.IsTerminalSuccess() {
 		w.handleLoopResult(ctx, task, result)
+		// handleLoopResult has no notion of a tiered pipeline: budget
+		// exhaustion, turn-limit, and tool-retry exhaustion route through the
+		// generic retry ladder, which either requeues the step (fine — it
+		// will run again) or eventually fails/hands it off to a human. In the
+		// latter case nothing else would ever tell the origin, leaving it
+		// BLOCKED forever, so check whether the step landed in a terminal
+		// failure state and, if so, resolve the pipeline the same way an
+		// explicit tiered failure does.
+		w.resolveTieredOriginIfStepFailed(ctx, task, parentTask)
 		return
 	}
 
@@ -68,6 +77,23 @@ func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, 
 		// The ladder could not schedule the follow-up work, so nothing will
 		// unblock the origin. Resolve it now instead of leaving it BLOCKED.
 		w.failTieredOrigin(ctx, parentTask, "escalation ladder failed: "+err.Error())
+	}
+}
+
+// resolveTieredOriginIfStepFailed re-reads a tiered step after generic
+// loop-result handling (requeue/evict/healing-handoff) and, if it landed in a
+// terminal failure state, fails its dependents and resolves the origin the
+// same way an explicit tiered step failure does. A requeued step (still
+// READY/QUEUED for another attempt) needs no action here.
+func (w *Worker) resolveTieredOriginIfStepFailed(ctx context.Context, task models.Task, parentTask models.Task) {
+	current, err := w.store.GetTask(ctx, task.ID)
+	if err != nil {
+		slog.Error("tiered verify: failed to re-read step after loop result", "task_id", task.ID, "error", err)
+		return
+	}
+	switch current.State {
+	case models.TaskStateFailed, models.TaskStateFailedRequiresHuman:
+		w.failTieredDependents(ctx, *current, parentTask)
 	}
 }
 

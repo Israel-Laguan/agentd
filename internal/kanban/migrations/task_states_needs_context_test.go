@@ -105,6 +105,17 @@ func TestMigrationV16IsIdempotent(t *testing.T) {
 		if err := Run(ctx, db); err != nil {
 			t.Fatalf("Run() pass %d error = %v", i+1, err)
 		}
+		if i == 0 {
+			// applyMigration short-circuits when schema_version is already at
+			// or past the target, so without resetting it here the second
+			// Run() would be a no-op that never re-enters migrateToV16 and
+			// never exercises its "already migrated" idempotency guard
+			// (the strings.Contains(createSQL, "'NEEDS_CONTEXT'") check).
+			if _, err := db.ExecContext(ctx,
+				`UPDATE settings SET value = '15' WHERE key = 'schema_version'`); err != nil {
+				t.Fatalf("reset schema version for idempotency re-run: %v", err)
+			}
+		}
 	}
 	createSQL, err := readTableSQL(ctx, db, "tasks")
 	if err != nil {

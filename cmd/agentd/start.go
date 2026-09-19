@@ -42,6 +42,16 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	defer cleanup()
 
+	// Idempotently seed any default/tiered agent profiles missing from an
+	// existing installation (e.g. one upgraded to a build that added the
+	// tiered execution profiles after its last `agentd init`). reset=false
+	// means this never overwrites an operator-customized profile — it only
+	// installs the ones that don't exist yet, matching seedDefaultAgent's
+	// normal (non-reset) semantics.
+	if err := seedDefaultAgent(cmd.Context(), store, false); err != nil {
+		return fmt.Errorf("seed default agent profiles: %w", err)
+	}
+
 	if err := requireStartupProviders(cfg.Gateway); err != nil {
 		return err
 	}

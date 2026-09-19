@@ -30,12 +30,23 @@ func migrateToV16(ctx context.Context, db *sql.DB) error {
 		return setSchemaVersion(ctx, db, 16)
 	}
 
-	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+	// PRAGMA foreign_keys is connection-scoped in SQLite, so the OFF/ON pair
+	// and the transaction must all run on the same dedicated connection.
+	// Using the pooled *sql.DB for these calls risks the pool handing out a
+	// different underlying connection for BeginTx, leaving FK enforcement ON
+	// during the DROP TABLE below and cascading into dependent rows.
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for schema migration v16: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return fmt.Errorf("disable foreign keys for schema migration v16: %w", err)
 	}
-	defer func() { _, _ = db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
 
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin schema migration v16: %w", err)
 	}

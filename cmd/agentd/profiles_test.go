@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -100,27 +102,43 @@ func assertContainsNone(t *testing.T, got string, notWant []string) {
 }
 
 // TestSeededProfilesCoverTieredSteps asserts every tiered step kind has a
-// seeded agent profile. A tiered step whose profile is missing fails dispatch
-// with ErrAgentProfileNotFound, which would silently break a ladder rung —
-// adding a step kind without seeding its profile fails here instead.
+// seeded agent profile that is actually persisted and retrievable after
+// running seedDefaultAgent against a real store. A tiered step whose profile
+// is missing fails dispatch with ErrAgentProfileNotFound, which would
+// silently break a ladder rung — adding a step kind without seeding its
+// profile fails here instead.
 func TestSeededProfilesCoverTieredSteps(t *testing.T) {
-	t.Parallel()
-	seeded := map[string]bool{}
-	for _, p := range append(defaultAgentProfiles(), tieredAgentProfiles()...) {
-		seeded[p.ID] = true
+	home := t.TempDir()
+	store, err := openTestStore(t, filepath.Join(home, "global.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
 	}
+	defer func() { _ = store.Close() }()
+
+	if err := seedDefaultAgent(context.Background(), store, false); err != nil {
+		t.Fatalf("seedDefaultAgent: %v", err)
+	}
+
 	for kind, profileID := range worker.TieredStepProfiles() {
-		if !seeded[profileID] {
-			t.Errorf("tiered step %q needs profile %q, which seedDefaultAgent does not install", kind, profileID)
+		if _, err := store.GetAgentProfile(context.Background(), profileID); err != nil {
+			t.Errorf("tiered step %q needs profile %q, which seedDefaultAgent does not install: %v", kind, profileID, err)
 		}
 	}
 }
 
+// TestTieredProfilesLeaveRoutingToGateway asserts only that the seeded tier
+// profiles ship with empty Provider/Model. It does NOT verify that distinct
+// small/mid/strong models are actually applied per tier at runtime — today
+// every agentic call, tiered steps included, is dispatched through the same
+// gateway.RoleWorker route (see internal/queue/worker/agentic/handlers.go),
+// so there is no automatic per-step model routing. An operator who wants the
+// documented cost tiers enforced must PATCH Provider/Model onto each
+// tier-* profile explicitly.
 func TestTieredProfilesLeaveRoutingToGateway(t *testing.T) {
 	t.Parallel()
 	for _, p := range tieredAgentProfiles() {
 		if p.Provider != "" || p.Model != "" {
-			t.Errorf("profile %q pins provider/model (%q/%q); tiers must fall back to gateway.role_models",
+			t.Errorf("profile %q pins provider/model (%q/%q); expected empty so gateway.role_models/manual PATCH decides routing",
 				p.ID, p.Provider, p.Model)
 		}
 	}
