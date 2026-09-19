@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"agentd/internal/models"
@@ -68,6 +69,12 @@ func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, par
 		return nil, models.ErrTaskNotFound
 	}
 	created := s.addDraftTasksLocked(projectID, parentTaskID, drafts)
+	// The real store's AppendTasksToProject inserts children as PENDING
+	// (unlike BlockTaskWithSubtasks, which inserts READY subtasks).
+	for i := range created {
+		created[i].State = models.TaskStatePending
+		s.tasks[created[i].ID] = created[i]
+	}
 	return created, nil
 }
 
@@ -87,13 +94,31 @@ func (s *FakeKanbanStore) PersistTieredDAG(_ context.Context, parentID string, e
 	if parent.State != models.TaskStateRunning && parent.State != models.TaskStateReady {
 		return nil, models.ErrInvalidStateTransition
 	}
+	// Resolve and validate everything before mutating any state, so a bad
+	// plan fails the whole call the way the real store's transaction does.
 	ts := now()
-	s.blockParentTaskLocked(parentID, ts)
-	tasks := make([]models.Task, 0, len(children))
+	resolved := make([]models.Task, 0, len(children))
+	persisted := make(map[string]struct{}, len(children))
 	for _, child := range children {
 		t := child.Task
 		if t.ID == "" {
 			t.ID = s.nextID()
+		}
+		if _, exists := s.tasks[t.ID]; exists {
+			return nil, fmt.Errorf("testutil: persist tiered dag: task %q already exists: %w", t.ID, models.ErrStateConflict)
+		}
+		if _, dup := persisted[t.ID]; dup {
+			return nil, fmt.Errorf("testutil: persist tiered dag: duplicate child id %q: %w", t.ID, models.ErrStateConflict)
+		}
+		// The real store inserts children in order before recording the
+		// DEPENDS_ON edge, so a forward reference (or unknown task) violates
+		// the task_relations foreign key and rejects the plan.
+		if child.DependsOnID != "" {
+			_, known := s.tasks[child.DependsOnID]
+			_, earlier := persisted[child.DependsOnID]
+			if !known && !earlier {
+				return nil, fmt.Errorf("testutil: persist tiered dag: unknown DependsOnID %q for child %q: %w", child.DependsOnID, t.ID, models.ErrTaskNotFound)
+			}
 		}
 		if t.CreatedAt.IsZero() {
 			t.CreatedAt = ts
@@ -101,6 +126,13 @@ func (s *FakeKanbanStore) PersistTieredDAG(_ context.Context, parentID string, e
 		if t.UpdatedAt.IsZero() {
 			t.UpdatedAt = ts
 		}
+		persisted[t.ID] = struct{}{}
+		resolved = append(resolved, t)
+	}
+	s.blockParentTaskLocked(parentID, ts)
+	tasks := make([]models.Task, 0, len(resolved))
+	for i, child := range children {
+		t := resolved[i]
 		s.tasks[t.ID] = t
 		s.childParents[t.ID] = append(s.childParents[t.ID], parentID)
 		if child.DependsOnID != "" {

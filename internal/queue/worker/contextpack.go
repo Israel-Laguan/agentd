@@ -20,8 +20,14 @@ const (
 	// DefaultMaxContextPackChars is the default cap on total chars across text fields.
 	DefaultMaxContextPackChars = 48000
 
-	// ContextPackFileName is the workspace file name for a context pack.
-	ContextPackFileName = "context_pack.v%d.json"
+	// ContextPackFileName is the workspace file name template for a context
+	// pack, scoped by the tiered pipeline's origin (parent) task so concurrent
+	// pipelines sharing a project workspace cannot overwrite each other's pack.
+	ContextPackFileName = "context_pack.%s.v%d.json"
+
+	// legacyContextPackFileName is the unscoped file name used when a pack
+	// carries no parent-task lineage.
+	legacyContextPackFileName = "context_pack.v%d.json"
 )
 
 // ContextPack is the sealed handoff artifact produced by the context step.
@@ -210,13 +216,18 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 	return truncated, nil
 }
 
-// PackFilePath returns the workspace-relative file path for a context pack at the given version.
-func PackFilePath(version int) string {
+// PackFilePath returns the workspace-relative file name for a context pack
+// scoped to the given origin (parent) task at the given version. An empty
+// parentTaskID falls back to the legacy unscoped name.
+func PackFilePath(parentTaskID string, version int) string {
 	v := version
 	if v <= 0 {
 		v = ContextPackVersion
 	}
-	return fmt.Sprintf(ContextPackFileName, v)
+	if parentTaskID == "" {
+		return fmt.Sprintf(legacyContextPackFileName, v)
+	}
+	return fmt.Sprintf(ContextPackFileName, parentTaskID, v)
 }
 
 // WriteContextPack serializes the pack to a JSON file in the workspace dir.
@@ -230,7 +241,7 @@ func WriteContextPack(workspace string, cp *ContextPack) error {
 	if err != nil {
 		return fmt.Errorf("marshal context pack: %w", err)
 	}
-	name := PackFilePath(cp.Version)
+	name := PackFilePath(cp.ParentTaskID, cp.Version)
 	path := filepath.Join(workspace, name)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write context pack %s: %w", name, err)
