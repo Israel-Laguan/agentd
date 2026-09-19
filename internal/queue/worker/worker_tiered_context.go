@@ -127,7 +127,45 @@ func (w *Worker) failTieredDependents(ctx context.Context, failedTask models.Tas
 			"task_id", dep.ID, "step", dep.AgentID, "predecessor", failedTask.ID)
 		w.failTieredStep(ctx, dep, "Predecessor step failed; dependent step cancelled")
 	}
+	// A re-gather appends a fresh chain while an older step may still be
+	// RUNNING. If that superseded step later fails, failing the shared
+	// origin here would cancel the fresh chain. Only the active (newest)
+	// chain may resolve the origin.
+	if w.tieredStepSuperseded(ctx, failedTask, originTask) {
+		slog.Info("tiered: ignoring failure from superseded step; origin left for active chain",
+			"task_id", failedTask.ID, "origin_id", originTask.ID)
+		return
+	}
 	w.failTieredOrigin(ctx, originTask, "Tiered step failed; pipeline cancelled")
+}
+
+// tieredStepSuperseded reports whether failedTask belongs to an older chain
+// that a re-gather has since replaced: any sibling tiered step created after
+// it means a fresher chain owns the origin now.
+func (w *Worker) tieredStepSuperseded(ctx context.Context, failedTask models.Task, originTask models.Task) bool {
+	steps, err := w.tieredStepChildren(ctx, originTask)
+	if err != nil {
+		// On lookup failure, fall through to failing the origin rather than
+		// silently swallowing a genuine pipeline failure.
+		slog.Warn("tiered: failed to check for superseding chain; failing origin",
+			"task_id", failedTask.ID, "origin_id", originTask.ID, "error", err)
+		return false
+	}
+	failed, err := w.store.GetTask(ctx, failedTask.ID)
+	if err != nil {
+		slog.Warn("tiered: failed to re-read failed step; failing origin",
+			"task_id", failedTask.ID, "error", err)
+		return false
+	}
+	for _, step := range steps {
+		if step.ID == failed.ID {
+			continue
+		}
+		if step.CreatedAt.After(failed.CreatedAt) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseAndConfigurePack reads the committed task result, parses the ContextPack,

@@ -44,7 +44,13 @@ func migrateToV16(ctx context.Context, db *sql.DB) error {
 	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return fmt.Errorf("disable foreign keys for schema migration v16: %w", err)
 	}
-	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+	defer func() {
+		// Restore FK enforcement on a non-cancelable cleanup context: if
+		// ctx is canceled during teardown, ExecContext with ctx would abort
+		// the PRAGMA and return this pooled connection with enforcement
+		// still disabled.
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys = ON`)
+	}()
 
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
