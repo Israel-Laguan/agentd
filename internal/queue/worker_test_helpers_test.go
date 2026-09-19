@@ -349,6 +349,16 @@ func (s *workerStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.
 	return &s.task, children, nil
 }
 
+func (s *workerStore) PersistTieredDAG(_ context.Context, _ string, _ time.Time, children []models.TieredDAGTask) ([]models.Task, error) {
+	s.task.State = models.TaskStateBlocked
+	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)
+	tasks := make([]models.Task, 0, len(children))
+	for _, child := range children {
+		tasks = append(tasks, child.Task)
+	}
+	return tasks, nil
+}
+
 func (s *workerStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

@@ -183,6 +183,10 @@ func (s *legacyHandoffStore) BlockTaskWithSubtasks(_ context.Context, _ string, 
 	return &s.task, nil, nil
 }
 
+func (s *legacyHandoffStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
+
 // legacyHandoffSink records emitted event kinds.
 type legacyHandoffSink struct {
 	mu    sync.Mutex

@@ -86,3 +86,7 @@ func (s *goalStallRefreshedStore) BlockTaskWithSubtasks(_ context.Context, _ str
 	s.blockAt = at
 	return nil, nil, nil
 }
+
+func (s *goalStallRefreshedStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}

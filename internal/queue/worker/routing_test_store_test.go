@@ -144,6 +144,10 @@ func (s *routingTestStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ 
 	return &s.task, nil, nil
 }
 
+func (s *routingTestStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *routingTestStore) ListParentTasks(_ context.Context, childID string) ([]models.Task, error) {
 	if s.parents == nil {
 		return nil, nil

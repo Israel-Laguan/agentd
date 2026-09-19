@@ -152,3 +152,10 @@ func (d DraftTask) ID() string {
 	}
 	return strings.TrimSpace(d.TempID)
 }
+
+// TieredDAGTask describes one child task in a tiered execution DAG for
+// PersistTieredDAG. DependsOnID is empty for the first step (no predecessor).
+type TieredDAGTask struct {
+	Task        Task
+	DependsOnID string
+}

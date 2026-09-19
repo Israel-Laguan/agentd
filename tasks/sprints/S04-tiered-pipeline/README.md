@@ -18,7 +18,7 @@ Complete the cost wedge (product-plan Phase 5, milestones M3–M5) on top of the
 | ID | Type | Title | PR | Status | Priority |
 | --- | --- | --- | --- | --- | --- |
 | [T-015](tasks/T-015-tiered-m3-splitter.md) | task | Tiered M3 — DAG splitter + step-kind profiles | **A** | done | P1 |
-| [T-016](tasks/T-016-tiered-m3-modes.md) | task | Tiered M3 — Worker modes (context/decision/execute/verify) | **B** | ready | P1 |
+| [T-016](tasks/T-016-tiered-m3-modes.md) | task | Tiered M3 — Worker modes (context/decision/execute/verify) | **B** | done | P1 |
 | [T-017](tasks/T-017-tiered-m4-escalation.md) | task | Tiered M4 — Escalation ladder + NEEDS_CONTEXT | **C** | ready | P1 |
 | [T-018](tasks/T-018-tiered-m5-cost-harness.md) | task | Tiered M5 — Cost/latency harness demo | **C** | ready | P2 |
 

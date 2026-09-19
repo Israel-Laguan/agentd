@@ -154,6 +154,10 @@ func (s *blockFailStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ ti
 	return nil, nil, models.ErrStateConflict
 }
 
+func (s *blockFailStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
+	return nil, nil
+}
+
 func TestCreatePromptHandoff_NoExpiryWhenBlockFails(t *testing.T) {
 	t.Parallel()
 	store := &blockFailStore{FakeKanbanStore: testutil.NewFakeStore()}
