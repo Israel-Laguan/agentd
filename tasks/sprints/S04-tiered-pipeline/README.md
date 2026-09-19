@@ -20,15 +20,16 @@ Complete the cost wedge (product-plan Phase 5, milestones M3–M5) on top of the
 | [T-015](tasks/T-015-tiered-m3-splitter.md) | task | Tiered M3 — DAG splitter + step-kind profiles | **A** | done | P1 |
 | [T-016](tasks/T-016-tiered-m3-modes.md) | task | Tiered M3 — Worker modes (context/decision/execute/verify) | **B** | ready | P1 |
 | [T-017](tasks/T-017-tiered-m4-escalation.md) | task | Tiered M4 — Escalation ladder + NEEDS_CONTEXT | **C** | ready | P1 |
-| [T-018](tasks/T-018-tiered-m5-cost-harness.md) | task | Tiered M5 — Cost/latency harness demo | **D** | ready | P2 |
+| [T-018](tasks/T-018-tiered-m5-cost-harness.md) | task | Tiered M5 — Cost/latency harness demo | **C** | ready | P2 |
 
 ## Suggested order
 
 ```text
 PR-A (T-015 DAG splitter) → PR-B (T-016 worker modes)
-PR-C (T-017 escalation) after PR-B
-PR-D (T-018 cost harness) after PR-C
+PR-C (T-017 escalation + T-018 cost harness, merged) after PR-B
 ```
+
+**PR-C note (operator decision 2026-09-19):** T-017 and T-018 were originally separate PRs (see [`PR-PLAN.md`](PR-PLAN.md)) and are now merged into one, in order to clear PR-C's 20-file minimum floor. This supersedes the "no bundling runtime changes + cost harness + escalation" rule below for PR-C specifically.
 
 ## Explicitly out of scope
 
@@ -37,7 +38,6 @@ PR-D (T-018 cost harness) after PR-C
 - SWE-bench / coding-agent UX
 - MCP board export / US-005 (Phase 3)
 - Foundational baseline contract changes
-- PRs that mix runtime changes + cost harness + escalation
 
 ## Risks / dependencies
 

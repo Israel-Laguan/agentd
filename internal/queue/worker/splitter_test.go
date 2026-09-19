@@ -1,7 +1,9 @@
 package worker
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"agentd/internal/models"
 )
@@ -18,11 +20,17 @@ func testTieredParent() models.Task {
 
 func TestSplitIntoTieredDAG_StepOrderAndProfiles(t *testing.T) {
 	t.Parallel()
-	children, _ := SplitIntoTieredDAG(testTieredParent())
+	now := time.Now()
+	children, _ := SplitIntoTieredDAG(testTieredParent(), now)
 	if len(children) != 4 {
 		t.Fatalf("len(children) = %d, want 4", len(children))
 	}
-	wantProfiles := []string{"tier-context", "tier-decision", "tier-execute", "tier-verify"}
+	wantProfiles := []string{
+		tieredStepProfile[TieredStepContext],
+		tieredStepProfile[TieredStepDecision],
+		tieredStepProfile[TieredStepExecute],
+		tieredStepProfile[TieredStepVerify],
+	}
 	for i, want := range wantProfiles {
 		if got := children[i].AgentID; got != want {
 			t.Fatalf("children[%d].AgentID = %q, want %q", i, got, want)
@@ -32,7 +40,8 @@ func TestSplitIntoTieredDAG_StepOrderAndProfiles(t *testing.T) {
 
 func TestSplitIntoTieredDAG_ContextStartsReady_OthersPending(t *testing.T) {
 	t.Parallel()
-	children, _ := SplitIntoTieredDAG(testTieredParent())
+	now := time.Now()
+	children, _ := SplitIntoTieredDAG(testTieredParent(), now)
 	if children[0].State != models.TaskStateReady {
 		t.Fatalf("context step state = %s, want READY", children[0].State)
 	}
@@ -45,7 +54,8 @@ func TestSplitIntoTieredDAG_ContextStartsReady_OthersPending(t *testing.T) {
 
 func TestSplitIntoTieredDAG_DependencyChainIsSequential(t *testing.T) {
 	t.Parallel()
-	children, _ := SplitIntoTieredDAG(testTieredParent())
+	now := time.Now()
+	children, _ := SplitIntoTieredDAG(testTieredParent(), now)
 	if len(children[0].DependsOn) != 0 {
 		t.Fatalf("context step DependsOn = %v, want none", children[0].DependsOn)
 	}
@@ -59,8 +69,14 @@ func TestSplitIntoTieredDAG_DependencyChainIsSequential(t *testing.T) {
 
 func TestSplitIntoTieredDAG_RelationsCoverSpawnedByAndDependsOn(t *testing.T) {
 	t.Parallel()
+	now := time.Now()
 	parent := testTieredParent()
-	children, relations := SplitIntoTieredDAG(parent)
+	children, relations := SplitIntoTieredDAG(parent, now)
+
+	childIndex := make(map[string]int, len(children))
+	for i, child := range children {
+		childIndex[child.ID] = i
+	}
 
 	var spawnedBy, dependsOn int
 	for _, rel := range relations {
@@ -70,8 +86,16 @@ func TestSplitIntoTieredDAG_RelationsCoverSpawnedByAndDependsOn(t *testing.T) {
 			if rel.ParentTaskID != parent.ID {
 				t.Fatalf("SPAWNED_BY relation parent = %q, want %q", rel.ParentTaskID, parent.ID)
 			}
+			if _, ok := childIndex[rel.ChildTaskID]; !ok {
+				t.Fatalf("SPAWNED_BY relation child = %q not in returned children", rel.ChildTaskID)
+			}
 		case models.TaskRelationDependsOn:
 			dependsOn++
+			ci, okC := childIndex[rel.ChildTaskID]
+			pi, okP := childIndex[rel.ParentTaskID]
+			if !okC || !okP || ci != pi+1 {
+				t.Fatalf("DEPENDS_ON relation %+v does not point to correct predecessor", rel)
+			}
 		default:
 			t.Fatalf("unexpected relation type %q", rel.RelationType)
 		}
@@ -86,29 +110,32 @@ func TestSplitIntoTieredDAG_RelationsCoverSpawnedByAndDependsOn(t *testing.T) {
 
 func TestSplitIntoTieredDAG_InheritsProjectAndAssignee(t *testing.T) {
 	t.Parallel()
+	now := time.Now()
 	parent := testTieredParent()
-	children, _ := SplitIntoTieredDAG(parent)
+	children, _ := SplitIntoTieredDAG(parent, now)
 	for i, child := range children {
+		if child.ID == "" {
+			t.Fatalf("children[%d].ID is empty", i)
+		}
 		if child.ProjectID != parent.ProjectID {
 			t.Fatalf("children[%d].ProjectID = %q, want %q", i, child.ProjectID, parent.ProjectID)
 		}
 		if child.Assignee != parent.Assignee {
 			t.Fatalf("children[%d].Assignee = %q, want %q", i, child.Assignee, parent.Assignee)
 		}
-		if child.ID == "" {
-			t.Fatalf("children[%d].ID is empty", i)
-		}
 	}
 }
 
 func TestSplitIntoTieredDAG_ChildTitlesReferenceStepKind(t *testing.T) {
 	t.Parallel()
+	now := time.Now()
 	parent := testTieredParent()
-	children, _ := SplitIntoTieredDAG(parent)
-	wantPrefixes := []string{"context:", "decision:", "execute:", "verify:"}
+	children, _ := SplitIntoTieredDAG(parent, now)
+	wantPrefixes := []TieredStepKind{TieredStepContext, TieredStepDecision, TieredStepExecute, TieredStepVerify}
 	for i, prefix := range wantPrefixes {
-		if got := children[i].Title; len(got) < len(prefix) || got[:len(prefix)] != prefix {
-			t.Fatalf("children[%d].Title = %q, want prefix %q", i, got, prefix)
+		want := fmt.Sprintf("%s:", prefix)
+		if got := children[i].Title; len(got) < len(want) || got[:len(want)] != want {
+			t.Fatalf("children[%d].Title = %q, want prefix %q", i, got, want)
 		}
 	}
 }

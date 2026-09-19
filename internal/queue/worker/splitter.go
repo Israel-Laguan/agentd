@@ -2,6 +2,7 @@ package worker
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -47,19 +48,23 @@ var tieredStepProfile = map[TieredStepKind]string{
 //
 // The context step starts READY since it has no dependency; the remaining
 // steps start PENDING until their predecessor completes.
-func SplitIntoTieredDAG(parent models.Task) ([]models.Task, []models.TaskRelation) {
+func SplitIntoTieredDAG(parent models.Task, now time.Time) ([]models.Task, []models.TaskRelation) {
 	children := make([]models.Task, 0, len(tieredStepOrder))
 	relations := make([]models.TaskRelation, 0, len(tieredStepOrder)*2-1)
 
 	for i, kind := range tieredStepOrder {
+		assignee := parent.Assignee
+		if !assignee.Valid() {
+			assignee = models.TaskAssigneeSystem
+		}
 		child := models.Task{
-			BaseEntity:  models.BaseEntity{ID: uuid.NewString()},
+			BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
 			ProjectID:   parent.ProjectID,
 			AgentID:     tieredStepProfile[kind],
 			Title:       fmt.Sprintf("%s: %s", kind, parent.Title),
 			Description: parent.Description,
 			State:       models.TaskStatePending,
-			Assignee:    parent.Assignee,
+			Assignee:    assignee,
 		}
 		if i == 0 {
 			child.State = models.TaskStateReady

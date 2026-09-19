@@ -178,62 +178,75 @@ cmd_probe_cascade() {
 }
 
 cmd_probe_breaker() {
-   echo "=== breaker exhaustion via gateway $API_URL/v1/chat/completions ==="
-   local attempt breaker_state="" validation_failed=0
-   for attempt in 1 2 3 4 5; do
-     local resp http_code probe_resp
-     probe_resp="$(mktemp "${TMPDIR:-/tmp}/agentd-probe.XXXXXX")" || return 1
-     http_code="$(curl -sS -o "$probe_resp" -w '%{http_code}' -m 5 -X POST "$API_URL/v1/chat/completions" \
-       -H 'Content-Type: application/json' \
-       -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' 2>&1)" || true
-     resp="$(cat "$probe_resp" 2>/dev/null || true)"
-     rm -f "$probe_resp"
-      if [[ "$http_code" != "200" ]]; then
-        echo "attempt $attempt: expected HTTP 200, got ${http_code:-unknown} (curl error or non-200 response)" >&2
-        return 1
-      fi
-      if ! echo "$resp" | grep -Fq "$systemTimeoutMessage"; then
-        echo "attempt $attempt: response missing systemTimeoutMessage" >&2
-        validation_failed=1
-        sleep 0.5
-        continue
-      fi
-     echo "attempt $attempt: got HTTP 200 with systemTimeoutMessage (expected for ErrLLMUnreachable)"
-     # Keep issuing requests: the breaker needs 3 consecutive
-     # ErrLLMUnreachable failures to reach OPEN, so stop only once the
-     # attempts are exhausted (or a hard error above returns).
+  echo "=== breaker exhaustion via gateway $API_URL/v1/chat/completions ==="
+  # Probe loop: every attempt must answer HTTP 200 + systemTimeoutMessage
+  # (ErrLLMUnreachable). We never exit early on a mismatch because the breaker
+  # needs several consecutive failures to reach OPEN, so all five probes are
+  # issued. timeout_missing is therefore intentionally sticky: it records that
+  # at least one probe was wrong and is only consulted after the loop. The
+  # telemetry loop further down is independent and does not read it, so it is
+  # never reset.
+  local attempt breaker_state=""
+  local timeout_missing=0
+  for attempt in 1 2 3 4 5; do
+    local resp http_code probe_resp
+    probe_resp="$(mktemp "${TMPDIR:-/tmp}/agentd-probe.XXXXXX")" || return 1
+    http_code="$(curl -sS -o "$probe_resp" -w '%{http_code}' -m 5 -X POST "$API_URL/v1/chat/completions" \
+      -H 'Content-Type: application/json' \
+      -d '{"model":"dead","messages":[{"role":"user","content":"breaker probe"}]}' 2>&1)" || true
+    resp="$(cat "$probe_resp" 2>/dev/null || true)"
+    rm -f "$probe_resp"
+    if [[ "$http_code" != "200" ]]; then
+      echo "attempt $attempt: expected HTTP 200, got ${http_code:-unknown} (curl error or non-200 response)" >&2
+      return 1
+    fi
+    if ! echo "$resp" | grep -Fq "$systemTimeoutMessage"; then
+      echo "attempt $attempt: response missing systemTimeoutMessage" >&2
+      timeout_missing=1
+      sleep 0.5
       continue
-    done
-   if (( validation_failed != 0 )); then
-     echo "FAIL: breaker probe saw a response missing systemTimeoutMessage" >&2
-     return 1
-   fi
-    for attempt in 1 2 3 4 5; do
-     local status
-     status="$(curl -fsS -m 2 "$API_URL/api/v1/system/status" 2>/dev/null || true)"
-     if echo "$status" | grep -Fq '"breaker":{"state":"OPEN"'; then
-       breaker_state="$status"
-       echo "breaker telemetry: $status"
-       break
-     fi
-     sleep 0.5
-   done
-   if ! curl -sS -m 2 "http://127.0.0.1:1/v1/models" >/dev/null 2>&1; then
-     echo "primary dead port unreachable (good)"
-   else
-     echo "unexpected: dead port answered" >&2; return 1
-   fi
-   if [[ -z "$breaker_state" ]]; then
-     echo "FAIL: breaker never reached OPEN state after $attempt attempts" >&2
-     return 1
-   fi
-   echo "$breaker_state" | grep -q "failure_count" && echo "found failure_count" || echo "no failure_count in status (check daemon version)"
-   echo "$breaker_state" | grep -q "last_error" && echo "found last_error" || true
-   echo "Pass criterion B: ErrLLMUnreachable (HTTP 200 + systemTimeoutMessage) + breaker OPEN after exhaustion."
-   echo "Coverage: circuit_breaker.feature + outage_handoff.feature."
-   API_URL="$API_URL" python3 "$PYTHON" projects 2>/dev/null || true
-   [[ -f "$HOME_DIR/daemon.log" ]] && { echo "=== recent daemon log ==="; tail -n 20 "$HOME_DIR/daemon.log" || true; }
-  }
+    fi
+    echo "attempt $attempt: got HTTP 200 with systemTimeoutMessage (expected for ErrLLMUnreachable)"
+  done
+  if (( timeout_missing != 0 )); then
+    echo "FAIL: breaker probe saw a response missing systemTimeoutMessage" >&2
+    return 1
+  fi
+
+  # Telemetry loop: independent of the probe loop above; polls system/status
+  # until the breaker reports OPEN.
+  for attempt in 1 2 3 4 5; do
+    local status
+    status="$(curl -fsS -m 2 "$API_URL/api/v1/system/status" 2>/dev/null || true)"
+    if echo "$status" | grep -Fq '"breaker":{"state":"OPEN"'; then
+      breaker_state="$status"
+      echo "breaker telemetry: $status"
+      break
+    fi
+    sleep 0.5
+  done
+  if ! curl -sS -m 2 "http://127.0.0.1:1/v1/models" >/dev/null 2>&1; then
+    echo "primary dead port unreachable (good)"
+  else
+    echo "unexpected: dead port answered" >&2
+    return 1
+  fi
+  if [[ -z "$breaker_state" ]]; then
+    echo "FAIL: breaker never reached OPEN state after $attempt attempts" >&2
+    return 1
+  fi
+  echo "$breaker_state" | grep -q "failure_count" && echo "found failure_count" || echo "no failure_count in status (check daemon version)"
+  echo "$breaker_state" | grep -q "last_error" && echo "found last_error" || true
+  echo "Pass criterion B: ErrLLMUnreachable (HTTP 200 + systemTimeoutMessage) + breaker OPEN after exhaustion."
+  echo "Coverage: circuit_breaker.feature + outage_handoff.feature."
+  API_URL="$API_URL" python3 "$PYTHON" projects 2>/dev/null || true
+  # Tail the daemon log when present. Uses `if` rather than `[[ ]] && {...}` so
+  # a missing log cannot make this otherwise-successful probe return non-zero.
+  if [[ -f "$HOME_DIR/daemon.log" ]]; then
+    echo "=== recent daemon log ==="
+    tail -n 20 "$HOME_DIR/daemon.log" || true
+  fi
+}
 
 cmd_status() {
   echo "=== system/status ==="

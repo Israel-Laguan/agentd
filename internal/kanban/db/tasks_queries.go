@@ -91,15 +91,18 @@ func UnlockReadyChildren(ctx context.Context, tx *ImmediateTx, parentID string, 
 		    SELECT child_task_id
 		    FROM task_relations
 		    WHERE parent_task_id = ?
+		      AND relation_type = ?
 		  )
 		  AND NOT EXISTS (
 		    SELECT 1
 		    FROM task_relations tr
 		    JOIN tasks parent ON parent.id = tr.parent_task_id
 		    WHERE tr.child_task_id = tasks.id
+		      AND tr.relation_type = ?
 		      AND parent.state != ?
 		  )`,
-		models.TaskStateReady, FormatTime(now), models.TaskStatePending, parentID, models.TaskStateCompleted)
+		models.TaskStateReady, FormatTime(now), models.TaskStatePending, parentID,
+		models.TaskRelationDependsOn, models.TaskRelationDependsOn, models.TaskStateCompleted)
 	if err != nil {
 		return fmt.Errorf("unlock completed task children: %w", err)
 	}

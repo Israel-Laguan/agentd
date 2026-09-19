@@ -7,7 +7,7 @@
 | Priority | P1 |
 | Sprint | S04-tiered-pipeline |
 | Estimate | L |
-| PR | **PR-C** — ≤15 files / <600 LOC |
+| PR | **PR-C** (merged with T-018 per operator decision 2026-09-19; see [PR-PLAN.md](../PR-PLAN.md)) — 20–50 files / <1000 LOC combined |
 | Links | [tiered-execution M4](../../../../docs/tiered-execution.md) |
 
 ## Goal
