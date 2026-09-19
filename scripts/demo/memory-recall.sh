@@ -139,6 +139,10 @@ cmd_probe() {
   local probe_tmp
   probe_tmp=$(mktemp)
   echo "$resp" > "$probe_tmp"
+  # `local rc=0` + `|| rc=$?` rather than a bare `local rc=$?`: with set -e the
+  # script would abort before the diagnostic branch below runs and before the
+  # temp file is removed.
+  local rc=0
   LAST_SEED="$last_seed" python3 -c "
 import sys, json, os, pathlib
 raw = json.load(open(sys.argv[1]))
@@ -178,8 +182,7 @@ print('  - Runtime memory section present (daemon healthy)')
 print('  - Recall mechanism can retrieve it (FTS intent matching, tested in recall_test.go)')
 print('  - FormatPreferences renders symptom/solution (USER_PREFERENCE path)')
 print('  - Namespace isolation holds (tested in recall_namespace.feature)')
-" "$probe_tmp" 2>/dev/null
-  local rc=$?
+" "$probe_tmp" 2>/dev/null || rc=$?
   if (( rc != 0 )); then
     echo "(could not parse status response — see raw below)" >&2
     cat "$probe_tmp" | python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps(d.get('data',d).get('memory',{}), indent=2))" "$probe_tmp" 2>/dev/null || cat "$probe_tmp" >&2 || true

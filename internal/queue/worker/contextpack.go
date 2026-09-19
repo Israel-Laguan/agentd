@@ -133,6 +133,9 @@ func (cp *ContextPack) CharCount() int {
 }
 
 // BackfillBudgetCounters fills zero-valued budget counters from serialized content.
+// ReadContextPack uses backfillAbsentBudgetCounters instead, which also tells an
+// absent counter apart from an explicit zero so explicit zeros still fail
+// Validate. This helper is kept for callers that only need the zero-based form.
 func (cp *ContextPack) BackfillBudgetCounters() {
 	if cp.Budget.PathCount == 0 {
 		cp.Budget.PathCount = len(cp.Paths)
@@ -152,7 +155,11 @@ func (cp *ContextPack) backfillAbsentBudgetCounters(pathCountPresent, charCountP
 	}
 }
 
-// requiredContentChars returns the char count of required fields.
+// requiredContentChars returns the char count of the fields EnforceBudget
+// cannot drop: Summary, Excerpts and CommandsRun. Constraints and Unknowns are
+// optional and deliberately excluded — EnforceBudget clears them to bring
+// CharCount() back under MaxChars, so counting them here would reject packs
+// that trimming can still fit.
 func (cp *ContextPack) requiredContentChars() int {
 	n := utf8.RuneCountInString(cp.Summary)
 	for i := range cp.Excerpts {
@@ -196,8 +203,10 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 	cp.Budget.MaxPaths = cfg.MaxPaths
 	cp.Budget.MaxChars = cfg.MaxChars
 	cp.Budget.PathCount = len(cp.Paths)
-	cp.Budget.CharCount = cp.CharCount()
-	if cp.Budget.CharCount > cfg.MaxChars {
+	// Count once and reuse it: CharCount() is only recomputed after a field is
+	// actually dropped, and the final store below reuses the last value.
+	charCount := cp.CharCount()
+	if charCount > cfg.MaxChars {
 		required := cp.requiredContentChars()
 		if required > cfg.MaxChars {
 			return truncated, fmt.Errorf("context pack required content %d chars exceeds budget %d (summary+excerpts+commands_run)", required, cfg.MaxChars)
@@ -205,14 +214,14 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 		// Required fits — trim optional content incrementally so clearing
 		// Unknowns alone can preserve safety-critical Constraints.
 		cp.Unknowns = nil
-		cp.Budget.CharCount = cp.CharCount()
-		if cp.Budget.CharCount > cfg.MaxChars {
+		charCount = cp.CharCount()
+		if charCount > cfg.MaxChars {
 			cp.Constraints = nil
-			cp.Budget.CharCount = cp.CharCount()
+			charCount = cp.CharCount()
 		}
 		truncated = true
 	}
-	cp.Budget.CharCount = cp.CharCount()
+	cp.Budget.CharCount = charCount
 	return truncated, nil
 }
 

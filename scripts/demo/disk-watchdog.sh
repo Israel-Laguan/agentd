@@ -159,7 +159,7 @@ for p in raw.get('data', raw):
     echo "Failed to fetch tasks for _system project" >&2
     return 1
   }
-local probe_result=""
+  local probe_result=""
   local probe_status=0
   probe_result=$(echo "$tasks_resp" | python3 -c "
 import sys, json
