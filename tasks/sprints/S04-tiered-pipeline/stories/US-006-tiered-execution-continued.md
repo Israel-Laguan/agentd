@@ -15,10 +15,10 @@ Complete the tiered execution pipeline: decision → execute → verify DAG with
 
 - [x] M3: DAG splitter produces typed children with dependency edges
 - [x] M3: Worker modes dispatch correctly per step kind with tool allowlists
-- [x] M4: Escalation ladder degrades to HUMAN without stuck loops
-- [x] M4: NEEDS_CONTEXT triggers re-gather with pack version bump
-- [x] M5: Cost harness shows measurable token/$ improvement vs single-model baseline
-- [x] All milestones have tests + documentation
+- [ ] M4: Escalation ladder degrades to HUMAN without stuck loops — classifier + state machine shipped in S04; runtime wiring carried to S05 T-020 (see [S04 retro](../retro/RETRO.md))
+- [ ] M4: NEEDS_CONTEXT triggers re-gather with pack version bump — enum-only in S04, missing DB constraint + rewire logic; S05 T-020
+- [ ] M5: Cost harness shows measurable token/$ improvement vs single-model baseline — S04 script uses illustrative constants, not measured runs; S05 T-020
+- [ ] All milestones have tests + documentation — M3 fully covered; M4/M5 covered at the unit level only, integration tests pending S05
 
 ## Notes
 
