@@ -268,5 +268,9 @@ func reconcileAndRecover(ctx context.Context, tx *immediateTx, ghosts []models.T
 	if err := reset(ctx, tx, ghosts, ids, now); err != nil {
 		return nil, err
 	}
-	return selectTasksByIDs(ctx, tx, ids)
+	recovered, err := selectTasksByIDs(ctx, tx, ids)
+	if err != nil {
+		return nil, err
+	}
+	return recovered, commitTx(tx, commitMsg)
 }
