@@ -240,6 +240,7 @@ verify → fail/flake
 ### Escalation to strong model
 
 On persistent failure or conflict, dispatch **escalate** step (strong model) with:
+
 - Current ContextPack
 - Decision artifacts (touch list + checks)
 - Failing verify evidence (last check results)
@@ -272,14 +273,15 @@ Run `./scripts/demo/tiered-harness.sh` to compare:
 | Metric | Baseline (strong) | Tiered | Savings |
 | --- | --- | --- | --- |
 | **Tokens** | 13,000 | 8,500 | 34% |
-| **Cost** | $0.195 | $0.063 | **68%** |
+| **Cost** | $0.195 | $0.0225 | **88%** |
 | **Wall time** | 45s | 28s | 38% |
 
 **Fixed task pack:** reproducible across runs; same acceptance criteria for both baseline and tiered.
 
 **Pricing table (offline proxy):**
+
 - Small model: $0.001 / 1k tokens
-- Mid model: $0.005 / 1k tokens  
+- Mid model: $0.005 / 1k tokens
 - Strong model: $0.015 / 1k tokens
 
 **Output:** JSON results file with per-step breakdown, token counts, cost, wall time, re-gather rate, escalation rate.

@@ -50,6 +50,9 @@ func ClassifyVerifyOutcome(verifyResult VerifyResult) models.VerifyResultOutcome
 }
 
 // handleVerifyOutcome routes the verify result through the escalation ladder.
+// Note: wired in T-020 (called from worker_tiered.go verify completion path).
+//
+//nolint:unused // Wired in T-020
 func (w *Worker) handleVerifyOutcome(
 	ctx context.Context,
 	task models.Task,
@@ -59,19 +62,24 @@ func (w *Worker) handleVerifyOutcome(
 ) error {
 	switch outcome {
 	case models.VerifyOutcomePass:
-		// Step succeeded; mark parent as complete
+		// Step succeeded; transition parent from BLOCKED → READY then COMPLETED
 		slog.InfoContext(ctx, "tiered verify passed", "task_id", task.ID, "parent_id", parentTask.ID)
+		// First move from BLOCKED to READY (intermediate state)
+		if err := w.transitionTaskState(ctx, parentTask.ID, models.TaskStateReady); err != nil {
+			return err
+		}
+		// Then complete it
 		return w.transitionTaskState(ctx, parentTask.ID, models.TaskStateCompleted)
 
 	case models.VerifyOutcomeFlake:
 		// Intermittent failure; retry with mid fix (bounded redo)
 		slog.InfoContext(ctx, "tiered verify flake detected; triggering mid fix", "task_id", task.ID)
-		return w.scheduleMidFix(ctx, task, parentTask)
+		return w.scheduleMidFix(ctx, task, parentTask, verifyResult)
 
 	case models.VerifyOutcomeFail:
 		// Hard failure; try mid fix (bounded redo)
 		slog.InfoContext(ctx, "tiered verify fail detected; triggering mid fix", "task_id", task.ID)
-		return w.scheduleMidFix(ctx, task, parentTask)
+		return w.scheduleMidFix(ctx, task, parentTask, verifyResult)
 
 	case models.VerifyOutcomeConflict:
 		// Design conflict; escalate to strong model
@@ -84,24 +92,33 @@ func (w *Worker) handleVerifyOutcome(
 }
 
 // scheduleMidFix creates a bounded redo of execute+verify with the same pack.
-func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, parentTask models.Task) error {
+// Note: called from handleVerifyOutcome; full integration wired in T-020.
+//
+//nolint:unused // Called from handleVerifyOutcome
+func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, parentTask models.Task, evidence VerifyResult) error {
 	midFixCount := getMetadataInt(verifyTask, "mid_fix_passes", 0)
 	maxMidFix := 2 // configurable per deployment
 
 	if midFixCount >= maxMidFix {
-		// Exhausted mid fix attempts; escalate
+		// Exhausted mid fix attempts; escalate with evidence preserved
 		slog.InfoContext(ctx, "mid fix attempts exhausted; escalating", "task_id", verifyTask.ID, "passes", midFixCount)
-		return w.scheduleEscalation(ctx, verifyTask, parentTask, VerifyResult{})
+		return w.scheduleEscalation(ctx, verifyTask, parentTask, evidence)
 	}
 
-	// Create an execute redo task that depends on the current decision
+	// Get the execute task to re-run (find predecessor via DEPENDS_ON)
+	executeTask, err := w.getPredecessorTask(ctx, verifyTask)
+	if err != nil || executeTask == nil {
+		return fmt.Errorf("failed to find execute task for mid fix: %w", err)
+	}
+
+	// Create an execute redo task using the same agent profile as the original execute
 	midFixTask := models.DraftTask{
 		Title:       fmt.Sprintf("Mid-fix redo: %s", parentTask.Title),
 		Description: fmt.Sprintf("Bounded redo of execute after verify failure (attempt %d)", midFixCount+1),
-		AgentID:     parentTask.AgentID + ":tier-execute:mid-fix",
+		AgentID:     "tier-execute", // Use registered profile, not synthetic ID
 	}
 
-	// Store metadata in description (alternative: use custom fields if available)
+	// Store metadata in task logs
 	logs := map[string]interface{}{
 		"mid_fix_passes":       midFixCount + 1,
 		"parent_tiered_dag_id": parentTask.ID,
@@ -111,8 +128,8 @@ func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, par
 	logsJSON, _ := json.Marshal(logs)
 	midFixTask.SuccessCriteria = []string{string(logsJSON)}
 
-	// Create the task and spawn it
-	if err := w.createAndSpawnTask(ctx, midFixTask, parentTask); err != nil {
+	// Attach mid-fix to the execute task (not parent) to avoid dependency cycle
+	if err := w.createAndSpawnTask(ctx, midFixTask, *executeTask); err != nil {
 		return fmt.Errorf("failed to schedule mid fix: %w", err)
 	}
 
@@ -121,6 +138,9 @@ func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, par
 }
 
 // scheduleEscalation creates an escalate step with strong model.
+// Note: called from scheduleMidFix on exhaustion; full integration wired in T-020.
+//
+//nolint:unused // Called from scheduleMidFix
 func (w *Worker) scheduleEscalation(ctx context.Context, verifyTask models.Task, parentTask models.Task, evidence VerifyResult) error {
 	escalateCount := getMetadataInt(parentTask, "escalate_count", 0)
 	maxEscalate := 1 // configurable per deployment
@@ -131,14 +151,14 @@ func (w *Worker) scheduleEscalation(ctx context.Context, verifyTask models.Task,
 		return w.transitionTaskState(ctx, parentTask.ID, models.TaskStateFailedRequiresHuman)
 	}
 
-	// Create escalate step (strong model)
+	// Create escalate step using registered profile (strong model)
 	escalateTask := models.DraftTask{
 		Title:       fmt.Sprintf("Escalation: %s", parentTask.Title),
 		Description: fmt.Sprintf("Strong model escalation after verify conflict"),
-		AgentID:     parentTask.AgentID + ":tier-escalate",
+		AgentID:     "tier-escalate",
 	}
 
-	// Store evidence for the escalate step to use
+	// Store evidence and metadata in task logs
 	evidenceJSON, _ := json.Marshal(evidence)
 	logs := map[string]interface{}{
 		"verify_evidence":      string(evidenceJSON),
@@ -150,8 +170,14 @@ func (w *Worker) scheduleEscalation(ctx context.Context, verifyTask models.Task,
 	logsJSON, _ := json.Marshal(logs)
 	escalateTask.SuccessCriteria = []string{string(logsJSON)}
 
-	// Create and spawn the task
-	if err := w.createAndSpawnTask(ctx, escalateTask, parentTask); err != nil {
+	// Get the verify task to attach escalation to (find predecessor)
+	verifyPredecessor, err := w.getPredecessorTask(ctx, verifyTask)
+	if err != nil || verifyPredecessor == nil {
+		return fmt.Errorf("failed to find verify task predecessor for escalation: %w", err)
+	}
+
+	// Create and spawn the task attached to the verify predecessor, not the parent
+	if err := w.createAndSpawnTask(ctx, escalateTask, *verifyPredecessor); err != nil {
 		return fmt.Errorf("failed to schedule escalation: %w", err)
 	}
 
@@ -160,6 +186,8 @@ func (w *Worker) scheduleEscalation(ctx context.Context, verifyTask models.Task,
 }
 
 // getPredecessorTask finds the immediate predecessor task via DEPENDS_ON relation.
+//
+//nolint:unused // Called from scheduleMidFix and scheduleEscalation
 func (w *Worker) getPredecessorTask(ctx context.Context, task models.Task) (*models.Task, error) {
 	// Query DEPENDS_ON relations specifically for this task (tiered pipeline uses typed relations)
 	predecessors, err := w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationDependsOn)
@@ -179,6 +207,8 @@ func (w *Worker) getPredecessorTask(ctx context.Context, task models.Task) (*mod
 }
 
 // getDecisionArtifact retrieves the decision output from the decision step.
+//
+//nolint:unused // Called from execute/verify steps (T-020)
 func (w *Worker) getDecisionArtifact(ctx context.Context, decisionTask models.Task) (*DecisionArtifact, error) {
 	// Decision artifact is stored in task metadata or logs
 	artifactJSON := getMetadata(decisionTask, "decision_artifact", "")
@@ -197,6 +227,8 @@ func (w *Worker) getDecisionArtifact(ctx context.Context, decisionTask models.Ta
 }
 
 // createAndSpawnTask creates a new task using AppendTasksToProject.
+//
+//nolint:unused // Called from scheduleMidFix and scheduleEscalation
 func (w *Worker) createAndSpawnTask(ctx context.Context, draftTask models.DraftTask, parentTask models.Task) error {
 	// Use AppendTasksToProject which handles SPAWNED_BY relation automatically
 	tasks, err := w.store.AppendTasksToProject(ctx, parentTask.ProjectID, parentTask.ID, []models.DraftTask{draftTask})
@@ -213,6 +245,8 @@ func (w *Worker) createAndSpawnTask(ctx context.Context, draftTask models.DraftT
 }
 
 // transitionTaskState moves a task to a new state.
+//
+//nolint:unused // Called from handleVerifyOutcome
 func (w *Worker) transitionTaskState(ctx context.Context, taskID string, newState models.TaskState) error {
 	task, err := w.store.GetTask(ctx, taskID)
 	if err != nil {
@@ -230,10 +264,25 @@ func (w *Worker) transitionTaskState(ctx context.Context, taskID string, newStat
 
 // Helper functions for task metadata management
 
+//nolint:unused // Used by escalation functions and scheduled via T-020
 func getMetadata(task models.Task, key, defaultVal string) string {
-	// Metadata is stored in task logs as JSON or key=value pairs
-	// For now, use a simple approach via task fields
-	// In production, you'd have a proper metadata store
+	// Metadata is stored in task logs as JSON
+	if task.Logs == "" {
+		return defaultVal
+	}
+	var meta map[string]interface{}
+	if err := json.Unmarshal([]byte(task.Logs), &meta); err != nil {
+		return defaultVal
+	}
+	if val, ok := meta[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+		if num, ok := val.(float64); ok {
+			return fmt.Sprint(num)
+		}
+		return fmt.Sprint(val)
+	}
 	return defaultVal
 }
 
@@ -258,10 +307,14 @@ func getMetadataInt(task models.Task, key string, defaultVal int) int {
 		return defaultVal
 	}
 	var i int
-	fmt.Sscanf(val, "%d", &i)
+	if _, err := fmt.Sscanf(val, "%d", &i); err != nil {
+		return defaultVal
+	}
 	return i
 }
 
 func setMetadataInt(task *models.Task, key string, value int) {
-	setMetadata(task, key, fmt.Sprintf("%d", value))
+	// Format value as string and store in metadata
+	valStr := fmt.Sprintf("%d", value)
+	setMetadata(task, key, valStr)
 }

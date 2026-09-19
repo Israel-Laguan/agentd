@@ -14,8 +14,8 @@ const (
 	TaskStateCompleted           TaskState = "COMPLETED"
 	TaskStateFailed              TaskState = "FAILED"
 	TaskStateFailedRequiresHuman TaskState = "FAILED_REQUIRES_HUMAN"
-	TaskStateNeedsContext        TaskState = "NEEDS_CONTEXT"
 	TaskStateInConsideration     TaskState = "IN_CONSIDERATION"
+	// TaskStateNeedsContext = "NEEDS_CONTEXT" — deferred to T-020 (schema migration + pack-rewire not yet implemented)
 )
 
 var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
@@ -44,7 +44,6 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 		TaskStateCompleted:           {},
 		TaskStateFailed:              {},
 		TaskStateFailedRequiresHuman: {},
-		TaskStateNeedsContext:        {},
 		TaskStateReady:               {},
 		TaskStateInConsideration:     {},
 	},
@@ -63,10 +62,6 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 		TaskStateReady:           {},
 		TaskStateInConsideration: {},
 	},
-	TaskStateNeedsContext: {
-		TaskStateReady:           {},
-		TaskStateInConsideration: {},
-	},
 	TaskStateInConsideration: {
 		TaskStatePending: {},
 		TaskStateReady:   {},
@@ -77,7 +72,7 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 // Valid reports whether the state is known to agentd.
 func (s TaskState) Valid() bool {
 	switch s {
-	case TaskStatePending, TaskStateReady, TaskStateQueued, TaskStateRunning, TaskStateBlocked, TaskStateCompleted, TaskStateFailed, TaskStateFailedRequiresHuman, TaskStateNeedsContext, TaskStateInConsideration:
+	case TaskStatePending, TaskStateReady, TaskStateQueued, TaskStateRunning, TaskStateBlocked, TaskStateCompleted, TaskStateFailed, TaskStateFailedRequiresHuman, TaskStateInConsideration:
 		return true
 	default:
 		return false
