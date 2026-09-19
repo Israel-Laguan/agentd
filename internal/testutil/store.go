@@ -14,11 +14,13 @@ import (
 // FakeKanbanStore is an in-memory models.KanbanStore for cross-package tests
 // that need a board without importing internal/kanban.
 type FakeKanbanStore struct {
-	mu           sync.Mutex
-	projects     map[string]models.Project
-	tasks        map[string]models.Task
+	mu            sync.Mutex
+	projects      map[string]models.Project
+	tasks         map[string]models.Task
 	// childParents maps child task ID → blocking parent task IDs (task_relations edges).
 	childParents map[string][]string
+	// childParentRelations maps child task ID → parent task IDs with their relation type.
+	childParentRelations map[string][]parentRelation
 	events       []models.Event
 	comments     []commentPayloadAtRest
 	memories     []models.Memory
@@ -28,6 +30,12 @@ type FakeKanbanStore struct {
 	nextSeq      int
 }
 
+// parentRelation tracks the relation type between a child and its parent.
+type parentRelation struct {
+	parentID     string
+	relationType models.TaskRelationType
+}
+
 var (
 	_ models.KanbanStore          = (*FakeKanbanStore)(nil)
 	_ models.ScheduledTaskStore   = (*FakeKanbanStore)(nil)
@@ -35,9 +43,10 @@ var (
 
 func NewFakeStore() *FakeKanbanStore {
 	return &FakeKanbanStore{
-		projects:     make(map[string]models.Project),
-		tasks:        make(map[string]models.Task),
-		childParents: make(map[string][]string),
+		projects:             make(map[string]models.Project),
+		tasks:                make(map[string]models.Task),
+		childParents:         make(map[string][]string),
+		childParentRelations: make(map[string][]parentRelation),
 		profiles: map[string]models.AgentProfile{
 			"default": {ID: "default", Name: "Default", Temperature: 0.2, SystemPrompt: sql.NullString{String: "Return JSON.", Valid: true}},
 		},

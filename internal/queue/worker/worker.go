@@ -225,25 +225,23 @@ func (w *Worker) tryDispatchTieredStep(ctx context.Context, task models.Task, pr
 	if !w.isTieredStep(task) {
 		return false
 	}
-	var parentTask *models.Task
-	var err error
-	if len(task.DependsOn) > 0 {
-		parentTask, err = w.store.GetTask(ctx, task.DependsOn[0])
+	// Resolve the origin task via the SPAWNED_BY relation. Every tiered
+	// step is connected to the original pipeline parent by a SPAWNED_BY
+	// edge; DEPENDS_ON edges connect consecutive steps within the chain.
+	parents, err := w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationSpawnedBy)
+	if err != nil {
+		slog.Error("tiered: failed to look up SPAWNED_BY parents",
+			"task_id", task.ID, "error", err)
+		w.FailHard(ctx, task, fmt.Errorf("tiered SPAWNED_BY lookup failed: %w", err))
+		return true
 	}
-	if err != nil || parentTask == nil {
-		// Fallback: DependsOn is not persisted on reload, so tiered steps
-		// resolve their origin task via the SPAWNED_BY relation instead.
-		parents, _ := w.store.ListParentTasks(ctx, task.ID)
-		if len(parents) > 0 {
-			parentTask = &parents[0]
-		}
-	}
-	if parentTask == nil {
-		slog.Warn("tiered step detected but parent not found; falling back to legacy",
+	if len(parents) == 0 {
+		slog.Error("tiered step has no SPAWNED_BY origin parent",
 			"task_id", task.ID, "agent_id", task.AgentID)
-		return false
+		w.FailHard(ctx, task, fmt.Errorf("tiered step %s has no SPAWNED_BY origin parent", task.ID))
+		return true
 	}
-	w.processTieredStep(ctx, task, project, profile, w.tieredStepKind(task), *parentTask)
+	w.processTieredStep(ctx, task, project, profile, w.tieredStepKind(task), parents[0])
 	return true
 }
 

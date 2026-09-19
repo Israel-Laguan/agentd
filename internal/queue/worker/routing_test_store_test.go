@@ -155,6 +155,10 @@ func (s *routingTestStore) ListParentTasks(_ context.Context, childID string) ([
 	return s.parents[childID], nil
 }
 
+func (s *routingTestStore) ListParentTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *routingTestStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

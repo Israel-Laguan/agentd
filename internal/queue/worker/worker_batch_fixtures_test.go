@@ -180,6 +180,9 @@ func (s *batchTestStore) PersistTieredDAG(context.Context, string, time.Time, []
 func (s *batchTestStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }
+func (s *batchTestStore) ListParentTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
 
 func (s *batchTestStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil

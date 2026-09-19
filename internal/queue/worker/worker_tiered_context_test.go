@@ -14,7 +14,9 @@ import (
 )
 
 func tieredContextPack(parentID string) *ContextPack {
-	cp := NewContextPack("ctx-task", parentID, "gathered context", []string{"a.go"}, ContextPackConfig{MaxPaths: 40, MaxChars: 48000})
+	summary := "gathered context for " + parentID
+	paths := []string{parentID + ".go"}
+	cp := NewContextPack("ctx-task", parentID, summary, paths, ContextPackConfig{MaxPaths: 40, MaxChars: 48000})
 	return cp
 }
 
@@ -36,12 +38,19 @@ func TestInjectContextPack_UsesTaskScopedPath(t *testing.T) {
 
 	// Each pipeline must resolve its own pack, not the single shared file.
 	for _, origin := range []string{"parent-a", "parent-b"} {
-		got := w.injectContextPack(task, models.Task{BaseEntity: models.BaseEntity{ID: origin}}, project)
+		got, err := w.injectContextPack(task, models.Task{BaseEntity: models.BaseEntity{ID: origin}}, project)
+		if err != nil {
+			t.Fatalf("injectContextPack(origin=%s): %v", origin, err)
+		}
 		if !strings.HasPrefix(got.Description, "CONTEXT PACK") {
 			t.Fatalf("injectContextPack(origin=%s) did not inject a pack: %q", origin, got.Description)
 		}
 		if !strings.Contains(got.Description, "Original task:\ndo the thing") {
 			t.Fatalf("injectContextPack(origin=%s) lost the original description: %q", origin, got.Description)
+		}
+		wantSummary := "gathered context for " + origin
+		if !strings.Contains(got.Description, wantSummary) {
+			t.Fatalf("injectContextPack(origin=%s) summary = %q, want contains %q", origin, got.Description, wantSummary)
 		}
 	}
 }
@@ -61,11 +70,14 @@ func TestInjectContextPack_RejectsForeignPackLineage(t *testing.T) {
 	}
 
 	w := &Worker{}
-	got := w.injectContextPack(
+	got, err := w.injectContextPack(
 		models.Task{BaseEntity: models.BaseEntity{ID: "decision-1"}, Description: "original"},
 		models.Task{BaseEntity: models.BaseEntity{ID: "parent-a"}},
 		models.Project{WorkspacePath: dir},
 	)
+	if err == nil {
+		t.Fatal("injectContextPack should return error for foreign pack lineage")
+	}
 	if got.Description != "original" {
 		t.Fatalf("injectContextPack injected a foreign pack: %q", got.Description)
 	}
@@ -123,9 +135,20 @@ func TestFailTieredStep_SurfacesStateConflict(t *testing.T) {
 	w := &Worker{store: store, sink: sink}
 
 	ctx := context.Background()
-	task := models.Task{BaseEntity: models.BaseEntity{ID: "ctx-1"}, ProjectID: "proj"}
+	// Seed the task in the store so GetTask succeeds during re-read.
+	_, tasks, err := base.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "fail-conflict",
+		Tasks:       []models.DraftTask{{Title: "ctx-task", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	running, err := base.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("MarkTaskRunning: %v", err)
+	}
 
-	w.failTieredStep(ctx, task, "invalid ContextPack")
+	w.failTieredStep(ctx, *running, "invalid ContextPack")
 
 	var found bool
 	for _, ev := range sink.events {

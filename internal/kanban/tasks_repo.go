@@ -47,6 +47,19 @@ func (s *Store) ListParentTasks(ctx context.Context, childID string) ([]models.T
 	return scanTasks(rows)
 }
 
+func (s *Store) ListParentTasksByRelation(ctx context.Context, childID string, relationType models.TaskRelationType) ([]models.Task, error) {
+	rows, err := s.db.QueryContext(ctx, taskSelectColumns("tasks")+`
+		FROM tasks
+		INNER JOIN task_relations tr ON tr.parent_task_id = tasks.id
+		WHERE tr.child_task_id = ? AND tr.relation_type = ?
+		ORDER BY tasks.created_at`, childID, string(relationType))
+	if err != nil {
+		return nil, fmt.Errorf("list parent tasks by relation: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanTasks(rows)
+}
+
 func (s *Store) ClaimNextReadyTasks(ctx context.Context, limit int) ([]models.Task, error) {
 	if limit <= 0 {
 		limit = 1

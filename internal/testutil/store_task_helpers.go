@@ -135,8 +135,10 @@ func (s *FakeKanbanStore) PersistTieredDAG(_ context.Context, parentID string, e
 		t := resolved[i]
 		s.tasks[t.ID] = t
 		s.childParents[t.ID] = append(s.childParents[t.ID], parentID)
+		s.childParentRelations[t.ID] = append(s.childParentRelations[t.ID], parentRelation{parentID: parentID, relationType: models.TaskRelationSpawnedBy})
 		if child.DependsOnID != "" {
 			s.childParents[t.ID] = append(s.childParents[t.ID], child.DependsOnID)
+			s.childParentRelations[t.ID] = append(s.childParentRelations[t.ID], parentRelation{parentID: child.DependsOnID, relationType: models.TaskRelationDependsOn})
 		}
 		tasks = append(tasks, t)
 	}
