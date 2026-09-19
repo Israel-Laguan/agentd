@@ -19,6 +19,7 @@ var tieredStepToolAllowlists = map[TieredStepKind][]string{
 	TieredStepDecision: {"read", "grep", "glob", "list"},
 	TieredStepExecute:  {"read", "write", "bash", "grep", "glob"},
 	TieredStepVerify:   {"read", "bash", "grep", "glob"},
+	TieredStepEscalate: {"read", "write", "bash", "grep", "glob"},
 }
 
 // tieredStepSystemPrompts provides per-step system prompt suffixes that
@@ -28,6 +29,7 @@ var tieredStepSystemPrompts = map[TieredStepKind]string{
 	TieredStepDecision: decisionStepPrompt,
 	TieredStepExecute:  executeStepPrompt,
 	TieredStepVerify:   verifyStepPrompt,
+	TieredStepEscalate: escalateStepPrompt,
 }
 
 const contextStepPrompt = `
@@ -90,6 +92,16 @@ Rules:
 - overall is "pass" if all checks pass, "fail" otherwise
 - "flake" for intermittent failures, "conflict" for merge conflicts`
 
+const escalateStepPrompt = `
+TIERED MODE: ESCALATE STEP
+A previous execute+verify cycle could not resolve this task. The failing
+verify evidence is included in your task description. Re-plan the approach
+and apply a corrected fix.
+Rules:
+- stay within the ContextPack paths; do not re-crawl the repository
+- prefer the smallest change that resolves the reported conflict
+- a verify step runs after you; do not mark the work done yourself`
+
 // processTieredStep dispatches a single tiered step (context, decision,
 // execute, or verify) through the agentic engine with step-appropriate
 // tool restrictions and system prompt injection.
@@ -102,7 +114,7 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 		return
 	}
 
-	if stepKind == TieredStepDecision || stepKind == TieredStepExecute || stepKind == TieredStepVerify {
+	if stepKind != TieredStepContext {
 		var err error
 		task, err = w.injectContextPack(task, parentTask, project)
 		if err != nil {
@@ -112,6 +124,11 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 			w.failTieredDependents(ctx, task, parentTask)
 			return
 		}
+	}
+
+	if stepKind == TieredStepVerify {
+		w.processTieredVerifyStep(ctx, task, project, profile, parentTask)
+		return
 	}
 
 	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
@@ -143,6 +160,7 @@ var tieredStepProfiles = map[string]TieredStepKind{
 	tieredStepProfile[TieredStepDecision]: TieredStepDecision,
 	tieredStepProfile[TieredStepExecute]:  TieredStepExecute,
 	tieredStepProfile[TieredStepVerify]:   TieredStepVerify,
+	tieredStepProfile[TieredStepEscalate]: TieredStepEscalate,
 }
 
 // isTieredStep reports whether the task was created by SplitIntoTieredDAG.

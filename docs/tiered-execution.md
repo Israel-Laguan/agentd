@@ -219,7 +219,9 @@ The **verify** step classifies check results into four outcomes:
 
 ### Bounded mid fix
 
-After verify fail/flake, re-run execute+verify with the same ContextPack. Prevents infinite loops with **configurable cap** (default: max 2 passes).
+After verify fail/flake, re-run execute+verify with the same ContextPack. Prevents infinite loops with a cap of **2 passes** (`maxMidFixPasses` in `internal/queue/worker/escalation.go` — a constant today, not yet a `tiered.*` config key).
+
+Passes are counted from the verify steps already on the board, not from a per-task counter, so the cap survives a restart mid-ladder.
 
 ```text
 verify → fail/flake
@@ -247,7 +249,13 @@ On persistent failure or conflict, dispatch **escalate** step (strong model) wit
 
 Escalate step produces a final execution or a bounded redo with corrected strategy. Follow with verify. If escalate+verify still fails, transition to `FAILED_REQUIRES_HUMAN`.
 
-**Caps:** max 1 escalate unless config says otherwise.
+**Caps:** max 1 escalate (`maxEscalations` in `internal/queue/worker/escalation.go` — a constant today, not yet a `tiered.*` config key).
+
+### As implemented (T-020)
+
+Each rung appends a **two-step chain** (`execute → verify`, or `escalate → verify`) to the origin via `PersistTieredDAG`, reusing the same `SPAWNED_BY`/`DEPENDS_ON` shape as the initial split. Appending re-blocks the origin, so the pipeline cannot resolve while a rung is outstanding.
+
+The origin itself is never completed by a step. `PersistTieredDAG` leaves it `BLOCKED`, and `BLOCKED → COMPLETED` is not a legal transition; instead the store unblocks it to `READY` once every child resolves, the queue re-dispatches it, and `tryResolveTieredOrigin` records the pipeline verdict through `UpdateTaskResult`. That same hook stops a finished origin from being split a second time.
 
 ### NEEDS_CONTEXT state
 
