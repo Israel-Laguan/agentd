@@ -281,6 +281,14 @@ func (s *apiStore) AppendTasksToProject(context.Context, string, string, []model
 func (s *apiStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
 	return nil, nil
 }
+
+func (s *apiStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *apiStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
 func (s *apiStore) EnsureSystemProject(context.Context) (*models.Project, error) {
 	return &models.Project{BaseEntity: models.BaseEntity{ID: "system"}, Name: "_system"}, nil
 }

@@ -1,0 +1,12 @@
+{
+  "step": "decision",
+  "model_tier": "mid",
+  "input_tokens": 1400,
+  "output_tokens": 480,
+  "duration_ms": 5200,
+  "response": {
+    "touch_list": ["internal/queue/worker/splitter.go", "internal/queue/worker/worker_tiered.go"],
+    "checks": ["go build ./...", "go test ./internal/queue/worker/..."],
+    "rationale": "Add the escalate step kind and wire per-step model tiers into the existing tool allowlist/prompt maps."
+  }
+}

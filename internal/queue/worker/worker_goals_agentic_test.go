@@ -90,3 +90,11 @@ func (s *goalStallRefreshedStore) BlockTaskWithSubtasks(_ context.Context, _ str
 func (s *goalStallRefreshedStore) PersistTieredDAG(context.Context, string, time.Time, []models.TieredDAGTask) ([]models.Task, error) {
 	return nil, nil
 }
+
+func (s *goalStallRefreshedStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *goalStallRefreshedStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}

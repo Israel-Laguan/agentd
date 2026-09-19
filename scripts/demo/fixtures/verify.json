@@ -1,0 +1,14 @@
+{
+  "step": "verify",
+  "model_tier": "mid",
+  "input_tokens": 1600,
+  "output_tokens": 420,
+  "duration_ms": 4800,
+  "response": {
+    "results": [
+      {"check": "go build ./...", "outcome": "pass", "detail": ""},
+      {"check": "go test ./internal/queue/worker/...", "outcome": "pass", "detail": ""}
+    ],
+    "overall": "pass"
+  }
+}

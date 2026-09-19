@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -10,13 +11,6 @@ import (
 	"github.com/google/uuid"
 
 	"agentd/internal/models"
-)
-
-// Caps on the escalation ladder. Both are counted from the steps already on
-// the board, so a restart mid-ladder resumes with the same budget.
-const (
-	maxMidFixPasses = 2
-	maxEscalations  = 1
 )
 
 // VerifyResult captures the output of a verify step.
@@ -31,6 +25,25 @@ type CheckResult struct {
 	Outcome string `json:"outcome"`
 	Detail  string `json:"detail,omitempty"`
 }
+
+// DecisionArtifact is the structured output from a decision step.
+type DecisionArtifact struct {
+	TouchList []string `json:"touch_list"`
+	Checks    []string `json:"checks"`
+	Rationale string   `json:"rationale,omitempty"`
+}
+
+// midFixTitlePrefix marks a mid-fix redo task's Title so countMidFixAttempts
+// can tell it apart from the DAG's original execute step, which shares the
+// same AgentID ("tier-execute") so it dispatches through the identical
+// tiered execute path (tool allowlist, ContextPack injection, prompt).
+const midFixTitlePrefix = "Mid-fix redo: "
+
+// escalateAgentID is the AgentID assigned to a strong-model escalation
+// task. It intentionally does not match any of the four base tiered step
+// kinds (context/decision/execute/verify): escalation is a one-off,
+// last-resort attempt, not a redo through the fixed DAG shape.
+const escalateAgentID = "tier-escalate"
 
 // ClassifyVerifyOutcome maps verify result to an outcome type.
 func ClassifyVerifyOutcome(verifyResult VerifyResult) models.VerifyResultOutcome {
@@ -58,193 +71,261 @@ func (w *Worker) handleVerifyOutcome(
 	task models.Task,
 	outcome models.VerifyResultOutcome,
 	verifyResult VerifyResult,
-	originTask models.Task,
+	parentTask models.Task,
 ) error {
 	switch outcome {
 	case models.VerifyOutcomePass:
-		// Nothing to schedule. The verify step's own successful result
-		// unblocks the origin, which then resolves itself from the recorded
-		// verdict in tryResolveTieredOrigin.
-		slog.InfoContext(ctx, "tiered verify passed", "task_id", task.ID, "origin_id", originTask.ID)
-		return nil
+		// Step succeeded; mark parent as complete
+		slog.InfoContext(ctx, "tiered verify passed", "task_id", task.ID, "parent_id", parentTask.ID)
+		return w.transitionTaskState(ctx, parentTask.ID, models.TaskStateCompleted)
 
-	case models.VerifyOutcomeFlake, models.VerifyOutcomeFail:
-		slog.InfoContext(ctx, "tiered verify failed; triggering mid fix",
-			"task_id", task.ID, "outcome", outcome)
-		return w.scheduleMidFix(ctx, originTask, verifyResult)
+	case models.VerifyOutcomeFlake:
+		// Intermittent failure; retry with mid fix (bounded redo)
+		slog.InfoContext(ctx, "tiered verify flake detected; triggering mid fix", "task_id", task.ID)
+		return w.scheduleMidFix(ctx, task, parentTask)
+
+	case models.VerifyOutcomeFail:
+		// Hard failure; try mid fix (bounded redo)
+		slog.InfoContext(ctx, "tiered verify fail detected; triggering mid fix", "task_id", task.ID)
+		return w.scheduleMidFix(ctx, task, parentTask)
 
 	case models.VerifyOutcomeConflict:
-		// Design conflict; skip the mid-fix rung and escalate.
+		// Design conflict; escalate to strong model
 		slog.InfoContext(ctx, "tiered verify conflict detected; scheduling escalation", "task_id", task.ID)
-		return w.scheduleEscalation(ctx, originTask, verifyResult)
+		return w.scheduleEscalation(ctx, task, parentTask, verifyResult)
 
 	default:
 		return fmt.Errorf("unknown verify outcome: %v", outcome)
 	}
 }
 
-// scheduleMidFix appends a bounded execute+verify redo against the same pack.
-// Passes are counted from the verify steps already on the board rather than
-// from a per-task counter, so the cap survives restarts and cannot drift.
-func (w *Worker) scheduleMidFix(ctx context.Context, originTask models.Task, evidence VerifyResult) error {
-	steps, err := w.tieredStepChildren(ctx, originTask)
+// countMidFixAttempts returns how many mid-fix redo tasks have already been
+// spawned for this pipeline's origin, by counting persisted SPAWNED_BY
+// children rather than trusting an in-memory counter that never survives a
+// task reload. This is what makes the mid-fix cap durable across separate
+// worker dispatch cycles.
+func (w *Worker) countMidFixAttempts(ctx context.Context, originID string) (int, error) {
+	children, err := w.store.ListChildTasksByRelation(ctx, originID, models.TaskRelationSpawnedBy)
 	if err != nil {
-		return fmt.Errorf("list tiered steps: %w", err)
+		return 0, fmt.Errorf("list spawned children: %w", err)
 	}
-	// The initial DAG already contains one verify, so the number of redos so
-	// far is one less than the number of verify steps.
-	passes := countTieredSteps(steps, TieredStepVerify) - 1
-	if passes >= maxMidFixPasses {
-		slog.InfoContext(ctx, "mid fix attempts exhausted; escalating",
-			"origin_id", originTask.ID, "passes", passes)
-		return w.scheduleEscalation(ctx, originTask, evidence)
-	}
-
-	description := fmt.Sprintf(
-		"Mid-fix redo (attempt %d of %d). The previous execute+verify cycle failed.\n\n%s\n\nOriginal task:\n%s",
-		passes+1, maxMidFixPasses, formatVerifyEvidence(evidence), originTask.Description)
-	if err := w.appendTieredRedo(ctx, originTask, TieredStepExecute, description); err != nil {
-		return fmt.Errorf("schedule mid fix: %w", err)
-	}
-	slog.InfoContext(ctx, "mid fix scheduled", "origin_id", originTask.ID, "attempt", passes+1)
-	return nil
-}
-
-// scheduleEscalation appends a strong-model escalate+verify pair, or hands the
-// origin to a human once the escalation budget is spent.
-func (w *Worker) scheduleEscalation(ctx context.Context, originTask models.Task, evidence VerifyResult) error {
-	steps, err := w.tieredStepChildren(ctx, originTask)
-	if err != nil {
-		return fmt.Errorf("list tiered steps: %w", err)
-	}
-	if countTieredSteps(steps, TieredStepEscalate) >= maxEscalations {
-		slog.InfoContext(ctx, "escalation limit reached; handing off to human", "origin_id", originTask.ID)
-		return w.handoffTieredOriginToHuman(ctx, originTask)
-	}
-
-	description := fmt.Sprintf(
-		"Escalation pass. Execute and verify could not resolve this task.\n\n%s\n\nOriginal task:\n%s",
-		formatVerifyEvidence(evidence), originTask.Description)
-	if err := w.appendTieredRedo(ctx, originTask, TieredStepEscalate, description); err != nil {
-		return fmt.Errorf("schedule escalation: %w", err)
-	}
-	slog.InfoContext(ctx, "escalation scheduled", "origin_id", originTask.ID)
-	return nil
-}
-
-// appendTieredRedo attaches a two-step redo chain (the given step kind, then a
-// fresh verify) to the origin and blocks it again. Reusing PersistTieredDAG
-// keeps the SPAWNED_BY / DEPENDS_ON shape identical to the initial split, so
-// the redo dispatches through the same tiered path and re-closes the loop.
-func (w *Worker) appendTieredRedo(ctx context.Context, originTask models.Task, kind TieredStepKind, description string) error {
-	origin, err := w.originForAppend(ctx, originTask.ID)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().UTC()
-	redo := w.newTieredStep(*origin, kind, description, now)
-	verify := w.newTieredStep(*origin, TieredStepVerify, originTask.Description, now)
-	redo.State = models.TaskStateReady
-	verify.State = models.TaskStatePending
-	verify.DependsOn = []string{redo.ID}
-
-	_, err = w.store.PersistTieredDAG(ctx, origin.ID, origin.UpdatedAt, []models.TieredDAGTask{
-		{Task: redo},
-		{Task: verify, DependsOnID: redo.ID},
-	})
-	if err != nil {
-		return fmt.Errorf("persist redo chain: %w", err)
-	}
-	w.Emit(ctx, *origin, "TIERED_LADDER_STEP_ADDED", string(kind))
-	return nil
-}
-
-// originForAppend re-reads the origin and puts it in a state PersistTieredDAG
-// accepts. A fresh read matters because appending re-blocks the origin under
-// optimistic concurrency and the step that got us here just bumped the row.
-//
-// PersistTieredDAG only accepts a RUNNING or READY parent. After a verify the
-// origin has already been unblocked by the step's own result, but a re-gather
-// raised mid-pipeline finds it still BLOCKED, so unblock it first —
-// BLOCKED -> READY is the transition the store itself uses for this.
-func (w *Worker) originForAppend(ctx context.Context, originID string) (*models.Task, error) {
-	origin, err := w.store.GetTask(ctx, originID)
-	if err != nil {
-		return nil, fmt.Errorf("re-read origin: %w", err)
-	}
-	if origin.State != models.TaskStateBlocked {
-		return origin, nil
-	}
-	unblocked, err := w.store.UpdateTaskState(ctx, origin.ID, origin.UpdatedAt, models.TaskStateReady)
-	if err != nil {
-		return nil, fmt.Errorf("unblock origin before append: %w", err)
-	}
-	return unblocked, nil
-}
-
-// newTieredStep builds a child task for the origin's pipeline.
-func (w *Worker) newTieredStep(origin models.Task, kind TieredStepKind, description string, now time.Time) models.Task {
-	assignee := origin.Assignee
-	if !assignee.Valid() {
-		assignee = models.TaskAssigneeSystem
-	}
-	return models.Task{
-		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
-		ProjectID:   origin.ProjectID,
-		AgentID:     tieredStepProfile[kind],
-		Title:       fmt.Sprintf("%s: %s", kind, origin.Title),
-		Description: description,
-		State:       models.TaskStatePending,
-		Assignee:    assignee,
-	}
-}
-
-// handoffTieredOriginToHuman moves the origin to FAILED_REQUIRES_HUMAN. The
-// origin is BLOCKED at this point, which UpdateTaskResult would reject, so the
-// handoff goes through a state transition instead.
-func (w *Worker) handoffTieredOriginToHuman(ctx context.Context, originTask models.Task) error {
-	origin, err := w.store.GetTask(ctx, originTask.ID)
-	if err != nil {
-		return fmt.Errorf("re-read origin: %w", err)
-	}
-	if origin.State == models.TaskStateFailedRequiresHuman {
-		return nil
-	}
-	if !origin.State.CanTransitionTo(models.TaskStateFailedRequiresHuman) {
-		return fmt.Errorf("cannot hand off origin from %s", origin.State)
-	}
-	if _, err := w.store.UpdateTaskState(ctx, origin.ID, origin.UpdatedAt, models.TaskStateFailedRequiresHuman); err != nil {
-		return fmt.Errorf("hand off origin to human: %w", err)
-	}
-	w.Emit(ctx, *origin, "TIERED_ESCALATION_EXHAUSTED",
-		"verify still failing after mid-fix and escalation budgets were spent")
-	return nil
-}
-
-// countTieredSteps counts steps of the given kind.
-func countTieredSteps(steps []models.Task, kind TieredStepKind) int {
 	count := 0
-	for _, step := range steps {
-		if tieredStepProfiles[step.AgentID] == kind {
+	for _, child := range children {
+		if strings.HasPrefix(child.Title, midFixTitlePrefix) {
 			count++
 		}
 	}
-	return count
+	return count, nil
 }
 
-// formatVerifyEvidence renders the failing checks for the next step's prompt.
-func formatVerifyEvidence(evidence VerifyResult) string {
-	if len(evidence.Results) == 0 {
-		return "FAILING VERIFY EVIDENCE: none recorded."
+// countEscalations returns how many escalation tasks have already been
+// spawned for this pipeline's origin. See countMidFixAttempts.
+func (w *Worker) countEscalations(ctx context.Context, originID string) (int, error) {
+	children, err := w.store.ListChildTasksByRelation(ctx, originID, models.TaskRelationSpawnedBy)
+	if err != nil {
+		return 0, fmt.Errorf("list spawned children: %w", err)
 	}
-	var b strings.Builder
-	b.WriteString("FAILING VERIFY EVIDENCE:\n")
-	for _, result := range evidence.Results {
-		if result.Outcome == "pass" {
-			continue
+	count := 0
+	for _, child := range children {
+		if child.AgentID == escalateAgentID {
+			count++
 		}
-		fmt.Fprintf(&b, "- [%s] %s: %s\n", result.Outcome, result.Check, result.Detail)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return count, nil
+}
+
+// scheduleMidFix creates a bounded redo of execute with the same pack.
+func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, parentTask models.Task) error {
+	midFixCount, err := w.countMidFixAttempts(ctx, parentTask.ID)
+	if err != nil {
+		return fmt.Errorf("count mid fix attempts: %w", err)
+	}
+	// Route the cap check through getMetadata/setMetadata (rather than
+	// comparing midFixCount directly) so the durable, DAG-derived count and
+	// the task.Logs metadata API agree on the same number.
+	setMetadataInt(&verifyTask, "mid_fix_passes", midFixCount)
+	maxMidFix := w.tieredCfg.EscalationConfig().MaxMidFix
+
+	if getMetadataInt(verifyTask, "mid_fix_passes", 0) >= maxMidFix {
+		// Exhausted mid fix attempts; escalate
+		slog.InfoContext(ctx, "mid fix attempts exhausted; escalating", "task_id", verifyTask.ID, "passes", midFixCount)
+		return w.scheduleEscalation(ctx, verifyTask, parentTask, VerifyResult{})
+	}
+
+	assignee := parentTask.Assignee
+	if !assignee.Valid() {
+		assignee = models.TaskAssigneeSystem
+	}
+	now := time.Now().UTC()
+	midFixTask := models.Task{
+		BaseEntity: models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
+		ProjectID:  parentTask.ProjectID,
+		// AgentID matches the DAG's own execute step so this redo dispatches
+		// through the identical tiered execute path (tool allowlist,
+		// ContextPack injection, execute prompt) rather than a bespoke one.
+		AgentID:     tieredStepProfile[TieredStepExecute],
+		Title:       fmt.Sprintf("%s%s", midFixTitlePrefix, parentTask.Title),
+		Description: fmt.Sprintf("Bounded redo of execute after verify failure (attempt %d).\n\n%s", midFixCount+1, parentTask.Description),
+		State:       models.TaskStateReady,
+		Assignee:    assignee,
+	}
+
+	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{{Task: midFixTask}}); err != nil {
+		return fmt.Errorf("failed to schedule mid fix: %w", err)
+	}
+
+	slog.InfoContext(ctx, "mid fix scheduled", "attempt", midFixCount+1)
+	return nil
+}
+
+// scheduleEscalation creates an escalate step with strong model.
+func (w *Worker) scheduleEscalation(ctx context.Context, verifyTask models.Task, parentTask models.Task, evidence VerifyResult) error {
+	escalateCount, err := w.countEscalations(ctx, parentTask.ID)
+	if err != nil {
+		return fmt.Errorf("count escalation attempts: %w", err)
+	}
+	setMetadataInt(&parentTask, "escalate_count", escalateCount)
+	maxEscalate := w.tieredCfg.EscalationConfig().MaxEscalate
+
+	if getMetadataInt(parentTask, "escalate_count", 0) >= maxEscalate {
+		// Exhausted escalation; hand off to HUMAN
+		slog.InfoContext(ctx, "escalation limit reached; handing off to human", "task_id", parentTask.ID)
+		return w.transitionTaskState(ctx, parentTask.ID, models.TaskStateFailedRequiresHuman)
+	}
+
+	assignee := parentTask.Assignee
+	if !assignee.Valid() {
+		assignee = models.TaskAssigneeSystem
+	}
+	evidenceJSON, _ := json.Marshal(evidence)
+	now := time.Now().UTC()
+	escalateTask := models.Task{
+		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
+		ProjectID:   parentTask.ProjectID,
+		AgentID:     escalateAgentID,
+		Title:       fmt.Sprintf("Escalation: %s", parentTask.Title),
+		Description: fmt.Sprintf("Strong model escalation after verify conflict.\n\nVerify evidence:\n%s\n\nOriginal task:\n%s", string(evidenceJSON), parentTask.Description),
+		State:       models.TaskStateReady,
+		Assignee:    assignee,
+	}
+
+	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{{Task: escalateTask}}); err != nil {
+		return fmt.Errorf("failed to schedule escalation: %w", err)
+	}
+
+	slog.InfoContext(ctx, "escalation scheduled")
+	return nil
+}
+
+// getPredecessorTask finds the immediate predecessor task via DEPENDS_ON relation.
+func (w *Worker) getPredecessorTask(ctx context.Context, task models.Task) (*models.Task, error) {
+	// Query DEPENDS_ON relations specifically for this task (tiered pipeline uses typed relations)
+	predecessors, err := w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationDependsOn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list predecessor relations: %w", err)
+	}
+
+	if len(predecessors) == 0 {
+		return nil, nil // No predecessor
+	}
+
+	if len(predecessors) > 1 {
+		slog.WarnContext(ctx, "task has multiple DEPENDS_ON predecessors; using first", "task_id", task.ID)
+	}
+
+	return &predecessors[0], nil
+}
+
+// getDecisionArtifact retrieves the decision output from the decision step.
+func (w *Worker) getDecisionArtifact(ctx context.Context, decisionTask models.Task) (*DecisionArtifact, error) {
+	// Decision artifact is stored in task metadata or logs
+	artifactJSON := getMetadata(decisionTask, "decision_artifact", "")
+	if artifactJSON == "" {
+		// Fallback: parse from logs if not in metadata
+		// This is a simplified approach; in production, you'd extract from the actual task output
+		return nil, fmt.Errorf("decision artifact not found for task %s", decisionTask.ID)
+	}
+
+	var artifact DecisionArtifact
+	if err := json.Unmarshal([]byte(artifactJSON), &artifact); err != nil {
+		return nil, fmt.Errorf("failed to parse decision artifact: %w", err)
+	}
+
+	return &artifact, nil
+}
+
+// transitionTaskState moves a task to a new state.
+func (w *Worker) transitionTaskState(ctx context.Context, taskID string, newState models.TaskState) error {
+	task, err := w.store.GetTask(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("failed to get task: %w", err)
+	}
+
+	if !task.State.CanTransitionTo(newState) {
+		return fmt.Errorf("invalid transition from %s to %s", task.State, newState)
+	}
+
+	// Use UpdateTaskState with proper concurrency control
+	_, err = w.store.UpdateTaskState(ctx, taskID, task.UpdatedAt, newState)
+	return err
+}
+
+// Helper functions for task metadata management. Metadata is stored as a
+// JSON object in task.Logs. It is a scratch API for values that only need
+// to survive within a single call chain (the cap enforcement above
+// re-derives its counts from the persisted DAG on every call instead of
+// trusting this to survive a task reload, since task.Logs has no backing
+// DB column).
+
+func getMetadata(task models.Task, key, defaultVal string) string {
+	if strings.TrimSpace(task.Logs) == "" {
+		return defaultVal
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(task.Logs), &meta); err != nil {
+		return defaultVal
+	}
+	val, ok := meta[key]
+	if !ok {
+		return defaultVal
+	}
+	if s, ok := val.(string); ok {
+		return s
+	}
+	encoded, err := json.Marshal(val)
+	if err != nil {
+		return defaultVal
+	}
+	return string(encoded)
+}
+
+func setMetadata(task *models.Task, key, value string) {
+	// Store in Logs field as JSON or structured format
+	if task.Logs == "" {
+		task.Logs = "{}"
+	}
+	var meta map[string]interface{}
+	if err := json.Unmarshal([]byte(task.Logs), &meta); err != nil {
+		meta = make(map[string]interface{})
+	}
+	meta[key] = value
+	if data, err := json.Marshal(meta); err == nil {
+		task.Logs = string(data)
+	}
+}
+
+func getMetadataInt(task models.Task, key string, defaultVal int) int {
+	val := getMetadata(task, key, "")
+	if val == "" {
+		return defaultVal
+	}
+	var i int
+	if _, err := fmt.Sscanf(val, "%d", &i); err != nil {
+		return defaultVal
+	}
+	return i
+}
+
+func setMetadataInt(task *models.Task, key string, value int) {
+	setMetadata(task, key, fmt.Sprintf("%d", value))
 }

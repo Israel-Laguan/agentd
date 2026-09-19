@@ -2,6 +2,8 @@ package testutil
 
 import (
 	"context"
+	"database/sql"
+	"strings"
 	"time"
 
 	"agentd/internal/models"
@@ -142,6 +144,19 @@ func (s *FakeKanbanStore) UpdateTaskResult(_ context.Context, id string, _ time.
 	s.tasks[id] = t
 	// Mirrors finishTaskResultSideEffects: try parent unblock (HITL-aware child resolution).
 	s.unblockBlockedParentsLocked(id)
+	// Mirrors AppendTaskResultEvent: a non-empty payload becomes a RESULT
+	// event so callers that read the committed output back (e.g. the tiered
+	// verify step parsing its VerifyResult JSON) see the same artifact the
+	// real store would persist.
+	if strings.TrimSpace(result.Payload) != "" {
+		s.events = append(s.events, models.Event{
+			BaseEntity: models.BaseEntity{ID: s.nextID(), CreatedAt: ts, UpdatedAt: ts},
+			ProjectID:  t.ProjectID,
+			TaskID:     sql.NullString{String: id, Valid: true},
+			Type:       models.EventTypeResult,
+			Payload:    result.Payload,
+		})
+	}
 	return &t, nil
 }
 

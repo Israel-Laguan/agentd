@@ -159,3 +159,13 @@ type TieredDAGTask struct {
 	Task        Task
 	DependsOnID string
 }
+
+// TieredContinuationTask describes one child task spawned onto an
+// already-BLOCKED tiered pipeline origin (mid-fix redo, escalation, or a
+// NEEDS_CONTEXT re-gather step). Unlike PersistTieredDAG, the origin task's
+// own state is left untouched, since it is already BLOCKED for the
+// pipeline's duration. DependsOnID is empty when the task should start READY.
+type TieredContinuationTask struct {
+	Task        Task
+	DependsOnID string
+}

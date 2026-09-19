@@ -187,6 +187,14 @@ func (s *legacyHandoffStore) PersistTieredDAG(context.Context, string, time.Time
 	return nil, nil
 }
 
+func (s *legacyHandoffStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (s *legacyHandoffStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 // legacyHandoffSink records emitted event kinds.
 type legacyHandoffSink struct {
 	mu    sync.Mutex

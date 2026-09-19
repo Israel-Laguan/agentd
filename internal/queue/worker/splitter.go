@@ -18,8 +18,11 @@ const (
 	TieredStepDecision TieredStepKind = "decision"
 	TieredStepExecute  TieredStepKind = "execute"
 	TieredStepVerify   TieredStepKind = "verify"
-	// TieredStepEscalate is not part of the initial split; the escalation
-	// ladder appends it after a verify conflict.
+	// TieredStepEscalate identifies a one-off strong-model escalation task
+	// spawned by scheduleEscalation after a verify conflict. It is not part
+	// of SplitIntoTieredDAG's fixed 4-step order (tieredStepOrder) — it is
+	// created dynamically by the escalation ladder, at most once per
+	// pipeline run (see TieredEscalationConfig.MaxEscalate).
 	TieredStepEscalate TieredStepKind = "escalate"
 )
 
@@ -41,18 +44,7 @@ var tieredStepProfile = map[TieredStepKind]string{
 	TieredStepDecision: "tier-decision",
 	TieredStepExecute:  "tier-execute",
 	TieredStepVerify:   "tier-verify",
-	TieredStepEscalate: "tier-escalate",
-}
-
-// TieredStepProfiles returns the agent profile each tiered step kind is
-// dispatched under, keyed by kind. Every profile it names must be seeded, or
-// that step fails dispatch with ErrAgentProfileNotFound.
-func TieredStepProfiles() map[TieredStepKind]string {
-	out := make(map[TieredStepKind]string, len(tieredStepProfile))
-	for kind, profile := range tieredStepProfile {
-		out[kind] = profile
-	}
-	return out
+	TieredStepEscalate: escalateAgentID,
 }
 
 // SplitIntoTieredDAG builds the context -> decision -> execute -> verify

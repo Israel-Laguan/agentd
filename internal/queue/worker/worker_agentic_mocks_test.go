@@ -295,6 +295,14 @@ func (m *mockCommitStore) PersistTieredDAG(ctx context.Context, parentID string,
 	return nil, nil
 }
 
+func (m *mockCommitStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, nil
+}
+
+func (m *mockCommitStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockCommitStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }
