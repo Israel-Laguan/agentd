@@ -12,9 +12,7 @@ BIN="${BIN:-$ROOT/bin/agentd}"
 HOME_DIR="${AGENTD_HOME:-/tmp/agentd-disk-demo}"
 API_ADDR="${API_ADDR:-127.0.0.1:18785}"
 API_URL="http://${API_ADDR}"
-# NOTE: WATCHDOG_INTERVAL is a configurable daemon schedule knob but does NOT
-# change the actual cron/daemon polling interval (default ~10m); the demo polls
-# the API for the task instead of relying on a timed cron trigger.
+# NOTE: WATCHDOG_INTERVAL is configurable but does NOT change daemon polling interval; demo polls API.
 WATCHDOG_INTERVAL="${WATCHDOG_INTERVAL:-10m}"
 
 source "$ROOT/scripts/demo/lib/demo-common.sh"
