@@ -188,45 +188,22 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	// threshold, split it into a context→decision→execute→verify DAG and
 	// block the parent. The child tasks will be picked up by the queue and
 	// dispatched through processTieredStep below.
-	if w.ShouldRunTiered(task) {
+	if !w.isTieredStep(task) && w.ShouldRunTiered(task) {
 		w.persistTieredDAG(ctx, task)
 		return
 	}
 	// Guard: if this provider's circuit breaker is open, create an immediate
 	// handoff rather than wasting a slot on a call that will fail with 429.
-	if w.providerBreakers != nil && profile.Provider != "" {
-		if w.providerBreakers.Get(profile.Provider).IsOpen() {
-			w.handoffOrFail(ctx, task,
-				fmt.Errorf("%w: provider %s circuit breaker is open",
-					models.ErrLLMQuotaExceeded, profile.Provider))
-			return
-		}
+	if w.providerBreakers != nil && profile.Provider != "" && w.providerBreakers.Get(profile.Provider).IsOpen() {
+		w.handoffOrFail(ctx, task,
+			fmt.Errorf("%w: provider %s circuit breaker is open", models.ErrLLMQuotaExceeded, profile.Provider))
+		return
 	}
 	// Tiered step detection: child tasks created by SplitIntoTieredDAG carry
 	// an AgentID matching a tiered step profile (tier-context, tier-decision,
 	// tier-execute, tier-verify). Dispatch them through the tiered pipeline.
-	if w.isTieredStep(task) {
-		parentTask, err := w.store.GetTask(ctx, task.DependsOn[0])
-		if err != nil && len(task.DependsOn) > 0 {
-			// Fallback: try to find parent via SPAWNED_BY relation
-			parents, _ := w.store.ListParentTasks(ctx, task.ID)
-			if len(parents) > 0 {
-				parentTask = &parents[0]
-			}
-		}
-		if parentTask == nil {
-			// For context step (no DependsOn), find parent via SPAWNED_BY
-			parents, _ := w.store.ListParentTasks(ctx, task.ID)
-			if len(parents) > 0 {
-				parentTask = &parents[0]
-			}
-		}
-		if parentTask != nil {
-			w.processTieredStep(ctx, task, *project, *profile, w.tieredStepKind(task), *parentTask)
-			return
-		}
-		slog.Warn("tiered step detected but parent not found; falling back to legacy",
-			"task_id", task.ID, "agent_id", task.AgentID)
+	if w.tryDispatchTieredStep(ctx, task, *project, *profile) {
+		return
 	}
 	// AgenticMode selects processAgentic. Model routing (Task 43) and external capability
 	// routing (Task 45) run inside processAgentic after tools are assembled; capability
@@ -238,6 +215,36 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		return
 	}
 	w.RunLegacyTask(ctx, task, *project, *profile, false)
+}
+
+// tryDispatchTieredStep resolves the origin task for a tiered step child
+// (context, decision, execute, or verify) and dispatches it through the
+// tiered pipeline. It reports whether the task was dispatched; the caller
+// falls back to the legacy/agentic path when it returns false.
+func (w *Worker) tryDispatchTieredStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) bool {
+	if !w.isTieredStep(task) {
+		return false
+	}
+	var parentTask *models.Task
+	var err error
+	if len(task.DependsOn) > 0 {
+		parentTask, err = w.store.GetTask(ctx, task.DependsOn[0])
+	}
+	if err != nil || parentTask == nil {
+		// Fallback: DependsOn is not persisted on reload, so tiered steps
+		// resolve their origin task via the SPAWNED_BY relation instead.
+		parents, _ := w.store.ListParentTasks(ctx, task.ID)
+		if len(parents) > 0 {
+			parentTask = &parents[0]
+		}
+	}
+	if parentTask == nil {
+		slog.Warn("tiered step detected but parent not found; falling back to legacy",
+			"task_id", task.ID, "agent_id", task.AgentID)
+		return false
+	}
+	w.processTieredStep(ctx, task, project, profile, w.tieredStepKind(task), *parentTask)
+	return true
 }
 
 func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (LoopResult, bool) {

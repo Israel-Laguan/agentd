@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -104,7 +103,7 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 	}
 
 	if stepKind == TieredStepDecision || stepKind == TieredStepExecute || stepKind == TieredStepVerify {
-		w.injectContextPack(task, parentTask)
+		task = w.injectContextPack(task, parentTask, project)
 	}
 
 	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
@@ -130,113 +129,6 @@ func (w *Worker) applyTieredStepProfile(profile models.AgentProfile, stepKind Ti
 	return p
 }
 
-// processTieredContextStep runs the context step: uses the agentic engine
-// to gather workspace context, then intercepts the committed text to
-// parse, validate, and persist the ContextPack.
-func (w *Worker) processTieredContextStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, parentTask models.Task) {
-	result, ok := w.processAgentic(ctx, task, project, profile)
-	if !ok {
-		return
-	}
-	if !result.IsTerminalSuccess() {
-		w.handleLoopResult(ctx, task, result)
-		return
-	}
-	// The agentic engine already committed the text to the task result.
-	// Read it back to extract the ContextPack.
-	committed, err := w.store.GetTask(ctx, task.ID)
-	if err != nil {
-		slog.Error("tiered context: failed to read committed task", "task_id", task.ID, "error", err)
-		return
-	}
-	payload := committed.Description
-	if payload == "" {
-		slog.Warn("tiered context: committed result is empty", "task_id", task.ID)
-		return
-	}
-	pack, err := parseContextPack(payload)
-	if err != nil {
-		slog.Error("tiered context: failed to parse ContextPack", "task_id", task.ID, "error", err)
-		w.Emit(ctx, task, "TIERED_CONTEXT_PARSE_ERROR", err.Error())
-		return
-	}
-	pack.TaskID = task.ID
-	pack.ParentTaskID = parentTask.ID
-	pack.Budget.PathCount = len(pack.Paths)
-	pack.Budget.CharCount = pack.CharCount()
-
-	packCfg := DefaultContextPackConfig()
-	if w.tieredCfg.ContextPack.MaxPaths > 0 {
-		packCfg.MaxPaths = w.tieredCfg.ContextPack.MaxPaths
-	}
-	if w.tieredCfg.ContextPack.MaxChars > 0 {
-		packCfg.MaxChars = w.tieredCfg.ContextPack.MaxChars
-	}
-	if _, err := pack.EnforceBudget(packCfg); err != nil {
-		slog.Error("tiered context: budget enforcement failed", "task_id", task.ID, "error", err)
-		w.Emit(ctx, task, "TIERED_CONTEXT_BUDGET_ERROR", err.Error())
-		return
-	}
-	if err := pack.Validate(); err != nil {
-		slog.Error("tiered context: pack validation failed", "task_id", task.ID, "error", err)
-		w.Emit(ctx, task, "TIERED_CONTEXT_VALIDATION_ERROR", err.Error())
-		return
-	}
-	if err := WriteContextPack(project.WorkspacePath, pack); err != nil {
-		slog.Error("tiered context: failed to write ContextPack", "task_id", task.ID, "error", err)
-		w.Emit(ctx, task, "TIERED_CONTEXT_WRITE_ERROR", err.Error())
-		return
-	}
-	w.Emit(ctx, task, "TIERED_CONTEXT_PACK_WRITTEN", PackFilePath(pack.Version))
-}
-
-// injectContextPack reads the ContextPack from the workspace and prepends
-// its summary to the task description so the downstream step has context.
-func (w *Worker) injectContextPack(task models.Task, parentTask models.Task) {
-	packPath := PackFilePath(ContextPackVersion)
-	pack, err := ReadContextPack(packPath)
-	if err != nil {
-		slog.Warn("tiered: failed to read ContextPack for injection",
-			"task_id", task.ID, "path", packPath, "error", err)
-		return
-	}
-	summary := fmt.Sprintf(
-		"CONTEXT PACK (from %s step):\nSummary: %s\nPaths: %s\nConstraints: %s\nUnknowns: %s\n",
-		TieredStepContext, pack.Summary, strings.Join(pack.Paths, ", "),
-		strings.Join(pack.Constraints, "; "), strings.Join(pack.Unknowns, "; "))
-	task.Description = summary + "\n\nOriginal task:\n" + task.Description
-}
-
-// parseContextPack attempts to extract a ContextPack from the LLM output.
-// The output may contain JSON embedded in markdown code fences or plain text.
-func parseContextPack(output string) (*ContextPack, error) {
-	output = strings.TrimSpace(output)
-	var cp ContextPack
-	if err := json.Unmarshal([]byte(output), &cp); err == nil {
-		return &cp, nil
-	}
-	// Try extracting from markdown code fences
-	if idx := strings.Index(output, "```json"); idx != -1 {
-		start := idx + len("```json")
-		if end := strings.Index(output[start:], "```"); end != -1 {
-			jsonStr := strings.TrimSpace(output[start : start+end])
-			if err := json.Unmarshal([]byte(jsonStr), &cp); err == nil {
-				return &cp, nil
-			}
-		}
-	}
-	if idx := strings.Index(output, "```"); idx != -1 {
-		start := idx + len("```")
-		if end := strings.Index(output[start:], "```"); end != -1 {
-			jsonStr := strings.TrimSpace(output[start : start+end])
-			if err := json.Unmarshal([]byte(jsonStr), &cp); err == nil {
-				return &cp, nil
-			}
-		}
-	}
-	return nil, fmt.Errorf("no valid ContextPack JSON found in output")
-}
-
 // tieredStepProfiles is the set of AgentID values that identify tiered steps.
 var tieredStepProfiles = map[string]TieredStepKind{
 	tieredStepProfile[TieredStepContext]:  TieredStepContext,
@@ -247,6 +139,9 @@ var tieredStepProfiles = map[string]TieredStepKind{
 
 // isTieredStep reports whether the task was created by SplitIntoTieredDAG.
 func (w *Worker) isTieredStep(task models.Task) bool {
+	if task.AgentID == "" {
+		return false
+	}
 	_, ok := tieredStepProfiles[task.AgentID]
 	return ok
 }
