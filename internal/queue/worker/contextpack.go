@@ -38,14 +38,12 @@ type ContextPack struct {
 	Unknowns     []string         `json:"unknowns,omitempty"`
 	Budget       ContextBudget    `json:"budget"`
 }
-
 // ContextExcerpt is a relevant snippet from a workspace file.
 type ContextExcerpt struct {
 	Path string `json:"path"`
 	Note string `json:"note"`
 	Span string `json:"span,omitempty"`
 }
-
 // CommandRun records a command executed during context gathering.
 type CommandRun struct {
 	Cmd     string `json:"cmd"`
@@ -59,7 +57,6 @@ type ContextBudget struct {
 	PathCount int `json:"path_count"`
 	CharCount int `json:"char_count"`
 }
-
 // ContextPackConfig holds budget defaults for ContextPack creation.
 type ContextPackConfig struct {
 	MaxPaths int
@@ -132,19 +129,6 @@ func (cp *ContextPack) CharCount() int {
 	return n
 }
 
-// BackfillBudgetCounters fills zero-valued budget counters from serialized content.
-// ReadContextPack uses backfillAbsentBudgetCounters instead, which also tells an
-// absent counter apart from an explicit zero so explicit zeros still fail
-// Validate. This helper is kept for callers that only need the zero-based form.
-func (cp *ContextPack) BackfillBudgetCounters() {
-	if cp.Budget.PathCount == 0 {
-		cp.Budget.PathCount = len(cp.Paths)
-	}
-	if cp.Budget.CharCount == 0 {
-		cp.Budget.CharCount = cp.CharCount()
-	}
-}
-
 // backfillAbsentBudgetCounters fills counters absent from the serialized pack.
 func (cp *ContextPack) backfillAbsentBudgetCounters(pathCountPresent, charCountPresent bool) {
 	if !pathCountPresent && cp.Budget.PathCount == 0 {
@@ -203,9 +187,10 @@ func (cp *ContextPack) EnforceBudget(cfg ContextPackConfig) (truncated bool, err
 	cp.Budget.MaxPaths = cfg.MaxPaths
 	cp.Budget.MaxChars = cfg.MaxChars
 	cp.Budget.PathCount = len(cp.Paths)
-	// Count once and reuse it: CharCount() is only recomputed after a field is
-	// actually dropped, and the final store below reuses the last value.
+	// Count once and store immediately so the budget stays consistent even on
+	// the error return below.
 	charCount := cp.CharCount()
+	cp.Budget.CharCount = charCount
 	if charCount > cfg.MaxChars {
 		required := cp.requiredContentChars()
 		if required > cfg.MaxChars {

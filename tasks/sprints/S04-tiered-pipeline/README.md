@@ -29,7 +29,7 @@ PR-A (T-015 DAG splitter) → PR-B (T-016 worker modes)
 PR-C (T-017 escalation + T-018 cost harness, merged) after PR-B
 ```
 
-**PR-C note (operator decision 2026-09-19):** T-017 and T-018 were originally separate PRs (see [`PR-PLAN.md`](PR-PLAN.md)) and are now merged into one, in order to clear PR-C's 20-file minimum floor. This supersedes the "no bundling runtime changes + cost harness + escalation" rule below for PR-C specifically.
+**PR-C note (operator decision 2026-09-19):** T-017 and T-018 were originally separate PRs (see [`PR-PLAN.md`](PR-PLAN.md)) and are now merged into one, in order to clear PR-C's 20-file minimum floor. This supersedes the previous "PRs that mix runtime changes + cost harness + escalation" rule (removed from "Explicitly out of scope") for PR-C specifically.
 
 ## Explicitly out of scope
 

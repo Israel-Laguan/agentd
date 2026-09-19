@@ -7,7 +7,7 @@
 | Priority | P1 |
 | Sprint | S04-tiered-pipeline |
 | Estimate | XL |
-| PR | **PR-B** — ≤20 files / <800 LOC |
+| PR | **PR-B** — 20–50 files / <800 LOC |
 | Links | [tiered-execution M3](../../../../docs/tiered-execution.md) |
 
 ## Goal
