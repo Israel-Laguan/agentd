@@ -231,6 +231,9 @@ func (s *dispatchBatchStore) PersistTieredDAG(context.Context, string, time.Time
 func (s *dispatchBatchStore) ListParentTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }
+func (s *dispatchBatchStore) ListParentTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
 
 func (s *dispatchBatchStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil

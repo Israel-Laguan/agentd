@@ -50,6 +50,28 @@ func (s *FakeKanbanStore) ListParentTasks(_ context.Context, childID string) ([]
 	return out, nil
 }
 
+func (s *FakeKanbanStore) ListParentTasksByRelation(_ context.Context, childID string, relationType models.TaskRelationType) ([]models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seen := make(map[string]struct{})
+	var out []models.Task
+	for _, rel := range s.childParentRelations[childID] {
+		if rel.relationType != relationType {
+			continue
+		}
+		if _, ok := seen[rel.parentID]; ok {
+			continue
+		}
+		t, ok := s.tasks[rel.parentID]
+		if !ok {
+			continue
+		}
+		seen[rel.parentID] = struct{}{}
+		out = append(out, t)
+	}
+	return out, nil
+}
+
 func (s *FakeKanbanStore) unblockBlockedParentsLocked(childID string) {
 	for _, parentID := range s.childParents[childID] {
 		parent, ok := s.tasks[parentID]

@@ -258,6 +258,30 @@ func ReadContextPack(path string) (*ContextPack, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read context pack: %w", err)
 	}
+	return unmarshalContextPack(data)
+}
+
+// ReadContextPackWithFallback reads a context pack from the scoped path.
+// If the scoped file does not exist, it falls back to the legacy unscoped
+// path so pipelines that were started before the filename migration can
+// still be resumed.
+func ReadContextPackWithFallback(scopedPath, legacyPath string) (*ContextPack, error) {
+	data, readErr := os.ReadFile(scopedPath)
+	if readErr != nil {
+		if os.IsNotExist(readErr) && legacyPath != "" {
+			legacyData, legacyErr := os.ReadFile(legacyPath)
+			if legacyErr != nil {
+				return nil, fmt.Errorf("read context pack (scoped: %w, legacy: %v)", readErr, legacyErr)
+			}
+			data = legacyData
+		} else {
+			return nil, fmt.Errorf("read context pack: %w", readErr)
+		}
+	}
+	return unmarshalContextPack(data)
+}
+
+func unmarshalContextPack(data []byte) (*ContextPack, error) {
 	var cp ContextPack
 	if err := json.Unmarshal(data, &cp); err != nil {
 		return nil, fmt.Errorf("unmarshal context pack: %w", err)

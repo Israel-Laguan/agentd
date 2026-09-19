@@ -70,6 +70,10 @@ type KanbanStore interface {
 	BlockTaskWithSubtasks(ctx context.Context, taskID string, expectedUpdatedAt time.Time, subtasks []DraftTask) (*Task, []Task, error)
 	ListChildTasks(ctx context.Context, parentID string) ([]Task, error)
 	ListParentTasks(ctx context.Context, childID string) ([]Task, error)
+	// ListParentTasksByRelation returns parent tasks connected by a specific
+	// relation type (e.g. SPAWNED_BY). Used by the tiered pipeline to
+	// resolve the origin task without ambiguity.
+	ListParentTasksByRelation(ctx context.Context, childID string, relationType TaskRelationType) ([]Task, error)
 	ReconcileExpiredBlockedTasks(ctx context.Context, now time.Time) ([]Task, error)
 	// PersistTieredDAG atomically blocks the parent and inserts pre-built
 	// tiered step children with SPAWNED_BY and DEPENDS_ON relations.

@@ -299,6 +299,10 @@ func (m *mockCommitStore) ListParentTasks(context.Context, string) ([]models.Tas
 	return nil, nil
 }
 
+func (m *mockCommitStore) ListParentTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (m *mockCommitStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

@@ -63,11 +63,24 @@ func (w *Worker) failTieredStep(ctx context.Context, task models.Task, reason st
 		if errors.Is(err, models.ErrStateConflict) {
 			// The step left RUNNING at the expected version before we could
 			// record the failure (e.g. a concurrent commit or heartbeat bump
-			// moved it out from under us). The step may now look COMPLETED
-			// without its artifact — surface it as an escalation signal
-			// instead of silently swallowing the conflict.
+			// moved it out from under us). Re-read the current state to
+			// distinguish a legitimate COMPLETED-without-artifact scenario
+			// from an engine-initiated failure that already recorded the
+			// result — the latter does not warrant an escalation.
+			current, getErr := w.store.GetTask(ctx, task.ID)
+			if getErr != nil {
+				slog.Error("tiered: failed to re-read task after state conflict",
+					"task_id", task.ID, "error", getErr)
+				w.Emit(ctx, task, "ERROR", getErr.Error())
+				return
+			}
+			if current.State == models.TaskStateFailed {
+				slog.Debug("tiered: task already FAILED by engine; skipping redundant failure",
+					"task_id", task.ID, "reason", reason)
+				return
+			}
 			slog.Error("tiered: failed to record step failure; task no longer RUNNING at expected version",
-				"task_id", task.ID, "reason", reason, "error", err)
+				"task_id", task.ID, "reason", reason, "error", err, "current_state", current.State)
 			w.Emit(ctx, task, "TIERED_STEP_FAIL_CONFLICT",
 				"escalation required: could not record failure ("+reason+"): "+err.Error())
 			return
@@ -146,27 +159,30 @@ func (w *Worker) validateAndWritePack(ctx context.Context, task models.Task, pro
 // origin task) and prepends its summary to the task description so the
 // downstream step has context. It returns the (possibly modified) task;
 // callers must use the returned value, since task is passed by value here.
-func (w *Worker) injectContextPack(task models.Task, parentTask models.Task, project models.Project) models.Task {
-	packPath := filepath.Join(project.WorkspacePath, PackFilePath(parentTask.ID, ContextPackVersion))
-	pack, err := ReadContextPack(packPath)
+// Returns an error when the pack cannot be read or its lineage mismatches,
+// so the caller can fail the tiered step instead of proceeding without context.
+func (w *Worker) injectContextPack(task models.Task, parentTask models.Task, project models.Project) (models.Task, error) {
+	scopedPath := filepath.Join(project.WorkspacePath, PackFilePath(parentTask.ID, ContextPackVersion))
+	legacyPath := filepath.Join(project.WorkspacePath, PackFilePath("", ContextPackVersion))
+	pack, err := ReadContextPackWithFallback(scopedPath, legacyPath)
 	if err != nil {
 		slog.Warn("tiered: failed to read ContextPack for injection",
-			"task_id", task.ID, "path", packPath, "error", err)
-		return task
+			"task_id", task.ID, "scoped_path", scopedPath, "error", err)
+		return task, fmt.Errorf("read ContextPack: %w", err)
 	}
 	// Defense in depth: never inject a pack produced by a different pipeline
 	// if the scoped file still carries another task's lineage.
 	if pack.ParentTaskID != "" && pack.ParentTaskID != parentTask.ID {
 		slog.Warn("tiered: ContextPack lineage mismatch, skipping injection",
 			"task_id", task.ID, "expected_parent", parentTask.ID, "pack_parent", pack.ParentTaskID)
-		return task
+		return task, fmt.Errorf("ContextPack lineage mismatch: expected parent %s, got %s", parentTask.ID, pack.ParentTaskID)
 	}
 	summary := fmt.Sprintf(
 		"CONTEXT PACK (from %s step):\nSummary: %s\nPaths: %s\nConstraints: %s\nUnknowns: %s\n",
 		TieredStepContext, pack.Summary, strings.Join(pack.Paths, ", "),
 		strings.Join(pack.Constraints, "; "), strings.Join(pack.Unknowns, "; "))
 	task.Description = summary + "\n\nOriginal task:\n" + task.Description
-	return task
+	return task, nil
 }
 
 // parseContextPack attempts to extract a ContextPack from the LLM output.

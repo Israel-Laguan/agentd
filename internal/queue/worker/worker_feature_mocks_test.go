@@ -218,6 +218,10 @@ func (s *workerTestStore) ListParentTasks(context.Context, string) ([]models.Tas
 	return nil, nil
 }
 
+func (s *workerTestStore) ListParentTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *workerTestStore) ListChildTasks(context.Context, string) ([]models.Task, error) {
 	return nil, nil
 }

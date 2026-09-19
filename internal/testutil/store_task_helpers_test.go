@@ -35,8 +35,8 @@ func TestPersistTieredDAG_RejectsDuplicateChildIDs(t *testing.T) {
 		{Task: models.Task{BaseEntity: models.BaseEntity{ID: "step-1"}, ProjectID: parent.ProjectID, State: models.TaskStateReady}},
 		{Task: models.Task{BaseEntity: models.BaseEntity{ID: "step-1"}, ProjectID: parent.ProjectID, State: models.TaskStatePending}, DependsOnID: "step-1"},
 	}
-	if _, err := s.PersistTieredDAG(ctx, parent.ID, parent.UpdatedAt, children); err == nil {
-		t.Fatal("PersistTieredDAG should reject duplicate child IDs")
+	if _, err := s.PersistTieredDAG(ctx, parent.ID, parent.UpdatedAt, children); !errors.Is(err, models.ErrStateConflict) {
+		t.Fatalf("PersistTieredDAG with duplicate child ID = %v, want ErrStateConflict", err)
 	}
 	if _, ok := s.tasks["step-1"]; ok {
 		t.Fatal("duplicate plan must not partially persist children")

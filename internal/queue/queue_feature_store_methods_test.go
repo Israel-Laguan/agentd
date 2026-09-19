@@ -219,6 +219,10 @@ func (s *queueStore) ListParentTasks(context.Context, string) ([]models.Task, er
 	return nil, nil
 }
 
+func (s *queueStore) ListParentTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+	return nil, nil
+}
+
 func (s *queueStore) ListChildTasks(_ context.Context, _ string) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

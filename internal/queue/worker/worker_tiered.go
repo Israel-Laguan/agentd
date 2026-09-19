@@ -103,7 +103,14 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 	}
 
 	if stepKind == TieredStepDecision || stepKind == TieredStepExecute || stepKind == TieredStepVerify {
-		task = w.injectContextPack(task, parentTask, project)
+		var err error
+		task, err = w.injectContextPack(task, parentTask, project)
+		if err != nil {
+			slog.Error("tiered: ContextPack injection failed; failing step",
+				"task_id", task.ID, "step", stepKind, "error", err)
+			w.failTieredStep(ctx, task, "ContextPack injection failed: "+err.Error())
+			return
+		}
 	}
 
 	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
