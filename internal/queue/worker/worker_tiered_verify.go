@@ -10,6 +10,8 @@ import (
 	"agentd/internal/models"
 )
 
+const tieredVerifyOutcomeEvent = "TIERED_VERIFY_OUTCOME"
+
 // processTieredVerifyStep runs the verify step through the agentic engine,
 // then — unlike the generic tiered dispatch — reads back the committed
 // VerifyResult JSON, classifies it, and routes it through the escalation
