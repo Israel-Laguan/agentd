@@ -14,15 +14,34 @@ const (
 	TaskStateCompleted           TaskState = "COMPLETED"
 	TaskStateFailed              TaskState = "FAILED"
 	TaskStateFailedRequiresHuman TaskState = "FAILED_REQUIRES_HUMAN"
+	TaskStateNeedsContext        TaskState = "NEEDS_CONTEXT"
 	TaskStateInConsideration     TaskState = "IN_CONSIDERATION"
-	// TaskStateNeedsContext = "NEEDS_CONTEXT" — deferred to T-020 (schema migration + pack-rewire not yet implemented)
 )
+
+// AllTaskStates lists every task state agentd knows. Valid reports membership
+// in this list, and the tasks.state CHECK constraint in the SQLite schema must
+// accept exactly these values — a state the Go enum allows but the DB rejects
+// fails at write time, which is how NEEDS_CONTEXT shipped broken in S04.
+// internal/kanban.TestTaskStateCheckConstraintParity guards the pair.
+var AllTaskStates = []TaskState{
+	TaskStatePending,
+	TaskStateReady,
+	TaskStateQueued,
+	TaskStateRunning,
+	TaskStateBlocked,
+	TaskStateCompleted,
+	TaskStateFailed,
+	TaskStateFailedRequiresHuman,
+	TaskStateNeedsContext,
+	TaskStateInConsideration,
+}
 
 var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 	TaskStatePending: {
 		TaskStateReady:           {},
 		TaskStateInConsideration: {},
 		TaskStateFailed:          {},
+		TaskStateNeedsContext:    {},
 	},
 	TaskStateReady: {
 		TaskStateQueued:              {},
@@ -31,6 +50,7 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 		TaskStateInConsideration:     {},
 		TaskStateFailed:              {},
 		TaskStateFailedRequiresHuman: {},
+		TaskStateNeedsContext:        {},
 	},
 	TaskStateQueued: {
 		TaskStateRunning:             {},
@@ -38,12 +58,14 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 		TaskStateInConsideration:     {},
 		TaskStateFailed:              {},
 		TaskStateFailedRequiresHuman: {},
+		TaskStateNeedsContext:        {},
 	},
 	TaskStateRunning: {
 		TaskStateBlocked:             {},
 		TaskStateCompleted:           {},
 		TaskStateFailed:              {},
 		TaskStateFailedRequiresHuman: {},
+		TaskStateNeedsContext:        {},
 		TaskStateReady:               {},
 		TaskStateInConsideration:     {},
 	},
@@ -62,6 +84,14 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 		TaskStateReady:           {},
 		TaskStateInConsideration: {},
 	},
+	// A NEEDS_CONTEXT step is revived once a fresh ContextPack exists, or
+	// abandoned if the re-gather itself cannot be scheduled.
+	TaskStateNeedsContext: {
+		TaskStateReady:               {},
+		TaskStateInConsideration:     {},
+		TaskStateFailed:              {},
+		TaskStateFailedRequiresHuman: {},
+	},
 	TaskStateInConsideration: {
 		TaskStatePending: {},
 		TaskStateReady:   {},
@@ -71,12 +101,12 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 
 // Valid reports whether the state is known to agentd.
 func (s TaskState) Valid() bool {
-	switch s {
-	case TaskStatePending, TaskStateReady, TaskStateQueued, TaskStateRunning, TaskStateBlocked, TaskStateCompleted, TaskStateFailed, TaskStateFailedRequiresHuman, TaskStateInConsideration:
-		return true
-	default:
-		return false
+	for _, known := range AllTaskStates {
+		if known == s {
+			return true
+		}
 	}
+	return false
 }
 
 // CanTransitionTo enforces the v1 task state machine.

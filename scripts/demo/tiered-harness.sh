@@ -1,247 +1,201 @@
 #!/bin/bash
-# tiered-harness.sh — Cost/latency demo comparing single-model baseline vs tiered execution
+# tiered-harness.sh — Cost demo comparing a single-model baseline against the
+# tiered pipeline on one fixed task pack.
 #
 # Usage:
 #   ./scripts/demo/tiered-harness.sh [OPTIONS]
 #
 # Options:
-#   --baseline-only      Run only the baseline (single mid/strong model)
-#   --tiered-only        Run only the tiered pipeline
-#   --task-pack PATH     Use custom task pack JSON (default: fixed demo pack)
-#   --output FILE        Write results to file (default: ./tiered-harness-results.json)
-#   --mock               Use mock LLM responses (offline proxy metrics)
+#   --baseline-only      Report only the baseline (single strong model)
+#   --tiered-only        Report only the tiered pipeline
+#   --task-pack PATH     Task pack JSON (default: fixtures/tiered/task.json)
+#   --fixtures DIR       Seeded step responses (default: fixtures/tiered)
+#   --output FILE        Write results JSON (default: ./tiered-harness-results.json)
+#   --mock               Accepted for compatibility; this harness is always offline
 #
+# WHAT IS AND IS NOT MEASURED
+#   Token counts are derived from the actual byte size of the seeded request and
+#   response fixtures, using a documented 4-bytes-per-token proxy. Costs are
+#   those token counts against the pricing table below. Nothing is hardcoded:
+#   edit a fixture and the numbers move.
+#
+#   Wall-clock latency is NOT reported. Reading fixtures takes microseconds and
+#   says nothing about provider latency, so there is no honest offline number to
+#   print. A latency comparison needs a live run against real providers.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+FIXTURE_DIR="${FIXTURE_DIR:-$SCRIPT_DIR/fixtures/tiered}"
 OUTPUT_FILE="${OUTPUT_FILE:-./tiered-harness-results.json}"
 TASK_PACK="${TASK_PACK:-}"
-MODE="${MODE:-both}"  # baseline, tiered, or both
-MOCK_MODE="${MOCK_MODE:-false}"
+MODE="${MODE:-both}"
 
-# Parse command-line arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --baseline-only)
-      MODE="baseline"
-      shift
-      ;;
-    --tiered-only)
-      MODE="tiered"
-      shift
-      ;;
-    --task-pack)
-      TASK_PACK="$2"
-      shift 2
-      ;;
-    --output)
-      OUTPUT_FILE="$2"
-      shift 2
-      ;;
-    --mock)
-      MOCK_MODE="true"
-      shift
-      ;;
-    *)
-      echo "Unknown option: $1"
-      exit 1
-      ;;
+    --baseline-only) MODE="baseline"; shift ;;
+    --tiered-only)   MODE="tiered";   shift ;;
+    --task-pack)     TASK_PACK="$2";  shift 2 ;;
+    --fixtures)      FIXTURE_DIR="$2"; shift 2 ;;
+    --output)        OUTPUT_FILE="$2"; shift 2 ;;
+    --mock)          shift ;;
+    -h|--help)       sed -n '2,26p' "$0"; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
-# Fixed demo task pack — must be reproducible across runs
-FIXED_TASK_PACK=$(cat <<'EOF'
-{
-  "id": "hard-task-001",
-  "title": "Implement tiered execution with cost measurement",
-  "description": "Add a new feature that splits complex tasks into context, decision, execute, verify steps with per-step cost tracking and model tier assignment.",
-  "acceptance_criteria": [
-    "DAG children created with correct step kinds",
-    "Each step runs with assigned model tier",
-    "Cost measured per step",
-    "Verify classifies outcomes correctly",
-    "Re-gather triggers on NEEDS_CONTEXT",
-    "Escalation degrades to HUMAN without loops"
-  ],
-  "complexity_score": 250,
-  "files_to_modify": 15,
-  "target_domains": ["worker", "models", "config"]
-}
-EOF
-)
+TASK_PACK="${TASK_PACK:-$FIXTURE_DIR/task.json}"
 
-# Baseline pricing table (offline proxy)
-# Real prices from claude.ai; used for cost calculation in mock/offline mode
-declare -A PRICING=(
-  ["small"]="0.001"      # $0.001 per 1k tokens (claude-3.5-haiku equivalent)
-  ["mid"]="0.005"        # $0.005 per 1k tokens (claude-3.5-sonnet equivalent)
-  ["strong"]="0.015"     # $0.015 per 1k tokens (claude-opus equivalent)
-)
+# Pricing table (USD per 1k tokens), offline proxy for the three tiers.
+PRICE_SMALL=0.001
+PRICE_MID=0.005
+PRICE_STRONG=0.015
 
-# Token budgets for each step (fixed for reproducibility)
-declare -A TOKEN_BUDGETS=(
-  ["context"]="2000"     # 2k tokens to gather context
-  ["decision"]="1500"    # 1.5k tokens to decide
-  ["execute"]="3000"     # 3k tokens to apply changes
-  ["verify"]="2000"      # 2k tokens to verify
-  ["mid-fix"]="1500"     # Mid fix redo
-  ["escalate"]="4000"    # Strong model escalation
-)
+# BYTES_PER_TOKEN is the proxy used to turn fixture size into a token count.
+BYTES_PER_TOKEN=4
 
-# Helper function to do floating point math without bc
-calc() {
-  awk "BEGIN {print $1}"
-}
+calc() { awk "BEGIN {printf \"%.4f\", $1}"; }
+pct()  { awk "BEGIN {printf \"%.1f\", $1}"; }
 
-# Baseline single-model token usage (strong model doing everything)
-# Empirical numbers from running real tasks
-BASELINE_TOKENS=13000  # Strong model needs ~13k tokens for full execution
-BASELINE_MODEL="strong"
-BASELINE_COST=$(calc "$BASELINE_TOKENS * ${PRICING[strong]} / 1000")
-
-# Tiered execution token usage breakdown
-TIERED_TOKENS=$(( ${TOKEN_BUDGETS[context]} + ${TOKEN_BUDGETS[decision]} + ${TOKEN_BUDGETS[execute]} + ${TOKEN_BUDGETS[verify]} ))
-TIERED_COST=$(calc "\
-  ${TOKEN_BUDGETS[context]} * ${PRICING[small]} / 1000 + \
-  ${TOKEN_BUDGETS[decision]} * ${PRICING[mid]} / 1000 + \
-  ${TOKEN_BUDGETS[execute]} * ${PRICING[small]} / 1000 + \
-  ${TOKEN_BUDGETS[verify]} * ${PRICING[mid]} / 1000")
-
-# Savings calculation
-COST_SAVED=$(calc "$BASELINE_COST - $TIERED_COST")
-COST_REDUCTION=$(calc "($COST_SAVED / $BASELINE_COST) * 100")
-
-# Wall-time estimates (offline proxy — not actual provider latency, just harness execution time)
-BASELINE_WALL_TIME=45  # seconds (single model, higher overhead per request)
-TIERED_WALL_TIME=28   # seconds (parallelizable steps, lower total time despite 4 steps)
-TIME_SAVED=$(($BASELINE_WALL_TIME - $TIERED_WALL_TIME))
-TIME_REDUCTION=$(calc "($TIME_SAVED / $BASELINE_WALL_TIME) * 100")
-
-echo "=== Tiered Execution Cost/Latency Harness ==="
-echo ""
-echo "Task pack: $FIXED_TASK_PACK"
-echo ""
-echo "=== Baseline (single mid/strong model) ==="
-echo "Model tier: $BASELINE_MODEL"
-echo "Total tokens: $BASELINE_TOKENS"
-echo "Total cost: \$$BASELINE_COST"
-echo "Wall time (offline proxy): ${BASELINE_WALL_TIME}s"
-echo ""
-echo "Acceptance checks: PASS"
-echo "  ✓ All task objectives met"
-echo "  ✓ Code review passed"
-echo "  ✓ Tests pass"
-echo ""
-echo "=== Tiered Execution (context→decision→execute→verify) ==="
-echo "Context step (small):  ${TOKEN_BUDGETS[context]} tokens × \$${PRICING[small]}/1k = \$$(calc "${TOKEN_BUDGETS[context]} * ${PRICING[small]} / 1000")"
-echo "Decision step (mid):   ${TOKEN_BUDGETS[decision]} tokens × \$${PRICING[mid]}/1k = \$$(calc "${TOKEN_BUDGETS[decision]} * ${PRICING[mid]} / 1000")"
-echo "Execute step (small):  ${TOKEN_BUDGETS[execute]} tokens × \$${PRICING[small]}/1k = \$$(calc "${TOKEN_BUDGETS[execute]} * ${PRICING[small]} / 1000")"
-echo "Verify step (mid):     ${TOKEN_BUDGETS[verify]} tokens × \$${PRICING[mid]}/1k = \$$(calc "${TOKEN_BUDGETS[verify]} * ${PRICING[mid]} / 1000")"
-echo ""
-echo "Total tokens: $TIERED_TOKENS"
-echo "Total cost: \$$TIERED_COST"
-echo "Wall time (offline proxy): ${TIERED_WALL_TIME}s"
-echo ""
-echo "Acceptance checks: PASS"
-echo "  ✓ All task objectives met"
-echo "  ✓ Code review passed"
-echo "  ✓ Tests pass"
-echo "  ✓ Escalation ladder handles conflicts"
-echo ""
-echo "=== Comparison ==="
-echo "Cost savings: \$$COST_SAVED ($COST_REDUCTION%)"
-echo "Time savings: ${TIME_SAVED}s"
-echo ""
-echo "Re-gather rate: 0 (no NEEDS_CONTEXT triggers on fixed pack)"
-echo "Escalation rate: 0% (no conflicts on deterministic fixed pack)"
-echo "Mid-fix rate: 0% (verify passes on first attempt)"
-echo ""
-echo "=== Interpretation ==="
-echo ""
-echo "Cost win: $COST_REDUCTION% reduction ($COST_SAVED per task)"
-echo "Latency win: ${TIME_SAVED}s improvement (${TIME_REDUCTION}% faster)"
-echo ""
-echo "The tiered pipeline saves money by using cheaper models for context gathering"
-echo "and execution, while reserving mid/strong models for decision points and"
-echo "verification. The sealed ContextPack ensures decision→execute consistency"
-echo "without requiring the strong model to re-crawl the codebase."
-echo ""
-echo "This demo uses fixed, deterministic task pack for reproducibility."
-echo "Real-world metrics will vary based on task complexity and error rates."
-echo ""
-echo "✓ Below the complexity threshold (≤200): tasks run one-shot (current path)"
-echo "✓ At/above threshold (≥200): tasks use tiered pipeline"
-echo ""
-
-# Helper to normalize JSON numbers (add leading zero to decimals starting with .)
-normalize_json_number() {
-  if [[ "$1" =~ ^\.[0-9] ]]; then
-    echo "0$1"
-  else
-    echo "$1"
+require_file() {
+  if [[ ! -f "$1" ]]; then
+    echo "missing fixture: $1" >&2
+    exit 1
   fi
 }
 
-# Compute all tiered step costs
-CONTEXT_COST=$(calc "${TOKEN_BUDGETS[context]} * ${PRICING[small]} / 1000")
-DECISION_COST=$(calc "${TOKEN_BUDGETS[decision]} * ${PRICING[mid]} / 1000")
-EXECUTE_COST=$(calc "${TOKEN_BUDGETS[execute]} * ${PRICING[small]} / 1000")
-VERIFY_COST=$(calc "${TOKEN_BUDGETS[verify]} * ${PRICING[mid]} / 1000")
+# tokens_of FILE... -> token count across the given files
+tokens_of() {
+  local total=0 file
+  for file in "$@"; do
+    require_file "$file"
+    total=$(( total + $(wc -c < "$file") ))
+  done
+  echo $(( total / BYTES_PER_TOKEN ))
+}
 
-# Write results to output file
+cost_of() { calc "$1 * $2 / 1000"; }
+
+require_file "$TASK_PACK"
+
+CONTEXT_OUT="$FIXTURE_DIR/step.context.json"
+DECISION_OUT="$FIXTURE_DIR/step.decision.json"
+EXECUTE_OUT="$FIXTURE_DIR/step.execute.txt"
+VERIFY_OUT="$FIXTURE_DIR/step.verify.json"
+BASELINE_OUT="$FIXTURE_DIR/baseline.strong.txt"
+
+# Baseline: one strong model sees the task and produces everything itself,
+# including the repository exploration captured in its response.
+BASELINE_TOKENS=$(tokens_of "$TASK_PACK" "$BASELINE_OUT")
+BASELINE_COST=$(cost_of "$BASELINE_TOKENS" "$PRICE_STRONG")
+
+# Tiered: each step is charged for what it actually reads plus what it writes.
+# The sealed pack is what lets the cheap steps skip re-reading the repository.
+CONTEXT_TOKENS=$(tokens_of "$TASK_PACK" "$CONTEXT_OUT")
+DECISION_TOKENS=$(tokens_of "$TASK_PACK" "$CONTEXT_OUT" "$DECISION_OUT")
+EXECUTE_TOKENS=$(tokens_of "$TASK_PACK" "$CONTEXT_OUT" "$DECISION_OUT" "$EXECUTE_OUT")
+VERIFY_TOKENS=$(tokens_of "$TASK_PACK" "$CONTEXT_OUT" "$DECISION_OUT" "$VERIFY_OUT")
+
+CONTEXT_COST=$(cost_of "$CONTEXT_TOKENS" "$PRICE_SMALL")
+DECISION_COST=$(cost_of "$DECISION_TOKENS" "$PRICE_MID")
+EXECUTE_COST=$(cost_of "$EXECUTE_TOKENS" "$PRICE_SMALL")
+VERIFY_COST=$(cost_of "$VERIFY_TOKENS" "$PRICE_MID")
+
+TIERED_TOKENS=$(( CONTEXT_TOKENS + DECISION_TOKENS + EXECUTE_TOKENS + VERIFY_TOKENS ))
+TIERED_COST=$(calc "$CONTEXT_COST + $DECISION_COST + $EXECUTE_COST + $VERIFY_COST")
+
+COST_SAVED=$(calc "$BASELINE_COST - $TIERED_COST")
+COST_REDUCTION=$(pct "($BASELINE_COST - $TIERED_COST) / $BASELINE_COST * 100")
+# Tokens go UP, not down: every step re-reads the sealed pack, so the pipeline
+# buys its cost win with extra tokens on cheaper tiers. Reported as a ratio
+# rather than a "reduction" so the sign cannot be mistaken for a saving.
+TOKEN_RATIO=$(awk "BEGIN {printf \"%.2f\", $TIERED_TOKENS / $BASELINE_TOKENS}")
+
+# The acceptance check is the seeded verify verdict, not an assertion in this
+# script: both arms have to satisfy the same criterion to be comparable.
+VERIFY_VERDICT=$(awk -F'"' '/"overall"/ {print $4}' "$VERIFY_OUT")
+if [[ "$VERIFY_VERDICT" != "pass" ]]; then
+  echo "tiered arm did not meet the acceptance criterion (verify overall=$VERIFY_VERDICT)" >&2
+  exit 1
+fi
+
+echo "=== Tiered Execution Cost Harness ==="
+echo ""
+echo "Task pack:  $TASK_PACK"
+echo "Fixtures:   $FIXTURE_DIR"
+echo "Token proxy: 1 token per ${BYTES_PER_TOKEN} bytes of seeded request+response"
+echo "Pricing/1k:  small=\$$PRICE_SMALL mid=\$$PRICE_MID strong=\$$PRICE_STRONG"
+echo ""
+
+if [[ "$MODE" == "baseline" || "$MODE" == "both" ]]; then
+  echo "=== Baseline (single strong model) ==="
+  echo "Tokens: $BASELINE_TOKENS"
+  echo "Cost:   \$$BASELINE_COST"
+  echo ""
+fi
+
+if [[ "$MODE" == "tiered" || "$MODE" == "both" ]]; then
+  echo "=== Tiered (context→decision→execute→verify) ==="
+  printf 'context  (small)  %6s tokens  $%s\n' "$CONTEXT_TOKENS" "$CONTEXT_COST"
+  printf 'decision (mid)    %6s tokens  $%s\n' "$DECISION_TOKENS" "$DECISION_COST"
+  printf 'execute  (small)  %6s tokens  $%s\n' "$EXECUTE_TOKENS" "$EXECUTE_COST"
+  printf 'verify   (mid)    %6s tokens  $%s\n' "$VERIFY_TOKENS" "$VERIFY_COST"
+  echo "Tokens: $TIERED_TOKENS"
+  echo "Cost:   \$$TIERED_COST"
+  echo "Acceptance: verify overall=$VERIFY_VERDICT"
+  echo ""
+fi
+
+if [[ "$MODE" == "both" ]]; then
+  echo "=== Comparison ==="
+  echo "Tokens:  $BASELINE_TOKENS -> $TIERED_TOKENS (${TOKEN_RATIO}x MORE)"
+  echo "Cost:    \$$BASELINE_COST -> \$$TIERED_COST (${COST_REDUCTION}% less)"
+  echo "Saved:   \$$COST_SAVED per task"
+  echo ""
+  echo "Read this carefully: the tiered pipeline spends MORE tokens, not fewer."
+  echo "Every step re-reads the sealed pack, so total tokens go up. The saving"
+  echo "comes entirely from tier assignment — the two largest steps run on the"
+  echo "small model because the pack means they never re-crawl the repository."
+  echo "Tiered execution is a price-per-token play, not a token-efficiency play."
+  echo ""
+  echo "Wall-clock latency is not reported — see the header for why."
+  echo ""
+fi
+
 if [[ -n "$OUTPUT_FILE" ]]; then
   cat > "$OUTPUT_FILE" <<RESULTS
 {
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "task_pack_id": "hard-task-001",
-  "mode": "offline-proxy",
-  "note": "Offline proxy metrics — token costs are calculated, wall-time is harness overhead, not provider latency",
+  "mode": "offline-fixture",
+  "note": "Token counts derived from seeded fixture sizes at ${BYTES_PER_TOKEN} bytes/token; costs from the pricing table. Wall-clock latency is not measured offline and is intentionally absent.",
+  "task_pack": "$TASK_PACK",
+  "fixtures": "$FIXTURE_DIR",
+  "bytes_per_token": $BYTES_PER_TOKEN,
+  "pricing_per_1k_usd": {"small": $PRICE_SMALL, "mid": $PRICE_MID, "strong": $PRICE_STRONG},
   "baseline": {
-    "model": "$BASELINE_MODEL",
+    "model_tier": "strong",
     "tokens": $BASELINE_TOKENS,
-    "cost_usd": $(normalize_json_number "$BASELINE_COST"),
-    "wall_time_sec": $BASELINE_WALL_TIME,
+    "cost_usd": $BASELINE_COST,
     "acceptance_pass": true
   },
   "tiered": {
     "steps": {
-      "context": {
-        "model": "small",
-        "tokens": ${TOKEN_BUDGETS[context]},
-        "cost_usd": $(normalize_json_number "$CONTEXT_COST")
-      },
-      "decision": {
-        "model": "mid",
-        "tokens": ${TOKEN_BUDGETS[decision]},
-        "cost_usd": $(normalize_json_number "$DECISION_COST")
-      },
-      "execute": {
-        "model": "small",
-        "tokens": ${TOKEN_BUDGETS[execute]},
-        "cost_usd": $(normalize_json_number "$EXECUTE_COST")
-      },
-      "verify": {
-        "model": "mid",
-        "tokens": ${TOKEN_BUDGETS[verify]},
-        "cost_usd": $(normalize_json_number "$VERIFY_COST")
-      }
+      "context":  {"model_tier": "small", "tokens": $CONTEXT_TOKENS,  "cost_usd": $CONTEXT_COST},
+      "decision": {"model_tier": "mid",   "tokens": $DECISION_TOKENS, "cost_usd": $DECISION_COST},
+      "execute":  {"model_tier": "small", "tokens": $EXECUTE_TOKENS,  "cost_usd": $EXECUTE_COST},
+      "verify":   {"model_tier": "mid",   "tokens": $VERIFY_TOKENS,   "cost_usd": $VERIFY_COST}
     },
     "total_tokens": $TIERED_TOKENS,
-    "total_cost_usd": $(normalize_json_number "$TIERED_COST"),
-    "wall_time_sec": $TIERED_WALL_TIME,
+    "total_cost_usd": $TIERED_COST,
     "acceptance_pass": true,
-    "re_gather_rate": "0%",
-    "escalation_rate": "0%",
-    "mid_fix_rate": "0%"
+    "verify_overall": "$VERIFY_VERDICT"
   },
   "comparison": {
-    "cost_saved_usd": $(normalize_json_number "$COST_SAVED"),
-    "cost_reduction_percent": $(calc "$COST_REDUCTION"),
-    "time_saved_sec": $TIME_SAVED,
-    "time_reduction_percent": $(calc "$TIME_REDUCTION")
+    "cost_saved_usd": $COST_SAVED,
+    "cost_reduction_percent": $COST_REDUCTION,
+    "tokens_note": "tiered spends more tokens than the baseline; the saving is price per token, not token count",
+    "token_ratio_vs_baseline": $TOKEN_RATIO
   }
 }
 RESULTS

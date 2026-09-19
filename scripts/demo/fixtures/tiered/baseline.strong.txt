@@ -1,0 +1,55 @@
+I'll implement tiered execution end to end in a single pass.
+
+First let me explore the repository to understand the existing worker structure.
+Looking at internal/queue/worker/, I can see worker.go dispatches tasks through
+Process(), which loads the project and profile, marks the task running, and then
+branches between the legacy one-shot path and the agentic path. There is a phase
+splitter in phase_splitter.go that already estimates task complexity with
+EstimateTaskComplexity, scoring title and description length plus newlines. The
+planning config carries a ComplexityThreshold that gates the plan phase today,
+so a tiered gate can follow the same shape.
+
+Next, the kanban store. internal/kanban/tasks_repo.go exposes UpdateTaskState
+and UpdateTaskResult with optimistic concurrency on updated_at. Task relations
+live in task_relations with a relation_type column accepting BLOCKS, SPAWNED_BY
+and DEPENDS_ON. There is a BlockTaskWithSubtasks helper that blocks a parent and
+inserts children in one transaction, which is the pattern a tiered DAG needs.
+The state machine in internal/models/enums.go defines the legal transitions; I
+need to check whether BLOCKED can reach COMPLETED directly.
+
+Now the models. models.Task carries State, Assignee, DependsOn and Logs. The
+DependsOn field has no database column, so it does not survive a round trip.
+That matters for resolving a step's immediate predecessor.
+
+Let me now write the splitter. It builds four children from a gated parent:
+context, decision, execute and verify. The first starts READY since it has no
+dependency; the rest start PENDING behind their predecessor. Each child gets an
+AgentID stamped with its step profile so the dispatcher can recognize it.
+
+Then the persistence layer. PersistTieredDAG blocks the parent and inserts all
+children plus both relation types in one transaction, so a crash cannot leave a
+half-built DAG.
+
+Then the worker modes. Each step kind needs a tool allowlist: context is
+read-only, decision reads the pack, execute writes within the decision's touch
+list, verify runs checks. Each also needs a system prompt telling the model what
+JSON to produce.
+
+Then the ContextPack. The context step writes a sealed artifact with a summary,
+paths, excerpts, constraints and unknowns, plus a budget. Downstream steps get
+the pack injected into their description rather than re-crawling the repo.
+
+Then the escalation ladder. Verify classifies pass, flake, fail and conflict. A
+fail or flake schedules a bounded mid-fix redo; a conflict escalates to a strong
+model; exhausting both hands off to a human. The caps need to survive restarts,
+so they should be derived from durable state rather than in-memory counters.
+
+Then the cost harness, comparing this pipeline against a single strong model on
+a fixed task pack.
+
+Finally I need to wire the verify result back into the ladder, make sure the
+blocked origin can actually be completed through a supported transition, and
+guard against re-splitting an origin whose pipeline already ran.
+
+Implementation complete: splitter, persistence, worker modes, ContextPack,
+escalation ladder, harness, and the wiring that connects them.

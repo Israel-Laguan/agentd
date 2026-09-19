@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "summary": "Tiered execution splits a gated task into context, decision, execute and verify children. The worker dispatches each by its AgentID profile; the store persists the DAG and its relations atomically.",
+  "paths": [
+    "internal/queue/worker/worker.go",
+    "internal/queue/worker/splitter.go",
+    "internal/queue/worker/worker_tiered.go",
+    "internal/queue/worker/escalation.go",
+    "internal/kanban/tiered_dag.go",
+    "internal/models/enums.go"
+  ],
+  "excerpts": [
+    {"path": "internal/queue/worker/worker.go", "note": "Process() dispatches; the tiered gate runs before the circuit breaker check", "span": "159-218"},
+    {"path": "internal/kanban/tiered_dag.go", "note": "PersistTieredDAG blocks the parent and inserts children plus relations in one transaction", "span": "16-69"},
+    {"path": "internal/models/enums.go", "note": "validTaskTransitions: BLOCKED reaches READY, not COMPLETED", "span": "21-70"}
+  ],
+  "commands_run": [
+    {"cmd": "go test ./internal/queue/worker", "outcome": "pass"}
+  ],
+  "constraints": [
+    "BLOCKED -> COMPLETED is not a legal transition; resolve the origin through UpdateTaskResult",
+    "UpdateTaskResult only accepts a RUNNING task",
+    "no new KanbanStore interface methods"
+  ],
+  "unknowns": [
+    "whether tier-escalate is seeded in every deployment"
+  ],
+  "budget": {"max_paths": 40, "max_chars": 48000, "path_count": 6, "char_count": 1180}
+}

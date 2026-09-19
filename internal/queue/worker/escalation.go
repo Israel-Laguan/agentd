@@ -137,12 +137,9 @@ func (w *Worker) scheduleEscalation(ctx context.Context, originTask models.Task,
 // keeps the SPAWNED_BY / DEPENDS_ON shape identical to the initial split, so
 // the redo dispatches through the same tiered path and re-closes the loop.
 func (w *Worker) appendTieredRedo(ctx context.Context, originTask models.Task, kind TieredStepKind, description string) error {
-	// Re-read for a fresh UpdatedAt: PersistTieredDAG blocks the origin under
-	// optimistic concurrency, and the verify step that got us here has just
-	// bumped the row by unblocking it.
-	origin, err := w.store.GetTask(ctx, originTask.ID)
+	origin, err := w.originForAppend(ctx, originTask.ID)
 	if err != nil {
-		return fmt.Errorf("re-read origin: %w", err)
+		return err
 	}
 
 	now := time.Now().UTC()
@@ -161,6 +158,29 @@ func (w *Worker) appendTieredRedo(ctx context.Context, originTask models.Task, k
 	}
 	w.Emit(ctx, *origin, "TIERED_LADDER_STEP_ADDED", string(kind))
 	return nil
+}
+
+// originForAppend re-reads the origin and puts it in a state PersistTieredDAG
+// accepts. A fresh read matters because appending re-blocks the origin under
+// optimistic concurrency and the step that got us here just bumped the row.
+//
+// PersistTieredDAG only accepts a RUNNING or READY parent. After a verify the
+// origin has already been unblocked by the step's own result, but a re-gather
+// raised mid-pipeline finds it still BLOCKED, so unblock it first —
+// BLOCKED -> READY is the transition the store itself uses for this.
+func (w *Worker) originForAppend(ctx context.Context, originID string) (*models.Task, error) {
+	origin, err := w.store.GetTask(ctx, originID)
+	if err != nil {
+		return nil, fmt.Errorf("re-read origin: %w", err)
+	}
+	if origin.State != models.TaskStateBlocked {
+		return origin, nil
+	}
+	unblocked, err := w.store.UpdateTaskState(ctx, origin.ID, origin.UpdatedAt, models.TaskStateReady)
+	if err != nil {
+		return nil, fmt.Errorf("unblock origin before append: %w", err)
+	}
+	return unblocked, nil
 }
 
 // newTieredStep builds a child task for the origin's pipeline.

@@ -1,0 +1,17 @@
+Applied the decided changes within the touch list.
+
+worker_tiered_verify.go: added processTieredVerifyStep, which runs the step,
+reads the committed RESULT event, parses the VerifyResult out of the payload,
+classifies it, and routes the outcome into the escalation ladder.
+
+worker_tiered_origin.go: added tryResolveTieredOrigin, which resolves the origin
+from its step outcomes once they are all terminal, re-blocks while any remain,
+and records the verdict through UpdateTaskResult.
+
+escalation.go: replaced the metadata-backed counters with counts derived from
+the steps on the board, and made each rung append an execute+verify or
+escalate+verify chain through PersistTieredDAG.
+
+worker.go: routed the origin through tryTieredOrigin before the split gate.
+
+go build ./... passes.

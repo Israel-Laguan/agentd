@@ -35,6 +35,16 @@ func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, 
 		return
 	}
 
+	// A step may decide the sealed pack cannot answer the task at all. That
+	// outranks any verdict it would otherwise report.
+	if reason, ok := w.detectNeedsContext(ctx, task); ok {
+		if err := w.handleNeedsContext(ctx, task, parentTask, reason); err != nil {
+			slog.Error("tiered verify: re-gather failed", "task_id", task.ID, "error", err)
+			w.failTieredOrigin(ctx, parentTask, "re-gather failed: "+err.Error())
+		}
+		return
+	}
+
 	verifyResult, err := w.readVerifyResult(ctx, task)
 	if err != nil {
 		// The step ran but produced no parseable verdict. Treating that as a
@@ -64,18 +74,9 @@ func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, 
 // readVerifyResult reads the verify step's committed output from its RESULT
 // event and parses the VerifyResult JSON out of it.
 func (w *Worker) readVerifyResult(ctx context.Context, task models.Task) (VerifyResult, error) {
-	events, err := w.store.ListEventsByTask(ctx, task.ID)
+	payload, err := w.latestResultPayload(ctx, task)
 	if err != nil {
-		return VerifyResult{}, fmt.Errorf("read verify events: %w", err)
-	}
-	payload := ""
-	for _, ev := range events {
-		if ev.Type == models.EventTypeResult {
-			payload = ev.Payload
-		}
-	}
-	if strings.TrimSpace(payload) == "" {
-		return VerifyResult{}, fmt.Errorf("no RESULT event payload on verify task %s", task.ID)
+		return VerifyResult{}, err
 	}
 	return parseVerifyResult(payload)
 }

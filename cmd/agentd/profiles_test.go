@@ -6,6 +6,7 @@ import (
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
+	"agentd/internal/queue/worker"
 )
 
 type initProfileHintCase struct {
@@ -94,6 +95,33 @@ func assertContainsNone(t *testing.T, got string, notWant []string) {
 	for _, s := range notWant {
 		if strings.Contains(got, s) {
 			t.Errorf("initProfileHint should not contain %q\n%s", s, got)
+		}
+	}
+}
+
+// TestSeededProfilesCoverTieredSteps asserts every tiered step kind has a
+// seeded agent profile. A tiered step whose profile is missing fails dispatch
+// with ErrAgentProfileNotFound, which would silently break a ladder rung —
+// adding a step kind without seeding its profile fails here instead.
+func TestSeededProfilesCoverTieredSteps(t *testing.T) {
+	t.Parallel()
+	seeded := map[string]bool{}
+	for _, p := range append(defaultAgentProfiles(), tieredAgentProfiles()...) {
+		seeded[p.ID] = true
+	}
+	for kind, profileID := range worker.TieredStepProfiles() {
+		if !seeded[profileID] {
+			t.Errorf("tiered step %q needs profile %q, which seedDefaultAgent does not install", kind, profileID)
+		}
+	}
+}
+
+func TestTieredProfilesLeaveRoutingToGateway(t *testing.T) {
+	t.Parallel()
+	for _, p := range tieredAgentProfiles() {
+		if p.Provider != "" || p.Model != "" {
+			t.Errorf("profile %q pins provider/model (%q/%q); tiers must fall back to gateway.role_models",
+				p.ID, p.Provider, p.Model)
 		}
 	}
 }

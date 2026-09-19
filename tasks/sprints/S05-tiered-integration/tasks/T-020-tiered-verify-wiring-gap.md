@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | ready |
+| Status | review |
 | Priority | P1 |
 | Sprint | S05-tiered-integration |
 | Estimate | L |
@@ -24,11 +24,16 @@ S04 shipped `internal/queue/worker/escalation.go` (classification + escalation h
 - [x] ~~`getMetadata` actually reads and unmarshals `task.Logs`~~ — **superseded**: `task.Logs` has no store setter (`KanbanStore` exposes no Logs write), so a Logs-backed counter was unimplementable without a new interface method this ticket forbids. Counters are now derived from the steps on the board instead — `countTieredSteps` counts verify/escalate children — which is restart-safe and needs no new storage. The dead `getMetadata`/`setMetadata`/`getDecisionArtifact` scaffolding was deleted
 - [x] Mid-fix cap (max 2) and escalate cap (max 1) are enforced — `TestScheduleMidFix_CapRoutesToEscalation` proves the 3rd attempt routes to escalation, `TestScheduleEscalation_CapHandsOffToHuman` proves exhaustion lands on `FAILED_REQUIRES_HUMAN`. Both caps are constants, not config keys (noted in the spec)
 - [x] The origin resolves through the supported path — `PersistTieredDAG` leaves it `BLOCKED` and `BLOCKED → COMPLETED` is illegal, so `tryResolveTieredOrigin` records the verdict via `UpdateTaskResult` after the store unblocks it. This also closes the re-split loop the wiring would otherwise have created (a resolved origin returning to `READY` was previously eligible for `ShouldRunTiered` again)
-- [ ] `internal/kanban/db/schema.sql` CHECK constraint includes `NEEDS_CONTEXT`; migration (if the project uses versioned migrations) or schema bump applied
-- [ ] Test asserts parity: every `models.TaskState` where `Valid()` is true is also accepted by the DB CHECK constraint (prevents this drift recurring — S04 retro action)
-- [ ] NEEDS_CONTEXT pack-rewire implemented: new context child spawned, pack version bumped, downstream `DEPENDS_ON` edges rewired to the new context child, stale-pack descendants blocked (per T-017's original spec, not yet built)
-- [ ] `tiered-harness.sh` replaced with a version that runs an actual mock LLM or reads seeded fixture responses per step, and reports token/cost/time totals derived from that run — hardcoded constants removed
-- [ ] `docs/tiered-execution.md` M4/M5 sections updated to reflect actually-measured numbers (or a clearly labeled placeholder if a real run hasn't happened yet — never silently keep illustrative numbers as if measured)
+- [x] `internal/kanban/db/schema.sql` CHECK constraint includes `NEEDS_CONTEXT`, and schema **v16** (`migrations/task_states_needs_context.go`) rebuilds the tasks table to widen the constraint on existing databases. `TestMigrationV16AddsNeedsContextState` proves a pre-v16 DB rejects the state, accepts it after `Run`, keeps its rows and all four indexes, and still rejects an unknown state; `TestMigrationV16IsIdempotent` covers the re-run path
+- [x] Parity test landed: `internal/kanban.TestTaskStateCheckConstraintParity` inserts every `models.AllTaskStates` value against the real schema, and `TestTaskStateCheckRejectsUnknownState` covers the other direction. `Valid()` is now derived from `AllTaskStates` so the enum and the test cannot drift. Mutation-checked: adding a bogus state to the list fails the test
+- [x] NEEDS_CONTEXT re-gather implemented (`worker_tiered_regather.go`), with two deliberate deviations from the original wording, both documented in the spec:
+  - **New context child spawned** ✓ — a whole fresh `context → decision → execute → verify` chain, carrying the stated reason into the new context step.
+  - **Stale descendants blocked** ✓ — `PENDING`/`READY`/`QUEUED` siblings are parked in `NEEDS_CONTEXT`; `RUNNING` ones finish and are superseded.
+  - **`DEPENDS_ON` edges rewired** — *not done, by design.* Rewiring needs a relation-mutation store method this ticket forbids. The new chain depends on the new context step by construction, which reaches the same end state; the abandoned steps stay visible on the board.
+  - **Pack version bumped** — *not done, deliberately.* `ContextPackVersion` is the **schema** version and `Validate()` rejects anything else, so `context_pack.v2.json` would assert "schema v2", not "second attempt". The re-gather rewrites the pack in place; the generation is visible as a second context step. Real generation numbering needs a field in the pack format — **follow-up, not silently dropped**
+- [x] `tiered-harness.sh` rewritten against seeded fixtures in `scripts/demo/fixtures/tiered/` (task pack, per-step responses, baseline response). Token counts come from actual fixture byte size at a documented 4-bytes/token proxy; costs from the pricing table. `BASELINE_TOKENS`/`BASELINE_WALL_TIME`/`TIERED_WALL_TIME` are gone — edit a fixture and the numbers move. The harness also reads the acceptance verdict from the seeded verify fixture and exits non-zero if the tiered arm did not pass, so both arms are held to the same criterion
+- [x] **Time totals deliberately not reported.** Reading fixtures takes microseconds and says nothing about provider latency. Rather than substitute one fabricated latency number for another, the harness prints no latency and says why
+- [x] `docs/tiered-execution.md` M4/M5 updated to the fixture-derived numbers, including the correction below
 
 ## Notes
 
@@ -37,5 +42,7 @@ S04 shipped `internal/queue/worker/escalation.go` (classification + escalation h
   `Process → tryDispatchTieredStep → processTieredStep → processTieredVerifyStep → readVerifyResult → ClassifyVerifyOutcome → handleVerifyOutcome → scheduleMidFix/scheduleEscalation`,
   and `Process → tryTieredOrigin → tryResolveTieredOrigin` for the origin. Confirmed by grepping non-test call sites. The new tests were mutation-checked (disabling mid-fix scheduling, and completing the origin regardless of verdict) and both mutants failed the suite, so the coverage is not vacuous.
 - A verify step that returns a terminal-success LLM answer still commits a *successful* task result before classification runs — that is why a non-pass verdict must append a redo rung (which re-blocks the origin) rather than relying on the step's own result to signal failure.
+- **The measured result contradicts what S04 claimed.** The old table asserted a *34% token reduction*. Measured against the fixtures, the tiered pipeline spends **2.88x MORE tokens** (947 -> 2,728) and still costs **43% less** ($0.0142 -> $0.0081), because the two largest steps run on the small model. Tiered execution is a price-per-token play, not a token-efficiency play — the token row is a cost the design pays, not a benefit. The spec now says so explicitly; the old 34%/68%/88% figures were never measured.
+- All five `tier-*` profiles are now seeded by `agentd init` (`cmd/agentd/profiles.go`) with empty provider/model so `gateway.role_models` still picks the tier models. `TestSeededProfilesCoverTieredSteps` fails if a step kind is added without a profile, which closes the `ErrAgentProfileNotFound` caveat raised in the previous pass.
 - `tier-escalate` is now a registered step profile with its own allowlist and prompt. Like the other `tier-*` profiles it must be seeded for escalation to dispatch; an unseeded profile fails loudly with `ErrAgentProfileNotFound` rather than silently skipping the rung.
 - Reuse existing store methods — no new `KanbanStore` interface methods should be needed: `ListParentTasksByRelation`, `AppendTasksToProject`, `UpdateTaskState` (optimistic concurrency via `expectedUpdatedAt`), `PersistTieredDAG`.

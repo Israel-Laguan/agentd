@@ -14,7 +14,7 @@ import (
 // initProfileHint returns operator-facing lines about seeded profiles and detected providers.
 func initProfileHint(gw config.GatewayConfig) string {
 	check := config.CheckProvidersOffline(gw)
-	hint := "profiles: default, researcher, qa (empty provider/model → gateway.order cascade)\n"
+	hint := "profiles: default, researcher, qa, tier-context, tier-decision, tier-execute, tier-verify, tier-escalate (empty provider/model → gateway.order cascade)\n"
 	if check.Available && check.Provider != "" {
 		hint += fmt.Sprintf("detected LLM provider: %s\n", check.Provider)
 	} else {
@@ -43,7 +43,8 @@ func gatewayOrderIncludes(order []string, name string) bool {
 // already exists, preserving any operator PATCH. Pass reset=true to
 // force-overwrite all profiles regardless of existing data.
 func seedDefaultAgent(ctx context.Context, store *kanban.Store, reset bool) error {
-	for _, profile := range defaultAgentProfiles() {
+	profiles := append(defaultAgentProfiles(), tieredAgentProfiles()...)
+	for _, profile := range profiles {
 		if !reset {
 			existing, err := store.GetAgentProfile(ctx, profile.ID)
 			if err == nil && existing != nil {
@@ -86,6 +87,65 @@ func defaultAgentProfiles() []models.AgentProfile {
 			Role: "QA",
 			SystemPrompt: sql.NullString{
 				String: "Run tests, lints, and assertions. Be deterministic and conservative. Output only JSON.",
+				Valid:  true,
+			},
+		},
+	}
+}
+
+// tieredAgentProfiles are the per-step profiles the tiered execution pipeline
+// stamps onto its DAG children (see internal/queue/worker/splitter.go). A
+// tiered step whose profile is missing fails dispatch with
+// ErrAgentProfileNotFound, so all five ship with the defaults.
+//
+// Provider/model are left empty on purpose: profile lookup falls back to the
+// matching gateway.role_models entry, which is where an operator pins the
+// actual cheap/mid/strong models per tier. Seeding them here only guarantees
+// the steps resolve; it does not choose anyone's models.
+func tieredAgentProfiles() []models.AgentProfile {
+	return []models.AgentProfile{
+		{
+			ID: "tier-context", Name: "Tiered: Context Gatherer",
+			Provider: "", Model: "", Temperature: 0.0, MaxTokens: 4096,
+			Role: "RESEARCH",
+			SystemPrompt: sql.NullString{
+				String: "Gather only the context the task needs. Read-only; never modify the workspace.",
+				Valid:  true,
+			},
+		},
+		{
+			ID: "tier-decision", Name: "Tiered: Decision Maker",
+			Provider: "", Model: "", Temperature: 0.0, MaxTokens: 2048,
+			Role: "CODE_GEN",
+			SystemPrompt: sql.NullString{
+				String: "Decide the approach from the sealed ContextPack. Plan only; never modify the workspace.",
+				Valid:  true,
+			},
+		},
+		{
+			ID: "tier-execute", Name: "Tiered: Executor",
+			Provider: "", Model: "", Temperature: 0.0, MaxTokens: 4096,
+			Role: "CODE_GEN", AgenticMode: true,
+			SystemPrompt: sql.NullString{
+				String: "Apply the decided changes within the decision's touch list.",
+				Valid:  true,
+			},
+		},
+		{
+			ID: "tier-verify", Name: "Tiered: Verifier",
+			Provider: "", Model: "", Temperature: 0.0, MaxTokens: 2048,
+			Role: "QA",
+			SystemPrompt: sql.NullString{
+				String: "Run the decided checks and classify the outcome. Do not invent new tests.",
+				Valid:  true,
+			},
+		},
+		{
+			ID: "tier-escalate", Name: "Tiered: Escalation",
+			Provider: "", Model: "", Temperature: 0.0, MaxTokens: 8192,
+			Role: "CODE_GEN", AgenticMode: true,
+			SystemPrompt: sql.NullString{
+				String: "Resolve what execute and verify could not. Re-plan, then apply the smallest corrective change.",
 				Valid:  true,
 			},
 		},
