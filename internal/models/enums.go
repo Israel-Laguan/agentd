@@ -39,9 +39,7 @@ var allTaskStates = []TaskState{
 
 // AllTaskStatesSlice returns a copy of the task state registry.
 func AllTaskStatesSlice() []TaskState {
-	result := make([]TaskState, len(allTaskStates))
-	copy(result, allTaskStates)
-	return result
+	return append([]TaskState(nil), allTaskStates...)
 }
 
 var validTaskTransitions = map[TaskState]map[TaskState]struct{}{

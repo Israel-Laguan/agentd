@@ -142,22 +142,24 @@ func (w *Worker) handleNeedsContext(ctx context.Context, task models.Task, paren
 		return fmt.Errorf("origin is %s; skipping re-gather", origin.State)
 	}
 
-	assignee := parentTask.Assignee
-	if !assignee.Valid() {
-		assignee = models.TaskAssigneeSystem
-	}
-
+	assignee := w.resolveAssignee(parentTask.Assignee)
 	pair, err := w.spawnContextPackChain(ctx, parentTask, assignee, generation)
 	if err != nil {
 		return fmt.Errorf("spawn re-gather context/decision chain: %w", err)
 	}
-
 	rewired, err := w.store.RewireDependsOn(ctx, task.ID, pair.decisionID)
 	if err != nil {
 		return fmt.Errorf("rewire downstream dependents: %w", err)
 	}
 	w.Emit(ctx, task, "TIERED_PACK_REWIRED", fmt.Sprintf("generation=%d rewired=%d", generation, len(rewired)))
 	return nil
+}
+
+func (w *Worker) resolveAssignee(a models.TaskAssignee) models.TaskAssignee {
+	if !a.Valid() {
+		return models.TaskAssigneeSystem
+	}
+	return a
 }
 
 // regatherPair holds the IDs of a freshly spawned re-gather chain.

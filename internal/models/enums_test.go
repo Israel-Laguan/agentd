@@ -23,11 +23,45 @@ func TestTaskStateTransitions(t *testing.T) {
 		{TaskStateBlocked, TaskStateFailedRequiresHuman, true},
 		{TaskStateCompleted, TaskStateNeedsContext, true},
 		{TaskStateRunning, TaskStateNeedsContext, true},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.from)+"->"+string(tt.to), func(t *testing.T) {
+			got := tt.from.CanTransitionTo(tt.to)
+			if got != tt.wantOK {
+				t.Errorf("CanTransitionTo(%s, %s) = %v, want %v", tt.from, tt.to, got, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestTaskStateTransitionsFromNeedsContext(t *testing.T) {
+	tests := []struct {
+		from   TaskState
+		to     TaskState
+		wantOK bool
+	}{
 		{TaskStateNeedsContext, TaskStateCompleted, false},
 		{TaskStateNeedsContext, TaskStateReady, true},
 		{TaskStateNeedsContext, TaskStateInConsideration, true},
 		{TaskStateNeedsContext, TaskStateFailed, true},
 		{TaskStateNeedsContext, TaskStateFailedRequiresHuman, true},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.from)+"->"+string(tt.to), func(t *testing.T) {
+			got := tt.from.CanTransitionTo(tt.to)
+			if got != tt.wantOK {
+				t.Errorf("CanTransitionTo(%s, %s) = %v, want %v", tt.from, tt.to, got, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestTaskStateTransitionsToNeedsContext(t *testing.T) {
+	tests := []struct {
+		from   TaskState
+		to     TaskState
+		wantOK bool
+	}{
 		{TaskStatePending, TaskStateNeedsContext, true},
 		{TaskStateReady, TaskStateNeedsContext, true},
 		{TaskStateQueued, TaskStateNeedsContext, true},
