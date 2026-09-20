@@ -147,10 +147,6 @@ func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, par
 		Assignee:    assignee,
 	}
 
-	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{{Task: midFixTask}}); err != nil {
-		return fmt.Errorf("failed to schedule mid fix: %w", err)
-	}
-
 	midVerifyTask := models.Task{
 		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
 		ProjectID:   parentTask.ProjectID,
@@ -160,8 +156,11 @@ func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, par
 		State:       models.TaskStatePending,
 		Assignee:    assignee,
 	}
-	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{{Task: midVerifyTask, DependsOnID: midFixTask.ID}}); err != nil {
-		return fmt.Errorf("failed to schedule mid-fix verify: %w", err)
+	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{
+		{Task: midFixTask},
+		{Task: midVerifyTask, DependsOnID: midFixTask.ID},
+	}); err != nil {
+		return fmt.Errorf("failed to schedule mid fix and verify: %w", err)
 	}
 
 	slog.InfoContext(ctx, "mid fix scheduled", "attempt", midFixCount+1)

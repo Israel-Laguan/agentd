@@ -260,6 +260,7 @@ If the **decision** step determines the ContextPack is insufficient (missing fil
 3. Any dependent still `PENDING` or `READY` with a `DEPENDS_ON` edge to the stale decision is rewired onto the new decision (`RewireDependsOn`); a `READY` dependent is additionally demoted to `BLOCKED` so it cannot run against the stale pack
 4. Once the new decision completes, `reconcileBlockedDependents` re-readies anything parked in `BLOCKED` by step 3 — `UnlockReadyChildren`'s own completion side effect only promotes `PENDING` tasks, so this explicit pass is what actually unblocks it
 5. A task already `RUNNING` or beyond when the rewire happens is left alone, per the original spec's "allowed to finish, outputs ignored" allowance
+6. Re-gathers are bounded by `tiered.escalation.max_re_gather` (default 2). Once the cap is reached, a further `needs_context` request hands the origin to `FAILED_REQUIRES_HUMAN` instead of spawning another chain.
 
 This is an **explicit board action** detected at the decision step — never silent inside execute.
 

@@ -76,6 +76,9 @@ func validateTieredChildren(ctx context.Context, tx *immediateTx, children []mod
 			return fmt.Errorf("tiered continuation child %s cannot depend on itself", child.Task.ID)
 		}
 		seen[child.Task.ID] = struct{}{}
+		if child.DependsOnID != "" && child.Task.State == models.TaskStateReady {
+			return fmt.Errorf("dependent continuation child %s cannot be READY", child.Task.ID)
+		}
 		if child.DependsOnID != "" {
 			if _, isSibling := seen[child.DependsOnID]; !isSibling {
 				if _, err := selectTaskByID(ctx, tx, child.DependsOnID); err != nil {
