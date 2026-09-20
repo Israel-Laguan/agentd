@@ -25,14 +25,28 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
+	assertSchemaVersion(t, db, ctx, "16")
+	assertTasksTableContainsNeedsContext(t, db, ctx)
+	assertMigratedTaskPreserved(t, db, ctx)
+	assertClampedCountersZero(t, db, ctx)
+	assertNeedsContextInsertAllowed(t, db, ctx)
+	assertSchemaVersionAfterSecondRun(t, db, ctx, "16")
+	assertNeedsContextStateAfterSecondRun(t, db, ctx)
+}
+
+func assertSchemaVersion(t *testing.T, db *sql.DB, ctx context.Context, want string) {
+	t.Helper()
 	var version string
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "16" {
-		t.Fatalf("schema version = %q, want 16", version)
+	if version != want {
+		t.Fatalf("schema version = %q, want %s", version, want)
 	}
+}
 
+func assertTasksTableContainsNeedsContext(t *testing.T, db *sql.DB, ctx context.Context) {
+	t.Helper()
 	var createSQL string
 	if err := db.QueryRowContext(ctx, `
 		SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'`).Scan(&createSQL); err != nil {
@@ -41,10 +55,11 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 	if !strings.Contains(createSQL, "'NEEDS_CONTEXT'") {
 		t.Fatalf("tasks ddl missing NEEDS_CONTEXT state: %s", createSQL)
 	}
+}
 
-	// The pre-existing row must survive the table rebuild intact.
-	var state string
-	var successCriteria string
+func assertMigratedTaskPreserved(t *testing.T, db *sql.DB, ctx context.Context) {
+	t.Helper()
+	var state, successCriteria string
 	if err := db.QueryRowContext(ctx, `SELECT state, success_criteria FROM tasks WHERE id = 'task'`).Scan(&state, &successCriteria); err != nil {
 		t.Fatalf("read migrated task: %v", err)
 	}
@@ -54,6 +69,10 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 	if successCriteria != "[]" {
 		t.Fatalf("success_criteria = %q, want []", successCriteria)
 	}
+}
+
+func assertClampedCountersZero(t *testing.T, db *sql.DB, ctx context.Context) {
+	t.Helper()
 	var retry, tokens, cached, writes int
 	if err := db.QueryRowContext(ctx, `SELECT retry_count, token_usage, cached_token_usage, cache_write_token_usage FROM tasks WHERE id = 'negative-task'`).Scan(&retry, &tokens, &cached, &writes); err != nil {
 		t.Fatalf("read clamped counters: %v", err)
@@ -61,8 +80,10 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 	if retry != 0 || tokens != 0 || cached != 0 || writes != 0 {
 		t.Fatalf("clamped counters = %d,%d,%d,%d, want all zero", retry, tokens, cached, writes)
 	}
+}
 
-	// The constraint must now accept NEEDS_CONTEXT.
+func assertNeedsContextInsertAllowed(t *testing.T, db *sql.DB, ctx context.Context) {
+	t.Helper()
 	if _, err := db.ExecContext(ctx, `
 		INSERT INTO tasks (
 		    id, project_id, agent_id, title, description, state, assignee,
@@ -77,12 +98,21 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 	if err := Run(ctx, db); err != nil {
 		t.Fatalf("second Run() error: %v", err)
 	}
+}
+
+func assertSchemaVersionAfterSecondRun(t *testing.T, db *sql.DB, ctx context.Context, want string) {
+	t.Helper()
+	var version string
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version after second run: %v", err)
 	}
-	if version != "16" {
-		t.Fatalf("schema version after second run = %q, want 16", version)
+	if version != want {
+		t.Fatalf("schema version after second run = %q, want %s", version, want)
 	}
+}
+
+func assertNeedsContextStateAfterSecondRun(t *testing.T, db *sql.DB, ctx context.Context) {
+	t.Helper()
 	var stateAfter string
 	if err := db.QueryRowContext(ctx, `SELECT state FROM tasks WHERE id = 'needs-context-task'`).Scan(&stateAfter); err != nil {
 		t.Fatalf("read NEEDS_CONTEXT task after second run: %v", err)

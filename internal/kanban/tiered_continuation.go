@@ -44,24 +44,9 @@ func (s *Store) SpawnTieredContinuation(
 		} else if origin.State != models.TaskStateBlocked {
 			return nil, fmt.Errorf("tiered continuation origin %s is %s, want BLOCKED", originID, origin.State)
 		}
-		seen := make(map[string]struct{}, len(children))
-		for _, child := range children {
-			if _, duplicate := seen[child.Task.ID]; duplicate {
-				return nil, fmt.Errorf("duplicate child ID in tiered continuation: %s", child.Task.ID)
-			}
-			if child.Task.ID != "" && child.DependsOnID == child.Task.ID {
-				return nil, fmt.Errorf("tiered continuation child %s cannot depend on itself", child.Task.ID)
-			}
-			seen[child.Task.ID] = struct{}{}
-			if child.DependsOnID != "" {
-				if _, isSibling := seen[child.DependsOnID]; !isSibling {
-					if _, err := selectTaskByID(ctx, tx, child.DependsOnID); err != nil {
-						return nil, err
-					}
-				}
-			}
+		if err := validateTieredChildren(ctx, tx, children); err != nil {
+			return nil, err
 		}
-
 		tasks := make([]models.Task, 0, len(children))
 		for _, child := range children {
 			if err := insertTask(ctx, tx, child.Task.Title, child.Task); err != nil {
@@ -79,6 +64,27 @@ func (s *Store) SpawnTieredContinuation(
 		}
 		return tasks, commitTx(tx, "spawn tiered continuation")
 	})
+}
+
+func validateTieredChildren(ctx context.Context, tx *immediateTx, children []models.TieredContinuationTask) error {
+	seen := make(map[string]struct{}, len(children))
+	for _, child := range children {
+		if _, duplicate := seen[child.Task.ID]; duplicate {
+			return fmt.Errorf("duplicate child ID in tiered continuation: %s", child.Task.ID)
+		}
+		if child.Task.ID != "" && child.DependsOnID == child.Task.ID {
+			return fmt.Errorf("tiered continuation child %s cannot depend on itself", child.Task.ID)
+		}
+		seen[child.Task.ID] = struct{}{}
+		if child.DependsOnID != "" {
+			if _, isSibling := seen[child.DependsOnID]; !isSibling {
+				if _, err := selectTaskByID(ctx, tx, child.DependsOnID); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // RewireDependsOn redirects unfinished dependents of oldParentID onto
@@ -102,41 +108,51 @@ func (s *Store) RewireDependsOn(ctx context.Context, oldParentID, newParentID st
 		}
 
 		now := utcNow()
-		rewired := make([]models.Task, 0, len(dependents))
-		for _, dep := range dependents {
-			if dep.State != models.TaskStatePending && dep.State != models.TaskStateReady && dep.State != models.TaskStateBlocked {
-				continue
-			}
-			if _, err := tx.ExecContext(ctx, `
-				DELETE FROM task_relations
-				WHERE parent_task_id = ? AND child_task_id = ? AND relation_type = ?`,
-				oldParentID, dep.ID, string(models.TaskRelationDependsOn)); err != nil {
-				return nil, fmt.Errorf("remove stale depends_on edge: %w", err)
-			}
-			// Make the new edge insertion idempotent: remove any
-			// existing edge to newParentID first so that a dependent
-			// already depending on newParentID does not hit the
-			// composite primary key.
-			if _, err := tx.ExecContext(ctx, `
-				DELETE FROM task_relations
-				WHERE parent_task_id = ? AND child_task_id = ? AND relation_type = ?`,
-				newParentID, dep.ID, string(models.TaskRelationDependsOn)); err != nil {
-				return nil, fmt.Errorf("remove existing depends_on edge: %w", err)
-			}
-			if err := insertTaskRelationWithType(ctx, tx, newParentID, dep.ID, models.TaskRelationDependsOn); err != nil {
-				return nil, err
-			}
-			if dep.State == models.TaskStateReady {
-				if err := blockStaleReadyDependent(ctx, tx, dep.ID, dep.UpdatedAt, now); err != nil {
-					return nil, err
-				}
-				dep.State = models.TaskStateBlocked
-				dep.UpdatedAt = now
-			}
-			rewired = append(rewired, dep)
+		rewired, err := rewireDependents(ctx, tx, dependents, oldParentID, newParentID, now)
+		if err != nil {
+			return nil, err
 		}
 		return rewired, commitTx(tx, "rewire depends_on")
 	})
+}
+
+func rewireDependents(ctx context.Context, tx *immediateTx, dependents []models.Task, oldParentID, newParentID string, now time.Time) ([]models.Task, error) {
+	rewired := make([]models.Task, 0, len(dependents))
+	for _, dep := range dependents {
+		if dep.State != models.TaskStatePending && dep.State != models.TaskStateReady && dep.State != models.TaskStateBlocked {
+			continue
+		}
+		if err := deleteTaskRelation(ctx, tx, oldParentID, dep.ID, models.TaskRelationDependsOn); err != nil {
+			return nil, fmt.Errorf("remove stale depends_on edge: %w", err)
+		}
+		// Make the new edge insertion idempotent: remove any
+		// existing edge to newParentID first so that a dependent
+		// already depending on newParentID does not hit the
+		// composite primary key.
+		if err := deleteTaskRelation(ctx, tx, newParentID, dep.ID, models.TaskRelationDependsOn); err != nil {
+			return nil, fmt.Errorf("remove existing depends_on edge: %w", err)
+		}
+		if err := insertTaskRelationWithType(ctx, tx, newParentID, dep.ID, models.TaskRelationDependsOn); err != nil {
+			return nil, err
+		}
+		if dep.State == models.TaskStateReady {
+			if err := blockStaleReadyDependent(ctx, tx, dep.ID, dep.UpdatedAt, now); err != nil {
+				return nil, err
+			}
+			dep.State = models.TaskStateBlocked
+			dep.UpdatedAt = now
+		}
+		rewired = append(rewired, dep)
+	}
+	return rewired, nil
+}
+
+func deleteTaskRelation(ctx context.Context, tx *immediateTx, parentID, childID string, relationType models.TaskRelationType) error {
+	_, err := tx.ExecContext(ctx, `
+		DELETE FROM task_relations
+		WHERE parent_task_id = ? AND child_task_id = ? AND relation_type = ?`,
+		parentID, childID, string(relationType))
+	return err
 }
 
 func selectDependsOnChildren(ctx context.Context, tx *immediateTx, parentID string) ([]models.Task, error) {
