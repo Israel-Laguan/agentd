@@ -1,4 +1,4 @@
-# BUG-001: Missing Web Interface / Dashboard
+# B-001: Missing Web Interface / Dashboard
 
 | Field | Value |
 | --- | --- |
@@ -7,7 +7,7 @@
 | Priority | P3 |
 | Sprint | S06-stabilize-observe |
 | Persona | adopter |
-| Links | [api server](../../../internal/api/server/server.go) |
+| Links | [api server](../../../../internal/api/server/server.go) |
 
 ## Symptom
 

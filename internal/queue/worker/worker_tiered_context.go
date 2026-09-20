@@ -176,7 +176,7 @@ func (w *Worker) tieredStepSuperseded(ctx context.Context, failedTask models.Tas
 // The pack JSON lives in the RESULT event payload (written by
 // AppendTaskResultEvent on commit), not in task.Description — no commit path
 // ever populates Description, so reading it there always yields an empty
-// pack (BUG-002).
+// pack (B-002).
 func (w *Worker) parseAndConfigurePack(ctx context.Context, task models.Task, parentTask models.Task) (*ContextPack, *models.Task, error) {
 	committed, err := w.store.GetTask(ctx, task.ID)
 	if err != nil {

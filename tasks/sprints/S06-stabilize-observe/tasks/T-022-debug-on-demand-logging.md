@@ -12,14 +12,16 @@
 
 Add `slog.Debug` calls at key subsystem boundaries so a maintainer can flip `log_level: debug` (or `-v`) to trace a request through intake → router → gateway → worker loop, then turn it off once the issue is resolved.
 
-Normal mode emits only errors and warnings with enough context to point at the right subsystem. No correlation ID plumbing, no always-on structured telemetry, no new dependencies.
+Normal mode emits only errors and warnings with enough context to point at the right subsystem. Chat intake assigns a correlation ID that is carried through router → gateway → worker loop log fields, so a stalled request is traceable with one identifier (US-006). No always-on structured telemetry, no new dependencies.
 
 ## Acceptance criteria
 
 - [ ] Chat intake logs request flow and completion/error outcome at debug level
+- [ ] Chat intake assigns a correlation ID logged at intake and propagated as a structured field through router, gateway, and worker loop stages
 - [ ] Router logs provider/model selection, cascade attempts, and errors at debug level
 - [ ] Provider adapter logs endpoint, response status, latency, and token usage at debug level
 - [ ] Agentic loop logs task ID, turn lifecycle, tool dispatch, and terminal result at debug level
 - [ ] Error-level logs include enough context (subsystem, task ID, provider) to diagnose without enabling debug
 - [ ] Debug logging is silent by default; enabled via existing `log_level` config or `-v` flag
+- [ ] A stalled chat request can be traced from intake through the final gateway/provider operation using the one correlation identifier
 - [ ] No API keys, auth headers, or prompt contents are emitted at any level

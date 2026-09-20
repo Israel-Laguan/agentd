@@ -29,8 +29,8 @@ As a **maintainer diagnosing a stalled or slow request**, I want **debug logs sp
 To verify this story, the following long-horizon test setup is used:
 
 1. **LiteLLM Setup**:
-   - Start LiteLLM with a configuration including a primary model (e.g., `poolside/laguna-s-2.1`) and a fallback model (e.g., `Atria-Dawn-Preview`).
-   - Configure Atria API key via `ATRIA_API_KEY` environment variable.
+   - Start LiteLLM with a configuration including a primary model (e.g., `poolside/laguna-m.1`) and a fallback model (e.g., `gpt-4o-mini`).
+   - Configure the provider API key via its documented env var (e.g., `POOLSIDE_API_KEY` for Poolside, `OPENAI_API_KEY` for OpenAI — see `config.reference.yaml` `gateway.providers[].api_key_env`).
 2. **agentd Setup**:
    - Set `LITELLM_API_KEY` to the LiteLLM master key (e.g., `local-key`).
    - Configure `gateway.order: [litellm]` and `adapter: openai`.

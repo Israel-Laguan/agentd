@@ -11,15 +11,20 @@ import (
 
 // unlockReadyChildrenLocked mirrors UnlockReadyChildren for the fake: a
 // PENDING child whose blocking parents are all COMPLETED moves to READY.
+// Only BLOCKS/DEPENDS_ON edges gate readiness — SPAWNED_BY provenance edges
+// are ignored, matching the real query's relation_type filter.
 func (s *FakeKanbanStore) unlockReadyChildrenLocked(parentID string, ts time.Time) {
-	for _, childID := range s.listChildTaskIDsLocked(parentID) {
+	for _, childID := range s.listBlockingChildTaskIDsLocked(parentID) {
 		child, ok := s.tasks[childID]
 		if !ok || child.State != models.TaskStatePending {
 			continue
 		}
 		ready := true
-		for _, pid := range s.childParents[childID] {
-			parent, ok := s.tasks[pid]
+		for _, rel := range s.childParentRelations[childID] {
+			if rel.relationType != models.TaskRelationBlocks && rel.relationType != models.TaskRelationDependsOn {
+				continue
+			}
+			parent, ok := s.tasks[rel.parentID]
 			if !ok {
 				continue
 			}
@@ -61,6 +66,11 @@ func (s *FakeKanbanStore) CompleteTieredOrigin(_ context.Context, id string, exp
 		return nil, models.ErrStateConflict
 	}
 	ts := now()
+	// Guarantee the version moves forward even if the clock has not ticked
+	// past the caller's read, mirroring kanban.Store.CompleteTieredOrigin.
+	if !ts.After(expectedUpdatedAt) {
+		ts = expectedUpdatedAt.Add(time.Nanosecond)
+	}
 	if result.Success {
 		t.State = models.TaskStateCompleted
 	} else {

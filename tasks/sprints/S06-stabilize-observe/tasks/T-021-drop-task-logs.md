@@ -6,7 +6,7 @@
 | Status | ready |
 | Priority | P1 |
 | Sprint | S06-stabilize-observe |
-| Links | [S05 retro](../../../S05-tiered-integration/retro/RETRO.md) |
+| Links | [S05 retro](../../S05-tiered-integration/retro/RETRO.md) |
 
 ## Goal
 

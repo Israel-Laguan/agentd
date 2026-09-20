@@ -67,6 +67,9 @@ func initialize(db *sql.DB) error {
 	if err := migrations.Run(ctx, db); err != nil {
 		return err
 	}
+	if err := NormalizeStoredTimestamps(ctx, db); err != nil {
+		return err
+	}
 
 	var journalMode string
 	if err := db.QueryRowContext(ctx, "PRAGMA journal_mode;").Scan(&journalMode); err != nil {
