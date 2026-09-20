@@ -140,10 +140,6 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	execute := newRewireStepTask(now, origin.ProjectID, "tier-execute", "execute", models.TaskStatePending)
 	verify := newRewireStepTask(now, origin.ProjectID, "tier-verify", "verify", models.TaskStatePending)
 	pendingDep := newRewireStepTask(now, origin.ProjectID, "tier-pending-dep", "pending-dep", models.TaskStatePending)
-	// readyDep and blockedDep must be created as PENDING via
-	// SpawnTieredContinuation (which rejects READY dependents) and then
-	// promoted to their target states so the READY->BLOCKED safety
-	// transition is actually exercised.
 	readyDepPending := newRewireStepTask(now, origin.ProjectID, "tier-ready-dep", "ready-dep", models.TaskStatePending)
 	blockedDepPending := newRewireStepTask(now, origin.ProjectID, "tier-blocked-dep", "blocked-dep", models.TaskStatePending)
 	queuedDep := newRewireStepTask(now, origin.ProjectID, "tier-queued-dep", "queued-dep", models.TaskStateQueued)
@@ -162,9 +158,27 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SpawnTieredContinuation() error = %v", err)
 	}
-	// Promote readyDep to READY (PENDING->READY) and blockedDep to
-	// BLOCKED (PENDING->READY->BLOCKED) to exercise both eligible
-	// states without violating validateTieredChildren.
+	readyDep, blockedDep := promoteReadyAndBlockedDependents(t, ctx, store, readyDepPending, blockedDepPending)
+
+	rewired, err := store.RewireDependsOn(ctx, oldDecision.ID, newDecision.ID)
+	if err != nil {
+		t.Fatalf("RewireDependsOn() error = %v", err)
+	}
+	if len(rewired) != 5 {
+		t.Fatalf("rewired len = %d, want 5", len(rewired))
+	}
+
+	assertRewirePendingDepRedirected(t, ctx, store, execute.ID, newDecision.ID)
+	assertRewirePendingDepRedirected(t, ctx, store, pendingDep.ID, newDecision.ID)
+	assertRewireVerifyPendingRedirected(t, ctx, store, verify.ID, newDecision.ID)
+	assertRewireReadyDepBlocked(t, ctx, store, readyDep.ID, newDecision.ID)
+	assertRewireBlockedDepRedirected(t, ctx, store, blockedDep.ID, newDecision.ID)
+	assertRewireParent(t, ctx, store, queuedDep.ID, oldDecision.ID)
+	assertRewireParent(t, ctx, store, idempotentDep.ID, newDecision.ID)
+}
+
+func promoteReadyAndBlockedDependents(t *testing.T, ctx context.Context, store *Store, readyDepPending, blockedDepPending models.Task) (models.Task, models.Task) {
+	t.Helper()
 	readyTmp, err := store.GetTask(ctx, readyDepPending.ID)
 	if err != nil {
 		t.Fatalf("GetTask(readyDep): %v", err)
@@ -186,23 +200,7 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTaskState(blockedDep BLOCKED): %v", err)
 	}
-	blockedDep := *blockedDepState
-
-	rewired, err := store.RewireDependsOn(ctx, oldDecision.ID, newDecision.ID)
-	if err != nil {
-		t.Fatalf("RewireDependsOn() error = %v", err)
-	}
-	if len(rewired) != 5 {
-		t.Fatalf("rewired len = %d, want 5", len(rewired))
-	}
-
-	assertRewirePendingDepRedirected(t, ctx, store, execute.ID, newDecision.ID)
-	assertRewirePendingDepRedirected(t, ctx, store, pendingDep.ID, newDecision.ID)
-	assertRewireVerifyPendingRedirected(t, ctx, store, verify.ID, newDecision.ID)
-	assertRewireReadyDepBlocked(t, ctx, store, readyDep.ID, newDecision.ID)
-	assertRewireBlockedDepRedirected(t, ctx, store, blockedDep.ID, newDecision.ID)
-	assertRewireParent(t, ctx, store, queuedDep.ID, oldDecision.ID)
-	assertRewireParent(t, ctx, store, idempotentDep.ID, newDecision.ID)
+	return readyDep, *blockedDepState
 }
 
 func assertRewireParent(t *testing.T, ctx context.Context, store *Store, taskID, parentID string) {

@@ -13,18 +13,12 @@ import (
 	"agentd/internal/models"
 )
 
-// needsContextSignal is the alternative Decision-step output that flags an
-// insufficient ContextPack instead of a normal touch_list/checks plan. See
-// decisionStepPrompt.
 type needsContextSignal struct {
 	NeedsContext bool   `json:"needs_context"`
 	Reason       string `json:"reason"`
 }
 
-// readCommittedText reads the most recent RESULT event for a task and
-// strips the "exit=%d duration=%s\n" prefix commitSucceeded adds, leaving
-// the model's raw final text (see readVerifyResult for the tiered verify
-// use of this same shape).
+// readCommittedText reads the most recent RESULT event, strips the exit/duration prefix.
 func (w *Worker) readCommittedText(ctx context.Context, taskID string) (string, error) {
 	events, err := w.store.ListEventsByTask(ctx, taskID)
 	if err != nil {
@@ -42,13 +36,8 @@ func (w *Worker) readCommittedText(ctx context.Context, taskID string) (string, 
 	return "", fmt.Errorf("no RESULT event found for task %s", taskID)
 }
 
-// processTieredDecisionStep runs the decision step, then checks its
-// committed output for the NEEDS_CONTEXT sentinel before falling through to
-// the normal reconcile pass. NEEDS_CONTEXT is deliberately detected here,
-// post-commit, rather than treated as a special LLM response type: the
-// decision step already completed nominally (the engine commits
-// unconditionally once the model answers), and only afterward is that
-// answer judged to have come from an insufficient pack.
+// processTieredDecisionStep runs the decision step, checks its
+// committed output for NEEDS_CONTEXT, then reconciles.
 func (w *Worker) processTieredDecisionStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, parentTask models.Task) {
 	if !w.providerSupportsAgentic(profile) {
 		w.failTieredStep(ctx, task, "tiered decision step requires an agentic-capable provider")
@@ -86,9 +75,6 @@ func (w *Worker) readNeedsContextSignal(ctx context.Context, task models.Task) (
 		return needsContextSignal{}, err
 	}
 	var signal needsContextSignal
-	// Not every decision output is the sentinel shape — a normal
-	// touch_list/checks Decision artifact fails this unmarshal, which is
-	// the expected, common case, not an error.
 	clean := strings.TrimSpace(payload)
 	clean = strings.TrimPrefix(clean, "```json")
 	clean = strings.TrimPrefix(clean, "```")
@@ -97,9 +83,7 @@ func (w *Worker) readNeedsContextSignal(ctx context.Context, task models.Task) (
 	return signal, nil
 }
 
-// nextContextPackGeneration counts existing context-step children already
-// spawned for this pipeline's origin (the DAG's original context step plus
-// any prior re-gathers) to derive the next generation number.
+// nextContextPackGeneration derives the next generation number.
 func (w *Worker) nextContextPackGeneration(ctx context.Context, originID string) (int, error) {
 	children, err := w.store.ListChildTasksByRelation(ctx, originID, models.TaskRelationSpawnedBy)
 	if err != nil {
@@ -114,11 +98,7 @@ func (w *Worker) nextContextPackGeneration(ctx context.Context, originID string)
 	return count + 1, nil
 }
 
-// handleNeedsContext implements the NEEDS_CONTEXT re-gather: it moves the
-// task that flagged insufficient context into NEEDS_CONTEXT, spawns a fresh
-// context→decision continuation, and rewires the stale decision's
-// dependents onto the new decision so they pick up the re-gathered pack
-// once it is ready.
+// handleNeedsContext implements the NEEDS_CONTEXT re-gather.
 func (w *Worker) handleNeedsContext(ctx context.Context, task models.Task, parentTask models.Task, reason string) error {
 	current, err := w.store.GetTask(ctx, task.ID)
 	if err != nil {
@@ -168,7 +148,6 @@ func (w *Worker) resolveAssignee(a models.TaskAssignee) models.TaskAssignee {
 	return a
 }
 
-// regatherPair holds the IDs of a freshly spawned re-gather chain.
 type regatherPair struct {
 	contextID  string
 	decisionID string
@@ -204,13 +183,7 @@ func (w *Worker) spawnContextPackChain(ctx context.Context, parentTask models.Ta
 	return regatherPair{contextID: newContext.ID, decisionID: newDecision.ID}, nil
 }
 
-// reconcileBlockedDependents re-readies any child of completedTaskID that
-// RewireDependsOn had to park in BLOCKED, once all of that child's
-// DEPENDS_ON/BLOCKS parents (now including the freshly rewired one) are
-// COMPLETED. UnlockReadyChildren (the store's own completion side effect)
-// only promotes PENDING tasks, so a BLOCKED dependent needs this explicit
-// pass — see the KanbanStore.RewireDependsOn doc for why READY dependents
-// are demoted to BLOCKED in the first place.
+// reconcileBlockedDependents re-readies BLOCKED children of completedTaskID.
 func (w *Worker) reconcileBlockedDependents(ctx context.Context, completedTaskID string) {
 	children, err := w.store.ListChildTasksByRelation(ctx, completedTaskID, models.TaskRelationDependsOn)
 	if err != nil {
@@ -242,6 +215,85 @@ func (w *Worker) allDependenciesResolved(ctx context.Context, taskID string) boo
 	for _, p := range append(depParents, blockParents...) {
 		if p.State != models.TaskStateCompleted {
 			return false
+		}
+	}
+	return true
+}
+
+func (w *Worker) handleNeedsContextDep(ctx context.Context, task models.Task, dependency models.Task, origin models.Task) bool {
+	freshDecisionID, err := w.freshDecisionID(ctx, origin.ID, dependency.ID)
+	if err != nil {
+		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision lookup failed: %w", err))
+		return true
+	}
+	if freshDecisionID != "" {
+		fresh, err := w.store.GetTask(ctx, freshDecisionID)
+		if err != nil {
+			w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision fetch failed: %w", err))
+			return true
+		}
+		return w.handleFreshDecision(ctx, task, dependency, fresh)
+	}
+	return w.handleStaleDecision(ctx, task, dependency, origin)
+}
+
+func (w *Worker) handleFreshDecision(ctx context.Context, task models.Task, dependency models.Task, fresh *models.Task) bool {
+	switch fresh.State {
+	case models.TaskStateCompleted:
+		return w.rewireToCompletedDecision(ctx, task, dependency, fresh.ID)
+	case models.TaskStateFailed, models.TaskStateFailedRequiresHuman:
+		if _, err := w.store.RewireDependsOn(ctx, dependency.ID, fresh.ID); err != nil {
+			w.FailHard(ctx, task, fmt.Errorf("tiered rewire to failed decision failed: %w", err))
+			return true
+		}
+		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", fresh.ID, fresh.State))
+		return true
+	case models.TaskStateNeedsContext:
+		return false
+	default:
+		if task.State.CanTransitionTo(models.TaskStateBlocked) {
+			if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
+				w.FailHard(ctx, task, fmt.Errorf("tiered park before dependency rewire failed: %w", err))
+				return true
+			}
+		}
+		if _, err := w.store.RewireDependsOn(ctx, dependency.ID, fresh.ID); err != nil {
+			w.FailHard(ctx, task, fmt.Errorf("tiered rewire to fresh decision failed: %w", err))
+			return true
+		}
+		return true
+	}
+}
+
+func (w *Worker) handleStaleDecision(ctx context.Context, task models.Task, dependency models.Task, origin models.Task) bool {
+	if completedID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateCompleted); err == nil && completedID != "" {
+		return w.rewireToCompletedDecision(ctx, task, dependency, completedID)
+	}
+	if failedID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateFailed); err == nil && failedID != "" {
+		_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedID)
+		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedID, models.TaskStateFailed))
+		return true
+	}
+	if failedHumanID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateFailedRequiresHuman); err == nil && failedHumanID != "" {
+		_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedHumanID)
+		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedHumanID, models.TaskStateFailedRequiresHuman))
+		return true
+	}
+	w.FailHard(ctx, task, fmt.Errorf("tiered step depends on stale decision %s awaiting context re-gather", dependency.ID))
+	return true
+}
+
+func (w *Worker) rewireToCompletedDecision(ctx context.Context, task models.Task, dependency models.Task, decisionID string) bool {
+	if _, err := w.store.RewireDependsOn(ctx, dependency.ID, decisionID); err != nil {
+		w.FailHard(ctx, task, fmt.Errorf("tiered rewire to completed decision failed: %w", err))
+		return true
+	}
+	if w.allDependenciesResolved(ctx, task.ID) {
+		latest, err := w.store.GetTask(ctx, task.ID)
+		if err == nil && latest.State.CanTransitionTo(models.TaskStateReady) {
+			if _, err := w.store.UpdateTaskState(ctx, latest.ID, latest.UpdatedAt, models.TaskStateReady); err != nil {
+				slog.Error("tiered: failed to re-ready after completed fresh decision", "task_id", latest.ID, "error", err)
+			}
 		}
 	}
 	return true
