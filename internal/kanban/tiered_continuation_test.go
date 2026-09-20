@@ -143,7 +143,7 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	readyDepPending := newRewireStepTask(now, origin.ProjectID, "tier-ready-dep", "ready-dep", models.TaskStatePending)
 	blockedDepPending := newRewireStepTask(now, origin.ProjectID, "tier-blocked-dep", "blocked-dep", models.TaskStatePending)
 	queuedDep := newRewireStepTask(now, origin.ProjectID, "tier-queued-dep", "queued-dep", models.TaskStateQueued)
-	idempotentDep := newRewireStepTask(now, origin.ProjectID, "tier-idempotent-dep", "idempotent-dep", models.TaskStatePending)
+	unrelatedDep := newRewireStepTask(now, origin.ProjectID, "tier-unrelated-dep", "unrelated-dep", models.TaskStatePending)
 
 	if _, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
 		{Task: oldDecision},
@@ -154,7 +154,7 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 		{Task: readyDepPending, DependsOnID: oldDecision.ID},
 		{Task: blockedDepPending, DependsOnID: oldDecision.ID},
 		{Task: queuedDep, DependsOnID: oldDecision.ID},
-		{Task: idempotentDep, DependsOnID: newDecision.ID},
+		{Task: unrelatedDep, DependsOnID: newDecision.ID},
 	}); err != nil {
 		t.Fatalf("SpawnTieredContinuation() error = %v", err)
 	}
@@ -174,7 +174,7 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	assertRewireReadyDepBlocked(t, ctx, store, readyDep.ID, newDecision.ID)
 	assertRewireBlockedDepRedirected(t, ctx, store, blockedDep.ID, newDecision.ID)
 	assertRewireParent(t, ctx, store, queuedDep.ID, oldDecision.ID)
-	assertRewireParent(t, ctx, store, idempotentDep.ID, newDecision.ID)
+	assertRewireParent(t, ctx, store, unrelatedDep.ID, newDecision.ID)
 }
 
 func promoteReadyAndBlockedDependents(t *testing.T, ctx context.Context, store *Store, readyDepPending, blockedDepPending models.Task) (models.Task, models.Task) {

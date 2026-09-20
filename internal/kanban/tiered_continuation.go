@@ -2,7 +2,9 @@ package kanban
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"agentd/internal/models"
@@ -44,6 +46,17 @@ func (s *Store) SpawnTieredContinuation(
 		} else if origin.State != models.TaskStateBlocked {
 			return nil, fmt.Errorf("tiered continuation origin %s is %s, want BLOCKED", originID, origin.State)
 		}
+		for _, child := range children {
+			if child.IdempotencyKey == "" {
+				continue
+			}
+			var childIDs string
+			if err := tx.QueryRowContext(ctx, `SELECT child_ids FROM tiered_continuation_keys WHERE origin_id = ? AND idempotency_key = ?`, originID, child.IdempotencyKey).Scan(&childIDs); err == nil {
+				return loadTasksByIDs(ctx, tx, childIDs)
+			} else if err != sql.ErrNoRows {
+				return nil, fmt.Errorf("look up tiered continuation key: %w", err)
+			}
+		}
 		if err := validateTieredChildren(ctx, tx, children); err != nil {
 			return nil, err
 		}
@@ -62,8 +75,31 @@ func (s *Store) SpawnTieredContinuation(
 			}
 			tasks = append(tasks, child.Task)
 		}
+		for _, child := range children {
+			if child.IdempotencyKey != "" {
+				ids := make([]string, 0, len(tasks))
+				for _, task := range tasks {
+					ids = append(ids, task.ID)
+				}
+				if _, err := tx.ExecContext(ctx, `INSERT INTO tiered_continuation_keys(origin_id, idempotency_key, child_ids) VALUES (?, ?, ?)`, originID, child.IdempotencyKey, strings.Join(ids, ",")); err != nil {
+					return nil, err
+				}
+			}
+		}
 		return tasks, commitTx(tx, "spawn tiered continuation")
 	})
+}
+
+func loadTasksByIDs(ctx context.Context, tx *immediateTx, childIDs string) ([]models.Task, error) {
+	tasks := make([]models.Task, 0)
+	for _, id := range strings.Split(childIDs, ",") {
+		task, err := selectTaskByID(ctx, tx, id)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, *task)
+	}
+	return tasks, nil
 }
 
 func validateTieredChildren(ctx context.Context, tx *immediateTx, children []models.TieredContinuationTask) error {

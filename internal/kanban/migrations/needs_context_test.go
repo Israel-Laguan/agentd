@@ -25,12 +25,12 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	assertSchemaVersion(t, db, ctx, "16")
+	assertSchemaVersion(t, db, ctx, "17")
 	assertTasksTableContainsNeedsContext(t, db, ctx)
 	assertMigratedTaskPreserved(t, db, ctx)
 	assertClampedCountersZero(t, db, ctx)
 	assertNeedsContextInsertAllowed(t, db, ctx)
-	assertSchemaVersionAfterSecondRun(t, db, ctx, "16")
+	assertSchemaVersionAfterSecondRun(t, db, ctx, "17")
 	assertNeedsContextStateAfterSecondRun(t, db, ctx)
 }
 
