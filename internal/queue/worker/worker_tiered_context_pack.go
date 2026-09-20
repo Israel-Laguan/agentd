@@ -27,7 +27,7 @@ func (w *Worker) nextContextPackGeneration(ctx context.Context, originID string)
 	return count + 1, nil
 }
 
-var regatherGenerationPattern = regexp.MustCompile(`re-gather v([0-9]+)`)
+var regatherGenerationPattern = regexp.MustCompile(`^decision \(re-gather v([0-9]+)\):`)
 
 func (w *Worker) handleNeedsContext(ctx context.Context, task models.Task, parentTask models.Task, reason string) error {
 	current, err := w.store.GetTask(ctx, task.ID)
@@ -112,11 +112,15 @@ func (w *Worker) spawnContextPackChain(ctx context.Context, parentTask models.Ta
 		Assignee:    assignee,
 	}
 
-	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{
+	created, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{
 		{Task: newContext, IdempotencyKey: fmt.Sprintf("%s:regather:%d", parentTask.ID, generation)},
 		{Task: newDecision, DependsOnID: newContext.ID},
-	}); err != nil {
+	})
+	if err != nil {
 		return regatherPair{}, err
 	}
-	return regatherPair{contextID: newContext.ID, decisionID: newDecision.ID}, nil
+	if len(created) != 2 {
+		return regatherPair{}, fmt.Errorf("spawn re-gather returned %d tasks, want 2", len(created))
+	}
+	return regatherPair{contextID: created[0].ID, decisionID: created[1].ID}, nil
 }
