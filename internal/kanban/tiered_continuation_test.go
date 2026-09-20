@@ -256,9 +256,11 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 		t.Fatalf("rewired len = %d, want 5", len(rewired))
 	}
 
-	assertRewirePendingDepRedirected(t, ctx, store, execute.ID, newDecision.ID)
-	assertRewirePendingDepRedirected(t, ctx, store, pendingDep.ID, newDecision.ID)
-	assertRewireVerifyPendingRedirected(t, ctx, store, verify.ID, newDecision.ID)
+	for _, child := range []struct{ id, label string }{
+		{execute.ID, "execute"}, {pendingDep.ID, "pendingDep"}, {verify.ID, "verify"},
+	} {
+		assertRewirePendingRedirected(t, ctx, store, child.id, child.label, newDecision.ID)
+	}
 	assertRewireReadyDepBlocked(t, ctx, store, readyDep.ID, newDecision.ID)
 	assertRewireBlockedDepRedirected(t, ctx, store, blockedDep.ID, newDecision.ID)
 	assertRewireParent(t, ctx, store, queuedDep.ID, oldDecision.ID)
@@ -318,39 +320,21 @@ func newRewireStepTask(now time.Time, projectID, agentID, title string, state mo
 	}
 }
 
-func assertRewirePendingDepRedirected(t *testing.T, ctx context.Context, store *Store, pendingDepID, newDecisionID string) {
+func assertRewirePendingRedirected(t *testing.T, ctx context.Context, store *Store, taskID, label, newDecisionID string) {
 	t.Helper()
-	reloaded, err := store.GetTask(ctx, pendingDepID)
+	reloaded, err := store.GetTask(ctx, taskID)
 	if err != nil {
-		t.Fatalf("GetTask(pendingDep) error = %v", err)
+		t.Fatalf("GetTask(%s) error = %v", label, err)
 	}
 	if reloaded.State != models.TaskStatePending {
-		t.Fatalf("pendingDep state = %s, want unchanged PENDING", reloaded.State)
+		t.Fatalf("%s state = %s, want unchanged PENDING", label, reloaded.State)
 	}
-	parents, err := store.ListParentTasksByRelation(ctx, pendingDepID, models.TaskRelationDependsOn)
+	parents, err := store.ListParentTasksByRelation(ctx, taskID, models.TaskRelationDependsOn)
 	if err != nil {
-		t.Fatalf("ListParentTasksByRelation(pendingDep) error = %v", err)
+		t.Fatalf("ListParentTasksByRelation(%s) error = %v", label, err)
 	}
 	if len(parents) != 1 || parents[0].ID != newDecisionID {
-		t.Fatalf("pendingDep's DEPENDS_ON parents = %+v, want [%s]", parents, newDecisionID)
-	}
-}
-
-func assertRewireVerifyPendingRedirected(t *testing.T, ctx context.Context, store *Store, verifyID, newDecisionID string) {
-	t.Helper()
-	reloadedVerify, err := store.GetTask(ctx, verifyID)
-	if err != nil {
-		t.Fatalf("GetTask(verify) error = %v", err)
-	}
-	if reloadedVerify.State != models.TaskStatePending {
-		t.Fatalf("verify state = %s, want unchanged PENDING", reloadedVerify.State)
-	}
-	verifyParents, err := store.ListParentTasksByRelation(ctx, verifyID, models.TaskRelationDependsOn)
-	if err != nil {
-		t.Fatalf("ListParentTasksByRelation(verify) error = %v", err)
-	}
-	if len(verifyParents) != 1 || verifyParents[0].ID != newDecisionID {
-		t.Fatalf("verify's DEPENDS_ON parents = %+v, want [%s]", verifyParents, newDecisionID)
+		t.Fatalf("%s's DEPENDS_ON parents = %+v, want [%s]", label, parents, newDecisionID)
 	}
 }
 
