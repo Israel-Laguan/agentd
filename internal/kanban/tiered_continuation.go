@@ -49,6 +49,9 @@ func (s *Store) SpawnTieredContinuation(
 			if _, duplicate := seen[child.Task.ID]; duplicate {
 				return nil, fmt.Errorf("duplicate child ID in tiered continuation: %s", child.Task.ID)
 			}
+			if child.Task.ID != "" && child.DependsOnID == child.Task.ID {
+				return nil, fmt.Errorf("tiered continuation child %s cannot depend on itself", child.Task.ID)
+			}
 			seen[child.Task.ID] = struct{}{}
 			if child.DependsOnID != "" {
 				if _, isSibling := seen[child.DependsOnID]; !isSibling {

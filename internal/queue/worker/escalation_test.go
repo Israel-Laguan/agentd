@@ -102,8 +102,8 @@ func TestHandleVerifyOutcome_Pass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if got.State != models.TaskStateCompleted {
-		t.Fatalf("origin state = %s, want COMPLETED", got.State)
+	if got.State != models.TaskStateBlocked {
+		t.Fatalf("origin state = %s, want BLOCKED (pass does not change origin state)", got.State)
 	}
 }
 
@@ -263,8 +263,8 @@ func TestScheduleEscalation_HandsOffToHumanOnceCapReached(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if current.State != models.TaskStateRunning {
-		t.Fatalf("origin state after 1st escalation = %s, want still RUNNING", current.State)
+	if current.State != models.TaskStateBlocked {
+		t.Fatalf("origin state after 1st escalation = %s, want still BLOCKED", current.State)
 	}
 
 	// A second conflict, with the cap already spent, hands off to HUMAN

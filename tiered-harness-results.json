@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-09-20T13:34:52Z",
+  "mode": "baseline",
+  "note": "Mock/offline harness — every token/cost/time figure is derived from seeded fixture files under fixtures_dir, not a real provider call. Never report as measured production costs.",
+  "fixtures_dir": "/home/anthony/code/agentd/scripts/demo/fixtures",
+  "baseline": {
+    "model": "strong",
+    "tokens": 13000,
+    "cost_usd": 0.19500000,
+    "wall_time_ms": 41000,
+    "acceptance_pass": true
+  },
+  "tiered": null,
+  "comparison": null
+}

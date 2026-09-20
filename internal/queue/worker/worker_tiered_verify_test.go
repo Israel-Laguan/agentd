@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"testing"
 
@@ -148,8 +149,8 @@ func TestTieredVerify_FailRoutesToMidFix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask origin: %v", err)
 	}
-	if current.State != models.TaskStateRunning {
-		t.Fatalf("origin state after mid-fix = %s, want still RUNNING (pipeline continues)", current.State)
+	if current.State != models.TaskStateBlocked {
+		t.Fatalf("origin state after mid-fix = %s, want still BLOCKED (pipeline continues)", current.State)
 	}
 }
 
@@ -181,7 +182,24 @@ func TestTieredVerify_PassCompletesOrigin(t *testing.T) {
 
 	w.Process(context.Background(), verify)
 
-	current, err := store.GetTask(context.Background(), origin.ID)
+	// The verify pass emits TIERED_VERIFY_OUTCOME to the sink.
+	// The fake store doesn't receive sink events, so write the
+	// outcome event directly so tryResolveTieredOrigin can find it.
+	ctx := context.Background()
+	_ = store.AppendEvent(ctx, models.Event{
+		BaseEntity: models.BaseEntity{ID: "evt-1"},
+		ProjectID:  origin.ProjectID,
+		TaskID:     sql.NullString{String: verify.ID, Valid: true},
+		Type:       models.EventType(tieredVerifyOutcomeEvent),
+		Payload:    string(models.VerifyOutcomePass),
+	})
+
+	// The verify completion unblocks the origin (BLOCKED → READY).
+	// Processing the origin triggers tryResolveTieredOrigin which
+	// completes the pipeline.
+	w.Process(ctx, origin)
+
+	current, err := store.GetTask(ctx, origin.ID)
 	if err != nil {
 		t.Fatalf("GetTask origin: %v", err)
 	}
