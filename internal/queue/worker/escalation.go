@@ -205,7 +205,7 @@ func (w *Worker) scheduleEscalation(ctx context.Context, verifyTask models.Task,
 		Assignee:    assignee,
 	}
 
-	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{{Task: escalateTask}}); err != nil {
+	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{{Task: escalateTask, IdempotencyKey: verifyTask.ID}}); err != nil {
 		return fmt.Errorf("failed to schedule escalation: %w", err)
 	}
 
