@@ -236,6 +236,10 @@ func (s *workerStore) UpdateTaskResult(_ context.Context, _ string, _ time.Time,
 	return &s.task, nil
 }
 
+func (s *workerStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return s.UpdateTaskResult(ctx, id, ts, result)
+}
+
 func (s *workerStore) AddComment(_ context.Context, c models.Comment) error {
 	s.comment = c.Body
 	return nil

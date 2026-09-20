@@ -307,6 +307,10 @@ func (s *testStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, st
 func (s *testStore) UpdateTaskResult(context.Context, string, time.Time, models.TaskResult) (*models.Task, error) {
 	return &s.task, nil
 }
+
+func (s *testStore) CompleteTieredOrigin(_ context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return s.UpdateTaskResult(context.Background(), id, ts, result)
+}
 func (s *testStore) UpdateCriteriaMet(context.Context, string, []string) error { return nil }
 func (s *testStore) ReconcileGhostTasks(context.Context, []int) ([]models.Task, error) {
 	return nil, nil

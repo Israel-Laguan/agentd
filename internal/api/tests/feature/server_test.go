@@ -243,6 +243,10 @@ func (s *apiStore) UpdateTaskPatch(_ context.Context, _ string, _ time.Time, sta
 func (s *apiStore) UpdateTaskResult(context.Context, string, time.Time, models.TaskResult) (*models.Task, error) {
 	return &s.task, nil
 }
+
+func (s *apiStore) CompleteTieredOrigin(_ context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return s.UpdateTaskResult(context.Background(), id, ts, result)
+}
 func (s *apiStore) ReconcileGhostTasks(context.Context, []int) ([]models.Task, error) {
 	return nil, nil
 }

@@ -63,6 +63,13 @@ type KanbanStore interface {
 	// untouched.
 	UpdateTaskPatch(ctx context.Context, id string, expectedUpdatedAt time.Time, state *TaskState, description *string) (*Task, error)
 	UpdateTaskResult(ctx context.Context, id string, expectedUpdatedAt time.Time, result TaskResult) (*Task, error)
+	// CompleteTieredOrigin resolves a tiered pipeline origin straight from
+	// BLOCKED, READY, or RUNNING to COMPLETED/FAILED in a single atomic
+	// write (SP-006): unlike the BLOCKED→READY→RUNNING ladder + generic
+	// UpdateTaskResult, it never exposes a transient READY state another
+	// dispatcher could claim. The generic UpdateTaskState machine still
+	// rejects BLOCKED/READY → COMPLETED; only this path may bypass it.
+	CompleteTieredOrigin(ctx context.Context, id string, expectedUpdatedAt time.Time, result TaskResult) (*Task, error)
 	UpdateCriteriaMet(ctx context.Context, id string, met []string) error
 	ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]Task, error)
 	ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleThreshold time.Duration) ([]Task, error)

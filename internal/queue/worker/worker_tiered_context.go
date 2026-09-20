@@ -112,9 +112,9 @@ func (w *Worker) failTieredStep(ctx context.Context, task models.Task, reason st
 // flips a BLOCKED origin back to READY on its own. And the origin is
 // virtually always BLOCKED at this point, not RUNNING, so a raw
 // UpdateTaskResult call here (which only accepts RUNNING) would silently
-// no-op via ErrStateConflict. failTieredOrigin handles both cases correctly:
-// RUNNING resolves via UpdateTaskResult, anything else transitions straight
-// to FAILED.
+// no-op via ErrStateConflict. failTieredOrigin handles both cases correctly
+// via the atomic CompleteTieredOrigin path (BLOCKED/READY/RUNNING straight
+// to FAILED, no claimable intermediate state).
 func (w *Worker) failTieredDependents(ctx context.Context, failedTask models.Task, originTask models.Task) {
 	dependents, err := w.store.ListChildTasksByRelation(ctx, failedTask.ID, models.TaskRelationDependsOn)
 	if err != nil {
@@ -168,18 +168,29 @@ func (w *Worker) tieredStepSuperseded(ctx context.Context, failedTask models.Tas
 	return false
 }
 
-// parseAndConfigurePack reads the committed task result, parses the ContextPack,
-// sets task IDs, and enforces budget limits from tiered config. It returns the
-// freshly-read committed task so callers can use its UpdatedAt for further
-// optimistic-locked writes (e.g. failing the step or persisting the pack).
+// parseAndConfigurePack reads the context step's committed RESULT event,
+// parses the ContextPack, sets task IDs, and enforces budget limits from
+// tiered config. It returns the freshly-read committed task so callers can
+// use its UpdatedAt for further optimistic-locked writes (e.g. failing the
+// step or persisting the pack).
+//
+// The pack JSON lives in the RESULT event payload (written by
+// AppendTaskResultEvent on commit), not in task.Description — no commit path
+// ever populates Description, so reading it there always yields an empty
+// pack (BUG-002).
 func (w *Worker) parseAndConfigurePack(ctx context.Context, task models.Task, parentTask models.Task) (*ContextPack, *models.Task, error) {
 	committed, err := w.store.GetTask(ctx, task.ID)
 	if err != nil {
 		slog.Error("tiered context: failed to read committed task", "task_id", task.ID, "error", err)
 		return nil, nil, err
 	}
-	payload := committed.Description
-	if payload == "" {
+	payload, err := w.readCommittedText(ctx, task.ID)
+	if err != nil {
+		slog.Warn("tiered context: committed result is empty", "task_id", task.ID, "error", err)
+		w.failTieredStep(ctx, *committed, "empty ContextPack result")
+		return nil, committed, fmt.Errorf("empty committed result: %w", err)
+	}
+	if strings.TrimSpace(payload) == "" {
 		slog.Warn("tiered context: committed result is empty", "task_id", task.ID)
 		w.failTieredStep(ctx, *committed, "empty ContextPack result")
 		return nil, committed, fmt.Errorf("empty committed result")

@@ -217,7 +217,7 @@ The **verify** step classifies check results into four outcomes:
 | **fail** | Hard failure (repeatable) | **Mid fix:** bounded redo (same pack, different approach) |
 | **conflict** | Merge conflict / design ambiguity | **Escalate:** one strong-model pass with evidence, then verify again |
 
-**As implemented (T-020):** `worker_tiered.go`'s verify step (`processTieredVerifyStep`) parses the model's committed VerifyResult JSON, classifies it via `ClassifyVerifyOutcome`, and calls `handleVerifyOutcome` — this actually drives mid-fix/escalation now, not just the classifier in isolation. Mid-fix and escalate caps are enforced against a durable count (SPAWNED_BY children of the pipeline's origin task), not an in-memory counter, so they survive across separate worker dispatch cycles; `getMetadata`/`setMetadata` route through that same count via `task.Logs` so the metadata API and the persisted count agree.
+**As implemented (T-020):** `worker_tiered.go`'s verify step (`processTieredVerifyStep`) parses the model's committed VerifyResult JSON, classifies it via `ClassifyVerifyOutcome`, and calls `handleVerifyOutcome` — this actually drives mid-fix/escalation now, not just the classifier in isolation. Mid-fix and escalate caps are enforced against a durable count (SPAWNED_BY children of the pipeline's origin task), not an in-memory counter, so they survive across separate worker dispatch cycles. The former `task.Logs`-backed `getMetadata`/`setMetadata` scratch API was retired in S06 (T-021): it had no backing DB column and never survived a task reload.
 
 ### Bounded mid fix
 

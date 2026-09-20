@@ -83,6 +83,78 @@ func TestInjectContextPack_RejectsForeignPackLineage(t *testing.T) {
 	}
 }
 
+func TestParseAndConfigurePack_ReadsResultEvent(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	sink := &mockEventSink{}
+	w := &Worker{store: store, sink: sink}
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "context-pack-result",
+		Tasks:       []models.DraftTask{{Title: "ctx", Description: "gather"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	running, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	// The agentic engine commits the pack as the task's RESULT event payload;
+	// Description is never populated by any commit path (BUG-002).
+	// Commit in the prod shape: "exit=.. duration=..\n<stdout>".
+	packJSON, err := json.Marshal(tieredContextPack("parent-1"))
+	if err != nil {
+		t.Fatalf("marshal pack: %v", err)
+	}
+	if _, err := store.UpdateTaskResult(ctx, running.ID, running.UpdatedAt, models.TaskResult{Success: true, Payload: "exit=0 duration=1s\n" + string(packJSON)}); err != nil {
+		t.Fatalf("commit result: %v", err)
+	}
+
+	pack, committed, err := w.parseAndConfigurePack(ctx, *running, models.Task{BaseEntity: models.BaseEntity{ID: "parent-1"}})
+	if err != nil {
+		t.Fatalf("parseAndConfigurePack: %v", err)
+	}
+	if pack.ParentTaskID != "parent-1" {
+		t.Fatalf("pack ParentTaskID = %q, want parent-1", pack.ParentTaskID)
+	}
+	if committed == nil || committed.ID != running.ID {
+		t.Fatalf("committed task = %+v, want re-read of %s", committed, running.ID)
+	}
+}
+
+func TestParseAndConfigurePack_FailsWithoutResultEvent(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	sink := &mockEventSink{}
+	w := &Worker{store: store, sink: sink}
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "context-pack-missing",
+		Tasks:       []models.DraftTask{{Title: "ctx", Description: "gather"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	running, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+
+	if _, _, err := w.parseAndConfigurePack(ctx, *running, models.Task{BaseEntity: models.BaseEntity{ID: "parent-1"}}); err == nil {
+		t.Fatal("parseAndConfigurePack should fail when no RESULT event was committed")
+	}
+	got, err := store.GetTask(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State != models.TaskStateFailed {
+		t.Fatalf("state = %s, want FAILED (step must not stay RUNNING without a pack)", got.State)
+	}
+}
+
 func TestProcessTieredContextStep_FailsWhenProviderLacksChatTools(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()

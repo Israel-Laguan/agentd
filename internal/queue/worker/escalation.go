@@ -228,5 +228,3 @@ func (w *Worker) transitionTaskState(ctx context.Context, taskID string, newStat
 	_, err = w.store.UpdateTaskState(ctx, taskID, task.UpdatedAt, newState)
 	return err
 }
-
-// Helper functions for task metadata management live in tiered_metadata.go.

@@ -54,24 +54,9 @@ func setUpTieredDecisionFixture(t *testing.T, store *testutil.FakeKanbanStore) (
 
 func setUpTieredOriginRunning(t *testing.T, store *testutil.FakeKanbanStore, projectName string) (models.Task, string) {
 	t.Helper()
-	ctx := context.Background()
-	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: projectName,
-		Tasks:       []models.DraftTask{{Title: "origin", Description: "complex task"}},
-	})
-	if err != nil {
-		t.Fatalf("materialize plan: %v", err)
-	}
-	originTask, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
-	if err != nil {
-		t.Fatalf("mark origin running: %v", err)
-	}
-	originTask, err = store.UpdateTaskState(ctx, originTask.ID, originTask.UpdatedAt, models.TaskStateBlocked)
-	if err != nil {
-		t.Fatalf("block origin: %v", err)
-	}
+	originTask := newTieredPipelineFixture(t, store, projectName)
 
-	project, err := store.GetProject(ctx, originTask.ProjectID)
+	project, err := store.GetProject(context.Background(), originTask.ProjectID)
 	if err != nil {
 		t.Fatalf("get project: %v", err)
 	}
@@ -80,7 +65,7 @@ func setUpTieredOriginRunning(t *testing.T, store *testutil.FakeKanbanStore, pro
 		t.Fatalf("create workspace dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(workspace) })
-	return *originTask, workspace
+	return originTask, workspace
 }
 
 func writeTieredDecisionPack(t *testing.T, workspace string, pack *ContextPack) {
@@ -191,7 +176,7 @@ func assertTieredPendingExecuteRewiredStillPending(t *testing.T, ctx context.Con
 func TestReconcileBlockedDependents_ReReadiesOnceParentCompletes(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
-	origin := newTieredPipelineFixture(t, store)
+	origin := newTieredPipelineFixture(t, store, "reconcile-blocked-fixture")
 	w := &Worker{store: store, sink: &mockEventSink{}}
 
 	newDecision, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
@@ -325,9 +310,7 @@ func TestTieredDecision_NeedsContextCapHandsOffToHuman(t *testing.T) {
 	w := &Worker{store: store, sink: &mockEventSink{}, tieredCfg: config.TieredConfig{
 		Escalation: config.TieredEscalationConfig{MaxReGather: 1},
 	}}
-	if err := exhaustReGatherBudget(ctx, t, store, origin); err != nil {
-		t.Fatalf("exhaust re-gather budget: %v", err)
-	}
+	exhaustReGatherBudget(ctx, t, store, origin)
 	running, err := store.UpdateTaskState(ctx, decisionTask.ID, decisionTask.UpdatedAt, models.TaskStateRunning)
 	if err != nil {
 		t.Fatalf("RUNNING: %v", err)
@@ -355,20 +338,19 @@ func TestTieredDecision_NeedsContextCapHandsOffToHuman(t *testing.T) {
 	}
 }
 
-func exhaustReGatherBudget(ctx context.Context, t *testing.T, store *testutil.FakeKanbanStore, origin models.Task) error {
+func exhaustReGatherBudget(ctx context.Context, t *testing.T, store *testutil.FakeKanbanStore, origin models.Task) {
 	t.Helper()
 	if _, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
 		{Task: models.Task{BaseEntity: models.BaseEntity{ID: "pre-context"}, ProjectID: origin.ProjectID, AgentID: "tier-context", Title: "context (re-gather v1): origin", State: models.TaskStateCompleted, Assignee: models.TaskAssigneeSystem}},
 	}); err != nil {
 		t.Fatalf("pre-create context: %v", err)
 	}
-	return nil
 }
 
 func TestTieredNeedsContext_RevivalTransitions(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
-	origin := newTieredPipelineFixture(t, store)
+	origin := newTieredPipelineFixture(t, store, "revival-fixture")
 	// Create a decision in NEEDS_CONTEXT then revive it to READY (the
 	// "revival" path once a fresh pack exists).
 	needsCtxTask := models.Task{BaseEntity: models.BaseEntity{ID: "needs-ctx"}, ProjectID: origin.ProjectID, AgentID: "tier-decision", Title: "decision: origin", State: models.TaskStatePending, Assignee: models.TaskAssigneeSystem}

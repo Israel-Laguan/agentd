@@ -74,6 +74,7 @@ var (
 	finishTaskStateSideEffects  = kdb.FinishTaskStateSideEffects
 	queueReadyTaskIDs           = kdb.QueueReadyTaskIDs
 	updateTaskResultState       = kdb.UpdateTaskResultState
+	completeTieredOriginState   = kdb.CompleteTieredOriginState
 	finishTaskResultSideEffects = kdb.FinishTaskResultSideEffects
 	resetGhostTasks             = kdb.ResetGhostTasks
 

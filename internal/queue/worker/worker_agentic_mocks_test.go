@@ -129,6 +129,10 @@ func (m *mockCommitStore) UpdateTaskResult(ctx context.Context, id string, t tim
 	return nil, nil
 }
 
+func (m *mockCommitStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return m.UpdateTaskResult(ctx, id, ts, result)
+}
+
 func (m *mockCommitStore) AddComment(ctx context.Context, c models.Comment) error {
 	return nil
 }
