@@ -29,21 +29,30 @@ func migrateToV16(ctx context.Context, db *sql.DB) error {
 	if strings.Contains(createSQL, "'NEEDS_CONTEXT'") {
 		return setSchemaVersion(ctx, db, 16)
 	}
-	if err := disableForeignKeys(ctx, db); err != nil {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for schema migration v16: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if err := disableForeignKeys(ctx, conn); err != nil {
 		return err
 	}
-	defer func() { _, _ = db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
-	return rebuildTasksTableV16(ctx, db)
+	defer func() { _, _ = conn.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys = ON`) }()
+	return rebuildTasksTableV16(ctx, conn)
 }
 
-func disableForeignKeys(ctx context.Context, db *sql.DB) error {
+func disableForeignKeys(ctx context.Context, db interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}) error {
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return fmt.Errorf("disable foreign keys for schema migration v16: %w", err)
 	}
 	return nil
 }
 
-func rebuildTasksTableV16(ctx context.Context, db *sql.DB) error {
+func rebuildTasksTableV16(ctx context.Context, db interface {
+	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
+}) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin schema migration v16: %w", err)

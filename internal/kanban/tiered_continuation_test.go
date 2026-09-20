@@ -20,7 +20,7 @@ func newTieredOriginTask(t *testing.T, store *Store, ctx context.Context) models
 		t.Fatalf("MaterializePlan() error = %v", err)
 	}
 	_ = project
-	origin, err := store.UpdateTaskState(ctx, tasks[0].ID, tasks[0].UpdatedAt, models.TaskStateRunning)
+	origin, err := store.UpdateTaskState(ctx, tasks[0].ID, tasks[0].UpdatedAt, models.TaskStateBlocked)
 	if err != nil {
 		t.Fatalf("UpdateTaskState(RUNNING) error = %v", err)
 	}
@@ -69,8 +69,8 @@ func TestSpawnTieredContinuation_WiresSpawnedByAndDependsOn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask(origin) error = %v", err)
 	}
-	if reloadedOrigin.State != models.TaskStateRunning {
-		t.Fatalf("origin state = %s, want unchanged RUNNING", reloadedOrigin.State)
+	if reloadedOrigin.State != models.TaskStateBlocked {
+		t.Fatalf("origin state = %s, want unchanged BLOCKED", reloadedOrigin.State)
 	}
 
 	spawned, err := store.ListChildTasksByRelation(ctx, origin.ID, models.TaskRelationSpawnedBy)

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"agentd/internal/config"
 	"agentd/internal/kanban"
@@ -48,6 +49,12 @@ func seedDefaultAgent(ctx context.Context, store *kanban.Store, reset bool) erro
 		if !reset {
 			existing, err := store.GetAgentProfile(ctx, profile.ID)
 			if err == nil && existing != nil {
+				if strings.HasPrefix(profile.ID, "tier-") && !existing.AgenticMode {
+					existing.AgenticMode = true
+					if err := store.UpsertAgentProfile(ctx, *existing); err != nil {
+						return err
+					}
+				}
 				continue
 			}
 			if err != nil && !errors.Is(err, models.ErrAgentProfileNotFound) {

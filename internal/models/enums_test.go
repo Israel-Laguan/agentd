@@ -2,56 +2,43 @@ package models
 
 import "testing"
 
-func TestTaskStateValidAndTransitions(t *testing.T) {
+func TestTaskStateValid(t *testing.T) {
 	if !TaskStateReady.Valid() {
 		t.Fatal("TaskStateReady should be valid")
 	}
 	if TaskState("UNKNOWN").Valid() {
 		t.Fatal("UNKNOWN task state should be invalid")
 	}
-	if !TaskStateReady.CanTransitionTo(TaskStateQueued) {
-		t.Fatal("READY should transition to QUEUED")
+}
+
+func TestTaskStateTransitions(t *testing.T) {
+	tests := []struct {
+		from   TaskState
+		to     TaskState
+		wantOK bool
+	}{
+		{TaskStateReady, TaskStateQueued, true},
+		{TaskStateCompleted, TaskStateRunning, false},
+		{TaskState("INVALID"), TaskStateReady, false},
+		{TaskStateBlocked, TaskStateFailedRequiresHuman, true},
+		{TaskStateCompleted, TaskStateNeedsContext, true},
+		{TaskStateRunning, TaskStateNeedsContext, true},
+		{TaskStateNeedsContext, TaskStateCompleted, false},
+		{TaskStateNeedsContext, TaskStateReady, true},
+		{TaskStateNeedsContext, TaskStateInConsideration, true},
+		{TaskStateNeedsContext, TaskStateFailed, true},
+		{TaskStateNeedsContext, TaskStateFailedRequiresHuman, true},
+		{TaskStatePending, TaskStateNeedsContext, true},
+		{TaskStateReady, TaskStateNeedsContext, true},
+		{TaskStateQueued, TaskStateNeedsContext, true},
 	}
-	if TaskStateCompleted.CanTransitionTo(TaskStateRunning) {
-		t.Fatal("COMPLETED should not transition to RUNNING")
-	}
-	if TaskState("INVALID").CanTransitionTo(TaskStateReady) {
-		t.Fatal("INVALID state should not transition to anything")
-	}
-	if !TaskStateBlocked.CanTransitionTo(TaskStateFailedRequiresHuman) {
-		t.Fatal("BLOCKED should transition to FAILED_REQUIRES_HUMAN")
-	}
-	if !TaskStateCompleted.CanTransitionTo(TaskStateNeedsContext) {
-		t.Fatal("COMPLETED should transition to NEEDS_CONTEXT (tiered re-gather, detected post-commit)")
-	}
-	if !TaskStateRunning.CanTransitionTo(TaskStateNeedsContext) {
-		t.Fatal("RUNNING should transition to NEEDS_CONTEXT")
-	}
-	if TaskStateNeedsContext.CanTransitionTo(TaskStateCompleted) {
-		t.Fatal("NEEDS_CONTEXT should not transition directly to COMPLETED")
-	}
-	// NEEDS_CONTEXT revival edges
-	if !TaskStateNeedsContext.CanTransitionTo(TaskStateReady) {
-		t.Fatal("NEEDS_CONTEXT should transition to READY (re-gather)")
-	}
-	if !TaskStateNeedsContext.CanTransitionTo(TaskStateInConsideration) {
-		t.Fatal("NEEDS_CONTEXT should transition to IN_CONSIDERATION")
-	}
-	if !TaskStateNeedsContext.CanTransitionTo(TaskStateFailed) {
-		t.Fatal("NEEDS_CONTEXT should transition to FAILED")
-	}
-	if !TaskStateNeedsContext.CanTransitionTo(TaskStateFailedRequiresHuman) {
-		t.Fatal("NEEDS_CONTEXT should transition to FAILED_REQUIRES_HUMAN")
-	}
-	// PENDING/READY/QUEUED -> NEEDS_CONTEXT
-	if !TaskStatePending.CanTransitionTo(TaskStateNeedsContext) {
-		t.Fatal("PENDING should transition to NEEDS_CONTEXT")
-	}
-	if !TaskStateReady.CanTransitionTo(TaskStateNeedsContext) {
-		t.Fatal("READY should transition to NEEDS_CONTEXT")
-	}
-	if !TaskStateQueued.CanTransitionTo(TaskStateNeedsContext) {
-		t.Fatal("QUEUED should transition to NEEDS_CONTEXT")
+	for _, tt := range tests {
+		t.Run(string(tt.from)+"->"+string(tt.to), func(t *testing.T) {
+			got := tt.from.CanTransitionTo(tt.to)
+			if got != tt.wantOK {
+				t.Errorf("CanTransitionTo(%s, %s) = %v, want %v", tt.from, tt.to, got, tt.wantOK)
+			}
+		})
 	}
 }
 

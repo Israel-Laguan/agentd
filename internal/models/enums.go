@@ -18,7 +18,7 @@ const (
 	TaskStateInConsideration     TaskState = "IN_CONSIDERATION"
 )
 
-// AllTaskStates lists every task state agentd knows. Valid reports membership
+// allTaskStates lists every task state agentd knows. Valid reports membership
 // in this list, and the tasks.state CHECK constraint in the SQLite schema must
 // accept exactly these values — a state the Go enum allows but the DB rejects
 // fails at write time, which is how NEEDS_CONTEXT shipped broken in S04.
@@ -40,9 +40,7 @@ var allTaskStates = []TaskState{
 // AllTaskStatesSlice returns a copy of the task state registry.
 func AllTaskStatesSlice() []TaskState {
 	result := make([]TaskState, len(allTaskStates))
-	for i, s := range allTaskStates {
-		result[i] = s
-	}
+	copy(result, allTaskStates)
 	return result
 }
 

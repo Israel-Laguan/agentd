@@ -250,16 +250,27 @@ func (w *Worker) tryDispatchTieredStep(ctx context.Context, task models.Task, pr
 	if err != nil {
 		slog.Error("tiered: failed to look up SPAWNED_BY parents",
 			"task_id", task.ID, "error", err)
-		// Distinguish lookup errors from "not an origin": on error,
-		// retry rather than treating the task as a new origin and
-		// persisting another DAG.
-		return false
+		// Do not fall through to legacy execution: tiered steps require
+		// their profile, context pack, and reconciliation hooks.
+		w.FailHard(ctx, task, fmt.Errorf("tiered parent lookup failed: %w", err))
+		return true
 	}
 	if len(parents) == 0 {
 		slog.Error("tiered step has no SPAWNED_BY origin parent",
 			"task_id", task.ID, "agent_id", task.AgentID)
 		w.FailHard(ctx, task, fmt.Errorf("tiered step %s has no SPAWNED_BY origin parent", task.ID))
 		return true
+	}
+	dependencies, err := w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationDependsOn)
+	if err != nil {
+		w.FailHard(ctx, task, fmt.Errorf("tiered dependency lookup failed: %w", err))
+		return true
+	}
+	for _, dependency := range dependencies {
+		if dependency.State == models.TaskStateNeedsContext {
+			w.FailHard(ctx, task, fmt.Errorf("tiered step depends on stale decision %s awaiting context re-gather", dependency.ID))
+			return true
+		}
 	}
 	w.processTieredStep(ctx, task, project, profile, w.tieredStepKind(task), parents[0])
 	return true

@@ -59,6 +59,10 @@ func setUpTieredOriginRunning(t *testing.T, store *testutil.FakeKanbanStore, pro
 	if err != nil {
 		t.Fatalf("mark origin running: %v", err)
 	}
+	originTask, err = store.UpdateTaskState(ctx, originTask.ID, originTask.UpdatedAt, models.TaskStateBlocked)
+	if err != nil {
+		t.Fatalf("block origin: %v", err)
+	}
 
 	project, err := store.GetProject(ctx, originTask.ProjectID)
 	if err != nil {

@@ -170,6 +170,39 @@ func (w *Worker) reblockTieredOrigin(ctx context.Context, task models.Task) {
 	}
 }
 
+// completeTieredOrigin resolves the origin as succeeded from a non-RUNNING
+// state. UpdateTaskResult only accepts RUNNING tasks, so a BLOCKED or READY
+// origin first walks the legal BLOCKED→READY→RUNNING ladder (preserving
+// optimistic-concurrency checks via UpdateTaskState) before recording the
+// result.
+func (w *Worker) completeTieredOrigin(ctx context.Context, origin models.Task, reason string) {
+	current, err := w.store.GetTask(ctx, origin.ID)
+	if err != nil {
+		slog.Error("tiered origin: failed to re-read before completing", "task_id", origin.ID, "error", err)
+		return
+	}
+	for current.State == models.TaskStateBlocked || current.State == models.TaskStateReady {
+		next := models.TaskStateRunning
+		if current.State == models.TaskStateBlocked {
+			next = models.TaskStateReady
+		}
+		updated, err := w.store.UpdateTaskState(ctx, current.ID, current.UpdatedAt, next)
+		if err != nil {
+			slog.Error("tiered origin: failed to ready before completing",
+				"task_id", origin.ID, "state", current.State, "error", err)
+			w.Emit(ctx, *current, "ERROR", err.Error())
+			return
+		}
+		current = updated
+	}
+	if current.State != models.TaskStateRunning {
+		slog.Error("tiered origin: cannot complete from current state",
+			"task_id", origin.ID, "state", current.State)
+		return
+	}
+	w.finishTieredOrigin(ctx, *current, true, reason)
+}
+
 // failTieredOrigin resolves the origin as failed from a non-RUNNING state.
 // UpdateTaskResult only accepts RUNNING tasks, so a BLOCKED origin whose
 // ladder broke down has to be failed through a state transition instead.
