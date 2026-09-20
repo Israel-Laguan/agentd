@@ -182,7 +182,11 @@ func (w *Worker) scheduleEscalation(ctx context.Context, verifyTask models.Task,
 	if escalateCount >= maxEscalate {
 		// Exhausted escalation; hand off to HUMAN
 		slog.InfoContext(ctx, "escalation limit reached; handing off to human", "task_id", parentTask.ID)
-		return w.transitionTaskState(ctx, parentTask.ID, models.TaskStateFailedRequiresHuman)
+		if err := w.transitionTaskState(ctx, parentTask.ID, models.TaskStateFailedRequiresHuman); err != nil {
+			return err
+		}
+		w.Emit(ctx, parentTask, string(models.EventTypeTieredEscalationExhausted), "escalation limit reached; handed off to human")
+		return nil
 	}
 
 	assignee := parentTask.Assignee
