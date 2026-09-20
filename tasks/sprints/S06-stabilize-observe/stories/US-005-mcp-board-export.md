@@ -3,9 +3,9 @@
 | Field | Value |
 | --- | --- |
 | Type | user-story |
-| Status | backlog |
+| Status | ready |
 | Priority | P2 |
-| Sprint | backlog |
+| Sprint | S06-stabilize-observe |
 | Persona | adopter |
 | Links | [product-plan Phase 3](../../../docs/product-plan.md) |
 

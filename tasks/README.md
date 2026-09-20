@@ -50,9 +50,9 @@ tasks/
 | Series | Next free (seeded) |
 | --- | --- |
 | US- | US-007 |
-| T- | T-015 |
-| B- | B-001 |
-| SP- | SP-006 |
+| T- | T-023 |
+| B- | B-003 |
+| SP- | SP-007 |
 
 Update this table when you mint IDs.
 
