@@ -260,7 +260,7 @@ func TestTieredDecision_PendingReGatherNeedsContextSpawnsSecondRegather(t *testi
 		t.Fatalf("GetTask(origin): %v", err)
 	}
 	if err := w.handleNeedsContext(ctx, pendingRegatherDecision, *originReloaded, "still missing file"); err != nil {
-		t.Fatalf("handleNeedsContext second (PENDING origin): %v", err)
+		t.Fatalf("handleNeedsContext second (BLOCKED origin): %v", err)
 	}
 	secondDecision, err := store.GetTask(ctx, pendingRegatherDecision.ID)
 	if err != nil {
@@ -439,7 +439,7 @@ func spawnCompletedFreshDecision(t *testing.T, ctx context.Context, store *testu
 	freshTime := staleNeedsCtx.CreatedAt.Add(10 * 1e9)
 	freshPending := models.Task{
 		BaseEntity: models.BaseEntity{ID: "fresh-decision-completed", CreatedAt: freshTime, UpdatedAt: freshTime},
-		ProjectID: origin.ProjectID, AgentID: "tier-decision", Title: "decision (re-gather v2): origin", State: models.TaskStatePending, Assignee: models.TaskAssigneeSystem,
+		ProjectID:  origin.ProjectID, AgentID: "tier-decision", Title: "decision (re-gather v2): origin", State: models.TaskStatePending, Assignee: models.TaskAssigneeSystem,
 	}
 	if _, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{{Task: freshPending, DependsOnID: ""}}); err != nil {
 		t.Fatalf("spawn fresh: %v", err)

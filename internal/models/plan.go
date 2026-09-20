@@ -166,6 +166,7 @@ type TieredDAGTask struct {
 // own state is left untouched, since it is already BLOCKED for the
 // pipeline's duration. DependsOnID is empty when the task should start READY.
 type TieredContinuationTask struct {
-	Task        Task
-	DependsOnID string
+	Task           Task
+	DependsOnID    string
+	IdempotencyKey string
 }

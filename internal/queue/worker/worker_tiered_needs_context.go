@@ -79,7 +79,9 @@ func (w *Worker) readNeedsContextSignal(ctx context.Context, task models.Task) (
 	clean = strings.TrimPrefix(clean, "```json")
 	clean = strings.TrimPrefix(clean, "```")
 	clean = strings.TrimSuffix(strings.TrimSpace(clean), "```")
-	_ = json.Unmarshal([]byte(strings.TrimSpace(clean)), &signal)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(clean)), &signal); err != nil {
+		return needsContextSignal{}, fmt.Errorf("decode needs-context signal: %w", err)
+	}
 	return signal, nil
 }
 
@@ -249,7 +251,12 @@ func (w *Worker) handleFreshDecision(ctx context.Context, task models.Task, depe
 		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", fresh.ID, fresh.State))
 		return true
 	case models.TaskStateNeedsContext:
-		return false
+		if task.State.CanTransitionTo(models.TaskStateBlocked) {
+			if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
+				w.FailHard(ctx, task, fmt.Errorf("tiered park while awaiting fresh context failed: %w", err))
+			}
+		}
+		return true
 	default:
 		if task.State.CanTransitionTo(models.TaskStateBlocked) {
 			if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
@@ -266,15 +273,30 @@ func (w *Worker) handleFreshDecision(ctx context.Context, task models.Task, depe
 }
 
 func (w *Worker) handleStaleDecision(ctx context.Context, task models.Task, dependency models.Task, origin models.Task) bool {
-	if completedID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateCompleted); err == nil && completedID != "" {
+	completedID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateCompleted)
+	if err != nil {
+		w.FailHard(ctx, task, fmt.Errorf("tiered completed decision lookup failed: %w", err))
+		return true
+	}
+	if completedID != "" {
 		return w.rewireToCompletedDecision(ctx, task, dependency, completedID)
 	}
-	if failedID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateFailed); err == nil && failedID != "" {
+	failedID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateFailed)
+	if err != nil {
+		w.FailHard(ctx, task, fmt.Errorf("tiered failed decision lookup failed: %w", err))
+		return true
+	}
+	if failedID != "" {
 		_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedID)
 		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedID, models.TaskStateFailed))
 		return true
 	}
-	if failedHumanID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateFailedRequiresHuman); err == nil && failedHumanID != "" {
+	failedHumanID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateFailedRequiresHuman)
+	if err != nil {
+		w.FailHard(ctx, task, fmt.Errorf("tiered human-failed decision lookup failed: %w", err))
+		return true
+	}
+	if failedHumanID != "" {
 		_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedHumanID)
 		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedHumanID, models.TaskStateFailedRequiresHuman))
 		return true

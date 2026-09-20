@@ -161,7 +161,7 @@ func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, par
 		Assignee:    assignee,
 	}
 	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{
-		{Task: midFixTask},
+		{Task: midFixTask, IdempotencyKey: verifyTask.ID},
 		{Task: midVerifyTask, DependsOnID: midFixTask.ID},
 	}); err != nil {
 		return fmt.Errorf("failed to schedule mid fix and verify: %w", err)
