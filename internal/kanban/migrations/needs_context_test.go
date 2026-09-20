@@ -73,6 +73,23 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 		    0, 0, 0, 0, '[]', '[]', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z')`); err != nil {
 		t.Fatalf("insert NEEDS_CONTEXT task: %v", err)
 	}
+
+	if err := Run(ctx, db); err != nil {
+		t.Fatalf("second Run() error: %v", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
+		t.Fatalf("read schema version after second run: %v", err)
+	}
+	if version != "16" {
+		t.Fatalf("schema version after second run = %q, want 16", version)
+	}
+	var stateAfter string
+	if err := db.QueryRowContext(ctx, `SELECT state FROM tasks WHERE id = 'needs-context-task'`).Scan(&stateAfter); err != nil {
+		t.Fatalf("read NEEDS_CONTEXT task after second run: %v", err)
+	}
+	if stateAfter != "NEEDS_CONTEXT" {
+		t.Fatalf("state after second run = %q, want NEEDS_CONTEXT", stateAfter)
+	}
 }
 
 const v15SchemaWithoutNeedsContextSQL = `

@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"database/sql"
 	"os"
 	"testing"
 
@@ -11,6 +10,12 @@ import (
 	"agentd/internal/models"
 	"agentd/internal/testutil"
 )
+
+type storeEventSink struct{ store *testutil.FakeKanbanStore }
+
+func (s *storeEventSink) Emit(ctx context.Context, ev models.Event) error {
+	return s.store.AppendEvent(ctx, ev)
+}
 
 // plainTextVerifyGateway is a minimal AIGateway double that returns a fixed
 // text response with no tool calls, so the agentic loop completes in a
@@ -154,6 +159,28 @@ func TestTieredVerify_FailRoutesToMidFix(t *testing.T) {
 	}
 }
 
+func TestParseVerifyResult_ValidatesPayload(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		valid bool
+	}{
+		{name: "plain JSON", input: `{"results":[{"check":"test","outcome":"pass"}],"overall":"pass"}`, valid: true},
+		{name: "markdown fence", input: "```json\n{\"results\":[{\"check\":\"test\",\"outcome\":\"fail\"}],\"overall\":\"fail\"}\n```", valid: true},
+		{name: "malformed JSON", input: `{not-json`, valid: false},
+		{name: "missing results", input: `{"overall":"pass"}`, valid: false},
+		{name: "invalid overall", input: `{"results":[{"check":"test","outcome":"pass"}],"overall":"unknown"}`, valid: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := parseVerifyResult(test.input)
+			if (err == nil) != test.valid {
+				t.Fatalf("error = %v, valid = %t", err, test.valid)
+			}
+		})
+	}
+}
+
 func TestTieredVerify_ConflictRoutesToEscalation(t *testing.T) {
 	store := testutil.NewFakeStore()
 	origin, verify, _ := setUpTieredVerifyFixture(t, store)
@@ -178,22 +205,11 @@ func TestTieredVerify_PassCompletesOrigin(t *testing.T) {
 
 	gw := &plainTextVerifyGateway{content: `{"results":[{"check":"go test ./...","outcome":"pass","detail":""}],"overall":"pass"}`}
 	sb := &mockAgenticSandbox{}
-	w := NewWorker(store, gw, sb, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 10})
+	w := NewWorker(store, gw, sb, nil, &storeEventSink{store: store}, WorkerOptions{MaxToolIterations: 10})
 
 	w.Process(context.Background(), verify)
 
-	// The verify pass emits TIERED_VERIFY_OUTCOME to the sink.
-	// The fake store doesn't receive sink events, so write the
-	// outcome event directly so tryResolveTieredOrigin can find it.
 	ctx := context.Background()
-	_ = store.AppendEvent(ctx, models.Event{
-		BaseEntity: models.BaseEntity{ID: "evt-1"},
-		ProjectID:  origin.ProjectID,
-		TaskID:     sql.NullString{String: verify.ID, Valid: true},
-		Type:       models.EventType(tieredVerifyOutcomeEvent),
-		Payload:    string(models.VerifyOutcomePass),
-	})
-
 	// The verify completion unblocks the origin (BLOCKED → READY).
 	// Processing the origin triggers tryResolveTieredOrigin which
 	// completes the pipeline.
@@ -205,5 +221,18 @@ func TestTieredVerify_PassCompletesOrigin(t *testing.T) {
 	}
 	if current.State != models.TaskStateCompleted {
 		t.Fatalf("origin state after verify pass = %s, want COMPLETED", current.State)
+	}
+	events, err := store.ListEventsByTask(ctx, verify.ID)
+	if err != nil {
+		t.Fatalf("ListEventsByTask: %v", err)
+	}
+	found := false
+	for _, event := range events {
+		if string(event.Type) == tieredVerifyOutcomeEvent && event.Payload == string(models.VerifyOutcomePass) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("verify task has no persisted pass outcome event")
 	}
 }

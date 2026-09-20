@@ -282,6 +282,10 @@ tiered:
   context_pack:
     max_paths: 40   # cap on workspace paths in a ContextPack
     max_chars: 48000  # cap on total chars across summary/excerpts/constraints/unknowns
+  escalation:
+    max_mid_fix: 2    # maximum bounded execute/verify redos before escalation
+    max_escalate: 1   # maximum strong-model escalations before human handoff
+    max_re_gather: 2  # maximum context re-gathers before human handoff
   # Per-role model overrides are configured via gateway.role_models.
   # See gateway section above for the role_models mapping.
   # Tiered step profiles route through role_models by step kind:

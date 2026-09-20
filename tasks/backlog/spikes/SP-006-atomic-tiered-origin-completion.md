@@ -1,4 +1,4 @@
-# SP-005: Atomic tiered-origin completion
+# SP-006: Atomic tiered-origin completion
 
 | Field | Value |
 | --- | --- |

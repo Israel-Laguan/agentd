@@ -90,6 +90,48 @@ func TestSpawnTieredContinuation_WiresSpawnedByAndDependsOn(t *testing.T) {
 	}
 }
 
+func TestSpawnTieredContinuation_OriginStateValidation(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name, state string
+		wantState   models.TaskState
+		wantErr     bool
+	}{
+		{name: "ready is reblocked", state: string(models.TaskStateReady), wantState: models.TaskStateBlocked},
+		{name: "pending is rejected", state: string(models.TaskStatePending), wantState: models.TaskStatePending, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newTestStore(t)
+			origin := newTieredOriginTask(t, store, ctx)
+			var err error
+			if tc.wantErr {
+				_, err = store.db.ExecContext(ctx, `UPDATE tasks SET state = 'PENDING' WHERE id = ?`, origin.ID)
+			} else {
+				_, err = store.UpdateTaskState(ctx, origin.ID, origin.UpdatedAt, models.TaskState(tc.state))
+			}
+			if err != nil {
+				t.Fatalf("set origin state: %v", err)
+			}
+			child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-context", "continuation", models.TaskStateReady)
+			_, err = store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{{Task: child}})
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error = %v, wantErr %t", err, tc.wantErr)
+			}
+			current, err := store.GetTask(ctx, origin.ID)
+			if err != nil {
+				t.Fatalf("GetTask: %v", err)
+			}
+			want := tc.wantState
+			if tc.name == "ready is reblocked" {
+				want = models.TaskStateBlocked
+			}
+			if current.State != want {
+				t.Fatalf("origin state = %s, want %s", current.State, want)
+			}
+		})
+	}
+}
+
 func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
@@ -101,6 +143,8 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	execute := newRewireStepTask(now, origin.ProjectID, "tier-execute", "execute", models.TaskStateReady)
 	verify := newRewireStepTask(now, origin.ProjectID, "tier-verify", "verify", models.TaskStatePending)
 	pendingDep := newRewireStepTask(now, origin.ProjectID, "tier-pending-dep", "pending-dep", models.TaskStatePending)
+	queuedDep := newRewireStepTask(now, origin.ProjectID, "tier-queued-dep", "queued-dep", models.TaskStateQueued)
+	idempotentDep := newRewireStepTask(now, origin.ProjectID, "tier-idempotent-dep", "idempotent-dep", models.TaskStatePending)
 
 	if _, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
 		{Task: oldDecision},
@@ -108,6 +152,8 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 		{Task: execute, DependsOnID: oldDecision.ID},
 		{Task: verify, DependsOnID: oldDecision.ID},
 		{Task: pendingDep, DependsOnID: oldDecision.ID},
+		{Task: queuedDep, DependsOnID: oldDecision.ID},
+		{Task: idempotentDep, DependsOnID: newDecision.ID},
 	}); err != nil {
 		t.Fatalf("SpawnTieredContinuation() error = %v", err)
 	}
@@ -123,6 +169,19 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	assertRewireExecuteBlocked(t, ctx, store, execute.ID, newDecision.ID)
 	assertRewirePendingDepRedirected(t, ctx, store, pendingDep.ID, newDecision.ID)
 	assertRewireVerifyPendingRedirected(t, ctx, store, verify.ID, newDecision.ID)
+	assertRewireParent(t, ctx, store, queuedDep.ID, oldDecision.ID)
+	assertRewireParent(t, ctx, store, idempotentDep.ID, newDecision.ID)
+}
+
+func assertRewireParent(t *testing.T, ctx context.Context, store *Store, taskID, parentID string) {
+	t.Helper()
+	parents, err := store.ListParentTasksByRelation(ctx, taskID, models.TaskRelationDependsOn)
+	if err != nil {
+		t.Fatalf("ListParentTasksByRelation: %v", err)
+	}
+	if len(parents) != 1 || parents[0].ID != parentID {
+		t.Fatalf("parents = %+v, want [%s]", parents, parentID)
+	}
 }
 
 func newRewireDecisionTask(now time.Time, projectID, title string, state models.TaskState) models.Task {
