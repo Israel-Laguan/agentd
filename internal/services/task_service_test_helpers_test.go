@@ -38,6 +38,10 @@ func (b *stubBoard) UpdateTaskResult(context.Context, string, time.Time, models.
 	return nil, nil
 }
 
+func (b *stubBoard) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return b.UpdateTaskResult(ctx, id, ts, result)
+}
+
 func (b *stubBoard) AddCommentAndPause(_ context.Context, taskID string, comment models.Comment) error {
 	b.addCalls++
 	b.lastTaskID = taskID

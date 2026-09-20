@@ -112,6 +112,10 @@ func (s *queueStore) UpdateTaskResult(_ context.Context, id string, _ time.Time,
 	return s.update(id, func(task *models.Task) { task.State = next })
 }
 
+func (s *queueStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return s.UpdateTaskResult(ctx, id, ts, result)
+}
+
 func (s *queueStore) ReconcileGhostTasks(_ context.Context, alivePIDs []int) ([]models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

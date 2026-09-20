@@ -131,6 +131,10 @@ func (s *dispatchBatchStore) UpdateTaskResult(_ context.Context, id string, _ ti
 	return nil, models.ErrTaskNotFound
 }
 
+func (s *dispatchBatchStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return s.UpdateTaskResult(ctx, id, ts, result)
+}
+
 func (s *dispatchBatchStore) IncrementRetryCount(_ context.Context, id string, _ time.Time) (*models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

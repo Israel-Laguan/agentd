@@ -41,7 +41,6 @@ type Task struct {
 	SuccessCriteria      []string     `json:"success_criteria"`
 	CriteriaMet          []string     `json:"criteria_met"`
 	DependsOn            []string     `json:"depends_on"`
-	Logs                 string       `json:"logs"`
 }
 
 // TaskResult is the durable outcome reported by a worker after running a task.

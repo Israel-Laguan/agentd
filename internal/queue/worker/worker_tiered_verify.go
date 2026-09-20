@@ -143,8 +143,8 @@ func (w *Worker) processTieredEscalateStep(ctx context.Context, task models.Task
 	}
 
 	// Escalation succeeded; trust the strong model's fix and complete
-	// the pipeline through a state-aware path: the origin is usually
-	// BLOCKED (or already READY), while UpdateTaskResult only accepts
-	// RUNNING, so completeTieredOrigin walks the ladder first.
+	// the pipeline through the atomic origin path: the origin is usually
+	// BLOCKED (or already READY), and CompleteTieredOrigin resolves it
+	// straight to COMPLETED with no claimable intermediate state.
 	w.completeTieredOrigin(ctx, parentTask, "tiered escalation succeeded")
 }

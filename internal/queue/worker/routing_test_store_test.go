@@ -57,6 +57,10 @@ func (s *routingTestStore) UpdateTaskResult(_ context.Context, _ string, _ time.
 	}
 	return &s.task, nil
 }
+
+func (s *routingTestStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return s.UpdateTaskResult(ctx, id, ts, result)
+}
 func (s *routingTestStore) AddComment(context.Context, models.Comment) error { return nil }
 func (s *routingTestStore) ListComments(context.Context, string) ([]models.Comment, error) {
 	return nil, nil

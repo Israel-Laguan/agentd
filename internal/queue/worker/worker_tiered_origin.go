@@ -15,9 +15,11 @@ import (
 // The origin is BLOCKED while its steps run. When the last step resolves, the
 // store unblocks it back to READY and the queue re-dispatches it — so the
 // origin arrives here RUNNING, having already had its work done by the DAG.
-// It must not be re-split (that would loop forever) and it cannot be completed
-// with UpdateTaskState either, since BLOCKED/READY -> COMPLETED is not a legal
-// transition. Resolving it through UpdateTaskResult is the supported path.
+// It must not be re-split (that would loop forever). It resolves through the
+// atomic CompleteTieredOrigin path (BLOCKED/READY/RUNNING straight to
+// COMPLETED, no claimable intermediate state), never through the generic
+// UpdateTaskState machine — BLOCKED/READY -> COMPLETED is not a legal
+// transition there by design.
 //
 // It reports whether the task was handled; false means this is not a tiered
 // origin and the caller should continue with the normal dispatch path.
@@ -170,60 +172,48 @@ func (w *Worker) reblockTieredOrigin(ctx context.Context, task models.Task) {
 	}
 }
 
-// completeTieredOrigin resolves the origin as succeeded from a non-RUNNING
-// state. UpdateTaskResult only accepts RUNNING tasks, so a BLOCKED or READY
-// origin first walks the legal BLOCKED→READY→RUNNING ladder (preserving
-// optimistic-concurrency checks via UpdateTaskState) before recording the
-// result.
+// completeTieredOrigin resolves the origin as succeeded from any
+// non-terminal pipeline state (usually BLOCKED). It completes atomically in
+// a single store call, so no transient READY state is ever exposed for
+// another dispatcher to claim and re-block with a stale verdict (SP-006).
 func (w *Worker) completeTieredOrigin(ctx context.Context, origin models.Task, reason string) {
-	current, err := w.store.GetTask(ctx, origin.ID)
-	if err != nil {
-		slog.Error("tiered origin: failed to re-read before completing", "task_id", origin.ID, "error", err)
-		return
-	}
-	for current.State == models.TaskStateBlocked || current.State == models.TaskStateReady {
-		next := models.TaskStateRunning
-		if current.State == models.TaskStateBlocked {
-			next = models.TaskStateReady
-		}
-		updated, err := w.store.UpdateTaskState(ctx, current.ID, current.UpdatedAt, next)
-		if err != nil {
-			slog.Error("tiered origin: failed to ready before completing",
-				"task_id", origin.ID, "state", current.State, "error", err)
-			w.Emit(ctx, *current, "ERROR", err.Error())
-			return
-		}
-		current = updated
-	}
-	if current.State != models.TaskStateRunning {
-		slog.Error("tiered origin: cannot complete from current state",
-			"task_id", origin.ID, "state", current.State)
-		return
-	}
-	w.finishTieredOrigin(ctx, *current, true, reason)
+	w.resolveTieredOrigin(ctx, origin, true, reason)
 }
 
 // failTieredOrigin resolves the origin as failed from a non-RUNNING state.
-// UpdateTaskResult only accepts RUNNING tasks, so a BLOCKED origin whose
-// ladder broke down has to be failed through a state transition instead.
+// Like the success path it completes atomically; FAILED is not claimable,
+// so the old direct-transition fallback is only kept for stores that lack
+// the atomic method.
 func (w *Worker) failTieredOrigin(ctx context.Context, origin models.Task, reason string) {
+	w.resolveTieredOrigin(ctx, origin, false, reason)
+}
+
+// resolveTieredOrigin records the pipeline's verdict on the origin task in a
+// single atomic store call: BLOCKED/READY/RUNNING straight to
+// COMPLETED/FAILED, so no transient READY state is ever exposed for another
+// dispatcher to claim and re-block with a stale verdict (SP-006).
+func (w *Worker) resolveTieredOrigin(ctx context.Context, origin models.Task, success bool, reason string) {
 	current, err := w.store.GetTask(ctx, origin.ID)
 	if err != nil {
-		slog.Error("tiered origin: failed to re-read before failing", "task_id", origin.ID, "error", err)
+		slog.Error("tiered origin: failed to re-read before resolving", "task_id", origin.ID, "error", err)
 		return
 	}
-	if current.State == models.TaskStateRunning {
-		w.finishTieredOrigin(ctx, *current, false, reason)
+	if _, err := w.store.CompleteTieredOrigin(ctx, current.ID, current.UpdatedAt, models.TaskResult{
+		Success: success,
+		Payload: truncate(reason, 1000),
+	}); err != nil {
+		if errors.Is(err, models.ErrStateConflict) {
+			// Another writer moved the origin first (a dispatcher
+			// claimed it or a concurrent resolution landed). Leave it
+			// alone rather than forcing a verdict on stale state.
+			slog.Warn("tiered origin: concurrent resolution won; leaving origin",
+				"task_id", origin.ID, "success", success)
+			return
+		}
+		slog.Error("tiered origin: failed to record pipeline result",
+			"task_id", origin.ID, "success", success, "error", err)
+		w.Emit(ctx, *current, "ERROR", err.Error())
 		return
 	}
-	if !current.State.CanTransitionTo(models.TaskStateFailed) {
-		slog.Error("tiered origin: cannot fail from current state",
-			"task_id", origin.ID, "state", current.State)
-		return
-	}
-	if _, err := w.store.UpdateTaskState(ctx, current.ID, current.UpdatedAt, models.TaskStateFailed); err != nil {
-		slog.Error("tiered origin: failed to mark failed", "task_id", origin.ID, "error", err)
-		return
-	}
-	w.Emit(ctx, *current, "TIERED_PIPELINE_RESOLVED", "success=false "+reason)
+	w.Emit(ctx, *current, "TIERED_PIPELINE_RESOLVED", fmt.Sprintf("success=%t %s", success, reason))
 }

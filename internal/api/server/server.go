@@ -79,7 +79,57 @@ func NewHandler(deps ServerDeps) http.Handler {
 	mux.HandleFunc("GET /api/v1/events/stream", stream.ServeHTTP)
 	mux.HandleFunc("POST /v1/chat/completions", chat.Complete)
 	mux.HandleFunc("POST /api/v1/preferences", preferences.Save)
+
+	// BUG-001: discovery endpoints. The mux previously only served
+	// /api/v1/*, so the daemon root and the conventional /health and /docs
+	// paths all returned the mux 404. A headless daemon still needs a
+	// landing page and a health check.
+	mux.HandleFunc("GET /", handleLanding)
+	mux.HandleFunc("GET /health", handleHealth)
+	mux.HandleFunc("GET /docs", handleDocs)
 	return corsMiddleware(mux)
+}
+
+// handleLanding serves a minimal daemon landing page so GET / identifies the
+// service and points at the API instead of returning the mux 404.
+func handleLanding(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"service":"agentd","status":"ok","health":"/health","docs":"/docs","api":"/api/v1"}` + "\n"))
+}
+
+// handleHealth is the lightweight liveness probe (no store access).
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"status":"ok"}` + "\n"))
+}
+
+// handleDocs serves a minimal human-readable endpoint catalog. It is a
+// static overview, not full OpenAPI/Swagger — enough to explore the daemon
+// without grepping the source.
+func handleDocs(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(`<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>agentd API</title></head>
+<body>
+<h1>agentd API</h1>
+<p>Health: <a href="/health">/health</a> &middot; JSON API under <code>/api/v1</code> &middot; OpenAI-compatible chat at <code>POST /v1/chat/completions</code></p>
+<ul>
+<li>GET /api/v1/projects, GET /api/v1/projects/{id}, GET /api/v1/projects/{id}/tasks</li>
+<li>POST /api/v1/projects/materialize, POST /api/v1/projects/{id}/workspace/ready</li>
+<li>GET/POST /api/v1/tasks/{id}/comments, PATCH /api/v1/tasks/{id}</li>
+<li>POST /api/v1/tasks/{id}/assign, /split, /retry</li>
+<li>GET/POST/PATCH/DELETE /api/v1/agents{/id}, GET /api/v1/gateway/providers</li>
+<li>GET /api/v1/system/status, POST /api/v1/system/breaker/reset</li>
+<li>GET /api/v1/events/stream (SSE), POST /api/v1/preferences</li>
+</ul>
+</body>
+</html>
+`))
 }
 
 // corsAllowedOrigins is the set of origins permitted to make cross-origin

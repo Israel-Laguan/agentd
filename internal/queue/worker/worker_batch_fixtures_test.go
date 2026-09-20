@@ -60,6 +60,10 @@ func (s *batchTestStore) UpdateTaskResult(_ context.Context, id string, _ time.T
 	return &t, nil
 }
 
+func (s *batchTestStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return s.UpdateTaskResult(ctx, id, ts, result)
+}
+
 func (s *batchTestStore) GetProject(context.Context, string) (*models.Project, error) {
 	return &s.project, nil
 }

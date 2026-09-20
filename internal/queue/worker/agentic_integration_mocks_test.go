@@ -185,6 +185,10 @@ func (m *mockAgenticStore) UpdateTaskResult(_ context.Context, _ string, _ time.
 	return &m.task, nil
 }
 
+func (m *mockAgenticStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
+	return m.UpdateTaskResult(ctx, id, ts, result)
+}
+
 func (m *mockAgenticStore) AddComment(context.Context, models.Comment) error {
 	return nil
 }

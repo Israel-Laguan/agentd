@@ -65,11 +65,11 @@ func TestClassifyVerifyOutcome_Conflict(t *testing.T) {
 
 // newTieredPipelineFixture materializes an origin task and marks it RUNNING,
 // the state a real tiered origin sits in for the whole pipeline's duration.
-func newTieredPipelineFixture(t *testing.T, store *testutil.FakeKanbanStore) models.Task {
+func newTieredPipelineFixture(t *testing.T, store *testutil.FakeKanbanStore, projectName string) models.Task {
 	t.Helper()
 	ctx := context.Background()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "escalation-fixture",
+		ProjectName: projectName,
 		Tasks:       []models.DraftTask{{Title: "origin", Description: "complex task"}},
 	})
 	if err != nil {
@@ -91,7 +91,7 @@ func TestHandleVerifyOutcome_Pass(t *testing.T) {
 	store := testutil.NewFakeStore()
 	w := &Worker{store: store, sink: &mockEventSink{}}
 
-	origin := newTieredPipelineFixture(t, store)
+	origin := newTieredPipelineFixture(t, store, "escalation-fixture")
 	verifyTask := models.Task{BaseEntity: models.BaseEntity{ID: "verify-1"}, Title: "verify step"}
 
 	if err := w.handleVerifyOutcome(ctx, verifyTask, models.VerifyOutcomePass, VerifyResult{Overall: "pass"}, origin); err != nil {
@@ -125,48 +125,6 @@ func TestVerifyResultOutcome_Valid(t *testing.T) {
 				t.Errorf("Valid() = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-// --- getMetadata/setMetadata round trip ---------------------------------
-
-func TestMetadata_RoundTripsThroughTaskLogs(t *testing.T) {
-	task := models.Task{}
-
-	if got := getMetadataInt(task, "mid_fix_passes", 0); got != 0 {
-		t.Fatalf("getMetadataInt() on empty task.Logs = %d, want default 0", got)
-	}
-
-	setMetadataInt(&task, "mid_fix_passes", 1)
-	if task.Logs == "" {
-		t.Fatal("setMetadataInt did not write task.Logs")
-	}
-	if got := getMetadataInt(task, "mid_fix_passes", 0); got != 1 {
-		t.Fatalf("getMetadataInt() after first set = %d, want 1", got)
-	}
-
-	// Increment again on the same task — the whole point of the "persists
-	// and increments across calls" requirement.
-	setMetadataInt(&task, "mid_fix_passes", 2)
-	if got := getMetadataInt(task, "mid_fix_passes", 0); got != 2 {
-		t.Fatalf("getMetadataInt() after second set = %d, want 2", got)
-	}
-
-	// A second, independent key must not clobber the first.
-	setMetadataInt(&task, "escalate_count", 1)
-	if got := getMetadataInt(task, "mid_fix_passes", 0); got != 2 {
-		t.Fatalf("mid_fix_passes clobbered by setting escalate_count: got %d, want 2", got)
-	}
-	if got := getMetadataInt(task, "escalate_count", 0); got != 1 {
-		t.Fatalf("getMetadataInt(escalate_count) = %d, want 1", got)
-	}
-}
-
-func TestGetMetadata_MissingKeyReturnsDefault(t *testing.T) {
-	task := models.Task{}
-	setMetadataInt(&task, "mid_fix_passes", 1)
-	if got := getMetadata(task, "nonexistent", "fallback"); got != "fallback" {
-		t.Fatalf("getMetadata() for missing key = %q, want %q", got, "fallback")
 	}
 }
 
@@ -212,7 +170,7 @@ func TestScheduleMidFix_EscalatesOnceCapReached(t *testing.T) {
 			Escalation: config.TieredEscalationConfig{MaxMidFix: 2, MaxEscalate: 1},
 		},
 	}
-	origin := newTieredPipelineFixture(t, store)
+	origin := newTieredPipelineFixture(t, store, "schedule-midfix-fixture")
 	verifyTask := models.Task{BaseEntity: models.BaseEntity{ID: "verify-1"}, Title: "verify: origin"}
 
 	// Attempts 1 and 2 stay under the cap: each spawns a mid-fix redo.
@@ -250,7 +208,7 @@ func TestScheduleEscalation_HandsOffToHumanOnceCapReached(t *testing.T) {
 			Escalation: config.TieredEscalationConfig{MaxMidFix: 2, MaxEscalate: 1},
 		},
 	}
-	origin := newTieredPipelineFixture(t, store)
+	origin := newTieredPipelineFixture(t, store, "schedule-escalation-fixture")
 	verifyTask := models.Task{BaseEntity: models.BaseEntity{ID: "verify-1"}, Title: "verify: origin"}
 
 	if err := w.scheduleEscalation(ctx, verifyTask, origin, VerifyResult{Overall: "fail"}); err != nil {
