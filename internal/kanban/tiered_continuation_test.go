@@ -123,6 +123,11 @@ func TestSpawnTieredContinuation_OriginStateValidation(t *testing.T) {
 				if err == nil {
 					t.Fatalf("child task %s should not exist after rejection", child.ID)
 				}
+			} else {
+				_, err = store.GetTask(ctx, child.ID)
+				if err != nil {
+					t.Fatalf("child task %s should exist after success: %v", child.ID, err)
+				}
 			}
 			current, err := store.GetTask(ctx, origin.ID)
 			if err != nil {
@@ -207,6 +212,40 @@ func TestSpawnTieredContinuation_IdempotencyKeyReplaysBatch(t *testing.T) {
 	}
 	if len(first) != 1 || len(second) != 1 || first[0].ID != second[0].ID {
 		t.Fatalf("replay returned %+v, first returned %+v; want same child", second, first)
+	}
+	spawned, err := store.ListChildTasksByRelation(ctx, origin.ID, models.TaskRelationSpawnedBy)
+	if err != nil {
+		t.Fatalf("ListChildTasksByRelation() error = %v", err)
+	}
+	if len(spawned) != 1 {
+		t.Fatalf("len(spawned) = %d, want 1", len(spawned))
+	}
+}
+
+func TestSpawnTieredContinuation_IdempotencyKeyMismatchedChild(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	origin := newTieredOriginTask(t, store, ctx)
+	child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-context", "child", models.TaskStateReady)
+	input := []models.TieredContinuationTask{{Task: child, IdempotencyKey: "verify-1"}}
+
+	first, err := store.SpawnTieredContinuation(ctx, origin.ID, input)
+	if err != nil {
+		t.Fatalf("first SpawnTieredContinuation() error = %v", err)
+	}
+
+	differentChild := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-context", "child-v2", models.TaskStateReady)
+	differentInput := []models.TieredContinuationTask{{Task: differentChild, IdempotencyKey: "verify-1"}}
+	second, err := store.SpawnTieredContinuation(ctx, origin.ID, differentInput)
+	if err != nil {
+		t.Fatalf("replay SpawnTieredContinuation() error = %v", err)
+	}
+
+	if len(second) != 1 || second[0].ID != first[0].ID {
+		t.Fatalf("replay returned %+v, want same as first %+v", second, first)
+	}
+	if _, err := store.GetTask(ctx, differentChild.ID); err == nil {
+		t.Fatalf("different child %s should not exist after replay", differentChild.ID)
 	}
 	spawned, err := store.ListChildTasksByRelation(ctx, origin.ID, models.TaskRelationSpawnedBy)
 	if err != nil {
