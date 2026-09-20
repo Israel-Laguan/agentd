@@ -54,6 +54,13 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 	if successCriteria != "[]" {
 		t.Fatalf("success_criteria = %q, want []", successCriteria)
 	}
+	var retry, tokens, cached, writes int
+	if err := db.QueryRowContext(ctx, `SELECT retry_count, token_usage, cached_token_usage, cache_write_token_usage FROM tasks WHERE id = 'negative-task'`).Scan(&retry, &tokens, &cached, &writes); err != nil {
+		t.Fatalf("read clamped counters: %v", err)
+	}
+	if retry != 0 || tokens != 0 || cached != 0 || writes != 0 {
+		t.Fatalf("clamped counters = %d,%d,%d,%d, want all zero", retry, tokens, cached, writes)
+	}
 
 	// The constraint must now accept NEEDS_CONTEXT.
 	if _, err := db.ExecContext(ctx, `
@@ -122,5 +129,13 @@ INSERT INTO tasks (
     success_criteria, criteria_met, created_at, updated_at
 )
 VALUES ('task', 'project', 'default', 'Task', 'description', 'READY', 'SYSTEM',
-    0, 0, 0, 0, '[]', '[]', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
+     0, 0, 0, 0, '[]', '[]', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
+
+INSERT INTO tasks (
+    id, project_id, agent_id, title, description, state, assignee,
+    retry_count, token_usage, cached_token_usage, cache_write_token_usage,
+    success_criteria, criteria_met, created_at, updated_at
+)
+VALUES ('negative-task', 'project', 'default', 'Negative', 'description', 'READY', 'SYSTEM',
+    -1, -2, -3, -4, '[]', '[]', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
 `

@@ -22,7 +22,7 @@ func newTieredOriginTask(t *testing.T, store *Store, ctx context.Context) models
 	_ = project
 	origin, err := store.UpdateTaskState(ctx, tasks[0].ID, tasks[0].UpdatedAt, models.TaskStateBlocked)
 	if err != nil {
-		t.Fatalf("UpdateTaskState(RUNNING) error = %v", err)
+		t.Fatalf("UpdateTaskState(BLOCKED) error = %v", err)
 	}
 	return *origin
 }

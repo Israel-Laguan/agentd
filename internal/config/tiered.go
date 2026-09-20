@@ -14,6 +14,7 @@ const (
 	// DefaultTieredMaxEscalate caps strong-model escalation attempts per
 	// pipeline run before handing off to a human.
 	DefaultTieredMaxEscalate = 1
+	DefaultTieredMaxReGather = 2
 )
 
 // TieredContextPackConfig holds budget defaults for ContextPack creation.
@@ -26,6 +27,7 @@ type TieredContextPackConfig struct {
 type TieredEscalationConfig struct {
 	MaxMidFix   int
 	MaxEscalate int
+	MaxReGather int
 }
 
 // TieredConfig controls the tiered execution pipeline (Phase 5, milestones M1–M2).
@@ -54,6 +56,9 @@ func (tc TieredConfig) EscalationConfig() TieredEscalationConfig {
 	if cfg.MaxEscalate <= 0 {
 		cfg.MaxEscalate = DefaultTieredMaxEscalate
 	}
+	if cfg.MaxReGather <= 0 {
+		cfg.MaxReGather = DefaultTieredMaxReGather
+	}
 	return cfg
 }
 
@@ -77,6 +82,7 @@ func setTieredDefaults(v *viper.Viper) {
 	v.SetDefault("tiered.context_pack.max_chars", DefaultTieredMaxChars)
 	v.SetDefault("tiered.escalation.max_mid_fix", DefaultTieredMaxMidFix)
 	v.SetDefault("tiered.escalation.max_escalate", DefaultTieredMaxEscalate)
+	v.SetDefault("tiered.escalation.max_re_gather", DefaultTieredMaxReGather)
 }
 
 func loadTieredConfig(v *viper.Viper) TieredConfig {
@@ -100,6 +106,10 @@ func loadTieredConfig(v *viper.Viper) TieredConfig {
 	if maxEscalate <= 0 {
 		maxEscalate = DefaultTieredMaxEscalate
 	}
+	maxReGather := v.GetInt("tiered.escalation.max_re_gather")
+	if maxReGather <= 0 {
+		maxReGather = DefaultTieredMaxReGather
+	}
 	return TieredConfig{
 		Enabled:             v.GetBool("tiered.enabled"),
 		ComplexityThreshold: threshold,
@@ -110,6 +120,7 @@ func loadTieredConfig(v *viper.Viper) TieredConfig {
 		Escalation: TieredEscalationConfig{
 			MaxMidFix:   maxMidFix,
 			MaxEscalate: maxEscalate,
+			MaxReGather: maxReGather,
 		},
 	}
 }
