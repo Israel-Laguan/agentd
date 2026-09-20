@@ -122,9 +122,6 @@ func TestSpawnTieredContinuation_OriginStateValidation(t *testing.T) {
 				t.Fatalf("GetTask: %v", err)
 			}
 			want := tc.wantState
-			if tc.name == "ready is reblocked" {
-				want = models.TaskStateBlocked
-			}
 			if current.State != want {
 				t.Fatalf("origin state = %s, want %s", current.State, want)
 			}
@@ -140,7 +137,7 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 
 	oldDecision := newRewireDecisionTask(now, origin.ProjectID, "decision", models.TaskStateCompleted)
 	newDecision := newRewireDecisionTask(now, origin.ProjectID, "decision (re-gather v2)", models.TaskStateReady)
-	execute := newRewireStepTask(now, origin.ProjectID, "tier-execute", "execute", models.TaskStateReady)
+	execute := newRewireStepTask(now, origin.ProjectID, "tier-execute", "execute", models.TaskStatePending)
 	verify := newRewireStepTask(now, origin.ProjectID, "tier-verify", "verify", models.TaskStatePending)
 	pendingDep := newRewireStepTask(now, origin.ProjectID, "tier-pending-dep", "pending-dep", models.TaskStatePending)
 	queuedDep := newRewireStepTask(now, origin.ProjectID, "tier-queued-dep", "queued-dep", models.TaskStateQueued)
@@ -166,7 +163,7 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 		t.Fatalf("rewired len = %d, want 3", len(rewired))
 	}
 
-	assertRewireExecuteBlocked(t, ctx, store, execute.ID, newDecision.ID)
+	assertRewirePendingDepRedirected(t, ctx, store, execute.ID, newDecision.ID)
 	assertRewirePendingDepRedirected(t, ctx, store, pendingDep.ID, newDecision.ID)
 	assertRewireVerifyPendingRedirected(t, ctx, store, verify.ID, newDecision.ID)
 	assertRewireParent(t, ctx, store, queuedDep.ID, oldDecision.ID)

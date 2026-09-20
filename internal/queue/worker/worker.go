@@ -240,12 +240,17 @@ func (w *Worker) dispatchTieredStep(ctx context.Context, task models.Task, proje
 				return true
 			}
 			if freshDecisionID != "" {
-				_, err := w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID)
+				_, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked)
+				if err != nil {
+					w.FailHard(ctx, task, fmt.Errorf("tiered park before dependency rewire failed: %w", err))
+					return true
+				}
+				_, err = w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID)
 				if err != nil {
 					w.FailHard(ctx, task, fmt.Errorf("tiered rewire to fresh decision failed: %w", err))
 					return true
 				}
-				break
+				return true
 			}
 			w.FailHard(ctx, task, fmt.Errorf("tiered step depends on stale decision %s awaiting context re-gather", dependency.ID))
 			return true
@@ -259,13 +264,13 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	engine := agentic.NewEngine(agentic.Config{
 		Store: w.store, Gateway: w.gateway, Sandbox: w.sandbox,
 		SandboxEnvAllowlist: w.sandboxEnvAllowlist,
-		SandboxExtraEnv: w.sandboxExtraEnv,
-		SandboxWallTimeout: w.sandboxWallTimeout,
-		FileContextCfg: w.fileContextCfg, DocStore: w.docStore,
+		SandboxExtraEnv:     w.sandboxExtraEnv,
+		SandboxWallTimeout:  w.sandboxWallTimeout,
+		FileContextCfg:      w.fileContextCfg, DocStore: w.docStore,
 		ContextCfg: w.contextCfg, MaxToolIterations: w.maxToolIterations,
-		BudgetTracker: w.budgetTracker,
+		BudgetTracker:           w.budgetTracker,
 		ContextWarningThreshold: w.contextWarningThreshold,
-		ToolFailureStreak: w.toolFailureStreak, TruncatorMax: w.truncatorMax,
+		ToolFailureStreak:       w.toolFailureStreak, TruncatorMax: w.truncatorMax,
 		CharacterBudget: w.characterBudget, PlanningCfg: w.planningCfg,
 		MessageEditor: w.messageEditor, CheckpointStore: w.checkpointStore,
 		TopicGuard: w.topicGuard, ModelRouter: w.modelRouter,

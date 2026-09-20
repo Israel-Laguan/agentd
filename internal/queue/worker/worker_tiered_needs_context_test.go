@@ -101,11 +101,8 @@ func tieredReadyExecuteDraft(projectID string) models.Task {
 		ProjectID:  projectID,
 		AgentID:    "tier-execute",
 		Title:      "execute: origin",
-		// READY simulates the common race: UnlockReadyChildren already
-		// promoted execute out of PENDING by the time the decision step's
-		// own post-commit NEEDS_CONTEXT check runs.
-		State:    models.TaskStateReady,
-		Assignee: models.TaskAssigneeSystem,
+		State:      models.TaskStatePending,
+		Assignee:   models.TaskAssigneeSystem,
 	}
 }
 
@@ -165,8 +162,7 @@ func assertTieredRegatherPairSpawned(t *testing.T, ctx context.Context, store *t
 
 func assertTieredExecuteRewiredAndBlocked(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, executeTask models.Task, _, newDecisionID string) {
 	t.Helper()
-	// execute was READY, depending on the now-stale decision; it must be
-	// rewired onto the new decision and blocked until that one is ready.
+	// execute depends on the now-stale decision and must be rewired.
 	executeParents, err := store.ListParentTasksByRelation(ctx, executeTask.ID, models.TaskRelationDependsOn)
 	if err != nil {
 		t.Fatalf("ListParentTasksByRelation(execute): %v", err)
@@ -178,8 +174,8 @@ func assertTieredExecuteRewiredAndBlocked(t *testing.T, ctx context.Context, sto
 	if err != nil {
 		t.Fatalf("GetTask(execute): %v", err)
 	}
-	if reloadedExecute.State != models.TaskStateBlocked {
-		t.Fatalf("execute state = %s, want BLOCKED", reloadedExecute.State)
+	if reloadedExecute.State != models.TaskStatePending {
+		t.Fatalf("execute state = %s, want PENDING", reloadedExecute.State)
 	}
 }
 

@@ -20,7 +20,10 @@ func (s *FakeKanbanStore) SpawnTieredContinuation(_ context.Context, originID st
 	if err := validateTieredOriginState(originID, origin); err != nil {
 		return nil, err
 	}
-	resolved := resolveTieredChildren(s, children)
+	resolved, err := resolveTieredChildren(s, children)
+	if err != nil {
+		return nil, err
+	}
 	if err := validateTieredDependencies(s, children, resolved); err != nil {
 		return nil, err
 	}
@@ -39,7 +42,7 @@ func validateTieredOriginState(originID string, origin models.Task) error {
 	return nil
 }
 
-func resolveTieredChildren(s *FakeKanbanStore, children []models.TieredContinuationTask) []models.Task {
+func resolveTieredChildren(s *FakeKanbanStore, children []models.TieredContinuationTask) ([]models.Task, error) {
 	seenIDs := make(map[string]struct{})
 	ts := now()
 	resolved := make([]models.Task, 0, len(children))
@@ -49,7 +52,7 @@ func resolveTieredChildren(s *FakeKanbanStore, children []models.TieredContinuat
 			t.ID = s.nextID()
 		}
 		if _, dup := seenIDs[t.ID]; dup {
-			continue
+			return nil, fmt.Errorf("duplicate child ID in tiered continuation: %s", t.ID)
 		}
 		seenIDs[t.ID] = struct{}{}
 		if t.CreatedAt.IsZero() {
@@ -60,7 +63,7 @@ func resolveTieredChildren(s *FakeKanbanStore, children []models.TieredContinuat
 		}
 		resolved = append(resolved, t)
 	}
-	return resolved
+	return resolved, nil
 }
 
 func persistTieredChildren(s *FakeKanbanStore, originID string, children []models.TieredContinuationTask, resolved []models.Task) []models.Task {
@@ -83,6 +86,9 @@ func validateTieredDependencies(s *FakeKanbanStore, children []models.TieredCont
 	for i, child := range children {
 		if child.DependsOnID == "" {
 			continue
+		}
+		if child.Task.State == models.TaskStateReady {
+			return fmt.Errorf("dependent continuation child %s cannot be READY", child.Task.ID)
 		}
 		if _, known := s.tasks[child.DependsOnID]; known {
 			continue
