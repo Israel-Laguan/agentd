@@ -126,14 +126,8 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 	w.Emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
 }
 
-// Process handles task execution, supporting two modes:
-// - Legacy mode (default): single-shot JSON command execution via GenerateJSON
-// - Agentic mode: inner loop with tool calling and message accumulation (processAgentic)
-// Model routing runs once per path: routeLegacyProfile in runLegacyTask for legacy,
-// applyModelRouting in processAgentic for agentic (using the pre-manifest tool registry
-// for context_token_threshold; manifest filtering applies only to turn-loop requests).
-// Agentic fallback to legacy reuses the agentic route (profileAlreadyRouted) so a
-// second route cannot change provider.
+// Process handles task execution: legacy (GenerateJSON), agentic (tool calling),
+// tiered dispatch, and review finalization. Model routing runs once per path.
 func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
 	project, profile, err := w.loadContext(ctx, task)
@@ -202,14 +196,12 @@ func (w *Worker) dispatchTieredStep(ctx context.Context, task models.Task, proje
 	}
 	parents, err := w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationSpawnedBy)
 	if err != nil {
-		slog.Error("tiered: failed to look up SPAWNED_BY parents",
-			"task_id", task.ID, "error", err)
+		slog.Error("tiered: failed to look up SPAWNED_BY parents", "task_id", task.ID, "error", err)
 		w.FailHard(ctx, task, fmt.Errorf("tiered parent lookup failed: %w", err))
 		return true
 	}
 	if len(parents) == 0 {
-		slog.Error("tiered step has no SPAWNED_BY origin parent",
-			"task_id", task.ID, "agent_id", task.AgentID)
+		slog.Error("tiered step has no SPAWNED_BY origin parent", "task_id", task.ID, "agent_id", task.AgentID)
 		w.FailHard(ctx, task, fmt.Errorf("tiered step %s has no SPAWNED_BY origin parent", task.ID))
 		return true
 	}
@@ -220,91 +212,9 @@ func (w *Worker) dispatchTieredStep(ctx context.Context, task models.Task, proje
 	}
 	for _, dependency := range dependencies {
 		if dependency.State == models.TaskStateNeedsContext {
-			freshDecisionID, err := w.freshDecisionID(ctx, parents[0].ID, dependency.ID)
-			if err != nil {
-				w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision lookup failed: %w", err))
+			if w.handleNeedsContextDep(ctx, task, dependency, parents[0]) {
 				return true
 			}
-			if freshDecisionID != "" {
-				fresh, err := w.store.GetTask(ctx, freshDecisionID)
-				if err != nil {
-					w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision fetch failed: %w", err))
-					return true
-				}
-				switch fresh.State {
-				case models.TaskStateCompleted:
-					if _, err := w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID); err != nil {
-						w.FailHard(ctx, task, fmt.Errorf("tiered rewire to completed decision failed: %w", err))
-						return true
-					}
-					// Fresh decision already completed; don't leave dependent
-					// parked in BLOCKED forever. Promote to READY if deps are
-					// now satisfied so the next dispatch can run it.
-					if w.allDependenciesResolved(ctx, task.ID) {
-						latest, err := w.store.GetTask(ctx, task.ID)
-						if err == nil && latest.State.CanTransitionTo(models.TaskStateReady) {
-							if _, err := w.store.UpdateTaskState(ctx, latest.ID, latest.UpdatedAt, models.TaskStateReady); err != nil {
-								slog.Error("tiered: failed to re-ready after completed fresh decision", "task_id", latest.ID, "error", err)
-							}
-						}
-					}
-					return true
-				case models.TaskStateFailed, models.TaskStateFailedRequiresHuman:
-					if _, err := w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID); err != nil {
-						w.FailHard(ctx, task, fmt.Errorf("tiered rewire to failed decision failed: %w", err))
-						return true
-					}
-					w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", freshDecisionID, fresh.State))
-					return true
-				case models.TaskStateNeedsContext:
-					// Fresh itself is stale; fall through to look for a
-					// successor or fail — do not park on a decision that
-					// will never complete.
-				default:
-					// Active fresh decision: park and rewire.
-					if task.State.CanTransitionTo(models.TaskStateBlocked) {
-						if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
-							w.FailHard(ctx, task, fmt.Errorf("tiered park before dependency rewire failed: %w", err))
-							return true
-						}
-					}
-					if _, err := w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID); err != nil {
-						w.FailHard(ctx, task, fmt.Errorf("tiered rewire to fresh decision failed: %w", err))
-						return true
-					}
-					return true
-				}
-			}
-			// No active fresh decision. Check for a terminal fresh that
-			// already completed so we can re-ready or propagate failure
-			// instead of leaving the dependent stuck.
-			if completedID, err := w.freshTerminalDecisionID(ctx, parents[0].ID, dependency.ID, models.TaskStateCompleted); err == nil && completedID != "" {
-				if _, err := w.store.RewireDependsOn(ctx, dependency.ID, completedID); err != nil {
-					w.FailHard(ctx, task, fmt.Errorf("tiered rewire to completed decision failed: %w", err))
-					return true
-				}
-				if w.allDependenciesResolved(ctx, task.ID) {
-					latest, err := w.store.GetTask(ctx, task.ID)
-					if err == nil && latest.State.CanTransitionTo(models.TaskStateReady) {
-						if _, err := w.store.UpdateTaskState(ctx, latest.ID, latest.UpdatedAt, models.TaskStateReady); err != nil {
-							slog.Error("tiered: failed to re-ready after completed fresh decision", "task_id", latest.ID, "error", err)
-						}
-					}
-				}
-				return true
-			}
-			if failedID, err := w.freshTerminalDecisionID(ctx, parents[0].ID, dependency.ID, models.TaskStateFailed); err == nil && failedID != "" {
-				_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedID)
-				w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedID, models.TaskStateFailed))
-				return true
-			}
-			if failedHumanID, err := w.freshTerminalDecisionID(ctx, parents[0].ID, dependency.ID, models.TaskStateFailedRequiresHuman); err == nil && failedHumanID != "" {
-				_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedHumanID)
-				w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedHumanID, models.TaskStateFailedRequiresHuman))
-				return true
-			}
-			w.FailHard(ctx, task, fmt.Errorf("tiered step depends on stale decision %s awaiting context re-gather", dependency.ID))
-			return true
 		}
 	}
 	w.processTieredStep(ctx, task, project, profile, w.tieredStepKind(task), parents[0])

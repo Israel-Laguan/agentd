@@ -239,13 +239,9 @@ func TestTieredDecision_PendingReGatherNeedsContextSpawnsSecondRegather(t *testi
 	store := testutil.NewFakeStore()
 	origin, _, _, _ := setUpTieredDecisionFixture(t, store)
 
-	// The re-gather decision spawned by handleNeedsContext starts as PENDING.
-	// Simulate that second-generation PENDING decision itself signaling
-	// NEEDS_CONTEXT (insufficient pack even after re-gather).
 	w := &Worker{store: store, sink: &mockEventSink{}, tieredCfg: config.TieredConfig{
 		Escalation: config.TieredEscalationConfig{MaxReGather: 5},
 	}}
-	// Trigger first re-gather to create a PENDING newDecision.
 	firstDecision, err := store.GetTask(ctx, "decision-task")
 	if err != nil {
 		t.Fatalf("GetTask(decision): %v", err)
@@ -253,25 +249,7 @@ func TestTieredDecision_PendingReGatherNeedsContextSpawnsSecondRegather(t *testi
 	if err := w.handleNeedsContext(ctx, *firstDecision, origin, "first pack missing file"); err != nil {
 		t.Fatalf("handleNeedsContext first: %v", err)
 	}
-	spawned, err := store.ListChildTasksByRelation(ctx, origin.ID, models.TaskRelationSpawnedBy)
-	if err != nil {
-		t.Fatalf("ListChildTasksByRelation: %v", err)
-	}
-	var pendingRegatherDecision models.Task
-	for _, s := range spawned {
-		if strings.HasPrefix(s.Title, "decision (re-gather") {
-			pendingRegatherDecision = s
-		}
-	}
-	if pendingRegatherDecision.ID == "" {
-		t.Fatalf("no re-gather decision found among %+v", spawned)
-	}
-	if pendingRegatherDecision.State != models.TaskStatePending {
-		t.Fatalf("re-gather decision state = %s, want PENDING", pendingRegatherDecision.State)
-	}
-	// Move PENDING -> RUNNING so the state transition to NEEDS_CONTEXT is
-	// realistic (PENDING->NEEDS_CONTEXT is also valid, but RUNNING mirrors
-	// the production flow where decision was dispatched).
+	pendingRegatherDecision := assertPendingRegatherDecision(t, ctx, store, origin)
 	running, err := store.UpdateTaskState(ctx, pendingRegatherDecision.ID, pendingRegatherDecision.UpdatedAt, models.TaskStateRunning)
 	if err != nil {
 		t.Fatalf("RUNNING: %v", err)
@@ -295,16 +273,40 @@ func TestTieredDecision_PendingReGatherNeedsContextSpawnsSecondRegather(t *testi
 	if err != nil {
 		t.Fatalf("ListChildTasksByRelation after second: %v", err)
 	}
-	// Should have 2 generations of context+decision pairs plus originals.
-	hasSecondContext := false
-	for _, s := range spawned2 {
-		if s.Title == "context (re-gather v2): origin" || strings.HasPrefix(s.Title, "context (re-gather v2)") {
-			hasSecondContext = true
-		}
-	}
-	if !hasSecondContext {
+	if !hasSecondRegatherContext(t, spawned2) {
 		t.Fatalf("expected second re-gather context among %+v", spawned2)
 	}
+}
+
+func assertPendingRegatherDecision(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, origin models.Task) models.Task {
+	t.Helper()
+	spawned, err := store.ListChildTasksByRelation(ctx, origin.ID, models.TaskRelationSpawnedBy)
+	if err != nil {
+		t.Fatalf("ListChildTasksByRelation: %v", err)
+	}
+	var pendingRegatherDecision models.Task
+	for _, s := range spawned {
+		if strings.HasPrefix(s.Title, "decision (re-gather") {
+			pendingRegatherDecision = s
+		}
+	}
+	if pendingRegatherDecision.ID == "" {
+		t.Fatalf("no re-gather decision found among %+v", spawned)
+	}
+	if pendingRegatherDecision.State != models.TaskStatePending {
+		t.Fatalf("re-gather decision state = %s, want PENDING", pendingRegatherDecision.State)
+	}
+	return pendingRegatherDecision
+}
+
+func hasSecondRegatherContext(t *testing.T, spawned []models.Task) bool {
+	t.Helper()
+	for _, s := range spawned {
+		if s.Title == "context (re-gather v2): origin" || strings.HasPrefix(s.Title, "context (re-gather v2)") {
+			return true
+		}
+	}
+	return false
 }
 
 func TestTieredDecision_NeedsContextCapHandsOffToHuman(t *testing.T) {
@@ -314,16 +316,9 @@ func TestTieredDecision_NeedsContextCapHandsOffToHuman(t *testing.T) {
 	w := &Worker{store: store, sink: &mockEventSink{}, tieredCfg: config.TieredConfig{
 		Escalation: config.TieredEscalationConfig{MaxReGather: 1},
 	}}
-
-	// Exhaust the single re-gather budget by pre-creating a context child
-	// so nextContextPackGeneration will be 2 > MaxReGather(1).
-	if _, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
-		{Task: models.Task{BaseEntity: models.BaseEntity{ID: "pre-context"}, ProjectID: origin.ProjectID, AgentID: "tier-context", Title: "context (re-gather v1): origin", State: models.TaskStateCompleted, Assignee: models.TaskAssigneeSystem}},
-	}); err != nil {
-		t.Fatalf("pre-create context: %v", err)
+	if err := exhaustReGatherBudget(ctx, t, store, origin); err != nil {
+		t.Fatalf("exhaust re-gather budget: %v", err)
 	}
-	// decisionTask is READY; move to RUNNING before handleNeedsContext
-	// mirrors production (or handleNeedsContext will reload and transition).
 	running, err := store.UpdateTaskState(ctx, decisionTask.ID, decisionTask.UpdatedAt, models.TaskStateRunning)
 	if err != nil {
 		t.Fatalf("RUNNING: %v", err)
@@ -342,7 +337,6 @@ func TestTieredDecision_NeedsContextCapHandsOffToHuman(t *testing.T) {
 	if gotOrigin.State != models.TaskStateFailedRequiresHuman {
 		t.Fatalf("origin state = %s, want FAILED_REQUIRES_HUMAN after MaxReGather cap", gotOrigin.State)
 	}
-	// Decision itself should still have been moved to NEEDS_CONTEXT before cap check.
 	gotDecision, err := store.GetTask(ctx, decisionTask.ID)
 	if err != nil {
 		t.Fatalf("GetTask(decision): %v", err)
@@ -350,6 +344,16 @@ func TestTieredDecision_NeedsContextCapHandsOffToHuman(t *testing.T) {
 	if gotDecision.State != models.TaskStateNeedsContext {
 		t.Fatalf("decision state = %s, want NEEDS_CONTEXT", gotDecision.State)
 	}
+}
+
+func exhaustReGatherBudget(ctx context.Context, t *testing.T, store *testutil.FakeKanbanStore, origin models.Task) error {
+	t.Helper()
+	if _, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
+		{Task: models.Task{BaseEntity: models.BaseEntity{ID: "pre-context"}, ProjectID: origin.ProjectID, AgentID: "tier-context", Title: "context (re-gather v1): origin", State: models.TaskStateCompleted, Assignee: models.TaskAssigneeSystem}},
+	}); err != nil {
+		t.Fatalf("pre-create context: %v", err)
+	}
+	return nil
 }
 
 func TestTieredNeedsContext_RevivalTransitions(t *testing.T) {
@@ -406,8 +410,20 @@ func TestDispatchTieredStep_StaleDepWithCompletedFreshReReadies(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	origin, staleDecision, executeTask, _ := setUpTieredDecisionFixture(t, store)
-	// Move stale decision to NEEDS_CONTEXT.
-	staleRunning, err := store.UpdateTaskState(ctx, staleDecision.ID, staleDecision.UpdatedAt, models.TaskStateRunning)
+	staleNeedsCtx := moveToNeedsContext(t, ctx, store, staleDecision)
+	freshCompleted := spawnCompletedFreshDecision(t, ctx, store, origin, staleNeedsCtx)
+	w := &Worker{store: store, sink: &mockEventSink{}}
+	project, profile, execLatest := setupDispatch(t, ctx, store, origin, executeTask)
+	handled := w.dispatchTieredStep(ctx, *execLatest, *project, profile)
+	if !handled {
+		t.Fatalf("dispatchTieredStep returned false, want true (handled stale dep)")
+	}
+	assertRewiredToCompletedFresh(t, ctx, store, executeTask, freshCompleted.ID)
+}
+
+func moveToNeedsContext(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, decisionTask models.Task) *models.Task {
+	t.Helper()
+	staleRunning, err := store.UpdateTaskState(ctx, decisionTask.ID, decisionTask.UpdatedAt, models.TaskStateRunning)
 	if err != nil {
 		t.Fatalf("stale RUNNING: %v", err)
 	}
@@ -415,9 +431,11 @@ func TestDispatchTieredStep_StaleDepWithCompletedFreshReReadies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stale NEEDS_CONTEXT: %v", err)
 	}
-	// Spawn a fresh decision that is already COMPLETED (simulates dispatch
-	// racing after the re-gather finished). Ensure its CreatedAt is after
-	// stale's so freshDecisionID (which compares CreatedAt) picks it up.
+	return staleNeedsCtx
+}
+
+func spawnCompletedFreshDecision(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, origin models.Task, staleNeedsCtx *models.Task) *models.Task {
+	t.Helper()
 	freshTime := staleNeedsCtx.CreatedAt.Add(10 * 1e9)
 	freshPending := models.Task{
 		BaseEntity: models.BaseEntity{ID: "fresh-decision-completed", CreatedAt: freshTime, UpdatedAt: freshTime},
@@ -435,9 +453,11 @@ func TestDispatchTieredStep_StaleDepWithCompletedFreshReReadies(t *testing.T) {
 		t.Fatalf("fresh COMPLETED: %v", err)
 	}
 	_ = completed
-	// Dependent execute is PENDING on stale decision; dispatching it now
-	// should detect stale NEEDS_CONTEXT, find the completed fresh, rewire
-	// to it, and promote to READY instead of leaving it BLOCKED forever.
+	return completed
+}
+
+func setupDispatch(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, origin models.Task, executeTask models.Task) (*models.Project, models.AgentProfile, *models.Task) {
+	t.Helper()
 	project, err := store.GetProject(ctx, origin.ProjectID)
 	if err != nil {
 		t.Fatalf("GetProject: %v", err)
@@ -448,20 +468,21 @@ func TestDispatchTieredStep_StaleDepWithCompletedFreshReReadies(t *testing.T) {
 		t.Fatalf("GetTask execute: %v", err)
 	}
 	profile := models.AgentProfile{ID: "tier-execute", Provider: "test-provider", AgenticMode: true}
-	// Ensure profile exists for dispatch lookup, though dispatch doesn't need gateway.
 	if err := store.UpsertAgentProfile(ctx, profile); err != nil {
 		t.Fatalf("upsert profile: %v", err)
 	}
-	handled := w.dispatchTieredStep(ctx, *execLatest, *project, profile)
-	if !handled {
-		t.Fatalf("dispatchTieredStep returned false, want true (handled stale dep)")
-	}
+	_ = w
+	return project, profile, execLatest
+}
+
+func assertRewiredToCompletedFresh(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, executeTask models.Task, freshDecisionID string) {
+	t.Helper()
 	rewiredParents, err := store.ListParentTasksByRelation(ctx, executeTask.ID, models.TaskRelationDependsOn)
 	if err != nil {
 		t.Fatalf("ListParent: %v", err)
 	}
-	if len(rewiredParents) != 1 || rewiredParents[0].ID != "fresh-decision-completed" {
-		t.Fatalf("execute parents = %+v, want [fresh-decision-completed]", rewiredParents)
+	if len(rewiredParents) != 1 || rewiredParents[0].ID != freshDecisionID {
+		t.Fatalf("execute parents = %+v, want [%s]", rewiredParents, freshDecisionID)
 	}
 	gotExec, err := store.GetTask(ctx, executeTask.ID)
 	if err != nil {
