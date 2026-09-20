@@ -131,10 +131,17 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 	candidates, matchedProvider, selectedHasToolSupport := r.selectCandidateProviders(req)
 	hasRequestedTools := len(req.Tools) > 0
 	var providerErrs []error
+	slog.Debug("router cascade starting",
+		"provider", req.Provider, "model", req.Model, "role", req.Role,
+		"json_mode", req.JSONMode, "tools_requested", hasRequestedTools,
+		"candidates", len(candidates), "matched_provider", matchedProvider,
+		"selected_has_tool_support", selectedHasToolSupport,
+	)
 	for _, p := range candidates {
+		slog.Debug("router trying provider", "provider", string(p.Name()), "supports_tools", p.Capabilities().SupportsChatTools)
 		resp, ok, err := r.tryProvider(ctx, p, req, hasRequestedTools, selectedHasToolSupport)
 		if err != nil {
-			// Truncation errors are not provider-specific; return immediately.
+			slog.Debug("router provider error", "provider", string(p.Name()), "error", err.Error())
 			var te errTruncation
 			if errors.As(err, &te) {
 				return spec.AIResponse{}, te.err
@@ -143,9 +150,12 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 			continue
 		}
 		if ok {
+			slog.Debug("router provider success", "provider", string(p.Name()), "model", resp.ModelUsed, "tokens", resp.TokenUsage)
 			r.recordBudget(req.TaskID, resp.TokenUsage)
 			return resp, nil
 		}
+		slog.Debug("router provider skipped", "provider", string(p.Name()))
 	}
+	slog.Debug("router cascade exhausted", "provider", req.Provider, "errors", len(providerErrs))
 	return spec.AIResponse{}, decideTerminalError(req, matchedProvider, selectedHasToolSupport, providerErrs)
 }
