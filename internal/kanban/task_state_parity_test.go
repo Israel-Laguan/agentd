@@ -15,7 +15,7 @@ import (
 // S04 shipped NEEDS_CONTEXT in the Go enum and the transition table but not in
 // the CHECK, so the state machine advertised a transition that failed at the
 // DB layer. This test is the S04 retro action that stops that drift recurring:
-// adding a state to models.AllTaskStates without a matching migration fails here.
+// adding a state to models.AllTaskStatesSlice() without a matching migration fails here.
 func TestTaskStateCheckConstraintParity(t *testing.T) {
 	db, err := Open("file:task-state-parity?mode=memory&cache=shared")
 	if err != nil {
@@ -31,10 +31,11 @@ func TestTaskStateCheckConstraintParity(t *testing.T) {
 		t.Fatalf("seed project: %v", err)
 	}
 
-	if len(models.AllTaskStates) == 0 {
-		t.Fatal("models.AllTaskStates is empty")
+	states := models.AllTaskStatesSlice()
+	if len(states) == 0 {
+		t.Fatal("models.AllTaskStatesSlice() is empty")
 	}
-	for _, state := range models.AllTaskStates {
+	for _, state := range states {
 		t.Run(string(state), func(t *testing.T) {
 			if !state.Valid() {
 				t.Fatalf("state %q is in AllTaskStates but Valid() = false", state)

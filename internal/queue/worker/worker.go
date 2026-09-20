@@ -250,6 +250,9 @@ func (w *Worker) tryDispatchTieredStep(ctx context.Context, task models.Task, pr
 	if err != nil {
 		slog.Error("tiered: failed to look up SPAWNED_BY parents",
 			"task_id", task.ID, "error", err)
+		// Distinguish lookup errors from "not an origin": on error,
+		// retry rather than treating the task as a new origin and
+		// persisting another DAG.
 		return false
 	}
 	if len(parents) == 0 {

@@ -113,7 +113,7 @@ func tieredAgentProfiles() []models.AgentProfile {
 		{
 			ID: "tier-context", Name: "Tiered: Context Gatherer",
 			Provider: "", Model: "", Temperature: 0.0, MaxTokens: 4096,
-			Role: "RESEARCH",
+			Role: "RESEARCH", AgenticMode: true,
 			SystemPrompt: sql.NullString{
 				String: "Gather only the context the task needs. Read-only; never modify the workspace.",
 				Valid:  true,
@@ -122,7 +122,7 @@ func tieredAgentProfiles() []models.AgentProfile {
 		{
 			ID: "tier-decision", Name: "Tiered: Decision Maker",
 			Provider: "", Model: "", Temperature: 0.0, MaxTokens: 2048,
-			Role: "CODE_GEN",
+			Role: "CODE_GEN", AgenticMode: true,
 			SystemPrompt: sql.NullString{
 				String: "Decide the approach from the sealed ContextPack. Plan only; never modify the workspace.",
 				Valid:  true,
@@ -140,7 +140,7 @@ func tieredAgentProfiles() []models.AgentProfile {
 		{
 			ID: "tier-verify", Name: "Tiered: Verifier",
 			Provider: "", Model: "", Temperature: 0.0, MaxTokens: 2048,
-			Role: "QA",
+			Role: "QA", AgenticMode: true,
 			SystemPrompt: sql.NullString{
 				String: "Run the decided checks and classify the outcome. Do not invent new tests.",
 				Valid:  true,

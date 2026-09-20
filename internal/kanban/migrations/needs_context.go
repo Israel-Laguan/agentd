@@ -136,6 +136,8 @@ INSERT INTO tasks_new (
 )
 SELECT
     id, project_id, agent_id, title, description, state, assignee,
-    os_process_id, started_at, completed_at, last_heartbeat, retry_count, token_usage,
-    cached_token_usage, cache_write_token_usage, success_criteria, criteria_met, created_at, updated_at
+    os_process_id, started_at, completed_at, last_heartbeat,
+    MAX(0, retry_count), MAX(0, token_usage),
+    MAX(0, cached_token_usage), MAX(0, cache_write_token_usage),
+    success_criteria, criteria_met, created_at, updated_at
 FROM tasks`

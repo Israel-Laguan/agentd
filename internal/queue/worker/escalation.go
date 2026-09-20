@@ -62,12 +62,12 @@ func (w *Worker) handleVerifyOutcome(
 	case models.VerifyOutcomeFlake:
 		// Intermittent failure; retry with mid fix (bounded redo)
 		slog.InfoContext(ctx, "tiered verify flake detected; triggering mid fix", "task_id", task.ID)
-		return w.scheduleMidFix(ctx, task, parentTask)
+		return w.scheduleMidFix(ctx, task, parentTask, verifyResult)
 
 	case models.VerifyOutcomeFail:
 		// Hard failure; try mid fix (bounded redo)
 		slog.InfoContext(ctx, "tiered verify fail detected; triggering mid fix", "task_id", task.ID)
-		return w.scheduleMidFix(ctx, task, parentTask)
+		return w.scheduleMidFix(ctx, task, parentTask, verifyResult)
 
 	case models.VerifyOutcomeConflict:
 		// Design conflict; escalate to strong model
@@ -115,7 +115,7 @@ func (w *Worker) countEscalations(ctx context.Context, originID string) (int, er
 }
 
 // scheduleMidFix creates a bounded redo of execute with the same pack.
-func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, parentTask models.Task) error {
+func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, parentTask models.Task, verifyResult VerifyResult) error {
 	midFixCount, err := w.countMidFixAttempts(ctx, parentTask.ID)
 	if err != nil {
 		return fmt.Errorf("count mid fix attempts: %w", err)
@@ -129,7 +129,7 @@ func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, par
 	if getMetadataInt(verifyTask, "mid_fix_passes", 0) >= maxMidFix {
 		// Exhausted mid fix attempts; escalate
 		slog.InfoContext(ctx, "mid fix attempts exhausted; escalating", "task_id", verifyTask.ID, "passes", midFixCount)
-		return w.scheduleEscalation(ctx, verifyTask, parentTask, VerifyResult{})
+		return w.scheduleEscalation(ctx, verifyTask, parentTask, verifyResult)
 	}
 
 	assignee := parentTask.Assignee

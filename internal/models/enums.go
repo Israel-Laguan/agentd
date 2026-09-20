@@ -23,7 +23,8 @@ const (
 // accept exactly these values — a state the Go enum allows but the DB rejects
 // fails at write time, which is how NEEDS_CONTEXT shipped broken in S04.
 // internal/kanban.TestTaskStateCheckConstraintParity guards the pair.
-var AllTaskStates = []TaskState{
+// The slice is immutable; use AllTaskStatesSlice() to obtain a copy.
+var allTaskStates = []TaskState{
 	TaskStatePending,
 	TaskStateReady,
 	TaskStateQueued,
@@ -34,6 +35,15 @@ var AllTaskStates = []TaskState{
 	TaskStateFailedRequiresHuman,
 	TaskStateNeedsContext,
 	TaskStateInConsideration,
+}
+
+// AllTaskStatesSlice returns a copy of the task state registry.
+func AllTaskStatesSlice() []TaskState {
+	result := make([]TaskState, len(allTaskStates))
+	for i, s := range allTaskStates {
+		result[i] = s
+	}
+	return result
 }
 
 var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
@@ -108,7 +118,7 @@ var validTaskTransitions = map[TaskState]map[TaskState]struct{}{
 
 // Valid reports whether the state is known to agentd.
 func (s TaskState) Valid() bool {
-	for _, known := range AllTaskStates {
+	for _, known := range allTaskStates {
 		if known == s {
 			return true
 		}

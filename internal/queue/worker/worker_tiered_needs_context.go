@@ -62,6 +62,8 @@ func (w *Worker) processTieredDecisionStep(ctx context.Context, task models.Task
 	signal, err := w.readNeedsContextSignal(ctx, task)
 	if err != nil {
 		slog.Error("tiered decision: failed to read committed result", "task_id", task.ID, "error", err)
+		w.failTieredOrigin(ctx, parentTask, "tiered decision: failed to read committed result")
+		return
 	}
 	if signal.NeedsContext {
 		if err := w.handleNeedsContext(ctx, task, parentTask, signal.Reason); err != nil {
@@ -121,6 +123,18 @@ func (w *Worker) handleNeedsContext(ctx context.Context, task models.Task, paren
 	generation, err := w.nextContextPackGeneration(ctx, parentTask.ID)
 	if err != nil {
 		return fmt.Errorf("determine pack generation: %w", err)
+	}
+
+	// Verify the origin is still active before spawning a new chain.
+	// If a concurrent failure path has already marked the origin as
+	// FAILED or FAILED_REQUIRES_HUMAN, do not append a new chain to
+	// a dead origin.
+	origin, err := w.store.GetTask(ctx, parentTask.ID)
+	if err != nil {
+		return fmt.Errorf("reload origin before re-gather: %w", err)
+	}
+	if origin.State == models.TaskStateFailed || origin.State == models.TaskStateFailedRequiresHuman {
+		return fmt.Errorf("origin is %s; skipping re-gather", origin.State)
 	}
 
 	assignee := parentTask.Assignee

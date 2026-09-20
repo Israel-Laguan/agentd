@@ -30,6 +30,29 @@ func TestTaskStateValidAndTransitions(t *testing.T) {
 	if TaskStateNeedsContext.CanTransitionTo(TaskStateCompleted) {
 		t.Fatal("NEEDS_CONTEXT should not transition directly to COMPLETED")
 	}
+	// NEEDS_CONTEXT revival edges
+	if !TaskStateNeedsContext.CanTransitionTo(TaskStateReady) {
+		t.Fatal("NEEDS_CONTEXT should transition to READY (re-gather)")
+	}
+	if !TaskStateNeedsContext.CanTransitionTo(TaskStateInConsideration) {
+		t.Fatal("NEEDS_CONTEXT should transition to IN_CONSIDERATION")
+	}
+	if !TaskStateNeedsContext.CanTransitionTo(TaskStateFailed) {
+		t.Fatal("NEEDS_CONTEXT should transition to FAILED")
+	}
+	if !TaskStateNeedsContext.CanTransitionTo(TaskStateFailedRequiresHuman) {
+		t.Fatal("NEEDS_CONTEXT should transition to FAILED_REQUIRES_HUMAN")
+	}
+	// PENDING/READY/QUEUED -> NEEDS_CONTEXT
+	if !TaskStatePending.CanTransitionTo(TaskStateNeedsContext) {
+		t.Fatal("PENDING should transition to NEEDS_CONTEXT")
+	}
+	if !TaskStateReady.CanTransitionTo(TaskStateNeedsContext) {
+		t.Fatal("READY should transition to NEEDS_CONTEXT")
+	}
+	if !TaskStateQueued.CanTransitionTo(TaskStateNeedsContext) {
+		t.Fatal("QUEUED should transition to NEEDS_CONTEXT")
+	}
 }
 
 func TestTaskRelationTypeValidIncludesDependsOn(t *testing.T) {

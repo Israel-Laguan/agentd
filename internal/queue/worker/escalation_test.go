@@ -213,7 +213,7 @@ func TestScheduleMidFix_EscalatesOnceCapReached(t *testing.T) {
 
 	// Attempts 1 and 2 stay under the cap: each spawns a mid-fix redo.
 	for i := 1; i <= 2; i++ {
-		if err := w.scheduleMidFix(ctx, verifyTask, origin); err != nil {
+		if err := w.scheduleMidFix(ctx, verifyTask, origin, VerifyResult{}); err != nil {
 			t.Fatalf("scheduleMidFix attempt %d: %v", i, err)
 		}
 	}
@@ -225,7 +225,7 @@ func TestScheduleMidFix_EscalatesOnceCapReached(t *testing.T) {
 	}
 
 	// The 3rd attempt must route to escalation, not a 3rd mid-fix.
-	if err := w.scheduleMidFix(ctx, verifyTask, origin); err != nil {
+	if err := w.scheduleMidFix(ctx, verifyTask, origin, VerifyResult{}); err != nil {
 		t.Fatalf("scheduleMidFix attempt 3: %v", err)
 	}
 	if got := countSpawnedByTitlePrefix(t, store, origin.ID, midFixTitlePrefix); got != 2 {
