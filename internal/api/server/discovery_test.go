@@ -13,7 +13,7 @@ import (
 	"agentd/internal/testutil"
 )
 
-// newDiscoveryHandler builds the API mux with minimal deps for BUG-001
+// newDiscoveryHandler builds the API mux with minimal deps for B-001
 // discovery-endpoint tests.
 func newDiscoveryHandler() http.Handler {
 	store := testutil.NewFakeStore()
@@ -25,7 +25,7 @@ func newDiscoveryHandler() http.Handler {
 	})
 }
 
-// TestDiscoveryRootServesLandingPage (BUG-001): GET / used to return the mux
+// TestDiscoveryRootServesLandingPage (B-001): GET / used to return the mux
 // 404. It now identifies the daemon and links to /health, /docs, /api/v1.
 func TestDiscoveryRootServesLandingPage(t *testing.T) {
 	h := newDiscoveryHandler()
@@ -46,7 +46,7 @@ func TestDiscoveryRootServesLandingPage(t *testing.T) {
 	}
 }
 
-// TestDiscoveryHealthCheck (BUG-001): GET /health is a dependency-free
+// TestDiscoveryHealthCheck (B-001): GET /health is a dependency-free
 // liveness probe returning {"status":"ok"}.
 func TestDiscoveryHealthCheck(t *testing.T) {
 	h := newDiscoveryHandler()
@@ -65,7 +65,7 @@ func TestDiscoveryHealthCheck(t *testing.T) {
 	}
 }
 
-// TestDiscoveryDocsListsEndpoints (BUG-001): GET /docs serves a readable
+// TestDiscoveryDocsListsEndpoints (B-001): GET /docs serves a readable
 // endpoint overview instead of the mux 404.
 func TestDiscoveryDocsListsEndpoints(t *testing.T) {
 	h := newDiscoveryHandler()

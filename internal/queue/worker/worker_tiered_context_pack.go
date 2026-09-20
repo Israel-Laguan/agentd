@@ -129,28 +129,10 @@ func (w *Worker) spawnContextPackChain(ctx context.Context, parentTask models.Ta
 // parseContextPack attempts to extract a ContextPack from the LLM output.
 // The output may contain JSON embedded in markdown code fences or plain text.
 func parseContextPack(output string) (*ContextPack, error) {
-	output = strings.TrimSpace(output)
 	var cp ContextPack
-	if err := json.Unmarshal([]byte(output), &cp); err == nil {
-		return &cp, nil
-	}
-	// Try extracting from markdown code fences
-	if idx := strings.Index(output, "```json"); idx != -1 {
-		start := idx + len("```json")
-		if end := strings.Index(output[start:], "```"); end != -1 {
-			jsonStr := strings.TrimSpace(output[start : start+end])
-			if err := json.Unmarshal([]byte(jsonStr), &cp); err == nil {
-				return &cp, nil
-			}
-		}
-	}
-	if idx := strings.Index(output, "```"); idx != -1 {
-		start := idx + len("```")
-		if end := strings.Index(output[start:], "```"); end != -1 {
-			jsonStr := strings.TrimSpace(output[start : start+end])
-			if err := json.Unmarshal([]byte(jsonStr), &cp); err == nil {
-				return &cp, nil
-			}
+	for _, candidate := range extractJSONCandidates(output) {
+		if err := json.Unmarshal([]byte(candidate), &cp); err == nil {
+			return &cp, nil
 		}
 	}
 	return nil, fmt.Errorf("no valid ContextPack JSON found in output")

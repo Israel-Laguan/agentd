@@ -102,7 +102,7 @@ func TestParseAndConfigurePack_ReadsResultEvent(t *testing.T) {
 		t.Fatalf("mark running: %v", err)
 	}
 	// The agentic engine commits the pack as the task's RESULT event payload;
-	// Description is never populated by any commit path (BUG-002).
+	// Description is never populated by any commit path (B-002).
 	// Commit in the prod shape: "exit=.. duration=..\n<stdout>".
 	packJSON, err := json.Marshal(tieredContextPack("parent-1"))
 	if err != nil {

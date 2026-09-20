@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"agentd/internal/models"
 )
@@ -75,31 +74,19 @@ func (w *Worker) readVerifyResult(ctx context.Context, task models.Task) (*Verif
 }
 
 // parseVerifyResult extracts a VerifyResult JSON object from raw model
-// output, tolerating markdown code fences the way parseContextPack does.
-// It also validates that the result has non-empty results and a valid
-// overall value before returning.
+// output, tolerating markdown code fences via extractJSONCandidates shared
+// with parseContextPack. It also validates that the result has non-empty
+// results and a valid overall value before returning.
 func parseVerifyResult(output string) (*VerifyResult, error) {
-	output = strings.TrimSpace(output)
 	var vr VerifyResult
-	if err := json.Unmarshal([]byte(output), &vr); err == nil {
+	for _, candidate := range extractJSONCandidates(output) {
+		if err := json.Unmarshal([]byte(candidate), &vr); err != nil {
+			continue
+		}
 		if !vr.Valid() {
 			return nil, fmt.Errorf("invalid VerifyResult: missing results or overall")
 		}
 		return &vr, nil
-	}
-	for _, fence := range []string{"```json", "```"} {
-		if idx := strings.Index(output, fence); idx != -1 {
-			start := idx + len(fence)
-			if end := strings.Index(output[start:], "```"); end != -1 {
-				jsonStr := strings.TrimSpace(output[start : start+end])
-				if err := json.Unmarshal([]byte(jsonStr), &vr); err == nil {
-					if !vr.Valid() {
-						return nil, fmt.Errorf("invalid VerifyResult: missing results or overall")
-					}
-					return &vr, nil
-				}
-			}
-		}
 	}
 	return nil, fmt.Errorf("no valid VerifyResult JSON found in output")
 }

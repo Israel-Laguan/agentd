@@ -80,7 +80,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	mux.HandleFunc("POST /v1/chat/completions", chat.Complete)
 	mux.HandleFunc("POST /api/v1/preferences", preferences.Save)
 
-	// BUG-001: discovery endpoints. The mux previously only served
+	// B-001: discovery endpoints. The mux previously only served
 	// /api/v1/*, so the daemon root and the conventional /health and /docs
 	// paths all returned the mux 404. A headless daemon still needs a
 	// landing page and a health check.

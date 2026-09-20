@@ -1,4 +1,4 @@
-# BUG-002: Context step reads unpopulated committed.Description
+# B-002: Context step reads unpopulated committed.Description
 
 | Field | Value |
 | --- | --- |
@@ -7,7 +7,7 @@
 | Priority | P1 |
 | Sprint | S06-stabilize-observe |
 | Persona | contributor |
-| Links | [S05 retro](../../../S05-tiered-integration/retro/RETRO.md) |
+| Links | [S05 retro](../../S05-tiered-integration/retro/RETRO.md) |
 
 ## Symptom
 
