@@ -38,6 +38,10 @@ func (b *stubBoard) UpdateTaskResult(context.Context, string, time.Time, models.
 	return nil, nil
 }
 
+// CompleteTieredOrigin is a nil-returning placeholder only there to satisfy
+// the KanbanStore interface assertion on fullStore; unlike production (and
+// testutil.FakeKanbanStore) it implements no BLOCKED/READY/RUNNING guard or
+// stale-version ErrStateConflict.
 func (b *stubBoard) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
 	return b.UpdateTaskResult(ctx, id, ts, result)
 }

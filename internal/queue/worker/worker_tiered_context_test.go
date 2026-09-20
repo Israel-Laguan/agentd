@@ -116,11 +116,16 @@ func TestParseAndConfigurePack_ReadsResultEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseAndConfigurePack: %v", err)
 	}
-	if pack.ParentTaskID != "parent-1" {
-		t.Fatalf("pack ParentTaskID = %q, want parent-1", pack.ParentTaskID)
+	// ParentTaskID is overwritten by parseAndConfigurePack and committed is
+	// re-read by ID, so assert on payload-derived fields it leaves untouched.
+	if !strings.Contains(pack.Summary, "parent-1") {
+		t.Fatalf("pack Summary = %q, want content derived from RESULT event for parent-1", pack.Summary)
 	}
-	if committed == nil || committed.ID != running.ID {
-		t.Fatalf("committed task = %+v, want re-read of %s", committed, running.ID)
+	if len(pack.Paths) == 0 || pack.Paths[0] != "parent-1.go" {
+		t.Fatalf("pack Paths = %v, want [parent-1.go] from RESULT event", pack.Paths)
+	}
+	if committed == nil {
+		t.Fatalf("committed task is nil, want re-read of %s", running.ID)
 	}
 }
 

@@ -131,8 +131,30 @@ func (s *dispatchBatchStore) UpdateTaskResult(_ context.Context, id string, _ ti
 	return nil, models.ErrTaskNotFound
 }
 
-func (s *dispatchBatchStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
-	return s.UpdateTaskResult(ctx, id, ts, result)
+func (s *dispatchBatchStore) CompleteTieredOrigin(_ context.Context, id string, expectedUpdatedAt time.Time, result models.TaskResult) (*models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.tasks {
+		if s.tasks[i].ID != id {
+			continue
+		}
+		if !s.tasks[i].UpdatedAt.Equal(expectedUpdatedAt) {
+			return nil, models.ErrStateConflict
+		}
+		switch s.tasks[i].State {
+		case models.TaskStateBlocked, models.TaskStateReady, models.TaskStateRunning:
+		default:
+			return nil, models.ErrStateConflict
+		}
+		if result.Success {
+			s.tasks[i].State = models.TaskStateCompleted
+		} else {
+			s.tasks[i].State = models.TaskStateFailed
+		}
+		s.tasks[i].UpdatedAt = time.Now().UTC()
+		return &s.tasks[i], nil
+	}
+	return nil, models.ErrTaskNotFound
 }
 
 func (s *dispatchBatchStore) IncrementRetryCount(_ context.Context, id string, _ time.Time) (*models.Task, error) {
