@@ -55,9 +55,10 @@ func (w *Worker) handleVerifyOutcome(
 ) error {
 	switch outcome {
 	case models.VerifyOutcomePass:
-		// Step succeeded; mark parent as complete
+		// The committed verify result unblocks the origin; the normal resolver
+		// completes it via UpdateTaskResult.
 		slog.InfoContext(ctx, "tiered verify passed", "task_id", task.ID, "parent_id", parentTask.ID)
-		return w.transitionTaskState(ctx, parentTask.ID, models.TaskStateCompleted)
+		return nil
 
 	case models.VerifyOutcomeFlake:
 		// Intermittent failure; retry with mid fix (bounded redo)
@@ -120,13 +121,9 @@ func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, par
 	if err != nil {
 		return fmt.Errorf("count mid fix attempts: %w", err)
 	}
-	// Route the cap check through getMetadata/setMetadata (rather than
-	// comparing midFixCount directly) so the durable, DAG-derived count and
-	// the task.Logs metadata API agree on the same number.
-	setMetadataInt(&verifyTask, "mid_fix_passes", midFixCount)
 	maxMidFix := w.tieredCfg.EscalationConfig().MaxMidFix
 
-	if getMetadataInt(verifyTask, "mid_fix_passes", 0) >= maxMidFix {
+	if midFixCount >= maxMidFix {
 		// Exhausted mid fix attempts; escalate
 		slog.InfoContext(ctx, "mid fix attempts exhausted; escalating", "task_id", verifyTask.ID, "passes", midFixCount)
 		return w.scheduleEscalation(ctx, verifyTask, parentTask, verifyResult)
@@ -164,10 +161,9 @@ func (w *Worker) scheduleEscalation(ctx context.Context, verifyTask models.Task,
 	if err != nil {
 		return fmt.Errorf("count escalation attempts: %w", err)
 	}
-	setMetadataInt(&parentTask, "escalate_count", escalateCount)
 	maxEscalate := w.tieredCfg.EscalationConfig().MaxEscalate
 
-	if getMetadataInt(parentTask, "escalate_count", 0) >= maxEscalate {
+	if escalateCount >= maxEscalate {
 		// Exhausted escalation; hand off to HUMAN
 		slog.InfoContext(ctx, "escalation limit reached; handing off to human", "task_id", parentTask.ID)
 		return w.transitionTaskState(ctx, parentTask.ID, models.TaskStateFailedRequiresHuman)
@@ -214,4 +210,3 @@ func (w *Worker) transitionTaskState(ctx context.Context, taskID string, newStat
 }
 
 // Helper functions for task metadata management live in tiered_metadata.go.
-

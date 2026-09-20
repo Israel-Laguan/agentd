@@ -28,8 +28,35 @@ func (s *Store) SpawnTieredContinuation(
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if _, err := selectTaskByID(ctx, tx, originID); err != nil {
+		origin, err := selectTaskByID(ctx, tx, originID)
+		if err != nil {
 			return nil, err
+		}
+		if origin.State == models.TaskStateReady {
+			now := utcNow()
+			result, err := tx.ExecContext(ctx, `UPDATE tasks SET state = ?, updated_at = ? WHERE id = ? AND updated_at = ? AND state = ?`, models.TaskStateBlocked, formatTime(now), originID, formatTime(origin.UpdatedAt), models.TaskStateReady)
+			if err != nil {
+				return nil, fmt.Errorf("re-block tiered continuation origin: %w", err)
+			}
+			if err := requireRowsAffected(result, 1, models.ErrStateConflict); err != nil {
+				return nil, err
+			}
+		} else if origin.State != models.TaskStateBlocked {
+			return nil, fmt.Errorf("tiered continuation origin %s is %s, want BLOCKED", originID, origin.State)
+		}
+		seen := make(map[string]struct{}, len(children))
+		for _, child := range children {
+			if _, duplicate := seen[child.Task.ID]; duplicate {
+				return nil, fmt.Errorf("duplicate child ID in tiered continuation: %s", child.Task.ID)
+			}
+			seen[child.Task.ID] = struct{}{}
+			if child.DependsOnID != "" {
+				if _, isSibling := seen[child.DependsOnID]; !isSibling {
+					if _, err := selectTaskByID(ctx, tx, child.DependsOnID); err != nil {
+						return nil, err
+					}
+				}
+			}
 		}
 
 		tasks := make([]models.Task, 0, len(children))

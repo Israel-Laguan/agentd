@@ -4,7 +4,7 @@
 | --- | --- |
 | Window | 2026-09-19 |
 | Goal | Close the gap between S04's escalation/cost-harness primitives and actual runtime behavior — wire, persist, migrate, measure |
-| Status | ready for review |
+| Status | review |
 | Based on | [S04 retro](../S04-tiered-pipeline/retro/RETRO.md) |
 
 ## Goal

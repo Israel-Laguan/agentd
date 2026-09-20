@@ -25,6 +25,11 @@ FIXTURES_DIR="${FIXTURES_DIR:-$SCRIPT_DIR/fixtures}"
 OUTPUT_FILE="${OUTPUT_FILE:-./tiered-harness-results.json}"
 MODE="${MODE:-both}"  # baseline, tiered, or both
 
+case "$MODE" in
+  baseline|tiered|both) ;;
+  *) echo "invalid MODE: $MODE (want baseline, tiered, or both)" >&2; exit 2 ;;
+esac
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --baseline-only) MODE="baseline"; shift ;;
@@ -73,37 +78,49 @@ step_tokens() { # $1=step
   echo $(( $(fixture_field "$1" '.input_tokens') + $(fixture_field "$1" '.output_tokens') ))
 }
 
-BASELINE_MODEL="$(fixture_field baseline '.model_tier')"
-BASELINE_TOKENS="$(step_tokens baseline)"
-BASELINE_COST="$(step_cost baseline)"
-BASELINE_WALL_MS="$(fixture_field baseline '.duration_ms')"
-BASELINE_PASS="$(fixture_field baseline '.acceptance_pass')"
+if [[ "$MODE" == "baseline" || "$MODE" == "both" ]]; then
+  BASELINE_MODEL="$(fixture_field baseline '.model_tier')"
+  BASELINE_TOKENS="$(step_tokens baseline)"
+  BASELINE_COST="$(step_cost baseline)"
+  BASELINE_WALL_MS="$(fixture_field baseline '.duration_ms')"
+  BASELINE_PASS="$(fixture_field baseline '.acceptance_pass')"
+fi
 
 TIERED_STEPS=(context decision execute verify)
 TIERED_TOKENS=0
 TIERED_WALL_MS=0
 TIERED_COST="0"
-for step in "${TIERED_STEPS[@]}"; do
-  TIERED_TOKENS=$(( TIERED_TOKENS + $(step_tokens "$step") ))
-  TIERED_WALL_MS=$(( TIERED_WALL_MS + $(fixture_field "$step" '.duration_ms') ))
-  TIERED_COST=$(echo "scale=8; $TIERED_COST + $(step_cost "$step")" | bc)
-done
+VERIFY_OUTCOME=""
+if [[ "$MODE" == "tiered" || "$MODE" == "both" ]]; then
+  for step in "${TIERED_STEPS[@]}"; do
+    TIERED_TOKENS=$(( TIERED_TOKENS + $(step_tokens "$step") ))
+    TIERED_WALL_MS=$(( TIERED_WALL_MS + $(fixture_field "$step" '.duration_ms') ))
+    TIERED_COST=$(echo "scale=8; $TIERED_COST + $(step_cost "$step")" | bc)
+  done
 
-VERIFY_OUTCOME="$(fixture_field verify '.response.overall')"
-
-if [[ "$BASELINE_COST" == "0" || "$BASELINE_COST" == "" ]]; then
-  echo "ERROR: baseline cost is zero — cannot compute cost reduction" >&2
-  exit 1
-fi
-if [[ "$BASELINE_WALL_MS" == "0" || "$BASELINE_WALL_MS" == "" ]]; then
-  echo "ERROR: baseline wall time is zero — cannot compute time reduction" >&2
-  exit 1
+  VERIFY_OUTCOME="$(fixture_field verify '.response.overall')"
 fi
 
-COST_SAVED=$(echo "scale=8; $BASELINE_COST - $TIERED_COST" | bc)
-COST_REDUCTION=$(echo "scale=2; ($COST_SAVED / $BASELINE_COST) * 100" | bc)
-TIME_SAVED_MS=$(( BASELINE_WALL_MS - TIERED_WALL_MS ))
-TIME_REDUCTION=$(echo "scale=1; ($TIME_SAVED_MS / $BASELINE_WALL_MS) * 100" | bc)
+if [[ "$MODE" == "both" ]]; then
+  if [[ "$BASELINE_COST" == "0" || "$BASELINE_COST" == "" ]]; then
+    echo "ERROR: baseline cost is zero — cannot compute cost reduction" >&2
+    exit 1
+  fi
+  if [[ "$BASELINE_WALL_MS" == "0" || "$BASELINE_WALL_MS" == "" ]]; then
+    echo "ERROR: baseline wall time is zero — cannot compute time reduction" >&2
+    exit 1
+  fi
+
+  COST_SAVED=$(echo "scale=8; $BASELINE_COST - $TIERED_COST" | bc)
+  COST_REDUCTION=$(echo "scale=2; ($COST_SAVED / $BASELINE_COST) * 100" | bc)
+  TIME_SAVED_MS=$(( BASELINE_WALL_MS - TIERED_WALL_MS ))
+  TIME_REDUCTION=$(echo "scale=1; ($TIME_SAVED_MS / $BASELINE_WALL_MS) * 100" | bc)
+else
+  COST_SAVED="0"
+  COST_REDUCTION="0"
+  TIME_SAVED_MS=0
+  TIME_REDUCTION="0"
+fi
 
 echo "=== Tiered Execution Cost/Latency Harness (mock/offline — fixtures: $FIXTURES_DIR) ==="
 echo ""
@@ -152,53 +169,75 @@ if [[ -n "$OUTPUT_FILE" ]]; then
       --argjson duration_ms "$(fixture_field "$1" '.duration_ms')" \
       '{model: $model, tokens: $tokens, cost_usd: ($cost|tonumber), duration_ms: $duration_ms}'
   }
-  TIERED_STEPS_JSON="{}"
-  for step in "${TIERED_STEPS[@]}"; do
-    TIERED_STEPS_JSON="$(jq -n --argjson acc "$TIERED_STEPS_JSON" --arg name "$step" --argjson v "$(step_json "$step")" '$acc + {($name): $v}')"
-  done
-
-  jq -n \
-    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --arg fixtures_dir "$FIXTURES_DIR" \
-    --arg baseline_model "$BASELINE_MODEL" \
-    --argjson baseline_tokens "$BASELINE_TOKENS" \
-    --arg baseline_cost "$BASELINE_COST" \
-    --argjson baseline_wall_ms "$BASELINE_WALL_MS" \
-    --argjson baseline_pass "$BASELINE_PASS" \
-    --argjson tiered_steps "$TIERED_STEPS_JSON" \
-    --argjson tiered_tokens "$TIERED_TOKENS" \
-    --arg tiered_cost "$TIERED_COST" \
-    --argjson tiered_wall_ms "$TIERED_WALL_MS" \
-    --arg verify_outcome "$VERIFY_OUTCOME" \
-    --arg cost_saved "$COST_SAVED" \
-    --arg cost_reduction_pct "$COST_REDUCTION" \
-    --argjson time_saved_ms "$TIME_SAVED_MS" \
-    --arg time_reduction_pct "$TIME_REDUCTION" \
-    '{
-      timestamp: $timestamp,
-      mode: "mock-offline-fixtures",
-      note: "Mock/offline harness — every token/cost/time figure is derived from seeded fixture files under fixtures_dir, not a real provider call. Never report as measured production costs.",
-      fixtures_dir: $fixtures_dir,
-      baseline: {
+  if [[ "$MODE" == "baseline" || "$MODE" == "both" ]]; then
+    BASELINE_JSON="$(jq -n \
+      --arg baseline_model "$BASELINE_MODEL" \
+      --argjson baseline_tokens "$BASELINE_TOKENS" \
+      --arg baseline_cost "$BASELINE_COST" \
+      --argjson baseline_wall_ms "$BASELINE_WALL_MS" \
+      --argjson baseline_pass "$BASELINE_PASS" \
+      '{
         model: $baseline_model,
         tokens: $baseline_tokens,
         cost_usd: ($baseline_cost|tonumber),
         wall_time_ms: $baseline_wall_ms,
         acceptance_pass: $baseline_pass
-      },
-      tiered: {
+      }')"
+  else
+    BASELINE_JSON="null"
+  fi
+  if [[ "$MODE" == "tiered" || "$MODE" == "both" ]]; then
+    TIERED_STEPS_JSON="{}"
+    for step in "${TIERED_STEPS[@]}"; do
+      TIERED_STEPS_JSON="$(jq -n --argjson acc "$TIERED_STEPS_JSON" --arg name "$step" --argjson v "$(step_json "$step")" '$acc + {($name): $v}')"
+    done
+    TIERED_JSON="$(jq -n \
+      --argjson tiered_steps "$TIERED_STEPS_JSON" \
+      --argjson tiered_tokens "$TIERED_TOKENS" \
+      --arg tiered_cost "$TIERED_COST" \
+      --argjson tiered_wall_ms "$TIERED_WALL_MS" \
+      --arg verify_outcome "$VERIFY_OUTCOME" \
+      '{
         steps: $tiered_steps,
         total_tokens: $tiered_tokens,
         total_cost_usd: ($tiered_cost|tonumber),
         wall_time_ms: $tiered_wall_ms,
         verify_outcome: $verify_outcome
-      },
-      comparison: {
+      }')"
+  else
+    TIERED_JSON="null"
+  fi
+  if [[ "$MODE" == "both" ]]; then
+    COMPARISON_JSON="$(jq -n \
+      --arg cost_saved "$COST_SAVED" \
+      --arg cost_reduction_pct "$COST_REDUCTION" \
+      --argjson time_saved_ms "$TIME_SAVED_MS" \
+      --arg time_reduction_pct "$TIME_REDUCTION" \
+      '{
         cost_saved_usd: ($cost_saved|tonumber),
         cost_reduction_percent: ($cost_reduction_pct|tonumber),
         time_saved_ms: $time_saved_ms,
         time_reduction_percent: ($time_reduction_pct|tonumber)
-      }
+      }')"
+  else
+    COMPARISON_JSON="null"
+  fi
+
+  jq -n \
+    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg fixtures_dir "$FIXTURES_DIR" \
+    --arg mode "$MODE" \
+    --argjson baseline "$BASELINE_JSON" \
+    --argjson tiered "$TIERED_JSON" \
+    --argjson comparison "$COMPARISON_JSON" \
+    '{
+      timestamp: $timestamp,
+      mode: $mode,
+      note: "Mock/offline harness — every token/cost/time figure is derived from seeded fixture files under fixtures_dir, not a real provider call. Never report as measured production costs.",
+      fixtures_dir: $fixtures_dir,
+      baseline: $baseline,
+      tiered: $tiered,
+      comparison: $comparison
     }' > "$OUTPUT_FILE"
   echo "Results written to: $OUTPUT_FILE"
 fi

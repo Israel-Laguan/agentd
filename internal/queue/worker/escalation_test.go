@@ -79,6 +79,10 @@ func newTieredPipelineFixture(t *testing.T, store *testutil.FakeKanbanStore) mod
 	if err != nil {
 		t.Fatalf("mark origin running: %v", err)
 	}
+	origin, err = store.UpdateTaskState(ctx, origin.ID, origin.UpdatedAt, models.TaskStateBlocked)
+	if err != nil {
+		t.Fatalf("block origin: %v", err)
+	}
 	return *origin
 }
 

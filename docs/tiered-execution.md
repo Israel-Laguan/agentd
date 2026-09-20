@@ -1,6 +1,6 @@
 # Tiered execution pipeline
 
-**Status:** design spec (not implemented as a product surface yet)  
+**Status:** implemented in the worker dispatch path (T-017 classifier + T-020 wiring); not yet exposed as a product-facing surface  
 **Parent plan:** [product-plan.md](product-plan.md) Phase 5  
 **Related:** [agentic-harness.md](agentic-harness.md), [architecture.md](architecture.md), existing `EstimateTaskComplexity` / `agentic.planning.complexity_threshold` in `internal/queue/worker/phase_splitter.go` and `internal/config/agentic.go`
 
@@ -91,7 +91,7 @@ mandatory still validate.
 
 1. Context step **must** write ContextPack to workspace/board storage and attach its id/path on the child tasks.
 2. Decision / execute / verify inject the pack; default tool policy **forbids** broad search (repo-wide glob/grep outside `paths`).
-3. Re-gather is an **explicit** board action: fail with `NEEDS_CONTEXT`, spawn/redo **context**, bump pack `version`. Never a silent side quest inside execute.
+3. Re-gather is an **explicit** board action: fail with `NEEDS_CONTEXT`, spawn/redo **context**, bump the pack generation. Never a silent side quest inside execute.
 4. Escalation and mid-fix **keep** the current pack unless a new context task is created.
 5. Packs have size limits; overflow goes to `unknowns` or forces a second context pass with a narrower question — not an unbounded dump into the next model.
 
@@ -277,7 +277,7 @@ Run `./scripts/demo/tiered-harness.sh` to compare. With the fixtures committed u
 | --- | --- | --- | --- |
 | **Tokens** | 13,000 | 9,750 | 25% |
 | **Cost** | $0.1950 | $0.0253 | **87%** |
-| **Wall time (fixture duration)** | 41,000ms | 25,500ms | 30% |
+| **Wall time (fixture duration)** | 41,000ms | 25,500ms | 37.8% |
 
 These are the fixture files' seeded numbers as of this writing — re-run the script for the current numbers rather than trusting this table if the fixtures change.
 

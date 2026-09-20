@@ -64,6 +64,10 @@ func setUpTieredVerifyOrigin(t *testing.T, store *testutil.FakeKanbanStore) (mod
 	if err != nil {
 		t.Fatalf("mark origin running: %v", err)
 	}
+	originTask, err = store.UpdateTaskState(ctx, originTask.ID, originTask.UpdatedAt, models.TaskStateBlocked)
+	if err != nil {
+		t.Fatalf("block origin: %v", err)
+	}
 
 	// FakeKanbanStore.MaterializePlan fixes WorkspacePath to
 	// "/tmp/projects/<project name>" with no way to override it after the

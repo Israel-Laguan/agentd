@@ -7,7 +7,7 @@
 | Priority | P1 |
 | Sprint | S05-tiered-integration |
 | Estimate | L |
-| Links | [S04 retro](../../S04-tiered-pipeline/retro/RETRO.md), [tiered-execution M4/M5](../../../../docs/tiered-execution.md), T-017, T-018 |
+| Links | [S04 retro](../../S04-tiered-pipeline/retro/RETRO.md), [tiered-execution M4/M5](../../../../docs/tiered-execution.md), [T-017](../../S04-tiered-pipeline/tasks/T-017-tiered-m4-escalation.md), [T-018](../../S04-tiered-pipeline/tasks/T-018-tiered-m5-cost-harness.md) |
 
 ## Context
 

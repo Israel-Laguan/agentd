@@ -13,17 +13,59 @@ func (s *FakeKanbanStore) SpawnTieredContinuation(_ context.Context, originID st
 	if len(children) == 0 {
 		return nil, models.ErrInvalidDraftPlan
 	}
-	if _, ok := s.tasks[originID]; !ok {
+	origin, ok := s.tasks[originID]
+	if !ok {
 		return nil, models.ErrTaskNotFound
 	}
+	if origin.State == models.TaskStateReady {
+		origin.State = models.TaskStateBlocked
+		origin.UpdatedAt = now()
+		s.tasks[originID] = origin
+	} else if origin.State != models.TaskStateBlocked {
+		return nil, fmt.Errorf("tiered continuation origin %s is %s, want BLOCKED", originID, origin.State)
+	}
 	seenIDs := make(map[string]struct{})
-	ts := now()
-	tasks := make([]models.Task, 0, len(children))
 	for _, child := range children {
 		if _, dup := seenIDs[child.Task.ID]; dup {
 			return nil, fmt.Errorf("duplicate child ID in SpawnTieredContinuation: %s", child.Task.ID)
 		}
 		seenIDs[child.Task.ID] = struct{}{}
+	}
+	// Validate dependencies against existing tasks plus earlier resolved
+	// siblings only: empty IDs are assigned during insertion below, so raw
+	// child.Task.ID values cannot be trusted, and forward sibling
+	// references are invalid (the real store inserts in order).
+	resolved := make([]string, 0, len(children))
+	for i := range children {
+		id := children[i].Task.ID
+		if id == "" {
+			// Placeholder for IDs assigned at insertion time; a
+			// DependsOnID can never validly reference these.
+			id = fmt.Sprintf("__pending-child-%d", i)
+		}
+		resolved = append(resolved, id)
+	}
+	for i, child := range children {
+		if child.DependsOnID == "" {
+			continue
+		}
+		if _, known := s.tasks[child.DependsOnID]; known {
+			continue
+		}
+		found := false
+		for _, sibling := range resolved[:i] {
+			if sibling != "" && sibling == child.DependsOnID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, models.ErrTaskNotFound
+		}
+	}
+	ts := now()
+	tasks := make([]models.Task, 0, len(children))
+	for _, child := range children {
 		t := child.Task
 		if t.ID == "" {
 			t.ID = s.nextID()
@@ -42,13 +84,6 @@ func (s *FakeKanbanStore) SpawnTieredContinuation(_ context.Context, originID st
 			s.childParentRelations[t.ID] = append(s.childParentRelations[t.ID], parentRelation{parentID: child.DependsOnID, relationType: models.TaskRelationDependsOn})
 		}
 		tasks = append(tasks, t)
-	}
-	for _, child := range children {
-		if child.DependsOnID != "" {
-			if _, ok := s.tasks[child.DependsOnID]; !ok {
-				return nil, models.ErrTaskNotFound
-			}
-		}
 	}
 	return tasks, nil
 }

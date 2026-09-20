@@ -50,6 +50,11 @@ func (w *Worker) readCommittedText(ctx context.Context, taskID string) (string, 
 // unconditionally once the model answers), and only afterward is that
 // answer judged to have come from an insufficient pack.
 func (w *Worker) processTieredDecisionStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, parentTask models.Task) {
+	if !w.providerSupportsAgentic(profile) {
+		w.failTieredStep(ctx, task, "tiered decision step requires an agentic-capable provider")
+		w.failTieredDependents(ctx, task, parentTask)
+		return
+	}
 	result, ok := w.processAgentic(ctx, task, project, profile)
 	if !ok {
 		return
@@ -84,7 +89,11 @@ func (w *Worker) readNeedsContextSignal(ctx context.Context, task models.Task) (
 	// Not every decision output is the sentinel shape — a normal
 	// touch_list/checks Decision artifact fails this unmarshal, which is
 	// the expected, common case, not an error.
-	_ = json.Unmarshal([]byte(strings.TrimSpace(payload)), &signal)
+	clean := strings.TrimSpace(payload)
+	clean = strings.TrimPrefix(clean, "```json")
+	clean = strings.TrimPrefix(clean, "```")
+	clean = strings.TrimSuffix(strings.TrimSpace(clean), "```")
+	_ = json.Unmarshal([]byte(strings.TrimSpace(clean)), &signal)
 	return signal, nil
 }
 
@@ -125,10 +134,6 @@ func (w *Worker) handleNeedsContext(ctx context.Context, task models.Task, paren
 		return fmt.Errorf("determine pack generation: %w", err)
 	}
 
-	// Verify the origin is still active before spawning a new chain.
-	// If a concurrent failure path has already marked the origin as
-	// FAILED or FAILED_REQUIRES_HUMAN, do not append a new chain to
-	// a dead origin.
 	origin, err := w.store.GetTask(ctx, parentTask.ID)
 	if err != nil {
 		return fmt.Errorf("reload origin before re-gather: %w", err)
@@ -141,6 +146,27 @@ func (w *Worker) handleNeedsContext(ctx context.Context, task models.Task, paren
 	if !assignee.Valid() {
 		assignee = models.TaskAssigneeSystem
 	}
+
+	pair, err := w.spawnContextPackChain(ctx, parentTask, assignee, generation)
+	if err != nil {
+		return fmt.Errorf("spawn re-gather context/decision chain: %w", err)
+	}
+
+	rewired, err := w.store.RewireDependsOn(ctx, task.ID, pair.decisionID)
+	if err != nil {
+		return fmt.Errorf("rewire downstream dependents: %w", err)
+	}
+	w.Emit(ctx, task, "TIERED_PACK_REWIRED", fmt.Sprintf("generation=%d rewired=%d", generation, len(rewired)))
+	return nil
+}
+
+// regatherPair holds the IDs of a freshly spawned re-gather chain.
+type regatherPair struct {
+	contextID  string
+	decisionID string
+}
+
+func (w *Worker) spawnContextPackChain(ctx context.Context, parentTask models.Task, assignee models.TaskAssignee, generation int) (regatherPair, error) {
 	now := time.Now().UTC()
 	newContext := models.Task{
 		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
@@ -165,15 +191,9 @@ func (w *Worker) handleNeedsContext(ctx context.Context, task models.Task, paren
 		{Task: newContext},
 		{Task: newDecision, DependsOnID: newContext.ID},
 	}); err != nil {
-		return fmt.Errorf("spawn re-gather context/decision chain: %w", err)
+		return regatherPair{}, err
 	}
-
-	rewired, err := w.store.RewireDependsOn(ctx, task.ID, newDecision.ID)
-	if err != nil {
-		return fmt.Errorf("rewire downstream dependents: %w", err)
-	}
-	w.Emit(ctx, task, "TIERED_PACK_REWIRED", fmt.Sprintf("generation=%d rewired=%d", generation, len(rewired)))
-	return nil
+	return regatherPair{contextID: newContext.ID, decisionID: newDecision.ID}, nil
 }
 
 // reconcileBlockedDependents re-readies any child of completedTaskID that

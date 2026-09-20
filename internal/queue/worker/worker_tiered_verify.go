@@ -48,6 +48,10 @@ func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, 
 	if err != nil {
 		slog.Error("tiered verify: failed to parse VerifyResult", "task_id", task.ID, "error", err)
 		w.Emit(ctx, task, "TIERED_VERIFY_PARSE_ERROR", err.Error())
+		w.Emit(ctx, task, tieredVerifyOutcomeEvent, string(models.VerifyOutcomeFail))
+		if routeErr := w.handleVerifyOutcome(ctx, task, models.VerifyOutcomeFail, VerifyResult{Overall: "fail", Results: []CheckResult{{Check: "parse", Outcome: "fail", Detail: err.Error()}}}, parentTask); routeErr != nil {
+			w.failTieredOrigin(ctx, parentTask, "tiered verify routing failed after parse error: "+routeErr.Error())
+		}
 		return
 	}
 
@@ -56,6 +60,7 @@ func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, 
 	if err := w.handleVerifyOutcome(ctx, task, outcome, *verifyResult, parentTask); err != nil {
 		slog.Error("tiered verify: failed to route outcome", "task_id", task.ID, "outcome", outcome, "error", err)
 		w.Emit(ctx, task, "TIERED_VERIFY_OUTCOME_ERROR", err.Error())
+		w.failTieredOrigin(ctx, parentTask, "tiered verify routing failed: "+err.Error())
 	}
 }
 
@@ -138,7 +143,8 @@ func (w *Worker) processTieredEscalateStep(ctx context.Context, task models.Task
 	}
 
 	// Escalation succeeded; trust the strong model's fix and complete
-	// the pipeline. The origin is BLOCKED, so use finishTieredOrigin
-	// (which handles the BLOCKED→COMPLETED transition via UpdateTaskResult).
-	w.finishTieredOrigin(ctx, parentTask, true, "tiered escalation succeeded")
+	// the pipeline through a state-aware path: the origin is usually
+	// BLOCKED (or already READY), while UpdateTaskResult only accepts
+	// RUNNING, so completeTieredOrigin walks the ladder first.
+	w.completeTieredOrigin(ctx, parentTask, "tiered escalation succeeded")
 }
