@@ -10,22 +10,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// allKnownTaskStates lists every TaskState the Go enum considers Valid().
-// Kept as an explicit literal (rather than iterating validTaskTransitions)
-// so this test independently double-checks models.TaskState.Valid() too.
-var allKnownTaskStates = []models.TaskState{
-	models.TaskStatePending,
-	models.TaskStateReady,
-	models.TaskStateQueued,
-	models.TaskStateRunning,
-	models.TaskStateBlocked,
-	models.TaskStateCompleted,
-	models.TaskStateFailed,
-	models.TaskStateFailedRequiresHuman,
-	models.TaskStateNeedsContext,
-	models.TaskStateInConsideration,
-}
-
 // TestSchemaAcceptsEveryValidTaskState proves the DB CHECK constraint on
 // tasks.state accepts every state models.TaskState.Valid() reports true
 // for. This guards against the drift that let NEEDS_CONTEXT sit in the Go
@@ -46,10 +30,16 @@ func TestSchemaAcceptsEveryValidTaskState(t *testing.T) {
 		t.Fatalf("insert project: %v", err)
 	}
 
-	for _, state := range allKnownTaskStates {
+	states := models.AllTaskStatesSlice()
+	if len(states) == 0 {
+		t.Fatal("models.AllTaskStatesSlice() is empty")
+	}
+	// Assert the literal covers every models.AllTaskStates member so
+	// the two cannot silently diverge.
+	for _, state := range states {
 		t.Run(string(state), func(t *testing.T) {
 			if !state.Valid() {
-				t.Fatalf("%q is not Valid() per the Go enum; fix allKnownTaskStates", state)
+				t.Fatalf("%q is not Valid() per the Go enum", state)
 			}
 			id := "parity-" + string(state)
 			if _, err := db.ExecContext(ctx, `

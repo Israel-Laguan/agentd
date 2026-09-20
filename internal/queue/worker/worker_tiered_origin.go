@@ -40,7 +40,12 @@ func (w *Worker) tryResolveTieredOrigin(ctx context.Context, task models.Task) b
 		return true
 	}
 
-	outcome, found := w.latestVerifyOutcome(ctx, steps)
+	outcome, found, err := w.latestVerifyOutcome(ctx, steps)
+	if err != nil {
+		slog.Error("tiered origin: failed to determine verify outcome", "task_id", task.ID, "error", err)
+		w.failTieredOrigin(ctx, task, "tiered pipeline: failed to read verify events")
+		return true
+	}
 	if !found {
 		// No verify step ever recorded a verdict — e.g. every verify attempt
 		// handed off, suspended, fell back to legacy execution, or exhausted
@@ -99,7 +104,7 @@ func unresolvedSteps(steps []models.Task) int {
 // step that actually recorded one. Verify steps abandoned by a re-gather, or
 // that never ran, carry no verdict and are skipped rather than treated as a
 // missing result for the whole pipeline.
-func (w *Worker) latestVerifyOutcome(ctx context.Context, steps []models.Task) (models.VerifyResultOutcome, bool) {
+func (w *Worker) latestVerifyOutcome(ctx context.Context, steps []models.Task) (models.VerifyResultOutcome, bool, error) {
 	verifies := make([]models.Task, 0, len(steps))
 	for _, step := range steps {
 		if tieredStepProfiles[step.AgentID] == TieredStepVerify {
@@ -110,19 +115,23 @@ func (w *Worker) latestVerifyOutcome(ctx context.Context, steps []models.Task) (
 		return verifies[i].CreatedAt.After(verifies[j].CreatedAt)
 	})
 	for _, verify := range verifies {
-		if outcome, ok := w.recordedVerifyOutcome(ctx, verify); ok {
-			return outcome, true
+		outcome, ok, err := w.recordedVerifyOutcome(ctx, verify)
+		if err != nil {
+			slog.Error("tiered origin: failed to read verify events", "task_id", verify.ID, "error", err)
+			return "", false, err
+		}
+		if ok {
+			return outcome, true, nil
 		}
 	}
-	return "", false
+	return "", false, nil
 }
 
 // recordedVerifyOutcome reads the verdict a verify step emitted, if any.
-func (w *Worker) recordedVerifyOutcome(ctx context.Context, verify models.Task) (models.VerifyResultOutcome, bool) {
+func (w *Worker) recordedVerifyOutcome(ctx context.Context, verify models.Task) (models.VerifyResultOutcome, bool, error) {
 	events, err := w.store.ListEventsByTask(ctx, verify.ID)
 	if err != nil {
-		slog.Error("tiered origin: failed to read verify events", "task_id", verify.ID, "error", err)
-		return "", false
+		return "", false, fmt.Errorf("failed to read verify events for task %s: %w", verify.ID, err)
 	}
 	outcome := models.VerifyResultOutcome("")
 	for _, ev := range events {
@@ -131,9 +140,9 @@ func (w *Worker) recordedVerifyOutcome(ctx context.Context, verify models.Task) 
 		}
 	}
 	if !outcome.Valid() {
-		return "", false
+		return "", false, nil
 	}
-	return outcome, true
+	return outcome, true, nil
 }
 
 // finishTieredOrigin records the pipeline's verdict on the origin task.

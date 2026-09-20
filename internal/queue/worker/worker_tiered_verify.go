@@ -52,7 +52,7 @@ func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, 
 	}
 
 	outcome := ClassifyVerifyOutcome(*verifyResult)
-	w.Emit(ctx, task, "TIERED_VERIFY_CLASSIFIED", string(outcome))
+	w.Emit(ctx, task, tieredVerifyOutcomeEvent, string(outcome))
 	if err := w.handleVerifyOutcome(ctx, task, outcome, *verifyResult, parentTask); err != nil {
 		slog.Error("tiered verify: failed to route outcome", "task_id", task.ID, "outcome", outcome, "error", err)
 		w.Emit(ctx, task, "TIERED_VERIFY_OUTCOME_ERROR", err.Error())
@@ -71,10 +71,15 @@ func (w *Worker) readVerifyResult(ctx context.Context, task models.Task) (*Verif
 
 // parseVerifyResult extracts a VerifyResult JSON object from raw model
 // output, tolerating markdown code fences the way parseContextPack does.
+// It also validates that the result has non-empty results and a valid
+// overall value before returning.
 func parseVerifyResult(output string) (*VerifyResult, error) {
 	output = strings.TrimSpace(output)
 	var vr VerifyResult
 	if err := json.Unmarshal([]byte(output), &vr); err == nil {
+		if !vr.Valid() {
+			return nil, fmt.Errorf("invalid VerifyResult: missing results or overall")
+		}
 		return &vr, nil
 	}
 	for _, fence := range []string{"```json", "```"} {
@@ -83,12 +88,26 @@ func parseVerifyResult(output string) (*VerifyResult, error) {
 			if end := strings.Index(output[start:], "```"); end != -1 {
 				jsonStr := strings.TrimSpace(output[start : start+end])
 				if err := json.Unmarshal([]byte(jsonStr), &vr); err == nil {
+					if !vr.Valid() {
+						return nil, fmt.Errorf("invalid VerifyResult: missing results or overall")
+					}
 					return &vr, nil
 				}
 			}
 		}
 	}
 	return nil, fmt.Errorf("no valid VerifyResult JSON found in output")
+}
+
+// Valid reports whether the VerifyResult has the required fields.
+func (vr VerifyResult) Valid() bool {
+	if vr.Overall != "pass" && vr.Overall != "fail" && vr.Overall != "flake" && vr.Overall != "conflict" {
+		return false
+	}
+	if len(vr.Results) == 0 {
+		return false
+	}
+	return true
 }
 
 // processTieredEscalateStep runs the strong-model escalation attempt and
@@ -118,8 +137,8 @@ func (w *Worker) processTieredEscalateStep(ctx context.Context, task models.Task
 		return
 	}
 
-	// Escalation succeeded; trust the strong model's fix and complete the pipeline.
-	if err := w.transitionTaskState(ctx, parentTask.ID, models.TaskStateCompleted); err != nil {
-		slog.Error("tiered escalate: failed to complete origin after success", "task_id", parentTask.ID, "error", err)
-	}
+	// Escalation succeeded; trust the strong model's fix and complete
+	// the pipeline. The origin is BLOCKED, so use finishTieredOrigin
+	// (which handles the BLOCKED→COMPLETED transition via UpdateTaskResult).
+	w.finishTieredOrigin(ctx, parentTask, true, "tiered escalation succeeded")
 }

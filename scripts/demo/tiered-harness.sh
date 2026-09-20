@@ -38,9 +38,16 @@ done
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
 command -v bc >/dev/null 2>&1 || { echo "bc is required" >&2; exit 1; }
 
-for f in baseline context decision execute verify; do
-  [[ -f "$FIXTURES_DIR/$f.json" ]] || { echo "missing fixture: $FIXTURES_DIR/$f.json" >&2; exit 1; }
-done
+if [[ "$MODE" == "baseline" || "$MODE" == "both" ]]; then
+  for f in baseline; do
+    [[ -f "$FIXTURES_DIR/$f.json" ]] || { echo "missing fixture: $FIXTURES_DIR/$f.json" >&2; exit 1; }
+  done
+fi
+if [[ "$MODE" == "tiered" || "$MODE" == "both" ]]; then
+  for f in context decision execute verify; do
+    [[ -f "$FIXTURES_DIR/$f.json" ]] || { echo "missing fixture: $FIXTURES_DIR/$f.json" >&2; exit 1; }
+  done
+fi
 
 # Pricing table (offline proxy) — $ per 1k tokens. This is a rate assumption,
 # not a measurement; everything downstream of it (tokens, duration) comes
@@ -59,7 +66,7 @@ step_cost() { # $1=step
   local tier tokens
   tier="$(fixture_field "$1" '.model_tier')"
   tokens=$(( $(fixture_field "$1" '.input_tokens') + $(fixture_field "$1" '.output_tokens') ))
-  echo "scale=4; $tokens * ${PRICING[$tier]} / 1000" | bc
+  echo "scale=8; $tokens * ${PRICING[$tier]} / 1000" | bc
 }
 
 step_tokens() { # $1=step
@@ -79,12 +86,21 @@ TIERED_COST="0"
 for step in "${TIERED_STEPS[@]}"; do
   TIERED_TOKENS=$(( TIERED_TOKENS + $(step_tokens "$step") ))
   TIERED_WALL_MS=$(( TIERED_WALL_MS + $(fixture_field "$step" '.duration_ms') ))
-  TIERED_COST=$(echo "scale=4; $TIERED_COST + $(step_cost "$step")" | bc)
+  TIERED_COST=$(echo "scale=8; $TIERED_COST + $(step_cost "$step")" | bc)
 done
 
 VERIFY_OUTCOME="$(fixture_field verify '.response.overall')"
 
-COST_SAVED=$(echo "scale=4; $BASELINE_COST - $TIERED_COST" | bc)
+if [[ "$BASELINE_COST" == "0" || "$BASELINE_COST" == "" ]]; then
+  echo "ERROR: baseline cost is zero — cannot compute cost reduction" >&2
+  exit 1
+fi
+if [[ "$BASELINE_WALL_MS" == "0" || "$BASELINE_WALL_MS" == "" ]]; then
+  echo "ERROR: baseline wall time is zero — cannot compute time reduction" >&2
+  exit 1
+fi
+
+COST_SAVED=$(echo "scale=8; $BASELINE_COST - $TIERED_COST" | bc)
 COST_REDUCTION=$(echo "scale=2; ($COST_SAVED / $BASELINE_COST) * 100" | bc)
 TIME_SAVED_MS=$(( BASELINE_WALL_MS - TIERED_WALL_MS ))
 TIME_REDUCTION=$(echo "scale=1; ($TIME_SAVED_MS / $BASELINE_WALL_MS) * 100" | bc)

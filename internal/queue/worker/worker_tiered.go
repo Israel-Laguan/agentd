@@ -130,6 +130,11 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 				"task_id", task.ID, "step", stepKind, "error", err)
 			w.failTieredStep(ctx, task, "ContextPack injection failed: "+err.Error())
 			w.failTieredDependents(ctx, task, parentTask)
+			if stepKind == TieredStepEscalate {
+				if err := w.transitionTaskState(ctx, parentTask.ID, models.TaskStateFailedRequiresHuman); err != nil {
+					slog.Error("tiered: failed to hand off origin after ContextPack injection failure", "task_id", parentTask.ID, "error", err)
+				}
+			}
 			return
 		}
 	}

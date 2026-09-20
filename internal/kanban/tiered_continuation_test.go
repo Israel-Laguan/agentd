@@ -98,18 +98,16 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 
 	oldDecision := newRewireDecisionTask(now, origin.ProjectID, "decision", models.TaskStateCompleted)
 	newDecision := newRewireDecisionTask(now, origin.ProjectID, "decision (re-gather v2)", models.TaskStateReady)
-	// execute is READY (as it would be immediately after the old decision
-	// completed and UnlockReadyChildren promoted it).
 	execute := newRewireStepTask(now, origin.ProjectID, "tier-execute", "execute", models.TaskStateReady)
-	// verify is still PENDING, depending on execute — untouched by this
-	// rewire since its DEPENDS_ON parent is execute, not oldDecision.
 	verify := newRewireStepTask(now, origin.ProjectID, "tier-verify", "verify", models.TaskStatePending)
+	pendingDep := newRewireStepTask(now, origin.ProjectID, "tier-pending-dep", "pending-dep", models.TaskStatePending)
 
 	if _, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
 		{Task: oldDecision},
 		{Task: newDecision},
 		{Task: execute, DependsOnID: oldDecision.ID},
-		{Task: verify, DependsOnID: execute.ID},
+		{Task: verify, DependsOnID: oldDecision.ID},
+		{Task: pendingDep, DependsOnID: oldDecision.ID},
 	}); err != nil {
 		t.Fatalf("SpawnTieredContinuation() error = %v", err)
 	}
@@ -118,12 +116,13 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RewireDependsOn() error = %v", err)
 	}
-	if len(rewired) != 1 || rewired[0].ID != execute.ID {
-		t.Fatalf("rewired = %+v, want exactly [execute]", rewired)
+	if len(rewired) != 3 {
+		t.Fatalf("rewired len = %d, want 3", len(rewired))
 	}
 
 	assertRewireExecuteBlocked(t, ctx, store, execute.ID, newDecision.ID)
-	assertRewireVerifyUntouched(t, ctx, store, verify.ID, execute.ID)
+	assertRewirePendingDepRedirected(t, ctx, store, pendingDep.ID, newDecision.ID)
+	assertRewireVerifyPendingRedirected(t, ctx, store, verify.ID, newDecision.ID)
 }
 
 func newRewireDecisionTask(now time.Time, projectID, title string, state models.TaskState) models.Task {
@@ -144,8 +143,6 @@ func newRewireStepTask(now time.Time, projectID, agentID, title string, state mo
 
 func assertRewireExecuteBlocked(t *testing.T, ctx context.Context, store *Store, executeID, newDecisionID string) {
 	t.Helper()
-	// execute must now depend on newDecision, not oldDecision, and must
-	// have been demoted to BLOCKED so it cannot run against the stale pack.
 	executeParents, err := store.ListParentTasksByRelation(ctx, executeID, models.TaskRelationDependsOn)
 	if err != nil {
 		t.Fatalf("ListParentTasksByRelation(execute) error = %v", err)
@@ -162,9 +159,26 @@ func assertRewireExecuteBlocked(t *testing.T, ctx context.Context, store *Store,
 	}
 }
 
-func assertRewireVerifyUntouched(t *testing.T, ctx context.Context, store *Store, verifyID, executeID string) {
+func assertRewirePendingDepRedirected(t *testing.T, ctx context.Context, store *Store, pendingDepID, newDecisionID string) {
 	t.Helper()
-	// verify is untouched: still PENDING, still depending on execute.
+	reloaded, err := store.GetTask(ctx, pendingDepID)
+	if err != nil {
+		t.Fatalf("GetTask(pendingDep) error = %v", err)
+	}
+	if reloaded.State != models.TaskStatePending {
+		t.Fatalf("pendingDep state = %s, want unchanged PENDING", reloaded.State)
+	}
+	parents, err := store.ListParentTasksByRelation(ctx, pendingDepID, models.TaskRelationDependsOn)
+	if err != nil {
+		t.Fatalf("ListParentTasksByRelation(pendingDep) error = %v", err)
+	}
+	if len(parents) != 1 || parents[0].ID != newDecisionID {
+		t.Fatalf("pendingDep's DEPENDS_ON parents = %+v, want [%s]", parents, newDecisionID)
+	}
+}
+
+func assertRewireVerifyPendingRedirected(t *testing.T, ctx context.Context, store *Store, verifyID, newDecisionID string) {
+	t.Helper()
 	reloadedVerify, err := store.GetTask(ctx, verifyID)
 	if err != nil {
 		t.Fatalf("GetTask(verify) error = %v", err)
@@ -176,7 +190,7 @@ func assertRewireVerifyUntouched(t *testing.T, ctx context.Context, store *Store
 	if err != nil {
 		t.Fatalf("ListParentTasksByRelation(verify) error = %v", err)
 	}
-	if len(verifyParents) != 1 || verifyParents[0].ID != executeID {
-		t.Fatalf("verify's DEPENDS_ON parents = %+v, want [%s]", verifyParents, executeID)
+	if len(verifyParents) != 1 || verifyParents[0].ID != newDecisionID {
+		t.Fatalf("verify's DEPENDS_ON parents = %+v, want [%s]", verifyParents, newDecisionID)
 	}
 }

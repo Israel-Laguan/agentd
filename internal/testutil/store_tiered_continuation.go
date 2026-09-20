@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 
 	"agentd/internal/models"
 )
@@ -15,9 +16,14 @@ func (s *FakeKanbanStore) SpawnTieredContinuation(_ context.Context, originID st
 	if _, ok := s.tasks[originID]; !ok {
 		return nil, models.ErrTaskNotFound
 	}
+	seenIDs := make(map[string]struct{})
 	ts := now()
 	tasks := make([]models.Task, 0, len(children))
 	for _, child := range children {
+		if _, dup := seenIDs[child.Task.ID]; dup {
+			return nil, fmt.Errorf("duplicate child ID in SpawnTieredContinuation: %s", child.Task.ID)
+		}
+		seenIDs[child.Task.ID] = struct{}{}
 		t := child.Task
 		if t.ID == "" {
 			t.ID = s.nextID()
@@ -36,6 +42,13 @@ func (s *FakeKanbanStore) SpawnTieredContinuation(_ context.Context, originID st
 			s.childParentRelations[t.ID] = append(s.childParentRelations[t.ID], parentRelation{parentID: child.DependsOnID, relationType: models.TaskRelationDependsOn})
 		}
 		tasks = append(tasks, t)
+	}
+	for _, child := range children {
+		if child.DependsOnID != "" {
+			if _, ok := s.tasks[child.DependsOnID]; !ok {
+				return nil, models.ErrTaskNotFound
+			}
+		}
 	}
 	return tasks, nil
 }

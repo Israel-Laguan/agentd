@@ -83,6 +83,16 @@ func (s *Store) RewireDependsOn(ctx context.Context, oldParentID, newParentID st
 				oldParentID, dep.ID, string(models.TaskRelationDependsOn)); err != nil {
 				return nil, fmt.Errorf("remove stale depends_on edge: %w", err)
 			}
+			// Make the new edge insertion idempotent: remove any
+			// existing edge to newParentID first so that a dependent
+			// already depending on newParentID does not hit the
+			// composite primary key.
+			if _, err := tx.ExecContext(ctx, `
+				DELETE FROM task_relations
+				WHERE parent_task_id = ? AND child_task_id = ? AND relation_type = ?`,
+				newParentID, dep.ID, string(models.TaskRelationDependsOn)); err != nil {
+				return nil, fmt.Errorf("remove existing depends_on edge: %w", err)
+			}
 			if err := insertTaskRelationWithType(ctx, tx, newParentID, dep.ID, models.TaskRelationDependsOn); err != nil {
 				return nil, err
 			}

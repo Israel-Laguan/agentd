@@ -43,7 +43,7 @@ func setMetadata(task *models.Task, key, value string) {
 		task.Logs = "{}"
 	}
 	var meta map[string]interface{}
-	if err := json.Unmarshal([]byte(task.Logs), &meta); err != nil {
+	if err := json.Unmarshal([]byte(task.Logs), &meta); err != nil || meta == nil {
 		meta = make(map[string]interface{})
 	}
 	meta[key] = value
