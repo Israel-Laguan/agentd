@@ -104,6 +104,7 @@ func TestSpawnTieredContinuation_OriginStateValidation(t *testing.T) {
 			store := newTestStore(t)
 			origin := newTieredOriginTask(t, store, ctx)
 			var err error
+			child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-context", "continuation", models.TaskStateReady)
 			if tc.wantErr {
 				_, err = store.db.ExecContext(ctx, `UPDATE tasks SET state = 'PENDING' WHERE id = ?`, origin.ID)
 			} else {
@@ -112,10 +113,15 @@ func TestSpawnTieredContinuation_OriginStateValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("set origin state: %v", err)
 			}
-			child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-context", "continuation", models.TaskStateReady)
 			_, err = store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{{Task: child}})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr %t", err, tc.wantErr)
+			}
+			if tc.wantErr {
+				_, err = store.GetTask(ctx, child.ID)
+				if err == nil {
+					t.Fatalf("child task %s should not exist after rejection", child.ID)
+				}
 			}
 			current, err := store.GetTask(ctx, origin.ID)
 			if err != nil {

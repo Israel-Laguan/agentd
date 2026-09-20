@@ -226,6 +226,7 @@ const (
 	EventTypeTopicDrift            EventType = "TOPIC_DRIFT"
 	EventTypeWarning               EventType = "WARNING"
 	EventTypeTokenUsage            EventType = "TOKEN_USAGE"
+	EventTypeTieredEscalationExhausted EventType = "TIERED_ESCALATION_EXHAUSTED"
 )
 
 // CommentAuthor identifies the actor that produced a comment.

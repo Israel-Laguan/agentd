@@ -11,7 +11,7 @@ func migrateToV17(ctx context.Context, db *sql.DB) error {
 		idempotency_key TEXT NOT NULL,
 		child_ids TEXT NOT NULL,
 		PRIMARY KEY (origin_id, idempotency_key)
-	)`); err != nil {
+	) STRICT`); err != nil {
 		return err
 	}
 	return setSchemaVersion(ctx, db, 17)

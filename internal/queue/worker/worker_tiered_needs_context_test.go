@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"agentd/internal/config"
 	"agentd/internal/models"
@@ -33,19 +34,25 @@ func setUpTieredDecisionFixture(t *testing.T, store *testutil.FakeKanbanStore) (
 
 	ctx := context.Background()
 	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{
+		ID: "tier-context", Provider: "test-provider", Model: "test-model", AgenticMode: true,
+	}); err != nil {
+		t.Fatalf("upsert tier-context profile: %v", err)
+	}
+	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{
 		ID: "tier-decision", Provider: "test-provider", Model: "test-model", AgenticMode: true,
 	}); err != nil {
 		t.Fatalf("upsert tier-decision profile: %v", err)
 	}
 
 	created, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
+		{Task: models.Task{BaseEntity: models.BaseEntity{ID: "context-1", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}, ProjectID: origin.ProjectID, AgentID: "tier-context", Title: "context: origin", State: models.TaskStateCompleted, Assignee: models.TaskAssigneeSystem}},
 		{Task: tieredDecisionDraft(origin.ProjectID)},
 		{Task: tieredPendingExecuteDraft(origin.ProjectID), DependsOnID: "decision-task"},
 	})
 	if err != nil {
 		t.Fatalf("spawn decision/execute steps: %v", err)
 	}
-	return origin, created[0], created[1], workspace
+	return origin, created[1], created[2], workspace
 }
 
 func setUpTieredOriginRunning(t *testing.T, store *testutil.FakeKanbanStore, projectName string) (models.Task, string) {
@@ -452,7 +459,6 @@ func spawnCompletedFreshDecision(t *testing.T, ctx context.Context, store *testu
 	if err != nil {
 		t.Fatalf("fresh COMPLETED: %v", err)
 	}
-	_ = completed
 	return completed
 }
 
@@ -462,7 +468,6 @@ func setupDispatch(t *testing.T, ctx context.Context, store *testutil.FakeKanban
 	if err != nil {
 		t.Fatalf("GetProject: %v", err)
 	}
-	w := &Worker{store: store, sink: &mockEventSink{}}
 	execLatest, err := store.GetTask(ctx, executeTask.ID)
 	if err != nil {
 		t.Fatalf("GetTask execute: %v", err)
@@ -471,7 +476,6 @@ func setupDispatch(t *testing.T, ctx context.Context, store *testutil.FakeKanban
 	if err := store.UpsertAgentProfile(ctx, profile); err != nil {
 		t.Fatalf("upsert profile: %v", err)
 	}
-	_ = w
 	return project, profile, execLatest
 }
 

@@ -29,6 +29,7 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 	assertTasksTableContainsNeedsContext(t, db, ctx)
 	assertMigratedTaskPreserved(t, db, ctx)
 	assertClampedCountersZero(t, db, ctx)
+	assertPositiveCountersPreserved(t, db, ctx)
 	assertNeedsContextInsertAllowed(t, db, ctx)
 	assertSchemaVersionAfterSecondRun(t, db, ctx, "17")
 	assertNeedsContextStateAfterSecondRun(t, db, ctx)
@@ -79,6 +80,17 @@ func assertClampedCountersZero(t *testing.T, db *sql.DB, ctx context.Context) {
 	}
 	if retry != 0 || tokens != 0 || cached != 0 || writes != 0 {
 		t.Fatalf("clamped counters = %d,%d,%d,%d, want all zero", retry, tokens, cached, writes)
+	}
+}
+
+func assertPositiveCountersPreserved(t *testing.T, db *sql.DB, ctx context.Context) {
+	t.Helper()
+	var retry, tokens, cached, writes int
+	if err := db.QueryRowContext(ctx, `SELECT retry_count, token_usage, cached_token_usage, cache_write_token_usage FROM tasks WHERE id = 'positive-task'`).Scan(&retry, &tokens, &cached, &writes); err != nil {
+		t.Fatalf("read positive counters: %v", err)
+	}
+	if retry != 5 || tokens != 100 || cached != 200 || writes != 50 {
+		t.Fatalf("positive counters = %d,%d,%d,%d, want 5,100,200,50", retry, tokens, cached, writes)
 	}
 }
 
@@ -185,4 +197,12 @@ INSERT INTO tasks (
 )
 VALUES ('negative-task', 'project', 'default', 'Negative', 'description', 'READY', 'SYSTEM',
     -1, -2, -3, -4, '[]', '[]', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
+
+INSERT INTO tasks (
+    id, project_id, agent_id, title, description, state, assignee,
+    retry_count, token_usage, cached_token_usage, cache_write_token_usage,
+    success_criteria, criteria_met, created_at, updated_at
+)
+VALUES ('positive-task', 'project', 'default', 'Positive', 'description', 'READY', 'SYSTEM',
+    5, 100, 200, 50, '[]', '[]', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
 `
