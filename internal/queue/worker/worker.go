@@ -114,8 +114,12 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 		w.tokenUsageHook(tokens)
 	}
 	if w.tokenStore != nil && !w.disableTokenRecording {
-		_ = w.tokenStore.AddTokenUsage(ctx, task.ID, tokens)
-		_ = w.tokenStore.AddUsageDetails(ctx, task.ID, details)
+		if err := w.tokenStore.AddTokenUsage(ctx, task.ID, tokens); err != nil {
+			slog.Error("failed to persist token usage", "task_id", task.ID, "tokens", tokens, "err", err)
+		}
+		if err := w.tokenStore.AddUsageDetails(ctx, task.ID, details); err != nil {
+			slog.Error("failed to persist usage details", "task_id", task.ID, "err", err)
+		}
 	}
 	slog.Debug("recorded token usage", "task_id", task.ID, "tokens", tokens, "cached_tokens", details.CachedTokens, "cache_write_tokens", details.CacheWriteTokens)
 	payload, _ := json.Marshal(models.TokenUsagePayload{Tokens: tokens, CachedTokens: details.CachedTokens, CacheWriteTokens: details.CacheWriteTokens})
@@ -222,16 +226,81 @@ func (w *Worker) dispatchTieredStep(ctx context.Context, task models.Task, proje
 				return true
 			}
 			if freshDecisionID != "" {
-				_, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked)
+				fresh, err := w.store.GetTask(ctx, freshDecisionID)
 				if err != nil {
-					w.FailHard(ctx, task, fmt.Errorf("tiered park before dependency rewire failed: %w", err))
+					w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision fetch failed: %w", err))
 					return true
 				}
-				_, err = w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID)
-				if err != nil {
-					w.FailHard(ctx, task, fmt.Errorf("tiered rewire to fresh decision failed: %w", err))
+				switch fresh.State {
+				case models.TaskStateCompleted:
+					if _, err := w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID); err != nil {
+						w.FailHard(ctx, task, fmt.Errorf("tiered rewire to completed decision failed: %w", err))
+						return true
+					}
+					// Fresh decision already completed; don't leave dependent
+					// parked in BLOCKED forever. Promote to READY if deps are
+					// now satisfied so the next dispatch can run it.
+					if w.allDependenciesResolved(ctx, task.ID) {
+						latest, err := w.store.GetTask(ctx, task.ID)
+						if err == nil && latest.State.CanTransitionTo(models.TaskStateReady) {
+							if _, err := w.store.UpdateTaskState(ctx, latest.ID, latest.UpdatedAt, models.TaskStateReady); err != nil {
+								slog.Error("tiered: failed to re-ready after completed fresh decision", "task_id", latest.ID, "error", err)
+							}
+						}
+					}
+					return true
+				case models.TaskStateFailed, models.TaskStateFailedRequiresHuman:
+					if _, err := w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID); err != nil {
+						w.FailHard(ctx, task, fmt.Errorf("tiered rewire to failed decision failed: %w", err))
+						return true
+					}
+					w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", freshDecisionID, fresh.State))
+					return true
+				case models.TaskStateNeedsContext:
+					// Fresh itself is stale; fall through to look for a
+					// successor or fail — do not park on a decision that
+					// will never complete.
+				default:
+					// Active fresh decision: park and rewire.
+					if task.State.CanTransitionTo(models.TaskStateBlocked) {
+						if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
+							w.FailHard(ctx, task, fmt.Errorf("tiered park before dependency rewire failed: %w", err))
+							return true
+						}
+					}
+					if _, err := w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID); err != nil {
+						w.FailHard(ctx, task, fmt.Errorf("tiered rewire to fresh decision failed: %w", err))
+						return true
+					}
 					return true
 				}
+			}
+			// No active fresh decision. Check for a terminal fresh that
+			// already completed so we can re-ready or propagate failure
+			// instead of leaving the dependent stuck.
+			if completedID, err := w.freshTerminalDecisionID(ctx, parents[0].ID, dependency.ID, models.TaskStateCompleted); err == nil && completedID != "" {
+				if _, err := w.store.RewireDependsOn(ctx, dependency.ID, completedID); err != nil {
+					w.FailHard(ctx, task, fmt.Errorf("tiered rewire to completed decision failed: %w", err))
+					return true
+				}
+				if w.allDependenciesResolved(ctx, task.ID) {
+					latest, err := w.store.GetTask(ctx, task.ID)
+					if err == nil && latest.State.CanTransitionTo(models.TaskStateReady) {
+						if _, err := w.store.UpdateTaskState(ctx, latest.ID, latest.UpdatedAt, models.TaskStateReady); err != nil {
+							slog.Error("tiered: failed to re-ready after completed fresh decision", "task_id", latest.ID, "error", err)
+						}
+					}
+				}
+				return true
+			}
+			if failedID, err := w.freshTerminalDecisionID(ctx, parents[0].ID, dependency.ID, models.TaskStateFailed); err == nil && failedID != "" {
+				_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedID)
+				w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedID, models.TaskStateFailed))
+				return true
+			}
+			if failedHumanID, err := w.freshTerminalDecisionID(ctx, parents[0].ID, dependency.ID, models.TaskStateFailedRequiresHuman); err == nil && failedHumanID != "" {
+				_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedHumanID)
+				w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedHumanID, models.TaskStateFailedRequiresHuman))
 				return true
 			}
 			w.FailHard(ctx, task, fmt.Errorf("tiered step depends on stale decision %s awaiting context re-gather", dependency.ID))
@@ -274,6 +343,35 @@ func (w *Worker) freshDecisionID(ctx context.Context, originID, staleDecisionID 
 	var latest time.Time
 	for _, child := range children {
 		if child.AgentID != tieredStepProfile[TieredStepDecision] {
+			continue
+		}
+		if child.State == models.TaskStateCompleted || child.State == models.TaskStateFailed || child.State == models.TaskStateFailedRequiresHuman || child.State == models.TaskStateNeedsContext {
+			continue
+		}
+		if child.CreatedAt.After(stale.CreatedAt) && child.CreatedAt.After(latest) {
+			freshID = child.ID
+			latest = child.CreatedAt
+		}
+	}
+	return freshID, nil
+}
+
+func (w *Worker) freshTerminalDecisionID(ctx context.Context, originID, staleDecisionID string, terminalState models.TaskState) (string, error) {
+	stale, err := w.store.GetTask(ctx, staleDecisionID)
+	if err != nil {
+		return "", fmt.Errorf("get stale decision: %w", err)
+	}
+	children, err := w.store.ListChildTasksByRelation(ctx, originID, models.TaskRelationSpawnedBy)
+	if err != nil {
+		return "", fmt.Errorf("list spawned children: %w", err)
+	}
+	var freshID string
+	var latest time.Time
+	for _, child := range children {
+		if child.AgentID != tieredStepProfile[TieredStepDecision] {
+			continue
+		}
+		if child.State != terminalState {
 			continue
 		}
 		if child.CreatedAt.After(stale.CreatedAt) && child.CreatedAt.After(latest) {

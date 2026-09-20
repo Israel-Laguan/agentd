@@ -134,15 +134,19 @@ func (w *Worker) scheduleMidFix(ctx context.Context, verifyTask models.Task, par
 		assignee = models.TaskAssigneeSystem
 	}
 	now := time.Now().UTC()
+	evidenceJSON, _ := json.Marshal(verifyResult)
 	midFixTask := models.Task{
 		BaseEntity: models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
 		ProjectID:  parentTask.ProjectID,
 		// AgentID matches the DAG's own execute step so this redo dispatches
 		// through the identical tiered execute path (tool allowlist,
 		// ContextPack injection, execute prompt) rather than a bespoke one.
-		AgentID:     tieredStepProfile[TieredStepExecute],
-		Title:       fmt.Sprintf("%s%s", midFixTitlePrefix, parentTask.Title),
-		Description: fmt.Sprintf("Bounded redo of execute after verify failure (attempt %d).\n\n%s", midFixCount+1, parentTask.Description),
+		AgentID: tieredStepProfile[TieredStepExecute],
+		Title:   fmt.Sprintf("%s%s", midFixTitlePrefix, parentTask.Title),
+		// The execute agent only sees its own task description, so the
+		// failing checks must travel with the redo — otherwise it has no
+		// outcome or detail to target.
+		Description: fmt.Sprintf("Bounded redo of execute after verify failure (attempt %d).\n\nVerify evidence:\n%s\n\nOriginal task:\n%s", midFixCount+1, string(evidenceJSON), parentTask.Description),
 		State:       models.TaskStateReady,
 		Assignee:    assignee,
 	}
