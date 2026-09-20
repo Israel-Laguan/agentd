@@ -92,16 +92,12 @@ type Worker struct {
 	legacyMaxDescriptionLen       int
 }
 
-// MemoryRetriever is an optional dependency for pre-fetching durable memories.
 type MemoryRetriever interface {
 	Recall(ctx context.Context, intent, projectID, userID string) []models.Memory
 }
 
-// TokenUsageStore persists per-call token counts to the task row.
-// It is implemented by the kanban store and injected via WorkerOptions.TokenStore.
 type TokenUsageStore interface {
 	AddTokenUsage(ctx context.Context, taskID string, tokens int) error
-	// AddUsageDetails persists prompt-cache usage details (cached + write).
 	AddUsageDetails(ctx context.Context, taskID string, details spec.UsageDetails) error
 }
 
@@ -139,10 +135,6 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 	w.Emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
 }
 
-// PluginMounter loads and mounts plugins from a directory into a
-// HookChain and capabilities Registry. The worker calls this to
-// mount project-scoped plugins (from workspace directories) and
-// session-scoped plugins (by name from AgentProfile.Plugins).
 type PluginMounter interface {
 	MountProject(workspacePath string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
 	MountSession(names []string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
@@ -184,29 +176,17 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.handlePhasePlanning(ctx, task, *project)
 		return
 	}
-	// Tiered pipeline gate: when enabled and the task exceeds the complexity
-	// threshold, split it into a context→decision→execute→verify DAG and
-	// block the parent. The child tasks will be picked up by the queue and
-	// dispatched through processTieredStep below.
 	if w.tryTieredOrigin(ctx, task) {
 		return
 	}
-	// Guard: if this provider's circuit breaker is open, create an immediate
-	// handoff rather than wasting a slot on a call that will fail with 429.
 	if w.providerBreakers != nil && profile.Provider != "" && w.providerBreakers.Get(profile.Provider).IsOpen() {
 		w.handoffOrFail(ctx, task,
 			fmt.Errorf("%w: provider %s circuit breaker is open", models.ErrLLMQuotaExceeded, profile.Provider))
 		return
 	}
-	// Tiered step detection: child tasks created by SplitIntoTieredDAG carry
-	// an AgentID matching a tiered step profile (tier-context, tier-decision,
-	// tier-execute, tier-verify). Dispatch them through the tiered pipeline.
-	if w.tryDispatchTieredStep(ctx, task, *project, *profile) {
+	if w.dispatchTieredStep(ctx, task, *project, *profile) {
 		return
 	}
-	// AgenticMode selects processAgentic. Model routing (Task 43) and external capability
-	// routing (Task 45) run inside processAgentic after tools are assembled; capability
-	// routing intercepts before the agentic turn loop when a mapped adapter is available.
 	if profile.AgenticMode {
 		if result, ok := w.processAgentic(ctx, task, *project, *profile); ok {
 			w.handleLoopResult(ctx, task, result)
@@ -216,11 +196,6 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	w.RunLegacyTask(ctx, task, *project, *profile, false)
 }
 
-// tryTieredOrigin handles the pipeline-origin side of tiered execution: it
-// either resolves an origin whose DAG has already run, or splits a complex
-// task into one. An origin comes back here after its steps unblock it, so
-// resolving has to be tried first — splitting again would recurse forever.
-// It reports whether the task was handled.
 func (w *Worker) tryTieredOrigin(ctx context.Context, task models.Task) bool {
 	if w.isTieredStep(task) {
 		return false
@@ -235,23 +210,14 @@ func (w *Worker) tryTieredOrigin(ctx context.Context, task models.Task) bool {
 	return true
 }
 
-// tryDispatchTieredStep resolves the origin task for a tiered step child
-// (context, decision, execute, or verify) and dispatches it through the
-// tiered pipeline. It reports whether the task was dispatched; the caller
-// falls back to the legacy/agentic path when it returns false.
-func (w *Worker) tryDispatchTieredStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) bool {
+func (w *Worker) dispatchTieredStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) bool {
 	if !w.isTieredStep(task) {
 		return false
 	}
-	// Resolve the origin task via the SPAWNED_BY relation. Every tiered
-	// step is connected to the original pipeline parent by a SPAWNED_BY
-	// edge; DEPENDS_ON edges connect consecutive steps within the chain.
 	parents, err := w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationSpawnedBy)
 	if err != nil {
 		slog.Error("tiered: failed to look up SPAWNED_BY parents",
 			"task_id", task.ID, "error", err)
-		// Do not fall through to legacy execution: tiered steps require
-		// their profile, context pack, and reconciliation hooks.
 		w.FailHard(ctx, task, fmt.Errorf("tiered parent lookup failed: %w", err))
 		return true
 	}
@@ -279,11 +245,6 @@ func (w *Worker) tryDispatchTieredStep(ctx context.Context, task models.Task, pr
 					w.FailHard(ctx, task, fmt.Errorf("tiered rewire to fresh decision failed: %w", err))
 					return true
 				}
-				dependencies, err = w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationDependsOn)
-				if err != nil {
-					w.FailHard(ctx, task, fmt.Errorf("tiered dependency re-lookup failed: %w", err))
-					return true
-				}
 				break
 			}
 			w.FailHard(ctx, task, fmt.Errorf("tiered step depends on stale decision %s awaiting context re-gather", dependency.ID))
@@ -296,35 +257,23 @@ func (w *Worker) tryDispatchTieredStep(ctx context.Context, task models.Task, pr
 
 func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (LoopResult, bool) {
 	engine := agentic.NewEngine(agentic.Config{
-		Store:                   w.store,
-		Gateway:                 w.gateway,
-		Sandbox:                 w.sandbox,
-		SandboxEnvAllowlist:     w.sandboxEnvAllowlist,
-		SandboxExtraEnv:         w.sandboxExtraEnv,
-		SandboxWallTimeout:      w.sandboxWallTimeout,
-		FileContextCfg:          w.fileContextCfg,
-		DocStore:                w.docStore,
-		ContextCfg:              w.contextCfg,
-		MaxToolIterations:       w.maxToolIterations,
-		BudgetTracker:           w.budgetTracker,
+		Store: w.store, Gateway: w.gateway, Sandbox: w.sandbox,
+		SandboxEnvAllowlist: w.sandboxEnvAllowlist,
+		SandboxExtraEnv: w.sandboxExtraEnv,
+		SandboxWallTimeout: w.sandboxWallTimeout,
+		FileContextCfg: w.fileContextCfg, DocStore: w.docStore,
+		ContextCfg: w.contextCfg, MaxToolIterations: w.maxToolIterations,
+		BudgetTracker: w.budgetTracker,
 		ContextWarningThreshold: w.contextWarningThreshold,
-		ToolFailureStreak:       w.toolFailureStreak,
-		TruncatorMax:            w.truncatorMax,
-		CharacterBudget:         w.characterBudget,
-		PlanningCfg:             w.planningCfg,
-		MessageEditor:           w.messageEditor,
-		CheckpointStore:         w.checkpointStore,
-		TopicGuard:              w.topicGuard,
-		ModelRouter:             w.modelRouter,
-		Capabilities:            w.capabilities,
+		ToolFailureStreak: w.toolFailureStreak, TruncatorMax: w.truncatorMax,
+		CharacterBudget: w.characterBudget, PlanningCfg: w.planningCfg,
+		MessageEditor: w.messageEditor, CheckpointStore: w.checkpointStore,
+		TopicGuard: w.topicGuard, ModelRouter: w.modelRouter,
+		Capabilities: w.capabilities,
 	}, w)
 	return engine.Process(ctx, task, project, profile)
 }
 
-// freshDecisionID finds the latest decision child of originID that
-// was spawned after staleDecisionID, i.e. the decision from the
-// re-gather chain triggered when the stale decision entered
-// NEEDS_CONTEXT. Returns "" when no fresher decision exists.
 func (w *Worker) freshDecisionID(ctx context.Context, originID, staleDecisionID string) (string, error) {
 	stale, err := w.store.GetTask(ctx, staleDecisionID)
 	if err != nil {

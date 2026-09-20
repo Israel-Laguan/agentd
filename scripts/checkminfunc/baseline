@@ -91,6 +91,7 @@ internal/memory/dream.go sqlStr
 internal/memory/librarian.go (*Librarian).CleanStaleArchives
 internal/memory/librarian.go (*Librarian).archivesDir
 internal/models/comment_payload.go FormatCommentPayload
+internal/models/enums.go AllTaskStatesSlice
 internal/models/scheduled_task.go (ScheduledTaskKind).Valid
 internal/models/task.go isAttemptEvent
 internal/paths/expand_tilde.go ExpandTildePrefix

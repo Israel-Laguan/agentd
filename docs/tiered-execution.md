@@ -8,7 +8,7 @@
 
 Spend strong models only where judgment is scarce. For **hard** tasks, split execution into typed steps with different model tiers and **sealed artifacts**, so cheap models gather and apply while mid/strong models decide, verify, and escalate — without relying on “don’t search again” prompts.
 
-Save **money and wall-clock**. Soft prompt discipline is not the mechanism. Wall-clock is a design target; fixture-derived durations are not provider latency (see [M5](#m5--costlatency-harness-t-018)).
+Save **money and wall-clock**. Soft prompt discipline is not the mechanism. Wall-clock is a design target; fixture-derived durations are not provider latency (see [M5](#m5--costlatency-harness-t-018-rebuilt-in-t-020)).
 
 ---
 
