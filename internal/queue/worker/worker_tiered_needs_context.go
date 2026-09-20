@@ -133,13 +133,19 @@ func (w *Worker) handleNeedsContext(ctx context.Context, task models.Task, paren
 	if err != nil {
 		return fmt.Errorf("determine pack generation: %w", err)
 	}
-
 	origin, err := w.store.GetTask(ctx, parentTask.ID)
 	if err != nil {
 		return fmt.Errorf("reload origin before re-gather: %w", err)
 	}
 	if origin.State == models.TaskStateFailed || origin.State == models.TaskStateFailedRequiresHuman {
 		return fmt.Errorf("origin is %s; skipping re-gather", origin.State)
+	}
+	if generation > w.tieredCfg.EscalationConfig().MaxReGather {
+		if _, err := w.store.UpdateTaskState(ctx, parentTask.ID, origin.UpdatedAt, models.TaskStateFailedRequiresHuman); err != nil {
+			return fmt.Errorf("hand off after re-gather cap: %w", err)
+		}
+		w.Emit(ctx, parentTask, "TIERED_NEEDS_CONTEXT_CAP", fmt.Sprintf("max re-gathers reached: %d", generation-1))
+		return nil
 	}
 
 	assignee := w.resolveAssignee(parentTask.Assignee)

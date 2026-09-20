@@ -31,6 +31,7 @@ while [[ $# -gt 0 ]]; do
     --tiered-only) MODE="tiered"; shift ;;
     --fixtures-dir) FIXTURES_DIR="$2"; shift 2 ;;
     --output) OUTPUT_FILE="$2"; shift 2 ;;
+    --mock) shift ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -102,6 +103,17 @@ if [[ "$MODE" == "tiered" || "$MODE" == "both" ]]; then
 fi
 
 if [[ "$MODE" == "both" ]]; then
+  if [[ "$BASELINE_PASS" != "true" ]]; then
+    echo "ERROR: baseline acceptance failed" >&2
+    exit 1
+  fi
+  if [[ "$VERIFY_OUTCOME" != "pass" ]]; then
+    echo "ERROR: tiered verification failed (outcome: $VERIFY_OUTCOME)" >&2
+    exit 1
+  fi
+fi
+
+if [[ "$MODE" == "both" ]]; then
   if [[ "$BASELINE_COST" == "0" || "$BASELINE_COST" == "" ]]; then
     echo "ERROR: baseline cost is zero — cannot compute cost reduction" >&2
     exit 1
@@ -112,9 +124,9 @@ if [[ "$MODE" == "both" ]]; then
   fi
 
   COST_SAVED=$(echo "scale=8; $BASELINE_COST - $TIERED_COST" | bc)
-  COST_REDUCTION=$(echo "scale=2; ($COST_SAVED / $BASELINE_COST) * 100" | bc)
+  COST_REDUCTION=$(echo "scale=2; ($COST_SAVED * 100) / $BASELINE_COST" | bc)
   TIME_SAVED_MS=$(( BASELINE_WALL_MS - TIERED_WALL_MS ))
-  TIME_REDUCTION=$(echo "scale=1; ($TIME_SAVED_MS / $BASELINE_WALL_MS) * 100" | bc)
+  TIME_REDUCTION=$(echo "scale=1; ($TIME_SAVED_MS * 100) / $BASELINE_WALL_MS" | bc)
 else
   COST_SAVED="0"
   COST_REDUCTION="0"

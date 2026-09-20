@@ -52,7 +52,7 @@ tasks/
 | US- | US-007 |
 | T- | T-015 |
 | B- | B-001 |
-| SP- | SP-005 |
+| SP- | SP-006 |
 
 Update this table when you mint IDs.
 

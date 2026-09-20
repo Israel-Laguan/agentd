@@ -91,7 +91,7 @@ func (s *FakeKanbanStore) RewireDependsOn(_ context.Context, oldParentID, newPar
 		if !ok {
 			continue
 		}
-		if task.State != models.TaskStatePending && task.State != models.TaskStateReady {
+		if task.State != models.TaskStatePending && task.State != models.TaskStateReady && task.State != models.TaskStateBlocked {
 			continue
 		}
 		idx := -1
@@ -106,12 +106,7 @@ func (s *FakeKanbanStore) RewireDependsOn(_ context.Context, oldParentID, newPar
 		}
 		rels[idx] = parentRelation{parentID: newParentID, relationType: models.TaskRelationDependsOn}
 		s.childParentRelations[childID] = rels
-		for i, pid := range s.childParents[childID] {
-			if pid == oldParentID {
-				s.childParents[childID][i] = newParentID
-				break
-			}
-		}
+		s.childParents[childID][idx] = newParentID
 		if task.State == models.TaskStateReady {
 			task.State = models.TaskStateBlocked
 			task.UpdatedAt = ts

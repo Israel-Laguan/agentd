@@ -39,7 +39,7 @@ func (g *plainTextVerifyGateway) Embed(ctx context.Context, req gateway.EmbedReq
 }
 func (g *plainTextVerifyGateway) ProviderSupportsChatTools(string) bool { return true }
 
-// setUpTieredVerifyFixture builds an origin task (RUNNING) plus a READY
+// setUpTieredVerifyFixture builds an origin task (BLOCKED) plus a READY
 // verify child wired via SPAWNED_BY (the same relation tryDispatchTieredStep
 // resolves), with a ContextPack on disk so injectContextPack succeeds.
 func setUpTieredVerifyFixture(t *testing.T, store *testutil.FakeKanbanStore) (origin models.Task, verify models.Task, workspace string) {

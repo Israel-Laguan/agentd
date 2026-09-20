@@ -81,7 +81,7 @@ func (s *Store) SpawnTieredContinuation(
 	})
 }
 
-// RewireDependsOn redirects PENDING/READY dependents of oldParentID onto
+// RewireDependsOn redirects unfinished dependents of oldParentID onto
 // newParentID. See the KanbanStore interface doc for the READY→BLOCKED
 // safety transition and why QUEUED/RUNNING dependents are left untouched.
 func (s *Store) RewireDependsOn(ctx context.Context, oldParentID, newParentID string) ([]models.Task, error) {
@@ -104,7 +104,7 @@ func (s *Store) RewireDependsOn(ctx context.Context, oldParentID, newParentID st
 		now := utcNow()
 		rewired := make([]models.Task, 0, len(dependents))
 		for _, dep := range dependents {
-			if dep.State != models.TaskStatePending && dep.State != models.TaskStateReady {
+			if dep.State != models.TaskStatePending && dep.State != models.TaskStateReady && dep.State != models.TaskStateBlocked {
 				continue
 			}
 			if _, err := tx.ExecContext(ctx, `
