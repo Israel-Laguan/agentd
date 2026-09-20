@@ -12,13 +12,10 @@ import (
 	"agentd/internal/testutil"
 )
 
-// setUpTieredDecisionFixture mirrors setUpTieredVerifyFixture but for the
-// decision step, and additionally pre-spawns an execute task that depends
-// on the decision. The execute stays PENDING until the decision completes,
-// so the NEEDS_CONTEXT rewire keeps it PENDING (the PENDING-dependent
-// reroute). This exercises the PENDING branch of RewireDependsOn; the
-// READY->BLOCKED demotion is exercised separately via
-// TestRewireDependsOn_RedirectsPendingAndBlocksReady.
+// setUpTieredDecisionFixture mirrors setUpTieredVerifyFixture for the
+// decision step, pre-spawning an execute task that depends on the
+// decision. The execute stays PENDING until the decision completes,
+// exercising the PENDING branch of RewireDependsOn.
 func setUpTieredDecisionFixture(t *testing.T, store *testutil.FakeKanbanStore) (origin, decisionTask, executeTask models.Task, workspace string) {
 	t.Helper()
 	origin, workspace = setUpTieredOriginRunning(t, store, "tiered-decision-fixture")
@@ -127,8 +124,8 @@ func TestTieredDecision_NeedsContextSpawnsRegatherAndRewiresExecute(t *testing.T
 
 	w.Process(ctx, decisionTask)
 	assertTieredDecisionReachedNeedsContext(t, ctx, store, decisionTask)
-	newContextID, newDecisionID := assertTieredRegatherPairSpawned(t, ctx, store, origin)
-	assertTieredPendingExecuteRewiredStillPending(t, ctx, store, executeTask, newContextID, newDecisionID)
+	_, newDecisionID := assertTieredRegatherPairSpawned(t, ctx, store, origin)
+	assertTieredPendingExecuteRewiredStillPending(t, ctx, store, executeTask, newDecisionID)
 }
 
 func assertTieredDecisionReachedNeedsContext(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, decisionTask models.Task) {
@@ -170,12 +167,11 @@ func assertTieredRegatherPairSpawned(t *testing.T, ctx context.Context, store *t
 	return newContextID, newDecisionID
 }
 
-func assertTieredPendingExecuteRewiredStillPending(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, executeTask models.Task, _, newDecisionID string) {
+func assertTieredPendingExecuteRewiredStillPending(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, executeTask models.Task, newDecisionID string) {
 	t.Helper()
-	// execute is PENDING and depends on the now-stale decision; after
-	// NEEDS_CONTEXT it must be rewired onto the new decision without
-	// changing state (PENDING stays PENDING; only READY is demoted to
-	// BLOCKED by RewireDependsOn).
+// execute is PENDING depending on the stale decision; after
+// NEEDS_CONTEXT it must be rewired onto the new decision
+// without changing state (PENDING stays PENDING).
 	executeParents, err := store.ListParentTasksByRelation(ctx, executeTask.ID, models.TaskRelationDependsOn)
 	if err != nil {
 		t.Fatalf("ListParentTasksByRelation(execute): %v", err)
@@ -285,9 +281,6 @@ func TestTieredDecision_PendingReGatherNeedsContextSpawnsSecondRegather(t *testi
 	if err != nil {
 		t.Fatalf("ListChildTasksByRelation after second: %v", err)
 	}
-	if !hasSecondRegatherContext(t, spawned2) {
-		t.Fatalf("expected second re-gather context among %+v", spawned2)
-	}
 	assertRegatherContextCount(t, spawned2, 2, "v2")
 }
 
@@ -323,16 +316,6 @@ func assertPendingRegatherDecision(t *testing.T, ctx context.Context, store *tes
 		t.Fatalf("re-gather decision state = %s, want PENDING", pendingRegatherDecision.State)
 	}
 	return pendingRegatherDecision
-}
-
-func hasSecondRegatherContext(t *testing.T, spawned []models.Task) bool {
-	t.Helper()
-	for _, s := range spawned {
-		if s.Title == "context (re-gather v2): origin" || strings.HasPrefix(s.Title, "context (re-gather v2)") {
-			return true
-		}
-	}
-	return false
 }
 
 func TestTieredDecision_NeedsContextCapHandsOffToHuman(t *testing.T) {
@@ -462,7 +445,7 @@ func moveToNeedsContext(t *testing.T, ctx context.Context, store *testutil.FakeK
 
 func spawnCompletedFreshDecision(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, origin models.Task, staleNeedsCtx *models.Task) *models.Task {
 	t.Helper()
-	freshTime := staleNeedsCtx.CreatedAt.Add(10 * 1e9)
+	freshTime := staleNeedsCtx.CreatedAt.Add(10 * time.Second)
 	freshPending := models.Task{
 		BaseEntity: models.BaseEntity{ID: "fresh-decision-completed", CreatedAt: freshTime, UpdatedAt: freshTime},
 		ProjectID:  origin.ProjectID, AgentID: "tier-decision", Title: "decision (re-gather v2): origin", State: models.TaskStatePending, Assignee: models.TaskAssigneeSystem,
