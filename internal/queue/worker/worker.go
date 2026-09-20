@@ -101,10 +101,11 @@ type TokenUsageStore interface {
 	AddUsageDetails(ctx context.Context, taskID string, details spec.UsageDetails) error
 }
 
-// recordTaskTokenUsage feeds the optional rolling ledger hook, persists usage to
-// the task row, and emits a TOKEN_USAGE audit event when a sink is wired.
-// Cache usage details ride along the event payload and the additive
-// TokenUsageStore.AddUsageDetails seam.
+type PluginMounter interface {
+	MountProject(workspacePath string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
+	MountSession(names []string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
+}
+
 func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails) {
 	if tokens <= 0 {
 		return
@@ -113,31 +114,12 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 		w.tokenUsageHook(tokens)
 	}
 	if w.tokenStore != nil && !w.disableTokenRecording {
-		if err := w.tokenStore.AddTokenUsage(ctx, task.ID, tokens); err != nil {
-			slog.Error("failed to persist token usage", "task_id", task.ID, "tokens", tokens, "err", err)
-		}
-		if err := w.tokenStore.AddUsageDetails(ctx, task.ID, details); err != nil {
-			slog.Error("failed to persist usage details", "task_id", task.ID, "err", err)
-		}
+		_ = w.tokenStore.AddTokenUsage(ctx, task.ID, tokens)
+		_ = w.tokenStore.AddUsageDetails(ctx, task.ID, details)
 	}
-	slog.Debug("recorded token usage",
-		"task_id", task.ID, "tokens", tokens,
-		"cached_tokens", details.CachedTokens, "cache_write_tokens", details.CacheWriteTokens)
-	payload, err := json.Marshal(models.TokenUsagePayload{
-		Tokens:           tokens,
-		CachedTokens:     details.CachedTokens,
-		CacheWriteTokens: details.CacheWriteTokens,
-	})
-	if err != nil {
-		slog.Error("failed to marshal token usage payload", "task_id", task.ID, "err", err)
-		return
-	}
+	slog.Debug("recorded token usage", "task_id", task.ID, "tokens", tokens, "cached_tokens", details.CachedTokens, "cache_write_tokens", details.CacheWriteTokens)
+	payload, _ := json.Marshal(models.TokenUsagePayload{Tokens: tokens, CachedTokens: details.CachedTokens, CacheWriteTokens: details.CacheWriteTokens})
 	w.Emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
-}
-
-type PluginMounter interface {
-	MountProject(workspacePath string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
-	MountSession(names []string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
 }
 
 // Process handles task execution, supporting two modes:

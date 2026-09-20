@@ -197,24 +197,6 @@ func newRewireStepTask(now time.Time, projectID, agentID, title string, state mo
 	}
 }
 
-func assertRewireExecuteBlocked(t *testing.T, ctx context.Context, store *Store, executeID, newDecisionID string) {
-	t.Helper()
-	executeParents, err := store.ListParentTasksByRelation(ctx, executeID, models.TaskRelationDependsOn)
-	if err != nil {
-		t.Fatalf("ListParentTasksByRelation(execute) error = %v", err)
-	}
-	if len(executeParents) != 1 || executeParents[0].ID != newDecisionID {
-		t.Fatalf("execute's DEPENDS_ON parents = %+v, want [%s]", executeParents, newDecisionID)
-	}
-	reloadedExecute, err := store.GetTask(ctx, executeID)
-	if err != nil {
-		t.Fatalf("GetTask(execute) error = %v", err)
-	}
-	if reloadedExecute.State != models.TaskStateBlocked {
-		t.Fatalf("execute state = %s, want BLOCKED", reloadedExecute.State)
-	}
-}
-
 func assertRewirePendingDepRedirected(t *testing.T, ctx context.Context, store *Store, pendingDepID, newDecisionID string) {
 	t.Helper()
 	reloaded, err := store.GetTask(ctx, pendingDepID)
