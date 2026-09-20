@@ -47,6 +47,17 @@ var tieredStepProfile = map[TieredStepKind]string{
 	TieredStepEscalate: escalateAgentID,
 }
 
+// TieredStepProfiles returns the agent profile each tiered step kind is
+// dispatched under, keyed by kind. Every profile it names must be seeded, or
+// that step fails dispatch with ErrAgentProfileNotFound.
+func TieredStepProfiles() map[TieredStepKind]string {
+	out := make(map[TieredStepKind]string, len(tieredStepProfile))
+	for kind, profile := range tieredStepProfile {
+		out[kind] = profile
+	}
+	return out
+}
+
 // SplitIntoTieredDAG builds the context -> decision -> execute -> verify
 // child tasks for a parent task that has already passed ShouldRunTiered.
 // It is a pure constructor: it does not check the gate itself, and callers

@@ -29,33 +29,47 @@ func migrateToV16(ctx context.Context, db *sql.DB) error {
 	if strings.Contains(createSQL, "'NEEDS_CONTEXT'") {
 		return setSchemaVersion(ctx, db, 16)
 	}
+	if err := disableForeignKeys(ctx, db); err != nil {
+		return err
+	}
+	defer func() { _, _ = db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+	return rebuildTasksTableV16(ctx, db)
+}
 
+func disableForeignKeys(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return fmt.Errorf("disable foreign keys for schema migration v16: %w", err)
 	}
-	defer func() { _, _ = db.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+	return nil
+}
 
+func rebuildTasksTableV16(ctx context.Context, db *sql.DB) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin schema migration v16: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	for _, step := range []struct {
+		sql string
+		msg string
+	}{
+		{`DROP TABLE IF EXISTS tasks_new`, "drop stale tasks_new v16"},
+		{createTasksV16SQL, "create tasks v16"},
+		{copyTasksToV16SQL, "copy tasks v16"},
+		{`DROP TABLE tasks`, "drop old tasks table v16"},
+		{`ALTER TABLE tasks_new RENAME TO tasks`, "rename tasks v16"},
+	} {
+		if _, err := tx.ExecContext(ctx, step.sql); err != nil {
+			return fmt.Errorf("%s: %w", step.msg, err)
+		}
+	}
+	if err := recreateTasksIndexesV16(ctx, tx); err != nil {
+		return err
+	}
+	return commitTasksRebuildV16(ctx, tx)
+}
 
-	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS tasks_new`); err != nil {
-		return fmt.Errorf("drop stale tasks_new v16: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, createTasksV16SQL); err != nil {
-		return fmt.Errorf("create tasks v16: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, copyTasksToV16SQL); err != nil {
-		return fmt.Errorf("copy tasks v16: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `DROP TABLE tasks`); err != nil {
-		return fmt.Errorf("drop old tasks table v16: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `ALTER TABLE tasks_new RENAME TO tasks`); err != nil {
-		return fmt.Errorf("rename tasks v16: %w", err)
-	}
+func recreateTasksIndexesV16(ctx context.Context, tx *sql.Tx) error {
 	for _, ddl := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_tasks_state_assignee ON tasks(state, assignee)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)`,
@@ -66,6 +80,10 @@ func migrateToV16(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("recreate tasks index v16 (%s): %w", ddl, err)
 		}
 	}
+	return nil
+}
+
+func commitTasksRebuildV16(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO settings (key, value, updated_at)
 		VALUES (?, ?, datetime('now'))

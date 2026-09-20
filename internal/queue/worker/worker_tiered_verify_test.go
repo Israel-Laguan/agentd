@@ -44,6 +44,15 @@ func (g *plainTextVerifyGateway) ProviderSupportsChatTools(string) bool { return
 func setUpTieredVerifyFixture(t *testing.T, store *testutil.FakeKanbanStore) (origin models.Task, verify models.Task, workspace string) {
 	t.Helper()
 	ctx := context.Background()
+	origin, workspace = setUpTieredVerifyOrigin(t, store)
+	writeTieredVerifyPack(t, workspace, origin.ID)
+	upsertTieredVerifyProfile(t, ctx, store)
+	return origin, spawnTieredVerifyStep(t, ctx, store, origin), workspace
+}
+
+func setUpTieredVerifyOrigin(t *testing.T, store *testutil.FakeKanbanStore) (models.Task, string) {
+	t.Helper()
+	ctx := context.Background()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "tiered-verify-fixture",
 		Tasks:       []models.DraftTask{{Title: "origin", Description: "complex task"}},
@@ -55,32 +64,38 @@ func setUpTieredVerifyFixture(t *testing.T, store *testutil.FakeKanbanStore) (or
 	if err != nil {
 		t.Fatalf("mark origin running: %v", err)
 	}
-	origin = *originTask
 
 	// FakeKanbanStore.MaterializePlan fixes WorkspacePath to
 	// "/tmp/projects/<project name>" with no way to override it after the
 	// fact, so create that exact directory for the ContextPack write.
-	project, err := store.GetProject(ctx, origin.ProjectID)
+	project, err := store.GetProject(ctx, originTask.ProjectID)
 	if err != nil {
 		t.Fatalf("get project: %v", err)
 	}
-	workspace = project.WorkspacePath
+	workspace := project.WorkspacePath
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		t.Fatalf("create workspace dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(workspace) })
+	return *originTask, workspace
+}
 
+func writeTieredVerifyPack(t *testing.T, workspace, originID string) {
+	t.Helper()
 	pack := &ContextPack{
 		Version:      ContextPackVersion,
 		TaskID:       "context-1",
-		ParentTaskID: origin.ID,
+		ParentTaskID: originID,
 		Summary:      "test summary",
 		Paths:        []string{"a.go"},
 	}
 	if err := WriteContextPack(workspace, pack); err != nil {
 		t.Fatalf("write context pack: %v", err)
 	}
+}
 
+func upsertTieredVerifyProfile(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore) {
+	t.Helper()
 	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{
 		ID:          "tier-verify",
 		Provider:    "test-provider",
@@ -89,7 +104,10 @@ func setUpTieredVerifyFixture(t *testing.T, store *testutil.FakeKanbanStore) (or
 	}); err != nil {
 		t.Fatalf("upsert tier-verify profile: %v", err)
 	}
+}
 
+func spawnTieredVerifyStep(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, origin models.Task) models.Task {
+	t.Helper()
 	verifyDraft := models.Task{
 		BaseEntity:  models.BaseEntity{ID: "verify-task"},
 		ProjectID:   origin.ProjectID,
@@ -103,8 +121,7 @@ func setUpTieredVerifyFixture(t *testing.T, store *testutil.FakeKanbanStore) (or
 	if err != nil {
 		t.Fatalf("spawn verify step: %v", err)
 	}
-	verify = created[0]
-	return origin, verify, workspace
+	return created[0]
 }
 
 func TestTieredVerify_FailRoutesToMidFix(t *testing.T) {

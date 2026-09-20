@@ -17,9 +17,39 @@ import (
 // must handle.
 func setUpTieredDecisionFixture(t *testing.T, store *testutil.FakeKanbanStore) (origin, decisionTask, executeTask models.Task, workspace string) {
 	t.Helper()
+	origin, workspace = setUpTieredOriginRunning(t, store, "tiered-decision-fixture")
+
+	pack := &ContextPack{
+		Version:      ContextPackVersion,
+		TaskID:       "context-1",
+		ParentTaskID: origin.ID,
+		Summary:      "test summary",
+		Paths:        []string{"a.go"},
+	}
+	writeTieredDecisionPack(t, workspace, pack)
+
+	ctx := context.Background()
+	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{
+		ID: "tier-decision", Provider: "test-provider", Model: "test-model", AgenticMode: true,
+	}); err != nil {
+		t.Fatalf("upsert tier-decision profile: %v", err)
+	}
+
+	created, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
+		{Task: tieredDecisionDraft(origin.ProjectID)},
+		{Task: tieredReadyExecuteDraft(origin.ProjectID), DependsOnID: "decision-task"},
+	})
+	if err != nil {
+		t.Fatalf("spawn decision/execute steps: %v", err)
+	}
+	return origin, created[0], created[1], workspace
+}
+
+func setUpTieredOriginRunning(t *testing.T, store *testutil.FakeKanbanStore, projectName string) (models.Task, string) {
+	t.Helper()
 	ctx := context.Background()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "tiered-decision-fixture",
+		ProjectName: projectName,
 		Tasks:       []models.DraftTask{{Title: "origin", Description: "complex task"}},
 	})
 	if err != nil {
@@ -29,47 +59,42 @@ func setUpTieredDecisionFixture(t *testing.T, store *testutil.FakeKanbanStore) (
 	if err != nil {
 		t.Fatalf("mark origin running: %v", err)
 	}
-	origin = *originTask
 
-	project, err := store.GetProject(ctx, origin.ProjectID)
+	project, err := store.GetProject(ctx, originTask.ProjectID)
 	if err != nil {
 		t.Fatalf("get project: %v", err)
 	}
-	workspace = project.WorkspacePath
+	workspace := project.WorkspacePath
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		t.Fatalf("create workspace dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(workspace) })
+	return *originTask, workspace
+}
 
-	pack := &ContextPack{
-		Version:      ContextPackVersion,
-		TaskID:       "context-1",
-		ParentTaskID: origin.ID,
-		Summary:      "test summary",
-		Paths:        []string{"a.go"},
-	}
+func writeTieredDecisionPack(t *testing.T, workspace string, pack *ContextPack) {
+	t.Helper()
 	if err := WriteContextPack(workspace, pack); err != nil {
 		t.Fatalf("write context pack: %v", err)
 	}
+}
 
-	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{
-		ID: "tier-decision", Provider: "test-provider", Model: "test-model", AgenticMode: true,
-	}); err != nil {
-		t.Fatalf("upsert tier-decision profile: %v", err)
-	}
-
-	decisionDraft := models.Task{
+func tieredDecisionDraft(projectID string) models.Task {
+	return models.Task{
 		BaseEntity:  models.BaseEntity{ID: "decision-task"},
-		ProjectID:   origin.ProjectID,
+		ProjectID:   projectID,
 		AgentID:     "tier-decision",
 		Title:       "decision: origin",
 		Description: "decide what to touch",
 		State:       models.TaskStateReady,
 		Assignee:    models.TaskAssigneeSystem,
 	}
-	executeDraft := models.Task{
+}
+
+func tieredReadyExecuteDraft(projectID string) models.Task {
+	return models.Task{
 		BaseEntity: models.BaseEntity{ID: "execute-task"},
-		ProjectID:  origin.ProjectID,
+		ProjectID:  projectID,
 		AgentID:    "tier-execute",
 		Title:      "execute: origin",
 		// READY simulates the common race: UnlockReadyChildren already
@@ -78,14 +103,6 @@ func setUpTieredDecisionFixture(t *testing.T, store *testutil.FakeKanbanStore) (
 		State:    models.TaskStateReady,
 		Assignee: models.TaskAssigneeSystem,
 	}
-	created, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
-		{Task: decisionDraft},
-		{Task: executeDraft, DependsOnID: decisionDraft.ID},
-	})
-	if err != nil {
-		t.Fatalf("spawn decision/execute steps: %v", err)
-	}
-	return origin, created[0], created[1], workspace
 }
 
 func TestTieredDecision_NeedsContextSpawnsRegatherAndRewiresExecute(t *testing.T) {
@@ -98,7 +115,13 @@ func TestTieredDecision_NeedsContextSpawnsRegatherAndRewiresExecute(t *testing.T
 	w := NewWorker(store, gw, sb, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 10})
 
 	w.Process(ctx, decisionTask)
+	assertTieredDecisionReachedNeedsContext(t, ctx, store, decisionTask)
+	newContextID, newDecisionID := assertTieredRegatherPairSpawned(t, ctx, store, origin)
+	assertTieredExecuteRewiredAndBlocked(t, ctx, store, executeTask, newContextID, newDecisionID)
+}
 
+func assertTieredDecisionReachedNeedsContext(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, decisionTask models.Task) {
+	t.Helper()
 	current, err := store.GetTask(ctx, decisionTask.ID)
 	if err != nil {
 		t.Fatalf("GetTask(decision): %v", err)
@@ -106,12 +129,14 @@ func TestTieredDecision_NeedsContextSpawnsRegatherAndRewiresExecute(t *testing.T
 	if current.State != models.TaskStateNeedsContext {
 		t.Fatalf("decision state = %s, want NEEDS_CONTEXT", current.State)
 	}
+}
 
+func assertTieredRegatherPairSpawned(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, origin models.Task) (newContextID, newDecisionID string) {
+	t.Helper()
 	spawned, err := store.ListChildTasksByRelation(ctx, origin.ID, models.TaskRelationSpawnedBy)
 	if err != nil {
 		t.Fatalf("ListChildTasksByRelation: %v", err)
 	}
-	var newContextID, newDecisionID string
 	for _, s := range spawned {
 		if strings.HasPrefix(s.Title, "context (re-gather") {
 			newContextID = s.ID
@@ -131,7 +156,11 @@ func TestTieredDecision_NeedsContextSpawnsRegatherAndRewiresExecute(t *testing.T
 	if len(newDecisionParents) != 1 || newDecisionParents[0].ID != newContextID {
 		t.Fatalf("new decision's DEPENDS_ON parents = %+v, want [%s]", newDecisionParents, newContextID)
 	}
+	return newContextID, newDecisionID
+}
 
+func assertTieredExecuteRewiredAndBlocked(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, executeTask models.Task, _, newDecisionID string) {
+	t.Helper()
 	// execute was READY, depending on the now-stale decision; it must be
 	// rewired onto the new decision and blocked until that one is ready.
 	executeParents, err := store.ListParentTasksByRelation(ctx, executeTask.ID, models.TaskRelationDependsOn)

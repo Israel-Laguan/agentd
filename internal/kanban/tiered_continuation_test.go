@@ -96,46 +96,14 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 	origin := newTieredOriginTask(t, store, ctx)
 	now := time.Now().UTC()
 
-	oldDecision := models.Task{
-		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
-		ProjectID:   origin.ProjectID,
-		AgentID:     "tier-decision",
-		Title:       "decision",
-		Description: "d",
-		State:       models.TaskStateCompleted,
-		Assignee:    models.TaskAssigneeSystem,
-	}
-	newDecision := models.Task{
-		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
-		ProjectID:   origin.ProjectID,
-		AgentID:     "tier-decision",
-		Title:       "decision (re-gather v2)",
-		Description: "d",
-		State:       models.TaskStateReady,
-		Assignee:    models.TaskAssigneeSystem,
-	}
+	oldDecision := newRewireDecisionTask(now, origin.ProjectID, "decision", models.TaskStateCompleted)
+	newDecision := newRewireDecisionTask(now, origin.ProjectID, "decision (re-gather v2)", models.TaskStateReady)
 	// execute is READY (as it would be immediately after the old decision
 	// completed and UnlockReadyChildren promoted it).
-	execute := models.Task{
-		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
-		ProjectID:   origin.ProjectID,
-		AgentID:     "tier-execute",
-		Title:       "execute",
-		Description: "d",
-		State:       models.TaskStateReady,
-		Assignee:    models.TaskAssigneeSystem,
-	}
+	execute := newRewireStepTask(now, origin.ProjectID, "tier-execute", "execute", models.TaskStateReady)
 	// verify is still PENDING, depending on execute — untouched by this
 	// rewire since its DEPENDS_ON parent is execute, not oldDecision.
-	verify := models.Task{
-		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
-		ProjectID:   origin.ProjectID,
-		AgentID:     "tier-verify",
-		Title:       "verify",
-		Description: "d",
-		State:       models.TaskStatePending,
-		Assignee:    models.TaskAssigneeSystem,
-	}
+	verify := newRewireStepTask(now, origin.ProjectID, "tier-verify", "verify", models.TaskStatePending)
 
 	if _, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
 		{Task: oldDecision},
@@ -154,36 +122,61 @@ func TestRewireDependsOn_RedirectsPendingAndBlocksReady(t *testing.T) {
 		t.Fatalf("rewired = %+v, want exactly [execute]", rewired)
 	}
 
+	assertRewireExecuteBlocked(t, ctx, store, execute.ID, newDecision.ID)
+	assertRewireVerifyUntouched(t, ctx, store, verify.ID, execute.ID)
+}
+
+func newRewireDecisionTask(now time.Time, projectID, title string, state models.TaskState) models.Task {
+	return newRewireStepTask(now, projectID, "tier-decision", title, state)
+}
+
+func newRewireStepTask(now time.Time, projectID, agentID, title string, state models.TaskState) models.Task {
+	return models.Task{
+		BaseEntity:  models.BaseEntity{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now},
+		ProjectID:   projectID,
+		AgentID:     agentID,
+		Title:       title,
+		Description: "d",
+		State:       state,
+		Assignee:    models.TaskAssigneeSystem,
+	}
+}
+
+func assertRewireExecuteBlocked(t *testing.T, ctx context.Context, store *Store, executeID, newDecisionID string) {
+	t.Helper()
 	// execute must now depend on newDecision, not oldDecision, and must
 	// have been demoted to BLOCKED so it cannot run against the stale pack.
-	executeParents, err := store.ListParentTasksByRelation(ctx, execute.ID, models.TaskRelationDependsOn)
+	executeParents, err := store.ListParentTasksByRelation(ctx, executeID, models.TaskRelationDependsOn)
 	if err != nil {
 		t.Fatalf("ListParentTasksByRelation(execute) error = %v", err)
 	}
-	if len(executeParents) != 1 || executeParents[0].ID != newDecision.ID {
-		t.Fatalf("execute's DEPENDS_ON parents = %+v, want [%s]", executeParents, newDecision.ID)
+	if len(executeParents) != 1 || executeParents[0].ID != newDecisionID {
+		t.Fatalf("execute's DEPENDS_ON parents = %+v, want [%s]", executeParents, newDecisionID)
 	}
-	reloadedExecute, err := store.GetTask(ctx, execute.ID)
+	reloadedExecute, err := store.GetTask(ctx, executeID)
 	if err != nil {
 		t.Fatalf("GetTask(execute) error = %v", err)
 	}
 	if reloadedExecute.State != models.TaskStateBlocked {
 		t.Fatalf("execute state = %s, want BLOCKED", reloadedExecute.State)
 	}
+}
 
+func assertRewireVerifyUntouched(t *testing.T, ctx context.Context, store *Store, verifyID, executeID string) {
+	t.Helper()
 	// verify is untouched: still PENDING, still depending on execute.
-	reloadedVerify, err := store.GetTask(ctx, verify.ID)
+	reloadedVerify, err := store.GetTask(ctx, verifyID)
 	if err != nil {
 		t.Fatalf("GetTask(verify) error = %v", err)
 	}
 	if reloadedVerify.State != models.TaskStatePending {
 		t.Fatalf("verify state = %s, want unchanged PENDING", reloadedVerify.State)
 	}
-	verifyParents, err := store.ListParentTasksByRelation(ctx, verify.ID, models.TaskRelationDependsOn)
+	verifyParents, err := store.ListParentTasksByRelation(ctx, verifyID, models.TaskRelationDependsOn)
 	if err != nil {
 		t.Fatalf("ListParentTasksByRelation(verify) error = %v", err)
 	}
-	if len(verifyParents) != 1 || verifyParents[0].ID != execute.ID {
-		t.Fatalf("verify's DEPENDS_ON parents = %+v, want [%s]", verifyParents, execute.ID)
+	if len(verifyParents) != 1 || verifyParents[0].ID != executeID {
+		t.Fatalf("verify's DEPENDS_ON parents = %+v, want [%s]", verifyParents, executeID)
 	}
 }

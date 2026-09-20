@@ -13,26 +13,6 @@ import (
 	"agentd/internal/models"
 )
 
-// VerifyResult captures the output of a verify step.
-type VerifyResult struct {
-	Results []CheckResult `json:"results"`
-	Overall string        `json:"overall"`
-}
-
-// CheckResult records a single check execution.
-type CheckResult struct {
-	Check   string `json:"check"`
-	Outcome string `json:"outcome"`
-	Detail  string `json:"detail,omitempty"`
-}
-
-// DecisionArtifact is the structured output from a decision step.
-type DecisionArtifact struct {
-	TouchList []string `json:"touch_list"`
-	Checks    []string `json:"checks"`
-	Rationale string   `json:"rationale,omitempty"`
-}
-
 // midFixTitlePrefix marks a mid-fix redo task's Title so countMidFixAttempts
 // can tell it apart from the DAG's original execute step, which shares the
 // same AgentID ("tier-execute") so it dispatches through the identical
@@ -217,43 +197,6 @@ func (w *Worker) scheduleEscalation(ctx context.Context, verifyTask models.Task,
 	return nil
 }
 
-// getPredecessorTask finds the immediate predecessor task via DEPENDS_ON relation.
-func (w *Worker) getPredecessorTask(ctx context.Context, task models.Task) (*models.Task, error) {
-	// Query DEPENDS_ON relations specifically for this task (tiered pipeline uses typed relations)
-	predecessors, err := w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationDependsOn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list predecessor relations: %w", err)
-	}
-
-	if len(predecessors) == 0 {
-		return nil, nil // No predecessor
-	}
-
-	if len(predecessors) > 1 {
-		slog.WarnContext(ctx, "task has multiple DEPENDS_ON predecessors; using first", "task_id", task.ID)
-	}
-
-	return &predecessors[0], nil
-}
-
-// getDecisionArtifact retrieves the decision output from the decision step.
-func (w *Worker) getDecisionArtifact(ctx context.Context, decisionTask models.Task) (*DecisionArtifact, error) {
-	// Decision artifact is stored in task metadata or logs
-	artifactJSON := getMetadata(decisionTask, "decision_artifact", "")
-	if artifactJSON == "" {
-		// Fallback: parse from logs if not in metadata
-		// This is a simplified approach; in production, you'd extract from the actual task output
-		return nil, fmt.Errorf("decision artifact not found for task %s", decisionTask.ID)
-	}
-
-	var artifact DecisionArtifact
-	if err := json.Unmarshal([]byte(artifactJSON), &artifact); err != nil {
-		return nil, fmt.Errorf("failed to parse decision artifact: %w", err)
-	}
-
-	return &artifact, nil
-}
-
 // transitionTaskState moves a task to a new state.
 func (w *Worker) transitionTaskState(ctx context.Context, taskID string, newState models.TaskState) error {
 	task, err := w.store.GetTask(ctx, taskID)
@@ -270,62 +213,5 @@ func (w *Worker) transitionTaskState(ctx context.Context, taskID string, newStat
 	return err
 }
 
-// Helper functions for task metadata management. Metadata is stored as a
-// JSON object in task.Logs. It is a scratch API for values that only need
-// to survive within a single call chain (the cap enforcement above
-// re-derives its counts from the persisted DAG on every call instead of
-// trusting this to survive a task reload, since task.Logs has no backing
-// DB column).
+// Helper functions for task metadata management live in tiered_metadata.go.
 
-func getMetadata(task models.Task, key, defaultVal string) string {
-	if strings.TrimSpace(task.Logs) == "" {
-		return defaultVal
-	}
-	var meta map[string]any
-	if err := json.Unmarshal([]byte(task.Logs), &meta); err != nil {
-		return defaultVal
-	}
-	val, ok := meta[key]
-	if !ok {
-		return defaultVal
-	}
-	if s, ok := val.(string); ok {
-		return s
-	}
-	encoded, err := json.Marshal(val)
-	if err != nil {
-		return defaultVal
-	}
-	return string(encoded)
-}
-
-func setMetadata(task *models.Task, key, value string) {
-	// Store in Logs field as JSON or structured format
-	if task.Logs == "" {
-		task.Logs = "{}"
-	}
-	var meta map[string]interface{}
-	if err := json.Unmarshal([]byte(task.Logs), &meta); err != nil {
-		meta = make(map[string]interface{})
-	}
-	meta[key] = value
-	if data, err := json.Marshal(meta); err == nil {
-		task.Logs = string(data)
-	}
-}
-
-func getMetadataInt(task models.Task, key string, defaultVal int) int {
-	val := getMetadata(task, key, "")
-	if val == "" {
-		return defaultVal
-	}
-	var i int
-	if _, err := fmt.Sscanf(val, "%d", &i); err != nil {
-		return defaultVal
-	}
-	return i
-}
-
-func setMetadataInt(task *models.Task, key string, value int) {
-	setMetadata(task, key, fmt.Sprintf("%d", value))
-}
