@@ -122,6 +122,8 @@ internal/queue/worker/worker_support.go (*Worker).isPromptHang
 internal/queue/worker/worker_support.go (*Worker).commitText
 internal/queue/worker/worker_support.go (*Worker).providerSupportsAgentic
 internal/queue/worker/worker_support.go (*Worker).SetSandbox
+internal/queue/worker/worker_tiered_origin.go (*Worker).completeTieredOrigin
+internal/queue/worker/worker_tiered_origin.go (*Worker).failTieredOrigin
 internal/queue/worker/worker_tools.go (*Worker).executeDelegate
 internal/sandbox/executor.go containsSudo
 internal/sandbox/interface.go (EnvironmentAdapter).CleanupZombie

@@ -19,10 +19,6 @@ func (s *failUpdateResultStore) UpdateTaskResult(context.Context, string, time.T
 	return nil, models.ErrStateConflict
 }
 
-func (s *failUpdateResultStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
-	return s.UpdateTaskResult(ctx, id, ts, result)
-}
-
 type failReviewUsedMarkerStore struct {
 	*testutil.FakeKanbanStore
 }

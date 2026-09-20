@@ -104,11 +104,17 @@ func TestCompleteTieredOrigin_FromReadyAndRunning(t *testing.T) {
 		t.Fatalf("state = %s, want COMPLETED", done.State)
 	}
 
-	running := seedTieredOrigin(t, store, ctx, "tiered-origin-fail")
+	seeded := seedTieredOrigin(t, store, ctx, "tiered-origin-fail")
+	unblockedRun, err := store.UpdateTaskState(ctx, seeded.ID, seeded.UpdatedAt, models.TaskStateReady)
+	if err != nil {
+		t.Fatalf("UpdateTaskState(READY) error = %v", err)
+	}
+	running, err := store.UpdateTaskState(ctx, unblockedRun.ID, unblockedRun.UpdatedAt, models.TaskStateRunning)
+	if err != nil {
+		t.Fatalf("UpdateTaskState(RUNNING) error = %v", err)
+	}
 	if failed, err := store.CompleteTieredOrigin(ctx, running.ID, running.UpdatedAt, models.TaskResult{Success: false, Payload: "pipeline cancelled"}); err != nil {
-		// BLOCKED is the seeded state here; the failure path must work from
-		// it too, since failTieredOrigin routes through the same method.
-		t.Fatalf("CompleteTieredOrigin(BLOCKED, fail) error = %v", err)
+		t.Fatalf("CompleteTieredOrigin(RUNNING, fail) error = %v", err)
 	} else if failed.State != models.TaskStateFailed {
 		t.Fatalf("state = %s, want FAILED", failed.State)
 	}

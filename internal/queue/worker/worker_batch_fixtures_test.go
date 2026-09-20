@@ -60,8 +60,30 @@ func (s *batchTestStore) UpdateTaskResult(_ context.Context, id string, _ time.T
 	return &t, nil
 }
 
-func (s *batchTestStore) CompleteTieredOrigin(ctx context.Context, id string, ts time.Time, result models.TaskResult) (*models.Task, error) {
-	return s.UpdateTaskResult(ctx, id, ts, result)
+func (s *batchTestStore) CompleteTieredOrigin(_ context.Context, id string, expectedUpdatedAt time.Time, result models.TaskResult) (*models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t := s.lookupTaskLocked(id)
+	if _, ok := s.tasks[id]; !ok {
+		return nil, models.ErrTaskNotFound
+	}
+	if !t.UpdatedAt.Equal(expectedUpdatedAt) {
+		return nil, models.ErrStateConflict
+	}
+	switch t.State {
+	case models.TaskStateBlocked, models.TaskStateReady, models.TaskStateRunning:
+	default:
+		return nil, models.ErrStateConflict
+	}
+	cp := result
+	s.results[id] = &cp
+	if result.Success {
+		t.State = models.TaskStateCompleted
+	} else {
+		t.State = models.TaskStateFailed
+	}
+	s.tasks[id] = t
+	return &t, nil
 }
 
 func (s *batchTestStore) GetProject(context.Context, string) (*models.Project, error) {

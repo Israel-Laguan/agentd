@@ -45,7 +45,9 @@ func (w *Worker) tryResolveTieredOrigin(ctx context.Context, task models.Task) b
 	outcome, found, err := w.latestVerifyOutcome(ctx, steps)
 	if err != nil {
 		slog.Error("tiered origin: failed to determine verify outcome", "task_id", task.ID, "error", err)
-		w.failTieredOrigin(ctx, task, "tiered pipeline: failed to read verify events")
+		// Storage/read failure: the pipeline outcome is unknown, so keep the
+		// origin BLOCKED for a later retry instead of recording a verdict.
+		w.reblockTieredOrigin(ctx, task)
 		return true
 	}
 	if !found {
@@ -147,20 +149,6 @@ func (w *Worker) recordedVerifyOutcome(ctx context.Context, verify models.Task) 
 	return outcome, true, nil
 }
 
-// finishTieredOrigin records the pipeline's verdict on the origin task.
-func (w *Worker) finishTieredOrigin(ctx context.Context, task models.Task, success bool, reason string) {
-	if _, err := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
-		Success: success,
-		Payload: truncate(reason, 1000),
-	}); err != nil {
-		slog.Error("tiered origin: failed to record pipeline result",
-			"task_id", task.ID, "success", success, "error", err)
-		w.Emit(ctx, task, "ERROR", err.Error())
-		return
-	}
-	w.Emit(ctx, task, "TIERED_PIPELINE_RESOLVED", fmt.Sprintf("success=%t %s", success, reason))
-}
-
 // reblockTieredOrigin returns the origin to BLOCKED while steps are pending.
 func (w *Worker) reblockTieredOrigin(ctx context.Context, task models.Task) {
 	if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
@@ -181,9 +169,8 @@ func (w *Worker) completeTieredOrigin(ctx context.Context, origin models.Task, r
 }
 
 // failTieredOrigin resolves the origin as failed from a non-RUNNING state.
-// Like the success path it completes atomically; FAILED is not claimable,
-// so the old direct-transition fallback is only kept for stores that lack
-// the atomic method.
+// Like the success path, it completes atomically through
+// CompleteTieredOrigin.
 func (w *Worker) failTieredOrigin(ctx context.Context, origin models.Task, reason string) {
 	w.resolveTieredOrigin(ctx, origin, false, reason)
 }

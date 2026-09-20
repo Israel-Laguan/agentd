@@ -52,10 +52,10 @@ race is real):
 
 ## Out of scope
 
-- Production implementation of the atomic completion path.
 - Changes to unrelated tiered retry or escalation limits.
 
 ## Notes
 
-The current completion helper walks BLOCKED -> READY -> RUNNING before calling
-UpdateTaskResult, leaving a claimable window between state transitions.
+The previous completion helper walked BLOCKED -> READY -> RUNNING before
+calling UpdateTaskResult, leaving a claimable window between state
+transitions.

@@ -5,8 +5,14 @@ import (
 	"time"
 )
 
-// UTCNow returns the current time in UTC with nanoseconds truncated to zero.
-func UTCNow() time.Time { return time.Now().UTC().Truncate(time.Second) }
+// UTCNow returns the current time in UTC at full clock precision.
+//
+// Timestamps double as optimistic-concurrency versions (updated_at): second
+// truncation let a dispatcher claim/start an origin in the same UTC second
+// as the resolver's read without changing the version, so the stale
+// CompleteTieredOrigin write still matched. Keep sub-second precision so
+// every committed write moves the version (stored as RFC3339Nano).
+func UTCNow() time.Time { return time.Now().UTC() }
 
 // FormatTime formats t as RFC3339Nano in UTC.
 func FormatTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }

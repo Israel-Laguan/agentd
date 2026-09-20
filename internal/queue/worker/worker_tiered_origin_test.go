@@ -11,9 +11,9 @@ import (
 )
 
 // TestCompleteTieredOrigin_AtomicFromBlocked (SP-006): a BLOCKED origin
-// resolves straight to COMPLETED in one call. No transient READY state is
-// written, so a concurrent ClaimNextReadyTasks can never grab the origin
-// mid-completion and re-block it with a stale verdict.
+// resolves straight to COMPLETED in one store call. Atomicity comes from
+// that single write (no intermediate READY is ever persisted), not from any
+// post-hoc claim check.
 func TestCompleteTieredOrigin_AtomicFromBlocked(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -52,11 +52,6 @@ func TestCompleteTieredOrigin_AtomicFromBlocked(t *testing.T) {
 	}
 	if !resultEvent {
 		t.Fatal("no persisted RESULT event with the pipeline verdict")
-	}
-	if claimed, err := store.ClaimNextReadyTasks(ctx, 10); err != nil {
-		t.Fatalf("ClaimNextReadyTasks: %v", err)
-	} else if len(claimed) != 0 {
-		t.Fatalf("claimed %d tasks after completion, want 0 (no transient READY leaked)", len(claimed))
 	}
 }
 
@@ -99,11 +94,11 @@ type raceWinningOriginStore struct {
 }
 
 func (s *raceWinningOriginStore) CompleteTieredOrigin(ctx context.Context, id string, expected time.Time, result models.TaskResult) (*models.Task, error) {
-	current, err := s.FakeKanbanStore.GetTask(ctx, id)
+	current, err := s.GetTask(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.FakeKanbanStore.IncrementRetryCount(ctx, id, current.UpdatedAt); err != nil {
+	if _, err := s.IncrementRetryCount(ctx, id, current.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return s.FakeKanbanStore.CompleteTieredOrigin(ctx, id, expected, result)

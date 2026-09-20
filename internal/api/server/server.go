@@ -84,7 +84,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	// /api/v1/*, so the daemon root and the conventional /health and /docs
 	// paths all returned the mux 404. A headless daemon still needs a
 	// landing page and a health check.
-	mux.HandleFunc("GET /", handleLanding)
+	mux.HandleFunc("GET /{$}", handleLanding)
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /docs", handleDocs)
 	return corsMiddleware(mux)
@@ -104,6 +104,7 @@ func handleLanding(w http.ResponseWriter, r *http.Request) {
 // handleHealth is the lightweight liveness probe (no store access).
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ok"}` + "\n"))
 }
 
@@ -123,7 +124,7 @@ func handleDocs(w http.ResponseWriter, _ *http.Request) {
 <li>POST /api/v1/projects/materialize, POST /api/v1/projects/{id}/workspace/ready</li>
 <li>GET/POST /api/v1/tasks/{id}/comments, PATCH /api/v1/tasks/{id}</li>
 <li>POST /api/v1/tasks/{id}/assign, /split, /retry</li>
-<li>GET/POST/PATCH/DELETE /api/v1/agents{/id}, GET /api/v1/gateway/providers</li>
+<li>GET /api/v1/agents, POST /api/v1/agents, GET/PATCH/DELETE /api/v1/agents/{id}, GET /api/v1/gateway/providers</li>
 <li>GET /api/v1/system/status, POST /api/v1/system/breaker/reset</li>
 <li>GET /api/v1/events/stream (SSE), POST /api/v1/preferences</li>
 </ul>
