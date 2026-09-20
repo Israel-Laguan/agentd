@@ -25,11 +25,6 @@ FIXTURES_DIR="${FIXTURES_DIR:-$SCRIPT_DIR/fixtures}"
 OUTPUT_FILE="${OUTPUT_FILE:-./tiered-harness-results.json}"
 MODE="${MODE:-both}"  # baseline, tiered, or both
 
-case "$MODE" in
-  baseline|tiered|both) ;;
-  *) echo "invalid MODE: $MODE (want baseline, tiered, or both)" >&2; exit 2 ;;
-esac
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --baseline-only) MODE="baseline"; shift ;;
@@ -39,6 +34,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
 done
+
+case "$MODE" in
+  baseline|tiered|both) ;;
+  *) echo "invalid MODE: $MODE (want baseline, tiered, or both)" >&2; exit 2 ;;
+esac
 
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
 command -v bc >/dev/null 2>&1 || { echo "bc is required" >&2; exit 1; }

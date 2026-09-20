@@ -268,6 +268,24 @@ func (w *Worker) tryDispatchTieredStep(ctx context.Context, task models.Task, pr
 	}
 	for _, dependency := range dependencies {
 		if dependency.State == models.TaskStateNeedsContext {
+			freshDecisionID, err := w.freshDecisionID(ctx, parents[0].ID, dependency.ID)
+			if err != nil {
+				w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision lookup failed: %w", err))
+				return true
+			}
+			if freshDecisionID != "" {
+				_, err := w.store.RewireDependsOn(ctx, dependency.ID, freshDecisionID)
+				if err != nil {
+					w.FailHard(ctx, task, fmt.Errorf("tiered rewire to fresh decision failed: %w", err))
+					return true
+				}
+				dependencies, err = w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationDependsOn)
+				if err != nil {
+					w.FailHard(ctx, task, fmt.Errorf("tiered dependency re-lookup failed: %w", err))
+					return true
+				}
+				break
+			}
 			w.FailHard(ctx, task, fmt.Errorf("tiered step depends on stale decision %s awaiting context re-gather", dependency.ID))
 			return true
 		}
@@ -301,4 +319,31 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		Capabilities:            w.capabilities,
 	}, w)
 	return engine.Process(ctx, task, project, profile)
+}
+
+// freshDecisionID finds the latest decision child of originID that
+// was spawned after staleDecisionID, i.e. the decision from the
+// re-gather chain triggered when the stale decision entered
+// NEEDS_CONTEXT. Returns "" when no fresher decision exists.
+func (w *Worker) freshDecisionID(ctx context.Context, originID, staleDecisionID string) (string, error) {
+	stale, err := w.store.GetTask(ctx, staleDecisionID)
+	if err != nil {
+		return "", fmt.Errorf("get stale decision: %w", err)
+	}
+	children, err := w.store.ListChildTasksByRelation(ctx, originID, models.TaskRelationSpawnedBy)
+	if err != nil {
+		return "", fmt.Errorf("list spawned children: %w", err)
+	}
+	var freshID string
+	var latest time.Time
+	for _, child := range children {
+		if child.AgentID != tieredStepProfile[TieredStepDecision] {
+			continue
+		}
+		if child.CreatedAt.After(stale.CreatedAt) && child.CreatedAt.After(latest) {
+			freshID = child.ID
+			latest = child.CreatedAt
+		}
+	}
+	return freshID, nil
 }

@@ -17,33 +17,28 @@ func (s *FakeKanbanStore) SpawnTieredContinuation(_ context.Context, originID st
 	if !ok {
 		return nil, models.ErrTaskNotFound
 	}
-	if origin.State == models.TaskStateReady {
-		origin.State = models.TaskStateBlocked
-		origin.UpdatedAt = now()
-		s.tasks[originID] = origin
-	} else if origin.State != models.TaskStateBlocked {
+	if origin.State != models.TaskStateReady && origin.State != models.TaskStateBlocked {
 		return nil, fmt.Errorf("tiered continuation origin %s is %s, want BLOCKED", originID, origin.State)
 	}
 	seenIDs := make(map[string]struct{})
+	ts := now()
+	resolved := make([]models.Task, 0, len(children))
 	for _, child := range children {
-		if _, dup := seenIDs[child.Task.ID]; dup {
-			return nil, fmt.Errorf("duplicate child ID in SpawnTieredContinuation: %s", child.Task.ID)
+		t := child.Task
+		if t.ID == "" {
+			t.ID = s.nextID()
 		}
-		seenIDs[child.Task.ID] = struct{}{}
-	}
-	// Validate dependencies against existing tasks plus earlier resolved
-	// siblings only: empty IDs are assigned during insertion below, so raw
-	// child.Task.ID values cannot be trusted, and forward sibling
-	// references are invalid (the real store inserts in order).
-	resolved := make([]string, 0, len(children))
-	for i := range children {
-		id := children[i].Task.ID
-		if id == "" {
-			// Placeholder for IDs assigned at insertion time; a
-			// DependsOnID can never validly reference these.
-			id = fmt.Sprintf("__pending-child-%d", i)
+		if _, dup := seenIDs[t.ID]; dup {
+			return nil, fmt.Errorf("duplicate child ID in SpawnTieredContinuation: %s", t.ID)
 		}
-		resolved = append(resolved, id)
+		seenIDs[t.ID] = struct{}{}
+		if t.CreatedAt.IsZero() {
+			t.CreatedAt = ts
+		}
+		if t.UpdatedAt.IsZero() {
+			t.UpdatedAt = ts
+		}
+		resolved = append(resolved, t)
 	}
 	for i, child := range children {
 		if child.DependsOnID == "" {
@@ -54,7 +49,7 @@ func (s *FakeKanbanStore) SpawnTieredContinuation(_ context.Context, originID st
 		}
 		found := false
 		for _, sibling := range resolved[:i] {
-			if sibling != "" && sibling == child.DependsOnID {
+			if sibling.ID == child.DependsOnID {
 				found = true
 				break
 			}
@@ -63,19 +58,14 @@ func (s *FakeKanbanStore) SpawnTieredContinuation(_ context.Context, originID st
 			return nil, models.ErrTaskNotFound
 		}
 	}
-	ts := now()
+	if origin.State == models.TaskStateReady {
+		origin.State = models.TaskStateBlocked
+		origin.UpdatedAt = ts
+		s.tasks[originID] = origin
+	}
 	tasks := make([]models.Task, 0, len(children))
-	for _, child := range children {
-		t := child.Task
-		if t.ID == "" {
-			t.ID = s.nextID()
-		}
-		if t.CreatedAt.IsZero() {
-			t.CreatedAt = ts
-		}
-		if t.UpdatedAt.IsZero() {
-			t.UpdatedAt = ts
-		}
+	for i, child := range children {
+		t := resolved[i]
 		s.tasks[t.ID] = t
 		s.childParents[t.ID] = append(s.childParents[t.ID], originID)
 		s.childParentRelations[t.ID] = append(s.childParentRelations[t.ID], parentRelation{parentID: originID, relationType: models.TaskRelationSpawnedBy})

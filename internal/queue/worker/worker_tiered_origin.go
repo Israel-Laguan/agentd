@@ -53,11 +53,11 @@ func (w *Worker) tryResolveTieredOrigin(ctx context.Context, task models.Task) b
 		// All steps being COMPLETED does NOT mean the work was verified, so
 		// this must resolve as failure, never success: reporting success here
 		// would let unverified changes look done.
-		w.finishTieredOrigin(ctx, task, false, "tiered pipeline finished without a verify verdict")
+		w.failTieredOrigin(ctx, task, "tiered pipeline finished without a verify verdict")
 		return true
 	}
 	if outcome == models.VerifyOutcomePass {
-		w.finishTieredOrigin(ctx, task, true, "tiered pipeline verified")
+		w.completeTieredOrigin(ctx, task, "tiered pipeline verified")
 		return true
 	}
 
