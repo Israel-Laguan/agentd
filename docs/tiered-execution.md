@@ -242,6 +242,7 @@ verify → fail/flake
 ### Escalation to strong model
 
 On persistent failure or conflict, dispatch **escalate** step (strong model) with:
+
 - Current ContextPack
 - Decision artifacts (touch list + checks)
 - Failing verify evidence (last check results)
@@ -281,6 +282,7 @@ Run `./scripts/demo/tiered-harness.sh` to compare. With the fixtures committed u
 These are the fixture files' seeded numbers as of this writing — re-run the script for the current numbers rather than trusting this table if the fixtures change.
 
 **Pricing table (offline proxy, a rate assumption applied to fixture token counts — not itself measured):**
+
 - Small model: $0.001 / 1k tokens
 - Mid model: $0.005 / 1k tokens
 - Strong model: $0.015 / 1k tokens

@@ -12,6 +12,19 @@ import (
 
 const tieredVerifyOutcomeEvent = "TIERED_VERIFY_OUTCOME"
 
+// VerifyResult captures the output of a verify step.
+type VerifyResult struct {
+	Results []CheckResult `json:"results"`
+	Overall string        `json:"overall"`
+}
+
+// CheckResult records a single check execution.
+type CheckResult struct {
+	Check   string `json:"check"`
+	Outcome string `json:"outcome"`
+	Detail  string `json:"detail,omitempty"`
+}
+
 // processTieredVerifyStep runs the verify step through the agentic engine,
 // then — unlike the generic tiered dispatch — reads back the committed
 // VerifyResult JSON, classifies it, and routes it through the escalation
