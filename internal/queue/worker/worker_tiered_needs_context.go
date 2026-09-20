@@ -43,6 +43,8 @@ func (w *Worker) processTieredDecisionStep(ctx context.Context, task models.Task
 	}
 	result, ok := w.processAgentic(ctx, task, project, profile)
 	if !ok {
+		w.failTieredStep(ctx, task, "tiered decision step produced no LoopResult")
+		w.failTieredDependents(ctx, task, parentTask)
 		return
 	}
 	if !result.IsTerminalSuccess() {
@@ -78,6 +80,21 @@ func (w *Worker) readNeedsContextSignal(ctx context.Context, task models.Task) (
 	clean = strings.TrimSuffix(strings.TrimSpace(clean), "```")
 	if err := json.Unmarshal([]byte(strings.TrimSpace(clean)), &signal); err != nil {
 		return needsContextSignal{}, fmt.Errorf("decode needs-context signal: %w", err)
+	}
+	if signal.NeedsContext {
+		if strings.TrimSpace(signal.Reason) == "" {
+			return needsContextSignal{}, fmt.Errorf("needs-context signal requires a reason")
+		}
+		return signal, nil
+	}
+	var decision struct {
+		TouchList []string `json:"touch_list"`
+		Checks    []string `json:"checks"`
+		Rationale string   `json:"rationale"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(clean)), &decision); err != nil ||
+		decision.TouchList == nil || decision.Checks == nil || strings.TrimSpace(decision.Rationale) == "" {
+		return needsContextSignal{}, fmt.Errorf("invalid tiered decision: expected touch_list, checks, and rationale")
 	}
 	return signal, nil
 }
@@ -198,7 +215,11 @@ func (w *Worker) handleStaleDecision(ctx context.Context, task models.Task, depe
 		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedHumanID, models.TaskStateFailedRequiresHuman))
 		return true
 	}
-	w.FailHard(ctx, task, fmt.Errorf("tiered step depends on stale decision %s awaiting context re-gather", dependency.ID))
+	if task.State.CanTransitionTo(models.TaskStateBlocked) {
+		if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
+			w.FailHard(ctx, task, fmt.Errorf("tiered park while awaiting context re-gather failed: %w", err))
+		}
+	}
 	return true
 }
 

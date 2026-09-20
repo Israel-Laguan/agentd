@@ -30,9 +30,6 @@ func (s *Store) SpawnTieredContinuation(
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := s.reblockOrigin(ctx, tx, originID); err != nil {
-			return nil, err
-		}
 		for _, child := range children {
 			if child.IdempotencyKey == "" {
 				continue
@@ -43,6 +40,9 @@ func (s *Store) SpawnTieredContinuation(
 			} else if err != sql.ErrNoRows {
 				return nil, fmt.Errorf("look up tiered continuation key: %w", err)
 			}
+		}
+		if err := s.reblockOrigin(ctx, tx, originID); err != nil {
+			return nil, err
 		}
 		if err := validateTieredChildren(ctx, tx, children); err != nil {
 			return nil, err
@@ -174,6 +174,9 @@ func rewireDependents(ctx context.Context, tx *immediateTx, dependents []models.
 	for _, dep := range dependents {
 		if dep.State != models.TaskStatePending && dep.State != models.TaskStateReady && dep.State != models.TaskStateBlocked {
 			continue
+		}
+		if err := ensureNoCycle(ctx, tx, newParentID, dep.ID); err != nil {
+			return nil, fmt.Errorf("validate replacement depends_on edge: %w", err)
 		}
 		if err := deleteTaskRelation(ctx, tx, oldParentID, dep.ID, models.TaskRelationDependsOn); err != nil {
 			return nil, fmt.Errorf("remove stale depends_on edge: %w", err)

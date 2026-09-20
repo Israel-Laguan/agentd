@@ -3,6 +3,9 @@ package worker
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,26 +20,36 @@ func (w *Worker) nextContextPackGeneration(ctx context.Context, originID string)
 	}
 	count := 0
 	for _, child := range children {
-		if child.AgentID == tieredStepProfile[TieredStepContext] {
+		if child.AgentID == tieredStepProfile[TieredStepContext] && strings.HasPrefix(child.Title, "context (re-gather") {
 			count++
 		}
 	}
 	return count + 1, nil
 }
 
+var regatherGenerationPattern = regexp.MustCompile(`re-gather v([0-9]+)`)
+
 func (w *Worker) handleNeedsContext(ctx context.Context, task models.Task, parentTask models.Task, reason string) error {
 	current, err := w.store.GetTask(ctx, task.ID)
 	if err != nil {
 		return fmt.Errorf("reload task before NEEDS_CONTEXT transition: %w", err)
 	}
-	if _, err := w.store.UpdateTaskState(ctx, current.ID, current.UpdatedAt, models.TaskStateNeedsContext); err != nil {
-		return fmt.Errorf("transition to NEEDS_CONTEXT: %w", err)
+	if current.State != models.TaskStateNeedsContext {
+		if _, err := w.store.UpdateTaskState(ctx, current.ID, current.UpdatedAt, models.TaskStateNeedsContext); err != nil {
+			return fmt.Errorf("transition to NEEDS_CONTEXT: %w", err)
+		}
 	}
 	w.Emit(ctx, task, "TIERED_NEEDS_CONTEXT", reason)
 
 	generation, err := w.nextContextPackGeneration(ctx, parentTask.ID)
 	if err != nil {
 		return fmt.Errorf("determine pack generation: %w", err)
+	}
+	if match := regatherGenerationPattern.FindStringSubmatch(task.Title); len(match) == 2 {
+		version, parseErr := strconv.Atoi(match[1])
+		if parseErr == nil {
+			generation = version + 1
+		}
 	}
 	origin, err := w.store.GetTask(ctx, parentTask.ID)
 	if err != nil {
@@ -100,7 +113,7 @@ func (w *Worker) spawnContextPackChain(ctx context.Context, parentTask models.Ta
 	}
 
 	if _, err := w.store.SpawnTieredContinuation(ctx, parentTask.ID, []models.TieredContinuationTask{
-		{Task: newContext},
+		{Task: newContext, IdempotencyKey: fmt.Sprintf("%s:regather:%d", parentTask.ID, generation)},
 		{Task: newDecision, DependsOnID: newContext.ID},
 	}); err != nil {
 		return regatherPair{}, err

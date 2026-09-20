@@ -256,6 +256,11 @@ func TestTieredDecision_PendingReGatherNeedsContextSpawnsSecondRegather(t *testi
 	if err := w.handleNeedsContext(ctx, *firstDecision, origin, "first pack missing file"); err != nil {
 		t.Fatalf("handleNeedsContext first: %v", err)
 	}
+	spawnedAfterFirst, err := store.ListChildTasksByRelation(ctx, origin.ID, models.TaskRelationSpawnedBy)
+	if err != nil {
+		t.Fatalf("ListChildTasksByRelation after first: %v", err)
+	}
+	assertRegatherContextCount(t, spawnedAfterFirst, 1, "v1")
 	pendingRegatherDecision := assertPendingRegatherDecision(t, ctx, store, origin)
 	running, err := store.UpdateTaskState(ctx, pendingRegatherDecision.ID, pendingRegatherDecision.UpdatedAt, models.TaskStateRunning)
 	if err != nil {
@@ -282,6 +287,20 @@ func TestTieredDecision_PendingReGatherNeedsContextSpawnsSecondRegather(t *testi
 	}
 	if !hasSecondRegatherContext(t, spawned2) {
 		t.Fatalf("expected second re-gather context among %+v", spawned2)
+	}
+	assertRegatherContextCount(t, spawned2, 2, "v2")
+}
+
+func assertRegatherContextCount(t *testing.T, tasks []models.Task, want int, version string) {
+	t.Helper()
+	count := 0
+	for _, task := range tasks {
+		if strings.Contains(task.Title, "context (re-gather "+version+")") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("regather %s context count = %d, want 1; tasks = %+v", version, count, tasks)
 	}
 }
 

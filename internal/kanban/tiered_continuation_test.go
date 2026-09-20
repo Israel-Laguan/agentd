@@ -138,51 +138,16 @@ func TestSpawnTieredContinuation_OriginStateValidation(t *testing.T) {
 
 func TestSpawnTieredContinuation_ChildValidation(t *testing.T) {
 	ctx := context.Background()
-	tests := []struct {
+	for _, tc := range []struct {
 		name     string
 		children func(origin models.Task) []models.TieredContinuationTask
 		wantErr  string
 	}{
-		{
-			name: "duplicate child IDs",
-			children: func(origin models.Task) []models.TieredContinuationTask {
-				id := uuid.NewString()
-				first := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-context", "first", models.TaskStateReady)
-				first.ID = id
-				second := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-decision", "second", models.TaskStatePending)
-				second.ID = id
-				return []models.TieredContinuationTask{{Task: first}, {Task: second}}
-			},
-			wantErr: "duplicate child ID",
-		},
-		{
-			name: "unknown dependency",
-			children: func(origin models.Task) []models.TieredContinuationTask {
-				child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-decision", "child", models.TaskStatePending)
-				return []models.TieredContinuationTask{{Task: child, DependsOnID: uuid.NewString()}}
-			},
-			wantErr: "task not found",
-		},
-		{
-			name: "self dependency",
-			children: func(origin models.Task) []models.TieredContinuationTask {
-				child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-decision", "child", models.TaskStatePending)
-				return []models.TieredContinuationTask{{Task: child, DependsOnID: child.ID}}
-			},
-			wantErr: "cannot depend on itself",
-		},
-		{
-			name: "ready dependent child",
-			children: func(origin models.Task) []models.TieredContinuationTask {
-				parent := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-context", "parent", models.TaskStateReady)
-				child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-decision", "child", models.TaskStateReady)
-				return []models.TieredContinuationTask{{Task: parent}, {Task: child, DependsOnID: parent.ID}}
-			},
-			wantErr: "cannot be READY",
-		},
-	}
-
-	for _, tc := range tests {
+		{name: "duplicate child IDs", children: duplicateChildIDsCase, wantErr: "duplicate child ID"},
+		{name: "unknown dependency", children: unknownDependencyCase, wantErr: "task not found"},
+		{name: "self dependency", children: selfDependencyCase, wantErr: "cannot depend on itself"},
+		{name: "ready dependent child", children: readyDependentChildCase, wantErr: "cannot be READY"},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := newTestStore(t)
 			origin := newTieredOriginTask(t, store, ctx)
@@ -198,6 +163,31 @@ func TestSpawnTieredContinuation_ChildValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func duplicateChildIDsCase(origin models.Task) []models.TieredContinuationTask {
+	id := uuid.NewString()
+	first := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-context", "first", models.TaskStateReady)
+	first.ID = id
+	second := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-decision", "second", models.TaskStatePending)
+	second.ID = id
+	return []models.TieredContinuationTask{{Task: first}, {Task: second}}
+}
+
+func unknownDependencyCase(origin models.Task) []models.TieredContinuationTask {
+	child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-decision", "child", models.TaskStatePending)
+	return []models.TieredContinuationTask{{Task: child, DependsOnID: uuid.NewString()}}
+}
+
+func selfDependencyCase(origin models.Task) []models.TieredContinuationTask {
+	child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-decision", "child", models.TaskStatePending)
+	return []models.TieredContinuationTask{{Task: child, DependsOnID: child.ID}}
+}
+
+func readyDependentChildCase(origin models.Task) []models.TieredContinuationTask {
+	parent := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-context", "parent", models.TaskStateReady)
+	child := newRewireStepTask(time.Now().UTC(), origin.ProjectID, "tier-decision", "child", models.TaskStateReady)
+	return []models.TieredContinuationTask{{Task: parent}, {Task: child, DependsOnID: parent.ID}}
 }
 
 func TestSpawnTieredContinuation_IdempotencyKeyReplaysBatch(t *testing.T) {
