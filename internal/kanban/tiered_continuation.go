@@ -30,21 +30,8 @@ func (s *Store) SpawnTieredContinuation(
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		origin, err := selectTaskByID(ctx, tx, originID)
-		if err != nil {
+		if err := s.reblockOrigin(ctx, tx, originID); err != nil {
 			return nil, err
-		}
-		if origin.State == models.TaskStateReady {
-			now := utcNow()
-			result, err := tx.ExecContext(ctx, `UPDATE tasks SET state = ?, updated_at = ? WHERE id = ? AND updated_at = ? AND state = ?`, models.TaskStateBlocked, formatTime(now), originID, formatTime(origin.UpdatedAt), models.TaskStateReady)
-			if err != nil {
-				return nil, fmt.Errorf("re-block tiered continuation origin: %w", err)
-			}
-			if err := requireRowsAffected(result, 1, models.ErrStateConflict); err != nil {
-				return nil, err
-			}
-		} else if origin.State != models.TaskStateBlocked {
-			return nil, fmt.Errorf("tiered continuation origin %s is %s, want BLOCKED", originID, origin.State)
 		}
 		for _, child := range children {
 			if child.IdempotencyKey == "" {
@@ -75,16 +62,8 @@ func (s *Store) SpawnTieredContinuation(
 			}
 			tasks = append(tasks, child.Task)
 		}
-		for _, child := range children {
-			if child.IdempotencyKey != "" {
-				ids := make([]string, 0, len(tasks))
-				for _, task := range tasks {
-					ids = append(ids, task.ID)
-				}
-				if _, err := tx.ExecContext(ctx, `INSERT INTO tiered_continuation_keys(origin_id, idempotency_key, child_ids) VALUES (?, ?, ?)`, originID, child.IdempotencyKey, strings.Join(ids, ",")); err != nil {
-					return nil, err
-				}
-			}
+		if err := s.insertIdempotencyKeys(ctx, tx, originID, children, tasks); err != nil {
+			return nil, err
 		}
 		return tasks, commitTx(tx, "spawn tiered continuation")
 	})
@@ -100,6 +79,41 @@ func loadTasksByIDs(ctx context.Context, tx *immediateTx, childIDs string) ([]mo
 		tasks = append(tasks, *task)
 	}
 	return tasks, nil
+}
+
+func (s *Store) reblockOrigin(ctx context.Context, tx *immediateTx, originID string) error {
+	origin, err := selectTaskByID(ctx, tx, originID)
+	if err != nil {
+		return err
+	}
+	if origin.State == models.TaskStateReady {
+		now := utcNow()
+		result, err := tx.ExecContext(ctx, `UPDATE tasks SET state = ?, updated_at = ? WHERE id = ? AND updated_at = ? AND state = ?`, models.TaskStateBlocked, formatTime(now), originID, formatTime(origin.UpdatedAt), models.TaskStateReady)
+		if err != nil {
+			return fmt.Errorf("re-block tiered continuation origin: %w", err)
+		}
+		return requireRowsAffected(result, 1, models.ErrStateConflict)
+	}
+	if origin.State != models.TaskStateBlocked {
+		return fmt.Errorf("tiered continuation origin %s is %s, want BLOCKED", originID, origin.State)
+	}
+	return nil
+}
+
+func (s *Store) insertIdempotencyKeys(ctx context.Context, tx *immediateTx, originID string, children []models.TieredContinuationTask, tasks []models.Task) error {
+	for _, child := range children {
+		if child.IdempotencyKey == "" {
+			continue
+		}
+		ids := make([]string, 0, len(tasks))
+		for _, task := range tasks {
+			ids = append(ids, task.ID)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO tiered_continuation_keys(origin_id, idempotency_key, child_ids) VALUES (?, ?, ?)`, originID, child.IdempotencyKey, strings.Join(ids, ",")); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateTieredChildren(ctx context.Context, tx *immediateTx, children []models.TieredContinuationTask) error {
