@@ -157,7 +157,35 @@ func TestCheckFileCountsSignificantLinesOnly(t *testing.T) {
 	if err := os.Chdir(root); err != nil {
 		t.Fatal(err)
 	}
-	src := `package p
+	if err := os.WriteFile("a.go", []byte(significantLinesTestSrc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	violations, err := checkFile("a.go", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make(map[string]int, len(violations))
+	for _, v := range violations {
+		got[v.name] = v.lines
+	}
+	want := map[string]int{
+		"padded": 2,
+		"trick":  2,
+		"single": 1,
+		"empty":  0,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("violations = %v, want %v", got, want)
+	}
+	for name, lines := range want {
+		if got[name] != lines {
+			t.Fatalf("violation %q = %d lines, want %d (all = %v)", name, got[name], lines, got)
+		}
+	}
+}
+
+const significantLinesTestSrc = `package p
 
 import "context"
 
@@ -196,33 +224,6 @@ func empty() {
 	// nothing here
 }
 `
-	if err := os.WriteFile("a.go", []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	violations, err := checkFile("a.go", 3)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := make(map[string]int, len(violations))
-	for _, v := range violations {
-		got[v.name] = v.lines
-	}
-	want := map[string]int{
-		"padded": 2,
-		"trick":  2,
-		"single": 1,
-		"empty":  0,
-	}
-	if len(got) != len(want) {
-		t.Fatalf("violations = %v, want %v", got, want)
-	}
-	for name, lines := range want {
-		if got[name] != lines {
-			t.Fatalf("violation %q = %d lines, want %d (all = %v)", name, got[name], lines, got)
-		}
-	}
-}
 
 func TestNewViolations(t *testing.T) {
 	t.Parallel()

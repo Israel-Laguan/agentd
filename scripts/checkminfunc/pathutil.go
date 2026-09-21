@@ -106,10 +106,7 @@ func fnmatch(pattern, name string) bool {
 		}
 	}
 	re.WriteByte('$')
-	matched, _ := regexpMatch(re.String(), name)
+	matched, _ := regexp.MatchString(re.String(), name)
 	return matched
 }
 
-func regexpMatch(pattern, name string) (bool, error) {
-	return regexp.MatchString(pattern, name)
-}
