@@ -8,7 +8,6 @@
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -72,45 +71,32 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		log.DebugContext(ctx, "chat intake: request rejected", "error", "invalid_request")
 		return
 	}
-
 	log.DebugContext(ctx, "chat intake: parsed request",
-		"flow", selectedFlow(req),
-		"message_count", len(req.Messages),
-		"stream", req.Stream,
-		"model", req.Model,
-		"has_tools", len(req.Tools) > 0,
+		"flow", selectedFlow(req), "message_count", len(req.Messages),
+		"stream", req.Stream, "model", req.Model, "has_tools", len(req.Tools) > 0,
 	)
-
 	intent, files, err := frontdesk.PrepareIntent(h.Planner.Stash, rawMessage, convertFiles(req.Files))
 	if err != nil {
 		log.WarnContext(ctx, "chat intake: intent preparation failed", "error", err)
 		httpx.WriteMappedError(w, err)
 		return
 	}
-
 	var projectID string
 	if len(req.ApprovedScopes) == 1 {
 		projectID = req.ApprovedScopes[0]
 	}
 	userID := r.Header.Get("X-Agentd-User")
 	intent = h.prependRecalledContext(ctx, intent, projectID, userID)
-
 	log.DebugContext(ctx, "chat intake: routing to planner",
-		"approved_scopes", len(req.ApprovedScopes),
-		"project_id", projectID,
-		"has_files", len(files) > 0,
+		"approved_scopes", len(req.ApprovedScopes), "project_id", projectID, "has_files", len(files) > 0,
 	)
-
 	if req.Stream {
 		h.completeStreaming(w, r, req, intent, files, ctx, log)
 		return
 	}
-
 	content, err := h.Planner.PlanContent(ctx, req.ApprovedScopes, intent, files)
-	outcome := requestOutcome(err, content)
 	log.DebugContext(ctx, "chat intake: request completed",
-		"result", outcome,
-		"content_length", len(content),
+		"result", requestOutcome(err, content), "content_length", len(content),
 	)
 	if err != nil {
 		if errors.Is(err, frontdesk.ErrMultipleApprovedScopes) {
@@ -213,8 +199,7 @@ func (h ChatHandler) completeStreaming(
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	flusher.Flush()
 	log.DebugContext(ctx, "chat intake: streaming request completed",
-		"result", outcome,
-		"content_length", len(content),
+		"result", outcome, "content_length", len(content),
 	)
 }
 
@@ -254,41 +239,6 @@ func convertFiles(files []chatFile) []frontdesk.InputFile {
 
 func isAICoreTimeout(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, models.ErrLLMUnreachable)
-}
-
-// buildToolCalls inspects the JSON content returned by Frontdesk and
-// constructs an OpenAI-compatible tool_calls slice when the content
-// represents a plan or a status report. Tools are only emitted when the
-// client opted in by sending req.Tools (preserves wire-shape stability for
-// existing simple clients that just consume content).
-func buildToolCalls(content []byte, toolsRequested bool) ([]chatToolCall, string) {
-	if !toolsRequested || len(content) == 0 {
-		return nil, finishReasonStop
-	}
-	args := string(bytes.TrimSpace(content))
-	var probe struct {
-		Kind  string          `json:"kind"`
-		Tasks json.RawMessage `json:"tasks"`
-	}
-	if err := json.Unmarshal(content, &probe); err != nil {
-		return nil, finishReasonStop
-	}
-	var name string
-	switch {
-	case probe.Kind == "status_report":
-		name = toolNameStatusReport
-	case probe.Kind == "" && len(probe.Tasks) > 0:
-		name = toolNameCreatePlan
-	default:
-		return nil, finishReasonStop
-	}
-	return []chatToolCall{{
-		ID:   "call_" + uuid.NewString(),
-		Type: "function",
-		Function: chatToolCallFunction{
-			Name: name, Arguments: args,
-		},
-	}}, finishReasonToolCalls
 }
 
 // selectedFlow describes which intake processing path a request will take so

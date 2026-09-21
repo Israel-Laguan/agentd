@@ -159,7 +159,7 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	setAgenticDefaults(v)
 	setTieredDefaults(v)
 	setChannelDefaults(v)
-	setLogLevelDefaults(v)
+	v.SetDefault("log_level", DefaultLogLevel)
 	setMCPDefaults(v)
 	return v
 }

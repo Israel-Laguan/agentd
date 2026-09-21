@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"bytes"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -98,4 +100,39 @@ func completion(model, content string, toolCalls []chatToolCall, finishReason st
 			},
 		}},
 	}
+}
+
+// buildToolCalls inspects the JSON content returned by Frontdesk and
+// constructs an OpenAI-compatible tool_calls slice when the content
+// represents a plan or a status report. Tools are only emitted when the
+// client opted in by sending req.Tools (preserves wire-shape stability for
+// existing simple clients that just consume content).
+func buildToolCalls(content []byte, toolsRequested bool) ([]chatToolCall, string) {
+	if !toolsRequested || len(content) == 0 {
+		return nil, finishReasonStop
+	}
+	args := string(bytes.TrimSpace(content))
+	var probe struct {
+		Kind  string          `json:"kind"`
+		Tasks json.RawMessage `json:"tasks"`
+	}
+	if err := json.Unmarshal(content, &probe); err != nil {
+		return nil, finishReasonStop
+	}
+	var name string
+	switch {
+	case probe.Kind == "status_report":
+		name = toolNameStatusReport
+	case probe.Kind == "" && len(probe.Tasks) > 0:
+		name = toolNameCreatePlan
+	default:
+		return nil, finishReasonStop
+	}
+	return []chatToolCall{{
+		ID:   "call_" + uuid.NewString(),
+		Type: "function",
+		Function: chatToolCallFunction{
+			Name: name, Arguments: args,
+		},
+	}}, finishReasonToolCalls
 }

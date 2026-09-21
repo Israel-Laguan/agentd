@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"agentd/internal/api/correlation"
 )
@@ -108,37 +109,45 @@ func (r *TurnLoopRunner) Run(ctx context.Context, req Request) (Result, error) {
 		if !outcome.Continue {
 			return Result{}, nil
 		}
-		if outcome.RewindTo >= 0 {
-			if rewind.apply(outcome.RewindTo) {
-				log.Warn("agentic rewind stagnation",
-					"task_id", req.TaskID,
-					"turn_index", turnIndex,
-					"turn_id", turnID,
-					"rewind_to", outcome.RewindTo,
-					"streak", rewind.streak,
-				)
-				result := LoopResult{
-					Status: LoopTurnLimitExceeded,
-					Meta:   LoopMeta{TurnCount: turnIndex, LastError: ErrRewindStagnation.Error()},
-				}
-				if req.BuildRewindStagnationResult != nil {
-					result = req.BuildRewindStagnationResult(turnIndex)
-				}
-				recordResult(req, result)
-				return Result{LoopResult: result, Reported: true}, nil
-			}
-			turnIndex = outcome.RewindTo
-			if req.ResetForRewind != nil {
-				req.ResetForRewind()
-			}
-			if req.ApplySessionRecoveryPlanInject != nil {
-				req.ApplySessionRecoveryPlanInject(state)
-			}
+		if result, done, cont := handleRewind(req, rewind, outcome, turnIndex, turnID, state, log); done {
+			return result, nil
+		} else if cont {
 			continue
 		}
 		rewind.reset()
 		turnIndex++
 	}
+}
+
+func handleRewind(req Request, rewind *rewindState, outcome IterationOutcome, turnIndex int, turnID string, state *IterationState, log *slog.Logger) (Result, bool, bool) {
+	if outcome.RewindTo < 0 {
+		return Result{}, false, false
+	}
+	if rewind.apply(outcome.RewindTo) {
+		log.Warn("agentic rewind stagnation",
+			"task_id", req.TaskID,
+			"turn_index", turnIndex,
+			"turn_id", turnID,
+			"rewind_to", outcome.RewindTo,
+			"streak", rewind.streak,
+		)
+		result := LoopResult{
+			Status: LoopTurnLimitExceeded,
+			Meta:   LoopMeta{TurnCount: turnIndex, LastError: ErrRewindStagnation.Error()},
+		}
+		if req.BuildRewindStagnationResult != nil {
+			result = req.BuildRewindStagnationResult(turnIndex)
+		}
+		recordResult(req, result)
+		return Result{LoopResult: result, Reported: true}, true, false
+	}
+	if req.ResetForRewind != nil {
+		req.ResetForRewind()
+	}
+	if req.ApplySessionRecoveryPlanInject != nil {
+		req.ApplySessionRecoveryPlanInject(state)
+	}
+	return Result{}, false, true
 }
 
 func recordResult(req Request, result LoopResult) {

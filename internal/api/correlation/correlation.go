@@ -15,12 +15,18 @@ const correlationIDField = "correlation_id"
 
 // WithID stores the correlation ID in the context.
 func WithID(ctx context.Context, id string) context.Context {
+	if id == "" {
+		return ctx
+	}
 	return context.WithValue(ctx, ctxKey{}, id)
 }
 
 // FromContext extracts the correlation ID from the context.
 // Returns "" when no correlation ID is present.
 func FromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
 	id, _ := ctx.Value(ctxKey{}).(string)
 	return id
 }

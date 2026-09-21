@@ -45,12 +45,16 @@ func New(store models.KanbanStore) *Server {
 		},
 		nil,
 	)
-	s.registerTools()
+	s.registerReadTools()
+	s.registerWriteTools()
 	return s
 }
 
 // Run starts the server on the stdio transport. Blocks until context is cancelled.
 func (s *Server) Run(ctx context.Context) error {
+	if s.mcpServer == nil {
+		return fmt.Errorf("mcp server not initialized")
+	}
 	slog.Info("mcp server: starting stdio transport")
 	return s.mcpServer.Run(ctx, &mcp.StdioTransport{})
 }
@@ -62,12 +66,6 @@ func (s *Server) HTTPHandler() http.Handler {
 	}, &mcp.StreamableHTTPOptions{
 		Stateless: true,
 	})
-}
-
-// registerTools registers all board tools on the MCP server.
-func (s *Server) registerTools() {
-	s.registerReadTools()
-	s.registerWriteTools()
 }
 
 func (s *Server) registerWriteTools() {
