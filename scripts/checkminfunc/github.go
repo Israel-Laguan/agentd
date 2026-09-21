@@ -18,7 +18,7 @@ func emitStepSummary(violations []violation) {
 		"",
 		fmt.Sprintf("%d function(s) have fewer than %d significant lines:", len(violations), *minLines),
 		"",
-		"| Lines | Function | File |",
+		"| Significant lines | Function | File |",
 		"| ---: | --- | --- |",
 	}
 	limit := len(violations)

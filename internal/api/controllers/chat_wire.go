@@ -106,15 +106,17 @@ func completion(model, content string, toolCalls []chatToolCall, finishReason st
 // constructs an OpenAI-compatible tool_calls slice when the content
 // represents a plan or a status report. Tools are only emitted when the
 // client opted in by sending req.Tools (preserves wire-shape stability for
-// existing simple clients that just consume content).
-func buildToolCalls(content []byte, toolsRequested bool) ([]chatToolCall, string) {
-	if !toolsRequested || len(content) == 0 {
+// existing simple clients that just consume content). A "none" tool_choice
+// suppresses tool calls, and a call is only emitted for a function name the
+// client actually declared.
+func buildToolCalls(content []byte, tools []json.RawMessage, toolChoice json.RawMessage) ([]chatToolCall, string) {
+	if len(tools) == 0 || len(content) == 0 {
 		return nil, finishReasonStop
 	}
 	args := string(bytes.TrimSpace(content))
 	var probe struct {
-		Kind  string          `json:"kind"`
-		Tasks json.RawMessage `json:"tasks"`
+		Kind  string            `json:"kind"`
+		Tasks []json.RawMessage `json:"tasks"`
 	}
 	if err := json.Unmarshal(content, &probe); err != nil {
 		return nil, finishReasonStop
@@ -128,6 +130,9 @@ func buildToolCalls(content []byte, toolsRequested bool) ([]chatToolCall, string
 	default:
 		return nil, finishReasonStop
 	}
+	if !toolCallAllowed(name, tools, toolChoice) {
+		return nil, finishReasonStop
+	}
 	return []chatToolCall{{
 		ID:   "call_" + uuid.NewString(),
 		Type: "function",
@@ -135,4 +140,57 @@ func buildToolCalls(content []byte, toolsRequested bool) ([]chatToolCall, string
 			Name: name, Arguments: args,
 		},
 	}}, finishReasonToolCalls
+}
+
+// toolCallAllowed reports whether a tool call for name may be emitted given
+// the client's declared tools and tool_choice.
+func toolCallAllowed(name string, tools []json.RawMessage, toolChoice json.RawMessage) bool {
+	if choice := string(bytes.TrimSpace(toolChoice)); len(choice) > 0 {
+		var asString string
+		if err := json.Unmarshal(toolChoice, &asString); err == nil {
+			if asString == "none" {
+				return false
+			}
+		} else {
+			var choiceObj struct {
+				Function struct {
+					Name string `json:"name"`
+				} `json:"function"`
+			}
+			if err := json.Unmarshal(toolChoice, &choiceObj); err == nil && choiceObj.Function.Name != "" {
+				if choiceObj.Function.Name != name {
+					return false
+				}
+			}
+		}
+	}
+	declared := declaredToolNames(tools)
+	if len(declared) > 0 {
+		_, ok := declared[name]
+		return ok
+	}
+	return true
+}
+
+// declaredToolNames extracts the set of function names from an OpenAI-style
+// tools array, accepting both {"function":{"name":...}} and {"name":...} shapes.
+func declaredToolNames(tools []json.RawMessage) map[string]struct{} {
+	names := make(map[string]struct{})
+	for _, raw := range tools {
+		var fn struct {
+			Function struct {
+				Name string `json:"name"`
+			} `json:"function"`
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(raw, &fn); err != nil {
+			continue
+		}
+		if fn.Function.Name != "" {
+			names[fn.Function.Name] = struct{}{}
+		} else if fn.Name != "" {
+			names[fn.Name] = struct{}{}
+		}
+	}
+	return names
 }
