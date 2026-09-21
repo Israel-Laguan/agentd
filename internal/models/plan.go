@@ -166,12 +166,12 @@ type TieredDAGTask struct {
 // own state is left untouched, since it is already BLOCKED for the
 // pipeline's duration. DependsOnID is empty when the task should start READY.
 type TieredContinuationTask struct {
-	Task           Task
-	DependsOnID    string
-// IdempotencyKey dedups the whole continuation batch on retry: a matching
-// key returns all originally spawned children and inserts nothing new.
-// Callers should use a key that uniquely identifies the batch, not an
-// individual child's key, since a matching key returns every child in
-// the batch.
+	Task        Task
+	DependsOnID string
+	// IdempotencyKey dedups the whole continuation batch on retry: a matching
+	// key returns all originally spawned children and inserts nothing new.
+	// Callers should use a key that uniquely identifies the batch, not an
+	// individual child's key, since a matching key returns every child in
+	// the batch.
 	IdempotencyKey string
 }

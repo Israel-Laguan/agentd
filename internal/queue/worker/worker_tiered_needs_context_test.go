@@ -154,9 +154,9 @@ func assertTieredRegatherPairSpawned(t *testing.T, ctx context.Context, store *t
 
 func assertTieredPendingExecuteRewiredStillPending(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, executeTask models.Task, newDecisionID string) {
 	t.Helper()
-// execute is PENDING depending on the stale decision; after
-// NEEDS_CONTEXT it must be rewired onto the new decision
-// without changing state (PENDING stays PENDING).
+	// execute is PENDING depending on the stale decision; after
+	// NEEDS_CONTEXT it must be rewired onto the new decision
+	// without changing state (PENDING stays PENDING).
 	executeParents, err := store.ListParentTasksByRelation(ctx, executeTask.ID, models.TaskRelationDependsOn)
 	if err != nil {
 		t.Fatalf("ListParentTasksByRelation(execute): %v", err)

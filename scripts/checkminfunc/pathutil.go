@@ -12,24 +12,11 @@ func validateBaselineWritePath(path string) error {
 	if path == "" {
 		return fmt.Errorf("baseline path is empty")
 	}
-	// Reject parent-traversal components before normalization: filepath.Abs
-	// cleans lexically, so "linkdir/../evil" would validate as inside the repo
-	// while the kernel resolves the symlink first and writes outside it.
-	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
-		if part == ".." {
-			return fmt.Errorf("baseline path %q must not contain parent traversal", path)
-		}
+	if hasParentTraversal(path) {
+		return fmt.Errorf("baseline path %q must not contain parent traversal", path)
 	}
 
-	root, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return err
-	}
-	rootReal, err := filepath.EvalSymlinks(rootAbs)
+	rootReal, err := repoRootReal()
 	if err != nil {
 		return err
 	}
@@ -38,35 +25,94 @@ func validateBaselineWritePath(path string) error {
 	if err != nil {
 		return err
 	}
-	if info, lstatErr := os.Lstat(targetAbs); lstatErr == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("baseline path %q must not be a symlink", path)
-		}
-	} else if !os.IsNotExist(lstatErr) {
-		return lstatErr
-	}
-	targetReal, err := filepath.EvalSymlinks(targetAbs)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		if info, lstatErr := os.Lstat(targetAbs); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("baseline path %q must not be a symlink", path)
-		}
-		targetReal, err = realExistingAncestor(targetAbs)
-		if err != nil {
-			return err
-		}
+	if err := requireNotSymlink(path, targetAbs); err != nil {
+		return err
 	}
 
-	rel, err := filepath.Rel(rootReal, targetReal)
+	targetReal, err := resolveTargetReal(targetAbs)
 	if err != nil {
 		return err
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+
+	if !isInsideRepo(rootReal, targetReal) {
 		return fmt.Errorf("baseline path %q must be inside repository root %q", path, rootReal)
 	}
 	return nil
+}
+
+// hasParentTraversal reports whether path contains a ".." path component.
+// filepath.Abs cleans lexically, so "linkdir/../evil" would validate as inside
+// the repo while the kernel resolves the symlink first and writes outside it.
+func hasParentTraversal(path string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+// repoRootReal resolves the current working directory to its real (symlink-free)
+// absolute form, used as the containment boundary for baseline writes.
+func repoRootReal() (string, error) {
+	root, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(rootAbs)
+}
+
+// requireNotSymlink rejects the target when it already exists as a symlink,
+// guarding against write-through-symlink escapes. A not-exists error is not
+// fatal; the path may be a fresh write.
+func requireNotSymlink(path, targetAbs string) error {
+	info, lstatErr := os.Lstat(targetAbs)
+	if lstatErr == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("baseline path %q must not be a symlink", path)
+		}
+		return nil
+	}
+	if !os.IsNotExist(lstatErr) {
+		return lstatErr
+	}
+	return nil
+}
+
+// resolveTargetReal resolves the real filesystem location of targetAbs. When the
+// target does not yet exist, it walks up to the nearest existing parent so that
+// containment against the repo root still holds for fresh writes.
+func resolveTargetReal(targetAbs string) (string, error) {
+	targetReal, err := filepath.EvalSymlinks(targetAbs)
+	if err == nil {
+		return targetReal, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", err
+	}
+	// EvalSymlinks on a path that crosses a symlink at an existing ancestor
+	// resolves the ancestor chain; a not-exists here means the ancestor itself
+	// is a symlink, which is disallowed.
+	if info, lstatErr := os.Lstat(targetAbs); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("baseline path %q must not be a symlink", targetAbs)
+	}
+	return realExistingAncestor(targetAbs)
+}
+
+// isInsideRepo reports whether targetReal is contained within rootReal.
+func isInsideRepo(rootReal, targetReal string) bool {
+	rel, err := filepath.Rel(rootReal, targetReal)
+	if err != nil {
+		return false
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return false
+	}
+	return true
 }
 
 func realExistingAncestor(path string) (string, error) {
@@ -124,4 +170,3 @@ func fnmatch(pattern, name string) bool {
 	matched, _ := regexp.MatchString(re.String(), name)
 	return matched
 }
-
