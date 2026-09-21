@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"time"
 
 	"agentd/internal/api/correlation"
 
@@ -54,34 +53,17 @@ func (e *Engine) processAgenticIteration(
 		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
 		"message_count", len(*messages), "tools_requested", len(tools),
 	)
-	recoveryGen := 0
-	if sessionRecoveryGen != nil {
-		recoveryGen = *sessionRecoveryGen
+	resp, llmStop, llmErr := e.callAndRecordLLM(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex, sessionRecoveryGen)
+	if llmStop != nil {
+		return false, *llmStop, true, rewindNone, nil
 	}
-	llmStart := time.Now()
-	resp, stop, err := e.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex, recoveryGen)
-	if stop != nil {
-		return false, *stop, true, rewindNone, nil
-	}
-	if err != nil {
-		return false, agentruntime.LoopResult{}, false, rewindNone, err
-	}
-	budgetGuard.AfterCall(resp.TokenUsage)
-	detailsToRecord := gateway.UsageDetails{}
-	if resp.UsageDetails != nil {
-		detailsToRecord = *resp.UsageDetails
-	}
-	e.host.RecordTaskTokenUsage(ctx, task, resp.TokenUsage, detailsToRecord)
-	if e.config.MessageEditor != nil {
-		e.config.MessageEditor.CommitAssistant(messages, resp)
-	} else {
-		appendAssistantMessage(messages, resp)
+	if llmErr != nil {
+		return false, agentruntime.LoopResult{}, false, rewindNone, llmErr
 	}
 	log.DebugContext(ctx, "agentic: llm call end",
 		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
 		"provider", resp.ProviderUsed, "model", resp.ModelUsed,
 		"tokens", resp.TokenUsage, "tool_calls", len(resp.ToolCalls),
-		"latency_ms", time.Since(llmStart).Milliseconds(),
 	)
 	if len(resp.ToolCalls) == 0 {
 		return e.finishAgenticTurnNoTools(
@@ -94,17 +76,40 @@ func (e *Engine) processAgenticIteration(
 		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
 		"tool_calls", len(resp.ToolCalls),
 	)
-	toolStart := time.Now()
 	cont, res, rep, finErr := e.continueAgenticAfterTools(
 		ctx, task, profile, resp, messages, toolToAdapter, toolExecutor,
 		taskHooks, taskCaps, cm, goalTracker, toolTracker,
 		iterationGuard, budgetGuard, turnID, turnIndex,
 	)
-	log.DebugContext(ctx, "agentic: tool dispatch end",
-		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
-		"continue", cont, "report", rep, "tool_elapsed_ms", time.Since(toolStart).Milliseconds(),
-	)
 	return cont, res, rep, rewindNone, finErr
+}
+
+func (e *Engine) callAndRecordLLM(
+	ctx context.Context, task models.Task, profile models.AgentProfile,
+	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
+	budgetGuard *agentruntime.BudgetGuard, ctxBudgetGuard *agentruntime.ContextBudgetGuard,
+	turnIndex int, sessionRecoveryGen *int,
+) (gateway.AIResponse, *agentruntime.LoopResult, error) {
+	recoveryGen := 0
+	if sessionRecoveryGen != nil {
+		recoveryGen = *sessionRecoveryGen
+	}
+	resp, stop, err := e.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex, recoveryGen)
+	if stop != nil || err != nil {
+		return gateway.AIResponse{}, stop, err
+	}
+	budgetGuard.AfterCall(resp.TokenUsage)
+	details := gateway.UsageDetails{}
+	if resp.UsageDetails != nil {
+		details = *resp.UsageDetails
+	}
+	e.host.RecordTaskTokenUsage(ctx, task, resp.TokenUsage, details)
+	if e.config.MessageEditor != nil {
+		e.config.MessageEditor.CommitAssistant(messages, resp)
+	} else {
+		appendAssistantMessage(messages, resp)
+	}
+	return resp, nil, nil
 }
 
 func (e *Engine) guardAgenticIteration(
