@@ -33,7 +33,7 @@ func TestServer_ToolsRegistered(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.1.0"}, nil)
 	clientSession, err := client.Connect(context.Background(), clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	tools, err := clientSession.ListTools(context.Background(), &mcp.ListToolsParams{})
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestServer_ListTasks_WithData(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.1.0"}, nil)
 	clientSession, err := client.Connect(context.Background(), clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	res, err := clientSession.CallTool(context.Background(), &mcp.CallToolParams{
 		Name:      "board.list_tasks",
@@ -92,7 +92,7 @@ func TestServer_GetTask_NotFound(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.1.0"}, nil)
 	clientSession, err := client.Connect(context.Background(), clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	res, err := clientSession.CallTool(context.Background(), &mcp.CallToolParams{
 		Name:      "board.get_task",
@@ -121,7 +121,7 @@ func TestServer_AddComment_EmptyBody(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.1.0"}, nil)
 	clientSession, err := client.Connect(context.Background(), clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	res, err := clientSession.CallTool(context.Background(), &mcp.CallToolParams{
 		Name:      "board.add_comment",
@@ -150,7 +150,7 @@ func TestServer_UpdateTaskState_InvalidTransition(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.1.0"}, nil)
 	clientSession, err := client.Connect(context.Background(), clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	// PENDING -> COMPLETED is invalid.
 	res, err := clientSession.CallTool(context.Background(), &mcp.CallToolParams{
@@ -177,7 +177,7 @@ func TestServer_ListProjects(t *testing.T) {
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.1.0"}, nil)
 	clientSession, err := client.Connect(context.Background(), clientTransport, nil)
 	require.NoError(t, err)
-	defer clientSession.Close()
+	defer func() { _ = clientSession.Close() }()
 
 	res, err := clientSession.CallTool(context.Background(), &mcp.CallToolParams{
 		Name: "board.list_projects",

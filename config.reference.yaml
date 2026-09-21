@@ -1,59 +1,13 @@
-# agentd configuration reference — copy to ~/.agentd/config.yaml or pass via: agentd --config <path>
-# Precedence: CLI flags > --config file > AGENTD_* (incl. repo .env) > this file > defaults.
-# When .env and config.yaml disagree, startup logs "config: key overridden by env"; use: agentd config show
-# Extended documentation: docs/config-reference.md
-
 home: ~/.agentd
 db_path: ~/.agentd/global.db
 projects_dir: ~/.agentd/projects
 uploads_dir: ~/.agentd/uploads
-
-# Logging level: debug, info (default), warn, error.
-# -v flag always overrides log_level to debug. Restart required after change.
 log_level: info
-
 api:
   address: "127.0.0.1:8765"
   materialize_token: "" # see docs/config-reference.md#api
-
 gateway:
   order: [openai, anthropic, gemini, ollama]
-  # See docs/config-reference.md#custom-provider-registry
-  #
-  # Example: two endpoints sharing the same adapter (OpenAI + Poolside in cascade).
-  # This was impossible with the old per-vendor slot schema (Task 09).
-  # providers:
-  #   - name: openai
-  #     adapter: openai
-  #     base_url: "https://api.openai.com/v1"
-  #     api_key_env: OPENAI_API_KEY
-  #     model: "gpt-4o-mini"
-  #   - name: poolside
-  #     adapter: openai
-  #     base_url: "https://inference.poolside.ai/v1"
-  #     api_key_env: POOLSIDE_API_KEY
-  #     model: "poolside/laguna-m.1"
-  #     capabilities:
-  #       chat_tools: true
-  # order: [openai, poolside, anthropic, gemini, ollama]
-  #
-  # Single custom entry (e.g. vLLM alongside OpenAI):
-  # providers:
-  #   - name: vllm
-  #     adapter: openai
-  #     base_url: "http://127.0.0.1:8000/v1"
-  #     model: "your-model-name"
-  # order: [openai, vllm]
-  #
-  # LiteLLM managed proxy (recommended multi-provider path — see docs/llm-connector-strategy.md):
-  # providers:
-  #   - name: litellm
-  #     adapter: openai
-  #     base_url: "http://127.0.0.1:4000/v1"
-  #     api_key_env: LITELLM_API_KEY      # scoped LiteLLM virtual key (not the master key)
-  #     model: "poolside/laguna-m.1"      # LiteLLM model_name alias
-  #     capabilities: { chat_tools: true }
-  # order: [litellm]
   warmup_enabled: true
   max_tasks_per_phase: 7
   openai:
@@ -85,9 +39,6 @@ gateway:
     max_input_chars: 0
     timeout: "5m"
     poll_interval: "4s"  # legacy key — still supported; populates options.poll_interval
-    # Preferred form (adapter-specific options):
-    # options:
-    #   poll_interval: "4s"
   gemini:
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
     model: "gemini-2.5-flash"
@@ -96,8 +47,6 @@ gateway:
     timeout: "5m"
   budget:
     tokens_per_task: 50000
-  # Role-level defaults when an agent profile leaves provider/model empty (see agentd init seeds).
-  # Per-agent cascade uses gateway.order; role_models apply inside the router for chat/worker/memory roles.
   role_models:
     chat:
       provider: ""
@@ -116,12 +65,6 @@ gateway:
     head_ratio: 0.5
     max_input_chars: 12000
     stash_threshold: 50000
-  # MCP external tool servers (formerly gateway.capabilities — renamed in Task 10)
-  # mcp_servers:
-  #   - name: my-mcp-server
-  #     type: mcp
-  #     server_url: "http://localhost:9000"
-
 agentic:
   context_warning_threshold: 0.85
   tool_failure_streak: 3
@@ -179,7 +122,6 @@ agentic:
       spreadsheet_ops: sheets_api
     tools:
       generate_image: generate
-
 sandbox:
   inactivity_timeout: "60s"
   wall_timeout: "10m"
@@ -193,7 +135,6 @@ sandbox:
     cpu_seconds: 600
     open_files: 1024
     processes: 256
-
 healing:
   enabled: true
   strategy: "increase_effort"
@@ -204,18 +145,14 @@ healing:
   context_multiplier: 2.0
   max_healing_tasks: 0
   outage_handoff_enabled: true
-
 breaker:
   handoff_after: "2m"
-
 disk:
   free_threshold_percent: 10.0
-
 channel:
   max_message_size: 1048576
   rate_limit: 0
   rate_window: 60
-
 queue:
   task_deadline: "10m"
   queued_reconcile_after: "10m"
@@ -260,10 +197,8 @@ queue:
     base_delay: "200ms"
     max_delay: "5s"
     tools: ["read"]
-
 heartbeat:
   stale_after: "2m"
-
 librarian:
   retention_hours: 24
   archive_grace_days: 7
@@ -275,43 +210,20 @@ librarian:
   preferences_top_k: 3
   dream_cluster_min_size: 3
   dream_similarity_threshold: 0.7
-
-# Tiered execution pipeline (Phase 5, milestones M1–M2).
-# When disabled (default), the worker always runs one-shot.
-# When enabled, tasks at or above complexity_threshold are split into
-# typed DAG steps (context → decision → execute → verify → escalate).
 tiered:
   enabled: false
-  complexity_threshold: 200  # 0 disables splitting when enabled; unset defaults to 200
+  complexity_threshold: 200
   context_pack:
-    max_paths: 40   # cap on workspace paths in a ContextPack
-    max_chars: 48000  # cap on total chars across summary/excerpts/constraints/unknowns
+    max_paths: 40
+    max_chars: 48000
   escalation:
-    max_mid_fix: 2    # maximum bounded execute/verify redos before escalation
-    max_escalate: 1   # maximum strong-model escalations before human handoff
-    max_re_gather: 2  # maximum context re-gathers before human handoff
-  # Per-role model overrides are configured via gateway.role_models.
-  # See gateway section above for the role_models mapping.
-  # Tiered step profiles route through role_models by step kind:
-  # context→memory, decision→worker, execute→worker, verify→worker, escalate→worker.
-  # Step kind overrides take precedence over the mapped role default
-  # (see tasks/sprints/S04-tiered-pipeline/tasks/T-015-tiered-m3-splitter.md).
-  # No tiered.models.<kind> configuration is supported by TieredConfig or loadTieredConfig.
-
-# MCP board-export server — exposes the kanban board over Model Context Protocol.
-# External agents (Claude Code, Cline) act as workers behind agentd's control plane.
-# agentd owns the board; writes go through the same store approval boundary as the REST API.
+    max_mid_fix: 2
+    max_escalate: 1
+    max_re_gather: 2
 mcp:
   enabled: false
   transport: stdio     # "stdio" (Claude Code/Cline), "http" (Streamable HTTP at /mcp), or "both"
   http_addr: "127.0.0.1:0"  # loopback, random port (only used when transport includes "http")
-
-# MCP servers configured as external tool providers (client-side, not board export).
-# mcp_servers:
-#   - name: my-mcp-server
-#     type: mcp
-#     server_url: "http://localhost:9000"
-
 plugins:
   enabled: false
   path: "~/.agentd/plugins"

@@ -66,22 +66,8 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	corrID := uuid.NewString()
 	ctx := correlation.WithID(r.Context(), corrID)
 	slog.DebugContext(ctx, "chat intake: request received")
-
-	rawBody, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.WarnContext(ctx, "chat intake: failed to read request body", "error", err)
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "could not read request body")
-		return
-	}
-	var req chatRequest
-	if err := json.Unmarshal(rawBody, &req); err != nil {
-		slog.WarnContext(ctx, "chat intake: invalid JSON body", "error", err)
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
-		return
-	}
-	rawMessage := frontdesk.LastUserMessage(req.Messages)
-	if rawMessage == "" {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "a user message is required")
+	req, rawMessage, ok := parseChatRequest(w, r, ctx)
+	if !ok {
 		return
 	}
 
@@ -137,6 +123,27 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	)
 	toolCalls, finishReason := buildToolCalls(content, len(req.Tools) > 0)
 	httpx.WriteJSON(w, http.StatusOK, completion(req.Model, string(content), toolCalls, finishReason))
+}
+
+func parseChatRequest(w http.ResponseWriter, r *http.Request, ctx context.Context) (chatRequest, string, bool) {
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		slog.WarnContext(ctx, "chat intake: failed to read request body", "error", err)
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "could not read request body")
+		return chatRequest{}, "", false
+	}
+	var req chatRequest
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		slog.WarnContext(ctx, "chat intake: invalid JSON body", "error", err)
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
+		return chatRequest{}, "", false
+	}
+	message := frontdesk.LastUserMessage(req.Messages)
+	if message == "" {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "a user message is required")
+		return chatRequest{}, "", false
+	}
+	return req, message, true
 }
 
 // completeStreaming emits the response as an SSE stream of chatChunk
