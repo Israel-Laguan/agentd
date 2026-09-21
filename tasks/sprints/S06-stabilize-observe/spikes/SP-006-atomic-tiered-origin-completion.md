@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | spike |
-| Status | done (PR 1) |
+| Status | review |
 | Priority | P1 |
 | Sprint | S06-stabilize-observe |
 | Time box | 1 day |

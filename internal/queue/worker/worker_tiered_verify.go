@@ -78,13 +78,13 @@ func (w *Worker) readVerifyResult(ctx context.Context, task models.Task) (*Verif
 // with parseContextPack. It also validates that the result has non-empty
 // results and a valid overall value before returning.
 func parseVerifyResult(output string) (*VerifyResult, error) {
-	var vr VerifyResult
 	for _, candidate := range extractJSONCandidates(output) {
+		var vr VerifyResult
 		if err := json.Unmarshal([]byte(candidate), &vr); err != nil {
 			continue
 		}
 		if !vr.Valid() {
-			return nil, fmt.Errorf("invalid VerifyResult: missing results or overall")
+			continue
 		}
 		return &vr, nil
 	}
