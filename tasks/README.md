@@ -62,4 +62,4 @@ Update this table when you mint IDs.
 
 ## Linking to product plan
 
-Active sprint: [`sprints/S03-tiered-foundation/`](sprints/S03-tiered-foundation/) (see `PR-PLAN.md`). Sprint goals should cite phases in [`docs/product-plan.md`](../docs/product-plan.md). Spikes for tiered execution cite [`docs/tiered-execution.md`](../docs/tiered-execution.md).
+Active sprint: [`sprints/S06-stabilize-observe/`](sprints/S06-stabilize-observe/) (PR discipline: [`sprints/S03-tiered-foundation/PR-PLAN.md`](sprints/S03-tiered-foundation/PR-PLAN.md)). Sprint goals should cite phases in [`docs/product-plan.md`](../docs/product-plan.md). Spikes for tiered execution cite [`docs/tiered-execution.md`](../docs/tiered-execution.md).

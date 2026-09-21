@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | ready |
+| Status | review |
 | Priority | P1 |
 | Sprint | S06-stabilize-observe |
 | Persona | contributor |

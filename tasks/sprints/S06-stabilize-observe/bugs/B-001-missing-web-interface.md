@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | ready |
+| Status | review |
 | Priority | P3 |
 | Sprint | S06-stabilize-observe |
 | Persona | adopter |

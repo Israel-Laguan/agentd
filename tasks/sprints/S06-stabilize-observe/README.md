@@ -17,10 +17,10 @@ S03–S05 shipped the tiered execution pipeline end-to-end. The pipeline is now 
 | --- | --- | --- | --- | --- |
 | [US-006](stories/US-006-pipeline-debug-observability.md) | story | Pipeline debug observability | ready | P1 |
 | [US-005](stories/US-005-mcp-board-export.md) | story | MCP board export wedge | ready | P2 |
-| [SP-006](spikes/SP-006-atomic-tiered-origin-completion.md) | spike | Atomic tiered-origin completion | done (PR 1) | P1 |
-| [B-002](bugs/B-002-context-step-committed-description.md) | bug | Context step reads unpopulated committed.Description | ready | P1 |
-| [B-001](bugs/B-001-missing-web-interface.md) | bug | Missing web interface / dashboard | ready | P3 |
-| [T-021](tasks/T-021-drop-task-logs.md) | task | Drop task.Logs / retire metadata API (Option A) | ready | P1 |
+| [SP-006](spikes/SP-006-atomic-tiered-origin-completion.md) | spike | Atomic tiered-origin completion | review | P1 |
+| [B-002](bugs/B-002-context-step-committed-description.md) | bug | Context step reads unpopulated committed.Description | review | P1 |
+| [B-001](bugs/B-001-missing-web-interface.md) | bug | Missing web interface / dashboard | review | P3 |
+| [T-021](tasks/T-021-drop-task-logs.md) | task | Drop task.Logs / retire metadata API (Option A) | review | P1 |
 | [T-022](tasks/T-022-debug-on-demand-logging.md) | task | Debug-on-demand leveled logging at key boundaries | ready | P1 |
 
 ## Suggested execution

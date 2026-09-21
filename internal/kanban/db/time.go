@@ -107,10 +107,14 @@ func NormalizeStoredTimestamps(ctx context.Context, db *sql.DB) error {
 }
 
 // timestampRewrite is a single stored value to rewrite into canonical form.
+// original is the exact value scanned at startup; the UPDATE matches on it so
+// a concurrent writer that changed the row after the scan is not overwritten
+// with the stale scanned value.
 type timestampRewrite struct {
-	pk     string
-	column string
-	value  string
+	pk       string
+	column   string
+	original string
+	value    string
 }
 
 func normalizeTableTimestamps(ctx context.Context, db *sql.DB, table, pk string, columns []string) error {
@@ -131,7 +135,7 @@ func normalizeTableTimestamps(ctx context.Context, db *sql.DB, table, pk string,
 		return err
 	}
 	for _, r := range pending {
-		if _, err := db.ExecContext(ctx, `UPDATE `+table+` SET `+r.column+` = ? WHERE `+pk+` = ?`, r.value, r.pk); err != nil {
+		if _, err := db.ExecContext(ctx, `UPDATE `+table+` SET `+r.column+` = ? WHERE `+pk+` = ? AND `+r.column+` = ?`, r.value, r.pk, r.original); err != nil {
 			return fmt.Errorf("normalize %s.%s: %w", table, r.column, err)
 		}
 	}
@@ -160,7 +164,7 @@ func collectTimestampRewrites(rows *sql.Rows, table string, columns []string) ([
 				continue
 			}
 			if normalized, changed := NormalizeTimestampString(v.String); changed {
-				pending = append(pending, timestampRewrite{pk: vals[0].String, column: col, value: normalized})
+				pending = append(pending, timestampRewrite{pk: vals[0].String, column: col, original: v.String, value: normalized})
 			}
 		}
 	}
