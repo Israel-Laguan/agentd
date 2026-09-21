@@ -128,12 +128,51 @@ func (w *Worker) spawnContextPackChain(ctx context.Context, parentTask models.Ta
 
 // parseContextPack attempts to extract a ContextPack from the LLM output.
 // The output may contain JSON embedded in markdown code fences or plain text.
+// Each fenced/plain candidate is decoded independently and must pass a
+// structural pre-check (schema version, summary, paths) before it is
+// accepted, so an earlier decodable-but-invalid payload cannot shadow a later
+// valid one. The caller (parseAndConfigurePack) then stamps the authoritative
+// task ID, normalizes budget counters, enforces the budget, and runs the full
+// ContextPack.Validate before the pack is written.
 func parseContextPack(output string) (*ContextPack, error) {
-	var cp ContextPack
 	for _, candidate := range extractJSONCandidates(output) {
-		if err := json.Unmarshal([]byte(candidate), &cp); err == nil {
-			return &cp, nil
+		var cp ContextPack
+		if err := json.Unmarshal([]byte(candidate), &cp); err != nil {
+			continue
 		}
+		if !validContextPackCandidate(&cp) {
+			continue
+		}
+		return &cp, nil
 	}
 	return nil, fmt.Errorf("no valid ContextPack JSON found in output")
+}
+
+// validContextPackCandidate reports whether cp carries the required ContextPack
+// content independent of caller-stamped fields (TaskID) and caller-normalized
+// budget counters (PathCount/CharCount), which parseAndConfigurePack sets after
+// selection and before the full Validate.
+func validContextPackCandidate(cp *ContextPack) bool {
+	if cp.Version != ContextPackVersion {
+		return false
+	}
+	if cp.Summary == "" || len(cp.Paths) == 0 {
+		return false
+	}
+	seen := make(map[string]struct{}, len(cp.Paths))
+	for _, p := range cp.Paths {
+		if p == "" {
+			return false
+		}
+		if _, dup := seen[p]; dup {
+			return false
+		}
+		seen[p] = struct{}{}
+	}
+	for _, e := range cp.Excerpts {
+		if e.Path == "" {
+			return false
+		}
+	}
+	return true
 }
