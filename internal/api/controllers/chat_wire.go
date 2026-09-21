@@ -165,11 +165,8 @@ func toolCallAllowed(name string, tools []json.RawMessage, toolChoice json.RawMe
 		}
 	}
 	declared := declaredToolNames(tools)
-	if len(declared) > 0 {
-		_, ok := declared[name]
-		return ok
-	}
-	return true
+	_, ok := declared[name]
+	return ok
 }
 
 // declaredToolNames extracts the set of function names from an OpenAI-style
