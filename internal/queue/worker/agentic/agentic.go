@@ -25,10 +25,6 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	messages, tools, toolToAdapter, _, profile, taskToolExecutor, taskHooks, taskCaps :=
 		e.prepareAgenticRun(ctx, task, project, profile)
 
-	correlation.Logger(ctx).DebugContext(ctx, "agentic: session start",
-		"task_id", task.ID, "project_id", project.ID, "agent_id", task.AgentID,
-		"provider", profile.Provider, "model", profile.Model,
-	)
 	if result, ok, err := e.host.TryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); err != nil {
 		return agentruntime.LoopResult{}, false
 	} else if ok {
@@ -42,6 +38,11 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		e.host.RunLegacyTask(cancelCtx, task, project, profile, true)
 		return agentruntime.LoopResult{}, false
 	}
+
+	correlation.Logger(ctx).DebugContext(ctx, "agentic: session start",
+		"task_id", task.ID, "project_id", project.ID, "agent_id", task.AgentID,
+		"provider", profile.Provider, "model", profile.Model,
+	)
 
 	if err := e.host.RunSessionStart(cancelCtx, task, project, taskHooks); err != nil {
 		e.host.FailHard(cancelCtx, task, err)
