@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"agentd/internal/api/correlation"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
@@ -65,13 +66,19 @@ func NewHorde(cfg spec.ProviderConfig, client *http.Client) *Horde {
 
 // Generate implements Backend.
 func (h *Horde) Generate(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, h.timeout)
-	defer cancel()
-
+	log := correlation.Logger(ctx)
 	model := h.cfg.Model
 	if req.Model != "" {
 		model = req.Model
 	}
+	log.DebugContext(ctx, "horde: sending request",
+		"model", model, "endpoint", h.url("/v2/generate/text/async"),
+		"timeout", h.timeout,
+		"message_count", len(req.Messages))
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(ctx, h.timeout)
+	defer cancel()
+
 	body := hordeSubmitRequest{
 		Prompt: messagesToHordePrompt(req.Messages),
 		Params: hordeParams{
@@ -86,9 +93,21 @@ func (h *Horde) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespon
 
 	requestID, err := h.submit(ctx, body)
 	if err != nil {
+		latency := time.Since(start)
+		log.WarnContext(ctx, "horde: request failed",
+			"model", model, "latency_ms", latency.Milliseconds(), "error", err)
 		return spec.AIResponse{}, err
 	}
-	return h.poll(ctx, requestID, model)
+	resp, err := h.poll(ctx, requestID, model)
+	latency := time.Since(start)
+	if err != nil {
+		log.WarnContext(ctx, "horde: request failed",
+			"model", model, "latency_ms", latency.Milliseconds(), "error", err)
+		return spec.AIResponse{}, err
+	}
+	log.DebugContext(ctx, "horde: response received",
+		"model", resp.ModelUsed, "latency_ms", latency.Milliseconds())
+	return resp, nil
 }
 
 func (h *Horde) submit(ctx context.Context, body hordeSubmitRequest) (string, error) {

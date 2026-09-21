@@ -65,13 +65,16 @@ type chatFile struct {
 func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	corrID := uuid.NewString()
 	ctx := correlation.WithID(r.Context(), corrID)
-	slog.DebugContext(ctx, "chat intake: request received")
+	log := correlation.Logger(ctx)
+	log.DebugContext(ctx, "chat intake: request received")
 	req, rawMessage, ok := parseChatRequest(w, r, ctx)
 	if !ok {
+		log.DebugContext(ctx, "chat intake: request rejected", "error", "invalid_request")
 		return
 	}
 
-	slog.DebugContext(ctx, "chat intake: parsed request",
+	log.DebugContext(ctx, "chat intake: parsed request",
+		"flow", selectedFlow(req),
 		"message_count", len(req.Messages),
 		"stream", req.Stream,
 		"model", req.Model,
@@ -80,7 +83,7 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 
 	intent, files, err := frontdesk.PrepareIntent(h.Planner.Stash, rawMessage, convertFiles(req.Files))
 	if err != nil {
-		slog.WarnContext(ctx, "chat intake: intent preparation failed", "error", err)
+		log.WarnContext(ctx, "chat intake: intent preparation failed", "error", err)
 		httpx.WriteMappedError(w, err)
 		return
 	}
@@ -92,35 +95,37 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-Agentd-User")
 	intent = h.prependRecalledContext(ctx, intent, projectID, userID)
 
-	slog.DebugContext(ctx, "chat intake: routing to planner",
+	log.DebugContext(ctx, "chat intake: routing to planner",
 		"approved_scopes", len(req.ApprovedScopes),
 		"project_id", projectID,
 		"has_files", len(files) > 0,
 	)
 
 	if req.Stream {
-		h.completeStreaming(w, r, req, intent, files, ctx)
+		h.completeStreaming(w, r, req, intent, files, ctx, log)
 		return
 	}
 
 	content, err := h.Planner.PlanContent(ctx, req.ApprovedScopes, intent, files)
+	outcome := requestOutcome(err, content)
+	log.DebugContext(ctx, "chat intake: request completed",
+		"result", outcome,
+		"content_length", len(content),
+	)
 	if err != nil {
 		if errors.Is(err, frontdesk.ErrMultipleApprovedScopes) {
 			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "send one turn per scope using approved_scopes with exactly one entry")
 			return
 		}
 		if isAICoreTimeout(err) {
-			slog.WarnContext(ctx, "chat intake: LLM timeout", "error", err)
+			log.WarnContext(ctx, "chat intake: LLM timeout", "error", err)
 			httpx.WriteJSON(w, http.StatusOK, completion(req.Model, systemTimeoutMessage, nil, finishReasonStop))
 			return
 		}
-		slog.WarnContext(ctx, "chat intake: planner failed", "error", err)
+		log.WarnContext(ctx, "chat intake: planner failed", "error", err)
 		httpx.WriteMappedError(w, err)
 		return
 	}
-	slog.DebugContext(ctx, "chat intake: request completed",
-		"content_length", len(content),
-	)
 	toolCalls, finishReason := buildToolCalls(content, len(req.Tools) > 0)
 	httpx.WriteJSON(w, http.StatusOK, completion(req.Model, string(content), toolCalls, finishReason))
 }
@@ -156,9 +161,11 @@ func (h ChatHandler) completeStreaming(
 	intent string,
 	files []frontdesk.FileRef,
 	ctx context.Context,
+	log *slog.Logger,
 ) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		log.ErrorContext(ctx, "chat intake: streaming not supported")
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "streaming not supported")
 		return
 	}
@@ -189,7 +196,8 @@ func (h ChatHandler) completeStreaming(
 	writeFrame(chatChunkDelta{Role: "assistant"}, nil)
 
 	finishStop := finishReasonStop
-	content, err := h.Planner.PlanContent(r.Context(), req.ApprovedScopes, intent, files)
+	content, err := h.Planner.PlanContent(ctx, req.ApprovedScopes, intent, files)
+	outcome := requestOutcome(err, content)
 	switch {
 	case errors.Is(err, frontdesk.ErrMultipleApprovedScopes):
 		writeFrame(chatChunkDelta{Content: "send one turn per scope using approved_scopes with exactly one entry"}, &finishStop)
@@ -204,6 +212,10 @@ func (h ChatHandler) completeStreaming(
 	}
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	flusher.Flush()
+	log.DebugContext(ctx, "chat intake: streaming request completed",
+		"result", outcome,
+		"content_length", len(content),
+	)
 }
 
 func (h ChatHandler) prependRecalledContext(ctx context.Context, intent, projectID, userID string) string {
@@ -277,4 +289,30 @@ func buildToolCalls(content []byte, toolsRequested bool) ([]chatToolCall, string
 			Name: name, Arguments: args,
 		},
 	}}, finishReasonToolCalls
+}
+
+// selectedFlow describes which intake processing path a request will take so
+// the intake log can distinguish streaming vs agentic-tool vs plain chat turns
+// without logging the full user content.
+func selectedFlow(req chatRequest) string {
+	if req.Stream {
+		return "stream"
+	}
+	if len(req.Tools) > 0 {
+		return "agentic"
+	}
+	return "chat"
+}
+
+// requestOutcome is the intake-level outcome used in the "request completed"
+// log. It is computed before any error-handoff so the outcome is always
+// recorded for the correlation trace.
+func requestOutcome(err error, content []byte) string {
+	if err != nil {
+		return "error"
+	}
+	if len(content) == 0 {
+		return "empty"
+	}
+	return "ok"
 }

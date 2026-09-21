@@ -16,7 +16,7 @@ func emitStepSummary(violations []violation) {
 	lines := []string{
 		"### Function length check failed",
 		"",
-		fmt.Sprintf("%d function(s) have fewer than %d lines:", len(violations), *minLines),
+		fmt.Sprintf("%d function(s) have fewer than %d significant lines:", len(violations), *minLines),
 		"",
 		"| Lines | Function | File |",
 		"| ---: | --- | --- |",
@@ -57,7 +57,7 @@ func emitGitHubAnnotations(violations []violation) {
 	for i := 0; i < limit; i++ {
 		v := violations[i]
 		fmt.Printf(
-			"::error file=%s,line=%d,endLine=%d,title=Function too short::Function %s has only %d lines (min %d)\n",
+			"::error file=%s,line=%d,endLine=%d,title=Function too short::Function %s has only %d significant lines (min %d)\n",
 			v.file, v.line, v.line, v.name, v.lines, *minLines,
 		)
 	}

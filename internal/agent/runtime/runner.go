@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
+
+	"agentd/internal/api/correlation"
 )
 
 const (
@@ -72,12 +73,20 @@ func (r *TurnLoopRunner) Run(ctx context.Context, req Request) (Result, error) {
 	if req.Iterate == nil {
 		return Result{}, errors.New("runtime runner: nil iterate callback")
 	}
+	log := correlation.Logger(ctx)
 	state := &IterationState{}
 	rewind := &rewindState{}
 	for turnIndex := 0; ; {
 		turnID := fmt.Sprintf("%s:%d", req.TaskID, turnIndex)
+		log.DebugContext(ctx, "agentic: turn start",
+			"task_id", req.TaskID, "turn_index", turnIndex, "turn_id", turnID,
+		)
 		outcome, err := req.Iterate(ctx, turnID, turnIndex, state)
 		if err != nil {
+			log.DebugContext(ctx, "agentic: turn error",
+				"task_id", req.TaskID, "turn_index", turnIndex, "turn_id", turnID,
+				"error", err.Error(),
+			)
 			if errors.Is(err, ErrTopicDriftReset) && outcome.RewindTo >= 0 {
 				rewind.reset()
 				turnIndex = outcome.RewindTo
@@ -88,6 +97,10 @@ func (r *TurnLoopRunner) Run(ctx context.Context, req Request) (Result, error) {
 			}
 			return Result{}, err
 		}
+		log.DebugContext(ctx, "agentic: turn end",
+			"task_id", req.TaskID, "turn_index", turnIndex, "turn_id", turnID,
+			"continue", outcome.Continue, "report", outcome.Report,
+		)
 		if outcome.Report {
 			recordResult(req, outcome.Result)
 			return Result{LoopResult: outcome.Result, Reported: true}, nil
@@ -97,9 +110,10 @@ func (r *TurnLoopRunner) Run(ctx context.Context, req Request) (Result, error) {
 		}
 		if outcome.RewindTo >= 0 {
 			if rewind.apply(outcome.RewindTo) {
-				slog.Warn("agentic rewind stagnation",
+				log.Warn("agentic rewind stagnation",
 					"task_id", req.TaskID,
 					"turn_index", turnIndex,
+					"turn_id", turnID,
 					"rewind_to", outcome.RewindTo,
 					"streak", rewind.streak,
 				)

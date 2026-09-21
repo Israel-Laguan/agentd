@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
+	"agentd/internal/api/correlation"
 	"agentd/internal/gateway/spec"
 )
 
@@ -62,14 +64,18 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 			body.Tools[i] = openAITool{Type: "function", Function: t}
 		}
 	}
-	slog.DebugContext(ctx, "openai: sending request",
+	log := correlation.Logger(ctx)
+	log.DebugContext(ctx, "openai: sending request",
 		"model", model, "endpoint", o.url("/chat/completions"),
 		"message_count", len(req.Messages), "tools_count", len(req.Tools),
-		"json_mode", req.JSONMode, "max_tokens", req.MaxTokens)
-	data, _, err := postJSON(ctx, o.client, o.url("/chat/completions"), body, o.cfg.APIKey)
+		"json_mode", req.JSONMode, "max_tokens", req.MaxTokens,
+		"timeout", o.cfg.Timeout)
+	start := time.Now()
+	data, status, err := postJSON(ctx, o.client, o.url("/chat/completions"), body, o.cfg.APIKey)
+	latency := time.Since(start)
 	if err != nil {
-		slog.WarnContext(ctx, "openai: request failed",
-			"model", model, "error", err)
+		log.WarnContext(ctx, "openai: request failed",
+			"model", model, "status", status, "latency_ms", latency.Milliseconds(), "error", err)
 		return spec.AIResponse{}, err
 	}
 	var decoded openAIResponse
@@ -77,9 +83,10 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		return spec.AIResponse{}, fmt.Errorf("decode openai response: %w", err)
 	}
 	resp := decoded.toAIResponse(model, string(o.Name()))
-	slog.DebugContext(ctx, "openai: response received",
+	log.DebugContext(ctx, "openai: response received",
 		"model", resp.ModelUsed, "tokens", resp.TokenUsage,
-		"tool_calls", len(resp.ToolCalls))
+		"tool_calls", len(resp.ToolCalls),
+		"status", status, "latency_ms", latency.Milliseconds())
 	return resp, nil
 }
 

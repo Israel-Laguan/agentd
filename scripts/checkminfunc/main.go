@@ -1,4 +1,6 @@
-// Command checkminfunc fails when functions have fewer than the minimum number of lines.
+// Command checkminfunc fails when functions have fewer than the minimum number of
+// significant code lines. Blank lines and comments are excluded from the count,
+// so padding a trivial wrapper with comments does not satisfy the check.
 // Such functions are typically trivial renames or wrappers that add no value.
 package main
 
@@ -7,6 +9,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/scanner"
 	"go/token"
 	"os"
 	"os/exec"
@@ -17,7 +20,7 @@ import (
 )
 
 var (
-	minLines       = flag.Int("min-lines", 3, "minimum number of lines per function")
+	minLines       = flag.Int("min-lines", 3, "minimum number of significant code lines per function (blank lines and comments excluded)")
 	exclude        = flag.String("exclude", "", "comma-separated patterns to exclude")
 	warn           = flag.Bool("warn", false, "warn only, don't exit with error")
 	baselinePath   = flag.String("baseline", filepath.Join("scripts", "checkminfunc", "baseline"), "path to accepted baseline")
@@ -75,7 +78,7 @@ func main() {
 		return
 	}
 
-	fmt.Printf("checkminfunc: %d new function(s) have fewer than %d lines:\n", len(violations), *minLines)
+	fmt.Printf("checkminfunc: %d new function(s) have fewer than %d significant lines:\n", len(violations), *minLines)
 	for _, v := range violations {
 		fmt.Printf("  %4d  %s:%d  %s\n", v.lines, v.file, v.line, v.name)
 	}
@@ -127,12 +130,17 @@ func buildExcludes() []string {
 
 func checkFile(relPath string, minLines int) ([]violation, error) {
 	root, _ := os.Getwd()
-	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, filepath.Join(root, relPath), nil, parser.ParseComments)
+	fullPath := filepath.Join(root, relPath)
+	src, err := os.ReadFile(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
+		return nil, err
+	}
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, fullPath, src, parser.ParseComments)
+	if err != nil {
 		return nil, err
 	}
 
@@ -144,11 +152,7 @@ func checkFile(relPath string, minLines int) ([]violation, error) {
 		}
 
 		start := fset.Position(funcDecl.Body.Pos()).Line
-		end := fset.Position(funcDecl.Body.Rbrace).Line
-		lineCount := end - start - 1
-		if lineCount < 1 {
-			lineCount = 1
-		}
+		lineCount := countSignificantLines(fset, fullPath, src, funcDecl.Body)
 		if lineCount < minLines {
 			funcName := funcDecl.Name.Name
 			if funcDecl.Recv != nil {
@@ -159,6 +163,39 @@ func checkFile(relPath string, minLines int) ([]violation, error) {
 		return true
 	})
 	return violations, nil
+}
+
+// countSignificantLines counts the physical lines inside body that contain at
+// least one code token. Blank lines and comments (including trailing comments
+// and multi-line block comments) are excluded. A separate scanner pass is used
+// instead of heuristics so comment-like text inside string literals is still
+// counted as code. Tokens are matched to the body by byte offset, so single-line
+// bodies such as `func f() int { return 1 }` are measured correctly.
+func countSignificantLines(fset *token.FileSet, filename string, src []byte, body *ast.BlockStmt) int {
+	lbraceOffset := fset.Position(body.Lbrace).Offset
+	rbraceOffset := fset.Position(body.Rbrace).Offset
+
+	scanSet := token.NewFileSet()
+	scanFile := scanSet.AddFile(filename, -1, len(src))
+	var s scanner.Scanner
+	s.Init(scanFile, src, nil, scanner.ScanComments)
+
+	lines := make(map[int]struct{})
+	for {
+		pos, tok, _ := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok == token.COMMENT {
+			continue
+		}
+		off := scanFile.Offset(pos)
+		if off <= lbraceOffset || off >= rbraceOffset {
+			continue
+		}
+		lines[scanSet.Position(pos).Line] = struct{}{}
+	}
+	return len(lines)
 }
 
 func sortViolations(violations []violation) {

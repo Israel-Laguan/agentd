@@ -2,7 +2,8 @@ package agentic
 
 import (
 	"context"
-	"log/slog"
+
+	"agentd/internal/api/correlation"
 
 	agentcontext "agentd/internal/agent/context"
 	agentruntime "agentd/internal/agent/runtime"
@@ -19,6 +20,11 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	cancelCtx, cleanup := e.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
+	correlation.Logger(ctx).DebugContext(ctx, "agentic: session start",
+		"task_id", task.ID, "project_id", project.ID, "agent_id", task.AgentID,
+		"provider", profile.Provider, "model", profile.Model,
+	)
+
 	// prepareAgenticRun builds messages/tools before routing; session start and
 	// pre-task elicitation run after the fallback check so legacy path is unaffected.
 	messages, tools, toolToAdapter, _, profile, taskToolExecutor, taskHooks, taskCaps :=
@@ -29,7 +35,7 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		return result, true
 	}
 	if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
-		slog.Warn("agentic mode requested but routed provider does not support tool round-tripping; falling back to legacy mode",
+		correlation.Logger(ctx).Warn("agentic mode requested but routed provider does not support tool round-tripping; falling back to legacy mode",
 			"task_id", task.ID,
 			"provider", profile.Provider,
 		)
@@ -48,8 +54,14 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		return agentruntime.LoopResult{}, false
 	}
 	if blocked {
+		correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation blocked",
+			"task_id", task.ID,
+		)
 		return agentruntime.LoopResult{}, false
 	}
+	correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation complete",
+		"task_id", task.ID,
+	)
 
 	guards := e.newAgenticLoopGuards(cancelCtx, task)
 
@@ -122,6 +134,11 @@ func (e *Engine) generateAgenticTurn(
 	sessionRecoveryGen int,
 ) (gateway.AIResponse, *agentruntime.LoopResult, error) {
 	req := e.buildAgenticRequest(task, profile, *messages, tools, sessionRecoveryGen)
+	correlation.Logger(ctx).DebugContext(ctx, "agentic: llm call start",
+		"task_id", task.ID, "turn_index", turnIndex,
+		"provider", req.Provider, "model", req.Model,
+		"message_count", len(req.Messages), "tools_count", len(req.Tools),
+	)
 	resp, err := e.config.Gateway.Generate(ctx, req)
 	if err != nil {
 		if budgetGuard.IsBudgetExceeded(err) {
