@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
+	"time"
 
+	"agentd/internal/api/correlation"
 	"agentd/internal/gateway/spec"
 )
 
@@ -48,12 +49,16 @@ func (o *Ollama) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	if req.JSONMode {
 		body.Format = "json"
 	}
-	slog.DebugContext(ctx, "ollama: sending request",
-		"model", model, "message_count", len(req.Messages))
-	data, _, err := postJSON(ctx, o.client, o.url("/api/chat"), body, "")
+	log := correlation.Logger(ctx)
+	log.DebugContext(ctx, "ollama: sending request",
+		"model", model, "message_count", len(req.Messages),
+		"timeout", o.cfg.Timeout)
+	start := time.Now()
+	data, status, err := postJSON(ctx, o.client, o.url("/api/chat"), body, "")
+	latency := time.Since(start)
 	if err != nil {
-		slog.WarnContext(ctx, "ollama: request failed",
-			"model", model, "error", err)
+		log.WarnContext(ctx, "ollama: request failed",
+			"model", model, "status", status, "latency_ms", latency.Milliseconds(), "error", err)
 		return spec.AIResponse{}, err
 	}
 	var decoded ollamaResponse
@@ -61,8 +66,9 @@ func (o *Ollama) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 		return spec.AIResponse{}, fmt.Errorf("decode ollama response: %w", err)
 	}
 	resp := decoded.toAIResponse(model, string(o.Name()))
-	slog.DebugContext(ctx, "ollama: response received",
-		"model", resp.ModelUsed, "tokens", resp.TokenUsage)
+	log.DebugContext(ctx, "ollama: response received",
+		"model", resp.ModelUsed, "tokens", resp.TokenUsage,
+		"status", status, "latency_ms", latency.Milliseconds())
 	return resp, nil
 }
 

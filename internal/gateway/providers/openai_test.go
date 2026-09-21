@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"agentd/internal/gateway/spec"
 )
@@ -34,6 +35,64 @@ func TestNewOpenAI_UnknownOptionLogsWarning(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "thinking_mode") {
 		t.Errorf("expected warning to name the key; log = %q", buf.String())
+	}
+}
+
+func TestOpenAI_GenerateLogsLifecycleAndRedactsSecrets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeOpenAIJSON(t, w, map[string]any{
+			"model": "gpt-test",
+			"choices": []map[string]any{{
+				"message": map[string]any{"role": "assistant", "content": "ok"},
+			}},
+			"usage": map[string]int{"total_tokens": 7},
+		})
+	}))
+	defer srv.Close()
+
+	secret := "sk-super-secret-api-key-xyz"
+	promptContent := "confidential user prompt: refactor the auth module"
+
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(old) })
+
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "gpt-test",
+		APIKey:  secret,
+		Timeout: 30 * time.Second,
+	}, srv.Client())
+	resp, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: promptContent}},
+	})
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+	if resp.TokenUsage != 7 {
+		t.Errorf("TokenUsage = %d, want 7", resp.TokenUsage)
+	}
+	logs := buf.String()
+
+	// Lifecycle events must be present with timing and status.
+	if !strings.Contains(logs, "openai: sending request") {
+		t.Errorf("pre-request lifecycle event missing; logs = %q", logs)
+	}
+	if !strings.Contains(logs, "openai: response received") {
+		t.Errorf("response lifecycle event missing; logs = %q", logs)
+	}
+	for _, field := range []string{"model=", "endpoint=", "timeout=", "status=200", "latency_ms=", "tokens=", "tool_calls="} {
+		if !strings.Contains(logs, field) {
+			t.Errorf("expected field %q in provider logs; logs = %q", field, logs)
+		}
+	}
+
+	// Secrets and content must never be emitted.
+	for _, forbidden := range []string{secret, "Bearer " + secret, promptContent, "confidential user prompt"} {
+		if strings.Contains(logs, forbidden) {
+			t.Errorf("logs leak %q; logs = %q", forbidden, logs)
+		}
 	}
 }
 

@@ -1,8 +1,11 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -152,5 +155,43 @@ func TestTurnLoopRunner_PropagatesNonRuntimeError(t *testing.T) {
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Run error = %v, want %v", err, wantErr)
+	}
+}
+
+// TestTurnLoopRunner_LogsTurnLifecycle verifies the debug lifecycle events
+// (turn start/end) and that no user content is emitted into logs.
+func TestTurnLoopRunner_LogsTurnLifecycle(t *testing.T) {
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(old) })
+
+	runner := NewTurnLoopRunner()
+	_, err := runner.Run(context.Background(), Request{
+		TaskID: "task-lifecycle-1",
+		Iterate: func(_ context.Context, _ string, turnIndex int, _ *IterationState) (IterationOutcome, error) {
+			if turnIndex == 0 {
+				return IterationOutcome{Continue: true, RewindTo: RewindNone}, nil
+			}
+			return IterationOutcome{Result: LoopResult{Status: LoopSuccessfulCompletion}, Report: true}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	logs := buf.String()
+	for _, event := range []string{"agentic: turn start", "agentic: turn end"} {
+		if !strings.Contains(logs, event) {
+			t.Errorf("lifecycle event %q missing; logs = %q", event, logs)
+		}
+	}
+	if !strings.Contains(logs, "task_id=task-lifecycle-1") {
+		t.Errorf("task_id field missing; logs = %q", logs)
+	}
+	if !strings.Contains(logs, "turn_id=task-lifecycle-1:0") {
+		t.Errorf("turn_id field missing; logs = %q", logs)
+	}
+	if strings.Contains(logs, "confidential") || strings.Contains(logs, "sk-secret") {
+		t.Errorf("user content or secret leaked into logs: %q", logs)
 	}
 }

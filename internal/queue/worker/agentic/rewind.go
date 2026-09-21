@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	"agentd/internal/api/correlation"
+
 	agentcontext "agentd/internal/agent/context"
 	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
@@ -195,6 +197,12 @@ func (e *Engine) finishAgenticTurnNoTools(
 			"", "", "",
 		),
 	}
+	correlation.Logger(ctx).DebugContext(ctx, "agentic: terminal result",
+		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
+		"status", r.Status.String(),
+		"token_usage", r.Meta.TokenUsage,
+		"message_count", len(*messages),
+	)
 	return false, r, true, rewindNone, nil
 }
 

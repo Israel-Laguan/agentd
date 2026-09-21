@@ -85,7 +85,7 @@ All write tools go through the same `KanbanStore` methods as the REST API — st
 }
 ```
 
-2. The agent can now list tasks, read project state, add comments, and transition tasks — all through the MCP protocol while agentd maintains board ownership.
+1. The agent can now list tasks, read project state, add comments, and transition tasks — all through the MCP protocol while agentd maintains board ownership.
 
 ## Debug logging
 

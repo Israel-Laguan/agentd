@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"agentd/internal/api/correlation"
 	"agentd/internal/gateway/spec"
 )
 
@@ -57,15 +58,29 @@ func (l *LlamaCpp) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRes
 			body.Tools[i] = openAITool{Type: "function", Function: t}
 		}
 	}
-	data, _, err := postJSON(ctx, l.client, l.url("/v1/chat/completions"), body, "")
+	log := correlation.Logger(ctx)
+	log.DebugContext(ctx, "llamacpp: sending request",
+		"model", model, "endpoint", l.url("/v1/chat/completions"),
+		"message_count", len(req.Messages), "tools_count", len(req.Tools),
+		"timeout", l.cfg.Timeout)
+	start := time.Now()
+	data, status, err := postJSON(ctx, l.client, l.url("/v1/chat/completions"), body, "")
+	latency := time.Since(start)
 	if err != nil {
+		log.WarnContext(ctx, "llamacpp: request failed",
+			"model", model, "status", status, "latency_ms", latency.Milliseconds(), "error", err)
 		return spec.AIResponse{}, err
 	}
 	var decoded openAIResponse
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return spec.AIResponse{}, fmt.Errorf("decode llamacpp response: %w", err)
 	}
-	return decoded.toAIResponse(model, string(l.Name())), nil
+	resp := decoded.toAIResponse(model, string(l.Name()))
+	log.DebugContext(ctx, "llamacpp: response received",
+		"model", resp.ModelUsed, "tokens", resp.TokenUsage,
+		"tool_calls", len(resp.ToolCalls),
+		"status", status, "latency_ms", latency.Milliseconds())
+	return resp, nil
 }
 
 // Capabilities implements Backend.

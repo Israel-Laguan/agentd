@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
+	"agentd/internal/api/correlation"
 	"agentd/internal/gateway/spec"
 )
 
@@ -65,13 +66,17 @@ func (a *Anthropic) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRe
 		}
 	}
 
-	slog.DebugContext(ctx, "anthropic: sending request",
+	log := correlation.Logger(ctx)
+	log.DebugContext(ctx, "anthropic: sending request",
 		"model", model, "message_count", len(messages),
-		"tools_count", len(req.Tools))
-	data, err := a.post(ctx, body)
+		"tools_count", len(req.Tools),
+		"timeout", a.cfg.Timeout)
+	start := time.Now()
+	data, status, err := a.post(ctx, body)
+	latency := time.Since(start)
 	if err != nil {
-		slog.WarnContext(ctx, "anthropic: request failed",
-			"model", model, "error", err)
+		log.WarnContext(ctx, "anthropic: request failed",
+			"model", model, "status", status, "latency_ms", latency.Milliseconds(), "error", err)
 		return spec.AIResponse{}, err
 	}
 	var decoded anthropicResponse
@@ -79,19 +84,20 @@ func (a *Anthropic) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRe
 		return spec.AIResponse{}, fmt.Errorf("decode anthropic response: %w", err)
 	}
 	resp := decoded.toAIResponse(model, string(a.Name()))
-	slog.DebugContext(ctx, "anthropic: response received",
+	log.DebugContext(ctx, "anthropic: response received",
 		"model", resp.ModelUsed, "tokens", resp.TokenUsage,
-		"tool_calls", len(resp.ToolCalls))
+		"tool_calls", len(resp.ToolCalls),
+		"status", status, "latency_ms", latency.Milliseconds())
 	return resp, nil
 }
 
-func (a *Anthropic) post(ctx context.Context, body anthropicRequest) ([]byte, error) {
+func (a *Anthropic) post(ctx context.Context, body anthropicRequest) ([]byte, int, error) {
 	url := strings.TrimRight(a.cfg.BaseURL, "/") + "/v1/messages"
-	data, _, err := postJSONWithHeaders(ctx, a.client, url, body, map[string]string{
+	data, status, err := postJSONWithHeaders(ctx, a.client, url, body, map[string]string{
 		"x-api-key":         a.cfg.APIKey,
 		"anthropic-version": anthropicAPIVersion,
 	})
-	return data, err
+	return data, status, err
 }
 
 func splitSystemMessages(messages []spec.PromptMessage) (string, []anthropicMessage) {

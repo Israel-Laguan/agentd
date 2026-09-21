@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
+
+	"agentd/internal/api/correlation"
 
 	agentcontext "agentd/internal/agent/context"
 	agenthooks "agentd/internal/agent/hooks"
@@ -33,6 +36,7 @@ func (e *Engine) processAgenticIteration(
 	checkpointer *wsession.SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
 	sessionRecoveryNeedsPlanInject *bool,
 ) (continueLoop bool, result agentruntime.LoopResult, report bool, rewindTo int, err error) {
+	log := correlation.Logger(ctx)
 	stop, guardErr := e.guardAgenticIteration(
 		ctx, task, project, profile, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
 		ctxBudgetGuard, cm, goalTracker, sessionMgr, turnID, turnIndex,
@@ -46,10 +50,15 @@ func (e *Engine) processAgenticIteration(
 		}
 		return false, agentruntime.LoopResult{}, false, rewindNone, guardErr
 	}
+	log.DebugContext(ctx, "agentic: iteration start",
+		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
+		"message_count", len(*messages), "tools_requested", len(tools),
+	)
 	recoveryGen := 0
 	if sessionRecoveryGen != nil {
 		recoveryGen = *sessionRecoveryGen
 	}
+	llmStart := time.Now()
 	resp, stop, err := e.generateAgenticTurn(ctx, task, profile, messages, tools, budgetGuard, ctxBudgetGuard, turnIndex, recoveryGen)
 	if stop != nil {
 		return false, *stop, true, rewindNone, nil
@@ -68,6 +77,12 @@ func (e *Engine) processAgenticIteration(
 	} else {
 		appendAssistantMessage(messages, resp)
 	}
+	log.DebugContext(ctx, "agentic: llm call end",
+		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
+		"provider", resp.ProviderUsed, "model", resp.ModelUsed,
+		"tokens", resp.TokenUsage, "tool_calls", len(resp.ToolCalls),
+		"latency_ms", time.Since(llmStart).Milliseconds(),
+	)
 	if len(resp.ToolCalls) == 0 {
 		return e.finishAgenticTurnNoTools(
 			ctx, task, profile, resp.Content, workPlan, goalTracker,
@@ -75,10 +90,19 @@ func (e *Engine) processAgenticIteration(
 			checkpointer, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject,
 		)
 	}
+	log.DebugContext(ctx, "agentic: tool dispatch start",
+		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
+		"tool_calls", len(resp.ToolCalls),
+	)
+	toolStart := time.Now()
 	cont, res, rep, finErr := e.continueAgenticAfterTools(
 		ctx, task, profile, resp, messages, toolToAdapter, toolExecutor,
 		taskHooks, taskCaps, cm, goalTracker, toolTracker,
 		iterationGuard, budgetGuard, turnID, turnIndex,
+	)
+	log.DebugContext(ctx, "agentic: tool dispatch end",
+		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
+		"continue", cont, "report", rep, "tool_elapsed_ms", time.Since(toolStart).Milliseconds(),
 	)
 	return cont, res, rep, rewindNone, finErr
 }

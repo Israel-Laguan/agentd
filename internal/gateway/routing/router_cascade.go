@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 
+	"agentd/internal/api/correlation"
 	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
@@ -34,7 +34,7 @@ func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq s
 		}
 		req.Tools = nil
 		req.JSONMode = true
-		slog.Warn("provider does not support tools, falling back to legacy mode", "provider", string(p.Name()))
+		correlation.Logger(ctx).WarnContext(ctx, "provider does not support tools, falling back to legacy mode", "provider", string(p.Name()))
 	}
 	if !req.SkipTruncation {
 		messages, err := r.applyTruncation(ctx, req.Messages, p.MaxInputChars())
@@ -131,18 +131,19 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 	candidates, matchedProvider, selectedHasToolSupport := r.selectCandidateProviders(req)
 	hasRequestedTools := len(req.Tools) > 0
 	var providerErrs []error
-	slog.DebugContext(ctx, "router cascade starting",
+	log := correlation.Logger(ctx)
+	log.DebugContext(ctx, "router cascade starting",
 		"provider", req.Provider, "model", req.Model, "role", string(req.Role),
 		"json_mode", req.JSONMode, "tools_requested", hasRequestedTools,
 		"candidates", len(candidates), "matched_provider", matchedProvider,
 		"selected_has_tool_support", selectedHasToolSupport,
 	)
 	for _, p := range candidates {
-		slog.DebugContext(ctx, "router trying provider",
+		log.DebugContext(ctx, "router trying provider",
 			"provider", string(p.Name()), "supports_tools", p.Capabilities().SupportsChatTools)
 		resp, ok, err := r.tryProvider(ctx, p, req, hasRequestedTools, selectedHasToolSupport)
 		if err != nil {
-			slog.DebugContext(ctx, "router provider error",
+			log.DebugContext(ctx, "router provider error",
 				"provider", string(p.Name()), "error", err.Error())
 			var te errTruncation
 			if errors.As(err, &te) {
@@ -152,14 +153,14 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 			continue
 		}
 		if ok {
-			slog.DebugContext(ctx, "router provider success",
+			log.DebugContext(ctx, "router provider success",
 				"provider", string(p.Name()), "model", resp.ModelUsed, "tokens", resp.TokenUsage)
 			r.recordBudget(req.TaskID, resp.TokenUsage)
 			return resp, nil
 		}
-		slog.DebugContext(ctx, "router provider skipped", "provider", string(p.Name()))
+		log.DebugContext(ctx, "router provider skipped", "provider", string(p.Name()))
 	}
-	slog.DebugContext(ctx, "router cascade exhausted",
+	log.DebugContext(ctx, "router cascade exhausted",
 		"provider", req.Provider, "errors", len(providerErrs))
 	return spec.AIResponse{}, decideTerminalError(req, matchedProvider, selectedHasToolSupport, providerErrs)
 }
