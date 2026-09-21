@@ -88,7 +88,6 @@ func startMCPServer(ctx context.Context, store models.KanbanStore, mcpCfg config
 	if transport == "stdio" || transport == "both" {
 		mcpServer := mcp.New(store)
 		go func() {
-			slog.Info("mcp server: starting stdio transport")
 			if err := mcpServer.Run(ctx); err != nil {
 				slog.Error("mcp server: stdio transport failed", "error", err)
 			}

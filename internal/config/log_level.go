@@ -29,10 +29,6 @@ func ParseLogLevel(level string) slog.Level {
 	}
 }
 
-func setLogLevelDefaults(v *viper.Viper) {
-	v.SetDefault("log_level", DefaultLogLevel)
-}
-
 func loadLogLevelConfig(v *viper.Viper) LogLevelConfig {
 	return LogLevelConfig{
 		Level: strings.ToLower(strings.TrimSpace(v.GetString("log_level"))),

@@ -74,20 +74,13 @@ func (r *Router) selectRoleRoutedCandidates(requestedProvider string) (candidate
 	return candidates, matchedProvider, selectedHasToolSupport
 }
 
-func skipExplicitProviderWithoutTools(requestedProvider string, req spec.AIRequest, hasRequestedTools bool, p providers.Backend) bool {
-	// When an explicit provider is requested with tools but doesn't support them,
-	// skip it so the after-loop error fires. Legacy fallback only applies to
-	// non-explicit provider cascading (including role-routed providers).
-	return requestedProvider != "" && !req.ProviderFromRole && hasRequestedTools && !p.Capabilities().SupportsChatTools
-}
-
 func (r *Router) selectDefaultCandidates(req spec.AIRequest, requestedProvider string, hasRequestedTools bool) (candidates []providers.Backend, matchedProvider bool, selectedHasToolSupport bool) {
 	for _, p := range r.providers {
 		if requestedProvider != "" && !strings.EqualFold(requestedProvider, string(p.Name())) {
 			continue
 		}
 		matchedProvider = true
-		if skipExplicitProviderWithoutTools(requestedProvider, req, hasRequestedTools, p) {
+		if requestedProvider != "" && !req.ProviderFromRole && hasRequestedTools && !p.Capabilities().SupportsChatTools {
 			continue
 		}
 		candidates = appendCandidate(candidates, p, &selectedHasToolSupport)

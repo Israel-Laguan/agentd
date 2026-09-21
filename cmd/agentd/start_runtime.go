@@ -21,7 +21,7 @@ func buildStartRuntime(ctx context.Context, cfg config.Config, store models.Kanb
 	ledger := queue.NewRollingTokenLedger(cfg.Queue.RollingTokenWindow, cfg.Queue.RollingTokenLimit)
 	hydrateRollingLedger(ctx, store, ledger)
 	worker := buildWorker(store, deps, cfg, ledger)
-	intake := buildIntake(store, deps, cfg)
+	intake := frontdesk.NewIntakeProcessor(store, deps.gateway, deps.emitter, cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), cfg.Gateway.Truncator.MaxInputChars)
 	daemon, err := buildDaemon(ctx, store, worker, intake, deps, cfg, startOpts, ledger)
 	if err != nil {
 		return nil, nil, err
@@ -51,16 +51,10 @@ func buildWorkerOptions(store models.KanbanStore, deps runtimeDeps, cfg config.C
 	return queue.WorkerOptions{Canceller: deps.canceller, Tuner: queue.NewParameterTuner(cfg.Healing), Retriever: r, HeartbeatInterval: cfg.Cron.Heartbeat, SandboxWallTimeout: cfg.Sandbox.WallTimeout, SandboxEnvAllowlist: cfg.Sandbox.EnvAllowlist, SandboxExtraEnv: cfg.Sandbox.ExtraEnv, SandboxScrubPatterns: cfg.Sandbox.ScrubPatterns, MaxToolIterations: cfg.Queue.MaxToolIterations, TokenBudget: cfg.Queue.TokenBudget, AgenticTruncatorMax: cfg.Queue.AgenticTruncatorMax, AgenticCharacterBudget: config.EffectiveAgenticCharacterBudget(cfg.Queue.AgenticCharacterBudget, cfg.Gateway.Truncator.MaxInputChars), AgenticContext: cfg.Queue.AgenticContext, InstructionsProjectFile: cfg.Queue.Instructions.ProjectFile, InstructionsUserPrefsPath: userPrefsPath, SkillsProjectDir: cfg.Queue.Skills.ProjectDir, SkillsGlobalDir: cfg.Queue.Skills.GlobalDir, SkillsThreshold: cfg.Queue.Skills.Threshold, SkillsTopK: cfg.Queue.Skills.TopK, LegacyHandoffTimeout: cfg.Queue.HITL.LegacyHandoffTimeout, ToolTimeouts: cfg.Queue.ToolTimeouts, ToolRetries: cfg.Queue.ToolRetries, ExternalTools: cfg.Agentic.ExternalTools, ToolCredentials: cfg.Agentic.ToolCredentials, DisableCredentialDetection: cfg.Agentic.DisableCredentialDetection, Audit: config.AuditConfig{Enabled: cfg.Agentic.Audit.Enabled, Path: config.ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path)}, ContextWarningThreshold: cfg.Agentic.ContextWarningThreshold, ToolFailureStreak: cfg.Agentic.ToolFailureStreak, TokenUsageHook: tokenHook, TokenStore: ts, FileContext: cfg.Agentic.FileContext, FileContextCachePath: config.ResolveFileContextCachePath(cfg.HomeDir, cfg.Agentic.FileContext.CachePath), Planning: cfg.Agentic.Planning, Tiered: cfg.Tiered, TopicGuard: cfg.Agentic.TopicGuard, ModelRouting: cfg.Agentic.ModelRouting, ProviderBreakers: deps.providerBreakers, HealingDisabled: !cfg.Healing.Enabled, MaxHealingTasks: cfg.Healing.MaxHealingTasks, Legacy: cfg.Queue.Legacy}
 }
 
-func buildIntake(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *frontdesk.IntakeProcessor {
-	return frontdesk.NewIntakeProcessor(store, deps.gateway, deps.emitter, cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), cfg.Gateway.Truncator.MaxInputChars)
-}
-
-func buildLibrarian(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *memory.Librarian {
-	return &memory.Librarian{Store: store, Gateway: deps.gateway, Breaker: deps.breaker, Sink: deps.emitter, Cfg: cfg.Librarian, HomeDir: cfg.HomeDir}
-}
-
-func buildDreamer(store models.KanbanStore, deps runtimeDeps, cfg config.Config) *memory.DreamAgent {
-	return &memory.DreamAgent{Store: store, Gateway: deps.gateway, Breaker: deps.breaker, Cfg: cfg.Librarian}
+func buildMemoryDeps(store models.KanbanStore, deps runtimeDeps, cfg config.Config) (*memory.Librarian, *memory.DreamAgent) {
+	librarian := &memory.Librarian{Store: store, Gateway: deps.gateway, Breaker: deps.breaker, Sink: deps.emitter, Cfg: cfg.Librarian, HomeDir: cfg.HomeDir}
+	dreamer := &memory.DreamAgent{Store: store, Gateway: deps.gateway, Breaker: deps.breaker, Cfg: cfg.Librarian}
+	return librarian, dreamer
 }
 
 func buildDaemon(ctx context.Context, store models.KanbanStore, worker *queue.Worker, intake *frontdesk.IntakeProcessor, deps runtimeDeps, cfg config.Config, opts *startOptions, ledger *queue.RollingTokenLedger) (*queue.Daemon, error) {
@@ -80,8 +74,9 @@ func buildDaemon(ctx context.Context, store models.KanbanStore, worker *queue.Wo
 			return nil, fmt.Errorf("scheduler init: %w", err)
 		}
 	}
+	librarian, dreamer := buildMemoryDeps(store, deps, cfg)
 	outage := cfg.Healing.OutageHandoffEnabled
-	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{OutageHandoffEnabled: &outage, MaxWorkers: opts.workers, TaskInterval: cfg.Cron.TaskDispatch, MaxTaskInterval: cfg.Queue.PollMaxInterval, TaskDeadline: cfg.Queue.TaskDeadline, IntakeInterval: cfg.Cron.Intake, HeartbeatInterval: cfg.Cron.Heartbeat, StaleAfter: cfg.Heartbeat.StaleAfter, HandoffAfter: cfg.Breaker.HandoffAfter, DiskWatchdogEvery: cfg.Cron.DiskWatchdog.Every, DiskWatchdogSchedule: cfg.Cron.DiskWatchdog.Schedule, HITLReconcileEvery: cfg.Cron.HITLReconcile.Every, HITLReconcileSchedule: cfg.Cron.HITLReconcile.Schedule, DiskFreeThreshold: cfg.Disk.FreeThresholdPercent, DiskCheckPath: cfg.HomeDir, Librarian: buildLibrarian(store, deps, cfg), Dreamer: buildDreamer(store, deps, cfg), CuratorEvery: cfg.Cron.MemoryCurator.Every, CuratorSchedule: cfg.Cron.MemoryCurator.Schedule, DreamEvery: cfg.Cron.Dream.Every, DreamSchedule: cfg.Cron.Dream.Schedule, Channel: channel, QueuedReconcileAfter: cfg.Queue.QueuedReconcileAfter, RateLimitedRequeueAfter: requeue, RollingTokenLedger: ledger, Scheduler: scheduler}), nil
+	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{OutageHandoffEnabled: &outage, MaxWorkers: opts.workers, TaskInterval: cfg.Cron.TaskDispatch, MaxTaskInterval: cfg.Queue.PollMaxInterval, TaskDeadline: cfg.Queue.TaskDeadline, IntakeInterval: cfg.Cron.Intake, HeartbeatInterval: cfg.Cron.Heartbeat, StaleAfter: cfg.Heartbeat.StaleAfter, HandoffAfter: cfg.Breaker.HandoffAfter, DiskWatchdogEvery: cfg.Cron.DiskWatchdog.Every, DiskWatchdogSchedule: cfg.Cron.DiskWatchdog.Schedule, HITLReconcileEvery: cfg.Cron.HITLReconcile.Every, HITLReconcileSchedule: cfg.Cron.HITLReconcile.Schedule, DiskFreeThreshold: cfg.Disk.FreeThresholdPercent, DiskCheckPath: cfg.HomeDir, Librarian: librarian, Dreamer: dreamer, CuratorEvery: cfg.Cron.MemoryCurator.Every, CuratorSchedule: cfg.Cron.MemoryCurator.Schedule, DreamEvery: cfg.Cron.Dream.Every, DreamSchedule: cfg.Cron.Dream.Schedule, Channel: channel, QueuedReconcileAfter: cfg.Queue.QueuedReconcileAfter, RateLimitedRequeueAfter: requeue, RollingTokenLedger: ledger, Scheduler: scheduler}), nil
 }
 
 func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Config, ledger *queue.RollingTokenLedger) (*http.Server, error) {

@@ -164,11 +164,14 @@ func TestStatus_ReadOnlyHomeNoAPIFlag(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(home, 0o755) })
 
+	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+	writeConfigTestFile(t, configPath, []byte("api:\n  address: 127.0.0.1:1\n"))
+
 	cmd := newRootCommand()
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"--home", home, "status"})
+	cmd.SetArgs([]string{"--home", home, "--config", configPath, "status"})
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatal("expected error when daemon not running, got nil")
