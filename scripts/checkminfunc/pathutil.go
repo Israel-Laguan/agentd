@@ -12,6 +12,14 @@ func validateBaselineWritePath(path string) error {
 	if path == "" {
 		return fmt.Errorf("baseline path is empty")
 	}
+	// Reject parent-traversal components before normalization: filepath.Abs
+	// cleans lexically, so "linkdir/../evil" would validate as inside the repo
+	// while the kernel resolves the symlink first and writes outside it.
+	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+		if part == ".." {
+			return fmt.Errorf("baseline path %q must not contain parent traversal", path)
+		}
+	}
 
 	root, err := os.Getwd()
 	if err != nil {
@@ -29,6 +37,13 @@ func validateBaselineWritePath(path string) error {
 	targetAbs, err := filepath.Abs(path)
 	if err != nil {
 		return err
+	}
+	if info, lstatErr := os.Lstat(targetAbs); lstatErr == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("baseline path %q must not be a symlink", path)
+		}
+	} else if !os.IsNotExist(lstatErr) {
+		return lstatErr
 	}
 	targetReal, err := filepath.EvalSymlinks(targetAbs)
 	if err != nil {
@@ -97,7 +112,7 @@ func fnmatch(pattern, name string) bool {
 		case '*':
 			re.WriteString("[^/]*")
 		case '?':
-			re.WriteByte('.')
+			re.WriteString("[^/]")
 		default:
 			if strings.ContainsRune(`\.+^$()[]{}|`, rune(pattern[i])) {
 				re.WriteByte('\\')

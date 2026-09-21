@@ -58,29 +58,7 @@ func TestLogger_IncludesCorrelationID(t *testing.T) {
 	assert.Contains(t, out, "test event")
 }
 
-func TestLogger_DoesNotEmitSecrets(t *testing.T) {
-	var buf bytes.Buffer
-	old := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(old) })
-
-	ctx := WithID(context.Background(), "req-secure-789")
-	log := Logger(ctx)
-	potentialSecrets := []string{
-		"sk-litellm-secret-123",
-		"sk-openai-secret-bearer",
-		"super-secret-key",
-	}
-	// agentd logs only sanitized metadata (model/endpoint/counts/status), never
-	// keys, authorization headers, or prompt content. Emit a realistic record.
-	log.DebugContext(ctx, "openai: sending request",
-		"model", "mock/agentd", "endpoint", "http://litellm:4000/v1/chat/completions",
-		"message_count", 3, "tools_count", 0, "status", 200)
-	out := buf.String()
-	for _, s := range potentialSecrets {
-		assert.NotContains(t, out, s, "secret value %q must not appear in log output", s)
-	}
-	assert.Contains(t, out, "correlation_id=req-secure-789")
-	assert.NotContains(t, out, "prompt", "no user prompt content should be logged")
-	assert.NotContains(t, out, "Authorization", "no authorization headers should be logged")
-}
+// Secret redaction for real request paths is covered by the provider tests
+// (e.g. TestOpenAI_GenerateLogsLifecycleAndRedactsSecrets, including its
+// failure-path case), which exercise the actual log statements instead of a
+// hand-built record.

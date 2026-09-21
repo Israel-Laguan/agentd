@@ -112,7 +112,7 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteMappedError(w, err)
 		return
 	}
-	toolCalls, finishReason := buildToolCalls(content, len(req.Tools) > 0)
+	toolCalls, finishReason := buildToolCalls(content, req.Tools, req.ToolChoice)
 	httpx.WriteJSON(w, http.StatusOK, completion(req.Model, string(content), toolCalls, finishReason))
 }
 
@@ -192,7 +192,7 @@ func (h ChatHandler) completeStreaming(
 	case err != nil:
 		writeFrame(chatChunkDelta{Content: fmt.Sprintf("error: %v", err)}, &finishStop)
 	default:
-		toolCalls, finish := buildToolCalls(content, len(req.Tools) > 0)
+		toolCalls, finish := buildToolCalls(content, req.Tools, req.ToolChoice)
 		f := finish
 		writeFrame(chatChunkDelta{Content: string(content), ToolCalls: toolCalls}, &f)
 	}

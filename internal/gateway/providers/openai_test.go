@@ -96,6 +96,43 @@ func TestOpenAI_GenerateLogsLifecycleAndRedactsSecrets(t *testing.T) {
 	}
 }
 
+func TestOpenAI_GenerateFailureLogsWithoutSecrets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"boom"}`))
+	}))
+	defer srv.Close()
+
+	secret := "sk-super-secret-api-key-xyz"
+	promptContent := "confidential user prompt: refactor the auth module"
+
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(old) })
+
+	o := NewOpenAI(spec.ProviderConfig{
+		BaseURL: srv.URL + "/v1",
+		Model:   "gpt-test",
+		APIKey:  secret,
+		Timeout: 30 * time.Second,
+	}, srv.Client())
+	if _, err := o.Generate(context.Background(), spec.AIRequest{
+		Messages: []spec.PromptMessage{{Role: "user", Content: promptContent}},
+	}); err == nil {
+		t.Fatal("Generate error = nil, want failure from 500 response")
+	}
+	logs := buf.String()
+	if !strings.Contains(logs, "openai: request failed") {
+		t.Errorf("failure lifecycle event missing; logs = %q", logs)
+	}
+	for _, forbidden := range []string{secret, "Bearer " + secret, promptContent, "confidential user prompt"} {
+		if strings.Contains(logs, forbidden) {
+			t.Errorf("failure logs leak %q; logs = %q", forbidden, logs)
+		}
+	}
+}
+
 func TestOpenAI_EmptyContentFallsBackToReasoningContent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeOpenAIJSON(t, w, map[string]any{

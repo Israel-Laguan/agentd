@@ -112,6 +112,7 @@ func (r *TurnLoopRunner) Run(ctx context.Context, req Request) (Result, error) {
 		if result, done, cont := handleRewind(req, rewind, outcome, turnIndex, turnID, state, log); done {
 			return result, nil
 		} else if cont {
+			turnIndex = outcome.RewindTo
 			continue
 		}
 		rewind.reset()

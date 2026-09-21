@@ -20,15 +20,15 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	cancelCtx, cleanup := e.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
-	correlation.Logger(ctx).DebugContext(ctx, "agentic: session start",
-		"task_id", task.ID, "project_id", project.ID, "agent_id", task.AgentID,
-		"provider", profile.Provider, "model", profile.Model,
-	)
-
 	// prepareAgenticRun builds messages/tools before routing; session start and
 	// pre-task elicitation run after the fallback check so legacy path is unaffected.
 	messages, tools, toolToAdapter, _, profile, taskToolExecutor, taskHooks, taskCaps :=
 		e.prepareAgenticRun(ctx, task, project, profile)
+
+	correlation.Logger(ctx).DebugContext(ctx, "agentic: session start",
+		"task_id", task.ID, "project_id", project.ID, "agent_id", task.AgentID,
+		"provider", profile.Provider, "model", profile.Model,
+	)
 	if result, ok, err := e.host.TryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); err != nil {
 		return agentruntime.LoopResult{}, false
 	} else if ok {
