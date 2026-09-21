@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"agentd/internal/gateway/spec"
@@ -47,15 +48,22 @@ func (o *Ollama) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	if req.JSONMode {
 		body.Format = "json"
 	}
+	slog.DebugContext(ctx, "ollama: sending request",
+		"model", model, "message_count", len(req.Messages))
 	data, _, err := postJSON(ctx, o.client, o.url("/api/chat"), body, "")
 	if err != nil {
+		slog.WarnContext(ctx, "ollama: request failed",
+			"model", model, "error", err)
 		return spec.AIResponse{}, err
 	}
 	var decoded ollamaResponse
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return spec.AIResponse{}, fmt.Errorf("decode ollama response: %w", err)
 	}
-	return decoded.toAIResponse(model, string(o.Name())), nil
+	resp := decoded.toAIResponse(model, string(o.Name()))
+	slog.DebugContext(ctx, "ollama: response received",
+		"model", resp.ModelUsed, "tokens", resp.TokenUsage)
+	return resp, nil
 }
 
 type ollamaRequest struct {

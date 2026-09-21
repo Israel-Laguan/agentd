@@ -3,6 +3,7 @@ package frontdesk
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"agentd/internal/gateway"
@@ -29,11 +30,16 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 		return err
 	}
 	if task.State != models.TaskStateInConsideration {
+		slog.DebugContext(ctx, "intake: skipping non-consideration task",
+			"task_id", ref.TaskID, "state", task.State)
 		return nil
 	}
+	slog.DebugContext(ctx, "intake: processing comment",
+		"task_id", ref.TaskID, "project_id", task.ProjectID)
 	ctx = gateway.WithHouseRules(ctx, models.LoadHouseRules(ctx, p.store))
 	intent, err := p.commentIntent(ctx, ref)
 	if err != nil {
+		slog.WarnContext(ctx, "intake: failed to build intent", "task_id", ref.TaskID, "error", err)
 		return err
 	}
 	var (
@@ -50,8 +56,11 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 		plan, planErr = p.gateway.GeneratePlan(ctx, intent)
 	}
 	if planErr != nil {
+		slog.WarnContext(ctx, "intake: plan generation failed", "task_id", ref.TaskID, "error", planErr)
 		return planErr
 	}
+	slog.DebugContext(ctx, "intake: plan generated",
+		"task_id", ref.TaskID, "task_count", len(plan.Tasks))
 	if _, err := p.store.AppendTasksToProject(ctx, task.ProjectID, task.ID, plan.Tasks); err != nil {
 		return err
 	}
@@ -61,6 +70,8 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 	if err := p.store.MarkCommentProcessed(ctx, task.ID, ref.CommentEventID); err != nil {
 		return err
 	}
+	slog.DebugContext(ctx, "intake: comment processed",
+		"task_id", ref.TaskID, "follow_up_tasks", len(plan.Tasks))
 	return p.emit(ctx, *task, len(plan.Tasks))
 }
 

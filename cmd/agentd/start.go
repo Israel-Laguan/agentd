@@ -19,6 +19,7 @@ import (
 	"agentd/internal/frontdesk"
 	"agentd/internal/memory"
 	"agentd/internal/kanban"
+	"agentd/internal/mcp"
 	"agentd/internal/models"
 	"agentd/internal/queue"
 	"agentd/internal/services"
@@ -73,6 +74,11 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	slog.Debug("HTTP server started")
 
+	// Start MCP server if enabled.
+	if cfg.MCP.Enabled {
+		startMCPServer(ctx, store, cfg.MCP)
+	}
+
 	apiErrCh := startAPIServer(ctx, listener, apiServer, stop)
 
 	slog.Debug("starting daemon")
@@ -80,6 +86,24 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 		return err
 	}
 	return drainAPIServerError(apiErrCh)
+}
+
+// startMCPServer launches the MCP board-export server for stdio transport.
+// HTTP transport is handled via buildAPIServer registering the handler on the mux.
+func startMCPServer(ctx context.Context, store models.KanbanStore, mcpCfg config.MCPConfig) {
+	transport := mcpCfg.Transport
+	if transport == "stdio" || transport == "both" {
+		mcpServer := mcp.New(store)
+		go func() {
+			slog.Info("mcp server: starting stdio transport")
+			if err := mcpServer.Run(ctx); err != nil {
+				slog.Error("mcp server: stdio transport failed", "error", err)
+			}
+		}()
+	}
+	if transport == "http" || transport == "both" {
+		slog.Info("mcp server: HTTP handler registered on /mcp")
+	}
 }
 
 func seedAndValidateStartup(ctx context.Context, store *kanban.Store, cfg config.Config, deps runtimeDeps, startOpts *startOptions) error {
@@ -278,6 +302,14 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 	if err != nil {
 		return nil, fmt.Errorf("gateway provider configs: %w", err)
 	}
+	var mcpHandler http.Handler
+	if cfg.MCP.Enabled {
+		mcpSrv := mcp.New(store)
+		transport := cfg.MCP.Transport
+		if transport == "http" || transport == "both" {
+			mcpHandler = mcpSrv.HTTPHandler()
+		}
+	}
 	return &http.Server{
 		Addr: cfg.API.Address,
 		Handler: api.NewHandler(api.ServerDeps{
@@ -286,7 +318,7 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 			Summarizer: summarizer, FileStash: fileStash,
 			Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars,
 			Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken,
-			ProviderConfigs: providerCfgs,
+			ProviderConfigs: providerCfgs, MCPHandler: mcpHandler,
 		}),
 	}, nil
 }

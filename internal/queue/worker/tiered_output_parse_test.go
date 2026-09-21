@@ -60,3 +60,49 @@ func TestParseContextPack_SkipsInvalidFirstCandidate(t *testing.T) {
 		t.Errorf("TaskID = %q, want %q", cp.TaskID, "t9")
 	}
 }
+
+func TestParseContextPackCandidates_ReturnsAllValidCandidates(t *testing.T) {
+	t.Parallel()
+	cp1 := `{"version":1,"task_id":"t1","summary":"first","paths":["a.go"]}`
+	cp2 := `{"version":1,"task_id":"t2","summary":"second","paths":["b.go"]}`
+	output := "```json\n" + cp1 + "\n```\n```json\n" + cp2 + "\n```"
+	candidates, err := parseContextPackCandidates(output)
+	if err != nil {
+		t.Fatalf("parseContextPackCandidates() error = %v", err)
+	}
+	if len(candidates) != 2 {
+		t.Fatalf("len(candidates) = %d, want 2", len(candidates))
+	}
+	if candidates[0].TaskID != "t1" {
+		t.Errorf("candidates[0].TaskID = %q, want %q", candidates[0].TaskID, "t1")
+	}
+	if candidates[1].TaskID != "t2" {
+		t.Errorf("candidates[1].TaskID = %q, want %q", candidates[1].TaskID, "t2")
+	}
+}
+
+func TestParseContextPackCandidates_SkipsInvalidJSON(t *testing.T) {
+	t.Parallel()
+	invalid := `{"version":999,"summary":"","paths":[]}`
+	valid := `{"version":1,"task_id":"t9","summary":"second","paths":["b.go"]}`
+	output := "```json\n" + invalid + "\n```\n```json\n" + valid + "\n```"
+	candidates, err := parseContextPackCandidates(output)
+	if err != nil {
+		t.Fatalf("parseContextPackCandidates() error = %v", err)
+	}
+	if len(candidates) != 1 {
+		t.Fatalf("len(candidates) = %d, want 1 (invalid candidate should be skipped)", len(candidates))
+	}
+	if candidates[0].TaskID != "t9" {
+		t.Errorf("candidates[0].TaskID = %q, want %q", candidates[0].TaskID, "t9")
+	}
+}
+
+func TestParseContextPackCandidates_NoValidCandidates(t *testing.T) {
+	t.Parallel()
+	output := "```json\n{\"version\":999,\"summary\":\"\",\"paths\":[]}\n```"
+	_, err := parseContextPackCandidates(output)
+	if err == nil {
+		t.Fatal("parseContextPackCandidates() should error when no valid candidate exists")
+	}
+}

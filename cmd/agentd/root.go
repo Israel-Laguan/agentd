@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"agentd/internal/config"
 )
 
 type rootOptions struct {
@@ -26,8 +28,8 @@ func newRootCommand() *cobra.Command {
 			if opts.verbose {
 				logLevel = slog.LevelDebug
 			}
-			opts := &slog.HandlerOptions{Level: logLevel}
-			logger := slog.New(slog.NewJSONHandler(os.Stderr, opts))
+			handlerOpts := &slog.HandlerOptions{Level: logLevel}
+			logger := slog.New(slog.NewJSONHandler(os.Stderr, handlerOpts))
 			slog.SetDefault(logger)
 		},
 	}
@@ -45,4 +47,16 @@ func newRootCommand() *cobra.Command {
 	rootCmd.AddCommand(newAskCommand(opts))
 
 	return rootCmd
+}
+
+// reconfigureSlog applies the config-level log_level, with -v always winning.
+// Call after config is loaded to pick up log_level from config.yaml.
+func reconfigureSlog(verbose bool, cfgLogLevel string) {
+	if verbose {
+		return // -v already set debug in PersistentPreRun
+	}
+	level := config.ParseLogLevel(cfgLogLevel)
+	handlerOpts := &slog.HandlerOptions{Level: level}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, handlerOpts))
+	slog.SetDefault(logger)
 }

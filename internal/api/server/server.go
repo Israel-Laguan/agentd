@@ -32,6 +32,7 @@ type ServerDeps struct {
 	Hub              *sse.Hub
 	Retriever        *memory.Retriever
 	ProviderConfigs  []spec.ProviderConfig
+	MCPHandler       http.Handler // optional: MCP board-export HTTP handler
 }
 
 // NewHandler builds the API mux.
@@ -87,6 +88,9 @@ func NewHandler(deps ServerDeps) http.Handler {
 	mux.HandleFunc("GET /{$}", handleLanding)
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /docs", handleDocs)
+	if deps.MCPHandler != nil {
+		mux.Handle("/mcp", deps.MCPHandler)
+	}
 	return corsMiddleware(mux)
 }
 

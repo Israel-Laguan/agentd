@@ -194,25 +194,44 @@ func (w *Worker) parseAndConfigurePack(ctx context.Context, task models.Task, pa
 		w.failTieredStep(ctx, *committed, "empty ContextPack result")
 		return nil, committed, fmt.Errorf("empty committed result")
 	}
-	pack, err := parseContextPack(payload)
+	candidates, err := parseContextPackCandidates(payload)
 	if err != nil {
 		slog.Error("tiered context: failed to parse ContextPack", "task_id", task.ID, "error", err)
 		w.Emit(ctx, task, "TIERED_CONTEXT_PARSE_ERROR", err.Error())
 		w.failTieredStep(ctx, *committed, "invalid ContextPack: "+err.Error())
 		return nil, committed, err
 	}
-	pack.TaskID = task.ID
-	pack.ParentTaskID = parentTask.ID
-	pack.Budget.PathCount = len(pack.Paths)
-	pack.Budget.CharCount = pack.CharCount()
 	packCfg := w.contextPackConfig()
-	if _, err := pack.EnforceBudget(packCfg); err != nil {
-		slog.Error("tiered context: budget enforcement failed", "task_id", task.ID, "error", err)
-		w.Emit(ctx, task, "TIERED_CONTEXT_BUDGET_ERROR", err.Error())
-		w.failTieredStep(ctx, *committed, "ContextPack budget exceeded: "+err.Error())
-		return nil, committed, err
+	// Try each structurally-valid candidate through the full configuration-dependent
+	// validation pipeline (budget enforcement). If an earlier candidate is rejected —
+	// e.g. its required content exceeds MaxChars — continue to the next candidate
+	// rather than failing the entire step, since a later candidate may fit within
+	// the configured budget.
+	var lastBudgetErr error
+	for i := range candidates {
+		pack := candidates[i]
+		pack.TaskID = task.ID
+		pack.ParentTaskID = parentTask.ID
+		pack.Budget.PathCount = len(pack.Paths)
+		pack.Budget.CharCount = pack.CharCount()
+		if _, berr := pack.EnforceBudget(packCfg); berr != nil {
+			slog.Warn("tiered context: candidate failed budget enforcement, trying next",
+				"task_id", task.ID, "candidate_index", i, "error", berr)
+			lastBudgetErr = berr
+			continue
+		}
+		slog.Debug("tiered context: selected ContextPack candidate",
+			"task_id", task.ID, "candidate_index", i)
+		return &pack, committed, nil
 	}
-	return pack, committed, nil
+	budgetErr := fmt.Errorf("all %d ContextPack candidates exceeded budget", len(candidates))
+	if lastBudgetErr != nil {
+		budgetErr = fmt.Errorf("%w: %v", budgetErr, lastBudgetErr)
+	}
+	slog.Error("tiered context: budget enforcement failed for all candidates", "task_id", task.ID, "error", budgetErr)
+	w.Emit(ctx, task, "TIERED_CONTEXT_BUDGET_ERROR", budgetErr.Error())
+	w.failTieredStep(ctx, *committed, "ContextPack budget exceeded: "+budgetErr.Error())
+	return nil, committed, budgetErr
 }
 
 // contextPackConfig returns the ContextPackConfig with tiered overrides applied.

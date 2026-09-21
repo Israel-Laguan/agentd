@@ -14,11 +14,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 
+	"agentd/internal/api/correlation"
 	"agentd/internal/api/httpx"
 	"agentd/internal/frontdesk"
 	"agentd/internal/gateway"
@@ -61,13 +63,19 @@ type chatFile struct {
 
 // Complete handles POST /v1/chat/completions.
 func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
+	corrID := uuid.NewString()
+	ctx := correlation.WithID(r.Context(), corrID)
+	slog.DebugContext(ctx, "chat intake: request received")
+
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
+		slog.WarnContext(ctx, "chat intake: failed to read request body", "error", err)
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "could not read request body")
 		return
 	}
 	var req chatRequest
 	if err := json.Unmarshal(rawBody, &req); err != nil {
+		slog.WarnContext(ctx, "chat intake: invalid JSON body", "error", err)
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}
@@ -77,8 +85,16 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.DebugContext(ctx, "chat intake: parsed request",
+		"message_count", len(req.Messages),
+		"stream", req.Stream,
+		"model", req.Model,
+		"has_tools", len(req.Tools) > 0,
+	)
+
 	intent, files, err := frontdesk.PrepareIntent(h.Planner.Stash, rawMessage, convertFiles(req.Files))
 	if err != nil {
+		slog.WarnContext(ctx, "chat intake: intent preparation failed", "error", err)
 		httpx.WriteMappedError(w, err)
 		return
 	}
@@ -88,26 +104,37 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		projectID = req.ApprovedScopes[0]
 	}
 	userID := r.Header.Get("X-Agentd-User")
-	intent = h.prependRecalledContext(r.Context(), intent, projectID, userID)
+	intent = h.prependRecalledContext(ctx, intent, projectID, userID)
+
+	slog.DebugContext(ctx, "chat intake: routing to planner",
+		"approved_scopes", len(req.ApprovedScopes),
+		"project_id", projectID,
+		"has_files", len(files) > 0,
+	)
 
 	if req.Stream {
-		h.completeStreaming(w, r, req, intent, files)
+		h.completeStreaming(w, r, req, intent, files, ctx)
 		return
 	}
 
-	content, err := h.Planner.PlanContent(r.Context(), req.ApprovedScopes, intent, files)
+	content, err := h.Planner.PlanContent(ctx, req.ApprovedScopes, intent, files)
 	if err != nil {
 		if errors.Is(err, frontdesk.ErrMultipleApprovedScopes) {
 			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "send one turn per scope using approved_scopes with exactly one entry")
 			return
 		}
 		if isAICoreTimeout(err) {
+			slog.WarnContext(ctx, "chat intake: LLM timeout", "error", err)
 			httpx.WriteJSON(w, http.StatusOK, completion(req.Model, systemTimeoutMessage, nil, finishReasonStop))
 			return
 		}
+		slog.WarnContext(ctx, "chat intake: planner failed", "error", err)
 		httpx.WriteMappedError(w, err)
 		return
 	}
+	slog.DebugContext(ctx, "chat intake: request completed",
+		"content_length", len(content),
+	)
 	toolCalls, finishReason := buildToolCalls(content, len(req.Tools) > 0)
 	httpx.WriteJSON(w, http.StatusOK, completion(req.Model, string(content), toolCalls, finishReason))
 }
@@ -121,6 +148,7 @@ func (h ChatHandler) completeStreaming(
 	req chatRequest,
 	intent string,
 	files []frontdesk.FileRef,
+	ctx context.Context,
 ) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {

@@ -8,6 +8,10 @@ db_path: ~/.agentd/global.db
 projects_dir: ~/.agentd/projects
 uploads_dir: ~/.agentd/uploads
 
+# Logging level: debug, info (default), warn, error.
+# -v flag always overrides log_level to debug. Restart required after change.
+log_level: info
+
 api:
   address: "127.0.0.1:8765"
   materialize_token: "" # see docs/config-reference.md#api
@@ -293,6 +297,20 @@ tiered:
   # Step kind overrides take precedence over the mapped role default
   # (see tasks/sprints/S04-tiered-pipeline/tasks/T-015-tiered-m3-splitter.md).
   # No tiered.models.<kind> configuration is supported by TieredConfig or loadTieredConfig.
+
+# MCP board-export server — exposes the kanban board over Model Context Protocol.
+# External agents (Claude Code, Cline) act as workers behind agentd's control plane.
+# agentd owns the board; writes go through the same store approval boundary as the REST API.
+mcp:
+  enabled: false
+  transport: stdio     # "stdio" (Claude Code/Cline), "http" (Streamable HTTP at /mcp), or "both"
+  http_addr: "127.0.0.1:0"  # loopback, random port (only used when transport includes "http")
+
+# MCP servers configured as external tool providers (client-side, not board export).
+# mcp_servers:
+#   - name: my-mcp-server
+#     type: mcp
+#     server_url: "http://localhost:9000"
 
 plugins:
   enabled: false

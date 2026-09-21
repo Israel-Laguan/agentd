@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"agentd/internal/gateway"
@@ -58,16 +59,23 @@ func (p *Planner) PlanContent(
 ) ([]byte, error) {
 	planCtx := p.ctxWithHouseRules(ctx)
 	if len(approvedScopes) == 1 {
+		slog.DebugContext(ctx, "planner: planning approved scope",
+			"scope", approvedScopes[0], "has_files", len(files) > 0)
 		return p.planApprovedScope(planCtx, intent, approvedScopes[0], files)
 	}
 	if len(approvedScopes) > 1 {
 		return nil, ErrMultipleApprovedScopes
 	}
 
+	slog.DebugContext(ctx, "planner: classifying intent")
 	classification, err := p.Gateway.ClassifyIntent(ctx, intent)
 	if err != nil {
+		slog.WarnContext(ctx, "planner: intent classification failed", "error", err)
 		return nil, err
 	}
+
+	slog.DebugContext(ctx, "planner: intent classified",
+		"intent", classification.Intent, "reason", classification.Reason)
 
 	switch classification.Intent {
 	case "status_check":

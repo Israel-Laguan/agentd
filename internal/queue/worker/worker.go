@@ -130,14 +130,20 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 // tiered dispatch, and review finalization. Model routing runs once per path.
 func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
+	slog.DebugContext(ctx, "worker: processing task",
+		"task_id", task.ID, "agent_id", task.AgentID, "state", task.State)
 	project, profile, err := w.loadContext(ctx, task)
 	if err != nil {
+		slog.ErrorContext(ctx, "worker: failed to load context",
+			"task_id", task.ID, "error", err)
 		w.FailHard(ctx, task, err)
 		return
 	}
 	w.warnIfWorkspaceEmpty(ctx, task, project)
 	running, err := w.store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, os.Getpid())
 	if err != nil {
+		slog.DebugContext(ctx, "worker: failed to mark running (concurrent claim?)",
+			"task_id", task.ID, "error", err)
 		return
 	}
 	task = *running
@@ -153,6 +159,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		}
 	}
 	if planning.IsPhasePlanningTask(task.Title) {
+		slog.DebugContext(ctx, "worker: handling phase planning", "task_id", task.ID)
 		w.handlePhasePlanning(ctx, task, *project)
 		return
 	}
@@ -168,11 +175,13 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		return
 	}
 	if profile.AgenticMode {
+		slog.DebugContext(ctx, "worker: entering agentic loop", "task_id", task.ID)
 		if result, ok := w.processAgentic(ctx, task, *project, *profile); ok {
 			w.handleLoopResult(ctx, task, result)
 		}
 		return
 	}
+	slog.DebugContext(ctx, "worker: running legacy task", "task_id", task.ID)
 	w.RunLegacyTask(ctx, task, *project, *profile, false)
 }
 

@@ -62,15 +62,25 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 			body.Tools[i] = openAITool{Type: "function", Function: t}
 		}
 	}
+	slog.DebugContext(ctx, "openai: sending request",
+		"model", model, "endpoint", o.url("/chat/completions"),
+		"message_count", len(req.Messages), "tools_count", len(req.Tools),
+		"json_mode", req.JSONMode, "max_tokens", req.MaxTokens)
 	data, _, err := postJSON(ctx, o.client, o.url("/chat/completions"), body, o.cfg.APIKey)
 	if err != nil {
+		slog.WarnContext(ctx, "openai: request failed",
+			"model", model, "error", err)
 		return spec.AIResponse{}, err
 	}
 	var decoded openAIResponse
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return spec.AIResponse{}, fmt.Errorf("decode openai response: %w", err)
 	}
-	return decoded.toAIResponse(model, string(o.Name())), nil
+	resp := decoded.toAIResponse(model, string(o.Name()))
+	slog.DebugContext(ctx, "openai: response received",
+		"model", resp.ModelUsed, "tokens", resp.TokenUsage,
+		"tool_calls", len(resp.ToolCalls))
+	return resp, nil
 }
 
 // buildMetadata collects task/agent/role identifiers into the metadata map

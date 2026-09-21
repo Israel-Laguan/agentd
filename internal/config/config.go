@@ -48,6 +48,8 @@ type Config struct {
 	Agentic     AgenticConfig
 	Tiered      TieredConfig
 	Channel     ChannelConfig
+	LogLevel    LogLevelConfig
+	MCP         MCPConfig
 	Cron        CronSchedule
 }
 
@@ -157,6 +159,8 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	setAgenticDefaults(v)
 	setTieredDefaults(v)
 	setChannelDefaults(v)
+	setLogLevelDefaults(v)
+	setMCPDefaults(v)
 	return v
 }
 
@@ -202,6 +206,8 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	cfg.Agentic.PromptTemplatesPath = ResolvePromptTemplatesPath(cfg.HomeDir, cfg.Agentic.PromptTemplatesPath)
 	cfg.Tiered = loadTieredConfig(v)
 	cfg.Channel = loadChannelConfig(v)
+	cfg.LogLevel = loadLogLevelConfig(v)
+	cfg.MCP = loadMCPConfig(v)
 	var cron CronSchedule
 	cron, err = LoadCron(cfg.CronPath)
 	if err != nil {

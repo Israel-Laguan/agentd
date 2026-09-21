@@ -122,6 +122,9 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 		return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("load configuration: %w", err)
 	}
 
+	// Reconfigure slog based on config log_level (-v always wins).
+	reconfigureSlog(opts.verbose, cfg.LogLevel.Level)
+
 	slog.Debug("ensuring runtime directories", "home", cfg.HomeDir)
 	if err := config.EnsureDirs(cfg); err != nil {
 		return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("ensure runtime directories: %w", err)

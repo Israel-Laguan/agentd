@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -64,15 +65,24 @@ func (a *Anthropic) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRe
 		}
 	}
 
+	slog.DebugContext(ctx, "anthropic: sending request",
+		"model", model, "message_count", len(messages),
+		"tools_count", len(req.Tools))
 	data, err := a.post(ctx, body)
 	if err != nil {
+		slog.WarnContext(ctx, "anthropic: request failed",
+			"model", model, "error", err)
 		return spec.AIResponse{}, err
 	}
 	var decoded anthropicResponse
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return spec.AIResponse{}, fmt.Errorf("decode anthropic response: %w", err)
 	}
-	return decoded.toAIResponse(model, string(a.Name())), nil
+	resp := decoded.toAIResponse(model, string(a.Name()))
+	slog.DebugContext(ctx, "anthropic: response received",
+		"model", resp.ModelUsed, "tokens", resp.TokenUsage,
+		"tool_calls", len(resp.ToolCalls))
+	return resp, nil
 }
 
 func (a *Anthropic) post(ctx context.Context, body anthropicRequest) ([]byte, error) {

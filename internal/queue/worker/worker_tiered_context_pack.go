@@ -126,15 +126,15 @@ func (w *Worker) spawnContextPackChain(ctx context.Context, parentTask models.Ta
 	return regatherPair{contextID: created[0].ID, decisionID: created[1].ID}, nil
 }
 
-// parseContextPack attempts to extract a ContextPack from the LLM output.
-// The output may contain JSON embedded in markdown code fences or plain text.
-// Each fenced/plain candidate is decoded independently and must pass a
-// structural pre-check (schema version, summary, paths) before it is
-// accepted, so an earlier decodable-but-invalid payload cannot shadow a later
-// valid one. The caller (parseAndConfigurePack) then stamps the authoritative
-// task ID, normalizes budget counters, enforces the budget, and runs the full
-// ContextPack.Validate before the pack is written.
-func parseContextPack(output string) (*ContextPack, error) {
+// parseContextPackCandidates returns all structurally-valid ContextPack
+// candidates decoded from the LLM output, preserving document order. Each
+// candidate passes the structural pre-check (schema version, summary, paths)
+// but has not yet been through configuration-dependent validation (budget
+// enforcement / full Validate), which the caller (parseAndConfigurePack)
+// performs so that a candidate rejected by MaxChars does not shadow a later
+// valid one.
+func parseContextPackCandidates(output string) ([]ContextPack, error) {
+	var candidates []ContextPack
 	for _, candidate := range extractJSONCandidates(output) {
 		var cp ContextPack
 		if err := json.Unmarshal([]byte(candidate), &cp); err != nil {
@@ -143,9 +143,26 @@ func parseContextPack(output string) (*ContextPack, error) {
 		if !validContextPackCandidate(&cp) {
 			continue
 		}
-		return &cp, nil
+		candidates = append(candidates, cp)
 	}
-	return nil, fmt.Errorf("no valid ContextPack JSON found in output")
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no valid ContextPack JSON found in output")
+	}
+	return candidates, nil
+}
+
+// parseContextPack attempts to extract a ContextPack from the LLM output.
+// The output may contain JSON embedded in markdown code fences or plain text.
+// It returns the first structurally-valid candidate; callers that need to
+// apply configuration-dependent filtering (budget enforcement) should use
+// parseContextPackCandidates instead so an earlier budget-rejected candidate
+// cannot shadow a later valid one.
+func parseContextPack(output string) (*ContextPack, error) {
+	candidates, err := parseContextPackCandidates(output)
+	if err != nil {
+		return nil, err
+	}
+	return &candidates[0], nil
 }
 
 // validContextPackCandidate reports whether cp carries the required ContextPack

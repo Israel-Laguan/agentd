@@ -1,6 +1,9 @@
 package worker
 
 import (
+	"agentd/internal/config"
+	"agentd/internal/models"
+	"agentd/internal/testutil"
 	"context"
 	"encoding/json"
 	"os"
@@ -8,9 +11,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"agentd/internal/models"
-	"agentd/internal/testutil"
 )
 
 func tieredContextPack(parentID string) *ContextPack {
@@ -247,4 +247,111 @@ type conflictingResultStore struct {
 
 func (s *conflictingResultStore) UpdateTaskResult(ctx context.Context, id string, expected time.Time, result models.TaskResult) (*models.Task, error) {
 	return nil, models.ErrStateConflict
+}
+
+func TestParseAndConfigurePack_SkipsBudgetRejectedCandidate(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	sink := &mockEventSink{}
+	// Set a tight MaxChars so candidate 1's required content exceeds the
+	// budget while candidate 2 fits. MaxPaths defaults to 40.
+	w := &Worker{
+		store:     store,
+		sink:      sink,
+		tieredCfg: config.TieredConfig{ContextPack: config.TieredContextPackConfig{MaxChars: 50}},
+	}
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "shadow-budget",
+		Tasks:       []models.DraftTask{{Title: "ctx", Description: "gather"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	running, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+
+	// Candidate 1: structurally valid but summary alone exceeds MaxChars (50).
+	// Required content = Summary (60 chars) > 50 → EnforceBudget fails.
+	// Candidate 2: structurally valid and fits within MaxChars (50).
+	// Required content = Summary (2 chars) ≤ 50 → EnforceBudget succeeds.
+	cp1JSON := `{"version":1,"task_id":"t1","summary":"` + strings.Repeat("x", 60) + `","paths":["a.go"]}`
+	cp2JSON := `{"version":1,"task_id":"t2","summary":"ok","paths":["b.go"]}`
+	output := "```json\n" + cp1JSON + "\n```\n```json\n" + cp2JSON + "\n```"
+
+	if _, err := store.UpdateTaskResult(ctx, running.ID, running.UpdatedAt,
+		models.TaskResult{Success: true, Payload: "exit=0 duration=1s\n" + output}); err != nil {
+		t.Fatalf("commit result: %v", err)
+	}
+
+	pack, committed, err := w.parseAndConfigurePack(ctx, *running,
+		models.Task{BaseEntity: models.BaseEntity{ID: "parent-shadow"}})
+	if err != nil {
+		t.Fatalf("parseAndConfigurePack should select candidate 2, got error: %v", err)
+	}
+	if committed == nil {
+		t.Fatal("committed task should not be nil")
+	}
+	// Candidate 2 must be selected, not candidate 1.
+	if pack.Summary != "ok" {
+		t.Fatalf("pack.Summary = %q, want %q (candidate 2 should be selected, not candidate 1)",
+			pack.Summary, "ok")
+	}
+	if len(pack.Paths) == 0 || pack.Paths[0] != "b.go" {
+		t.Fatalf("pack.Paths = %v, want [b.go]", pack.Paths)
+	}
+}
+
+func TestParseAndConfigurePack_FailsWhenAllCandidatesExceedBudget(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	sink := &mockEventSink{}
+	w := &Worker{
+		store:     store,
+		sink:      sink,
+		tieredCfg: config.TieredConfig{ContextPack: config.TieredContextPackConfig{MaxChars: 50}},
+	}
+
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "all-over-budget",
+		Tasks:       []models.DraftTask{{Title: "ctx", Description: "gather"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize plan: %v", err)
+	}
+	running, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+
+	// Both candidates exceed MaxChars (50) in required content.
+	cp1JSON := `{"version":1,"task_id":"t1","summary":"` + strings.Repeat("x", 60) + `","paths":["a.go"]}`
+	cp2JSON := `{"version":1,"task_id":"t2","summary":"` + strings.Repeat("y", 70) + `","paths":["b.go"]}`
+	output := "```json\n" + cp1JSON + "\n```\n```json\n" + cp2JSON + "\n```"
+
+	if _, err := store.UpdateTaskResult(ctx, running.ID, running.UpdatedAt,
+		models.TaskResult{Success: true, Payload: "exit=0 duration=1s\n" + output}); err != nil {
+		t.Fatalf("commit result: %v", err)
+	}
+
+	pack, _, err := w.parseAndConfigurePack(ctx, *running,
+		models.Task{BaseEntity: models.BaseEntity{ID: "parent-over"}})
+	if err == nil {
+		t.Fatal("parseAndConfigurePack should fail when all candidates exceed budget")
+	}
+	if pack != nil {
+		t.Fatalf("pack should be nil on failure, got: %+v", pack)
+	}
+	// Verify the step was marked as FAILED.
+	got, err := store.GetTask(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State != models.TaskStateFailed {
+		t.Fatalf("state = %s, want FAILED when all candidates exceed budget", got.State)
+	}
 }
