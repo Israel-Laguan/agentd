@@ -54,7 +54,14 @@ export function useDashboard(
       if (boardRes.status !== "fulfilled" || workforceRes.status !== "fulfilled") {
         setBoardError(true);
         setSystemStatus(statusRes.status === "fulfilled" ? statusRes.value : null);
-        throw new Error("dashboard refresh failed");
+        const boardErr = boardRes.status === "rejected" ? boardRes.reason : null;
+        const workforceErr = workforceRes.status === "rejected" ? workforceRes.reason : null;
+        const errMsg = boardErr
+          ? `Failed to load board: ${boardErr}`
+          : workforceErr
+            ? `Failed to load workforce: ${workforceErr}`
+            : "dashboard refresh failed";
+        throw new Error(errMsg);
       }
       return applyDashboardSnapshot(
         boardRes.value,

@@ -1,0 +1,14 @@
+node_modules
+*.md
+docs/
+tasks/
+deploy/
+.git
+.gitignore
+*.db
+*.log
+.env
+.env.*
+coverage
+*.test.go
+*_test.go
