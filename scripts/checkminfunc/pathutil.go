@@ -117,6 +117,17 @@ func isInsideRepo(rootReal, targetReal string) bool {
 
 func realExistingAncestor(path string) (string, error) {
 	for {
+		// Lstat each level without following the final component so a
+		// symlink ancestor (including a dangling one, which Stat would
+		// report as not-exist) is rejected instead of skipped over.
+		if info, lstatErr := os.Lstat(path); lstatErr == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return "", fmt.Errorf("baseline path %q must not traverse a symlink", path)
+			}
+		} else if !os.IsNotExist(lstatErr) {
+			return "", lstatErr
+		}
+
 		if _, err := os.Stat(path); err == nil {
 			return filepath.EvalSymlinks(path)
 		} else if !os.IsNotExist(err) {

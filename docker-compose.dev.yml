@@ -1,0 +1,86 @@
+version: "3.8"
+
+# Local development stack for agentd + web UI testing.
+#
+# Services:
+#   mockllm - fake OpenAI-compatible LLM (port 8000)
+#   litellm - proxy that routes to mockllm (port 4000)
+#   agentd  - daemon (port 8765)
+#   web     - Next.js frontend (port 3000)
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build
+#   # Open http://localhost:3000
+#
+# To stop:
+#   docker compose -f docker-compose.dev.yml down
+#
+# To rebuild after code changes:
+#   docker compose -f docker-compose.dev.yml build --no-cache
+
+services:
+  mockllm:
+    build:
+      context: .
+      dockerfile: deploy/docker-plan-execute/mockllm/Dockerfile
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  litellm:
+    image: litellm/litellm:1.100.0
+    command: ["--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./deploy/docker-plan-execute/litellm:/app:ro
+    depends_on:
+      mockllm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness').status==200 else 1)"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  agentd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8765:8765"
+    environment:
+      LITELLM_API_KEY: "sk-demo-litellm"
+      AGENTD_API_ADDRESS: "0.0.0.0:8765"
+    volumes:
+      - agentd-data:/home/agentd/.agentd
+    command: >
+      sh -c "agentd init &&
+             exec agentd start --skip-llm-warmup -v"
+    depends_on:
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8765/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_USE_MOCK: "false"
+      NEXT_PUBLIC_API_URL: "http://host.docker.internal:8765"
+    depends_on:
+      - agentd
+
+volumes:
+  agentd-data:

@@ -66,7 +66,7 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	ctx := correlation.WithID(r.Context(), corrID)
 	log := correlation.Logger(ctx)
 	log.DebugContext(ctx, "chat intake: request received")
-	req, rawMessage, ok := parseChatRequest(w, r, ctx)
+	req, rawMessage, ok := parseChatRequest(w, r, ctx, log)
 	if !ok {
 		log.DebugContext(ctx, "chat intake: request rejected", "error", "invalid_request")
 		return
@@ -116,16 +116,16 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, completion(req.Model, string(content), toolCalls, finishReason))
 }
 
-func parseChatRequest(w http.ResponseWriter, r *http.Request, ctx context.Context) (chatRequest, string, bool) {
+func parseChatRequest(w http.ResponseWriter, r *http.Request, ctx context.Context, log *slog.Logger) (chatRequest, string, bool) {
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.WarnContext(ctx, "chat intake: failed to read request body", "error", err)
+		log.WarnContext(ctx, "chat intake: failed to read request body", "error", err)
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "could not read request body")
 		return chatRequest{}, "", false
 	}
 	var req chatRequest
 	if err := json.Unmarshal(rawBody, &req); err != nil {
-		slog.WarnContext(ctx, "chat intake: invalid JSON body", "error", err)
+		log.WarnContext(ctx, "chat intake: invalid JSON body", "error", err)
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return chatRequest{}, "", false
 	}
