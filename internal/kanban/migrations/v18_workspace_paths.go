@@ -15,15 +15,19 @@ type projectPath struct {
 	updated string
 }
 
-func migrateToV18(ctx context.Context, db *sql.DB, projectsDir string) error {
-	return migrateWorkspacePaths(ctx, db, projectsDir, true, true)
+// v18RunMode selects what a run over the projects table does: repair
+// malformed workspace paths and/or advance the stored schema version.
+type v18RunMode struct {
+	repair     bool
+	setVersion bool
 }
 
-func validateV18ProjectPaths(ctx context.Context, db *sql.DB, projectsDir string) error {
-	return migrateWorkspacePaths(ctx, db, projectsDir, false, false)
-}
+var (
+	v18MigrateMode  = v18RunMode{repair: true, setVersion: true}
+	v18ValidateMode = v18RunMode{repair: false, setVersion: false}
+)
 
-func migrateWorkspacePaths(ctx context.Context, db *sql.DB, projectsDir string, repair, setVersion bool) error {
+func migrateWorkspacePaths(ctx context.Context, db *sql.DB, projectsDir string, mode v18RunMode) error {
 	root, err := workspaceRoot(projectsDir)
 	if err != nil {
 		return err
@@ -39,7 +43,7 @@ func migrateWorkspacePaths(ctx context.Context, db *sql.DB, projectsDir string, 
 		return fmt.Errorf("migrate workspace paths: inspect projects table: %w", err)
 	}
 	if projectsTable == 0 {
-		if setVersion {
+		if mode.setVersion {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO settings (key, value, updated_at) VALUES (?, '18', datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, schemaVersionKey); err != nil {
 				return fmt.Errorf("set schema version: %w", err)
 			}
@@ -47,14 +51,14 @@ func migrateWorkspacePaths(ctx context.Context, db *sql.DB, projectsDir string, 
 		return tx.Commit()
 	}
 
-	updated, err := collectProjectPaths(ctx, tx, root, repair)
+	updated, err := collectProjectPaths(ctx, tx, root, mode.repair)
 	if err != nil {
 		return err
 	}
 	if err := updateProjectPaths(ctx, tx, updated); err != nil {
 		return err
 	}
-	if setVersion {
+	if mode.setVersion {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO settings (key, value, updated_at)
 			VALUES (?, '18', datetime('now'))

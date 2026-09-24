@@ -17,7 +17,7 @@ import (
 // DB layer. This test is the S04 retro action that stops that drift recurring:
 // adding a state to models.AllTaskStatesSlice() without a matching migration fails here.
 func TestTaskStateCheckConstraintParity(t *testing.T) {
-	db, err := Open("file:task-state-parity?mode=memory&cache=shared")
+	db, err := Open("file:task-state-parity?mode=memory&cache=shared", t.TempDir())
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -55,7 +55,7 @@ func TestTaskStateCheckConstraintParity(t *testing.T) {
 // TestTaskStateCheckRejectsUnknownState is the other half of the parity
 // guarantee: the CHECK must not be broader than the Go enum either.
 func TestTaskStateCheckRejectsUnknownState(t *testing.T) {
-	db, err := Open("file:task-state-parity-unknown?mode=memory&cache=shared")
+	db, err := Open("file:task-state-parity-unknown?mode=memory&cache=shared", t.TempDir())
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}

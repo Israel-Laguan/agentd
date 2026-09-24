@@ -10,7 +10,7 @@ import (
 )
 
 func TestOpenBootstrapsCurrentSchemaVersion(t *testing.T) {
-	db, err := Open("file:migrate-current-version?mode=memory&cache=shared")
+	db, err := Open("file:migrate-current-version?mode=memory&cache=shared", t.TempDir())
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -32,7 +32,7 @@ func TestOpenBootstrapsCurrentSchemaVersion(t *testing.T) {
 }
 
 func TestSchemaAllowsDependsOnTaskRelations(t *testing.T) {
-	db, err := Open("file:migrate-depends-on?mode=memory&cache=shared")
+	db, err := Open("file:migrate-depends-on?mode=memory&cache=shared", t.TempDir())
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}

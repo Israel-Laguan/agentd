@@ -21,7 +21,7 @@ func TestMigrationCreatesScheduledTasksTable(t *testing.T) {
 		t.Fatalf("create v11 schema: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
@@ -67,7 +67,7 @@ func TestMigrationRepairsMissingRunAfterIndex(t *testing.T) {
 		t.Fatalf("precreate scheduled_tasks: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 

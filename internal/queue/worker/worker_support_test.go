@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,8 +18,12 @@ import (
 
 func TestValidateProjectWorkspaceRejectsOutsideRoot(t *testing.T) {
 	root := t.TempDir()
+	outside := filepath.Join(root, "..", "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	w := &Worker{projectsDir: root}
-	err := w.validateProjectWorkspace(models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: filepath.Join(root, "..", "outside")})
+	err := w.validateProjectWorkspace(models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: outside})
 	if !errors.Is(err, models.ErrSandboxViolation) {
 		t.Fatalf("validateProjectWorkspace error = %v, want sandbox violation", err)
 	}

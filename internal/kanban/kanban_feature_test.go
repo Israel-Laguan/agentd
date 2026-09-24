@@ -3,6 +3,7 @@ package kanban
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -46,11 +47,12 @@ func initializeKanbanScenario(sc *godog.ScenarioContext) {
 
 	sc.Before(func(ctx context.Context, scenario *godog.Scenario) (context.Context, error) {
 		dbName := strings.NewReplacer(" ", "_", "/", "_").Replace(scenario.Name)
-		db, err := Open("file:godog-" + dbName + "?mode=memory&cache=shared")
+		projectsDir := os.TempDir()
+		db, err := Open("file:godog-"+dbName+"?mode=memory&cache=shared", projectsDir)
 		if err != nil {
 			return ctx, fmt.Errorf("open test store: %w", err)
 		}
-		state.store = NewStore(db)
+		state.store = NewStore(db, projectsDir)
 		state.project = nil
 		state.plan = models.DraftPlan{}
 		state.tasks = make(map[string]models.Task)

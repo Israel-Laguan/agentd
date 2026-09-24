@@ -55,8 +55,15 @@ class MockLLMHandler(BaseHTTPRequestHandler):
         # Check if tools are requested
         tools = request.get("tools", [])
         messages = request.get("messages", [])
+        tool_names = {
+            tool.get("function", {}).get("name")
+            for tool in tools
+            if isinstance(tool, dict)
+        }
+        last_message = messages[-1] if messages and isinstance(messages[-1], dict) else {}
+        last_role = last_message.get("role")
 
-        if tools:
+        if "create_task" in tool_names and last_role == "user":
             # Simulate a tool call response
             response = {
                 "id": "chatcmpl-mock",
@@ -94,7 +101,7 @@ class MockLLMHandler(BaseHTTPRequestHandler):
             }
         else:
             # Simple text response
-            last_msg = messages[-1]["content"] if messages else ""
+            last_msg = last_message.get("content") or ""
             response = {
                 "id": "chatcmpl-mock",
                 "object": "chat.completion",

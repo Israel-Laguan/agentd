@@ -6,4 +6,7 @@ COPY package*.json ./
 RUN npm install --production --legacy-peer-deps
 
 EXPOSE 3000
+USER node
+
+EXPOSE 3000
 CMD ["npm", "start"]

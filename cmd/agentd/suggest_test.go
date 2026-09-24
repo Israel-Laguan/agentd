@@ -75,6 +75,9 @@ func seedSuggestTask(t *testing.T, openAIURL string) (string, string) {
 	if err != nil || project == nil {
 		t.Fatalf("MaterializePlan() project=%v error=%v", project, err)
 	}
+	if err := os.MkdirAll(project.WorkspacePath, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
 	return home, tasks[0].ID
 }
 

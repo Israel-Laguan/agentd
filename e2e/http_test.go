@@ -178,7 +178,7 @@ func TestNotFound(t *testing.T) {
 // migrations or default-data seeding break, these assertions will catch it.
 func TestStartup_FreshDatabaseHealthCheck(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "global.db")
-	store, err := kanban.OpenStore(dbPath)
+	store, err := kanban.OpenStore(dbPath, filepath.Join(filepath.Dir(dbPath), "projects"))
 	if err != nil {
 		t.Fatalf("kanban.OpenStore: %v", err)
 	}

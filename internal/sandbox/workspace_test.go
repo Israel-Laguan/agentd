@@ -54,6 +54,24 @@ func TestJailPathRejectsEscape(t *testing.T) {
 	}
 }
 
+func TestJailPathRejectsSymlinkEscape(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "projects")
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "project")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := JailPath(root, filepath.Join(root, "project")); !errors.Is(err, models.ErrSandboxViolation) {
+		t.Fatalf("JailPath() error = %v, want ErrSandboxViolation", err)
+	}
+}
+
 func TestSecureDeleteRemovesProjectOnly(t *testing.T) {
 	root := t.TempDir()
 	manager := &FSWorkspaceManager{Root: root}

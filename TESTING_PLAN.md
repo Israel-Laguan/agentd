@@ -44,14 +44,14 @@ python3 scripts/mock_llm.py --port 8000
 ```
 
 ### Terminal 2: Start agentd daemon
+Start this terminal in the repository root, then run:
 ```bash
-cd /home/anthony/code/agentd
 LITELLM_API_KEY=test ./bin/agentd start --skip-llm-warmup -v
 ```
 
 ### Terminal 3: Start web frontend
 ```bash
-cd /home/anthony/code/agentd/web
+cd web
 NEXT_PUBLIC_USE_MOCK=false npm run dev
 ```
 
@@ -116,8 +116,9 @@ curl -s -X POST http://localhost:8765/v1/chat/completions   -H "Content-Type: ap
 
 **API verification:**
 ```bash
+PROJECT_ID="replace-with-project-id"
 curl -s http://localhost:8765/api/v1/projects | python3 -m json.tool
-curl -s http://localhost:8765/api/v1/projects/<PROJECT_ID>/tasks | python3 -m json.tool
+curl -s "http://localhost:8765/api/v1/projects/${PROJECT_ID}/tasks" | python3 -m json.tool
 podman exec agentd_agentd_1 sqlite3 /home/agentd/global.db "SELECT id, title, state, project_id FROM tasks ORDER BY created_at DESC LIMIT 10;"
 ```
 
@@ -143,7 +144,8 @@ podman exec agentd_agentd_1 sqlite3 /home/agentd/global.db "SELECT id, title, st
 ```bash
 curl -s -X POST http://localhost:8765/v1/chat/completions   -H "Content-Type: application/json"   -d '{"model":"mock/agentd","messages":[{"role":"user","content":"Create tasks for: (1) Write documentation, (2) Fix login bug, (3) Add dark mode"}],"tools":[{"type":"function","function":{"name":"create_plan"}}]}'
 
-curl -s http://localhost:8765/api/v1/projects/<PROJECT_ID>/tasks | python3 -m json.tool
+PROJECT_ID="replace-with-project-id"
+curl -s "http://localhost:8765/api/v1/projects/${PROJECT_ID}/tasks" | python3 -m json.tool
 podman logs agentd_agentd_1 -f 2>&1 | grep -E 'task|execut|complete|RUNNING|COMPLETED'
 ```
 
@@ -188,11 +190,13 @@ them unclaimable until an operator signals workspace readiness (see
 `ProjectService.MaterializePlan` in `internal/services/project_service.go`). To unlock:
 
 ```bash
+PROJECT_ID="replace-with-project-id"
+
 # 1. Seed at least one file into the project workspace (IsWorkspacePopulated requires >=1 entry)
-podman exec agentd_agentd_1 sh -c 'echo "# workspace" > /home/agentd/projects/<PROJECT_ID>/README.md'
+podman exec agentd_agentd_1 sh -c 'echo "# workspace" > "/home/agentd/projects/$1/README.md"' sh "$PROJECT_ID"
 
 # 2. Transition PENDING -> READY (dispatch happens within ~10s after this)
-curl -s -X POST http://localhost:8765/api/v1/projects/<PROJECT_ID>/workspace/ready
+curl -s -X POST "http://localhost:8765/api/v1/projects/${PROJECT_ID}/workspace/ready"
 ```
 
 Calling step 2 before step 1 returns **HTTP 409** (`workspace is empty; seed content before
