@@ -352,5 +352,5 @@ func assertDefaultProfileEmpty(t *testing.T, store *kanban.Store) {
 
 func openTestStore(t *testing.T, dbPath string) (*kanban.Store, error) {
 	t.Helper()
-	return kanban.OpenStore(dbPath)
+	return kanban.OpenStore(dbPath, filepath.Join(filepath.Dir(dbPath), "projects"))
 }

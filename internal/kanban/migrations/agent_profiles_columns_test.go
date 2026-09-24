@@ -20,7 +20,7 @@ func TestMigrationAddsRoleAndMaxTokensColumns(t *testing.T) {
 		t.Fatalf("create v6 schema: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
@@ -182,7 +182,7 @@ func TestMigrationAddsDisableTopicDriftColumn(t *testing.T) {
 		t.Fatalf("create v9 schema: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
@@ -216,7 +216,7 @@ func TestMigrationAddsCapabilityRouteIntentColumn(t *testing.T) {
 		t.Fatalf("create v10 schema: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 

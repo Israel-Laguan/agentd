@@ -69,11 +69,11 @@ func (m *FSWorkspaceManager) SecureDelete(ctx context.Context, projectID string)
 
 // JailPath resolves requested and verifies it remains inside workspaceRoot.
 func JailPath(workspaceRoot, requested string) (string, error) {
-	root, err := filepath.Abs(workspaceRoot)
+	root, err := filepath.EvalSymlinks(workspaceRoot)
 	if err != nil {
 		return "", fmt.Errorf("resolve workspace root: %w", err)
 	}
-	path, err := filepath.Abs(requested)
+	path, err := filepath.EvalSymlinks(requested)
 	if err != nil {
 		return "", fmt.Errorf("resolve requested path: %w", err)
 	}

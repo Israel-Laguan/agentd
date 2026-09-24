@@ -16,7 +16,7 @@ import (
 // enum/transition table for a full sprint while the DB constraint silently
 // rejected it (see S04 retro / T-020).
 func TestSchemaAcceptsEveryValidTaskState(t *testing.T) {
-	db, err := Open("file:schema-state-parity?mode=memory&cache=shared")
+	db, err := Open("file:schema-state-parity?mode=memory&cache=shared", t.TempDir())
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}

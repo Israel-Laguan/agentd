@@ -20,7 +20,7 @@ func TestMigrationAddsAgenticModeColumn(t *testing.T) {
 		t.Fatalf("create v8 schema: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 

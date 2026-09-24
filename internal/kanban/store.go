@@ -34,12 +34,8 @@ var (
 )
 var _ models.KanbanBoardContract = (*Store)(nil)
 
-func NewStore(db *sql.DB, projectsDirs ...string) *Store {
-	root := "/tmp/agentd-projects"
-	if len(projectsDirs) > 0 {
-		root = projectsDirs[0]
-	}
-	absolute, err := filepath.Abs(filepath.Clean(root))
+func NewStore(db *sql.DB, projectsDir string) *Store {
+	absolute, err := filepath.Abs(filepath.Clean(projectsDir))
 	if err != nil {
 		panic(fmt.Sprintf("resolve projects dir: %v", err))
 	}
@@ -54,12 +50,15 @@ func (s *Store) WithCanceller(c models.TaskCanceller) *Store {
 	return &cp
 }
 
-func OpenStore(path string, projectsDirs ...string) (*Store, error) {
-	db, err := Open(path, projectsDirs...)
+func OpenStore(path string, projectsDir string) (*Store, error) {
+	if strings.TrimSpace(projectsDir) == "" {
+		return nil, fmt.Errorf("projects_dir must not be empty")
+	}
+	db, err := Open(path, projectsDir)
 	if err != nil {
 		return nil, err
 	}
-	return NewStore(db, projectsDirs...), nil
+	return NewStore(db, projectsDir), nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }

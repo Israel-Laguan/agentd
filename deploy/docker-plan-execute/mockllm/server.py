@@ -24,6 +24,9 @@ SCOPE_PREFIX = (
     r'(?:build|create|make|add|implement|design|plan|develop)\s+'
     r'(?:a|an|the)?\s*([A-Z][a-zA-Z0-9\s_-]+)'
 )
+TASK_SPLIT = r'(?:^|\n|\b(?:and|or)\b\s*|,\s*|\d+[)\s]+\s*|[-–*•]\s*)'
+SCOPE_INTRODUCER = r'\b(?:build|create|make|add|implement|design|plan|develop)\b'
+SCOPE_SPLIT = SCOPE_DELIMITER + r'(?=' + SCOPE_INTRODUCER + r')'
 
 
 def message_content(body: dict, role: str) -> str:
@@ -86,7 +89,7 @@ def generate_plan(user_content: str) -> dict:
     )
     if task_list:
         parts = re.split(
-            r'(?:^|\n|\b(?:and|or|,)\s*|\d+[)\s]+\s*|[-–*•]\s*)',
+            TASK_SPLIT,
             task_list.group(1).strip(),
         )
         tasks = [task_from_text(part) for part in parts if len(part.strip()) >= 3][:5]
@@ -122,16 +125,12 @@ def scope_label(part: str, single_scope: bool) -> str:
 
 
 def analyze_scope(user_content: str) -> dict:
-    multi_scope = re.search(
-        SCOPE_DELIMITER + r'(?:build|create|make|add|implement|design|plan|develop)\b',
-        user_content,
-        re.IGNORECASE,
-    )
+    multi_scope = re.search(SCOPE_SPLIT, user_content, re.IGNORECASE)
     single_scope = multi_scope is None
     if single_scope:
         scopes = [{"id": "scope-1", "label": scope_label(user_content, True)}]
     else:
-        parts = re.split(SCOPE_DELIMITER, user_content)
+        parts = re.split(SCOPE_SPLIT, user_content, flags=re.IGNORECASE)
         scopes = [
             {"id": f"scope-{index}", "label": scope_label(part, False)}
             for index, part in enumerate(parts, 1)

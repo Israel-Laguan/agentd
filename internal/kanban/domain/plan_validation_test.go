@@ -44,6 +44,9 @@ func normalizeDraftPlanCases() []struct {
 		{name: "empty project name", plan: models.DraftPlan{
 			ProjectName: "  ", Tasks: []models.DraftTask{{Title: "Task 1"}},
 		}, wantErr: true, errIs: models.ErrInvalidDraftPlan},
+		{name: "reserved project name", plan: models.DraftPlan{
+			ProjectName: "_system", Tasks: []models.DraftTask{{Title: "Task 1"}},
+		}, wantErr: true, errIs: models.ErrInvalidDraftPlan},
 		{name: "no tasks", plan: models.DraftPlan{ProjectName: "Test Project"}, wantErr: true, errIs: models.ErrInvalidDraftPlan},
 		{name: "task missing title", plan: models.DraftPlan{
 			ProjectName: "Test Project", Tasks: []models.DraftTask{{Title: ""}},

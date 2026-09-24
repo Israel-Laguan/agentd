@@ -197,7 +197,7 @@ func TestMigrationPreservesTasksAndAllowsBlockedState(t *testing.T) {
 		t.Fatalf("insert task: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
@@ -244,7 +244,7 @@ func TestMigrationAllowsFailedRequiresHumanState(t *testing.T) {
 		t.Fatalf("insert task: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 

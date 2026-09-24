@@ -26,6 +26,9 @@ func validateDraftHeader(plan models.DraftPlan) error {
 	if strings.TrimSpace(plan.ProjectName) == "" {
 		return fmt.Errorf("%w: project name is required", models.ErrInvalidDraftPlan)
 	}
+	if strings.TrimSpace(plan.ProjectName) == "_system" {
+		return fmt.Errorf("%w: project name %q is reserved", models.ErrInvalidDraftPlan, plan.ProjectName)
+	}
 	if len(plan.Tasks) == 0 {
 		return fmt.Errorf("%w: at least one task is required", models.ErrInvalidDraftPlan)
 	}

@@ -178,11 +178,12 @@ func TestClaimNextReadyTasksAtomic(t *testing.T) {
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	id := atomic.AddUint64(&memtestID, 1)
-	db, err := Open(fmt.Sprintf("file:memtest%d?mode=memory&cache=shared", id))
+	projectsDir := t.TempDir()
+	db, err := Open(fmt.Sprintf("file:memtest%d?mode=memory&cache=shared", id), projectsDir)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
-	store := NewStore(db)
+	store := NewStore(db, projectsDir)
 	t.Cleanup(func() {
 		if err := store.Close(); err != nil {
 			t.Fatalf("Close() error = %v", err)

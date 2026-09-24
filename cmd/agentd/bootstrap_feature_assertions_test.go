@@ -49,7 +49,7 @@ func (s *bootstrapScenario) cronFileExists(_ context.Context) error {
 }
 
 func (s *bootstrapScenario) profilesSeeded(ctx context.Context) error {
-	store, err := kanban.OpenStore(filepath.Join(s.homeDir, "global.db"))
+	store, err := kanban.OpenStore(filepath.Join(s.homeDir, "global.db"), filepath.Join(s.homeDir, "projects"))
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}

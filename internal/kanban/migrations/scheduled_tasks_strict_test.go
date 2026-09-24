@@ -40,7 +40,7 @@ func TestMigrationCreatesStrictScheduledTasks(t *testing.T) {
 		t.Fatalf("create v11 schema: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestMigrationRebuildsNonStrictTable(t *testing.T) {
 		t.Fatalf("seed scheduled_tasks: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 

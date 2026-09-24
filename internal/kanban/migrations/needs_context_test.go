@@ -17,11 +17,12 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	ctx := context.Background()
+	projectsDir := t.TempDir()
 	if _, err := db.ExecContext(ctx, v15SchemaWithoutNeedsContextSQL); err != nil {
 		t.Fatalf("create v15 schema: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, projectsDir); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
@@ -30,7 +31,7 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 	assertMigratedTaskPreserved(t, db, ctx)
 	assertClampedCountersZero(t, db, ctx)
 	assertPositiveCountersPreserved(t, db, ctx)
-	assertNeedsContextInsertAllowed(t, db, ctx)
+	assertNeedsContextInsertAllowed(t, db, ctx, projectsDir)
 	assertSchemaVersionAfterSecondRun(t, db, ctx, "18")
 	assertNeedsContextStateAfterSecondRun(t, db, ctx)
 }
@@ -94,7 +95,7 @@ func assertPositiveCountersPreserved(t *testing.T, db *sql.DB, ctx context.Conte
 	}
 }
 
-func assertNeedsContextInsertAllowed(t *testing.T, db *sql.DB, ctx context.Context) {
+func assertNeedsContextInsertAllowed(t *testing.T, db *sql.DB, ctx context.Context, projectsDir string) {
 	t.Helper()
 	if _, err := db.ExecContext(ctx, `
 		INSERT INTO tasks (
@@ -107,7 +108,7 @@ func assertNeedsContextInsertAllowed(t *testing.T, db *sql.DB, ctx context.Conte
 		t.Fatalf("insert NEEDS_CONTEXT task: %v", err)
 	}
 
-	if err := Run(ctx, db); err != nil {
+	if err := Run(ctx, db, projectsDir); err != nil {
 		t.Fatalf("second Run() error: %v", err)
 	}
 }

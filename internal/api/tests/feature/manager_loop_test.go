@@ -24,7 +24,7 @@ import (
 func newKanbanIntegrationStore(t *testing.T) *kanban.Store {
 	t.Helper()
 	dir := t.TempDir()
-	store, err := kanban.OpenStore(filepath.Join(dir, "agentd.db"))
+	store, err := kanban.OpenStore(filepath.Join(dir, "agentd.db"), filepath.Join(dir, "projects"))
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
