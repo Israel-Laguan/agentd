@@ -3,6 +3,7 @@ package kanban
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,7 +34,10 @@ func (s *Store) MaterializePlan(ctx context.Context, plan models.DraftPlan) (*mo
 		defer func() { _ = tx.Rollback() }()
 
 		now := utcNow()
-		project := newProject(normalized, now)
+		project, err := s.newProject(normalized, now)
+		if err != nil {
+			return result{}, err
+		}
 		taskIDs := newTaskIDs(normalized.Tasks)
 		if err := insertProject(ctx, tx, project); err != nil {
 			return result{}, err
@@ -112,15 +116,22 @@ func prepareDraftPlan(plan models.DraftPlan) (models.DraftPlan, error) {
 	return normalized, nil
 }
 
-func newProject(plan models.DraftPlan, now time.Time) *models.Project {
+func (s *Store) newProject(plan models.DraftPlan, now time.Time) (*models.Project, error) {
+	if s.projectsDir == "" {
+		return nil, fmt.Errorf("projects_dir must not be empty")
+	}
+	root, err := filepath.Abs(filepath.Clean(s.projectsDir))
+	if err != nil {
+		return nil, fmt.Errorf("resolve projects_dir: %w", err)
+	}
 	projectID := uuid.NewString()
 	return &models.Project{
 		BaseEntity:    models.BaseEntity{ID: projectID, CreatedAt: now, UpdatedAt: now},
 		Name:          strings.TrimSpace(plan.ProjectName),
 		OriginalInput: strings.TrimSpace(plan.Description),
-		WorkspacePath: projectID,
+		WorkspacePath: filepath.Join(root, projectID),
 		Status:        models.ProjectStatusActive,
-	}
+	}, nil
 }
 
 func newTaskIDs(tasks []models.DraftTask) map[string]string {

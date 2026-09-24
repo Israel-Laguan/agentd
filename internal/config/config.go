@@ -182,7 +182,10 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	var err error
 	cfg.HomeDir = v.GetString("home")
 	cfg.DBPath = v.GetString("db_path")
-	cfg.ProjectsDir = v.GetString("projects_dir")
+	cfg.ProjectsDir, err = normalizeConfiguredPath(v.GetString("projects_dir"))
+	if err != nil {
+		return Config{}, fmt.Errorf("resolve projects_dir: %w", err)
+	}
 	cfg.UploadsDir = v.GetString("uploads_dir")
 	cfg.CronPath = filepath.Join(cfg.HomeDir, cronFileName)
 	cfg.API = loadAPIConfig(v)
@@ -215,6 +218,21 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	}
 	cfg.Cron = cron
 	return cfg, nil
+}
+
+func normalizeConfiguredPath(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", errors.New("path must not be empty")
+	}
+	if strings.HasPrefix(raw, "~") {
+		raw = paths.ExpandTildePrefix(raw)
+	}
+	abs, err := filepath.Abs(filepath.Clean(raw))
+	if err != nil {
+		return "", err
+	}
+	return abs, nil
 }
 
 // resolveSkillsGlobalDir normalizes queue.skills.global_dir after viper read.

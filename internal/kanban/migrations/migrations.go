@@ -5,17 +5,23 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
 const (
-	currentSchemaVersion = 17
+	currentSchemaVersion = 18
 	schemaVersionKey     = "schema_version"
 )
 
 // Run applies incremental SQLite schema migrations up to the current version.
-func Run(ctx context.Context, db *sql.DB) error {
+func Run(ctx context.Context, db *sql.DB, projectsDirs ...string) error {
+	projectsDir := "/tmp/agentd-projects"
+	if len(projectsDirs) > 0 {
+		projectsDir = projectsDirs[0]
+	}
+	projectsDir = filepath.Clean(projectsDir)
 	slog.Debug("checking schema version")
 	version, err := schemaVersion(ctx, db)
 	if err != nil {
@@ -42,11 +48,17 @@ func Run(ctx context.Context, db *sql.DB) error {
 		{15, migrateToV15},
 		{16, migrateToV16},
 		{17, migrateToV17},
+		{18, func(ctx context.Context, db *sql.DB) error {
+			return migrateToV18(ctx, db, projectsDir)
+		}},
 	}
 	for _, migration := range migrations {
 		if err := applyMigration(ctx, db, version, migration.version, migration.run); err != nil {
 			return err
 		}
+	}
+	if version >= currentSchemaVersion {
+		return validateV18ProjectPaths(ctx, db, projectsDir)
 	}
 	slog.Debug("schema migration complete", "version", currentSchemaVersion)
 	return nil

@@ -28,7 +28,7 @@ func TestMigrationAddsMemoriesFTSColumnsAndTriggers(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "17" {
+	if version != "18" {
 		t.Fatalf("schema version = %q, want 17", version)
 	}
 
@@ -93,7 +93,7 @@ func TestMigrationSkipsWhenFTSAlreadyExists(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "17" {
+	if version != "18" {
 		t.Fatalf("schema version = %q, want 17", version)
 	}
 }
@@ -118,7 +118,7 @@ func TestMigrationSkipsWithoutMemoriesTable(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "17" {
+	if version != "18" {
 		t.Fatalf("schema version = %q, want 17", version)
 	}
 

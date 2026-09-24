@@ -5,23 +5,26 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 )
 
 // Librarian curates completed task logs into durable memories and manages
 // the raw-log archival lifecycle.
 type Librarian struct {
-	Store   models.KanbanStore
-	Gateway gateway.AIGateway
-	Breaker gateway.BreakerChecker
-	Sink    models.EventSink
-	Cfg     config.LibrarianConfig
-	HomeDir string
+	Store        models.KanbanStore
+	Gateway      gateway.AIGateway
+	Breaker      gateway.BreakerChecker
+	Sink         models.EventSink
+	Cfg          config.LibrarianConfig
+	HomeDir      string
+	ProjectsRoot string
 }
 
 type memorySummary struct {
@@ -108,8 +111,14 @@ func (l *Librarian) CurateTask(ctx context.Context, task models.Task) error {
 	l.emitEvent(ctx, task, "MEMORY_INGESTED", fmt.Sprintf("task=%s symptom_len=%d solution_len=%d", task.ID, len(summary.Symptom), len(summary.Solution)))
 
 	if project, err := l.Store.GetProject(ctx, task.ProjectID); err == nil && project != nil && project.WorkspacePath != "" {
-		if writeErr := appendLessonMarkdown(project.WorkspacePath, task, mem); writeErr != nil {
-			slog.Warn("failed to write lessons.md", "task", task.ID, "error", writeErr)
+		workspace, validationErr := l.projectWorkspace(project)
+		switch {
+		case validationErr != nil:
+			slog.Warn("skipping lessons.md write", "task", task.ID, "project", project.ID, "error", validationErr)
+		case workspace != "":
+			if writeErr := appendLessonMarkdown(workspace, task, mem); writeErr != nil {
+				slog.Warn("failed to write lessons.md", "task", task.ID, "error", writeErr)
+			}
 		}
 	}
 
@@ -143,6 +152,26 @@ func (l *Librarian) PurgeCuratedEvents(ctx context.Context, purged []PurgedArchi
 		}
 	}
 	return nil
+}
+
+func (l *Librarian) projectWorkspace(project *models.Project) (string, error) {
+	if project.ID == "_system" || project.WorkspacePath == "_system" {
+		return "", nil
+	}
+	if l.ProjectsRoot == "" {
+		return project.WorkspacePath, nil
+	}
+	if !filepath.IsAbs(project.WorkspacePath) || filepath.Clean(project.WorkspacePath) != project.WorkspacePath {
+		return "", fmt.Errorf("workspace must be a clean absolute path: %s", project.WorkspacePath)
+	}
+	workspace, err := sandbox.JailPath(l.ProjectsRoot, project.WorkspacePath)
+	if err != nil {
+		return "", err
+	}
+	if workspace == filepath.Clean(l.ProjectsRoot) {
+		return "", fmt.Errorf("workspace cannot be the projects root")
+	}
+	return workspace, nil
 }
 
 func (l *Librarian) archivesDir() string {

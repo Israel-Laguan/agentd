@@ -2,6 +2,8 @@ package kanban
 
 import (
 	"database/sql"
+	"fmt"
+	"path/filepath"
 	"strings"
 
 	"agentd/internal/models"
@@ -21,8 +23,9 @@ func resolveAgentID(draftAgentID string) string {
 }
 
 type Store struct {
-	db        *sql.DB
-	canceller models.TaskCanceller
+	db          *sql.DB
+	projectsDir string
+	canceller   models.TaskCanceller
 }
 
 var (
@@ -31,7 +34,17 @@ var (
 )
 var _ models.KanbanBoardContract = (*Store)(nil)
 
-func NewStore(db *sql.DB) *Store { return &Store{db: db} }
+func NewStore(db *sql.DB, projectsDirs ...string) *Store {
+	root := "/tmp/agentd-projects"
+	if len(projectsDirs) > 0 {
+		root = projectsDirs[0]
+	}
+	absolute, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		panic(fmt.Sprintf("resolve projects dir: %v", err))
+	}
+	return &Store{db: db, projectsDir: absolute}
+}
 
 // WithCanceller returns a shallow copy of the Store that invokes the given
 // canceller after a human comment moves a task to IN_CONSIDERATION.
@@ -41,12 +54,12 @@ func (s *Store) WithCanceller(c models.TaskCanceller) *Store {
 	return &cp
 }
 
-func OpenStore(path string) (*Store, error) {
-	db, err := Open(path)
+func OpenStore(path string, projectsDirs ...string) (*Store, error) {
+	db, err := Open(path, projectsDirs...)
 	if err != nil {
 		return nil, err
 	}
-	return NewStore(db), nil
+	return NewStore(db, projectsDirs...), nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }

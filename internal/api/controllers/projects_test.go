@@ -17,15 +17,20 @@ import (
 	"agentd/internal/testutil"
 )
 
-func projectTestHandler() (controllers.ProjectHandler, *testutil.FakeKanbanStore) {
+func projectTestHandler(t *testing.T) (controllers.ProjectHandler, *testutil.FakeKanbanStore) {
+	t.Helper()
 	store := testutil.NewFakeStore()
-	return controllers.ProjectHandler{Store: store}, store
+	wsRoot := t.TempDir()
+	store.SetProjectsDir(wsRoot)
+	svc := services.NewProjectService(store, &sandbox.FSWorkspaceManager{Root: wsRoot})
+	return controllers.ProjectHandler{Store: store, Service: svc}, store
 }
 
 func projectServiceTestHandler(t *testing.T) (controllers.ProjectHandler, *sandbox.FSWorkspaceManager) {
 	t.Helper()
 	store := testutil.NewFakeStore()
 	ws := &sandbox.FSWorkspaceManager{Root: t.TempDir()}
+	store.SetProjectsDir(ws.Root)
 	svc := services.NewProjectService(store, ws)
 	return controllers.ProjectHandler{Store: store, Service: svc}, ws
 }
@@ -46,6 +51,7 @@ func projectHandlerWithMaterializeToken(t *testing.T, token string) (controllers
 	t.Helper()
 	store := testutil.NewFakeStore()
 	ws := &sandbox.FSWorkspaceManager{Root: t.TempDir()}
+	store.SetProjectsDir(ws.Root)
 	svc := services.NewProjectService(store, ws)
 	return controllers.ProjectHandler{
 		Store:            store,
@@ -165,7 +171,7 @@ func assertWorkspaceReadyStatus(t *testing.T, h controllers.ProjectHandler, proj
 }
 
 func TestProjectHandler_List(t *testing.T) {
-	h, store := projectTestHandler()
+	h, store := projectTestHandler(t)
 	seedProject(t, store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
@@ -194,7 +200,7 @@ func TestProjectHandler_List(t *testing.T) {
 }
 
 func TestProjectHandler_Get(t *testing.T) {
-	h, store := projectTestHandler()
+	h, store := projectTestHandler(t)
 	projectID := seedProject(t, store)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID, nil)
@@ -218,7 +224,7 @@ func TestProjectHandler_Get(t *testing.T) {
 }
 
 func TestProjectHandler_GetNotFound(t *testing.T) {
-	h, _ := projectTestHandler()
+	h, _ := projectTestHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/missing", nil)
 	req.SetPathValue("id", "missing")
 	rec := httptest.NewRecorder()
@@ -229,7 +235,7 @@ func TestProjectHandler_GetNotFound(t *testing.T) {
 }
 
 func TestProjectHandler_MaterializeWithAgentID(t *testing.T) {
-	h, store := projectTestHandler()
+	h, store := projectTestHandler(t)
 	ctx := context.Background()
 	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{
 		ID: "researcher", Name: "Researcher", Provider: "openai", Model: "gpt-4o-mini",
@@ -255,7 +261,7 @@ func TestProjectHandler_MaterializeWithAgentID(t *testing.T) {
 }
 
 func TestProjectHandler_Materialize(t *testing.T) {
-	h, store := projectTestHandler()
+	h, store := projectTestHandler(t)
 
 	body := `{"project_name":"api-project","tasks":[{"title":"First","description":"work"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader(body))
@@ -295,8 +301,12 @@ func TestProjectHandler_Materialize(t *testing.T) {
 
 func TestProjectHandler_MaterializeToken(t *testing.T) {
 	store := testutil.NewFakeStore()
+	wsRoot := t.TempDir()
+	store.SetProjectsDir(wsRoot)
+	svc := services.NewProjectService(store, &sandbox.FSWorkspaceManager{Root: wsRoot})
 	h := controllers.ProjectHandler{
 		Store:            store,
+		Service:          svc,
 		MaterializeToken: "expected-secret-token",
 	}
 	body := `{"project_name":"token-project","tasks":[{"title":"T","description":"d"}]}`
@@ -349,7 +359,7 @@ func TestProjectHandler_MaterializeToken(t *testing.T) {
 }
 
 func TestProjectHandler_MaterializeInvalidJSON(t *testing.T) {
-	h, _ := projectTestHandler()
+	h, _ := projectTestHandler(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/materialize", strings.NewReader("{"))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -472,7 +482,7 @@ func TestProjectHandler_WorkspaceReadyToken(t *testing.T) {
 }
 
 func TestProjectHandler_WorkspaceReadyServiceNotConfigured(t *testing.T) {
-	h, _ := projectTestHandler()
+	h := controllers.ProjectHandler{}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/some-id/workspace/ready", nil)
 	req.SetPathValue("id", "some-id")
 	rec := httptest.NewRecorder()

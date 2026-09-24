@@ -23,7 +23,7 @@ func TestCommentCommand_AddsComment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	store, err := kanban.OpenStore(cfg.DBPath)
+	store, err := kanban.OpenStore(cfg.DBPath, cfg.ProjectsDir)
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}

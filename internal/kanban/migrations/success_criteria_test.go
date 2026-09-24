@@ -28,7 +28,7 @@ func TestMigrationAddsSuccessCriteriaColumn(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "17" {
+	if version != "18" {
 		t.Fatalf("schema version = %q, want 17", version)
 	}
 
@@ -100,7 +100,7 @@ CREATE TABLE settings (
 INSERT INTO settings (key, value, updated_at) VALUES ('schema_version', '7', datetime('now'));
 
 INSERT INTO projects (id, name, original_input, workspace_path, status, created_at, updated_at)
-VALUES ('project', 'Project', 'input', 'workspace', 'ACTIVE', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
+VALUES ('project', 'Project', 'input', 'project', 'ACTIVE', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
 
 INSERT INTO tasks (
     id, project_id, agent_id, title, description, state, assignee,

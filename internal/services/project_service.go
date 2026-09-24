@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"agentd/internal/models"
@@ -49,7 +50,13 @@ func (s *ProjectService) MaterializePlan(
 	if err != nil {
 		return nil, nil, err
 	}
-	project.WorkspacePath = workspace
+	workspace, err = filepath.Abs(filepath.Clean(workspace))
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve persisted workspace path: %w", err)
+	}
+	if !filepath.IsAbs(project.WorkspacePath) || filepath.Clean(project.WorkspacePath) != workspace {
+		return nil, nil, fmt.Errorf("persisted workspace path %q does not match provisioned workspace %q", project.WorkspacePath, workspace)
+	}
 
 	if plan.SourcePath != "" {
 		if err := s.ws.SeedFromPath(ctx, project.ID, plan.SourcePath); err != nil {

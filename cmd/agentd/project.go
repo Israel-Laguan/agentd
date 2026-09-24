@@ -136,7 +136,7 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 	}
 
 	slog.Debug("opening database", "path", cfg.DBPath)
-	store, err := kanban.OpenStore(cfg.DBPath)
+	store, err := kanban.OpenStore(cfg.DBPath, cfg.ProjectsDir)
 	if err != nil {
 		return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("open database: %w", err)
 	}

@@ -9,40 +9,54 @@ version: "3.8"
 #   web     - Next.js frontend (port 3000)
 #
 # Usage:
-#   docker compose -f docker-compose.dev.yml up --build
+#   podman compose -f docker-compose.dev.yml up --build -d
 #   # Open http://localhost:3000
 #
+# The -d flag returns after startup. The services keep running until explicitly
+# stopped. Use compose up without -d only for an attached/log-following session.
+#
 # To stop:
-#   docker compose -f docker-compose.dev.yml down
+#   podman compose -f docker-compose.dev.yml down
 #
 # To rebuild after code changes:
-#   docker compose -f docker-compose.dev.yml build --no-cache
+#   podman compose -f docker-compose.dev.yml build --no-cache
+#
+# Troubleshooting:
+#   - Healthchecks use CMD-SHELL (string form) so they survive the alias/quote
+#     handling in podman-compose 1.3.0. If a service stays unhealthy, run:
+#       podman logs <service>_<n>
+#       podman inspect <service>_<n> --format '{{json .State.Health}}'
+#   - Web runs as root inside the container. Under rootless podman the container
+#     uid 0 maps to the host user, so this is safe and keeps host file ownership.
+#   - NEXT_PUBLIC_API_URL is localhost:8765 (client-side fetches from the browser,
+#     not from inside the container). host.docker.internal is not defined on Linux.
+#   - Named volume "agentd-data" holds /home/agentd (db at /home/agentd/global.db).
 
 services:
   mockllm:
     build:
-      context: .
-      dockerfile: deploy/docker-plan-execute/mockllm/Dockerfile
+      context: ./deploy/docker-plan-execute/mockllm
+      dockerfile: Dockerfile
     expose:
       - "8000"
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)\""]
       interval: 2s
       timeout: 3s
       retries: 20
 
   litellm:
-    image: litellm/litellm:1.100.0
+    image: docker.io/litellm/litellm:1.100.0
     command: ["--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
     ports:
       - "4000:4000"
     volumes:
-      - ./deploy/docker-plan-execute/litellm:/app:ro
+      - ./deploy/docker-plan-execute/litellm/config.yaml:/app/config.yaml:ro
     depends_on:
       mockllm:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness').status==200 else 1)"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness').status==200 else 1)\""]
       interval: 3s
       timeout: 3s
       retries: 30
@@ -51,36 +65,40 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
     ports:
       - "8765:8765"
     environment:
-      LITELLM_API_KEY: "sk-demo-litellm"
+      LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
       AGENTD_API_ADDRESS: "0.0.0.0:8765"
     volumes:
-      - agentd-data:/home/agentd/.agentd
-    command: >
-      sh -c "agentd init &&
-             exec agentd start --skip-llm-warmup -v"
+      - agentd-data:/home/agentd
+      - ./deploy/docker-plan-execute/agentd/config.yaml:/etc/agentd/config.yaml:ro
     depends_on:
       litellm:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8765/health"]
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8765/api/v1/system/status"]
       interval: 3s
       timeout: 3s
       retries: 30
 
   web:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
+    image: node:22-alpine
+    user: root
+    working_dir: /app
     ports:
       - "3000:3000"
     environment:
+      NODE_ENV: "development"
       NEXT_PUBLIC_USE_MOCK: "false"
-      NEXT_PUBLIC_API_URL: "http://host.docker.internal:8765"
+      NEXT_PUBLIC_API_URL: "http://localhost:8765"
+    volumes:
+      - ./web:/app
+    command: ["sh", "-c", "npm install --legacy-peer-deps && npm run dev"]
     depends_on:
-      - agentd
+      agentd:
+        condition: service_started
 
 volumes:
   agentd-data:

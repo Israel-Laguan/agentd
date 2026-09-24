@@ -22,13 +22,13 @@ const schemaFile = "schema.sql"
 
 // Open opens a SQLite database, applies operational pragmas, and runs schema
 // migrations. The caller owns the returned database handle.
-func Open(path string) (*sql.DB, error) {
+func Open(path string, projectsDirs ...string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
 	}
 
-	if err := initialize(db); err != nil {
+	if err := initialize(db, projectsDirs...); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-func initialize(db *sql.DB) error {
+func initialize(db *sql.DB, projectsDirs ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -64,7 +64,7 @@ func initialize(db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, string(schema)); err != nil {
 		return fmt.Errorf("apply schema: %w", err)
 	}
-	if err := migrations.Run(ctx, db); err != nil {
+	if err := migrations.Run(ctx, db, projectsDirs...); err != nil {
 		return err
 	}
 	if err := NormalizeStoredTimestamps(ctx, db); err != nil {

@@ -3,6 +3,7 @@ package testutil
 
 import (
 	"database/sql"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ type FakeKanbanStore struct {
 	profiles             map[string]models.AgentProfile
 	settings             map[string]string
 	scheduled            map[string]models.ScheduledTask
+	projectsDir          string
 	nextSeq              int
 }
 
@@ -50,9 +52,18 @@ func NewFakeStore() *FakeKanbanStore {
 		profiles: map[string]models.AgentProfile{
 			"default": {ID: "default", Name: "Default", Temperature: 0.2, SystemPrompt: sql.NullString{String: "Return JSON.", Valid: true}},
 		},
-		settings:  make(map[string]string),
-		scheduled: make(map[string]models.ScheduledTask),
+		settings:    make(map[string]string),
+		scheduled:   make(map[string]models.ScheduledTask),
+		projectsDir: filepath.Join(string(filepath.Separator), "tmp", "agentd-fake-projects"),
 	}
+}
+
+func (s *FakeKanbanStore) SetProjectsDir(root string) {
+	absolute, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		panic(err)
+	}
+	s.projectsDir = absolute
 }
 
 func (s *FakeKanbanStore) Close() error { return nil }
