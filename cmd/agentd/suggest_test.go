@@ -59,7 +59,7 @@ func seedSuggestTask(t *testing.T, openAIURL string) (string, string) {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	store, err := kanban.OpenStore(filepath.Join(home, "global.db"))
+	store, err := kanban.OpenStore(filepath.Join(home, "global.db"), filepath.Join(home, "projects"))
 	if err != nil {
 		t.Fatalf("OpenStore() error = %v", err)
 	}

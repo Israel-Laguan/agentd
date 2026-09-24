@@ -9,12 +9,18 @@ import (
 	"agentd/internal/api"
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
+	"agentd/internal/sandbox"
+	"agentd/internal/services"
+	"agentd/internal/testutil"
 )
 
 func TestMaterializeForbiddenWithoutTokenWhenRequired(t *testing.T) {
-	store := newAPITestStore()
+	store := testutil.NewFakeStore()
+	wsRoot := t.TempDir()
+	store.SetProjectsDir(wsRoot)
+	projectService := services.NewProjectService(store, &sandbox.FSWorkspaceManager{Root: wsRoot})
 	handler := api.NewHandler(api.ServerDeps{
-		Store: store, Gateway: newAPIGateway(), Bus: bus.NewInProcess(),
+		Store: store, Gateway: newAPIGateway(), Bus: bus.NewInProcess(), Project: projectService,
 		Summarizer:       frontdesk.NewStatusSummarizer(store),
 		MaterializeToken: "expected-secret-token",
 	})
@@ -24,9 +30,12 @@ func TestMaterializeForbiddenWithoutTokenWhenRequired(t *testing.T) {
 }
 
 func TestMaterializeSucceedsWithMatchingToken(t *testing.T) {
-	store := newAPITestStore()
+	store := testutil.NewFakeStore()
+	wsRoot := t.TempDir()
+	store.SetProjectsDir(wsRoot)
+	projectService := services.NewProjectService(store, &sandbox.FSWorkspaceManager{Root: wsRoot})
 	handler := api.NewHandler(api.ServerDeps{
-		Store: store, Gateway: newAPIGateway(), Bus: bus.NewInProcess(),
+		Store: store, Gateway: newAPIGateway(), Bus: bus.NewInProcess(), Project: projectService,
 		Summarizer:       frontdesk.NewStatusSummarizer(store),
 		MaterializeToken: "expected-secret-token",
 	})

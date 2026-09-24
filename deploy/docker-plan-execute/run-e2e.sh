@@ -137,6 +137,12 @@ log "reading execution evidence: ${EVIDENCE}"
 if [ ! -f "$EVIDENCE" ]; then
   fail "PLAN_RESULTS.log was not written (tasks did not actually execute)"
 else
+  direct_task_id=$(printf '%s' "$TASKS" | jq -r '.[] | select(.title | test("Generate a greeting script")) | .id')
+  if [ -n "$direct_task_id" ] && grep -q "task=${direct_task_id} .*executed via litellm" "$EVIDENCE"; then
+    pass "execution evidence present for the direct task"
+  else
+    fail "PLAN_RESULTS.log has no execution evidence for the direct greeting task"
+  fi
   step_evidence=0
   for task_id in $(printf '%s' "$TASKS" | jq -r '.[] | select(.title | test(":: Step")) | .id'); do
     if grep -q "task=${task_id} .*executed via litellm" "$EVIDENCE"; then

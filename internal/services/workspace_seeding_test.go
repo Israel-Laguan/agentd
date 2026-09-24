@@ -33,6 +33,7 @@ func TestMaterializeWithSourcePath(t *testing.T) {
 	wsRoot := t.TempDir()
 	ws := &sandbox.FSWorkspaceManager{Root: wsRoot}
 	store := testutil.NewFakeStore()
+	store.SetProjectsDir(wsRoot)
 	svc := services.NewProjectService(store, ws)
 
 	plan := models.DraftPlan{
@@ -89,6 +90,7 @@ func TestMaterializeWithSourcePathAndDeps(t *testing.T) {
 	wsRoot := t.TempDir()
 	ws := &sandbox.FSWorkspaceManager{Root: wsRoot}
 	store := testutil.NewFakeStore()
+	store.SetProjectsDir(wsRoot)
 	svc := services.NewProjectService(store, ws)
 
 	plan := models.DraftPlan{
@@ -130,6 +132,7 @@ func TestMaterializeWithoutSourcePath(t *testing.T) {
 	wsRoot := t.TempDir()
 	ws := &sandbox.FSWorkspaceManager{Root: wsRoot}
 	store := testutil.NewFakeStore()
+	store.SetProjectsDir(wsRoot)
 	svc := services.NewProjectService(store, ws)
 
 	plan := models.DraftPlan{
@@ -161,6 +164,7 @@ func TestWorkspaceReadyUnlocksTasks(t *testing.T) {
 	wsRoot := t.TempDir()
 	ws := &sandbox.FSWorkspaceManager{Root: wsRoot}
 	store := testutil.NewFakeStore()
+	store.SetProjectsDir(wsRoot)
 	svc := services.NewProjectService(store, ws)
 
 	// Materialize without source_path — tasks PENDING.
@@ -212,6 +216,7 @@ func TestSourcePathNotDirectory(t *testing.T) {
 	wsRoot := t.TempDir()
 	ws := &sandbox.FSWorkspaceManager{Root: wsRoot}
 	store := testutil.NewFakeStore()
+	store.SetProjectsDir(wsRoot)
 	svc := services.NewProjectService(store, ws)
 
 	plan := models.DraftPlan{
@@ -233,6 +238,7 @@ func TestSourcePathNotExist(t *testing.T) {
 	wsRoot := t.TempDir()
 	ws := &sandbox.FSWorkspaceManager{Root: wsRoot}
 	store := testutil.NewFakeStore()
+	store.SetProjectsDir(wsRoot)
 	svc := services.NewProjectService(store, ws)
 
 	plan := models.DraftPlan{

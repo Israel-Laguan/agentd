@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -12,6 +14,28 @@ import (
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
+
+func TestValidateProjectWorkspaceRejectsOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	w := &Worker{projectsDir: root}
+	err := w.validateProjectWorkspace(models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: filepath.Join(root, "..", "outside")})
+	if !errors.Is(err, models.ErrSandboxViolation) {
+		t.Fatalf("validateProjectWorkspace error = %v, want sandbox violation", err)
+	}
+}
+
+func TestValidateProjectWorkspaceRejectsSystemSentinel(t *testing.T) {
+	w := &Worker{projectsDir: t.TempDir()}
+	if err := w.validateProjectWorkspace(models.Project{BaseEntity: models.BaseEntity{ID: "_system"}, WorkspacePath: "_system"}); !errors.Is(err, models.ErrSandboxViolation) {
+		t.Fatalf("validateProjectWorkspace error = %v, want sandbox violation", err)
+	}
+}
+
+func TestShellQuoteWorkspacePath(t *testing.T) {
+	if got, want := shellQuote("/tmp/project with space"), `'/tmp/project with space'`; got != want {
+		t.Fatalf("shellQuote = %q, want %q", got, want)
+	}
+}
 
 func TestTruncateToMaxMultibyteInput(t *testing.T) {
 	input := strings.Repeat("界", maxOutputSummaryLength)

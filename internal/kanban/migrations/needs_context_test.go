@@ -25,13 +25,13 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	assertSchemaVersion(t, db, ctx, "17")
+	assertSchemaVersion(t, db, ctx, "18")
 	assertTasksTableContainsNeedsContext(t, db, ctx)
 	assertMigratedTaskPreserved(t, db, ctx)
 	assertClampedCountersZero(t, db, ctx)
 	assertPositiveCountersPreserved(t, db, ctx)
 	assertNeedsContextInsertAllowed(t, db, ctx)
-	assertSchemaVersionAfterSecondRun(t, db, ctx, "17")
+	assertSchemaVersionAfterSecondRun(t, db, ctx, "18")
 	assertNeedsContextStateAfterSecondRun(t, db, ctx)
 }
 
@@ -180,7 +180,7 @@ CREATE TABLE settings (
 INSERT INTO settings (key, value, updated_at) VALUES ('schema_version', '15', datetime('now'));
 
 INSERT INTO projects (id, name, original_input, workspace_path, status, created_at, updated_at)
-VALUES ('project', 'Project', 'input', 'workspace', 'ACTIVE', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
+VALUES ('project', 'Project', 'input', 'project', 'ACTIVE', '2026-05-21T10:00:00Z', '2026-05-21T10:00:00Z');
 
 INSERT INTO tasks (
     id, project_id, agent_id, title, description, state, assignee,

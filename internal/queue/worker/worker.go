@@ -37,6 +37,7 @@ type Worker struct {
 	breaker                       *safety.CircuitBreaker
 	providerBreakers              *safety.ProviderBreakers
 	sink                          models.EventSink
+	projectsDir                   string
 	canceller                     *CancelRegistry
 	tuner                         *planning.ParameterTuner
 	retriever                     MemoryRetriever
@@ -139,6 +140,12 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 		w.FailHard(ctx, task, err)
 		return
 	}
+	if err := w.validateProjectWorkspace(*project); err != nil {
+		slog.ErrorContext(ctx, "worker: invalid project workspace",
+			"task_id", task.ID, "project_id", task.ProjectID, "error", err)
+		w.FailHard(ctx, task, err)
+		return
+	}
 	w.warnIfWorkspaceEmpty(ctx, task, project)
 	running, err := w.store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, os.Getpid())
 	if err != nil {
@@ -150,6 +157,10 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	ctx = gateway.WithHouseRules(ctx, models.LoadHouseRules(ctx, w.store))
 	stopHeartbeat := w.startHeartbeat(ctx, task.ID)
 	defer stopHeartbeat()
+	w.dispatchProcess(ctx, task, *project, *profile)
+}
+
+func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
 	if profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
 			w.FailHard(ctx, task, err)
@@ -160,7 +171,7 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	}
 	if planning.IsPhasePlanningTask(task.Title) {
 		slog.DebugContext(ctx, "worker: handling phase planning", "task_id", task.ID)
-		w.handlePhasePlanning(ctx, task, *project)
+		w.handlePhasePlanning(ctx, task, project)
 		return
 	}
 	if w.tryTieredOrigin(ctx, task) {
@@ -171,18 +182,18 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 			fmt.Errorf("%w: provider %s circuit breaker is open", models.ErrLLMQuotaExceeded, profile.Provider))
 		return
 	}
-	if w.dispatchTieredStep(ctx, task, *project, *profile) {
+	if w.dispatchTieredStep(ctx, task, project, profile) {
 		return
 	}
 	if profile.AgenticMode {
 		slog.DebugContext(ctx, "worker: entering agentic loop", "task_id", task.ID)
-		if result, ok := w.processAgentic(ctx, task, *project, *profile); ok {
+		if result, ok := w.processAgentic(ctx, task, project, profile); ok {
 			w.handleLoopResult(ctx, task, result)
 		}
 		return
 	}
 	slog.DebugContext(ctx, "worker: running legacy task", "task_id", task.ID)
-	w.RunLegacyTask(ctx, task, *project, *profile, false)
+	w.RunLegacyTask(ctx, task, project, profile, false)
 }
 
 func (w *Worker) tryTieredOrigin(ctx context.Context, task models.Task) bool {

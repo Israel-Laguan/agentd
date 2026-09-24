@@ -23,6 +23,7 @@ import (
 )
 
 type WorkerOptions struct {
+	ProjectsDir                string
 	MaxRetries                 int
 	MaxToolIterations          int
 	TokenBudget                int
@@ -172,6 +173,7 @@ func newWorkerCore(
 ) *Worker {
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
+		projectsDir:      opts.ProjectsDir,
 		providerBreakers: opts.ProviderBreakers,
 		canceller:        opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
 		heartbeatInterval:   opts.HeartbeatInterval,

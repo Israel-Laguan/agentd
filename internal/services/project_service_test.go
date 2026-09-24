@@ -3,6 +3,8 @@ package services_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"agentd/internal/models"
@@ -15,11 +17,14 @@ type stubWorkspace struct {
 	err  error
 }
 
-func (s *stubWorkspace) EnsureProjectDir(_ context.Context, _ string) (string, error) {
+func (s *stubWorkspace) EnsureProjectDir(_ context.Context, projectID string) (string, error) {
 	if s.err != nil {
 		return "", s.err
 	}
-	return s.path, nil
+	if s.path != "" {
+		return s.path, nil
+	}
+	return filepath.Join("/workspaces", projectID), nil
 }
 
 func (s *stubWorkspace) ProjectDir(projectID string) string { return "/tmp/" + projectID }
@@ -44,7 +49,8 @@ func TestProjectServiceMaterializeWorkspaceError(t *testing.T) {
 
 func TestProjectServiceMaterializeSetsWorkspacePath(t *testing.T) {
 	store := testutil.NewFakeStore()
-	ws := &stubWorkspace{path: "/workspaces/p1"}
+	store.SetProjectsDir("/workspaces")
+	ws := &stubWorkspace{}
 	svc := services.NewProjectService(store, ws)
 
 	plan := models.DraftPlan{ProjectName: "Demo", Description: "desc", Tasks: []models.DraftTask{{Title: "T1"}}}
@@ -52,7 +58,7 @@ func TestProjectServiceMaterializeSetsWorkspacePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MaterializePlan: %v", err)
 	}
-	if project.WorkspacePath != "/workspaces/p1" {
+	if !filepath.IsAbs(project.WorkspacePath) || !strings.HasPrefix(project.WorkspacePath, "/workspaces"+string(filepath.Separator)) {
 		t.Fatalf("WorkspacePath = %q", project.WorkspacePath)
 	}
 	if len(tasks) != 1 {

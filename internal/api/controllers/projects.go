@@ -67,7 +67,11 @@ func (h ProjectHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}
-	project, tasks, err := h.materialize(r, plan)
+	if h.Service == nil {
+		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "project service not configured")
+		return
+	}
+	project, tasks, err := h.Service.MaterializePlan(r.Context(), plan)
 	if err != nil {
 		httpx.WriteMappedError(w, err)
 		return
@@ -97,13 +101,6 @@ func (h ProjectHandler) WorkspaceReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteSuccess(w, http.StatusOK, workspaceReadyResponse{Tasks: tasks}, nil)
-}
-
-func (h ProjectHandler) materialize(r *http.Request, plan models.DraftPlan) (*models.Project, []models.Task, error) {
-	if h.Service != nil {
-		return h.Service.MaterializePlan(r.Context(), plan)
-	}
-	return h.Store.MaterializePlan(r.Context(), plan)
 }
 
 const materializeTokenHeader = "X-Agentd-Materialize-Token"

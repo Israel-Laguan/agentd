@@ -4,10 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"agentd/internal/config"
+	"agentd/internal/models"
 )
+
+func TestCurateTask_SystemProjectSkipsLessonWrite(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(cwd) }()
+	temp := t.TempDir()
+	if err := os.Chdir(temp); err != nil {
+		t.Fatal(err)
+	}
+	store := &fakeStore{
+		events:  testEvents(1),
+		project: &models.Project{BaseEntity: models.BaseEntity{ID: "_system"}, WorkspacePath: "_system"},
+	}
+	lib := &Librarian{Store: store, Gateway: &fakeGateway{}, Breaker: &fakeBreaker{}, HomeDir: t.TempDir(), ProjectsRoot: filepath.Join(temp, "projects")}
+
+	if err := lib.CurateTask(context.Background(), testTask()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(temp, "_system", "lessons.md")); !os.IsNotExist(err) {
+		t.Fatalf("system lesson file should not exist, stat error = %v", err)
+	}
+}
 
 func TestCurateTask_SmallLog(t *testing.T) {
 	store := &fakeStore{events: testEvents(3)}

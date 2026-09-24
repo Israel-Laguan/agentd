@@ -14,9 +14,9 @@ echo ""
 case "$MODE" in
   docker)
     echo "Starting with Docker Compose..."
-    echo "Run: docker compose -f docker-compose.dev.yml up --build"
+    echo "Stop: docker compose -f docker-compose.dev.yml down"
     echo "Open: http://localhost:3000"
-    docker compose -f docker-compose.dev.yml up --build
+    docker compose -f docker-compose.dev.yml up --build -d
     ;;
   mock)
     echo "Starting in MOCK mode (no backend required)"

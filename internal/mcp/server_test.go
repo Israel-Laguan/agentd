@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -164,7 +165,7 @@ func TestServer_UpdateTaskState_InvalidTransition(t *testing.T) {
 func TestServer_ListProjects(t *testing.T) {
 	s, store := newTestServer(t)
 
-	_, _, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+	project, _, err := store.MaterializePlan(context.Background(), models.DraftPlan{
 		ProjectName: "my-project",
 		Tasks:       []models.DraftTask{{Title: "t1", AgentID: "default"}},
 	})
@@ -185,4 +186,14 @@ func TestServer_ListProjects(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, res.IsError)
 	require.NotEmpty(t, res.Content)
+	text, ok := res.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	var projects []struct {
+		ID            string `json:"id"`
+		WorkspacePath string `json:"workspace_path"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &projects))
+	require.Len(t, projects, 1)
+	require.Equal(t, project.ID, projects[0].ID)
+	require.Equal(t, project.WorkspacePath, projects[0].WorkspacePath)
 }

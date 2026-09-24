@@ -78,6 +78,6 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 		providerBreakers: providerBreakers,
 		canceller:        queue.NewCancelRegistry(),
 		project:          services.NewProjectService(store, ws),
-		runner:           queue.NewTaskRunner(gw, store, emitter, ws),
+		runner:           queue.NewTaskRunner(gw, store, emitter, ws, cfg.ProjectsDir),
 	}, nil
 }

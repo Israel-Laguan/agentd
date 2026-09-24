@@ -60,6 +60,26 @@ func (c *CancelRegistry) Cancel(taskID string) bool {
 	return ok
 }
 
+func (w *Worker) validateProjectWorkspace(project models.Project) error {
+	if project.ID == "_system" || project.WorkspacePath == "_system" {
+		return fmt.Errorf("%w: system project is not an executable workspace", models.ErrSandboxViolation)
+	}
+	if w.projectsDir == "" {
+		return nil
+	}
+	if !filepath.IsAbs(project.WorkspacePath) || filepath.Clean(project.WorkspacePath) != project.WorkspacePath {
+		return fmt.Errorf("%w: project %s workspace must be a clean absolute path: %s", models.ErrSandboxViolation, project.ID, project.WorkspacePath)
+	}
+	workspace, err := sandbox.JailPath(w.projectsDir, project.WorkspacePath)
+	if err != nil {
+		return fmt.Errorf("validate workspace for project %s: %w", project.ID, err)
+	}
+	if workspace == filepath.Clean(w.projectsDir) {
+		return fmt.Errorf("%w: refusing to execute at workspace root for project %s", models.ErrSandboxViolation, project.ID)
+	}
+	return nil
+}
+
 func (w *Worker) payload(task models.Task, project models.Project, command string) sandbox.Payload {
 	return sandbox.Payload{
 		TaskID:        task.ID,

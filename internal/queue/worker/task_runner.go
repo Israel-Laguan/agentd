@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -12,10 +13,11 @@ import (
 )
 
 type TaskRunner struct {
-	gateway gateway.AIGateway
-	store   models.KanbanStore
-	emitter models.EventSink
-	ws      sandbox.WorkspaceManager
+	gateway      gateway.AIGateway
+	store        models.KanbanStore
+	emitter      models.EventSink
+	ws           sandbox.WorkspaceManager
+	projectsRoot string
 }
 
 func NewTaskRunner(
@@ -23,8 +25,13 @@ func NewTaskRunner(
 	store models.KanbanStore,
 	emitter models.EventSink,
 	ws sandbox.WorkspaceManager,
+	projectsRoot ...string,
 ) *TaskRunner {
-	return &TaskRunner{gateway: gw, store: store, emitter: emitter, ws: ws}
+	root := ""
+	if len(projectsRoot) > 0 {
+		root = projectsRoot[0]
+	}
+	return &TaskRunner{gateway: gw, store: store, emitter: emitter, ws: ws, projectsRoot: root}
 }
 
 func (r *TaskRunner) Suggest(ctx context.Context, taskID string) (string, error) {
@@ -36,8 +43,23 @@ func (r *TaskRunner) Suggest(ctx context.Context, taskID string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	workspace := r.ws.ProjectDir(project.ID)
-	suggestion := fmt.Sprintf("cd %s && %s", filepath.Clean(workspace), cmd.Command)
+	if project.ID == "_system" || project.WorkspacePath == "_system" {
+		return "", fmt.Errorf("%w: system project is not an executable workspace", models.ErrSandboxViolation)
+	}
+	if r.projectsRoot == "" {
+		return "", fmt.Errorf("workspace root is not configured")
+	}
+	if !filepath.IsAbs(project.WorkspacePath) || filepath.Clean(project.WorkspacePath) != project.WorkspacePath {
+		return "", fmt.Errorf("%w: project workspace must be a clean absolute path: %s", models.ErrSandboxViolation, project.WorkspacePath)
+	}
+	workspace, err := sandbox.JailPath(r.projectsRoot, project.WorkspacePath)
+	if err != nil {
+		return "", fmt.Errorf("validate project workspace: %w", err)
+	}
+	if workspace == filepath.Clean(r.projectsRoot) {
+		return "", fmt.Errorf("%w: refusing to suggest commands at workspace root", models.ErrSandboxViolation)
+	}
+	suggestion := fmt.Sprintf("cd %s && %s", shellQuote(workspace), cmd.Command)
 	return suggestion, r.emitSuggestion(ctx, task, suggestion)
 }
 
@@ -92,4 +114,11 @@ func (r *TaskRunner) emitSuggestion(ctx context.Context, task *models.Task, sugg
 
 type suggestedCommand struct {
 	Command string `json:"command"`
+}
+
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }

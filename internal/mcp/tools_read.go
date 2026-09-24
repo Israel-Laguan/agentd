@@ -80,7 +80,7 @@ func (s *Server) registerListProjects() {
 		}
 		out := make([]map[string]any, 0, len(projects))
 		for _, p := range projects {
-			out = append(out, map[string]any{"id": p.ID, "name": p.Name, "status": string(p.Status)})
+			out = append(out, map[string]any{"id": p.ID, "name": p.Name, "workspace_path": p.WorkspacePath, "status": string(p.Status)})
 		}
 		return textResult(out), out, nil
 	})

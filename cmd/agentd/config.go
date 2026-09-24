@@ -20,7 +20,7 @@ func newConfigCommand(opts *rootOptions) *cobra.Command {
 				return err
 			}
 
-			store, err := kanban.OpenStore(cfg.DBPath)
+			store, err := kanban.OpenStore(cfg.DBPath, cfg.ProjectsDir)
 			if err != nil {
 				return err
 			}

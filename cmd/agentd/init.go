@@ -39,7 +39,7 @@ func newInitCommand(opts *rootOptions) *cobra.Command {
 			}
 
 			slog.Debug("initializing database", "path", cfg.DBPath)
-			store, err := kanban.OpenStore(cfg.DBPath)
+			store, err := kanban.OpenStore(cfg.DBPath, cfg.ProjectsDir)
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}

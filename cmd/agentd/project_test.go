@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"agentd/internal/kanban"
 )
 
 func TestProjectCreateCreatesWorkspace(t *testing.T) {
@@ -26,6 +28,26 @@ func TestProjectCreateCreatesWorkspace(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "task_id=") {
 		t.Fatalf("output missing task_id: %s", output.String())
+	}
+	if !filepath.IsAbs(workspace) {
+		t.Fatalf("workspace = %q, want absolute path", workspace)
+	}
+	projectID := outputValue(t, output.String(), "project_id")
+	store, err := kanban.OpenStore(filepath.Join(home, "global.db"), filepath.Join(home, "projects"))
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("close store: %v", err)
+		}
+	})
+	project, err := store.GetProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("get reopened project: %v", err)
+	}
+	if project.WorkspacePath != workspace {
+		t.Fatalf("reopened workspace_path = %q, printed workspace = %q", project.WorkspacePath, workspace)
 	}
 }
 

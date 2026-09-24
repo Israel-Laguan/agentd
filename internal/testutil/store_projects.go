@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"path/filepath"
 
 	"agentd/internal/models"
 )
@@ -12,11 +13,12 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 	if err := s.validateDraftAgentIDs(plan.Tasks); err != nil {
 		return nil, nil, err
 	}
+	projectID := s.nextID()
 	project := models.Project{
-		BaseEntity:    models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+		BaseEntity:    models.BaseEntity{ID: projectID, CreatedAt: now(), UpdatedAt: now()},
 		Name:          plan.ProjectName,
 		OriginalInput: plan.Description,
-		WorkspacePath: "/tmp/projects/" + plan.ProjectName,
+		WorkspacePath: filepath.Join(s.projectsDir, projectID),
 	}
 	s.projects[project.ID] = project
 	tempToID := make(map[string]string, len(plan.Tasks))
@@ -117,8 +119,9 @@ func (s *FakeKanbanStore) EnsureSystemProject(context.Context) (*models.Project,
 		}
 	}
 	project := models.Project{
-		BaseEntity: models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-		Name:       "_system",
+		BaseEntity:    models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+		Name:          "_system",
+		WorkspacePath: "_system",
 	}
 	s.projects[project.ID] = project
 	return &project, nil
