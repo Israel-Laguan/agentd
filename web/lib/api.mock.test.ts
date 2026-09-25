@@ -1,19 +1,22 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getBoard, getWorkforce, getSystemStatus, sendChat, updateTask, fetchTaskComments, addTaskComment, fetchProviders } from './api';
+import { getBoard, getWorkforce, getSystemStatus, sendChat, updateTask, fetchTaskComments, fetchTaskEvents, addTaskComment, resolveHumanHandoff, fetchProviders } from './api';
 import { mockSystemStatus } from './mocks/system.mock';
 import { mockBoard } from './mocks/board.mock';
 import { mockWorkforce } from './mocks/workforce.mock';
 import { mockTaskComments } from './mocks/mock-task-comment';
+import { mockTaskEvents } from './mocks/task-event.mock';
 import { mockProviders } from './mocks/providers.mock';
 import { TaskStatus } from './types';
 
 const initialTasks = structuredClone(mockBoard.tasks);
 const initialComments = structuredClone(mockTaskComments);
+const initialEvents = structuredClone(mockTaskEvents);
 
 describe('API (mock mode)', () => {
   beforeEach(() => {
     mockBoard.tasks.splice(0, mockBoard.tasks.length, ...structuredClone(initialTasks));
     mockTaskComments.splice(0, mockTaskComments.length, ...structuredClone(initialComments));
+    mockTaskEvents.splice(0, mockTaskEvents.length, ...structuredClone(initialEvents));
   });
 
   it('getBoard returns mock board', async () => {
@@ -44,6 +47,21 @@ describe('API (mock mode)', () => {
     expect(updated.state).toBe(TaskStatus.COMPLETED);
     expect(updated.id).toBe(original.id);
     expect(mockBoard.tasks[0].state).toBe(TaskStatus.COMPLETED);
+  });
+
+  it('preserves task events and results', async () => {
+    const events = await fetchTaskEvents('t3');
+    expect(events.some((event) => event.type === 'RESULT' && event.payload.includes('completed'))).toBe(true);
+  });
+
+  it('resolves a human handoff and records the result', async () => {
+    const handoff = mockBoard.tasks.find((task) => task.id === 't6');
+    expect(handoff).toBeDefined();
+    const resolution = await resolveHumanHandoff('t6', 'operator output', handoff!.updated_at);
+    expect(resolution.task.state).toBe(TaskStatus.COMPLETED);
+    expect(resolution.parent.state).toBe(TaskStatus.COMPLETED);
+    const events = await fetchTaskEvents('t6');
+    expect(events.some((event) => event.type === 'HUMAN_RESOLUTION' && event.payload.includes('operator output'))).toBe(true);
   });
 
   it('fetchTaskComments filters by taskId', async () => {

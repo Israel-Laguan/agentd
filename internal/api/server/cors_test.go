@@ -23,6 +23,9 @@ func TestCorsMiddleware_AllowedOrigin(t *testing.T) {
 	if got := rec.Header().Get("Vary"); got != "Origin" {
 		t.Fatalf("Vary = %q, want Origin", got)
 	}
+	if got := rec.Header().Get("Access-Control-Allow-Headers"); got != "Content-Type, Authorization, X-Agentd-Materialize-Token" {
+		t.Fatalf("Access-Control-Allow-Headers = %q", got)
+	}
 }
 
 func TestCorsMiddleware_DisallowedOrigin(t *testing.T) {

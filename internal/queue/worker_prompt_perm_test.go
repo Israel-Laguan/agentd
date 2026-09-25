@@ -116,6 +116,62 @@ func TestWorkerPermissionFailureCreatesHumanTask(t *testing.T) {
 	}
 }
 
+func TestWorkerSudoBlockExecutesOneNonPrivilegedAlternative(t *testing.T) {
+	store := newWorkerStore()
+	gw := &fakeGateway{
+		content:     `{"command":"sudo dmidecode -t memory"}`,
+		nextContent: `{"command":"free -h"}`,
+	}
+	sb := &fakeSandbox{
+		results: []sandbox.Result{
+			{Success: false, ExitCode: -1, Stderr: "sudo command blocked"},
+			{Success: true, Stdout: "available without privileges"},
+		},
+		errs: []error{models.ErrSandboxViolation, nil},
+	}
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
+
+	worker.Process(context.Background(), store.task)
+
+	if len(sb.commands) != 2 || sb.commands[0] != "sudo dmidecode -t memory" || sb.commands[1] != "free -h" {
+		t.Fatalf("commands = %#v", sb.commands)
+	}
+	if len(gw.requests) != 2 {
+		t.Fatalf("gateway requests = %d, want initial command plus one alternative request", len(gw.requests))
+	}
+	if store.appends != 0 || store.task.State != models.TaskStateCompleted {
+		t.Fatalf("appends=%d state=%s, want completed without handoff", store.appends, store.task.State)
+	}
+	if store.result == nil || !store.result.Success {
+		t.Fatalf("result = %#v", store.result)
+	}
+}
+
+func TestWorkerSudoBlockRejectsSudoAlternativeWithoutSecondExecution(t *testing.T) {
+	store := newWorkerStore()
+	gw := &fakeGateway{
+		content:     `{"command":"sudo dmidecode -t memory"}`,
+		nextContent: `{"command":"sudo cat /proc/meminfo"}`,
+	}
+	sb := &fakeSandbox{
+		result: sandbox.Result{Success: false, ExitCode: -1, Stderr: "sudo command blocked"},
+		err:    models.ErrSandboxViolation,
+	}
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
+
+	worker.Process(context.Background(), store.task)
+
+	if len(sb.commands) != 1 || !strings.HasPrefix(sb.commands[0], "sudo ") {
+		t.Fatalf("commands = %#v, want only the original sudo command", sb.commands)
+	}
+	if len(gw.requests) != 2 {
+		t.Fatalf("gateway requests = %d, want one bounded alternative request", len(gw.requests))
+	}
+	if store.appends != 1 || len(store.drafts) != 1 || store.drafts[0].Assignee != models.TaskAssigneeHuman {
+		t.Fatalf("handoff appends=%d drafts=%#v", store.appends, store.drafts)
+	}
+}
+
 func TestWorkerPermissionFailureFromSandboxViolationCreatesHumanTask(t *testing.T) {
 	store := newWorkerStore()
 	gw := &fakeGateway{content: `{"command":"sudo touch /etc/agentd.conf"}`}

@@ -32,9 +32,11 @@ type Envelope = APIResponse[any]
 // at {page, per_page, total} for backwards compatibility; conversion from
 // the store's offset/limit world happens via MetaFromPagination.
 type Meta struct {
-	Page    int `json:"page"`
-	PerPage int `json:"per_page"`
-	Total   int `json:"total"`
+	Page      int  `json:"page"`
+	PerPage   int  `json:"per_page"`
+	Total     int  `json:"total"`
+	HasMore   bool `json:"has_more,omitempty"`
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // APIError is the error payload returned with non-2xx responses. Details
@@ -134,6 +136,7 @@ func MapError(err error) (int, string, string) {
 	case errors.Is(err, models.ErrStateConflict),
 		errors.Is(err, models.ErrInvalidStateTransition),
 		errors.Is(err, models.ErrOptimisticLock),
+		errors.Is(err, models.ErrHumanHandoffInvalid),
 		errors.Is(err, models.ErrTaskBlocked):
 		return http.StatusConflict, CodeStateConflict, err.Error()
 	case errors.Is(err, models.ErrInvalidDraftPlan),

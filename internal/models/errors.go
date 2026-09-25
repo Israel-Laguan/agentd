@@ -32,6 +32,7 @@ var (
 	ErrStateConflict          = errors.New("task state conflict")
 	ErrTaskBlocked            = errors.New("task is blocked")
 	ErrTaskNotFound           = errors.New("task not found")
+	ErrHumanHandoffInvalid    = errors.New("invalid human handoff")
 	ErrBudgetExceeded         = errors.New("task token budget exceeded")
 	ErrAgentProfileNotFound   = errors.New("agent profile not found")
 	ErrAgentProfileInvalid    = errors.New("invalid agent profile")

@@ -63,7 +63,7 @@ func (e *Engine) applyAgenticTruncation(ctx context.Context, messages []gateway.
 }
 
 func (e *Engine) handleAgenticToolCalls(
-	ctx context.Context, task models.Task, turnID string,
+	ctx context.Context, task models.Task, profile models.AgentProfile, turnID string,
 	resp gateway.AIResponse, messages *[]gateway.PromptMessage,
 	toolToAdapter map[string]string, toolExecutor *agenttools.ToolExecutor,
 	taskHooks *agenthooks.HookChain, taskCaps *capabilities.Registry,
@@ -83,6 +83,23 @@ func (e *Engine) handleAgenticToolCalls(
 			taskUpdatedAt = fresh.UpdatedAt
 		}
 		tr, suspended := e.host.DispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps, providerName)
+		if command, blocked := e.host.AgenticPrivilegeBlock(call, tr); blocked {
+			allowAlternative := !e.privilegeAlternativeAttempted
+			e.privilegeAlternativeAttempted = true
+			tr, suspended = e.host.RecoverAgenticPrivilege(
+				ctx, task, profile, command, tr, allowAlternative,
+				func(alternativeCall gateway.ToolCall) (agenttools.ToolResult, bool) {
+					alternativeResult, alternativeSuspended := e.host.DispatchToolWithHooks(
+						ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, alternativeCall,
+						toolToAdapter, toolExecutor, taskHooks, taskCaps, providerName,
+					)
+					return alternativeResult, alternativeSuspended
+				},
+			)
+			if suspended {
+				return true, agentruntime.LoopResult{}, false
+			}
+		}
 		contextContent := tr.ForContext()
 		if detected := cm.CheckToolResult(contextContent); len(detected) > 0 {
 			slog.Info("auto-detected context corrections", "task_id", task.ID, "count", len(detected))
@@ -116,7 +133,7 @@ func (e *Engine) continueAgenticAfterTools(
 ) (continueLoop bool, result agentruntime.LoopResult, report bool, err error) {
 	iterationGuard.AfterIteration(true)
 	if abort, toolResult, toolReport := e.handleAgenticToolCalls(
-		ctx, task, turnID, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps,
+		ctx, task, profile, turnID, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps,
 		cm, toolTracker, turnIndex, budgetGuard, resp.ProviderUsed,
 	); abort {
 		return false, toolResult, toolReport, nil

@@ -48,6 +48,22 @@ func (h *noopHost) DispatchToolWithHooks(
 	return agenttools.SuccessResult(call.ID, "noop", 0), false
 }
 
+func (h *noopHost) AgenticPrivilegeBlock(gateway.ToolCall, agenttools.ToolResult) (string, bool) {
+	return "", false
+}
+
+func (h *noopHost) RecoverAgenticPrivilege(
+	_ context.Context,
+	_ models.Task,
+	_ models.AgentProfile,
+	_ string,
+	blockedResult agenttools.ToolResult,
+	_ bool,
+	_ func(gateway.ToolCall) (agenttools.ToolResult, bool),
+) (agenttools.ToolResult, bool) {
+	return blockedResult, true
+}
+
 func (h *noopHost) RunPreTaskElicitation(_ context.Context, task models.Task, _ models.Project) (models.Task, bool, error) {
 	return task, false, nil
 }

@@ -143,31 +143,6 @@ func (w *Worker) createPromptHandoff(ctx context.Context, task models.Task, payl
 	w.Emit(ctx, task, "PROMPT_HANDOFF", truncate(payload, 1000))
 }
 
-func (w *Worker) handlePermissionFailure(ctx context.Context, task models.Task, command string, result sandbox.Result) {
-	detection := safety.DetectPermission(result.Stdout, result.Stderr)
-	payload := detectionPayload(detection.Pattern, command, result)
-	w.Emit(ctx, task, "PERMISSION_DETECTED", truncate(payload, 1000))
-	w.createPermissionHandoff(ctx, task, payload)
-}
-
-func (w *Worker) createPermissionHandoff(ctx context.Context, task models.Task, payload string) {
-	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title: models.HITLSubtaskTitleManualAction + " privileged command",
-		Description: "The worker detected a command that requires host privileges. " +
-			"Please run the required command on the host machine with appropriate privileges and mark this task Complete.\n\n" +
-			truncate(payload, 1500),
-		Assignee: models.TaskAssigneeHuman,
-	}})
-	if err != nil {
-		w.Emit(ctx, task, "ERROR", err.Error())
-		return
-	}
-	if !w.recordLegacyHandoffExpiry(ctx, task) {
-		return
-	}
-	w.Emit(ctx, task, "PERMISSION_HANDOFF", truncate(payload, 1000))
-}
-
 func (w *Worker) HandleGoalStalled(ctx context.Context, task models.Task, gt *agentcontext.GoalTracker) error {
 	goal := gt.Goal()
 	if goal == nil {

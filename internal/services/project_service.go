@@ -36,9 +36,10 @@ func (s *ProjectService) MaterializePlan(
 	ctx context.Context,
 	plan models.DraftPlan,
 ) (*models.Project, []models.Task, error) {
-	plan.WorkspacePending = true
-	needsExplicitReady := strings.TrimSpace(plan.SourcePath) == ""
-	if needsExplicitReady {
+	sourcePath := strings.TrimSpace(plan.SourcePath)
+	needsExplicitReady := sourcePath == "" && !plan.StartEmptyWorkspace
+	plan.WorkspacePending = sourcePath != "" || !plan.StartEmptyWorkspace
+	if sourcePath == "" {
 		plan.SourcePath = ""
 	}
 
@@ -46,16 +47,8 @@ func (s *ProjectService) MaterializePlan(
 	if err != nil {
 		return nil, nil, err
 	}
-	workspace, err := s.ws.EnsureProjectDir(ctx, project.ID)
-	if err != nil {
+	if err := s.ensureWorkspace(ctx, *project); err != nil {
 		return nil, nil, err
-	}
-	workspace, err = filepath.Abs(filepath.Clean(workspace))
-	if err != nil {
-		return nil, nil, fmt.Errorf("resolve persisted workspace path: %w", err)
-	}
-	if !filepath.IsAbs(project.WorkspacePath) || filepath.Clean(project.WorkspacePath) != workspace {
-		return nil, nil, fmt.Errorf("persisted workspace path %q does not match provisioned workspace %q", project.WorkspacePath, workspace)
 	}
 
 	if plan.SourcePath != "" {
@@ -88,6 +81,21 @@ func (s *ProjectService) MaterializePlan(
 		}
 	}
 	return project, tasks, nil
+}
+
+func (s *ProjectService) ensureWorkspace(ctx context.Context, project models.Project) error {
+	workspace, err := s.ws.EnsureProjectDir(ctx, project.ID)
+	if err != nil {
+		return err
+	}
+	workspace, err = filepath.Abs(filepath.Clean(workspace))
+	if err != nil {
+		return fmt.Errorf("resolve persisted workspace path: %w", err)
+	}
+	if !filepath.IsAbs(project.WorkspacePath) || filepath.Clean(project.WorkspacePath) != workspace {
+		return fmt.Errorf("persisted workspace path %q does not match provisioned workspace %q", project.WorkspacePath, workspace)
+	}
+	return nil
 }
 
 // MarkWorkspaceReady transitions all PENDING tasks for the given project to

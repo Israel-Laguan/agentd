@@ -12,8 +12,10 @@ import (
 )
 
 type TaskHandler struct {
-	Store models.KanbanStore
-	Tasks *services.TaskService
+	Store            models.KanbanStore
+	Tasks            *services.TaskService
+	HumanResolver    models.HumanHandoffResolver
+	MaterializeToken string
 }
 
 type commentRequest struct {

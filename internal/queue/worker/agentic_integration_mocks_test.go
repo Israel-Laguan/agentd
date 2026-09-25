@@ -42,6 +42,8 @@ type mockAgenticStore struct {
 	project         models.Project
 	profile         models.AgentProfile
 	committedResult *models.TaskResult
+	blocked         bool
+	drafts          []models.DraftTask
 }
 
 func newMockAgenticStore(taskID string) *mockAgenticStore {
@@ -333,7 +335,9 @@ func (m *mockAgenticStore) AppendTasksToProject(context.Context, string, string,
 	return nil, nil
 }
 
-func (m *mockAgenticStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, _ []models.DraftTask) (*models.Task, []models.Task, error) {
+func (m *mockAgenticStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, drafts []models.DraftTask) (*models.Task, []models.Task, error) {
+	m.blocked = true
+	m.drafts = append([]models.DraftTask(nil), drafts...)
 	return &m.task, nil, nil
 }
 

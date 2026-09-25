@@ -42,7 +42,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 		Store: deps.Store, Service: deps.Project,
 		MaterializeToken: deps.MaterializeToken,
 	}
-	tasks := controllers.TaskHandler{Store: deps.Store, Tasks: resolveTaskService(deps)}
+	tasks := newTaskHandler(deps)
 	chat := controllers.ChatHandler{
 		Planner: &frontdesk.Planner{
 			Gateway: deps.Gateway, Summarizer: deps.Summarizer,
@@ -65,6 +65,8 @@ func NewHandler(deps ServerDeps) http.Handler {
 	mux.HandleFunc("POST /api/v1/projects/{id}/workspace/ready", projects.WorkspaceReady)
 	mux.HandleFunc("GET /api/v1/tasks/{id}/comments", tasks.ListComments)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/comments", tasks.AddComment)
+	mux.HandleFunc("GET /api/v1/tasks/{id}/events", tasks.ListEvents)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/human-resolution", tasks.ResolveHumanHandoff)
 	mux.HandleFunc("PATCH /api/v1/tasks/{id}", tasks.Patch)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/assign", tasks.Assign)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/split", tasks.Split)
@@ -126,8 +128,8 @@ func handleDocs(w http.ResponseWriter, _ *http.Request) {
 <ul>
 <li>GET /api/v1/projects, GET /api/v1/projects/{id}, GET /api/v1/projects/{id}/tasks</li>
 <li>POST /api/v1/projects/materialize, POST /api/v1/projects/{id}/workspace/ready</li>
-<li>GET/POST /api/v1/tasks/{id}/comments, PATCH /api/v1/tasks/{id}</li>
-<li>POST /api/v1/tasks/{id}/assign, /split, /retry</li>
+<li>GET/POST /api/v1/tasks/{id}/comments, GET /api/v1/tasks/{id}/events, PATCH /api/v1/tasks/{id}</li>
+<li>POST /api/v1/tasks/{id}/assign, /split, /retry, /human-resolution</li>
 <li>GET /api/v1/agents, POST /api/v1/agents, GET/PATCH/DELETE /api/v1/agents/{id}, GET /api/v1/gateway/providers</li>
 <li>GET /api/v1/system/status, POST /api/v1/system/breaker/reset</li>
 <li>GET /api/v1/events/stream (SSE), POST /api/v1/preferences</li>
@@ -154,7 +156,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Agentd-Materialize-Token")
 		}
 		if r.Method == http.MethodOptions && origin != "" {
 			if _, ok := corsAllowedOrigins[origin]; ok {
@@ -164,6 +166,22 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func newTaskHandler(deps ServerDeps) controllers.TaskHandler {
+	return controllers.TaskHandler{
+		Store: deps.Store, Tasks: resolveTaskService(deps),
+		MaterializeToken: deps.MaterializeToken,
+		HumanResolver:    resolveHumanHandoffResolver(deps.Store),
+	}
+}
+
+func resolveHumanHandoffResolver(store models.KanbanStore) models.HumanHandoffResolver {
+	resolver, ok := any(store).(models.HumanHandoffResolver)
+	if !ok {
+		return nil
+	}
+	return resolver
 }
 
 func resolveAgentService(deps ServerDeps) *services.AgentService {

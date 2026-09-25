@@ -15,7 +15,8 @@ type DraftPlan struct {
 	// copied into the project workspace before tasks become claimable.
 	// When set, the server performs an atomic copy so workers never run
 	// against an empty directory.
-	SourcePath string `json:"source_path,omitempty"`
+	SourcePath          string `json:"source_path,omitempty"`
+	StartEmptyWorkspace bool   `json:"start_empty_workspace,omitempty"`
 	// WorkspacePending when true forces all root tasks (those without
 	// dependencies) into PENDING state at creation time. Used by the
 	// ProjectService to defer task dispatch until workspace content is

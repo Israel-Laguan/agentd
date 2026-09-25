@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight } from "lucide-react";
 import { ChatStatusReport } from "@/lib/types";
 
 const STATE_ORDER = [
@@ -10,12 +10,18 @@ const STATE_ORDER = [
   "PENDING",
   "IN_CONSIDERATION",
   "BLOCKED",
+  "NEEDS_CONTEXT",
   "COMPLETED",
   "FAILED",
   "FAILED_REQUIRES_HUMAN",
 ];
 
-export function ChatStatusReportView({ report }: { report: ChatStatusReport }) {
+interface ChatStatusReportViewProps {
+  report: ChatStatusReport;
+  onOpenTask?: (taskId: string) => void;
+}
+
+export function ChatStatusReportView({ report, onOpenTask }: ChatStatusReportViewProps) {
   const entries = Object.entries(report.tasksByState).filter(([, n]) => n > 0);
   const sorted = entries.sort(
     (a, b) =>
@@ -45,6 +51,37 @@ export function ChatStatusReportView({ report }: { report: ChatStatusReport }) {
           </span>
         ))}
       </div>
+      {report.attention.length > 0 && (
+        <div className="mt-3 space-y-2 border-t border-border pt-3">
+          {report.attention.map((item) => (
+            <div key={item.taskId} className="rounded border border-warning/20 bg-warning/5 p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-xs font-bold text-text">{item.taskTitle || item.taskId}</h3>
+                    <span className="font-mono text-[9px] text-warning">{item.state}</span>
+                    <span className="font-mono text-[9px] text-text-dim">{item.assignee}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-text">{item.requiredAction}</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-text-dim">{item.explanation}</p>
+                  <p className="mt-1 text-[9px] text-text-dim">{item.projectName || item.projectId}</p>
+                </div>
+                {onOpenTask && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTask(item.taskId)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded border border-border px-2 py-1 text-[10px] text-text hover:border-blue hover:text-blue"
+                  >
+                    Open in Board
+                    <ArrowUpRight size={11} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

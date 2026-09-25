@@ -36,6 +36,7 @@ describe('API (non-mock materialize)', () => {
     );
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.project_name).toBe('My Project');
+    expect(body.start_empty_workspace).toBe(true);
     expect(body.tasks[0].temp_id).toBe('t1');
     expect(body.tasks[0].title).toBe('Do thing');
   });

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 	"agentd/internal/services"
 	"agentd/internal/testutil"
 )
@@ -44,6 +45,36 @@ func TestProjectServiceMaterializeWorkspaceError(t *testing.T) {
 	_, _, err := svc.MaterializePlan(context.Background(), plan)
 	if err == nil || err.Error() != "disk full" {
 		t.Fatalf("MaterializePlan: %v", err)
+	}
+}
+
+func TestProjectServiceMaterializeStartEmptyWorkspaceUnlocksRootsOnly(t *testing.T) {
+	store := testutil.NewFakeStore()
+	wsRoot := t.TempDir()
+	store.SetProjectsDir(wsRoot)
+	svc := services.NewProjectService(store, &sandbox.FSWorkspaceManager{Root: wsRoot})
+
+	_, tasks, err := svc.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName:         "empty",
+		StartEmptyWorkspace: true,
+		Tasks: []models.DraftTask{
+			{TempID: "root-a", Title: "Root A"},
+			{TempID: "root-b", Title: "Root B"},
+			{TempID: "dependent", Title: "Dependent", DependsOn: []string{"root-a"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	states := map[string]models.TaskState{}
+	for _, task := range tasks {
+		states[task.Title] = task.State
+	}
+	if states["Root A"] != models.TaskStateReady || states["Root B"] != models.TaskStateReady {
+		t.Fatalf("root states = %v, want READY", states)
+	}
+	if states["Dependent"] != models.TaskStatePending {
+		t.Fatalf("dependent state = %q, want PENDING", states["Dependent"])
 	}
 }
 

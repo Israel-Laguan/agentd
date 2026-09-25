@@ -7,6 +7,7 @@ import (
 
 type PermissionDetection struct {
 	Detected bool
+	Blocked  bool
 	Pattern  string
 }
 
@@ -31,7 +32,11 @@ func DetectPermission(stdout, stderr string) PermissionDetection {
 	}
 	for _, pattern := range permissionPatterns {
 		if pattern.re.MatchString(output) {
-			return PermissionDetection{Detected: true, Pattern: pattern.name}
+			return PermissionDetection{
+				Detected: true,
+				Blocked:  pattern.name == "sudo command blocked",
+				Pattern:  pattern.name,
+			}
 		}
 	}
 	return PermissionDetection{}

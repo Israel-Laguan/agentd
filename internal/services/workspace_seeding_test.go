@@ -79,6 +79,33 @@ func TestMaterializeWithSourcePath(t *testing.T) {
 
 // TestMaterializeWithSourcePathAndDeps verifies that the response includes
 // all tasks (both root READY and dependent PENDING) when source_path is set.
+func TestMaterializeSourcePathTakesPrecedenceOverStartEmptyWorkspace(t *testing.T) {
+	t.Parallel()
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "seed.txt"), []byte("seeded"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wsRoot := t.TempDir()
+	store := testutil.NewFakeStore()
+	store.SetProjectsDir(wsRoot)
+	svc := services.NewProjectService(store, &sandbox.FSWorkspaceManager{Root: wsRoot})
+	project, tasks, err := svc.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName:         "source-precedence",
+		SourcePath:          srcDir,
+		StartEmptyWorkspace: true,
+		Tasks:               []models.DraftTask{{Title: "T1"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	if tasks[0].State != models.TaskStateReady {
+		t.Fatalf("state = %q, want READY", tasks[0].State)
+	}
+	if _, err := os.Stat(filepath.Join(project.WorkspacePath, "seed.txt")); err != nil {
+		t.Fatalf("source file not seeded: %v", err)
+	}
+}
+
 func TestMaterializeWithSourcePathAndDeps(t *testing.T) {
 	t.Parallel()
 

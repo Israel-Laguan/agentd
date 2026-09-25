@@ -3,6 +3,7 @@ package frontdesk
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"agentd/internal/models"
@@ -20,9 +21,21 @@ func NewStatusSummarizer(store models.KanbanStore) *StatusSummarizer {
 
 // StatusReport is the structured response returned on status_check intent.
 type StatusReport struct {
-	Kind    string        `json:"kind"`
-	Message string        `json:"message"`
-	Summary StatusSummary `json:"summary"`
+	Kind      string          `json:"kind"`
+	Message   string          `json:"message"`
+	Summary   StatusSummary   `json:"summary"`
+	Attention []AttentionItem `json:"attention,omitempty"`
+}
+
+type AttentionItem struct {
+	ProjectID      string              `json:"project_id"`
+	ProjectName    string              `json:"project_name"`
+	TaskID         string              `json:"task_id"`
+	TaskTitle      string              `json:"task_title"`
+	State          models.TaskState    `json:"state"`
+	Assignee       models.TaskAssignee `json:"assignee"`
+	RequiredAction string              `json:"required_action"`
+	Explanation    string              `json:"explanation"`
 }
 
 type StatusSummary struct {
@@ -62,18 +75,9 @@ func (s *StatusSummarizer) SummarizeWithOptions(ctx context.Context, opts Summar
 		}, nil
 	}
 
-	byState := map[string]int{}
-	for _, p := range projects {
-		tasks, err := s.store.ListTasksByProject(ctx, p.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, t := range tasks {
-			if !opts.IncludeHealing && models.IsSelfHealingHandoffTask(t) {
-				continue
-			}
-			byState[string(t.State)]++
-		}
+	byState, attention, err := s.collectTaskStatus(ctx, projects, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	remaining := 0
@@ -83,11 +87,84 @@ func (s *StatusSummarizer) SummarizeWithOptions(ctx context.Context, opts Summar
 		}
 	}
 
+	message := buildMessage(len(projects), remaining, byState)
+	if len(attention) > 0 {
+		message += fmt.Sprintf(" %d item(s) need attention; open the Board to review the required action.", len(attention))
+	}
+	sortAttention(attention)
 	return &StatusReport{
-		Kind:    "status_report",
-		Message: buildMessage(len(projects), remaining, byState),
-		Summary: StatusSummary{TotalProjects: len(projects), TasksByState: byState},
+		Kind:      "status_report",
+		Message:   message,
+		Summary:   StatusSummary{TotalProjects: len(projects), TasksByState: byState},
+		Attention: attention,
 	}, nil
+}
+
+func (s *StatusSummarizer) collectTaskStatus(ctx context.Context, projects []models.Project, opts SummarizeOptions) (map[string]int, []AttentionItem, error) {
+	byState := map[string]int{}
+	var attention []AttentionItem
+	for _, project := range projects {
+		tasks, err := s.store.ListTasksByProject(ctx, project.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, task := range tasks {
+			if !opts.IncludeHealing && models.IsSelfHealingHandoffTask(task) {
+				continue
+			}
+			byState[string(task.State)]++
+			if item, ok := buildAttentionItem(project, task); ok {
+				attention = append(attention, item)
+			}
+		}
+	}
+	return byState, attention, nil
+}
+
+func sortAttention(items []AttentionItem) {
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].ProjectName == items[j].ProjectName {
+			return items[i].TaskID < items[j].TaskID
+		}
+		return items[i].ProjectName < items[j].ProjectName
+	})
+}
+
+func buildAttentionItem(project models.Project, task models.Task) (AttentionItem, bool) {
+	action := ""
+	explanation := ""
+	if task.State == models.TaskStateCompleted || task.State == models.TaskStateFailed {
+		return AttentionItem{}, false
+	}
+	switch {
+	case task.Assignee == models.TaskAssigneeHuman:
+		action = "Open the task and submit the required human result or action."
+		explanation = "The task is assigned to a human and remains open."
+	case task.State == models.TaskStateBlocked:
+		action = "Open the blocked parent and resolve its open human handoff."
+		explanation = "The task is blocked and waiting for a child handoff to resolve."
+	case task.State == models.TaskStateFailedRequiresHuman:
+		action = "Open the task and submit the required human result or action."
+		explanation = "The task failed and requires human intervention."
+	case task.State == models.TaskStateInConsideration:
+		action = "Review the task and record the next decision in its comments."
+		explanation = "The task is paused in human consideration."
+	case task.State == models.TaskStateNeedsContext:
+		action = "Re-gather or update the task context before continuing."
+		explanation = "The task needs a fresh context pack."
+	default:
+		return AttentionItem{}, false
+	}
+	return AttentionItem{
+		ProjectID:      project.ID,
+		ProjectName:    project.Name,
+		TaskID:         task.ID,
+		TaskTitle:      task.Title,
+		State:          task.State,
+		Assignee:       task.Assignee,
+		RequiredAction: action,
+		Explanation:    explanation,
+	}, true
 }
 
 func buildMessage(projectCount, remaining int, byState map[string]int) string {

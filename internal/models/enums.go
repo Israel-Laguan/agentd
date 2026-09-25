@@ -226,6 +226,9 @@ const (
 	EventTypeTopicDrift                EventType = "TOPIC_DRIFT"
 	EventTypeWarning                   EventType = "WARNING"
 	EventTypeTokenUsage                EventType = "TOKEN_USAGE"
+	EventTypePermissionDetected        EventType = "PERMISSION_DETECTED"
+	EventTypePermissionHandoff         EventType = "PERMISSION_HANDOFF"
+	EventTypeHumanResolution           EventType = "HUMAN_RESOLUTION"
 	EventTypeTieredEscalationExhausted EventType = "TIERED_ESCALATION_EXHAUSTED"
 )
 

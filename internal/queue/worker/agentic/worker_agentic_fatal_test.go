@@ -90,7 +90,7 @@ func TestHandleAgenticToolCalls_FatalAborts(t *testing.T) {
 	var messages []gateway.PromptMessage
 	budgetGuard := agentruntime.NewBudgetGuard(nil, task.ID)
 	abort, result, report := e.handleAgenticToolCalls(
-		context.Background(), task, "", resp, &messages, nil, ex, taskHooks, nil, cm, agenttools.NewToolFailureTracker(0), 0, budgetGuard,
+		context.Background(), task, models.AgentProfile{}, "", resp, &messages, nil, ex, taskHooks, nil, cm, agenttools.NewToolFailureTracker(0), 0, budgetGuard,
 	)
 	if !abort || !report {
 		t.Fatal("expected fatal tool result to report LoopToolFailure")

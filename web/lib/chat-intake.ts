@@ -1,4 +1,5 @@
 import {
+  ChatAttentionItem,
   ChatIntentClarification,
   ChatScopeClarification,
   ChatScopeOption,
@@ -35,6 +36,28 @@ export function mapScopeOptions(scopes: unknown): ChatScopeOption[] {
     .filter((s): s is ChatScopeOption => s !== null);
 }
 
+export function mapAttentionItems(value: unknown): ChatAttentionItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      const row = asRecord(entry);
+      if (!row) return null;
+      const taskId = String(row.task_id ?? row.TaskID ?? row.taskId ?? "").trim();
+      if (!taskId) return null;
+      return {
+        projectId: String(row.project_id ?? row.ProjectID ?? ""),
+        projectName: String(row.project_name ?? row.ProjectName ?? ""),
+        taskId,
+        taskTitle: String(row.task_title ?? row.TaskTitle ?? ""),
+        state: String(row.state ?? row.State ?? "PENDING") as ChatAttentionItem["state"],
+        assignee: String(row.assignee ?? row.Assignee ?? "SYSTEM") as ChatAttentionItem["assignee"],
+        requiredAction: String(row.required_action ?? row.RequiredAction ?? ""),
+        explanation: String(row.explanation ?? row.Explanation ?? ""),
+      };
+    })
+    .filter((item): item is ChatAttentionItem => item !== null);
+}
+
 export function mapStatusReport(raw: Record<string, unknown>): ChatStatusReport {
   const summary = asRecord(raw.summary ?? raw.Summary);
   const tasksByState = asRecord(summary?.tasks_by_state ?? summary?.TasksByState) ?? {};
@@ -46,6 +69,7 @@ export function mapStatusReport(raw: Record<string, unknown>): ChatStatusReport 
     message: String(raw.message ?? raw.Message ?? ""),
     totalProjects: Number(summary?.total_projects ?? summary?.TotalProjects) || 0,
     tasksByState: normalized,
+    attention: mapAttentionItems(raw.attention ?? raw.Attention),
   };
 }
 
