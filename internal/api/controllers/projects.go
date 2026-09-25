@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -73,9 +74,11 @@ func (h ProjectHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 	}
 	project, tasks, err := h.Service.MaterializePlan(r.Context(), plan)
 	if err != nil {
+		slog.Error("materialize endpoint: plan materialization failed", "project_name", plan.ProjectName, "error", err)
 		httpx.WriteMappedError(w, err)
 		return
 	}
+	slog.Info("materialize endpoint: plan materialized successfully", "project_id", project.ID, "task_count", len(tasks), "project_name", plan.ProjectName)
 	httpx.WriteSuccess(w, http.StatusCreated, materializeResponse{Project: project, Tasks: tasks}, nil)
 }
 
@@ -94,12 +97,15 @@ func (h ProjectHandler) WorkspaceReady(w http.ResponseWriter, r *http.Request) {
 	tasks, err := h.Service.MarkWorkspaceReady(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, models.ErrWorkspaceNotReady) {
+			slog.Debug("workspace ready endpoint: workspace not yet populated", "project_id", projectID)
 			httpx.WriteError(w, http.StatusConflict, httpx.CodeStateConflict, err.Error())
 			return
 		}
+		slog.Error("workspace ready endpoint: failed to mark workspace ready", "project_id", projectID, "error", err)
 		httpx.WriteMappedError(w, err)
 		return
 	}
+	slog.Info("workspace ready endpoint: workspace marked ready and tasks unlocked", "project_id", projectID, "unlocked_count", len(tasks))
 	httpx.WriteSuccess(w, http.StatusOK, workspaceReadyResponse{Tasks: tasks}, nil)
 }
 

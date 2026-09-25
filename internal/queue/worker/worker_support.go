@@ -93,6 +93,7 @@ func (w *Worker) payload(task models.Task, project models.Project, command strin
 
 func (w *Worker) recoverPanic(ctx context.Context, task models.Task) {
 	if recovered := recover(); recovered != nil {
+		slog.Error("worker panic recovered", "task_id", task.ID, "project_id", task.ProjectID, "panic", recovered)
 		w.Emit(ctx, task, "PANIC", fmt.Sprintf("worker panic: %v", recovered))
 		w.FailHard(ctx, task, fmt.Errorf("worker panic: %v", recovered))
 	}

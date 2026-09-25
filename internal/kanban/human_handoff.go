@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -28,20 +29,24 @@ func (s *Store) ResolveHumanHandoff(
 ) (*models.HumanHandoffResolution, error) {
 	result = strings.TrimSpace(sandbox.NewScrubber(nil).Scrub(result))
 	if result == "" {
+		slog.Warn("resolve human handoff: result is empty", "task_id", taskID)
 		return nil, fmt.Errorf("%w: human result is required", models.ErrHumanHandoffInvalid)
 	}
 	if len(result) > maxHumanResolutionResult {
+		slog.Warn("resolve human handoff: result exceeds max bytes", "task_id", taskID, "bytes", len(result), "max", maxHumanResolutionResult)
 		return nil, fmt.Errorf("%w: human result exceeds %d bytes", models.ErrHumanHandoffInvalid, maxHumanResolutionResult)
 	}
 	return retryOnBusy(ctx, func(ctx context.Context) (*models.HumanHandoffResolution, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
+			slog.Error("resolve human handoff: begin transaction failed", "task_id", taskID, "error", err)
 			return nil, fmt.Errorf("begin human handoff resolution: %w", err)
 		}
 		defer func() { _ = tx.Rollback() }()
 
 		child, parent, err := loadHandoffForResolution(ctx, tx, taskID, expectedUpdatedAt)
 		if err != nil {
+			slog.Warn("resolve human handoff: load handoff failed", "task_id", taskID, "error", err)
 			return nil, err
 		}
 
@@ -64,12 +69,15 @@ func (s *Store) ResolveHumanHandoff(
 
 		resolvedChild, err := selectTaskByID(ctx, tx, child.ID)
 		if err != nil {
+			slog.Error("resolve human handoff: reload child task failed", "task_id", child.ID, "error", err)
 			return nil, err
 		}
 		resolvedParent, err := selectTaskByID(ctx, tx, parent.ID)
 		if err != nil {
+			slog.Error("resolve human handoff: reload parent task failed", "parent_id", parent.ID, "error", err)
 			return nil, err
 		}
+		slog.Info("human handoff resolved", "child_task_id", child.ID, "parent_task_id", parent.ID, "project_id", child.ProjectID)
 		return &models.HumanHandoffResolution{
 			Task: resolvedChild, Parent: resolvedParent, Result: result,
 		}, commitTx(tx, "human handoff resolution")
@@ -105,12 +113,15 @@ func loadHandoffForResolution(
 
 func validateHandoffChild(child *models.Task, expectedUpdatedAt *time.Time) error {
 	if expectedUpdatedAt != nil && !child.UpdatedAt.Equal(*expectedUpdatedAt) {
+		slog.Warn("validate handoff child: optimistic lock conflict", "task_id", child.ID)
 		return models.ErrOptimisticLock
 	}
 	if !models.IsHITLSubtaskTitle(child.Title) || (child.Assignee != models.TaskAssigneeHuman && child.State != models.TaskStateFailedRequiresHuman) {
+		slog.Warn("validate handoff child: not an open human handoff", "task_id", child.ID, "assignee", child.Assignee, "state", child.State)
 		return fmt.Errorf("%w: task is not an open human handoff", models.ErrHumanHandoffInvalid)
 	}
 	if child.State == models.TaskStateCompleted || child.State == models.TaskStateFailed {
+		slog.Warn("validate handoff child: handoff already resolved", "task_id", child.ID, "state", child.State)
 		return fmt.Errorf("%w: handoff is already resolved", models.ErrStateConflict)
 	}
 	return nil
@@ -120,13 +131,16 @@ func validateHandoffParent(ctx context.Context, tx *immediateTx, child models.Ta
 	parentAllowed := parent.State == models.TaskStateBlocked
 	timedOut := parent.State == models.TaskStateFailedRequiresHuman && child.State == models.TaskStateFailedRequiresHuman
 	if !parentAllowed && !timedOut {
+		slog.Warn("validate handoff parent: parent state invalid for handoff resolution", "parent_id", parent.ID, "parent_state", parent.State, "child_id", child.ID)
 		return fmt.Errorf("%w: parent state %s cannot be resolved by human handoff", models.ErrHumanHandoffInvalid, parent.State)
 	}
 	openSiblings, err := countOpenHandoffSiblings(ctx, tx, parent.ID, child.ID)
 	if err != nil {
+		slog.Error("validate handoff parent: count open siblings failed", "parent_id", parent.ID, "child_id", child.ID, "error", err)
 		return err
 	}
 	if openSiblings > 0 {
+		slog.Warn("validate handoff parent: parent has other open children", "parent_id", parent.ID, "child_id", child.ID, "open_siblings", openSiblings)
 		return fmt.Errorf("%w: parent has %d other open children", models.ErrStateConflict, openSiblings)
 	}
 	return nil

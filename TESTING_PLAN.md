@@ -62,6 +62,69 @@ Open browser to: **http://localhost:3000**
 
 ## Test Checkpoints
 
+### Checkpoint 0: Daemon Boot Sequence and LLM Connectivity
+
+Boot order is: seed default agent → provider presence check → tool-credential
+validation → LLM warmup → HTTP listener bind → daemon/queue start
+(`cmd/agentd/start.go`, `start_serve.go`, `start_runtime.go`). This checkpoint
+exists because the provider "health" check at boot (`internal/config/health.go`
+`tryAPIKeyHealth`) only verifies an API key string is non-empty — it does
+**not** make a network call. Real connectivity is only proven by the LLM
+warmup step, which is skippable.
+
+Use `-v` (verbose/debug logging, as in the manual Terminal 2 command) so the
+step-by-step boot sequence is actually visible — without it, several of the
+milestone lines below are emitted at `slog.Debug` and won't show.
+
+**Steps:**
+1. With litellm running, start agentd **without** `--skip-llm-warmup` and
+   `-v`, and watch the log stream (or `podman logs -f agentd_agentd_1`) for
+   the boot sequence in order.
+2. Stop litellm, then start agentd **without** `--skip-llm-warmup`.
+3. Stop litellm, then start agentd **with** `--skip-llm-warmup` (or
+   `gateway.warmup_enabled: false`).
+4. With the daemon from step 3 running (litellm still down), send a chat
+   message and observe the failure mode, in both the API response and logs.
+
+**Expected Results — this is the primary way to confirm the loop actually
+started, not just that the process is alive:**
+- Step 1: logs show, in order — `"tool credentials validated"` (debug) →
+  `"running LLM warmup"` (debug) → `"LLM warmup OK" provider=... model=...`
+  (info, `internal/config/health_warmup.go`) → `"API server listening"
+  address=...` (info, `cmd/agentd/start.go`) → `"HTTP server started"`
+  (debug) → `"starting daemon"` (debug). `/api/v1/system/status` should then
+  reflect a working provider.
+- Step 2: boot **fails hard** — this is not a soft-fail. `warmupLLMIfNeeded`
+  wraps the failure in `config.ErrLLMWarmup`, `seedAndValidateStartup`
+  returns it before the listener ever binds, and `reportCommandError`
+  (`cmd/agentd/errors.go`) prints both a human summary ("agentd reached your
+  LLM provider, but the startup warmup failed...") and
+  `slog.Error("command failed", "summary", ..., "error", ...)` to stderr, then
+  the process exits non-zero. Confirm no `"API server listening"` line ever
+  appears and the process actually exits (don't mistake a hang for a fail-fast).
+- Step 3: **known gap** — no `"LLM warmup"` lines appear at all (skipped
+  before the call), boot proceeds straight to `"API server listening"`, and
+  the daemon reports healthy even though litellm is unreachable. Confirm this
+  is in fact what happens (don't assume) — the logs will look identical to a
+  healthy boot.
+- Step 4: chat/task calls fail only at first real use. Confirm the failure
+  surfaces in **both** places: the API response/chat UI, and a daemon log
+  line (the gateway call site should log the provider error — grep for
+  `error` around the timestamp of the failed request). If no log line
+  appears at all for this failure, that itself is a gap worth flagging.
+
+**API verification:**
+```bash
+curl -s http://localhost:8765/health
+curl -s http://localhost:8765/api/v1/system/status | python3 -m json.tool
+curl -s http://localhost:8765/api/v1/gateway/providers | python3 -m json.tool
+
+# log-based verification (adjust container/binary name as needed)
+podman logs agentd_agentd_1 2>&1 | grep -E 'tool credentials validated|running LLM warmup|LLM warmup OK|API server listening|command failed'
+```
+
+---
+
 ### Checkpoint 1: Verify Logs Appear When Loop Starts and Kanban is Accessible
 
 **Steps:**
@@ -77,10 +140,39 @@ Open browser to: **http://localhost:3000**
 
 **API verification (automated alternative to visual check):**
 ```bash
+curl -s http://localhost:8765/health
 curl -s http://localhost:8765/api/v1/projects | python3 -m json.tool
 curl -s http://localhost:8765/api/v1/system/status | python3 -m json.tool
+curl -s http://localhost:8765/api/v1/gateway/providers | python3 -m json.tool
 curl -s -N http://localhost:8765/api/v1/events/stream
 ```
+
+> **Note:** `/health` is a plain liveness probe; `/api/v1/system/status` is a
+> richer readiness view (includes provider/queue state). Check both — a
+> service can be "alive" (`/health` 200) while its LLM provider is actually
+> unreachable (see Checkpoint 0).
+
+#### Checkpoint 1b: Web Client Connection Awareness (known gap)
+
+The web app has **no** dedicated health check against the daemon. The only
+"connected" signal in the UI is the SSE stream's `onopen`/`onerror`, and it
+only drives the Logs panel's status dot — chat has no equivalent indicator.
+A chat-side failure (daemon down, or LLM down) surfaces only as a generic
+"Sorry, I encountered an error..." message, indistinguishable from any other
+failure.
+
+**Steps:**
+1. Load the web app with the daemon already stopped. Observe the chat panel
+   and the Logs panel status dot.
+2. With the app already loaded and connected, stop the daemon mid-session,
+   then send a chat message.
+
+**Expected Results (documenting current behavior, not asserting correctness):**
+- Step 1: Logs panel shows disconnected (red dot via SSE `onerror`); chat
+  input gives no explicit "not connected" cue before the user tries to send.
+- Step 2: chat shows a generic error message with no distinction between
+  "daemon unreachable" and "LLM unreachable" — flag this as a known UX gap,
+  not a regression, unless it changes.
 
 ---
 
@@ -99,6 +191,35 @@ curl -s -N http://localhost:8765/api/v1/events/stream
 **API verification:**
 ```bash
 curl -s -X POST http://localhost:8765/v1/chat/completions   -H "Content-Type: application/json"   -d '{"model":"mock/agentd","messages":[{"role":"user","content":"Build a holiday card reminder app"}],"tools":[{"type":"function","function":{"name":"create_plan"}}]}'
+```
+
+#### Checkpoint 2b: Chat Agent Works Independently (No Plan Created)
+
+Plain conversational chat is routed entirely separately from task/plan
+handling (`internal/api/controllers/chat.go` → `frontdesk.Planner.PlanContent`).
+A tool call is only emitted when the planner's response contains a
+`status_report` or a non-empty `tasks[]`; otherwise the reply is plain
+content with no side effects. This path is not exercised anywhere in the
+existing checkpoints, which all use plan-triggering prompts.
+
+**Steps:**
+1. Note current project/task counts via the API verification below.
+2. Send a message with no action/build keywords, e.g. "What can you help me
+   with?" or "Tell me the current laptop OS and hardware" phrased as a
+   question rather than a task request.
+3. Re-check project/task counts and the SSE stream.
+
+**Expected Results:**
+- Agent replies conversationally; response contains no `create_plan` tool call.
+- No new project or task rows are created.
+- No task-related SSE events are emitted (`task_created`, `task_retried`, etc.).
+
+**API verification:**
+```bash
+curl -s http://localhost:8765/api/v1/projects | python3 -m json.tool  # before
+curl -s -X POST http://localhost:8765/v1/chat/completions -H "Content-Type: application/json" \
+  -d '{"model":"mock/agentd","messages":[{"role":"user","content":"What can you help me with?"}]}'
+curl -s http://localhost:8765/api/v1/projects | python3 -m json.tool  # after — should be unchanged
 ```
 
 ### Checkpoint 3: Kanban View Reflects Database
@@ -123,6 +244,94 @@ podman exec agentd_agentd_1 sqlite3 /home/agentd/global.db "SELECT id, title, st
 ```
 
 > **Note:** The database lives in the named volume `agentd-data` at `/home/agentd/global.db`.
+
+#### Checkpoint 3a: Per-Task Event Log (Task Drawer)
+
+Distinct from the daemon-wide Logs panel (Checkpoint 1's SSE stream), each
+task has its own event history introduced alongside the human-handoff
+feature: `GET /api/v1/tasks/{id}/events` (`internal/api/controllers/tasks_events.go`)
+feeds the `TaskEventList` component in the Task Drawer
+(`web/app/components/task/task-event-list.tsx`). It scrubs sensitive content
+from payloads (`sandbox.NewScrubber`), truncates any payload over 16KB
+(`maxTaskEventPayload`, sets `payload_truncated: true`), and paginates via a
+`limit` query param (default 100, max 200).
+
+**Steps:**
+1. Open a task's drawer in the Board after it has gone through several
+   lifecycle transitions (created → running → blocked/handoff → resolved).
+   Confirm the event list shows one entry per transition, newest first, each
+   expandable to its payload.
+2. Trigger a task whose output/payload would contain something scrub-worthy
+   (e.g. an env var or secret-looking string in command output) and confirm
+   the scrubber redacts it in the displayed payload — not just in daemon logs.
+3. Trigger or synthesize an event with a payload larger than 16KB and confirm
+   the UI shows the "Payload truncated" warning and the API's
+   `payload_truncated: true` flag.
+4. Call the events endpoint with an out-of-range `limit` (e.g. `limit=0` or
+   `limit=500`) and confirm a clean 400 validation error, not a silent
+   clamp or crash.
+
+**Expected Results:**
+- Event list matches the task's actual lifecycle (task creation, permission
+  handoff, human resolution, retries, terminal state) with no gaps or
+  duplicates.
+- No secret/sensitive payload content reaches the browser unscrubbed.
+- Truncation flag and warning UI behave as coded.
+- Invalid `limit` is rejected with a clear error.
+
+**API verification:**
+```bash
+TASK_ID="replace-with-task-id"
+curl -s "http://localhost:8765/api/v1/tasks/${TASK_ID}/events" | python3 -m json.tool
+curl -s "http://localhost:8765/api/v1/tasks/${TASK_ID}/events?limit=0"    # expect 400
+curl -s "http://localhost:8765/api/v1/tasks/${TASK_ID}/events?limit=500"  # expect 400 (max 200)
+```
+
+---
+
+#### Checkpoint 3b: Plan Materialization Edge Cases
+
+`ProjectService.MaterializePlan` (`internal/services/project_service.go`) has
+two flows — `source_path` (seed synchronously, tasks unlock to READY) and
+`start_empty_workspace` (tasks stay PENDING until `POST workspace/ready`) —
+each with validation the happy-path checkpoints above don't exercise.
+
+**Steps and expected results:**
+1. Call `POST /api/v1/projects/{id}/workspace/ready` on a project whose
+   workspace has **not** been seeded yet (no file written). Expect an error
+   (`ErrWorkspaceNotReady`), not a silent success — tasks must remain PENDING.
+2. Materialize a plan with `source_path` pointing at a nonexistent or
+   unreadable directory. Expect materialization to fail cleanly, not create
+   a project stuck in a half-seeded state.
+3. Call `workspace/ready` twice in a row after a valid seed. Expect the
+   second call to be a safe no-op (or a clear "already ready" response), not
+   a duplicate dispatch of already-READY tasks.
+
+```bash
+PROJECT_ID="replace-with-project-id"
+curl -s -X POST "http://localhost:8765/api/v1/projects/${PROJECT_ID}/workspace/ready"   # before seeding — expect error
+curl -s -X POST http://localhost:8765/api/v1/projects/materialize -H "Content-Type: application/json" \
+  -d '{"source_path":"/nonexistent/path", ...}'   # fill in real plan fields; expect clean failure
+```
+
+#### Known Gap: Refining an Overly Broad Plan
+
+There is currently **no** refine/narrow-scope mechanism in the code
+(`models/plan.go`'s `DraftPlan` has no version or parent-plan linkage, and no
+"revise" endpoint exists). Pushing back on a plan in chat produces a brand
+new `DraftPlan` from scratch rather than a narrowed revision of the original.
+
+**Steps:**
+1. Send a deliberately broad request, e.g. "Build me a full SaaS product."
+2. Push back in the same chat thread: "That's too broad, just do the landing
+   page for now."
+3. Compare the second `DraftPlan` to the first.
+
+**Expected Results (document actual behavior — this is a known limitation,
+not a pass/fail check):** the second plan is an independent draft with no
+explicit link back to the first; there is no diff/narrowing UI. If this
+changes in a future release, promote this from "known gap" to a real
+pass/fail checkpoint.
 
 ---
 
@@ -181,6 +390,56 @@ for the real-provider run. API assertions are automated; browser click-through r
 5. Paste the output into the task drawer’s resolution form and resolve the
    handoff. Confirm the child and parent reach terminal state and do not rerun
    the privileged command. Ask for status again and confirm attention is gone.The browser has no automation; API assertions are automated.
+
+### Sudo/Human-Handoff Edge Cases (not yet covered)
+
+Detection is regex-based and happens in two places: a pre-execution
+syntactic block for `sudo` at the start of a command or after `&&`/`||`/`;`/`|`
+(`internal/sandbox/executor.go`), and a post-execution output scan
+(`internal/queue/safety/permission_detector.go`). Resolution
+(`internal/kanban/human_handoff.go` `ResolveHumanHandoff`) accepts **any**
+non-empty pasted text as success — it does not re-verify the output. These
+edge cases exercise both the detection boundary and the trust boundary of
+that resolution step; none are covered by the automated script or the happy
+path above.
+
+> **Log gap:** `permission_detector.go`, `worker_permission.go`,
+> `human_handoff.go`, and `sandbox/executor.go` contain **zero** `slog` calls.
+> A sudo block, the resulting handoff creation, and its resolution are only
+> ever visible via the DB-backed task events (`GET /api/v1/tasks/{id}/events`,
+> Checkpoint 3a) and SSE (`permission_detected`, `poison_pill_handoff`) — none
+> of it is written to daemon stdout logs. For every edge case below, check
+> `podman logs -f agentd_agentd_1` in parallel with the API/SSE checks and
+> confirm this: **no log line will appear for the block or handoff itself.**
+> That silence is the gap — flag it if you're expecting the daemon logs to be
+> a complete error-surfacing mechanism, since today they aren't for this path.
+
+1. **Bypass check — `sudo` inside a subshell or heredoc.** Ask the agent to
+   run something like `echo "$(sudo whoami)"` or a multi-line script with
+   `sudo` on its own line after a newline (not after `&&`/`;`/`|`). Confirm
+   whether the sandbox actually blocks it — the current regex only matches
+   `sudo` at the start of a command or immediately after a shell operator,
+   so a subshell or bare-newline occurrence may execute without triggering
+   the human-handoff flow at all. **Do not run this in production; use a
+   disposable workspace.**
+2. **Wrong/garbage password pasted back.** Trigger a real sudo handoff, then
+   resolve it with plainly wrong text (e.g. "asdf" or the literal string
+   "done") instead of real command output. Confirm the task is marked
+   successful anyway (this is expected given current code — the resolution
+   endpoint does not validate the pasted result), and note this as a trust
+   boundary the operator must self-police.
+3. **Multiple concurrent sudo subtasks on one parent.** Ask for a plan whose
+   steps require sudo more than once (e.g. two different privileged
+   commands). Confirm both attention cards appear, `countOpenHandoffSiblings`
+   correctly tracks that more than one sibling is open, and resolving one
+   does not prematurely unblock the parent while the other is still pending.
+4. **Handoff timeout expiry.** The default legacy handoff timeout is 7 days
+   (`internal/config/queue.go` `DefaultLegacyHandoffTimeout`). Full expiry is
+   impractical to test in real time — instead, verify (via code/config, or a
+   shortened timeout in a test config) that an expired handoff transitions
+   the task to a clear failed/expired state rather than hanging forever, and
+   that the transition is visible in the Board and via
+   `GET /api/v1/tasks/{id}/events`.
 
 All four checkpoints were verified end-to-end against the running stack
 (`podman compose -f docker-compose.dev.yml up --build -d`):

@@ -24,6 +24,11 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 
 	defer func() {
 		if r := recover(); r != nil {
+			taskIDs := make([]string, len(tasks))
+			for i, task := range tasks {
+				taskIDs[i] = task.ID
+			}
+			slog.Error("worker batch panic recovered", "task_ids", taskIDs, "panic", r)
 			for _, task := range tasks {
 				w.Emit(ctx, task, "PANIC", fmt.Sprintf("worker batch panic: %v", r))
 				w.FailHard(ctx, task, fmt.Errorf("worker batch panic: %v", r))
