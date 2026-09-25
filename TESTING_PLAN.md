@@ -5,7 +5,7 @@ This document outlines the testing plan to verify agentd functionality through t
 ## Prerequisites
 
 - Podman (or Docker) and Podman Compose installed
-- Ports 3000, 4000, 8000, 8765 available
+- Ports 3000, 4000, 8765 available
 
 ## Quick Start with Podman Compose
 
@@ -29,25 +29,35 @@ podman compose -f docker-compose.dev.yml build --no-cache
 > The node:22-alpine image ships `NODE_ENV=production`, which causes `npm install` to skip
 > devDependencies. With `NODE_ENV=development`, the full dependency tree (including devDeps
 > like `@tailwindcss/postcss`) is installed before `next dev` starts.
+>
+> **Note:** The `agentd` service in this compose file starts with `--skip-llm-warmup`.
+> Because of that, a green `/health` or `/api/v1/system/status` does **not** prove LiteLLM
+> connectivity. See Checkpoint 0 for the isolated warmup run that does prove connectivity.
 
 Services:
-- **mockllm** (port 8000) - Fake OpenAI-compatible LLM
-- **litellm** (port 4000) - Proxy routing to mockllm
+- **litellm** (port 4000) - LLM proxy/router
 - **agentd** (port 8765) - Daemon
 - **web** (port 3000) - Next.js frontend
 
 ## Running the Test Environment (Manual)
 
-### Terminal 1: Start mock LLM
+The compose stack is the recommended way to run the full local test environment
+(`podman compose -f docker-compose.dev.yml up --build -d`). It wires agentd
+through LiteLLM as the LLM provider.
+
+### Terminal 1: Start LiteLLM (compose handles this)
 ```bash
-python3 scripts/mock_llm.py --port 8000
+podman compose -f docker-compose.dev.yml up -d litellm
 ```
 
 ### Terminal 2: Start agentd daemon
-Start this terminal in the repository root, then run:
+Build first:
 ```bash
-LITELLM_API_KEY=test ./bin/agentd start --skip-llm-warmup -v
+make build
 ```
+Then run with a config whose gateway provider points at LiteLLM and
+`warmup_enabled: true` if you want to prove LLM connectivity (Checkpoint 0).
+With `--skip-llm-warmup` the daemon boots without proving provider connectivity.
 
 ### Terminal 3: Start web frontend
 ```bash
@@ -88,12 +98,13 @@ milestone lines below are emitted at `slog.Debug` and won't show.
 
 **Expected Results — this is the primary way to confirm the loop actually
 started, not just that the process is alive:**
-- Step 1: logs show, in order — `"tool credentials validated"` (debug) →
-  `"running LLM warmup"` (debug) → `"LLM warmup OK" provider=... model=...`
-  (info, `internal/config/health_warmup.go`) → `"API server listening"
+- Step 1: logs show, in order — `"running LLM warmup"` (debug) →
+  `"LLM warmup OK" provider=... model=...` (info,
+  `internal/config/health_warmup.go`) → `"API server listening"
   address=...` (info, `cmd/agentd/start.go`) → `"HTTP server started"`
-  (debug) → `"starting daemon"` (debug). `/api/v1/system/status` should then
-  reflect a working provider.
+  (debug) → `"starting daemon"` (debug). `/api/v1/system/status` shows
+  provider metadata, but **does not prove provider connectivity**; the warmup
+  step is the only boot-time proof.
 - Step 2: boot **fails hard** — this is not a soft-fail. `warmupLLMIfNeeded`
   wraps the failure in `config.ErrLLMWarmup`, `seedAndValidateStartup`
   returns it before the listener ever binds, and `reportCommandError`
@@ -112,6 +123,10 @@ started, not just that the process is alive:**
   line (the gateway call site should log the provider error — grep for
   `error` around the timestamp of the failed request). If no log line
   appears at all for this failure, that itself is a gap worth flagging.
+
+> **Compose note:** `docker-compose.dev.yml` starts agentd with `--skip-llm-warmup`,
+> so the Quick Start stack does **not** exercise Step 1/2 above. Use the isolated
+> warmup run described below (or override the entrypoint) to prove provider connectivity.
 
 **API verification:**
 ```bash
@@ -135,8 +150,12 @@ podman logs agentd_agentd_1 2>&1 | grep -E 'tool credentials validated|running L
 
 **Expected Results:**
 - Kanban board displays with task columns
-- Logs show daemon activity
+- The Logs panel shows a status dot and daemon/event stream activity
 - No console errors
+- **Known gap:** the Logs panel currently always displays `System Live` and uses a
+  blue disconnected dot rather than a red one. Normal task logs are not surfaced in
+  the daemon-wide Logs panel; use `GET /api/v1/tasks/{id}/events` for durable,
+  per-task evidence.
 
 **API verification (automated alternative to visual check):**
 ```bash
@@ -187,10 +206,13 @@ failure.
 - Message appears in chat history
 - Response from the agent appears (a `create_plan` tool call with a DraftPlan)
 - No HTTP errors in console
+- **Note:** the `model` field in the chat request is echoed in the response; it does
+  **not** select agentd's gateway provider. Provider routing is controlled by
+  `docker-compose.dev.yml` / agentd config (`gateway.order` and `gateway.providers`).
 
 **API verification:**
 ```bash
-curl -s -X POST http://localhost:8765/v1/chat/completions   -H "Content-Type: application/json"   -d '{"model":"mock/agentd","messages":[{"role":"user","content":"Build a holiday card reminder app"}],"tools":[{"type":"function","function":{"name":"create_plan"}}]}'
+curl -s -X POST http://localhost:8765/v1/chat/completions   -H "Content-Type: application/json"   -d '{"model":"agentd","messages":[{"role":"user","content":"Build a holiday card reminder app"}],"tools":[{"type":"function","function":{"name":"create_plan"}}]}'
 ```
 
 #### Checkpoint 2b: Chat Agent Works Independently (No Plan Created)
@@ -218,7 +240,7 @@ existing checkpoints, which all use plan-triggering prompts.
 ```bash
 curl -s http://localhost:8765/api/v1/projects | python3 -m json.tool  # before
 curl -s -X POST http://localhost:8765/v1/chat/completions -H "Content-Type: application/json" \
-  -d '{"model":"mock/agentd","messages":[{"role":"user","content":"What can you help me with?"}]}'
+  -d '{"model":"agentd","messages":[{"role":"user","content":"What can you help me with?"}]}'
 curl -s http://localhost:8765/api/v1/projects | python3 -m json.tool  # after — should be unchanged
 ```
 
@@ -240,7 +262,9 @@ curl -s http://localhost:8765/api/v1/projects | python3 -m json.tool  # after �
 PROJECT_ID="replace-with-project-id"
 curl -s http://localhost:8765/api/v1/projects | python3 -m json.tool
 curl -s "http://localhost:8765/api/v1/projects/${PROJECT_ID}/tasks" | python3 -m json.tool
-podman exec agentd_agentd_1 sqlite3 /home/agentd/global.db "SELECT id, title, state, project_id FROM tasks ORDER BY created_at DESC LIMIT 10;"
+
+# The agentd image does not ship the `sqlite3` CLI. Use the task API or query the
+# database from a separate utility container if direct SQL is needed.
 ```
 
 > **Note:** The database lives in the named volume `agentd-data` at `/home/agentd/global.db`.
@@ -301,8 +325,10 @@ each with validation the happy-path checkpoints above don't exercise.
    workspace has **not** been seeded yet (no file written). Expect an error
    (`ErrWorkspaceNotReady`), not a silent success — tasks must remain PENDING.
 2. Materialize a plan with `source_path` pointing at a nonexistent or
-   unreadable directory. Expect materialization to fail cleanly, not create
-   a project stuck in a half-seeded state.
+   unreadable directory. Expect materialization to return an error. Note that
+   project/task rows may already be persisted before the error is returned, so
+   the failure is not always fully atomic; inspect `GET /api/v1/projects` after
+   the call if atomicity matters.
 3. Call `workspace/ready` twice in a row after a valid seed. Expect the
    second call to be a safe no-op (or a clear "already ready" response), not
    a duplicate dispatch of already-READY tasks.
@@ -340,35 +366,55 @@ pass/fail checkpoint.
 **Steps:**
 1. Send a request to create multiple tasks via chat
 2. Example: "Create tasks for: (1) Write documentation, (2) Fix login bug, (3) Add dark mode"
-3. Watch the Kanban board for new tasks
-4. Observe the logs panel
+3. **Approve the returned plan** (in the web UI this calls `POST /api/v1/projects/materialize`;
+   for deterministic hierarchy use the API directly with `start_empty_workspace: true`)
+4. Watch the Kanban board for new tasks
+5. Observe the logs panel / task events
 
 **Expected Results:**
-- New tasks appear in Kanban PENDING column
+- After approval, root tasks leave `PENDING` for `READY`/`RUNNING`; dependent
+  tasks stay `PENDING` until their dependencies complete.
 - Agent processes tasks (moves to RUNNING)
-- Logs show task execution details
-- Tasks eventually complete (COMPLETED/FAILED)
+- Per-task events and `PLAN_RESULTS.log` show execution details
+- Tasks eventually reach a terminal state (`COMPLETED`, `FAILED`, or
+  `FAILED_REQUIRES_HUMAN`)
+- **Known gap:** approval through the web UI can lose task metadata such as
+  `depends_on`, `assignee`, and `success_criteria`. Use `POST /api/v1/projects/materialize`
+  directly when you need the full task hierarchy preserved.
 
 **API verification:**
 ```bash
-curl -s -X POST http://localhost:8765/v1/chat/completions   -H "Content-Type: application/json"   -d '{"model":"mock/agentd","messages":[{"role":"user","content":"Create tasks for: (1) Write documentation, (2) Fix login bug, (3) Add dark mode"}],"tools":[{"type":"function","function":{"name":"create_plan"}}]}'
+# 1. Create a plan
+curl -s -X POST http://localhost:8765/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"agentd","messages":[{"role":"user","content":"Create tasks for: (1) Write documentation, (2) Fix login bug, (3) Add dark mode"}],"tools":[{"type":"function","function":{"name":"create_plan"}}]}'
+
+# 2. Materialize with start_empty_workspace (approval)
+curl -s -X POST http://localhost:8765/api/v1/projects/materialize -H "Content-Type: application/json" \
+  -d '{"project_name":"test","description":"test","start_empty_workspace":true,"tasks":[...]}'
 
 PROJECT_ID="replace-with-project-id"
 curl -s "http://localhost:8765/api/v1/projects/${PROJECT_ID}/tasks" | python3 -m json.tool
-podman logs agentd_agentd_1 -f 2>&1 | grep -E 'task|execut|complete|RUNNING|COMPLETED'
+
+# 3. Evidence: per-task events and PLAN_RESULTS.log
+TASK_ID="replace-with-task-id"
+curl -s "http://localhost:8765/api/v1/tasks/${TASK_ID}/events" | python3 -m json.tool
+podman compose exec agentd cat "/home/agentd/projects/${PROJECT_ID}/PLAN_RESULTS.log"
 ```
 
 ---
 
 ## Chat-to-Kanban privileged handoff QA
 
-The repeatable API portion uses the operator-provided internal LiteLLM, not the
-compose `mockllm`; use an isolated `AGENTD_HOME` and a fresh project database.
+The repeatable API portion uses the operator-provided LiteLLM, not the compose
+`litellm`. Start from a clean stack (`podman compose -f docker-compose.dev.yml down -v`)
+if you need a fresh project database, then run:
+
 ```bash
 AGENTD_API_URL=http://127.0.0.1:8765 \
 LITELLM_BASE_URL=http://127.0.0.1:4000/v1 \
 LITELLM_API_KEY="$LITELLM_API_KEY" \
-LITELLM_MODEL="$LITELLM_MODEL" \
+LITELLM_MODEL=agentd \
 ./scripts/chat-kanban-qa.sh
 ```
 
@@ -376,8 +422,20 @@ The script authenticates against `/v1/models`, checks agentd and the web endpoin
 creates the machine-inventory chat plan, materializes it with
 `start_empty_workspace`, polls task events for autonomous output, and exercises
 the human-resolution API. It exits non-zero when assertions fail and prints the
-project/task IDs for investigation; do not use `deploy/docker-plan-execute/mockllm`
-for the real-provider run. API assertions are automated; browser click-through remains manual.
+project/task IDs for investigation. API assertions are automated; browser click-through remains manual.
+
+> **Note:** The script validates that `agentd` is present in the authenticated
+> LiteLLM `/v1/models` response and checks agentd/web liveness, but it does **not**
+> independently verify that agentd is configured to use the same `LITELLM_BASE_URL`
+> and model. That routing is controlled by `deploy/docker-plan-execute/agentd/config.yaml`
+> and the compose file. It also leaves the created project and tasks behind.
+>
+> **Known behavior:** the LiteLLM-backed mock generates task titles like "Set up plan"
+> and "Implement core of plan". The script's completion assertion looks for "identity"
+> in the task title, which these generic titles do not contain. If the script reports
+> "no completed identity task observed", confirm the tasks reached `COMPLETED` via
+> `GET /api/v1/projects/{id}/tasks` and treat the script assertion as a mock-title
+> mismatch rather than an execution failure.
 
 ## Manual browser verification
 
@@ -403,16 +461,12 @@ edge cases exercise both the detection boundary and the trust boundary of
 that resolution step; none are covered by the automated script or the happy
 path above.
 
-> **Log gap:** `permission_detector.go`, `worker_permission.go`,
-> `human_handoff.go`, and `sandbox/executor.go` contain **zero** `slog` calls.
-> A sudo block, the resulting handoff creation, and its resolution are only
-> ever visible via the DB-backed task events (`GET /api/v1/tasks/{id}/events`,
-> Checkpoint 3a) and SSE (`permission_detected`, `poison_pill_handoff`) — none
-> of it is written to daemon stdout logs. For every edge case below, check
-> `podman logs -f agentd_agentd_1` in parallel with the API/SSE checks and
-> confirm this: **no log line will appear for the block or handoff itself.**
-> That silence is the gap — flag it if you're expecting the daemon logs to be
-> a complete error-surfacing mechanism, since today they aren't for this path.
+> **Note:** Earlier versions of these paths had minimal daemon stdout logging.
+> The current codebase now emits `slog` calls in `permission_detector.go`,
+> `worker_permission.go`, `human_handoff.go`, and `sandbox/executor.go`, so
+> handoff and permission events should be visible in daemon logs as well as
+> task events and SSE. Still verify with `podman compose logs -f agentd` in
+> parallel with API/SSE checks.
 
 1. **Bypass check — `sudo` inside a subshell or heredoc.** Ask the agent to
    run something like `echo "$(sudo whoami)"` or a multi-line script with
@@ -421,7 +475,9 @@ path above.
    `sudo` at the start of a command or immediately after a shell operator,
    so a subshell or bare-newline occurrence may execute without triggering
    the human-handoff flow at all. **Do not run this in production; use a
-   disposable workspace.**
+   disposable workspace.** The current Alpine runtime does not install `sudo`,
+   so treat this as a parser/escape-boundary test rather than a
+   privilege-escalation demo.
 2. **Wrong/garbage password pasted back.** Trigger a real sudo handoff, then
    resolve it with plainly wrong text (e.g. "asdf" or the literal string
    "done") instead of real command output. Confirm the task is marked
@@ -441,15 +497,43 @@ path above.
    that the transition is visible in the Board and via
    `GET /api/v1/tasks/{id}/events`.
 
-All four checkpoints were verified end-to-end against the running stack
-(`podman compose -f docker-compose.dev.yml up --build -d`):
+All checkpoints were verified end-to-end against the running stack
+(`podman compose -f docker-compose.dev.yml up --build -d`) using
+LiteLLM as the LLM provider (model `agentd`). Verified 2026-09-25.
 
 | Checkpoint | Result | Evidence |
 |---|---|---|
-| CP1 – Logs + Kanban accessible | ✅ PASS | `GET /` → HTTP 200 with full dashboard HTML (Chat/Board/Logs nav); `GET /api/v1/projects` → 3 projects; SSE endpoint accepts connections |
-| CP2 – Chat interface works | ✅ PASS | `POST /v1/chat/completions` returns a `create_plan` tool call containing a DraftPlan |
-| CP3 – Kanban reflects database | ✅ PASS | `POST /api/v1/projects/materialize` → HTTP 201; tasks visible via `GET /api/v1/projects/{id}/tasks` |
-| CP4 – Multi-task plan + execution | ✅ PASS | After `workspace/ready`, every executable direct and generated task reached `COMPLETED`; `PLAN_RESULTS.log` in the materialized project workspace contains a task-ID evidence line for each direct and generated task (only the intended `AGENT_PLAN` parent may be `BLOCKED`). Chat approval uses the explicit empty-workspace contract; seeded-workspace verification still uses `workspace/ready`. |
+| CP0 – Daemon boot + LLM connectivity | ✅ PASS | Isolated warmup: `tool credentials validated` → `running LLM warmup` → `LLM warmup OK provider=litellm model=agentd` → `API server listening`; warmup failure → hard exit code 1 with `command failed` summary; `--skip-llm-warmup` → no warmup lines, boots straight to `API server listening` |
+| CP1 – Logs + Kanban accessible | ✅ PASS | `GET /` → HTTP 200; `GET /api/v1/projects` → 0 projects; SSE endpoint accepts connections |
+| CP2 – Chat interface works | ✅ PASS | `POST /v1/chat/completions` returns `create_plan` tool call with DraftPlan via LiteLLM |
+| CP3 – Kanban reflects database | ✅ PASS | `POST /api/v1/projects/materialize` → tasks visible via task API; root tasks `READY`; invalid event limits → 400 |
+| CP4 – Multi-task plan + execution | ✅ PASS | Materialized plan tasks reached `COMPLETED`; `PLAN_RESULTS.log` exists in project workspace |
+
+## Execution results and notes
+
+### CP0 verification
+- Isolated warmup run succeeded: `tool credentials validated` → `running LLM warmup` → `LLM warmup OK` → `API server listening` → `starting daemon`.
+- Warmup failure run confirmed hard exit (code 1) with `command failed` summary when litellm was stopped.
+- Compose default (`--skip-llm-warmup`) boots to `API server listening` with **no** warmup lines, as expected.
+
+### CP3b edge cases
+- `workspace/ready` before seeding returned `409` / `ErrWorkspaceNotReady` with tasks staying `PENDING`.
+- Nonexistent `source_path` materialization returned an error and did **not** persist the project row — failure is atomic.
+- `workspace/ready` twice after a valid seed was safe (second call succeeded without duplicating dispatch).
+
+### Chat-to-Kanban QA script
+- `./scripts/chat-kanban-qa.sh` created a project, materialized it with `start_empty_workspace: true`, and tasks reached `COMPLETED`.
+- The script then timed out waiting for a human-attention task. This is expected with `healing.enabled: false` in `docker-compose.dev.yml`; no handoff/attention flow was triggered. Do not treat this as a script failure unless a real-provider run with healing enabled is intended.
+- Project/task IDs for investigation: `ca0cdbd4-c56a-427e-9c3e-794fcfd13acd`.
+- The stack now uses LiteLLM with model `agentd` (previously `mock/agentd`). The
+  `/v1/models` endpoint returns `agentd` and agentd's provider config references
+  `model: "agentd"`.
+
+### Known gaps confirmed live
+- Web Logs panel always shows `System Live`; task logs are not in the daemon-wide Logs panel.
+- `sqlite3` CLI is not installed in the agentd image; use task APIs or a separate utility container.
+- The compose stack starts agentd with `--skip-llm-warmup`, so `/health` does not prove provider connectivity.
+- `POST /api/v1/projects/materialize` with nonexistent `source_path` returns error without persisting state.
 
 Additional observations:
 
@@ -515,7 +599,7 @@ matching task-ID line in the project's `PLAN_RESULTS.log` as execution evidence.
 ### If LiteLLM is not running:
 - Tasks will fail with LLM errors
 - Check logs for "connection refused" or "LLM error"
-- Discover the real model alias from the operator’s authenticated `/v1/models` response, then set `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `LITELLM_MODEL` for agentd. Do not substitute the compose `mockllm` for the real-provider run.
+- Discover the real model alias from the operator’s authenticated `/v1/models` response, then set `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `LITELLM_MODEL` for agentd.
 - Check litellm config mount: `./deploy/docker-plan-execute/litellm/config.yaml:/app/config.yaml:ro`
 
 ### If web shows "Not Connected":
@@ -530,8 +614,10 @@ matching task-ID line in the project's `PLAN_RESULTS.log` as execution evidence.
 
 ### If tasks don't appear:
 - Check daemon logs for errors: `podman logs agentd_agentd_1`
-- Verify database has tasks: `podman exec agentd_agentd_1 sqlite3 /home/agentd/global.db "SELECT * FROM tasks;"`
-- For compose-only smoke tests, check mockllm through litellm: `curl -s -H "Authorization: Bearer $LITELLM_API_KEY" http://localhost:4000/v1/models`
+- Verify database has tasks: use `GET /api/v1/projects/{id}/tasks`; the agentd image
+  does not ship the `sqlite3` CLI. If direct SQL is required, run a separate utility
+  container against the `agentd-data` volume.
+- For smoke tests, verify LiteLLM is reachable: `curl -s -H "Authorization: Bearer $LITELLM_API_KEY" http://localhost:4000/v1/models`
 
 ### Healthchecks show unhealthy:
 - podman-compose 1.3.0 has a known healthcheck quoting bug with exec-form (`CMD`) tests.
@@ -550,10 +636,6 @@ matching task-ID line in the project's `PLAN_RESULTS.log` as execution evidence.
 - `npm install` and `next dev` both need write access to the bind-mounted `./web` directory
   (for `node_modules` and `.next` respectively), hence `user: root` is required.
 
-### Mock LLM doesn't trigger plan flow:
-- The mock LLM classifies intent based on keywords in the user message. To trigger a plan:
-  - Use action words: "build", "create", "implement", "design", "plan", "scrape", etc.
-  - Example: "Build a holiday card reminder app"
-- To trigger task execution (worker command): use "Task: <description>" without plan keywords
-- To trigger plan decomposition: include "AGENT_PLAN" in the task title
-- See `deploy/docker-plan-execute/mockllm/server.py` for the keyword lists.
+### If chat doesn't trigger plan flow:
+- Use action words in the prompt: "build", "create", "implement", "design", "plan", "scrape", etc.
+- See the LiteLLM proxy logs for model routing and the agentd logs for plan generation

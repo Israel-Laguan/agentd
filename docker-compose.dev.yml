@@ -3,8 +3,7 @@ version: "3.8"
 # Local development stack for agentd + web UI testing.
 #
 # Services:
-#   mockllm - fake OpenAI-compatible LLM (port 8000)
-#   litellm - proxy that routes to mockllm (port 4000)
+#   litellm - LLM proxy/router (port 4000)
 #   agentd  - daemon (port 8765)
 #   web     - Next.js frontend (port 3000)
 #

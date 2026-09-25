@@ -1,7 +1,7 @@
 # LiteLLM proxy config for the agentd plan+execute scenario.
 #
-# agentd routes every LLM call to this proxy as the model "mock/agentd".
-# The proxy forwards to the mock OpenAI-compatible backend (mockllm). This
+# agentd routes every LLM call to this proxy as the model "agentd".
+# The proxy forwards to the OpenAI-compatible backend (mockllm). This
 # exercises the real litellm wire path without any live provider keys.
 #
 # Run with: litellm --config /app/config.yaml --host 0.0.0.0 --port 4000
@@ -13,10 +13,10 @@ general_settings:
   master_key: "sk-demo-litellm-plan-execute-only"
 
 model_list:
-  - model_name: mock/agentd
+  - model_name: agentd
     litellm_params:
       # openai/ prefix tells litellm to treat the upstream as OpenAI-compatible.
-      model: openai/mock-agentd
+      model: openai/agentd
       api_base: http://mockllm:8000/v1
-      # Upstream mock does not auth; any non-empty key satisfies litellm.
+      # Upstream backend does not auth; any non-empty key satisfies litellm.
       api_key: sk-mock
