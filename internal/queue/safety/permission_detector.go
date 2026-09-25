@@ -1,6 +1,7 @@
 package safety
 
 import (
+	"log/slog"
 	"regexp"
 	"strings"
 )
@@ -32,6 +33,7 @@ func DetectPermission(stdout, stderr string) PermissionDetection {
 	}
 	for _, pattern := range permissionPatterns {
 		if pattern.re.MatchString(output) {
+			slog.Warn("permission pattern detected in command output", "pattern", pattern.name, "blocked", pattern.name == "sudo command blocked")
 			return PermissionDetection{
 				Detected: true,
 				Blocked:  pattern.name == "sudo command blocked",

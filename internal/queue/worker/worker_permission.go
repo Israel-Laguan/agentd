@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -140,6 +141,7 @@ func (w *Worker) recoverLegacyPrivilege(
 	audit.exitCode = result.ExitCode
 	if runErr == nil && result.Success {
 		audit.command = alternative.Command
+		slog.Info("permission recovery: non-privileged alternative succeeded", "task_id", task.ID, "project_id", task.ProjectID)
 		if profile.RequireReview {
 			w.createReviewHandoff(ctx, task, result.Stdout)
 			return
@@ -148,6 +150,7 @@ func (w *Worker) recoverLegacyPrivilege(
 		return
 	}
 	audit.failed = true
+	slog.Warn("permission recovery: non-privileged alternative failed", "task_id", task.ID, "project_id", task.ProjectID, "exit_code", result.ExitCode)
 	outcome := "Non-privileged alternative failed"
 	if result.Stderr != "" {
 		outcome += ": " + w.safePermissionText(result.Stderr, 300)
@@ -214,6 +217,8 @@ func (w *Worker) handlePermissionFailure(ctx context.Context, task models.Task, 
 	}
 	original := w.safePermissionText(command, 500)
 	outcome := w.safePermissionText(alternativeOutcome, 500)
+	slog.Info("permission failure: creating human handoff", "task_id", task.ID, "project_id", task.ProjectID, "outcome", outcome)
+
 	payload := permissionHandoffPayload{
 		OriginalCommand:    original,
 		AlternativeOutcome: outcome,
@@ -236,12 +241,14 @@ func (w *Worker) handlePermissionFailure(ctx context.Context, task models.Task, 
 		Assignee:    models.TaskAssigneeHuman,
 	}})
 	if err != nil {
+		slog.Error("permission failure: block task with subtasks failed", "task_id", task.ID, "error", err)
 		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
 	if !w.recordLegacyHandoffExpiry(ctx, task) {
 		return
 	}
+	slog.Info("permission failure: human handoff created", "task_id", task.ID, "project_id", task.ProjectID)
 	w.Emit(ctx, task, string(models.EventTypePermissionHandoff), string(encoded))
 }
 

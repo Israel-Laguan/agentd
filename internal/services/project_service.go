@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -45,14 +46,17 @@ func (s *ProjectService) MaterializePlan(
 
 	project, tasks, err := s.store.MaterializePlan(ctx, plan)
 	if err != nil {
+		slog.Error("materialize plan failed", "error", err, "project_name", plan.ProjectName)
 		return nil, nil, err
 	}
 	if err := s.ensureWorkspace(ctx, *project); err != nil {
+		slog.Error("ensure project workspace failed", "project_id", project.ID, "error", err)
 		return nil, nil, err
 	}
 
 	if plan.SourcePath != "" {
 		if err := s.ws.SeedFromPath(ctx, project.ID, plan.SourcePath); err != nil {
+			slog.Error("seed workspace from source_path failed", "project_id", project.ID, "source_path", plan.SourcePath, "error", err)
 			return nil, nil, fmt.Errorf("seed workspace from source_path: %w", err)
 		}
 	}
@@ -61,14 +65,17 @@ func (s *ProjectService) MaterializePlan(
 		// Tasks stay PENDING until the operator signals workspace readiness.
 		// Transition them now so callers can see they need to call
 		// MarkWorkspaceReady before tasks become claimable.
+		slog.Info("materialize plan: workspace pending explicit ready", "project_id", project.ID, "task_count", len(tasks))
 		return project, tasks, nil
 	}
 
 	// source_path was provided and copied; unlock root tasks to READY.
 	unlocked, err := s.store.MarkProjectTasksReady(ctx, project.ID)
 	if err != nil {
+		slog.Error("unlock tasks after workspace seed failed", "project_id", project.ID, "error", err)
 		return nil, nil, fmt.Errorf("unlock tasks after workspace seed: %w", err)
 	}
+	slog.Info("materialize plan: workspace seeded and tasks unlocked", "project_id", project.ID, "task_count", len(tasks), "unlocked_count", len(unlocked))
 	// Merge updated states back into the full task list so dependent
 	// tasks (still PENDING) are not dropped from the response.
 	ready := make(map[string]models.Task, len(unlocked))
@@ -104,10 +111,18 @@ func (s *ProjectService) ensureWorkspace(ctx context.Context, project models.Pro
 func (s *ProjectService) MarkWorkspaceReady(ctx context.Context, projectID string) ([]models.Task, error) {
 	populated, err := s.ws.IsWorkspacePopulated(ctx, projectID)
 	if err != nil {
+		slog.Error("check workspace populated failed", "project_id", projectID, "error", err)
 		return nil, fmt.Errorf("check workspace populated: %w", err)
 	}
 	if !populated {
+		slog.Warn("mark workspace ready called but workspace is empty", "project_id", projectID)
 		return nil, fmt.Errorf("%w: workspace is empty; seed content before marking ready", models.ErrWorkspaceNotReady)
 	}
-	return s.store.MarkProjectTasksReady(ctx, projectID)
+	tasks, err := s.store.MarkProjectTasksReady(ctx, projectID)
+	if err != nil {
+		slog.Error("mark project tasks ready failed", "project_id", projectID, "error", err)
+		return nil, err
+	}
+	slog.Info("workspace marked ready and tasks unlocked", "project_id", projectID, "unlocked_count", len(tasks))
+	return tasks, nil
 }

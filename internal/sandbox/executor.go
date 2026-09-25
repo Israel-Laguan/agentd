@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -40,10 +41,12 @@ func (e *BashExecutor) Execute(ctx context.Context, payload Payload) (Result, er
 		return Result{}, err
 	}
 	if containsSudo(payload.Command) {
+		slog.Debug("sandbox: sudo command blocked", "workspace", workspace, "task_id", payload.TaskID)
 		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub("sudo command blocked"))
 		return Result{ExitCode: -1, Stderr: e.scrub("sudo command blocked")}, fmt.Errorf("%w: sudo is not allowed", models.ErrSandboxViolation)
 	}
 	if err := validateCommandPaths(payload.Command, workspace); err != nil {
+		slog.Warn("sandbox: directory escape attempt blocked", "workspace", workspace, "task_id", payload.TaskID, "error", err)
 		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub("directory escape attempt blocked"))
 		return Result{ExitCode: -1}, err
 	}
@@ -82,6 +85,7 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	output := newCommandOutput(e.maxLogBytes(), e.scrubber())
 	output.start(execCtx, e.Sink, payload, stdout, stderr)
 	if err := cmd.Start(); err != nil {
+		slog.Error("sandbox: command start failed", "workspace", workspace, "task_id", payload.TaskID, "error", err)
 		cancel()
 		output.wg.Wait()
 		return Result{}, fmt.Errorf("start command: %w", err)
@@ -90,9 +94,15 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	output.wg.Wait()
 	waitErr := waitCommand(cmd, timedOut, e.killGrace())
 	if drainErr := output.drainError(); drainErr != nil {
+		slog.Error("sandbox: drain output failed", "workspace", workspace, "task_id", payload.TaskID, "error", drainErr)
 		return Result{}, fmt.Errorf("drain output: %w", drainErr)
 	}
 	result := output.result(cmd, started, hasTimedOut(timedOut))
+	if result.TimedOut {
+		slog.Warn("sandbox: command timed out", "workspace", workspace, "task_id", payload.TaskID, "timeout_seconds", e.Inactivity.Seconds())
+	} else if result.ExitCode != 0 {
+		slog.Debug("sandbox: command exited with non-zero code", "workspace", workspace, "task_id", payload.TaskID, "exit_code", result.ExitCode)
+	}
 	return result, finishError(waitErr, result.TimedOut)
 }
 

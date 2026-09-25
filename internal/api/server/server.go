@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 
 	"agentd/internal/api/controllers"
@@ -93,7 +94,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	if deps.MCPHandler != nil {
 		mux.Handle("/mcp", deps.MCPHandler)
 	}
-	return corsMiddleware(mux)
+	return requestLoggingMiddleware(corsMiddleware(mux))
 }
 
 // handleLanding serves a minimal daemon landing page so GET / identifies the
@@ -164,6 +165,15 @@ func corsMiddleware(next http.Handler) http.Handler {
 				return
 			}
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requestLoggingMiddleware logs HTTP requests at Debug level (only visible with -v/verbose mode).
+// This provides visibility into endpoint access patterns without cluttering Info-level logs.
+func requestLoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Debug("http request", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 		next.ServeHTTP(w, r)
 	})
 }
