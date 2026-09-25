@@ -146,8 +146,8 @@ func (s *Store) ListEventsByTask(ctx context.Context, taskID string) ([]models.E
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, project_id, task_id, type, payload, created_at, updated_at
 		FROM events
-		WHERE task_id = ?
-		ORDER BY created_at`, taskID)
+		WHERE task_id = ? AND updated_at NOT LIKE 'CURATED:%'
+		ORDER BY created_at, id`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("list events by task: %w", err)
 	}

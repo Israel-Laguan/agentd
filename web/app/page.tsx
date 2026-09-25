@@ -8,7 +8,7 @@ import {
   ChatMessage,
   DraftPlan,
 } from '@/lib/types';
-import { fetchProviders } from "@/lib/api";
+import { fetchProviders, resolveHumanHandoff } from "@/lib/api";
 import { BoardView } from "@/app/components/board/board-view";
 import { ChatView } from "@/app/components/chat/chat-view";
 import { LogsView } from "@/app/components/logs-view";
@@ -31,6 +31,7 @@ export default function Page() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draftPlan, setDraftPlan] = useState<DraftPlan | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [taskEventRefreshKey, setTaskEventRefreshKey] = useState(0);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
@@ -43,6 +44,7 @@ export default function Page() {
     boardError,
     systemStatus,
     handleMaterialized,
+    refreshDashboard,
   } = useDashboard(setSelectedTask);
 
   const { handleDragEnd, handleUpdateTask } = useTaskBoard(
@@ -82,6 +84,44 @@ export default function Page() {
     [handleMaterialized]
   );
 
+  const handleOpenTask = useCallback(
+    async (taskId: string) => {
+      try {
+        setActiveTab('board');
+        let task = localTasks.find((candidate) => candidate.id === taskId);
+        if (!task) {
+          const tasks = await refreshDashboard(false);
+          task = tasks.find((candidate) => candidate.id === taskId);
+        }
+        if (task) setSelectedTask(task);
+      } catch (error) {
+        console.error("Failed to open task", error);
+      }
+    },
+    [localTasks, refreshDashboard]
+  );
+
+  const handleResolveHandoff = async (
+    taskId: string,
+    result: string,
+    expectedUpdatedAt: number
+  ) => {
+    const resolution = await resolveHumanHandoff(taskId, result, expectedUpdatedAt);
+    setLocalTasks((tasks) => {
+      const updated = tasks.map((task) => {
+        if (task.id === resolution.task.id) return resolution.task;
+        if (task.id === resolution.parent.id) return resolution.parent;
+        return task;
+      });
+      const ids = new Set(updated.map((task) => task.id));
+      if (!ids.has(resolution.task.id)) updated.push(resolution.task);
+      if (!ids.has(resolution.parent.id)) updated.push(resolution.parent);
+      return updated;
+    });
+    setSelectedTask(resolution.task);
+    setTaskEventRefreshKey((value) => value + 1);
+  };
+
   const onUpdateTask = async (id: string, patch: Partial<Task>) => {
     try {
       await handleUpdateTask(id, patch);
@@ -112,6 +152,7 @@ export default function Page() {
                 setDraftPlan={setDraftPlan}
                 setActiveTab={setActiveTab}
                 onMaterialized={onMaterialized}
+                onOpenTask={(taskId) => void handleOpenTask(taskId)}
                 input={input}
                 setInput={setInput}
                 isTyping={isTyping}
@@ -173,6 +214,8 @@ export default function Page() {
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
         onUpdateTask={onUpdateTask}
+        onResolveHandoff={handleResolveHandoff}
+        eventRefreshKey={taskEventRefreshKey}
       />
     </div>
   );

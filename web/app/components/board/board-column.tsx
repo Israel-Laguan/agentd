@@ -40,6 +40,8 @@ export function BoardColumn({
               ? "text-green-400"
               : status === TaskStatus.FAILED || status === TaskStatus.FAILED_REQUIRES_HUMAN
               ? "text-error"
+              : status === TaskStatus.NEEDS_CONTEXT || status === TaskStatus.BLOCKED
+              ? "text-warning"
               : "text-text-dim"
           )}
         >

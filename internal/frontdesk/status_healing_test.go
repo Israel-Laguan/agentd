@@ -108,6 +108,64 @@ func TestSummarizeWithOptions_ExcludesSystemProject(t *testing.T) {
 	}
 }
 
+func TestSummarizeIncludesStructuredAttention(t *testing.T) {
+	store := testutil.NewFakeStore()
+	project, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "attention",
+		Tasks:       []models.DraftTask{{Title: "Collect hardware details"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	_, children, err := store.BlockTaskWithSubtasks(context.Background(), tasks[0].ID, tasks[0].UpdatedAt, []models.DraftTask{{
+		Title:    models.HITLSubtaskTitleManualAction + " privileged command",
+		Assignee: models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	report, err := frontdesk.NewStatusSummarizer(store).SummarizeWithOptions(context.Background(), frontdesk.SummarizeOptions{
+		IncludeHealing: true, IncludeSystem: true,
+	})
+	if err != nil {
+		t.Fatalf("summarize: %v", err)
+	}
+	var child *frontdesk.AttentionItem
+	for i := range report.Attention {
+		if report.Attention[i].TaskID == children[0].ID {
+			child = &report.Attention[i]
+			break
+		}
+	}
+	if child == nil {
+		t.Fatalf("attention = %#v, want child %s", report.Attention, children[0].ID)
+	}
+	if child.ProjectID != project.ID || child.ProjectName != project.Name {
+		t.Fatalf("attention project = %+v", child)
+	}
+	if child.RequiredAction == "" || child.Explanation == "" {
+		t.Fatalf("attention action/explanation missing: %+v", child)
+	}
+}
+
+func TestSummarizeWithoutAttentionKeepsEmptyList(t *testing.T) {
+	store := testutil.NewFakeStore()
+	_, _, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "quiet",
+		Tasks:       []models.DraftTask{{Title: "Ready work"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	report, err := frontdesk.NewStatusSummarizer(store).Summarize(context.Background())
+	if err != nil {
+		t.Fatalf("summarize: %v", err)
+	}
+	if len(report.Attention) != 0 {
+		t.Fatalf("attention = %#v, want empty", report.Attention)
+	}
+}
+
 func TestSummarize_BackwardsCompatible(t *testing.T) {
 	store := testutil.NewFakeStore()
 	_, _, err := store.MaterializePlan(context.Background(), models.DraftPlan{

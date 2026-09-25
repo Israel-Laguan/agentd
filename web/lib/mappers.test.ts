@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapDaemonComment, mapDaemonTask, mapDaemonDraftPlan } from "./mappers";
+import { mapDaemonComment, mapDaemonTask, mapDaemonTaskEvent, mapDaemonDraftPlan } from "./mappers";
 
 describe("mapDaemonComment", () => {
   it("maps USER author string to You", () => {
@@ -51,6 +51,33 @@ describe("mapDaemonTask", () => {
   it("reads lowercase state key", () => {
     const task = mapDaemonTask({ id: "t1", state: "RUNNING" });
     expect(task.state).toBe("RUNNING");
+  });
+
+  it("preserves assignee and defaults to system", () => {
+    expect(mapDaemonTask({ Assignee: "HUMAN" }).assignee).toBe("HUMAN");
+    expect(mapDaemonTask({ assignee: "HUMAN" }).assignee).toBe("HUMAN");
+    expect(mapDaemonTask({}).assignee).toBe("SYSTEM");
+  });
+});
+
+describe("mapDaemonTaskEvent", () => {
+  it("preserves task results and truncation metadata", () => {
+    const event = mapDaemonTaskEvent({
+      id: "e1",
+      project_id: "p1",
+      task_id: "t1",
+      type: "RESULT",
+      payload: "completed",
+      payload_truncated: true,
+      created_at: "2026-09-25T10:00:00Z",
+      updated_at: "2026-09-25T10:00:00Z",
+    });
+    expect(event).toMatchObject({
+      task_id: "t1",
+      type: "RESULT",
+      payload: "completed",
+      payload_truncated: true,
+    });
   });
 });
 

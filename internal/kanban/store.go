@@ -33,6 +33,7 @@ var (
 	_ models.ScheduledTaskStore = (*Store)(nil)
 )
 var _ models.KanbanBoardContract = (*Store)(nil)
+var _ models.HumanHandoffResolver = (*Store)(nil)
 
 func NewStore(db *sql.DB, projectsDir string) *Store {
 	absolute, err := filepath.Abs(filepath.Clean(projectsDir))

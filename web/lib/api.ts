@@ -12,7 +12,7 @@ import { unwrapData, mapDaemonTask } from "@/lib/mappers";
 import { API, USE_MOCK } from "@/lib/api-config";
 
 export { sendChat, postApprovePlan } from "@/lib/api-chat";
-export { fetchTaskComments, updateTask, addTaskComment } from "@/lib/api-tasks";
+export { fetchTaskComments, fetchTaskEvents, updateTask, addTaskComment, resolveHumanHandoff } from "@/lib/api-tasks";
 export type { ChatSettings } from "@/lib/api-config";
 
 // ---------------- BOARD ----------------
@@ -27,7 +27,9 @@ export async function getBoard(): Promise<{ tasks: Task[] }> {
     projects.map(async (p) => {
       const projectId = (p.ID ?? p.id) as string;
       if (!projectId) return [] as Task[];
-      const r = await fetch(`${API}/api/v1/projects/${projectId}/tasks`);
+      const r = await fetch(
+        `${API}/api/v1/projects/${projectId}/tasks?limit=200&include_healing=true`
+      );
       if (!r.ok) return [] as Task[];
       return unwrapData<Record<string, unknown>[]>(await r.json()).map(mapDaemonTask);
     })

@@ -176,8 +176,12 @@ func (w *Worker) applyBatchLegacySlot(
 		w.handlePromptRecovery(ctx, task, project, slot.Command, result)
 		return
 	}
+	if w.isPrivilegeBlock(result, runErr) {
+		w.recoverLegacyPrivilege(ctx, task, project, profile, slot.Command, &legacyTaskAudit{})
+		return
+	}
 	if w.isPermissionFailure(result, runErr) {
-		w.handlePermissionFailure(ctx, task, slot.Command, result)
+		w.handlePermissionFailure(ctx, task, slot.Command, "The sandbox reported a permission failure; no non-privileged recovery was attempted.")
 		return
 	}
 	if profile.RequireReview && runErr == nil && result.Success {

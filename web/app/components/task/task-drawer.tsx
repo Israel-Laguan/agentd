@@ -1,10 +1,13 @@
 "use client";
 
-import { Task, TaskStatus } from "@/lib/types";
+import { Task, TaskStatus, TaskAssignee, TaskEvent } from "@/lib/types";
 import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRef, useState, useLayoutEffect } from "react";
+import { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { CommentPanel } from "../comment/comment-panel";
+import { fetchTaskEvents } from "@/lib/api";
+import { HumanResolutionForm } from "./human-resolution-form";
+import { TaskEventList } from "./task-event-list";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 
@@ -12,19 +15,56 @@ interface TaskDrawerProps {
   task: Task | null;
   onClose: () => void;
   onUpdateTask?: (id: string, patch: Partial<Task>) => Promise<void>;
+  onResolveHandoff?: (taskId: string, result: string, expectedUpdatedAt: number) => Promise<void>;
+  eventRefreshKey?: number;
 }
 
-export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
+const humanHandoffPrefixes = [
+  "Approve tool call: ",
+  "Review required:",
+  "Clarification required: ",
+  "Manual review required:",
+  "Manual action required:",
+];
+
+function isHumanHandoff(task: Task) {
+  return task.assignee === TaskAssignee.HUMAN && humanHandoffPrefixes.some((prefix) => task.title.startsWith(prefix));
+}
+
+export function TaskDrawer({
+  task,
+  onClose,
+  onUpdateTask,
+  onResolveHandoff,
+  eventRefreshKey = 0,
+}: TaskDrawerProps) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [status, setStatus] = useState<TaskStatus>(task?.state || TaskStatus.PENDING);
+  const [events, setEvents] = useState<TaskEvent[]>([]);
 
   const committedTitleRef = useRef(task?.title ?? "");
   const committedDescriptionRef = useRef(task?.description ?? "");
   const committedStatusRef = useRef<TaskStatus>(task?.state || TaskStatus.PENDING);
   const suppressBlurSaveRef = useRef(false);
+
+  const taskId = task?.id;
+  useEffect(() => {
+    let cancelled = false;
+    if (!taskId) return () => { cancelled = true; };
+    fetchTaskEvents(taskId)
+      .then((loaded) => {
+        if (!cancelled) setEvents(loaded);
+      })
+      .catch(() => {
+        if (!cancelled) setEvents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId, eventRefreshKey]);
 
   // Synchronize local state when the task prop changes (review-requested pattern).
   /* eslint-disable */
@@ -205,6 +245,14 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
               </select>
             </div>
 
+            <div>
+              <label className="text-[10px] text-text-dim pr-2">Assignee</label>
+              <p className="mt-1 flex items-center gap-2 text-sm text-text">
+                {task.assignee === TaskAssignee.HUMAN && <span className="text-purple-400">HUMAN</span>}
+                {task.assignee === TaskAssignee.SYSTEM && <span className="text-text-dim">SYSTEM</span>}
+              </p>
+            </div>
+
             {/* CREATED */}
             <div>
               <label className="text-[10px] text-text-dim">Created</label>
@@ -220,6 +268,17 @@ export function TaskDrawer({ task, onClose, onUpdateTask }: TaskDrawerProps) {
                 {new Date(task.updated_at).toLocaleString()}
               </p>
             </div>
+
+            <div className="pt-4 border-t border-border">
+              <TaskEventList events={events.filter((event) => event.task_id === task.id)} />
+            </div>
+
+            {task && isHumanHandoff(task) && onResolveHandoff && (
+              <HumanResolutionForm
+                task={task}
+                onResolve={(taskId, result) => onResolveHandoff(taskId, result, task.updated_at)}
+              />
+            )}
 
             {/* COMMENTS */}
             <div className="pt-4 border-t border-border">

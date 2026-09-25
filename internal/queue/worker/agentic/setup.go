@@ -42,6 +42,7 @@ func (e *Engine) prepareAgenticRun(
 }
 
 func (e *Engine) setupAgenticCancel(ctx context.Context, taskID string) (context.Context, func()) {
+	e.privilegeAlternativeAttempted = false
 	cancelCtx, cancel := context.WithCancel(ctx)
 	e.host.RegisterCancel(taskID, cancel)
 	return cancelCtx, func() {

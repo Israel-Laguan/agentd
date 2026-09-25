@@ -105,7 +105,7 @@ curl -s -X POST http://localhost:8765/v1/chat/completions   -H "Content-Type: ap
 
 **Steps:**
 1. Create a task via chat (Checkpoint 2)
-2. Approve the plan (in the web UI, this triggers `POST /api/v1/projects/materialize`)
+2. Approve the plan (in the web UI, this triggers `POST /api/v1/projects/materialize` with `start_empty_workspace: true`)
 3. Check the Kanban board
 4. Verify task appears in correct column
 
@@ -151,7 +151,36 @@ podman logs agentd_agentd_1 -f 2>&1 | grep -E 'task|execut|complete|RUNNING|COMP
 
 ---
 
-## Verification Results (verified 2026-09-23)
+## Chat-to-Kanban privileged handoff QA
+
+The repeatable API portion uses the operator-provided internal LiteLLM, not the
+compose `mockllm`; use an isolated `AGENTD_HOME` and a fresh project database.
+```bash
+AGENTD_API_URL=http://127.0.0.1:8765 \
+LITELLM_BASE_URL=http://127.0.0.1:4000/v1 \
+LITELLM_API_KEY="$LITELLM_API_KEY" \
+LITELLM_MODEL="$LITELLM_MODEL" \
+./scripts/chat-kanban-qa.sh
+```
+
+The script authenticates against `/v1/models`, checks agentd and the web endpoint,
+creates the machine-inventory chat plan, materializes it with
+`start_empty_workspace`, polls task events for autonomous output, and exercises
+the human-resolution API. It exits non-zero when assertions fail and prints the
+project/task IDs for investigation; do not use `deploy/docker-plan-execute/mockllm`
+for the real-provider run. API assertions are automated; browser click-through remains manual.
+
+## Manual browser verification
+
+1. Send the inventory, hardware, and privileged-detail plan in Chat.
+2. Approve it once with **Execute Strategy** and confirm root tasks leave
+   `PENDING` for `READY`/`QUEUED`/`RUNNING` without a workspace seeding call.
+3. Inspect the Board, then ask “How’s it going?”.
+4. If an attention card appears, use **Open in Board**, copy the displayed
+   command, and run it in the operator’s own terminal.
+5. Paste the output into the task drawer’s resolution form and resolve the
+   handoff. Confirm the child and parent reach terminal state and do not rerun
+   the privileged command. Ask for status again and confirm attention is gone.The browser has no automation; API assertions are automated.
 
 All four checkpoints were verified end-to-end against the running stack
 (`podman compose -f docker-compose.dev.yml up --build -d`):
@@ -161,7 +190,7 @@ All four checkpoints were verified end-to-end against the running stack
 | CP1 – Logs + Kanban accessible | ✅ PASS | `GET /` → HTTP 200 with full dashboard HTML (Chat/Board/Logs nav); `GET /api/v1/projects` → 3 projects; SSE endpoint accepts connections |
 | CP2 – Chat interface works | ✅ PASS | `POST /v1/chat/completions` returns a `create_plan` tool call containing a DraftPlan |
 | CP3 – Kanban reflects database | ✅ PASS | `POST /api/v1/projects/materialize` → HTTP 201; tasks visible via `GET /api/v1/projects/{id}/tasks` |
-| CP4 – Multi-task plan + execution | ✅ PASS | After `workspace/ready`, every executable direct and generated task reached `COMPLETED`; `PLAN_RESULTS.log` in the materialized project workspace contains a task-ID evidence line for each direct and generated task (only the intended `AGENT_PLAN` parent may be `BLOCKED`) |
+| CP4 – Multi-task plan + execution | ✅ PASS | After `workspace/ready`, every executable direct and generated task reached `COMPLETED`; `PLAN_RESULTS.log` in the materialized project workspace contains a task-ID evidence line for each direct and generated task (only the intended `AGENT_PLAN` parent may be `BLOCKED`). Chat approval uses the explicit empty-workspace contract; seeded-workspace verification still uses `workspace/ready`. |
 
 Additional observations:
 
@@ -185,7 +214,8 @@ Additional observations:
 
 ### Tasks stuck in PENDING (never dispatched)
 
-Materialized plans **without** a `source_path` intentionally create tasks in `PENDING` and keep
+Materialized plans **without** a `source_path` or explicit
+`start_empty_workspace: true` intentionally create tasks in `PENDING` and keep
 them unclaimable until an operator signals workspace readiness (see
 `ProjectService.MaterializePlan` in `internal/services/project_service.go`). To unlock:
 
@@ -199,9 +229,9 @@ podman exec agentd_agentd_1 sh -c 'echo "# workspace" > "/home/agentd/projects/$
 curl -s -X POST "http://localhost:8765/api/v1/projects/${PROJECT_ID}/workspace/ready"
 ```
 
-Calling step 2 before step 1 returns **HTTP 409** (`workspace is empty; seed content before
-marking ready`). No `X-Agentd-Materialize-Token` header is required unless
-`api.materialize_token` is set in the agentd config.
+Chat-created plans now send `start_empty_workspace: true`, so they use the
+explicit empty-workspace flow. Plans using the two-phase seeded-workspace flow
+must omit the flag, seed content, and then call `workspace/ready`.
 
 Note: the boot log field `scheduler_enabled: false` refers to the optional **agentic cron
 scheduler** (`agentic.scheduler.enabled`, defaults to `false`) — it is unrelated to normal task
@@ -226,7 +256,7 @@ matching task-ID line in the project's `PLAN_RESULTS.log` as execution evidence.
 ### If LiteLLM is not running:
 - Tasks will fail with LLM errors
 - Check logs for "connection refused" or "LLM error"
-- Verify: `curl -s http://localhost:4000/health/liveliness` (should return `"I'm alive!"`)
+- Discover the real model alias from the operator’s authenticated `/v1/models` response, then set `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `LITELLM_MODEL` for agentd. Do not substitute the compose `mockllm` for the real-provider run.
 - Check litellm config mount: `./deploy/docker-plan-execute/litellm/config.yaml:/app/config.yaml:ro`
 
 ### If web shows "Not Connected":
@@ -242,7 +272,7 @@ matching task-ID line in the project's `PLAN_RESULTS.log` as execution evidence.
 ### If tasks don't appear:
 - Check daemon logs for errors: `podman logs agentd_agentd_1`
 - Verify database has tasks: `podman exec agentd_agentd_1 sqlite3 /home/agentd/global.db "SELECT * FROM tasks;"`
-- Check mockllm is reachable through litellm: `curl -s -H "Authorization: Bearer sk-demo-litellm-plan-execute-only" http://localhost:4000/v1/models`
+- For compose-only smoke tests, check mockllm through litellm: `curl -s -H "Authorization: Bearer $LITELLM_API_KEY" http://localhost:4000/v1/models`
 
 ### Healthchecks show unhealthy:
 - podman-compose 1.3.0 has a known healthcheck quoting bug with exec-form (`CMD`) tests.

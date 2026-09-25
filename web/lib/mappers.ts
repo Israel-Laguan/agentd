@@ -1,4 +1,13 @@
-import { Task, TaskStatus, TaskLog, TaskComment, DraftPlan, DraftPlanTask } from "@/lib/types";
+import {
+  Task,
+  TaskStatus,
+  TaskAssignee,
+  TaskEvent,
+  TaskLog,
+  TaskComment,
+  DraftPlan,
+  DraftPlanTask,
+} from "@/lib/types";
 
 // unwrapData extracts the `.data` field from the daemon's standard envelope
 // { status, data, meta?, error? }. Used by all real-API fetch functions.
@@ -50,6 +59,7 @@ export function mapDaemonTask(raw: Record<string, unknown>): Task {
     title: (raw.Title ?? raw.title ?? "") as string,
     description: (raw.Description ?? raw.description ?? "") as string,
     state: ((raw.State ?? raw.state ?? raw.status ?? "PENDING") as string) as TaskStatus,
+    assignee: ((raw.Assignee ?? raw.assignee ?? TaskAssignee.SYSTEM) as string) as TaskAssignee,
     depends_on: ((raw.DependsOn ?? raw.depends_on ?? raw.dependsOn ?? []) as string[]),
     // Logs is a raw string on the daemon side; degrade to empty structured array.
     logs: [] as TaskLog[],
@@ -62,6 +72,21 @@ export function mapDaemonTask(raw: Record<string, unknown>): Task {
 // mapDaemonDraftPlan converts a raw daemon DraftPlan (project_name / PascalCase
 // fallback) to the web DraftPlan shape. project_name maps to name; task
 // ref_id / temp_id map to the optional DraftPlanTask.id.
+export function mapDaemonTaskEvent(raw: Record<string, unknown>): TaskEvent {
+  const createdAt = raw.CreatedAt ?? raw.created_at ?? raw.createdAt;
+  const updatedAt = raw.UpdatedAt ?? raw.updated_at ?? raw.updatedAt;
+  return {
+    id: String(raw.ID ?? raw.id ?? ""),
+    project_id: String(raw.ProjectID ?? raw.project_id ?? raw.projectId ?? ""),
+    task_id: String(raw.TaskID ?? raw.task_id ?? raw.taskId ?? ""),
+    type: String(raw.Type ?? raw.type ?? "EVENT"),
+    payload: String(raw.Payload ?? raw.payload ?? ""),
+    payload_truncated: Boolean(raw.PayloadTruncated ?? raw.payload_truncated ?? false),
+    created_at: typeof createdAt === "string" ? createdAt : new Date(isoToMs(createdAt)).toISOString(),
+    updated_at: typeof updatedAt === "string" ? updatedAt : new Date(isoToMs(updatedAt)).toISOString(),
+  };
+}
+
 export function mapDaemonDraftPlan(raw: Record<string, unknown> | null | undefined): DraftPlan {
   const safeRaw = raw ?? {};
   const name = (safeRaw.project_name ?? safeRaw.ProjectName ?? "") as string;

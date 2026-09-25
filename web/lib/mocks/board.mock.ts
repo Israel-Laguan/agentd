@@ -1,4 +1,4 @@
-import { Task, TaskStatus } from "@/lib/types"; // adjust path if needed
+import { Task, TaskAssignee, TaskStatus } from "@/lib/types";
 
 export const mockBoard: { tasks: Task[] } = {
   tasks: [
@@ -8,6 +8,7 @@ export const mockBoard: { tasks: Task[] } = {
       title: "Design system UI",
       description: "Create base UI components",
       state: TaskStatus.PENDING,
+      assignee: TaskAssignee.SYSTEM,
       depends_on: [],
       logs: [],
       created_at: Date.now(),
@@ -20,6 +21,7 @@ export const mockBoard: { tasks: Task[] } = {
       title: "Build API integration",
       description: "Connect frontend to backend",
       state: TaskStatus.RUNNING,
+      assignee: TaskAssignee.SYSTEM,
       depends_on: ["t1"],
       logs: [
         {
@@ -37,6 +39,7 @@ export const mockBoard: { tasks: Task[] } = {
       title: "AI orchestration layer",
       description: "Implement planner logic",
       state: TaskStatus.COMPLETED,
+      assignee: TaskAssignee.SYSTEM,
       depends_on: ["t2"],
       logs: [
         {
@@ -53,6 +56,7 @@ export const mockBoard: { tasks: Task[] } = {
       title: "Deploy system",
       description: "Deploy to production",
       state: TaskStatus.FAILED,
+      assignee: TaskAssignee.SYSTEM,
       depends_on: ["t3"],
       logs: [
         {
@@ -69,6 +73,7 @@ export const mockBoard: { tasks: Task[] } = {
       title: "Retry exhausted worker task",
       description: "Evicted after max retries; needs operator review",
       state: TaskStatus.FAILED_REQUIRES_HUMAN,
+      assignee: TaskAssignee.HUMAN,
       depends_on: ["t4"],
       logs: [
         {
@@ -76,6 +81,31 @@ export const mockBoard: { tasks: Task[] } = {
           timestamp: Date.now(),
         },
       ],
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    },
+    {
+      id: "t6",
+      project_id: "p1",
+      title: "Manual action required: privileged command",
+      description:
+        'The worker detected a command that requires host privileges. Run it in your own terminal.\n\npattern=privilege command="sudo dmidecode --string system-serial-number" exit=1',
+      state: TaskStatus.BLOCKED,
+      assignee: TaskAssignee.HUMAN,
+      depends_on: ["t2"],
+      logs: [],
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    },
+    {
+      id: "t7",
+      project_id: "p1",
+      title: "Refresh execution context",
+      description: "A fresh context pack is required before this task can continue.",
+      state: TaskStatus.NEEDS_CONTEXT,
+      assignee: TaskAssignee.SYSTEM,
+      depends_on: ["t2"],
+      logs: [],
       created_at: Date.now(),
       updated_at: Date.now(),
     },

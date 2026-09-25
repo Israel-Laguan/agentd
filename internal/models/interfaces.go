@@ -15,6 +15,10 @@ type TaskCanceller interface {
 	Cancel(taskID string) bool
 }
 
+type HumanHandoffResolver interface {
+	ResolveHumanHandoff(ctx context.Context, taskID string, expectedUpdatedAt *time.Time, result string) (*HumanHandoffResolution, error)
+}
+
 // KanbanBoardContract captures the proposal-aligned box contract for queue and
 // frontdesk orchestration. The richer KanbanStore below remains the primary
 // internal persistence boundary.

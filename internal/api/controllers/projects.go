@@ -58,7 +58,7 @@ func (h ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h ProjectHandler) Materialize(w http.ResponseWriter, r *http.Request) {
-	if err := h.verifyMaterializeToken(r); err != nil {
+	if err := verifyMaterializeToken(r, h.MaterializeToken); err != nil {
 		httpx.WriteError(w, http.StatusForbidden, httpx.CodeForbidden, err.Error())
 		return
 	}
@@ -82,7 +82,7 @@ func (h ProjectHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 // WorkspaceReady signals that the project workspace has been populated and
 // tasks may be dispatched. Transitions PENDING tasks to READY.
 func (h ProjectHandler) WorkspaceReady(w http.ResponseWriter, r *http.Request) {
-	if err := h.verifyMaterializeToken(r); err != nil {
+	if err := verifyMaterializeToken(r, h.MaterializeToken); err != nil {
 		httpx.WriteError(w, http.StatusForbidden, httpx.CodeForbidden, err.Error())
 		return
 	}
@@ -105,8 +105,8 @@ func (h ProjectHandler) WorkspaceReady(w http.ResponseWriter, r *http.Request) {
 
 const materializeTokenHeader = "X-Agentd-Materialize-Token"
 
-func (h ProjectHandler) verifyMaterializeToken(r *http.Request) error {
-	want := strings.TrimSpace(h.MaterializeToken)
+func verifyMaterializeToken(r *http.Request, wantValue string) error {
+	want := strings.TrimSpace(wantValue)
 	if want == "" {
 		return nil
 	}

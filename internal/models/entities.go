@@ -84,6 +84,12 @@ type Event struct {
 	Payload   string
 }
 
+type HumanHandoffResolution struct {
+	Task   *Task  `json:"task"`
+	Parent *Task  `json:"parent"`
+	Result string `json:"result"`
+}
+
 // TokenUsageEvent is a timestamped per-call token count used to rebuild rolling budgets.
 // CachedTokens / CacheWriteTokens are prompt-cache observability fields that ride
 // along the TOKEN_USAGE event payload; they are not consumed by the rolling budget.

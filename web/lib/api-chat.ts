@@ -93,6 +93,7 @@ export async function postApprovePlan(plan: DraftPlan): Promise<MaterializeResul
   const daemonBody = {
     project_name: plan.name,
     description: plan.description,
+    start_empty_workspace: true,
     tasks: plan.tasks.map((t) => ({
       title: t.title,
       description: t.description,

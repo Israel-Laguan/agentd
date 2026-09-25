@@ -84,8 +84,20 @@ func TestListCommentsAndEventsRoundTrip(t *testing.T) {
 	if err != nil || len(comments) != 0 {
 		t.Fatalf("ListCommentsSince after curation: %v %#v", err, comments)
 	}
+	assertCurationHidesEvents(t, store, task.ID)
 	if err := store.DeleteCuratedEvents(ctx, task.ID); err != nil {
 		t.Fatalf("DeleteCuratedEvents: %v", err)
+	}
+}
+
+func assertCurationHidesEvents(t *testing.T, store *Store, taskID string) {
+	t.Helper()
+	events, err := store.ListEventsByTask(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("ListEventsByTask after curation: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("events after curation = %#v, want empty", events)
 	}
 }
 

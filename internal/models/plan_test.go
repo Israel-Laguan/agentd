@@ -79,6 +79,16 @@ func TestDraftPlanValidateDanglingDependency(t *testing.T) {
 	}
 }
 
+func TestDraftPlanStartEmptyWorkspaceJSON(t *testing.T) {
+	var plan DraftPlan
+	if err := json.Unmarshal([]byte(`{"project_name":"inventory","start_empty_workspace":true,"tasks":[{"title":"Collect data"}]}`), &plan); err != nil {
+		t.Fatalf("UnmarshalJSON() error = %v", err)
+	}
+	if !plan.StartEmptyWorkspace {
+		t.Fatal("StartEmptyWorkspace = false, want true")
+	}
+}
+
 func TestDraftPlan_UnmarshalJSON_Legacy(t *testing.T) {
 	data := `{
 		"ProjectName": "Legacy Project",

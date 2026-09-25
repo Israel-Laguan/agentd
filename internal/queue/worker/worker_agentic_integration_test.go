@@ -15,6 +15,99 @@ import (
 	"agentd/internal/testutil"
 )
 
+func TestAgenticSudoBlockExecutesOneNonPrivilegedAlternative(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		{Content: "Inspect memory", ToolCalls: []gateway.ToolCall{{
+			ID: "call-privileged", Type: "function",
+			Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sudo dmidecode -t memory"}`},
+		}}},
+		{Content: `{"command":"free -h"}`},
+		{Content: "Completed with non-privileged memory data."},
+	}}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"sudo dmidecode -t memory": {Success: false, ExitCode: -1, Stderr: "sudo command blocked"},
+		"free -h":                  {Success: true, ExitCode: 0, Stdout: "available without privileges"},
+	}}
+	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
+	w.Process(context.Background(), task)
+
+	if sb.executionCount != 2 {
+		t.Fatalf("sandbox executions = %d, want blocked original plus one alternative", sb.executionCount)
+	}
+	if sb.lastCommand != "free -h" {
+		t.Fatalf("last command = %q, want non-privileged alternative", sb.lastCommand)
+	}
+	if gw.callCount != 3 {
+		t.Fatalf("gateway calls = %d, want tool turn, one alternative request, and final turn", gw.callCount)
+	}
+	if store.committedResult == nil || !store.committedResult.Success {
+		t.Fatalf("result = %#v", store.committedResult)
+	}
+	if store.blocked {
+		t.Fatal("successful alternative must not create a HUMAN handoff")
+	}
+}
+
+func TestAgenticSudoBlockWithoutAlternativeCreatesSafeHandoff(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		{Content: "Inspect memory", ToolCalls: []gateway.ToolCall{{
+			ID: "call-privileged", Type: "function",
+			Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sudo dmidecode -t memory"}`},
+		}}},
+		{Content: `{"no_alternative":true,"reason":"API_KEY=sk-abcdefghijklmnopqrstuvwxyz requires host privilege"}`},
+	}}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
+		"sudo dmidecode -t memory": {Success: false, ExitCode: -1, Stderr: "sudo command blocked"},
+	}}
+	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
+	sink := &mockEventSink{}
+	w.sink = sink
+	w.Process(context.Background(), task)
+
+	if sb.executionCount != 1 {
+		t.Fatalf("sandbox executions = %d, want blocked original only", sb.executionCount)
+	}
+	if gw.callCount != 2 {
+		t.Fatalf("gateway calls = %d, want one alternative request only", gw.callCount)
+	}
+	if !store.blocked || len(store.drafts) != 1 || store.drafts[0].Assignee != models.TaskAssigneeHuman {
+		t.Fatalf("blocked=%v drafts=%#v", store.blocked, store.drafts)
+	}
+	for _, value := range []string{"sudo dmidecode -t memory", "No non-privileged alternative", permissionHandoffAction} {
+		if !strings.Contains(store.drafts[0].Description, value) {
+			t.Fatalf("handoff description missing %q: %s", value, store.drafts[0].Description)
+		}
+	}
+	eventPayload := findPermissionHandoffPayload(t, sink.events)
+	if strings.Contains(store.drafts[0].Description, "sk-abcdefghijklmnopqrstuvwxyz") {
+		t.Fatal("handoff description exposed a credential")
+	}
+	if eventPayload.OriginalCommand != "sudo dmidecode -t memory" || eventPayload.RequiredAction != permissionHandoffAction {
+		t.Fatalf("event payload = %#v", eventPayload)
+	}
+	if strings.Contains(eventPayload.AlternativeOutcome, "sk-abcdefghijklmnopqrstuvwxyz") || !strings.Contains(eventPayload.AlternativeOutcome, "[REDACTED]") {
+		t.Fatalf("event outcome was not safely scrubbed: %q", eventPayload.AlternativeOutcome)
+	}
+}
+
+func findPermissionHandoffPayload(t *testing.T, events []models.Event) permissionHandoffPayload {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != models.EventType("PERMISSION_HANDOFF") {
+			continue
+		}
+		var payload permissionHandoffPayload
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+			t.Fatalf("decode PERMISSION_HANDOFF: %v", err)
+		}
+		return payload
+	}
+	t.Fatal("expected PERMISSION_HANDOFF event")
+	return permissionHandoffPayload{}
+}
+
 // TestAgenticLoop_IntegrationWithMockGateway verifies the full agentic loop
 // when the gateway returns a sequence: first response with tool_calls,
 // second response with plain text (final result).

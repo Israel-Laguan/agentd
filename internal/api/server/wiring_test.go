@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -52,6 +53,33 @@ func TestNewHandlerGETProjectsSmoke(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
+	}
+}
+
+func TestNewHandlerRoutesTaskEvents(t *testing.T) {
+	store := testutil.NewFakeStore()
+	project, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "events",
+		Tasks:       []models.DraftTask{{Title: "Inspect"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	if err := store.AppendEvent(context.Background(), models.Event{
+		BaseEntity: models.BaseEntity{ID: "event-1"},
+		ProjectID:  project.ID,
+		TaskID:     sql.NullString{String: tasks[0].ID, Valid: true},
+		Type:       models.EventTypeResult,
+		Payload:    "done",
+	}); err != nil {
+		t.Fatalf("AppendEvent: %v", err)
+	}
+	handler := server.NewHandler(server.ServerDeps{Store: store, Summarizer: frontdesk.NewStatusSummarizer(store)})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+tasks[0].ID+"/events", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"event-1"`) {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
 }
 

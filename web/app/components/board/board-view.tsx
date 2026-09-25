@@ -35,6 +35,7 @@ export function BoardView({
       [TaskStatus.COMPLETED]: [],
       [TaskStatus.FAILED]: [],
       [TaskStatus.FAILED_REQUIRES_HUMAN]: [],
+      [TaskStatus.NEEDS_CONTEXT]: [],
       [TaskStatus.BLOCKED]: [],
       [TaskStatus.IN_CONSIDERATION]: [],
     };
@@ -91,12 +92,13 @@ export function BoardView({
       </div>
 
       <DndContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-9 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-10 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
           {[
             TaskStatus.PENDING,
             TaskStatus.READY,
             TaskStatus.QUEUED,
             TaskStatus.RUNNING,
+            TaskStatus.NEEDS_CONTEXT,
             TaskStatus.BLOCKED,
             TaskStatus.IN_CONSIDERATION,
             TaskStatus.COMPLETED,

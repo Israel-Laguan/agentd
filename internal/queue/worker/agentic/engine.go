@@ -61,6 +61,16 @@ type Host interface {
 		taskCaps *capabilities.Registry,
 		providerName string,
 	) (agenttools.ToolResult, bool)
+	AgenticPrivilegeBlock(call gateway.ToolCall, result agenttools.ToolResult) (string, bool)
+	RecoverAgenticPrivilege(
+		ctx context.Context,
+		task models.Task,
+		profile models.AgentProfile,
+		command string,
+		blockedResult agenttools.ToolResult,
+		allowAlternative bool,
+		dispatch func(gateway.ToolCall) (agenttools.ToolResult, bool),
+	) (agenttools.ToolResult, bool)
 	RunPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error)
 	Emit(ctx context.Context, task models.Task, kind, payload string)
 	AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage
@@ -109,8 +119,9 @@ type Host interface {
 }
 
 type Engine struct {
-	config Config
-	host   Host
+	config                        Config
+	host                          Host
+	privilegeAlternativeAttempted bool
 }
 
 func NewEngine(cfg Config, host Host) *Engine {

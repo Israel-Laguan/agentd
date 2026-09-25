@@ -15,6 +15,19 @@ violations.
 
 ---
 
+## Explicit empty-workspace start
+
+Chat-created plans intentionally opt in to an empty execution environment by
+sending `start_empty_workspace: true` during approval. The daemon creates the
+workspace and transitions dependency-free root tasks to `READY`; dependent
+tasks remain `PENDING` until their dependencies complete. This is an explicit
+execution-environment choice, not evidence that the host or container has a
+populated source tree.
+
+The compose `mockllm` and the operator-provided internal LiteLLM are separate
+model backends. The browser and the API-level QA runner must use the
+operator-provided backend for real execution results.
+
 ## Recommended Workflow: Option A — `source_path` on Materialize
 
 The simplest and safest approach. Include a `source_path` field pointing to a
@@ -96,26 +109,19 @@ for monitoring.
 ## Task State Machine
 
 ```text
-           source_path set              source_path empty
-               │                              │
-               ▼                              ▼
-     ┌──────────────────┐          ┌──────────────────┐
-     │  PENDING (brief) │          │     PENDING      │
-     └────────┬─────────┘          └────────┬─────────┘
-              │                              │
-     copy completes                  workspace/ready call
-              │                              │
-              ▼                              ▼
-     ┌──────────────────┐          ┌──────────────────┐
-     │      READY       │          │      READY       │
-     └────────┬─────────┘          └────────┬─────────┘
-              │                              │
-        worker claims                  worker claims
-              │                              │
-              ▼                              ▼
-     ┌──────────────────┐          ┌──────────────────┐
-     │     QUEUED       │          │     QUEUED       │
-     └──────────────────┘          └──────────────────┘
+       source_path set          start_empty_workspace=true       neither option
+            │                             │                              │
+            ▼                             ▼                              ▼
+      PENDING (brief)                  PENDING (brief)                    PENDING
+            │                             │                              │
+      copy completes                 workspace created                  seed externally
+            │                             │                              │
+            └──────────────┬──────────────┘                              │
+                           ▼                                             ▼
+                         READY                                    workspace/ready call
+                                                                         │
+                                                                         ▼
+                                                                       READY
 ```
 
 ---
@@ -131,6 +137,7 @@ Extended request body:
 | `project_name` | string   | yes      | Project display name |
 | `description`  | string   | no       | Project description |
 | `source_path`  | string   | no       | Local directory to copy into workspace before tasks become claimable |
+| `start_empty_workspace` | boolean | no | Explicitly start with an empty workspace; root tasks become `READY` when true |
 | `tasks`        | array    | yes      | Array of task drafts |
 
 ### POST /api/v1/projects/{id}/workspace/ready

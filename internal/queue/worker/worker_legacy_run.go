@@ -88,8 +88,12 @@ func (w *Worker) executeLegacyCommand(
 		w.handlePromptRecovery(ctx, task, project, command, result)
 		return
 	}
+	if w.isPrivilegeBlock(result, runErr) {
+		w.recoverLegacyPrivilege(ctx, task, project, profile, command, audit)
+		return
+	}
 	if w.isPermissionFailure(result, runErr) {
-		w.handlePermissionFailure(ctx, task, command, result)
+		w.handlePermissionFailure(ctx, task, command, "The sandbox reported a permission failure; no non-privileged recovery was attempted.")
 		return
 	}
 	if profile.RequireReview && runErr == nil && result.Success {

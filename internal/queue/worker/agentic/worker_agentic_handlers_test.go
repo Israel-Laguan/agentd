@@ -148,7 +148,7 @@ func TestHandleAgenticToolCalls_GetTaskNotFoundDoesNotPanic(t *testing.T) {
 
 	var messages []gateway.PromptMessage
 	abort, _, report := e.handleAgenticToolCalls(
-		context.Background(), task, "", resp, &messages, nil, ex, taskHooks, nil, cm, agenttools.NewToolFailureTracker(0), 0, agentruntime.NewBudgetGuard(nil, task.ID),
+		context.Background(), task, models.AgentProfile{}, "", resp, &messages, nil, ex, taskHooks, nil, cm, agenttools.NewToolFailureTracker(0), 0, agentruntime.NewBudgetGuard(nil, task.ID),
 	)
 	if abort || report {
 		t.Fatalf("abort = %v report = %v, want non-aborting tool dispatch", abort, report)
@@ -194,7 +194,7 @@ func TestHandleAgenticToolCalls_GetTaskNilNilDoesNotPanic(t *testing.T) {
 
 	var messages []gateway.PromptMessage
 	abort, _, report := e.handleAgenticToolCalls(
-		context.Background(), task, "", resp, &messages, nil, ex, taskHooks, nil, cm, agenttools.NewToolFailureTracker(0), 0, agentruntime.NewBudgetGuard(nil, task.ID),
+		context.Background(), task, models.AgentProfile{}, "", resp, &messages, nil, ex, taskHooks, nil, cm, agenttools.NewToolFailureTracker(0), 0, agentruntime.NewBudgetGuard(nil, task.ID),
 	)
 	if abort || report {
 		t.Fatalf("abort = %v report = %v, want non-aborting tool dispatch", abort, report)
@@ -240,7 +240,7 @@ func TestHandleAgenticToolCalls_RefreshesTaskUpdatedAt(t *testing.T) {
 
 	var messages []gateway.PromptMessage
 	e.handleAgenticToolCalls(
-		context.Background(), task, "", resp, &messages, nil, ex, nil, nil, cm,
+		context.Background(), task, models.AgentProfile{}, "", resp, &messages, nil, ex, nil, nil, cm,
 		agenttools.NewToolFailureTracker(0), 0, agentruntime.NewBudgetGuard(nil, task.ID),
 	)
 	if !host.capturedUpdatedAt.Equal(freshAt) {

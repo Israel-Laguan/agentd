@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  mapAttentionItems,
   mapScopeOptions,
   mapStatusReport,
   intakeFromRecord,
@@ -24,6 +25,44 @@ describe("chat-intake", () => {
     expect(report.message).toBe("2 projects active");
     expect(report.totalProjects).toBe(2);
     expect(report.tasksByState.RUNNING).toBe(1);
+    expect(report.attention).toEqual([]);
+  });
+
+  it("maps attention items and drops records without task ids", () => {
+    const report = mapStatusReport({
+      message: "Human intervention required",
+      Summary: { TotalProjects: 1, TasksByState: {} },
+      Attention: [
+        {
+          ProjectID: "p1",
+          ProjectName: "Inventory",
+          TaskID: "t9",
+          TaskTitle: "Privileged lookup",
+          State: "BLOCKED",
+          Assignee: "HUMAN",
+          RequiredAction: "Open the task and submit the result.",
+          Explanation: "A human handoff is open.",
+        },
+        { project_name: "Invalid" },
+      ],
+    });
+    expect(report.attention).toEqual([
+      {
+        projectId: "p1",
+        projectName: "Inventory",
+        taskId: "t9",
+        taskTitle: "Privileged lookup",
+        state: "BLOCKED",
+        assignee: "HUMAN",
+        requiredAction: "Open the task and submit the result.",
+        explanation: "A human handoff is open.",
+      },
+    ]);
+  });
+
+  it("returns no attention for an empty or missing list", () => {
+    expect(mapAttentionItems(undefined)).toEqual([]);
+    expect(mapAttentionItems([])).toEqual([]);
   });
 
   it("parses status_report from tool_calls", () => {

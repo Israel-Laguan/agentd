@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock,
   GripVertical,
+  HelpCircle,
   Loader2,
   MessageSquare,
   Play,
@@ -22,6 +23,7 @@ interface TaskCardProps {
     title: string;
     description: string;
     state: TaskStatus;
+    assignee: "HUMAN" | "SYSTEM";
     token_usage?: number;
   };
   onClick: () => void;
@@ -36,6 +38,7 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
     [TaskStatus.COMPLETED]: "bg-accent/10 text-accent border-accent/20",
     [TaskStatus.FAILED]: "bg-error/10 text-error border-error/20",
     [TaskStatus.FAILED_REQUIRES_HUMAN]: "bg-error/20 text-error border-error/40",
+    [TaskStatus.NEEDS_CONTEXT]: "bg-warning/10 text-warning border-warning/20",
     [TaskStatus.BLOCKED]: "bg-warning/10 text-warning border-warning/20",
     [TaskStatus.IN_CONSIDERATION]: "bg-purple-500/10 text-purple-400 border-purple-500/20",
   };
@@ -48,6 +51,7 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
     [TaskStatus.COMPLETED]: CheckCircle2,
     [TaskStatus.FAILED]: AlertCircle,
     [TaskStatus.FAILED_REQUIRES_HUMAN]: User,
+    [TaskStatus.NEEDS_CONTEXT]: HelpCircle,
     [TaskStatus.BLOCKED]: AlertCircle,
     [TaskStatus.IN_CONSIDERATION]: MessageSquare,
   };
@@ -103,7 +107,15 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
           {task.state}
         </div>
       </div>
-      <p className="text-[11px] text-text-dim line-clamp-2 mb-3 leading-relaxed">{task.description}</p>
+      <div className="flex items-center gap-2 mb-2">
+        {task.assignee === "HUMAN" && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-purple-500/20 bg-purple-500/10 text-purple-400">
+            <User size={10} />
+            Human action
+          </span>
+        )}
+        <p className="text-[11px] text-text-dim leading-relaxed">{task.description}</p>
+      </div>
       <div className="flex items-center gap-2">
         {(task.token_usage ?? 0) > 0 && (
           <span className="text-[9px] font-mono text-text-dim shrink-0" title="Tokens used">

@@ -32,6 +32,7 @@ interface ChatViewProps {
   setDraftPlan: React.Dispatch<React.SetStateAction<DraftPlan | null>>;
   setActiveTab: (tab: string) => void;
   onMaterialized?: (result: MaterializeResult) => void | Promise<void>;
+  onOpenTask?: (taskId: string) => void;
   input: string;
   setInput: (v: string) => void;
   isTyping: boolean;
@@ -48,6 +49,7 @@ export function ChatView({
   setDraftPlan,
   setActiveTab,
   onMaterialized,
+  onOpenTask,
   input,
   setInput,
   isTyping,
@@ -111,7 +113,9 @@ export function ChatView({
 
         {isTyping && <ChatTyping />}
 
-        {statusReport && <ChatStatusReportView report={statusReport} />}
+        {statusReport && (
+          <ChatStatusReportView report={statusReport} onOpenTask={onOpenTask} />
+        )}
 
         {pendingScopeOptions.length > 0 && (
           <ChatScopeClarificationPanel

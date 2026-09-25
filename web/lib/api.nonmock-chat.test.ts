@@ -113,6 +113,12 @@ describe('API (non-mock chat)', () => {
       kind: 'status_report',
       message: 'You have 1 active project(s) with 2 task(s) remaining',
       summary: { total_projects: 1, tasks_by_state: { RUNNING: 1, READY: 1 } },
+      attention: [{
+        project_id: 'p1', project_name: 'Inventory', task_id: 't9',
+        task_title: 'Privileged lookup', state: 'BLOCKED', assignee: 'HUMAN',
+        required_action: 'Open the task and submit the result.',
+        explanation: 'A human handoff is open.',
+      }],
     });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -132,6 +138,7 @@ describe('API (non-mock chat)', () => {
     const res = await sendChat('status?');
     expect(res.statusReport).toBeDefined();
     expect(res.statusReport!.totalProjects).toBe(1);
+    expect(res.statusReport!.attention[0].taskId).toBe('t9');
     expect(res.message.content).toBe('You have 1 active project(s) with 2 task(s) remaining');
     expect(res.message.content).not.toContain('"kind"');
     expect(res.plan).toBeUndefined();

@@ -67,6 +67,7 @@ When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.
+Never retry a command that the sandbox blocked for sudo or elevated privileges. Try at most one safe non-privileged alternative, then report that no alternative exists if it cannot complete the task.
 
 ` + agenthooks.ExternalContentInstruction
 	if len(goal) == 0 || goal[0] == nil || len(goal[0].SuccessCriteria) == 0 {

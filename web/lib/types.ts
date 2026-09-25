@@ -6,8 +6,14 @@ export enum TaskStatus {
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
   FAILED_REQUIRES_HUMAN = 'FAILED_REQUIRES_HUMAN',
+  NEEDS_CONTEXT = 'NEEDS_CONTEXT',
   BLOCKED = 'BLOCKED',
   IN_CONSIDERATION = 'IN_CONSIDERATION'
+}
+
+export enum TaskAssignee {
+  SYSTEM = 'SYSTEM',
+  HUMAN = 'HUMAN'
 }
 
 export interface TaskLog {
@@ -21,6 +27,7 @@ export interface Task {
   title: string;
   description: string;
   state: TaskStatus;
+  assignee: TaskAssignee;
   depends_on: string[];
   logs: TaskLog[];
   created_at: number;
@@ -68,10 +75,39 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface TaskEvent {
+  id: string;
+  project_id: string;
+  task_id: string;
+  type: string;
+  payload: string;
+  payload_truncated?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HumanHandoffResolution {
+  task: Task;
+  parent: Task;
+  result: string;
+}
+
+export interface ChatAttentionItem {
+  projectId: string;
+  projectName: string;
+  taskId: string;
+  taskTitle: string;
+  state: TaskStatus;
+  assignee: TaskAssignee;
+  requiredAction: string;
+  explanation: string;
+}
+
 export interface ChatStatusReport {
   message: string;
   totalProjects: number;
   tasksByState: Record<string, number>;
+  attention: ChatAttentionItem[];
 }
 
 export interface ChatScopeOption {
