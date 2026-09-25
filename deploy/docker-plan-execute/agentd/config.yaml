@@ -2,7 +2,7 @@
 #
 # The only gateway provider is the litellm proxy running in the same compose
 # network. All seeded agent profiles (default/researcher/qa) leave provider and
-# model empty, so they cascade to gateway.order -> litellm -> mock/agentd.
+# model empty, so they cascade to gateway.order -> litellm -> agentd.
 #
 # Passed to the daemon with: agentd --config /etc/agentd/config.yaml
 
@@ -21,7 +21,7 @@ gateway:
       adapter: openai
       base_url: "http://litellm:4000/v1"
       api_key_env: LITELLM_API_KEY      # matches the demo key in litellm/config.yaml + compose env
-      model: "mock/agentd"
+      model: "agentd"
       capabilities:
         chat_tools: true
       options:
