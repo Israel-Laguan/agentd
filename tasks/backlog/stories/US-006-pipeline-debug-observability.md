@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | user-story |
-| Status | ready |
+| Status | done |
 | Priority | P1 |
 | Sprint | backlog |
 | Persona | maintainer |
@@ -15,14 +15,14 @@ As a **maintainer diagnosing a stalled or slow request**, I want **debug logs sp
 
 ## Acceptance criteria
 
-- [ ] Chat intake logs request correlation ID, message count, selected flow, and completion/error outcome without logging secrets or full user content by default.
-- [ ] Router logs role, provider/model selection, candidate order, tool capability decisions, cascade attempts, provider errors, and final outcome.
-- [ ] Provider adapter logs a sanitized pre-request summary, endpoint/model, timeout, response status, latency, token usage, and decoded tool-call count.
-- [ ] Agentic loop logs task ID, session/turn/iteration lifecycle, guard decisions, LLM call start/end, tool dispatch start/end, and terminal result.
-- [ ] Logs use structured `slog` fields and preserve existing secret/content redaction behavior.
-- [ ] Debug logging is disabled or low-noise by default and can be enabled through the existing log-level configuration.
-- [ ] Tests verify key lifecycle events and confirm API keys, authorization headers, and prompt contents are not emitted.
-- [ ] A stalled chat request can be traced from HTTP intake through the final gateway/provider operation using one correlation identifier.
+- [x] Chat intake logs request correlation ID, message count, selected flow, and completion/error outcome without logging secrets or full user content by default.
+- [x] Router logs role, provider/model selection, candidate order, tool capability decisions, cascade attempts, provider errors, and final outcome.
+- [x] Provider adapter logs a sanitized pre-request summary, endpoint/model, timeout, response status, latency, token usage, and decoded tool-call count.
+- [x] Agentic loop logs task ID, session/turn/iteration lifecycle, guard decisions, LLM call start/end, tool dispatch start/end, and terminal result.
+- [x] Logs use structured `slog` fields and preserve existing secret/content redaction behavior.
+- [x] Debug logging is disabled or low-noise by default and can be enabled through the existing log-level configuration.
+- [x] Tests verify key lifecycle events and confirm API keys, authorization headers, and prompt contents are not emitted.
+- [x] A stalled chat request can be traced from HTTP intake through the final gateway/provider operation using one correlation identifier.
 
 ## Verification Plan
 
