@@ -61,10 +61,12 @@ func (w *Worker) handleTaskBreakdown(ctx context.Context, task models.Task, subt
 		w.handleAgentFailure(ctx, task, "worker reported task too complex without subtasks")
 		return
 	}
-	if _, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, drafts); err != nil {
+	_, children, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, drafts)
+	if err != nil {
 		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
+	w.recordBreakdownSubtasks(ctx, task, children)
 	w.Emit(ctx, task, "TASK_BREAKDOWN", fmt.Sprintf("created %d subtasks", len(drafts)))
 }
 

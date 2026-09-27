@@ -12,6 +12,12 @@ general_settings:
   # LITELLM_API_KEY in docker-compose for the agentd service.
   master_key: "sk-demo-litellm-plan-execute-only"
 
+litellm_settings:
+  # Forwards agentd's task metadata (which LiteLLM keeps for itself) to the
+  # upstream as `agentd_metadata`, so mockllm can tag evidence by task id.
+  # Resolved relative to this file: /app/agentd_correlation.py.
+  callbacks: agentd_correlation.proxy_handler_instance
+
 model_list:
   - model_name: agentd
     litellm_params:

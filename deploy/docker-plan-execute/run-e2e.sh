@@ -64,17 +64,21 @@ pass "plan materialized (project=${PID})"
 
 EVIDENCE="/home/agentd/projects/${PID}/PLAN_RESULTS.log"
 
+# The task list is paginated (default 25, newest first); ask for the maximum
+# page so a runaway decomposition can't push the oldest tasks off the page.
+TASKS_URL="${BASE}/api/v1/projects/${PID}/tasks?limit=200"
+
 # --- poll until the kanban settles ------------------------------------------
 log "waiting for tasks to execute (max 150s) ..."
 settled=0
 for i in $(seq 1 150); do
-  TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data // []' || echo '[]')
+  TASKS=$(curl -sS --max-time 5 "${TASKS_URL}" | jq -c '.data // []' || echo '[]')
   active=$(printf '%s' "$TASKS" | jq '[.[] | select(.state | test("READY|QUEUED|RUNNING|PENDING"))] | length')
   if [ "${active:-0}" -eq 0 ] && [ "$(printf '%s' "$TASKS" | jq 'length')" -gt 0 ]; then settled=1; break; fi
   sleep 1
 done
 
-TASKS=$(curl -sS --max-time 5 "${BASE}/api/v1/projects/${PID}/tasks" | jq -c '.data // []' || echo '[]')
+TASKS=$(curl -sS --max-time 5 "${TASKS_URL}" | jq -c '.data // []' || echo '[]')
 if ! printf '%s' "$TASKS" | jq . >/dev/null 2>&1; then
   TASKS='[]'
 fi
@@ -85,13 +89,12 @@ PLAN_CONTAINER=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test("AGENT_P
 GEN_SUBTASKS=$(printf '%s' "$TASKS" | jq '[.[] | select(.title | test(":: Step"))] | length' || echo 0)
 GEN_COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select( (.title | test(":: Step")) and .state=="COMPLETED" )] | length' || echo 0)
 DIRECT_COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select((.title | test("Generate a greeting script")) and .state=="COMPLETED")] | length' || echo 0)
-BLOCKED_IS_PLAN=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="BLOCKED" and (.title | test("AGENT_PLAN")))] | length' || echo 0)
-EXPECTED_COMPLETED=$((TOTAL - 1))
+PLAN_COMPLETED=$(printf '%s' "$TASKS" | jq '[.[] | select(.state=="COMPLETED" and (.title | test("AGENT_PLAN")))] | length' || echo 0)
 
 if [ "$settled" -ne 1 ]; then
   fail "kanban did not settle; active tasks remain"
 else
-  pass "kanban settled (${TOTAL} tasks, ${COMPLETED} completed, ${BLOCKED} blocked; only AGENT_PLAN parent blocked)"
+  pass "kanban settled (${TOTAL} tasks, ${COMPLETED} completed, ${BLOCKED} blocked)"
 fi
 
 # --- assertions --------------------------------------------------------------
@@ -107,10 +110,13 @@ else
   fail "AGENT_PLAN task missing"
 fi
 
-if [ "${BLOCKED}" -eq 1 ] && [ "${BLOCKED_IS_PLAN}" -eq 1 ]; then
-  pass "exactly one BLOCKED task and it contains AGENT_PLAN (the only allowed blocked)"
+# A broken-down parent is BLOCKED only while its subtasks run. agentd returns it
+# to READY once they all complete, and the worker then rolls it up to COMPLETED
+# instead of re-prompting (and re-decomposing) it.
+if [ "${PLAN_COMPLETED}" -eq 1 ]; then
+  pass "AGENT_PLAN parent rolled up to COMPLETED after its subtasks"
 else
-  fail "expected exactly 1 BLOCKED which is the AGENT_PLAN parent (got ${BLOCKED} blocked, ${BLOCKED_IS_PLAN} plan-blocked)"
+  fail "expected the AGENT_PLAN parent COMPLETED after its subtasks (got ${PLAN_COMPLETED} completed plan tasks)"
 fi
 
 if [ "${GEN_COMPLETED}" -eq "${GEN_SUBTASKS}" ]; then
@@ -125,11 +131,11 @@ else
   fail "original direct greeting task not completed"
 fi
 
-# strict: only the plan parent is BLOCKED; everything else must be COMPLETED
-if [ "${COMPLETED}" -eq "${EXPECTED_COMPLETED}" ] && [ "${BLOCKED}" -eq 1 ]; then
-  pass "strict: only the one plan parent is BLOCKED, all other tasks COMPLETED"
+# strict: 2 original tasks + 2 generated subtasks, all COMPLETED, none BLOCKED
+if [ "${TOTAL}" -eq 4 ] && [ "${COMPLETED}" -eq "${TOTAL}" ] && [ "${BLOCKED}" -eq 0 ]; then
+  pass "strict: all ${TOTAL} tasks COMPLETED, none BLOCKED"
 else
-  fail "strict failure: expected ${TOTAL} tasks with ${EXPECTED_COMPLETED} COMPLETED and 1 BLOCKED, got ${COMPLETED} COMPLETED + ${BLOCKED} BLOCKED"
+  fail "strict failure: expected 4 tasks all COMPLETED and 0 BLOCKED, got ${TOTAL} tasks: ${COMPLETED} COMPLETED + ${BLOCKED} BLOCKED"
 fi
 
 # --- verify execution evidence written by the sandbox through litellm -------

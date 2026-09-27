@@ -92,6 +92,9 @@ func (w *Worker) prepareBatchRunnable(
 				continue
 			}
 		}
+		if w.tryRollUpBreakdown(ctx, task) {
+			continue
+		}
 		heartbeats = append(heartbeats, w.startHeartbeat(ctx, task.ID))
 		runnable = append(runnable, task)
 	}

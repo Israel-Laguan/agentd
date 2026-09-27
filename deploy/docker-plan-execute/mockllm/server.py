@@ -160,7 +160,7 @@ def completion(body: dict, content: dict, response_id: str = "chatcmpl-mock") ->
 
 
 def decompose_plan(title: str) -> dict:
-    safe_title = title.replace(PLAN_MARKER, "").strip() or title
+    safe_title = title.replace(PLAN_MARKER, "").strip().lstrip(":").strip() or title
     return {
         "too_complex": True,
         "subtasks": [
@@ -170,8 +170,15 @@ def decompose_plan(title: str) -> dict:
     }
 
 
+def request_metadata(body: dict) -> dict:
+    # litellm keeps the client's `metadata` for itself; its agentd_correlation
+    # hook re-sends those fields as `agentd_metadata`. Plain `metadata` still
+    # works when agentd talks to this mock directly.
+    return body.get("agentd_metadata") or body.get("metadata") or {}
+
+
 def chat_completion(body: dict) -> dict:
-    metadata = body.get("metadata") or {}
+    metadata = request_metadata(body)
     task_id = metadata.get("task_id") or body.get("user") or "unknown"
     title = extract_task_title(body)
     user_content = message_content(body, "user")
@@ -182,7 +189,9 @@ def chat_completion(body: dict) -> dict:
             f"[mockllm] correlation task_id={task_id} agent_id={metadata.get('agent_id')} "
             f"role={metadata.get('role')}\n"
         )
-        sys.stderr.flush()
+    else:
+        sys.stderr.write(f"[mockllm] no correlation; request keys={sorted(body)}\n")
+    sys.stderr.flush()
 
     if "Frontdesk scope analyzer" in system_content:
         scope_analysis = analyze_scope(user_content)
