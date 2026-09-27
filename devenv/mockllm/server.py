@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OpenAI-compatible mock LLM for the docker-compose.dev.yml stack."""
+"""OpenAI-compatible mock LLM for the devenv/compose.yaml stack."""
 
 import json
 import os

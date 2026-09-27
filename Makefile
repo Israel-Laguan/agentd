@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept folder-audit check test-e2e podman-test lint-md lint-links lint-docs smoke-contract
+.PHONY: build test test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept folder-audit check test-e2e podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -65,6 +65,15 @@ lint-install:
 podman-test:
 	podman build -f Dockerfile.test -t agentd-test .
 	podman run --rm agentd-test
+
+dev-up:
+	podman compose -f devenv/compose.yaml up --build -d
+
+dev-down:
+	podman compose -f devenv/compose.yaml down
+
+dev-logs:
+	podman compose -f devenv/compose.yaml logs -f
 
 loc:
 	$(GO) run ./scripts/checkloc --max-lines 300
