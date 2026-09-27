@@ -8,8 +8,8 @@ Helper scripts: [`restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh) (Be
 
 ## Beat 1 (S02) — Restart mid-task
 
-**Chosen in** [SP-001](../tasks/sprints/S01-positioning-and-demo/spikes/SP-001-reliability-beat.md).  
-**Tickets:** [T-006a](../tasks/sprints/S02-harness-reliability/tasks/T-006a-restart-beat-docs.md) (this doc/script), [T-006b](../tasks/sprints/S02-harness-reliability/tasks/T-006b-restart-reconcile-tests.md) (tests).
+**Chosen in** SP-001.  
+**Tickets:** T-006a (this doc/script), T-006b (tests).
 
 ### Beat 1 — Pass criteria
 
@@ -76,7 +76,7 @@ curl -sS "http://${API_ADDR}/api/v1/system/status"
 
 ## Beat 2 (S02) — Provider fallback / breaker
 
-**Tickets:** [T-010a](../tasks/sprints/S02-harness-reliability/tasks/T-010a-fallback-beat-docs.md) (this doc/script), [T-010b](../tasks/sprints/S02-harness-reliability/tasks/T-010b-cascade-breaker-tests.md) (tests).
+**Tickets:** T-010a (this doc/script), T-010b (tests).
 
 Distinct from [demo.md](demo.md)’s connector-HUMAN **governance** loop. Beat 2 proves the **house**: cascade to a healthy secondary, or open the breaker / hand off when nothing answers — without a billable cloud dependency (mock HTTP, LiteLLM, or dead `127.0.0.1:1` slots).
 
@@ -142,7 +142,7 @@ export API_ADDR=127.0.0.1:18776
 
 ## Beat 2.3 (S03) — Disk / resource watchdog
 
-**Tickets:** [T-013](../tasks/sprints/S03-tiered-foundation/tasks/T-013-disk-watchdog-beat.md).
+**Tickets:** T-013.
 
 Prove product-plan Phase 2.3: a disk/resource crunch surfaces a durable event or board task — no silent death. The watchdog implementation already exists (`internal/queue/disk_watchdog.go`); this beat packages it as a runnable demo with fault injection.
 
@@ -212,7 +212,7 @@ export API_ADDR=127.0.0.1:18785
 
 ## Beat 2.4 (S03) — Memory recall on repeat failure
 
-**Tickets:** [T-014](../tasks/sprints/S03-tiered-foundation/tasks/T-014-memory-recall-beat.md).
+**Tickets:** T-014.
 
 Prove product-plan Phase 2.4: on a repeated failure class, Librarian/FTS surfaces a prior `{symptom, solution}` instead of re-burning tokens. The recall mechanism already exists (`internal/memory/recall.go`); this beat packages it as a runnable demo with seeded fixtures.
 
@@ -282,14 +282,14 @@ export API_ADDR=127.0.0.1:18795
 
 | Beat | Intent | Ticket |
 | --- | --- | --- |
-| Provider fallback (**Beat 2**, above) | Cascade or breaker/HUMAN | [T-010a](../tasks/sprints/S02-harness-reliability/tasks/T-010a-fallback-beat-docs.md) |
-| Disk / watchdog (**Beat 2.3**, above) | Durable watchdog signal | [T-013](../tasks/sprints/S03-tiered-foundation/tasks/T-013-disk-watchdog-beat.md) |
-| Memory recall | Librarian/FTS on repeat failure | [T-014](../tasks/sprints/S03-tiered-foundation/tasks/T-014-memory-recall-beat.md) |
+| Provider fallback (**Beat 2**, above) | Cascade or breaker/HUMAN | T-010a |
+| Disk / watchdog (**Beat 2.3**, above) | Durable watchdog signal | T-013 |
+| Memory recall | Librarian/FTS on repeat failure | T-014 |
 | Permission → HUMAN | Sandbox violation | later encore |
 
 ## Related
 
 - Connector inject HUMAN: [demo.md](demo.md)
-- SP-003 run log: [SP-003](../tasks/sprints/S01-positioning-and-demo/spikes/SP-003-demo-path-dry-run.md)
-- SP-004 pre-flight: [SP-004](../tasks/sprints/S02-harness-reliability/spikes/SP-004-env-preflight.md)
-- S02 PR budgets: [PR-PLAN.md](../tasks/sprints/S02-harness-reliability/PR-PLAN.md)
+- SP-003 run log: SP-003
+- SP-004 pre-flight: SP-004
+- S02 PR budgets: PR-PLAN.md
