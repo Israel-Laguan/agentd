@@ -193,7 +193,7 @@ script below certifies a *runtime* endpoint against the user-facing subset.
 
 The single OpenAI Chat Completions wire path (`adapter: openai`) is what both
 the direct (llama.cpp / OpenAI / vLLM) and managed (LiteLLM / Portkey /
-OpenRouter) topologies depend on. `scripts/llm-smoke.sh` is a POSIX-sh probe
+OpenRouter) topologies depend on. `tools/diag/llm-smoke.sh` is a POSIX-sh probe
 that certifies any endpoint satisfies the three essential contract checks:
 
 | Probe | What it exercises | Pass criteria |
@@ -205,13 +205,13 @@ that certifies any endpoint satisfies the three essential contract checks:
 ### Direct path (llama.cpp / vLLM / OpenAI)
 
 ```sh
-scripts/llm-smoke.sh http://127.0.0.1:8080/v1 llama-cpp-model sk-llama
+tools/diag/llm-smoke.sh http://127.0.0.1:8080/v1 llama-cpp-model sk-llama
 ```
 
 ### Managed path (LiteLLM)
 
 ```sh
-scripts/llm-smoke.sh http://127.0.0.1:4000/v1 poolside/laguna-m.1 "$LITELLM_VIRTUAL_KEY"
+tools/diag/llm-smoke.sh http://127.0.0.1:4000/v1 poolside/laguna-m.1 "$LITELLM_VIRTUAL_KEY"
 ```
 
 ### Verdict interpretation

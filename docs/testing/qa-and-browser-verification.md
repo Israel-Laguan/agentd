@@ -6,7 +6,7 @@
 ## Chat-to-Kanban privileged handoff QA
 
 The repeatable API portion uses the operator-provided LiteLLM, not the compose
-`litellm`. Start from a clean stack (`podman compose -f docker-compose.dev.yml down -v`)
+`litellm`. Start from a clean stack (`podman compose -f devenv/compose.yaml down -v`)
 if you need a fresh project database, then run:
 
 ```bash
@@ -14,7 +14,7 @@ AGENTD_API_URL=http://127.0.0.1:8765 \
 LITELLM_BASE_URL=http://127.0.0.1:4000/v1 \
 LITELLM_API_KEY="$LITELLM_API_KEY" \
 LITELLM_MODEL=agentd \
-./scripts/chat-kanban-qa.sh
+./test/e2e/chat-kanban.sh
 ```
 
 The script authenticates against `/v1/models`, checks agentd and the web endpoint,
@@ -26,7 +26,7 @@ project/task IDs for investigation. API assertions are automated; browser click-
 > **Note:** The script validates that `agentd` is present in the authenticated
 > LiteLLM `/v1/models` response and checks agentd/web liveness, but it does **not**
 > independently verify that agentd is configured to use the same `LITELLM_BASE_URL`
-> and model. That routing is controlled by `dev/agentd/config.yaml`
+> and model. That routing is controlled by `devenv/agentd/config.yaml`
 > and the compose file. It also leaves the created project and tasks behind.
 >
 > **Known behavior:** the LiteLLM-backed mock generates task titles like "Set up plan"
@@ -104,7 +104,7 @@ path above.
    `GET /api/v1/tasks/{id}/events`.
 
 All checkpoints were verified end-to-end against the running stack
-(`podman compose -f docker-compose.dev.yml up --build -d`) using
+(`podman compose -f devenv/compose.yaml up --build -d`) using
 LiteLLM as the LLM provider (model `agentd`). Verified 2026-09-25.
 
 | Checkpoint | Result | Evidence |

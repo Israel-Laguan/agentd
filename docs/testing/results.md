@@ -26,9 +26,9 @@
 
 ### Chat-to-Kanban QA script
 
-- `./scripts/chat-kanban-qa.sh` created a project, materialized it with `start_empty_workspace: true`, and tasks reached `COMPLETED`.
+- `./test/e2e/chat-kanban.sh` created a project, materialized it with `start_empty_workspace: true`, and tasks reached `COMPLETED`.
 
-- The script then timed out waiting for a human-attention task. This is expected with `healing.enabled: false` in `docker-compose.dev.yml`; no handoff/attention flow was triggered. Do not treat this as a script failure unless a real-provider run with healing enabled is intended.
+- The script then timed out waiting for a human-attention task. This is expected with `healing.enabled: false` in `devenv/compose.yaml`; no handoff/attention flow was triggered. Do not treat this as a script failure unless a real-provider run with healing enabled is intended.
 
 - Project/task IDs for investigation: `ca0cdbd4-c56a-427e-9c3e-794fcfd13acd`.
 

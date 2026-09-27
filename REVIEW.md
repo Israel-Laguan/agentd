@@ -29,12 +29,12 @@ Run these on the PR branch. Order is fastest-fail first; `make check` is the req
 | --- | --- | --- |
 | Deps | `make tidy` | `go.mod` / `go.sum` are consistent |
 | Compile | `make build` | `cmd/agentd` builds to `bin/agentd` |
-| LOC | `make loc` | File size limits ([`scripts/checkloc`](scripts/checkloc): 300 default, 500 for `*_test.go`, 400 under `docs/`) |
+| LOC | `make loc` | File size limits ([`tools/checkloc`](tools/checkloc): 300 default, 500 for `*_test.go`, 400 under `docs/`) |
 | Lint | `make lint` | `golangci-lint` + [`depguard`](.golangci.yml) architecture rules |
 | Tests (while iterating) | `make test PKG=./path/... RUN=TestName` | Race-enabled tests for one package or test |
 | Tests (full) | `make test` | Race-enabled tests for `./...` |
 | Full gate | `make check` | `loc` + `minfunc` + `lint` + `test` + `lint-docs` (required before merge) |
-| E2E (if API/queue touched) | `make test-e2e` | `./e2e/...` |
+| Feature tests (if API/queue touched) | `make test PKG=./internal/api/tests/feature` | API feature tests under `./internal/api/tests/feature/` |
 | Web (if `web/` changed) | `cd web && npm run build && npm run lint` | Next.js build + ESLint |
 
 ### Targeted checks (while iterating or large PRs)
@@ -48,7 +48,7 @@ Use scoped `PKG` / `RUN` while editing; run `make test` (all packages) or `make 
 
 ## Go toolchain troubleshooting
 
-`make build`, `make lint`, `make test`, `make coverage`, and `make test-e2e` use:
+`make build`, `make lint`, `make test`, `make coverage`, and `make test PKG=./internal/api/...` use:
 
 - `GOCACHE=$(pwd)/.gocache` — avoids stale **build** artefacts after `git checkout` or branch switches
 - `GOMODCACHE` from your environment, otherwise `$(HOME)/go/pkg/mod` — avoids empty module caches in some IDE/agent environments

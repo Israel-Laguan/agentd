@@ -117,7 +117,7 @@ Use `AGENTD_HOME` or `--home` to override the default `~/.agentd` home directory
 
 ### Docker
 
-There is a `Dockerfile` for the runtime image and a `Dockerfile.test` for running tests inside a container as a non-root `tester` user (it installs `sqlite-libs` and `bash`, the latter because the sandbox executor and plugin hooks shell out to `/bin/bash`). The runtime image uses a multi-stage build:
+There is a `Dockerfile` for the runtime image and a `test/container/Dockerfile` for running tests inside a container as a non-root `tester` user (it installs `sqlite-libs` and `bash`, the latter because the sandbox executor and plugin hooks shell out to `/bin/bash`). The runtime image uses a multi-stage build:
 
 1. **Build stage** (`golang:1.26-alpine`): compiles a static binary with `CGO_ENABLED=0`.
 2. **Runtime stage** (`alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339`): installs `sqlite-libs`, creates a non-root `agentd` user, and copies the binary.

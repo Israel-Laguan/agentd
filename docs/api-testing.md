@@ -288,7 +288,7 @@ See [`reference.md` — Task States](reference.md#task-states).
 ## Running the Tests
 
 ```sh
-make test-e2e
+make test PKG=./internal/api/...
 make test PKG=./internal/api/...
 make check
 ```
