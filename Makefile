@@ -26,9 +26,9 @@ endif
 test:
 	$(GO_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
 
-# E2E tests against live devenv stack. Requires devenv to be running (make dev-up).
+# E2E tests against live devenv stack. Starts devenv if not already running (or reuses it).
 # Runs with -tags=e2e and does not run with `make test`.
-test-e2e:
+test-e2e: dev-up
 	$(GO_ENV) $(GO) test -v -race -tags=e2e -timeout=300s ./test/e2e/...
 
 # Compile (but don't run) per-package test binaries, e.g. for a debugger that
