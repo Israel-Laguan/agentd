@@ -121,7 +121,7 @@ Optional encore (not required): permission/`sudo` sandbox → HUMAN. Prefer conn
 
 ## Related
 
-- Spike evidence / notes: [SP-003](../tasks/sprints/S01-positioning-and-demo/spikes/SP-003-demo-path-dry-run.md)
+- Spike evidence / notes: SP-003
 - Positioning: [why-agentd.md](why-agentd.md), [product-plan.md](product-plan.md)
 - Workspace seeding: [workspace-seeding.md](workspace-seeding.md)
 - Connector strategy: [llm-connector-strategy.md](llm-connector-strategy.md)

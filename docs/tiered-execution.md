@@ -200,7 +200,7 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 3. **Verify:** runs **decision-specified** checks only; classifies outcomes; does not invent tests.
 4. **Agentic mode:** allowed on **execute** (and escalate) profiles only; context/decision stay structured / tool-bounded as specified above.
 
-See [SP-002](../tasks/sprints/S01-positioning-and-demo/spikes/SP-002-tiered-open-questions.md).
+See SP-002.
 
 ---
 
