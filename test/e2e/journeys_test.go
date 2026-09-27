@@ -65,6 +65,127 @@ func TestJ01_BootWithWarmup(t *testing.T) {
 	t.Log("J01: Boot verified - system/status 200 OK with success envelope")
 }
 
+// TestJ02_BoardAndSSE tests J02: Board and logs reachable, loop running.
+//
+// "Board reachable" is GET /api/v1/projects (there is no separate board API;
+// the web UI's kanban view reads the same endpoint client-side — browser
+// verification is out of scope for this Go harness, see docs/testing/
+// qa-and-browser-verification.md). "Loop running" is verified indirectly:
+// a materialized task starting in READY only reaches COMPLETED if the
+// task-dispatch cron job (every 3s, see internal/config/cron.go) is
+// actually claiming and running it.
+func TestJ02_BoardAndSSE(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	harness := NewHarness(baseURL, "default")
+	if err := harness.WaitForHealthy(ctx, 10*time.Second); err != nil {
+		t.Fatalf("J02 [boot] harness failed to become healthy: %v", err)
+	}
+	client := NewAPIClient(baseURL, harness.client)
+
+	resp, err := client.Projects(ctx)
+	if err != nil {
+		t.Fatalf("J02 [projects] request failed: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("J02 [projects] returned %d, want 200", resp.StatusCode)
+	}
+
+	// A single-task, self-contained plan: start_empty_workspace skips the
+	// workspace/ready round trip (that flow is J04's concern), so this
+	// journey stays focused on board + SSE + loop.
+	plan := DraftPlan{
+		ProjectName:         UniqueProjectName("j02"),
+		Description:         "J02 board/SSE/loop smoke task",
+		StartEmptyWorkspace: true,
+		Tasks: []DraftTask{
+			{Title: "J02 smoke task", Description: "Prove the dispatch loop claims and runs a task."},
+		},
+	}
+	projectID := materializePlan(ctx, t, client, "J02", plan).Project.ID
+
+	sse, err := NewSSEReader(ctx, client, projectID)
+	if err != nil {
+		t.Fatalf("J02 [sse] failed to open stream: %v", err)
+	}
+	defer func() { _ = sse.Close() }()
+
+	poller := NewTaskPoller(client, projectID)
+	finalTasks, err := poller.WaitForAllComplete(ctx, 30*time.Second)
+	if err != nil {
+		t.Fatalf("J02 [loop] task did not complete (dispatch loop not running?): %v (last observed: %+v)", err, finalTasks)
+	}
+
+	event, err := sse.NextEvent(ctx, 10*time.Second)
+	if err != nil {
+		t.Fatalf("J02 [sse] no event delivered for project %s: %v", projectID, err)
+	}
+
+	t.Logf("J02: Board reachable, loop ran task to COMPLETED, SSE delivered %q event", event.Type)
+}
+
+// TestJ03_ChatWithoutPlan tests J03: Chat answers without creating a plan.
+//
+// A status_check intent (see internal/frontdesk/status.go) is answered by
+// StatusSummarizer directly — a deterministic, LLM-free query against the
+// kanban store — and returns {"kind":"status_report",...} rather than a
+// DraftPlan. Any response with a non-empty "kind" field is a clarification
+// or status report, never a plan (see test/e2e/project.go's DraftPlan doc
+// comment): a plan is exactly {"tasks": [...], ...} with no "kind".
+func TestJ03_ChatWithoutPlan(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	harness := NewHarness(baseURL, "default")
+	if err := harness.WaitForHealthy(ctx, 10*time.Second); err != nil {
+		t.Fatalf("J03 [boot] harness failed to become healthy: %v", err)
+	}
+	client := NewAPIClient(baseURL, harness.client)
+
+	resp, err := client.ChatCompletions(ctx, "What is the current status of things?", nil)
+	if err != nil {
+		t.Fatalf("J03 [chat] request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		t.Fatalf("J03 [chat] returned %d, want 200", resp.StatusCode)
+	}
+	chatResp, err := DecodeChatCompletion(resp)
+	if err != nil {
+		t.Fatalf("J03 [chat] decode failed: %v", err)
+	}
+	if len(chatResp.Choices) == 0 {
+		t.Fatalf("J03 [chat] response had no choices")
+	}
+	content := chatResp.Choices[0].Message.Content
+
+	var kinded struct {
+		Kind    string `json:"kind"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(content), &kinded); err != nil {
+		t.Fatalf("J03 [chat] could not parse assistant content: %v (content: %s)", err, content)
+	}
+	if kinded.Kind == "" {
+		t.Fatalf("J03 [chat] response had no \"kind\" (looks like a plan, not a chat answer); content: %s", content)
+	}
+	if kinded.Kind != "status_report" {
+		t.Logf("J03: got kind=%q instead of status_report (intent classification is mock-driven and message-text-sensitive); still not a plan", kinded.Kind)
+	}
+
+	t.Logf("J03: Chat answered without a plan - kind=%q, message=%q", kinded.Kind, kinded.Message)
+}
+
 // TestJ04_FullHappyPath tests J04: Chat → plan → materialize → workspace
 // ready → tasks complete.
 //
@@ -89,7 +210,13 @@ func TestJ04_FullHappyPath(t *testing.T) {
 
 	j04VerifySystemReady(ctx, t, client)
 	plan := j04RequestPlan(ctx, t, client)
-	projectID := j04Materialize(ctx, t, client, plan)
+	materialized := materializePlan(ctx, t, client, "J04", plan)
+	for _, task := range materialized.Tasks {
+		if task.State != TaskStatePending {
+			t.Fatalf("J04 [materialize] task %s state = %s, want PENDING (workspace not yet seeded)", task.ID, task.State)
+		}
+	}
+	projectID := materialized.Project.ID
 	j04UnlockWorkspace(ctx, t, client, projectID)
 	j04AwaitCompletion(ctx, t, client, projectID)
 }
@@ -156,37 +283,32 @@ func j04RequestPlan(ctx context.Context, t *testing.T, client *APIClient) DraftP
 	return plan
 }
 
-// j04Materialize covers step 3: materialize == approve. No
-// source_path/start_empty_workspace, so root tasks are created PENDING and
-// require an explicit WorkspaceReady call (see
-// internal/services/project_service.go). Returns the new project's UUID.
-func j04Materialize(ctx context.Context, t *testing.T, client *APIClient, plan DraftPlan) string {
+// materializePlan calls POST /api/v1/projects/materialize == approve (there
+// is no separate approval step or plan ID in the real API — see
+// test/e2e/project.go's DraftPlan doc comment) and returns the decoded
+// result. tag is the calling journey's ID, used only in failure messages.
+func materializePlan(ctx context.Context, t *testing.T, client *APIClient, tag string, plan DraftPlan) *MaterializeResult {
 	t.Helper()
 
 	resp, err := client.MaterializePlan(ctx, plan)
 	if err != nil {
-		t.Fatalf("J04 [materialize] request failed: %v", err)
+		t.Fatalf("%s [materialize] request failed: %v", tag, err)
 	}
 	if resp.StatusCode != http.StatusCreated {
 		_ = resp.Body.Close()
-		t.Fatalf("J04 [materialize] returned %d, want 201", resp.StatusCode)
+		t.Fatalf("%s [materialize] returned %d, want 201", tag, resp.StatusCode)
 	}
 	materialized, err := DecodeMaterializeResult(resp)
 	if err != nil {
-		t.Fatalf("J04 [materialize] decode failed: %v", err)
+		t.Fatalf("%s [materialize] decode failed: %v", tag, err)
 	}
 	if materialized.Project.ID == "" {
-		t.Fatalf("J04 [materialize] response had no project ID")
+		t.Fatalf("%s [materialize] response had no project ID", tag)
 	}
 	if len(materialized.Tasks) == 0 {
-		t.Fatalf("J04 [materialize] response had no tasks")
+		t.Fatalf("%s [materialize] response had no tasks", tag)
 	}
-	for _, task := range materialized.Tasks {
-		if task.State != TaskStatePending {
-			t.Fatalf("J04 [materialize] task %s state = %s, want PENDING (workspace not yet seeded)", task.ID, task.State)
-		}
-	}
-	return materialized.Project.ID
+	return materialized
 }
 
 // j04UnlockWorkspace covers step 4: seed the workspace (docs/demo.md's

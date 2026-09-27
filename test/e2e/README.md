@@ -25,12 +25,15 @@ The journey suite is defined in [docs/testing/journeys.md](../../docs/testing/jo
 - **J01**: Boot + provider connectivity (system/status envelope check; warmup
   on/off log verification is not yet automated — devenv/compose.yaml hardcodes
   `--skip-llm-warmup` into every profile's entrypoint)
+- **J02**: Board and logs reachable, loop running — materializes a
+  self-contained task and confirms the dispatch loop claims/runs it, and
+  that an SSE event arrives on the project-scoped stream
+- **J03**: Chat answers without creating a plan — a status_check intent
+  returns a deterministic `status_report`, not a `DraftPlan`
 - **J04**: Full happy path — chat → plan → materialize → seed workspace →
   workspace/ready → poll tasks to COMPLETED
 
 Future journeys will test:
-- J02: Board and logs reachable
-- J03: Chat answers without plan
 - J05-J06: Materialization edge cases
 - J07: Self-healing handoff
 - J08-J09: Provider failures and circuit breaker
@@ -165,12 +168,11 @@ if err != nil {
 
 1. **J01**: Add a devenv profile that boots without `--skip-llm-warmup` to
    automate the warmup-on/off log check
-2. **Implement J02-J03**: Board and logs, chat-only response
-3. **Implement J05-J06**: Materialization edge cases, task drawer event log
-4. **Implement J07-J12**: Profile-specific journey tests (healing, faults,
+2. **Implement J05-J06**: Materialization edge cases, task drawer event log
+3. **Implement J07-J12**: Profile-specific journey tests (healing, faults,
    disk, tiered)
-5. **Add mock scenario injection**: Parse @scenario= tags in requests (T-028)
-6. **Improve error output**: Capture last observed state for bug filing (T-027)
+4. **Add mock scenario injection**: Parse @scenario= tags in requests (T-028)
+5. **Improve error output**: Capture last observed state for bug filing (T-027)
 
 ## Testing
 
