@@ -56,8 +56,8 @@ opencode.json
 __pycache__/
 *.pyc
 
-# scratch artifact written by scripts/checkminfunc --update-baseline
-scripts/checkminfunc/baseline.bak
+# scratch artifact written by tools/checkminfunc --update-baseline
+tools/checkminfunc/baseline.bak
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
