@@ -60,8 +60,7 @@ func (w *Worker) processTieredDecisionStep(ctx context.Context, task models.Task
 	}
 	if signal.NeedsContext {
 		if err := w.handleNeedsContext(ctx, task, parentTask, signal.Reason); err != nil {
-			slog.Error("tiered decision: needs-context rewire failed", "task_id", task.ID, "error", err)
-			w.Emit(ctx, task, "TIERED_NEEDS_CONTEXT_ERROR", err.Error())
+			w.resolveFailedNeedsContext(ctx, task, parentTask, err)
 		}
 		return
 	}
@@ -98,6 +97,30 @@ func (w *Worker) taskDivertedToNeedsContext(ctx context.Context, taskID string) 
 		return false, err
 	}
 	return current.State == models.TaskStateNeedsContext, nil
+}
+
+// diversionCheckAttempts bounds the transient retries a verify step makes
+// before giving up on learning whether it was diverted to NEEDS_CONTEXT.
+const diversionCheckAttempts = 3
+
+// confirmNotDiverted reports whether taskID is definitely not parked in
+// NEEDS_CONTEXT, retrying transient store failures. The verify flow must not
+// classify output until this returns true: a diverted step has no committed
+// RESULT event, so reading one would report a parse failure and route a
+// verify failure for output that was never a verify result.
+func (w *Worker) confirmNotDiverted(ctx context.Context, taskID string) (bool, error) {
+	var err error
+	for attempt := 1; attempt <= diversionCheckAttempts; attempt++ {
+		var diverted bool
+		if diverted, err = w.taskDivertedToNeedsContext(ctx, taskID); err == nil {
+			return !diverted, nil
+		}
+		if attempt < diversionCheckAttempts {
+			slog.Warn("tiered verify: retrying NEEDS_CONTEXT diversion check",
+				"task_id", taskID, "attempt", attempt, "error", err)
+		}
+	}
+	return false, err
 }
 
 // interceptTieredNeedsContext intercepts a tiered execute/verify step's
@@ -137,10 +160,45 @@ func (w *Worker) interceptTieredNeedsContext(ctx context.Context, task models.Ta
 		return true
 	}
 	if err := w.handleNeedsContext(ctx, task, parents[0], signal.Reason); err != nil {
-		slog.Error("tiered: needs-context rewire failed", "task_id", task.ID, "step", kind, "error", err)
-		w.Emit(ctx, task, "TIERED_NEEDS_CONTEXT_ERROR", err.Error())
+		w.resolveFailedNeedsContext(ctx, task, parents[0], err)
 	}
 	return true
+}
+
+// resolveFailedNeedsContext gives a diverted step a terminal, visible state
+// after its re-gather failed. handleNeedsContext transitions the step to
+// NEEDS_CONTEXT first and can then fail on the generation lookup, the
+// replacement chain spawn, or the dependent rewire, leaving a step with no
+// committed result and dependents that may never be unblocked.
+//
+// The replacement chain is spawned under an idempotency key derived from the
+// origin and generation, so retrying handleNeedsContext for the same
+// generation reuses a partially spawned chain instead of duplicating it. A
+// step that never left RUNNING is therefore requeued to retry the whole
+// diversion; one already parked in NEEDS_CONTEXT is moved to FAILED and its
+// dependents (and the origin) resolved, so the pipeline cannot hang.
+func (w *Worker) resolveFailedNeedsContext(ctx context.Context, task, parentTask models.Task, cause error) {
+	slog.Error("tiered: needs-context rewire failed", "task_id", task.ID, "error", cause)
+	w.Emit(ctx, task, "TIERED_NEEDS_CONTEXT_ERROR", cause.Error())
+	current, err := w.store.GetTask(ctx, task.ID)
+	if err != nil {
+		slog.Error("tiered: failed to re-read step after needs-context failure", "task_id", task.ID, "error", err)
+		return
+	}
+	if current.State == models.TaskStateRunning {
+		w.requeue(ctx, *current, "needs-context re-gather failed: "+cause.Error())
+		return
+	}
+	if current.State != models.TaskStateNeedsContext {
+		return
+	}
+	if _, err := w.store.UpdateTaskState(ctx, current.ID, current.UpdatedAt, models.TaskStateFailed); err != nil {
+		slog.Error("tiered: failed to abandon a step whose re-gather could not be scheduled",
+			"task_id", current.ID, "error", err)
+		return
+	}
+	w.Emit(ctx, task, "TIERED_NEEDS_CONTEXT_ABANDONED", cause.Error())
+	w.failTieredDependents(ctx, *current, parentTask)
 }
 
 func (w *Worker) readNeedsContextSignal(ctx context.Context, task models.Task) (needsContextSignal, error) {
@@ -226,90 +284,4 @@ func (w *Worker) handleNeedsContextDep(ctx context.Context, task models.Task, de
 		return w.handleFreshDecision(ctx, task, dependency, fresh)
 	}
 	return w.handleStaleDecision(ctx, task, dependency, origin)
-}
-
-func (w *Worker) handleFreshDecision(ctx context.Context, task models.Task, dependency models.Task, fresh *models.Task) bool {
-	switch fresh.State {
-	case models.TaskStateCompleted:
-		return w.rewireToCompletedDecision(ctx, task, dependency, fresh.ID)
-	case models.TaskStateFailed, models.TaskStateFailedRequiresHuman:
-		if _, err := w.store.RewireDependsOn(ctx, dependency.ID, fresh.ID); err != nil {
-			w.FailHard(ctx, task, fmt.Errorf("tiered rewire to failed decision failed: %w", err))
-			return true
-		}
-		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", fresh.ID, fresh.State))
-		return true
-	case models.TaskStateNeedsContext:
-		if task.State.CanTransitionTo(models.TaskStateBlocked) {
-			if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
-				w.FailHard(ctx, task, fmt.Errorf("tiered park while awaiting fresh context failed: %w", err))
-			}
-		}
-		return true
-	default:
-		if task.State.CanTransitionTo(models.TaskStateBlocked) {
-			if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
-				w.FailHard(ctx, task, fmt.Errorf("tiered park before dependency rewire failed: %w", err))
-				return true
-			}
-		}
-		if _, err := w.store.RewireDependsOn(ctx, dependency.ID, fresh.ID); err != nil {
-			w.FailHard(ctx, task, fmt.Errorf("tiered rewire to fresh decision failed: %w", err))
-			return true
-		}
-		return true
-	}
-}
-
-func (w *Worker) handleStaleDecision(ctx context.Context, task models.Task, dependency models.Task, origin models.Task) bool {
-	completedID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateCompleted)
-	if err != nil {
-		w.FailHard(ctx, task, fmt.Errorf("tiered completed decision lookup failed: %w", err))
-		return true
-	}
-	if completedID != "" {
-		return w.rewireToCompletedDecision(ctx, task, dependency, completedID)
-	}
-	failedID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateFailed)
-	if err != nil {
-		w.FailHard(ctx, task, fmt.Errorf("tiered failed decision lookup failed: %w", err))
-		return true
-	}
-	if failedID != "" {
-		_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedID)
-		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedID, models.TaskStateFailed))
-		return true
-	}
-	failedHumanID, err := w.freshTerminalDecisionID(ctx, origin.ID, dependency.ID, models.TaskStateFailedRequiresHuman)
-	if err != nil {
-		w.FailHard(ctx, task, fmt.Errorf("tiered human-failed decision lookup failed: %w", err))
-		return true
-	}
-	if failedHumanID != "" {
-		_, _ = w.store.RewireDependsOn(ctx, dependency.ID, failedHumanID)
-		w.FailHard(ctx, task, fmt.Errorf("tiered fresh decision %s is %s", failedHumanID, models.TaskStateFailedRequiresHuman))
-		return true
-	}
-	if task.State.CanTransitionTo(models.TaskStateBlocked) {
-		if _, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
-			w.FailHard(ctx, task, fmt.Errorf("tiered park while awaiting context re-gather failed: %w", err))
-		}
-	}
-	return true
-}
-
-func (w *Worker) rewireToCompletedDecision(ctx context.Context, task models.Task, dependency models.Task, decisionID string) bool {
-	if _, err := w.store.RewireDependsOn(ctx, dependency.ID, decisionID); err != nil {
-		w.FailHard(ctx, task, fmt.Errorf("tiered rewire to completed decision failed: %w", err))
-		return true
-	}
-	if w.allDependenciesResolved(ctx, task.ID) {
-		latest, err := w.store.GetTask(ctx, task.ID)
-		if err == nil && latest.State.CanTransitionTo(models.TaskStateReady) {
-			if _, err := w.store.UpdateTaskState(ctx, latest.ID, latest.UpdatedAt, models.TaskStateReady); err != nil {
-				slog.Error("tiered: failed to re-ready after completed fresh decision", "task_id", latest.ID, "error", err)
-			}
-		}
-	}
-	return true
 }

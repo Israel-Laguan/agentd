@@ -181,6 +181,17 @@ func (w *Worker) tryFinalizeApprovedReview(ctx context.Context, task models.Task
 	if err != nil {
 		return false, fmt.Errorf("refresh task for approved review commit: %w", err)
 	}
+	// A review-required tiered execute/verify step can produce the same
+	// NEEDS_CONTEXT sentinel as an unreviewed one. Route the approved draft
+	// through interception before committing: committing it as a success
+	// would unlock BLOCKED dependents before handleNeedsContext rewires them.
+	if w.interceptTieredNeedsContext(ctx, *fresh, draft) {
+		if err := markReviewUsed(ctx, w.store, task.ID, review.ID); err != nil {
+			slog.Warn("failed to mark intercepted review as consumed",
+				"task_id", task.ID, "subtask_id", review.ID, "error", err)
+		}
+		return true, nil
+	}
 	result := sandbox.Result{Success: true, Stdout: draft}
 	if !w.commitSucceeded(ctx, *fresh, result, nil) {
 		return false, nil

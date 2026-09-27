@@ -169,7 +169,11 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 			return
 		}
 	}
-	if w.tryRollUpBreakdown(ctx, task) {
+	if handled, err := w.tryRollUpBreakdown(ctx, task); err != nil {
+		w.Emit(ctx, task, "BREAKDOWN_ROLLUP_ERROR", err.Error())
+		w.requeue(ctx, task, err.Error())
+		return
+	} else if handled {
 		return
 	}
 	if planning.IsPhasePlanningTask(task.Title) {

@@ -17,10 +17,10 @@ import (
 	"agentd/internal/bus"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/kanban"
 	"agentd/internal/models"
 	"agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // Plan-and-execute end to end, in process: a real kanban store, worker and
@@ -103,38 +103,36 @@ func (f *fakeOpenAI) snapshot() []fakeChatRequest {
 	return append([]fakeChatRequest(nil), f.requests...)
 }
 
-func TestPlanExecute_ThroughOpenAIAdapter(t *testing.T) {
+func seedDefaultProfile(t *testing.T, store models.KanbanStore) {
+	t.Helper()
 	ctx := context.Background()
-	dir := t.TempDir()
-	projectsDir := filepath.Join(dir, "projects")
-	store, err := kanban.OpenStore(filepath.Join(dir, "agentd.db"), projectsDir)
-	if err != nil {
-		t.Fatalf("OpenStore: %v", err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	// Same default profile `agentd init` seeds: provider/model empty, so the
-	// request cascades to the only configured provider.
 	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{
 		ID: "default", Name: "Default Coding Agent", Temperature: 0.2, MaxTokens: 1024, Role: "CODE_GEN",
 		SystemPrompt: sql.NullString{String: "Suggest one safe shell command for the requested task. Output only JSON.", Valid: true},
 	}); err != nil {
 		t.Fatalf("seed default profile: %v", err)
 	}
+}
 
-	fake := &fakeOpenAI{}
-	server := httptest.NewServer(fake)
-	t.Cleanup(server.Close)
+func buildOpenAIAdapterRouter(t *testing.T, baseURL string) *gateway.Router {
+	t.Helper()
 	router, err := gateway.NewRouterFromConfigs([]spec.ProviderConfig{{
-		Name: "litellm", Adapter: "openai", BaseURL: server.URL + "/v1", APIKey: "sk-test", Model: "agentd",
+		Name: "litellm", Adapter: "openai", BaseURL: baseURL + "/v1", APIKey: "sk-test", Model: "agentd",
 		Options: map[string]any{"send_task_metadata": true},
 	}})
 	if err != nil {
 		t.Fatalf("NewRouterFromConfigs: %v", err)
 	}
+	return router
+}
 
-	emitter := bus.NewEventEmitter(store, bus.NewInProcess())
-	sb := &sandbox.BashExecutor{Root: projectsDir, Sink: bus.EventBridge{Emitter: emitter}}
-	w := worker.NewWorker(store, router, sb, nil, emitter, worker.WorkerOptions{ProjectsDir: projectsDir})
+func materializePlan(t *testing.T, store models.KanbanStore, ctx context.Context, projectsDir string) *models.Project {
+	t.Helper()
+	// The fake store does not scaffold the workspace root the way the real
+	// one does, and the worker refuses to run a project without it.
+	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
+		t.Fatalf("create projects dir: %v", err)
+	}
 
 	project, _, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "plan-execute-demo",
@@ -149,9 +147,18 @@ func TestPlanExecute_ThroughOpenAIAdapter(t *testing.T) {
 	if err := os.MkdirAll(project.WorkspacePath, 0o755); err != nil {
 		t.Fatalf("create workspace: %v", err)
 	}
+	return project
+}
 
-	tasks := drivePlanToRest(t, store, w, project.ID)
+func verifyPlanExecution(t *testing.T, ctx context.Context, store models.KanbanStore, tasks []models.Task, project *models.Project, fake *fakeOpenAI) {
+	t.Helper()
+	byTitle, parent := verifyPlanTasks(t, ctx, store, tasks)
+	verifyPlanRequests(t, byTitle, parent, fake)
+	verifyPlanEvidence(t, tasks, parent, project)
+}
 
+func verifyPlanTasks(t *testing.T, ctx context.Context, store models.KanbanStore, tasks []models.Task) (map[string]models.Task, models.Task) {
+	t.Helper()
 	byTitle := make(map[string]models.Task, len(tasks))
 	var parent models.Task
 	steps := 0
@@ -180,7 +187,11 @@ func TestPlanExecute_ThroughOpenAIAdapter(t *testing.T) {
 	if steps != 2 || len(children) != 2 {
 		t.Fatalf("subtasks: %d titled ':: Step', %d children of the parent; want 2 and 2", steps, len(children))
 	}
+	return byTitle, parent
+}
 
+func verifyPlanRequests(t *testing.T, byTitle map[string]models.Task, parent models.Task, fake *fakeOpenAI) {
+	t.Helper()
 	requests := fake.snapshot()
 	decomposes, parentRequests := 0, 0
 	for i, req := range requests {
@@ -208,7 +219,10 @@ func TestPlanExecute_ThroughOpenAIAdapter(t *testing.T) {
 	if parentRequests != 1 {
 		t.Errorf("requests for the parent = %d, want 1 (it must not be re-sent after the split)", parentRequests)
 	}
+}
 
+func verifyPlanEvidence(t *testing.T, tasks []models.Task, parent models.Task, project *models.Project) {
+	t.Helper()
 	evidence, err := os.ReadFile(filepath.Join(project.WorkspacePath, "PLAN_RESULTS.log"))
 	if err != nil {
 		t.Fatalf("read PLAN_RESULTS.log: %v", err)
@@ -230,10 +244,32 @@ func TestPlanExecute_ThroughOpenAIAdapter(t *testing.T) {
 	}
 }
 
+func TestPlanExecute_ThroughOpenAIAdapter(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	projectsDir := filepath.Join(dir, "projects")
+	store := testutil.NewFakeStore()
+	t.Cleanup(func() { _ = store.Close() })
+	store.SetProjectsDir(projectsDir)
+	seedDefaultProfile(t, store)
+
+	fake := &fakeOpenAI{}
+	server := httptest.NewServer(fake)
+	t.Cleanup(server.Close)
+	router := buildOpenAIAdapterRouter(t, server.URL)
+	emitter := bus.NewEventEmitter(store, bus.NewInProcess())
+	sb := &sandbox.BashExecutor{Root: projectsDir, Sink: bus.EventBridge{Emitter: emitter}}
+	w := worker.NewWorker(store, router, sb, nil, emitter, worker.WorkerOptions{ProjectsDir: projectsDir})
+
+	project := materializePlan(t, store, ctx, projectsDir)
+	tasks := drivePlanToRest(t, store, w, project.ID)
+	verifyPlanExecution(t, ctx, store, tasks, project, fake)
+}
+
 // drivePlanToRest runs the daemon's claim-and-process cycle until no task in
 // the project is PENDING, READY, QUEUED or RUNNING, failing if it doesn't
 // settle within a bounded number of rounds.
-func drivePlanToRest(t *testing.T, store *kanban.Store, w *worker.Worker, projectID string) []models.Task {
+func drivePlanToRest(t *testing.T, store models.KanbanStore, w *worker.Worker, projectID string) []models.Task {
 	t.Helper()
 	ctx := context.Background()
 	const maxRounds = 20

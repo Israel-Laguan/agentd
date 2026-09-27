@@ -262,7 +262,7 @@ If the **decision** step determines the ContextPack is insufficient (missing fil
 5. A task already `RUNNING` or beyond when the rewire happens is left alone, per the original spec's "allowed to finish, outputs ignored" allowance
 6. Re-gathers are bounded by `tiered.escalation.max_re_gather` (default 2). Once the cap is reached, a further `needs_context` request hands the origin to `FAILED_REQUIRES_HUMAN` instead of spawning another chain.
 
-This is an **explicit board action** detected at the decision step — never silent inside execute.
+This is an **explicit board action**: the decision step's trigger is detected post-commit, while execute and verify use the pre-commit interception described below.
 
 **Extended to execute/verify (T-023):** the decision-only trigger above still applies unchanged. Execute and verify steps can also emit the same `{"needs_context": true, "reason": "..."}` sentinel, but they cannot use decision's post-commit detection safely: the engine's unconditional commit (`Worker.CommitTextWithProfile`) runs inside the same DB transaction as `UnlockReadyChildren`/`UnblockBlockedParentsWhenChildrenResolved` (`finishTaskResultSideEffects`), so any `BLOCKED` dependent would already be unlocked by the time a post-commit read judged the answer insufficient — a race a post-hoc override can't close.
 

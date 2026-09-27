@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +31,23 @@ func captureDebugLogs(t *testing.T, level slog.Level) *bytes.Buffer {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: level})))
 	t.Cleanup(func() { slog.SetDefault(old) })
 	return &buf
+}
+
+var correlationIDPattern = regexp.MustCompile(`correlation_id=(\S+)`)
+
+// correlationIDOn returns the correlation_id carried by the first log line
+// containing marker, or "" when that line carries none.
+func correlationIDOn(logs, marker string) string {
+	for _, line := range strings.Split(logs, "\n") {
+		if !strings.Contains(line, marker) {
+			continue
+		}
+		if m := correlationIDPattern.FindStringSubmatch(line); m != nil {
+			return m[1]
+		}
+		return ""
+	}
+	return ""
 }
 
 // debugLoggingHost is a minimal Host for exercising the agentic loop's debug
@@ -94,6 +112,7 @@ func buildDebugLoggingTurnLoopInput(t *testing.T, ctx context.Context, e *Engine
 // task ID, turn lifecycle, tool dispatch, and terminal result"; US-006 AC:
 // "one identifier").
 func TestAgenticLoop_CorrelationIDConsistentAcrossLifecycle(t *testing.T) {
+	const wantID = "trace-agentic-xyz"
 	now := time.Now()
 	task := models.Task{
 		BaseEntity: models.BaseEntity{ID: "task-agentic-1", UpdatedAt: now},
@@ -119,7 +138,7 @@ func TestAgenticLoop_CorrelationIDConsistentAcrossLifecycle(t *testing.T) {
 	host := &debugLoggingHost{noopHost: &noopHost{}}
 	e := NewEngine(Config{Store: store, Gateway: seq, Sandbox: sb}, host)
 
-	ctx := correlation.WithID(context.Background(), "trace-agentic-xyz")
+	ctx := correlation.WithID(context.Background(), wantID)
 	in := buildDebugLoggingTurnLoopInput(t, ctx, e, task, store)
 
 	buf := captureDebugLogs(t, slog.LevelDebug)
@@ -136,6 +155,18 @@ func TestAgenticLoop_CorrelationIDConsistentAcrossLifecycle(t *testing.T) {
 		t.Fatal("expected committed terminal text")
 	}
 
+	assertLifecycleCorrelationIDs(t, logs, wantID)
+
+	if strings.Contains(logs, secretArg) {
+		t.Fatalf("logs leaked tool call argument %q; logs=%s", secretArg, logs)
+	}
+}
+
+// assertLifecycleCorrelationIDs checks each required lifecycle line on its
+// own line. Counting tagged lines separately would let an unrelated debug line
+// satisfy the count while the boundary that matters lost its id.
+func assertLifecycleCorrelationIDs(t *testing.T, logs, wantID string) {
+	t.Helper()
 	for _, marker := range []string{
 		"agentic: turn start",
 		"agentic: turn end",
@@ -148,20 +179,11 @@ func TestAgenticLoop_CorrelationIDConsistentAcrossLifecycle(t *testing.T) {
 	} {
 		if !strings.Contains(logs, marker) {
 			t.Errorf("missing lifecycle log %q; logs=%s", marker, logs)
+			continue
 		}
-	}
-
-	const wantID = "correlation_id=trace-agentic-xyz"
-	count := strings.Count(logs, wantID)
-	// Every one of the 8 markers above (plus the initial guard/other debug
-	// lines) should be tagged with the same correlation id; require at
-	// least one occurrence per lifecycle marker as a floor.
-	if count < 8 {
-		t.Fatalf("expected correlation id %q on every lifecycle log line (>=8 occurrences), got %d; logs=%s", wantID, count, logs)
-	}
-
-	if strings.Contains(logs, secretArg) {
-		t.Fatalf("logs leaked tool call argument %q; logs=%s", secretArg, logs)
+		if id := correlationIDOn(logs, marker); id != wantID {
+			t.Errorf("%q line correlation_id = %q, want %q; logs=%s", marker, id, wantID, logs)
+		}
 	}
 }
 
