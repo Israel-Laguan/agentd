@@ -1,6 +1,6 @@
-# Dockerfile.test - Run agentd tests as a non-root user inside a container
+# Test image - Run agentd tests as a non-root user inside a container
 #
-# Build:  podman build -f Dockerfile.test -t agentd-test .
+# Build:  podman build -f test/container/Dockerfile -t agentd-test .
 # Run:    podman run --rm agentd-test
 # Run all tests non-root so permission-sensitive tests behave correctly.
 

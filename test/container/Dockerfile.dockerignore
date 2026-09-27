@@ -4,7 +4,7 @@
 docs/
 tasks/
 devenv/
-test/
+.e2e/
 .gocache/
 bin/
 *.db
@@ -14,5 +14,3 @@ bin/
 node_modules
 .next
 coverage
-*.test.go
-*_test.go
