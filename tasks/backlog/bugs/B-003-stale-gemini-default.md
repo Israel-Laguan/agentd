@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | backlog |
+| Status | done |
 | Priority | P2 |
 | Sprint | backlog |
 | Severity | minor |
