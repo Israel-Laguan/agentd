@@ -57,7 +57,7 @@ this README/backlog before the sprint folder is cleared.
 | US- | US-007 |
 | T- | T-024 |
 | B- | B-004 |
-| SP- | SP-007 |
+| SP- | SP-008 |
 
 Update this table when you mint IDs.
 
