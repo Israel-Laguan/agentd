@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-logs
+.PHONY: build test test-e2e test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -25,6 +25,11 @@ endif
 
 test:
 	$(GO_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
+
+# E2E tests against live devenv stack. Requires devenv to be running (make dev-up).
+# Runs with -tags=e2e and does not run with `make test`.
+test-e2e:
+	$(GO_ENV) $(GO) test -v -race -tags=e2e -timeout=300s ./test/e2e/...
 
 # Compile (but don't run) per-package test binaries, e.g. for a debugger that
 # needs a standalone `go test -c` binary. Output is scoped to bin/test/ (git-
