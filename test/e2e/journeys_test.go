@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	baseURL     = "http://localhost:8765"
-	timeout     = 30 * time.Second
-	composePath = "../../devenv/compose.yaml"
+	baseURL        = "http://localhost:8765"
+	healingBaseURL = "http://localhost:8766"
+	timeout        = 30 * time.Second
+	composePath    = "../../devenv/compose.yaml"
 )
 
 // TestJ01_BootWithWarmup tests J01: Boot + provider connectivity.
@@ -345,4 +346,110 @@ func j04AwaitCompletion(ctx context.Context, t *testing.T, client *APIClient, pr
 	}
 
 	t.Logf("J04: Happy path verified - project %s materialized %d task(s), all COMPLETED", projectID, len(finalTasks))
+}
+
+// TestJ07_HealingHandoff tests J07: Connector failure → HUMAN task → human
+// resolution.
+//
+// Requires the "healing" devenv profile (agentd-healing on :8766, healing.
+// enabled + outage_handoff_enabled true). devenv/agentd/config.healing.yaml
+// deliberately points its only gateway provider at an address nothing
+// listens on, so every queue-worker LLM call fails with ErrLLMUnreachable
+// (same trick as docs/demo.md's HUMAN beat). After 3 consecutive failures
+// (internal/queue/safety.defaultBreakerFailures) the circuit breaker opens
+// and internal/queue/worker/worker_healing_handoff.go blocks the parent task
+// and creates a "Manual review required:" HUMAN child. Materialize builds
+// the DraftPlan directly (bypassing chat), since materialize never calls
+// the gateway — only the worker's execution-time call ever touches the
+// dead connector.
+//
+// The "resolution" here is POST /api/v1/tasks/{parentID}/retry, not
+// POST .../human-resolution: that endpoint is reserved for manual-action
+// handoffs (privileged-command approval, agentic-mode-switch, waiting-for-
+// input) whose child title has the "Manual action required:" prefix — see
+// internal/kanban/human_handoff.go's validateHandoffChild. A provider
+// outage isn't something a human answers with text; the human fixes the
+// outage out-of-band and retries the BLOCKED parent, which is exactly what
+// docs/demo.md's HITL beat does (it never calls human-resolution either).
+func TestJ07_HealingHandoff(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	harness := NewHarness(healingBaseURL, "healing")
+	if err := harness.WaitForHealthy(ctx, 10*time.Second); err != nil {
+		t.Fatalf("J07 [boot] harness failed to become healthy: %v", err)
+	}
+	client := NewAPIClient(healingBaseURL, harness.client)
+
+	j07ResetBreaker(ctx, t, client)
+
+	plan := DraftPlan{
+		ProjectName:         UniqueProjectName("j07"),
+		Description:         "J07 self-healing handoff smoke task",
+		StartEmptyWorkspace: true,
+		Tasks: []DraftTask{
+			{Title: "J07 task doomed to hit the dead connector", Description: "Any LLM call this task makes will fail."},
+		},
+	}
+	materialized := materializePlan(ctx, t, client, "J07", plan)
+	projectID := materialized.Project.ID
+	parentTaskID := materialized.Tasks[0].ID
+
+	poller := NewTaskPoller(client, projectID)
+	humanTask, err := poller.WaitForHumanHandoff(ctx, 30*time.Second)
+	if err != nil {
+		t.Fatalf("J07 [handoff] no HUMAN task appeared (breaker never opened?): %v", err)
+	}
+	if humanTask.State != TaskStateReady {
+		t.Fatalf("J07 [handoff] HUMAN task %s state = %s, want READY (see internal/kanban/task_breakdown.go's insertReadySubtasks)", humanTask.ID, humanTask.State)
+	}
+
+	retried := j07RetryParent(ctx, t, client, parentTaskID)
+
+	t.Logf("J07: HUMAN task %s appeared, parent %s retried back to READY", humanTask.ID, retried.ID)
+}
+
+// j07ResetBreaker resets the process-global circuit breaker before the
+// journey starts. The breaker is not per-project: a prior run (or another
+// journey against this same profile) may have left it OPEN, which throttles
+// new task dispatch for up to breaker.handoff_after (2m default) before
+// it's even attempted once (see internal/queue/loop_dispatch.go's
+// dispatchAvailable). Resetting first keeps the journey fast and repeatable
+// regardless of what ran before it.
+func j07ResetBreaker(ctx context.Context, t *testing.T, client *APIClient) {
+	t.Helper()
+
+	resp, err := client.ResetBreaker(ctx)
+	if err != nil {
+		t.Fatalf("J07 [breaker reset] request failed: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("J07 [breaker reset] returned %d, want 200", resp.StatusCode)
+	}
+}
+
+func j07RetryParent(ctx context.Context, t *testing.T, client *APIClient, parentTaskID string) *Task {
+	t.Helper()
+
+	resp, err := client.RetryTask(ctx, parentTaskID)
+	if err != nil {
+		t.Fatalf("J07 [retry] request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		t.Fatalf("J07 [retry] returned %d, want 200", resp.StatusCode)
+	}
+	retried, err := DecodeTaskResponse(resp)
+	if err != nil {
+		t.Fatalf("J07 [retry] decode failed: %v", err)
+	}
+	if retried.State != TaskStateReady {
+		t.Fatalf("J07 [retry] parent task %s state = %s, want READY (blocked parent did not resume)", retried.ID, retried.State)
+	}
+	return retried
 }

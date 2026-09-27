@@ -26,17 +26,26 @@ const (
 	TaskStateInConsideration     TaskState = "IN_CONSIDERATION"
 )
 
+// TaskAssignee mirrors internal/models.TaskAssignee.
+type TaskAssignee string
+
+const (
+	TaskAssigneeSystem TaskAssignee = "SYSTEM"
+	TaskAssigneeHuman  TaskAssignee = "HUMAN"
+)
+
 // Task represents a task object from the API (internal/models.Task). There
 // is no per-task GET endpoint; tasks are only observable via the
 // project-scoped list (GET /api/v1/projects/{id}/tasks) or as the payload of
 // a mutating call (materialize, workspace/ready, patch, assign, ...).
 type Task struct {
-	ID          string    `json:"id"`
-	ProjectID   string    `json:"project_id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	State       TaskState `json:"state"`
-	DependsOn   []string  `json:"depends_on"`
+	ID          string       `json:"id"`
+	ProjectID   string       `json:"project_id"`
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	State       TaskState    `json:"state"`
+	Assignee    TaskAssignee `json:"assignee"`
+	DependsOn   []string     `json:"depends_on"`
 }
 
 // TaskPoller polls a project's task list until one task reaches a desired
@@ -71,7 +80,7 @@ func (p *TaskPoller) WaitForTaskState(ctx context.Context, taskID string, desire
 			if time.Now().After(deadline) {
 				return nil, fmt.Errorf("task poller timeout waiting for task %s to reach %s", taskID, desired)
 			}
-			tasks, err := p.listTasks(ctx)
+			tasks, err := p.listTasks(ctx, false)
 			if err != nil {
 				continue
 			}
@@ -104,7 +113,7 @@ func (p *TaskPoller) WaitForAllComplete(ctx context.Context, timeout time.Durati
 		case <-ctx.Done():
 			return last, ctx.Err()
 		case <-ticker.C:
-			tasks, err := p.listTasks(ctx)
+			tasks, err := p.listTasks(ctx, false)
 			if err != nil {
 				continue
 			}
@@ -131,8 +140,37 @@ func (p *TaskPoller) WaitForAllComplete(ctx context.Context, timeout time.Durati
 	}
 }
 
-func (p *TaskPoller) listTasks(ctx context.Context) ([]Task, error) {
-	resp, err := p.client.ListTasks(ctx, p.projectID, "")
+// WaitForHumanHandoff polls (with include_healing=true) until a HUMAN-
+// assigned task appears in the project — created by
+// internal/queue/worker/worker_healing_handoff.go when the circuit breaker
+// opens or self-healing is exhausted.
+func (p *TaskPoller) WaitForHumanHandoff(ctx context.Context, timeout time.Duration) (*Task, error) {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			tasks, err := p.listTasks(ctx, true)
+			if err == nil {
+				for _, task := range tasks {
+					if task.Assignee == TaskAssigneeHuman {
+						return &task, nil
+					}
+				}
+			}
+			if time.Now().After(deadline) {
+				return nil, fmt.Errorf("task poller timeout waiting for a HUMAN handoff task")
+			}
+		}
+	}
+}
+
+func (p *TaskPoller) listTasks(ctx context.Context, includeHealing bool) ([]Task, error) {
+	resp, err := p.client.ListTasks(ctx, p.projectID, "", includeHealing)
 	if err != nil {
 		return nil, err
 	}

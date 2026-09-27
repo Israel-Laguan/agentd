@@ -33,6 +33,18 @@ func (c *APIClient) SystemStatus(ctx context.Context) (*http.Response, error) {
 	return c.Get(ctx, "/api/v1/system/status")
 }
 
+// ResetBreaker calls POST /api/v1/system/breaker/reset, resetting the
+// global circuit breaker (and all per-provider breakers) to CLOSED. The
+// breaker is process-global, not per-project: while it's OPEN, new task
+// dispatch is probe-limited (internal/queue/loop_dispatch.go's
+// dispatchAvailable) for up to breaker.handoff_after (2m default) before
+// the next task even gets attempted, so a journey that depends on a fresh
+// breaker (like J07) should reset it first rather than assume a clean
+// state left by a prior run.
+func (c *APIClient) ResetBreaker(ctx context.Context) (*http.Response, error) {
+	return c.Post(ctx, "/api/v1/system/breaker/reset", nil)
+}
+
 // Projects calls GET /api/v1/projects.
 func (c *APIClient) Projects(ctx context.Context) (*http.Response, error) {
 	return c.Get(ctx, "/api/v1/projects")
@@ -110,13 +122,86 @@ func (c *APIClient) WorkspaceReady(ctx context.Context, projectID string) (*http
 
 // ListTasks calls GET /api/v1/projects/{projectID}/tasks, optionally
 // filtered by comma-separated state(s) (e.g. "COMPLETED" or "READY,RUNNING").
-// Pass an empty state to list every task.
-func (c *APIClient) ListTasks(ctx context.Context, projectID, state string) (*http.Response, error) {
+// Pass an empty state to list every task. Self-healing handoff tasks (HUMAN
+// assignees created by a provider outage, see internal/queue/worker/
+// worker_healing_handoff.go) are excluded unless includeHealing is true.
+func (c *APIClient) ListTasks(ctx context.Context, projectID, state string, includeHealing bool) (*http.Response, error) {
 	path := fmt.Sprintf("/api/v1/projects/%s/tasks", projectID)
+	query := ""
 	if state != "" {
-		path += "?state=" + state
+		query += "state=" + state
+	}
+	if includeHealing {
+		if query != "" {
+			query += "&"
+		}
+		query += "include_healing=true"
+	}
+	if query != "" {
+		path += "?" + query
 	}
 	return c.Get(ctx, path)
+}
+
+// DecodeTaskResponse reads and JSON-decodes a single-task envelope response,
+// as returned by RetryTask, Patch, Assign, and Split.
+func DecodeTaskResponse(resp *http.Response) (*Task, error) {
+	defer func() { _ = resp.Body.Close() }()
+	var envelope struct {
+		Data Task `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("decode task response: %w", err)
+	}
+	return &envelope.Data, nil
+}
+
+// RetryTask calls POST /api/v1/tasks/{taskID}/retry, transitioning a
+// FAILED/FAILED_REQUIRES_HUMAN/BLOCKED/IN_CONSIDERATION task back to READY
+// (internal/services/task_service.go's Retry). This is the real recovery
+// path for a provider-outage BLOCKED parent: fix the outage out-of-band,
+// then retry the parent — its still-open ManualReview HUMAN child is not
+// resolved through /human-resolution (that endpoint is reserved for
+// manual-action handoffs only; see internal/kanban/human_handoff.go's
+// validateHandoffChild).
+func (c *APIClient) RetryTask(ctx context.Context, taskID string) (*http.Response, error) {
+	path := fmt.Sprintf("/api/v1/tasks/%s/retry", taskID)
+	return c.Post(ctx, path, nil)
+}
+
+// humanResolutionRequest is the body for POST /api/v1/tasks/{id}/human-resolution
+// (internal/api/controllers/tasks_human.go).
+type humanResolutionRequest struct {
+	Result string `json:"result"`
+}
+
+// ResolveHumanHandoff calls POST /api/v1/tasks/{taskID}/human-resolution.
+// taskID is the HUMAN-assigned child task's ID (from ListTasks with
+// includeHealing=true), not the parent it was created to unblock.
+func (c *APIClient) ResolveHumanHandoff(ctx context.Context, taskID, result string) (*http.Response, error) {
+	path := fmt.Sprintf("/api/v1/tasks/%s/human-resolution", taskID)
+	return c.PostJSON(ctx, path, humanResolutionRequest{Result: result})
+}
+
+// HumanHandoffResolution is the response body of a resolved human handoff
+// (internal/models.HumanHandoffResolution): the resolved HUMAN task and its
+// now-completed parent.
+type HumanHandoffResolution struct {
+	Task   Task   `json:"task"`
+	Parent Task   `json:"parent"`
+	Result string `json:"result"`
+}
+
+// DecodeHumanHandoffResolution reads and JSON-decodes a human-resolution response.
+func DecodeHumanHandoffResolution(resp *http.Response) (*HumanHandoffResolution, error) {
+	defer func() { _ = resp.Body.Close() }()
+	var envelope struct {
+		Data HumanHandoffResolution `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("decode human handoff resolution: %w", err)
+	}
+	return &envelope.Data, nil
 }
 
 // Get makes a GET request.

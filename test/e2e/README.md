@@ -32,10 +32,15 @@ The journey suite is defined in [docs/testing/journeys.md](../../docs/testing/jo
   returns a deterministic `status_report`, not a `DraftPlan`
 - **J04**: Full happy path — chat → plan → materialize → seed workspace →
   workspace/ready → poll tasks to COMPLETED
+- **J07**: Self-healing handoff (needs the "healing" profile) — a plan
+  materialized against a deliberately dead connector (devenv/agentd/
+  config.healing.yaml) opens the circuit breaker, producing a BLOCKED
+  parent + "Manual review required:" HUMAN child; the journey resets the
+  breaker first (it's process-global, not per-project — see
+  APIClient.ResetBreaker's doc comment) then retries the parent
 
 Future journeys will test:
 - J05-J06: Materialization edge cases
-- J07: Self-healing handoff
 - J08-J09: Provider failures and circuit breaker
 - J10: Disk space watchdog
 - J11: Saved preferences recall
@@ -169,7 +174,7 @@ if err != nil {
 1. **J01**: Add a devenv profile that boots without `--skip-llm-warmup` to
    automate the warmup-on/off log check
 2. **Implement J05-J06**: Materialization edge cases, task drawer event log
-3. **Implement J07-J12**: Profile-specific journey tests (healing, faults,
+3. **Implement J08-J12**: Remaining profile-specific journey tests (faults,
    disk, tiered)
 4. **Add mock scenario injection**: Parse @scenario= tags in requests (T-028)
 5. **Improve error output**: Capture last observed state for bug filing (T-027)
