@@ -43,6 +43,18 @@ func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, 
 		return
 	}
 
+	if diverted, err := w.taskDivertedToNeedsContext(ctx, task.ID); err != nil {
+		slog.Error("tiered verify: failed to check NEEDS_CONTEXT diversion", "task_id", task.ID, "error", err)
+	} else if diverted {
+		// CommitTextWithProfile's pre-commit interception (T-023) already
+		// classified this output as a needs-context signal and fully
+		// handled the transition/re-gather spawn; there is no committed
+		// VerifyResult to read back, and routing it through the normal
+		// pass/fail/escalate ladder below would misclassify the missing
+		// commit as a failure.
+		return
+	}
+
 	verifyResult, err := w.readVerifyResult(ctx, task)
 	if err != nil {
 		slog.Error("tiered verify: failed to parse VerifyResult", "task_id", task.ID, "error", err)

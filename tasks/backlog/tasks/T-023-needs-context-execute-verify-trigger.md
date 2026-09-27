@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | backlog |
+| Status | done |
 | Priority | P2 |
 | Sprint | backlog |
 | Parent | none |
@@ -18,10 +18,10 @@ Extending the trigger to execute/verify needs an agentic-engine change (pre-comm
 
 ## Done when
 
-- [ ] Decide whether pre-commit interception in `engine.Process` is worth adding, or whether decision-only NEEDS_CONTEXT is the accepted permanent scope (update `docs/tiered-execution.md` either way)
-- [ ] If proceeding: engine supports intercepting a step's result before commit for tiered steps
-- [ ] Execute/verify steps can signal NEEDS_CONTEXT the same way decision does today
-- [ ] Existing decision-step NEEDS_CONTEXT path and its tests are unaffected
+- [x] Decide whether pre-commit interception in `engine.Process` is worth adding, or whether decision-only NEEDS_CONTEXT is the accepted permanent scope (update `docs/tiered-execution.md` either way)
+- [x] If proceeding: engine supports intercepting a step's result before commit for tiered steps
+- [x] Execute/verify steps can signal NEEDS_CONTEXT the same way decision does today
+- [x] Existing decision-step NEEDS_CONTEXT path and its tests are unaffected
 
 ## Notes
 
