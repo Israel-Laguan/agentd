@@ -17,7 +17,7 @@ List tasks for a project with optional filters.
 - `state` - Filter by state (comma-separated): `PENDING`, `READY`, `QUEUED`, `RUNNING`, `BLOCKED`, `COMPLETED`, `FAILED`, `FAILED_REQUIRES_HUMAN`, `IN_CONSIDERATION`
 - `assignee` - Filter by assignee: `HUMAN`, `SYSTEM`, or agent ID
 - `include_healing` - When `true`, include self-healing handoff subtasks. Default: excluded.
-- `limit` - Maximum results (default: 50)
+- `limit` - Maximum results (default: 25, max: 200). Results are sorted newest first (`created_at` descending), so omitting `limit` drops the oldest tasks once a project has more than 25.
 - `offset` - Pagination offset
 
 **Response**:
@@ -26,7 +26,7 @@ List tasks for a project with optional filters.
 {
   "status": "success",
   "data": [...],
-  "meta": { "page": 1, "per_page": 50, "total": 5 }
+  "meta": { "page": 1, "per_page": 25, "total": 5 }
 }
 ```
 

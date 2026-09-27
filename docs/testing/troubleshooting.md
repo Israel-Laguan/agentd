@@ -53,7 +53,7 @@ matching task-ID line in the project's `PLAN_RESULTS.log` as execution evidence.
 
 - Discover the real model alias from the operator’s authenticated `/v1/models` response, then set `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `LITELLM_MODEL` for agentd.
 
-- Check litellm config mount: `./deploy/docker-plan-execute/litellm/config.yaml:/app/config.yaml:ro`
+- Check litellm config mount: `./dev/litellm/config.yaml:/app/config.yaml:ro` (plus `./dev/litellm/agentd_correlation.py`, which that config loads as a callback)
 
 ### If web shows "Not Connected"
 

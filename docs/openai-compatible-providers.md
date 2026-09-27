@@ -43,7 +43,7 @@ Keys used by every `providers` entry:
 | `api_key_env` | Environment variable holding the API key (preferred over inline `api_key`) |
 | `model` | Model name as the vendor expects it |
 | `capabilities.chat_tools` | Override tool-calling support; the `openai` adapter defaults to `true` |
-| `options.send_task_metadata` | Opt-in correlation: when `true`, sends `metadata` map (task_id/agent_id/role when any of the three is non-empty) for passthrough on compatible gateways (e.g. LiteLLM). We do not set the top-level `user` field (OpenAI semantic for end-user id). Defaults `false`. |
+| `options.send_task_metadata` | Opt-in correlation: when `true`, sends `metadata` map (task_id/agent_id/role when any of the three is non-empty) for spend correlation on gateways such as LiteLLM, which keeps it for its own logs and does **not** forward it upstream (see [litellm-integration.md](litellm-integration.md)). We do not set the top-level `user` field (OpenAI semantic for end-user id). Defaults `false`. |
 
 List the vendor name(s) in `gateway.order`. agentd tries each provider in order and advances
 to the next on error, so cascade fallback works automatically.
@@ -166,6 +166,10 @@ are documented in [`docs/llm-connector-strategy.md`](llm-connector-strategy.md).
     single internal retry before agentd's cascade handles cross-provider fallback.
   - Keep agentd-side timeouts (`gateway.providers[*].timeout`) bounded so a stuck
     LiteLLM route yields to the next provider rather than hanging the task.
+
+- **Task correlation and container notes.** What LiteLLM does with
+  `send_task_metadata`, a pre-call hook to forward it upstream, and Podman
+  compose lessons: [litellm-integration.md](litellm-integration.md).
 
 ## Tool Calling
 

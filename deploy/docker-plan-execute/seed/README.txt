@@ -1,1 +1,0 @@
-This directory is used as source_path to seed the materialized project workspace. Execution evidence (PLAN_RESULTS.log) is written by sandboxed commands into the project workspace (not back into the read-only seed).

@@ -1,4 +1,4 @@
-# agentd configuration for the docker plan+execute scenario.
+# agentd configuration for the docker-compose.dev.yml stack.
 #
 # The only gateway provider is the litellm proxy running in the same compose
 # network. All seeded agent profiles (default/researcher/qa) leave provider and
@@ -36,7 +36,7 @@ gateway:
 queue:
   token_budget: 50000
 
-# Keep the scenario quiet: no self-healing handoffs or outage tasks.
+# Keep the dev stack quiet: no self-healing handoffs or outage tasks.
 healing:
   enabled: false
   outage_handoff_enabled: false
