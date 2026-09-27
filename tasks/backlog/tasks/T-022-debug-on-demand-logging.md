@@ -5,7 +5,7 @@
 | Type | task |
 | Status | ready |
 | Priority | P1 |
-| Sprint | S06-stabilize-observe |
+| Sprint | backlog |
 | Links | [US-006](../stories/US-006-pipeline-debug-observability.md) |
 
 ## Goal
