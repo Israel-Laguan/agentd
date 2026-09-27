@@ -54,3 +54,29 @@ func TestBeat2ExhaustionBreakerClass(t *testing.T) {
 		t.Fatal("breaker should classify cascade exhaustion as breaker failure")
 	}
 }
+
+// TestNewRouterFromConfigs_PrimaryFailureSecondarySucess encodes T-025 Part A:
+// dead primary provider (http://127.0.0.1:1) with live secondary httptest.Server.
+// ProviderUsed should be "secondary" and the response content should be captured.
+func TestNewRouterFromConfigs_PrimaryFailureSecondarySucess(t *testing.T) {
+	// Secondary is always reachable and returns a response
+	secondary := &fakeProvider{
+		providerName: "secondary",
+		resp:         AIResponse{Content: "cascade success", ProviderUsed: "secondary"},
+	}
+
+	router := NewRouter(&fakeProvider{providerName: "primary", err: fmt.Errorf("connection refused")}, secondary)
+	resp, err := router.Generate(context.Background(), AIRequest{
+		Messages: []PromptMessage{{Role: "user", Content: "test cascade"}},
+	})
+
+	if err != nil {
+		t.Fatalf("Generate() error = %v, want nil", err)
+	}
+	if resp.ProviderUsed != "secondary" {
+		t.Fatalf("ProviderUsed = %q, want secondary", resp.ProviderUsed)
+	}
+	if resp.Content != "cascade success" {
+		t.Fatalf("Content = %q, want cascade success", resp.Content)
+	}
+}

@@ -3,10 +3,17 @@ package kanban
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 
+	"agentd/internal/memory"
 	"agentd/internal/models"
 )
+
+// FormatPreferences wraps the recall.FormatPreferences for test use.
+func FormatPreferences(memories []models.Memory) string {
+	return memory.FormatPreferences(memories)
+}
 
 func TestRecordAndListMemories(t *testing.T) {
 	store := newTestStore(t)
@@ -183,5 +190,59 @@ func assertProjectMemory(t *testing.T, ctx context.Context, store *Store, projec
 	}
 	if len(projectMemories) != 1 || projectMemories[0].ProjectID.String != projectID {
 		t.Fatalf("project memories = %#v, want one project-scoped memory", projectMemories)
+	}
+}
+
+// TestUserPreferenceRecall tests T-025 Part A: a USER_PREFERENCE memory is
+// recalled by user and intent on real SQLite, isn't returned for another user,
+// and appears in FormatPreferences output.
+func TestUserPreferenceRecall(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	userID1 := "user-alice"
+	userID2 := "user-bob"
+
+	// Record a USER_PREFERENCE for user 1 (user_id encoded in Tags)
+	prefMemory := models.Memory{
+		Scope:    "USER_PREFERENCE",
+		Tags:     sql.NullString{String: "user_id:" + userID1 + ",pref", Valid: true},
+		Symptom:  sql.NullString{String: "format preference: compact lists", Valid: true},
+		Solution: sql.NullString{String: "use bullet format only", Valid: true},
+	}
+	if err := store.RecordMemory(ctx, prefMemory); err != nil {
+		t.Fatalf("RecordMemory() error = %v", err)
+	}
+
+	// Recall by user 1 should find the preference
+	recalled1, err := store.RecallMemories(ctx, models.RecallQuery{
+		Intent: "format preference",
+		UserID: userID1,
+	})
+	if err != nil {
+		t.Fatalf("RecallMemories(user1) error = %v", err)
+	}
+	if len(recalled1) == 0 {
+		t.Fatal("RecallMemories(user1) returned no matches, want the recorded preference")
+	}
+	if recalled1[0].Solution.String != "use bullet format only" {
+		t.Fatalf("recalled solution = %q, want bullet format", recalled1[0].Solution.String)
+	}
+
+	// Recall by user 2 should NOT find user 1's preference
+	recalled2, err := store.RecallMemories(ctx, models.RecallQuery{
+		Intent: "format preference",
+		UserID: userID2,
+	})
+	if err != nil {
+		t.Fatalf("RecallMemories(user2) error = %v", err)
+	}
+	if len(recalled2) > 0 {
+		t.Fatalf("RecallMemories(user2) returned %d memories, want 0 (user1 pref should not leak)", len(recalled2))
+	}
+
+	// FormatPreferences should include the preference
+	formatted := FormatPreferences([]models.Memory{recalled1[0]})
+	if !strings.Contains(formatted, "use bullet format only") {
+		t.Fatalf("FormatPreferences output = %q, want to include the solution", formatted)
 	}
 }
