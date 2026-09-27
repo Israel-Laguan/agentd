@@ -15,17 +15,13 @@ interface TaskDrawerProps {
   task: Task | null;
   onClose: () => void;
   onUpdateTask?: (id: string, patch: Partial<Task>) => Promise<void>;
-  onResolveHandoff?: (taskId: string, result: string, expectedUpdatedAt: number) => Promise<void>;
+  onResolveHandoff?: (taskId: string, result: string, expectedUpdatedAt: number | string) => Promise<void>;
   eventRefreshKey?: number;
 }
 
-const humanHandoffPrefixes = [
-  "Approve tool call: ",
-  "Review required:",
-  "Clarification required: ",
-  "Manual review required:",
-  "Manual action required:",
-];
+// Only manual-action handoffs are resolvable by a human via the
+// human-resolution endpoint; other HITL prefixes resume the agent instead.
+const humanHandoffPrefixes = ["Manual action required:"];
 
 function isHumanHandoff(task: Task) {
   return task.assignee === TaskAssignee.HUMAN && humanHandoffPrefixes.some((prefix) => task.title.startsWith(prefix));
@@ -273,12 +269,16 @@ export function TaskDrawer({
               <TaskEventList events={events.filter((event) => event.task_id === task.id)} />
             </div>
 
-            {task && isHumanHandoff(task) && onResolveHandoff && (
-              <HumanResolutionForm
-                task={task}
-                onResolve={(taskId, result) => onResolveHandoff(taskId, result, task.updated_at)}
-              />
-            )}
+            {task &&
+              isHumanHandoff(task) &&
+              task.state !== TaskStatus.COMPLETED &&
+              task.state !== TaskStatus.FAILED &&
+              onResolveHandoff && (
+                <HumanResolutionForm
+                  task={task}
+                  onResolve={(taskId, result) => onResolveHandoff(taskId, result, task.daemon_updated_at ?? task.updated_at)}
+                />
+              )}
 
             {/* COMMENTS */}
             <div className="pt-4 border-t border-border">

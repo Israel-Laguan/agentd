@@ -104,7 +104,7 @@ export default function Page() {
   const handleResolveHandoff = async (
     taskId: string,
     result: string,
-    expectedUpdatedAt: number
+    expectedUpdatedAt: number | string
   ) => {
     const resolution = await resolveHumanHandoff(taskId, result, expectedUpdatedAt);
     setLocalTasks((tasks) => {

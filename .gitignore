@@ -52,3 +52,6 @@ opencode.json
 # Python
 __pycache__/
 *.pyc
+
+# scratch artifact written by scripts/checkminfunc --update-baseline
+scripts/checkminfunc/baseline.bak
