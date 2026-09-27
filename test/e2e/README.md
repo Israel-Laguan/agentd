@@ -22,8 +22,11 @@ make dev-down
 
 The journey suite is defined in [docs/testing/journeys.md](../../docs/testing/journeys.md). Currently implemented:
 
-- **J01**: Boot + provider connectivity (warmup on/off)
-- **J04**: Full happy path (system status, board, SSE)
+- **J01**: Boot + provider connectivity (system/status envelope check; warmup
+  on/off log verification is not yet automated — devenv/compose.yaml hardcodes
+  `--skip-llm-warmup` into every profile's entrypoint)
+- **J04**: Full happy path — chat → plan → materialize → seed workspace →
+  workspace/ready → poll tasks to COMPLETED
 
 Future journeys will test:
 - J02: Board and logs reachable
@@ -47,30 +50,49 @@ Future journeys will test:
 - **APIClient**: Convenience methods for API calls
   - `SystemStatus()`: GET /api/v1/system/status
   - `Projects()`: GET /api/v1/projects
-  - `Chat()`: POST /api/v1/chat
-  - `MaterializePlan()`: POST to materialize a plan
-  - `WorkspaceReady()`: POST workspace/ready
-  - Generic `Get()`, `Post()`, `Patch()` methods
+  - `ChatCompletions()`: POST /v1/chat/completions (OpenAI-shaped; the real
+    chat route — there is no `/api/v1/chat`)
+  - `MaterializePlan()`: POST /api/v1/projects/materialize — the DraftPlan
+    JSON from chat, unmodified. There is no separate approve endpoint or
+    plan ID: materializing that exact plan IS the approval.
+  - `WorkspaceReady()`: POST /api/v1/projects/{projectID}/workspace/ready,
+    keyed by the project's UUID (not its name)
+  - `ListTasks()`: GET /api/v1/projects/{projectID}/tasks, optionally
+    filtered by state — there is no single-task GET endpoint
+  - Generic `Get()`, `Post()`, `PostJSON()`, `Patch()` methods
 
-- **SSEReader**: Consume server-sent events from /api/v1/sse
+- **SSEReader**: Consume server-sent events from /api/v1/events/stream
+  (optionally scoped with `?project_id=`)
   - `NextEvent()`: Read next SSE event with timeout
   - Parses "event:" and "data:" lines
 
-- **TaskPoller**: Poll task state until desired state reached
-  - `WaitForState()`: Block until task reaches READY, RUNNING, COMPLETED, etc.
-  - `CurrentState()`: Get task state immediately
+- **TaskPoller**: Poll a project's task list until desired states are reached
+  - `WaitForTaskState()`: Block until one task reaches a given state
+  - `WaitForAllComplete()`: Block until every task in the project is
+    COMPLETED, or fail fast on FAILED/FAILED_REQUIRES_HUMAN
   - Automatic timeout protection
 
-- **ProjectManager**: Per-journey project isolation
-  - `Create()`: Create project (auto-created on first materialize)
-  - `Cleanup()`: Delete project after journey
-  - Isolates journeys via unique names (j01-abc123 format)
+- **ProjectManager**: Tracks a journey's project name for isolation. There is
+  no DELETE /api/v1/projects/{id} route, so `Cleanup()` doesn't exist —
+  journey projects (and their workspaces) accumulate in the devenv volume
+  across runs.
 
 - **DevenvManager**: Manage devenv stack via podman-compose
-  - `Start()`: Bring up devenv (idempotent)
-  - `Stop()`: Tear down devenv
+  - `Start()`: Bring up this manager's profile (idempotent)
+  - `Stop()`: Tear down this manager's profile
   - `WaitForReady()`: Wait for all services healthy
-  - `IsRunning()`: Check if running
+  - `IsRunning()`: Check if the profile has running containers
+  - `SeedWorkspace()`: Create a non-empty workspace dir for a project inside
+    the running agentd container via `podman compose exec` — there is no
+    bind mount exposing the workspace root to the host (see
+    devenv/compose.yaml's named volumes)
+
+  All podman-compose invocations pass `--profile <profile>` explicitly:
+  podman-compose 1.3.0 does not auto-activate the "default" profile the way
+  docker compose does, so an unqualified `up`/`ps`/`down` silently resolves
+  to `services: {}`. `NewDevenvManager` also resolves `composePath` to an
+  absolute path — podman-compose 1.3.0 has been observed to fail on a
+  relative `-f` path depending on how it's invoked.
 
 ### Service Profiles
 
@@ -102,11 +124,11 @@ Tests use `//go:build e2e` to exclude them from `make test`:
 
 ### Per-Journey Isolation
 
-Each journey gets a unique project name:
+Each journey gets a unique project name (there's no cleanup step — see
+ProjectManager above):
 ```go
 name := UniqueProjectName("j01")  // "j01-abc123"
 pm := NewProjectManager(client, name)
-defer pm.Cleanup(ctx)
 ```
 
 ### Failure Diagnostics
@@ -129,21 +151,24 @@ func TestJ07_HealingHandoff(t *testing.T) {
 
 ### State Polling with Timeout
 
-Task state polling protects against hangs:
+Task state polling protects against hangs (there's no single-task GET, so
+polling always goes through the project's task list):
 ```go
-poller := NewTaskPoller(client, "myproject", "task-123")
-task, err := poller.WaitForState(ctx, TaskStateCompleted, 30*time.Second)
+poller := NewTaskPoller(client, projectID)
+tasks, err := poller.WaitForAllComplete(ctx, 60*time.Second)
 if err != nil {
-    t.Fatalf("Task stuck in %s: %v", task.State, err)
+    t.Fatalf("tasks did not complete: %v (last observed: %+v)", err, tasks)
 }
 ```
 
 ## Next Steps
 
-1. **Enhance J01**: Verify warmup logs when gateway.warmup_enabled: true
-2. **Enhance J04**: Add chat request, plan approval, workspace creation, task completion
-3. **Implement J02-J03**: Board and logs, chat-only response
-4. **Implement J07-J12**: Profile-specific journey tests
+1. **J01**: Add a devenv profile that boots without `--skip-llm-warmup` to
+   automate the warmup-on/off log check
+2. **Implement J02-J03**: Board and logs, chat-only response
+3. **Implement J05-J06**: Materialization edge cases, task drawer event log
+4. **Implement J07-J12**: Profile-specific journey tests (healing, faults,
+   disk, tiered)
 5. **Add mock scenario injection**: Parse @scenario= tags in requests (T-028)
 6. **Improve error output**: Capture last observed state for bug filing (T-027)
 
