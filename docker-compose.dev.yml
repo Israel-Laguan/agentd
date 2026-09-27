@@ -3,6 +3,7 @@ version: "3.8"
 # Local development stack for agentd + web UI testing.
 #
 # Services:
+#   mockllm - fake OpenAI-compatible backend (dev/mockllm)
 #   litellm - LLM proxy/router (port 4000)
 #   agentd  - daemon (port 8765)
 #   web     - Next.js frontend (port 3000)
@@ -34,7 +35,7 @@ version: "3.8"
 services:
   mockllm:
     build:
-      context: ./deploy/docker-plan-execute/mockllm
+      context: ./dev/mockllm
       dockerfile: Dockerfile
     expose:
       - "8000"
@@ -50,7 +51,9 @@ services:
     ports:
       - "127.0.0.1:4000:4000"
     volumes:
-      - ./deploy/docker-plan-execute/litellm/config.yaml:/app/config.yaml:ro
+      - ./dev/litellm/config.yaml:/app/config.yaml:ro
+      # Pre-call hook registered in config.yaml (litellm_settings.callbacks).
+      - ./dev/litellm/agentd_correlation.py:/app/agentd_correlation.py:ro
     depends_on:
       mockllm:
         condition: service_started
@@ -72,7 +75,7 @@ services:
       AGENTD_API_ADDRESS: "0.0.0.0:8765"
     volumes:
       - agentd-data:/home/agentd
-      - ./deploy/docker-plan-execute/agentd/config.yaml:/etc/agentd/config.yaml:ro
+      - ./dev/agentd/config.yaml:/etc/agentd/config.yaml:ro
     depends_on:
       litellm:
         condition: service_started

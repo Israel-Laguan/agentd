@@ -26,7 +26,7 @@ project/task IDs for investigation. API assertions are automated; browser click-
 > **Note:** The script validates that `agentd` is present in the authenticated
 > LiteLLM `/v1/models` response and checks agentd/web liveness, but it does **not**
 > independently verify that agentd is configured to use the same `LITELLM_BASE_URL`
-> and model. That routing is controlled by `deploy/docker-plan-execute/agentd/config.yaml`
+> and model. That routing is controlled by `dev/agentd/config.yaml`
 > and the compose file. It also leaves the created project and tasks behind.
 >
 > **Known behavior:** the LiteLLM-backed mock generates task titles like "Set up plan"

@@ -14,8 +14,8 @@ import (
 const breakdownMarkerTitle = "AGENT_PLAN"
 
 // titleBreakdownGateway decomposes any task whose prompt carries
-// breakdownMarkerTitle and returns a shell command otherwise, the way the
-// docker-plan-execute mock LLM does.
+// breakdownMarkerTitle and returns a shell command otherwise, like a model that always splits
+// plan-marked tasks.
 type titleBreakdownGateway struct {
 	routingTestGateway
 }
@@ -69,7 +69,7 @@ func mustListChildren(t *testing.T, store *testutil.FakeKanbanStore, id string) 
 
 // A decomposed parent that resumes after its subtasks complete must be rolled
 // up to COMPLETED, not re-prompted: re-prompting the identical task made the
-// model decompose it again on every resume (docker-plan-execute F1).
+// model decompose it again on every resume.
 func TestBreakdownRollup_ResumedParentCompletesWithoutRedecomposing(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

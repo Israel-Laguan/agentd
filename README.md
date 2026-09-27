@@ -177,6 +177,7 @@ Run spawned agents under a non-sudoer system user. `agentd` blocks commands that
 | [`docs/reference.md`](docs/reference.md) | Feature catalog, task states, event types, config key reference |
 | [`docs/workspace-seeding.md`](docs/workspace-seeding.md) | Workspace seeding: `source_path` on materialize and `workspace/ready` two-phase flow |
 | [`docs/openai-compatible-providers.md`](docs/openai-compatible-providers.md) | Using Groq, Together AI, Poolside, and other OpenAI-compatible cloud vendors |
+| [`docs/litellm-integration.md`](docs/litellm-integration.md) | LiteLLM task-metadata behaviour, forwarding hook, task-list pagination, Podman compose notes |
 | [`docs/llamacpp-quickstart.md`](docs/llamacpp-quickstart.md) | Local inference quickstart (llama.cpp, LM Studio, vLLM, Ollama) |
 | [`docs/guardrails.md`](docs/guardrails.md) | Size limits, layer boundaries, quality workflow (human-facing) |
 | [`docs/architecture.md#foundational-baseline-contract`](docs/architecture.md#foundational-baseline-contract) | Foundational baseline contract |
