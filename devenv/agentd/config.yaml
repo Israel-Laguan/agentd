@@ -1,4 +1,4 @@
-# agentd configuration for the docker-compose.dev.yml stack.
+# agentd configuration for the devenv/compose.yaml stack.
 #
 # The only gateway provider is the litellm proxy running in the same compose
 # network. All seeded agent profiles (default/researcher/qa) leave provider and

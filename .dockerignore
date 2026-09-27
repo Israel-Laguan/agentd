@@ -3,7 +3,7 @@
 *.md
 docs/
 tasks/
-dev/
+devenv/
 .e2e/
 .gocache/
 bin/

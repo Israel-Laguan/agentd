@@ -1,4 +1,4 @@
-# LiteLLM proxy config for the docker-compose.dev.yml stack.
+# LiteLLM proxy config for the devenv/compose.yaml stack.
 #
 # agentd routes every LLM call to this proxy as the model "agentd".
 # The proxy forwards to the OpenAI-compatible backend (mockllm). This
