@@ -70,7 +70,7 @@ task["id"], task["project_id"], task["state"]
 | User-editable cron | The daemon reads `<home>/agentd.crontab` for background job schedules. Recognized jobs include `task-dispatch`, `intake`, `heartbeat`, `disk-watchdog`, `hitl-reconcile` (default `@every 1m`), `memory-curator`, and `dream`. Standard 5-field entries and `@every <duration>` sub-minute entries are supported. | [`cron_schedule.feature`](../cmd/agentd/features/cron_schedule.feature) |
 | Prompt recovery | Timed-out sandbox executions are scanned for interactive prompt patterns. Allowlisted commands get a one-shot non-interactive retry; unrecoverable prompts create a HUMAN task. | [`prompt_recovery.feature`](../internal/queue/features/prompt_recovery.feature) |
 | Permission detection | `sudo` is blocked before execution. Failed commands with permission-like output create a HUMAN child task for the privileged host action. | [`permission_detection.feature`](../internal/queue/features/permission_detection.feature) |
-| Worker self-breakdown | Workers can return `{too_complex: true, subtasks: [...]}`. The parent moves to `BLOCKED`, child tasks are created, and the parent returns to `READY` after all children complete. | [`task_dependencies.feature`](../internal/kanban/features/task_dependencies.feature) |
+| Worker self-breakdown | Workers can return `{too_complex: true, subtasks: [...]}`. The parent moves to `BLOCKED`, child tasks are created, and the parent returns to `READY` after all children complete; the worker then rolls it up to `COMPLETED` without re-prompting the model (`TASK_BREAKDOWN_ROLLUP`). | [`task_dependencies.feature`](../internal/kanban/features/task_dependencies.feature) |
 
 ### Journey 3: System Resilience and Hardware
 
@@ -138,6 +138,7 @@ task["id"], task["project_id"], task["state"]
 | `SANDBOX_VIOLATION` | Sandbox | Command blocked before execution due to sandbox policy (e.g., `sudo`, path escape). |
 | `LOG_CHUNK` | Sandbox | Streaming stdout/stderr line emitted during command execution (after scrubber redaction). |
 | `TASK_BREAKDOWN` | Worker | Oversized task split into child tasks; parent blocked. |
+| `TASK_BREAKDOWN_ROLLUP` | Worker | Resumed broken-down parent completed because all its breakdown subtasks completed; no LLM call. |
 | `LLM_OUTAGE_HANDOFF` | Daemon | HUMAN task created for AI provider outage diagnostics. |
 | `REBOOT_RECOVERY_HANDOFF` | Daemon | HUMAN review task created after resetting interrupted tasks on startup. |
 | `DISK_SPACE_CRITICAL` | Watchdog | Free disk space below configured threshold. |

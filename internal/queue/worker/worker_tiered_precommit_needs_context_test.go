@@ -46,12 +46,12 @@ func upsertTieredExecuteProfile(t *testing.T, ctx context.Context, store *testut
 func spawnBlockedDependent(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, origin models.Task, parentStepID string) models.Task {
 	t.Helper()
 	dependentDraft := models.Task{
-		BaseEntity:  models.BaseEntity{ID: "downstream-task"},
-		ProjectID:   origin.ProjectID,
-		AgentID:     escalateAgentID,
-		Title:       "escalate: origin",
-		State:       models.TaskStateBlocked,
-		Assignee:    models.TaskAssigneeSystem,
+		BaseEntity: models.BaseEntity{ID: "downstream-task"},
+		ProjectID:  origin.ProjectID,
+		AgentID:    escalateAgentID,
+		Title:      "escalate: origin",
+		State:      models.TaskStateBlocked,
+		Assignee:   models.TaskAssigneeSystem,
 	}
 	created, err := store.SpawnTieredContinuation(ctx, origin.ID, []models.TieredContinuationTask{
 		{Task: dependentDraft, DependsOnID: parentStepID},

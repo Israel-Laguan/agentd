@@ -17,6 +17,11 @@
 #   docker compose up -d mockllm litellm agentd
 #   docker compose run --rm tester            # materialize + assert
 
+# podman-compose defaults to one shared pod, which forbids per-container
+# userns_mode (needed by agentd below). Service DNS still works over the network.
+x-podman:
+  in_pod: false
+
 services:
   mockllm:
     build:
@@ -25,7 +30,9 @@ services:
     expose:
       - "8000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)"]
+      # CMD-SHELL (not array-form CMD) so podman-compose's healthcheck
+      # translation doesn't mangle the quoting of the inline python.
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)\""]
       interval: 2s
       timeout: 3s
       retries: 20
@@ -35,13 +42,17 @@ services:
     command: ["--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
+      # Pre-call hook that forwards agentd's task metadata upstream (see file).
+      - ./litellm/agentd_correlation.py:/app/agentd_correlation.py:ro
     expose:
       - "4000"
     depends_on:
       mockllm:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness').status==200 else 1)"]
+      # CMD-SHELL (not array-form CMD) so podman-compose's healthcheck
+      # translation doesn't mangle the quoting of the inline python.
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness').status==200 else 1)\""]
       interval: 3s
       timeout: 3s
       retries: 30
@@ -54,6 +65,11 @@ services:
     # CMD and would be appended as args ("agentd sh -c ..."), which fails.
     # Override the entrypoint so the shell one-liner below actually runs.
     entrypoint: ["sh", "-c"]
+    # Rootless Podman: map the image's agentd user (uid 1000) to the host user,
+    # the same host uid that owns a fresh named volume (container root elsewhere).
+    # Without this, the tester's root mount of agentd-projects wins the volume
+    # chown and agentd gets "permission denied" creating project workspaces.
+    userns_mode: "keep-id:uid=1000,gid=1000"
     environment:
       LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
       AGENTD_API_ADDRESS: "0.0.0.0:8765"
@@ -64,9 +80,14 @@ services:
       - ./seed:/srv/seed:ro
       # Shared so the tester can read execution evidence written by the sandbox.
       - agentd-projects:/home/agentd/projects
-    command: >
-      agentd --config /etc/agentd/config.yaml init &&
-             exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v
+    # Must be a single-element list: a plain (string-form) `command:` gets
+    # shlex-split into an argv array by Compose, so `sh -c` would only ever
+    # receive the first token ("agentd") as its script and silently discard
+    # the rest as ignored positional params ($0, $1, ...).
+    command:
+      - >-
+        agentd --config /etc/agentd/config.yaml init &&
+        exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v
     depends_on:
       litellm:
         condition: service_healthy

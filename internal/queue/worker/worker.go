@@ -169,6 +169,9 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 			return
 		}
 	}
+	if w.tryRollUpBreakdown(ctx, task) {
+		return
+	}
 	if planning.IsPhasePlanningTask(task.Title) {
 		slog.DebugContext(ctx, "worker: handling phase planning", "task_id", task.ID)
 		w.handlePhasePlanning(ctx, task, project)
