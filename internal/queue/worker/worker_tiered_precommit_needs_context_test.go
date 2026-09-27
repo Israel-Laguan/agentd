@@ -274,19 +274,14 @@ func TestTieredExecute_FailedRegatherAbandonsTheStep(t *testing.T) {
 	}
 }
 
-// verifyStateReadFailureStore fails only GetTask, standing in for a transient
-// database error right after the pre-commit interception ran.
-type verifyStateReadFailureStore struct {
+// diversionCheckFailureStore fails every GetTask call so confirmNotDiverted
+// exhausts its retries and records TIERED_VERIFY_DIVERSION_CHECK_ERROR.
+type diversionCheckFailureStore struct {
 	*testutil.FakeKanbanStore
-	reads int
 }
 
-func (s *verifyStateReadFailureStore) GetTask(ctx context.Context, id string) (*models.Task, error) {
-	if s.reads < 4 {
-		s.reads++
-		return nil, errors.New("tasks table unavailable")
-	}
-	return s.FakeKanbanStore.GetTask(ctx, id)
+func (s *diversionCheckFailureStore) GetTask(ctx context.Context, id string) (*models.Task, error) {
+	return nil, errors.New("tasks table unavailable")
 }
 
 // A failed diversion check leaves the verify outcome unknown, so the step must
@@ -298,21 +293,25 @@ func TestTieredVerify_DiversionCheckFailureDoesNotClassifyOutput(t *testing.T) {
 	_, verify, _ := setUpTieredVerifyFixture(t, store)
 
 	gw := &plainTextVerifyGateway{content: `{"results":[{"check":"go test","outcome":"pass"}],"overall":"pass"}`}
-	failing := &verifyStateReadFailureStore{FakeKanbanStore: store}
+	failing := &diversionCheckFailureStore{FakeKanbanStore: store}
 	w := NewWorker(failing, gw, &mockAgenticSandbox{}, nil, &storeEventSink{store: store}, WorkerOptions{MaxToolIterations: 10})
 
 	w.Process(ctx, verify)
 
-	if failing.reads < 4 {
-		t.Fatalf("expected the diversion check to retry %d times, got %d", 4, failing.reads)
-	}
 	events, err := store.ListEventsByTask(ctx, verify.ID)
 	if err != nil {
 		t.Fatalf("ListEventsByTask(verify): %v", err)
 	}
+	var foundDiversionError bool
 	for _, e := range events {
 		if string(e.Type) == tieredVerifyOutcomeEvent {
 			t.Fatalf("verify task has a %s event %+v; output must not be classified when the diversion state is unknown", tieredVerifyOutcomeEvent, e)
 		}
+		if string(e.Type) == "TIERED_VERIFY_DIVERSION_CHECK_ERROR" {
+			foundDiversionError = true
+		}
+	}
+	if !foundDiversionError {
+		t.Fatal("expected TIERED_VERIFY_DIVERSION_CHECK_ERROR event when diversion check fails")
 	}
 }
