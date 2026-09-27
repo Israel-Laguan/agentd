@@ -69,10 +69,10 @@ podman-test:
 	podman run --rm agentd-test
 
 dev-up:
-	podman compose -f devenv/compose.yaml up --build -d
+	podman compose -f devenv/compose.yaml --profile default up --build -d
 
 dev-down:
-	podman compose -f devenv/compose.yaml down
+	podman compose -f devenv/compose.yaml --profile default down
 
 dev-logs:
 	podman compose -f devenv/compose.yaml logs -f
