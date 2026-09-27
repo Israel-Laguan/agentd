@@ -52,7 +52,7 @@ func (h *Harness) WaitForHealthy(ctx context.Context, timeout time.Duration) err
 			if err != nil {
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
 				return nil

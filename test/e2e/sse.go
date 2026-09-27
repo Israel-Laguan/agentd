@@ -19,19 +19,22 @@ type SSEEvent struct {
 	Data json.RawMessage // Raw JSON data
 }
 
-// SSEReader reads from the /api/v1/sse endpoint.
+// SSEReader reads from the /api/v1/events/stream endpoint.
 type SSEReader struct {
-	resp   *http.Response
+	resp    *http.Response
 	scanner *bufio.Scanner
-	cancel context.CancelFunc
+	cancel  context.CancelFunc
 }
 
-// NewSSEReader opens the SSE endpoint and returns a reader.
-// The caller should call Close() when done.
-func NewSSEReader(ctx context.Context, client *APIClient) (*SSEReader, error) {
+// NewSSEReader opens the SSE endpoint, optionally scoped to one project's
+// events, and returns a reader. The caller should call Close() when done.
+func NewSSEReader(ctx context.Context, client *APIClient, projectID string) (*SSEReader, error) {
 	readCtx, cancel := context.WithCancel(ctx)
-	req, err := http.NewRequestWithContext(readCtx, http.MethodGet,
-		client.baseURL+"/api/v1/sse", nil)
+	url := client.baseURL + "/api/v1/events/stream"
+	if projectID != "" {
+		url += "?project_id=" + projectID
+	}
+	req, err := http.NewRequestWithContext(readCtx, http.MethodGet, url, nil)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -44,7 +47,7 @@ func NewSSEReader(ctx context.Context, client *APIClient) (*SSEReader, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		cancel()
 		return nil, fmt.Errorf("SSE endpoint returned %d", resp.StatusCode)
 	}
