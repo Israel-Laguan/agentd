@@ -6,50 +6,59 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 )
 
-// TaskState represents the state of a task.
+// TaskState mirrors internal/models.TaskState's real enum values.
 type TaskState string
 
 const (
-	TaskStateReady      TaskState = "READY"
-	TaskStateRunning    TaskState = "RUNNING"
-	TaskStateCompleted  TaskState = "COMPLETED"
-	TaskStateHuman      TaskState = "HUMAN"
-	TaskStateError      TaskState = "ERROR"
-	TaskStateCancelled  TaskState = "CANCELLED"
+	TaskStatePending             TaskState = "PENDING"
+	TaskStateReady               TaskState = "READY"
+	TaskStateQueued              TaskState = "QUEUED"
+	TaskStateRunning             TaskState = "RUNNING"
+	TaskStateBlocked             TaskState = "BLOCKED"
+	TaskStateCompleted           TaskState = "COMPLETED"
+	TaskStateFailed              TaskState = "FAILED"
+	TaskStateFailedRequiresHuman TaskState = "FAILED_REQUIRES_HUMAN"
+	TaskStateNeedsContext        TaskState = "NEEDS_CONTEXT"
+	TaskStateInConsideration     TaskState = "IN_CONSIDERATION"
 )
 
-// Task represents a task object from the API.
+// Task represents a task object from the API (internal/models.Task). There
+// is no per-task GET endpoint; tasks are only observable via the
+// project-scoped list (GET /api/v1/projects/{id}/tasks) or as the payload of
+// a mutating call (materialize, workspace/ready, patch, assign, ...).
 type Task struct {
-	ID       string    `json:"id"`
-	Title    string    `json:"title"`
-	State    TaskState `json:"state"`
-	Output   string    `json:"output,omitempty"`
-	Error    string    `json:"error,omitempty"`
-	UpdatedAt string   `json:"updated_at,omitempty"`
+	ID          string    `json:"id"`
+	ProjectID   string    `json:"project_id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	State       TaskState `json:"state"`
+	DependsOn   []string  `json:"depends_on"`
 }
 
-// TaskPoller polls a task until a desired state is reached or a timeout occurs.
+// TaskPoller polls a project's task list until one task reaches a desired
+// state, or until every task in the project reaches a terminal state.
 type TaskPoller struct {
-	client      *APIClient
-	projectName string
-	taskID      string
+	client    *APIClient
+	projectID string
 }
 
-// NewTaskPoller creates a task poller for the given project and task.
-func NewTaskPoller(client *APIClient, projectName, taskID string) *TaskPoller {
+// NewTaskPoller creates a task poller for the given project (by UUID, as
+// returned by MaterializePlan — not the human-readable project name).
+func NewTaskPoller(client *APIClient, projectID string) *TaskPoller {
 	return &TaskPoller{
-		client:      client,
-		projectName: projectName,
-		taskID:      taskID,
+		client:    client,
+		projectID: projectID,
 	}
 }
 
-// WaitForState polls the task until it reaches the desired state.
-// Returns the final task state or an error if timeout is exceeded.
-func (p *TaskPoller) WaitForState(ctx context.Context, desiredState TaskState, timeout time.Duration) (*Task, error) {
+// WaitForTaskState polls until the task with the given ID reaches the
+// desired state. Returns an error immediately if the task instead reaches
+// FAILED or FAILED_REQUIRES_HUMAN.
+func (p *TaskPoller) WaitForTaskState(ctx context.Context, taskID string, desired TaskState, timeout time.Duration) (*Task, error) {
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
@@ -58,47 +67,86 @@ func (p *TaskPoller) WaitForState(ctx context.Context, desiredState TaskState, t
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(time.Until(deadline)):
-			return nil, fmt.Errorf("task poller timeout waiting for state %s", desiredState)
 		case <-ticker.C:
-			task, err := p.getTask(ctx)
+			if time.Now().After(deadline) {
+				return nil, fmt.Errorf("task poller timeout waiting for task %s to reach %s", taskID, desired)
+			}
+			tasks, err := p.listTasks(ctx)
 			if err != nil {
 				continue
 			}
-
-			if task.State == desiredState {
-				return task, nil
-			}
-
-			// Error states fail immediately.
-			if task.State == TaskStateError {
-				return task, fmt.Errorf("task reached ERROR state: %s", task.Error)
+			for _, task := range tasks {
+				if task.ID != taskID {
+					continue
+				}
+				if task.State == desired {
+					return &task, nil
+				}
+				if task.State == TaskStateFailed || task.State == TaskStateFailedRequiresHuman {
+					return &task, fmt.Errorf("task %s reached %s", taskID, task.State)
+				}
 			}
 		}
 	}
 }
 
-// CurrentState returns the current state of the task.
-func (p *TaskPoller) CurrentState(ctx context.Context) (*Task, error) {
-	return p.getTask(ctx)
+// WaitForAllComplete polls until every task in the project is COMPLETED.
+// Returns an error if any task reaches FAILED or FAILED_REQUIRES_HUMAN, or
+// on timeout, along with the last observed task list for diagnostics.
+func (p *TaskPoller) WaitForAllComplete(ctx context.Context, timeout time.Duration) ([]Task, error) {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(300 * time.Millisecond)
+	defer ticker.Stop()
+
+	var last []Task
+	for {
+		select {
+		case <-ctx.Done():
+			return last, ctx.Err()
+		case <-ticker.C:
+			tasks, err := p.listTasks(ctx)
+			if err != nil {
+				continue
+			}
+			last = tasks
+			if len(tasks) == 0 {
+				continue
+			}
+			allDone := true
+			for _, task := range tasks {
+				if task.State == TaskStateFailed || task.State == TaskStateFailedRequiresHuman {
+					return tasks, fmt.Errorf("task %s (%s) reached %s", task.ID, task.Title, task.State)
+				}
+				if task.State != TaskStateCompleted {
+					allDone = false
+				}
+			}
+			if allDone {
+				return tasks, nil
+			}
+			if time.Now().After(deadline) {
+				return tasks, fmt.Errorf("task poller timeout waiting for all tasks to complete")
+			}
+		}
+	}
 }
 
-func (p *TaskPoller) getTask(ctx context.Context) (*Task, error) {
-	path := fmt.Sprintf("/api/v1/projects/%s/tasks/%s", p.projectName, p.taskID)
-	resp, err := p.client.Get(ctx, path)
+func (p *TaskPoller) listTasks(ctx context.Context) ([]Task, error) {
+	resp, err := p.client.ListTasks(ctx, p.projectID, "")
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("get task returned %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("list tasks returned %d", resp.StatusCode)
 	}
 
-	var task Task
-	if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
+	var envelope struct {
+		Data []Task `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		return nil, err
 	}
-
-	return &task, nil
+	return envelope.Data, nil
 }
