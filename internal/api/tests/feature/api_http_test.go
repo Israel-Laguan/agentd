@@ -1,12 +1,9 @@
-package e2e
+package api_test
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -205,36 +202,6 @@ func TestStartup_FreshDatabaseHealthCheck(t *testing.T) {
 			t.Fatalf("projects data has unexpected type: %T", data)
 		}
 	}
-}
-
-func request(handler http.Handler, method, path, body string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	return rec
-}
-
-func assertStatus(t *testing.T, resp *httptest.ResponseRecorder, want int) {
-	t.Helper()
-	if resp.Code != want {
-		t.Fatalf("status = %d, want %d, body=%s", resp.Code, want, resp.Body.String())
-	}
-}
-
-func assertJSONField(t *testing.T, resp *httptest.ResponseRecorder, key string, want any) {
-	t.Helper()
-	if got := decodeBody(t, resp)[key]; got != want {
-		t.Fatalf("%s = %v, want %v", key, got, want)
-	}
-}
-
-func decodeBody(t *testing.T, resp *httptest.ResponseRecorder) map[string]any {
-	t.Helper()
-	var decoded map[string]any
-	if err := json.Unmarshal(resp.Body.Bytes(), &decoded); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	return decoded
 }
 
 type testStore struct {

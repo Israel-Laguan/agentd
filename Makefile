@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check test-e2e podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-logs
+.PHONY: build test test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -11,9 +11,6 @@ GOMODCACHE ?= $(HOME)/go/pkg/mod
 # Workspace-local GOCACHE for all compile/lint/test paths to avoid stale-build
 # artefacts when switching branches or when the global cache becomes inconsistent.
 GO_ENV = env GOCACHE=$(CURDIR)/.gocache GOMODCACHE=$(GOMODCACHE) GOTOOLCHAIN=go1.26.2+auto
-
-test-e2e:
-	$(GO_ENV) $(GO) test -v ./e2e/...
 
 build:
 	$(GO_ENV) $(GO) build -o bin/agentd ./cmd/agentd
