@@ -68,6 +68,81 @@ func (w *Worker) processTieredDecisionStep(ctx context.Context, task models.Task
 	w.reconcileBlockedDependents(ctx, task.ID)
 }
 
+// parseNeedsContextSignal scans raw, pre-commit LLM output for a
+// needs-context sentinel ({"needs_context": true, "reason": "..."}), using
+// the same JSON-candidate extraction as VerifyResult/ContextPack parsing so
+// it tolerates markdown fences and surrounding prose. It requires a
+// non-empty reason so an ordinary execute/verify artifact is never mistaken
+// for a re-gather request (neither schema has a needs_context field, so
+// there is no legitimate collision).
+func parseNeedsContextSignal(output string) (needsContextSignal, bool) {
+	for _, candidate := range extractJSONCandidates(output) {
+		var signal needsContextSignal
+		if err := json.Unmarshal([]byte(candidate), &signal); err != nil {
+			continue
+		}
+		if signal.NeedsContext && strings.TrimSpace(signal.Reason) != "" {
+			return signal, true
+		}
+	}
+	return needsContextSignal{}, false
+}
+
+// taskDivertedToNeedsContext reports whether taskID's current state is
+// NEEDS_CONTEXT, used to detect that interceptTieredNeedsContext already
+// diverted a step before its caller's own post-commit read/classification
+// logic runs.
+func (w *Worker) taskDivertedToNeedsContext(ctx context.Context, taskID string) (bool, error) {
+	current, err := w.store.GetTask(ctx, taskID)
+	if err != nil {
+		return false, err
+	}
+	return current.State == models.TaskStateNeedsContext, nil
+}
+
+// interceptTieredNeedsContext intercepts a tiered execute/verify step's
+// output before the engine's unconditional commit (T-023). Decision detects
+// NEEDS_CONTEXT after commit (readNeedsContextSignal), which is safe there
+// because committing only marks the decision itself COMPLETED before
+// tiered code judges that already-committed answer. For execute/verify,
+// committing first would unconditionally unlock any BLOCKED dependents in
+// the same transaction (finishTaskResultSideEffects), racing whoever picks
+// them up next against this NEEDS_CONTEXT decision. Intercepting here,
+// while the task is still RUNNING, transitions straight to NEEDS_CONTEXT
+// (a valid edge in models.validTaskTransitions) and never calls
+// store.UpdateTaskResult, so dependents are never unlocked in the first
+// place. Returns true when it fully handled the commit (caller must not
+// fall through to the normal success-commit path).
+func (w *Worker) interceptTieredNeedsContext(ctx context.Context, task models.Task, content string) bool {
+	if !w.isTieredStep(task) {
+		return false
+	}
+	kind := w.tieredStepKind(task)
+	if kind != TieredStepExecute && kind != TieredStepVerify {
+		return false
+	}
+	signal, ok := parseNeedsContextSignal(content)
+	if !ok {
+		return false
+	}
+	parents, err := w.store.ListParentTasksByRelation(ctx, task.ID, models.TaskRelationSpawnedBy)
+	if err != nil {
+		slog.Error("tiered: failed to look up SPAWNED_BY parent for pre-commit NEEDS_CONTEXT", "task_id", task.ID, "step", kind, "error", err)
+		w.FailHard(ctx, task, fmt.Errorf("tiered NEEDS_CONTEXT: parent lookup failed: %w", err))
+		return true
+	}
+	if len(parents) == 0 {
+		slog.Error("tiered step has no SPAWNED_BY origin parent", "task_id", task.ID, "agent_id", task.AgentID)
+		w.FailHard(ctx, task, fmt.Errorf("tiered NEEDS_CONTEXT: task %s has no SPAWNED_BY origin parent", task.ID))
+		return true
+	}
+	if err := w.handleNeedsContext(ctx, task, parents[0], signal.Reason); err != nil {
+		slog.Error("tiered: needs-context rewire failed", "task_id", task.ID, "step", kind, "error", err)
+		w.Emit(ctx, task, "TIERED_NEEDS_CONTEXT_ERROR", err.Error())
+	}
+	return true
+}
+
 func (w *Worker) readNeedsContextSignal(ctx context.Context, task models.Task) (needsContextSignal, error) {
 	payload, err := w.readCommittedText(ctx, task.ID)
 	if err != nil {

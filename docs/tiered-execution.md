@@ -264,6 +264,10 @@ If the **decision** step determines the ContextPack is insufficient (missing fil
 
 This is an **explicit board action** detected at the decision step — never silent inside execute.
 
+**Extended to execute/verify (T-023):** the decision-only trigger above still applies unchanged. Execute and verify steps can also emit the same `{"needs_context": true, "reason": "..."}` sentinel, but they cannot use decision's post-commit detection safely: the engine's unconditional commit (`Worker.CommitTextWithProfile`) runs inside the same DB transaction as `UnlockReadyChildren`/`UnblockBlockedParentsWhenChildrenResolved` (`finishTaskResultSideEffects`), so any `BLOCKED` dependent would already be unlocked by the time a post-commit read judged the answer insufficient — a race a post-hoc override can't close.
+
+Instead, `Worker.CommitTextWithProfile` intercepts execute/verify output **before** calling the normal commit path (`interceptTieredNeedsContext`, in `internal/queue/worker/worker_tiered_needs_context.go`): it parses the raw, not-yet-committed content for the sentinel, and when found, transitions the step directly `RUNNING → NEEDS_CONTEXT` (already a valid edge in `models.validTaskTransitions`) and calls the same `handleNeedsContext` decision uses — spawning the re-gather chain and rewiring dependents — without ever calling `store.UpdateTaskResult`. Dependents are therefore never unlocked in the first place, closing the race structurally rather than by ordering. `processTieredVerifyStep`'s own post-commit classification checks for this diversion (`taskDivertedToNeedsContext`) and skips the pass/fail/escalate ladder when it already happened, since there is no committed `VerifyResult` to read back in that case. The decision step's post-commit path, its transitions, and its tests are unchanged by this addition.
+
 ---
 
 ## M5 — Cost/latency harness (T-018, rebuilt in T-020)

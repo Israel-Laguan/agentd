@@ -116,6 +116,9 @@ func (w *Worker) CommitTextWithProfile(ctx context.Context, task models.Task, co
 		w.createReviewHandoff(ctx, task, content)
 		return
 	}
+	if w.interceptTieredNeedsContext(ctx, task, content) {
+		return
+	}
 	result := sandbox.Result{
 		Success: true,
 		Stdout:  content,
