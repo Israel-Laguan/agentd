@@ -1,0 +1,40 @@
+# agentd configuration for disk profile (J10).
+# Tests disk space watchdog.
+
+home: /home/agentd-disk
+db_path: /home/agentd-disk/global.db
+projects_dir: /home/agentd-disk/projects
+uploads_dir: /home/agentd-disk/uploads
+
+api:
+  address: "0.0.0.0:8768"
+
+gateway:
+  order: [litellm]
+  providers:
+    - name: litellm
+      adapter: openai
+      base_url: "http://litellm:4000/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "agentd"
+      capabilities:
+        chat_tools: true
+      options:
+        send_task_metadata: true
+  warmup_enabled: false
+  role_models:
+    chat:  { provider: "", model: "" }
+    worker: { provider: "", model: "" }
+    memory: { provider: "", model: "" }
+
+queue:
+  token_budget: 50000
+
+healing:
+  enabled: false
+  outage_handoff_enabled: false
+
+# Disk watchdog configuration for J10.
+disk:
+  free_threshold_percent: 100
+  check_interval: 5s

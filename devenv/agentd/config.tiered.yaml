@@ -1,0 +1,41 @@
+# agentd configuration for tiered profile (J12).
+# Tests tiered execution (small model -> full model).
+
+home: /home/agentd-tiered
+db_path: /home/agentd-tiered/global.db
+projects_dir: /home/agentd-tiered/projects
+uploads_dir: /home/agentd-tiered/uploads
+
+api:
+  address: "0.0.0.0:8769"
+
+gateway:
+  order: [litellm]
+  providers:
+    - name: litellm
+      adapter: openai
+      base_url: "http://litellm:4000/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "agentd"
+      capabilities:
+        chat_tools: true
+      options:
+        send_task_metadata: true
+  warmup_enabled: false
+  role_models:
+    chat:  { provider: "", model: "" }
+    worker: { provider: "", model: "" }
+    memory: { provider: "", model: "" }
+
+queue:
+  token_budget: 50000
+
+healing:
+  enabled: false
+  outage_handoff_enabled: false
+
+# Tiered execution configuration for J12.
+tiered:
+  enabled: true
+  small_model: "gpt-3.5-turbo"
+  full_model: "gpt-4"
