@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"agentd/internal/api/correlation"
+
 	agentcontext "agentd/internal/agent/context"
 	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
@@ -132,10 +134,15 @@ func (e *Engine) continueAgenticAfterTools(
 	turnID string, turnIndex int,
 ) (continueLoop bool, result agentruntime.LoopResult, report bool, err error) {
 	iterationGuard.AfterIteration(true)
-	if abort, toolResult, toolReport := e.handleAgenticToolCalls(
+	abort, toolResult, toolReport := e.handleAgenticToolCalls(
 		ctx, task, profile, turnID, resp, messages, toolToAdapter, toolExecutor, taskHooks, taskCaps,
 		cm, toolTracker, turnIndex, budgetGuard, resp.ProviderUsed,
-	); abort {
+	)
+	correlation.Logger(ctx).DebugContext(ctx, "agentic: tool dispatch end",
+		"task_id", task.ID, "turn_index", turnIndex, "turn_id", turnID,
+		"tool_calls", len(resp.ToolCalls), "aborted", abort,
+	)
+	if abort {
 		return false, toolResult, toolReport, nil
 	}
 	stalled, stallErr := e.handleGoalProgress(ctx, task, goalTracker, resp.Content)
