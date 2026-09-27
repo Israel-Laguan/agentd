@@ -141,6 +141,12 @@ internal/services/project_service.go NewProjectService
 internal/services/system_service.go NewSystemService
 internal/services/system_service.go (*SystemService).Snapshot
 internal/services/task_service.go NewTaskService
+test/e2e/client.go (*APIClient).SystemStatus
+test/e2e/client.go (*APIClient).Projects
+test/e2e/client.go (*APIClient).Chat
+test/e2e/e2e.go (*Harness).BaseURL
+test/e2e/project.go (*ProjectManager).Name
+test/e2e/task.go (*TaskPoller).CurrentState
 tools/checkminfunc/baseline.go violationKey
 cmd/agentd/io.go writeLine
 cmd/agentd/io.go writeFormat
@@ -172,3 +178,9 @@ internal/queue/worker/worker_support.go (*Worker).isPermissionFailure
 internal/queue/worker/worker_support.go (*Worker).handleIterationExceeded
 internal/queue/worker/worker_tools.go (*Worker).DispatchTool
 internal/queue/worker/worker_tools.go (*Worker).dispatchToolWithProject
+test/e2e/client.go (*APIClient).MaterializePlan
+test/e2e/client.go (*APIClient).WorkspaceReady
+test/e2e/devenv.go (*DevenvManager).WaitForReady
+test/e2e/project.go (*ProjectManager).Create
+test/e2e/sse.go (*SSEReader).Close
+test/e2e/util.go UniqueProjectName
