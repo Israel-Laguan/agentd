@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"agentd/internal/models"
@@ -97,6 +98,40 @@ func assertNoResultEventRecorded(t *testing.T, ctx context.Context, store *testu
 	}
 }
 
+// assertTieredDependentRewiredTo checks the BLOCKED dependent now hangs off
+// the fresh decision instead of the stale step, then completes that decision
+// and reconciles so the dependent becomes READY. Asserting only that the
+// dependent stayed BLOCKED would not catch a regression leaving it attached
+// to the step that can never complete.
+func assertTieredDependentRewiredTo(t *testing.T, ctx context.Context, w *Worker, store *testutil.FakeKanbanStore, dependent, staleStep models.Task, newDecisionID string) {
+	t.Helper()
+	parents, err := store.ListParentTasksByRelation(ctx, dependent.ID, models.TaskRelationDependsOn)
+	if err != nil {
+		t.Fatalf("ListParentTasksByRelation(dependent): %v", err)
+	}
+	if len(parents) != 1 || parents[0].ID != newDecisionID {
+		t.Fatalf("dependent DEPENDS_ON parents = %+v, want only the fresh decision %s", parents, newDecisionID)
+	}
+	if parents[0].ID == staleStep.ID {
+		t.Fatalf("dependent still attached to the stale step %s", staleStep.ID)
+	}
+	decision, err := store.GetTask(ctx, newDecisionID)
+	if err != nil {
+		t.Fatalf("GetTask(newDecision): %v", err)
+	}
+	if _, err := store.UpdateTaskResult(ctx, decision.ID, decision.UpdatedAt, models.TaskResult{Success: true, Payload: "fresh decision"}); err != nil {
+		t.Fatalf("complete fresh decision: %v", err)
+	}
+	w.reconcileBlockedDependents(ctx, newDecisionID)
+	ready, err := store.GetTask(ctx, dependent.ID)
+	if err != nil {
+		t.Fatalf("GetTask(dependent): %v", err)
+	}
+	if ready.State != models.TaskStateReady {
+		t.Fatalf("dependent state after the fresh decision completed = %s, want READY", ready.State)
+	}
+}
+
 func TestTieredVerify_NeedsContextInterceptsBeforeCommit(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
@@ -112,7 +147,8 @@ func TestTieredVerify_NeedsContextInterceptsBeforeCommit(t *testing.T) {
 	assertTieredStepReachedNeedsContext(t, ctx, store, verify.ID)
 	assertStillBlocked(t, ctx, store, dependent.ID)
 	assertNoResultEventRecorded(t, ctx, store, verify.ID)
-	assertTieredRegatherPairSpawned(t, ctx, store, origin)
+	_, newDecisionID := assertTieredRegatherPairSpawned(t, ctx, store, origin)
+	assertTieredDependentRewiredTo(t, ctx, w, store, dependent, verify, newDecisionID)
 
 	events, err := store.ListEventsByTask(ctx, verify.ID)
 	if err != nil {
@@ -143,7 +179,8 @@ func TestTieredExecute_NeedsContextInterceptsBeforeCommit(t *testing.T) {
 	assertTieredStepReachedNeedsContext(t, ctx, store, execute.ID)
 	assertStillBlocked(t, ctx, store, dependent.ID)
 	assertNoResultEventRecorded(t, ctx, store, execute.ID)
-	assertTieredRegatherPairSpawned(t, ctx, store, origin)
+	_, newDecisionID := assertTieredRegatherPairSpawned(t, ctx, store, origin)
+	assertTieredDependentRewiredTo(t, ctx, w, store, dependent, execute, newDecisionID)
 }
 
 func TestParseNeedsContextSignal_RequiresFlagAndReason(t *testing.T) {
@@ -190,5 +227,92 @@ func TestTieredVerify_NormalPassStillCommitsNormally(t *testing.T) {
 	}
 	if current.State != models.TaskStateCompleted {
 		t.Fatalf("verify state = %s, want COMPLETED (normal pass path must be unaffected)", current.State)
+	}
+}
+
+// regatherSpawnFailureStore fails only the re-gather chain spawn, leaving the
+// rest of the store usable so a test can observe the post-transition failure.
+type regatherSpawnFailureStore struct {
+	*testutil.FakeKanbanStore
+}
+
+func (s *regatherSpawnFailureStore) SpawnTieredContinuation(context.Context, string, []models.TieredContinuationTask) ([]models.Task, error) {
+	return nil, errors.New("spawn unavailable")
+}
+
+// A re-gather that cannot be scheduled must not leave the step parked in
+// NEEDS_CONTEXT with no committed result: it is abandoned so the dependent
+// parked behind it fails explicitly instead of blocking forever.
+func TestTieredExecute_FailedRegatherAbandonsTheStep(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	origin, workspace := setUpTieredVerifyOrigin(t, store)
+	writeTieredVerifyPack(t, workspace, origin.ID)
+	upsertTieredExecuteProfile(t, ctx, store)
+	execute := spawnTieredExecuteStep(t, ctx, store, origin)
+	dependent := spawnBlockedDependent(t, ctx, store, origin, execute.ID)
+
+	gw := &plainTextVerifyGateway{content: `{"needs_context": true, "reason": "the referenced file is gone"}`}
+	w := NewWorker(&regatherSpawnFailureStore{FakeKanbanStore: store}, gw, &mockAgenticSandbox{},
+		nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 10})
+
+	w.Process(ctx, execute)
+
+	step, err := store.GetTask(ctx, execute.ID)
+	if err != nil {
+		t.Fatalf("GetTask(execute): %v", err)
+	}
+	if step.State != models.TaskStateFailed {
+		t.Fatalf("execute state after a failed re-gather = %s, want FAILED (not parked in NEEDS_CONTEXT)", step.State)
+	}
+	dep, err := store.GetTask(ctx, dependent.ID)
+	if err != nil {
+		t.Fatalf("GetTask(dependent): %v", err)
+	}
+	if dep.State != models.TaskStateFailed {
+		t.Fatalf("dependent state = %s, want FAILED (its predecessor can never run)", dep.State)
+	}
+}
+
+// verifyStateReadFailureStore fails only GetTask, standing in for a transient
+// database error right after the pre-commit interception ran.
+type verifyStateReadFailureStore struct {
+	*testutil.FakeKanbanStore
+	reads int
+}
+
+func (s *verifyStateReadFailureStore) GetTask(ctx context.Context, id string) (*models.Task, error) {
+	if s.reads < 4 {
+		s.reads++
+		return nil, errors.New("tasks table unavailable")
+	}
+	return s.FakeKanbanStore.GetTask(ctx, id)
+}
+
+// A failed diversion check leaves the verify outcome unknown, so the step must
+// be failed explicitly rather than classified as a parse error / verify
+// failure for output that was never a verify result.
+func TestTieredVerify_DiversionCheckFailureDoesNotClassifyOutput(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	_, verify, _ := setUpTieredVerifyFixture(t, store)
+
+	gw := &plainTextVerifyGateway{content: `{"results":[{"check":"go test","outcome":"pass"}],"overall":"pass"}`}
+	failing := &verifyStateReadFailureStore{FakeKanbanStore: store}
+	w := NewWorker(failing, gw, &mockAgenticSandbox{}, nil, &storeEventSink{store: store}, WorkerOptions{MaxToolIterations: 10})
+
+	w.Process(ctx, verify)
+
+	if failing.reads < 4 {
+		t.Fatalf("expected the diversion check to retry %d times, got %d", 4, failing.reads)
+	}
+	events, err := store.ListEventsByTask(ctx, verify.ID)
+	if err != nil {
+		t.Fatalf("ListEventsByTask(verify): %v", err)
+	}
+	for _, e := range events {
+		if string(e.Type) == tieredVerifyOutcomeEvent {
+			t.Fatalf("verify task has a %s event %+v; output must not be classified when the diversion state is unknown", tieredVerifyOutcomeEvent, e)
+		}
 	}
 }

@@ -17,6 +17,8 @@ import (
 	"agentd/internal/gateway"
 )
 
+var correlationIDPattern = regexp.MustCompile(`correlation_id=(\S+)`)
+
 // newRealChatHandler wires the actual production request pipeline used by
 // T-022/US-006 (Frontdesk Planner -> Router -> OpenAI-compatible provider)
 // against a fake upstream HTTP server, instead of the api_test package's
@@ -68,6 +70,21 @@ func draftPlanUpstream(t *testing.T) *httptest.Server {
 	}))
 }
 
+// correlationIDOn returns the correlation_id carried by the first log line
+// containing marker, or "" when that line carries none.
+func correlationIDOn(logs, marker string) string {
+	for _, line := range strings.Split(logs, "\n") {
+		if !strings.Contains(line, marker) {
+			continue
+		}
+		if m := correlationIDPattern.FindStringSubmatch(line); m != nil {
+			return m[1]
+		}
+		return ""
+	}
+	return ""
+}
+
 // TestChatPipeline_CorrelationIDTracesIntakeRouterProvider verifies that a
 // single correlation ID assigned at chat intake appears, identically, in
 // debug log lines emitted by the router and the provider adapter for the
@@ -86,27 +103,17 @@ func TestChatPipeline_CorrelationIDTracesIntakeRouterProvider(t *testing.T) {
 
 	logs := buf.String()
 
-	if !strings.Contains(logs, "chat intake: request received") {
-		t.Fatalf("missing chat intake lifecycle log; logs=%s", logs)
+	// Every required boundary is checked on its own line: counting tagged
+	// lines separately would let an unrelated debug line satisfy the count
+	// while the boundary that matters lost its id.
+	boundaries := []string{"chat intake: request received", "router cascade starting", "openai: sending request"}
+	intakeID := correlationIDOn(logs, boundaries[0])
+	if intakeID == "" {
+		t.Fatalf("chat intake line carries no correlation_id; logs=%s", logs)
 	}
-	if !strings.Contains(logs, "router cascade starting") {
-		t.Fatalf("missing router lifecycle log; logs=%s", logs)
-	}
-	if !strings.Contains(logs, "openai: sending request") {
-		t.Fatalf("missing provider lifecycle log; logs=%s", logs)
-	}
-
-	ids := regexp.MustCompile(`correlation_id=(\S+)`).FindAllStringSubmatch(logs, -1)
-	if len(ids) < 3 {
-		t.Fatalf("expected correlation_id on at least 3 log lines (intake, router, provider); got %d; logs=%s", len(ids), logs)
-	}
-	first := ids[0][1]
-	if first == "" {
-		t.Fatal("correlation_id was empty")
-	}
-	for _, m := range ids {
-		if m[1] != first {
-			t.Fatalf("correlation_id mismatch across boundaries: %q vs %q; logs=%s", m[1], first, logs)
+	for _, marker := range boundaries[1:] {
+		if id := correlationIDOn(logs, marker); id != intakeID {
+			t.Fatalf("%q line correlation_id = %q, want %q; logs=%s", marker, id, intakeID, logs)
 		}
 	}
 }

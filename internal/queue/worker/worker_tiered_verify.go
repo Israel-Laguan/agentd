@@ -43,9 +43,18 @@ func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, 
 		return
 	}
 
-	if diverted, err := w.taskDivertedToNeedsContext(ctx, task.ID); err != nil {
-		slog.Error("tiered verify: failed to check NEEDS_CONTEXT diversion", "task_id", task.ID, "error", err)
-	} else if diverted {
+	notDiverted, err := w.confirmNotDiverted(ctx, task.ID)
+	if err != nil {
+		// An unknown diversion state is not a verify result: classifying it
+		// would route a fabricated failure for a step whose output was
+		// already handled by the pre-commit interception.
+		slog.Error("tiered verify: NEEDS_CONTEXT diversion check failed", "task_id", task.ID, "error", err)
+		w.Emit(ctx, task, "TIERED_VERIFY_DIVERSION_CHECK_ERROR", err.Error())
+		w.failTieredStep(ctx, task, "tiered verify: NEEDS_CONTEXT diversion check failed: "+err.Error())
+		w.failTieredDependents(ctx, task, parentTask)
+		return
+	}
+	if !notDiverted {
 		// CommitTextWithProfile's pre-commit interception (T-023) already
 		// classified this output as a needs-context signal and fully
 		// handled the transition/re-gather spawn; there is no committed

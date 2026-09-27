@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -172,19 +173,130 @@ func TestBreakdownRollup_IncompleteSubtasksFallThrough(t *testing.T) {
 	}
 }
 
-func TestLatestBreakdownSubtaskIDs_UsesNewestMarker(t *testing.T) {
+func TestLatestBreakdownSubtaskCount_UsesNewestWorkerMarker(t *testing.T) {
 	t.Parallel()
 	t0 := time.Now()
 	comments := []models.Comment{
-		{BaseEntity: models.BaseEntity{CreatedAt: t0.Add(time.Second)}, Body: breakdownSubtasksPrefix + "c,d"},
-		{BaseEntity: models.BaseEntity{CreatedAt: t0}, Body: breakdownSubtasksPrefix + "a,b"},
-		{BaseEntity: models.BaseEntity{CreatedAt: t0.Add(2 * time.Second)}, Body: "unrelated"},
+		{BaseEntity: models.BaseEntity{CreatedAt: t0.Add(time.Second)}, Author: models.CommentAuthorWorkerAgent, Body: breakdownSubtasksPrefix + "3"},
+		{BaseEntity: models.BaseEntity{CreatedAt: t0}, Author: models.CommentAuthorWorkerAgent, Body: breakdownSubtasksPrefix + "2"},
+		{BaseEntity: models.BaseEntity{CreatedAt: t0.Add(2 * time.Second)}, Author: models.CommentAuthorWorkerAgent, Body: "unrelated"},
+		// A user-authored lookalike is newer still and must be ignored.
+		{BaseEntity: models.BaseEntity{CreatedAt: t0.Add(3 * time.Second)}, Author: models.CommentAuthorUser, Body: breakdownSubtasksPrefix + "99"},
 	}
-	got := latestBreakdownSubtaskIDs(comments)
-	if strings.Join(got, ",") != "c,d" {
-		t.Fatalf("latestBreakdownSubtaskIDs = %v, want [c d]", got)
+	count, ok := latestBreakdownSubtaskCount(comments)
+	if !ok || count != 3 {
+		t.Fatalf("latestBreakdownSubtaskCount = (%d, %v), want (3, true)", count, ok)
 	}
-	if ids := latestBreakdownSubtaskIDs([]models.Comment{{Body: "plain"}}); ids != nil {
-		t.Fatalf("no marker: got %v, want nil", ids)
+	if _, ok := latestBreakdownSubtaskCount([]models.Comment{{Author: models.CommentAuthorWorkerAgent, Body: "plain"}}); ok {
+		t.Fatal("non-marker comment was accepted as a breakdown marker")
+	}
+}
+
+// A caller-supplied comment that claims fewer children than the parent
+// actually has must not roll the parent up: the recorded child set is the
+// relations table, and a subset claim would strand the other subtasks.
+func TestBreakdownRollup_ForgedSubsetMarkerIsRejected(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, gw, w, parent := newBreakdownRollupFixture(t)
+
+	w.Process(ctx, parent)
+	children := mustListChildren(t, store, parent.ID)
+	w.Process(ctx, mustGetTask(t, store, children[0].ID))
+
+	if err := store.AddComment(ctx, models.Comment{
+		TaskID: parent.ID,
+		Author: models.CommentAuthorUser,
+		Body:   breakdownSubtasksPrefix + "1",
+	}); err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+	blocked := mustGetTask(t, store, parent.ID)
+	retried, err := store.UpdateTaskState(ctx, blocked.ID, blocked.UpdatedAt, models.TaskStateReady)
+	if err != nil {
+		t.Fatalf("UpdateTaskState(READY): %v", err)
+	}
+
+	requestsBefore := len(gw.requests)
+	w.Process(ctx, *retried)
+
+	if got := mustGetTask(t, store, parent.ID).State; got == models.TaskStateCompleted {
+		t.Fatal("parent completed from a forged subset marker while a subtask was still open")
+	}
+	if got := len(gw.requests) - requestsBefore; got != 1 {
+		t.Fatalf("gateway requests after forged marker = %d, want 1 (normal dispatch)", got)
+	}
+}
+
+// A roll-up whose store reads fail must requeue the task instead of sending a
+// parent whose subtasks already completed back to the model.
+func TestBreakdownRollup_ReadFailureRequeuesInsteadOfDispatching(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, gw, w, parent := newBreakdownRollupFixture(t)
+
+	w.Process(ctx, parent)
+	for _, child := range mustListChildren(t, store, parent.ID) {
+		w.Process(ctx, mustGetTask(t, store, child.ID))
+	}
+
+	w = NewWorker(&breakdownListCommentsFailureStore{FakeKanbanStore: store}, gw,
+		&routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 5})
+
+	resumed := mustGetTask(t, store, parent.ID)
+	requestsBefore := len(gw.requests)
+	w.Process(ctx, resumed)
+
+	if got := len(gw.requests) - requestsBefore; got != 0 {
+		t.Fatalf("gateway requests after a failed roll-up read = %d, want 0", got)
+	}
+	if got := mustGetTask(t, store, parent.ID).State; got != models.TaskStateReady {
+		t.Fatalf("parent state after failed roll-up read = %s, want READY (requeued)", got)
+	}
+}
+
+// breakdownListCommentsFailureStore fails the roll-up's first store read, the
+// way a transient database error does.
+type breakdownListCommentsFailureStore struct {
+	*testutil.FakeKanbanStore
+}
+
+func (s *breakdownListCommentsFailureStore) ListComments(context.Context, string) ([]models.Comment, error) {
+	return nil, errors.New("comments table unavailable")
+}
+
+// breakdownCommitFailureStore fails the parent's result commit, the way a
+// transient write error does.
+type breakdownCommitFailureStore struct {
+	*testutil.FakeKanbanStore
+}
+
+func (s *breakdownCommitFailureStore) UpdateTaskResult(ctx context.Context, id string, at time.Time, result models.TaskResult) (*models.Task, error) {
+	if result.Success {
+		return nil, errors.New("tasks table read-only")
+	}
+	return s.FakeKanbanStore.UpdateTaskResult(ctx, id, at, result)
+}
+
+// A roll-up whose commit fails must not report the task handled: the parent is
+// requeued so the roll-up is retried instead of being left to reconciliation.
+func TestBreakdownRollup_CommitFailureRequeuesParent(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, gw, w, parent := newBreakdownRollupFixture(t)
+
+	w.Process(ctx, parent)
+	for _, child := range mustListChildren(t, store, parent.ID) {
+		w.Process(ctx, mustGetTask(t, store, child.ID))
+	}
+
+	failing := &breakdownCommitFailureStore{FakeKanbanStore: store}
+	handled, err := NewWorker(failing, gw, &routingTestSandbox{}, nil, &mockEventSink{},
+		WorkerOptions{MaxToolIterations: 5}).tryRollUpBreakdown(ctx, mustGetTask(t, store, parent.ID))
+	if !handled || err == nil {
+		t.Fatalf("tryRollUpBreakdown = (%v, %v), want (true, error) so the caller requeues", handled, err)
+	}
+	if got := mustGetTask(t, store, parent.ID).State; got == models.TaskStateCompleted {
+		t.Fatalf("parent state = COMPLETED despite a failed roll-up commit")
 	}
 }

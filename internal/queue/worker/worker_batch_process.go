@@ -92,7 +92,11 @@ func (w *Worker) prepareBatchRunnable(
 				continue
 			}
 		}
-		if w.tryRollUpBreakdown(ctx, task) {
+		if handled, rollupErr := w.tryRollUpBreakdown(ctx, task); rollupErr != nil {
+			w.Emit(ctx, task, "BREAKDOWN_ROLLUP_ERROR", rollupErr.Error())
+			w.requeue(ctx, task, rollupErr.Error())
+			continue
+		} else if handled {
 			continue
 		}
 		heartbeats = append(heartbeats, w.startHeartbeat(ctx, task.ID))
