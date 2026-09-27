@@ -83,6 +83,9 @@ func TestInitCreatesHomeDatabaseAndWAL(t *testing.T) {
 	dbPath := filepath.Join(home, "global.db")
 	assertPathExists(t, dbPath)
 	assertPathExists(t, filepath.Join(home, "agentd.crontab"))
+	assertPathExists(t, filepath.Join(home, "projects"))
+	assertPathExists(t, filepath.Join(home, "uploads"))
+	assertPathExists(t, filepath.Join(home, "archives"))
 	assertJournalMode(t, dbPath, "wal")
 }
 
