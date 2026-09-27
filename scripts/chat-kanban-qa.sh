@@ -161,7 +161,9 @@ import json,sys
 with open(sys.argv[1]) as stream:
     tasks=json.load(stream).get('data', [])
 for task in tasks:
-    if task.get('assignee') == 'HUMAN' or task.get('state') in ('BLOCKED','FAILED_REQUIRES_HUMAN'):
+    if (task.get('assignee') == 'HUMAN'
+            and task.get('title', '').startswith('Manual action required:')
+            and task.get('state') not in ('COMPLETED', 'FAILED')):
         print(task['id'])
         break
 PY

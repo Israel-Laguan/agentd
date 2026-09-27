@@ -32,6 +32,8 @@ export interface Task {
   logs: TaskLog[];
   created_at: number;
   updated_at: number;
+  /** Raw daemon updated_at string, kept at full precision for optimistic-lock requests. */
+  daemon_updated_at?: string;
   token_usage?: number;
 }
 

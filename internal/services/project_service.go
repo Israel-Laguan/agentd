@@ -40,9 +40,7 @@ func (s *ProjectService) MaterializePlan(
 	sourcePath := strings.TrimSpace(plan.SourcePath)
 	needsExplicitReady := sourcePath == "" && !plan.StartEmptyWorkspace
 	plan.WorkspacePending = sourcePath != "" || !plan.StartEmptyWorkspace
-	if sourcePath == "" {
-		plan.SourcePath = ""
-	}
+	plan.SourcePath = sourcePath
 
 	project, tasks, err := s.store.MaterializePlan(ctx, plan)
 	if err != nil {

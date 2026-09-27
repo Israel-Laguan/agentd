@@ -65,6 +65,9 @@ export function mapDaemonTask(raw: Record<string, unknown>): Task {
     logs: [] as TaskLog[],
     created_at: isoToMs(raw.CreatedAt ?? raw.created_at ?? raw.createdAt),
     updated_at: isoToMs(raw.UpdatedAt ?? raw.updated_at ?? raw.updatedAt),
+    ...(typeof (raw.UpdatedAt ?? raw.updated_at ?? raw.updatedAt) === "string"
+      ? { daemon_updated_at: (raw.UpdatedAt ?? raw.updated_at ?? raw.updatedAt) as string }
+      : {}),
     token_usage: (raw.TokenUsage ?? raw.token_usage) as number | undefined,
   };
 }

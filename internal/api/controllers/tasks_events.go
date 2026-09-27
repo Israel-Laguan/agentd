@@ -104,8 +104,8 @@ func boundedEventPayload(payload string) (string, bool) {
 		return payload, false
 	}
 	limit := maxTaskEventPayload
-	for limit > 0 && !utf8.ValidString(payload[:limit]) {
+	for i := 0; i < utf8.UTFMax && limit > 0 && !utf8.RuneStart(payload[limit]); i++ {
 		limit--
 	}
-	return payload[:limit], true
+	return strings.ToValidUTF8(payload[:limit], "\uFFFD"), true
 }

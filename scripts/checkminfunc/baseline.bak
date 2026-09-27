@@ -91,6 +91,7 @@ internal/memory/dream.go sqlStr
 internal/memory/librarian.go (*Librarian).CleanStaleArchives
 internal/memory/librarian.go (*Librarian).archivesDir
 internal/models/comment_payload.go FormatCommentPayload
+internal/models/enums.go AllTaskStatesSlice
 internal/models/scheduled_task.go (ScheduledTaskKind).Valid
 internal/models/task.go isAttemptEvent
 internal/paths/expand_tilde.go ExpandTildePrefix
@@ -121,6 +122,8 @@ internal/queue/worker/worker_support.go (*Worker).isPromptHang
 internal/queue/worker/worker_support.go (*Worker).commitText
 internal/queue/worker/worker_support.go (*Worker).providerSupportsAgentic
 internal/queue/worker/worker_support.go (*Worker).SetSandbox
+internal/queue/worker/worker_tiered_origin.go (*Worker).completeTieredOrigin
+internal/queue/worker/worker_tiered_origin.go (*Worker).failTieredOrigin
 internal/queue/worker/worker_tools.go (*Worker).executeDelegate
 internal/sandbox/executor.go containsSudo
 internal/sandbox/interface.go (EnvironmentAdapter).CleanupZombie
