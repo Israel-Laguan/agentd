@@ -21,14 +21,16 @@ Output of: [SP-008-e2e-journey-inventory.md](../../tasks/sprints/S07-e2e-journey
 
 **Decision: Named `devenv/` service profiles + per-journey environment overrides.**
 
-Rationale: 
+Rationale:
+
 - The mock LLM (one instance, not switched per journey) handles scenario selection via in-band requests (T-028).
 - Daemon-config variants (e.g., healing.enabled, gateway.order, disk threshold) are applied by running a separate agentd service with a distinct config and port.
 - `podman-compose` supports `profiles:` on services; we'll use `profiles: ["default", "healing", "faults", "disk", "tiered"]` to conditionally start variants.
 - Each journey's test harness names its required profile(s), and the test setup ensures the right services are running.
 
-Profiles:
-| Profile | When | agentd service | port | config changes | 
+**Profiles:**
+
+| Profile | When | agentd service | port | config changes |
 | --- | --- | --- | --- | --- |
 | default | J01-J06, J13-J15 (standard) | agentd | 8765 | none |
 | healing | J07 (connector failure → handoff) | agentd-healing | 8766 | `healing.enabled: true`, `outage_handoff_enabled: true` |
@@ -55,7 +57,8 @@ The mock accepts a request with a special `user` or `system` message tagged with
 
 The mock maintains internal state per scenario (e.g., "fail on primary, succeed on secondary"). Journeys pass the tag as part of their request flow.
 
-Scenarios (T-028 will implement):
+**Scenarios (T-028 will implement):**
+
 | Scenario | Used by | Mock behavior |
 | --- | --- | --- |
 | success | J01-J07, J13-J15 | return intent + plan/response; no errors |
@@ -107,6 +110,7 @@ Scenarios (T-028 will implement):
 ## P1/P2 Deferral or Bug Policy
 
 For P1/P2 journeys (J05, J06, J12, J13, J15):
+
 - If passing: land them as-is.
 - If failing: either (a) defer with a reason in this doc, or (b) open a bug linking the journey.
 
@@ -119,4 +123,3 @@ For P1/P2 journeys (J05, J06, J12, J13, J15):
 **T-027** (run and triage): Execute all P0 journeys on clean devenv stack twice; triage failures into bugs or deferrals.
 
 **T-028** (mock scenarios): Implement mock LLM scenario selection per table above; ensure cascade, breaker, tiered scenarios work.
-
