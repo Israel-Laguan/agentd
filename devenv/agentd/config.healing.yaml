@@ -1,0 +1,36 @@
+# agentd configuration for healing profile (J07).
+# Enables self-healing and outage handoff.
+
+home: /home/agentd-healing
+db_path: /home/agentd-healing/global.db
+projects_dir: /home/agentd-healing/projects
+uploads_dir: /home/agentd-healing/uploads
+
+api:
+  address: "0.0.0.0:8766"
+
+gateway:
+  order: [litellm]
+  providers:
+    - name: litellm
+      adapter: openai
+      base_url: "http://litellm:4000/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "agentd"
+      capabilities:
+        chat_tools: true
+      options:
+        send_task_metadata: true
+  warmup_enabled: false
+  role_models:
+    chat:  { provider: "", model: "" }
+    worker: { provider: "", model: "" }
+    memory: { provider: "", model: "" }
+
+queue:
+  token_budget: 50000
+
+# Enable healing and outage handoff for J07.
+healing:
+  enabled: true
+  outage_handoff_enabled: true

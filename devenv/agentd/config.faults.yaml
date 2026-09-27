@@ -1,0 +1,42 @@
+# agentd configuration for faults profile (J08-J09).
+# Tests provider failures and circuit breaker.
+
+home: /home/agentd-faults
+db_path: /home/agentd-faults/global.db
+projects_dir: /home/agentd-faults/projects
+uploads_dir: /home/agentd-faults/uploads
+
+api:
+  address: "0.0.0.0:8767"
+
+gateway:
+  order: [dead, secondary]
+  providers:
+    - name: dead
+      adapter: openai
+      base_url: "http://localhost:9999/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "agentd"
+      capabilities:
+        chat_tools: true
+    - name: secondary
+      adapter: openai
+      base_url: "http://litellm:4000/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "agentd"
+      capabilities:
+        chat_tools: true
+      options:
+        send_task_metadata: true
+  warmup_enabled: false
+  role_models:
+    chat:  { provider: "", model: "" }
+    worker: { provider: "", model: "" }
+    memory: { provider: "", model: "" }
+
+queue:
+  token_budget: 50000
+
+healing:
+  enabled: false
+  outage_handoff_enabled: false

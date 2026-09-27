@@ -1,25 +1,32 @@
 version: "3.8"
 name: agentd
 
-# Local development stack for agentd + web UI testing.
+# Local development stack for agentd + web UI + e2e test variants.
 #
 # Services:
-#   mockllm - fake OpenAI-compatible backend (devenv/mockllm)
-#   litellm - LLM proxy/router (port 4000)
-#   agentd  - daemon (port 8765)
-#   web     - Next.js frontend (port 3000)
+#   mockllm - fake OpenAI-compatible backend (devenv/mockllm) - all profiles
+#   litellm - LLM proxy/router (port 4000) - all profiles
+#   agentd  - daemon (port 8765) - default profile
+#   agentd-healing - variant (port 8766) - healing profile
+#   agentd-faults  - variant (port 8767) - faults profile
+#   agentd-disk    - variant (port 8768) - disk profile
+#   agentd-tiered  - variant (port 8769) - tiered profile
+#   web     - Next.js frontend (port 3000) - default profile
 #
 # Usage:
-#   make dev-up
-#   # Open http://localhost:3000
+#   make dev-up            # Brings up default profile (agentd + web)
+#   podman compose -f devenv/compose.yaml up -d agentd-healing  # Brings up healing variant
+#   make dev-down          # Stops all services
 #
-# The stack keeps running until explicitly stopped.
+# E2E Tests:
+#   make test-e2e          # Runs e2e tests (requires devenv up)
 #
-# To stop:
-#   make dev-down
-#
-# To rebuild after code changes:
-#   make dev-up
+# Profiles:
+#   default - standard development stack (agentd + web)
+#   healing - self-healing and outage handoff (J07)
+#   faults  - provider failures and circuit breaker (J08-J09)
+#   disk    - disk space watchdog (J10)
+#   tiered  - tiered execution (J12)
 #
 # Troubleshooting:
 #   - Healthchecks use CMD-SHELL (string form) so they survive the alias/quote
@@ -30,7 +37,7 @@ name: agentd
 #     uid 0 maps to the host user, so this is safe and keeps host file ownership.
 #   - NEXT_PUBLIC_API_URL is localhost:8765 (client-side fetches from the browser,
 #     not from inside the container). host.docker.internal is not defined on Linux.
-#   - Named volume "agentd_agentd-data" holds /home/agentd (db at /home/agentd/global.db).
+#   - Named volumes hold service data (e.g., agentd-data at /home/agentd/global.db).
 
 services:
   mockllm:
@@ -39,6 +46,12 @@ services:
       dockerfile: Dockerfile
     expose:
       - "8000"
+    profiles:
+      - default
+      - healing
+      - faults
+      - disk
+      - tiered
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)\""]
       interval: 2s
@@ -50,6 +63,12 @@ services:
     command: ["--config", "/app/config.yaml", "--host", "0.0.0.0", "--port", "4000"]
     ports:
       - "127.0.0.1:4000:4000"
+    profiles:
+      - default
+      - healing
+      - faults
+      - disk
+      - tiered
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
       # Pre-call hook registered in config.yaml (litellm_settings.callbacks).
@@ -70,6 +89,8 @@ services:
     entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
     ports:
       - "127.0.0.1:8765:8765"
+    profiles:
+      - default
     environment:
       LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
       AGENTD_API_ADDRESS: "0.0.0.0:8765"
@@ -85,12 +106,110 @@ services:
       timeout: 3s
       retries: 30
 
+  agentd-healing:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
+    ports:
+      - "127.0.0.1:8766:8766"
+    profiles:
+      - healing
+    environment:
+      LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
+      AGENTD_API_ADDRESS: "0.0.0.0:8766"
+    volumes:
+      - agentd-data-healing:/home/agentd-healing
+      - ./agentd/config.healing.yaml:/etc/agentd/config.yaml:ro
+    depends_on:
+      litellm:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8766/api/v1/system/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  agentd-faults:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
+    ports:
+      - "127.0.0.1:8767:8767"
+    profiles:
+      - faults
+    environment:
+      LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
+      AGENTD_API_ADDRESS: "0.0.0.0:8767"
+    volumes:
+      - agentd-data-faults:/home/agentd-faults
+      - ./agentd/config.faults.yaml:/etc/agentd/config.yaml:ro
+    depends_on:
+      litellm:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8767/api/v1/system/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  agentd-disk:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
+    ports:
+      - "127.0.0.1:8768:8768"
+    profiles:
+      - disk
+    environment:
+      LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
+      AGENTD_API_ADDRESS: "0.0.0.0:8768"
+    volumes:
+      - agentd-data-disk:/home/agentd-disk
+      - ./agentd/config.disk.yaml:/etc/agentd/config.yaml:ro
+    depends_on:
+      litellm:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8768/api/v1/system/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  agentd-tiered:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
+    ports:
+      - "127.0.0.1:8769:8769"
+    profiles:
+      - tiered
+    environment:
+      LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
+      AGENTD_API_ADDRESS: "0.0.0.0:8769"
+    volumes:
+      - agentd-data-tiered:/home/agentd-tiered
+      - ./agentd/config.tiered.yaml:/etc/agentd/config.yaml:ro
+    depends_on:
+      litellm:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8769/api/v1/system/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
   web:
     image: node:22-alpine
     user: root
     working_dir: /app
     ports:
       - "127.0.0.1:3000:3000"
+    profiles:
+      - default
     environment:
       NODE_ENV: "development"
       NEXT_PUBLIC_USE_MOCK: "false"
@@ -104,3 +223,7 @@ services:
 
 volumes:
   agentd-data:
+  agentd-data-healing:
+  agentd-data-faults:
+  agentd-data-disk:
+  agentd-data-tiered:
