@@ -1,5 +1,13 @@
 # agentd configuration for healing profile (J07).
 # Enables self-healing and outage handoff.
+#
+# The provider below points at an address nothing listens on (same trick as
+# docs/demo.md's HUMAN beat), so every gateway call fails with a connection
+# error deterministically. J07 never needs a working LLM: it constructs its
+# DraftPlan directly as the materialize request body (materialize does not
+# call the gateway — see internal/services/project_service.go), so only the
+# queue worker's execution-time call ever touches this dead connector, which
+# is exactly the outage this journey exercises.
 
 home: /home/agentd-healing
 db_path: /home/agentd-healing/global.db
@@ -14,7 +22,7 @@ gateway:
   providers:
     - name: litellm
       adapter: openai
-      base_url: "http://litellm:4000/v1"
+      base_url: "http://127.0.0.1:1/v1"
       api_key_env: LITELLM_API_KEY
       model: "agentd"
       capabilities:

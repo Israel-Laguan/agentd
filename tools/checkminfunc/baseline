@@ -142,6 +142,7 @@ internal/services/system_service.go NewSystemService
 internal/services/system_service.go (*SystemService).Snapshot
 internal/services/task_service.go NewTaskService
 test/e2e/client.go (*APIClient).SystemStatus
+test/e2e/client.go (*APIClient).ResetBreaker
 test/e2e/client.go (*APIClient).Projects
 test/e2e/client.go (*APIClient).MaterializePlan
 test/e2e/e2e.go (*Harness).BaseURL
@@ -179,6 +180,8 @@ internal/queue/worker/worker_support.go (*Worker).handleIterationExceeded
 internal/queue/worker/worker_tools.go (*Worker).DispatchTool
 internal/queue/worker/worker_tools.go (*Worker).dispatchToolWithProject
 test/e2e/client.go (*APIClient).WorkspaceReady
+test/e2e/client.go (*APIClient).RetryTask
+test/e2e/client.go (*APIClient).ResolveHumanHandoff
 test/e2e/devenv.go (*DevenvManager).WaitForReady
 test/e2e/sse.go (*SSEReader).Close
 test/e2e/util.go UniqueProjectName
