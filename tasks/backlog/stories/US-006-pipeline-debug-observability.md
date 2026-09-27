@@ -5,9 +5,9 @@
 | Type | user-story |
 | Status | ready |
 | Priority | P1 |
-| Sprint | S06-stabilize-observe |
+| Sprint | backlog |
 | Persona | maintainer |
-| Links | [agentic harness](../../../docs/agentic-harness.md) |
+| Links | [agentic harness](../../docs/agentic-harness.md), carried from S06 (untracked, kept locally) |
 
 ## Story
 

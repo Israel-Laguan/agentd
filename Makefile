@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test coverage run tidy lint lint-install loc minfunc minfunc-accept folder-audit check test-e2e podman-test lint-md lint-links lint-docs smoke-contract
+.PHONY: build test test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept folder-audit check test-e2e podman-test lint-md lint-links lint-docs smoke-contract
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -28,6 +28,19 @@ endif
 
 test:
 	$(GO_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
+
+# Compile (but don't run) per-package test binaries, e.g. for a debugger that
+# needs a standalone `go test -c` binary. Output is scoped to bin/test/ (git-
+# ignored) instead of littering the repo root.
+TESTBIN_DIR := bin/test
+
+test-bins:
+	@mkdir -p $(TESTBIN_DIR)
+	@for pkg in $(PKG); do \
+		name=$$(echo $$pkg | sed 's#^\./##; s#/#_#g'); \
+		echo "compiling $$pkg -> $(TESTBIN_DIR)/$$name.test"; \
+		$(GO_ENV) $(GO) test -c -o $(TESTBIN_DIR)/$$name.test $$pkg || exit 1; \
+	done
 
 smoke-contract:
 	$(GO_ENV) $(GO) test -count=1 ./internal/gateway/providers -run 'WireContract|TestWireContract_ErrorStatusMapping|TestOpenAIWireContract'

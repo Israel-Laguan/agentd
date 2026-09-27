@@ -28,14 +28,19 @@ Copy from [`templates/`](templates/) — do not edit templates in place for real
 tasks/
   README.md                 ← you are here
   templates/                ← blank forms
-  backlog/                  ← not yet scheduled
+  backlog/                  ← not yet scheduled (tracked in git)
     stories/ tasks/ bugs/ spikes/
-  sprints/
+  sprints/                  ← local-only working state (gitignored, see below)
     S01-…/                  ← one folder per sprint
       README.md             ← sprint goal + board table
       stories/ tasks/ bugs/ spikes/
       retro/RETRO.md
 ```
+
+`tasks/sprints/` is untracked (`.gitignore`) — it's local sprint-in-progress
+state, not shared history. Anything worth keeping past a sprint's life
+belongs in `backlog/` (unfinished work) or a retro action folded back into
+this README/backlog before the sprint folder is cleared.
 
 ## Workflow
 
@@ -50,8 +55,8 @@ tasks/
 | Series | Next free (seeded) |
 | --- | --- |
 | US- | US-007 |
-| T- | T-023 |
-| B- | B-003 |
+| T- | T-024 |
+| B- | B-004 |
 | SP- | SP-007 |
 
 Update this table when you mint IDs.
@@ -62,4 +67,4 @@ Update this table when you mint IDs.
 
 ## Linking to product plan
 
-Active sprint: [`sprints/S06-stabilize-observe/`](sprints/S06-stabilize-observe/) (PR discipline: [`sprints/S03-tiered-foundation/PR-PLAN.md`](sprints/S03-tiered-foundation/PR-PLAN.md)). Sprint goals should cite phases in [`docs/product-plan.md`](../docs/product-plan.md). Spikes for tiered execution cite [`docs/tiered-execution.md`](../docs/tiered-execution.md).
+Active sprint lives under the local (gitignored) `sprints/` folder — not linked here since it isn't committed. Sprint goals should cite phases in [`docs/product-plan.md`](../docs/product-plan.md). Spikes for tiered execution cite [`docs/tiered-execution.md`](../docs/tiered-execution.md).
