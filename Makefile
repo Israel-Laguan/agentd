@@ -63,7 +63,7 @@ lint-install:
 	$(GO) install -v github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 
 podman-test:
-	podman build -f Dockerfile.test -t agentd-test .
+	podman build -f test/container/Dockerfile -t agentd-test .
 	podman run --rm agentd-test
 
 dev-up:
