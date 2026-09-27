@@ -127,7 +127,7 @@ func TestAgenticLoop_CorrelationIDConsistentAcrossLifecycle(t *testing.T) {
 			Content: "running a command",
 			ToolCalls: []gateway.ToolCall{{
 				ID: "call_1", Type: "function",
-				Function: gateway.ToolCallFunction{Name: "bash", Arguments: secretArg},
+				Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"` + secretArg + `"}`},
 			}},
 		},
 		{Content: "terminal-canary-content"},
