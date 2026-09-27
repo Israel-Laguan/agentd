@@ -120,7 +120,7 @@ handlers may have partial behavior, and parallel calls are opt-in. Without a
 verified setup, leave `SupportsChatTools` at its `false` default — `AgenticMode:
 true` then falls back to the legacy JSON mode with a warning log (see the
 AgenticMode Gate
-below). Use `scripts/llm-smoke.sh` (M16) to certify a given `llama-server` +
+below). Use `tools/diag/llm-smoke.sh` (M16) to certify a given `llama-server` +
 model combination before enabling `chat_tools`/`probe_tools`.
 
 ### AI Horde

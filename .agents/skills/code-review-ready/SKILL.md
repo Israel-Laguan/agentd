@@ -69,7 +69,7 @@ make check   # loc + lint + test — must exit 0
 Add when the diff touches those areas:
 
 ```sh
-make test-e2e                              # API or queue behavior
+make test PKG=./internal/api/...                              # API or queue behavior
 cd web && npm ci && npm run lint && npm run build   # web/ changes
 make test PKG=./internal/queue/worker/...  # large worker-only PRs
 ```

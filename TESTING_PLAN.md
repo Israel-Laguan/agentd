@@ -13,19 +13,19 @@ The easiest way to run the full stack locally:
 
 ```bash
 # Build and start all services
-podman compose -f docker-compose.dev.yml up --build -d
+podman compose -f devenv/compose.yaml up --build -d
 
 # Open http://localhost:3000
 
 # To stop
-podman compose -f docker-compose.dev.yml down
+podman compose -f devenv/compose.yaml down
 
 # To rebuild after code changes:
-podman compose -f docker-compose.dev.yml build --no-cache
+podman compose -f devenv/compose.yaml build --no-cache
 ```
 
 > **Note:** If the web container fails to start with `Cannot find module '@tailwindcss/postcss'`,
-> ensure the `web` service has `NODE_ENV: "development"` set in `docker-compose.dev.yml`.
+> ensure the `web` service has `NODE_ENV: "development"` set in `devenv/compose.yaml`.
 > The node:22-alpine image ships `NODE_ENV=production`, which causes `npm install` to skip
 > devDependencies. With `NODE_ENV=development`, the full dependency tree (including devDeps
 > like `@tailwindcss/postcss`) is installed before `next dev` starts.
@@ -42,12 +42,12 @@ Services:
 ## Running the Test Environment (Manual)
 
 The compose stack is the recommended way to run the full local test environment
-(`podman compose -f docker-compose.dev.yml up --build -d`). It wires agentd
+(`podman compose -f devenv/compose.yaml up --build -d`). It wires agentd
 through LiteLLM as the LLM provider.
 
 ### Terminal 1: Start LiteLLM (compose handles this)
 ```bash
-podman compose -f docker-compose.dev.yml up -d litellm
+podman compose -f devenv/compose.yaml up -d litellm
 ```
 
 ### Terminal 2: Start agentd daemon

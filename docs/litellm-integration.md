@@ -78,9 +78,9 @@ callback but the file is missing, LiteLLM exits on startup with
 `ModuleNotFoundError: No module named 'agentd_correlation'`. The upstream then
 receives `"agentd_metadata": {"task_id": …, "agent_id": …, "role": …}`.
 
-The dev stack uses exactly this: [`dev/litellm/`](../dev/litellm/), wired in
-[`docker-compose.dev.yml`](../docker-compose.dev.yml). Its mock backend,
-[`dev/mockllm/server.py`](../dev/mockllm/server.py), reads `agentd_metadata`
+The dev stack uses exactly this: [`devenv/litellm/`](../devenv/litellm/), wired in
+[`devenv/compose.yaml`](../devenv/compose.yaml). Its mock backend,
+[`devenv/mockllm/server.py`](../devenv/mockllm/server.py), reads `agentd_metadata`
 first, then `metadata`.
 
 ## Listing tasks: pagination
@@ -114,7 +114,7 @@ hit running agentd, LiteLLM and a mock backend under compose:
       exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v
   ```
 
-  Or put the whole `sh -c` line in `entrypoint:`, as `docker-compose.dev.yml` does.
+  Or put the whole `sh -c` line in `entrypoint:`, as `devenv/compose.yaml` does.
 - **Use `CMD-SHELL` healthchecks.** podman-compose mangles the quoting of
   array-form `["CMD", "python", "-c", "…"]` healthchecks, and the service stays
   `unhealthy` forever. Use `["CMD-SHELL", "python -c \"…\""]`.

@@ -14,19 +14,19 @@ Runtime commands run in an Alpine-based image; Podman is docker-compatible.
 | Dockerfile | Purpose | Default user |
 | --- | --- | --- |
 | `Dockerfile` | Runtime image (`agentd` binary + sqlite-libs + bash) | `agentd` (non-root) |
-| `Dockerfile.test` | Test/lint image (Go toolchain + sqlite-libs + bash) | `tester` (non-root) |
+| `test/container/Dockerfile` | Test/lint image (Go toolchain + sqlite-libs + bash) | `tester` (non-root) |
 
 ### Why a non-root test image matters
 
 Several tests verify that the daemon correctly rejects operations when a data
 directory is not writable. A root user bypasses Unix permission bits, so those
-tests silently succeed when they should fail. `Dockerfile.test` creates a
+tests silently succeed when they should fail. `test/container/Dockerfile` creates a
 dedicated `tester` user and runs `go test` as that user, matching the project's
 runtime user conventions.
 
 ### Why the test image installs `bash`
 
-The `Dockerfile.test` image also installs `bash` (not just `sqlite-libs`). The
+The `test/container/Dockerfile` image also installs `bash` (not just `sqlite-libs`). The
 sandbox `BashExecutor` and the plugin pre/post hooks shell out to `/bin/bash`,
 so tests such as `TestBashExecutor*`, `TestShellPreHook_*`, and the
 `cmd/agentd` non-writable-directory checks fail with
@@ -52,7 +52,7 @@ podman run --rm agentd --version   # or: agentd --help
 make podman-test
 
 # Equivalent manual commands
-podman build -f Dockerfile.test -t agentd-test .
+podman build -f test/container/Dockerfile -t agentd-test .
 podman run --rm agentd-test
 
 # Run a single package (the image caches modules between runs)
@@ -81,7 +81,7 @@ make lint-install
 make lint
 
 # Or run lint inside the test container (no local install needed)
-podman build -f Dockerfile.test -t agentd-test .
+podman build -f test/container/Dockerfile -t agentd-test .
 podman run --rm agentd-test sh -c '
   go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 &&
   $(go env GOPATH)/bin/golangci-lint run $(go list ./... | grep -vE "^agentd/(web|docs)$" | sed "s|^agentd/|./|")
@@ -95,7 +95,7 @@ make build          # go build -o bin/agentd ./cmd/agentd (host go; GOTOOLCHAIN=
 make test           # go test ./... (requires non-root for permission tests)
 make lint-install   # install golangci-lint v2.12.2 locally
 make lint           # run golangci-lint v2
-make podman-test    # build Dockerfile.test and run go test as non-root
+make podman-test    # build test/container/Dockerfile and run go test as non-root
 podman build -t agentd .            # build runtime image
 podman run --rm agentd init         # run agentd init
 podman run --rm agentd start -v     # run agentd start (verbose)
@@ -107,14 +107,14 @@ podman run --rm agentd start -v     # run agentd start (verbose)
 
 The sandbox `BashExecutor`, plugin hooks, and some `cmd/agentd` permission
 checks run commands through `/bin/bash`. If you rebuilt the test image from a
-`Dockerfile.test` that omits `bash` (or swapped the base image to one without
-it), those tests fail with this error. Rebuild from the committed `Dockerfile.test`,
+`test/container/Dockerfile` that omits `bash` (or swapped the base image to one without
+it), those tests fail with this error. Rebuild from the committed `test/container/Dockerfile`,
 which installs `bash` via `apk add --no-cache sqlite-libs bash`.
 
 ### `go: downloading go1.26.2 ... no such file or directory`
 
 You are hitting the toolchain auto-downloader. Make sure `GOTOOLCHAIN=local` is
-set (it is baked into `Dockerfile.test`). If you override it, set it back:
+set (it is baked into `test/container/Dockerfile`). If you override it, set it back:
 
 ```bash
 podman run --rm -e GOTOOLCHAIN=local agentd-test go test ./...

@@ -65,7 +65,7 @@ started, not just that the process is alive:**
   `error` around the timestamp of the failed request). If no log line
   appears at all for this failure, that itself is a gap worth flagging.
 
-> **Compose note:** `docker-compose.dev.yml` starts agentd with `--skip-llm-warmup`,
+> **Compose note:** `devenv/compose.yaml` starts agentd with `--skip-llm-warmup`,
 > so the Quick Start stack does **not** exercise Step 1/2 above. Use the isolated
 > warmup run described below (or override the entrypoint) to prove provider connectivity.
 
@@ -170,7 +170,7 @@ failure.
 
 - **Note:** the `model` field in the chat request is echoed in the response; it does
   **not** select agentd's gateway provider. Provider routing is controlled by
-  `docker-compose.dev.yml` / agentd config (`gateway.order` and `gateway.providers`).
+  `devenv/compose.yaml` / agentd config (`gateway.order` and `gateway.providers`).
 
 **API verification:**
 
