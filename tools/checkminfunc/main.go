@@ -22,7 +22,7 @@ var (
 	minLines       = flag.Int("min-lines", 3, "minimum number of significant code lines per function (blank lines and comments excluded)")
 	exclude        = flag.String("exclude", "", "comma-separated patterns to exclude")
 	warn           = flag.Bool("warn", false, "warn only, don't exit with error")
-	baselinePath   = flag.String("baseline", filepath.Join("scripts", "checkminfunc", "baseline"), "path to accepted baseline")
+	baselinePath   = flag.String("baseline", filepath.Join("tools", "checkminfunc", "baseline"), "path to accepted baseline")
 	updateBaseline = flag.Bool("update-baseline", false, "write current violations to the baseline file")
 )
 

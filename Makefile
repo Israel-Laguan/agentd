@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept folder-audit check test-e2e podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-logs
+.PHONY: build test test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check test-e2e podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -44,7 +44,7 @@ test-bins:
 
 smoke-contract:
 	$(GO_ENV) $(GO) test -count=1 ./internal/gateway/providers -run 'WireContract|TestWireContract_ErrorStatusMapping|TestOpenAIWireContract'
-	@echo "Runtime smoke: scripts/llm-smoke.sh <base_url> <model> [key]"
+	@echo "Runtime smoke: tools/diag/llm-smoke.sh <base_url> <model> [key]"
 
 coverage:
 	$(GO_ENV) $(GO) test -v -race -covermode=atomic -coverpkg=$(COVERPKG) -coverprofile=coverage.out $(PKG)
@@ -76,18 +76,15 @@ dev-logs:
 	podman compose -f devenv/compose.yaml logs -f
 
 loc:
-	$(GO) run ./scripts/checkloc --max-lines 300
+	$(GO) run ./tools/checkloc --max-lines 300
 
 minfunc:
-	$(GO) run ./scripts/checkminfunc --min-lines 3
+	$(GO) run ./tools/checkminfunc --min-lines 3
 
 # Accept current set of short functions into the baseline (use when a short
 # function is intentional, e.g. interface method or trivial helper).
 minfunc-accept:
-	$(GO) run ./scripts/checkminfunc --min-lines 3 --update-baseline
-
-folder-audit:
-	$(GO) run ./scripts/folder_audit --out /tmp/folder-size-audit.md
+	$(GO) run ./tools/checkminfunc --min-lines 3 --update-baseline
 
 # Docs linting. Dependencies: `npm install` (markdownlint-cli2 via the root
 # package.json script) and `lychee` (single binary, see .lychee.toml). These

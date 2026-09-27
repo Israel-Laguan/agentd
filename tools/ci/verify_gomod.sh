@@ -4,7 +4,7 @@ set -euo pipefail
 
 make tidy
 if ! git diff --quiet go.mod go.sum; then
-  ./scripts/ci_report_failure.sh "go.mod not tidy" \
+  ./tools/ci/report_failure.sh "go.mod not tidy" \
     "Run 'make tidy' locally and commit go.mod and go.sum"
   git --no-pager diff go.mod go.sum
   exit 1
