@@ -116,7 +116,9 @@ func validateHandoffChild(child *models.Task, expectedUpdatedAt *time.Time) erro
 		slog.Warn("validate handoff child: optimistic lock conflict", "task_id", child.ID)
 		return models.ErrOptimisticLock
 	}
-	if !models.IsHITLSubtaskTitle(child.Title) || (child.Assignee != models.TaskAssigneeHuman && child.State != models.TaskStateFailedRequiresHuman) {
+	// Only manual-action handoffs are human-resolvable: the other HITL prefixes
+	// (approval, clarification, review) resume the agent, not complete the parent.
+	if !strings.HasPrefix(child.Title, models.HITLSubtaskTitleManualAction) || (child.Assignee != models.TaskAssigneeHuman && child.State != models.TaskStateFailedRequiresHuman) {
 		slog.Warn("validate handoff child: not an open human handoff", "task_id", child.ID, "assignee", child.Assignee, "state", child.State)
 		return fmt.Errorf("%w: task is not an open human handoff", models.ErrHumanHandoffInvalid)
 	}

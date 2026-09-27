@@ -141,6 +141,7 @@ func (w *Worker) recoverLegacyPrivilege(
 	audit.exitCode = result.ExitCode
 	if runErr == nil && result.Success {
 		audit.command = alternative.Command
+		audit.failed = false
 		slog.Info("permission recovery: non-privileged alternative succeeded", "task_id", task.ID, "project_id", task.ProjectID)
 		if profile.RequireReview {
 			w.createReviewHandoff(ctx, task, result.Stdout)

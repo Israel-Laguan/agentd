@@ -65,7 +65,7 @@ export async function updateTask(
 export async function resolveHumanHandoff(
   taskId: string,
   result: string,
-  expectedUpdatedAt: number
+  expectedUpdatedAt: number | string
 ): Promise<HumanHandoffResolution> {
   if (USE_MOCK) {
     const task = mockBoard.tasks.find((candidate) => candidate.id === taskId);
@@ -110,7 +110,10 @@ export async function resolveHumanHandoff(
     headers,
     body: JSON.stringify({
       result,
-      expected_updated_at: new Date(expectedUpdatedAt).toISOString(),
+      // The daemon compares expected_updated_at against the full-precision stored
+      // timestamp, so a raw daemon string is sent unchanged.
+      expected_updated_at:
+        typeof expectedUpdatedAt === "string" ? expectedUpdatedAt : new Date(expectedUpdatedAt).toISOString(),
     }),
   });
   if (!res.ok) {
