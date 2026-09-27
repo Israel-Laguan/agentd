@@ -11,7 +11,7 @@ on:
       - "go.sum"
       - "Makefile"
       - ".golangci.yml"
-      - "scripts/**"
+      - "tools/**"
       - "README.md"
       - "config.reference.yaml"
       - "docs/**"
@@ -27,7 +27,7 @@ on:
       - "go.sum"
       - "Makefile"
       - ".golangci.yml"
-      - "scripts/**"
+      - "tools/**"
       - "README.md"
       - "config.reference.yaml"
       - "docs/**"
@@ -61,7 +61,7 @@ jobs:
       - name: Verify go.mod is tidy
         id: gomod_check
         continue-on-error: true
-        run: ./scripts/verify_gomod.sh
+        run: ./tools/ci/verify_gomod.sh
 
       - name: Enforce go.mod tidy
         if: steps.gomod_check.outcome == 'failure'
@@ -107,9 +107,9 @@ jobs:
         continue-on-error: true
         run: |
           echo "=== minfunc baseline diagnostics ==="
-          ls -l scripts/checkminfunc/baseline || echo "ERROR: baseline file missing!"
-          wc -l scripts/checkminfunc/baseline 2>/dev/null || true
-          head -5 scripts/checkminfunc/baseline 2>/dev/null || true
+          ls -l tools/checkminfunc/baseline || echo "ERROR: baseline file missing!"
+          wc -l tools/checkminfunc/baseline 2>/dev/null || true
+          head -5 tools/checkminfunc/baseline 2>/dev/null || true
           echo "=== running make minfunc ==="
           make minfunc
 
