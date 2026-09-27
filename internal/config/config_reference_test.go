@@ -26,8 +26,10 @@ func TestLoad_ConfigReferenceYAML(t *testing.T) {
 	if g.BaseURL == "" {
 		t.Error("gateway.gemini.base_url is empty")
 	}
-	if g.Model == "" {
-		t.Error("gateway.gemini.model is empty")
+	// No built-in model default: past ids have gone stale/404, so this
+	// must be set explicitly by the operator (see B-003).
+	if g.Model != "" {
+		t.Errorf("gateway.gemini.model = %q, want empty (no built-in default)", g.Model)
 	}
 	if g.Timeout <= 0 {
 		t.Errorf("gateway.gemini.timeout = %v, want positive duration", g.Timeout)
