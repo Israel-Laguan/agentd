@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"agentd/internal/gateway"
+	"agentd/internal/memory"
 	"agentd/internal/models"
 
 	agentcontext "agentd/internal/agent/context"
@@ -37,7 +38,9 @@ func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, project
 	// Preferences are formatted separately from lessons: memoryFormatLessons
 	// deliberately skips USER_PREFERENCE rows, so without this they would be
 	// recalled (when userID is set) but silently dropped before the prompt.
-	if prefs := memoryFormatPreferences(recalled); prefs != "" {
+	// memory.FormatPreferences is shared with the chat planner so both render
+	// preferences identically.
+	if prefs := memory.FormatPreferences(recalled); prefs != "" {
 		messages = append(messages, gateway.PromptMessage{Role: "system", Content: prefs})
 	}
 	return messages
