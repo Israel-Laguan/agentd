@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,10 +43,28 @@ func (e *SSEEvent) Signal() (signalPayload, error) {
 }
 
 // SSEReader reads from the /api/v1/events/stream endpoint.
+//
+// A single background goroutine ("pump") owns the response body and decodes
+// whole frames, pushing them onto a buffered channel. Reads are served from
+// that channel. An earlier version instead spawned a goroutine per
+// NextEvent call and abandoned it on timeout — which silently *consumed and
+// discarded* the next event, because the orphan kept reading the shared
+// scanner. Any timeout-then-read-more sequence (notably J14, which drains
+// until the stream goes quiet) could therefore lose frames it was supposed
+// to see. The pump makes a read timeout purely a timeout.
 type SSEReader struct {
 	resp    *http.Response
-	scanner *bufio.Scanner
 	cancel  context.CancelFunc
+	events  chan readResult
+	closeCh chan struct{}
+	// readErr records why the pump stopped, so a read that returns no event
+	// can report EOF rather than an opaque timeout.
+	readErr error
+}
+
+type readResult struct {
+	event *SSEEvent
+	err   error
 }
 
 // NewSSEReader opens the SSE endpoint, optionally scoped to one project's
@@ -74,63 +93,84 @@ func NewSSEReader(ctx context.Context, client *APIClient, projectID string) (*SS
 		return nil, fmt.Errorf("SSE endpoint returned %d", resp.StatusCode)
 	}
 
-	return &SSEReader{
+	r := &SSEReader{
 		resp:    resp,
-		scanner: bufio.NewScanner(resp.Body),
 		cancel:  cancel,
-	}, nil
+		events:  make(chan readResult, sseEventBuffer),
+		closeCh: make(chan struct{}),
+	}
+	go r.pump(bufio.NewScanner(resp.Body))
+	return r, nil
 }
 
-// NextEvent reads the next SSE event with a timeout.
-func (r *SSEReader) NextEvent(ctx context.Context, timeout time.Duration) (*SSEEvent, error) {
-	type result struct {
-		event *SSEEvent
-		err   error
-	}
-	ch := make(chan result, 1)
+// sseEventBuffer bounds how far the pump may run ahead of the consumer. Deep
+// enough that a burst of task events never blocks the reader mid-frame.
+const sseEventBuffer = 256
 
-	go func() {
-		event, err := r.nextEventSync()
-		ch <- result{event, err}
-	}()
+// pump decodes frames off the body until the stream ends, then closes the
+// events channel. It is the only reader of the body.
+func (r *SSEReader) pump(scanner *bufio.Scanner) {
+	defer close(r.events)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, ":") || line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "event: ") {
+			continue
+		}
+		eventType := strings.TrimPrefix(line, "event: ")
+
+		// Expect a data line next.
+		if !scanner.Scan() {
+			r.readErr = io.EOF
+			return
+		}
+		dataLine := scanner.Text()
+		if !strings.HasPrefix(dataLine, "data: ") {
+			// Malformed frame; the type line is already consumed, so keep
+			// scanning rather than desynchronising on it.
+			continue
+		}
+		event := &SSEEvent{
+			Type: eventType,
+			Data: json.RawMessage(strings.TrimPrefix(dataLine, "data: ")),
+		}
+		select {
+		case r.events <- readResult{event: event}:
+		case <-r.closeCh:
+			return
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		r.readErr = err
+		return
+	}
+	r.readErr = io.EOF
+}
+
+// NextEvent reads the next SSE event, giving up after timeout. On timeout the
+// stream stays intact: no event is consumed, so a later call still sees the
+// next frame.
+func (r *SSEReader) NextEvent(ctx context.Context, timeout time.Duration) (*SSEEvent, error) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case res := <-ch:
+	case res, ok := <-r.events:
+		if !ok {
+			if r.readErr != nil && !errors.Is(r.readErr, io.EOF) {
+				return nil, r.readErr
+			}
+			return nil, io.EOF
+		}
 		return res.event, res.err
-	case <-time.After(timeout):
+	case <-timer.C:
 		return nil, fmt.Errorf("SSE read timeout")
 	}
-}
-
-func (r *SSEReader) nextEventSync() (*SSEEvent, error) {
-	// Skip empty lines and comments.
-	for r.scanner.Scan() {
-		line := r.scanner.Text()
-		if strings.HasPrefix(line, ":") || line == "" {
-			continue
-		}
-
-		// Parse "event: <type>" or "data: <json>".
-		if strings.HasPrefix(line, "event: ") {
-			eventType := strings.TrimPrefix(line, "event: ")
-			// Expect a data line next.
-			if !r.scanner.Scan() {
-				return nil, io.EOF
-			}
-			dataLine := r.scanner.Text()
-			if !strings.HasPrefix(dataLine, "data: ") {
-				continue
-			}
-			dataStr := strings.TrimPrefix(dataLine, "data: ")
-			return &SSEEvent{
-				Type: eventType,
-				Data: json.RawMessage(dataStr),
-			}, nil
-		}
-	}
-	return nil, r.scanner.Err()
 }
 
 // DrainEvents reads events until timeout elapses with no new event, returning
@@ -138,9 +178,8 @@ func (r *SSEReader) nextEventSync() (*SSEEvent, error) {
 // burst of lifecycle signals and their relative order, rather than on any
 // single event arriving within a window (what NextEvent is for).
 //
-// A short quiet period is treated as end-of-stream: the frame sequence for a
-// completing task arrives within milliseconds, so an idle gap means the burst
-// is over rather than that more are coming.
+// A quiet period is treated as end-of-stream: a completing task's frames
+// arrive within milliseconds, so an idle gap means the burst is over.
 func (r *SSEReader) DrainEvents(ctx context.Context, quietPeriod, maxWait time.Duration) []SSEEvent {
 	var events []SSEEvent
 	deadline := time.Now().Add(maxWait)
@@ -157,6 +196,7 @@ func (r *SSEReader) DrainEvents(ctx context.Context, quietPeriod, maxWait time.D
 
 // Close closes the SSE reader.
 func (r *SSEReader) Close() error {
+	close(r.closeCh)
 	r.cancel()
 	return r.resp.Body.Close()
 }
