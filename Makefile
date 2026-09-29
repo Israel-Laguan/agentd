@@ -26,10 +26,15 @@ endif
 test:
 	$(GO_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
 
-# E2E tests against live devenv stack. Starts devenv if not already running (or reuses it).
+# E2E tests against live devenv stack. Starts devenv if not already running
+# (or reuses it). dev-up brings up every profile, not just `default`, because
+# J07/J09/J10 run against the healing, faults/breaker and disk profiles.
 # Runs with -tags=e2e and does not run with `make test`.
+#
+# The full suite is slow: J08 alone waits out a ~2m recovery window, and J10
+# holds for several watchdog passes to prove dedup.
 test-e2e: dev-up
-	$(GO_ENV) $(GO) test -v -race -tags=e2e -timeout=300s ./test/e2e/...
+	$(GO_ENV) $(GO) test -v -race -tags=e2e -timeout=1800s ./test/e2e/...
 
 # Compile (but don't run) per-package test binaries, e.g. for a debugger that
 # needs a standalone `go test -c` binary. Output is scoped to bin/test/ (git-
@@ -68,14 +73,24 @@ podman-test:
 	podman build -f test/container/Dockerfile -t agentd-test .
 	podman run --rm agentd-test
 
+# Compose file paths must be absolute: podman-compose 1.3.0 chdirs before
+# re-opening the file, so a relative -f fails depending on how it is invoked.
+COMPOSE := $(CURDIR)/devenv/compose.yaml
+
+# Every profile must be named in one invocation. podman-compose 1.3.0
+# resolves depends_on only within the *activated* profiles, so bringing up a
+# single non-default profile alone fails with KeyError: 'litellm'.
+COMPOSE_PROFILES := --profile default --profile healing --profile faults \
+                     --profile breaker --profile disk
+
 dev-up:
-	podman compose -f devenv/compose.yaml --profile default up --build -d
+	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) up --build -d
 
 dev-down:
-	podman compose -f devenv/compose.yaml --profile default down
+	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) down
 
 dev-logs:
-	podman compose -f devenv/compose.yaml logs -f
+	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) logs -f
 
 loc:
 	$(GO) run ./tools/checkloc --max-lines 300
