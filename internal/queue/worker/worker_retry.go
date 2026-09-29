@@ -2,8 +2,10 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	agentruntime "agentd/internal/agent/runtime"
@@ -89,15 +91,41 @@ func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result s
 	if w.breaker != nil {
 		w.breaker.RecordSuccess()
 	}
+	payload := fmt.Sprintf("exit=%d duration=%s\n%s", result.ExitCode, result.Duration, result.Stdout)
 	_, updateErr := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
 		Success: true,
-		Payload: fmt.Sprintf("exit=%d duration=%s\n%s", result.ExitCode, result.Duration, result.Stdout),
+		Payload: payload,
 	})
 	if updateErr != nil {
 		w.Emit(ctx, task, "ERROR", updateErr.Error())
 		return false
 	}
+	w.broadcastResult(ctx, task, payload)
 	return true
+}
+
+// broadcastResult fans the task's RESULT event out to live subscribers.
+//
+// The event itself is already durable: Store.UpdateTaskResult appends it via
+// kanban/db.AppendTaskResultEvent inside the same transaction that flips the
+// task to COMPLETED, so it must not be re-persisted here. It was, however,
+// never published to the event bus, so SSE subscribers (the web UI's live
+// board among them) saw a task start producing output and then went silent —
+// completion only became visible on the next poll or reconnect. Broadcasting
+// the already-written event closes that gap.
+func (w *Worker) broadcastResult(ctx context.Context, task models.Task, payload string) {
+	broadcaster, ok := w.sink.(models.EventBroadcaster)
+	if !ok {
+		return
+	}
+	if err := broadcaster.Broadcast(ctx, models.Event{
+		ProjectID: task.ProjectID,
+		TaskID:    sql.NullString{String: task.ID, Valid: true},
+		Type:      models.EventTypeResult,
+		Payload:   payload,
+	}); err != nil {
+		slog.Warn("failed to broadcast task result to live subscribers", "task_id", task.ID, "error", err)
+	}
 }
 
 func (w *Worker) handleAgentFailure(ctx context.Context, task models.Task, payload string) {
