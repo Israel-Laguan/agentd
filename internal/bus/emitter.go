@@ -23,6 +23,13 @@ func (e *EventEmitter) Emit(ctx context.Context, evt models.Event) error {
 	if err := e.store.AppendEvent(ctx, evt); err != nil {
 		return err
 	}
+	return e.Broadcast(ctx, evt)
+}
+
+// Broadcast fans an already-persisted event out to live subscribers without
+// writing it again. Implements models.EventBroadcaster for events that a store
+// transaction recorded directly — see that interface for the RESULT case.
+func (e *EventEmitter) Broadcast(ctx context.Context, evt models.Event) error {
 	e.publish(ctx, GlobalTopic, evt)
 	e.publish(ctx, eventTopic(evt), evt)
 	if evt.TaskID.Valid {

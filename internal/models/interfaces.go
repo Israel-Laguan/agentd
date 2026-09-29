@@ -10,6 +10,23 @@ type EventSink interface {
 	Emit(ctx context.Context, ev Event) error
 }
 
+// EventBroadcaster broadcasts an already-persisted event to live subscribers
+// without writing it to the store again.
+//
+// It exists for events that are durable by construction — written inside a
+// store transaction, where an Emit cannot run (it would deadlock or, worse,
+// commit a row the transaction later rolls back). RESULT is the motivating
+// case: Store.UpdateTaskResult appends it via
+// kanban/db.AppendTaskResultEvent inside the same transaction that flips the
+// task to COMPLETED, so live SSE subscribers never heard about task
+// completions and only learned of them on a later poll.
+//
+// Sinks that only persist (and do not fan out to subscribers) need not
+// implement this; callers type-assert and skip broadcasting when absent.
+type EventBroadcaster interface {
+	Broadcast(ctx context.Context, ev Event) error
+}
+
 // TaskCanceller cancels active worker contexts for a given task.
 type TaskCanceller interface {
 	Cancel(taskID string) bool
