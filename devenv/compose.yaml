@@ -48,6 +48,12 @@ services:
       dockerfile: Dockerfile
     expose:
       - "8000"
+    # Published so the e2e harness can read back what the worker actually sent
+    # (GET /requests) without shelling into the container — J11 asserts a saved
+    # preference reached the worker's prompt, and nothing in the agentd API
+    # exposes prompt contents.
+    ports:
+      - "127.0.0.1:8000:8000"
     profiles:
       - default
       - healing

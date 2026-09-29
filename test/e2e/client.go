@@ -198,6 +198,39 @@ func (c *APIClient) MaterializePlan(ctx context.Context, plan DraftPlan) (*http.
 	return c.PostJSON(ctx, "/api/v1/projects/materialize", plan)
 }
 
+// MaterializePlanForUser is MaterializePlan with the X-Agentd-User header
+// identifying who the project is for. The controller stamps that identity
+// onto the project, which is what scopes the worker's memory recall — and
+// therefore which saved preferences reach the execution prompt. Clients that
+// omit it get a project with no user, and no preferences recalled.
+func (c *APIClient) MaterializePlanForUser(ctx context.Context, plan DraftPlan, userID string) (*http.Response, error) {
+	data, err := json.Marshal(plan)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.baseURL+"/api/v1/projects/materialize", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if userID != "" {
+		req.Header.Set("X-Agentd-User", userID)
+	}
+	return c.client.Do(req)
+}
+
+// SavePreference calls POST /api/v1/preferences, recording a user preference
+// as a USER_PREFERENCE memory. Returns 201 on success; there is no GET
+// counterpart, so a journey observes the effect by checking a later task's
+// prompt rather than by reading the stored row back.
+func (c *APIClient) SavePreference(ctx context.Context, userID, text string) (*http.Response, error) {
+	return c.PostJSON(ctx, "/api/v1/preferences", map[string]string{
+		"user_id": userID,
+		"text":    text,
+	})
+}
+
 // WorkspaceReady calls POST /api/v1/projects/{projectID}/workspace/ready.
 // projectID is the project's UUID (assigned at materialize time), not its
 // human-readable name.

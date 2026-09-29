@@ -8,6 +8,9 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8000"))
+# Where to append every received request body as JSONL. Read back via
+# GET /requests. Set MOCKLLM_CAPTURE="" to disable capture entirely.
+CAPTURE_PATH = os.environ.get("MOCKLLM_CAPTURE", "/tmp/mockllm-requests.jsonl")
 PLAN_MARKER = "AGENT_PLAN"
 SLOW_MARKER = "SLOW_TASK"
 PLAN_KEYWORDS = (
@@ -230,6 +233,30 @@ def chat_completion(body: dict) -> dict:
     return completion(body, {"command": build_command(task_id, title)})
 
 
+def record_request(body: dict) -> None:
+    """Append the full request body to the capture log, for e2e assertions.
+
+    J11 needs to prove that a preference the user saved through
+    POST /api/v1/preferences actually reached the worker's prompt. Nothing
+    in the agentd API exposes prompt contents, and stderr only carries
+    correlation metadata, so without a durable capture the journey would have
+    to take the preference's presence on faith — the same self-fulfilling
+    check that scripts/demo/memory-recall.sh performs.
+
+    The log is append-only JSONL so concurrent worker requests interleave
+    safely (the server is threaded) and a test can read the entries written
+    during one task's execution. Writes are best-effort: a read-only or
+    missing capture directory must never break a request.
+    """
+    if not CAPTURE_PATH:
+        return
+    try:
+        with open(CAPTURE_PATH, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(body) + "\n")
+    except OSError as exc:  # pragma: no cover - diagnostics only
+        sys.stderr.write(f"[mockllm] request capture failed: {exc}\n")
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, payload: dict, status: int = 200):
         data = json.dumps(payload).encode()
@@ -248,12 +275,31 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._send({"error": "invalid json"}, 400)
                 return
+            record_request(body)
             self._send(chat_completion(body))
             return
         self._send({"error": "not found"}, 404)
 
     def do_GET(self):
-        data = [{"id": "mock/agentd"}] if self.path.rstrip("/").endswith("/models") else []
+        path = self.path.rstrip("/")
+        if path.endswith("/models"):
+            data = [{"id": "mock/agentd"}]
+        elif path.endswith("/requests"):
+            # Read back the capture log so a journey can assert on what the
+            # worker actually sent without shelling into the container.
+            entries = []
+            if CAPTURE_PATH and os.path.exists(CAPTURE_PATH):
+                with open(CAPTURE_PATH, "r", encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if line:
+                            try:
+                                entries.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                continue
+            data = entries
+        else:
+            data = []
         self._send({"object": "list", "data": data})
 
     def log_message(self, format, *args):
