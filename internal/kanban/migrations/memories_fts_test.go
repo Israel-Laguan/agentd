@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -28,8 +29,8 @@ func TestMigrationAddsMemoriesFTSColumnsAndTriggers(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "18" {
-		t.Fatalf("schema version = %q, want 17", version)
+	if version != strconv.Itoa(currentSchemaVersion) {
+		t.Fatalf("schema version = %q, want %d", version, currentSchemaVersion)
 	}
 
 	for _, col := range []string{"last_accessed_at", "access_count", "superseded_by"} {
@@ -93,8 +94,8 @@ func TestMigrationSkipsWhenFTSAlreadyExists(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "18" {
-		t.Fatalf("schema version = %q, want 17", version)
+	if version != strconv.Itoa(currentSchemaVersion) {
+		t.Fatalf("schema version = %q, want %d", version, currentSchemaVersion)
 	}
 }
 
@@ -118,8 +119,8 @@ func TestMigrationSkipsWithoutMemoriesTable(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "18" {
-		t.Fatalf("schema version = %q, want 17", version)
+	if version != strconv.Itoa(currentSchemaVersion) {
+		t.Fatalf("schema version = %q, want %d", version, currentSchemaVersion)
 	}
 
 	var tableExists int

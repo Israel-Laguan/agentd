@@ -16,16 +16,29 @@ import (
 	agenttools "agentd/internal/agent/tools"
 )
 
-// appendMemoryLessons appends an optional memory-lessons system message after the
-// stable system prompt + task seed. Placing lessons after the stable context keeps
-// the cache prefix stable across tasks while still surfacing durable memories.
-func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, projectID string, messages []gateway.PromptMessage) []gateway.PromptMessage {
+// appendMemoryLessons appends optional memory context after the stable system
+// prompt + task seed. Placing it after the stable context keeps the cache
+// prefix stable across tasks while still surfacing durable memories and the
+// requesting user's saved preferences.
+//
+// userID scopes the recall to one identity. It comes from the project
+// (models.Project.UserID, stamped at materialization from the X-Agentd-User
+// header) because nothing on the task itself carries it: phase continuations,
+// breakdowns, and handoff children are all created long after the chat turn
+// that identified the user, and all inherit the project's identity.
+func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, projectID string, userID string, messages []gateway.PromptMessage) []gateway.PromptMessage {
 	if w.retriever == nil {
 		return messages
 	}
-	recalled := w.retriever.Recall(ctx, intent, projectID, "")
+	recalled := w.retriever.Recall(ctx, intent, projectID, userID)
 	if lessons := memoryFormatLessons(recalled); lessons != "" {
-		return append(messages, gateway.PromptMessage{Role: "system", Content: lessons})
+		messages = append(messages, gateway.PromptMessage{Role: "system", Content: lessons})
+	}
+	// Preferences are formatted separately from lessons: memoryFormatLessons
+	// deliberately skips USER_PREFERENCE rows, so without this they would be
+	// recalled (when userID is set) but silently dropped before the prompt.
+	if prefs := memoryFormatPreferences(recalled); prefs != "" {
+		messages = append(messages, gateway.PromptMessage{Role: "system", Content: prefs})
 	}
 	return messages
 }
@@ -33,7 +46,7 @@ func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, project
 func (w *Worker) seedMessages(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := w.legacySeedMessages(task, project, profile)
 	intent := task.Title + " " + task.Description
-	return w.appendMemoryLessons(ctx, intent, task.ProjectID, messages)
+	return w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages)
 }
 
 // applyModelRouting selects provider/model from complexity routing when enabled.
@@ -205,7 +218,7 @@ func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Ta
 		{Role: "user", Content: userContent},
 	}
 	intent := task.Title + " " + task.Description
-	return w.appendMemoryLessons(ctx, intent, task.ProjectID, messages)
+	return w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages)
 }
 
 // assembleAgenticSystemPromptWithUserContent builds the layered system prompt and sets the
@@ -225,5 +238,5 @@ func (w *Worker) AssembleAgenticSystemPromptWithUserContent(
 		{Role: "user", Content: userContent},
 	}
 	intent := task.Title + " " + task.Description
-	return w.appendMemoryLessons(ctx, intent, task.ProjectID, messages)
+	return w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages)
 }

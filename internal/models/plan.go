@@ -22,6 +22,11 @@ type DraftPlan struct {
 	// ProjectService to defer task dispatch until workspace content is
 	// ready. Not serialized in the API response.
 	WorkspacePending bool `json:"-"`
+	// UserID is the identity the plan is being materialized for, carried
+	// from the originating chat turn's X-Agentd-User header. It is stamped on
+	// the project so execution-time memory recall can scope that user's saved
+	// preferences. Optional: blank means no preferences are recalled.
+	UserID string `json:"user_id,omitempty"`
 }
 
 // UnmarshalJSON accepts both proposal snake_case and legacy camel-case keys.

@@ -95,7 +95,7 @@ func (s *Store) EnsureProjectTask(ctx context.Context, projectID string, draft m
 
 func selectProjectByID(ctx context.Context, tx sqlExecutor, id string) (*models.Project, error) {
 	row := tx.QueryRowContext(ctx, `
-		SELECT id, name, original_input, workspace_path, status, created_at, updated_at
+		SELECT id, name, original_input, workspace_path, status, user_id, created_at, updated_at
 		FROM projects WHERE id = ?`, id)
 	return scanProject(row)
 }
