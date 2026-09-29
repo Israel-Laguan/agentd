@@ -156,6 +156,35 @@ func DecodeTaskResponse(resp *http.Response) (*Task, error) {
 	return &envelope.Data, nil
 }
 
+// TaskEvent is one entry of a task's event log
+// (internal/api/controllers/tasks_events.go's taskEventResponse).
+type TaskEvent struct {
+	ID      string `json:"id"`
+	TaskID  string `json:"task_id"`
+	Type    string `json:"type"`
+	Payload string `json:"payload"`
+}
+
+// ListTaskEvents calls GET /api/v1/tasks/{taskID}/events and decodes the
+// returned events (most recent 100 by default).
+func (c *APIClient) ListTaskEvents(ctx context.Context, taskID string) ([]TaskEvent, error) {
+	resp, err := c.Get(ctx, fmt.Sprintf("/api/v1/tasks/%s/events", taskID))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("list task events returned %d", resp.StatusCode)
+	}
+	var envelope struct {
+		Data []TaskEvent `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, fmt.Errorf("decode task events: %w", err)
+	}
+	return envelope.Data, nil
+}
+
 // RetryTask calls POST /api/v1/tasks/{taskID}/retry, transitioning a
 // FAILED/FAILED_REQUIRES_HUMAN/BLOCKED/IN_CONSIDERATION task back to READY
 // (internal/services/task_service.go's Retry). This is the real recovery
