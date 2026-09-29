@@ -1,0 +1,22 @@
+# agentd.crontab for the disk profile (J10).
+#
+# Identical to internal/config/cron.go's defaultCronFile except for the
+# disk-watchdog cadence, which is shortened from "*/10 * * * *" to
+# "@every 5s" so the J10 journey observes a watchdog pass (and its dedup
+# on the following pass) within seconds instead of waiting up to 10
+# minutes. Without this the disk watchdog is untestable in an e2e run.
+#
+# The cadence is read from this file, NOT from config.disk.yaml — there is
+# no `disk.check_interval` config key; see internal/config/cron.go's
+# applyCronJob and internal/config/runtime_controls.go's DiskConfig (which
+# only carries FreeThresholdPercent).
+#
+# @every <duration> <job>    (robfig/cron descriptor, sub-minute)
+# m h dom mon dow <job>      (Vixie crontab, minute resolution)
+
+@every 3s       task-dispatch
+@every 5s       intake
+@every 30s      heartbeat
+@every 5s       disk-watchdog
+@every 1m       hitl-reconcile
+0 * * * *       memory-curator

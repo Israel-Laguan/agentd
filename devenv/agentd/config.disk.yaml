@@ -35,6 +35,16 @@ healing:
   outage_handoff_enabled: false
 
 # Disk watchdog configuration for J10.
+#
+# free_threshold_percent: 100 means "alert unless the filesystem is
+# literally 100% free", so the watchdog always fires on the container's
+# overlay fs. That is the point — J10 tests that the alert is raised once
+# and deduped on the next pass, not that a real disk-full condition occurs.
+#
+# The watchdog's *cadence* is not a config key: it comes from
+# <home>/agentd.crontab, bind-mounted from devenv/agentd/crontab.disk with
+# an "@every 5s disk-watchdog" entry. An earlier revision of this file set a
+# `check_interval: 5s` key here, which no Go config struct reads — it was
+# silently ignored and the watchdog stayed on the default */10 schedule.
 disk:
   free_threshold_percent: 100
-  check_interval: 5s
