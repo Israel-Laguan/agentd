@@ -7,7 +7,6 @@ import (
 
 	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
-	"agentd/internal/memory"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 )
@@ -24,8 +23,8 @@ type workerSubtask struct {
 }
 
 // memoryFormatLessons renders non-preference memories as numbered lessons.
-// USER_PREFERENCE rows are skipped here and formatted by
-// memoryFormatPreferences instead, so a preference is never mangled into
+// USER_PREFERENCE rows are skipped here and rendered by
+// memory.FormatPreferences instead, so a preference is never mangled into
 // "Symptom/Solution" prose.
 func memoryFormatLessons(memories []models.Memory) string {
 	if len(memories) == 0 {
@@ -40,14 +39,6 @@ func memoryFormatLessons(memories []models.Memory) string {
 		fmt.Fprintf(&b, "%d. Symptom: %s\n   Solution: %s\n", i+1, m.Symptom.String, m.Solution.String)
 	}
 	return b.String()
-}
-
-// memoryFormatPreferences renders the requesting user's saved preferences as a
-// prompt block. It delegates to memory.FormatPreferences rather than
-// reimplementing the format, so the worker and the chat planner render
-// preferences identically.
-func memoryFormatPreferences(memories []models.Memory) string {
-	return memory.FormatPreferences(memories)
 }
 
 // legacyJSONCommandSystemSentinel matches the non-agentic JSON-command worker system prompt.
