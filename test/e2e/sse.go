@@ -13,10 +13,32 @@ import (
 	"time"
 )
 
-// SSEEvent represents a server-sent event from /api/v1/sse.
+// SSEEvent represents a server-sent event from /api/v1/events/stream.
+//
+// Type is the lowercased event name from the frame's "event:" line, which
+// internal/api/sse/stream.go's eventName maps from the internal type (RESULT
+// becomes "task_updated", LOG_CHUNK becomes "log_chunk", and anything
+// unmapped falls through to strings.ToLower of the internal type).
 type SSEEvent struct {
-	Type string          // "task-started", "task-claimed", "task-completed", etc.
+	Type string          // e.g. "log_chunk", "task_updated", "warning"
 	Data json.RawMessage // Raw JSON data
+}
+
+// signalPayload is the decoded body of an SSE frame's "data:" line
+// (internal/api/sse/stream.go's writeEvent marshals exactly these three keys).
+type signalPayload struct {
+	Topic   string `json:"topic"`
+	Type    string `json:"type"`
+	Payload string `json:"payload"`
+}
+
+// Signal decodes the event's data line into its topic/type/payload.
+func (e *SSEEvent) Signal() (signalPayload, error) {
+	var out signalPayload
+	if err := json.Unmarshal(e.Data, &out); err != nil {
+		return out, fmt.Errorf("decode sse signal: %w", err)
+	}
+	return out, nil
 }
 
 // SSEReader reads from the /api/v1/events/stream endpoint.
@@ -109,6 +131,28 @@ func (r *SSEReader) nextEventSync() (*SSEEvent, error) {
 		}
 	}
 	return nil, r.scanner.Err()
+}
+
+// DrainEvents reads events until timeout elapses with no new event, returning
+// everything received in arrival order. This suits J14, which asserts on a
+// burst of lifecycle signals and their relative order, rather than on any
+// single event arriving within a window (what NextEvent is for).
+//
+// A short quiet period is treated as end-of-stream: the frame sequence for a
+// completing task arrives within milliseconds, so an idle gap means the burst
+// is over rather than that more are coming.
+func (r *SSEReader) DrainEvents(ctx context.Context, quietPeriod, maxWait time.Duration) []SSEEvent {
+	var events []SSEEvent
+	deadline := time.Now().Add(maxWait)
+
+	for time.Now().Before(deadline) {
+		event, err := r.NextEvent(ctx, quietPeriod)
+		if err != nil {
+			return events
+		}
+		events = append(events, *event)
+	}
+	return events
 }
 
 // Close closes the SSE reader.
