@@ -85,59 +85,6 @@ func (s *Store) ListMemories(ctx context.Context, filter models.MemoryFilter) ([
 	return scanMemories(rows)
 }
 
-// RecallMemories returns non-superseded memories matching intent via FTS5,
-// scoped to GLOBAL + the given project + user preferences.
-func (s *Store) RecallMemories(ctx context.Context, q models.RecallQuery) ([]models.Memory, error) {
-	if strings.TrimSpace(q.Intent) == "" {
-		return nil, nil
-	}
-	limit := q.Limit
-	if limit <= 0 {
-		limit = 5
-	}
-	ftsQuery := buildFTSQuery(q.Intent)
-	if ftsQuery == "" {
-		return nil, nil
-	}
-
-	query := `
-		SELECT m.id, m.scope, m.project_id, m.tags, m.symptom, m.solution, m.created_at,
-		       m.last_accessed_at, m.access_count, m.superseded_by
-		FROM memories m
-		JOIN memories_fts ON memories_fts.rowid = m.rowid
-		WHERE m.superseded_by IS NULL
-		  AND (
-			m.scope = ?
-			OR m.scope = ?`
-
-	var args []any
-	args = append(args, models.MemoryScopeGlobal, models.MemoryScopeTaskCuration)
-	if strings.TrimSpace(q.ProjectID) != "" {
-		query += `
-			OR m.project_id = ?`
-		args = append(args, q.ProjectID)
-	}
-	if strings.TrimSpace(q.UserID) != "" {
-		query += `
-			OR (m.scope = ? AND m.tags LIKE ?)`
-		args = append(args, models.MemoryScopeUserPref)
-		args = append(args, "user_id:"+q.UserID+"%")
-	}
-	query += `
-		  )
-		  AND memories_fts MATCH ?
-		ORDER BY bm25(memories_fts) ASC
-		LIMIT ?`
-	args = append(args, ftsQuery, limit)
-
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("recall memories: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	return scanMemories(rows)
-}
-
 // TouchMemories bumps access_count and last_accessed_at for the given IDs.
 func (s *Store) TouchMemories(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
