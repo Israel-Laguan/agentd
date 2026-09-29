@@ -44,14 +44,36 @@ The journey suite is defined in [docs/testing/journeys.md](../../docs/testing/jo
   and asserts the task gets a RECOVERY event. Takes ~2 min: boot reconcile
   misses the task because the daemon is PID 1 in the container (known gap,
   see docs/testing/journeys.md), so the stale-heartbeat sweep recovers it
+- **J09**: Provider cascade and circuit breaker, split across two profiles
+  because they need opposite configs. `TestJ09_ProviderCascade` (faults
+  profile) asserts a request succeeds despite a dead first-choice provider
+  and the breaker stays CLOSED; `TestJ09_BreakerOpens` (breaker profile,
+  every provider unreachable) asserts the breaker reaches OPEN and the task
+  gains a "Manual review required:" HUMAN child. ProviderUsed has no HTTP
+  surface, so the cascade is asserted behaviourally
+- **J10**: Disk space watchdog (disk profile) — asserts exactly one HUMAN
+  "Disk space critical" task in `_system` with exactly one
+  `DISK_SPACE_CRITICAL` event, still exactly one after several further
+  watchdog passes. The threshold is 100%, so the watchdog always fires on
+  the container's overlay fs; the journey tests dedup, not a real
+  disk-full condition
+- **J11**: Saved preference recall — a preference saved via
+  `POST /api/v1/preferences` must reach a *later* task's execution prompt.
+  Three phases: absent before the save (baseline), present after, and
+  absent for an unrelated user (so a leak into every prompt would fail).
+  Observes the real prompt via the mock's request capture — see
+  `MockLLMClient` below
+- **J14**: SSE event delivery — opens a project-scoped stream, runs a task
+  READY → COMPLETED, and asserts the lifecycle signals arrive in causal
+  order (LOG_CHUNK before RESULT), then reconciles the live stream against
+  the task's durable event log. Note the spec's expected `task-started` /
+  `task-claimed` / `task-completed` events do not exist: claim and start
+  write no event row at all, so there is nothing to stream for them
 
-Future journeys will test:
-- J05-J06: Materialization edge cases
-- J09: Provider cascade and circuit breaker
-- J10: Disk space watchdog
-- J11: Saved preferences recall
+Deferred (P1/P2, see docs/testing/journeys.md for the policy):
+- J05-J06: Materialization edge cases, task drawer event log
 - J12: Tiered execution
-- J13-J15: OpenAI compatibility, SSE events, MCP export
+- J13: OpenAI compatibility, J15: MCP export
 
 ## Architecture
 
@@ -78,12 +100,28 @@ Future journeys will test:
 - **SSEReader**: Consume server-sent events from /api/v1/events/stream
   (optionally scoped with `?project_id=`)
   - `NextEvent()`: Read next SSE event with timeout
+  - `DrainEvents()`: Read until the stream goes quiet, returning everything in
+    arrival order — suits assertions over a burst and its ordering rather than
+    a single event
   - Parses "event:" and "data:" lines
+
+- **MockLLMClient**: Read back what the worker actually sent to the model
+  (`GET /requests` on the devenv mock, which appends every request body to a
+  JSONL log). This is the only channel for asserting on prompt contents —
+  nothing in the agentd API exposes them, which is how the older
+  `scripts/demo/memory-recall.sh` ended up simulating its own success.
+  `WorkerPrompts(taskID)` attributes captured prompts to a task via the
+  request's `agentd_metadata.task_id`
 
 - **TaskPoller**: Poll a project's task list until desired states are reached
   - `WaitForTaskState()`: Block until one task reaches a given state
   - `WaitForAllComplete()`: Block until every task in the project is
     COMPLETED, or fail fast on FAILED/FAILED_REQUIRES_HUMAN
+  - `WaitForHumanHandoff()` / `PollHumanHandoff()`: Look for a HUMAN-assigned
+    task (self-healing handoffs are filtered out of default listings, so
+    these pass `include_healing=true`). The single-shot `PollHumanHandoff`
+    exists so a caller can interleave other work — J09 releases the breaker's
+    probe gate between polls
   - Automatic timeout protection
 
 - **ProjectManager**: Tracks a journey's project name for isolation. There is
@@ -116,8 +154,9 @@ Devenv supports multiple configurations via profiles in `devenv/compose.yaml`:
 |---------|----------|----------|-----------------|
 | default | Development | agentd, web | Standard config |
 | healing | Self-healing (J07) | agentd-healing | healing.enabled: true |
-| faults | Provider failures (J08-J09) | agentd-faults | gateway.order: [dead, secondary] |
-| disk | Disk watchdog (J10) | agentd-disk | disk.free_threshold_percent: 100 |
+| faults | Provider cascade (J09-A) | agentd-faults | gateway.order: [dead, secondary] |
+| breaker | Breaker trip (J09-B) | agentd-brk | gateway.order: [dead, dead2] (all dead) |
+| disk | Disk watchdog (J10) | agentd-disk | disk.free_threshold_percent: 100 + a crontab with `@every 5s disk-watchdog` |
 | tiered | Tiered execution (J12) | agentd-tiered | tiered.enabled: true |
 
 Each variant has:
@@ -175,15 +214,35 @@ if err != nil {
 }
 ```
 
+## Bringing up the non-default profiles
+
+`make test-e2e` only starts the `default` profile. Journeys on other profiles
+need them started explicitly, and **all profiles must be named in a single
+invocation** — podman-compose 1.3.0 resolves `depends_on` only within the
+activated profiles, so `--profile breaker up -d` alone fails with
+`KeyError: 'litellm'`:
+
+```bash
+podman compose -f "$PWD/devenv/compose.yaml" \
+  --profile default --profile healing --profile faults \
+  --profile breaker --profile disk up -d
+```
+
+The mock LLM is published on `127.0.0.1:8000` for J11's request capture.
+
 ## Next Steps
 
 1. **J01**: Add a devenv profile that boots without `--skip-llm-warmup` to
    automate the warmup-on/off log check
 2. **Implement J05-J06**: Materialization edge cases, task drawer event log
-3. **Implement J09-J12**: Remaining profile-specific journey tests (faults,
-   disk, tiered)
+3. **Implement J12-J13, J15**: Tiered execution, OpenAI compatibility, MCP export
 4. **Add mock scenario injection**: Parse @scenario= tags in requests (T-028)
-5. **Improve error output**: Capture last observed state for bug filing (T-027)
+5. **Tighten J08** once boot reconcile stops skipping PID-1 tasks
+6. **T-027**: run every P0 journey twice on a clean stack and triage
+
+All ten P0 journeys (J01-J04, J07-J11, J14) pass. See
+[docs/testing/journeys.md](../../docs/testing/journeys.md) for the spec, the
+bugs the journeys found, and the deferral policy for P1/P2.
 
 ## Testing
 
