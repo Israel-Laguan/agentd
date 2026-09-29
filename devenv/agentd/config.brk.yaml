@@ -1,0 +1,55 @@
+# agentd configuration for breaker profile (J09 part B).
+#
+# Every provider in gateway.order is unreachable, so a worker call walks the
+# full cascade and then fails with models.ErrLLMUnreachable. That is the only
+# error class the circuit breaker counts (safety.ClassifiesAsBreakerFailure),
+# so three consecutive failed tasks trip it (safety.defaultBreakerFailures = 3,
+# NOT the 5 the journey spec originally assumed).
+#
+# Two dead providers rather than one (as in config.healing.yaml, used by J07)
+# so this journey also proves the cascade is walked to exhaustion — a single
+# dead provider would pass just as well but wouldn't distinguish "cascade
+# exhausted" from "only provider failed".
+#
+# healing.enabled + outage_handoff_enabled mirror the healing profile: with
+# healing off, worker_handoffs.go's handoffOrFail fails the task terminally
+# instead of creating the "Manual review required:" HUMAN child that J09
+# asserts on.
+
+home: /home/agentd-brk
+db_path: /home/agentd-brk/global.db
+projects_dir: /home/agentd-brk/projects
+uploads_dir: /home/agentd-brk/uploads
+
+api:
+  address: "0.0.0.0:8770"
+
+gateway:
+  order: [dead, dead2]
+  providers:
+    - name: dead
+      adapter: openai
+      base_url: "http://127.0.0.1:1/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "agentd"
+      capabilities:
+        chat_tools: true
+    - name: dead2
+      adapter: openai
+      base_url: "http://127.0.0.1:2/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "agentd"
+      capabilities:
+        chat_tools: true
+  warmup_enabled: false
+  role_models:
+    chat:  { provider: "", model: "" }
+    worker: { provider: "", model: "" }
+    memory: { provider: "", model: "" }
+
+queue:
+  token_budget: 50000
+
+healing:
+  enabled: true
+  outage_handoff_enabled: true

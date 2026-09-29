@@ -154,19 +154,32 @@ func (p *TaskPoller) WaitForHumanHandoff(ctx context.Context, timeout time.Durat
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-ticker.C:
-			tasks, err := p.listTasks(ctx, true)
-			if err == nil {
-				for _, task := range tasks {
-					if task.Assignee == TaskAssigneeHuman {
-						return &task, nil
-					}
-				}
+			if task, err := p.PollHumanHandoff(ctx); err == nil && task != nil {
+				return task, nil
 			}
 			if time.Now().After(deadline) {
 				return nil, fmt.Errorf("task poller timeout waiting for a HUMAN handoff task")
 			}
 		}
 	}
+}
+
+// PollHumanHandoff makes a single non-blocking check for a HUMAN-assigned task
+// in the project (listing with include_healing=true, since these handoffs are
+// filtered out of default listings). Returns (nil, nil) when none is present
+// yet, so a caller that needs to interleave other work between polls can do
+// so without reimplementing the listing.
+func (p *TaskPoller) PollHumanHandoff(ctx context.Context) (*Task, error) {
+	tasks, err := p.listTasks(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+	for _, task := range tasks {
+		if task.Assignee == TaskAssigneeHuman {
+			return &task, nil
+		}
+	}
+	return nil, nil
 }
 
 func (p *TaskPoller) listTasks(ctx context.Context, includeHealing bool) ([]Task, error) {

@@ -10,6 +10,7 @@ name: agentd
 #   agentd-healing - variant (port 8766) - healing profile
 #   agentd-faults  - variant (port 8767) - faults profile
 #   agentd-disk    - variant (port 8768) - disk profile
+#   agentd-brk     - variant (port 8770) - breaker profile (all providers dead)
 #   agentd-tiered  - variant (port 8769) - tiered profile
 #   web     - Next.js frontend (port 3000) - default profile
 #
@@ -24,7 +25,8 @@ name: agentd
 # Profiles:
 #   default - standard development stack (agentd + web)
 #   healing - self-healing and outage handoff (J07)
-#   faults  - provider failures and circuit breaker (J08-J09)
+#   faults  - provider cascade to a live secondary (J09 part A)
+#   breaker - every provider dead, so the breaker trips (J09 part B)
 #   disk    - disk space watchdog (J10)
 #   tiered  - tiered execution (J12)
 #
@@ -166,14 +168,50 @@ services:
     environment:
       LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
       AGENTD_API_ADDRESS: "0.0.0.0:8768"
+      # Points agentd's home at the named volume. Without this, home resolves
+      # to $HOME/.agentd in the image layer — `home:` in config.disk.yaml is
+      # ignored (pinned by internal/config/config.go's newConfigViper) — and
+      # bind-mounting the crontab there makes podman create the parent dirs
+      # as root, which the non-root agentd user then cannot write.
+      AGENTD_HOME: "/home/agentd-disk"
     volumes:
       - agentd-data-disk:/home/agentd-disk
       - ./agentd/config.disk.yaml:/etc/agentd/config.yaml:ro
+      # J10 needs the disk watchdog to run every 5s; the default schedule is
+      # */10. The crontab is the only cadence input — there is no
+      # disk.check_interval config key — so it has to be bind-mounted to
+      # <AGENTD_HOME>/agentd.crontab. `agentd init` leaves it alone
+      # (WriteDefaultCron is O_EXCL, so an existing file is preserved).
+      - ./agentd/crontab.disk:/home/agentd-disk/agentd.crontab:ro
     depends_on:
       litellm:
         condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8768/api/v1/system/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  agentd-brk:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
+    ports:
+      - "127.0.0.1:8770:8770"
+    profiles:
+      - breaker
+    environment:
+      LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
+      AGENTD_API_ADDRESS: "0.0.0.0:8770"
+    volumes:
+      - agentd-data-brk:/home/agentd-brk
+      - ./agentd/config.brk.yaml:/etc/agentd/config.yaml:ro
+    depends_on:
+      litellm:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8770/api/v1/system/status"]
       interval: 3s
       timeout: 3s
       retries: 30
@@ -226,4 +264,5 @@ volumes:
   agentd-data-healing:
   agentd-data-faults:
   agentd-data-disk:
+  agentd-data-brk:
   agentd-data-tiered:

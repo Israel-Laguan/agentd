@@ -21,6 +21,7 @@ var profileService = map[string]struct {
 	"default": {"agentd", "/home/agentd"},
 	"healing": {"agentd-healing", "/home/agentd-healing"},
 	"faults":  {"agentd-faults", "/home/agentd-faults"},
+	"breaker": {"agentd-brk", "/home/agentd-brk"},
 	"disk":    {"agentd-disk", "/home/agentd-disk"},
 	"tiered":  {"agentd-tiered", "/home/agentd-tiered"},
 }
