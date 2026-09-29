@@ -3,6 +3,7 @@ package kanban
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -244,5 +245,84 @@ func TestUserPreferenceRecall(t *testing.T) {
 	formatted := FormatPreferences([]models.Memory{recalled1[0]})
 	if !strings.Contains(formatted, "use bullet format only") {
 		t.Fatalf("FormatPreferences output = %q, want to include the solution", formatted)
+	}
+}
+
+// TestUserPreferenceRecallNotStarvedByTopK guards the J11 finding: preferences
+// used to be a branch of the bm25-ranked FTS query, so they competed for the
+// same top-K as lessons. Once a user had more preferences than RecallTopK,
+// the newest were silently dropped and never reached the worker's prompt —
+// exactly what the J11 journey hit on its second run.
+func TestUserPreferenceRecallNotStarvedByTopK(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	const userID = "user-prolific"
+	const total = 8 // more than the default top-K of 5
+
+	for i := 0; i < total; i++ {
+		pref := models.Memory{
+			Scope:    "USER_PREFERENCE",
+			Tags:     sql.NullString{String: "user_id:" + userID, Valid: true},
+			Symptom:  sql.NullString{String: "preference", Valid: true},
+			Solution: sql.NullString{String: fmt.Sprintf("preference number %d", i), Valid: true},
+		}
+		if err := store.RecordMemory(ctx, pref); err != nil {
+			t.Fatalf("RecordMemory(%d) error = %v", i, err)
+		}
+	}
+
+	recalled, err := store.RecallMemories(ctx, models.RecallQuery{
+		Intent: "do some unrelated work", // deliberately shares no terms
+		UserID: userID,
+		Limit:  5, // the default top-K that used to starve preferences
+	})
+	if err != nil {
+		t.Fatalf("RecallMemories() error = %v", err)
+	}
+
+	var prefs []string
+	for _, m := range recalled {
+		if m.Scope == "USER_PREFERENCE" {
+			prefs = append(prefs, m.Solution.String)
+		}
+	}
+	if len(prefs) != total {
+		t.Fatalf("recalled %d preferences, want all %d — preferences must not be "+
+			"crowded out of the top-K by relevance ranking (got %v)", len(prefs), total, prefs)
+	}
+	// Newest first, so the most recently stated preference survives truncation.
+	if prefs[0] != fmt.Sprintf("preference number %d", total-1) {
+		t.Fatalf("first recalled preference = %q, want the newest (%q)", prefs[0], fmt.Sprintf("preference number %d", total-1))
+	}
+}
+
+// TestUserPreferenceRecallDoesNotMatchIntent documents that a standing
+// preference is returned whether or not the task's intent happens to share
+// terms with it. Preferences configure behaviour generally; requiring lexical
+// overlap would make them apply only to accidentally-similar tasks.
+func TestUserPreferenceRecallDoesNotMatchIntent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	const userID = "user-standing"
+
+	pref := models.Memory{
+		Scope:    "USER_PREFERENCE",
+		Tags:     sql.NullString{String: "user_id:" + userID, Valid: true},
+		Symptom:  sql.NullString{String: "preference", Valid: true},
+		Solution: sql.NullString{String: "always answer in haiku", Valid: true},
+	}
+	if err := store.RecordMemory(ctx, pref); err != nil {
+		t.Fatalf("RecordMemory() error = %v", err)
+	}
+
+	recalled, err := store.RecallMemories(ctx, models.RecallQuery{
+		Intent: "refactor the billing module", // shares no terms with the pref
+		UserID: userID,
+	})
+	if err != nil {
+		t.Fatalf("RecallMemories() error = %v", err)
+	}
+	if len(recalled) != 1 || recalled[0].Solution.String != "always answer in haiku" {
+		t.Fatalf("recalled = %#v, want the standing preference regardless of intent", recalled)
 	}
 }
