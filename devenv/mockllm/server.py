@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8000"))
 PLAN_MARKER = "AGENT_PLAN"
+SLOW_MARKER = "SLOW_TASK"
 PLAN_KEYWORDS = (
     "build", "create", "implement", "design", "plan", "scrape", "tool", "api",
     "web", "app", "script", "cli", "service", "backend", "frontend", "library",
@@ -59,6 +60,12 @@ def build_command(task_id: str, title: str) -> str:
         f'echo "[agentd] task={task_id} title={safe_title} '
         f'executed via litellm proxy" >> PLAN_RESULTS.log && cat PLAN_RESULTS.log'
     )
+
+
+def slow_command() -> str:
+    # Emits output every second so the executor's inactivity timeout never
+    # fires; lets a journey kill the daemon while the task is RUNNING.
+    return 'i=0; while [ $i -lt 60 ]; do echo tick $i; i=$((i+1)); sleep 1; done'
 
 
 def task_from_text(part: str) -> dict:
@@ -218,6 +225,8 @@ def chat_completion(body: dict) -> dict:
         sys.stderr.write(f"[mockllm] decomposing plan for task_id={task_id}\n")
         sys.stderr.flush()
         return completion(body, decompose_plan(title))
+    if SLOW_MARKER in title:
+        return completion(body, {"command": slow_command()})
     return completion(body, {"command": build_command(task_id, title)})
 
 

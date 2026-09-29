@@ -89,6 +89,32 @@ func (m *DevenvManager) WaitForReady(ctx context.Context, timeout time.Duration)
 	return harness.WaitForHealthy(ctx, timeout)
 }
 
+// KillAgentd SIGKILLs this profile's agentd container (an unclean crash: no
+// graceful shutdown, no deferred cleanup) without removing it, so its data
+// volume — and therefore its SQLite board — survives for RestartAgentd.
+func (m *DevenvManager) KillAgentd(ctx context.Context) error {
+	return m.serviceCmd(ctx, "kill")
+}
+
+// RestartAgentd starts this profile's previously killed agentd container on
+// the same data volume.
+func (m *DevenvManager) RestartAgentd(ctx context.Context) error {
+	return m.serviceCmd(ctx, "start")
+}
+
+func (m *DevenvManager) serviceCmd(ctx context.Context, verb string) error {
+	svc, ok := profileService[m.profile]
+	if !ok {
+		return fmt.Errorf("no known agentd service for profile %q", m.profile)
+	}
+	cmd := exec.CommandContext(ctx, "podman", "compose", "-f", m.composePath,
+		"--profile", m.profile, verb, svc.service)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s %s: %w (output: %s)", verb, svc.service, err, string(output))
+	}
+	return nil
+}
+
 // SeedWorkspace creates a non-empty workspace directory for projectID inside
 // the running agentd container for this manager's profile, by shelling into
 // the container via `podman compose exec` (there is no bind mount exposing

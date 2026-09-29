@@ -145,6 +145,8 @@ test/e2e/client.go (*APIClient).SystemStatus
 test/e2e/client.go (*APIClient).ResetBreaker
 test/e2e/client.go (*APIClient).Projects
 test/e2e/client.go (*APIClient).MaterializePlan
+test/e2e/devenv.go (*DevenvManager).KillAgentd
+test/e2e/devenv.go (*DevenvManager).RestartAgentd
 test/e2e/e2e.go (*Harness).BaseURL
 test/e2e/project.go (*ProjectManager).Name
 test/e2e/project.go (*statusError).Error

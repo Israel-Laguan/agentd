@@ -107,6 +107,23 @@ The mock maintains internal state per scenario (e.g., "fail on primary, succeed 
 
 ---
 
+## Known Bugs Found by Journeys
+
+### J08: boot reconcile misses tasks owned by a PID-1 daemon
+
+`MarkTaskRunning` stamps `os.Getpid()` (the daemon's own PID) on a RUNNING
+task. `queue.BootReconcile` resets a RUNNING task only when its owning PID is
+no longer alive. In the devenv container agentd is PID 1 before and after a
+restart, so the previous owner always appears alive and the interrupted task
+is skipped at boot. It is only recovered by the stale-heartbeat sweep
+(`StaleAfter`, 2m default; observed ~2m after restart). `TestJ08_UncleanKillRecovery`
+therefore allows up to 180s and logs time-to-recovery. Fix options (product
+decision, not yet made): stamp a per-boot instance ID alongside the PID, or
+have boot reconcile treat any RUNNING task started before this daemon's boot
+as a ghost. Once fixed, tighten the test to a short deadline.
+
+---
+
 ## P1/P2 Deferral or Bug Policy
 
 For P1/P2 journeys (J05, J06, J12, J13, J15):

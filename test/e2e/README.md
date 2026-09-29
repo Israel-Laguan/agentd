@@ -39,9 +39,15 @@ The journey suite is defined in [docs/testing/journeys.md](../../docs/testing/jo
   breaker first (it's process-global, not per-project — see
   APIClient.ResetBreaker's doc comment) then retries the parent
 
+- **J08**: Unclean kill mid-task — SIGKILLs the agentd container while a
+  `SLOW_TASK` (mockllm scenario) is RUNNING, restarts it on the same volume,
+  and asserts the task gets a RECOVERY event. Takes ~2 min: boot reconcile
+  misses the task because the daemon is PID 1 in the container (known gap,
+  see docs/testing/journeys.md), so the stale-heartbeat sweep recovers it
+
 Future journeys will test:
 - J05-J06: Materialization edge cases
-- J08-J09: Provider failures and circuit breaker
+- J09: Provider cascade and circuit breaker
 - J10: Disk space watchdog
 - J11: Saved preferences recall
 - J12: Tiered execution
@@ -174,7 +180,7 @@ if err != nil {
 1. **J01**: Add a devenv profile that boots without `--skip-llm-warmup` to
    automate the warmup-on/off log check
 2. **Implement J05-J06**: Materialization edge cases, task drawer event log
-3. **Implement J08-J12**: Remaining profile-specific journey tests (faults,
+3. **Implement J09-J12**: Remaining profile-specific journey tests (faults,
    disk, tiered)
 4. **Add mock scenario injection**: Parse @scenario= tags in requests (T-028)
 5. **Improve error output**: Capture last observed state for bug filing (T-027)
