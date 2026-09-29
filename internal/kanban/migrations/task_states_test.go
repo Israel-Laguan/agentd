@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -264,8 +265,8 @@ func TestMigrationAllowsFailedRequiresHumanState(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "18" {
-		t.Fatalf("schema version = %q, want 17", version)
+	if version != strconv.Itoa(currentSchemaVersion) {
+		t.Fatalf("schema version = %q, want %d", version, currentSchemaVersion)
 	}
 
 	var completedAt sql.NullString

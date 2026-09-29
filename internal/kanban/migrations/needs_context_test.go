@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -26,13 +27,13 @@ func TestMigrateToV16_AddsNeedsContextToCheckConstraint(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	assertSchemaVersion(t, db, ctx, "18")
+	assertSchemaVersion(t, db, ctx, strconv.Itoa(currentSchemaVersion))
 	assertTasksTableContainsNeedsContext(t, db, ctx)
 	assertMigratedTaskPreserved(t, db, ctx)
 	assertClampedCountersZero(t, db, ctx)
 	assertPositiveCountersPreserved(t, db, ctx)
 	assertNeedsContextInsertAllowed(t, db, ctx, projectsDir)
-	assertSchemaVersionAfterSecondRun(t, db, ctx, "18")
+	assertSchemaVersionAfterSecondRun(t, db, ctx, strconv.Itoa(currentSchemaVersion))
 	assertNeedsContextStateAfterSecondRun(t, db, ctx)
 }
 

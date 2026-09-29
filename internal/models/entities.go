@@ -19,6 +19,11 @@ type Project struct {
 	OriginalInput string        `json:"original_input"`
 	WorkspacePath string        `json:"workspace_path"`
 	Status        ProjectStatus `json:"status"`
+	// UserID is the identity that requested this project, taken from the
+	// X-Agentd-User header on the originating chat turn. It scopes
+	// execution-time memory recall to that user's saved preferences; blank
+	// means no preferences are recalled.
+	UserID string `json:"user_id,omitempty"`
 }
 
 // Task is the durable unit of work moved by the Kanban state machine.

@@ -15,7 +15,7 @@ type Scanner interface{ Scan(dest ...any) error }
 func ScanProject(row Scanner) (*models.Project, error) {
 	var p models.Project
 	var createdAt, updatedAt string
-	err := row.Scan(&p.ID, &p.Name, &p.OriginalInput, &p.WorkspacePath, &p.Status, &createdAt, &updatedAt)
+	err := row.Scan(&p.ID, &p.Name, &p.OriginalInput, &p.WorkspacePath, &p.Status, &p.UserID, &createdAt, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrProjectNotFound
 	}

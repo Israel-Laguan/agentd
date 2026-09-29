@@ -11,9 +11,14 @@ import (
 )
 
 const (
-	currentSchemaVersion = 18
+	currentSchemaVersion = 19
 	schemaVersionKey     = "schema_version"
 )
+
+// CurrentSchemaVersion is the schema version a fully-migrated database reports.
+// Exported so tests can assert against it instead of hardcoding a number that
+// drifts every time a migration is added.
+const CurrentSchemaVersion = currentSchemaVersion
 
 // Run applies incremental SQLite schema migrations up to the current version.
 func Run(ctx context.Context, db *sql.DB, projectsDir string) error {
@@ -50,6 +55,7 @@ func Run(ctx context.Context, db *sql.DB, projectsDir string) error {
 		{18, func(ctx context.Context, db *sql.DB) error {
 			return migrateWorkspacePaths(ctx, db, projectsDir, v18MigrateMode)
 		}},
+		{19, migrateToV19},
 	}
 	for _, migration := range migrations {
 		if err := applyMigration(ctx, db, version, migration.version, migration.run); err != nil {
