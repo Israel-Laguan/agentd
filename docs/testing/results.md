@@ -88,4 +88,3 @@ Bugs found and fixed this cycle:
 - J14 only checked that a `TOKEN_USAGE` row existed; it now checks the recorded token count and fails on a dropped write.
 
 Not covered: P1/P2 journeys (J05, J06, J12, J13, J15) are not implemented.
-

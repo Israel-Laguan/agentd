@@ -83,6 +83,7 @@ internal/gateway/truncation/truncation_head_tail.go (HeadTailStrategy).Name
 internal/kanban/db/time.go UTCNow
 internal/kanban/db/time.go FormatTime
 internal/kanban/human_handoff.go insertHumanResultEvent
+internal/kanban/memories_recall.go escapeLike
 internal/kanban/projects_repo.go (*Store).validateDraftAgentIDs
 internal/kanban/scheduled_tasks_repo.go (*Store).InsertReadyTask
 internal/kanban/scheduled_tasks_repo.go (*Store).InsertReadyTaskAndRecordDispatch
