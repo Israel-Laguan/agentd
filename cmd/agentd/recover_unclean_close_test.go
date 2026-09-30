@@ -2,8 +2,14 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"agentd/internal/api"
+	"agentd/internal/bus"
+	"agentd/internal/frontdesk"
+	"agentd/internal/kanban"
 	"agentd/internal/models"
 	"agentd/internal/queue"
 )
@@ -72,5 +78,29 @@ func reopenAndReconcile(t *testing.T, ctx context.Context, home string, taskID s
 	}
 	if afterReconcile.State == models.TaskStateRunning {
 		t.Fatalf("after reconcile: task state = %v, want not RUNNING", afterReconcile.State)
+	}
+	assertSystemStatusOK(t, store2)
+}
+
+// assertSystemStatusOK serves the reopened home through api.NewHandler and
+// requires GET /api/v1/system/status to return 200 — the daemon-usable-home
+// half of the T-025 Part A contract.
+func assertSystemStatusOK(t *testing.T, store *kanban.Store) {
+	t.Helper()
+	handler := api.NewHandler(api.ServerDeps{
+		Store:      store,
+		Bus:        bus.NewInProcess(),
+		Summarizer: frontdesk.NewStatusSummarizer(store),
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/system/status")
+	if err != nil {
+		t.Fatalf("GET /api/v1/system/status error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/v1/system/status status = %d, want 200", resp.StatusCode)
 	}
 }
