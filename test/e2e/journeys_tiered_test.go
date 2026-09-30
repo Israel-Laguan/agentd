@@ -68,13 +68,24 @@ func TestJ12_TieredExecution(t *testing.T) {
 
 	// The mock's request capture is the observation channel for which steps ran:
 	// the verify step must have run (and failed) and the escalate step must have
-	// run after it. J12 is the only journey that drives tiered steps, so any
-	// tiered-step requests in the shared capture belong to this run.
+	// run after it. Filter captured requests by this run's task IDs so prior
+	// append-only capture entries cannot satisfy the checks.
 	mock := NewMockLLMClient(mockLLMBaseURL)
 	requests, err := mock.Requests(ctx)
 	if err != nil {
 		t.Fatalf("J12 [mock capture] %v", err)
 	}
+	ids := make(map[string]struct{}, len(finalTasks))
+	for _, task := range finalTasks {
+		ids[task.ID] = struct{}{}
+	}
+	var runRequests []capturedRequest
+	for _, request := range requests {
+		if _, ok := ids[request.taskID()]; ok {
+			runRequests = append(runRequests, request)
+		}
+	}
+	requests = runRequests
 	if !mockHasStep(requests, "TIERED MODE: VERIFY STEP") {
 		t.Fatal("J12 [mock capture] no verify-step request found — the verify step never ran")
 	}

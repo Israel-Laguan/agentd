@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"agentd/internal/gateway/spec"
@@ -90,9 +91,9 @@ func TestRouterCascadesToSecondaryWhenPrimaryFails(t *testing.T) {
 // and an httptest.Server secondary. The cascade must reach the secondary over
 // HTTP and ProviderUsed must be "secondary".
 func TestNewRouterFromConfigsCascadesToLiveSecondary(t *testing.T) {
-	var secondaryHits int
+	var secondaryHits atomic.Int64
 	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		secondaryHits++
+		secondaryHits.Add(1)
 		if r.URL.Path != "/v1/chat/completions" {
 			http.NotFound(w, r)
 			return
@@ -129,7 +130,7 @@ func TestNewRouterFromConfigsCascadesToLiveSecondary(t *testing.T) {
 	if resp.Content != "fallback ok" {
 		t.Fatalf("Content = %q, want %q", resp.Content, "fallback ok")
 	}
-	if secondaryHits == 0 {
+	if secondaryHits.Load() == 0 {
 		t.Fatal("secondary server received no requests")
 	}
 }
