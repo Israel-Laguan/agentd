@@ -34,6 +34,9 @@ var categoryLimits = []struct {
 }{
 	{"*_test.go", 500},
 	{"docs/**", 400},
+	// devenv/ holds non-Go infrastructure (compose files, the mock LLM) that
+	// runs longer than hand-written Go; T-028 caps the mock server at 500.
+	{"devenv/**", 500},
 }
 
 func main() {
