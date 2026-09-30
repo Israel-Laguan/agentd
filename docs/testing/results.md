@@ -140,3 +140,96 @@ Bugs found this cycle:
 Also: `test/e2e/chat-kanban.sh` deleted (superseded by J04 and J07), and
 `docs/testing/qa-and-browser-verification.md` / `docs/architecture/repo-layout.md`
 repointed. `devenv/agentd/config.yaml` gains `mcp.enabled: true` for J15.
+
+### Housekeeping cycle: close every P1 gap (2026-09-30)
+
+Command: `make dev-clean dev-up`, then `make test-e2e` (`-count=1`) twice back
+to back on the same tree. Goal: no P1 leftovers in the PR.
+
+| Run | Stack | Result |
+| --- | --- | --- |
+| 1 | clean (`dev-clean`) | 17/17 pass (294.5s) |
+| 2 | same stack, no reset | 17/17 pass (309.4s) |
+
+Per-journey durations (run 1 / run 2):
+
+| Journey | Run 1 | Run 2 |
+| --- | --- | --- |
+| J01 boot + warmup | 0.51s | 0.52s |
+| J02 board + SSE | 6.51s | 6.53s |
+| J03 chat without plan | 0.52s | 0.52s |
+| J04 full happy path | 2.66s | 2.64s |
+| J05 materialize edges | 2.00s | 1.66s |
+| J07 healing handoff | 7.02s | 9.51s |
+| J08 unclean restart | 123.13s | 130.80s |
+| J09 cascade (faults) | 1.84s | 0.52s |
+| J09 breaker (breaker) | 8.56s | 7.05s |
+| J10 disk watchdog | 15.56s | 15.52s |
+| J11 preference recall | 8.38s | 8.40s |
+| J12 tiered escalation | 29.34s | 33.55s |
+| J13 OpenAI intake | 0.62s | 0.62s |
+| J14 SSE events | 10.32s | 10.32s |
+| J15 MCP export | 0.51s | 0.52s |
+| J15 large board (B-005) | 0.56s | 0.59s |
+| J15 state filter (B-006) | 75.51s | 79.13s |
+
+`dev-up` wall-clock: **484s (8m4s)** — the six-per-service Go image build
+(B-007) dominates; see below.
+
+Gates: `go build ./...` clean, `go test ./...` clean, `make check` clean
+(loc + minfunc + lint + test + test-mockllm + lint-docs, 43s).
+
+Bugs fixed this cycle:
+
+- **B-002** (P3): the web service rewrote the bind-mounted
+  `web/package-lock.json` on every container start. It now runs
+  `npm ci --legacy-peer-deps`, which never rewrites the lockfile. The
+  accidental lockfile commit (`78781774`) was removed from branch history via
+  `git rebase --onto`, so `git diff main -- web/package-lock.json` is empty.
+  `make dev-up` leaves `git status` clean.
+- **B-005** (P2): `board.list_tasks` silently capped at 100 tasks. The tool
+  now takes explicit `limit` (default 200) and `offset`, and both the
+  project-scoped and board-wide paths route through the one paginated,
+  filter-aware store method. The response stays a bare task array (no breaking
+  shape change). Covered by `TestServer_ListTasks_BoardWideExposesAllTasks` and
+  `TestJ15_MCPBoardExportLargeBoard`.
+- **B-006** (P2): `board.list_tasks` ignored `state` when `project_id` was
+  passed. Fixed by the same routing change. Covered by
+  `TestServer_ListTasks_StateFilterComposesWithProject` and
+  `TestJ15_MCPBoardExportStateFilter`.
+
+Bug filed:
+
+- **B-007** (P3): `make dev-up` builds the same Dockerfile once per agentd
+  service — six `CGO_ENABLED=0 go build` invocations per `dev-up`, one per
+  service image. The `tiered` → `COMPOSE_PROFILES` change raised the count
+  from 5 to 6. This is the dominant `dev-up` wall-clock cost. Candidate fixes
+  recorded in the bug; not fixed in this PR.
+
+Journey implemented:
+
+- **J12** (P1, tiered execution): T-028's mock now detects each tiered step
+  from its system-prompt suffix and returns the artifact that step commits;
+  verify fails by default, so the escalation ladder (mid-fix redos, then a
+  strong-model escalate) runs for real. `TestJ12_TieredExecution` materializes
+  a complex task on the `tiered` profile, waits for the origin to reach
+  COMPLETED via escalation, and asserts the mock's request capture shows both
+  a verify-step and an escalate-step request. The `tiered` profile was added
+  to `COMPOSE_PROFILES` so `make dev-up` starts it.
+
+Test bug fixed:
+
+- `TestJ15_MCPBoardExportLargeBoard` asserted the board-wide page total equals
+  this project's 150 tasks, but the board-wide call spans every project on the
+  shared default profile. The assertion now pages the whole board and checks
+  every one of the project's tasks appears exactly once, so it is robust to
+  board accumulation across runs.
+
+Tooling:
+
+- `checkloc` gained a `devenv/**` → 500-line category (matching the existing
+  `docs/**` → 400 pattern and T-028's "server.py under 500" bound); the mock
+  server is 406 lines, over the 300 default.
+
+J06 remains deferred (browser tier; two of its three expected task-lifecycle
+events do not exist). Not implemented, as instructed.
