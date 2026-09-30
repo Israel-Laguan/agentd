@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
@@ -113,4 +114,48 @@ type statusError struct {
 
 func (e *statusError) Error() string {
 	return e.path + " returned unexpected status " + http.StatusText(e.status)
+}
+
+// APIError is the error block of the status envelope
+// (internal/api/httpx's APIError, duplicated to avoid importing internal
+// packages from the test package).
+type APIError struct {
+	Code    string   `json:"code"`
+	Message string   `json:"message"`
+	Details []string `json:"details,omitempty"`
+}
+
+// DecodeError reads a non-2xx response's status envelope
+// ({"status":"error","error":{"code":...,"message":...}}). Statuses without
+// that envelope (e.g. a raw mux 404) still yield a usable APIError with the
+// status text as the message, so failure messages are never empty.
+func DecodeError(resp *http.Response) (*APIError, error) {
+	defer func() { _ = resp.Body.Close() }()
+	var envelope struct {
+		Error *APIError `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil || envelope.Error == nil {
+		return &APIError{Code: http.StatusText(resp.StatusCode), Message: fmt.Sprintf("HTTP %d with no error envelope", resp.StatusCode)}, nil
+	}
+	return envelope.Error, nil
+}
+
+// WorkspaceReadyResult is the response body of
+// POST /api/v1/projects/{id}/workspace/ready. Note it carries only the tasks
+// that are READY *now*, not every task in the project: a dependent task is
+// still PENDING and is absent from the response.
+type WorkspaceReadyResult struct {
+	Tasks []Task `json:"tasks"`
+}
+
+// DecodeWorkspaceReady reads a workspace/ready 200 response.
+func DecodeWorkspaceReady(resp *http.Response) (*WorkspaceReadyResult, error) {
+	defer func() { _ = resp.Body.Close() }()
+	var envelope struct {
+		Data WorkspaceReadyResult `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return nil, err
+	}
+	return &envelope.Data, nil
 }

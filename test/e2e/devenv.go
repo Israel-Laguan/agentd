@@ -136,3 +136,44 @@ func (m *DevenvManager) SeedWorkspace(ctx context.Context, projectID string) err
 	}
 	return nil
 }
+
+// CreateSourceDir creates a seeded directory at "<home>/sources/<name>"
+// inside this profile's agentd container and returns its container-internal
+// path, ready to pass as a DraftPlan.SourcePath. The daemon reads the source
+// path itself, so the path only has to resolve inside the agentd container —
+// and the agentd service shares that container, which is why a host temp dir
+// would not work. The path is deliberately outside the workspace root:
+// SeedFromPath jails only the destination, so the source is unconstrained.
+func (m *DevenvManager) CreateSourceDir(ctx context.Context, name string) (string, error) {
+	svc, ok := profileService[m.profile]
+	if !ok {
+		return "", fmt.Errorf("no known agentd service for profile %q", m.profile)
+	}
+	dir := svc.home + "/sources/" + name
+	shellCmd := fmt.Sprintf("mkdir -p %s && echo seeded > %s/seed.txt", dir, dir)
+	cmd := exec.CommandContext(ctx, "podman", "compose", "-f", m.composePath,
+		"--profile", m.profile, "exec", "-T", svc.service, "sh", "-c", shellCmd)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("create source dir %s: %w (output: %s)", dir, err, string(output))
+	}
+	return dir, nil
+}
+
+// CreateSourceFile creates a *file* at "<home>/sources/<name>.txt" and
+// returns its container-internal path. A path naming a file rather than a
+// directory is a distinct source_path rejection from a missing path, so the
+// two are exercised separately.
+func (m *DevenvManager) CreateSourceFile(ctx context.Context, name string) (string, error) {
+	svc, ok := profileService[m.profile]
+	if !ok {
+		return "", fmt.Errorf("no known agentd service for profile %q", m.profile)
+	}
+	path := svc.home + "/sources/" + name + ".txt"
+	shellCmd := fmt.Sprintf("mkdir -p %s && echo not-a-directory > %s", svc.home+"/sources", path)
+	cmd := exec.CommandContext(ctx, "podman", "compose", "-f", m.composePath,
+		"--profile", m.profile, "exec", "-T", svc.service, "sh", "-c", shellCmd)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("create source file %s: %w (output: %s)", path, err, string(output))
+	}
+	return path, nil
+}
