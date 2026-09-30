@@ -17,6 +17,7 @@ const (
 	faultsBaseURL  = "http://localhost:8767"
 	diskBaseURL    = "http://localhost:8768"
 	breakerBaseURL = "http://localhost:8770"
+	tieredBaseURL  = "http://localhost:8769"
 	timeout        = 30 * time.Second
 	composePath    = "../../devenv/compose.yaml"
 )

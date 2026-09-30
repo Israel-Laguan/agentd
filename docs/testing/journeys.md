@@ -57,31 +57,33 @@ The disk and outage-handoff jobs are scheduled by `<AGENTD_HOME>/agentd.crontab`
 
 ### Mock LLM Scenario Selection
 
-**Decision: Inline mock request → scenario tag in messages.**
+**Decision: per-request scenario selection, by in-band tag, header, or model name.**
 
-The mock accepts a request with a special `user` or `system` message tagged with `@scenario=<name>`. Example:
+`devenv/mockllm/server.py` resolves a scenario for every request, in this order:
 
-```json
-{
-  "messages": [
-    {"role": "system", "content": "... prompt ..."},
-    {"role": "system", "content": "@scenario=cascade-fail-primary"}
-  ]
-}
-```
+1. an in-band `@scenario=<name>` tag in any message (travels with the request, so parallel journeys never share state);
+2. an `X-Mock-Scenario` header;
+3. the request's `model` name, mapped by `MOCKLLM_MODEL_SCENARIOS` (e.g. `gpt-3.5-turbo=tiered-fail-verify`).
 
-The mock maintains internal state per scenario (e.g., "fail on primary, succeed on secondary"). Journeys pass the tag as part of their request flow.
+A selected scenario overrides the prompt-inferred behaviour. The tiered
+worker cannot inject a tag or header and uses one model for every step, so the
+mock also detects each tiered step from its system-prompt suffix
+(`TIERED MODE: <STEP> STEP`) and returns the artifact that step commits —
+this is what makes J12 a real end-to-end run rather than a fixture.
 
-**Scenarios (T-028 will implement):**
+**Scenarios (T-028, implemented):**
 
 | Scenario | Used by | Mock behavior |
 | --- | --- | --- |
-| success | J01-J07, J13-J15 | return intent + plan/response; no errors |
-| cascade-fail-primary | J09 | fail first call, succeed on second (cascade) |
-| cascade-fail-all | J09 variant | fail all providers; breaker test |
-| breaker-timeout-x5 | J09 | return 4 timeouts, then succeed (open breaker) |
-| memory-good | J11 | normal memory ops; include recalled pref in prompt |
-| tiered-fail-verify | J12 | small-model plan succeeds, verify fails → escalate |
+| success (default) | J01-J11, J13-J15 | infer from prompt: intent, plan, scope, command; no errors |
+| tiered step detection | J12 | return the ContextPack/Decision/execute/verify/escalate artifact for the step's prompt marker; verify fails by default |
+| error / error-429 / error-503 | (error-path journeys) | answer with the given HTTP status |
+| latency / slow / timeout | (latency journeys) | sleep `MOCKLLM_LATENCY` seconds before answering |
+
+J09's cascade/breaker halves use dedicated all-dead-provider profiles rather
+than mock error scenarios, so the mock's error path is not on the P0 critical
+path. Python unit tests for the dispatch live in
+`devenv/mockllm/test_server.py` and run under `make check`.
 
 ---
 
@@ -100,7 +102,7 @@ The mock maintains internal state per scenario (e.g., "fail on primary, succeed 
 | **J09** | Dead primary provider → cascade to secondary; worker failures open the breaker → HUMAN handoff | A. Cascade (`TestJ09_ProviderCascade`, faults): 1. Start agentd-faults; 2. Send chat with dead primary first in gateway.order; 3. Verify the request succeeds and the breaker stays CLOSED. B. Breaker (`TestJ09_BreakerOpens`, breaker): 1. Materialize 3 tasks against all-dead providers; 2. Verify breaker OPEN; 3. Verify a HUMAN "Manual review required: AI providers unavailable" child exists | A. Response succeeds despite an unanswerable first-choice provider, breaker CLOSED; B. Breaker OPEN, HUMAN task created | faults (A), breaker (B) | Only the queue worker records breaker failures, so chat traffic can't trip it — and chat returns 200 even with every provider dead, so it isn't a usable failure signal either. Trip threshold is 3 (`safety.defaultBreakerFailures`), not 5. `ProviderUsed` has no HTTP surface, so A asserts behaviourally | P0 | Beat 2, provider_fallback_test.go, Beat 2.3 (breaker) |
 | **J10** | Disk below threshold → one HUMAN "Disk space critical" task, deduped | 1. Start agentd-disk (threshold 100%); 2. Wait for the watchdog's first pass; 3. Verify one HUMAN task in `_system` with one `DISK_SPACE_CRITICAL` event; 4. Wait out 3 more passes; 5. Verify still exactly one task, same ID, still one event | Exactly one HUMAN task, deduped across passes; exactly one event | disk | Cadence comes from the bind-mounted crontab, not config (`@every 5s`, default `*/10`). Threshold 100% means the watchdog always fires on the container's overlay fs — the journey tests dedup, not a real disk-full | P0 | Beat 2.3, disk_watchdog_test.go |
 | **J11** | Saved preference is recalled and shown to the agent on a later task | 1. Materialize + run a project for a user *before* any preference exists; 2. Assert the canary is **absent** from that task's captured prompt; 3. POST `/api/v1/preferences`; 4. Materialize a second project for the same user and run it; 5. Assert the canary is **present** in its prompt; 6. Materialize a third project for an unrelated user and assert it is **absent** | Absent before, present after, absent for another user — i.e. real per-user recall, and no leak into every prompt | default | Phase 1 is the baseline: without it, "present" would be satisfied by anything that always injects prefs. Phase 3 catches a global leak. Needs a prompt-observability channel, which did not exist (see the J11 bug entry) | P0 | Beat 2.4 |
-| **J12** | Tiered execution: small-model plan, escalation on verify failure | 1. Start agentd-tiered; 2. Chat with complex task; 3. Small model makes plan; 4. Verify step fails verification; 5. Escalate to full model | Tiered: small model tried first; verify failure triggers escalation; final step uses full model | tiered | tiered.enabled: false by default; config variant needed; J12 replaces tiered-harness.sh (which only tested fixtures); T-025 removes harness | P1 | Phase 5, tiered-execution.md |
+| **J12** | Tiered execution: small-model plan, escalation on verify failure | 1. Start agentd-tiered; 2. Materialize a complex task (title+description ≥ the complexity threshold); 3. Worker splits it into the context/decision/execute/verify DAG; 4. Verify fails; 5. Escalation ladder runs mid-fix redos, then a strong-model escalate completes the origin | Origin reaches COMPLETED; the mock's request capture shows both a verify-step and an escalate-step request | tiered | The mock detects each tiered step from its system-prompt suffix and returns the artifact that step commits; verify fails by default, so the escalation ladder is exercised for real. The `tiered` profile is started by `make dev-up` (added to `COMPOSE_PROFILES`) | P1 | Phase 5, tiered-execution.md |
 | **J13** | OpenAI-compatible intake (`/v1/chat/completions`) | 1. POST OpenAI-shaped request → `chat.completion` envelope; 2. declare a `tools` entry → `tool_calls` with `finish_reason: tool_calls`; 3. `tool_choice: "none"` suppresses them; 4. `stream: true` → `chat.completion.chunk` frames + `[DONE]`; 5. error intake → 400 with a stable code | Envelope fields valid (`object`, `chatcmpl-` id, `created`, echoed model, `choices[0]`); tool_calls only for a declared tool; stream framing terminated; 400s for no user message / two approved scopes / undecodable body | default | **Widen 2026-09-30:** the real surface is bigger than "parsed as OpenAI intake" — the handler also accepts `tools`/`tool_choice`/`stream` and emits `tool_calls` only for a tool the client declared. `usage` is declared `omitempty` and never populated on the non-streaming path, so clients must treat it as optional. | P1 | openai_intake.feature |
 | **J14** | SSE stream delivers task lifecycle events | 1. Materialize a single-task project; 2. Open a project-scoped `/api/v1/events/stream`; 3. Wait for the task to reach COMPLETED; 4. Drain the stream; 5. Assert `LOG_CHUNK` and `RESULT` both arrived, `LOG_CHUNK` before `RESULT`; 6. Reconcile the live frames against the task's durable event log | Stream open, lifecycle signals present and causally ordered, and live-vs-durable divergence is only the documented `RESULT` case | default | The spec's `task-started` / `task-claimed` / `task-completed` events do not exist — claim and start write no event row. Subscribe *after* materialize: task-dispatch runs every 3s, so listening first would miss a fast task (the durable log covers that window) | P0 | results.md |
 | **J15** | MCP board export | 1. `tools/list` → the eight documented board tools with schemas; 2. materialize a project; 3. `board.list_projects` / `board.get_project` return it; 4. `board.list_tasks` returns its tasks, scoped and state-accurate; 5. `board.get_task` returns the detail shape; 6. unknown tool → JSON-RPC `-32602`, missing task → tool error on a 200 | Every advertised tool present with a schema; the project and its tasks exported with real ids/states; the two error shapes distinguishable | default + `mcp.enabled: true` | **Corrected 2026-09-30:** there is no `/api/v1/mcp/export`. The board is a JSON-RPC 2.0 MCP server over Streamable HTTP at `POST /mcp`, and MCP is off by default, so the route is not even registered on a stock config. "Contains all tasks" is false (B-005) and no tool exposes task **outputs** — the export is a state summary. Format now specified in docs/mcp-board-export.md. | P1 | docs/mcp-board-export.md |
@@ -150,7 +152,8 @@ Discovered and fixed four real defects:
   finished. Product bug, fixed.
 
 P1 journeys (J05, J13, J15) were implemented in the 2026-09-30 cycle and pass.
-J06 and J12 are deferred with reasons below.
+J12 was implemented on 2026-09-30 once T-028 landed the tiered mock replies.
+J06 remains deferred (browser tier) with its reason below.
 
 Stack bring-up for the non-default profiles:
 
@@ -358,8 +361,8 @@ actually specified in `docs/mcp-board-export.md`.
 Defects found: B-004 (bad `source_path` returned 500 and orphaned the project —
 **fixed** in the same cycle), B-005 (`board.list_tasks` silently caps at 100
 tasks), B-006 (`board.list_tasks` ignores `state` when `project_id` is passed).
-B-005 and B-006 are open; neither blocks J15, which passes on the contract as
-it actually behaves.
+B-005 and B-006 are **fixed** in the housekeeping cycle; J15 now exports a
+>100-task board completely and honours `state` with and without `project_id`.
 
 ### J06: deferred to Phase 2 (UI journeys need a browser)
 
@@ -375,20 +378,17 @@ durable half is already covered by J14.
 Re-entry condition: a browser-based test tier exists, and the three
 task-lifecycle events are implemented if the timeline is meant to show them.
 
-### J12: deferred until T-028 (needs per-request mock scenarios)
+### J12: implemented (2026-09-30, on T-028)
 
-J12 needs the small model to produce a plan and then *fail verification* on a
-known step, so the escalation to the full model is observable. Nothing on the
-default stack can produce that: the mock LLM always succeeds, and the failure
-has to be attributed to the verifier rather than to a dead provider — which is
-what the `tiered-fail-verify` scenario in the table above is for. It needs
-T-028's per-request `@scenario=` selection and tiered verify replies, neither of
-which exists yet.
-
-The `tiered` profile fixture is in place (port 8769, `tiered.enabled: true`), so
-what is missing is the mock, not the config.
-
-Re-entry condition: T-028 lands per-request scenario selection.
+J12 needed the small model to produce a plan and then *fail verification* on a
+known step, so the escalation to the full model is observable. T-028's mock
+now detects each tiered step from its system-prompt suffix and returns the
+artifact that step commits; the verify step fails by default, so the
+escalation ladder (bounded mid-fix redos, then a strong-model escalate) runs
+for real and completes the origin. `TestJ12_TieredExecution` materializes a
+complex task on the `tiered` profile, waits for the origin to reach COMPLETED,
+and asserts the mock's request capture shows both a verify-step and an
+escalate-step request. The `tiered` profile is started by `make dev-up`.
 
 ---
 
@@ -396,4 +396,4 @@ Re-entry condition: T-028 lands per-request scenario selection.
 
 **T-027** (run and triage): done. P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; P1 journeys J05, J13 and J15 are implemented and passing, and J06 and J12 are deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`. Filed but not fixed: B-001, B-002, B-003, B-005, B-006. `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 pass. Cycle entries are in `results.md`.
 
-**T-028** (mock scenarios): partly done. Request capture (`GET /requests`) and the published mock port exist. No per-request scenario selection, error/latency responses or tiered verify replies yet; none of the P0 journeys needed them (J09's breaker half uses an all-dead provider profile), and the three P1 journeys added on 2026-09-30 did not either. **J12 is the only remaining consumer** and is deferred until this lands.
+**T-028** (mock scenarios): done. Request capture (`GET /requests`), the published mock port, per-request scenario selection (in-band `@scenario=` tag, `X-Mock-Scenario` header, or model name via `MOCKLLM_MODEL_SCENARIOS`), error/latency responses, and tiered step replies (each step detected from its system-prompt suffix; verify fails by default) all land. Python unit tests for the dispatch run under `make check` (`devenv/mockllm/test_server.py`). **J12 is the only consumer** of the tiered replies and is now implemented.

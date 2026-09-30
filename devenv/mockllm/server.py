@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from capture import CAPTURE_PATH, read_requests, record_request
@@ -33,12 +34,51 @@ TASK_SPLIT = r'(?:^|\n|\b(?:and|or)\b\s*|,\s*|\d+[)\s]+\s*|[-–*•]\s*)'
 SCOPE_INTRODUCER = r'\b(?:build|create|make|add|implement|design|plan|develop)\b'
 SCOPE_SPLIT = SCOPE_DELIMITER + r'(?=' + SCOPE_INTRODUCER + r')'
 
+# --- Scenario selection -----------------------------------------------------
+#
+# A request can select a named behaviour (error, latency, a tiered verify
+# outcome) so a journey can drive a specific path without a real provider.
+# Selection is per request and resolved in this order:
+#   1. an in-band @scenario=<name> tag in any message (travels with the
+#      request, so parallel journeys never share state);
+#   2. an X-Mock-Scenario header;
+#   3. the request's model name, mapped by MOCKLLM_MODEL_SCENARIOS
+#      (e.g. "gpt-3.5-turbo=tiered-fail-verify,gpt-4=tiered-pass-verify").
+SCENARIO_TAG_RE = re.compile(r"@scenario=([A-Za-z0-9_-]+)")
+DEFAULT_LIMIT = 200
+
 
 def message_content(body: dict, role: str) -> str:
     return next(
         (msg.get("content", "") for msg in body.get("messages", []) if msg.get("role") == role),
         "",
     )
+
+
+def select_scenario(body: dict, headers) -> str:
+    """Return the scenario name selected by this request, or "" for the default.
+
+    `headers` is a email.message.Message (BaseHTTPRequestHandler.headers); header
+    lookup is case-insensitive.
+    """
+    for msg in body.get("messages", []):
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            match = SCENARIO_TAG_RE.search(content)
+            if match:
+                return match.group(1)
+    header = headers.get("X-Mock-Scenario") if headers is not None else None
+    if header and header.strip():
+        return header.strip()
+    model = body.get("model", "")
+    mapping = os.environ.get("MOCKLLM_MODEL_SCENARIOS", "")
+    for pair in mapping.split(","):
+        if "=" not in pair:
+            continue
+        name, scenario = pair.split("=", 1)
+        if name.strip() == model:
+            return scenario.strip()
+    return ""
 
 
 def extract_task_title(body: dict) -> str:
@@ -66,7 +106,7 @@ def build_command(task_id: str, title: str) -> str:
     )
 
 
-def slow_command() -> str:
+def slow_command():
     # Emits output every second so the executor's inactivity timeout never
     # fires; lets a journey kill the daemon while the task is RUNNING.
     return 'i=0; while [ $i -lt 60 ]; do echo tick $i; i=$((i+1)); sleep 1; done'
@@ -181,6 +221,58 @@ def decompose_plan(title: str) -> dict:
     }
 
 
+# --- Tiered execution replies ----------------------------------------------
+#
+# The tiered worker runs each pipeline step (context/decision/execute/verify/
+# escalate) through the agentic engine with a step-specific system-prompt
+# suffix. The mock detects the step from that suffix and returns the artifact
+# the step commits, so a tiered pipeline runs end to end without a real
+# provider. The verify step fails by default, which drives the escalation
+# ladder (mid-fix redos, then a strong-model escalate) that J12 observes.
+TIERED_STEP_MARKERS = {
+    "TIERED MODE: CONTEXT STEP": "context",
+    "TIERED MODE: DECISION STEP": "decision",
+    "TIERED MODE: EXECUTE STEP": "execute",
+    "TIERED MODE: VERIFY STEP": "verify",
+    "TIERED MODE: ESCALATE STEP": "escalate",
+}
+
+
+def tiered_step(system_content: str) -> str:
+    for marker, step in TIERED_STEP_MARKERS.items():
+        if marker in system_content:
+            return step
+    return ""
+
+
+def tiered_reply(step: str) -> dict:
+    if step == "context":
+        # Minimal but structurally valid ContextPack: parseAndConfigurePack
+        # overwrites task_id/parent_task_id and the budget counters, and
+        # Validate only checks structure (version, non-empty summary, >=1
+        # unique path, consistent budget), not that paths exist on disk.
+        return {
+            "version": 1,
+            "summary": "Workspace context gathered for this task.",
+            "paths": ["README.md"],
+            "constraints": [],
+            "unknowns": [],
+        }
+    if step == "decision":
+        return {
+            "touch_list": ["README.md"],
+            "checks": ["echo verify"],
+            "rationale": "Minimal decision for the mock.",
+        }
+    if step == "verify":
+        return {
+            "results": [{"check": "echo verify", "outcome": "fail", "detail": "mock verify failure"}],
+            "overall": "fail",
+        }
+    # execute / escalate: a terminal success is all the step needs.
+    return {"status": "ok", "output": f"mock {step} success"}
+
+
 def request_metadata(body: dict) -> dict:
     # litellm keeps the client's `metadata` for itself; its agentd_correlation
     # hook re-sends those fields as `agentd_metadata`. Plain `metadata` still
@@ -188,7 +280,17 @@ def request_metadata(body: dict) -> dict:
     return body.get("agentd_metadata") or body.get("metadata") or {}
 
 
-def chat_completion(body: dict) -> dict:
+def scenario_error_status(scenario: str) -> int:
+    # "error" -> 500, "error-429" -> 429, etc.
+    if scenario.startswith("error-"):
+        try:
+            return int(scenario.split("-", 1)[1])
+        except ValueError:
+            return 500
+    return 500
+
+
+def chat_completion(body: dict, headers=None) -> dict:
     metadata = request_metadata(body)
     task_id = metadata.get("task_id") or body.get("user") or "unknown"
     title = extract_task_title(body)
@@ -203,6 +305,18 @@ def chat_completion(body: dict) -> dict:
     else:
         sys.stderr.write(f"[mockllm] no correlation; request keys={sorted(body)}\n")
     sys.stderr.flush()
+
+    # A selected scenario overrides the prompt-inferred behaviour.
+    scenario = select_scenario(body, headers)
+    if scenario and not scenario.startswith(("error", "latency", "slow", "timeout")):
+        sys.stderr.write(f"[mockllm] scenario={scenario}\n")
+        sys.stderr.flush()
+
+    step = tiered_step(system_content)
+    if step:
+        sys.stderr.write(f"[mockllm] tiered step={step} task_id={task_id}\n")
+        sys.stderr.flush()
+        return completion(body, tiered_reply(step), f"chatcmpl-mock-tiered-{step}")
 
     if "Frontdesk scope analyzer" in system_content:
         scope_analysis = analyze_scope(user_content)
@@ -252,8 +366,20 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._send({"error": "invalid json"}, 400)
                 return
+            scenario = select_scenario(body, self.headers)
+            if scenario.startswith("error"):
+                status = scenario_error_status(scenario)
+                sys.stderr.write(f"[mockllm] scenario={scenario} -> HTTP {status}\n")
+                sys.stderr.flush()
+                self._send({"error": f"mock error scenario {scenario}"}, status)
+                return
+            if scenario in ("latency", "slow", "timeout"):
+                delay = float(os.environ.get("MOCKLLM_LATENCY", "2"))
+                sys.stderr.write(f"[mockllm] scenario={scenario} sleeping {delay}s\n")
+                sys.stderr.flush()
+                time.sleep(delay)
             record_request(body)
-            self._send(chat_completion(body))
+            self._send(chat_completion(body, self.headers))
             return
         self._send({"error": "not found"}, 404)
 
