@@ -25,7 +25,7 @@ func (s *Server) registerListTasks() {
 		Limit     int    `json:"limit,omitempty"`
 		Offset    int    `json:"offset,omitempty"`
 	}
-	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "board.list_tasks", Description: "List tasks on the kanban board, optionally filtered by project and state. Paginated: limit (default 200, the store's max page) and offset page through the whole board, so a >100-task export is never silently truncated."}, func(ctx context.Context, _ *mcp.CallToolRequest, in input) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "board.list_tasks", Description: "List tasks on the kanban board, optionally filtered by project and state. Paginated: limit (default 200, the store's max page) and offset page through the whole board. Returns pagination metadata (total, has_next) in structuredContent."}, func(ctx context.Context, _ *mcp.CallToolRequest, in input) (*mcp.CallToolResult, any, error) {
 		slog.DebugContext(ctx, "mcp: board.list_tasks", "project_id", in.ProjectID, "state", in.State, "limit", in.Limit, "offset", in.Offset)
 		if s.board == nil {
 			return errorResult(fmt.Errorf("list_tasks requires KanbanBoardContract")), nil, nil
@@ -55,7 +55,13 @@ func (s *Server) registerListTasks() {
 		for _, t := range tasks {
 			out = append(out, map[string]any{"id": t.ID, "title": t.Title, "state": string(t.State), "assignee": string(t.Assignee), "project_id": t.ProjectID, "agent_id": t.AgentID, "depends_on": t.DependsOn})
 		}
-		return textResult(out), out, nil
+		res := textResult(out)
+		structured := map[string]any{
+			"tasks":    out,
+			"total":    result.Total,
+			"has_next": result.HasNext,
+		}
+		return res, structured, nil
 	})
 }
 
