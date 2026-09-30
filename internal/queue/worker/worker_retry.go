@@ -92,16 +92,30 @@ func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result s
 		w.breaker.RecordSuccess()
 	}
 	payload := fmt.Sprintf("exit=%d duration=%s\n%s", result.ExitCode, result.Duration, result.Stdout)
-	_, updateErr := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
+	if _, updateErr := w.updateTaskResult(ctx, task, models.TaskResult{
 		Success: true,
 		Payload: payload,
-	})
-	if updateErr != nil {
+	}); updateErr != nil {
 		w.Emit(ctx, task, "ERROR", updateErr.Error())
 		return false
 	}
-	w.broadcastResult(ctx, task, payload)
 	return true
+}
+
+// updateTaskResult is the single write path for a terminal task result: it
+// persists through the store and then fans the RESULT event out to live
+// subscribers. Every completion path goes through here rather than calling
+// store.UpdateTaskResult directly, because that store call is what appends the
+// RESULT event — a path that skipped the broadcast left SSE subscribers (the
+// web UI's live board among them) showing a task as still running until the
+// next poll or reconnect.
+func (w *Worker) updateTaskResult(ctx context.Context, task models.Task, result models.TaskResult) (*models.Task, error) {
+	updated, err := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, result)
+	if err != nil {
+		return updated, err
+	}
+	w.broadcastResult(ctx, task, result.Payload)
+	return updated, nil
 }
 
 // broadcastResult fans the task's RESULT event out to live subscribers.
@@ -232,7 +246,7 @@ func (w *Worker) requeue(ctx context.Context, task models.Task, payload string) 
 }
 
 func (w *Worker) evict(ctx context.Context, task models.Task, payload string) {
-	updated, err := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
+	updated, err := w.updateTaskResult(ctx, task, models.TaskResult{
 		Success: false,
 		Payload: truncate(payload, 1000),
 	})
@@ -247,7 +261,7 @@ func (w *Worker) evict(ctx context.Context, task models.Task, payload string) {
 }
 
 func (w *Worker) FailHard(ctx context.Context, task models.Task, err error) {
-	_, updateErr := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
+	_, updateErr := w.updateTaskResult(ctx, task, models.TaskResult{
 		Success: false,
 		Payload: truncate(err.Error(), 1000),
 	})
@@ -259,7 +273,7 @@ func (w *Worker) FailHard(ctx context.Context, task models.Task, err error) {
 // failTerminal records a failed result and moves the task to a terminal state so
 // it is not picked up again (used when healing handoffs are disabled or capped).
 func (w *Worker) failTerminal(ctx context.Context, task models.Task, err error, state models.TaskState) {
-	_, updateErr := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
+	_, updateErr := w.updateTaskResult(ctx, task, models.TaskResult{
 		Success: false,
 		Payload: truncate(err.Error(), 1000),
 	})

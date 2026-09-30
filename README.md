@@ -187,10 +187,14 @@ Run spawned agents under a non-sudoer system user. `agentd` blocks commands that
 
 ## Maintenance Scripts
 
-Generate an ad-hoc folder-size audit report:
+Repo-local tooling lives in `tools/` and is run through `make`:
 
 ```sh
-go run ./scripts/folder_audit --out /tmp/folder-size-audit.md
+make loc        # fail files over the configured LOC limit
+make minfunc    # flag functions shorter than the configured minimum
 ```
 
-The report ranks folders by non-test Go files and separately calls out test-heavy folders. It is intentionally not checked in; use it for temporary analysis.
+`make minfunc-accept` records the current short functions as intentional when
+they are (interface methods, trivial helpers). See
+[`docs/architecture/repo-layout.md`](docs/architecture/repo-layout.md) for the
+layout these live in.

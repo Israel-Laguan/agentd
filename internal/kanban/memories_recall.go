@@ -19,17 +19,25 @@ import (
 // ones were silently starved out and never reached the prompt. They are also
 // not required to match the intent terms, which a standing preference should
 // not have to.
+//
+// Because of that, preference recall is deliberately independent of the FTS
+// query: a blank intent, or an intent made entirely of terms FTS discards,
+// still recalls the user's preferences. Gating preferences on there being
+// something for FTS to rank would reintroduce exactly the term-matching
+// coupling they were split out to remove.
 func (s *Store) RecallMemories(ctx context.Context, q models.RecallQuery) ([]models.Memory, error) {
-	if strings.TrimSpace(q.Intent) == "" {
-		return nil, nil
+	prefs, err := s.recallPrefsFor(ctx, q.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	ftsQuery := buildFTSQuery(q.Intent)
+	if ftsQuery == "" {
+		return prefs, nil
 	}
 	limit := q.Limit
 	if limit <= 0 {
 		limit = 5
-	}
-	ftsQuery := buildFTSQuery(q.Intent)
-	if ftsQuery == "" {
-		return nil, nil
 	}
 
 	query := `
@@ -66,14 +74,17 @@ func (s *Store) RecallMemories(ctx context.Context, q models.RecallQuery) ([]mod
 		return nil, err
 	}
 
-	if strings.TrimSpace(q.UserID) == "" {
-		return memories, nil
-	}
-	prefs, err := s.recallUserPreferences(ctx, q.UserID, userPreferenceLimit)
-	if err != nil {
-		return nil, err
-	}
 	return append(memories, prefs...), nil
+}
+
+// recallPrefsFor returns the user's saved preferences, or nil when no user was
+// supplied. A nil slice keeps the no-user case allocation-free and lets the
+// caller return it directly.
+func (s *Store) recallPrefsFor(ctx context.Context, userID string) ([]models.Memory, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, nil
+	}
+	return s.recallUserPreferences(ctx, userID, userPreferenceLimit)
 }
 
 // userPreferenceLimit caps how many of a user's saved preferences reach one

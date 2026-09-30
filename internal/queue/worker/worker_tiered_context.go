@@ -56,7 +56,7 @@ func (w *Worker) processTieredContextStep(ctx context.Context, task models.Task,
 // step (and the DAG built on top of it) looking successful.
 func (w *Worker) failTieredStep(ctx context.Context, task models.Task, reason string) {
 	result := models.TaskResult{Success: false, Payload: truncate(reason, 1000)}
-	if _, err := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, result); err != nil {
+	if _, err := w.updateTaskResult(ctx, task, result); err != nil {
 		if errors.Is(err, models.ErrStateConflict) {
 			// The step left RUNNING at the expected version before we could
 			// record the failure (e.g. a concurrent commit or heartbeat bump
@@ -80,7 +80,7 @@ func (w *Worker) failTieredStep(ctx context.Context, task models.Task, reason st
 				// Still legitimately RUNNING (e.g. a heartbeat bumped
 				// UpdatedAt) — retry once against the fresh version instead
 				// of leaving the step stuck looking active.
-				if _, retryErr := w.store.UpdateTaskResult(ctx, current.ID, current.UpdatedAt, result); retryErr != nil {
+				if _, retryErr := w.updateTaskResult(ctx, *current, result); retryErr != nil {
 					slog.Error("tiered: retry failed to record step failure after state conflict",
 						"task_id", task.ID, "reason", reason, "error", retryErr, "current_state", current.State)
 					w.Emit(ctx, task, "TIERED_STEP_FAIL_CONFLICT",
