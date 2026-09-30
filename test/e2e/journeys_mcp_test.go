@@ -280,6 +280,77 @@ func j15LargePage(ctx context.Context, t *testing.T, client *APIClient, limit, o
 	return tasks
 }
 
+// TestJ15_MCPBoardExportStateFilter pins B-006 end to end: the state filter
+// must be honoured when project_id is also passed. A project whose tasks are
+// all COMPLETED returns nothing for state=FAILED — both scoped to the project
+// and board-wide — and returns its tasks for state=COMPLETED.
+func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	harness := NewHarness(baseURL, "default")
+	if err := harness.WaitForHealthy(ctx, 10*time.Second); err != nil {
+		t.Fatalf("J15-state [boot] harness failed to become healthy: %v", err)
+	}
+	client := NewAPIClient(baseURL, harness.client)
+
+	materialized := materializePlan(ctx, t, client, "J15-state", DraftPlan{
+		ProjectName:         UniqueProjectName("j15-state"),
+		Description:         "J15: the state filter composes with project_id",
+		StartEmptyWorkspace: true,
+		Tasks: []DraftTask{
+			{Title: "J15 state task A", Description: "Completes, then is filtered on."},
+			{Title: "J15 state task B", Description: "Completes, then is filtered on."},
+		},
+	})
+
+	// Let the workers complete the tasks so there is a real COMPLETED set to
+	// filter on.
+	poller := NewTaskPoller(client, materialized.Project.ID)
+	completed, err := poller.WaitForAllComplete(ctx, 120*time.Second)
+	if err != nil {
+		t.Fatalf("J15-state [run] tasks did not complete: %v (last observed: %+v)", err, completed)
+	}
+	for _, task := range completed {
+		if task.State != TaskStateCompleted {
+			t.Fatalf("J15-state [run] task %s state = %q, want COMPLETED", task.ID, task.State)
+		}
+	}
+
+	// state=FAILED on COMPLETED tasks: none, scoped to the project.
+	var failedInProject []MCPTask
+	if err := client.CallMCPTool(ctx, "board.list_tasks", map[string]any{"project_id": materialized.Project.ID, "state": "FAILED"}, &failedInProject); err != nil {
+		t.Fatalf("J15-state [mcp board.list_tasks project+FAILED] %v", err)
+	}
+	if len(failedInProject) != 0 {
+		t.Fatalf("J15-state [mcp board.list_tasks project+FAILED] returned %d task(s), want 0", len(failedInProject))
+	}
+
+	// The same filter board-wide: also none.
+	var failedBoardWide []MCPTask
+	if err := client.CallMCPTool(ctx, "board.list_tasks", map[string]any{"state": "FAILED"}, &failedBoardWide); err != nil {
+		t.Fatalf("J15-state [mcp board.list_tasks FAILED] %v", err)
+	}
+	if len(failedBoardWide) != 0 {
+		t.Fatalf("J15-state [mcp board.list_tasks FAILED] returned %d task(s), want 0", len(failedBoardWide))
+	}
+
+	// state=COMPLETED with project_id: the project's tasks, proving the
+	// filter is applied rather than dropped.
+	var completedInProject []MCPTask
+	if err := client.CallMCPTool(ctx, "board.list_tasks", map[string]any{"project_id": materialized.Project.ID, "state": "COMPLETED"}, &completedInProject); err != nil {
+		t.Fatalf("J15-state [mcp board.list_tasks project+COMPLETED] %v", err)
+	}
+	if len(completedInProject) != len(materialized.Tasks) {
+		t.Fatalf("J15-state [mcp board.list_tasks project+COMPLETED] returned %d task(s), want %d", len(completedInProject), len(materialized.Tasks))
+	}
+	t.Logf("J15-state: state=FAILED returned 0 (project and board-wide); state=COMPLETED returned %d", len(completedInProject))
+}
+
 // j15AssertTaskDetail is step 4: the per-task read. The detail shape carries
 // *counts* of events and comments rather than their bodies, and no result or
 // output field at all — the reason "export contains all tasks with outputs" is

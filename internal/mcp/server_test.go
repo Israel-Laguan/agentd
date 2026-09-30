@@ -144,6 +144,49 @@ func TestServer_ListTasks_BoardWideExposesAllTasks(t *testing.T) {
 	assert.Len(t, second, taskCount-100, "offset must page past the first page")
 }
 
+// TestServer_ListTasks_StateFilterComposesWithProject pins B-006: the state
+// filter must be honoured when project_id is also passed. A client asking for
+// "the failed tasks in this project" must not get the whole project back.
+func TestServer_ListTasks_StateFilterComposesWithProject(t *testing.T) {
+	s, store := newTestServer(t)
+
+	project, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "mixed-project",
+		Tasks: []models.DraftTask{
+			{Title: "done-1", AgentID: "default"},
+			{Title: "done-2", AgentID: "default"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, tasks, 2)
+	for _, task := range tasks {
+		_, err := store.UpdateTaskState(context.Background(), task.ID, task.UpdatedAt, models.TaskStateCompleted)
+		require.NoError(t, err)
+	}
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	_, err = s.mcpServer.Connect(context.Background(), serverTransport, nil)
+	require.NoError(t, err)
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.1.0"}, nil)
+	session, err := client.Connect(context.Background(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+	ctx := context.Background()
+
+	// state=FAILED on a project of COMPLETED tasks: none, with project_id.
+	failedInProject := callListTasks(t, ctx, session, map[string]any{"project_id": project.ID, "state": "FAILED"})
+	assert.Empty(t, failedInProject, "state=FAILED must return no tasks from a project of COMPLETED tasks")
+
+	// The same filter board-wide: also none.
+	failedBoardWide := callListTasks(t, ctx, session, map[string]any{"state": "FAILED"})
+	assert.Empty(t, failedBoardWide, "state=FAILED board-wide must return no tasks")
+
+	// state=COMPLETED with project_id: both tasks, proving the filter is
+	// applied rather than the argument being dropped.
+	completedInProject := callListTasks(t, ctx, session, map[string]any{"project_id": project.ID, "state": "COMPLETED"})
+	assert.Len(t, completedInProject, 2, "state=COMPLETED must return the project's COMPLETED tasks")
+}
+
 func TestServer_GetTask_NotFound(t *testing.T) {
 	s, _ := newTestServer(t)
 
