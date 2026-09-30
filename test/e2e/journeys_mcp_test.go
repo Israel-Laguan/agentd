@@ -224,18 +224,25 @@ func TestJ15_MCPBoardExportLargeBoard(t *testing.T) {
 	}
 	j15LargeAssertAllExported(ctx, t, client, materialized, all)
 
-	// Paging: two pages of 100 cover the same board with no gaps or repeats.
-	page1 := j15LargePage(ctx, t, client, 100, 0)
-	page2 := j15LargePage(ctx, t, client, 100, 100)
-	if len(page1)+len(page2) != len(materialized.Tasks) {
-		t.Fatalf("J15-large [paging] pages hold %d+%d tasks, want %d", len(page1), len(page2), len(materialized.Tasks))
-	}
-	seen := make(map[string]bool, len(page1)+len(page2))
-	for _, task := range append(page1, page2...) {
-		if seen[task.ID] {
-			t.Fatalf("J15-large [paging] task %s appeared on both pages", task.ID)
+	// Paging: walk the board in pages of 100. The board-wide call spans every
+	// project on the shared default profile, so the page total is not this
+	// project's count — what matters is that every one of this project's tasks
+	// appears exactly once across the pages (no gaps, no repeats).
+	seen := make(map[string]bool)
+	for offset := 0; ; offset += 100 {
+		page := j15LargePage(ctx, t, client, 100, offset)
+		if len(page) == 0 {
+			break
 		}
-		seen[task.ID] = true
+		for _, task := range page {
+			if seen[task.ID] {
+				t.Fatalf("J15-large [paging] task %s appeared on two pages", task.ID)
+			}
+			seen[task.ID] = true
+		}
+		if len(page) < 100 {
+			break
+		}
 	}
 	for _, want := range materialized.Tasks {
 		if !seen[want.ID] {
