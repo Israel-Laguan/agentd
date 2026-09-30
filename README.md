@@ -36,7 +36,7 @@ make build
 
 **Governance demo (approve → board → HUMAN):** see [`docs/demo.md`](docs/demo.md) — about 10 minutes with a connector you control.
 
-**Harness reliability (restart mid-task):** see [`docs/harness-reliability.md`](docs/harness-reliability.md) and `scripts/demo/restart-mid-task.sh`.
+**Harness reliability (restart mid-task, provider fallback, disk watchdog, memory recall):** proven by the e2e journey suite — see [`docs/harness-reliability.md`](docs/harness-reliability.md) and [`docs/testing/journeys.md`](docs/testing/journeys.md); run it with `make test-e2e`.
 
 ### First Run
 

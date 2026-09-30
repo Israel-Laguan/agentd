@@ -2,6 +2,12 @@
 
 Show **approve → board → HUMAN handoff**, not “it wrote an API.”
 
+This flow is proven automatically by the e2e journey suite: **J04** (ask →
+approve → materialize → tasks complete) and **J07** (connector failure → HUMAN
+task → human resolution). Run it with `make test-e2e`; specs and pass criteria
+are in [journeys.md](testing/journeys.md). The steps below remain as a manual
+walkthrough with a connector you control.
+
 Throwaway home recommended: `export AGENTD_HOME=/tmp/agentd-demo` (or `agentd --home …` on every command).
 
 ## 0. Build

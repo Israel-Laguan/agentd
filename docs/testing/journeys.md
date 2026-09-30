@@ -313,9 +313,9 @@ already uses, and preferred over a body-supplied value); and appending
 stable prefix, so anonymous prompts are byte-identical to before.
 
 There was also no way to *observe* the prompt: the devenv mock logged only
-correlation metadata, which is how `scripts/demo/memory-recall.sh` ended up
-simulating its own success in Python. The mock now appends every request body
-to a JSONL log, served back at `GET /requests`.
+correlation metadata, which is how the old memory-recall demo script (deleted
+in T-025) ended up simulating its own success in Python. The mock now appends
+every request body to a JSONL log, served back at `GET /requests`.
 
 ### J09 (fixed in the devenv fixture): the faults profile could never trip the breaker
 

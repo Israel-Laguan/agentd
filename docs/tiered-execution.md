@@ -8,7 +8,7 @@
 
 Spend strong models only where judgment is scarce. For **hard** tasks, split execution into typed steps with different model tiers and **sealed artifacts**, so cheap models gather and apply while mid/strong models decide, verify, and escalate — without relying on “don’t search again” prompts.
 
-Save **money and wall-clock**. Soft prompt discipline is not the mechanism. Wall-clock is a design target; fixture-derived durations are not provider latency (see [M5](#m5--costlatency-harness-t-018-rebuilt-in-t-020)).
+Save **money and wall-clock**. Soft prompt discipline is not the mechanism. Wall-clock is a design target; fixture-derived durations are not provider latency (see [M5](#m5--costlatency-comparison-illustrative-only)).
 
 ---
 
@@ -270,13 +270,20 @@ Instead, `Worker.CommitTextWithProfile` intercepts execute/verify output **befor
 
 ---
 
-## M5 — Cost/latency harness (T-018, rebuilt in T-020)
+## M5 — Cost/latency comparison (illustrative only)
 
-**As implemented (T-020):** T-018 shipped a harness with `BASELINE_TOKENS=13000`, `BASELINE_WALL_TIME=45`, `TIERED_WALL_TIME=28` hardcoded as bash constants — arithmetic over guessed inputs, not a run of anything. `scripts/demo/tiered-harness.sh` was rewritten to read seeded mock-LLM fixture responses from `scripts/demo/fixtures/{baseline,context,decision,execute,verify}.json` (one file per step, each with `model_tier`, `input_tokens`, `output_tokens`, `duration_ms`, and the actual mock response payload) and derive every total from them via `jq`/`bc`. No aggregate constant is hardcoded in the script; `--fixtures-dir` can point at a different seeded fixture set entirely.
+**Status: illustrative — not a measurement.** T-018 shipped a harness with
+`BASELINE_TOKENS=13000`, `BASELINE_WALL_TIME=45`, `TIERED_WALL_TIME=28`
+hardcoded as bash constants — arithmetic over guessed inputs, not a run of
+anything. It was rebuilt in T-020 to derive totals from seeded mock-LLM fixture
+responses, and the harness script itself was deleted in T-025 once the journey
+suite covered the behaviour it was meant to prove. No harness exists in the
+tree today.
 
-### Demo script and metrics
-
-Run `./scripts/demo/tiered-harness.sh` to compare. With the fixtures committed under `scripts/demo/fixtures/`:
+The table below is retained **only as an illustration of the tiering shape**
+(cheap models for context/execute, mid models for decision/verify, most token
+weight where it belongs). The numbers are seeded fixture values, not
+measurements:
 
 | Metric | Baseline (strong) | Tiered | Savings |
 | --- | --- | --- | --- |
@@ -284,26 +291,15 @@ Run `./scripts/demo/tiered-harness.sh` to compare. With the fixtures committed u
 | **Cost** | $0.1950 | $0.0253 | **87%** |
 | **Wall time (fixture duration)** | 41,000ms | 25,500ms | 37.8% |
 
-These are the fixture files' seeded numbers as of this writing — re-run the script for the current numbers rather than trusting this table if the fixtures change.
-
-**Pricing table (offline proxy, a rate assumption applied to fixture token counts — not itself measured):**
+**Pricing (offline proxy, a rate assumption applied to fixture token counts — not itself measured):**
 
 - Small model: $0.001 / 1k tokens
 - Mid model: $0.005 / 1k tokens
 - Strong model: $0.015 / 1k tokens
 
-**Output:** JSON results file (`--output`, default `./tiered-harness-results.json`) with per-step breakdown, token counts, cost, wall time, and the verify step's classified outcome.
-
-### Offline proxy semantics
-
-The script never calls a real provider — it reads seeded fixture files and sums them. `duration_ms` in the fixtures is a seeded stand-in for wall time, not a measurement of anything; the output JSON's `note` field says so explicitly, and the script's console output is headed "mock/offline" throughout.
-
-Never report these figures as measured production costs or latencies — they illustrate the tiering shape (cheap models for context/execute, mid models for decision/verify, most token weight where it belongs) under one fixed, reproducible fixture set. A real measurement requires wiring the harness to an actual provider call, which is out of scope here (see T-020's explicit out-of-scope list: "Real (non-mock) LLM cost harness runs against a live provider").
-
-### Success criteria for M5
-
-- ✓ Fixed, seeded fixture set defined and reproducible (`scripts/demo/fixtures/`)
-- ✓ Script derives every total from the fixtures — no hardcoded aggregate constants
-- ✓ Cost comparison shows measurable token/$ improvement
-- ✓ Results documented and linked from this spec
-- ✓ Script runs offline (no real API calls)
+Never report these figures as measured production costs or latencies. A real
+measurement requires wiring a harness to an actual provider call, which is out
+of scope (see T-020's explicit out-of-scope list: "Real (non-mock) LLM cost
+harness runs against a live provider"). Tiered execution itself is proven by
+the e2e journey suite (`make test-e2e`); J12 (escalation on verify failure)
+is deferred until the mock LLM gains per-request scenario selection (T-028).
