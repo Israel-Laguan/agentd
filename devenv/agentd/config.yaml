@@ -41,3 +41,10 @@ healing:
   enabled: false
   outage_handoff_enabled: false
 
+# MCP board tools, enabled so the J15 journey can exercise /mcp. Off by
+# default in the product (mcp.enabled defaults to false, transport stdio);
+# the HTTP transport rides on api.address above — there is no separate
+# listener, so mcp.http_addr is deliberately not set here.
+mcp:
+  enabled: true
+  transport: http
