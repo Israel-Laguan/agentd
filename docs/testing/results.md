@@ -88,3 +88,55 @@ Bugs found and fixed this cycle:
 - J14 only checked that a `TOKEN_USAGE` row existed; it now checks the recorded token count and fails on a dropped write.
 
 Not covered: P1/P2 journeys (J05, J06, J12, J13, J15) are not implemented.
+
+### T-027 cycle: P1 journeys (2026-09-30)
+
+Command: `make dev-clean dev-up`, then `make test-e2e` (`-count=1`) twice on
+the same stack.
+
+| Run | Stack | Result |
+| --- | --- | --- |
+| 1 | clean (`dev-clean`) | 14/14 pass (11 P0 + J05, J13, J15) |
+| 2 | same stack, no reset | 14/14 pass |
+
+Journeys implemented this cycle: **J05** (materialization edge cases), **J13**
+(OpenAI-compatible intake), **J15** (MCP board export). Deferred with reasons
+in `docs/testing/journeys.md`: **J06** (needs a browser; two of its three
+expected events do not exist) and **J12** (blocked on T-028 per-request mock
+scenarios).
+
+Every P1 spec entry had to be corrected against the running stack before it
+could be tested — all three described behaviour the product does not have:
+
+- **J05** said materialize returns 409 for a not-ready workspace. It never
+  does: it accepts the plan and returns PENDING tasks, and 409 is what
+  `workspace/ready` answers while the workspace is empty. The journey now
+  pins that split, plus double-ready as idempotent 200.
+- **J13** claimed only "parsed as OpenAI intake". The handler also takes
+  `tools` / `tool_choice` / `stream` and emits `tool_calls` only for a tool
+  the client declared. `usage` is `omitempty` and never populated, so the
+  journey reports it rather than requiring it.
+- **J15** named `POST /api/v1/mcp/export` returning all tasks "with outputs".
+  There is no such route: the board is a JSON-RPC 2.0 MCP server over
+  Streamable HTTP at `POST /mcp`, MCP is off by default (the route is not even
+  registered on a stock config), `board.list_tasks` silently caps at 100
+  tasks, and no tool exposes task outputs. `docs/mcp-board-export.md` now
+  specifies the actual wire format.
+
+Bugs found this cycle:
+
+- **B-004** (fixed): a bad `source_path` returned 500 and left the project and
+  task rows persisted — an orphan project whose PENDING tasks could never be
+  unlocked, with no route to delete it. `ProjectService.MaterializePlan`
+  committed before seeding; it now validates the path first and answers 400.
+  Covered by `TestMaterializeRejectsBadSourcePathBeforePersisting` and J05.
+- **B-005** (open): `board.list_tasks` without `project_id` silently truncates
+  at 100 tasks with no total or cursor. Verified live: a 101-task project
+  exported as exactly 100 board-wide, 101 with `project_id`.
+- **B-006** (open): `board.list_tasks` ignores `state` when `project_id` is
+  also passed. Verified live: `state=FAILED` on a project of COMPLETED tasks
+  returned both tasks; the same filter without `project_id` returned none.
+
+Also: `test/e2e/chat-kanban.sh` deleted (superseded by J04 and J07), and
+`docs/testing/qa-and-browser-verification.md` / `docs/architecture/repo-layout.md`
+repointed. `devenv/agentd/config.yaml` gains `mcp.enabled: true` for J15.
