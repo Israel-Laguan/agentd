@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
 
@@ -79,5 +82,54 @@ func TestRouterCascadesToSecondaryWhenPrimaryFails(t *testing.T) {
 	}
 	if resp.Content != "cascade success" {
 		t.Fatalf("Content = %q, want cascade success", resp.Content)
+	}
+}
+
+// TestNewRouterFromConfigsCascadesToLiveSecondary is the real-adapter half of
+// T-025 Part A: NewRouterFromConfigs with a dead primary (http://127.0.0.1:1)
+// and an httptest.Server secondary. The cascade must reach the secondary over
+// HTTP and ProviderUsed must be "secondary".
+func TestNewRouterFromConfigsCascadesToLiveSecondary(t *testing.T) {
+	var secondaryHits int
+	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		secondaryHits++
+		if r.URL.Path != "/v1/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id": "chatcmpl-beat2",
+			"object": "chat.completion",
+			"created": 1760000000,
+			"model": "mock-secondary",
+			"choices": [{"index": 0, "message": {"role": "assistant", "content": "fallback ok"}, "finish_reason": "stop"}],
+			"usage": {"total_tokens": 3}
+		}`))
+	}))
+	defer secondary.Close()
+
+	router, err := NewRouterFromConfigs([]spec.ProviderConfig{
+		{Name: "primary", Adapter: "openai", BaseURL: "http://127.0.0.1:1/v1", Model: "primary-model"},
+		{Name: "secondary", Adapter: "openai", BaseURL: secondary.URL + "/v1", Model: "secondary-model"},
+	})
+	if err != nil {
+		t.Fatalf("NewRouterFromConfigs() error = %v", err)
+	}
+
+	resp, err := router.Generate(context.Background(), AIRequest{
+		Messages: []PromptMessage{{Role: "user", Content: "beat2 cascade"}},
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v, want success via secondary", err)
+	}
+	if resp.ProviderUsed != "secondary" {
+		t.Fatalf("ProviderUsed = %q, want secondary", resp.ProviderUsed)
+	}
+	if resp.Content != "fallback ok" {
+		t.Fatalf("Content = %q, want %q", resp.Content, "fallback ok")
+	}
+	if secondaryHits == 0 {
+		t.Fatal("secondary server received no requests")
 	}
 }
