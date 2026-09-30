@@ -212,7 +212,7 @@ services:
       AGENTD_API_ADDRESS: "0.0.0.0:8770"
     volumes:
       - agentd-data-brk:/home/agentd-brk
-      - ./agentd/config.brk.yaml:/etc/agentd/config.yaml:ro
+      - ./agentd/config.breaker.yaml:/etc/agentd/config.yaml:ro
     depends_on:
       litellm:
         condition: service_healthy
