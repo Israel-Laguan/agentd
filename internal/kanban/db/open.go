@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ const schemaFile = "schema.sql"
 // Open opens a SQLite database, applies operational pragmas, and runs schema
 // migrations. The caller owns the returned database handle.
 func Open(path string, projectsDir string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", connectionDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
 	}
@@ -34,6 +35,34 @@ func Open(path string, projectsDir string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// connectionPragmas are applied by the driver to every pooled connection.
+// busy_timeout and foreign_keys are per-connection settings, so running them
+// once through the pool leaves every other connection with a 0ms busy timeout
+// and writes failing immediately with SQLITE_BUSY under contention.
+var connectionPragmas = []string{
+	"foreign_keys(1)",
+	"busy_timeout(5000)",
+	"synchronous(NORMAL)",
+}
+
+// connectionDSN appends the per-connection pragmas to path, which may be a
+// plain file path or a file: URI that already carries query parameters.
+func connectionDSN(path string) string {
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	var b strings.Builder
+	b.WriteString(path)
+	for _, p := range connectionPragmas {
+		b.WriteString(sep)
+		b.WriteString("_pragma=")
+		b.WriteString(url.QueryEscape(p))
+		sep = "&"
+	}
+	return b.String()
 }
 
 func initialize(db *sql.DB, projectsDir string) error {
