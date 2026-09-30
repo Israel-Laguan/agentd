@@ -33,8 +33,13 @@ test:
 #
 # The full suite is slow: J08 alone waits out a ~2m recovery window, and J10
 # holds for several watchdog passes to prove dedup.
+#
+# -count=1 disables Go's test result cache, which silently masks reruns (e.g.,
+# run 2 with `-count=1 removed` would report "ok (cached)" in 0s, hiding a
+# real second invocation). This is mandatory when running the suite repeatedly
+# to verify flakiness fixes.
 test-e2e: dev-up
-	$(GO_ENV) $(GO) test -v -race -tags=e2e -timeout=1800s ./test/e2e/...
+	$(GO_ENV) $(GO) test -v -race -tags=e2e -count=1 -timeout=1800s ./test/e2e/...
 
 # Compile (but don't run) per-package test binaries, e.g. for a debugger that
 # needs a standalone `go test -c` binary. Output is scoped to bin/test/ (git-
