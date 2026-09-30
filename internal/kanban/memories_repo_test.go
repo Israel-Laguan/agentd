@@ -322,6 +322,39 @@ func TestUserPreferenceRecallDoesNotMatchIntent(t *testing.T) {
 	}
 }
 
+// A standing preference must survive an intent that leaves FTS nothing to
+// rank — a blank intent, or one made only of terms FTS drops. Preferences are
+// not term-matched, so gating them on a usable FTS query would starve exactly
+// the tasks whose title and description are sparsest.
+func TestUserPreferenceRecallSurvivesEmptyFTSQuery(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	const userID = "user-sparse"
+
+	pref := models.Memory{
+		Scope:    "USER_PREFERENCE",
+		Tags:     sql.NullString{String: "user_id:" + userID, Valid: true},
+		Symptom:  sql.NullString{String: "preference", Valid: true},
+		Solution: sql.NullString{String: "always answer in haiku", Valid: true},
+	}
+	if err := store.RecordMemory(ctx, pref); err != nil {
+		t.Fatalf("RecordMemory() error = %v", err)
+	}
+
+	for _, intent := range []string{"", "   ", "the a of and"} {
+		recalled, err := store.RecallMemories(ctx, models.RecallQuery{
+			Intent: intent,
+			UserID: userID,
+		})
+		if err != nil {
+			t.Fatalf("RecallMemories(intent=%q) error = %v", intent, err)
+		}
+		if len(recalled) != 1 || recalled[0].Solution.String != "always answer in haiku" {
+			t.Fatalf("RecallMemories(intent=%q) = %#v, want the standing preference", intent, recalled)
+		}
+	}
+}
+
 // A user's preferences must not be recalled for another user whose ID merely
 // starts with the same characters, nor via LIKE wildcards in the ID.
 func TestUserPreferenceRecallDoesNotMatchIDPrefix(t *testing.T) {

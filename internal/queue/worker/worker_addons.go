@@ -90,7 +90,7 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
-	if _, err := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
+	if _, err := w.updateTaskResult(ctx, task, models.TaskResult{
 		Success: true,
 		Payload: fmt.Sprintf("planned next phase with %d tasks", len(created)),
 	}); err != nil {

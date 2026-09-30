@@ -70,12 +70,12 @@ func (h ProjectHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 	}
 	// The requesting identity scopes execution-time memory recall to that
 	// user's saved preferences (see the X-Agentd-User header the chat
-	// endpoint already reads). A body-supplied user_id is ignored in favour
-	// of the header so the identity always comes from the authenticated
-	// edge, not from caller-controlled payload.
-	if userID := strings.TrimSpace(r.Header.Get("X-Agentd-User")); userID != "" {
-		plan.UserID = userID
-	}
+	// endpoint already reads). It is assigned unconditionally, not only when
+	// non-empty: a body-supplied user_id would otherwise survive into the
+	// project and let a caller pick whose preferences get recalled. Blank
+	// header means no preferences, which is the same outcome as an empty
+	// DraftPlan.UserID.
+	plan.UserID = strings.TrimSpace(r.Header.Get("X-Agentd-User"))
 	if h.Service == nil {
 		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "project service not configured")
 		return

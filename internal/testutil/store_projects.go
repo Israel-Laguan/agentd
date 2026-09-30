@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"path/filepath"
+	"strings"
 
 	"agentd/internal/models"
 )
@@ -19,6 +20,7 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 		Name:          plan.ProjectName,
 		OriginalInput: plan.Description,
 		WorkspacePath: filepath.Join(s.projectsDir, projectID),
+		UserID:        strings.TrimSpace(plan.UserID),
 	}
 	s.projects[project.ID] = project
 	tempToID := make(map[string]string, len(plan.Tasks))

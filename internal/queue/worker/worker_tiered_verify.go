@@ -138,7 +138,7 @@ func (w *Worker) processTieredEscalateStep(ctx context.Context, task models.Task
 	}
 	if !result.IsTerminalSuccess() {
 		w.Emit(ctx, task, "TIERED_ESCALATE_FAILED", result.Status.String())
-		if _, err := w.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{
+		if _, err := w.updateTaskResult(ctx, task, models.TaskResult{
 			Success: false,
 			Payload: "tiered escalation attempt failed: " + result.Status.String(),
 		}); err != nil {

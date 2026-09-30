@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -131,6 +132,38 @@ func TestCommitSucceededNoBroadcastOnUpdateFailure(t *testing.T) {
 	}
 	if got := resultEventCount(sink); got != 0 {
 		t.Fatalf("broadcast RESULT events = %d, want 0 (nothing was persisted, so nothing may be announced)", got)
+	}
+}
+
+// TestEvictBroadcastsResult covers the failure side of the same gap: evict
+// writes a RESULT event through the store transaction, so live subscribers
+// need it too — otherwise the board shows a task as running right up to the
+// moment it becomes FAILED_REQUIRES_HUMAN.
+func TestEvictBroadcastsResult(t *testing.T) {
+	store := testutil.NewFakeStore()
+	sink := &broadcastSink{}
+	w := &Worker{store: store, sink: sink, maxRetries: 1}
+	task := seedCommitTask(t, store)
+
+	w.evict(context.Background(), task, "boom")
+
+	if got := resultEventCount(sink); got != 1 {
+		t.Fatalf("broadcast RESULT events = %d, want 1 (eviction is a terminal result subscribers must see)", got)
+	}
+}
+
+// TestFailHardBroadcastsResult covers the FailHard path, which records a
+// terminal result without any further state transition.
+func TestFailHardBroadcastsResult(t *testing.T) {
+	store := testutil.NewFakeStore()
+	sink := &broadcastSink{}
+	w := &Worker{store: store, sink: sink}
+	task := seedCommitTask(t, store)
+
+	w.FailHard(context.Background(), task, errors.New("gateway down"))
+
+	if got := resultEventCount(sink); got != 1 {
+		t.Fatalf("broadcast RESULT events = %d, want 1", got)
 	}
 }
 
