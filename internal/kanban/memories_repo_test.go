@@ -11,11 +11,6 @@ import (
 	"agentd/internal/models"
 )
 
-// FormatPreferences wraps the recall.FormatPreferences for test use.
-func FormatPreferences(memories []models.Memory) string {
-	return memory.FormatPreferences(memories)
-}
-
 func TestRecordAndListMemories(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
@@ -242,7 +237,7 @@ func TestUserPreferenceRecall(t *testing.T) {
 	}
 
 	// FormatPreferences should include the preference
-	formatted := FormatPreferences([]models.Memory{recalled1[0]})
+	formatted := memory.FormatPreferences([]models.Memory{recalled1[0]})
 	if !strings.Contains(formatted, "use bullet format only") {
 		t.Fatalf("FormatPreferences output = %q, want to include the solution", formatted)
 	}
@@ -324,5 +319,42 @@ func TestUserPreferenceRecallDoesNotMatchIntent(t *testing.T) {
 	}
 	if len(recalled) != 1 || recalled[0].Solution.String != "always answer in haiku" {
 		t.Fatalf("recalled = %#v, want the standing preference regardless of intent", recalled)
+	}
+}
+
+// A user's preferences must not be recalled for another user whose ID merely
+// starts with the same characters, nor via LIKE wildcards in the ID.
+func TestUserPreferenceRecallDoesNotMatchIDPrefix(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	record := func(tags, solution string) {
+		t.Helper()
+		err := store.RecordMemory(ctx, models.Memory{
+			Scope:    "USER_PREFERENCE",
+			Tags:     sql.NullString{String: tags, Valid: true},
+			Symptom:  sql.NullString{String: "preference", Valid: true},
+			Solution: sql.NullString{String: solution, Valid: true},
+		})
+		if err != nil {
+			t.Fatalf("RecordMemory(%q) error = %v", tags, err)
+		}
+	}
+	record("user_id:alice2,pref", "alice2 private preference")
+	record("user_id:alice", "alice own preference")
+
+	for _, userID := range []string{"alice", "ali%", "alic_"} {
+		got, err := store.RecallMemories(ctx, models.RecallQuery{Intent: "unrelated", UserID: userID})
+		if err != nil {
+			t.Fatalf("RecallMemories(%q) error = %v", userID, err)
+		}
+		for _, m := range got {
+			if m.Solution.String == "alice2 private preference" {
+				t.Fatalf("RecallMemories(%q) leaked alice2's preference", userID)
+			}
+			if userID != "alice" && m.Solution.String == "alice own preference" {
+				t.Fatalf("RecallMemories(%q) matched alice's preference via wildcard", userID)
+			}
+		}
 	}
 }

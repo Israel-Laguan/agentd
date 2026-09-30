@@ -21,11 +21,9 @@ import (
 
 type mockAgenticSandbox struct {
 	results map[string]sandbox.Result
-	called  bool
 }
 
 func (s *mockAgenticSandbox) Execute(ctx context.Context, p sandbox.Payload) (sandbox.Result, error) {
-	s.called = true
 	if res, ok := s.results[p.Command]; ok {
 		return res, nil
 	}
