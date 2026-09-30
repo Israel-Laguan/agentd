@@ -301,5 +301,4 @@ Never report these figures as measured production costs or latencies. A real
 measurement requires wiring a harness to an actual provider call, which is out
 of scope (see T-020's explicit out-of-scope list: "Real (non-mock) LLM cost
 harness runs against a live provider"). Tiered execution itself is proven by
-the e2e journey suite (`make test-e2e`); J12 (escalation on verify failure)
-is deferred until the mock LLM gains per-request scenario selection (T-028).
+the e2e journey suite (`make test-e2e`); see `TestJ12_TieredExecution`.

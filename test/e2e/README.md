@@ -85,15 +85,11 @@ The journey suite is defined in [docs/testing/journeys.md](../../docs/testing/jo
   JSON-RPC over Streamable HTTP at `POST /mcp`, **not** a REST export route,
   and every tool payload is a JSON string in `content[0].text`. Requires
   `mcp.enabled: true` (set in devenv/agentd/config.yaml; the product default
-  is off). Two open contract limits are documented in
-  docs/mcp-board-export.md and filed as B-005 (silent 100-task cap) and B-006
-  (`state` ignored when `project_id` is passed)
+  is off).
 
 Deferred (see docs/testing/journeys.md for the policy and re-entry conditions):
 - **J06**: task drawer event log — needs a browser (UI journeys move to
   Phase 2), and two of its three expected events do not exist at all
-- **J12**: tiered execution — blocked on T-028 per-request mock scenarios and
-  tiered verify replies; the `tiered` profile fixture already exists
 
 ## Architecture
 
@@ -187,7 +183,7 @@ Devenv supports multiple configurations via profiles in `devenv/compose.yaml`:
 | faults | Provider cascade (J09-A) | agentd-faults | gateway.order: [dead, secondary] |
 | breaker | Breaker trip (J09-B) | agentd-brk | gateway.order: [dead, dead2] (all dead) |
 | disk | Disk watchdog (J10) | agentd-disk | disk.free_threshold_percent: 100 + a crontab with `@every 5s disk-watchdog` |
-| tiered | Tiered execution (J12, deferred) | agentd-tiered | tiered.enabled: true |
+| tiered | Tiered execution (J12) | agentd-tiered | tiered.enabled: true |
 
 The `default` profile also sets `mcp.enabled: true` / `transport: http` so
 J15 can reach `/mcp`; the product default is off.
@@ -269,10 +265,8 @@ The mock LLM is published on `127.0.0.1:8000` for J11's request capture.
    automate the warmup-on/off log check
 2. **J06**: needs a browser test tier; also blocked on the task-lifecycle
    events it expects actually existing
-3. **J12**: blocked on T-028 (per-request `@scenario=` selection and tiered
-   verify replies)
-4. **Add mock scenario injection**: Parse @scenario= tags in requests (T-028)
-5. **Tighten J08** once boot reconcile stops skipping PID-1 tasks
+3. **Add mock scenario injection**: Parse @scenario= tags in requests (T-028)
+4. **Tighten J08** once boot reconcile stops skipping PID-1 tasks
 
 All ten P0 journeys (J01-J04, J07-J11, J14) and the three implemented P1
 journeys (J05, J13, J15) pass. See
