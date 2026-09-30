@@ -394,8 +394,6 @@ Re-entry condition: T-028 lands per-request scenario selection.
 
 ## Todos for T-026, T-027, T-028
 
-**T-026** (harness): done. `test/e2e/` runs behind `//go:build e2e`; `make test-e2e` brings up every profile and waits for healthy.
-
 **T-027** (run and triage): done. P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; P1 journeys J05, J13 and J15 are implemented and passing, and J06 and J12 are deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`. Filed but not fixed: B-001, B-002, B-003, B-005, B-006. `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 pass. Cycle entries are in `results.md`.
 
 **T-028** (mock scenarios): partly done. Request capture (`GET /requests`) and the published mock port exist. No per-request scenario selection, error/latency responses or tiered verify replies yet; none of the P0 journeys needed them (J09's breaker half uses an all-dead provider profile), and the three P1 journeys added on 2026-09-30 did not either. **J12 is the only remaining consumer** and is deferred until this lands.
