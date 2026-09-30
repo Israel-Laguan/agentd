@@ -56,6 +56,9 @@ func TestMaxLinesFor(t *testing.T) {
 	if got := maxLinesFor("internal/foo.go", 300); got != 300 {
 		t.Fatalf("default limit = %d, want 300", got)
 	}
+	if got := maxLinesFor("devenv/mockllm/server.py", 300); got != 500 {
+		t.Fatalf("devenv limit = %d, want 500", got)
+	}
 }
 
 func TestExcluded(t *testing.T) {
