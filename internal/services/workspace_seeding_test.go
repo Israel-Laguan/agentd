@@ -425,7 +425,6 @@ func TestMaterializeRejectsBadSourcePathBeforePersisting(t *testing.T) {
 				t.Fatalf("err = %v, want it to mention %q", err, tc.wantErr)
 			}
 
-			// The whole point: nothing was persisted.
 			projects, listErr := store.ListProjects(context.Background())
 			if listErr != nil {
 				t.Fatalf("ListProjects: %v", listErr)
