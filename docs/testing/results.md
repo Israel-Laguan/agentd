@@ -69,3 +69,23 @@ Additional observations:
   `FAILED_REQUIRES_HUMAN` after auto-retries. See troubleshooting below for why.
 
 ---
+
+### T-027 cycle: P0 journeys (2026-09-29)
+
+Command: `make dev-clean dev-up`, then `make test-e2e` (`-count=1`).
+
+| Run | Stack | Result |
+| --- | --- | --- |
+| 1-3 | clean (`dev-clean`) | 11/11 pass |
+| 4 | reused, one prior run of state | 11/11 pass |
+| 5-8 | one stack, no reset (0 -> 26 projects) | 11/11 pass each |
+
+Bugs found and fixed this cycle:
+
+- SQLite pragmas (`busy_timeout`, `foreign_keys`) were applied to one pooled connection only, so other connections dropped writes on `SQLITE_BUSY`, including `TOKEN_USAGE` rows. Now DSN parameters. Zero `SQLITE_BUSY` across the 8-container logs of the 4 accumulating runs; `TOKEN_USAGE` rows durable and monotonic.
+- Startup race: agentd dispatched to litellm before it accepted connections, tripping the breaker for 5 minutes and stalling every later journey. `dev-up` now waits for healthy; J11 resets the breaker.
+- `make test-e2e` could report `ok (cached)` for a repeat run. Now `-count=1`.
+- J14 only checked that a `TOKEN_USAGE` row existed; it now checks the recorded token count and fails on a dropped write.
+
+Not covered: P1/P2 journeys (J05, J06, J12, J13, J15) are not implemented.
+

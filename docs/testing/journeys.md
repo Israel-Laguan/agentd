@@ -350,8 +350,8 @@ For P1/P2 journeys (J05, J06, J12, J13, J15):
 
 ## Todos for T-026, T-027, T-028
 
-**T-026** ✓ COMPLETE: Implement test/e2e package with setup/teardown (devenv profile startup, mock scenario injection).
+**T-026** (harness): done. `test/e2e/` runs behind `//go:build e2e`; `make test-e2e` brings up every profile and waits for healthy.
 
-**T-027** ✓ COMPLETE: Execute all P0 journeys on clean devenv stack twice (and 4× under stress); triage failures into bugs or deferrals. All 11 journeys pass; 4 defects found and fixed (SQLite pragmas, J09 profiles, J10 crontab, J11 product gap).
+**T-027** (run and triage): P0 half done — all P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; four defects found and fixed (SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap). Still open: implement or defer J05, J06, J12, J13, J15 (each with a reason or a `B-` bug), append a cycle entry per run to `results.md`, and delete `test/e2e/chat-kanban.sh` now that J04 and J07 pass.
 
-**T-028** (mock scenarios): Implement mock LLM scenario selection per table above; ensure cascade, breaker, tiered scenarios work. (Deferred to P1 scope.)
+**T-028** (mock scenarios): partly done. Request capture (`GET /requests`) and the published mock port exist. No per-request scenario selection, error/latency responses or tiered verify replies yet; none of the P0 journeys needed them (J09's breaker half uses an all-dead provider profile). J12 is what needs them.
