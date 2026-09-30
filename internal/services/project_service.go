@@ -42,6 +42,18 @@ func (s *ProjectService) MaterializePlan(
 	plan.WorkspacePending = sourcePath != "" || !plan.StartEmptyWorkspace
 	plan.SourcePath = sourcePath
 
+	// Validate source_path before persisting anything. store.MaterializePlan
+	// commits the project and task rows in its own transaction, and the seed
+	// happens after that, so a bad path would otherwise return 500 and leave
+	// an orphan project with PENDING tasks that nothing can ever unlock.
+	// Wrapping in ErrInvalidDraftPlan maps to 400 VALIDATION.
+	if plan.SourcePath != "" {
+		if _, err := sandbox.ValidateSourcePath(plan.SourcePath); err != nil {
+			slog.Warn("materialize plan: invalid source_path", "source_path", plan.SourcePath, "error", err)
+			return nil, nil, fmt.Errorf("%w: source_path: %w", models.ErrInvalidDraftPlan, err)
+		}
+	}
+
 	project, tasks, err := s.store.MaterializePlan(ctx, plan)
 	if err != nil {
 		slog.Error("materialize plan failed", "error", err, "project_name", plan.ProjectName)

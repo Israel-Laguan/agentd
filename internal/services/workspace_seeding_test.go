@@ -2,8 +2,10 @@ package services_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"agentd/internal/models"
@@ -365,5 +367,74 @@ func TestClaimDoesNotReturnPendingTasks(t *testing.T) {
 	}
 	if len(claimed) != 1 {
 		t.Fatalf("claimed %d tasks after unlock, want 1", len(claimed))
+	}
+}
+
+// TestMaterializeRejectsBadSourcePathBeforePersisting pins the fix for the
+// journey J05 finding: a bad source_path used to fail *after* the project and
+// task rows were committed, returning 500 and leaving an orphan project whose
+// PENDING tasks could never be unlocked (its workspace is empty, so
+// workspace/ready 409s forever).
+func TestMaterializeRejectsBadSourcePathBeforePersisting(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T) string
+		wantErr string
+	}{
+		{
+			name:    "nonexistent directory",
+			setup:   func(t *testing.T) string { return filepath.Join(t.TempDir(), "does-not-exist") },
+			wantErr: "stat source path",
+		},
+		{
+			name: "path is a file",
+			setup: func(t *testing.T) string {
+				path := filepath.Join(t.TempDir(), "not-a-dir.txt")
+				if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return path
+			},
+			wantErr: "source_path must be a directory",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			wsRoot := t.TempDir()
+			store := testutil.NewFakeStore()
+			store.SetProjectsDir(wsRoot)
+			svc := services.NewProjectService(store, &sandbox.FSWorkspaceManager{Root: wsRoot})
+
+			_, _, err := svc.MaterializePlan(context.Background(), models.DraftPlan{
+				ProjectName: "bad-source",
+				SourcePath:  tc.setup(t),
+				Tasks:       []models.DraftTask{{Title: "T1"}},
+			})
+			if err == nil {
+				t.Fatal("MaterializePlan: want error for a bad source_path, got nil")
+			}
+			if !errors.Is(err, models.ErrInvalidDraftPlan) {
+				t.Fatalf("err = %v, want it to wrap ErrInvalidDraftPlan so the API maps to 400", err)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("err = %v, want it to mention %q", err, tc.wantErr)
+			}
+
+			// The whole point: nothing was persisted.
+			projects, listErr := store.ListProjects(context.Background())
+			if listErr != nil {
+				t.Fatalf("ListProjects: %v", listErr)
+			}
+			for _, p := range projects {
+				if p.Name == "bad-source" {
+					t.Fatalf("project %q was persisted despite the rejected source_path (orphan project)", p.Name)
+				}
+			}
+		})
 	}
 }
