@@ -86,11 +86,10 @@ Loopback binding is currently the only thing limiting that.
 Two caveats on `board.list_tasks`, both open bugs:
 
 - **Without `project_id` the list is capped at 100 tasks**, silently — no
-  total, no cursor, no truncation flag ([B-005](../../tasks/backlog/bugs/B-005-mcp-list-tasks-silent-100-task-cap.md)).
+  total, no cursor, no truncation flag ([B-005](../tasks/backlog/bugs/B-005-mcp-list-tasks-silent-100-task-cap.md)).
   With `project_id` there is no cap at all.
 - **The `state` filter is ignored when `project_id` is also passed**; only one
-  of the two is applied ([B-006](../../tasks/backlog/bugs/B-006-mcp-list-tasks-ignores-state-filter-with-project-id.md)).
-
+  of the two is applied ([B-006](../tasks/backlog/bugs/B-006-mcp-list-tasks-ignores-state-filter-with-project-id.md)).
 
 ### Write tools (gated)
 

@@ -1,15 +1,26 @@
-# Harness reliability demos
+# Harness reliability journeys
 
 Prove the **house**, not the coding model. Positioning: [why-agentd.md](why-agentd.md), plan Phase 2: [product-plan.md](product-plan.md).
 
 Governance demo (approve → board → connector HUMAN) lives in [demo.md](demo.md) — do that **first**. Do not re-prove dead-`base_url` HUMAN here.
 
-Helper scripts: [`restart-mid-task.sh`](../scripts/demo/restart-mid-task.sh) (Beat 1), [`provider-fallback.sh`](../scripts/demo/provider-fallback.sh) (Beat 2), [`disk-watchdog.sh`](../scripts/demo/disk-watchdog.sh) (Beat 2.3), [`memory-recall.sh`](../scripts/demo/memory-recall.sh) (Beat 2.4).
+These beats are proven by the e2e journey suite, not by helper scripts: each beat
+below names the journey that covers it. Run everything with `make test-e2e`
+(brings up the `devenv/` stack on rootless Podman and runs the suite). Journey
+specs, pass criteria and gotchas: [journeys.md](testing/journeys.md).
+
+| Beat | Journey | What it proves |
+| --- | --- | --- |
+| Beat 1 — Restart mid-task | **J08** (`TestJ08_UncleanKillRecovery`) | Unclean kill mid-task, restart on the same home, no stuck `RUNNING` |
+| Beat 2 — Provider fallback / breaker | **J09** (`TestJ09_ProviderCascade`, `TestJ09_BreakerOpens`) | Cascade to a live secondary; breaker OPEN + HUMAN handoff when every provider is dead |
+| Beat 2.3 — Disk / resource watchdog | **J10** (`TestJ10_DiskWatchdogDedup`) | One deduped HUMAN "Disk space critical" task below threshold |
+| Beat 2.4 — Memory recall | **J11** (`TestJ11_PreferenceRecallOnLaterTask`) | A saved preference is recalled and shown to the agent on a later task |
 
 ## Beat 1 (S02) — Restart mid-task
 
-**Chosen in** SP-001.  
-**Tickets:** T-006a (this doc/script), T-006b (tests).
+**Chosen in** SP-001.
+**Tickets:** T-006a (this beat), T-006b (tests).
+**Journey:** J08 in [journeys.md](testing/journeys.md) — `make test-e2e`.
 
 ### Beat 1 — Pass criteria
 
@@ -24,42 +35,15 @@ After an **unclean** kill of `agentd` while work is in flight (or claimed), then
 
 Ghost/stale reconcile (`ReconcileGhostTasks` / `ReconcileStaleTasks` + heartbeat loop) is the mechanism under test — see `internal/queue/features/ghost_reconciliation.feature` and `heartbeat_reconciliation.feature`.
 
-### Beat 1 — Prerequisites
-
-- `make build` → `./bin/agentd`
-- Throwaway home recommended: `export AGENTD_HOME=/tmp/agentd-restart-demo`
-- A configured provider so `start` comes up (LiteLLM/Poolside/mock, **or** a dummy openai-compatible slot — see script `prepare`). Empty keys → process exits with `no LLM providers available` (SP-004).
-
 ### Beat 1 — Operator sequence
 
 ```sh
-export AGENTD_HOME=/tmp/agentd-restart-demo
-export API_ADDR=127.0.0.1:18765   # must match config api.address
-
-# A) home + daemon (dummy upstream is enough to listen)
-./scripts/demo/restart-mid-task.sh prepare
-
-# B) put a task on the board (pick one):
-#    - follow docs/demo.md ask→approve→workspace/ready with a working connector, or
-#    - materialize a DraftPlan via POST /api/v1/projects/materialize, seed workspace, POST …/workspace/ready
-# Optional: leave a worker RUNNING by using a slow/mock LLM.
-
-PROJECT_ID=…   # from GET /api/v1/projects
-
-# C) before
-./scripts/demo/restart-mid-task.sh status
-curl -sS "http://${API_ADDR}/api/v1/projects/$PROJECT_ID/tasks"
-
-# D) unclean stop + same-home start
-./scripts/demo/restart-mid-task.sh cycle
-# equivalent:
-#   kill -KILL "$(pgrep -f "./bin/agentd --home $AGENTD_HOME start")"
-#   ./bin/agentd --home "$AGENTD_HOME" start --skip-llm-warmup
-
-# E) after — assert pass criteria
-curl -sS "http://${API_ADDR}/api/v1/projects/$PROJECT_ID/tasks"
-curl -sS "http://${API_ADDR}/api/v1/system/status"
+make test-e2e   # runs TestJ08_UncleanKillRecovery against the devenv stack
 ```
+
+The journey materializes a multi-task plan, SIGKILLs the daemon mid-task,
+restarts it on the same home, and asserts: no `RUNNING` tasks after restart,
+`system/status` returns 200, recovery is automatic (`BootReconcile`).
 
 ### What “good” looks like
 
@@ -76,9 +60,10 @@ curl -sS "http://${API_ADDR}/api/v1/system/status"
 
 ## Beat 2 (S02) — Provider fallback / breaker
 
-**Tickets:** T-010a (this doc/script), T-010b (tests).
+**Tickets:** T-010a (this beat), T-010b (tests).
+**Journey:** J09 in [journeys.md](testing/journeys.md) — `make test-e2e`.
 
-Distinct from [demo.md](demo.md)’s connector-HUMAN **governance** loop. Beat 2 proves the **house**: cascade to a healthy secondary, or open the breaker / hand off when nothing answers — without a billable cloud dependency (mock HTTP, LiteLLM, or dead `127.0.0.1:1` slots).
+Distinct from [demo.md](demo.md)’s connector-HUMAN **governance** loop. Beat 2 proves the **house**: cascade to a healthy secondary, or open the breaker / hand off when nothing answers — without a billable cloud dependency (the journeys use dead `127.0.0.1` slots and the mock LLM).
 
 ### Beat 2 — Pass criteria
 
@@ -98,32 +83,16 @@ Distinct from [demo.md](demo.md)’s connector-HUMAN **governance** loop. Beat 2
 
 Mechanism pointers: gateway cascade (`internal/gateway/features/cascading_fallback.feature`), breaker (`internal/queue/features/circuit_breaker.feature`), handoff (`outage_handoff.feature`).
 
-### Beat 2 — Prerequisites
-
-- `make build` → `./bin/agentd`
-- Throwaway home: `export AGENTD_HOME=/tmp/agentd-fallback-demo`
-- No billable keys required — script uses local mock HTTP + dead ports.
-
 ### Beat 2 — Operator sequence
 
 ```sh
-export AGENTD_HOME=/tmp/agentd-fallback-demo
-export API_ADDR=127.0.0.1:18776
-
-# A) two-slot config: dead primary + live mock secondary
-./scripts/demo/provider-fallback.sh prepare-cascade
-./scripts/demo/provider-fallback.sh probe-cascade
-# expect: HTTP 200 from mock secondary path / ProviderUsed secondary in logs
-
-# B) single dead slot → exhaustion
-./scripts/demo/provider-fallback.sh prepare-breaker
-./scripts/demo/provider-fallback.sh probe-breaker
-# expect: ErrLLMUnreachable-class failure; after N failures breaker OPEN
-# optional: leave daemon running until outage handoff creates HUMAN under _system
-
-./scripts/demo/provider-fallback.sh status
-./scripts/demo/provider-fallback.sh stop
+make test-e2e   # runs TestJ09_ProviderCascade (faults profile) and TestJ09_BreakerOpens (breaker profile)
 ```
+
+J09 runs as two tests on two profiles: `faults` (dead primary + live secondary
+→ cascade succeeds, breaker stays CLOSED) and `breaker` (every provider dead →
+breaker OPEN, HUMAN "Manual review required: AI providers unavailable" child
+created).
 
 ### Beat 2 — What "good" looks like
 
@@ -143,8 +112,9 @@ export API_ADDR=127.0.0.1:18776
 ## Beat 2.3 (S03) — Disk / resource watchdog
 
 **Tickets:** T-013.
+**Journey:** J10 in [journeys.md](testing/journeys.md) — `make test-e2e`.
 
-Prove product-plan Phase 2.3: a disk/resource crunch surfaces a durable event or board task — no silent death. The watchdog implementation already exists (`internal/queue/disk_watchdog.go`); this beat packages it as a runnable demo with fault injection.
+Prove product-plan Phase 2.3: a disk/resource crunch surfaces a durable event or board task — no silent death. The watchdog implementation already exists (`internal/queue/disk_watchdog.go`); J10 proves it against a live daemon.
 
 ### Beat 2.3 — Pass criteria
 
@@ -155,36 +125,16 @@ Prove product-plan Phase 2.3: a disk/resource crunch surfaces a durable event or
 
 Mechanism: `Daemon.checkDiskSpace` → `safety.DiskFreePercent` → `EnsureProjectTask` (HUMAN assignee) → `sink.Emit(DISK_SPACE_CRITICAL)`. Tests: `internal/queue/disk_watchdog_test.go`. Feature: `internal/queue/features/disk_watchdog.feature`.
 
-### Beat 2.3 — Prerequisites
-
-- `make build` → `./bin/agentd`
-- Throwaway home: `export AGENTD_HOME=/tmp/agentd-disk-demo`
-- No billable keys required — the demo uses fault injection via a derived threshold (observed free +5%) plus a `scratch/` marker dir, never a real disk fill.
-
 ### Beat 2.3 — Operator sequence
 
 ```sh
-export AGENTD_HOME=/tmp/agentd-disk-demo
-export API_ADDR=127.0.0.1:18785
-
-# A) prepare: start daemon; threshold is derived from observed free space (+5%, min 1% above current)
-#    so free_percent < threshold is guaranteed without a real disk fill; scratch dir created at $AGENTD_HOME/scratch.
-#    NOTE: When observed free_pct is 100, derive_threshold caps at 100 and checkDiskSpace
-#    returns immediately (freePercent >= threshold). In that case inject a disk-stat value
-#    (e.g. DISK_THRESHOLD=99) or report the environment as unsupported.
-./scripts/demo/disk-watchdog.sh prepare
-
-# B) inject fault: (re)create scratch dir $AGENTD_HOME/scratch and ensure config free_threshold_percent
-#    is set to derived value (observed free +5%, capped at 99) — no filesystem fill needed
-./scripts/demo/disk-watchdog.sh inject-fault
-
-# C) probe: verify HUMAN task, SSE event, and deduplication (exactly 1 task, assignee=HUMAN)
-./scripts/demo/disk-watchdog.sh probe
-# expect: _system project with HUMAN task "Disk space critical..." + DISK_SPACE_CRITICAL in SSE/daemon.log
-
-# D) cleanup
-./scripts/demo/disk-watchdog.sh stop
+make test-e2e   # runs TestJ10_DiskWatchdogDedup against the disk profile
 ```
+
+The `agentd-disk` service runs with `disk.free_threshold_percent: 100` and a
+bind-mounted `@every 5s disk-watchdog` crontab, so the watchdog fires on every
+pass. J10 asserts exactly one deduped HUMAN task with one `DISK_SPACE_CRITICAL`
+event across repeated passes.
 
 ### Beat 2.3 — What "good" looks like
 
@@ -213,8 +163,9 @@ export API_ADDR=127.0.0.1:18785
 ## Beat 2.4 (S03) — Memory recall on repeat failure
 
 **Tickets:** T-014.
+**Journey:** J11 in [journeys.md](testing/journeys.md) — `make test-e2e`.
 
-Prove product-plan Phase 2.4: on a repeated failure class, Librarian/FTS surfaces a prior `{symptom, solution}` instead of re-burning tokens. The recall mechanism already exists (`internal/memory/recall.go`); this beat packages it as a runnable demo with seeded fixtures.
+Prove product-plan Phase 2.4: on a repeated failure class, Librarian/FTS surfaces a prior `{symptom, solution}` instead of re-burning tokens. The recall mechanism already exists (`internal/memory/recall.go`); J11 proves it against a live daemon.
 
 ### Beat 2.4 — Pass criteria
 
@@ -223,33 +174,12 @@ Prove product-plan Phase 2.4: on a repeated failure class, Librarian/FTS surface
 3. Namespace isolation holds: project-scoped memories do not leak across projects.
 4. Recall timeout is respected: a slow store returns empty results, not a hang.
 
-Mechanism: `Retriever.Recall` → `Store.RecallMemories` (FTS by intent, scoped to GLOBAL + project + user prefs) → `FormatLessons` / `FormatPreferences`. The demo seeds via `POST /api/v1/preferences` (USER_PREFERENCE scope; `Symptom="preference"`, `Solution="Symptom: … → Solution: …"`), probes via `GET /api/v1/system/status` asserting `total_memories>0` and `preferences_count>0`, plus a retrieval-and-formatting assertion that the seeded symptom/solution appears in the simulated `FormatPreferences` output (see `scripts/demo/memory-recall.sh:cmd_probe`). Tests: `internal/memory/recall_test.go`, features: `recall_namespace.feature`, `recall_timeout.feature`.
-
-### Beat 2.4 — Prerequisites
-
-- `make build` → `./bin/agentd`
-- Throwaway home: `export AGENTD_HOME=/tmp/agentd-recall-demo`
-- No billable keys required — the demo uses a mock LLM and seeds memories via the preferences API.
+Mechanism: `Retriever.Recall` → `Store.RecallMemories` (FTS by intent, scoped to GLOBAL + project + user prefs) → `FormatLessons` / `FormatPreferences`. J11 seeds via `POST /api/v1/preferences` (USER_PREFERENCE scope), then asserts the preference is absent from an earlier task's prompt, present in a later same-user task's prompt, and absent for an unrelated user. Tests: `internal/memory/recall_test.go`, `internal/kanban/memories_repo_test.go`; features: `recall_namespace.feature`, `recall_timeout.feature`.
 
 ### Beat 2.4 — Operator sequence
 
 ```sh
-export AGENTD_HOME=/tmp/agentd-recall-demo
-export API_ADDR=127.0.0.1:18795
-
-# A) start daemon with a mock provider
-./scripts/demo/memory-recall.sh prepare
-
-# B) seed a {symptom, solution} pair via the preferences API (JSON-encoded via python3; handles quotes/backslashes)
-./scripts/demo/memory-recall.sh seed "EOFError when parsing JSON" "Add try/except around json.loads with fallback to raw text"
-# expect: HTTP 201 saved; payload built with json.dumps so special chars are safe
-
-# C) probe: verify daemon health and retrieval + formatting assertion
-./scripts/demo/memory-recall.sh probe
-# expect: runtime memory section present + FormatPreferences contains symptom/solution
-
-# D) cleanup
-./scripts/demo/memory-recall.sh stop
+make test-e2e   # runs TestJ11_PreferenceRecallOnLaterTask against the default profile
 ```
 
 ### Beat 2.4 — What "good" looks like
@@ -290,6 +220,7 @@ export API_ADDR=127.0.0.1:18795
 ## Related
 
 - Connector inject HUMAN: [demo.md](demo.md)
+- Journey suite specs and results: [journeys.md](testing/journeys.md)
 - SP-003 run log: SP-003
 - SP-004 pre-flight: SP-004
 - S02 PR budgets: PR-PLAN.md

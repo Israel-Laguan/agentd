@@ -135,8 +135,8 @@ Deferred (see docs/testing/journeys.md for the policy and re-entry conditions):
 - **MockLLMClient**: Read back what the worker actually sent to the model
   (`GET /requests` on the devenv mock, which appends every request body to a
   JSONL log). This is the only channel for asserting on prompt contents —
-  nothing in the agentd API exposes them, which is how the older
-  `scripts/demo/memory-recall.sh` ended up simulating its own success.
+  nothing in the agentd API exposes them, which is how the old memory-recall
+  demo script (deleted in T-025) ended up simulating its own success.
   `WorkerPrompts(taskID)` attributes captured prompts to a task via the
   request's `agentd_metadata.task_id`
 

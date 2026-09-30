@@ -3,7 +3,8 @@
 Status: **proposed** (outcome of SP-007, 2026-09-27). Nothing has moved yet.
 Until it does, the paths below marked "target" do not exist. The work is split
 into T-024 (the moves) and sprint S07 (US-007): an end-to-end journey suite in `test/e2e/` that finishes
-what the demo scripts started, after which T-025 deletes `scripts/demo/`.
+what the demo scripts started, after which T-025 deletes `scripts/demo/`
+(done 2026-09-30 — see "Demo scripts").
 
 ## The rule
 
@@ -80,8 +81,8 @@ devenv/                      local run (rootless Podman)
 `scripts/verify-init.sh`, `scripts/run-tests.sh`, `scripts/integration-test.sh`,
 `scripts/test-env.sh`, `scripts/mock_llm.py`, the tracked
 `scripts/checkminfunc/baseline.bak` and the `make folder-audit` target.
-`scripts/demo/` stays until the S07 journeys cover it, then T-025 deletes it
-(see "Demo scripts").
+`scripts/demo/` stayed until the S07 journeys covered it; T-025 deleted it
+2026-09-30 once every gated journey passed (see "Demo scripts").
 
 ## Decisions
 
@@ -126,8 +127,8 @@ T-026 reuses it for the real journey suite.
 
 Keep `devenv/mockllm/server.py`, the mock the compose stack uses and the only
 one that follows current agentd flows (plan, intent, scope, task correlation).
-`scripts/mock_llm.py` was only printed by `test-env.sh`, so it goes.
-`scripts/demo/mock-provider.py` goes with the demo scripts.
+`scripts/mock_llm.py` was only printed by `test-env.sh`, so it went.
+`scripts/demo/mock-provider.py` went with the demo scripts (deleted in T-025).
 
 ### Unreferenced files: deleted
 
@@ -142,12 +143,13 @@ Owner confirmed 2026-09-27. Nothing in the Makefile, CI or docs referenced them.
 ## Demo scripts
 
 The scripts were meant to prove end-to-end behaviour and never did it well.
-Rather than delete them unfinished, sprint S07 finishes the job: each beat
-becomes an e2e journey (J07–J12 in [journeys.md](../testing/journeys.md)), and T-025 deletes a script only
-once its journey passes or is explicitly deferred. The audit below checked each
+Sprint S07 finished the job: each beat became an e2e journey (J07–J12 in
+[journeys.md](../testing/journeys.md)), and T-025 deleted a script once its
+journey passed or was explicitly deferred. The audit below checked each
 script's real pass/fail logic (not its comments) against the existing Go
-tests. It feeds the journey gotchas and lists the Go tests T-025 also adds.
-Nothing in the Makefile, CI or Go tests depends on `scripts/demo/`.
+tests. It fed the journey gotchas and lists the Go tests T-025 also added.
+Nothing in the Makefile, CI or Go tests depended on `scripts/demo/`, and the
+directory was deleted 2026-09-30.
 
 | Script | What it actually asserts | Already covered by | Gap | Go-test follow-up (T-025) |
 | --- | --- | --- | --- | --- |
@@ -157,10 +159,10 @@ Nothing in the Makefile, CI or Go tests depends on `scripts/demo/`.
 | `memory-recall.sh` | `POST /api/v1/preferences` returns `saved` and runtime heap counters are non-zero. The "retrieval" check builds the expected string from its own seed file, so it can't fail | `internal/api/controllers/preferences_test.go`, `internal/memory/recall_test.go` (fake store) | the SQLite `USER_PREFERENCE` recall path (FTS + `user_id:` tag match, `internal/kanban/memories_repo.go`) | **Delete**, and add the test the doc claims exists: in `internal/kanban/memories_repo_test.go`, record a preference as the API does, recall it by user and intent, check another user doesn't get it, check `FormatPreferences` output |
 | `tiered-harness.sh` | only facts about the fixture files (baseline passed, costs non-zero). It never compares tiered with baseline and runs no Go code. Its pricing lives only in bash, with tier names that don't match config | nothing needed | none. A "tiered < baseline" test over hand-written fixtures would test the fixtures | **Delete** with `fixtures/` (the `fixtures/tiered/` set is already unused). Mark the cost table in [tiered-execution.md](../tiered-execution.md) as illustrative |
 
-`lib/demo-common.sh` is only sourced by these scripts. After T-025,
-[harness-reliability.md](../harness-reliability.md) and [demo.md](../demo.md)
-point at the journeys that prove them, and the Beat 2.4 claims
-(`total_memories > 0`, `preferences_count > 0`) are removed because nothing
+`lib/demo-common.sh` was only sourced by these scripts and was deleted with
+them. [harness-reliability.md](../harness-reliability.md) and [demo.md](../demo.md)
+now point at the journeys that prove them, and the Beat 2.4 claims
+(`total_memories > 0`, `preferences_count > 0`) were removed because nothing
 produced them.
 
 ## Side findings
