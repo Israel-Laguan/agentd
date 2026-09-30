@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -111,17 +112,17 @@ func TestJ14_SSEStreamDeliversTaskEvents(t *testing.T) {
 	}
 
 	// An event missing from BOTH is the daemon losing the write, not the
-	// stream losing the frame. Under sustained load the devenv SQLite DB
-	// returns SQLITE_BUSY and the worker logs and continues (see the
-	// environment note in docs/testing/journeys.md), so a completed task can
-	// genuinely have no LOG_CHUNK row. That is a product bug, not an SSE
-	// one, and it is documented rather than papered over — but it must not
-	// fail this journey, or the journey would be asserting the database is
-	// never contended.
-	if !durable[evtTypeLogChunk] {
-		t.Logf("J14: task %s recorded no %s event at all (the daemon dropped the write, not the stream); "+
-			"continuing — see docs/testing/journeys.md on SQLITE_BUSY", taskID, evtTypeLogChunk)
+	// stream losing the frame. That used to happen under load: SQLite
+	// connections had no busy_timeout (see docs/testing/journeys.md), so
+	// writes failed with SQLITE_BUSY and were dropped. That is fixed, so a
+	// missing row is now a regression and fails the journey.
+	for _, typ := range []string{evtTypeLogChunk, evtTypeTokenUsage} {
+		if !durable[typ] {
+			t.Fatalf("J14 [events] task %s recorded no %s event (durable: %v) — the daemon dropped the write",
+				taskID, typ, j14Keys(durable))
+		}
 	}
+	j14AssertTokenLedger(ctx, t, client, taskID)
 
 	j14AssertOrdering(t, events, projectID)
 
@@ -221,4 +222,41 @@ func j14Keys(m map[string]bool) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// mockTokensPerCall is the total_tokens the devenv mock LLM reports on every
+// completion (devenv/mockllm/server.py's "usage"). The worker records one
+// TOKEN_USAGE row per call, so every persisted row must carry exactly this
+// figure; a different value means the ledger is mis-recording spend.
+const mockTokensPerCall = 2
+
+// j14AssertTokenLedger checks the durable TOKEN_USAGE rows for the task carry
+// the token count the provider reported, not just that a row exists.
+func j14AssertTokenLedger(ctx context.Context, t *testing.T, client *APIClient, taskID string) {
+	t.Helper()
+
+	persisted, err := client.ListTaskEvents(ctx, taskID)
+	if err != nil {
+		t.Fatalf("J14 [ledger] could not read the durable event log: %v", err)
+	}
+	rows := 0
+	for _, e := range persisted {
+		if e.Type != evtTypeTokenUsage {
+			continue
+		}
+		rows++
+		var payload struct {
+			Tokens int `json:"tokens"`
+		}
+		if err := json.Unmarshal([]byte(e.Payload), &payload); err != nil {
+			t.Fatalf("J14 [ledger] TOKEN_USAGE %s has an unparseable payload %q: %v", e.ID, e.Payload, err)
+		}
+		if payload.Tokens != mockTokensPerCall {
+			t.Fatalf("J14 [ledger] TOKEN_USAGE %s recorded %d tokens, want %d (the mock's reported usage)",
+				e.ID, payload.Tokens, mockTokensPerCall)
+		}
+	}
+	if rows == 0 {
+		t.Fatalf("J14 [ledger] task %s has no TOKEN_USAGE rows to verify", taskID)
+	}
 }
