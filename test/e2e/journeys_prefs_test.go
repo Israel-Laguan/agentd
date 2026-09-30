@@ -50,6 +50,11 @@ func TestJ11_PreferenceRecallOnLaterTask(t *testing.T) {
 		t.Fatalf("J11 [boot] harness failed to become healthy: %v", err)
 	}
 	client := NewAPIClient(baseURL, harness.client)
+
+	// The breaker is process-global and may have been left OPEN by a prior test
+	// (e.g. J09). Reset it to prevent dispatch from being blocked for 5 minutes.
+	j11ResetBreaker(ctx, t, client)
+
 	mock := NewMockLLMClient(mockLLMBaseURL)
 
 	const userID = "j11-user"
@@ -184,5 +189,24 @@ func j11SavePreference(ctx context.Context, t *testing.T, client *APIClient, use
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("J11 [preferences] returned %d, want 201", resp.StatusCode)
+	}
+}
+
+// j11ResetBreaker resets the process-global circuit breaker before the
+// journey starts. The breaker is not per-project: a prior run (e.g. J09)
+// may have left it OPEN, which throttles new task dispatch for up to
+// safety.DefaultBreakerTimeout (5 minutes) before it's even attempted.
+// Resetting first keeps the journey fast and repeatable regardless of
+// what ran before it.
+func j11ResetBreaker(ctx context.Context, t *testing.T, client *APIClient) {
+	t.Helper()
+
+	resp, err := client.ResetBreaker(ctx)
+	if err != nil {
+		t.Fatalf("J11 [breaker reset] request failed: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("J11 [breaker reset] returned %d, want 200", resp.StatusCode)
 	}
 }
