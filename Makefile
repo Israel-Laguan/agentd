@@ -88,8 +88,21 @@ COMPOSE := $(CURDIR)/devenv/compose.yaml
 COMPOSE_PROFILES := --profile default --profile healing --profile faults \
                      --profile breaker --profile disk
 
+# dev-up blocks until every container with a healthcheck is healthy. podman-compose
+# does not reliably honour depends_on service_healthy, and `up -d` returns as soon
+# as containers exist; without this wait the first tasks reach litellm while it is
+# still refusing connections, which trips the circuit breaker for its full timeout.
+DEV_HEALTH_WAIT ?= 180
 dev-up:
 	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) up --build -d
+	@echo "waiting up to $(DEV_HEALTH_WAIT)s for containers to become healthy"
+	@deadline=$$(( $$(date +%s) + $(DEV_HEALTH_WAIT) )); \
+	while :; do \
+		pending=$$(podman ps --filter label=io.podman.compose.project --format '{{.Names}} {{.Status}}' | grep -E 'starting|unhealthy' || true); \
+		[ -z "$$pending" ] && break; \
+		if [ $$(date +%s) -ge $$deadline ]; then echo "not healthy in time:"; echo "$$pending"; exit 1; fi; \
+		sleep 2; \
+	done
 
 dev-down:
 	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) down

@@ -215,37 +215,56 @@ Also corrected here: the spec's `task-started` / `task-claimed` /
 READY → RUNNING transition write no event row, so there is nothing to stream
 for them. J14 asserts the events that do exist.
 
-### Environment: the devenv SQLite DB drops events under contention (not fixed)
+### SQLite drops events under contention (product bug, fixed)
 
-Running the full suite repeatedly against one long-lived stack makes J04/J14
-fail intermittently — a task completes but its `LOG_CHUNK` / `TOKEN_USAGE`
-events are missing from both the stream *and* the durable log. The daemon logs
-show why:
+Running the full suite repeatedly against one long-lived stack made J04/J14
+fail intermittently — a task completed but its `LOG_CHUNK` / `TOKEN_USAGE`
+events were missing from both the stream *and* the durable log. The daemon logs
+showed why:
 
 ```text
 ERROR failed to persist token usage ... err="add token usage: database is locked (5) (SQLITE_BUSY)"
 WARN  memory touch failed ... err="touch memories: database is locked (5) (SQLITE_BUSY)"
-WARN  sandbox: command timed out ... timeout_seconds=60
 ```
 
-Writes are dropped on `SQLITE_BUSY` and the worker logs and continues, so a
-completed task can be missing the events describing how it got there. Two
-things drive the contention, both artefacts of running the suite many times
-without resetting the stack:
+**Root cause.** `internal/kanban/db/open.go` applied `busy_timeout` and
+`foreign_keys` with `db.ExecContext` on the connection pool. Both are
+*per-connection* settings, so only the one connection that happened to run
+them got them; every other pooled connection had a 0ms busy timeout and failed
+instantly under write contention. The retry wrapper (`RetryOnBusy`, ~150ms
+total) could not compensate. A completed task could therefore be missing the
+rows describing how it got there, and a dropped `TOKEN_USAGE` row means the
+token ledger under-reports spend.
+
+**Fix.** The pragmas are now passed as `_pragma=` DSN parameters, so the driver
+applies them to every connection (`connectionDSN`, covered by
+`TestOpenAppliesBusyTimeoutToEveryConnection`, which fails without the fix).
+Foreign-key enforcement, previously silently off on most connections, now
+applies everywhere.
+
+Contention was made worse by two suite artefacts that still exist:
 
 - **Orphaned `SLOW_TASK`s.** J08 SIGKILLs the daemon mid-task; the task is
   only recovered ~2m later by the stale sweep, then re-dispatched and holds a
   worker for a further 60s. Each J08 run leaves one behind.
 - **Accumulated projects.** The board grows by ~10 projects per suite run and
-  is never cleaned (there is no DELETE route), so the dispatch loop and the
-  status summariser scan more rows every time.
+  is never cleaned (there is no DELETE route).
 
-Mitigation today is to reset the stack between runs, which is what the P0 exit
-criteria already specify ("2 clean runs"). The durable fix is a real product
-decision, not a test one: retry or queue on `SQLITE_BUSY` rather than dropping
-the write, and/or a WAL/busy-timeout tuning pass. **Worth filing as a bug** —
-losing a `TOKEN_USAGE` row means the token ledger under-reports spend, which
-is a billing-adjacent correctness issue, not just a missing UI event.
+Use `make dev-clean dev-up` (drops volumes) for clean-database runs; plain
+`make dev-down` keeps the named volumes and so accumulates state. Retrying or
+queueing on a still-busy DB remains a product decision and is not done here.
+
+### Suite hygiene: breaker poisoning, test cache, readiness
+
+- **Startup race.** `up -d` returns once containers exist, and podman-compose
+  does not reliably honour `depends_on: service_healthy`, so early tasks could
+  reach litellm while it still refused connections. Three failures trip the
+  circuit breaker (`defaultBreakerFailures`) and block dispatch for
+  `defaultBreakerTimeout` (5m), leaving every later journey stuck in READY.
+  `make dev-up` now waits for all containers to report healthy, and J11 resets
+  the breaker like J07/J09 do.
+- **Go test cache.** `make test-e2e` passes `-count=1`; without it a repeat run
+  reports `ok (cached)` in 0s, which would falsely satisfy "2 clean runs".
 
 ### J11: preferences could not reach a worker prompt (product gap, fixed)
 
