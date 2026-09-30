@@ -1,7 +1,7 @@
 # E2E Journey Suite (S07)
 
 Status: **under SP-008 spike** (2026-09-28 to 2026-09-29).  
-Output of: [SP-008-e2e-journey-inventory.md](../../tasks/sprints/S07-e2e-journeys/spikes/SP-008-e2e-journey-inventory.md)
+Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in git)
 
 ---
 

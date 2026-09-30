@@ -95,7 +95,7 @@ func TestJ09_ProviderCascade(t *testing.T) {
 // This runs against the breaker profile (agentd-brk on :8770), NOT the faults
 // profile. config.faults.yaml's secondary is live, so a worker call always
 // cascades successfully there and the breaker can never open — see
-// devenv/agentd/config.brk.yaml, which puts two unreachable providers in
+// devenv/agentd/config.breaker.yaml, which puts two unreachable providers in
 // gateway.order so the cascade is walked to exhaustion.
 //
 // Chat traffic is deliberately NOT used to drive this. Two reasons, both
