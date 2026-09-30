@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-e2e test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-logs
+.PHONY: build test test-e2e test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-clean dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -93,6 +93,13 @@ dev-up:
 
 dev-down:
 	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) down
+
+# dev-clean is like dev-down but also removes all named volumes, forcing a
+# clean database and cache on the next dev-up. Use this for repeated test
+# runs that need to verify fixes; plain dev-down keeps volumes intact so
+# state persists across restarts (useful for manual testing).
+dev-clean:
+	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) down -v
 
 dev-logs:
 	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) logs -f
