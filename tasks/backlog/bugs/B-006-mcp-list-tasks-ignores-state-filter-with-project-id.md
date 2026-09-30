@@ -3,11 +3,22 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | backlog |
+| Status | fixed (2026-09-30) |
 | Priority | P2 |
-| Sprint | backlog |
+| Sprint | S07-e2e-journeys |
 | Severity | major |
 | Links | internal/mcp/tools_read.go, docs/mcp-board-export.md, test/e2e/journeys_mcp_test.go (J15) |
+
+## Fix (2026-09-30)
+
+`board.list_tasks` routed the `project_id` case through
+`ListTasksByProject`, which returned before the state filter was ever built,
+so passing both silently dropped `state`. The fix (landed with B-005) routes
+both the project-scoped and board-wide calls through the one paginated,
+filter-aware store method, so `project_id` and `state` compose. Covered by
+`TestServer_ListTasks_StateFilterComposesWithProject` (unit) and
+`TestJ15_MCPBoardExportStateFilter` (J15: state=FAILED on COMPLETED tasks
+returns none, with and without project_id).
 
 ## Symptoms
 
