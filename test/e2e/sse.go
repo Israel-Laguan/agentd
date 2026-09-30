@@ -200,3 +200,55 @@ func (r *SSEReader) Close() error {
 	r.cancel()
 	return r.resp.Body.Close()
 }
+
+// ChatStreamFrame is one decoded `data:` payload of a stream:true
+// /v1/chat/completions response. The handler emits plain `data: <json>`
+// lines with no `event:` name (unlike the board event stream, whose frames
+// carry one), terminated by a literal `data: [DONE]`.
+type ChatStreamFrame struct {
+	Object  string `json:"object"`
+	ID      string `json:"id"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index int `json:"index"`
+		Delta struct {
+			Role      string     `json:"role"`
+			Content   string     `json:"content"`
+			ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+		} `json:"delta"`
+		FinishReason *string `json:"finish_reason"`
+	} `json:"choices"`
+}
+
+// ReadChatStreamFrames drains a stream:true chat response to its terminator,
+// returning every decoded chunk in arrival order and whether the OpenAI
+// `data: [DONE]` sentinel was seen. maxBytes caps the frame size so a runaway
+// stream cannot hang the suite.
+func ReadChatStreamFrames(resp *http.Response, maxBytes int64) ([]ChatStreamFrame, bool, error) {
+	defer func() { _ = resp.Body.Close() }()
+	frames := []ChatStreamFrame{}
+	done := false
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), int(maxBytes))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "[DONE]" {
+			done = true
+			continue
+		}
+		var frame ChatStreamFrame
+		if err := json.Unmarshal([]byte(payload), &frame); err != nil {
+			return nil, false, fmt.Errorf("decode chat stream frame %q: %w", payload, err)
+		}
+		frames = append(frames, frame)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, false, err
+	}
+	return frames, done, nil
+}
