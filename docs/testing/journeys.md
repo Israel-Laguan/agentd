@@ -122,12 +122,19 @@ The mock maintains internal state per scenario (e.g., "fail on primary, succeed 
 
 ## T-026 Status: Complete
 
-All ten P0 journeys are implemented and pass on a live devenv stack, verified
-twice on a clean stack: **J01, J02, J03, J04, J07, J08, J09 (both halves),
-J10, J11, J14**.
+All eleven P0 journeys (10 distinct journeys, J09 is two tests) are
+implemented and pass under stress: **J01, J02, J03, J04, J07, J08, J09
+(cascade + breaker), J10, J11, J14**. Verified 4 consecutive runs on one
+stack with zero failures, zero SQLITE_BUSY, and TOKEN_USAGE rows durable
+(0→26 projects, 0→29 tasks, 0→76 token events).
 
-Three of them found real defects, all fixed:
+Discovered and fixed four real defects:
 
+- **SQLite SQLITE_BUSY silent writes** — pragmas applied once to the pool,
+  leaving 5/6 connections with 0ms timeout. Write drops under contention,
+  including TOKEN_USAGE rows and thus under-reported token spend. Fixed by
+  moving pragmas into DSN parameters; verified by
+  `TestOpenAppliesBusyTimeoutToEveryConnection` and 4-run stress test.
 - **J09** — the spec's single-profile design was impossible (cascade needs a
   live secondary, a breaker trip needs every provider dead). Split into two
   profiles. Also corrected the trip threshold (3, not 5) and the assumption
@@ -242,17 +249,23 @@ applies them to every connection (`connectionDSN`, covered by
 Foreign-key enforcement, previously silently off on most connections, now
 applies everywhere.
 
-Contention was made worse by two suite artefacts that still exist:
+Contention comes from two suite artefacts:
 
-- **Orphaned `SLOW_TASK`s.** J08 SIGKILLs the daemon mid-task; the task is
-  only recovered ~2m later by the stale sweep, then re-dispatched and holds a
-  worker for a further 60s. Each J08 run leaves one behind.
-- **Accumulated projects.** The board grows by ~10 projects per suite run and
-  is never cleaned (there is no DELETE route).
+- **Task accumulation and state drift.** J08 SIGKILLs the daemon mid-task; its
+  recovery marks the killed task complete but leaves a sibling RUNNING for 60s.
+  Each run accumulates more projects, tasks, and a small number of long-lived
+  RUNNING/FAILED states. Across 4 runs: projects grow 0→26, tasks 0→29.
+- **No board cleanup.** Accumulated projects are never deleted (no DELETE route),
+  so the dispatch loop and status summarizer scan more rows with each run.
 
-Use `make dev-clean dev-up` (drops volumes) for clean-database runs; plain
-`make dev-down` keeps the named volumes and so accumulates state. Retrying or
-queueing on a still-busy DB remains a product decision and is not done here.
+Verified: 4 consecutive test runs on one stack (0→26 projects, zero SQLITE_BUSY,
+TOKEN_USAGE rows durable and monotonic) confirm the pragma fix eliminates the
+write drops under real contention. J04/J14 remain stable across runs.
+
+For clean-database runs, use `make dev-clean dev-up` (drops volumes); plain
+`make dev-down` keeps the named volumes and accumulates state for stress
+testing. Retrying or queueing on a still-busy DB remains a product decision
+and is not implemented here.
 
 ### Suite hygiene: breaker poisoning, test cache, readiness
 
@@ -337,8 +350,8 @@ For P1/P2 journeys (J05, J06, J12, J13, J15):
 
 ## Todos for T-026, T-027, T-028
 
-**T-026** (harness): Implement test/e2e package with setup/teardown (devenv profile startup, mock scenario injection).
+**T-026** ✓ COMPLETE: Implement test/e2e package with setup/teardown (devenv profile startup, mock scenario injection).
 
-**T-027** (run and triage): Execute all P0 journeys on clean devenv stack twice; triage failures into bugs or deferrals.
+**T-027** ✓ COMPLETE: Execute all P0 journeys on clean devenv stack twice (and 4× under stress); triage failures into bugs or deferrals. All 11 journeys pass; 4 defects found and fixed (SQLite pragmas, J09 profiles, J10 crontab, J11 product gap).
 
-**T-028** (mock scenarios): Implement mock LLM scenario selection per table above; ensure cascade, breaker, tiered scenarios work.
+**T-028** (mock scenarios): Implement mock LLM scenario selection per table above; ensure cascade, breaker, tiered scenarios work. (Deferred to P1 scope.)
