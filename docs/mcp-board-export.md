@@ -77,19 +77,27 @@ Loopback binding is currently the only thing limiting that.
 
 | Tool | Description |
 |------|-------------|
-| `board.list_tasks` | List tasks, optionally filtered by `project_id` or `state` (see the two caveats below) |
+| `board.list_tasks` | List tasks, optionally filtered by `project_id` and `state` (both compose), paginated by `limit`/`offset` |
 | `board.get_task` | Get a single task with full details and event/comment counts |
 | `board.list_projects` | List all projects |
 | `board.get_project` | Get a single project |
 | `board.list_comments` | List comments on a task |
 
-Two caveats on `board.list_tasks`, both open bugs:
+`board.list_tasks` takes four optional arguments:
 
-- **Without `project_id` the list is capped at 100 tasks**, silently — no
-  total, no cursor, no truncation flag ([B-005](../tasks/backlog/bugs/B-005-mcp-list-tasks-silent-100-task-cap.md)).
-  With `project_id` there is no cap at all.
-- **The `state` filter is ignored when `project_id` is also passed**; only one
-  of the two is applied ([B-006](../tasks/backlog/bugs/B-006-mcp-list-tasks-ignores-state-filter-with-project-id.md)).
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `project_id` | — | Scope the list to one project |
+| `state` | — | Filter by task state (e.g. `COMPLETED`, `FAILED`); composes with `project_id` |
+| `limit` | `200` | Page size, capped at 200 (the store's max page) |
+| `offset` | `0` | Number of tasks to skip, for paging |
+
+Both filters and both pagination arguments are honoured on every call — the
+project-scoped and board-wide paths share one paginated, filter-aware store
+method, so the result no longer depends on which arguments you pass. A board
+with more tasks than one page is exported by paging (`limit=200&offset=0`,
+then `offset=200`, …); the default `limit` of 200 returns any board of up to
+200 tasks in a single call.
 
 ### Write tools (gated)
 
