@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -184,6 +185,99 @@ func j15AssertTasksExported(ctx context.Context, t *testing.T, client *APIClient
 		}
 	}
 	t.Logf("J15: %d/%d task(s) exported with ids, titles and states", len(exported), len(materialized.Tasks))
+}
+
+// TestJ15_MCPBoardExportLargeBoard extends J15 past the silent 100-task cap
+// (B-005). A board of 150 tasks must be exportable in full: the default
+// board-wide call returns every task, and limit/offset page through a board
+// larger than one page without dropping any.
+func TestJ15_MCPBoardExportLargeBoard(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	harness := NewHarness(baseURL, "default")
+	if err := harness.WaitForHealthy(ctx, 10*time.Second); err != nil {
+		t.Fatalf("J15-large [boot] harness failed to become healthy: %v", err)
+	}
+	client := NewAPIClient(baseURL, harness.client)
+
+	const taskCount = 150
+	drafts := make([]DraftTask, taskCount)
+	for i := range drafts {
+		drafts[i] = DraftTask{Title: fmt.Sprintf("J15 large board task %03d", i), Description: "Exported via board.list_tasks."}
+	}
+	materialized := materializePlan(ctx, t, client, "J15-large", DraftPlan{
+		ProjectName:         UniqueProjectName("j15-large"),
+		Description:         "J15: a board larger than one default page exports completely",
+		StartEmptyWorkspace: true,
+		Tasks:               drafts,
+	})
+
+	// Default board-wide call: the whole 150-task board, not a 100-task page.
+	var all []MCPTask
+	if err := client.CallMCPTool(ctx, "board.list_tasks", nil, &all); err != nil {
+		t.Fatalf("J15-large [mcp board.list_tasks] %v", err)
+	}
+	j15LargeAssertAllExported(ctx, t, client, materialized, all)
+
+	// Paging: two pages of 100 cover the same board with no gaps or repeats.
+	page1 := j15LargePage(ctx, t, client, 100, 0)
+	page2 := j15LargePage(ctx, t, client, 100, 100)
+	if len(page1)+len(page2) != len(materialized.Tasks) {
+		t.Fatalf("J15-large [paging] pages hold %d+%d tasks, want %d", len(page1), len(page2), len(materialized.Tasks))
+	}
+	seen := make(map[string]bool, len(page1)+len(page2))
+	for _, task := range append(page1, page2...) {
+		if seen[task.ID] {
+			t.Fatalf("J15-large [paging] task %s appeared on both pages", task.ID)
+		}
+		seen[task.ID] = true
+	}
+	for _, want := range materialized.Tasks {
+		if !seen[want.ID] {
+			t.Fatalf("J15-large [paging] task %s (%q) missing from the paged export", want.ID, want.Title)
+		}
+	}
+}
+
+// j15LargeAssertAllExported asserts the default board-wide call returned every
+// task of the materialized project, with real ids, titles and states.
+func j15LargeAssertAllExported(ctx context.Context, t *testing.T, client *APIClient, materialized *MaterializeResult, all []MCPTask) {
+	t.Helper()
+	exported := make(map[string]MCPTask, len(all))
+	for _, task := range all {
+		if task.ID == "" || task.Title == "" || task.State == "" {
+			t.Fatalf("J15-large [mcp board.list_tasks] task is missing metadata: %+v", task)
+		}
+		exported[task.ID] = task
+	}
+	for _, want := range materialized.Tasks {
+		got, ok := exported[want.ID]
+		if !ok {
+			t.Fatalf("J15-large [mcp board.list_tasks] task %s (%q) missing from the default export (%d tasks returned)", want.ID, want.Title, len(all))
+		}
+		if got.Title != want.Title {
+			t.Fatalf("J15-large [mcp board.list_tasks] task %s title = %q, want %q", want.ID, got.Title, want.Title)
+		}
+		if got.State != string(want.State) {
+			t.Fatalf("J15-large [mcp board.list_tasks] task %s state = %q, want %q", want.ID, got.State, want.State)
+		}
+	}
+	t.Logf("J15-large: default board-wide call exported %d/%d task(s)", len(exported), len(materialized.Tasks))
+}
+
+// j15LargePage fetches one page of the board-wide export.
+func j15LargePage(ctx context.Context, t *testing.T, client *APIClient, limit, offset int) []MCPTask {
+	t.Helper()
+	var tasks []MCPTask
+	if err := client.CallMCPTool(ctx, "board.list_tasks", map[string]any{"limit": limit, "offset": offset}, &tasks); err != nil {
+		t.Fatalf("J15-large [mcp board.list_tasks limit=%d offset=%d] %v", limit, offset, err)
+	}
+	return tasks
 }
 
 // j15AssertTaskDetail is step 4: the per-task read. The detail shape carries

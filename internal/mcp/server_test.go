@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -81,6 +82,66 @@ func TestServer_ListTasks_WithData(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, res.IsError)
 	require.NotEmpty(t, res.Content)
+}
+
+// callListTasks is a small helper that calls board.list_tasks and decodes the
+// task array from the tool result's text payload.
+func callListTasks(t *testing.T, ctx context.Context, session *mcp.ClientSession, args map[string]any) []map[string]any {
+	t.Helper()
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "board.list_tasks",
+		Arguments: args,
+	})
+	require.NoError(t, err)
+	require.False(t, res.IsError, "board.list_tasks returned a tool error")
+	require.NotEmpty(t, res.Content)
+	text, ok := res.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	var tasks []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &tasks))
+	return tasks
+}
+
+// TestServer_ListTasks_BoardWideExposesAllTasks pins B-005: the board-wide
+// call must not silently cap at 100 tasks. A client exporting a >100-task board
+// has to be able to get every task — either because the default page is large
+// enough or because limit/offset page through the whole board.
+func TestServer_ListTasks_BoardWideExposesAllTasks(t *testing.T) {
+	s, store := newTestServer(t)
+
+	const taskCount = 150
+	drafts := make([]models.DraftTask, taskCount)
+	for i := range drafts {
+		drafts[i] = models.DraftTask{Title: fmt.Sprintf("task-%03d", i), AgentID: "default"}
+	}
+	_, _, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "big-project",
+		Tasks:       drafts,
+	})
+	require.NoError(t, err)
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	_, err = s.mcpServer.Connect(context.Background(), serverTransport, nil)
+	require.NoError(t, err)
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.1.0"}, nil)
+	session, err := client.Connect(context.Background(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+	ctx := context.Background()
+
+	// Default call: a 150-task board must come back whole, not truncated at 100.
+	all := callListTasks(t, ctx, session, nil)
+	assert.Len(t, all, taskCount, "default board-wide call must return every task, not a silent 100-task page")
+
+	// Explicit limit at least as large as the board returns everything.
+	whole := callListTasks(t, ctx, session, map[string]any{"limit": taskCount})
+	assert.Len(t, whole, taskCount, "an explicit limit must be honoured, not clamped to a hidden 100")
+
+	// limit + offset page through the board in two halves.
+	first := callListTasks(t, ctx, session, map[string]any{"limit": 100, "offset": 0})
+	require.Len(t, first, 100)
+	second := callListTasks(t, ctx, session, map[string]any{"limit": 100, "offset": 100})
+	assert.Len(t, second, taskCount-100, "offset must page past the first page")
 }
 
 func TestServer_GetTask_NotFound(t *testing.T) {

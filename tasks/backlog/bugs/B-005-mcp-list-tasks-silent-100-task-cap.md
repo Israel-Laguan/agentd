@@ -3,11 +3,21 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | backlog |
+| Status | fixed (2026-09-30) |
 | Priority | P2 |
-| Sprint | backlog |
+| Sprint | S07-e2e-journeys |
 | Severity | major |
 | Links | internal/mcp/tools_read.go, docs/mcp-board-export.md, test/e2e/journeys_mcp_test.go (J15), docs/testing/journeys.md (J15) |
+
+## Fix (2026-09-30)
+
+`board.list_tasks` now takes explicit `limit` (default 200, the store's max
+page) and `offset` arguments and routes both the project-scoped and board-wide
+calls through the one paginated, filter-aware store method. The cap is no
+longer silent: a client pages with `limit`/`offset`, and the default `limit`
+of 200 returns any board of up to 200 tasks in a single call. Covered by
+`TestServer_ListTasks_BoardWideExposesAllTasks` (unit) and
+`TestJ15_MCPBoardExportLargeBoard` (J15, 150-task board).
 
 ## Symptoms
 
