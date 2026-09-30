@@ -79,7 +79,7 @@ This plan is split so each document stays focused and reviewable:
 | --- | --- |
 | [Test Checkpoints](docs/testing/checkpoints.md) | CP0–CP4, the per-checkpoint steps and acceptance evidence |
 | [Plan Materialization Edge Cases and Plan Refinement](docs/testing/materialization-and-plan-refinement.md) | CP3b materialization edge cases and the plan-refinement known gap |
-| [QA Scripts and Manual Browser Verification](docs/testing/qa-and-browser-verification.md) | `chat-kanban-qa.sh`, privileged handoff QA, manual click-through |
+| [QA Scripts and Manual Browser Verification](docs/testing/qa-and-browser-verification.md) | privileged handoff QA (now the J04/J07 journeys), manual click-through |
 | [Test Execution Results](docs/testing/results.md) | Historical run outcomes and known gaps confirmed live |
 | [Test Troubleshooting](docs/testing/troubleshooting.md) | PENDING dispatch, warmup, workspace-seeding, and routing failures |
 

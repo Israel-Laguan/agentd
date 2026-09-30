@@ -5,36 +5,33 @@
 
 ## Chat-to-Kanban privileged handoff QA
 
-The repeatable API portion uses the operator-provided LiteLLM, not the compose
-`litellm`. Start from a clean stack (`podman compose -f devenv/compose.yaml down -v`)
-if you need a fresh project database, then run:
+This used to be a standalone shell script (`test/e2e/chat-kanban.sh`, before
+that `scripts/chat-kanban-qa.sh`). It is **deleted**: everything it asserted is
+now covered by the e2e journey suite, which runs the same flow against the
+compose stack and fails loudly instead of exiting non-zero from a `jq` pipeline.
+
+| What the script did | Where it lives now |
+| --- | --- |
+| Authenticated `/v1/models` and checked `agentd` was present | `TestJ13_OpenAIIntake` (`test/e2e/journeys_openai_test.go`) — the same compose litellm the script pointed at, so the routing assertion is no longer needed: the journey's requests go through the daemon's own provider config |
+| Created a plan, materialized it, polled task events to autonomous output | `TestJ04_FullHappyPath` — chat → plan → materialize → workspace/ready → all tasks COMPLETED |
+| Exercised the human-resolution API / privileged handoff | `TestJ07_HealingHandoff` (healing profile) — connector failure opens the breaker, producing a BLOCKED parent and a "Manual review required:" HUMAN child |
+
+Run them all with:
 
 ```bash
-AGENTD_API_URL=http://127.0.0.1:8765 \
-LITELLM_BASE_URL=http://127.0.0.1:4000/v1 \
-LITELLM_API_KEY="$LITELLM_API_KEY" \
-LITELLM_MODEL=agentd \
-./test/e2e/chat-kanban.sh
+make dev-clean dev-up   # the journeys run against the compose stack
+make test-e2e
 ```
 
-The script authenticates against `/v1/models`, checks agentd and the web endpoint,
-creates the machine-inventory chat plan, materializes it with
-`start_empty_workspace`, polls task events for autonomous output, and exercises
-the human-resolution API. It exits non-zero when assertions fail and prints the
-project/task IDs for investigation. API assertions are automated; browser click-through remains manual.
+Or one journey:
 
-> **Note:** The script validates that `agentd` is present in the authenticated
-> LiteLLM `/v1/models` response and checks agentd/web liveness, but it does **not**
-> independently verify that agentd is configured to use the same `LITELLM_BASE_URL`
-> and model. That routing is controlled by `devenv/agentd/config.yaml`
-> and the compose file. It also leaves the created project and tasks behind.
->
-> **Known behavior:** the LiteLLM-backed mock generates task titles like "Set up plan"
-> and "Implement core of plan". The script's completion assertion looks for "identity"
-> in the task title, which these generic titles do not contain. If the script reports
-> "no completed identity task observed", confirm the tasks reached `COMPLETED` via
-> `GET /api/v1/projects/{id}/tasks` and treat the script assertion as a mock-title
-> mismatch rather than an execution failure.
+```bash
+go test -v -tags=e2e -count=1 -run 'TestJ04|TestJ07' ./test/e2e/
+```
+
+What is **not** covered, and is why the browser checklist below is still
+manual: nothing here renders the UI. The privileged-handoff click-through
+(steps 1-5) and the sudo edge cases (1-4) have no automated coverage.
 
 ## Manual browser verification
 
@@ -50,7 +47,7 @@ project/task IDs for investigation. API assertions are automated; browser click-
 
 5. Paste the output into the task drawer’s resolution form and resolve the
    handoff. Confirm the child and parent reach terminal state and do not rerun
-   the privileged command. Ask for status again and confirm attention is gone.The browser has no automation; API assertions are automated.
+   the privileged command. Ask for status again and confirm attention is gone. The browser has no automation; the API assertions above are automated.
 
 ### Sudo/Human-Handoff Edge Cases (not yet covered)
 
@@ -61,8 +58,8 @@ syntactic block for `sudo` at the start of a command or after `&&`/`||`/`;`/`|`
 (`internal/kanban/human_handoff.go` `ResolveHumanHandoff`) accepts **any**
 non-empty pasted text as success — it does not re-verify the output. These
 edge cases exercise both the detection boundary and the trust boundary of
-that resolution step; none are covered by the automated script or the happy
-path above.
+that resolution step; none are covered by the journey suite or the happy path
+above.
 
 > **Note:** Earlier versions of these paths had minimal daemon stdout logging.
 > The current codebase now emits `slog` calls in `permission_detector.go`,
