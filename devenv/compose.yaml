@@ -260,7 +260,10 @@ services:
       NEXT_PUBLIC_API_URL: "http://localhost:8765"
     volumes:
       - ../web:/app
-    command: ["sh", "-c", "npm install --legacy-peer-deps && npm run dev"]
+    # npm ci installs exactly what package-lock.json pins and never rewrites
+    # it. The plain `npm install` this replaced rewrote the bind-mounted
+    # lockfile on every container start (B-002), dirtying the host tree.
+    command: ["sh", "-c", "npm ci --legacy-peer-deps && npm run dev"]
     depends_on:
       agentd:
         condition: service_started
