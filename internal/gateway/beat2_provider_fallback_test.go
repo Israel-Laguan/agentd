@@ -55,10 +55,11 @@ func TestBeat2ExhaustionBreakerClass(t *testing.T) {
 	}
 }
 
-// TestNewRouterFromConfigs_PrimaryFailureSecondarySucess encodes T-025 Part A:
-// dead primary provider (http://127.0.0.1:1) with live secondary httptest.Server.
-// ProviderUsed should be "secondary" and the response content should be captured.
-func TestNewRouterFromConfigs_PrimaryFailureSecondarySucess(t *testing.T) {
+// TestRouterCascadesToSecondaryWhenPrimaryFails encodes T-025 Part A with fake
+// providers: a failing primary cascades to the secondary, and ProviderUsed and
+// the content come from the secondary. It does not exercise the real openai
+// adapter built by NewRouterFromConfigs.
+func TestRouterCascadesToSecondaryWhenPrimaryFails(t *testing.T) {
 	// Secondary is always reachable and returns a response
 	secondary := &fakeProvider{
 		providerName: "secondary",

@@ -143,7 +143,7 @@ Owner confirmed 2026-09-27. Nothing in the Makefile, CI or docs referenced them.
 
 The scripts were meant to prove end-to-end behaviour and never did it well.
 Rather than delete them unfinished, sprint S07 finishes the job: each beat
-becomes an e2e journey (J08–J12 in SP-008), and T-025 deletes a script only
+becomes an e2e journey (J07–J12 in [journeys.md](../testing/journeys.md)), and T-025 deletes a script only
 once its journey passes or is explicitly deferred. The audit below checked each
 script's real pass/fail logic (not its comments) against the existing Go
 tests. It feeds the journey gotchas and lists the Go tests T-025 also adds.

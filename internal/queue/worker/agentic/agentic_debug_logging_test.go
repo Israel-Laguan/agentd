@@ -122,6 +122,7 @@ func TestAgenticLoop_CorrelationIDConsistentAcrossLifecycle(t *testing.T) {
 	}
 	store := testutil.NewFakeStore()
 	secretArg := "secret-tool-arg-should-not-leak"
+	// The bash tool reads the command out of a JSON object; the sandbox map is keyed by the bare command.
 	seq := &sequenceGateway{responses: []gateway.AIResponse{
 		{
 			Content: "running a command",

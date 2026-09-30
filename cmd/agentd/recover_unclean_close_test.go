@@ -8,23 +8,22 @@ import (
 	"agentd/internal/queue"
 )
 
-// TestRecoverUncleanCloseUngrabbedTasks_RestartRecoversTask tests T-025 Part A:
-// A file-backed home with a RUNNING task (dead PID) is reopened after unclean
-// close (no Close() call), then BootReconcile is called. The task should no
-// longer be RUNNING and system/status should return 200.
-func TestRecoverUncleanCloseUngrabbedTasks_RestartRecoversTask(t *testing.T) {
+// TestBootReconcileRecoversRunningTaskAfterUncleanClose tests T-025 Part A: a
+// file-backed home with a RUNNING task (dead PID) is reopened while the first
+// handle is still open (a killed daemon never calls Close), then BootReconcile
+// runs. The task must no longer be RUNNING.
+func TestBootReconcileRecoversRunningTaskAfterUncleanClose(t *testing.T) {
 	home := initHome(t)
 	ctx := context.Background()
-	taskID := seedRunningTask(t, ctx, home)
-	closeAndReopen(t, ctx, home, taskID)
+	taskID, cleanup := seedRunningTask(t, ctx, home)
+	// Deliberately not closed before the reopen: that is the unclean close.
+	defer cleanup()
+	reopenAndReconcile(t, ctx, home, taskID)
 }
 
-func seedRunningTask(t *testing.T, ctx context.Context, home string) string {
+func seedRunningTask(t *testing.T, ctx context.Context, home string) (string, func()) {
 	t.Helper()
 	_, store, _, cleanup, err := openRuntime(&rootOptions{home: home})
-	if cleanup != nil {
-		defer cleanup()
-	}
 	if err != nil {
 		t.Fatalf("openRuntime() error = %v", err)
 	}
@@ -52,11 +51,10 @@ func seedRunningTask(t *testing.T, ctx context.Context, home string) string {
 	if beforeClose.State != models.TaskStateRunning {
 		t.Fatalf("before close: task state = %v, want RUNNING", beforeClose.State)
 	}
-	cleanup()
-	return tasks[0].ID
+	return tasks[0].ID, cleanup
 }
 
-func closeAndReopen(t *testing.T, ctx context.Context, home string, taskID string) {
+func reopenAndReconcile(t *testing.T, ctx context.Context, home string, taskID string) {
 	t.Helper()
 	_, store2, _, cleanup2, err := openRuntime(&rootOptions{home: home})
 	if cleanup2 != nil {

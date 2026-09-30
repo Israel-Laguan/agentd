@@ -278,9 +278,11 @@ func TestTieredExecute_FailedRegatherAbandonsTheStep(t *testing.T) {
 // exhausts its retries and records TIERED_VERIFY_DIVERSION_CHECK_ERROR.
 type diversionCheckFailureStore struct {
 	*testutil.FakeKanbanStore
+	reads int
 }
 
 func (s *diversionCheckFailureStore) GetTask(ctx context.Context, id string) (*models.Task, error) {
+	s.reads++
 	return nil, errors.New("tasks table unavailable")
 }
 
@@ -298,6 +300,9 @@ func TestTieredVerify_DiversionCheckFailureDoesNotClassifyOutput(t *testing.T) {
 
 	w.Process(ctx, verify)
 
+	if failing.reads < 4 {
+		t.Fatalf("expected the diversion check to retry %d times, got %d", 4, failing.reads)
+	}
 	events, err := store.ListEventsByTask(ctx, verify.ID)
 	if err != nil {
 		t.Fatalf("ListEventsByTask(verify): %v", err)

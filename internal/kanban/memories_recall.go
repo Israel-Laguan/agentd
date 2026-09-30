@@ -90,13 +90,18 @@ func (s *Store) recallUserPreferences(ctx context.Context, userID string, limit 
 		FROM memories m
 		WHERE m.superseded_by IS NULL
 		  AND m.scope = ?
-		  AND m.tags LIKE ?
+		  AND (m.tags = ? OR m.tags LIKE ? ESCAPE '\')
 		ORDER BY m.created_at DESC
 		LIMIT ?`,
-		models.MemoryScopeUserPref, "user_id:"+userID+"%", limit)
+		models.MemoryScopeUserPref, "user_id:"+userID, escapeLike("user_id:"+userID)+",%", limit)
 	if err != nil {
 		return nil, fmt.Errorf("recall user preferences: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	return scanMemories(rows)
+}
+
+// escapeLike escapes LIKE wildcards so an ID is matched literally.
+func escapeLike(v string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(v)
 }
