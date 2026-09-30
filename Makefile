@@ -86,7 +86,7 @@ COMPOSE := $(CURDIR)/devenv/compose.yaml
 # resolves depends_on only within the *activated* profiles, so bringing up a
 # single non-default profile alone fails with KeyError: 'litellm'.
 COMPOSE_PROFILES := --profile default --profile healing --profile faults \
-                     --profile breaker --profile disk
+                     --profile breaker --profile disk --profile tiered
 
 # dev-up blocks until every container with a healthcheck is healthy. podman-compose
 # does not reliably honour depends_on service_healthy, and `up -d` returns as soon
@@ -142,6 +142,11 @@ lint-links:
 
 lint-docs: lint-md lint-links
 
+# Python unit tests for the devenv mock LLM's scenario dispatch and tiered
+# replies (devenv/mockllm/test_server.py). No third-party deps: stdlib unittest.
+test-mockllm:
+	python3 -m unittest discover -s devenv/mockllm -p 'test_server.py'
+
 # check is the required merge gate: loc + minfunc + lint + test + lint-docs
-# (Markdown and link checks). Run before pushing.
-check: loc minfunc lint test lint-docs
+# (Markdown and link checks) + the mock LLM scenario tests. Run before pushing.
+check: loc minfunc lint test test-mockllm lint-docs
