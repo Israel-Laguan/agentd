@@ -83,6 +83,30 @@ func JailPath(workspaceRoot, requested string) (string, error) {
 	return path, nil
 }
 
+// ValidateSourcePath resolves sourcePath to an absolute path and checks that
+// it names an existing directory, returning it ready to copy from. It is
+// exported so callers can reject a bad source_path *before* they persist any
+// board state: SeedFromPath's own failure happens after the project and task
+// rows are already committed, which would leave an orphan project behind.
+//
+// It is deliberately not on the WorkspaceManager interface — it needs no
+// receiver, and adding it there would force every fake implementation to grow
+// a method that never touches workspace state.
+func ValidateSourcePath(sourcePath string) (string, error) {
+	src, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return "", fmt.Errorf("resolve source path: %w", err)
+	}
+	info, err := os.Stat(src)
+	if err != nil {
+		return "", fmt.Errorf("stat source path: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("source_path must be a directory: %s", src)
+	}
+	return src, nil
+}
+
 // SeedFromPath copies the contents of sourcePath into the project workspace
 // using a recursive filesystem walk. It validates that sourcePath exists and
 // that the destination is within the jailed workspace root.
@@ -90,16 +114,9 @@ func (m *FSWorkspaceManager) SeedFromPath(ctx context.Context, projectID, source
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	src, err := filepath.Abs(sourcePath)
+	src, err := ValidateSourcePath(sourcePath)
 	if err != nil {
-		return fmt.Errorf("resolve source path: %w", err)
-	}
-	info, err := os.Stat(src)
-	if err != nil {
-		return fmt.Errorf("stat source path: %w", err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("source_path must be a directory: %s", src)
+		return err
 	}
 	destDir := m.ProjectDir(projectID)
 	if _, err := JailPath(m.Root, destDir); err != nil {
