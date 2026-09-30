@@ -83,7 +83,7 @@ services:
       - ./litellm/agentd_correlation.py:/app/agentd_correlation.py:ro
     depends_on:
       mockllm:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness').status==200 else 1)\""]
       interval: 3s
@@ -107,7 +107,7 @@ services:
       - ./agentd/config.yaml:/etc/agentd/config.yaml:ro
     depends_on:
       litellm:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8765/api/v1/system/status"]
       interval: 3s
@@ -131,7 +131,7 @@ services:
       - ./agentd/config.healing.yaml:/etc/agentd/config.yaml:ro
     depends_on:
       litellm:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8766/api/v1/system/status"]
       interval: 3s
@@ -155,7 +155,7 @@ services:
       - ./agentd/config.faults.yaml:/etc/agentd/config.yaml:ro
     depends_on:
       litellm:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8767/api/v1/system/status"]
       interval: 3s
@@ -191,7 +191,7 @@ services:
       - ./agentd/crontab.disk:/home/agentd-disk/agentd.crontab:ro
     depends_on:
       litellm:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8768/api/v1/system/status"]
       interval: 3s
@@ -215,7 +215,7 @@ services:
       - ./agentd/config.brk.yaml:/etc/agentd/config.yaml:ro
     depends_on:
       litellm:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8770/api/v1/system/status"]
       interval: 3s
@@ -239,7 +239,7 @@ services:
       - ./agentd/config.tiered.yaml:/etc/agentd/config.yaml:ro
     depends_on:
       litellm:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8769/api/v1/system/status"]
       interval: 3s
