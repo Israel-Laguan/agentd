@@ -69,11 +69,31 @@ The journey suite is defined in [docs/testing/journeys.md](../../docs/testing/jo
   the task's durable event log. Note the spec's expected `task-started` /
   `task-claimed` / `task-completed` events do not exist: claim and start
   write no event row at all, so there is nothing to stream for them
+- **J05**: Materialization edge cases — a plan with no workspace intent comes
+  back 201/PENDING and `workspace/ready` 409s until the workspace is seeded
+  (the spec's "materialize returns 409" step described an API that does not
+  exist); double-ready is idempotent 200; a bad `source_path` (missing path,
+  or a file rather than a directory) is a 400 with no project row left behind
+- **J13**: OpenAI-compatible intake — the `chat.completion` envelope, the
+  `tools` / `tool_choice` opt-in (`tool_calls` only for a tool the client
+  declared, suppressed by `tool_choice: "none"`), the `stream: true` chunk
+  framing with its `[DONE]` sentinel, and the 400 error intake. No `usage`
+  block is required: it is `omitempty` and never populated
+- **J15**: MCP board export — `tools/list` advertises the eight documented
+  board tools, and `board.list_projects` / `board.list_tasks` /
+  `board.get_task` return a just-materialized project. The transport is
+  JSON-RPC over Streamable HTTP at `POST /mcp`, **not** a REST export route,
+  and every tool payload is a JSON string in `content[0].text`. Requires
+  `mcp.enabled: true` (set in devenv/agentd/config.yaml; the product default
+  is off). Two open contract limits are documented in
+  docs/mcp-board-export.md and filed as B-005 (silent 100-task cap) and B-006
+  (`state` ignored when `project_id` is passed)
 
-Deferred (P1/P2, see docs/testing/journeys.md for the policy):
-- J05-J06: Materialization edge cases, task drawer event log
-- J12: Tiered execution
-- J13: OpenAI compatibility, J15: MCP export
+Deferred (see docs/testing/journeys.md for the policy and re-entry conditions):
+- **J06**: task drawer event log — needs a browser (UI journeys move to
+  Phase 2), and two of its three expected events do not exist at all
+- **J12**: tiered execution — blocked on T-028 per-request mock scenarios and
+  tiered verify replies; the `tiered` profile fixture already exists
 
 ## Architecture
 
@@ -84,13 +104,20 @@ Deferred (P1/P2, see docs/testing/journeys.md for the policy):
   - `Get()`: Make GET requests to the API
 
 - **APIClient**: Convenience methods for API calls
+  - `PostMCP()`: POST /mcp with the Accept header the Streamable HTTP
+    transport requires (`application/json, text/event-stream`). Go's
+    http.Client sends no Accept by default and is answered 400; curl's `*/*`
+    passes. Every MCP call goes through this
   - `SystemStatus()`: GET /api/v1/system/status
   - `Projects()`: GET /api/v1/projects
   - `ChatCompletions()`: POST /v1/chat/completions (OpenAI-shaped; the real
     chat route — there is no `/api/v1/chat`)
   - `MaterializePlan()`: POST /api/v1/projects/materialize — the DraftPlan
     JSON from chat, unmodified. There is no separate approve endpoint or
-    plan ID: materializing that exact plan IS the approval.
+    plan ID: materializing that exact plan IS the approval. A bad
+    `source_path` is rejected 400 before anything is persisted
+  - `CallMCPTool()` / `ListMCPTools()`: JSON-RPC calls to /mcp, decoding the
+    SSE-framed response and the `content[0].text` JSON payload
   - `WorkspaceReady()`: POST /api/v1/projects/{projectID}/workspace/ready,
     keyed by the project's UUID (not its name)
   - `ListTasks()`: GET /api/v1/projects/{projectID}/tasks, optionally
@@ -138,6 +165,9 @@ Deferred (P1/P2, see docs/testing/journeys.md for the policy):
     the running agentd container via `podman compose exec` — there is no
     bind mount exposing the workspace root to the host (see
     devenv/compose.yaml's named volumes)
+  - `CreateSourceDir()` / `CreateSourceFile()`: Stage a `source_path` inside
+    the agentd container and return its container-internal path. The daemon
+    reads the path itself, so a host temp dir would not resolve
 
   All podman-compose invocations pass `--profile <profile>` explicitly:
   podman-compose 1.3.0 does not auto-activate the "default" profile the way
@@ -157,7 +187,10 @@ Devenv supports multiple configurations via profiles in `devenv/compose.yaml`:
 | faults | Provider cascade (J09-A) | agentd-faults | gateway.order: [dead, secondary] |
 | breaker | Breaker trip (J09-B) | agentd-brk | gateway.order: [dead, dead2] (all dead) |
 | disk | Disk watchdog (J10) | agentd-disk | disk.free_threshold_percent: 100 + a crontab with `@every 5s disk-watchdog` |
-| tiered | Tiered execution (J12) | agentd-tiered | tiered.enabled: true |
+| tiered | Tiered execution (J12, deferred) | agentd-tiered | tiered.enabled: true |
+
+The `default` profile also sets `mcp.enabled: true` / `transport: http` so
+J15 can reach `/mcp`; the product default is off.
 
 Each variant has:
 - Separate `agentd-*` service on unique port
@@ -234,15 +267,17 @@ The mock LLM is published on `127.0.0.1:8000` for J11's request capture.
 
 1. **J01**: Add a devenv profile that boots without `--skip-llm-warmup` to
    automate the warmup-on/off log check
-2. **Implement J05-J06**: Materialization edge cases, task drawer event log
-3. **Implement J12-J13, J15**: Tiered execution, OpenAI compatibility, MCP export
+2. **J06**: needs a browser test tier; also blocked on the task-lifecycle
+   events it expects actually existing
+3. **J12**: blocked on T-028 (per-request `@scenario=` selection and tiered
+   verify replies)
 4. **Add mock scenario injection**: Parse @scenario= tags in requests (T-028)
 5. **Tighten J08** once boot reconcile stops skipping PID-1 tasks
-6. **T-027**: run every P0 journey twice on a clean stack and triage
 
-All ten P0 journeys (J01-J04, J07-J11, J14) pass. See
+All ten P0 journeys (J01-J04, J07-J11, J14) and the three implemented P1
+journeys (J05, J13, J15) pass. See
 [docs/testing/journeys.md](../../docs/testing/journeys.md) for the spec, the
-bugs the journeys found, and the deferral policy for P1/P2.
+bugs the journeys found, and the deferral policy for the rest.
 
 ## Testing
 

@@ -24,7 +24,7 @@
 
 - `workspace/ready` twice after a valid seed was safe (second call succeeded without duplicating dispatch).
 
-### Chat-to-Kanban QA script
+### Chat-to-Kanban QA script (historical — script deleted 2026-09-30, superseded by J04 and J07)
 
 - `./test/e2e/chat-kanban.sh` created a project, materialized it with `start_empty_workspace: true`, and tasks reached `COMPLETED`.
 

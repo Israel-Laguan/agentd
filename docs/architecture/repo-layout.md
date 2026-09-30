@@ -62,7 +62,7 @@ internal/api/tests/feature/
   api_http_test.go           was e2e/http_test.go
 test/                        test time, outside the source tree
   container/Dockerfile       was Dockerfile.test (+ Dockerfile.dockerignore)
-  e2e/chat-kanban.sh         was scripts/chat-kanban-qa.sh; deleted once J04 + J07 pass (T-027)
+  e2e/journeys_*_test.go     the e2e journey suite (J01-J15); was scripts/chat-kanban-qa.sh, deleted in T-027
 tools/                       dev time
   checkloc/                  was tools/checkloc/
   checkminfunc/              was tools/checkminfunc/ (+ baseline)
@@ -201,7 +201,7 @@ deploy notes" in [litellm-integration.md](../litellm-integration.md)).
 ### 3. `test/`
 
 - [ ] `git mv test/container/Dockerfile test/container/Dockerfile`. Add `test/container/Dockerfile.dockerignore` (root copy, minus test patterns). Fix the header build command.
-- [ ] `git mv test/e2e/chat-kanban.sh test/e2e/chat-kanban.sh`. Update its usage/header lines.
+- [x] ~~`git mv test/e2e/chat-kanban.sh`~~ — superseded: the shell QA script was deleted outright in T-027 (2026-09-30) once J04 and J07 covered its assertions. `test/e2e/` now holds the Go journey suite.
 - [ ] Makefile: `podman-test` → `podman build -f test/container/Dockerfile …`.
 - [ ] `.gitignore`: drop `!test/container/Dockerfile`. `.dockerignore`: add `test/`, drop `.e2e/`.
 
@@ -233,7 +233,7 @@ deploy notes" in [litellm-integration.md](../litellm-integration.md)).
 - [ ] `CONTRIBUTING.md`, `REVIEW.md`, `.agents/skills/code-review-ready/SKILL.md`: `make test-e2e` → `make test PKG=./internal/api/...`.
 - [ ] `REVIEW.md`, `GUARDRAILS.md`, `docs/guardrails.md`: `scripts/checkloc` / `scripts/checkminfunc` → `tools/…`.
 - [ ] [container-development.md](../container-development.md): `Dockerfile.test` → `test/container/Dockerfile` (8 places), plus the no-container steps from `test-env.sh`.
-- [ ] [litellm-integration.md](../litellm-integration.md), [checkpoints.md](../testing/checkpoints.md), [qa-and-browser-verification.md](../testing/qa-and-browser-verification.md), [troubleshooting.md](../testing/troubleshooting.md), [results.md](../testing/results.md): compose path and `dev/` → `devenv/`; `scripts/chat-kanban-qa.sh` → `test/e2e/chat-kanban.sh`.
+- [ ] [litellm-integration.md](../litellm-integration.md), [checkpoints.md](../testing/checkpoints.md), [qa-and-browser-verification.md](../testing/qa-and-browser-verification.md), [troubleshooting.md](../testing/troubleshooting.md), [results.md](../testing/results.md): compose path and `dev/` → `devenv/`; `scripts/chat-kanban-qa.sh` (deleted in T-027, 2026-09-30; the e2e journey suite replaced it).
 - [ ] [api-testing.md](../api-testing.md): 7 `e2e/http_test.go:<line>` refs and `make test-e2e`.
 - [ ] [llm-connector-strategy.md](../llm-connector-strategy.md), [provider-tool-calling.md](../provider-tool-calling.md), [agentic-harness-roadmap.md](../agentic-harness-roadmap.md): `scripts/llm-smoke.sh` → `tools/diag/llm-smoke.sh`.
 - [ ] Agent memory note `podman-runtime-target`: `docker-compose.dev.yml` + `dev/` → `devenv/`.

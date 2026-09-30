@@ -32,7 +32,7 @@ Rationale:
 
 | Profile | When | agentd service | port | config changes |
 | --- | --- | --- | --- | --- |
-| default | J01-J06, J13-J15 (standard) | agentd | 8765 | none |
+| default | J01-J06, J13-J15 (standard) | agentd | 8765 | none, except `mcp.enabled: true` in `devenv/agentd/config.yaml` for J15 — the product default is off, so the `/mcp` route is not registered without it |
 | healing | J07 (connector failure → handoff) | agentd-healing | 8766 | `healing.enabled: true`, `outage_handoff_enabled: true` |
 | faults | J09 part A (cascade to a live secondary) | agentd-faults | 8767 | `gateway.order: [dead, secondary]` |
 | breaker | J09 part B (every provider dead → breaker trips) | agentd-brk | 8770 | `gateway.order: [dead, dead2]`, `healing.enabled: true`, `outage_handoff_enabled: true` |
@@ -93,7 +93,7 @@ The mock maintains internal state per scenario (e.g., "fail on primary, succeed 
 | **J02** | Board and logs reachable, loop running | 1. Start `make dev-up`; 2. Curl `/api/v1/projects`; 3. Open browser, check kanban loads; 4. Verify SSE `/api/v1/sse` delivers heartbeats | HTTP 200 on board/logs routes; SSE stream delivers events; queue worker loop active (visible in logs) | default | Web routes are client-side tabs, not server routes; SSE is the real data stream | P0 | CP1 |
 | **J03** | Chat answers without creating a plan | 1. POST `/api/v1/chat` with a simple intent (no plan needed); 2. Verify response is a chat completion, not a plan | Response is `AIResponse` (chat), not `PlanResponse`; no tasks created | default | Needs a way to signal "chat only" vs "ask for plan"; check feature for current signal | P0 | CP2 |
 | **J04** | Chat → plan → approve → materialize → workspace ready → tasks complete | 1. `agentd ask "write hello.txt"`; 2. Approve with Y; 3. Create project workspace dir + README; 4. POST `/workspace/ready`; 5. Watch board as workers claim tasks; 6. Verify tasks COMPLETED | Tasks flow: PENDING → READY → RUNNING → COMPLETED; workspace is non-empty before tasks unlock; all tasks finish | default + mock success scenario | Empty workspace blocks task unlock; demo.md has full script; J04 is the "happy path" | P0 | CP4, demo §2-4 |
-| **J05** | Materialization edge cases (not-ready workspace, bad source_path, double ready) | 1. Materialize without workspace; expect 409; 2. Try again with bad `source_path` (non-existent dir); 3. Call workspace/ready twice; verify idempotent or error | Correct HTTP codes (409 for not-ready); idempotent on double-ready; clear error on bad path | default | T-025 closes a gap: failed materialize can leave project row behind | P1 | CP3b |
+| **J05** | Materialization edge cases (not-ready workspace, bad source_path, double ready) | 1. Materialize with neither `source_path` nor `start_empty_workspace` → 201 with PENDING tasks; 2. `workspace/ready` before seeding → 409; 3. seed, `workspace/ready` → 200; 4. `workspace/ready` again → 200, same set; 5. bad `source_path` (missing dir; and a file) → 400, no project row; 6. good `source_path` → 201, seeded, root tasks READY | 409 `STATE_CONFLICT` from `workspace/ready` on an empty workspace; double-ready idempotent; bad `source_path` 400 with nothing persisted | default | **Corrected 2026-09-30:** materialize never 409s — it accepts the plan and returns PENDING tasks. The 409 is `workspace/ready`'s. The old "409 for not-ready" step was written against an API that does not exist. | P1 | CP3b |
 | **J06** | Task drawer event log shows per-task events | 1. Run J04; 2. Open task detail drawer; 3. Verify `task-started`, `task-claimed`, `task-completed` events in timeline | SSE delivers task-* events; UI renders timeline with correct event sequence | default | Requires browser verification (manual in S07; UI journeys defer to Phase 2) | P1 | CP3a |
 | **J07** | Connector failure → HUMAN task → human resolution | 1. Start agentd-healing (healing.enabled: true); 2. Chat → plan → approve with a step that needs a tool call; 3. Force tool to fail (simulated permission denied); 4. Verify HUMAN task created in `_system`; 5. Resolve HUMAN task; 6. Verify next task resumes | HUMAN task created, SSE event sent, next task can be resumed or re-run | healing | healing.enabled: false in dev config (gotcha 2 in spike); need healing config variant; J07 replaces chat-kanban-qa.sh beat 5 | P0 | demo §5, chat-kanban-qa.sh |
 | **J08** | Unclean kill mid-task → restart on same home → no stuck RUNNING | 1. Materialize a multi-task plan; 2. Kill -9 agentd while task is RUNNING; 3. Restart agentd on same home; 4. Call `/api/v1/system/status`; 5. Verify no RUNNING tasks; board recovered | No RUNNING tasks after restart; `system/status` returns 200; recovery is automatic (BootReconcile) | default | J08 needs its own agentd (can't share with J07 for timing); Beat 1 (restart-mid-task.sh); T-025 closes gap with new test | P0 | Beat 1 |
@@ -101,9 +101,9 @@ The mock maintains internal state per scenario (e.g., "fail on primary, succeed 
 | **J10** | Disk below threshold → one HUMAN "Disk space critical" task, deduped | 1. Start agentd-disk (threshold 100%); 2. Wait for the watchdog's first pass; 3. Verify one HUMAN task in `_system` with one `DISK_SPACE_CRITICAL` event; 4. Wait out 3 more passes; 5. Verify still exactly one task, same ID, still one event | Exactly one HUMAN task, deduped across passes; exactly one event | disk | Cadence comes from the bind-mounted crontab, not config (`@every 5s`, default `*/10`). Threshold 100% means the watchdog always fires on the container's overlay fs — the journey tests dedup, not a real disk-full | P0 | Beat 2.3, disk_watchdog_test.go |
 | **J11** | Saved preference is recalled and shown to the agent on a later task | 1. Materialize + run a project for a user *before* any preference exists; 2. Assert the canary is **absent** from that task's captured prompt; 3. POST `/api/v1/preferences`; 4. Materialize a second project for the same user and run it; 5. Assert the canary is **present** in its prompt; 6. Materialize a third project for an unrelated user and assert it is **absent** | Absent before, present after, absent for another user — i.e. real per-user recall, and no leak into every prompt | default | Phase 1 is the baseline: without it, "present" would be satisfied by anything that always injects prefs. Phase 3 catches a global leak. Needs a prompt-observability channel, which did not exist (see the J11 bug entry) | P0 | Beat 2.4 |
 | **J12** | Tiered execution: small-model plan, escalation on verify failure | 1. Start agentd-tiered; 2. Chat with complex task; 3. Small model makes plan; 4. Verify step fails verification; 5. Escalate to full model | Tiered: small model tried first; verify failure triggers escalation; final step uses full model | tiered | tiered.enabled: false by default; config variant needed; J12 replaces tiered-harness.sh (which only tested fixtures); T-025 removes harness | P1 | Phase 5, tiered-execution.md |
-| **J13** | OpenAI-compatible intake (`/v1/chat/completions`) | 1. POST to `/v1/chat/completions` with OpenAI format; 2. Verify response is OpenAI format | Request parsed as OpenAI intake; response format matches OpenAI spec | default | Tested via openai_intake.feature | P1 | openai_intake.feature |
+| **J13** | OpenAI-compatible intake (`/v1/chat/completions`) | 1. POST OpenAI-shaped request → `chat.completion` envelope; 2. declare a `tools` entry → `tool_calls` with `finish_reason: tool_calls`; 3. `tool_choice: "none"` suppresses them; 4. `stream: true` → `chat.completion.chunk` frames + `[DONE]`; 5. error intake → 400 with a stable code | Envelope fields valid (`object`, `chatcmpl-` id, `created`, echoed model, `choices[0]`); tool_calls only for a declared tool; stream framing terminated; 400s for no user message / two approved scopes / undecodable body | default | **Widen 2026-09-30:** the real surface is bigger than "parsed as OpenAI intake" — the handler also accepts `tools`/`tool_choice`/`stream` and emits `tool_calls` only for a tool the client declared. `usage` is declared `omitempty` and never populated on the non-streaming path, so clients must treat it as optional. | P1 | openai_intake.feature |
 | **J14** | SSE stream delivers task lifecycle events | 1. Materialize a single-task project; 2. Open a project-scoped `/api/v1/events/stream`; 3. Wait for the task to reach COMPLETED; 4. Drain the stream; 5. Assert `LOG_CHUNK` and `RESULT` both arrived, `LOG_CHUNK` before `RESULT`; 6. Reconcile the live frames against the task's durable event log | Stream open, lifecycle signals present and causally ordered, and live-vs-durable divergence is only the documented `RESULT` case | default | The spec's `task-started` / `task-claimed` / `task-completed` events do not exist — claim and start write no event row. Subscribe *after* materialize: task-dispatch runs every 3s, so listening first would miss a fast task (the durable log covers that window) | P0 | results.md |
-| **J15** | MCP board export | 1. Populate board with tasks; 2. Call `/api/v1/mcp/export` (or similar endpoint); 3. Verify export contains all tasks with IDs, states, outputs | Export JSON includes all task metadata; format matches mcp-board-export.md | default | docs/mcp-board-export.md has format spec | P1 | docs/mcp-board-export.md |
+| **J15** | MCP board export | 1. `tools/list` → the eight documented board tools with schemas; 2. materialize a project; 3. `board.list_projects` / `board.get_project` return it; 4. `board.list_tasks` returns its tasks, scoped and state-accurate; 5. `board.get_task` returns the detail shape; 6. unknown tool → JSON-RPC `-32602`, missing task → tool error on a 200 | Every advertised tool present with a schema; the project and its tasks exported with real ids/states; the two error shapes distinguishable | default + `mcp.enabled: true` | **Corrected 2026-09-30:** there is no `/api/v1/mcp/export`. The board is a JSON-RPC 2.0 MCP server over Streamable HTTP at `POST /mcp`, and MCP is off by default, so the route is not even registered on a stock config. "Contains all tasks" is false (B-005) and no tool exposes task **outputs** — the export is a state summary. Format now specified in docs/mcp-board-export.md. | P1 | docs/mcp-board-export.md |
 
 ---
 
@@ -149,8 +149,8 @@ Discovered and fixed four real defects:
   published to the event bus, so live subscribers never learned a task
   finished. Product bug, fixed.
 
-P1/P2 journeys (J05, J06, J12, J13, J15) remain unimplemented, deferred per
-the policy below.
+P1 journeys (J05, J13, J15) were implemented in the 2026-09-30 cycle and pass.
+J06 and J12 are deferred with reasons below.
 
 Stack bring-up for the non-default profiles:
 
@@ -346,12 +346,56 @@ For P1/P2 journeys (J05, J06, J12, J13, J15):
 - If passing: land them as-is.
 - If failing: either (a) defer with a reason in this doc, or (b) open a bug linking the journey.
 
+### J05, J13, J15: implemented (2026-09-30)
+
+All three pass on the default profile with no new mock scenarios. Each needed
+its spec corrected against the running stack first — J05's "409 on materialize",
+J13's narrow "parsed as OpenAI intake", and J15's `/api/v1/mcp/export` endpoint
+and "with outputs" promise all described behaviour the product does not have.
+The corrected rows are in the table above; the J15 response format is now
+actually specified in `docs/mcp-board-export.md`.
+
+Defects found: B-004 (bad `source_path` returned 500 and orphaned the project —
+**fixed** in the same cycle), B-005 (`board.list_tasks` silently caps at 100
+tasks), B-006 (`board.list_tasks` ignores `state` when `project_id` is passed).
+B-005 and B-006 are open; neither blocks J15, which passes on the contract as
+it actually behaves.
+
+### J06: deferred to Phase 2 (UI journeys need a browser)
+
+J06 asserts that the task drawer renders a `task-started` / `task-claimed` /
+`task-completed` timeline. Two of those three events do not exist at all:
+`ClaimNextReadyTasks` and the READY → RUNNING transition write no event row
+(the same finding J14 already corrected), so there is nothing for the timeline
+to show and nothing to stream. What remains is a rendering assertion about
+React components, which needs a browser driver — deliberately out of scope for
+this Go harness (see the SP-008 harness decision: "Non-goal: Playwright"). The
+durable half is already covered by J14.
+
+Re-entry condition: a browser-based test tier exists, and the three
+task-lifecycle events are implemented if the timeline is meant to show them.
+
+### J12: deferred until T-028 (needs per-request mock scenarios)
+
+J12 needs the small model to produce a plan and then *fail verification* on a
+known step, so the escalation to the full model is observable. Nothing on the
+default stack can produce that: the mock LLM always succeeds, and the failure
+has to be attributed to the verifier rather than to a dead provider — which is
+what the `tiered-fail-verify` scenario in the table above is for. It needs
+T-028's per-request `@scenario=` selection and tiered verify replies, neither of
+which exists yet.
+
+The `tiered` profile fixture is in place (port 8769, `tiered.enabled: true`), so
+what is missing is the mock, not the config.
+
+Re-entry condition: T-028 lands per-request scenario selection.
+
 ---
 
 ## Todos for T-026, T-027, T-028
 
 **T-026** (harness): done. `test/e2e/` runs behind `//go:build e2e`; `make test-e2e` brings up every profile and waits for healthy.
 
-**T-027** (run and triage): P0 half done — all P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; four defects found and fixed (SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap). Still open: implement or defer J05, J06, J12, J13, J15 (each with a reason or a `B-` bug), append a cycle entry per run to `results.md`, and delete `test/e2e/chat-kanban.sh` now that J04 and J07 pass.
+**T-027** (run and triage): done. P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; P1 journeys J05, J13 and J15 are implemented and passing, and J06 and J12 are deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`. Filed but not fixed: B-001, B-002, B-003, B-005, B-006. `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 pass. Cycle entries are in `results.md`.
 
-**T-028** (mock scenarios): partly done. Request capture (`GET /requests`) and the published mock port exist. No per-request scenario selection, error/latency responses or tiered verify replies yet; none of the P0 journeys needed them (J09's breaker half uses an all-dead provider profile). J12 is what needs them.
+**T-028** (mock scenarios): partly done. Request capture (`GET /requests`) and the published mock port exist. No per-request scenario selection, error/latency responses or tiered verify replies yet; none of the P0 journeys needed them (J09's breaker half uses an all-dead provider profile), and the three P1 journeys added on 2026-09-30 did not either. **J12 is the only remaining consumer** and is deferred until this lands.
