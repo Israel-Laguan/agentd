@@ -1,6 +1,6 @@
 # E2E Journey Suite (S07)
 
-Status: **under SP-008 spike** (2026-09-28 to 2026-09-29).  
+Status: **implemented** (17 tests / 14 journeys, green on repeated `make test-e2e -count=1`; S07 closed 2026-10-01).  
 Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in git)
 
 ---
@@ -196,10 +196,10 @@ pass (let alone a deduped second one) inside an e2e run.
 Fixed by adding `devenv/agentd/crontab.disk` (an `@every 5s disk-watchdog`
 entry) and bind-mounting it into the `agentd-disk` service, and by deleting the
 dead key. This is a fixture bug, not a product bug — but it is worth flagging
-that **`disk.check_interval` reads like a real knob and isn't one**. If
-operators are expected to tune the watchdog cadence, the key should either be
-implemented or the config reference should say the crontab is the only input.
-No product change made; the choice is a product decision.
+that **`disk.check_interval` reads like a real knob and isn't one**. Decided in
+T-032: **document, don't implement.** The crontab is the only input, and a Go-side
+interval would mean a second scheduler for one job. `docs/reference.md` now says so
+on the `disk.free_threshold_percent` row. No product change made.
 
 ### J14: task completions were never published to the event bus (product bug, fixed)
 
@@ -344,7 +344,7 @@ Two further spec corrections, both verified against the running stack:
 
 ## P1/P2 Deferral or Bug Policy
 
-For P1/P2 journeys (J05, J06, J12, J13, J15):
+For P1/P2 journeys (J05, J06, J13, J15 — J12 is implemented as of 2026-09-30):
 
 - If passing: land them as-is.
 - If failing: either (a) defer with a reason in this doc, or (b) open a bug linking the journey.
@@ -394,6 +394,6 @@ escalate-step request. The `tiered` profile is started by `make dev-up`.
 
 ## Todos for T-026, T-027, T-028
 
-**T-027** (run and triage): done. P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; P1 journeys J05, J12, J13 and J15 are implemented and passing, and J06 is deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`, B-005, B-006. Filed but not fixed: B-001, B-002, B-003. `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 pass. Cycle entries are in `results.md`.
+**T-027** (run and triage): done. P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; P1 journeys J05, J12, J13 and J15 are implemented and passing, and J06 is deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`, B-005, B-006. Filed: B-001, B-002 (fixed), B-003. `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 pass. Cycle entries are in `results.md`.
 
 **T-028** (mock scenarios): done. Request capture (`GET /requests`), the published mock port, per-request scenario selection (in-band `@scenario=` tag, `X-Mock-Scenario` header, or model name via `MOCKLLM_MODEL_SCENARIOS`), error/latency responses, and tiered step replies (each step detected from its system-prompt suffix; verify fails by default) all land. Python unit tests for the dispatch run under `make check` (`devenv/mockllm/test_server.py`). **J12 is the only consumer** of the tiered replies and is now implemented.

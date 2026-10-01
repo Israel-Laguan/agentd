@@ -233,3 +233,35 @@ Tooling:
 
 J06 remains deferred (browser tier; two of its three expected task-lifecycle
 events do not exist). Not implemented, as instructed.
+
+### T-029 cycle: build the agentd image once (2026-10-01)
+
+Fixed:
+
+- **B-007** (P3): `make dev-up` no longer compiles agentd six times. All six
+  agentd services in `devenv/compose.yaml` now take `image: agentd:local`
+  instead of declaring their own `build:` block, and a new `make dev-build`
+  target (`podman build -t agentd:local .`) runs once per `dev-up` ahead of
+  compose. `mockllm` keeps its own build context, so `up --build` is retained
+  for it. Verified after `touch internal/queue/recovery/recover.go` and a full
+  `make dev-clean`:
+  - `grep -c "CGO_ENABLED=0 go build" <dev-up log>` = **1** (was 6).
+  - `make dev-up` wall-clock **51s** (was 484s on a tree with edited Go).
+  - All six agentd containers report image `localhost/agentd:local`.
+
+`make check` green (exit 0) after the compose, Makefile and docs edits.
+
+`make test-e2e -count=1`: **17/17 in 294.85s** on a clean stack, no regressions
+from the compose change; every agentd profile went healthy.
+
+Confirmed live for T-030:
+
+- J08 logged `recovered 2m0s after restart (reset ghost task to READY)` — B-008
+  reproduces exactly as documented (PID 1 before and after, so only the
+  stale-heartbeat sweep recovers it). J08 is 123.25s of the 294.85s run.
+
+Also in this cycle (T-032 docs hygiene): `journeys.md` stale lines corrected
+(status, P1/P2 policy list, B-002 marked fixed); `repo-layout.md` set to
+**implemented** with 29 of 34 T-024 checklist boxes verified against the tree and
+ticked; `disk.check_interval` decided as **document, don't implement** and
+recorded on the `disk.free_threshold_percent` row in `docs/reference.md`.

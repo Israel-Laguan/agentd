@@ -3,9 +3,9 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | backlog |
+| Status | fixed |
 | Priority | P3 |
-| Sprint | S07-e2e-journeys |
+| Sprint | S07-e2e-journeys (fixed in S08, T-029) |
 | Severity | minor |
 | Links | devenv/compose.yaml, Makefile (dev-up), Dockerfile |
 
@@ -46,7 +46,7 @@ wall-clock cost of bringing the stack up after any Go change.
   for J12) added a sixth service that shares the same build.
 - This is a pre-existing compose wart that the `tiered` addition amplified, not
   a regression introduced by it.
-- Not fixed in this PR (out of scope; recorded so the cost is on the record).
+- **Fixed 2026-10-01** (T-029): all six agentd services use `image: agentd:local`, built once by a new `make dev-build`. `grep -c "CGO_ENABLED=0 go build"` on a clean `dev-up` = 1; dev-up 51s (was 484s). See `docs/testing/results.md`.
 
 ## Candidate fixes
 
