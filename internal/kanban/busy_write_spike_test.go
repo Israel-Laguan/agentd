@@ -39,7 +39,8 @@ func TestSpikeBusyWriteUnderLongLock(t *testing.T) {
 	held := spikeHoldWriteLock(t, db)
 
 	var ok, failed int64
-	var firstFailure time.Duration
+	var firstFailure atomic.Int64
+	var onceFailure sync.Once
 	start := time.Now()
 	runSpikeWrites(t, func(ctx context.Context) error {
 		_, err := db.ExecContext(ctx,
@@ -47,16 +48,17 @@ func TestSpikeBusyWriteUnderLongLock(t *testing.T) {
 		return err
 	}, func(err error) {
 		atomic.AddInt64(&failed, 1)
-		if firstFailure == 0 {
-			firstFailure = time.Since(start)
-			t.Logf("first failure after %v: %v", firstFailure.Truncate(time.Millisecond), err)
-		}
+		onceFailure.Do(func() {
+			d := time.Since(start)
+			firstFailure.Store(int64(d))
+			t.Logf("first failure after %v: %v", d.Truncate(time.Millisecond), err)
+		})
 	}, &ok)
 
 	<-held
 	t.Logf("RESULT unwrapped attempts=%d ok=%d failed=%d elapsed=%v first_failure=%v (busy_timeout=5s)",
 		ok+failed, ok, failed, time.Since(start).Truncate(time.Millisecond),
-		firstFailure.Truncate(time.Millisecond))
+		time.Duration(firstFailure.Load()).Truncate(time.Millisecond))
 	spikeAssertNoSilentLoss(t, store, db, taskID, ok)
 }
 
@@ -81,6 +83,12 @@ func TestSpikeBusyWriteWithRetryOnBusy(t *testing.T) {
 	<-held
 	t.Logf("RESULT retried attempts=%d ok=%d failed=%d elapsed=%v",
 		ok+failed, ok, failed, time.Since(start).Truncate(time.Millisecond))
+	// The shipped path must lose nothing: the consistency check below compares
+	// the durable counter with the successful writes, and both sides stay
+	// consistent even if every attempt failed, so assert the count outright.
+	if failed != 0 {
+		t.Errorf("retried writes failed = %d, want 0", failed)
+	}
 	spikeAssertNoSilentLoss(t, store, db, taskID, ok)
 }
 
@@ -158,18 +166,18 @@ func spikeHoldWriteLock(t *testing.T, db *sql.DB, hold ...time.Duration) <-chan 
 	if len(hold) > 0 {
 		d = hold[0]
 	}
+	// Take the lock on this goroutine so acquisition is deterministic and any
+	// failure aborts before the workers report unguarded results.
+	tx, err := beginImmediate(context.Background(), db)
+	if err != nil {
+		t.Fatalf("beginImmediate() error = %v", err)
+	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		tx, err := beginImmediate(context.Background(), db)
-		if err != nil {
-			return
-		}
 		defer func() { _ = tx.Rollback() }()
 		time.Sleep(d)
 	}()
-	// Let the holder win the lock before the workers start.
-	time.Sleep(250 * time.Millisecond)
 	return done
 }
 

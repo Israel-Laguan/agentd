@@ -1,6 +1,6 @@
 # E2E Journey Suite (S07)
 
-Status: **implemented** (17 tests / 14 journeys, green on repeated `make test-e2e -count=1`; S07 closed 2026-10-01).  
+Status: **implemented** (17 tests / 14 journeys, green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01).  
 Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in git)
 
 ---
@@ -39,7 +39,7 @@ Rationale:
 | disk | J10 (disk threshold) | agentd-disk | 8768 | `disk.free_threshold_percent: 100`, crontab `@every 5s disk-watchdog` |
 | tiered | J12 (tiered execution) | agentd-tiered | 8769 | `tiered.enabled: true` |
 
-Implementation: devenv/compose.yaml lists all variants; test setup calls `podman compose up -d <profile>` for the needed service.
+Implementation: devenv/compose.yaml lists all variants; test setup calls `podman compose up -d <profile>` for the needed service, after `make dev-build` has produced the `agentd:local` image those services reference.
 
 **`breaker` is a separate profile from `faults` because they need opposite configurations.** `faults` has a *live* secondary, so a worker call always cascades successfully and the breaker can never open there; `breaker` puts two unreachable providers in `gateway.order` so the cascade is walked to exhaustion. J09 is therefore split across two journeys — `TestJ09_ProviderCascade` (faults) and `TestJ09_BreakerOpens` (breaker) — rather than being one test on one profile.
 
@@ -155,7 +155,9 @@ P1 journeys (J05, J13, J15) were implemented in the 2026-09-30 cycle and pass.
 J12 was implemented on 2026-09-30 once T-028 landed the tiered mock replies.
 J06 remains deferred (browser tier) with its reason below.
 
-Stack bring-up for the non-default profiles:
+Stack bring-up for the non-default profiles. The agentd services take a
+prebuilt image, so build it first (`make dev-build`, or just `make dev-up` once
+for the default profile) — a direct compose invocation cannot build it:
 
 ```sh
 podman compose -f "$PWD/devenv/compose.yaml" \
@@ -395,6 +397,6 @@ escalate-step request. The `tiered` profile is started by `make dev-up`.
 
 ## Todos for T-026, T-027, T-028
 
-**T-027** (run and triage): done. P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; P1 journeys J05, J12, J13 and J15 are implemented and passing, and J06 is deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`, B-005, B-006. Filed: B-001, B-002 (fixed), B-003. `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 pass. Cycle entries are in `results.md`.
+**T-027** (run and triage): done. P0 journeys pass on repeated clean runs and on 4 consecutive runs against one accumulating stack; P1 journeys J05, J12, J13 and J15 are implemented and passing, and J06 is deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`, B-005, B-006. Filed (now resolved): B-001, B-002 (fixed), B-003 (closed as not a bug; see results.md). `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 pass. Cycle entries are in `results.md`.
 
 **T-028** (mock scenarios): done. Request capture (`GET /requests`), the published mock port, per-request scenario selection (in-band `@scenario=` tag, `X-Mock-Scenario` header, or model name via `MOCKLLM_MODEL_SCENARIOS`), error/latency responses, and tiered step replies (each step detected from its system-prompt suffix; verify fails by default) all land. Python unit tests for the dispatch run under `make check` (`devenv/mockllm/test_server.py`). **J12 is the only consumer** of the tiered replies and is now implemented.

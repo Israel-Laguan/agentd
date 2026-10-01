@@ -98,12 +98,17 @@ DEV_HEALTH_WAIT ?= 180
 # separate image per service when each declares build:, so the Go compile ran once
 # per service -- six per dev-up. Build the tag once here and let compose only start
 # containers. --build is kept for mockllm, which still has its own build context.
-AGENTD_IMAGE ?= agentd:local
+# Exported so devenv/compose.yaml resolves ${AGENTD_IMAGE:-agentd:local} to the
+# same tag that dev-build just produced. Keep the two in sync.
+export AGENTD_IMAGE ?= agentd:local
+
 dev-build:
 	podman build -t $(AGENTD_IMAGE) .
 
+# --force-recreate: compose compares the service image by tag, so a rebuilt
+# agentd:local would otherwise leave the previous container (and binary) running.
 dev-up: dev-build
-	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) up --build -d
+	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) up --build --force-recreate -d
 	@echo "waiting up to $(DEV_HEALTH_WAIT)s for containers to become healthy"
 	@deadline=$$(( $$(date +%s) + $(DEV_HEALTH_WAIT) )); \
 	while :; do \

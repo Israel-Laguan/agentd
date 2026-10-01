@@ -228,10 +228,10 @@ func (s *Store) ListCompletedTasksOlderThan(ctx context.Context, age time.Durati
 	return scanTasks(rows)
 }
 
-// AppendEvent inserts an event row. Retried on BUSY because the insert is not
-// idempotent (normalizeEvent mints a fresh uuid per attempt, so a replay would
-// append a duplicate) but a write that returned BUSY did not commit, so the
-// retry cannot double-write. TOKEN_USAGE events are the source the rolling
+// AppendEvent inserts an event row. normalizeEvent runs once, before the retry
+// loop, so every attempt reuses the same event.ID -- a BUSY attempt never
+// committed, and the replay carries the same id rather than a fresh one.
+// TOKEN_USAGE events are the source the rolling
 // budget is rehydrated from, so a drop here is silent budget drift (SP-009).
 func (s *Store) AppendEvent(ctx context.Context, e models.Event) error {
 	event, err := normalizeEvent(e)
