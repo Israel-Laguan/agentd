@@ -137,7 +137,10 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 		t.Skip("skipping e2e test in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	// The step budgets below add up: WaitForTaskState (30s) + kill/restart +
+	// WaitForHealthy (60s) + the recovery poll (30s). The deadline must cover
+	// all of them, or a slow-but-successful run dies mid-poll.
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
 
 	harness := NewHarness(baseURL, "default")
@@ -183,6 +186,13 @@ func j08AwaitRecoveryEvent(ctx context.Context, t *testing.T, client *APIClient,
 	// machine while still failing loudly if we are back on the 2m sweep.
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("J08 [recovery] context expired (%v) while polling for a "+
+				"RECOVERY event on task %s; this is a test-budget failure, not a "+
+				"recovery regression", ctx.Err(), taskID)
+		default:
+		}
 		events, err := client.ListTaskEvents(ctx, taskID)
 		if err == nil {
 			for _, e := range events {

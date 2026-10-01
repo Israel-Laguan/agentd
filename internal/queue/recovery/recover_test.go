@@ -119,7 +119,12 @@ func TestBootReconcile_resetsTaskOwnedByOwnPID(t *testing.T) {
 func TestBootReconcile_leavesTaskOwnedByOtherLivePID(t *testing.T) {
 	store := testutil.NewFakeStore()
 	ctx := context.Background()
-	const otherPID = 4242
+	otherPID := 4242
+	if otherPID == os.Getpid() {
+		// BootReconcile drops its own PID from the alive set, so the "other
+		// live daemon" must never be this process.
+		otherPID++
+	}
 	taskID := seedRunningGhostTaskWithPID(t, ctx, store, otherPID)
 
 	sink := &recordingSink{}

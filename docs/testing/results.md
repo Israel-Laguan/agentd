@@ -251,7 +251,7 @@ Fixed:
 
 `make check` green (exit 0) after the compose, Makefile and docs edits.
 
-`make test-e2e -count=1`: **17/17 in 294.85s** on a clean stack, no regressions
+`make test-e2e`: **17/17 in 294.85s** on a clean stack, no regressions
 from the compose change; every agentd profile went healthy.
 
 Confirmed live for T-030:
