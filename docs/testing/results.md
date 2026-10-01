@@ -155,3 +155,23 @@ vacuously-passing test would have shipped as false confidence.
 Flake: `TestJ10_DiskWatchdogDedup` failed once at 0.51 s, then passed in
 isolation (16.5 s) and on a full re-run. Startup timing, unrelated to the ledger
 path.
+
+### SP-012 cycle: provider-outage time to resume (2026-10-01)
+
+Measured in `internal/queue/outage_recovery_test.go`: J09 covered the trip, the
+recovery half was unproven, and does not work in every case.
+
+**Time to resume: 5 min, then one probe.** OPEN holds for `DefaultBreakerTimeout`
+(`safety/breaker.go:21`), admits one probe task, closes when it succeeds. The spike
+blamed the S07 startup race; it is a package constant, so an operator cannot shorten
+it.
+
+**Failed tasks split.** The 2 pre-trip failures requeue to READY with `RetryCount`
+== 0 (an outage does not consume the retry budget); the trip task is BLOCKED with a
+`PROVIDER_EXHAUSTED_HANDOFF`. A long outage ends in a human inbox.
+
+**Defect: the breaker can latch HALF_OPEN forever.** `ProbeLimit` sets `inflight`
+= true before dispatch knows it has a task (`loop_dispatch.go:161`), so an empty
+queue at the crossing tick spends the probe on nothing; `inflight` is then cleared
+only by a result from a task that can no longer be dispatched, so nothing runs
+without an operator reset. Reproduced, not committed; sized as T-035.
