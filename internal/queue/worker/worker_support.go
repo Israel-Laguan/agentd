@@ -113,16 +113,22 @@ func (w *Worker) startHeartbeat(ctx context.Context, taskID string) func() {
 	}
 }
 
+// Emit appends an event to the task's event log. A dropped event is logged at
+// Error rather than discarded: for TOKEN_USAGE this is the durable record the
+// rolling budget is rehydrated from, so a silent drop would let budget
+// accounting drift permanently with no way to tell it happened (SP-009).
 func (w *Worker) Emit(ctx context.Context, task models.Task, kind, payload string) {
 	if w.sink == nil {
 		return
 	}
-	_ = w.sink.Emit(ctx, models.Event{
+	if err := w.sink.Emit(ctx, models.Event{
 		ProjectID: task.ProjectID,
 		TaskID:    sql.NullString{String: task.ID, Valid: true},
 		Type:      models.EventType(kind),
 		Payload:   payload,
-	})
+	}); err != nil {
+		slog.Error("failed to append event", "task_id", task.ID, "type", kind, "err", err)
+	}
 }
 
 // toolExecEnvelope is used to parse tool execution results from JSON.

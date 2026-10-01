@@ -228,16 +228,24 @@ func (s *Store) ListCompletedTasksOlderThan(ctx context.Context, age time.Durati
 	return scanTasks(rows)
 }
 
+// AppendEvent inserts an event row. Retried on BUSY because the insert is not
+// idempotent (normalizeEvent mints a fresh uuid per attempt, so a replay would
+// append a duplicate) but a write that returned BUSY did not commit, so the
+// retry cannot double-write. TOKEN_USAGE events are the source the rolling
+// budget is rehydrated from, so a drop here is silent budget drift (SP-009).
 func (s *Store) AppendEvent(ctx context.Context, e models.Event) error {
 	event, err := normalizeEvent(e)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO events (id, project_id, task_id, type, payload, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		event.ID, event.ProjectID, nullString(event.TaskID), event.Type, event.Payload,
-		formatTime(event.CreatedAt), formatTime(event.UpdatedAt))
+	err = retryOnBusyNoResult(ctx, func(ctx context.Context) error {
+		_, execErr := s.db.ExecContext(ctx, `
+			INSERT INTO events (id, project_id, task_id, type, payload, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			event.ID, event.ProjectID, nullString(event.TaskID), event.Type, event.Payload,
+			formatTime(event.CreatedAt), formatTime(event.UpdatedAt))
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("append event: %w", err)
 	}

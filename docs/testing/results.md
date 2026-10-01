@@ -317,3 +317,64 @@ Two setup notes worth keeping:
 - `make test-e2e -count=1` cannot be run as written — `make` parses `-count=1`
   as its own option and fails with `invalid option -- 'c'`. The target hardcodes
   `-count=1`, so `make test-e2e` is the same uncached run.
+
+### T-031 cycle: never drop a token-ledger write to a busy database (2026-10-01)
+
+Fixed:
+
+- **B-001** (P2): the three token-ledger writes — `AddTokenUsage`,
+  `AddUsageDetails` (`internal/kanban/tasks_repo_token_usage.go`) and
+  `AppendEvent` (`internal/kanban/events.go`) — were the **only** unwrapped
+  writes in the kanban package, despite ~30 neighbouring call sites being
+  wrapped, including `AddComment` in the same file as `AppendEvent`. All three
+  are now wrapped in `RetryOnBusy`. `Worker.Emit`
+  (`internal/queue/worker/worker_support.go`) no longer discards the sink error
+  with `_ =`; it logs at Error.
+
+The premise B-001 was filed on turned out to be wrong, and that is the real
+finding. `RetryOnBusy`'s ~156 ms of backoff *looks* pointless behind a 5 s
+`busy_timeout`. But that 156 ms is only the delay **between** attempts — every
+attempt independently gets the driver's own 5 s window, so the wrapper's real
+tolerance is **6 × 5 s ≈ 30 s**. Measured with the lock held for three
+durations:
+
+| Lock hold | Writes landed |
+| --- | --- |
+| 8 s | 160/160 (no loss) |
+| 25 s | 160/160 (no loss) |
+| 32 s | 152/160 (loss returns) |
+
+The cliff sits between 25 s and 32 s, matching 6 × 5 s = 30 s. So `RetryOnBusy`
+was always earning its place; it just had no test saying why.
+
+Evidence:
+
+- **Reproduced the loss first.** 8 workers × 20 counter writes while a second
+  connection holds the write lock 8 s: `attempts=160 ok=152 failed=8` — a 5%
+  drop, with the first failure at 4.7 s. So B-001 was real, not theoretical.
+- **Fixed path loses nothing**: the same load through the real
+  `store.AddTokenUsage` is `160/160`.
+- Retry is safe despite neither write being idempotent (the counter is a
+  read-modify-write accumulate; the event mints a fresh uuid per attempt),
+  because SQLite guarantees a write that returned `SQLITE_BUSY` did not commit.
+  Empirically confirmed: the durable counter equals the successful write count
+  exactly in every run — no partial writes, no double-counts.
+- `TestRetryOnBusyToleratesLockHeldLongerThanOneTimeout`
+  (`internal/kanban/db/busy_window_test.go`) turns the mechanism into an
+  always-on ~0.6 s guard: an unwrapped write cannot outlast a single
+  `busy_timeout` and fails, the same write through `RetryOnBusy` lands, and
+  exactly one row lands so a replayed write would show as a double-count.
+- `TestEmitLogsDroppedEvent` failed before the `Emit` fix, passes after.
+- `make check` green. Full e2e suite 17/17 in 194.2 s.
+
+A test that was wrong on the first attempt: the initial worker-level test
+asserted `Worker` retries a `SQLITE_BUSY` from its `TokenUsageStore`. It passed
+vacuously — `RecordTaskTokenUsage` calls both counter writes unconditionally, so
+it made two calls whether or not it retried, and the assertion could not fail.
+The retry belongs in the kanban store, not `Worker`, so the test was asserting
+the wrong layer. Replaced with the store-layer proof. Recorded because a
+vacuously-passing test would have shipped as false confidence.
+
+Flake: `TestJ10_DiskWatchdogDedup` failed once at 0.51 s, then passed in
+isolation (16.5 s) and on a full re-run. Startup timing, unrelated to the ledger
+path.
