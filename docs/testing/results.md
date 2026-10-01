@@ -224,3 +224,33 @@ of failing an assertion.
 That is a product decision for a later sprint, recorded in `journeys.md` rather than
 backlogged. The three lifecycle events remain unimplemented — a product change, not a
 test gap.
+
+### B-009 cycle: two load-sensitive test waits made robust (2026-10-01)
+
+Both reported flakes are fixed by removing the fixed windows, but **neither
+reproduced**, so these are robustness fixes rather than verified root-cause
+fixes. Under 2–2.5× CPU oversubscription (20 busy loops on 8 cores) the queue
+suite passed 5/5 both with the old 3s budget and the new 30s one, and J10 passed
+3/3 at both the old and new windows. Recording that plainly: the change removes a
+known timing dependency, it is not a demonstrated cure.
+
+**Breaker scenario.** `waitFor` in `steps_dispatch_test.go` had a hardcoded 3s
+deadline shared by every queue scenario, which matches the 3s timeout B-009
+recorded exactly. It is now a named `stepWaitBudget` of 30s. Generous is safe
+here because every use of `waitFor` polls for an event that either happens on its
+own or never happens at all — no scenario legitimately needs to fail fast, since
+a failing step returns an error the suite already surfaces.
+
+A larger budget is only safe if still bounded, so `step_wait_budget_test.go` pins
+that: `waitFor` must give up, its error must name the budget so a reader can tell
+a slow pass from a hang, and `stepWaitBudget` itself must stay positive, above
+the 3s that flaked, and at most a minute. The timeout test uses a short explicit
+budget via `waitForBudget` so the suite does not pay 30s to prove a timeout works.
+
+**J10.** The dedup window was a single 15s `Sleep` for a crontab that says
+`@every 5s`. Under load a pass can start late, so 15s could elapse while fewer
+than three extra passes had run and the assertion would prove less than it
+claimed. Now a 20s window (3 passes + 5s slack) polled at 500ms, and the test's
+context budget goes 90s → 120s to cover it. J10 passes at 20.54s.
+
+Verification: `make check` green; `TestJ10_DiskWatchdogDedup` green under load.

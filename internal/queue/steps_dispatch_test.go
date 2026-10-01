@@ -208,13 +208,34 @@ func requireBreakerState(b *CircuitBreaker, want BreakerState) error {
 	return nil
 }
 
+// stepWaitBudget bounds how long a scenario step polls for its condition.
+//
+// It was 3s, which B-009 recorded as flaky: under full-suite load the breaker
+// scenario's three workers could not claim, run and record a failure inside 3s,
+// so a timing artefact read as a product failure. The budget is now generous
+// (30s) because every use of waitFor is a poll for an event that either happens
+// on its own or never happens at all — there is no scenario that legitimately
+// needs to *fail* fast, since a failing step returns an error the suite already
+// surfaces. The old 3s was also an implicit default shared by every scenario;
+// naming it here means a future step can raise it deliberately rather than by
+// editing this function.
+const stepWaitBudget = 30 * time.Second
+
+// waitFor polls ok until it is true or the step budget expires. ok is called on
+// a 10ms interval, so it should be a cheap, non-blocking check.
 func waitFor(ok func() bool, label string) error {
-	deadline := time.Now().Add(3 * time.Second)
+	return waitForBudget(ok, label, stepWaitBudget)
+}
+
+// waitForBudget is waitFor with an explicit deadline, so a test can exercise the
+// timeout path without spending the real budget.
+func waitForBudget(ok func() bool, label string, budget time.Duration) error {
+	deadline := time.Now().Add(budget)
 	for time.Now().Before(deadline) {
 		if ok() {
 			return nil
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	return fmt.Errorf("timed out waiting for %s", label)
+	return fmt.Errorf("timed out waiting for %s after %s", label, budget)
 }
