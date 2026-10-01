@@ -176,3 +176,49 @@ It is a package constant, so an operator cannot shorten it.
 queue at the crossing tick spends the probe on nothing; `inflight` is then cleared
 only by a result from a task that can no longer be dispatched, so nothing runs
 without an operator reset. Reproduced, not committed; sized as T-035.
+
+### T-034 cycle: J06 rewritten, drawer event log covered by component tests (2026-10-01)
+
+J06 wanted `task-started` / `task-claimed` / `task-completed`, and claim and start
+write no event row (the same finding J14 made), so it could never pass. Redefined as
+**"the drawer renders the task's durable event log"** — the events that exist.
+
+**Fixtures are captured, not invented.** `GET /api/v1/tasks/{id}/events` was read off
+the devenv stack after `TestJ08_UncleanKillRecovery`, and the test's events are that
+response verbatim: `WARNING`, `RECOVERY`, `TOKEN_USAGE`, `LOG_CHUNK`, `RESULT`, with
+real payloads and nanosecond timestamps. So the tests fail if the wire shape drifts,
+not only if the markup does. The stack was reset with `make dev-clean && make dev-up`
+first, per the B-008 stale-image trap.
+
+**Three of the item's premises were wrong**, checked against the code:
+
+- "First component tests in `web/`" — `web/` already had 16 vitest files. These are the
+  first for these two components, not the first in the repo.
+- The drawer's three behaviours were already implemented: the `task_id` filter is
+  inline in `task-drawer.tsx`, `eventRefreshKey` is in the effect deps, and the reject
+  path clears events. So this was a test-writing job, not a fix — smaller than the
+  P1 / ~1 day estimate suggested.
+- The component renders events **newest first**, not in API order. The tests pin the
+  real order rather than the order the item implied.
+
+**One vacuous test, found and fixed.** The first rejected-fetch test asserted only
+that a drawer opened with a failing fetch shows no events — which passes even with the
+catch handler deleted, because a fresh drawer's events are already `[]`. Mutation
+testing caught it: deleting the handler left the suite green. Rewritten to fetch
+successfully once and then fail on refresh, so clearing the stale log is observable; it
+now fails against that mutation.
+
+Every other assertion was mutation-checked too. Removing the `task_id` filter, dropping
+`eventRefreshKey` from the deps, removing the `.reverse()`, mutating the caller's array,
+and removing the empty state each turn the suite red.
+
+`vitest.setup.ts` gained a `scrollIntoView` stub: jsdom does not implement it and
+`CommentPanel` calls it on mount, so mounting any component containing it threw instead
+of failing an assertion.
+
+`cd web && npm test`: 19 files, 105 tests, green.
+
+**Recorded gap:** no real-browser tier, so CSS layout and click-through are unproven.
+That is a product decision for a later sprint, recorded in `journeys.md` rather than
+backlogged. The three lifecycle events remain unimplemented — a product change, not a
+test gap.
