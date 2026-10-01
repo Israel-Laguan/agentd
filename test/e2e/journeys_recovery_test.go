@@ -123,21 +123,21 @@ func j07RetryParent(ctx context.Context, t *testing.T, client *APIClient, parent
 // (podman-compose's kill default). The recovered task is then legitimately
 // re-dispatched, so the assertion is the RECOVERY event, not a state snapshot.
 //
-// KNOWN GAP (docs/testing/journeys.md J08): the intended path is
-// queue.BootReconcile (internal/queue/recovery/recover.go), which resets
-// RUNNING tasks whose owning PID is dead. But MarkTaskRunning stamps the
-// daemon's own os.Getpid(), and in the devenv container agentd is PID 1 both
-// before and after the restart, so the owner always looks alive and boot
-// reconcile skips the task. It is only recovered by the stale-heartbeat sweep
-// (StaleAfter, 2m default), so this test allows ~3m instead of asserting
-// immediate recovery. Kept last in this file: the re-dispatched slow task
-// occupies a worker for up to a minute.
+// Boot reconcile now resets the interrupted task at boot (B-008, fixed in T-030):
+// MarkTaskRunning stamps the daemon's own PID, and in the devenv container agentd
+// is PID 1 before and after the restart, so the liveness probe saw the owner as
+// alive and skipped the task until the stale-heartbeat sweep caught it 2m later.
+// BootReconcile now drops its own PID from the alive set, so the orphan is reset as
+// soon as the daemon starts. The wait below is therefore a tight bound: recovery
+// happens during startup, so anything near it means boot reconcile regressed to the
+// stale sweep again. Kept last in this file: the re-dispatched slow task occupies a
+// worker for up to a minute.
 func TestJ08_UncleanKillRecovery(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	harness := NewHarness(baseURL, "default")
@@ -178,7 +178,10 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 func j08AwaitRecoveryEvent(ctx context.Context, t *testing.T, client *APIClient, taskID string, restarted time.Time) {
 	t.Helper()
 
-	deadline := time.Now().Add(180 * time.Second)
+	// Boot reconcile runs before the daemon serves traffic, so recovery is
+	// expected within seconds. 30s leaves room for a slow restart on a loaded
+	// machine while still failing loudly if we are back on the 2m sweep.
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		events, err := client.ListTaskEvents(ctx, taskID)
 		if err == nil {
@@ -191,5 +194,5 @@ func j08AwaitRecoveryEvent(ctx context.Context, t *testing.T, client *APIClient,
 		}
 		time.Sleep(time.Second)
 	}
-	t.Fatalf("J08 [recovery] no RECOVERY event on task %s within 180s of restart (stuck RUNNING)", taskID)
+	t.Fatalf("J08 [recovery] no RECOVERY event on task %s within 30s of restart (boot reconcile did not recover it; a hit here means it fell back to the 2m stale-heartbeat sweep)", taskID)
 }

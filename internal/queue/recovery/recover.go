@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ func BootReconcile(ctx context.Context, store models.KanbanStore, probe safety.P
 	if err != nil {
 		return err
 	}
-	recovered, err := store.ReconcileGhostTasks(ctx, alive)
+	recovered, err := store.ReconcileGhostTasks(ctx, withoutOwnPID(alive))
 	if err != nil {
 		return err
 	}
@@ -32,6 +33,33 @@ func BootReconcile(ctx context.Context, store models.KanbanStore, probe safety.P
 		return err
 	}
 	return reportRebootRecovery(ctx, store, sink, recovered)
+}
+
+// withoutOwnPID drops this daemon's PID from the alive set used at boot.
+//
+// MarkTaskRunning stamps os.Getpid(), and in a container agentd is PID 1 both
+// before and after a restart, so the liveness probe reports a task left RUNNING
+// by the killed daemon as owned by a live process. Only the stale-heartbeat sweep
+// recovered it, 2m after the restart (B-008).
+//
+// Boot reconcile runs before this process starts any worker, so a RUNNING task
+// stamped with our own PID cannot be one of ours: it is an orphan. Removing only
+// our own PID keeps the rule correct when a second daemon shares the home, because
+// that daemon's tasks keep their own live owner PID and still go through the
+// liveness probe.
+//
+// Accepted limit: two daemons in separate PID namespaces that are both PID 1 and
+// share one home would still collide. Supporting that needs a per-boot instance
+// ID stamped alongside the PID, not this rule.
+func withoutOwnPID(alive []int) []int {
+	self := os.Getpid()
+	out := make([]int, 0, len(alive))
+	for _, pid := range alive {
+		if pid != self {
+			out = append(out, pid)
+		}
+	}
+	return out
 }
 
 func EmitHeartbeatReconcile(ctx context.Context, sink models.EventSink, tasks []models.Task) error {
