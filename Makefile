@@ -105,10 +105,26 @@ export AGENTD_IMAGE ?= agentd:local
 dev-build:
 	podman build -t $(AGENTD_IMAGE) .
 
-# --force-recreate: compose compares the service image by tag, so a rebuilt
-# agentd:local would otherwise leave the previous container (and binary) running.
+# The agentd containers must be recreated to pick up the freshly built
+# agentd:local: podman-compose compares the service image by tag, so a plain
+# `up` leaves the previous container (and binary) running -- verified, the
+# running container keeps the old image ID across a rebuild.
+#
+# Recreation is scoped to the six agentd containers, removed by hand and then
+# recreated by the `up` below. `--force-recreate` is deliberately not used: it
+# applies to every service in every activated profile, and web's command is
+# `npm ci && npm run dev` on the bind-mounted host tree, so it would delete and
+# reinstall web/node_modules and kill the developer's live dev server on every
+# dev-up -- including every e2e run, since test-e2e depends on dev-up. It also
+# tore down and raced the recreated litellm/mockllm dependencies.
+#
+# The name filter matches only the agentd variants (agentd_agentd_1,
+# agentd_agentd-healing_1, ...); litellm, mockllm and web do not match. This
+# requires web to have no depends_on: agentd -- see devenv/compose.yaml.
 dev-up: dev-build
-	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) up --build --force-recreate -d
+	@for id in $$(podman ps -q --filter label=io.podman.compose.project \
+	    --filter name=agentd_agentd); do podman rm -f $$id; done
+	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) up --build -d
 	@echo "waiting up to $(DEV_HEALTH_WAIT)s for containers to become healthy"
 	@deadline=$$(( $$(date +%s) + $(DEV_HEALTH_WAIT) )); \
 	while :; do \
