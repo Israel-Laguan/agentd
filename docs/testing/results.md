@@ -87,8 +87,10 @@ Two setup notes worth keeping:
   on `dev-up`, but the already-running container was created before the source
   edit, and J08's kill/restart reuses that container's filesystem — so the old
   binary kept running and the fix appeared not to work. `make dev-clean` before
-  judging a container-level change fixes it. Worth remembering: `dev-up` is not
-  enough after editing code that only takes effect on a fresh container.
+  judging a container-level change fixes it. Worth remembering: a plain
+  `podman compose up` is not enough after editing code that only takes effect on
+  a fresh container. (`dev-up` now recreates the `agentd_agentd*` containers for
+  you, so this only bites when driving compose directly.)
 - `make test-e2e -count=1` cannot be run as written — `make` parses `-count=1`
   as its own option and fails with `invalid option -- 'c'`. The target hardcodes
   `-count=1`, so `make test-e2e` is the same uncached run.

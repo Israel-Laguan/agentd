@@ -97,19 +97,20 @@ matching task-ID line in the project's `PLAN_RESULTS.log` as execution evidence.
 
 ### A fix looks broken because the container reuses the old filesystem
 
-`make dev-up` after a container-level change is **not** enough. The J08 journey
-kills and restarts the agentd container on the same volume, so a rebuild that
-only refreshes the image leaves the running container's filesystem untouched —
-the test exercises the old binary and the fix appears not to work. Run:
+A plain `podman compose up` after a container-level change is **not** enough: it
+compares the service image by tag, so the previous container keeps running the
+old binary and the fix appears not to work. This cost a full debugging cycle on
+B-008 in S08. Use `make dev-up` — it removes all `agentd_agentd*` containers
+before the `up`, so they are recreated from the freshly built image every time
+(`make test-e2e` depends on `dev-up`, so the suite gets this for free).
 
-```bash
-make dev-clean && make dev-up
-```
+`make dev-clean && make dev-up` is only for cases that need **volume-level**
+state reset — `dev-clean` runs `down -v` and deletes the named volumes, giving
+the next `dev-up` a clean database and cache. Reach for it on repeated runs that
+must prove a fix against fresh state, not for an ordinary rebuild.
 
-`make dev-clean` removes the containers and volumes, so the next `dev-up` starts
-from the new image. Symptom to recognise: a source change that plainly should
-alter behaviour, yet the behaviour is unchanged, and the log lines from the fix
-are absent. This cost a full debugging cycle on B-008 in S08.
+Symptom to recognise: a source change that plainly should alter behaviour, yet
+the behaviour is unchanged, and the log lines from the fix are absent.
 
 ### `make dev-up` prints a container-name collision
 
