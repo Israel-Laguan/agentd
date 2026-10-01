@@ -71,7 +71,9 @@ Additional observations:
   The stream is silent when no state changes occur — that is expected behavior, not a bug.
 
 - **Task execution reaches terminal states:** tasks end as `QUEUED` (in flight) or
-  `FAILED_REQUIRES_HUMAN` after auto-retries. See troubleshooting below for why.
+  `FAILED_REQUIRES_HUMAN` after auto-retries. See
+  [troubleshooting.md](troubleshooting.md) ("Tasks fail with FAILED_REQUIRES_HUMAN /
+  poison_pill_handoff") for why.
 
 ---
 

@@ -1,8 +1,8 @@
 # Repo Layout: Folders by Concern
 
 Status: **implemented** (T-024 moves landed; the checklist below was verified
-against the tree on 2026-10-01 — 30 of 35 boxes ticked, 5 still open and listed
-as unticked). The paths marked "target" now exist. The work was split into T-024 (the moves)
+against the tree on 2026-10-01 — all 35 boxes ticked, none left open). The paths
+marked "target" now exist. The work was split into T-024 (the moves)
 and sprint S07 (US-007): an end-to-end journey suite in `test/e2e/` that finishes
 what the demo scripts started, after which T-025 deleted `scripts/demo/`
 (done 2026-09-30 — see "Demo scripts").
@@ -199,7 +199,7 @@ deploy notes" in [litellm-integration.md](../litellm-integration.md)).
 - [x] Update the header comments in `devenv/agentd/config.yaml`, `devenv/litellm/config.yaml` and `devenv/mockllm/server.py`.
 - [x] Makefile: add `dev-up`, `dev-down` and `dev-logs` (`podman compose -f devenv/compose.yaml …`).
 - [x] `.dockerignore`: `dev/` → `devenv/`.
-- [x] Smoke-test: `make dev-up`, confirm the existing `agentd_agentd-data` volume is reused and all four services go healthy. Verified 2026-10-01 (T-033): the volume's contents checksum identically before and after `dev-up`, and all seven profiles report healthy. Note `podman-compose` 1.3.0 prints a container-name collision for `agentd_litellm_1` and then continues — the stack still comes up healthy, so it is noise, not a failure.
+- [x] Smoke-test: `make dev-up`, confirm the existing `agentd_agentd-data` volume is reused and all four services go healthy. Verified 2026-10-01 (T-033): the volume's contents checksum identically before and after `dev-up`, and all six profiles report healthy. Note `podman-compose` 1.3.0 prints a container-name collision for `agentd_litellm_1` and then continues — the stack still comes up healthy, so it is noise, not a failure.
 
 ### 3. `test/`
 
@@ -240,9 +240,10 @@ deploy notes" in [litellm-integration.md](../litellm-integration.md)).
 - [x] [api-testing.md](../api-testing.md): 7 `e2e/http_test.go:<line>` refs and `make test-e2e`. Repointed 2026-10-01 (T-033) to `internal/api/tests/feature/api_http_test.go` with the test name for each, since the old line numbers would now point at unrelated code. The `make test-e2e` references were already gone — T-026 kept the target for the journey suite.
 - [x] [llm-connector-strategy.md](../llm-connector-strategy.md), [provider-tool-calling.md](../provider-tool-calling.md), [agentic-harness-roadmap.md](../agentic-harness-roadmap.md): `scripts/llm-smoke.sh` → `tools/diag/llm-smoke.sh`.
 - [x] Agent memory note `podman-runtime-target`: `docker-compose.dev.yml` + `dev/` → `devenv/`. Struck 2026-10-01 (T-033): there is no agent-memory store in this repo to carry the note. `docs/architecture/repo-layout.md` (this file), `docs/container-development.md` and `devenv/compose.yaml`'s own header comment all state the podman target and the `devenv/` path, so the information is already in tracked docs where a reader will actually find it.
-- [x] Final sweep: `git grep -nE 'docker-compose\.dev|Dockerfile\.(test|init-test)|scripts/(check|verify|ci_|mock_llm|chat-kanban|llm-smoke|test-env|run-tests|integration)|\./e2e|test-e2e|[^/]dev/(agentd|litellm|mockllm)'` returns nothing outside `tasks/`. The regex is stale, not the tree — run 2026-10-01 (T-033) it matches only `make test-e2e`, which T-026 deliberately kept for the journey suite (`Makefile:41`), plus one historical mention in `qa-and-browser-verification.md` explaining that `scripts/chat-kanban-qa.sh` was deleted. Its other patterns (`docker-compose.dev`, `scripts/…`, `./e2e`) match nothing outside this file, where they appear as the migration record.
+- [x] Final sweep: `git grep -nE 'docker-compose\.dev|Dockerfile\.(test|init-test)|scripts/(check|verify|ci_|mock_llm|chat-kanban|llm-smoke|test-env|run-tests|integration)|\./e2e|test-e2e|[^/]dev/(agentd|litellm|mockllm)'` returns nothing outside `tasks/`. The regex is stale, not the tree — run 2026-10-01 (T-033) the only matches outside this file are `make test-e2e` (the target T-026 kept for the journey suite at `Makefile:41`, referenced throughout `README.md`, `docs/` and `test/e2e/README.md`) and the one historical `scripts/chat-kanban-qa.sh` mention in `qa-and-browser-verification.md`. `docker-compose.dev` and `./e2e` match nothing outside this file, where they appear as the migration record.
 
 T-024 and T-025 have both landed, so the Status above is **implemented**. The
-five unticked boxes below are follow-up cleanups, not blockers: they touch
-`.gitignore`, `docs/api-testing.md`, an agent memory note, the volume-reuse
-smoke test and a final `git grep` sweep.
+five boxes T-032 could not confirm (the `.gitignore` and `docs/api-testing.md`
+cleanups, the agent memory note, the volume-reuse smoke test and the final
+`git grep` sweep) were resolved in T-033: each is now either ticked with a
+reason or struck with one.
