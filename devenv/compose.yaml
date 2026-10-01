@@ -91,9 +91,7 @@ services:
       retries: 30
 
   agentd:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: agentd:local
     entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
     ports:
       - "127.0.0.1:8765:8765"
@@ -115,9 +113,7 @@ services:
       retries: 30
 
   agentd-healing:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: agentd:local
     entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
     ports:
       - "127.0.0.1:8766:8766"
@@ -139,9 +135,7 @@ services:
       retries: 30
 
   agentd-faults:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: agentd:local
     entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
     ports:
       - "127.0.0.1:8767:8767"
@@ -163,9 +157,7 @@ services:
       retries: 30
 
   agentd-disk:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: agentd:local
     entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
     ports:
       - "127.0.0.1:8768:8768"
@@ -199,9 +191,7 @@ services:
       retries: 30
 
   agentd-brk:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: agentd:local
     entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
     ports:
       - "127.0.0.1:8770:8770"
@@ -223,9 +213,7 @@ services:
       retries: 30
 
   agentd-tiered:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: agentd:local
     entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
     ports:
       - "127.0.0.1:8769:8769"

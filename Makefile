@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-e2e test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check podman-test lint-md lint-links lint-docs smoke-contract dev-up dev-down dev-clean dev-logs
+.PHONY: build test test-e2e test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-down dev-clean dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -93,7 +93,16 @@ COMPOSE_PROFILES := --profile default --profile healing --profile faults \
 # as containers exist; without this wait the first tasks reach litellm while it is
 # still refusing connections, which trips the circuit breaker for its full timeout.
 DEV_HEALTH_WAIT ?= 180
-dev-up:
+
+# All six agentd services share one prebuilt image (B-007). podman-compose tags a
+# separate image per service when each declares build:, so the Go compile ran once
+# per service -- six per dev-up. Build the tag once here and let compose only start
+# containers. --build is kept for mockllm, which still has its own build context.
+AGENTD_IMAGE ?= agentd:local
+dev-build:
+	podman build -t $(AGENTD_IMAGE) .
+
+dev-up: dev-build
 	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) up --build -d
 	@echo "waiting up to $(DEV_HEALTH_WAIT)s for containers to become healthy"
 	@deadline=$$(( $$(date +%s) + $(DEV_HEALTH_WAIT) )); \
