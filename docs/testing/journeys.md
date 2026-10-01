@@ -170,18 +170,19 @@ above.
 
 ## Known Bugs Found by Journeys
 
-### J08: boot reconcile misses tasks owned by a PID-1 daemon
+### J08: boot reconcile missed tasks owned by a PID-1 daemon (B-008, fixed)
 
-`MarkTaskRunning` stamps `os.Getpid()` (the daemon's own PID) on a RUNNING
-task. `queue.BootReconcile` resets a RUNNING task only when its owning PID is
-no longer alive. In the devenv container agentd is PID 1 before and after a
-restart, so the previous owner always appears alive and the interrupted task
-is skipped at boot. It is only recovered by the stale-heartbeat sweep
-(`StaleAfter`, 2m default; observed ~2m after restart). `TestJ08_UncleanKillRecovery`
-therefore allows up to 180s and logs time-to-recovery. Fix options (product
-decision, not yet made): stamp a per-boot instance ID alongside the PID, or
-have boot reconcile treat any RUNNING task started before this daemon's boot
-as a ghost. Once fixed, tighten the test to a short deadline.
+`MarkTaskRunning` stamps `os.Getpid()` (the daemon's own PID) on a RUNNING task, and
+`queue.BootReconcile` reset one only when its owning PID was no longer alive. In the
+devenv container agentd is PID 1 before and after a restart, so the previous owner
+always looked alive and the task was skipped at boot; only the stale-heartbeat sweep
+recovered it (observed exactly 2m0s). Fixed in T-030: `BootReconcile` drops its own
+PID from the alive set before reconciling. Boot runs before any worker starts, so a
+RUNNING task stamped with our own PID cannot be ours — it is an orphan. Only our own
+PID is exempted, so a task owned by a different live daemon still goes through the
+liveness probe. `TestJ08_UncleanKillRecovery` now allows 30s (health budget 240s→90s)
+and logs time-to-recovery. Accepted limit: two daemons in separate PID namespaces both
+at PID 1 sharing a home would collide; that needs a per-boot instance ID.
 
 ### J10 (fixed in the devenv fixture, not product code): the disk watchdog's cadence was unreachable from config
 
@@ -191,15 +192,15 @@ carries only `FreeThresholdPercent`, and the watchdog's interval comes from the
 `disk-watchdog` line in `<AGENTD_HOME>/agentd.crontab`
 (`internal/config/cron.go`'s `applyCronJob`). The key was silently ignored, so
 the watchdog stayed on the default `*/10 * * * *` and J10 could not observe a
-pass (let alone a deduped second one) inside an e2e run.
+pass (let alone a deduped second one) inside an e2e run. Fixed by adding
+`devenv/agentd/crontab.disk` (an `@every 5s disk-watchdog` entry) and
+bind-mounting it into the `agentd-disk` service, and by deleting the dead key.
 
-Fixed by adding `devenv/agentd/crontab.disk` (an `@every 5s disk-watchdog`
-entry) and bind-mounting it into the `agentd-disk` service, and by deleting the
-dead key. This is a fixture bug, not a product bug — but it is worth flagging
-that **`disk.check_interval` reads like a real knob and isn't one**. Decided in
-T-032: **document, don't implement.** The crontab is the only input, and a Go-side
-interval would mean a second scheduler for one job. `docs/reference.md` now says so
-on the `disk.free_threshold_percent` row. No product change made.
+This is a fixture bug, not a product bug — but **`disk.check_interval` reads
+like a real knob and isn't one**. Decided in T-032: **document, don't implement.**
+The crontab is the only input, and a Go-side interval would mean a second
+scheduler for one job; `docs/reference.md` now says so on the
+`disk.free_threshold_percent` row. No product change made.
 
 ### J14: task completions were never published to the event bus (product bug, fixed)
 

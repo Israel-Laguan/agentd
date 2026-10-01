@@ -3,6 +3,7 @@ package recovery
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -74,6 +75,70 @@ func TestBootReconcile_noGhosts(t *testing.T) {
 	}
 }
 
+// B-008: in a container agentd is PID 1 both before and after a restart, so a
+// task left RUNNING by the killed daemon carries an owner PID that the liveness
+// probe reports as alive. Boot reconcile skipped it and only the stale-heartbeat
+// sweep recovered it (observed exactly 2m0s). At boot this process has started no
+// worker, so a RUNNING task stamped with our own PID cannot be ours: treat it as
+// an orphan. A task owned by any other PID keeps going through the liveness probe.
+func TestBootReconcile_resetsTaskOwnedByOwnPID(t *testing.T) {
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+	taskID := seedRunningGhostTaskWithPID(t, ctx, store, os.Getpid())
+
+	sink := &recordingSink{}
+	// The probe reports our own PID as alive, exactly as gopsutil does at boot.
+	if err := BootReconcile(ctx, store, safety.StaticPIDProbe{PIDs: []int{os.Getpid()}}, sink); err != nil {
+		t.Fatalf("BootReconcile() error = %v", err)
+	}
+
+	task, err := store.GetTask(ctx, taskID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if task.State != models.TaskStateReady {
+		t.Fatalf("state = %s, want READY", task.State)
+	}
+	if task.OSProcessID != nil {
+		t.Fatalf("os_process_id = %d, want NULL", *task.OSProcessID)
+	}
+
+	var recovery int
+	for _, ev := range sink.events {
+		if ev.Type == models.EventTypeRecovery && ev.TaskID.Valid && ev.TaskID.String == taskID {
+			recovery++
+		}
+	}
+	if recovery != 1 {
+		t.Fatalf("RECOVERY events for task = %d, want 1 (events: %#v)", recovery, sink.events)
+	}
+}
+
+// Guard for the rule above: it must not reset a task belonging to another live
+// daemon sharing the same home. Only our own PID is exempted.
+func TestBootReconcile_leavesTaskOwnedByOtherLivePID(t *testing.T) {
+	store := testutil.NewFakeStore()
+	ctx := context.Background()
+	const otherPID = 4242
+	taskID := seedRunningGhostTaskWithPID(t, ctx, store, otherPID)
+
+	sink := &recordingSink{}
+	if err := BootReconcile(ctx, store, safety.StaticPIDProbe{PIDs: []int{os.Getpid(), otherPID}}, sink); err != nil {
+		t.Fatalf("BootReconcile() error = %v", err)
+	}
+
+	task, err := store.GetTask(ctx, taskID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if task.State != models.TaskStateRunning {
+		t.Fatalf("state = %s, want RUNNING (task owned by a live foreign daemon)", task.State)
+	}
+	if len(sink.events) != 0 {
+		t.Fatalf("events = %#v, want none", sink.events)
+	}
+}
+
 func TestBootReconcile_probeError(t *testing.T) {
 	store := testutil.NewFakeStore()
 	err := BootReconcile(context.Background(), store, errProbe{}, nil)
@@ -132,6 +197,11 @@ func TestRebootRecoveryDescription(t *testing.T) {
 
 func seedRunningGhostTask(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore) string {
 	t.Helper()
+	return seedRunningGhostTaskWithPID(t, ctx, store, 9999)
+}
+
+func seedRunningGhostTaskWithPID(t *testing.T, ctx context.Context, store *testutil.FakeKanbanStore, pid int) string {
+	t.Helper()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "recover",
 		Tasks:       []models.DraftTask{{TempID: "a", Title: "Interrupted"}},
@@ -143,7 +213,7 @@ func seedRunningGhostTask(t *testing.T, ctx context.Context, store *testutil.Fak
 	if err != nil {
 		t.Fatalf("ClaimNextReadyTasks: %v", err)
 	}
-	if _, err := store.MarkTaskRunning(ctx, claimed[0].ID, claimed[0].UpdatedAt, 9999); err != nil {
+	if _, err := store.MarkTaskRunning(ctx, claimed[0].ID, claimed[0].UpdatedAt, pid); err != nil {
 		t.Fatalf("MarkTaskRunning: %v", err)
 	}
 	return tasks[0].ID

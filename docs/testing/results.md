@@ -265,3 +265,55 @@ Also in this cycle (T-032 docs hygiene): `journeys.md` stale lines corrected
 **implemented** with 29 of 34 T-024 checklist boxes verified against the tree and
 ticked; `disk.check_interval` decided as **document, don't implement** and
 recorded on the `disk.free_threshold_percent` row in `docs/reference.md`.
+
+### T-030 cycle: recover interrupted tasks at boot under PID 1 (2026-10-01)
+
+Fixed:
+
+- **B-008** (P2, major): `BootReconcile` now drops its own PID from the alive
+  set before reconciling (`withoutOwnPID` in
+  `internal/queue/recovery/recover.go`). `MarkTaskRunning` stamps
+  `os.Getpid()`, and in a container agentd is PID 1 before and after a
+  restart, so the liveness probe reported the killed daemon's tasks as owned by
+  a live process and boot reconcile skipped them. Boot runs before any worker
+  starts, so a RUNNING task stamped with our own PID cannot be ours. Only our
+  own PID is exempted, so a task owned by a different live daemon sharing the
+  home still goes through the probe. No schema change.
+- **B-003** (P3): **closed** — see below.
+
+Evidence:
+
+- J08 `recovered **0s** after restart (reset ghost task to READY)`, was
+  `2m0s`. The test's wait drops 180s→30s and its health budget 240s→90s.
+  J08 itself: **5.55s**, was 123.25s.
+- `TestJ08_UncleanKillRecovery` no longer needs the `KNOWN GAP` comment, and
+  `journeys.md` is back under its 400-line limit at exactly 400.
+- `TestBootReconcile_resetsTaskOwnedByOwnPID` fails on the pre-fix tree
+  (`state = RUNNING, want READY`), passes after. Guard test
+  `TestBootReconcile_leavesTaskOwnedByOtherLivePID` passes: a task owned by a
+  different live PID stays RUNNING with no events.
+- `make check` green (exit 0).
+
+**4 consecutive `go test -tags=e2e -count=1 ./test/e2e/...` on one stack
+(B-003 re-check): 17/17 each, 195.8s / 195.9s / 185.9s / 195.8s.** Suite
+wall-clock down from ~295s.
+
+B-003 outcome: one task was RUNNING immediately after run 4 finished — a
+`SLOW_TASK J08` from project `j08-kznz6w` with `os_process_id=1`. Its event log
+shows it was **not stuck**: live `LOG_CHUNK tick N` heartbeats and a `RETRY`
+("execution timed out: no output within limit") while it re-executed, and it
+reached a terminal state on its own ~90s later without intervention, leaving
+**0 RUNNING**. So B-003 was the still-executing re-dispatch caught mid-flight,
+not a leaked task. J08's own comment already said as much; this run confirms it.
+
+Two setup notes worth keeping:
+
+- The first J08 attempt failed against a **stale image**. `make test-e2e` depends
+  on `dev-up`, but the already-running container was created before the source
+  edit, and J08's kill/restart reuses that container's filesystem — so the old
+  binary kept running and the fix appeared not to work. `make dev-clean` before
+  judging a container-level change fixes it. Worth remembering: `dev-up` is not
+  enough after editing code that only takes effect on a fresh container.
+- `make test-e2e -count=1` cannot be run as written — `make` parses `-count=1`
+  as its own option and fails with `invalid option -- 'c'`. The target hardcodes
+  `-count=1`, so `make test-e2e` is the same uncached run.

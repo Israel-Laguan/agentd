@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | ready |
+| Status | fixed |
 | Priority | P2 |
 | Sprint | S08-reliability-and-dev-speed |
 | Severity | major |
@@ -33,5 +33,6 @@ and skips the task. Only the stale-heartbeat sweep recovers it.
 
 ## Notes
 
-- Suspected cause of B-003 (RUNNING sibling left after J08). Re-check B-003 after this is fixed.
-- Candidate fixes: (1) a per-boot instance ID stored with the running mark and compared at boot; (2) at boot, before any worker starts, treat every RUNNING task as orphaned. Pick in T-030; (2) is smaller but assumes one daemon per home.
+- **Fixed 2026-10-01** (T-030): `BootReconcile` now drops its own PID from the alive set before reconciling. Boot runs before any worker starts, so a RUNNING task stamped with our own PID cannot be ours. Only our own PID is exempted, so a task owned by a different live daemon sharing the home still goes through the liveness probe. No schema change. J08: `recovered 0s after restart`, was 2m0s. See `docs/testing/results.md`.
+- Was the suspected cause of B-003; B-003 is now closed as not-a-bug (the leftover was the still-executing re-dispatch caught mid-flight).
+- Candidate fix (2) as originally written ("treat every RUNNING task as orphaned") was **narrowed** rather than taken as-is: nothing enforces one daemon per home (no lock file, no single-instance check), so blanket-resetting would wrongly reset a second daemon's live tasks. Accepted residual limit: two daemons in separate PID namespaces both at PID 1 sharing one home would still collide; the per-boot instance ID (1) is the follow-up if multi-daemon homes are ever supported.
