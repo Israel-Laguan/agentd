@@ -163,7 +163,7 @@ invocation cannot build it, and every profile must be named in one invocation
 ```sh
 podman compose -f "$PWD/devenv/compose.yaml" \
   --profile default --profile healing --profile faults \
-  --profile breaker --profile disk up -d
+  --profile breaker --profile disk --profile tiered up -d
 ```
 
 ---
