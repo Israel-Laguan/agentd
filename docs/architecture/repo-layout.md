@@ -1,7 +1,7 @@
 # Repo Layout: Folders by Concern
 
 Status: **implemented** (T-024 moves landed; the checklist below was verified
-against the tree on 2026-10-01 — 29 of 34 boxes ticked, 5 still open and listed
+against the tree on 2026-10-01 — 30 of 35 boxes ticked, 5 still open and listed
 as unticked). The paths marked "target" now exist. The work was split into T-024 (the moves)
 and sprint S07 (US-007): an end-to-end journey suite in `test/e2e/` that finishes
 what the demo scripts started, after which T-025 deleted `scripts/demo/`

@@ -156,17 +156,15 @@ J12 was implemented on 2026-09-30 once T-028 landed the tiered mock replies.
 J06 remains deferred (browser tier) with its reason below.
 
 Stack bring-up for the non-default profiles. The agentd services take a
-prebuilt image, so build it first (`make dev-build`, or just `make dev-up` once
-for the default profile) — a direct compose invocation cannot build it:
+prebuilt image, so build it first (`make dev-build`) — a direct compose
+invocation cannot build it, and every profile must be named in one invocation
+(see the podman-compose gotchas above):
 
 ```sh
 podman compose -f "$PWD/devenv/compose.yaml" \
   --profile default --profile healing --profile faults \
   --profile breaker --profile disk up -d
 ```
-
-All profiles must be named in one invocation — see the podman-compose gotchas
-above.
 
 ---
 
@@ -384,14 +382,11 @@ task-lifecycle events are implemented if the timeline is meant to show them.
 ### J12: implemented (2026-09-30, on T-028)
 
 J12 needed the small model to produce a plan and then *fail verification* on a
-known step, so the escalation to the full model is observable. T-028's mock
-now detects each tiered step from its system-prompt suffix and returns the
-artifact that step commits; the verify step fails by default, so the
-escalation ladder (bounded mid-fix redos, then a strong-model escalate) runs
-for real and completes the origin. `TestJ12_TieredExecution` materializes a
-complex task on the `tiered` profile, waits for the origin to reach COMPLETED,
-and asserts the mock's request capture shows both a verify-step and an
-escalate-step request. The `tiered` profile is started by `make dev-up`.
+known step, so the escalation to the full model is observable; T-028's mock
+supplies both halves, as described in that cycle's entry below.
+`TestJ12_TieredExecution` materializes a complex task on the `tiered` profile,
+waits for the origin to reach COMPLETED, and asserts the mock's request capture
+shows both a verify-step and an escalate-step request.
 
 ---
 

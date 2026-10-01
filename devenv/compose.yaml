@@ -15,7 +15,7 @@ name: agentd
 #   web     - Next.js frontend (port 3000) - default profile
 #
 # Usage:
-#   make dev-up            # Builds agentd:local, then brings up default profile (agentd + web)
+#   make dev-up            # Builds agentd:local, then brings up all profiles (agentd variants + web)
 #   podman compose -f devenv/compose.yaml up -d agentd-healing  # Brings up healing variant
 #
 # The agentd services take a prebuilt image (AGENTD_IMAGE, default agentd:local)
@@ -257,9 +257,14 @@ services:
     # it. The plain `npm install` this replaced rewrote the bind-mounted
     # lockfile on every container start (B-002), dirtying the host tree.
     command: ["sh", "-c", "npm ci --legacy-peer-deps && npm run dev"]
-    depends_on:
-      agentd:
-        condition: service_started
+    # Deliberately no depends_on: agentd. The browser is what calls the daemon
+    # (NEXT_PUBLIC_API_URL is inlined client-side, and the browser runs on the
+    # host, not in this container), so web does not need the daemon at boot.
+    # Declaring it made agentd unremovable: podman refuses to remove a container
+    # that a live container depends on, so recreating the agentd services to
+    # pick up a rebuilt agentd:local would have forced a web recreate too --
+    # re-running npm ci and killing the developer's live dev server on every
+    # `make dev-up`. Readiness is handled by the dev-up health wait instead.
 
 volumes:
   agentd-data:
