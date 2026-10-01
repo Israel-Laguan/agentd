@@ -95,6 +95,29 @@ matching task-ID line in the project's `PLAN_RESULTS.log` as execution evidence.
 
   stack can always start even if a healthcheck is flaky.
 
+### A fix looks broken because the container reuses the old filesystem
+
+`make dev-up` after a container-level change is **not** enough. The J08 journey
+kills and restarts the agentd container on the same volume, so a rebuild that
+only refreshes the image leaves the running container's filesystem untouched —
+the test exercises the old binary and the fix appears not to work. Run:
+
+```bash
+make dev-clean && make dev-up
+```
+
+`make dev-clean` removes the containers and volumes, so the next `dev-up` starts
+from the new image. Symptom to recognise: a source change that plainly should
+alter behaviour, yet the behaviour is unchanged, and the log lines from the fix
+are absent. This cost a full debugging cycle on B-008 in S08.
+
+### `make dev-up` prints a container-name collision
+
+podman-compose 1.3.0 can print `creating container storage: the container name
+"agentd_litellm_1" is already in use` and then carry on. The stack still comes up
+healthy, so this is noise. Confirm with `podman ps` rather than treating the line
+as a failure.
+
 ### Web container permission issues (EACCES)
 
 - The web container runs as `root` (uid 0) inside the container. With rootless podman, uid 0

@@ -53,7 +53,7 @@ Returns system health, memory usage, circuit breaker state, and task summary.
 }
 ```
 
-**Test Coverage**: `e2e/http_test.go:20`
+**Test Coverage**: `internal/api/tests/feature/api_http_test.go` (`TestSystemStatus`)
 
 ### POST /api/v1/system/breaker/reset
 
@@ -106,7 +106,7 @@ List all projects.
 }
 ```
 
-**Test Coverage**: `e2e/http_test.go:33`
+**Test Coverage**: `internal/api/tests/feature/api_http_test.go` (`TestProjectsList`)
 
 ### POST /api/v1/projects/materialize
 
@@ -186,7 +186,7 @@ List all agent profiles.
 
 `agentic_mode` (boolean, default `false`) enables the inner agentic worker loop with tool round-tripping. When `true` and the provider supports agentic mode, tasks use `processAgentic`; otherwise the worker falls back to legacy single-shot JSON execution with a warning log.
 
-**Test Coverage**: `e2e/http_test.go:53`
+**Test Coverage**: `internal/api/tests/feature/api_http_test.go` (`TestAgentsList`)
 
 ### GET /api/v1/agents/{id}
 
@@ -194,9 +194,9 @@ Get a specific agent profile.
 
 **Test Coverage**:
 
-- `default` agent: `e2e/http_test.go:70`
-- `qa` agent: `e2e/http_test.go:87`
-- `researcher` agent: `e2e/http_test.go:104`
+- `default` agent: `internal/api/tests/feature/api_http_test.go` (`TestAgentsDefault`)
+- `qa` agent: `internal/api/tests/feature/api_http_test.go` (`TestAgentsQA`)
+- `researcher` agent: `internal/api/tests/feature/api_http_test.go` (`TestAgentsResearcher`)
 
 ### POST /api/v1/agents
 
@@ -247,7 +247,7 @@ OpenAI-compatible chat completions endpoint.
 }
 ```
 
-**Test Coverage**: `e2e/http_test.go:121`
+**Test Coverage**: `internal/api/tests/feature/api_http_test.go` (`TestChatCompletion`)
 
 ---
 
