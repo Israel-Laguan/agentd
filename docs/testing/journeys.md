@@ -96,7 +96,7 @@ path. Python unit tests for the dispatch live in
 | **J03** | Chat answers without creating a plan | 1. POST `/api/v1/chat` with a simple intent (no plan needed); 2. Verify response is a chat completion, not a plan | Response is `AIResponse` (chat), not `PlanResponse`; no tasks created | default | Needs a way to signal "chat only" vs "ask for plan"; check feature for current signal | P0 | CP2 |
 | **J04** | Chat → plan → approve → materialize → workspace ready → tasks complete | 1. `agentd ask "write hello.txt"`; 2. Approve with Y; 3. Create project workspace dir + README; 4. POST `/workspace/ready`; 5. Watch board as workers claim tasks; 6. Verify tasks COMPLETED | Tasks flow: PENDING → READY → RUNNING → COMPLETED; workspace is non-empty before tasks unlock; all tasks finish | default + mock success scenario | Empty workspace blocks task unlock; demo.md has full script; J04 is the "happy path" | P0 | CP4, demo §2-4 |
 | **J05** | Materialization edge cases (not-ready workspace, bad source_path, double ready) | 1. Materialize with neither `source_path` nor `start_empty_workspace` → 201 with PENDING tasks; 2. `workspace/ready` before seeding → 409; 3. seed, `workspace/ready` → 200; 4. `workspace/ready` again → 200, same set; 5. bad `source_path` (missing dir; and a file) → 400, no project row; 6. good `source_path` → 201, seeded, root tasks READY | 409 `STATE_CONFLICT` from `workspace/ready` on an empty workspace; double-ready idempotent; bad `source_path` 400 with nothing persisted | default | **Corrected 2026-09-30:** materialize never 409s — it accepts the plan and returns PENDING tasks. The 409 is `workspace/ready`'s. The old "409 for not-ready" step was written against an API that does not exist. | P1 | CP3b |
-| **J06** | Task drawer event log shows per-task events | 1. Run J04; 2. Open task detail drawer; 3. Verify `task-started`, `task-claimed`, `task-completed` events in timeline | SSE delivers task-* events; UI renders timeline with correct event sequence | default | Requires browser verification (manual in S07; UI journeys defer to Phase 2) | P1 | CP3a |
+| **J06** | Task drawer renders the task's durable event log | 1. Render `TaskEventList` with events captured from a real `GET /tasks/{id}/events` response; 2. Render `TaskDrawer` with `fetchTaskEvents` mocked; 3. Assert types, payloads, newest-first order, per-task scoping, re-fetch on `eventRefreshKey`, and clearing on a rejected fetch | Every real event type renders with its payload; newest first; only the open task's events; re-reads on refresh; no stale log after a failed read | n/a (vitest + jsdom) | **Redefined 2026-10-01 (T-034):** the old `task-started`/`task-claimed`/`task-completed` timeline cannot pass — claim and start write no event row. No browser tier: layout and click-through are an explicit gap, not backlog. Fixtures captured from a real devenv response | P1 | CP3a |
 | **J07** | Connector failure → HUMAN task → human resolution | 1. Start agentd-healing (healing.enabled: true); 2. Chat → plan → approve with a step that needs a tool call; 3. Force tool to fail (simulated permission denied); 4. Verify HUMAN task created in `_system`; 5. Resolve HUMAN task; 6. Verify next task resumes | HUMAN task created, SSE event sent, next task can be resumed or re-run | healing | healing.enabled: false in dev config (gotcha 2 in spike); need healing config variant; J07 replaces chat-kanban-qa.sh beat 5 | P0 | demo §5, chat-kanban-qa.sh |
 | **J08** | Unclean kill mid-task → restart on same home → no stuck RUNNING | 1. Materialize a multi-task plan; 2. Kill -9 agentd while task is RUNNING; 3. Restart agentd on same home; 4. Call `/api/v1/system/status`; 5. Verify no RUNNING tasks; board recovered | No RUNNING tasks after restart; `system/status` returns 200; recovery is automatic (BootReconcile) | default | J08 needs its own agentd (can't share with J07 for timing); Beat 1 (restart-mid-task.sh); T-025 closes gap with new test | P0 | Beat 1 |
 | **J09** | Dead primary provider → cascade to secondary; worker failures open the breaker → HUMAN handoff | A. Cascade (`TestJ09_ProviderCascade`, faults): 1. Start agentd-faults; 2. Send chat with dead primary first in gateway.order; 3. Verify the request succeeds and the breaker stays CLOSED. B. Breaker (`TestJ09_BreakerOpens`, breaker): 1. Materialize 3 tasks against all-dead providers; 2. Verify breaker OPEN; 3. Verify a HUMAN "Manual review required: AI providers unavailable" child exists | A. Response succeeds despite an unanswerable first-choice provider, breaker CLOSED; B. Breaker OPEN, HUMAN task created | faults (A), breaker (B) | Only the queue worker records breaker failures, so chat traffic can't trip it — and chat returns 200 even with every provider dead, so it isn't a usable failure signal either. Trip threshold is 3 (`safety.defaultBreakerFailures`), not 5. `ProviderUsed` has no HTTP surface, so A asserts behaviourally | P0 | Beat 2, provider_fallback_test.go, Beat 2.3 (breaker) |
@@ -153,7 +153,9 @@ Discovered and fixed four real defects:
 
 P1 journeys (J05, J13, J15) were implemented in the 2026-09-30 cycle and pass.
 J12 was implemented on 2026-09-30 once T-028 landed the tiered mock replies.
-J06 remains deferred (browser tier) with its reason below.
+J06 was implemented on 2026-10-01 (T-034) as component tests; it had been deferred
+as "needs a browser", which held only because the spec wanted events that do not
+exist.
 
 Stack bring-up for the non-default profiles. The agentd services take a
 prebuilt image, so build it first (`make dev-build`) — a direct compose
@@ -176,7 +178,7 @@ there.
 
 ## P1/P2 Deferral or Bug Policy
 
-For P1/P2 journeys (J05, J06, J13, J15 — J12 is implemented as of 2026-09-30):
+For P1/P2 journeys (J05, J13, J15; J06 and J12 are implemented):
 
 - If passing: land them as-is.
 - If failing: either (a) defer with a reason in this doc, or (b) open a bug linking the journey.
@@ -196,19 +198,35 @@ tasks), B-006 (`board.list_tasks` ignores `state` when `project_id` is passed).
 B-005 and B-006 are **fixed** in the housekeeping cycle; J15 now exports a
 >100-task board completely and honours `state` with and without `project_id`.
 
-### J06: deferred to Phase 2 (UI journeys need a browser)
+### J06: implemented as component tests (2026-10-01, on T-034)
 
-J06 asserts that the task drawer renders a `task-started` / `task-claimed` /
-`task-completed` timeline. Two of those three events do not exist at all:
-`ClaimNextReadyTasks` and the READY → RUNNING transition write no event row
-(the same finding J14 already corrected), so there is nothing for the timeline
-to show and nothing to stream. What remains is a rendering assertion about
-React components, which needs a browser driver — deliberately out of scope for
-this Go harness (see the SP-008 harness decision: "Non-goal: Playwright"). The
-durable half is already covered by J14.
+**Redefined** as "the drawer renders the task's durable event log". The old
+`task-started` / `task-claimed` / `task-completed` timeline could never pass:
+claim and start write no event row.
 
-Re-entry condition: a browser-based test tier exists, and the three
-task-lifecycle events are implemented if the timeline is meant to show them.
+Covered by `web/app/components/task/task-event-list.test.tsx` and
+`task-drawer.test.tsx` (vitest + jsdom, `cd web && npm test`):
+
+| Test | Asserts |
+| --- | --- |
+| `TaskEventList` › renders every captured event type | `WARNING`, `RECOVERY`, `TOKEN_USAGE`, `LOG_CHUNK`, `RESULT` all render, with real payloads |
+| `TaskEventList` › orders newest event first | the daemon returns oldest-first; the drawer reverses |
+| `TaskEventList` › shows an empty state | `No task events yet.` |
+| `TaskEventList` › does not mutate the caller's array | the reverse is on a copy |
+| `TaskEventList` › marks a truncated payload | `payload_truncated` renders the warning; an empty payload falls back |
+| `TaskDrawer` › renders the task's own events | the log comes from `fetchTaskEvents(task.id)` |
+| `TaskDrawer` › shows only the open task's events | another task's event is filtered out |
+| `TaskDrawer` › re-fetches when `eventRefreshKey` changes | the log does not freeze at first render |
+| `TaskDrawer` › clears the list when a refresh rejects | a failed read drops the stale log |
+| `TaskDrawer` › does not fetch when no task is open | no spurious request for a closed drawer |
+
+Fixtures are copied from a real `GET /api/v1/tasks/{id}/events` response captured
+off the devenv stack on 2026-10-01, so the tests fail if the wire shape drifts
+rather than only if the markup does.
+
+**Explicit gap:** no real-browser tier, so layout and click-through are unproven —
+a product decision for a later sprint, recorded here rather than backlogged. The
+lifecycle events are still unimplemented; that is a product change, not a test gap.
 
 ### J12: implemented (2026-09-30, on T-028)
 
