@@ -122,7 +122,7 @@ dev-build:
 # agentd_agentd-healing_1, ...); litellm, mockllm and web do not match. This
 # requires web to have no depends_on: agentd -- see devenv/compose.yaml.
 dev-up: dev-build
-	@for id in $$(podman ps -q --filter label=io.podman.compose.project \
+	@for id in $$(podman ps -aq --filter label=io.podman.compose.project \
 	    --filter name=agentd_agentd); do podman rm -f $$id; done
 	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) up --build -d
 	@echo "waiting up to $(DEV_HEALTH_WAIT)s for containers to become healthy"
