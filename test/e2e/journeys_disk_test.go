@@ -52,9 +52,9 @@ func TestJ10_DiskWatchdogDedup(t *testing.T) {
 		t.Skip("skipping e2e test in short mode")
 	}
 
-	// Long enough for several 5s watchdog passes: the first raises the task,
-	// the rest must be silent.
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	// Budget: 45s to await the first task, then a 20s dedup window (3 passes at
+	// 5s plus 5s slack, see below), so 120s leaves headroom under load.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	harness := NewHarness(diskBaseURL, "disk")
@@ -71,10 +71,22 @@ func TestJ10_DiskWatchdogDedup(t *testing.T) {
 	// one DISK_SPACE_CRITICAL event, still present after several more passes.
 	j10AssertSingleEvent(ctx, t, client, task.ID)
 
+	// Wait out further watchdog passes before asserting dedup (B-009). The
+	// crontab says "@every 5s", but under load a pass can start late, so the
+	// sleep is padded rather than exact: the point is to guarantee *at least*
+	// three more passes had a chance to run, and the assertions below are what
+	// actually prove dedup. The previous single 15s Sleep had no padding, so a
+	// slow pass meant the window proved less than it claimed.
 	passes := 3
-	t.Logf("J10: task %s raised; waiting out %d further watchdog passes (~%s) to prove dedup",
-		task.ID, passes, time.Duration(passes)*5*time.Second)
-	time.Sleep(time.Duration(passes) * 5 * time.Second)
+	const passInterval = 5 * time.Second
+	const slack = 5 * time.Second
+	window := time.Duration(passes)*passInterval + slack
+	deadline := time.Now().Add(window)
+	t.Logf("J10: task %s raised; waiting out %d further watchdog passes (~%s window, %s slack) to prove dedup",
+		task.ID, passes, window, slack)
+	for time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+	}
 
 	matches := j10DiskTasks(ctx, t, client)
 	if len(matches) != 1 {
