@@ -8,6 +8,7 @@ Run with:  python3 -m unittest discover -s devenv/mockllm -p 'test_server.py'
 import json
 import sys
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -205,6 +206,101 @@ class OutageTest(unittest.TestCase):
         self.assertEqual(self._post("/outage", {"model": ["brk-outage"], "down": True}), 400)
         self.assertEqual(self._post("/outage", {"model": "", "down": True}), 400)
         self.assertFalse(server.in_outage("brk-outage"))
+
+
+class QuotaAndSlowOnceTest(unittest.TestCase):
+    """The quota toggle and the one-shot delay, both keyed by model name.
+
+    Quota exists because only ErrLLMQuotaExceeded feeds the per-provider
+    breakers; an outage is an unreachable provider and feeds the global one. A
+    journey that wants to exercise a provider breaker's probe slot needs 429s.
+    slow_once exists so a journey can hold a probe in flight long enough to see
+    what the siblings do while it runs.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        cls.base = f"http://127.0.0.1:{cls.httpd.server_port}"
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+
+    def setUp(self):
+        # Fixture chats, not journey traffic: keep them out of the shared capture
+        # log so a later GET /requests consumer sees only its own requests.
+        self._real_record_request = server.record_request
+        server.record_request = staticmethod(lambda body: None)
+        server.set_quota("prb-quota", False)
+        server.set_slow_once("prb-quota", 0)
+
+    def tearDown(self):
+        server.record_request = self._real_record_request
+        server.set_quota("prb-quota", False)
+        server.set_slow_once("prb-quota", 0)
+
+    def _post(self, path, payload):
+        req = urllib.request.Request(
+            self.base + path, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status
+        except urllib.error.HTTPError as err:
+            return err.code
+
+    def _chat(self, model):
+        return self._post(
+            "/v1/chat/completions", {"model": model, "messages": [{"role": "user", "content": "Task: x"}]}
+        )
+
+    def test_quota_answers_429_and_only_for_the_named_model(self):
+        self.assertEqual(self._post("/quota", {"model": "prb-quota", "on": True}), 200)
+        self.assertEqual(self._chat("prb-quota"), 429)
+        self.assertEqual(self._chat("other"), 200)
+        self.assertEqual(self._post("/quota", {"model": "prb-quota", "on": False}), 200)
+        self.assertEqual(self._chat("prb-quota"), 200)
+
+    def test_quota_is_distinct_from_an_outage(self):
+        """A quota failure and an outage must not be the same status: they reach
+        different breakers, so collapsing them would silently retarget the test."""
+        self._post("/quota", {"model": "prb-quota", "on": True})
+        self.assertEqual(self._chat("prb-quota"), 429)
+        self.assertNotEqual(server.QUOTA_STATUS, server.OUTAGE_STATUS)
+
+    def test_quota_rejects_a_malformed_body(self):
+        self.assertEqual(self._post("/quota", {"model": "prb-quota"}), 400)
+        self.assertEqual(self._post("/quota", {"on": True}), 400)
+        self.assertEqual(self._post("/quota", {"model": "prb-quota", "on": "yes"}), 400)
+        self.assertFalse(server.in_quota("prb-quota"))
+
+    def test_slow_once_delays_exactly_one_request(self):
+        self.assertEqual(self._post("/slow_once", {"model": "prb-quota", "seconds": 0.4}), 200)
+        started = time.monotonic()
+        self.assertEqual(self._chat("prb-quota"), 200)
+        first = time.monotonic() - started
+        started = time.monotonic()
+        self.assertEqual(self._chat("prb-quota"), 200)
+        second = time.monotonic() - started
+        self.assertGreater(first, 0.3, "the armed request was not delayed")
+        self.assertLess(second, 0.3, "the delay was not consumed by a single request")
+
+    def test_slow_once_rejects_a_malformed_body(self):
+        self.assertEqual(self._post("/slow_once", {"model": "prb-quota"}), 400)
+        self.assertEqual(self._post("/slow_once", {"model": "prb-quota", "seconds": "soon"}), 400)
+        self.assertEqual(self._post("/slow_once", {"model": "prb-quota", "seconds": -1}), 400)
+
+    def test_slow_once_does_not_mask_a_quota_failure(self):
+        """An armed delay must not turn a failing provider into a slow success:
+        the failure has to be reported before the sleep."""
+        self._post("/quota", {"model": "prb-quota", "on": True})
+        self._post("/slow_once", {"model": "prb-quota", "seconds": 5})
+        started = time.monotonic()
+        self.assertEqual(self._chat("prb-quota"), 429)
+        self.assertLess(time.monotonic() - started, 2.0, "the quota failure waited out the armed delay")
 
 
 if __name__ == "__main__":

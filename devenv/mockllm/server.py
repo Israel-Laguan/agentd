@@ -9,7 +9,35 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import controls
 from capture import CAPTURE_PATH, read_requests, record_request
+from controls import (
+    OUTAGE_STATUS,
+    QUOTA_STATUS,
+    in_outage,
+    in_quota,
+    set_outage,
+    set_quota,
+    set_slow_once,
+    take_slow_once,
+)
+
+# Re-exported so callers that only import this module — including the tests — can
+# keep using server.set_outage(...) and friends. The per-model control toggles now
+# live in controls.py; see that module for why each is keyed by model name.
+__all__ = [
+    "Handler",
+    "OUTAGE_STATUS",
+    "QUOTA_STATUS",
+    "in_outage",
+    "in_quota",
+    "record_request",
+    "read_requests",
+    "set_outage",
+    "set_quota",
+    "set_slow_once",
+    "take_slow_once",
+]
 
 PORT = int(os.environ.get("PORT", "8000"))
 # Where to append every received request body as JSONL. Read back via
@@ -47,27 +75,6 @@ SCOPE_SPLIT = SCOPE_DELIMITER + r'(?=' + SCOPE_INTRODUCER + r')'
 #      (e.g. "gpt-3.5-turbo=tiered-fail-verify,gpt-4=tiered-pass-verify").
 SCENARIO_TAG_RE = re.compile(r"@scenario=([A-Za-z0-9_-]+)")
 
-# Models currently "down". Unlike a scenario tag, which fails one request, an
-# outage fails every request for a model until it is switched off, so a journey
-# can end a provider outage mid-test (J09 recovery). Keyed by model name so only
-# the profile that owns that model sees it; every other journey is unaffected.
-# Switched through POST /outage {"model": "<name>", "down": true|false}.
-OUTAGE_STATUS = 503
-_outage_lock = threading.Lock()
-_outage_models: set = set()
-
-
-def set_outage(model: str, down: bool) -> None:
-    with _outage_lock:
-        if down:
-            _outage_models.add(model)
-        else:
-            _outage_models.discard(model)
-
-
-def in_outage(model: str) -> bool:
-    with _outage_lock:
-        return model in _outage_models
 DEFAULT_LIMIT = 200
 
 
@@ -405,6 +412,16 @@ class Handler(BaseHTTPRequestHandler):
                 sys.stderr.flush()
                 self._send({"error": "mock outage"}, OUTAGE_STATUS)
                 return
+            if in_quota(body.get("model", "")):
+                sys.stderr.write(f"[mockllm] quota model={body.get('model')} -> HTTP {QUOTA_STATUS}\n")
+                sys.stderr.flush()
+                self._send({"error": "mock quota exceeded"}, QUOTA_STATUS)
+                return
+            slow = take_slow_once(body.get("model", ""))
+            if slow:
+                sys.stderr.write(f"[mockllm] slow_once model={body.get('model')} sleeping {slow}s\n")
+                sys.stderr.flush()
+                time.sleep(slow)
             scenario = select_scenario(body, self.headers)
             if scenario.startswith("error"):
                 status = scenario_error_status(scenario)
@@ -420,24 +437,19 @@ class Handler(BaseHTTPRequestHandler):
             record_request(body)
             self._send(chat_completion(body, self.headers))
             return
-        if self.path.rstrip("/").endswith("/outage"):
-            length = int(self.headers.get("Content-Length", "0"))
-            try:
-                body = json.loads((self.rfile.read(length) if length else b"{}") or b"{}")
-            except json.JSONDecodeError:
-                self._send({"error": "invalid json"}, 400)
+        if self._is_control_path():
+            body = controls.read_body(self)
+            if body is None:
                 return
-            if not isinstance(body, dict):
-                self._send({"error": "want {model: string, down: bool}"}, 400)
-                return
-            model = body.get("model", "")
-            if not isinstance(model, str) or not model or not isinstance(body.get("down"), bool):
-                self._send({"error": "want {model: string, down: bool}"}, 400)
-                return
-            set_outage(model, body["down"])
-            self._send({"model": model, "down": body["down"]})
+            controls.handle_control(self, body)
             return
         self._send({"error": "not found"}, 404)
+
+    def _is_control_path(self) -> bool:
+        return any(
+            self.path.rstrip("/").endswith(suffix)
+            for suffix in ("/outage", "/quota", "/slow_once")
+        )
 
     def do_GET(self):
         path = self.path.rstrip("/")
