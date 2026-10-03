@@ -110,6 +110,9 @@ var NewProviderBreakersWithTimeout = safety.NewProviderBreakersWithTimeout
 // DefaultBreakerTimeout matches the circuit breaker open-state timeout.
 const DefaultBreakerTimeout = safety.DefaultBreakerTimeout
 
+// DefaultBreakerFailures matches how many provider failures open the breaker.
+const DefaultBreakerFailures = safety.DefaultBreakerFailures
+
 var NewSemaphore = safety.NewSemaphore
 
 type Semaphore = safety.Semaphore

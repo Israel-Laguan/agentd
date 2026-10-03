@@ -56,8 +56,10 @@ func (w *Worker) HandleGatewayError(ctx context.Context, task models.Task, err e
 			return
 		}
 		if w.breaker != nil {
-			w.breaker.RecordError(err)
-			if w.breaker.IsOpen() {
+			// The verdict that tripped the breaker is escalated and every failure
+			// recorded before it is requeued. Asking IsOpen separately would make
+			// all three in-flight verdicts escalate (B-017).
+			if w.breaker.RecordErrorTrips(err) {
 				w.handoffOrFail(ctx, task, err)
 				return
 			}
