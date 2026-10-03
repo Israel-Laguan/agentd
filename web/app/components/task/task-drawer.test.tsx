@@ -17,7 +17,7 @@ const CAPTURED_EVENTS: TaskEvent[] = [
     updated_at: "2026-10-01T17:33:37.188144663Z",
   },
   {
-    id: "c78814d4-14a2-49dd-ac58-41e341abd002",
+    id: "78832ae1-0031-4b05-993b-254271a714dc",
     project_id: "89bfee74-42b5-433f-bbf1-260bd9f5e36d",
     task_id: "task-under-test",
     type: "LOG_CHUNK",
