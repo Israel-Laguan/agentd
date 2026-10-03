@@ -129,10 +129,9 @@ def build_command(task_id: str, title: str) -> str:
     )
 
 
-# The command must finish inside the sandbox's 60s inactivity limit. That limit is
-# tracked per stream and stderr stays silent here, so a longer command is killed at
-# 60s no matter how much stdout it prints (a sandbox defect filed as B-011). Staying
-# well under it lets the re-run of a recovered task (J08) run to completion.
+# Long enough for a journey to kill the daemon mid-task, short enough to keep J08
+# fast. Output on either stream resets the sandbox inactivity timer (B-011), so this
+# is a time budget, not a limit imposed by the 60s inactivity timeout.
 SLOW_TICKS = 30
 
 

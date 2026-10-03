@@ -78,8 +78,9 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 			}
 		})
 	}
-	stdout = e.watch(stdout, markTimedOut)
-	stderr = e.watch(stderr, markTimedOut)
+	activity := e.activity(markTimedOut)
+	stdout = activity.watch(stdout)
+	stderr = activity.watch(stderr)
 	stopWallTimeout := e.startWallTimeout(payload, markTimedOut)
 	defer stopWallTimeout()
 	output := newCommandOutput(e.maxLogBytes(), e.scrubber())
@@ -106,12 +107,12 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	return result, finishError(waitErr, result.TimedOut)
 }
 
-func (e *BashExecutor) watch(reader io.Reader, markTimedOut func()) io.Reader {
+func (e *BashExecutor) activity(markTimedOut func()) *activityTracker {
 	limit := e.Inactivity
 	if limit <= 0 {
 		limit = defaultInactivityLimit
 	}
-	return newInactivityReader(reader, limit, markTimedOut)
+	return newActivityTracker(limit, markTimedOut)
 }
 
 func (e *BashExecutor) startWallTimeout(payload Payload, markTimedOut func()) func() {
