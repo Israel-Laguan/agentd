@@ -254,3 +254,49 @@ claimed. Now a 20s window (3 passes + 5s slack) polled at 500ms, and the test's
 context budget goes 90s → 120s to cover it. J10 passes at 20.54s.
 
 Verification: `make check` green; `TestJ10_DiskWatchdogDedup` green under load.
+
+### SP-011 cycle: is re-running a recovered task safe? (2026-10-01)
+
+**Answer: go, with a caveat worth naming.** Nothing cleans the workspace between
+attempts, so a re-run is not starting fresh — but the sandbox's determinism and the
+worker's output-based commands make it safe in practice. Measured in
+`internal/sandbox/rerun_idempotency_spike_test.go`.
+
+**The workspace is not cleaned, confirmed.** A command that writes a file and
+sleeps is killed mid-task; the re-dispatch then runs `ls` and sees the file:
+
+```text
+FINDING: attempt 2 sees the first attempt's file.
+stdout:
+marker.txt
+```
+
+`BashExecutor` only sets `cmd.Dir` to the workspace and runs. There is no
+per-attempt preparation anywhere: `FSWorkspaceManager` has `SecureDelete` (whole
+project removal) and `SeedFromPath` (initial seed), and nothing else touches the
+directory. So a recovered task resumes on top of whatever the killed attempt left.
+
+**That is genuinely non-idempotent for some commands.** An appending command
+reports a different result on the second attempt than the first:
+
+```text
+attempt 1 reports "1" lines, attempt 2 reports "2" lines
+```
+
+**Why it is still a go.** The non-idempotency lands in the file, not in agentd's
+own state. The task's kanban row is reset to READY and dispatched from the start,
+so counters in SQLite cannot double-count. And the recovery path is bounded: the
+stale-heartbeat sweep only recovers a task after 2m of no heartbeat, by which point
+the killed attempt's process group is gone — a concurrently-still-running first
+attempt is B-003's case, already investigated and closed in S08 as not a bug.
+
+**A dead retry-awareness hook found on the way.** `models.ExecutionPayload` carries
+`PreviousAttempts []string` and `BuildExecutionPayload` populates it from the
+event history — but `BuildExecutionPayload` has **no callers**. It is a dead
+function, so nothing currently tells a re-run what the previous attempt did. Not a
+defect today (no code reads the field), but it is the natural hook for making
+re-runs safer, so it is recorded in T-036 rather than left as a surprise.
+
+T-036, in `tasks/sprints/S10-rerun-idempotency/`: give the recovery re-run a
+per-attempt workspace reset behind a flag, and either wire `PreviousAttempts` into
+the prompt or delete it.
