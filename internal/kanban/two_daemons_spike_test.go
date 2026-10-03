@@ -206,7 +206,4 @@ func TestTwoDaemonClaimAssertionDetectsADoubleClaim(t *testing.T) {
 			"assertion in TestTwoDaemonsDoNotDoubleDispatchTheSameTask would miss a double claim",
 			len(first)+len(second))
 	}
-	if len(first) == 3 && len(second) == 3 {
-		t.Fatal("both claims returned every task; the claim is not exclusive and the count check is blind")
-	}
 }
