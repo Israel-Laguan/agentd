@@ -32,7 +32,7 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 	ws := &sandbox.FSWorkspaceManager{Root: cfg.ProjectsDir}
 	emitter := bus.NewEventEmitter(store, eventBus)
 	breaker := queue.NewCircuitBreakerWithTimeout(cfg.Breaker.OpenTimeout)
-	providerBreakers := queue.NewProviderBreakers()
+	providerBreakers := queue.NewProviderBreakersWithTimeout(cfg.Breaker.OpenTimeout)
 	providerConfigs, err := cfg.Gateway.ProviderConfigs()
 	if err != nil {
 		return runtimeDeps{}, fmt.Errorf("resolve provider configs: %w", err)
