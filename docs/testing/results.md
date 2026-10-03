@@ -306,3 +306,40 @@ Follow-up (not yet tracked in `tasks/backlog/`): give the recovery re-run a
 per-attempt workspace reset behind a flag, terminate or verify the dead attempt's
 process group before re-dispatch, and either wire `PreviousAttempts` into the
 prompt or delete it.
+
+### SP-010 and SP-013 cycle: two P3 limits, measured and accepted (2026-10-01)
+
+Both were half-done spikes whose remaining question was a bounded, accepted risk.
+Both are now measured rather than assumed, and both are recommended **dropped with
+the limit recorded** — the fixes are schema changes with a poor cost/benefit ratio
+against a 2-minute worst case that only follows a host reboot.
+
+**SP-013 — no single-instance guard.** Confirmed by reading the start path: a second
+`Open` on an already-initialised home succeeds and writes to it. There is no lock
+on the home; the only `flock` in the tree is on a per-document cache in
+`filecontext`, unrelated to the daemon. With two stores on one database
+(`internal/kanban/two_daemons_spike_test.go`):
+
+- **No double-dispatch.** `ClaimNextReadyTasks` runs `BEGIN IMMEDIATE`, so two
+  daemons racing the same READY task hand it out exactly once — A claimed 1, B 0.
+- **No false recovery.** Daemon A's boot reconcile leaves daemon B's task RUNNING,
+  because B's owner PID is genuinely alive.
+
+So the two feared failure modes do not occur. The remaining risk is both daemons
+polling and competing on the same queue, which costs throughput rather than
+correctness. **Dropped**, with the limit recorded.
+
+**SP-010 — PID reuse after reboot.** Confirmed: a RUNNING task whose owner PID is
+held by an unrelated live process is not recovered at boot, and waits for the
+stale-heartbeat sweep (~2m). Root cause, stated as an assertion: given only a PID,
+PID reuse and a live second daemon are *indistinguishable* — both leave the task
+RUNNING. Fixing it needs a per-boot instance ID or process start-time check, which
+is a schema change after v19. **Dropped**, with the limit recorded.
+
+Note T-030's fix does not touch this: it resets tasks owned by the daemon's *own*
+PID, and a reused PID is by definition not our own.
+
+Both sets of tests are written to fail if the behaviour ever changes, so the
+accepted limits cannot silently stop being true — the `withoutOwnPID` mutation
+turns SP-010's discriminator test red, and SP-013's claim-count test is
+self-checked against a double claim.
