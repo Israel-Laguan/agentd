@@ -316,3 +316,15 @@ passed. Mutation checks, each red: `Admit` never reports "in flight", helper alw
 hands off, requeue with a payload, probe slot not released, OPEN also waits, and
 `cfg.Breaker.OpenTimeout` dropped from the provider registry (new test in
 `cmd/agentd`). `make check` green; no devenv journey run (no profile changed).
+
+### B-014 cycle: only the probe holder settles the probe (2026-10-03)
+
+The HALF_OPEN probe slot now has an owner: `AdmitFor`/`RecordErrorFor`/
+`RecordSuccessFor`/`ReleaseProbeFor` name the task holding it, and a verdict from
+any other task moves the failure count and the breaker state without settling the
+slot. The dispatch path's unowned slot and the plain unscoped `Record*`/
+`ReleaseProbe` are unchanged. 13 mutations; 9 red, 4 equivalent (`RecordSuccess`
+clearing unconditionally, and the three call sites left unscoped) — all four are
+inert because a closed breaker takes no slot and the `OPEN` → `HALF_OPEN`
+transition resets the slot, both pinned by tests. `make check` green; no devenv
+journey run (no profile changed).
