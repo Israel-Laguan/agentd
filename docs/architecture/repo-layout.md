@@ -199,7 +199,7 @@ deploy notes" in [litellm-integration.md](../litellm-integration.md)).
 - [x] Update the header comments in `devenv/agentd/config.yaml`, `devenv/litellm/config.yaml` and `devenv/mockllm/server.py`.
 - [x] Makefile: add `dev-up`, `dev-down` and `dev-logs` (`podman compose -f devenv/compose.yaml …`).
 - [x] `.dockerignore`: `dev/` → `devenv/`.
-- [x] Smoke-test: `make dev-up`, confirm the existing `agentd_agentd-data` volume is reused and all four services go healthy. Verified 2026-10-01 (T-033): the volume's contents checksum identically before and after `dev-up`, and all six profiles report healthy. Note `podman-compose` 1.3.0 prints a container-name collision for `agentd_litellm_1` and then continues — the stack still comes up healthy, so it is noise, not a failure.
+- [x] Smoke-test: `make dev-up`, confirm the existing `agentd_agentd-data` volume is reused and all health-checked containers go healthy. Verified 2026-10-01 (T-033): the volume's contents checksum identically before and after `dev-up`, and all health-checked containers report healthy. Note `podman-compose` 1.3.0 prints a container-name collision for `agentd_litellm_1` and then continues — the stack still comes up healthy, so it is noise, not a failure.
 
 ### 3. `test/`
 

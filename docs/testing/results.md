@@ -285,18 +285,24 @@ attempt 1 reports "1" lines, attempt 2 reports "2" lines
 
 **Why it is still a go.** The non-idempotency lands in the file, not in agentd's
 own state. The task's kanban row is reset to READY and dispatched from the start,
-so counters in SQLite cannot double-count. And the recovery path is bounded: the
-stale-heartbeat sweep only recovers a task after 2m of no heartbeat, by which point
-the killed attempt's process group is gone — a concurrently-still-running first
-attempt is B-003's case, already investigated and closed in S08 as not a bug.
+so counters in SQLite cannot double-count.
+
+**Open: overlap with a surviving first attempt.** Nothing in recovery verifies or
+terminates the killed attempt's process group. Boot reconcile resets a task whose
+owner PID is dead immediately, and the stale-heartbeat sweep (2m without a
+heartbeat) only resets the kanban row. A command that outlives its daemon can
+therefore still be running while the retry starts in the same workspace. The
+spike did not measure this; it is the same shape as B-003, closed in S08 for the
+live-worker case, not for a command orphaned by a daemon crash.
 
 **A dead retry-awareness hook found on the way.** `models.ExecutionPayload` carries
 `PreviousAttempts []string` and `BuildExecutionPayload` populates it from the
 event history — but `BuildExecutionPayload` has **no callers**. It is a dead
 function, so nothing currently tells a re-run what the previous attempt did. Not a
 defect today (no code reads the field), but it is the natural hook for making
-re-runs safer, so it is recorded in T-036 rather than left as a surprise.
+re-runs safer, so it is named here rather than left as a surprise.
 
-T-036, in `tasks/sprints/S10-rerun-idempotency/`: give the recovery re-run a
-per-attempt workspace reset behind a flag, and either wire `PreviousAttempts` into
-the prompt or delete it.
+Follow-up (not yet tracked in `tasks/backlog/`): give the recovery re-run a
+per-attempt workspace reset behind a flag, terminate or verify the dead attempt's
+process group before re-dispatch, and either wire `PreviousAttempts` into the
+prompt or delete it.

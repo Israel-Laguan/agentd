@@ -33,7 +33,7 @@ log; append new cycles there.
 
 - `./test/e2e/chat-kanban.sh` created a project, materialized it with `start_empty_workspace: true`, and tasks reached `COMPLETED`.
 
-- The script then timed out waiting for a human-attention task. This is expected with `healing.enabled: false` in `devenv/compose.yaml`; no handoff/attention flow was triggered. Do not treat this as a script failure unless a real-provider run with healing enabled is intended.
+- The script then timed out waiting for a human-attention task. This is expected with `healing.enabled: false` in `devenv/agentd/config.yaml`; no handoff/attention flow was triggered. Do not treat this as a script failure unless a real-provider run with healing enabled is intended.
 
 - Project/task IDs for investigation: `ca0cdbd4-c56a-427e-9c3e-794fcfd13acd`.
 
