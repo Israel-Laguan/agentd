@@ -111,14 +111,12 @@ func (w *Worker) processRunningTask(
 	profile models.AgentProfile,
 ) {
 	defer w.recoverPanic(ctx, task)
-	if w.providerBreakers != nil && profile.Provider != "" {
-		if w.providerBreakers.Get(profile.Provider).IsOpen() {
-			w.handoffOrFail(ctx, task,
-				fmt.Errorf("%w: provider %s circuit breaker is open",
-					models.ErrLLMQuotaExceeded, profile.Provider))
-			return
-		}
+	release, err := w.admitProvider(profile.Provider)
+	if err != nil {
+		w.handoffOrFail(ctx, task, err)
+		return
 	}
+	defer release()
 	if profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
 			w.FailHard(ctx, task, err)

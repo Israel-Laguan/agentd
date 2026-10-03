@@ -111,6 +111,24 @@ func (b *CircuitBreaker) ProbeLimit(available int) int {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.probeLocked(available)
+}
+
+// Admit is the per-request form of ProbeLimit(1) for callers that gate one
+// task at a time. probe reports that the request took the HALF_OPEN probe slot,
+// so the caller must record an outcome or ReleaseProbe; a CLOSED breaker admits
+// without a slot.
+func (b *CircuitBreaker) Admit() (allowed, probe bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.state == BreakerClosed {
+		return true, false
+	}
+	allowed = b.probeLocked(1) > 0
+	return allowed, allowed
+}
+
+func (b *CircuitBreaker) probeLocked(available int) int {
 	switch b.state {
 	case BreakerOpen:
 		if b.now().Sub(b.tripTime) < b.timeout {

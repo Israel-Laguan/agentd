@@ -91,6 +91,7 @@ func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result s
 	if w.breaker != nil {
 		w.breaker.RecordSuccess()
 	}
+	w.recordProviderSuccess(ctx, task)
 	payload := fmt.Sprintf("exit=%d duration=%s\n%s", result.ExitCode, result.Duration, result.Stdout)
 	if _, updateErr := w.updateTaskResult(ctx, task, models.TaskResult{
 		Success: true,

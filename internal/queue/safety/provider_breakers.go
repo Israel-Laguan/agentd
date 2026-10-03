@@ -10,11 +10,22 @@ import (
 type ProviderBreakers struct {
 	mu       sync.RWMutex
 	breakers map[string]*CircuitBreaker
+	timeout  time.Duration
 }
 
-// NewProviderBreakers returns an empty, ready-to-use ProviderBreakers registry.
+// NewProviderBreakers returns an empty, ready-to-use ProviderBreakers registry
+// whose breakers use the default open timeout.
 func NewProviderBreakers() *ProviderBreakers {
-	return &ProviderBreakers{breakers: make(map[string]*CircuitBreaker)}
+	return NewProviderBreakersWithTimeout(defaultBreakerTimeout)
+}
+
+// NewProviderBreakersWithTimeout returns a registry whose breakers stay OPEN for
+// timeout before admitting a probe. A non-positive timeout falls back to the default.
+func NewProviderBreakersWithTimeout(timeout time.Duration) *ProviderBreakers {
+	return &ProviderBreakers{
+		breakers: make(map[string]*CircuitBreaker),
+		timeout:  timeout,
+	}
 }
 
 // Get returns the CircuitBreaker for the given provider, creating one on first use.
@@ -28,7 +39,7 @@ func (p *ProviderBreakers) Get(provider string) *CircuitBreaker {
 	if b, ok := p.breakers[provider]; ok {
 		return b
 	}
-	b := NewCircuitBreaker()
+	b := NewCircuitBreakerWithTimeout(p.timeout)
 	p.breakers[provider] = b
 	return b
 }
