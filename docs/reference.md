@@ -141,6 +141,8 @@ task["id"], task["project_id"], task["state"]
 | `TASK_BREAKDOWN_ROLLUP` | Worker | Resumed broken-down parent completed because all its breakdown subtasks completed; no LLM call. |
 | `LLM_OUTAGE_HANDOFF` | Daemon | HUMAN task created for AI provider outage diagnostics. |
 | `REBOOT_RECOVERY_HANDOFF` | Daemon | HUMAN review task created after resetting interrupted tasks on startup. |
+| `RECOVERY_WORKSPACE_RESET` | Daemon | `recovery.clean_workspace_on_recover` emptied the project workspace of a task recovered at startup, before its re-run. |
+| `RECOVERY_RESET_REFUSED` | Daemon | The reset was refused or failed (project not started empty, or another COMPLETED/RUNNING task shares the workspace); the recovered task is FAILED_REQUIRES_HUMAN. |
 | `DISK_SPACE_CRITICAL` | Watchdog | Free disk space below configured threshold. |
 | `TUNE` | Worker | Model parameters changed for a retry attempt. |
 | `HEALING_SPLIT` | Worker | Repeated-failure task forced into the breakdown path. |
@@ -166,6 +168,7 @@ task["id"], task["project_id"], task["state"]
 | `uploads_dir` | `<home>/uploads` | Directory for oversized uploaded or referenced file content. |
 | `breaker.handoff_after` | `2m` | Duration the LLM breaker must stay open before creating a HUMAN outage task. |
 | `breaker.open_timeout` | `5m` | How long a tripped LLM breaker pauses dispatch before it admits one probe task; the breaker closes when that probe succeeds. A failed probe restarts the full timeout. Applies to the global breaker and to each per-provider breaker (a provider's breaker admits one probe task at a time; siblings are handed off until it resolves). Non-positive values fall back to `5m`. |
+| `recovery.clean_workspace_on_recover` | `false` | At boot, empty the workspace of a recovered task's project before the task re-runs. Applies only to projects created with `start_empty_workspace` and no `source_path`; refuses (and fails the task as FAILED_REQUIRES_HUMAN) otherwise, or when another COMPLETED or RUNNING task shares the workspace. Stale-heartbeat recoveries are never reset. See [recovery-rerun.md](architecture/recovery-rerun.md). |
 | `disk.free_threshold_percent` | `10.0` | Minimum acceptable free disk percentage. There is deliberately **no** `disk.check_interval`: the watchdog's cadence comes from the `disk-watchdog` line in `<AGENTD_HOME>/agentd.crontab` (see the cron row above), and the key is not read by any config struct. Set the interval there. |
 | `healing.enabled` | `true` | Self-healing ladder and provider-exhaustion HUMAN handoffs. When `false`, failures terminate without healing subtasks (product HITL gates unchanged). |
 | `healing.strategy` | `increase_effort` | Built-in healing ladder (`increase_effort` or `minimize_variables`). |

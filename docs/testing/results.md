@@ -274,3 +274,34 @@ Reproduced, then fixed:
   success hook I first added in `handleLoopResult` survived its mutation because the loop
   already commits through `commitSucceeded`, so it was deleted.
 - Not covered by a test: the one-line wiring of `cfg.Breaker.OpenTimeout` into the registry.
+
+### S10 follow-up: B-010 / T-036b, opt-in workspace reset on recovery (2026-10-03)
+
+Built:
+
+- **Baseline decision:** a persisted "started empty" bit (`projects.started_empty`, schema
+  v20), not a recorded `source_path`. Evidence: `DraftPlan.StartEmptyWorkspace` is already
+  known at materialize time and only needed persisting; "empty" is the one starting state
+  that can be restored exactly, whereas a recorded `source_path` restores what the directory
+  holds *now* and still cannot cover hand-populated projects. SP-010 rejected a schema change
+  because the cure was worth ~2m; this one is a single additive column on the v19 template,
+  existing rows default to 0 (the reset refuses them, the safe direction).
+- **`recovery.clean_workspace_on_recover`** (default off), boot reconcile only. It refuses and
+  fails the task as FAILED_REQUIRES_HUMAN (`RECOVERY_RESET_REFUSED`) when the project did not
+  start empty, has another COMPLETED or RUNNING task, or the reset errors; one reset per
+  project; `FSWorkspaceManager.ResetProjectDir` is jailed and refuses the root.
+- Failing tests first (recovery package, red by compile then by assertion). Mutation checks,
+  each red: skip the started-empty check; drop either half of the COMPLETED/RUNNING guard;
+  reset per task instead of per project; do not fail the task on refusal; ignore the reset
+  error; do not call the reset from boot; reset without the jail, without the root refusal,
+  or by deleting the directory itself; daemon not passing the option; store not persisting
+  the bit, or persisting it for seeded projects.
+- **J08** now runs with the flag on (`devenv/agentd/config.yaml`). The mock's slow command
+  drops `attempt.marker` and prints `carried-over` if it is already there; J08 waits for the
+  first attempt's output before the kill, then asserts the re-run's RESULT lacks
+  `carried-over` and a `RECOVERY_WORKSPACE_RESET` event exists. With the flag off J08 fails
+  with the marker carried over (measured). J08 passes in 42s.
+- Removed the mock test that pinned `SLOW_TICKS` under the inactivity limit (obsolete since B-011).
+
+Verified: `make check` green after the stack was rebuilt (`dev-clean`, `dev-up`); full
+`make test-e2e` passes (J01 to J15, 246s), the first full run since S10.

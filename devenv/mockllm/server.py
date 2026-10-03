@@ -138,7 +138,12 @@ SLOW_TICKS = 30
 def slow_command():
     # Emits output every second; lets a journey kill the daemon while the task is
     # RUNNING, and the last line ("tick 29") shows the command ran to the end.
-    return f'i=0; while [ $i -lt {SLOW_TICKS} ]; do echo tick $i; i=$((i+1)); sleep 1; done'
+    # It also leaves attempt.marker and reports "carried-over" when one is already
+    # there, so a re-run shows whether the workspace was reset between attempts.
+    return (
+        'if [ -e attempt.marker ]; then echo carried-over; fi; touch attempt.marker; '
+        f'i=0; while [ $i -lt {SLOW_TICKS} ]; do echo tick $i; i=$((i+1)); sleep 1; done'
+    )
 
 
 def task_from_text(part: str) -> dict:

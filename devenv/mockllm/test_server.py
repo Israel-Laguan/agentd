@@ -131,10 +131,12 @@ class ChatCompletionDispatchTest(unittest.TestCase):
 
 
 class SlowCommandTest(unittest.TestCase):
-    def test_slow_command_finishes_inside_the_sandbox_inactivity_limit(self):
-        # sandbox.inactivity_timeout defaults to 60s; a slow task that outlives it
-        # can never complete, so a re-run after recovery would always time out.
-        self.assertLess(server.SLOW_TICKS, 60)
+    def test_slow_command_reports_a_first_attempts_file(self):
+        # J08 proves the recovery.clean_workspace_on_recover reset with this: the
+        # command drops a marker file, and a re-run that still sees it says so.
+        command = server.slow_command()
+        self.assertIn("if [ -e attempt.marker ]; then echo carried-over; fi", command)
+        self.assertLess(command.index("carried-over"), command.index("touch attempt.marker"))
 
     def test_slow_command_prints_every_tick_through_the_last(self):
         command = server.slow_command()
