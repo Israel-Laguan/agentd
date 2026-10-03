@@ -25,7 +25,7 @@ func TestWaitForGivesUpOnItsOwn(t *testing.T) {
 	if err == nil {
 		t.Fatal("waitForBudget() = nil for a condition that never becomes true, want a timeout error")
 	}
-	if elapsed := time.Since(started); elapsed > budget+5*time.Second {
+	if elapsed := time.Since(started); elapsed > budget+500*time.Millisecond {
 		t.Fatalf("waitForBudget took %s to give up, want at most ~%s", elapsed, budget)
 	}
 	if !strings.Contains(err.Error(), budget.String()) {
@@ -65,12 +65,14 @@ func TestWaitForReturnsAsSoonAsTheConditionHolds(t *testing.T) {
 }
 
 // TestWaitForNoticesALateCondition is the B-009 case directly: a condition that
-// becomes true well after the old 3s budget would have failed. It stands in for
+// becomes true after the old 3s budget would have failed. It stands in for
 // three workers taking longer than 3s to run under load.
 func TestWaitForNoticesALateCondition(t *testing.T) {
+	// Past the old 3s budget, so reverting to it makes this fail.
+	const lateCondition = 3500 * time.Millisecond
 	gate := make(chan struct{})
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(lateCondition)
 		close(gate)
 	}()
 
@@ -82,6 +84,6 @@ func TestWaitForNoticesALateCondition(t *testing.T) {
 			return false
 		}
 	}, "late condition"); err != nil {
-		t.Fatalf("waitFor() error = %v, want nil — a condition at 500ms is within the budget", err)
+		t.Fatalf("waitFor() error = %v, want nil — a condition at %s is within the budget", err, lateCondition)
 	}
 }
