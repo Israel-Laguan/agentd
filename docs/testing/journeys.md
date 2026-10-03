@@ -221,8 +221,9 @@ Covered by `web/app/components/task/task-event-list.test.tsx` and
 | `TaskDrawer` › does not fetch when no task is open | no spurious request for a closed drawer |
 
 Fixtures are copied from a real `GET /api/v1/tasks/{id}/events` response captured
-off the devenv stack on 2026-10-01, so the tests fail if the wire shape drifts
-rather than only if the markup does.
+off the devenv stack on 2026-10-01, pinning the wire shape and payloads (the RESULT
+row's id/payload and the drawer fixture's task IDs are adapted for the tests). They
+are static snapshots, so they do not detect later drift in the endpoint.
 
 **Explicit gap:** no real-browser tier, so layout and click-through are unproven —
 a product decision for a later sprint, recorded here rather than backlogged. The
