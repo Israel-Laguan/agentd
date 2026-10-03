@@ -177,3 +177,29 @@ func TestCircuitBreakerWithNonPositiveTimeoutUsesDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestAdmitReportsWhyARequestWasRefused(t *testing.T) {
+	b := NewCircuitBreaker()
+	now := time.Now()
+	b.SetClockForTest(func() time.Time { return now })
+	if got := b.Admit(); got != AdmissionGranted {
+		t.Fatalf("CLOSED Admit() = %v, want granted", got)
+	}
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	if got := b.Admit(); got != AdmissionDenied {
+		t.Fatalf("OPEN before the timeout Admit() = %v, want denied", got)
+	}
+	now = now.Add(DefaultBreakerTimeout + time.Second)
+	if got := b.Admit(); got != AdmissionProbe {
+		t.Fatalf("first Admit() after the timeout = %v, want probe", got)
+	}
+	if got := b.Admit(); got != AdmissionProbeInFlight {
+		t.Fatalf("second Admit() while the probe runs = %v, want probe in flight", got)
+	}
+	b.RecordError(models.ErrLLMUnreachable)
+	if got := b.Admit(); got != AdmissionDenied {
+		t.Fatalf("Admit() after a failed probe = %v, want denied (timeout restarted)", got)
+	}
+}

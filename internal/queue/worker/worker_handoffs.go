@@ -66,36 +66,6 @@ func (w *Worker) HandleGatewayError(ctx context.Context, task models.Task, err e
 	w.handleAgentFailure(ctx, task, fmt.Sprintf("gateway error: %v", err))
 }
 
-// admitProvider asks the provider's breaker whether this task may run; err wraps
-// ErrLLMQuotaExceeded when it may not. After the open timeout it admits one probe
-// task; release gives that probe slot back when the task ends without recording an
-// outcome (it never changes breaker state).
-func (w *Worker) admitProvider(provider string) (release func(), err error) {
-	noop := func() {}
-	if w.providerBreakers == nil || provider == "" {
-		return noop, nil
-	}
-	b := w.providerBreakers.Get(provider)
-	admitted, probe := b.Admit()
-	if !admitted {
-		return noop, fmt.Errorf("%w: provider %s circuit breaker is open", models.ErrLLMQuotaExceeded, provider)
-	}
-	if probe {
-		return b.ReleaseProbe, nil
-	}
-	return noop, nil
-}
-
-// recordProviderSuccess closes the task's provider breaker after a task completed.
-func (w *Worker) recordProviderSuccess(ctx context.Context, task models.Task) {
-	if w.providerBreakers == nil {
-		return
-	}
-	if provider := w.lookupProvider(ctx, task); provider != "" {
-		w.providerBreakers.Get(provider).RecordSuccess()
-	}
-}
-
 func (w *Worker) handoffOrFail(ctx context.Context, task models.Task, err error) {
 	if !w.healingEnabled {
 		w.failTerminal(ctx, task, err, models.TaskStateFailed)

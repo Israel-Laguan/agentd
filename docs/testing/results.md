@@ -305,3 +305,14 @@ Built:
 
 Verified: `make check` green after the stack was rebuilt (`dev-clean`, `dev-up`); full
 `make test-e2e` passes (J01 to J15, 246s), the first full run since S10.
+
+### B-013 cycle: siblings wait for a provider probe (2026-10-03)
+
+While a provider breaker's probe is in flight, sibling tasks for that provider now go
+back to READY (no gateway call, no handoff, no RETRY event) instead of
+`PROVIDER_EXHAUSTED_HANDOFF`; an OPEN breaker still hands off. `Admit` reports the
+refusal reason atomically. The first sibling test failed with the task BLOCKED, then
+passed. Mutation checks, each red: `Admit` never reports "in flight", helper always
+hands off, requeue with a payload, probe slot not released, OPEN also waits, and
+`cfg.Breaker.OpenTimeout` dropped from the provider registry (new test in
+`cmd/agentd`). `make check` green; no devenv journey run (no profile changed).
