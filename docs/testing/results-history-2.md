@@ -3,7 +3,8 @@
 The T-029, T-030 and T-031 cycles (2026-10-01), moved out of
 [results.md](results.md) on 2026-10-03 (S10 follow-up) so the live log had room
 under the 400-line docs budget. Earlier cycles are in
-[results-history.md](results-history.md). Nothing here is deleted.
+[results-history.md](results-history.md) and the later pre-S10 cycles in
+[results-history-3.md](results-history-3.md). Nothing here is deleted.
 
 ## Execution results and notes
 
