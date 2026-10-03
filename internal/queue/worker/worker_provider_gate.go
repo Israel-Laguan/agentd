@@ -54,8 +54,37 @@ func (w *Worker) gateProvider(ctx context.Context, task models.Task, provider st
 	return release, true
 }
 
-// recordProviderSuccess closes the task's provider breaker after a task completed.
-func (w *Worker) recordProviderSuccess(ctx context.Context, task models.Task) {
+// gateBatchProvider runs the provider breaker gate for a batched request.
+//
+// The batched LLM call is the provider request for every task in the batch, so it
+// is what the gate has to cover: processRunningTask only gates the per-slot
+// fallback that runs afterwards, so without this an OPEN breaker would still let
+// the aggregated request out. When the batch is refused every task in it is
+// handled the same way a single task would be.
+func (w *Worker) gateBatchProvider(ctx context.Context, tasks []models.Task, provider string) (release func(), ok bool) {
+	release, err := w.admitProvider(provider)
+	switch {
+	case errors.Is(err, errProviderProbeInFlight):
+		for _, task := range tasks {
+			w.requeue(ctx, task, "")
+		}
+		return nil, false
+	case err != nil:
+		for _, task := range tasks {
+			w.handoffOrFail(ctx, task, err)
+		}
+		return nil, false
+	}
+	return release, true
+}
+
+// RecordProviderSuccess closes the task's provider breaker.
+//
+// Call it only immediately after the provider request itself succeeded. A local
+// completion — a breakdown roll-up, a sandbox result, a review handoff — makes no
+// provider call, and recording success for one would close an OPEN circuit that
+// the provider never recovered from.
+func (w *Worker) RecordProviderSuccess(ctx context.Context, task models.Task) {
 	if w.providerBreakers == nil {
 		return
 	}

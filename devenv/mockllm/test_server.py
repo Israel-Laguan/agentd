@@ -158,7 +158,17 @@ class OutageTest(unittest.TestCase):
         cls.httpd.shutdown()
         cls.httpd.server_close()
 
+    def setUp(self):
+        # The chats below are fixtures, not journey traffic. Keep them out of the
+        # shared /tmp capture log so a later GET /requests consumer sees only its
+        # own requests.
+        self._real_record_request = server.record_request
+        server.record_request = staticmethod(lambda body: None)
+
     def tearDown(self):
+        server.record_request = self._real_record_request
+        server.set_outage("brk-outage", False)
+        server.set_outage("other", False)
         server.set_outage("brk-outage", False)
         server.set_outage("other", False)
 
@@ -188,6 +198,12 @@ class OutageTest(unittest.TestCase):
     def test_outage_rejects_a_malformed_body(self):
         self.assertEqual(self._post("/outage", {"model": "brk-outage"}), 400)
         self.assertEqual(self._post("/outage", {"down": True}), 400)
+        self.assertFalse(server.in_outage("brk-outage"))
+
+    def test_outage_rejects_a_non_object_or_non_string_model(self):
+        self.assertEqual(self._post("/outage", ["brk-outage"]), 400)
+        self.assertEqual(self._post("/outage", {"model": ["brk-outage"], "down": True}), 400)
+        self.assertEqual(self._post("/outage", {"model": "", "down": True}), 400)
         self.assertFalse(server.in_outage("brk-outage"))
 
 

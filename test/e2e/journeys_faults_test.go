@@ -196,43 +196,28 @@ func j09AwaitBreakerOpen(ctx context.Context, t *testing.T, client *APIClient, p
 		"tasks are not reaching the gateway, or failures are not classified as breaker failures", projectID, last)
 }
 
-// j09AwaitHandoff waits for the provider-exhausted HUMAN child, releasing the
-// breaker's probe gate if it is still holding this project's tasks back.
+// j09AwaitHandoff waits for the provider-exhausted HUMAN child.
 //
-// The breaker is process-global, so in-flight tasks from a previous run (or
-// from this run's own earlier tasks) can trip it before the tasks just
-// materialized are ever dispatched. While OPEN, ProbeLimit returns 0 for
-// safety.DefaultBreakerTimeout (5m), so the new tasks sit READY forever and
-// no handoff is created — a flake that only shows up on repeat runs. Closing
-// the breaker lets the loop dispatch them, they fail against the dead
-// providers, and the breaker re-trips on their failures, which is the same
-// path a first run takes.
-//
-// If the breaker is already CLOSED when the handoff has not appeared, the
-// tasks are genuinely running rather than gated, so waiting is correct and
-// the eventual timeout reports the real failure.
+// It deliberately does not reset the breaker. The recovery half of this journey
+// asserts that the breaker comes back on its own, and a reset here would let that
+// assertion pass for the wrong reason: the gate the reset opens lets a task
+// through, that task's success closes the breaker, and j09AwaitRecovery sees a
+// CLOSED breaker with work completed. The breaker profile's 10s open timeout fits
+// well inside the 60s wait below, so a genuine unaided recovery still lands here.
 func j09AwaitHandoff(ctx context.Context, t *testing.T, client *APIClient, projectID string) *Task {
 	t.Helper()
 
 	poller := NewTaskPoller(client, projectID)
 	deadline := time.Now().Add(60 * time.Second)
-	released := false
 
 	for time.Now().Before(deadline) {
 		if task, err := poller.PollHumanHandoff(ctx); err == nil && task != nil {
 			return task
 		}
-		if !released {
-			if status := j09ReadStatus(ctx, t, client); status.Breaker != nil && status.Breaker.State == BreakerOpen {
-				t.Logf("J09: breaker still OPEN with no handoff in project %s — releasing the probe gate so this project's tasks can dispatch", projectID)
-				j09ResetBreaker(ctx, t, client)
-				released = true
-			}
-		}
 		time.Sleep(500 * time.Millisecond)
 	}
 	t.Fatalf("J09 [handoff] breaker opened but no HUMAN task appeared in project %s within 60s "+
-		"(released the probe gate: %v) — is healing.enabled true on this profile?", projectID, released)
+		"— is healing.enabled true on this profile?", projectID)
 	return nil
 }
 

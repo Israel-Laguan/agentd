@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"agentd/internal/models"
 	"agentd/internal/queue/safety"
@@ -30,6 +31,19 @@ type resetFixture struct {
 
 // deadPID is owned by no live process in these tests.
 const deadPID = 999999
+
+// siblingPID is the "second live daemon" PID the fixture stamps on a sibling it
+// wants to keep RUNNING. StaticPIDProbe decides liveness, so the only requirement
+// is that it differs from this process's own PID: withoutOwnPID drops our own PID
+// from the alive set, which would recover the sibling and invalidate the
+// assertion the test is making.
+func siblingPID() int {
+	pid := 4242
+	for pid == os.Getpid() || pid == deadPID {
+		pid++
+	}
+	return pid
+}
 
 // newResetFixture materializes a project with one task per title, marks the first
 // RUNNING under a dead PID, and has that attempt leave a partial file behind.
@@ -205,10 +219,11 @@ func TestBootReconcile_refusesResetWhenProjectHasCompletedTask(t *testing.T) {
 func TestBootReconcile_refusesResetWhenSiblingStillRunningElsewhere(t *testing.T) {
 	f := newResetFixture(t, true, "a", "other")
 	// A second live daemon owns the sibling: its PID is alive, so it stays RUNNING.
-	f.markRunning(t, f.taskIDs[1], 4242)
+	pid := siblingPID()
+	f.markRunning(t, f.taskIDs[1], pid)
 
 	err := BootReconcile(context.Background(), f.store,
-		safety.StaticPIDProbe{PIDs: []int{1, 4242}}, f.sink, WithWorkspaceReset(f.ws))
+		safety.StaticPIDProbe{PIDs: []int{1, pid}}, f.sink, WithWorkspaceReset(f.ws))
 	if err != nil {
 		t.Fatalf("BootReconcile() error = %v", err)
 	}
@@ -217,6 +232,116 @@ func TestBootReconcile_refusesResetWhenSiblingStillRunningElsewhere(t *testing.T
 		t.Fatal("workspace of a project with a RUNNING sibling was deleted")
 	}
 	f.assertRefused(t, f.taskIDs[0])
+}
+
+// A sibling that has run and then moved on still owns output in the directory:
+// started_at survives every later transition, so the guard has to read that rather
+// than the sibling's current state.
+func TestBootReconcile_refusesResetWhenSiblingStartedThenLeftRunning(t *testing.T) {
+	f := newResetFixture(t, true, "a", "other")
+	pid := siblingPID()
+	f.markRunning(t, f.taskIDs[1], pid)
+	if _, err := f.store.UpdateTaskState(context.Background(), f.taskIDs[1], time.Now(), models.TaskStateBlocked); err != nil {
+		t.Fatalf("UpdateTaskState to BLOCKED: %v", err)
+	}
+	sibling, err := f.store.GetTask(context.Background(), f.taskIDs[1])
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if sibling.StartedAt == nil {
+		t.Fatal("fixture did not record a start, so this test would pass without exercising the guard")
+	}
+
+	err = BootReconcile(context.Background(), f.store,
+		safety.StaticPIDProbe{PIDs: []int{1, pid}}, f.sink, WithWorkspaceReset(f.ws))
+	if err != nil {
+		t.Fatalf("BootReconcile() error = %v", err)
+	}
+
+	if !f.partialExists() {
+		t.Fatal("workspace of a project with a sibling that had already run was deleted")
+	}
+	f.assertRefused(t, f.taskIDs[0])
+}
+
+// Boot reconcile resets each project once, but a second daemon sharing the home
+// can claim one of the just-recovered tasks in the window between recovery and
+// the reset. That task is no longer READY, and emptying the workspace underneath
+// it would erase a live attempt's files.
+func TestBootReconcile_refusesResetWhenRecoveredTaskWasClaimedConcurrently(t *testing.T) {
+	f := newResetFixture(t, true, "a", "b")
+	f.markRunning(t, f.taskIDs[1], deadPID)
+	store := &claimOnListStore{FakeKanbanStore: f.store}
+
+	if err := BootReconcile(context.Background(), store,
+		safety.StaticPIDProbe{PIDs: []int{1}}, f.sink, WithWorkspaceReset(f.ws)); err != nil {
+		t.Fatalf("BootReconcile() error = %v", err)
+	}
+
+	if !store.claimed {
+		t.Fatal("the concurrent claim never happened, so this test did not exercise the guard")
+	}
+	if !f.partialExists() {
+		t.Fatal("the workspace was emptied under a task another daemon had already claimed")
+	}
+	refused := 0
+	for _, id := range f.taskIDs {
+		if f.state(t, id) == models.TaskStateFailedRequiresHuman {
+			refused++
+		}
+	}
+	// The reset is per project, so one unresettable project refuses every
+	// recovered task in it rather than only the claimed one.
+	if refused != len(f.taskIDs) {
+		t.Fatalf("FAILED_REQUIRES_HUMAN tasks = %d, want %d (the claimed task blocks the whole project reset)",
+			refused, len(f.taskIDs))
+	}
+}
+
+// A refusal whose FAILED_REQUIRES_HUMAN transition cannot be persisted must abort
+// boot. Logging it and continuing would leave the task READY on disk, so the
+// dispatch loop would claim it onto the workspace the operator asked to be clean.
+func TestBootReconcile_abortsWhenRefusalCannotBePersisted(t *testing.T) {
+	// A project that did not start empty guarantees the refusal; the store
+	// guarantees the failure to record it.
+	f := newResetFixture(t, false, "a")
+	store := updateStateFailStore{FakeKanbanStore: f.store}
+
+	err := BootReconcile(context.Background(), store,
+		safety.StaticPIDProbe{PIDs: []int{1}}, f.sink, WithWorkspaceReset(f.ws))
+	if err == nil {
+		t.Fatal("BootReconcile() error = nil, want the refusal-persistence failure to abort boot")
+	}
+	if got := f.state(t, f.taskIDs[0]); got != models.TaskStateReady {
+		t.Fatalf("task state = %s, want READY — the failed transition left it claimable", got)
+	}
+}
+
+// claimOnListStore claims one READY task the first time boot reconcile lists the
+// project's tasks, standing in for a second daemon sharing the home.
+type claimOnListStore struct {
+	*testutil.FakeKanbanStore
+	claimed bool
+}
+
+func (s *claimOnListStore) ListTasksByProject(ctx context.Context, projectID string) ([]models.Task, error) {
+	tasks, err := s.FakeKanbanStore.ListTasksByProject(ctx, projectID)
+	if err != nil || s.claimed {
+		return tasks, err
+	}
+	s.claimed = true
+	if _, err := s.ClaimNextReadyTasks(ctx, 1); err != nil {
+		return nil, err
+	}
+	return s.ListTasksByProject(ctx, projectID)
+}
+
+type updateStateFailStore struct {
+	*testutil.FakeKanbanStore
+}
+
+func (s updateStateFailStore) UpdateTaskState(context.Context, string, time.Time, models.TaskState) (*models.Task, error) {
+	return nil, errors.New("database is locked")
 }
 
 type countingResetter struct {

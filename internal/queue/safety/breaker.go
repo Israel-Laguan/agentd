@@ -168,6 +168,16 @@ func (b *CircuitBreaker) probeLocked(available int) int {
 	}
 }
 
+// ProbeHeld reports whether the HALF_OPEN probe slot is currently taken. A
+// caller that asked ProbeLimit for capacity calls it to learn whether it now
+// owns a probe it must resolve with an outcome or ReleaseProbe. It is false
+// while the breaker is CLOSED, because no slot is taken then.
+func (b *CircuitBreaker) ProbeHeld() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.state == BreakerHalfOpen && b.inflight
+}
+
 // ReleaseProbe returns the HALF_OPEN probe slot taken by ProbeLimit when the
 // caller ended up dispatching nothing, so a later tick with work can use it.
 // It never changes the breaker state: only a recorded outcome does that.

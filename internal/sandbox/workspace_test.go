@@ -124,6 +124,46 @@ func TestResetProjectDirEmptiesWorkspaceAndKeepsIt(t *testing.T) {
 	}
 }
 
+// A symlink entry inside a workspace is removed as the symlink it is: its target,
+// even one outside the root, must survive. Path-based removal would follow it out
+// of the jail.
+func TestResetProjectDirRemovesSymlinksWithoutFollowingThem(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "ws")
+	outside := filepath.Join(base, "outside")
+	for _, dir := range []string{root, outside} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(outside, "precious.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manager := &FSWorkspaceManager{Root: root}
+	dir, err := manager.EnsureProjectDir(context.Background(), "project-1")
+	if err != nil {
+		t.Fatalf("EnsureProjectDir() error = %v", err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "precious.txt"), filepath.Join(dir, "escape.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "partial.txt"), []byte("p"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.ResetProjectDir(context.Background(), "project-1"); err != nil {
+		t.Fatalf("ResetProjectDir() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(outside, "precious.txt")); err != nil {
+		t.Fatalf("the symlink target outside the root was deleted: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("ReadDir(%s) = %v, %v; want an existing, empty workspace", dir, entries, err)
+	}
+}
+
 func TestResetProjectDirIsJailed(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "ws")

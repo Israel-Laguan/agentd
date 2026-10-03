@@ -114,6 +114,19 @@ func (s *ProjectService) ensureWorkspace(ctx context.Context, project models.Pro
 	return nil
 }
 
+// startedEmptyClearer clears projects.started_empty once an operator has populated
+// the workspace by hand.
+//
+// The bit records "this workspace was created empty and nothing else was put in
+// it", which is what recovery.clean_workspace_on_recover needs to know before it
+// may empty the directory. Seeding the directory by hand invalidates it. It is a
+// narrow optional interface rather than a KanbanStore method so stores that do not
+// implement it simply keep the bit — which only makes boot recovery refuse the
+// reset, never perform an unsafe one.
+type startedEmptyClearer interface {
+	ClearProjectStartedEmpty(ctx context.Context, projectID string) error
+}
+
 // MarkWorkspaceReady transitions all PENDING tasks for the given project to
 // READY, signaling that the workspace has been populated and workers may
 // claim tasks.
@@ -126,6 +139,14 @@ func (s *ProjectService) MarkWorkspaceReady(ctx context.Context, projectID strin
 	if !populated {
 		slog.Warn("mark workspace ready called but workspace is empty", "project_id", projectID)
 		return nil, fmt.Errorf("%w: workspace is empty; seed content before marking ready", models.ErrWorkspaceNotReady)
+	}
+	// Reaching here means the operator put content in the directory themselves, so
+	// the project no longer started empty and its content is not a leftover to be
+	// cleaned away by recovery.
+	if clearer, ok := s.store.(startedEmptyClearer); ok {
+		if err := clearer.ClearProjectStartedEmpty(ctx, projectID); err != nil {
+			slog.Error("clear started_empty failed", "project_id", projectID, "error", err)
+		}
 	}
 	tasks, err := s.store.MarkProjectTasksReady(ctx, projectID)
 	if err != nil {

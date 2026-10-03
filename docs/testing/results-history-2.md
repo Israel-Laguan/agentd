@@ -99,7 +99,7 @@ Fixed:
 
 - **B-001** (P2): the three token-ledger writes — `AddTokenUsage`,
   `AddUsageDetails` (`internal/kanban/tasks_repo_token_usage.go`) and
-  `AppendEvent` (`internal/kanban/events.go`) — were the **only** unwrapped
+  `AppendEvent` (`internal/kanban/events.go`) — were unwrapped
   writes in the kanban package, despite ~30 neighbouring call sites being
   wrapped, including `AddComment` in the same file as `AppendEvent`. All three
   are now wrapped in `RetryOnBusy`. `Worker.Emit`
@@ -130,7 +130,7 @@ Evidence:
 - **Fixed path loses nothing**: the same load through the real
   `store.AddTokenUsage` is `160/160`.
 - Retry is safe despite neither write being idempotent (the counter is a
-  read-modify-write accumulate; the event mints a fresh uuid per attempt),
+  read-modify-write accumulate; AppendEvent normalizes its ID once before retrying),
   because SQLite guarantees a write that returned `SQLITE_BUSY` did not commit.
   Empirically confirmed: the durable counter equals the successful write count
   exactly in every run — no partial writes, no double-counts.

@@ -427,8 +427,11 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._send({"error": "invalid json"}, 400)
                 return
+            if not isinstance(body, dict):
+                self._send({"error": "want {model: string, down: bool}"}, 400)
+                return
             model = body.get("model", "")
-            if not model or not isinstance(body.get("down"), bool):
+            if not isinstance(model, str) or not model or not isinstance(body.get("down"), bool):
                 self._send({"error": "want {model: string, down: bool}"}, 400)
                 return
             set_outage(model, body["down"])

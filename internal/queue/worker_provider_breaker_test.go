@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -130,13 +131,15 @@ func TestWorkerProviderBreakerStillOpenHandsOff(t *testing.T) {
 	}
 }
 
-// A probe that ends without a verdict (here: a non-breaker failure) must hand the
-// slot back, or the provider stays HALF_OPEN with no one allowed to probe.
+// A probe that ends without a verdict must hand the slot back, or the provider stays
+// HALF_OPEN with no one allowed to probe. The verdict has to come from the provider
+// request, so the request itself is what fails here: a task that reached a healthy
+// provider and then failed its sandbox has, and did record, a verdict.
 func TestWorkerProviderBreakerReleasesProbeWithoutVerdict(t *testing.T) {
 	store := providerStore()
 	pb, clock := trippedProviderBreakers(t)
 	*clock = clock.Add(6 * time.Minute)
-	gw := &fakeGateway{content: `{"command":"false"}`}
+	gw := &fakeGateway{err: errors.New("upstream returned garbage")}
 	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1}}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), &recordingSink{}, WorkerOptions{ProviderBreakers: pb})
 
@@ -147,6 +150,25 @@ func TestWorkerProviderBreakerReleasesProbeWithoutVerdict(t *testing.T) {
 	}
 	if got := pb.Get("gemini").Admit(); got != AdmissionProbe {
 		t.Fatal("probe slot stayed taken after the probe task ended without a verdict")
+	}
+}
+
+// The counterpart: a task that reaches the provider successfully has recorded a
+// verdict even if its sandbox run then fails, so the breaker closes. Recording
+// success on task completion instead would leave a provider that is back in
+// service looking OPEN until something else happened to succeed.
+func TestWorkerProviderBreakerClosesOnProviderSuccessNotSandboxResult(t *testing.T) {
+	store := providerStore()
+	pb, clock := trippedProviderBreakers(t)
+	*clock = clock.Add(6 * time.Minute)
+	gw := &fakeGateway{content: `{"command":"false"}`}
+	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1}}
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), &recordingSink{}, WorkerOptions{ProviderBreakers: pb})
+
+	worker.Process(context.Background(), store.task)
+
+	if got := pb.Get("gemini").State(); got != BreakerClosed {
+		t.Fatalf("state = %s, want CLOSED — the provider answered, so the probe succeeded", got)
 	}
 }
 

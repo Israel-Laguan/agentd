@@ -26,28 +26,7 @@ func TestDaemonStart_WorkspaceResetOnRecover(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			root := t.TempDir()
-			store := testutil.NewFakeStore()
-			store.SetProjectsDir(root)
-			project, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
-				ProjectName: "p", StartEmptyWorkspace: true,
-				Tasks: []models.DraftTask{{TempID: "a", Title: "A"}},
-			})
-			if err != nil {
-				t.Fatalf("MaterializePlan: %v", err)
-			}
-			ws := &sandbox.FSWorkspaceManager{Root: root}
-			dir, err := ws.EnsureProjectDir(ctx, project.ID)
-			if err != nil {
-				t.Fatalf("EnsureProjectDir: %v", err)
-			}
-			partial := filepath.Join(dir, "first-attempt.txt")
-			if err := os.WriteFile(partial, []byte("partial"), 0o644); err != nil {
-				t.Fatalf("write partial: %v", err)
-			}
-			if _, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 999999); err != nil {
-				t.Fatalf("MarkTaskRunning: %v", err)
-			}
+			store, ws, partial, taskID := seedInterruptedWorkspace(t)
 			opts := DaemonOptions{
 				TaskInterval: time.Hour, MaxTaskInterval: time.Hour, IntakeInterval: time.Hour,
 				HeartbeatInterval: time.Hour, Probe: StaticPIDProbe{},
@@ -59,7 +38,15 @@ func TestDaemonStart_WorkspaceResetOnRecover(t *testing.T) {
 			runCtx, cancel := context.WithCancel(ctx)
 			done := make(chan error, 1)
 			go func() { done <- daemon.Start(runCtx) }()
-			time.Sleep(30 * time.Millisecond)
+			// Synchronize on boot reconcile instead of sleeping: a fixed delay
+			// races the goroutine, and cancelling before the liveness probe runs
+			// makes it return context.Canceled so the task is never recovered.
+			if err := waitFor(func() bool {
+				recovered, getErr := store.GetTask(ctx, taskID)
+				return getErr == nil && recovered.State == models.TaskStateReady
+			}, "boot reconcile recovered the task"); err != nil {
+				t.Fatalf("boot reconcile did not finish: %v", err)
+			}
 			cancel()
 			if err := <-done; err != nil {
 				t.Fatalf("Start() error = %v", err)
@@ -71,4 +58,34 @@ func TestDaemonStart_WorkspaceResetOnRecover(t *testing.T) {
 			}
 		})
 	}
+}
+
+// seedInterruptedWorkspace materializes a start-empty project with one task left
+// RUNNING under a dead PID and a partial file its interrupted attempt wrote.
+func seedInterruptedWorkspace(t *testing.T) (*testutil.FakeKanbanStore, *sandbox.FSWorkspaceManager, string, string) {
+	t.Helper()
+	ctx := context.Background()
+	root := t.TempDir()
+	store := testutil.NewFakeStore()
+	store.SetProjectsDir(root)
+	project, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "p", StartEmptyWorkspace: true,
+		Tasks: []models.DraftTask{{TempID: "a", Title: "A"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	ws := &sandbox.FSWorkspaceManager{Root: root}
+	dir, err := ws.EnsureProjectDir(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("EnsureProjectDir: %v", err)
+	}
+	partial := filepath.Join(dir, "first-attempt.txt")
+	if err := os.WriteFile(partial, []byte("partial"), 0o644); err != nil {
+		t.Fatalf("write partial: %v", err)
+	}
+	if _, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 999999); err != nil {
+		t.Fatalf("MarkTaskRunning: %v", err)
+	}
+	return store, ws, partial, tasks[0].ID
 }

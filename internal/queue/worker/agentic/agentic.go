@@ -153,5 +153,6 @@ func (e *Engine) generateAgenticTurn(
 		e.host.HandleGatewayError(ctx, task, err)
 		return gateway.AIResponse{}, nil, err
 	}
+	e.host.RecordProviderSuccess(ctx, task)
 	return resp, nil, nil
 }

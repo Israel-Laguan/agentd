@@ -27,7 +27,9 @@ type Project struct {
 	// StartedEmpty records that the workspace was created empty and never
 	// seeded (no source_path, not hand-populated). It is the only starting state
 	// agentd can restore, so the opt-in recovery reset (B-010) applies to these
-	// projects alone. False for every project that predates the column.
+	// projects alone. False for every project that predates the column, and
+	// cleared when an operator seeds the workspace by hand and calls
+	// MarkWorkspaceReady.
 	StartedEmpty bool `json:"started_empty,omitempty"`
 }
 

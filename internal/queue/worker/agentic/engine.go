@@ -48,6 +48,11 @@ type Host interface {
 	RegisterCancel(taskID string, cancel context.CancelFunc)
 	DeregisterCancel(taskID string)
 	HandleGatewayError(ctx context.Context, task models.Task, err error)
+	// RecordProviderSuccess closes the task's provider breaker. The engine calls
+	// it only after a turn's LLM request actually succeeded, so a turn that ends
+	// locally (tool failure, budget exhaustion, break-up) never closes an OPEN
+	// circuit the provider has not recovered from.
+	RecordProviderSuccess(ctx context.Context, task models.Task)
 	RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails)
 	CommitTextWithProfile(ctx context.Context, task models.Task, text string, profile *models.AgentProfile)
 	DispatchToolWithHooks(

@@ -35,8 +35,10 @@ func newBootConfig(opts []BootOption) bootConfig {
 // directory the project started as. Without it (the default) the re-run sees the
 // interrupted attempt's files, see docs/architecture/recovery-rerun.md.
 //
-// Boot only: it runs before any worker starts, so nothing can be writing to the
-// workspace. The stale-heartbeat sweep runs beside live dispatch and never resets.
+// Boot only: it runs before any worker starts, so no new attempt can begin
+// against the workspace. A command from the killed attempt can still survive and
+// keep writing to it. The stale-heartbeat sweep runs beside live dispatch and
+// never resets.
 func WithWorkspaceReset(r WorkspaceResetter) BootOption {
 	return func(cfg *bootConfig) {
 		cfg.resetter = r
@@ -47,13 +49,18 @@ func WithWorkspaceReset(r WorkspaceResetter) BootOption {
 // tasks still READY. A task whose project cannot be reset safely is failed
 // loudly (FAILED_REQUIRES_HUMAN plus a RECOVERY_RESET_REFUSED event) instead of
 // being re-run on a workspace the operator asked to be clean.
+//
+// A refusal whose FAILED_REQUIRES_HUMAN transition cannot be persisted is
+// returned as an error rather than logged: otherwise the task stays READY on
+// disk, boot continues, and the dispatch loop claims it onto the workspace the
+// operator asked to be clean.
 func resetRecoveredWorkspaces(
 	ctx context.Context,
 	store models.KanbanStore,
 	resetter WorkspaceResetter,
 	sink models.EventSink,
 	recovered []models.Task,
-) []models.Task {
+) ([]models.Task, error) {
 	recoveredIDs := make(map[string]struct{}, len(recovered))
 	for _, task := range recovered {
 		recoveredIDs[task.ID] = struct{}{}
@@ -67,13 +74,15 @@ func resetRecoveredWorkspaces(
 			outcome[task.ProjectID] = err
 		}
 		if err != nil {
-			refuseReset(ctx, store, sink, task, err)
+			if refuseErr := refuseReset(ctx, store, sink, task, err); refuseErr != nil {
+				return nil, refuseErr
+			}
 			continue
 		}
 		emitResetEvent(ctx, sink, models.EventTypeRecoveryWorkspaceReset, task, "workspace reset to its empty starting state before re-run")
 		resumed = append(resumed, task)
 	}
-	return resumed
+	return resumed, nil
 }
 
 // resetProject refuses unless the reset provably restores the project's starting
@@ -98,9 +107,20 @@ func resetProject(
 	}
 	for _, other := range tasks {
 		if _, interrupted := recoveredIDs[other.ID]; interrupted {
+			// Recovery moved this task to READY, but a second daemon sharing this
+			// home can claim it before the reset runs. Only a task still sitting
+			// READY is safe to empty the workspace under.
+			if other.State != models.TaskStateReady {
+				return fmt.Errorf("task %s was recovered but is now %s; a reset would delete a live attempt's output", other.ID, other.State)
+			}
 			continue
 		}
-		if other.State == models.TaskStateCompleted || other.State == models.TaskStateRunning {
+		// A sibling can write workspace output while RUNNING and then move to
+		// BLOCKED, FAILED, IN_CONSIDERATION, READY or QUEUED. StartedAt stays set
+		// across those transitions, so it — not the current state — is what says
+		// whether this sibling owns output in the directory.
+		untouched := (other.State == models.TaskStatePending || other.State == models.TaskStateReady) && other.StartedAt == nil
+		if !untouched {
 			return fmt.Errorf("task %s is %s and shares this workspace; a reset would delete its output", other.ID, other.State)
 		}
 	}
@@ -110,7 +130,11 @@ func resetProject(
 	return nil
 }
 
-func refuseReset(ctx context.Context, store models.KanbanStore, sink models.EventSink, task models.Task, cause error) {
+// refuseReset fails a recovered task whose workspace could not be reset and
+// returns the error from persisting that state. A non-nil error means the task is
+// still READY on disk and must not be dispatched onto the uncleaned workspace, so
+// the caller aborts.
+func refuseReset(ctx context.Context, store models.KanbanStore, sink models.EventSink, task models.Task, cause error) error {
 	slog.Error("recovery: workspace reset refused, failing recovered task",
 		"task_id", task.ID, "project_id", task.ProjectID, "error", cause)
 	current, err := store.GetTask(ctx, task.ID)
@@ -122,6 +146,7 @@ func refuseReset(ctx context.Context, store models.KanbanStore, sink models.Even
 	}
 	emitResetEvent(ctx, sink, models.EventTypeRecoveryResetRefused, task,
 		"recovery.clean_workspace_on_recover is on but the workspace was not reset: "+cause.Error())
+	return err
 }
 
 func emitResetEvent(ctx context.Context, sink models.EventSink, eventType models.EventType, task models.Task, payload string) {

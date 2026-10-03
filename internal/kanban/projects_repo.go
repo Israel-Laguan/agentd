@@ -136,6 +136,25 @@ func (s *Store) newProject(plan models.DraftPlan, now time.Time) (*models.Projec
 	}, nil
 }
 
+// ClearProjectStartedEmpty records that a project materialized with an empty
+// workspace has since been populated by hand, so its content is no longer known to
+// be a leftover and recovery.clean_workspace_on_recover must not empty it.
+//
+// The bit is only ever cleared, never set: materialization is the only moment that
+// can attest a workspace started empty.
+func (s *Store) ClearProjectStartedEmpty(ctx context.Context, projectID string) error {
+	return retryOnBusyNoResult(ctx, func(ctx context.Context) error {
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE projects
+			SET started_empty = 0
+			WHERE id = ?`, projectID)
+		if err != nil {
+			return fmt.Errorf("clear projects.started_empty: %w", err)
+		}
+		return nil
+	})
+}
+
 func newTaskIDs(tasks []models.DraftTask) map[string]string {
 	taskIDs := make(map[string]string, len(tasks))
 	for _, task := range tasks {
