@@ -105,6 +105,8 @@ internal/queue/rolling_budget.go (*RollingTokenLedger).Enabled
 internal/queue/safety/breaker.go NewCircuitBreaker
 internal/queue/safety/breaker.go (*CircuitBreaker).IsOpen
 internal/queue/safety/breaker.go (*CircuitBreaker).RecordError
+internal/queue/safety/breaker.go (*CircuitBreaker).RecordErrorFor
+internal/queue/safety/breaker.go (*CircuitBreaker).RecordErrorTrips
 internal/queue/safety/breaker.go (*CircuitBreaker).RecordSuccess
 internal/queue/safety/breaker_probe.go (*CircuitBreaker).AllowRequest
 internal/queue/safety/breaker_probe.go (*CircuitBreaker).ReleaseProbe
