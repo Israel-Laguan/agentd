@@ -167,6 +167,10 @@ func (s *queueScenario) breakerShouldBeClosed(context.Context) error {
 }
 
 func (s *queueScenario) normalPollingResumes(ctx context.Context) error {
+	// The tick is part of the poll on purpose: dispatch claims nothing until the
+	// breaker lets it through, so the step has to keep ticking until it does. A
+	// tick that claims tasks takes them out of READY, so the precondition below
+	// stops it from ticking again.
 	var tickErr error
 	err := waitFor(func() bool {
 		if s.daemon.sem.InUse() != 0 || s.store.count(models.TaskStateReady) != 2 {
