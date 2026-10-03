@@ -24,6 +24,10 @@ const (
 // DefaultBreakerTimeout is the built-in half-open wait used by the circuit breaker.
 const DefaultBreakerTimeout = defaultBreakerTimeout
 
+// DefaultBreakerFailures is how many provider failures open the circuit
+// breaker, i.e. how many verdicts may be requeued before the trip is escalated.
+const DefaultBreakerFailures = defaultBreakerFailures
+
 type CircuitBreaker struct {
 	mu           sync.RWMutex
 	state        BreakerState
@@ -113,9 +117,36 @@ func (b *CircuitBreaker) RecordError(err error) {
 // provider, and ignoring it would let a real outage look recovered. Only the
 // HALF_OPEN probe slot is reserved for the task that holds it, so a verdict from
 // any other task cannot hand a second probe to a sibling (B-014).
+//
+// It discards whether this record tripped the breaker; RecordErrorTrips is the
+// form a caller needs when it has to tell the trip apart from the failures
+// recorded before it (B-017).
 func (b *CircuitBreaker) RecordErrorFor(owner string, err error) {
+	b.recordError(owner, err)
+}
+
+// RecordErrorTrips reports whether err's record is the one that left the breaker
+// OPEN, so a caller can escalate exactly the task that tripped it and no other.
+//
+// The question has to be asked under the same lock acquisition as the record.
+// Reading IsOpen afterwards is a different question: it reports the breaker's
+// state by the time it is read, so of three concurrent verdicts the first two
+// would both be told "open" once the third had been recorded (B-017). Splitting
+// the outage into "escalate the trip, requeue the failures before it" needs the
+// verdict to belong to its own record.
+//
+// An error recorded while the breaker is already OPEN still reports true, so a
+// straggler that was admitted before the trip is escalated rather than requeued
+// into a queue nothing will dispatch.
+func (b *CircuitBreaker) RecordErrorTrips(err error) bool {
+	return b.recordError("", err)
+}
+
+// recordError counts one failure and reports whether that record left the
+// breaker OPEN.
+func (b *CircuitBreaker) recordError(owner string, err error) bool {
 	if !ClassifiesAsBreakerFailure(err) {
-		return
+		return false
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -125,7 +156,9 @@ func (b *CircuitBreaker) RecordErrorFor(owner string, err error) {
 	if b.failureCount >= defaultBreakerFailures {
 		b.state = BreakerOpen
 		b.tripTime = b.now()
+		return true
 	}
+	return false
 }
 
 func (b *CircuitBreaker) RecordSuccess() {
