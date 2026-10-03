@@ -328,3 +328,18 @@ clearing unconditionally, and the three call sites left unscoped) — all four a
 inert because a closed breaker takes no slot and the `OPEN` → `HALF_OPEN`
 transition resets the slot, both pinned by tests. `make check` green; no devenv
 journey run (no profile changed).
+
+### B-013 gaps: real store, dispatch soak, admission invariant (2026-10-03)
+
+Closed three of four open B-013 test gaps, tests only. Real-store requeue in
+`internal/kanban` (depguard's `queue-test-isolation` and `kanban-test-isolation`
+rules keep the real board and the breaker package apart, so the store half lives
+there); dispatch-loop soak at `TaskInterval` 20ms measuring 49 ticks against a bound
+of 50; and the in-package proof that `AdmissionProbeInFlight` needs a reachable trap
+— `RecordSuccessFor` goes CLOSED before settling the probe, leaving a CLOSED breaker
+that still holds a slot. Seven mutations, all red. Full `make test-e2e` green (16
+journeys). The fourth gap, an e2e journey, is blocked: `decideTerminalError`
+formats joined provider errors with `%v`, which flattens the quota sentinel, so no
+per-provider breaker can ever open — filed as B-016 with a reproduced chain check.
+The mock gains the per-model `POST /quota` and `POST /slow_once` that journey will
+need (7 new unit tests, no other journey affected).

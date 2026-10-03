@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -137,4 +138,58 @@ func (m *MockLLMClient) SetOutage(ctx context.Context, model string, down bool) 
 		return fmt.Errorf("mock /outage returned %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// postControl sends a control request to one of the mock's toggle endpoints.
+func (m *MockLLMClient) postControl(ctx context.Context, path string, payload map[string]any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseURL+path, strings.NewReader(string(body)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("mock %s returned %d", path, resp.StatusCode)
+	}
+	return nil
+}
+
+// SetQuota makes the mock answer 429 for the named model (POST /quota), or stops
+// doing so.
+//
+// This is deliberately not SetOutage. An outage is an unreachable provider and
+// feeds the single global breaker, whereas only ErrLLMQuotaExceeded feeds the
+// per-provider breakers (worker_handoffs.go). A journey exercising a provider
+// breaker's probe slot needs quota errors. Keyed by model, so it affects only the
+// profile that owns that model name.
+func (m *MockLLMClient) SetQuota(ctx context.Context, model string, on bool) error {
+	if model == "" {
+		return errors.New("mock quota: model name is required")
+	}
+	return m.postControl(ctx, "/quota", map[string]any{"model": model, "on": on})
+}
+
+// SetSlowOnce arms a one-shot delay for the next request to the named model
+// (POST /slow_once). That request sleeps and then proceeds normally; the delay is
+// consumed, so only one call is slowed.
+//
+// A journey needs this to hold a breaker's probe in flight long enough to observe
+// what the siblings do while it runs. Without it the probe resolves in
+// milliseconds and no sibling ever sees AdmissionProbeInFlight.
+func (m *MockLLMClient) SetSlowOnce(ctx context.Context, model string, seconds float64) error {
+	if model == "" {
+		return errors.New("mock slow_once: model name is required")
+	}
+	if seconds < 0 {
+		return errors.New("mock slow_once: seconds must be >= 0")
+	}
+	return m.postControl(ctx, "/slow_once", map[string]any{"model": model, "seconds": seconds})
 }
