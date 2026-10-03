@@ -161,10 +161,11 @@ path.
 Measured in `internal/queue/outage_recovery_test.go`: J09 covered the trip, the
 recovery half was unproven, and does not work in every case.
 
-**Time to resume: 5 min, then one probe.** OPEN holds for `DefaultBreakerTimeout`
-(`safety/breaker.go:21`), admits one probe task, closes when it succeeds. The spike
-blamed the S07 startup race; it is a package constant, so an operator cannot shorten
-it.
+**Time to first probe: 5 min; a failed probe restarts the full timeout.** OPEN holds for
+`DefaultBreakerTimeout` (`safety/breaker.go:21`), admits one probe task, closes when it
+succeeds. If the probe fails (e.g., during a flapping outage), the breaker reopens and the
+5-minute timeout restarts from the failure point, so recovery time extends per failed probe.
+It is a package constant, so an operator cannot shorten it.
 
 **Failed tasks split.** The 2 pre-trip failures requeue to READY with `RetryCount`
 == 0 (an outage does not consume the retry budget); the trip task is BLOCKED with a
