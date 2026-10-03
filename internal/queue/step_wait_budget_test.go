@@ -28,6 +28,9 @@ func TestWaitForGivesUpOnItsOwn(t *testing.T) {
 	if elapsed := time.Since(started); elapsed > budget+500*time.Millisecond {
 		t.Fatalf("waitForBudget took %s to give up, want at most ~%s", elapsed, budget)
 	}
+	if want := "timed out waiting for never happens"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q is not the timeout error, want it to contain %q", err, want)
+	}
 	if !strings.Contains(err.Error(), budget.String()) {
 		t.Fatalf("error %q does not name the budget %s, so a reader cannot tell a slow pass from a hang",
 			err, budget)
