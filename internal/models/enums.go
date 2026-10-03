@@ -218,6 +218,8 @@ const (
 	EventTypeResult                    EventType = "RESULT"
 	EventTypeRecovery                  EventType = "RECOVERY"
 	EventTypeRebootRecovery            EventType = "REBOOT_RECOVERY"
+	EventTypeRecoveryWorkspaceReset    EventType = "RECOVERY_WORKSPACE_RESET"
+	EventTypeRecoveryResetRefused      EventType = "RECOVERY_RESET_REFUSED"
 	EventTypeRebootRecoveryHandoff     EventType = "REBOOT_RECOVERY_HANDOFF"
 	EventTypeHeartbeatReconcile        EventType = "HEARTBEAT_RECONCILE"
 	EventTypeToolCall                  EventType = "TOOL_CALL"

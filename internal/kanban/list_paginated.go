@@ -24,7 +24,7 @@ func (s *Store) ListProjectsPage(ctx context.Context, params models.PaginationPa
 		return models.PaginatedResult[models.Project]{}, fmt.Errorf("count projects: %w", err)
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, original_input, workspace_path, status, user_id, created_at, updated_at
+		SELECT id, name, original_input, workspace_path, status, user_id, started_empty, created_at, updated_at
 		FROM projects
 		ORDER BY `+page.SortBy+` `+page.Order+`
 		LIMIT ? OFFSET ?`, page.Limit, page.Offset)

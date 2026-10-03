@@ -48,14 +48,18 @@ func (w *Worker) HandleGatewayError(ctx context.Context, task models.Task, err e
 	if safety.ClassifiesAsBreakerFailure(err) {
 		if errors.Is(err, models.ErrLLMQuotaExceeded) {
 			if w.providerBreakers != nil {
-				w.providerBreakers.Get(w.lookupProvider(ctx, task)).RecordError(err)
+				// Named after the task so a task that is not the probe updates the
+				// failure count without settling the probe slot (B-014).
+				w.providerBreakers.Get(w.lookupProvider(ctx, task)).RecordErrorFor(task.ID, err)
 			}
 			w.handoffOrFail(ctx, task, err)
 			return
 		}
 		if w.breaker != nil {
-			w.breaker.RecordError(err)
-			if w.breaker.IsOpen() {
+			// The verdict that tripped the breaker is escalated and every failure
+			// recorded before it is requeued. Asking IsOpen separately would make
+			// all three in-flight verdicts escalate (B-017).
+			if w.breaker.RecordErrorTrips(err) {
 				w.handoffOrFail(ctx, task, err)
 				return
 			}

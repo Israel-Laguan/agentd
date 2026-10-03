@@ -59,6 +59,7 @@ func (s *FakeKanbanStore) MarkTaskRunning(_ context.Context, id string, _ time.T
 	n := now()
 	t.State = models.TaskStateRunning
 	t.OSProcessID = &pid
+	t.StartedAt = &n
 	t.LastHeartbeat = &n
 	t.UpdatedAt = n
 	s.tasks[id] = t

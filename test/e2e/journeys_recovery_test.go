@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -119,9 +120,13 @@ func j07RetryParent(ctx context.Context, t *testing.T, client *APIClient, parent
 // the same data volume → the interrupted task is recovered.
 //
 // The task title carries devenv/mockllm's SLOW_TASK marker, so the worker
-// runs a ~60s command and stays RUNNING long enough to SIGKILL the container
+// runs a ~30s command and stays RUNNING long enough to SIGKILL the container
 // (podman-compose's kill default). The recovered task is then legitimately
-// re-dispatched, so the assertion is the RECOVERY event, not a state snapshot.
+// re-dispatched, so the first assertion is the RECOVERY event, not a state
+// snapshot. The second is the re-run's result: the task must reach COMPLETED and
+// its RESULT must carry the command's final line, which only a run that went to
+// the end can produce. A RECOVERY event alone proves the reset, not that the re-run
+// worked (SP-011 flagged that gap).
 //
 // Boot reconcile now resets the interrupted task at boot (B-008, fixed in T-030):
 // MarkTaskRunning stamps the daemon's own PID, and in the devenv container agentd
@@ -139,8 +144,9 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 
 	// The step budgets below add up: WaitForTaskState (30s) + kill/restart +
 	// WaitForHealthy (60s) + the recovery poll (30s). The deadline must cover
-	// all of them, or a slow-but-successful run dies mid-poll.
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	// all of them, or a slow-but-successful run dies mid-poll. The re-run then
+	// repeats the ~30s slow command from the start (j08RerunBudget).
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second+j08RerunBudget)
 	defer cancel()
 
 	harness := NewHarness(baseURL, "default")
@@ -163,6 +169,11 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 		t.Fatalf("J08 [running] task never reached RUNNING: %v", err)
 	}
 
+	// RUNNING is set before the command starts. The reset assertion below is only
+	// meaningful once the first attempt has written its marker file, and its output
+	// proves it has.
+	j08AwaitFirstAttemptOutput(ctx, t, client, taskID)
+
 	devenv := NewDevenvManager(composePath, "default")
 	if err := devenv.KillAgentd(ctx); err != nil {
 		t.Fatalf("J08 [kill] %v", err)
@@ -176,6 +187,88 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 
 	restarted := time.Now()
 	j08AwaitRecoveryEvent(ctx, t, client, taskID, restarted)
+	j08AwaitRerunResult(ctx, t, client, poller, taskID)
+}
+
+// j08CarriedOverMarker is printed by the mock's SLOW_TASK command when the first
+// attempt's attempt.marker file is still in the workspace.
+const j08CarriedOverMarker = "carried-over"
+
+// j08AwaitFirstAttemptOutput waits until the first attempt's command has printed
+// a few ticks, which happens after it created attempt.marker.
+func j08AwaitFirstAttemptOutput(ctx context.Context, t *testing.T, client *APIClient, taskID string) {
+	t.Helper()
+
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		events, err := client.ListTaskEvents(ctx, taskID)
+		if err == nil {
+			for _, e := range events {
+				if strings.Contains(e.Payload, "tick 2") {
+					return
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("J08 [running] context expired while waiting for the first attempt's output: %v", ctx.Err())
+		case <-time.After(time.Second):
+		}
+	}
+	t.Fatalf("J08 [running] task %s never printed output within 30s, so its command did not start", taskID)
+}
+
+// j08RerunBudget covers the re-dispatched slow command: 30 one-second ticks plus
+// slack for the claim tick and the result commit. It must stay well above the
+// command but the command must stay under the sandbox's 60s inactivity limit (B-011),
+// or the re-run is killed and never completes.
+const j08RerunBudget = 60 * time.Second
+
+// j08RerunMarker is the last line of the mock's SLOW_TASK command (devenv/mockllm
+// slow_command prints "tick 0" … "tick 29"). It appears in the RESULT only when
+// the command ran to the end.
+const j08RerunMarker = "tick 29"
+
+// j08AwaitRerunResult asserts the recovered task finishes: COMPLETED, with a
+// RESULT event carrying the final output. The killed first attempt can never
+// have produced it, so a RESULT here is the re-run's own.
+func j08AwaitRerunResult(ctx context.Context, t *testing.T, client *APIClient, poller *TaskPoller, taskID string) {
+	t.Helper()
+
+	if _, err := poller.WaitForTaskState(ctx, taskID, TaskStateCompleted, j08RerunBudget); err != nil {
+		t.Fatalf("J08 [rerun] recovered task %s did not reach COMPLETED within %s: %v", taskID, j08RerunBudget, err)
+	}
+	events, err := client.ListTaskEvents(ctx, taskID)
+	if err != nil {
+		t.Fatalf("J08 [rerun] list events for task %s: %v", taskID, err)
+	}
+	for _, e := range events {
+		if e.Type != "RESULT" {
+			continue
+		}
+		if !strings.Contains(e.Payload, j08RerunMarker) {
+			t.Fatalf("J08 [rerun] RESULT for task %s does not contain %q, so the re-run did not run to the end; payload: %q",
+				taskID, j08RerunMarker, truncateForLog(e.Payload))
+		}
+		if strings.Contains(e.Payload, j08CarriedOverMarker) {
+			t.Fatalf("J08 [reset] the re-run of task %s still saw the first attempt's attempt.marker, so recovery.clean_workspace_on_recover did not reset the workspace; payload: %q",
+				taskID, truncateForLog(e.Payload))
+		}
+		if !j08HasEvent(events, "RECOVERY_WORKSPACE_RESET") {
+			t.Fatalf("J08 [reset] task %s has no RECOVERY_WORKSPACE_RESET event (events: %d)", taskID, len(events))
+		}
+		t.Logf("J08: task %s re-run COMPLETED with its final output in RESULT and a reset workspace", taskID)
+		return
+	}
+	t.Fatalf("J08 [rerun] task %s is COMPLETED but has no RESULT event (events: %d)", taskID, len(events))
+}
+
+func truncateForLog(s string) string {
+	const limit = 200
+	if len(s) <= limit {
+		return s
+	}
+	return s[:limit] + "…"
 }
 
 func j08AwaitRecoveryEvent(ctx context.Context, t *testing.T, client *APIClient, taskID string, restarted time.Time) {
@@ -205,4 +298,13 @@ func j08AwaitRecoveryEvent(ctx context.Context, t *testing.T, client *APIClient,
 		time.Sleep(time.Second)
 	}
 	t.Fatalf("J08 [recovery] no RECOVERY event on task %s within 30s of restart (boot reconcile did not recover it; a hit here means it fell back to the 2m stale-heartbeat sweep)", taskID)
+}
+
+func j08HasEvent(events []TaskEvent, eventType string) bool {
+	for _, e := range events {
+		if e.Type == eventType {
+			return true
+		}
+	}
+	return false
 }

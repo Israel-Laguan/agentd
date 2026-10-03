@@ -307,3 +307,30 @@ func testExecutor(t *testing.T, sink models.EventSink) (*BashExecutor, string) {
 func testPayload(workspace, command string) Payload {
 	return Payload{ProjectID: "p", TaskID: "t", WorkspacePath: filepath.Clean(workspace), Command: command}
 }
+
+func TestBashExecutorInactivityIsSharedAcrossStreams(t *testing.T) {
+	tests := []struct {
+		name        string
+		command     string
+		wantTimeout bool
+	}{
+		{"chatty stdout, silent stderr", "for i in 1 2 3 4 5 6 7 8; do echo tick $i; sleep 0.2; done", false},
+		{"silent stdout, chatty stderr", "for i in 1 2 3 4 5 6 7 8; do echo tick $i >&2; sleep 0.2; done", false},
+		{"silent on both streams", "sleep 5", true},
+		{"one stream closed, the other silent", "exec 1>&-; sleep 5", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exec, workspace := testExecutor(t, nil)
+			exec.Inactivity = 500 * time.Millisecond
+			exec.KillGrace = 100 * time.Millisecond
+			result, err := exec.Execute(context.Background(), testPayload(workspace, tt.command))
+			if result.TimedOut != tt.wantTimeout {
+				t.Fatalf("TimedOut = %v, want %v (err = %v)", result.TimedOut, tt.wantTimeout, err)
+			}
+			if !tt.wantTimeout && (err != nil || result.ExitCode != 0) {
+				t.Fatalf("Execute() = %#v, %v; want clean exit", result, err)
+			}
+		})
+	}
+}

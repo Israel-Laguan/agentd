@@ -28,6 +28,8 @@ func (h *noopHost) DeregisterCancel(_ string) {}
 
 func (h *noopHost) HandleGatewayError(_ context.Context, _ models.Task, _ error) {}
 
+func (h *noopHost) RecordProviderSuccess(_ context.Context, _ models.Task) {}
+
 func (h *noopHost) RecordTaskTokenUsage(_ context.Context, _ models.Task, _ int, _ gateway.UsageDetails) {
 }
 

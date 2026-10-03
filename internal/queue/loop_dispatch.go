@@ -17,6 +17,15 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 	if available <= 0 {
 		return 0, 0, nil
 	}
+	// A HALF_OPEN probe slot is taken before we know whether any task will run.
+	// If this tick dispatches nothing, give it back or the breaker latches; if
+	// it does dispatch, the completion path owns the slot instead.
+	probeHeld := d.breaker != nil && d.breaker.ProbeHeld()
+	defer func() {
+		if dispatched == 0 && probeHeld {
+			d.breaker.ReleaseProbe()
+		}
+	}()
 	tasks, err := d.store.ClaimNextReadyTasks(ctx, available)
 	if err != nil {
 		return 0, 0, err
@@ -26,7 +35,7 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 		return 0, nacked, d.dispatchGuardNilWorker(ctx, toGroup)
 	}
 	batches := d.worker.GroupClaimed(ctx, toGroup)
-	dispatched, err = d.dispatchRunBatches(ctx, batches)
+	dispatched, err = d.dispatchRunBatches(ctx, batches, probeHeld)
 	return dispatched, nacked, err
 }
 
@@ -83,7 +92,7 @@ func (d *Daemon) dispatchGuardNilWorker(ctx context.Context, toGroup []models.Ta
 	return fmt.Errorf("dispatch worker is nil")
 }
 
-func (d *Daemon) dispatchRunBatches(ctx context.Context, batches []qw.TaskBatch) (dispatched int, err error) {
+func (d *Daemon) dispatchRunBatches(ctx context.Context, batches []qw.TaskBatch, probeHeld bool) (dispatched int, err error) {
 	for batchIdx, batch := range batches {
 		need := len(batch.Tasks)
 		acquired := 0
@@ -103,9 +112,9 @@ func (d *Daemon) dispatchRunBatches(ctx context.Context, batches []qw.TaskBatch)
 		}
 		dispatched += need
 		if need == 1 {
-			d.runDispatchedTask(ctx, batch.Tasks[0], 1)
+			d.runDispatchedTask(ctx, batch.Tasks[0], 1, probeHeld)
 		} else {
-			d.runDispatchedBatch(ctx, batch.Tasks, need)
+			d.runDispatchedBatch(ctx, batch.Tasks, need, probeHeld)
 		}
 	}
 	return dispatched, nil
@@ -114,6 +123,22 @@ func (d *Daemon) dispatchRunBatches(ctx context.Context, batches []qw.TaskBatch)
 func (d *Daemon) requeueUndispatchedClaims(ctx context.Context, tasks []models.Task) {
 	for _, task := range tasks {
 		d.requeueClaimedTask(ctx, task)
+	}
+}
+
+// releaseGlobalProbe gives back the global breaker's HALF_OPEN probe slot when
+// the dispatched task ended without recording a breaker outcome.
+//
+// A dispatched task can finish that way without ever touching the breaker: a
+// non-zero exit, a requeue, a breakdown roll-up, FailHard or a recovered panic
+// all skip RecordSuccess and RecordError. The slot would then stay held, every
+// later ProbeLimit would return 0, and dispatch would stop until an operator
+// reset the breaker by hand. ReleaseProbe only clears the slot while the breaker
+// is HALF_OPEN, so calling it after a recorded outcome preserves that outcome —
+// it mirrors the deferred release in the worker provider gate.
+func (d *Daemon) releaseGlobalProbe(probeHeld bool) {
+	if probeHeld && d.breaker != nil {
+		d.breaker.ReleaseProbe()
 	}
 }
 
@@ -212,10 +237,11 @@ func (d *Daemon) dispatchDeferRollingBudget(ctx context.Context, task models.Tas
 	return true
 }
 
-func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task, semSlots int) {
+func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task, semSlots int, probeHeld bool) {
 	d.wg.Add(1)
 	go func(task models.Task, semSlots int) {
 		defer d.wg.Done()
+		defer d.releaseGlobalProbe(probeHeld)
 		defer func() {
 			for i := 0; i < semSlots; i++ {
 				d.sem.Release()
@@ -235,11 +261,12 @@ func (d *Daemon) runDispatchedTask(ctx context.Context, task models.Task, semSlo
 	}(task, semSlots)
 }
 
-func (d *Daemon) runDispatchedBatch(ctx context.Context, tasks []models.Task, semSlots int) {
+func (d *Daemon) runDispatchedBatch(ctx context.Context, tasks []models.Task, semSlots int, probeHeld bool) {
 	d.wg.Add(1)
 	cp := append([]models.Task(nil), tasks...)
 	go func(tasks []models.Task, semSlots int) {
 		defer d.wg.Done()
+		defer d.releaseGlobalProbe(probeHeld)
 		defer func() {
 			for i := 0; i < semSlots; i++ {
 				d.sem.Release()

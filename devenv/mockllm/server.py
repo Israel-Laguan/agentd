@@ -5,10 +5,39 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import controls
 from capture import CAPTURE_PATH, read_requests, record_request
+from controls import (
+    OUTAGE_STATUS,
+    QUOTA_STATUS,
+    in_outage,
+    in_quota,
+    set_outage,
+    set_quota,
+    set_slow_once,
+    take_slow_once,
+)
+
+# Re-exported so callers that only import this module — including the tests — can
+# keep using server.set_outage(...) and friends. The per-model control toggles now
+# live in controls.py; see that module for why each is keyed by model name.
+__all__ = [
+    "Handler",
+    "OUTAGE_STATUS",
+    "QUOTA_STATUS",
+    "in_outage",
+    "in_quota",
+    "record_request",
+    "read_requests",
+    "set_outage",
+    "set_quota",
+    "set_slow_once",
+    "take_slow_once",
+]
 
 PORT = int(os.environ.get("PORT", "8000"))
 # Where to append every received request body as JSONL. Read back via
@@ -45,6 +74,7 @@ SCOPE_SPLIT = SCOPE_DELIMITER + r'(?=' + SCOPE_INTRODUCER + r')'
 #   3. the request's model name, mapped by MOCKLLM_MODEL_SCENARIOS
 #      (e.g. "gpt-3.5-turbo=tiered-fail-verify,gpt-4=tiered-pass-verify").
 SCENARIO_TAG_RE = re.compile(r"@scenario=([A-Za-z0-9_-]+)")
+
 DEFAULT_LIMIT = 200
 
 
@@ -106,10 +136,21 @@ def build_command(task_id: str, title: str) -> str:
     )
 
 
+# Long enough for a journey to kill the daemon mid-task, short enough to keep J08
+# fast. Output on either stream resets the sandbox inactivity timer (B-011), so this
+# is a time budget, not a limit imposed by the 60s inactivity timeout.
+SLOW_TICKS = 30
+
+
 def slow_command():
-    # Emits output every second so the executor's inactivity timeout never
-    # fires; lets a journey kill the daemon while the task is RUNNING.
-    return 'i=0; while [ $i -lt 60 ]; do echo tick $i; i=$((i+1)); sleep 1; done'
+    # Emits output every second; lets a journey kill the daemon while the task is
+    # RUNNING, and the last line ("tick 29") shows the command ran to the end.
+    # It also leaves attempt.marker and reports "carried-over" when one is already
+    # there, so a re-run shows whether the workspace was reset between attempts.
+    return (
+        'if [ -e attempt.marker ]; then echo carried-over; fi; touch attempt.marker; '
+        f'i=0; while [ $i -lt {SLOW_TICKS} ]; do echo tick $i; i=$((i+1)); sleep 1; done'
+    )
 
 
 def task_from_text(part: str) -> dict:
@@ -366,6 +407,21 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._send({"error": "invalid json"}, 400)
                 return
+            if in_outage(body.get("model", "")):
+                sys.stderr.write(f"[mockllm] outage model={body.get('model')} -> HTTP {OUTAGE_STATUS}\n")
+                sys.stderr.flush()
+                self._send({"error": "mock outage"}, OUTAGE_STATUS)
+                return
+            if in_quota(body.get("model", "")):
+                sys.stderr.write(f"[mockllm] quota model={body.get('model')} -> HTTP {QUOTA_STATUS}\n")
+                sys.stderr.flush()
+                self._send({"error": "mock quota exceeded"}, QUOTA_STATUS)
+                return
+            slow = take_slow_once(body.get("model", ""))
+            if slow:
+                sys.stderr.write(f"[mockllm] slow_once model={body.get('model')} sleeping {slow}s\n")
+                sys.stderr.flush()
+                time.sleep(slow)
             scenario = select_scenario(body, self.headers)
             if scenario.startswith("error"):
                 status = scenario_error_status(scenario)
@@ -381,7 +437,19 @@ class Handler(BaseHTTPRequestHandler):
             record_request(body)
             self._send(chat_completion(body, self.headers))
             return
+        if self._is_control_path():
+            body = controls.read_body(self)
+            if body is None:
+                return
+            controls.handle_control(self, body)
+            return
         self._send({"error": "not found"}, 404)
+
+    def _is_control_path(self) -> bool:
+        return any(
+            self.path.rstrip("/").endswith(suffix)
+            for suffix in ("/outage", "/quota", "/slow_once")
+        )
 
     def do_GET(self):
         path = self.path.rstrip("/")

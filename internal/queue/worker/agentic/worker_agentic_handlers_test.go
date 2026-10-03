@@ -106,6 +106,8 @@ func (h *handlersMockHost) RepairOutputWithPlan(
 
 func (h *handlersMockHost) HandleGatewayError(ctx context.Context, task models.Task, err error) {}
 
+func (h *handlersMockHost) RecordProviderSuccess(ctx context.Context, task models.Task) {}
+
 type nilGetTaskStore struct {
 	models.KanbanStore
 }

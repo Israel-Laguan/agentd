@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS projects (
     workspace_path TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL DEFAULT 'ACTIVE',
     user_id TEXT NOT NULL DEFAULT '',
+    started_empty INTEGER NOT NULL DEFAULT 0 CHECK (started_empty IN (0, 1)),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     CHECK (status IN ('ACTIVE', 'COMPLETED', 'ARCHIVED'))

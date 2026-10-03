@@ -20,7 +20,7 @@ const (
 
 const rebootRecoveryMemoryScope = models.MemoryScopeGlobal
 
-func BootReconcile(ctx context.Context, store models.KanbanStore, probe safety.PIDProbe, sink models.EventSink) error {
+func BootReconcile(ctx context.Context, store models.KanbanStore, probe safety.PIDProbe, sink models.EventSink, opts ...BootOption) error {
 	alive, err := probe.AlivePIDs(ctx)
 	if err != nil {
 		return err
@@ -29,7 +29,14 @@ func BootReconcile(ctx context.Context, store models.KanbanStore, probe safety.P
 	if err != nil {
 		return err
 	}
-	if err := emitRecoveredTasks(ctx, sink, recovered); err != nil {
+	resumed := recovered
+	if cfg := newBootConfig(opts); cfg.resetter != nil {
+		resumed, err = resetRecoveredWorkspaces(ctx, store, cfg.resetter, sink, recovered)
+		if err != nil {
+			return err
+		}
+	}
+	if err := emitRecoveredTasks(ctx, sink, resumed); err != nil {
 		return err
 	}
 	return reportRebootRecovery(ctx, store, sink, recovered)

@@ -1,6 +1,7 @@
 package safety
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -98,5 +99,141 @@ func TestProviderBreakersSnapshot(t *testing.T) {
 	}
 	if entry.LastError == "" {
 		t.Fatal("snapshot should carry last error")
+	}
+}
+
+func TestReleaseProbeReturnsTheHalfOpenSlot(t *testing.T) {
+	b := NewCircuitBreaker()
+	now := time.Now()
+	b.SetClockForTest(func() time.Time { return now })
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	now = now.Add(DefaultBreakerTimeout + time.Second)
+
+	if got := b.ProbeLimit(3); got != 1 {
+		t.Fatalf("first ProbeLimit = %d, want 1", got)
+	}
+	if got := b.ProbeLimit(3); got != 0 {
+		t.Fatalf("second ProbeLimit before release = %d, want 0", got)
+	}
+	b.ReleaseProbe()
+	if b.State() != BreakerHalfOpen {
+		t.Fatalf("state after ReleaseProbe = %s, want HALF_OPEN (only an outcome changes state)", b.State())
+	}
+	if got := b.ProbeLimit(3); got != 1 {
+		t.Fatalf("ProbeLimit after release = %d, want 1", got)
+	}
+}
+
+func TestReleaseProbeIsNoOpWhenNotHalfOpen(t *testing.T) {
+	b := NewCircuitBreaker()
+	b.ReleaseProbe()
+	if b.State() != BreakerClosed {
+		t.Fatalf("state = %s, want CLOSED", b.State())
+	}
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	b.ReleaseProbe()
+	if b.State() != BreakerOpen {
+		t.Fatalf("state = %s, want OPEN", b.State())
+	}
+}
+
+func TestCircuitBreakerWithTimeoutHonorsTheConfiguredPause(t *testing.T) {
+	b := NewCircuitBreakerWithTimeout(30 * time.Second)
+	now := time.Now()
+	b.SetClockForTest(func() time.Time { return now })
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	now = now.Add(29 * time.Second)
+	if got := b.ProbeLimit(1); got != 0 {
+		t.Fatalf("ProbeLimit before the configured timeout = %d, want 0", got)
+	}
+	now = now.Add(time.Second)
+	if got := b.ProbeLimit(1); got != 1 {
+		t.Fatalf("ProbeLimit at the configured timeout = %d, want 1", got)
+	}
+}
+
+// A bad config value must never shorten the pause to nothing: it stays bounded
+// at the default.
+func TestCircuitBreakerWithNonPositiveTimeoutUsesDefault(t *testing.T) {
+	for _, timeout := range []time.Duration{0, -time.Minute} {
+		b := NewCircuitBreakerWithTimeout(timeout)
+		now := time.Now()
+		b.SetClockForTest(func() time.Time { return now })
+		for range defaultBreakerFailures {
+			b.RecordError(models.ErrLLMUnreachable)
+		}
+		now = now.Add(DefaultBreakerTimeout - time.Second)
+		if got := b.ProbeLimit(1); got != 0 {
+			t.Fatalf("timeout %v: ProbeLimit just before the default = %d, want 0", timeout, got)
+		}
+		now = now.Add(time.Second)
+		if got := b.ProbeLimit(1); got != 1 {
+			t.Fatalf("timeout %v: ProbeLimit at the default = %d, want 1", timeout, got)
+		}
+	}
+}
+
+func TestAdmitReportsWhyARequestWasRefused(t *testing.T) {
+	b := NewCircuitBreaker()
+	now := time.Now()
+	b.SetClockForTest(func() time.Time { return now })
+	if got := b.Admit(); got != AdmissionGranted {
+		t.Fatalf("CLOSED Admit() = %v, want granted", got)
+	}
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	if got := b.Admit(); got != AdmissionDenied {
+		t.Fatalf("OPEN before the timeout Admit() = %v, want denied", got)
+	}
+	now = now.Add(DefaultBreakerTimeout + time.Second)
+	if got := b.Admit(); got != AdmissionProbe {
+		t.Fatalf("first Admit() after the timeout = %v, want probe", got)
+	}
+	if got := b.Admit(); got != AdmissionProbeInFlight {
+		t.Fatalf("second Admit() while the probe runs = %v, want probe in flight", got)
+	}
+	b.RecordError(models.ErrLLMUnreachable)
+	if got := b.Admit(); got != AdmissionDenied {
+		t.Fatalf("Admit() after a failed probe = %v, want denied (timeout restarted)", got)
+	}
+}
+
+// Many tasks reaching a HALF_OPEN breaker at once: exactly one takes the probe slot
+// and every other one is told to wait, never denied or granted.
+func TestAdmitConcurrentSiblingsGetOneProbe(t *testing.T) {
+	b := NewCircuitBreaker()
+	now := time.Now()
+	b.SetClockForTest(func() time.Time { return now })
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	now = now.Add(DefaultBreakerTimeout + time.Second)
+
+	const siblings = 32
+	results := make(chan Admission, siblings)
+	var wg sync.WaitGroup
+	for range siblings {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results <- b.Admit()
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	counts := map[Admission]int{}
+	for got := range results {
+		counts[got]++
+	}
+	if counts[AdmissionProbe] != 1 || counts[AdmissionProbeInFlight] != siblings-1 {
+		t.Fatalf("admissions = %v, want 1 probe and %d probe-in-flight", counts, siblings-1)
 	}
 }

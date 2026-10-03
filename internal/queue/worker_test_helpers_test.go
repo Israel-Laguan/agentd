@@ -25,6 +25,9 @@ type fakeGateway struct {
 	lastPlanIntent string
 	toolCalls      []gateway.ToolCall
 	nextToolCalls  []gateway.ToolCall
+	// onRequest runs inside Generate, so a test can change the world between the
+	// worker admitting a task and the provider answering it.
+	onRequest func()
 }
 
 func (g *fakeGateway) isElicitorRequest(req gateway.AIRequest) bool {
@@ -43,6 +46,9 @@ func (g *fakeGateway) Generate(_ context.Context, req gateway.AIRequest) (gatewa
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.requests = append(g.requests, req)
+	if g.onRequest != nil {
+		g.onRequest()
+	}
 	if g.isElicitorRequest(req) {
 		return gateway.AIResponse{Content: `{"needs_clarification":false}`}, g.err
 	}

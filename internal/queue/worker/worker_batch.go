@@ -32,6 +32,7 @@ func (w *Worker) runBatchTextGateway(
 	if err != nil {
 		return batchTextResponse{}, err
 	}
+	w.RecordProviderSuccess(ctx, tasks[0])
 	return resp, nil
 }
 
@@ -49,6 +50,7 @@ func (w *Worker) runBatchLegacyGateway(
 	if err != nil {
 		return batchLegacyResponse{}, err
 	}
+	w.RecordProviderSuccess(ctx, tasks[0])
 	return resp, nil
 }
 
@@ -111,14 +113,11 @@ func (w *Worker) processRunningTask(
 	profile models.AgentProfile,
 ) {
 	defer w.recoverPanic(ctx, task)
-	if w.providerBreakers != nil && profile.Provider != "" {
-		if w.providerBreakers.Get(profile.Provider).IsOpen() {
-			w.handoffOrFail(ctx, task,
-				fmt.Errorf("%w: provider %s circuit breaker is open",
-					models.ErrLLMQuotaExceeded, profile.Provider))
-			return
-		}
+	release, ok := w.gateProvider(ctx, task, profile.Provider)
+	if !ok {
+		return
 	}
+	defer release()
 	if profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
 			w.FailHard(ctx, task, err)

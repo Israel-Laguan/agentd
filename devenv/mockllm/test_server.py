@@ -5,9 +5,15 @@ Run with:  python3 -m unittest discover -s devenv/mockllm -p 'test_server.py'
 (or `make test-mockllm` from the repo root).
 """
 
+import json
 import sys
+import threading
+import time
 import unittest
+import urllib.error
+import urllib.request
 from email.message import Message
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -123,6 +129,178 @@ class ChatCompletionDispatchTest(unittest.TestCase):
         result = server.chat_completion(body, headers())
         content = result["choices"][0]["message"]["content"]
         self.assertIn("command", content)
+
+
+class SlowCommandTest(unittest.TestCase):
+    def test_slow_command_reports_a_first_attempts_file(self):
+        # J08 proves the recovery.clean_workspace_on_recover reset with this: the
+        # command drops a marker file, and a re-run that still sees it says so.
+        command = server.slow_command()
+        self.assertIn("if [ -e attempt.marker ]; then echo carried-over; fi", command)
+        self.assertLess(command.index("carried-over"), command.index("touch attempt.marker"))
+
+    def test_slow_command_prints_every_tick_through_the_last(self):
+        command = server.slow_command()
+        self.assertIn(f"-lt {server.SLOW_TICKS}", command)
+        self.assertIn("echo tick $i", command)
+
+
+class OutageTest(unittest.TestCase):
+    """POST /outage fails every request for one model until switched off."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        cls.base = f"http://127.0.0.1:{cls.httpd.server_port}"
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+
+    def setUp(self):
+        # The chats below are fixtures, not journey traffic. Keep them out of the
+        # shared /tmp capture log so a later GET /requests consumer sees only its
+        # own requests.
+        self._real_record_request = server.record_request
+        server.record_request = staticmethod(lambda body: None)
+
+    def tearDown(self):
+        server.record_request = self._real_record_request
+        server.set_outage("brk-outage", False)
+        server.set_outage("other", False)
+        server.set_outage("brk-outage", False)
+        server.set_outage("other", False)
+
+    def _post(self, path, payload):
+        req = urllib.request.Request(
+            self.base + path, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status
+        except urllib.error.HTTPError as err:
+            return err.code
+
+    def _chat(self, model):
+        return self._post(
+            "/v1/chat/completions", {"model": model, "messages": [{"role": "user", "content": "Task: x"}]}
+        )
+
+    def test_outage_fails_only_the_named_model_until_switched_off(self):
+        self.assertEqual(self._chat("brk-outage"), 200)
+        self.assertEqual(self._post("/outage", {"model": "brk-outage", "down": True}), 200)
+        self.assertEqual(self._chat("brk-outage"), 503)
+        self.assertEqual(self._chat("other"), 200)
+        self.assertEqual(self._post("/outage", {"model": "brk-outage", "down": False}), 200)
+        self.assertEqual(self._chat("brk-outage"), 200)
+
+    def test_outage_rejects_a_malformed_body(self):
+        self.assertEqual(self._post("/outage", {"model": "brk-outage"}), 400)
+        self.assertEqual(self._post("/outage", {"down": True}), 400)
+        self.assertFalse(server.in_outage("brk-outage"))
+
+    def test_outage_rejects_a_non_object_or_non_string_model(self):
+        self.assertEqual(self._post("/outage", ["brk-outage"]), 400)
+        self.assertEqual(self._post("/outage", {"model": ["brk-outage"], "down": True}), 400)
+        self.assertEqual(self._post("/outage", {"model": "", "down": True}), 400)
+        self.assertFalse(server.in_outage("brk-outage"))
+
+
+class QuotaAndSlowOnceTest(unittest.TestCase):
+    """The quota toggle and the one-shot delay, both keyed by model name.
+
+    Quota exists because only ErrLLMQuotaExceeded feeds the per-provider
+    breakers; an outage is an unreachable provider and feeds the global one. A
+    journey that wants to exercise a provider breaker's probe slot needs 429s.
+    slow_once exists so a journey can hold a probe in flight long enough to see
+    what the siblings do while it runs.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        cls.base = f"http://127.0.0.1:{cls.httpd.server_port}"
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+
+    def setUp(self):
+        # Fixture chats, not journey traffic: keep them out of the shared capture
+        # log so a later GET /requests consumer sees only its own requests.
+        self._real_record_request = server.record_request
+        server.record_request = staticmethod(lambda body: None)
+        server.set_quota("prb-quota", False)
+        server.set_slow_once("prb-quota", 0)
+
+    def tearDown(self):
+        server.record_request = self._real_record_request
+        server.set_quota("prb-quota", False)
+        server.set_slow_once("prb-quota", 0)
+
+    def _post(self, path, payload):
+        req = urllib.request.Request(
+            self.base + path, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status
+        except urllib.error.HTTPError as err:
+            return err.code
+
+    def _chat(self, model):
+        return self._post(
+            "/v1/chat/completions", {"model": model, "messages": [{"role": "user", "content": "Task: x"}]}
+        )
+
+    def test_quota_answers_429_and_only_for_the_named_model(self):
+        self.assertEqual(self._post("/quota", {"model": "prb-quota", "on": True}), 200)
+        self.assertEqual(self._chat("prb-quota"), 429)
+        self.assertEqual(self._chat("other"), 200)
+        self.assertEqual(self._post("/quota", {"model": "prb-quota", "on": False}), 200)
+        self.assertEqual(self._chat("prb-quota"), 200)
+
+    def test_quota_is_distinct_from_an_outage(self):
+        """A quota failure and an outage must not be the same status: they reach
+        different breakers, so collapsing them would silently retarget the test."""
+        self._post("/quota", {"model": "prb-quota", "on": True})
+        self.assertEqual(self._chat("prb-quota"), 429)
+        self.assertNotEqual(server.QUOTA_STATUS, server.OUTAGE_STATUS)
+
+    def test_quota_rejects_a_malformed_body(self):
+        self.assertEqual(self._post("/quota", {"model": "prb-quota"}), 400)
+        self.assertEqual(self._post("/quota", {"on": True}), 400)
+        self.assertEqual(self._post("/quota", {"model": "prb-quota", "on": "yes"}), 400)
+        self.assertFalse(server.in_quota("prb-quota"))
+
+    def test_slow_once_delays_exactly_one_request(self):
+        self.assertEqual(self._post("/slow_once", {"model": "prb-quota", "seconds": 0.4}), 200)
+        started = time.monotonic()
+        self.assertEqual(self._chat("prb-quota"), 200)
+        first = time.monotonic() - started
+        started = time.monotonic()
+        self.assertEqual(self._chat("prb-quota"), 200)
+        second = time.monotonic() - started
+        self.assertGreater(first, 0.3, "the armed request was not delayed")
+        self.assertLess(second, 0.3, "the delay was not consumed by a single request")
+
+    def test_slow_once_rejects_a_malformed_body(self):
+        self.assertEqual(self._post("/slow_once", {"model": "prb-quota"}), 400)
+        self.assertEqual(self._post("/slow_once", {"model": "prb-quota", "seconds": "soon"}), 400)
+        self.assertEqual(self._post("/slow_once", {"model": "prb-quota", "seconds": -1}), 400)
+
+    def test_slow_once_does_not_mask_a_quota_failure(self):
+        """An armed delay must not turn a failing provider into a slow success:
+        the failure has to be reported before the sleep."""
+        self._post("/quota", {"model": "prb-quota", "on": True})
+        self._post("/slow_once", {"model": "prb-quota", "seconds": 5})
+        started = time.monotonic()
+        self.assertEqual(self._chat("prb-quota"), 429)
+        self.assertLess(time.monotonic() - started, 2.0, "the quota failure waited out the armed delay")
 
 
 if __name__ == "__main__":

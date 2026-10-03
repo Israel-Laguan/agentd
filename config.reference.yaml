@@ -147,6 +147,12 @@ healing:
   outage_handoff_enabled: true
 breaker:
   handoff_after: "2m"
+  open_timeout: "5m"
+recovery:
+  # Opt-in. At boot, empty a recovered task's project workspace before it re-runs.
+  # Only projects created with start_empty_workspace (and no source_path) are reset;
+  # others, and projects with another COMPLETED/RUNNING task, fail the recovered task.
+  clean_workspace_on_recover: false
 disk:
   free_threshold_percent: 10.0
 channel:
