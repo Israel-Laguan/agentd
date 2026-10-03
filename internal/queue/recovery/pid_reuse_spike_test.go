@@ -56,9 +56,6 @@ func TestBootReconcileSkipsTaskWhoseOwnerPIDWasReused(t *testing.T) {
 		t.Fatalf("GetTask: %v", err)
 	}
 
-	if task.State == models.TaskStateReady {
-		t.Skip("this run has no PID reuse: the ghost was recovered at boot, so the spike's case did not arise")
-	}
 	if task.State != models.TaskStateRunning {
 		t.Fatalf("state = %s, want RUNNING — boot skipped the task because its owner PID looked alive", task.State)
 	}
