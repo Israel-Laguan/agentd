@@ -17,6 +17,13 @@ func (d *Daemon) dispatch(ctx context.Context) (dispatched int, nacked int, err 
 	if available <= 0 {
 		return 0, 0, nil
 	}
+	// A HALF_OPEN probe slot is taken before we know whether any task will run.
+	// If this tick dispatches nothing, give it back or the breaker latches.
+	defer func() {
+		if dispatched == 0 && d.breaker != nil {
+			d.breaker.ReleaseProbe()
+		}
+	}()
 	tasks, err := d.store.ClaimNextReadyTasks(ctx, available)
 	if err != nil {
 		return 0, 0, err
