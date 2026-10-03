@@ -113,3 +113,28 @@ func (m *MockLLMClient) WorkerPrompts(ctx context.Context, taskID string) ([]str
 	}
 	return prompts, nil
 }
+
+// SetOutage takes the mock model named model down (every chat completion for it
+// answers 503) or brings it back, via the mock's POST /outage. Only requests for
+// that model are affected, so a journey that owns a model name can end a provider
+// outage mid-test without touching any other journey.
+func (m *MockLLMClient) SetOutage(ctx context.Context, model string, down bool) error {
+	payload, err := json.Marshal(map[string]any{"model": model, "down": down})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseURL+"/outage", strings.NewReader(string(payload)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("mock /outage returned %d", resp.StatusCode)
+	}
+	return nil
+}

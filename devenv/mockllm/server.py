@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -45,6 +46,28 @@ SCOPE_SPLIT = SCOPE_DELIMITER + r'(?=' + SCOPE_INTRODUCER + r')'
 #   3. the request's model name, mapped by MOCKLLM_MODEL_SCENARIOS
 #      (e.g. "gpt-3.5-turbo=tiered-fail-verify,gpt-4=tiered-pass-verify").
 SCENARIO_TAG_RE = re.compile(r"@scenario=([A-Za-z0-9_-]+)")
+
+# Models currently "down". Unlike a scenario tag, which fails one request, an
+# outage fails every request for a model until it is switched off, so a journey
+# can end a provider outage mid-test (J09 recovery). Keyed by model name so only
+# the profile that owns that model sees it; every other journey is unaffected.
+# Switched through POST /outage {"model": "<name>", "down": true|false}.
+OUTAGE_STATUS = 503
+_outage_lock = threading.Lock()
+_outage_models: set = set()
+
+
+def set_outage(model: str, down: bool) -> None:
+    with _outage_lock:
+        if down:
+            _outage_models.add(model)
+        else:
+            _outage_models.discard(model)
+
+
+def in_outage(model: str) -> bool:
+    with _outage_lock:
+        return model in _outage_models
 DEFAULT_LIMIT = 200
 
 
@@ -366,6 +389,11 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._send({"error": "invalid json"}, 400)
                 return
+            if in_outage(body.get("model", "")):
+                sys.stderr.write(f"[mockllm] outage model={body.get('model')} -> HTTP {OUTAGE_STATUS}\n")
+                sys.stderr.flush()
+                self._send({"error": "mock outage"}, OUTAGE_STATUS)
+                return
             scenario = select_scenario(body, self.headers)
             if scenario.startswith("error"):
                 status = scenario_error_status(scenario)
@@ -380,6 +408,20 @@ class Handler(BaseHTTPRequestHandler):
                 time.sleep(delay)
             record_request(body)
             self._send(chat_completion(body, self.headers))
+            return
+        if self.path.rstrip("/").endswith("/outage"):
+            length = int(self.headers.get("Content-Length", "0"))
+            try:
+                body = json.loads((self.rfile.read(length) if length else b"{}") or b"{}")
+            except json.JSONDecodeError:
+                self._send({"error": "invalid json"}, 400)
+                return
+            model = body.get("model", "")
+            if not model or not isinstance(body.get("down"), bool):
+                self._send({"error": "want {model: string, down: bool}"}, 400)
+                return
+            set_outage(model, body["down"])
+            self._send({"model": model, "down": body["down"]})
             return
         self._send({"error": "not found"}, 404)
 

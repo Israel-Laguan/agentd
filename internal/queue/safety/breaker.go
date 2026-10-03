@@ -36,7 +36,17 @@ type CircuitBreaker struct {
 }
 
 func NewCircuitBreaker() *CircuitBreaker {
-	return &CircuitBreaker{state: BreakerClosed, now: time.Now, timeout: defaultBreakerTimeout}
+	return NewCircuitBreakerWithTimeout(defaultBreakerTimeout)
+}
+
+// NewCircuitBreakerWithTimeout returns a breaker that stays OPEN for timeout
+// before admitting a probe. A non-positive timeout falls back to the default,
+// so a bad config value can never make the pause zero or unbounded.
+func NewCircuitBreakerWithTimeout(timeout time.Duration) *CircuitBreaker {
+	if timeout <= 0 {
+		timeout = defaultBreakerTimeout
+	}
+	return &CircuitBreaker{state: BreakerClosed, now: time.Now, timeout: timeout}
 }
 
 // SetClockForTest replaces the time source (same-package tests may assign .now directly).

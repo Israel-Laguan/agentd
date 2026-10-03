@@ -22,10 +22,16 @@ func loadAPIConfig(v *viper.Viper) APIConfig {
 	}
 }
 
-const defaultBreakerHandoffAfter = 2 * time.Minute
+const (
+	defaultBreakerHandoffAfter = 2 * time.Minute
+	defaultBreakerOpenTimeout  = 5 * time.Minute
+)
 
 type BreakerConfig struct {
 	HandoffAfter time.Duration
+	// OpenTimeout is how long a tripped breaker pauses dispatch before it
+	// admits a single probe task. Non-positive values fall back to the default.
+	OpenTimeout time.Duration
 }
 
 const defaultDiskFreeThresholdPercent = 10.0
@@ -49,7 +55,14 @@ func loadHeartbeatConfig(v *viper.Viper) HeartbeatConfig {
 }
 
 func loadBreakerConfig(v *viper.Viper) BreakerConfig {
-	return BreakerConfig{HandoffAfter: v.GetDuration("breaker.handoff_after")}
+	cfg := BreakerConfig{
+		HandoffAfter: v.GetDuration("breaker.handoff_after"),
+		OpenTimeout:  v.GetDuration("breaker.open_timeout"),
+	}
+	if cfg.OpenTimeout <= 0 {
+		cfg.OpenTimeout = defaultBreakerOpenTimeout
+	}
+	return cfg
 }
 
 const (
