@@ -378,3 +378,20 @@ Found:
 
 `make check` green. J09 `TestJ09_BreakerOpens` and J08 `TestJ08_UncleanKillRecovery`
 pass against the rebuilt stack; the rest of `make test-e2e` was not run.
+
+### S10 follow-up: B-011, shared sandbox inactivity timer (2026-10-03)
+
+Fixed:
+
+- **B-011.** `BashExecutor` gave stdout and stderr each their own inactivity timer, so a
+  command that printed only to stdout was killed at `sandbox.inactivity_timeout`. Both
+  streams now share one `activityTracker` (`internal/sandbox/inactivity.go`): a read on
+  either resets it, and it stops once both have ended. Failing test first
+  (`TestBashExecutorInactivityIsSharedAcrossStreams`, 500ms limit): chatty stdout and
+  chatty stderr each timed out before the fix and complete now; a silent command and a
+  command that closes stdout then goes silent are still killed.
+- Mutation checks: a separate tracker per stream turns the two chatty cases red; stopping
+  the timer on the first EOF turns the closed-stdout case red (it survived until that
+  case was added).
+- J08's `SLOW_TICKS` stays at 30 (restoring 60 is optional); its comment in
+  `devenv/mockllm/server.py` no longer cites B-011 as a live limit.

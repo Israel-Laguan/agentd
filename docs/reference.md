@@ -204,7 +204,7 @@ task["id"], task["project_id"], task["state"]
 | `agentic.capability_routing.min_confidence` | `0.35` | Minimum classifier confidence (0.0–1.0) to apply a capability mapping; below threshold continues with the normal agentic loop. |
 | `agentic.capability_routing.mappings` | _(none)_ | Map intent names (`generate_image`, `real_time_search`, `browse_url`, `spreadsheet_ops`) to adapter registry names (`capabilities.Registry.Register` name). |
 | `agentic.capability_routing.tools` | _(intent name)_ | Optional per-intent tool name override passed to `CallTool`; when omitted, the intent name is used. |
-| `sandbox.inactivity_timeout` | `60s` | Max stdout/stderr silence before sandbox timeout triggers. |
+| `sandbox.inactivity_timeout` | `60s` | Max silence on both stdout and stderr before sandbox timeout triggers; output on either stream resets it. |
 | `sandbox.wall_timeout` | `10m` | Max wall-clock execution time for each sandbox command payload. |
 | `sandbox.kill_grace` | `2s` | Grace window between SIGTERM and SIGKILL for timed-out process groups. |
 | `sandbox.max_log_bytes` | `5242880` | Per-stream cap for final command output buffers with head/tail truncation marker. |
