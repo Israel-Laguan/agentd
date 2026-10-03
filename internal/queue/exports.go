@@ -91,7 +91,11 @@ const (
 	BreakerHalfOpen        = safety.BreakerHalfOpen
 	AdmissionDenied        = safety.AdmissionDenied
 	AdmissionProbeInFlight = safety.AdmissionProbeInFlight
-	AdmissionProbe         = safety.AdmissionProbe
+	// AdmissionGranted: the breaker is CLOSED, so Admit took no probe slot.
+	// Re-exported with the rest so a queue-only caller can tell "closed" from
+	// "half-open probe already in flight" and gate on the difference.
+	AdmissionGranted = safety.AdmissionGranted
+	AdmissionProbe   = safety.AdmissionProbe
 )
 
 var NewCircuitBreaker = safety.NewCircuitBreaker

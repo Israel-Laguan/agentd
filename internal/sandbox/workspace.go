@@ -85,12 +85,37 @@ func (m *FSWorkspaceManager) ResetProjectDir(ctx context.Context, projectID stri
 	if filepath.Clean(dir) == filepath.Clean(root) {
 		return fmt.Errorf("%w: refusing to reset workspace root", models.ErrSandboxViolation)
 	}
-	entries, err := os.ReadDir(dir)
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return fmt.Errorf("locate project workspace under root: %w", err)
+	}
+	// Enumerate and delete through a directory handle rooted at the workspace root
+	// rather than through the resolved path. A concurrent writer can replace the
+	// project directory with a symlink between the jail check above and the
+	// removals below, and os.RemoveAll on a path then follows it out of the root.
+	// os.Root resolves every component under the root it was opened on, so the
+	// removal cannot leave the jail however the path is rewritten underneath us.
+	jail, err := os.OpenRoot(m.Root)
+	if err != nil {
+		return fmt.Errorf("open workspace root %s: %w", m.Root, err)
+	}
+	defer func() { _ = jail.Close() }()
+	projRoot, err := jail.OpenRoot(rel)
+	if err != nil {
+		return fmt.Errorf("open project workspace %s: %w", dir, err)
+	}
+	defer func() { _ = projRoot.Close() }()
+	handle, err := projRoot.Open(".")
+	if err != nil {
+		return fmt.Errorf("open project workspace %s: %w", dir, err)
+	}
+	defer func() { _ = handle.Close() }()
+	entries, err := handle.ReadDir(-1)
 	if err != nil {
 		return fmt.Errorf("read project workspace %s: %w", dir, err)
 	}
 	for _, entry := range entries {
-		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+		if err := projRoot.RemoveAll(entry.Name()); err != nil {
 			return fmt.Errorf("reset project workspace %s: %w", dir, err)
 		}
 	}

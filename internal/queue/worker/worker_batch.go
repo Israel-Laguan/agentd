@@ -32,6 +32,7 @@ func (w *Worker) runBatchTextGateway(
 	if err != nil {
 		return batchTextResponse{}, err
 	}
+	w.RecordProviderSuccess(ctx, tasks[0])
 	return resp, nil
 }
 
@@ -49,6 +50,7 @@ func (w *Worker) runBatchLegacyGateway(
 	if err != nil {
 		return batchLegacyResponse{}, err
 	}
+	w.RecordProviderSuccess(ctx, tasks[0])
 	return resp, nil
 }
 

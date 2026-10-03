@@ -103,6 +103,7 @@ func (w *Worker) command(ctx context.Context, task models.Task, project models.P
 	if err != nil {
 		return workerResponse{}, tokenUsage, details, err
 	}
+	w.RecordProviderSuccess(ctx, task)
 	return resp, tokenUsage, details, nil
 }
 

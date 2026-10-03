@@ -31,7 +31,10 @@ func BootReconcile(ctx context.Context, store models.KanbanStore, probe safety.P
 	}
 	resumed := recovered
 	if cfg := newBootConfig(opts); cfg.resetter != nil {
-		resumed = resetRecoveredWorkspaces(ctx, store, cfg.resetter, sink, recovered)
+		resumed, err = resetRecoveredWorkspaces(ctx, store, cfg.resetter, sink, recovered)
+		if err != nil {
+			return err
+		}
 	}
 	if err := emitRecoveredTasks(ctx, sink, resumed); err != nil {
 		return err
