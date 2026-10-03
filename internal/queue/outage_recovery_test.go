@@ -144,4 +144,10 @@ func TestOutageRecoveryFailedProbeReopensTheBreaker(t *testing.T) {
 		t.Fatalf("ProbeLimit %s after the failed probe = %d, want 0 — the timeout restarts",
 			DefaultBreakerTimeout-time.Second, got)
 	}
+
+	// Once the restarted timeout expires, probes are admitted again.
+	now = now.Add(time.Second)
+	if got := breaker.ProbeLimit(1); got != 1 {
+		t.Fatalf("ProbeLimit at the restarted timeout = %d, want 1", got)
+	}
 }
