@@ -167,21 +167,23 @@ func (s *queueScenario) breakerShouldBeClosed(context.Context) error {
 }
 
 func (s *queueScenario) normalPollingResumes(ctx context.Context) error {
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
+	var tickErr error
+	err := waitFor(func() bool {
 		if s.daemon.sem.InUse() != 0 || s.store.count(models.TaskStateReady) != 2 {
-			time.Sleep(10 * time.Millisecond)
-			continue
+			return false
 		}
-		if err := s.daemonTicks(ctx); err != nil {
-			return err
+		if tickErr = s.daemonTicks(ctx); tickErr != nil {
+			return true
 		}
-		if s.lastQueued == 2 {
-			return nil
-		}
-		time.Sleep(10 * time.Millisecond)
+		return s.lastQueued == 2
+	}, "normal polling to claim 2 tasks")
+	if tickErr != nil {
+		return tickErr
 	}
-	return fmt.Errorf("newly claimed tasks = %d, want 2", s.lastQueued)
+	if err != nil {
+		return fmt.Errorf("newly claimed tasks = %d, want 2: %w", s.lastQueued, err)
+	}
+	return nil
 }
 
 func newBlockingQueueSandbox() *queueSandbox {

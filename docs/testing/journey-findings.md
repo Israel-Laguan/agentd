@@ -19,7 +19,7 @@ recovered it (observed exactly 2m0s). Fixed in T-030: `BootReconcile` drops its 
 PID from the alive set before reconciling. Boot runs before any worker starts, so a
 RUNNING task stamped with our own PID cannot be ours — it is an orphan. Only our own
 PID is exempted, so a task owned by a different live daemon still goes through the
-liveness probe. `TestJ08_UncleanKillRecovery` now allows 30s (health budget 240s→90s)
+liveness probe. `TestJ08_UncleanKillRecovery` now allows 30s for recovery (restart health timeout 60s, overall budget 150s, was 240s)
 and logs time-to-recovery. Accepted limit: two daemons in separate PID namespaces both
 at PID 1 sharing a home would collide; that needs a per-boot instance ID.
 
