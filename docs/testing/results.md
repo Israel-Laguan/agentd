@@ -274,6 +274,9 @@ Reproduced, then fixed:
   success hook I first added in `handleLoopResult` survived its mutation because the loop
   already commits through `commitSucceeded`, so it was deleted.
 - Not covered by a test: the one-line wiring of `cfg.Breaker.OpenTimeout` into the registry.
+- **Superseded end to end.** Both this fix and B-013 were inert in production until B-016: no
+  per-provider breaker could ever open, so neither the probe nor a sibling ever happened.
+  **J16 is the first end-to-end evidence for this entry** (see the B-016/J16 cycle below).
 
 ### S10 follow-up: B-010 / T-036b, opt-in workspace reset on recovery (2026-10-03)
 
@@ -315,7 +318,9 @@ refusal reason atomically. The first sibling test failed with the task BLOCKED, 
 passed. Mutation checks, each red: `Admit` never reports "in flight", helper always
 hands off, requeue with a payload, probe slot not released, OPEN also waits, and
 `cfg.Breaker.OpenTimeout` dropped from the provider registry (new test in
-`cmd/agentd`). `make check` green; no devenv journey run (no profile changed).
+`cmd/agentd`). `make check` green. **J16 is the first end-to-end evidence for this
+entry** — until B-016 was fixed no provider breaker could open at all, so this
+behaviour was unreachable in production (see the B-016/J16 cycle below).
 
 ### B-014 cycle: only the probe holder settles the probe (2026-10-03)
 
@@ -335,7 +340,9 @@ Closed three of four open B-013 test gaps, tests only. Real-store requeue in
 `internal/kanban` (depguard's `queue-test-isolation` and `kanban-test-isolation`
 rules keep the real board and the breaker package apart, so the store half lives
 there); dispatch-loop soak at `TaskInterval` 20ms measuring 49 ticks against a bound
-of 50; and the in-package proof that `AdmissionProbeInFlight` needs a reachable trap
+of 50 — siblings cycle **once per `TaskInterval` (3s in the devenv profiles) with
+no backoff**, since a requeue counts as dispatched; the 10s cap applies only to a
+tick that dispatches nothing; and the in-package proof that `AdmissionProbeInFlight` needs a reachable trap
 — `RecordSuccessFor` goes CLOSED before settling the probe, leaving a CLOSED breaker
 that still holds a slot. Seven mutations, all red. Full `make test-e2e` green (16
 journeys). The fourth gap, an e2e journey, is blocked: `decideTerminalError`
@@ -343,3 +350,35 @@ formats joined provider errors with `%v`, which flattens the quota sentinel, so 
 per-provider breaker can ever open — filed as B-016 with a reproduced chain check.
 The mock gains the per-model `POST /quota` and `POST /slow_once` that journey will
 need (7 new unit tests, no other journey affected).
+
+### B-016 + J16 cycle: the cascade keeps the quota sentinel (2026-10-03)
+
+- **B-016.** `decideTerminalError` formatted the joined provider errors with `%v`, so
+  `errors.Is(err, ErrLLMQuotaExceeded)` was false for every cascaded failure and
+  `HandleGatewayError` always took the global branch — whose `RecordErrorFor` caller is
+  gated on exactly that check, so no per-provider breaker could ever open. Two `%w`
+  verbs keep both sentinels and render the same message.
+- **Decided, all pinned by tests.** (a) both sentinels survive (all-unreachable stays
+  unreachable-only, so an outage never opens a provider breaker); (b) the verdict stays
+  keyed on `lookupProvider`, because `admitProvider` takes the probe slot on that key;
+  (c) the branches stay mutually exclusive, so one provider's exhausted key cannot stall
+  the others, and an unreachable total outage still feeds only the global breaker.
+- **Tests, failing first:** 3 new `decideTerminalError` cases with a two-directional
+  `errors.Is` check, and 3 new `internal/queue` tests driving the **real**
+  `gateway.Router` through `Process` — every earlier test hand-fed the error.
+- **J16**, `TestJ16_SiblingsWaitForProviderProbe`, new `provider` profile on :8771 (one
+  provider on the mock model `prb-quota`): 3 real 429s open the provider breaker, a
+  sibling waits while the admitted probe is in flight (no `PROVIDER_EXHAUSTED_HANDOFF`,
+  no HUMAN subtask, re-checked every 500ms across 6s), then all 3 tasks COMPLETE and the
+  breaker is CLOSED with no reset. Green alone in 43.8s; full `make test-e2e` green, 18
+  tests / 17 journeys, 284s.
+- **Spec correction:** the tasks that trip a provider breaker cannot be the ones the
+  journey waits on (the quota branch hands them off too), so the trip is done by three
+  throwaway "arming" tasks and the asserted-on tasks are created after `open_timeout`.
+- **Mutations:** 4 unit + 3 journey, each red — `%v` again (J16 fails at its own arming
+  bound, breaker `CLOSED (0 failures)`), the join's `%w` dropped to `%s`, `errors.Join()`
+  emptied, the verdict on a hard-coded provider, `gateProvider` always handing off (22.7s),
+  `open_timeout` at `5m` (fails on its 90s bound, not hanging). Sources restored
+  byte-identical.
+- **B-017 filed:** `-race -count=20 ./internal/queue` failed once in each of two runs, in
+  two different outage tests, both on the `ErrLLMUnreachable` branch this fix leaves alone.
