@@ -120,6 +120,17 @@ func (b *CircuitBreaker) ProbeLimit(available int) int {
 	}
 }
 
+// ReleaseProbe returns the HALF_OPEN probe slot taken by ProbeLimit when the
+// caller ended up dispatching nothing, so a later tick with work can use it.
+// It never changes the breaker state: only a recorded outcome does that.
+func (b *CircuitBreaker) ReleaseProbe() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.state == BreakerHalfOpen {
+		b.inflight = false
+	}
+}
+
 func (b *CircuitBreaker) RecordError(err error) {
 	if !ClassifiesAsBreakerFailure(err) {
 		return

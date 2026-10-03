@@ -100,3 +100,42 @@ func TestProviderBreakersSnapshot(t *testing.T) {
 		t.Fatal("snapshot should carry last error")
 	}
 }
+
+func TestReleaseProbeReturnsTheHalfOpenSlot(t *testing.T) {
+	b := NewCircuitBreaker()
+	now := time.Now()
+	b.SetClockForTest(func() time.Time { return now })
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	now = now.Add(DefaultBreakerTimeout + time.Second)
+
+	if got := b.ProbeLimit(3); got != 1 {
+		t.Fatalf("first ProbeLimit = %d, want 1", got)
+	}
+	if got := b.ProbeLimit(3); got != 0 {
+		t.Fatalf("second ProbeLimit before release = %d, want 0", got)
+	}
+	b.ReleaseProbe()
+	if b.State() != BreakerHalfOpen {
+		t.Fatalf("state after ReleaseProbe = %s, want HALF_OPEN (only an outcome changes state)", b.State())
+	}
+	if got := b.ProbeLimit(3); got != 1 {
+		t.Fatalf("ProbeLimit after release = %d, want 1", got)
+	}
+}
+
+func TestReleaseProbeIsNoOpWhenNotHalfOpen(t *testing.T) {
+	b := NewCircuitBreaker()
+	b.ReleaseProbe()
+	if b.State() != BreakerClosed {
+		t.Fatalf("state = %s, want CLOSED", b.State())
+	}
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	b.ReleaseProbe()
+	if b.State() != BreakerOpen {
+		t.Fatalf("state = %s, want OPEN", b.State())
+	}
+}
