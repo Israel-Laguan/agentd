@@ -86,11 +86,12 @@ type CircuitBreaker = safety.CircuitBreaker
 type BreakerState = safety.BreakerState
 
 const (
-	BreakerClosed   = safety.BreakerClosed
-	BreakerOpen     = safety.BreakerOpen
-	BreakerHalfOpen = safety.BreakerHalfOpen
-	AdmissionDenied = safety.AdmissionDenied
-	AdmissionProbe  = safety.AdmissionProbe
+	BreakerClosed          = safety.BreakerClosed
+	BreakerOpen            = safety.BreakerOpen
+	BreakerHalfOpen        = safety.BreakerHalfOpen
+	AdmissionDenied        = safety.AdmissionDenied
+	AdmissionProbeInFlight = safety.AdmissionProbeInFlight
+	AdmissionProbe         = safety.AdmissionProbe
 )
 
 var NewCircuitBreaker = safety.NewCircuitBreaker

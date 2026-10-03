@@ -1,6 +1,7 @@
 package safety
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -201,5 +202,38 @@ func TestAdmitReportsWhyARequestWasRefused(t *testing.T) {
 	b.RecordError(models.ErrLLMUnreachable)
 	if got := b.Admit(); got != AdmissionDenied {
 		t.Fatalf("Admit() after a failed probe = %v, want denied (timeout restarted)", got)
+	}
+}
+
+// Many tasks reaching a HALF_OPEN breaker at once: exactly one takes the probe slot
+// and every other one is told to wait, never denied or granted.
+func TestAdmitConcurrentSiblingsGetOneProbe(t *testing.T) {
+	b := NewCircuitBreaker()
+	now := time.Now()
+	b.SetClockForTest(func() time.Time { return now })
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	now = now.Add(DefaultBreakerTimeout + time.Second)
+
+	const siblings = 32
+	results := make(chan Admission, siblings)
+	var wg sync.WaitGroup
+	for range siblings {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results <- b.Admit()
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	counts := map[Admission]int{}
+	for got := range results {
+		counts[got]++
+	}
+	if counts[AdmissionProbe] != 1 || counts[AdmissionProbeInFlight] != siblings-1 {
+		t.Fatalf("admissions = %v, want 1 probe and %d probe-in-flight", counts, siblings-1)
 	}
 }
