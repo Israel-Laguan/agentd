@@ -18,12 +18,13 @@ var profileService = map[string]struct {
 	service string
 	home    string
 }{
-	"default": {"agentd", "/home/agentd"},
-	"healing": {"agentd-healing", "/home/agentd-healing"},
-	"faults":  {"agentd-faults", "/home/agentd-faults"},
-	"breaker": {"agentd-brk", "/home/agentd-brk"},
-	"disk":    {"agentd-disk", "/home/agentd-disk"},
-	"tiered":  {"agentd-tiered", "/home/agentd-tiered"},
+	"default":  {"agentd", "/home/agentd"},
+	"healing":  {"agentd-healing", "/home/agentd-healing"},
+	"faults":   {"agentd-faults", "/home/agentd-faults"},
+	"breaker":  {"agentd-brk", "/home/agentd-brk"},
+	"disk":     {"agentd-disk", "/home/agentd-disk"},
+	"tiered":   {"agentd-tiered", "/home/agentd-tiered"},
+	"provider": {"agentd-prb", "/home/agentd-prb"},
 }
 
 // DevenvManager manages the devenv stack via podman-compose.

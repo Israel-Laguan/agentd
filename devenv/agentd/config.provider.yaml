@@ -1,0 +1,58 @@
+# agentd configuration for the provider-breaker profile (J16).
+#
+# One provider, `quota`, pointing at the mock LLM's model `prb-quota`. The
+# journey owns that model name (POST /quota and POST /slow_once are both keyed by
+# model), so nothing here affects any other profile.
+#
+# Why this profile exists at all: a per-provider breaker can only be fed by
+# ErrLLMQuotaExceeded (internal/queue/worker/worker_handoffs.go's
+# HandleGatewayError), and a provider answering 429 is the only way to produce
+# it. J09's profile cannot do this — every provider there is unreachable, which
+# feeds the single global breaker instead. It is a 429 model, not an outage, so
+# J16 needs its own gateway.order with exactly one entry: the cascade must be
+# exhausted by that one provider for the aggregate to carry its quota sentinel.
+#
+# breaker.open_timeout is 10s so the journey does not wait out the 5 minute
+# default; the default itself is covered by unit tests. The journey's bound is
+# built from this value, so a timeout that stopped being read from config fails
+# the journey instead of passing slowly.
+#
+# healing.enabled mirrors the healing and breaker profiles: with healing off,
+# handoffOrFail fails a task terminally instead of creating the HUMAN child that
+# makes a handoff observable in the task list.
+
+home: /home/agentd-prb
+db_path: /home/agentd-prb/global.db
+projects_dir: /home/agentd-prb/projects
+uploads_dir: /home/agentd-prb/uploads
+
+api:
+  address: "0.0.0.0:8771"
+
+gateway:
+  order: [quota]
+  providers:
+    - name: quota
+      adapter: openai
+      base_url: "http://mockllm:8000/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "prb-quota"
+      capabilities:
+        chat_tools: true
+      options:
+        send_task_metadata: true
+  warmup_enabled: false
+  role_models:
+    chat:  { provider: "", model: "" }
+    worker: { provider: "", model: "" }
+    memory: { provider: "", model: "" }
+
+queue:
+  token_budget: 50000
+
+breaker:
+  open_timeout: "10s"
+
+healing:
+  enabled: true
+  outage_handoff_enabled: true

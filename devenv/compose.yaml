@@ -12,6 +12,7 @@ name: agentd
 #   agentd-disk    - variant (port 8768) - disk profile
 #   agentd-brk     - variant (port 8770) - breaker profile (all providers dead)
 #   agentd-tiered  - variant (port 8769) - tiered profile
+#   agentd-prb     - variant (port 8771) - provider breaker profile (J16)
 #   web     - Next.js frontend (port 3000) - default profile
 #
 # Usage:
@@ -34,6 +35,7 @@ name: agentd
 #   breaker - every provider dead, so the breaker trips (J09 part B)
 #   disk    - disk space watchdog (J10)
 #   tiered  - tiered execution (J12)
+#   provider- one provider whose model the mock can 429 (J16)
 #
 # Troubleshooting:
 #   - Healthchecks use CMD-SHELL (string form) so they survive the alias/quote
@@ -65,6 +67,7 @@ services:
       - faults
       - disk
       - tiered
+      - provider
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)\""]
       interval: 2s
@@ -217,6 +220,28 @@ services:
       timeout: 3s
       retries: 30
 
+  agentd-prb:
+    image: ${AGENTD_IMAGE:-agentd:local}
+    entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
+    ports:
+      - "127.0.0.1:8771:8771"
+    profiles:
+      - provider
+    environment:
+      LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
+      AGENTD_API_ADDRESS: "0.0.0.0:8771"
+    volumes:
+      - agentd-data-prb:/home/agentd-prb
+      - ./agentd/config.provider.yaml:/etc/agentd/config.yaml:ro
+    depends_on:
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8771/api/v1/system/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
   agentd-tiered:
     image: ${AGENTD_IMAGE:-agentd:local}
     entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
@@ -272,4 +297,5 @@ volumes:
   agentd-data-faults:
   agentd-data-disk:
   agentd-data-brk:
+  agentd-data-prb:
   agentd-data-tiered:

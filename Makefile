@@ -28,7 +28,8 @@ test:
 
 # E2E tests against live devenv stack. Starts devenv if not already running
 # (or reuses it). dev-up brings up every profile, not just `default`, because
-# J07/J09/J10 run against the healing, faults/breaker and disk profiles.
+# J07/J09/J10/J16 run against the healing, faults/breaker, disk and provider
+# profiles.
 # Runs with -tags=e2e and does not run with `make test`.
 #
 # The full suite is slow: J08 alone waits out a ~2m recovery window, and J10
@@ -86,7 +87,8 @@ COMPOSE := $(CURDIR)/devenv/compose.yaml
 # resolves depends_on only within the *activated* profiles, so bringing up a
 # single non-default profile alone fails with KeyError: 'litellm'.
 COMPOSE_PROFILES := --profile default --profile healing --profile faults \
-                     --profile breaker --profile disk --profile tiered
+                     --profile breaker --profile disk --profile tiered \
+                     --profile provider
 
 # dev-up blocks until every container with a healthcheck is healthy. podman-compose
 # does not reliably honour depends_on service_healthy, and `up -d` returns as soon
@@ -94,9 +96,9 @@ COMPOSE_PROFILES := --profile default --profile healing --profile faults \
 # still refusing connections, which trips the circuit breaker for its full timeout.
 DEV_HEALTH_WAIT ?= 180
 
-# All six agentd services share one prebuilt image (B-007). podman-compose tags a
+# All the agentd services share one prebuilt image (B-007). podman-compose tags a
 # separate image per service when each declares build:, so the Go compile ran once
-# per service -- six per dev-up. Build the tag once here and let compose only start
+# per service -- one per dev-up. Build the tag once here and let compose only start
 # containers. --build is kept for mockllm, which still has its own build context.
 # Exported so devenv/compose.yaml resolves ${AGENTD_IMAGE:-agentd:local} to the
 # same tag that dev-build just produced. Keep the two in sync.
@@ -110,7 +112,7 @@ dev-build:
 # `up` leaves the previous container (and binary) running -- verified, the
 # running container keeps the old image ID across a rebuild.
 #
-# Recreation is scoped to the six agentd containers, removed by hand and then
+# Recreation is scoped to the agentd containers, removed by hand and then
 # recreated by the `up` below. `--force-recreate` is deliberately not used: it
 # applies to every service in every activated profile, and web's command is
 # `npm ci && npm run dev` on the bind-mounted host tree, so it would delete and
