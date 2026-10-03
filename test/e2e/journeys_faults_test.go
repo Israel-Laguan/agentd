@@ -90,7 +90,8 @@ func TestJ09_ProviderCascade(t *testing.T) {
 }
 
 // TestJ09_BreakerOpens tests J09 part B: consecutive worker failures open the
-// circuit breaker and produce a HUMAN handoff.
+// circuit breaker and produce a HUMAN handoff; then the provider returns and the
+// breaker closes on its own (the recovery half, j09AwaitRecovery).
 //
 // This runs against the breaker profile (agentd-brk on :8770), NOT the faults
 // profile. config.faults.yaml's secondary is live, so a worker call always
@@ -127,6 +128,10 @@ func TestJ09_BreakerOpens(t *testing.T) {
 	}
 	client := NewAPIClient(breakerBaseURL, harness.client)
 
+	// The flaky provider must be down before any task runs, or the cascade ends
+	// in success and the breaker never trips. The recovery half brings it back.
+	j09SetOutage(ctx, t, true)
+
 	// The breaker is process-global, not per-project: a prior run (or J07 on
 	// its own profile) may have left it OPEN, which probe-gates dispatch for
 	// up to safety.DefaultBreakerTimeout before any task is even attempted.
@@ -162,6 +167,10 @@ func TestJ09_BreakerOpens(t *testing.T) {
 	status := j09ReadStatus(ctx, t, client)
 	t.Logf("J09-B: breaker %s after %d failure(s) (last error: %s); HUMAN task %s created in project %s",
 		status.Breaker.State, status.Breaker.FailureCount, status.Breaker.LastError, humanTask.ID, projectID)
+
+	// Recovery half: the provider comes back and nothing resets the breaker.
+	elapsed := j09AwaitRecovery(ctx, t, client, projectID)
+	t.Logf("J09-C: provider back; breaker CLOSED and work completed %s later with no reset", elapsed.Round(time.Second))
 }
 
 // j09AwaitBreakerOpen polls system/status until the global breaker reports

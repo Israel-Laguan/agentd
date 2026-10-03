@@ -147,6 +147,7 @@ healing:
   outage_handoff_enabled: true
 breaker:
   handoff_after: "2m"
+  open_timeout: "5m"
 disk:
   free_threshold_percent: 10.0
 channel:

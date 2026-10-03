@@ -165,6 +165,7 @@ task["id"], task["project_id"], task["state"]
 | `gateway.truncation.stash_threshold` | _(configured)_ | Character threshold above which content is saved to the file stash. |
 | `uploads_dir` | `<home>/uploads` | Directory for oversized uploaded or referenced file content. |
 | `breaker.handoff_after` | `2m` | Duration the LLM breaker must stay open before creating a HUMAN outage task. |
+| `breaker.open_timeout` | `5m` | How long a tripped LLM breaker pauses dispatch before it admits one probe task; the breaker closes when that probe succeeds. A failed probe restarts the full timeout. Non-positive values fall back to `5m`. |
 | `disk.free_threshold_percent` | `10.0` | Minimum acceptable free disk percentage. There is deliberately **no** `disk.check_interval`: the watchdog's cadence comes from the `disk-watchdog` line in `<AGENTD_HOME>/agentd.crontab` (see the cron row above), and the key is not read by any config struct. Set the interval there. |
 | `healing.enabled` | `true` | Self-healing ladder and provider-exhaustion HUMAN handoffs. When `false`, failures terminate without healing subtasks (product HITL gates unchanged). |
 | `healing.strategy` | `increase_effort` | Built-in healing ladder (`increase_effort` or `minimize_variables`). |

@@ -89,6 +89,7 @@ const (
 )
 
 var NewCircuitBreaker = safety.NewCircuitBreaker
+var NewCircuitBreakerWithTimeout = safety.NewCircuitBreakerWithTimeout
 
 type ProviderBreakers = safety.ProviderBreakers
 type ProviderBreakerEntry = safety.ProviderBreakerEntry

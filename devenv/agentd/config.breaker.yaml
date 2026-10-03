@@ -11,6 +11,13 @@
 # dead provider would pass just as well but wouldn't distinguish "cascade
 # exhausted" from "only provider failed".
 #
+# A third provider, `flaky`, is a live mock whose model name `brk-outage` the mock
+# LLM can take down and bring back (POST /outage). While it is down the cascade
+# is exhausted exactly as with two dead providers; once the journey brings it
+# back, the cascade ends in success, which is what lets J09 prove the recovery.
+# breaker.open_timeout is shortened so the journey does not wait out the 5 minute
+# default; the default itself is covered by unit tests.
+#
 # healing.enabled + outage_handoff_enabled mirror the healing profile: with
 # healing off, worker_handoffs.go's handoffOrFail fails the task terminally
 # instead of creating the "Manual review required:" HUMAN child that J09
@@ -25,7 +32,7 @@ api:
   address: "0.0.0.0:8770"
 
 gateway:
-  order: [dead, dead2]
+  order: [dead, dead2, flaky]
   providers:
     - name: dead
       adapter: openai
@@ -41,6 +48,15 @@ gateway:
       model: "agentd"
       capabilities:
         chat_tools: true
+    - name: flaky
+      adapter: openai
+      base_url: "http://mockllm:8000/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "brk-outage"
+      capabilities:
+        chat_tools: true
+      options:
+        send_task_metadata: true
   warmup_enabled: false
   role_models:
     chat:  { provider: "", model: "" }
@@ -49,6 +65,9 @@ gateway:
 
 queue:
   token_budget: 50000
+
+breaker:
+  open_timeout: "10s"
 
 healing:
   enabled: true

@@ -152,6 +152,7 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	setSandboxDefaults(v)
 	setHealingDefaults(v)
 	v.SetDefault("breaker.handoff_after", defaultBreakerHandoffAfter.String())
+	v.SetDefault("breaker.open_timeout", defaultBreakerOpenTimeout.String())
 	v.SetDefault("disk.free_threshold_percent", defaultDiskFreeThresholdPercent)
 	v.SetDefault("heartbeat.stale_after", defaultHeartbeatStaleAfter.String())
 	setLibrarianDefaults(v)

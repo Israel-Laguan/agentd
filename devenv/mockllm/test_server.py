@@ -5,9 +5,14 @@ Run with:  python3 -m unittest discover -s devenv/mockllm -p 'test_server.py'
 (or `make test-mockllm` from the repo root).
 """
 
+import json
 import sys
+import threading
 import unittest
+import urllib.error
+import urllib.request
 from email.message import Message
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -123,6 +128,53 @@ class ChatCompletionDispatchTest(unittest.TestCase):
         result = server.chat_completion(body, headers())
         content = result["choices"][0]["message"]["content"]
         self.assertIn("command", content)
+
+
+class OutageTest(unittest.TestCase):
+    """POST /outage fails every request for one model until switched off."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        cls.base = f"http://127.0.0.1:{cls.httpd.server_port}"
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+
+    def tearDown(self):
+        server.set_outage("brk-outage", False)
+        server.set_outage("other", False)
+
+    def _post(self, path, payload):
+        req = urllib.request.Request(
+            self.base + path, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status
+        except urllib.error.HTTPError as err:
+            return err.code
+
+    def _chat(self, model):
+        return self._post(
+            "/v1/chat/completions", {"model": model, "messages": [{"role": "user", "content": "Task: x"}]}
+        )
+
+    def test_outage_fails_only_the_named_model_until_switched_off(self):
+        self.assertEqual(self._chat("brk-outage"), 200)
+        self.assertEqual(self._post("/outage", {"model": "brk-outage", "down": True}), 200)
+        self.assertEqual(self._chat("brk-outage"), 503)
+        self.assertEqual(self._chat("other"), 200)
+        self.assertEqual(self._post("/outage", {"model": "brk-outage", "down": False}), 200)
+        self.assertEqual(self._chat("brk-outage"), 200)
+
+    def test_outage_rejects_a_malformed_body(self):
+        self.assertEqual(self._post("/outage", {"model": "brk-outage"}), 400)
+        self.assertEqual(self._post("/outage", {"down": True}), 400)
+        self.assertFalse(server.in_outage("brk-outage"))
 
 
 if __name__ == "__main__":

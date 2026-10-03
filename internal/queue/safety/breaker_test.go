@@ -139,3 +139,41 @@ func TestReleaseProbeIsNoOpWhenNotHalfOpen(t *testing.T) {
 		t.Fatalf("state = %s, want OPEN", b.State())
 	}
 }
+
+func TestCircuitBreakerWithTimeoutHonorsTheConfiguredPause(t *testing.T) {
+	b := NewCircuitBreakerWithTimeout(30 * time.Second)
+	now := time.Now()
+	b.SetClockForTest(func() time.Time { return now })
+	for range defaultBreakerFailures {
+		b.RecordError(models.ErrLLMUnreachable)
+	}
+	now = now.Add(29 * time.Second)
+	if got := b.ProbeLimit(1); got != 0 {
+		t.Fatalf("ProbeLimit before the configured timeout = %d, want 0", got)
+	}
+	now = now.Add(time.Second)
+	if got := b.ProbeLimit(1); got != 1 {
+		t.Fatalf("ProbeLimit at the configured timeout = %d, want 1", got)
+	}
+}
+
+// A bad config value must never shorten the pause to nothing: it stays bounded
+// at the default.
+func TestCircuitBreakerWithNonPositiveTimeoutUsesDefault(t *testing.T) {
+	for _, timeout := range []time.Duration{0, -time.Minute} {
+		b := NewCircuitBreakerWithTimeout(timeout)
+		now := time.Now()
+		b.SetClockForTest(func() time.Time { return now })
+		for range defaultBreakerFailures {
+			b.RecordError(models.ErrLLMUnreachable)
+		}
+		now = now.Add(DefaultBreakerTimeout - time.Second)
+		if got := b.ProbeLimit(1); got != 0 {
+			t.Fatalf("timeout %v: ProbeLimit just before the default = %d, want 0", timeout, got)
+		}
+		now = now.Add(time.Second)
+		if got := b.ProbeLimit(1); got != 1 {
+			t.Fatalf("timeout %v: ProbeLimit at the default = %d, want 1", timeout, got)
+		}
+	}
+}

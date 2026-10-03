@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -168,5 +170,37 @@ func TestHealingConfig_MaxHealingTasksDefaultZero(t *testing.T) {
 	}
 	if cfg.MaxHealingTasks != 0 {
 		t.Errorf("MaxHealingTasks = %v, want 0 (no cap)", cfg.MaxHealingTasks)
+	}
+}
+
+func TestLoad_BreakerOpenTimeout(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want time.Duration
+	}{
+		{"default", "", 5 * time.Minute},
+		{"override", "breaker:\n  open_timeout: \"30s\"\n", 30 * time.Second},
+		{"zero falls back to default", "breaker:\n  open_timeout: \"0s\"\n", 5 * time.Minute},
+		{"negative falls back to default", "breaker:\n  open_timeout: \"-1m\"\n", 5 * time.Minute},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			homeDir := filepath.Join(t.TempDir(), "agentd")
+			if err := os.MkdirAll(homeDir, 0o755); err != nil {
+				t.Fatalf("mkdir home: %v", err)
+			}
+			configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+			if err := os.WriteFile(configPath, []byte(tc.body), 0o644); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			cfg, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if cfg.Breaker.OpenTimeout != tc.want {
+				t.Fatalf("Breaker.OpenTimeout = %v, want %v", cfg.Breaker.OpenTimeout, tc.want)
+			}
+		})
 	}
 }
