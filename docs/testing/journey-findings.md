@@ -95,7 +95,8 @@ applies everywhere.
 Contention comes from two suite artefacts:
 
 - **Task accumulation and state drift.** J08 SIGKILLs the daemon mid-task; its
-  recovery marks the killed task complete but leaves a sibling RUNNING for 60s.
+  boot reconcile resets the interrupted task to READY and it is re-dispatched
+  after about 60s.
   Each run accumulates more projects, tasks, and a small number of long-lived
   RUNNING/FAILED states. Across 4 runs: projects grow 0→26, tasks 0→29.
 - **No board cleanup.** Accumulated projects are never deleted (no DELETE route),
