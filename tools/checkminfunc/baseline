@@ -56,7 +56,6 @@ internal/config/health.go isOllamaHealthy
 internal/config/override_log.go envKeyForConfigKey
 internal/config/runtime_controls.go loadDiskConfig
 internal/config/runtime_controls.go loadHeartbeatConfig
-internal/config/runtime_controls.go loadBreakerConfig
 internal/config/show.go normalizeCompare
 internal/config/show.go fileConfigOverridePrefix
 internal/frontdesk/intake.go NewIntakeProcessor
@@ -96,7 +95,6 @@ internal/memory/librarian.go (*Librarian).archivesDir
 internal/models/comment_payload.go FormatCommentPayload
 internal/models/enums.go AllTaskStatesSlice
 internal/models/scheduled_task.go (ScheduledTaskKind).Valid
-internal/models/task.go isAttemptEvent
 internal/paths/expand_tilde.go ExpandTildePrefix
 internal/queue/channel.go classifyDispatchNack
 internal/queue/daemon.go (*Daemon).Stop
@@ -106,7 +104,10 @@ internal/queue/planning/phase_planning.go IsPhasePlanningTask
 internal/queue/rolling_budget.go (*RollingTokenLedger).Enabled
 internal/queue/safety/breaker.go NewCircuitBreaker
 internal/queue/safety/breaker.go (*CircuitBreaker).IsOpen
-internal/queue/safety/breaker.go (*CircuitBreaker).AllowRequest
+internal/queue/safety/breaker.go (*CircuitBreaker).RecordError
+internal/queue/safety/breaker.go (*CircuitBreaker).RecordSuccess
+internal/queue/safety/breaker_probe.go (*CircuitBreaker).AllowRequest
+internal/queue/safety/breaker_probe.go (*CircuitBreaker).ReleaseProbe
 internal/queue/safety/provider_breakers.go NewProviderBreakers
 internal/queue/safety/semaphore.go (*Semaphore).InUse
 internal/queue/safety/semaphore.go (*Semaphore).Capacity
@@ -168,6 +169,7 @@ internal/kanban/db/hitl_sql.go SelfHealingHandoffExcludeSQL
 internal/kanban/db/tasks_queries.go SelectTaskSQL
 internal/models/errors.go (*ProviderNotConfiguredError).Error
 internal/models/hitl.go IsSelfHealingHandoffTask
+internal/queue/safety/breaker_probe.go (*CircuitBreaker).clearProbeLocked
 internal/queue/worker/agentic/handlers.go (*Engine).applyAgenticTruncation
 internal/queue/worker/agentic/rewind.go resetAgenticStateForTopicDrift
 internal/queue/worker/agentic/setup.go (*Engine).newAgenticContextManagerOnly

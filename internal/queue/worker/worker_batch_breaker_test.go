@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/config"
 	"agentd/internal/models"
 	"agentd/internal/queue/safety"
 )
@@ -162,5 +163,40 @@ func TestProcessRunningTask_OpenBreakerStillHandsOff(t *testing.T) {
 	}
 	if got := store.tasks[task.ID].State; got == models.TaskStateReady {
 		t.Fatalf("state = %s, want a handoff or failure, not a requeue, while OPEN", got)
+	}
+}
+
+// B-014: a batch that takes the probe and then ends without recording a verdict
+// (here the batched gateway call itself failed with a non-breaker error, so the
+// provider never reported anything) must hand the slot back. The probe belongs to
+// the first task in the batch, so its release is the one that has to work.
+func TestProcessBatch_ProbeWithoutVerdictReleasesTheSlot(t *testing.T) {
+	t.Parallel()
+	store := &batchTestStore{
+		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp/ws"},
+		profile: models.AgentProfile{ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: true},
+		tasks:   make(map[string]models.Task),
+		results: make(map[string]*models.TaskResult),
+	}
+	tasks := summarizeTasks(3)
+	for _, task := range tasks {
+		store.tasks[task.ID] = task
+	}
+	clock := time.Now()
+	pb := trippedOpenAIBreakers(&clock)
+	clock = clock.Add(6 * time.Minute)
+	w := NewWorker(store, &batchFailingGateway{}, nil, nil, nil, WorkerOptions{
+		ProviderBreakers: pb,
+		Batching:         config.BatchingConfig{Enabled: true, MaxBatchSize: 5},
+		ToolManifest:     config.ToolManifestConfig{Enabled: true, MinConfidence: 0.35},
+	})
+
+	w.ProcessBatch(context.Background(), tasks)
+
+	if got := pb.Get("openai").State(); got != safety.BreakerHalfOpen {
+		t.Fatalf("state = %s, want HALF_OPEN (no verdict recorded)", got)
+	}
+	if got := pb.Get("openai").AdmitFor(tasks[1].ID); got != safety.AdmissionProbe {
+		t.Fatalf("AdmitFor after the batch released its probe = %v, want the probe slot back", got)
 	}
 }

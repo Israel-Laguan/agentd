@@ -33,6 +33,7 @@ type CircuitBreaker struct {
 	now          func() time.Time
 	timeout      time.Duration
 	inflight     bool
+	probeOwner   string
 }
 
 func NewCircuitBreaker() *CircuitBreaker {
@@ -101,95 +102,18 @@ func (b *CircuitBreaker) LastError() error {
 	return b.lastError
 }
 
-func (b *CircuitBreaker) AllowRequest() bool {
-	return b.ProbeLimit(1) > 0
-}
-
-func (b *CircuitBreaker) ProbeLimit(available int) int {
-	if available <= 0 {
-		return 0
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.probeLocked(available)
-}
-
-// Admission is the outcome of asking a breaker whether one request may run.
-type Admission int
-
-const (
-	// AdmissionDenied: the breaker is OPEN and its timeout has not elapsed.
-	AdmissionDenied Admission = iota
-	// AdmissionProbeInFlight: the breaker is HALF_OPEN and another request holds
-	// the probe slot, so the provider's state is not known yet.
-	AdmissionProbeInFlight
-	// AdmissionGranted: the breaker is CLOSED; no probe slot was taken.
-	AdmissionGranted
-	// AdmissionProbe: the request took the HALF_OPEN probe slot and must record an
-	// outcome or ReleaseProbe.
-	AdmissionProbe
-)
-
-// Admit is the per-request form of ProbeLimit(1) for callers that gate one
-// task at a time. The reason a request is refused is decided under the same lock
-// as the refusal, so a probe resolving in between cannot change it.
-func (b *CircuitBreaker) Admit() Admission {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.state == BreakerClosed {
-		return AdmissionGranted
-	}
-	if b.probeLocked(1) > 0 {
-		return AdmissionProbe
-	}
-	if b.state == BreakerHalfOpen {
-		return AdmissionProbeInFlight
-	}
-	return AdmissionDenied
-}
-
-func (b *CircuitBreaker) probeLocked(available int) int {
-	switch b.state {
-	case BreakerOpen:
-		if b.now().Sub(b.tripTime) < b.timeout {
-			return 0
-		}
-		b.state = BreakerHalfOpen
-		b.inflight = false
-		fallthrough
-	case BreakerHalfOpen:
-		if b.inflight {
-			return 0
-		}
-		b.inflight = true
-		return 1
-	default:
-		return available
-	}
-}
-
-// ProbeHeld reports whether the HALF_OPEN probe slot is currently taken. A
-// caller that asked ProbeLimit for capacity calls it to learn whether it now
-// owns a probe it must resolve with an outcome or ReleaseProbe. It is false
-// while the breaker is CLOSED, because no slot is taken then.
-func (b *CircuitBreaker) ProbeHeld() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.state == BreakerHalfOpen && b.inflight
-}
-
-// ReleaseProbe returns the HALF_OPEN probe slot taken by ProbeLimit when the
-// caller ended up dispatching nothing, so a later tick with work can use it.
-// It never changes the breaker state: only a recorded outcome does that.
-func (b *CircuitBreaker) ReleaseProbe() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.state == BreakerHalfOpen {
-		b.inflight = false
-	}
-}
-
 func (b *CircuitBreaker) RecordError(err error) {
+	b.RecordErrorFor("", err)
+}
+
+// RecordErrorFor counts a provider failure reported for owner.
+//
+// The failure count, the last error and the breaker state move whoever reported
+// them: a task admitted while the breaker was CLOSED is still evidence about the
+// provider, and ignoring it would let a real outage look recovered. Only the
+// HALF_OPEN probe slot is reserved for the task that holds it, so a verdict from
+// any other task cannot hand a second probe to a sibling (B-014).
+func (b *CircuitBreaker) RecordErrorFor(owner string, err error) {
 	if !ClassifiesAsBreakerFailure(err) {
 		return
 	}
@@ -197,7 +121,7 @@ func (b *CircuitBreaker) RecordError(err error) {
 	defer b.mu.Unlock()
 	b.failureCount++
 	b.lastError = err
-	b.inflight = false
+	b.settleProbeLocked(owner)
 	if b.failureCount >= defaultBreakerFailures {
 		b.state = BreakerOpen
 		b.tripTime = b.now()
@@ -205,13 +129,35 @@ func (b *CircuitBreaker) RecordError(err error) {
 }
 
 func (b *CircuitBreaker) RecordSuccess() {
+	b.RecordSuccessFor("")
+}
+
+// RecordSuccessFor closes the breaker after a provider request for owner
+// succeeded.
+//
+// Any task's success is evidence the provider is up, so the breaker closes
+// whoever reports it — that is existing behaviour and a stuck OPEN breaker is the
+// worse failure. The probe slot is settled by its holder alone, which is safe
+// because probeLocked clears it whenever the breaker next reaches HALF_OPEN.
+func (b *CircuitBreaker) RecordSuccessFor(owner string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.failureCount = 0
 	b.state = BreakerClosed
 	b.tripTime = time.Time{}
 	b.lastError = nil
-	b.inflight = false
+	b.settleProbeLocked(owner)
+}
+
+// settleProbeLocked returns the HALF_OPEN probe slot to the pool when owner holds
+// it, and does nothing for any other owner: only the holder's own outcome settles
+// a probe (B-014). The unowned slot taken by ProbeLimit and Admit has no holder
+// to match, so the plain unscoped verdict and ReleaseProbe settle it, which is
+// what the dispatch path relies on.
+func (b *CircuitBreaker) settleProbeLocked(owner string) {
+	if b.state == BreakerHalfOpen && b.inflight && b.probeOwner == owner {
+		b.inflight = false
+	}
 }
 
 // ForceStateForTest overrides internal state for integration tests.
@@ -220,7 +166,7 @@ func (b *CircuitBreaker) ForceStateForTest(state BreakerState, tripTime time.Tim
 	defer b.mu.Unlock()
 	b.state = state
 	b.tripTime = tripTime
-	b.inflight = false
+	b.clearProbeLocked()
 }
 
 // Reset unconditionally returns the breaker to the CLOSED state and clears
@@ -233,7 +179,7 @@ func (b *CircuitBreaker) Reset() {
 	b.failureCount = 0
 	b.tripTime = time.Time{}
 	b.lastError = nil
-	b.inflight = false
+	b.clearProbeLocked()
 }
 
 // ArmForResilienceTest configures an OPEN breaker for queue integration tests.
@@ -245,7 +191,7 @@ func (b *CircuitBreaker) ArmForResilienceTest(now, tripTime time.Time, failureCo
 	b.tripTime = tripTime
 	b.failureCount = failureCount
 	b.lastError = lastErr
-	b.inflight = false
+	b.clearProbeLocked()
 }
 
 func ClassifiesAsBreakerFailure(err error) bool {

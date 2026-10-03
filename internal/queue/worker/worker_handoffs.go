@@ -48,7 +48,9 @@ func (w *Worker) HandleGatewayError(ctx context.Context, task models.Task, err e
 	if safety.ClassifiesAsBreakerFailure(err) {
 		if errors.Is(err, models.ErrLLMQuotaExceeded) {
 			if w.providerBreakers != nil {
-				w.providerBreakers.Get(w.lookupProvider(ctx, task)).RecordError(err)
+				// Named after the task so a task that is not the probe updates the
+				// failure count without settling the probe slot (B-014).
+				w.providerBreakers.Get(w.lookupProvider(ctx, task)).RecordErrorFor(task.ID, err)
 			}
 			w.handoffOrFail(ctx, task, err)
 			return
