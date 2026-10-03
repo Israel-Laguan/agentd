@@ -130,6 +130,18 @@ class ChatCompletionDispatchTest(unittest.TestCase):
         self.assertIn("command", content)
 
 
+class SlowCommandTest(unittest.TestCase):
+    def test_slow_command_finishes_inside_the_sandbox_inactivity_limit(self):
+        # sandbox.inactivity_timeout defaults to 60s; a slow task that outlives it
+        # can never complete, so a re-run after recovery would always time out.
+        self.assertLess(server.SLOW_TICKS, 60)
+
+    def test_slow_command_prints_every_tick_through_the_last(self):
+        command = server.slow_command()
+        self.assertIn(f"-lt {server.SLOW_TICKS}", command)
+        self.assertIn("echo tick $i", command)
+
+
 class OutageTest(unittest.TestCase):
     """POST /outage fails every request for one model until switched off."""
 
