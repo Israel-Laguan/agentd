@@ -183,16 +183,18 @@ J06 wanted `task-started` / `task-claimed` / `task-completed`, and claim and sta
 write no event row (the same finding J14 made), so it could never pass. Redefined as
 **"the drawer renders the task's durable event log"** — the events that exist.
 
-**Fixtures are captured, not invented.** `GET /api/v1/tasks/{id}/events` was read off
-the devenv stack after `TestJ08_UncleanKillRecovery`, and the test's events are that
-response verbatim: `WARNING`, `RECOVERY`, `TOKEN_USAGE`, `LOG_CHUNK`, `RESULT`, with
-real payloads and nanosecond timestamps. So the tests fail if the wire shape drifts,
-not only if the markup does. The stack was reset with `make dev-clean && make dev-up`
-first, per the B-008 stale-image trap.
+**Fixtures are captured, then adapted.** `GET /api/v1/tasks/{id}/events` was read off
+the devenv stack after `TestJ08_UncleanKillRecovery`. `WARNING`, `RECOVERY`,
+`TOKEN_USAGE` and `LOG_CHUNK` are the captured rows, with real payloads and nanosecond
+timestamps. The `RESULT` row's id, timestamp and payload were trimmed, the drawer
+fixture rewrites `task_id` to `task-under-test`, and its `some-other-task` event is
+invented. The snapshots pin the wire shape as of 2026-10-01; nothing re-validates them
+against the live endpoint, so they do not detect later drift. The stack was reset with
+`make dev-clean && make dev-up` first, per the B-008 stale-image trap.
 
 **Three of the item's premises were wrong**, checked against the code:
 
-- "First component tests in `web/`" — `web/` already had 16 vitest files. These are the
+- "First component tests in `web/`" — `web/` already had 17 vitest files. These are the
   first for these two components, not the first in the repo.
 - The drawer's three behaviours were already implemented: the `task_id` filter is
   inline in `task-drawer.tsx`, `eventRefreshKey` is in the effect deps, and the reject

@@ -5,9 +5,9 @@ import { TaskEventList } from "./task-event-list";
 
 // Captured verbatim from GET /api/v1/tasks/e6e62f50-.../events on the devenv
 // stack (2026-10-01, T-034), after TestJ08_UncleanKillRecovery ran. Types and
-// payload strings are the real wire values, so the test fails if the shape
-// drifts rather than merely if the markup changes. The RESULT row is real
-// except for its id and payload, which were trimmed to keep the fixture short.
+// payload strings are the real wire values, pinned as a static snapshot (nothing
+// re-validates them against the live endpoint). The RESULT row is real except
+// for its id, timestamp and payload, which were trimmed to keep the fixture short.
 const CAPTURED_EVENTS: TaskEvent[] = [
   {
     id: "59919cd9-183e-4bd2-aef8-25219c819cfd",

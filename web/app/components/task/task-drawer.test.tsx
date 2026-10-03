@@ -40,6 +40,16 @@ const OTHER_TASK_EVENT: TaskEvent = {
   updated_at: "2026-10-01T17:34:00.000000000Z",
 };
 
+const NEW_SAME_TASK_EVENT: TaskEvent = {
+  id: "88888888-8888-4888-8888-888888888888",
+  project_id: "89bfee74-42b5-433f-bbf1-260bd9f5e36d",
+  task_id: "task-under-test",
+  type: "LOG_CHUNK",
+  payload: "tick 1",
+  created_at: "2026-10-01T17:33:50.000000000Z",
+  updated_at: "2026-10-01T17:33:50.000000000Z",
+};
+
 const task: Task = {
   id: "task-under-test",
   title: "list files in the workspace",
@@ -96,10 +106,11 @@ describe("TaskDrawer event log", () => {
     await waitFor(() => expect(screen.getByText("Task events")).toBeInTheDocument());
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
-    mockFetch.mockResolvedValue([...CAPTURED_EVENTS, OTHER_TASK_EVENT]);
+    mockFetch.mockResolvedValue([...CAPTURED_EVENTS, NEW_SAME_TASK_EVENT]);
     rerender(<TaskDrawer task={task} onClose={vi.fn()} eventRefreshKey={1} />);
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText("tick 1")).toBeInTheDocument());
   });
 
   // A rejected read must clear the log, not merely leave it empty on a fresh
