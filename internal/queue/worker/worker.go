@@ -184,9 +184,8 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 	if w.tryTieredOrigin(ctx, task) {
 		return
 	}
-	release, err := w.admitProvider(profile.Provider)
-	if err != nil {
-		w.handoffOrFail(ctx, task, err)
+	release, ok := w.gateProvider(ctx, task, profile.Provider)
+	if !ok {
 		return
 	}
 	defer release()

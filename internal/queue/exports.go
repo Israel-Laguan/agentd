@@ -89,6 +89,8 @@ const (
 	BreakerClosed   = safety.BreakerClosed
 	BreakerOpen     = safety.BreakerOpen
 	BreakerHalfOpen = safety.BreakerHalfOpen
+	AdmissionDenied = safety.AdmissionDenied
+	AdmissionProbe  = safety.AdmissionProbe
 )
 
 var NewCircuitBreaker = safety.NewCircuitBreaker

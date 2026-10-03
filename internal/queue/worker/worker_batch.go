@@ -111,9 +111,8 @@ func (w *Worker) processRunningTask(
 	profile models.AgentProfile,
 ) {
 	defer w.recoverPanic(ctx, task)
-	release, err := w.admitProvider(profile.Provider)
-	if err != nil {
-		w.handoffOrFail(ctx, task, err)
+	release, ok := w.gateProvider(ctx, task, profile.Provider)
+	if !ok {
 		return
 	}
 	defer release()

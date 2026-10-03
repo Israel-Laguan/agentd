@@ -114,18 +114,38 @@ func (b *CircuitBreaker) ProbeLimit(available int) int {
 	return b.probeLocked(available)
 }
 
+// Admission is the outcome of asking a breaker whether one request may run.
+type Admission int
+
+const (
+	// AdmissionDenied: the breaker is OPEN and its timeout has not elapsed.
+	AdmissionDenied Admission = iota
+	// AdmissionProbeInFlight: the breaker is HALF_OPEN and another request holds
+	// the probe slot, so the provider's state is not known yet.
+	AdmissionProbeInFlight
+	// AdmissionGranted: the breaker is CLOSED; no probe slot was taken.
+	AdmissionGranted
+	// AdmissionProbe: the request took the HALF_OPEN probe slot and must record an
+	// outcome or ReleaseProbe.
+	AdmissionProbe
+)
+
 // Admit is the per-request form of ProbeLimit(1) for callers that gate one
-// task at a time. probe reports that the request took the HALF_OPEN probe slot,
-// so the caller must record an outcome or ReleaseProbe; a CLOSED breaker admits
-// without a slot.
-func (b *CircuitBreaker) Admit() (allowed, probe bool) {
+// task at a time. The reason a request is refused is decided under the same lock
+// as the refusal, so a probe resolving in between cannot change it.
+func (b *CircuitBreaker) Admit() Admission {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.state == BreakerClosed {
-		return true, false
+		return AdmissionGranted
 	}
-	allowed = b.probeLocked(1) > 0
-	return allowed, allowed
+	if b.probeLocked(1) > 0 {
+		return AdmissionProbe
+	}
+	if b.state == BreakerHalfOpen {
+		return AdmissionProbeInFlight
+	}
+	return AdmissionDenied
 }
 
 func (b *CircuitBreaker) probeLocked(available int) int {

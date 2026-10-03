@@ -70,25 +70,63 @@ func TestWorkerProviderBreakerFailedProbeReopens(t *testing.T) {
 	if got := pb.Get("gemini").State(); got != BreakerOpen {
 		t.Fatalf("state after failed probe = %s, want OPEN", got)
 	}
-	if allowed, _ := pb.Get("gemini").Admit(); allowed {
+	if got := pb.Get("gemini").Admit(); got != AdmissionDenied {
 		t.Fatal("a failed probe must restart the timeout, but the breaker admitted again at once")
 	}
 }
 
-func TestWorkerProviderBreakerRefusesSiblingWhileProbeInFlight(t *testing.T) {
+// B-013: while another task holds the probe slot, a sibling for the same provider
+// must wait (back to READY, no gateway call, no handoff) rather than be handed to a
+// human as if the provider were still down.
+func TestWorkerProviderBreakerSiblingWaitsWhileProbeInFlight(t *testing.T) {
 	store := providerStore()
 	pb, clock := trippedProviderBreakers(t)
 	*clock = clock.Add(6 * time.Minute)
-	if allowed, probe := pb.Get("gemini").Admit(); !allowed || !probe {
-		t.Fatalf("setup: Admit() = %v, %v, want the probe slot", allowed, probe)
+	if got := pb.Get("gemini").Admit(); got != AdmissionProbe {
+		t.Fatalf("setup: Admit() = %v, want the probe slot", got)
 	}
 	gw := &fakeGateway{content: `{"command":"echo ok"}`}
-	worker := NewWorker(store, gw, &fakeSandbox{}, NewCircuitBreaker(), &recordingSink{}, WorkerOptions{ProviderBreakers: pb})
+	sink := &recordingSink{}
+	worker := NewWorker(store, gw, &fakeSandbox{}, NewCircuitBreaker(), sink, WorkerOptions{ProviderBreakers: pb})
 
 	worker.Process(context.Background(), store.task)
 
 	if len(gw.requests) != 0 {
 		t.Fatalf("gateway requests = %d, want 0 while another task holds the probe slot", len(gw.requests))
+	}
+	if store.task.State != models.TaskStateReady {
+		t.Fatalf("sibling state = %s, want READY (waiting for the probe)", store.task.State)
+	}
+	if sink.hasEvent("PROVIDER_EXHAUSTED_HANDOFF") {
+		t.Fatal("sibling was handed off while the provider's probe was still in flight")
+	}
+	if got := pb.Get("gemini").State(); got != BreakerHalfOpen {
+		t.Fatalf("breaker state = %s, want HALF_OPEN (the probe has not resolved)", got)
+	}
+	if sink.hasEvent("RETRY") {
+		t.Fatal("waiting on a probe must not emit a RETRY event on every tick")
+	}
+	if store.task.RetryCount != 0 {
+		t.Fatalf("RetryCount = %d, want 0 (waiting is not a retry)", store.task.RetryCount)
+	}
+}
+
+// A breaker that is genuinely OPEN (timeout not yet reached) still hands the task
+// off: only the probe-in-flight case waits.
+func TestWorkerProviderBreakerStillOpenHandsOff(t *testing.T) {
+	store := providerStore()
+	pb, _ := trippedProviderBreakers(t)
+	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	sink := &recordingSink{}
+	worker := NewWorker(store, gw, &fakeSandbox{}, NewCircuitBreaker(), sink, WorkerOptions{ProviderBreakers: pb})
+
+	worker.Process(context.Background(), store.task)
+
+	if len(gw.requests) != 0 {
+		t.Fatalf("gateway requests = %d, want 0 while the provider breaker is OPEN", len(gw.requests))
+	}
+	if store.task.State == models.TaskStateReady {
+		t.Fatalf("task state = %s, want it handed off or failed, not requeued, while OPEN", store.task.State)
 	}
 }
 
@@ -107,7 +145,7 @@ func TestWorkerProviderBreakerReleasesProbeWithoutVerdict(t *testing.T) {
 	if got := pb.Get("gemini").State(); got != BreakerHalfOpen {
 		t.Fatalf("state = %s, want HALF_OPEN (no verdict recorded)", got)
 	}
-	if allowed, _ := pb.Get("gemini").Admit(); !allowed {
+	if got := pb.Get("gemini").Admit(); got != AdmissionProbe {
 		t.Fatal("probe slot stayed taken after the probe task ended without a verdict")
 	}
 }
@@ -120,8 +158,8 @@ func TestProviderBreakersHonourConfiguredTimeout(t *testing.T) {
 		pb.Get("gemini").RecordError(models.ErrLLMQuotaExceeded)
 	}
 	clock = clock.Add(11 * time.Second)
-	if allowed, probe := pb.Get("gemini").Admit(); !allowed || !probe {
-		t.Fatalf("Admit() after 11s of a 10s timeout = %v, %v, want the probe slot", allowed, probe)
+	if got := pb.Get("gemini").Admit(); got != AdmissionProbe {
+		t.Fatalf("Admit() after 11s of a 10s timeout = %v, want the probe slot", got)
 	}
 }
 
