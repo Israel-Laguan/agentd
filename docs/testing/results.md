@@ -343,3 +343,38 @@ Both sets of tests are written to fail if the behaviour ever changes, so the
 accepted limits cannot silently stop being true — the `withoutOwnPID` mutation
 turns SP-010's discriminator test red, and SP-013's claim-count test is
 self-checked against a double claim.
+
+### S10 cycle: breaker recovery and re-run result (2026-10-03)
+
+Fixed:
+
+- **T-035a (latch).** A HALF_OPEN probe slot taken on a tick that dispatched nothing is
+  now released (`CircuitBreaker.ReleaseProbe`, called from `dispatch`). The failing test
+  (`TestDispatchReleasesProbeSlotWhenQueueIsEmptyAtTimeout`) was red first, then green;
+  neutralising the release turns it and the breaker unit test red.
+- **T-035b.** `breaker.open_timeout` (default `5m`, non-positive falls back to it) is read
+  from config. J09 now covers the recovery: the breaker profile has a third provider on a
+  mock model the journey takes down and back (`POST /outage` on the mock LLM) and a 10s
+  timeout. Measured: breaker CLOSED and a waiting task COMPLETED **19s** after the provider
+  returned, with no reset call. With `open_timeout` put back at `5m` the journey fails at
+  its 55s bound.
+- **T-036a.** J08 now asserts the re-run's result. Measured: COMPLETED with the final line
+  in RESULT; a wrong marker fails it. J08 is **34.6s** (was 123s) because the slow command
+  is 30s, not 60s.
+- **T-036c.** Deleted `BuildExecutionPayload`, `ExecutionPayload.PreviousAttempts` and
+  their test; J08 shows a re-run completes without knowing the earlier attempt. The
+  contract is in `docs/architecture/recovery-rerun.md`.
+
+Found:
+
+- J08's 60s fixture could never complete: the re-run was killed at the 60s inactivity
+  limit on every attempt and evicted with `POISON_PILL_HANDOFF`. Cause is B-011, a
+  product defect (the inactivity timer is per stream, so a command silent on stderr is
+  killed at the limit however much it prints on stdout). Filed for S11.
+- Per-provider breakers are never probed, so an open one stays open until reset (B-012,
+  from reading the code, not yet reproduced). Filed for S11.
+- T-036b is not buildable as written: the workspace is per project and a project's seed
+  is not recorded. Split to B-010 with a recommended shape.
+
+`make check` green. J09 `TestJ09_BreakerOpens` and J08 `TestJ08_UncleanKillRecovery`
+pass against the rebuilt stack; the rest of `make test-e2e` was not run.

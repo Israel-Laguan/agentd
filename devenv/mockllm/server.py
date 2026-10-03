@@ -129,10 +129,17 @@ def build_command(task_id: str, title: str) -> str:
     )
 
 
+# The command must finish inside the sandbox's 60s inactivity limit. That limit is
+# tracked per stream and stderr stays silent here, so a longer command is killed at
+# 60s no matter how much stdout it prints (a sandbox defect filed as B-011). Staying
+# well under it lets the re-run of a recovered task (J08) run to completion.
+SLOW_TICKS = 30
+
+
 def slow_command():
-    # Emits output every second so the executor's inactivity timeout never
-    # fires; lets a journey kill the daemon while the task is RUNNING.
-    return 'i=0; while [ $i -lt 60 ]; do echo tick $i; i=$((i+1)); sleep 1; done'
+    # Emits output every second; lets a journey kill the daemon while the task is
+    # RUNNING, and the last line ("tick 29") shows the command ran to the end.
+    return f'i=0; while [ $i -lt {SLOW_TICKS} ]; do echo tick $i; i=$((i+1)); sleep 1; done'
 
 
 def task_from_text(part: str) -> dict:

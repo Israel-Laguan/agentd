@@ -16,14 +16,13 @@ type ExecutionPayload struct {
 	Context       string
 
 	// Legacy/compatibility fields currently used by the queue and sandbox path.
-	ProjectID        string
-	Command          string
-	EnvVars          []string
-	TimeoutLimit     int
-	WallTimeout      time.Duration
-	PreviousAttempts []string
-	Why              string
-	What             string
+	ProjectID    string
+	Command      string
+	EnvVars      []string
+	TimeoutLimit int
+	WallTimeout  time.Duration
+	Why          string
+	What         string
 }
 
 // ExecutionResult is the cross-box return shape from sandbox to queue/store.
@@ -49,33 +48,4 @@ func (r ExecutionResult) Err() error {
 		return nil
 	}
 	return errors.New(r.FatalError)
-}
-
-// BuildExecutionPayload converts persisted Kanban state into gateway input.
-func BuildExecutionPayload(task Task, project Project, history []Event) ExecutionPayload {
-	attempts := previousAttempts(task.ID, history)
-	return ExecutionPayload{
-		TaskID:           task.ID,
-		WorkspacePath:    project.WorkspacePath,
-		Intent:           task.Description,
-		Context:          project.OriginalInput,
-		ProjectID:        task.ProjectID,
-		PreviousAttempts: attempts,
-		Why:              project.OriginalInput,
-		What:             task.Description,
-	}
-}
-
-func previousAttempts(taskID string, history []Event) []string {
-	attempts := make([]string, 0, len(history))
-	for _, event := range history {
-		if event.TaskID.Valid && event.TaskID.String == taskID && isAttemptEvent(event.Type) {
-			attempts = append(attempts, event.Payload)
-		}
-	}
-	return attempts
-}
-
-func isAttemptEvent(eventType EventType) bool {
-	return eventType == EventTypeLog || eventType == EventTypeFailure
 }
