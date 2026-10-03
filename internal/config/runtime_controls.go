@@ -34,6 +34,21 @@ type BreakerConfig struct {
 	OpenTimeout time.Duration
 }
 
+// RecoveryConfig tunes how interrupted tasks are recovered.
+type RecoveryConfig struct {
+	// CleanWorkspaceOnRecover resets a recovered task's project workspace to its
+	// empty starting state at boot, before the task is re-run. Opt-in: the reset
+	// refuses (and fails the task) when it cannot restore the project's starting
+	// state or would delete another task's output. See docs/architecture/recovery-rerun.md.
+	CleanWorkspaceOnRecover bool
+}
+
+func loadRecoveryConfig(v *viper.Viper) RecoveryConfig {
+	return RecoveryConfig{
+		CleanWorkspaceOnRecover: v.GetBool("recovery.clean_workspace_on_recover"),
+	}
+}
+
 const defaultDiskFreeThresholdPercent = 10.0
 
 type DiskConfig struct {

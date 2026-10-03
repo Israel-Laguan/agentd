@@ -89,3 +89,75 @@ func TestSecureDeleteRemovesProjectOnly(t *testing.T) {
 		t.Fatalf("root should remain: %v", err)
 	}
 }
+
+func TestResetProjectDirEmptiesWorkspaceAndKeepsIt(t *testing.T) {
+	root := t.TempDir()
+	manager := &FSWorkspaceManager{Root: root}
+	dir, err := manager.EnsureProjectDir(context.Background(), "project-1")
+	if err != nil {
+		t.Fatalf("EnsureProjectDir() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sub", "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sibling, err := manager.EnsureProjectDir(context.Background(), "project-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sibling, "keep.txt"), []byte("k"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := manager.ResetProjectDir(context.Background(), "project-1"); err != nil {
+		t.Fatalf("ResetProjectDir() error = %v", err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("ReadDir(%s) = %v, %v; want an existing, empty workspace", dir, entries, err)
+	}
+	if _, err := os.Stat(filepath.Join(sibling, "keep.txt")); err != nil {
+		t.Fatalf("another project's file was touched: %v", err)
+	}
+}
+
+func TestResetProjectDirIsJailed(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "ws")
+	outside := filepath.Join(base, "outside")
+	for _, dir := range []string{root, outside} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, path := range []string{filepath.Join(root, "rootfile.txt"), filepath.Join(outside, "outsidefile.txt")} {
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	manager := &FSWorkspaceManager{Root: root}
+
+	for name, projectID := range map[string]string{
+		"workspace root":   "",
+		"dot-dot escape":   "../outside",
+		"symlink to other": "escape",
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := manager.ResetProjectDir(context.Background(), projectID)
+			if !errors.Is(err, models.ErrSandboxViolation) {
+				t.Fatalf("ResetProjectDir(%q) error = %v, want ErrSandboxViolation", projectID, err)
+			}
+		})
+	}
+	for _, path := range []string{filepath.Join(root, "rootfile.txt"), filepath.Join(outside, "outsidefile.txt")} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s was deleted by a refused reset: %v", path, err)
+		}
+	}
+}

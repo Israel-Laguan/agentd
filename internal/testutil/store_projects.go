@@ -21,6 +21,7 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 		OriginalInput: plan.Description,
 		WorkspacePath: filepath.Join(s.projectsDir, projectID),
 		UserID:        strings.TrimSpace(plan.UserID),
+		StartedEmpty:  plan.StartEmptyWorkspace && strings.TrimSpace(plan.SourcePath) == "",
 	}
 	s.projects[project.ID] = project
 	tempToID := make(map[string]string, len(plan.Tasks))

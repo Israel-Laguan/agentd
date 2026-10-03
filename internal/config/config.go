@@ -41,6 +41,7 @@ type Config struct {
 	Sandbox     SandboxConfig
 	Healing     HealingConfig
 	Breaker     BreakerConfig
+	Recovery    RecoveryConfig
 	Disk        DiskConfig
 	Heartbeat   HeartbeatConfig
 	Librarian   LibrarianConfig
@@ -153,6 +154,7 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	setHealingDefaults(v)
 	v.SetDefault("breaker.handoff_after", defaultBreakerHandoffAfter.String())
 	v.SetDefault("breaker.open_timeout", defaultBreakerOpenTimeout.String())
+	v.SetDefault("recovery.clean_workspace_on_recover", false)
 	v.SetDefault("disk.free_threshold_percent", defaultDiskFreeThresholdPercent)
 	v.SetDefault("heartbeat.stale_after", defaultHeartbeatStaleAfter.String())
 	setLibrarianDefaults(v)
@@ -197,6 +199,7 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	cfg.Sandbox = loadSandboxConfig(v)
 	cfg.Healing = loadHealingConfig(v)
 	cfg.Breaker = loadBreakerConfig(v)
+	cfg.Recovery = loadRecoveryConfig(v)
 	cfg.Disk = loadDiskConfig(v)
 	cfg.Heartbeat = loadHeartbeatConfig(v)
 	cfg.Librarian = loadLibrarianConfig(v)

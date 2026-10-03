@@ -67,6 +67,36 @@ func (m *FSWorkspaceManager) SecureDelete(ctx context.Context, projectID string)
 	return nil
 }
 
+// ResetProjectDir empties a project's workspace but keeps the directory itself,
+// so the persisted workspace path stays valid for the re-run. Like SecureDelete
+// it acts only on a path jailed under the configured root and refuses the root.
+func (m *FSWorkspaceManager) ResetProjectDir(ctx context.Context, projectID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	dir, err := JailPath(m.Root, m.ProjectDir(projectID))
+	if err != nil {
+		return err
+	}
+	root, err := filepath.EvalSymlinks(m.Root)
+	if err != nil {
+		return fmt.Errorf("resolve workspace root: %w", err)
+	}
+	if filepath.Clean(dir) == filepath.Clean(root) {
+		return fmt.Errorf("%w: refusing to reset workspace root", models.ErrSandboxViolation)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("read project workspace %s: %w", dir, err)
+	}
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return fmt.Errorf("reset project workspace %s: %w", dir, err)
+		}
+	}
+	return nil
+}
+
 // JailPath resolves requested and verifies it remains inside workspaceRoot.
 func JailPath(workspaceRoot, requested string) (string, error) {
 	root, err := filepath.EvalSymlinks(workspaceRoot)

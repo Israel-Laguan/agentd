@@ -20,6 +20,7 @@ import (
 
 type Daemon struct {
 	store                    models.KanbanStore
+	workspaceReset           recovery.WorkspaceResetter
 	worker                   *qw.Worker
 	intake                   *frontdesk.IntakeProcessor
 	breaker                  *safety.CircuitBreaker
@@ -86,6 +87,9 @@ type DaemonOptions struct {
 	RollingTokenLedger      *RollingTokenLedger
 	Scheduler               *Scheduler
 	SchedulerTickInterval   time.Duration
+	// WorkspaceReset, when non-nil, makes boot reconcile reset recovered tasks'
+	// workspaces (recovery.clean_workspace_on_recover). Nil leaves them as is.
+	WorkspaceReset recovery.WorkspaceResetter
 }
 
 func NewDaemon(
@@ -121,12 +125,13 @@ func NewDaemon(
 		rollingLedger:           opts.RollingTokenLedger,
 		scheduler:               opts.Scheduler,
 		schedulerTickEvery:      opts.SchedulerTickInterval,
+		workspaceReset:          opts.WorkspaceReset,
 	}
 }
 
 func (d *Daemon) Start(ctx context.Context) error {
 	slog.Debug("boot reconcile starting")
-	if err := recovery.BootReconcile(ctx, d.store, d.probe, d.sink); err != nil {
+	if err := recovery.BootReconcile(ctx, d.store, d.probe, d.sink, d.bootOptions()...); err != nil {
 		return err
 	}
 	logDaemonError("orphaned queued reconcile failed", d.reconcileOrphanedQueued(ctx))
@@ -248,4 +253,12 @@ func logDaemonError(msg string, err error) {
 	if err != nil {
 		slog.Error(msg, "error", err)
 	}
+}
+
+// bootOptions maps daemon settings onto boot reconcile options.
+func (d *Daemon) bootOptions() []recovery.BootOption {
+	if d.workspaceReset == nil {
+		return nil
+	}
+	return []recovery.BootOption{recovery.WithWorkspaceReset(d.workspaceReset)}
 }

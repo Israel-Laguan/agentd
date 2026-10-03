@@ -41,6 +41,12 @@ healing:
   enabled: false
   outage_handoff_enabled: false
 
+# J08 proves the opt-in reset: after an unclean kill, boot reconcile empties the
+# start-empty project's workspace so the re-run does not see the first attempt's
+# marker file. Off by default in the product.
+recovery:
+  clean_workspace_on_recover: true
+
 # MCP board tools, enabled so the J15 journey can exercise /mcp. Off by
 # default in the product (mcp.enabled defaults to false, transport stdio);
 # the HTTP transport rides on api.address above — there is no separate

@@ -20,6 +20,9 @@ type GopsutilProbe = safety.GopsutilProbe
 // and integration tests rooted at internal/queue.
 var BootReconcile = recovery.BootReconcile
 
+// WorkspaceResetter re-exports recovery.WorkspaceResetter for cmd wiring.
+type WorkspaceResetter = recovery.WorkspaceResetter
+
 const (
 	RebootRecoveryHandoffEventType = recovery.RebootRecoveryHandoffEventType
 	HeartbeatReconcileEventType    = recovery.HeartbeatReconcileEventType

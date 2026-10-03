@@ -204,3 +204,34 @@ func TestLoad_BreakerOpenTimeout(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_RecoveryCleanWorkspaceOnRecover(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"default is off", "", false},
+		{"explicit on", "recovery:\n  clean_workspace_on_recover: true\n", true},
+		{"explicit off", "recovery:\n  clean_workspace_on_recover: false\n", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			homeDir := filepath.Join(t.TempDir(), "agentd")
+			if err := os.MkdirAll(homeDir, 0o755); err != nil {
+				t.Fatalf("mkdir home: %v", err)
+			}
+			configPath := filepath.Join(t.TempDir(), "agentd.yaml")
+			if err := os.WriteFile(configPath, []byte(tc.body), 0o644); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+			cfg, err := Load(LoadOptions{HomeOverride: homeDir, ConfigFile: configPath})
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if cfg.Recovery.CleanWorkspaceOnRecover != tc.want {
+				t.Fatalf("Recovery.CleanWorkspaceOnRecover = %v, want %v", cfg.Recovery.CleanWorkspaceOnRecover, tc.want)
+			}
+		})
+	}
+}
