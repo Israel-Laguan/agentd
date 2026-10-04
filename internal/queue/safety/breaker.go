@@ -24,8 +24,8 @@ const (
 // DefaultBreakerTimeout is the built-in half-open wait used by the circuit breaker.
 const DefaultBreakerTimeout = defaultBreakerTimeout
 
-// DefaultBreakerFailures is how many provider failures open the circuit
-// breaker, i.e. how many verdicts may be requeued before the trip is escalated.
+// DefaultBreakerFailures is how many provider failure verdicts it takes to open
+// the circuit breaker.
 const DefaultBreakerFailures = defaultBreakerFailures
 
 type CircuitBreaker struct {

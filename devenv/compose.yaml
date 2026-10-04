@@ -233,8 +233,11 @@ services:
     volumes:
       - agentd-data-prb:/home/agentd-prb
       - ./agentd/config.provider.yaml:/etc/agentd/config.yaml:ro
+    # config.provider.yaml points at mockllm directly, and the provider profile
+    # does not activate litellm — depending on litellm here would fail to
+    # resolve when `--profile provider` runs on its own.
     depends_on:
-      litellm:
+      mockllm:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8771/api/v1/system/status"]

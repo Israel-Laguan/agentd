@@ -142,10 +142,14 @@ func (s *ProjectService) MarkWorkspaceReady(ctx context.Context, projectID strin
 	}
 	// Reaching here means the operator put content in the directory themselves, so
 	// the project no longer started empty and its content is not a leftover to be
-	// cleaned away by recovery.
+	// cleaned away by recovery. A failed clear leaves started_empty set, which
+	// would make a later boot recovery eligible to delete that hand-seeded
+	// content, so refuse to unlock the tasks and let the caller retry — the call
+	// is idempotent.
 	if clearer, ok := s.store.(startedEmptyClearer); ok {
 		if err := clearer.ClearProjectStartedEmpty(ctx, projectID); err != nil {
 			slog.Error("clear started_empty failed", "project_id", projectID, "error", err)
+			return nil, fmt.Errorf("clear started_empty: %w", err)
 		}
 	}
 	tasks, err := s.store.MarkProjectTasksReady(ctx, projectID)

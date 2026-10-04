@@ -41,10 +41,18 @@ func TestDaemonStart_WorkspaceResetOnRecover(t *testing.T) {
 			// Synchronize on boot reconcile instead of sleeping: a fixed delay
 			// races the goroutine, and cancelling before the liveness probe runs
 			// makes it return context.Canceled so the task is never recovered.
+			// With the reset on, ReconcileGhostTasks sets the task READY *before*
+			// ResetProjectDir deletes the directory, so the recovered READY state
+			// alone can be observed mid-reset: waiting on the file disappearing
+			// closes that gap and keeps the cancellation out of ResetProjectDir.
 			if err := waitFor(func() bool {
+				if tc.enabled {
+					_, statErr := os.Stat(partial)
+					return os.IsNotExist(statErr)
+				}
 				recovered, getErr := store.GetTask(ctx, taskID)
 				return getErr == nil && recovered.State == models.TaskStateReady
-			}, "boot reconcile recovered the task"); err != nil {
+			}, "boot reconcile reached the expected state"); err != nil {
 				t.Fatalf("boot reconcile did not finish: %v", err)
 			}
 			cancel()

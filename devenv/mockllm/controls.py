@@ -18,6 +18,7 @@ Three toggles:
 """
 
 import threading
+from math import isfinite
 
 OUTAGE_STATUS = 503
 QUOTA_STATUS = 429
@@ -77,7 +78,7 @@ def read_body(handler) -> dict | None:
     raw = handler.rfile.read(length) if length else b"{}"
     try:
         body = json.loads(raw or b"{}")
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         handler._send({"error": "invalid json"}, 400)
         return None
     if not isinstance(body, dict):
@@ -109,12 +110,18 @@ def handle_control(handler, body: dict) -> None:
         if not isinstance(model, str) or not model:
             handler._send({"error": "want {model: string, seconds: number}"}, 400)
             return
+        if isinstance(seconds, bool):
+            handler._send({"error": "want {model: string, seconds: number}"}, 400)
+            return
         try:
             seconds = float(seconds)
         except (TypeError, ValueError):
             handler._send({"error": "want {model: string, seconds: number}"}, 400)
             return
-        if seconds < 0:
+        # math.isfinite, not just `seconds < 0`: NaN compares false against 0 and
+        # would survive that check, and both NaN and inf blow up time.sleep()
+        # later, turning the next chat-completions request into a 500.
+        if not isfinite(seconds) or seconds < 0:
             handler._send({"error": "seconds must be >= 0"}, 400)
             return
         set_slow_once(model, seconds)

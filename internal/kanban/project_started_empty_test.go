@@ -76,13 +76,14 @@ func TestClearProjectStartedEmptyAfterHandSeeding(t *testing.T) {
 	}
 }
 
-// Clearing is idempotent and must never touch a project that did not start empty.
+// Clearing is idempotent: a second clear must leave the bit false, and it must
+// never set it on a project that did not start empty.
 func TestClearProjectStartedEmptyIsIdempotent(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	project, _, err := store.MaterializePlan(ctx, models.DraftPlan{
-		ProjectName: "p",
-		Tasks:       []models.DraftTask{{TempID: "a", Title: "A"}},
+		ProjectName: "p", StartEmptyWorkspace: true,
+		Tasks: []models.DraftTask{{TempID: "a", Title: "A"}},
 	})
 	if err != nil {
 		t.Fatalf("MaterializePlan() error = %v", err)
@@ -97,6 +98,25 @@ func TestClearProjectStartedEmptyIsIdempotent(t *testing.T) {
 		t.Fatalf("GetProject() error = %v", err)
 	}
 	if got.StartedEmpty {
-		t.Fatalf("StartedEmpty = true, want false for a project that never started empty")
+		t.Fatal("StartedEmpty = true after clearing a started-empty project twice")
+	}
+
+	// A project that never started empty must stay that way.
+	plain, _, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "q",
+		Tasks:       []models.DraftTask{{TempID: "a", Title: "A"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan() error = %v", err)
+	}
+	if err := store.ClearProjectStartedEmpty(ctx, plain.ID); err != nil {
+		t.Fatalf("ClearProjectStartedEmpty() error = %v", err)
+	}
+	got, err = store.GetProject(ctx, plain.ID)
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	if got.StartedEmpty {
+		t.Fatal("StartedEmpty = true, want false for a project that never started empty")
 	}
 }

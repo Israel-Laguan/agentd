@@ -301,14 +301,16 @@ func TestConcurrentVerdictsNeverGrantTwoProbes(t *testing.T) {
 	outstanding, grantedToSibling := 1, 0
 
 	// The unrelated task keeps reporting while the siblings queue up behind the
-	// probe. Under -race this also exercises the breaker lock from 25 goroutines.
+	// probe. Only one more verdict: the one above already counted 1, and the
+	// breaker trips at 3 — going to OPEN would leave the siblings seeing only
+	// AdmissionDenied, so they would never exercise the probe-in-flight path
+	// this test is about. Under -race the noise still contends on the breaker
+	// lock alongside the 24 sibling goroutines.
 	var noise sync.WaitGroup
 	noise.Add(1)
 	go func() {
 		defer noise.Done()
-		for range 4 {
-			b.RecordErrorFor("unrelated", models.ErrLLMUnreachable)
-		}
+		b.RecordErrorFor("unrelated", models.ErrLLMUnreachable)
 	}()
 
 	var wg sync.WaitGroup

@@ -48,8 +48,11 @@ func TestDispatchReleasesGlobalProbeWhenProbeTaskFailsWithoutVerdict(t *testing.
 	if dispatched != 1 {
 		t.Fatalf("dispatched = %d, want 1 (the breaker admits exactly one probe)", dispatched)
 	}
-	if err := waitFor(func() bool { return daemon.sem.InUse() == 0 }, "probe task finished"); err != nil {
-		t.Fatalf("probe task did not finish: %v", err)
+	// Wait on the breaker, not the semaphore: the worker goroutine returns its
+	// slot before its deferred releaseGlobalProbe runs, so sem.InUse() can read
+	// zero with the probe still held.
+	if err := waitFor(func() bool { return !breaker.ProbeHeld() }, "probe slot released"); err != nil {
+		t.Fatalf("probe slot was not released: %v", err)
 	}
 
 	if breaker.State() != BreakerHalfOpen {

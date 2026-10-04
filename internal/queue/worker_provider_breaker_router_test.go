@@ -21,7 +21,7 @@ import (
 // not: decideTerminalError formatted the joined provider errors with %v, which
 // drops the sentinel and leaves errors.Is(err, ErrLLMQuotaExceeded) false, so
 // HandleGatewayError took the global-breaker branch instead and no per-provider
-// breaker could ever leave CLOSED. These two tests drive the real
+// breaker could ever leave CLOSED. These tests drive the real
 // gateway.Router so the error is the one production produces.
 
 // failingProvider is a providers.Backend that always fails with a fixed error, so

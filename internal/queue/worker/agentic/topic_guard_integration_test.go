@@ -145,7 +145,6 @@ func (h *topicDriftHost) RunLegacyTask(ctx context.Context, task models.Task, pr
 func (h *topicDriftHost) RegisterCancel(taskID string, cancel context.CancelFunc)             {}
 func (h *topicDriftHost) DeregisterCancel(taskID string)                                      {}
 func (h *topicDriftHost) HandleGatewayError(ctx context.Context, task models.Task, err error) {}
-func (h *topicDriftHost) RecordProviderSuccess(ctx context.Context, task models.Task)         {}
 func (h *topicDriftHost) RunPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error) {
 	return task, false, nil
 }

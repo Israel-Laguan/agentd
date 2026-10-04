@@ -97,9 +97,10 @@ COMPOSE_PROFILES := --profile default --profile healing --profile faults \
 DEV_HEALTH_WAIT ?= 180
 
 # All the agentd services share one prebuilt image (B-007). podman-compose tags a
-# separate image per service when each declares build:, so the Go compile ran once
-# per service -- one per dev-up. Build the tag once here and let compose only start
-# containers. --build is kept for mockllm, which still has its own build context.
+# separate image per service when each declares its own build:, which meant one Go
+# compile per agentd service on every dev-up. Building the tag once here leaves
+# compose with nothing to build for them, so a dev-up compiles exactly once.
+# --build is kept for mockllm, which still has its own build context.
 # Exported so devenv/compose.yaml resolves ${AGENTD_IMAGE:-agentd:local} to the
 # same tag that dev-build just produced. Keep the two in sync.
 export AGENTD_IMAGE ?= agentd:local

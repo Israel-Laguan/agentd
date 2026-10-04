@@ -192,12 +192,14 @@ func TestDispatchLoopBacksOffWhenNothingIsDispatched(t *testing.T) {
 	}
 	gaps := consecutiveGaps(claims)
 
-	// The first gap is the base interval; the last must be the cap. Allow a wide
-	// margin for scheduler jitter on a loaded machine but keep it far below the
-	// budget, so a loop that never backed off (constant base interval) fails.
-	if last := gaps[len(gaps)-1]; last < maxInterval/2 {
-		t.Fatalf("final tick gap = %s, want it backed off toward MaxTaskInterval %s (all gaps: %v)",
-			last, maxInterval, gaps)
+	// The first gap is the base interval; later gaps must be backed off toward
+	// the cap. Take the median of the later half rather than the final sample: a
+	// single stretched tick would otherwise let a loop stuck on the base
+	// interval pass. Allow a wide margin for scheduler jitter on a loaded
+	// machine but keep it far below the budget.
+	if med := median(gaps[len(gaps)/2:]); med < maxInterval/2 {
+		t.Fatalf("median of the later tick gaps = %s, want it backed off toward MaxTaskInterval %s (all gaps: %v)",
+			med, maxInterval, gaps)
 	}
 	// No gap may exceed the cap plus slack, or the loop stopped dispatching.
 	if last := gaps[len(gaps)-1]; last > maxInterval*3 {
