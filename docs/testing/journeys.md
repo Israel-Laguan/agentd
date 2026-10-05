@@ -13,7 +13,8 @@ Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in
 
 - Rationale: Existing in-process API tests use httptest; e2e journeys run against a live `devenv/` stack started by test setup.
 - Non-goal: Playwright (UI testing comes later); shell (hard to assert without CLI parsing).
-- Impact: `make test` (unit + feature tests) stays fast. `make test-e2e` runs the suite only if `-tags=e2e` is passed or `TEST_E2E=1` is set.
+- Impact: `make test` (unit + feature tests) stays fast. `make test-e2e` brings the stack up and runs the suite with `-tags=e2e` already set; it is never part of `make test`.
+- CI: `.github/workflows/ci-e2e.yml` runs `make test-e2e` weekly on `main`, on demand, and on any pull request that touches `test/e2e/`, `devenv/` or the workflow itself (B-023). The per-PR Go check does not run it, so a change outside those paths is covered by the weekly run, not by its own PR.
 
 **UI journeys:** Browser verification is manual (documented in qa-and-browser-verification.md); not automated in S07.
 
