@@ -178,7 +178,7 @@ func (d *Daemon) requeueClaimedTask(ctx context.Context, task models.Task) {
 	if current.State != models.TaskStateQueued {
 		return
 	}
-	if _, err := d.store.UpdateTaskState(ctx, task.ID, current.UpdatedAt, models.TaskStateReady); err != nil {
+	if err := qw.RequeueTask(ctx, d.store, *current, models.TaskStateQueued); err != nil {
 		slog.Error("requeue claimed task: update state failed", "task_id", task.ID, "error", err)
 	}
 }

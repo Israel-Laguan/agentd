@@ -236,7 +236,7 @@ func (w *Worker) tunePayload(profile models.AgentProfile, action planning.Healin
 }
 
 func (w *Worker) requeue(ctx context.Context, task models.Task, payload string) {
-	_, err := w.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateReady)
+	err := RequeueTask(ctx, w.store, task, models.TaskStateRunning, models.TaskStateQueued)
 	if err != nil && !errors.Is(err, models.ErrStateConflict) {
 		w.Emit(ctx, task, "ERROR", err.Error())
 	}
