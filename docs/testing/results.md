@@ -243,3 +243,54 @@ all three verdicts were accounted for, so nothing was lost in the store.
   the task QUEUED until `ReconcileOrphanedQueued`'s age threshold elapses. It is
   not what these two tests hit.
 - `-race -count=20 ./internal/queue` green 5 runs in a row.
+
+### B-024 cycle: S08 final double `make test-e2e` on the merged tree (2026-10-05)
+
+Closed the S08 verification gap: the S08 delivery plan's "one final double
+`make test-e2e`" on the assembled feature branch was never run or recorded. The
+feature branch merged as PR #112, so the check ran on `main` at `d223209d` —
+the exact tree that shipped.
+
+Two consecutive `make test-e2e` runs on one stack: **17/17 in 275.8s** and
+**17/17 in 284.3s**. J08 logged `recovered 0s after restart` and its re-run
+COMPLETED with the final output in RESULT; J12 tiered escalation and J14 SSE
+ordering both passed. No regressions from the assembled S08 tree (boot recovery,
+single-build devenv, ledger retry).
+
+Also fixed in the same pass, from the S08 close-out gap analysis: the S08 README
+and retro still described PR #112 as "draft, awaiting merge" (it merged
+2026-10-01), and the S08 README cited `make test-e2e -count=1`, which `make`
+rejects — the target already hardcodes `-count=1`.
+
+### S11 cycles: open findings from S10 (2026-10-05)
+
+One PR (#122) at the owner's direction instead of one per item. Capacity checked first:
+`results.md` was 263 of 400 lines (the sprint README's "380" was stale); these entries fit
+without a split. Mutations are listed as *broken -> test that went red*.
+
+**Final tree, double run.** `make test-e2e` twice after rebuilding `agentd:local` (image
+`42b473db508c` -> `043b8dec5984`): **18/18 in 284.9s** and **18/18 in 285.2s**. The suite is 18
+tests, not the 17 B-024 recorded (S10's retro had it right); `journeys.md` now says 18.
+
+**B-018.** A requeue that lost the optimistic lock was dropped (task stayed QUEUED). Now
+`worker.RequeueTask` retries against the current row, 3 attempts. Red first with the old call
+sites. Mutations: no retry, always retry, bound 4, real-store `WHERE` without the version.
+**B-019.** Not load: `pgrep -f "sleep 300"` is machine-global, so two copies of the test fail
+every time (1.12s, the ticket's message); one never does. Unique marker plus bounded wait. Also
+found the test was vacuous for the group kill (bash `exec`s a trailing command); now `& wait`.
+Mutations: no-op kill (hangs to timeout), shared pattern. Two concurrent `-race -count=5` runs green.
+**B-015.** Worker `commitSucceeded` closed an OPEN global breaker on a sandbox success that
+predates the trip. `RecordSuccessFor` now ignores a success while OPEN (OPEN leaves by time, so it
+cannot stick). Generation stamp dropped: stale close costs 3 failures, stale failures need 3 in a
+row; both pinned. Mutations: guard removed (2 red), guard widened to HALF_OPEN (14 red).
+**T-037.** Decided document-only; `MarkWorkspaceReady` is the guard. Two `BootReconcile` tests pin
+both sides (untracked file deleted; kept once the bit is cleared). Mutations: always refuse, ignore the bit.
+**B-021.** Copy-then-swap (`StageSeed`/`Promote`/`Discard`). A mid-copy failure left 1 project; now 0.
+Mutations: swallowed error, staging kept, no `Discard`, `Promote` overwrites, `Discard` no-op.
+**B-023.** `ci-e2e.yml`: weekly, manual, and on `test/e2e`/`devenv` PRs. Unverified until it first runs.
+**SP-016.** `outage_latch_test.go` against `c635a218` (pre-#121): red, "latched HALF_OPEN" (SP-012's
+defect). HEAD `-race -count=20`: green. Release at `loop_dispatch.go:26` neutralised: red. Fix holds.
+**SP-014** go, narrow (T-038, not built). **SP-015** no-go on the events; J06 already implemented.
+**B-020, B-022** were already fixed by T-032/T-033 (see their files). **B-025** T-033 entry
+reconstructed in `results-history-3.md`. **B-026, B-027** ticket homes now referenced from the docs.
+

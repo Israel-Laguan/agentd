@@ -39,4 +39,4 @@ The "started empty" bit means empty when the project was created. An operator wh
 ## Known limits
 
 - **Without the flag there is no per-attempt workspace reset**, and with it only boot-recovered tasks of start-empty projects are reset.
-- **A surviving first attempt can overlap.** Recovery does not verify or terminate the killed attempt's process group. A command that outlives its daemon can still be running while the re-run starts in the same workspace — and the workspace reset does not stop it, so its writes can land after the reset.
+- **A surviving first attempt can overlap.** Recovery does not verify or terminate the killed attempt's process group. A command that outlives its daemon can still be running while the re-run starts in the same workspace — and the workspace reset does not stop it, so its writes can land after the reset. Unmeasured; B-029 (S11) holds the re-entry condition (measure only when a journey, a bug or a reviewer shows a re-run racing a surviving command).

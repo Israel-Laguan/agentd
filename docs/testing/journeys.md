@@ -1,6 +1,6 @@
 # E2E Journey Suite (S07)
 
-Status: **implemented** (17 tests / 14 journeys, green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01).  
+Status: **implemented** (18 tests, J01-J16, green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01).  
 Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in git)
 
 ---
