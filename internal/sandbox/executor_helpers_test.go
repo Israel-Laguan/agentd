@@ -2,9 +2,11 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -42,11 +44,34 @@ func (s *persistingBusSink) Emit(ctx context.Context, evt models.Event) error {
 	return nil
 }
 
-func assertNoSleep300(t *testing.T) {
+var sleepSeq atomic.Int64
+
+// uniqueSleep returns a long sleep command no other process shares, and the
+// pgrep pattern that finds only it. pgrep -f reads every process on the
+// machine, so a fixed "sleep 300" also matches the same test running in
+// another process (a parallel `make check`, a second worktree) while that
+// copy's sleep is still inside its own timeout (B-019).
+func uniqueSleep() (command, pattern string) {
+	marker := fmt.Sprintf("%d%03d", os.Getpid(), sleepSeq.Add(1))
+	return "sleep 300." + marker, "sleep 300\\." + marker
+}
+
+// assertProcessGone waits, bounded, for no process to match pattern. Signal
+// delivery and reaping are asynchronous, so one sample taken right after the
+// kill measures scheduler latency rather than whether the kill happened.
+func assertProcessGone(t *testing.T, pattern string) {
 	t.Helper()
-	out, err := exec.Command("pgrep", "-f", "sleep 300").CombinedOutput()
-	if err == nil {
-		t.Fatalf("sleep 300 still exists: %s", out)
+	const budget = 5 * time.Second
+	deadline := time.Now().Add(budget)
+	for {
+		out, err := exec.Command("pgrep", "-f", pattern).CombinedOutput()
+		if err != nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%q still running %s after the kill: %s", pattern, budget, out)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
