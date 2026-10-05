@@ -191,7 +191,43 @@ is a schema change after v19. **Dropped**, with the limit recorded.
 Note T-030's fix does not touch this: it resets tasks owned by the daemon's *own*
 PID, and a reused PID is by definition not our own.
 
+If either limit resurfaces, size the two together: both need a per-boot instance ID
+(or process start-time check), so that change is costed once. That conditional now
+has a ticket home, B-026 (S11, P3), instead of living only in this paragraph.
+
 Both sets of tests are written to fail if the behaviour ever changes, so the
 accepted limits cannot silently stop being true — the `withoutOwnPID` mutation
 turns SP-010's discriminator test red, and SP-013's claim-count test is
 self-checked against a double claim.
+
+### T-033 cycle: docs and tooling leftovers, and the two splits (2026-10-01, reconstructed)
+
+**Reconstructed 2026-10-05 (B-025)** from commit `0dfbf0f5` (PR #115, 8 files, +465/-414)
+and the T-033 outcome. It was not written when the cycle ran, which is why the S09
+retro counted 5 entries for 6 cycles. Nothing below was re-measured; the figures are
+the commit's.
+
+Closed:
+
+- **The five unticked `repo-layout.md` T-024 boxes**, each with a reason rather than a
+  tick. Volume reuse was smoke-tested for real: the `agentd_agentd-data` volume
+  checksums identically before and after `dev-up`, and all seven profiles report
+  healthy. `api-testing.md`'s 7 references were repointed to test names in
+  `internal/api/tests/feature/api_http_test.go`, since the old line numbers would now
+  point at unrelated code. `folder_audit` was dropped from `.gitignore` (the target and
+  script were deleted in T-024). The `podman-runtime-target` memory note was struck:
+  there is no memory store in this repo, and the target is already stated in
+  `repo-layout.md`, `container-development.md` and the compose header. The final
+  sweep's regex was stale, not the tree.
+- **The stale-image trap** is in `troubleshooting.md`: J08's kill/restart reuses the
+  container filesystem, so `make dev-clean` is needed before `make dev-up` after a
+  container-level change, or a fix looks broken. It also notes that podman-compose
+  1.3.0's `agentd_litellm_1` name-collision line is noise.
+- **Both 400/400 docs were split**, which is the part that widened the scope:
+  `results.md` was at the cap after SP-012's entry, so every later entry would have
+  failed `checkloc`. `journeys.md` 397 -> 227 (history to `journey-findings.md`, 183);
+  `results.md` 400 -> 154 (everything before T-029 to `results-history.md`, 241).
+  Nothing was deleted; every heading survives across the new pairs, checked
+  programmatically.
+
+`make check` was green on the branch.

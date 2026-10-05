@@ -235,9 +235,18 @@ off the devenv stack on 2026-10-01, pinning the wire shape and payloads (the RES
 row's id/payload and the drawer fixture's task IDs are adapted for the tests). They
 are static snapshots, so they do not detect later drift in the endpoint.
 
-**Explicit gap:** no real-browser tier, so layout and click-through are unproven —
-a product decision for a later sprint, recorded here rather than backlogged. The
-lifecycle events are still unimplemented; that is a product change, not a test gap.
+**Explicit gap:** no real-browser tier, so layout and click-through are unproven.
+That is a product decision, not a work item, so it is held open as B-027 (S11, P3)
+instead of the backlog; B-027 is where "where is the browser tier tracked?" points.
+
+**Decision (SP-015, 2026-10-05): `task-started` / `task-claimed` are not emitted.**
+Claim and start are already queryable as state (`started_at`, the task's state) and
+as the `LOG_CHUNK` stream, and nothing consumes them: no API, UI or journey reads
+such an event, and emitting two rows for every task would grow the event log for
+every task to serve a timeline nobody asked for. J06 is therefore neither parked
+nor dropped: it stays implemented as redefined above, and the old timeline is
+retired with this reason. Re-open only if a consumer needs the transitions as
+events.
 
 ### J12: implemented (2026-09-30, on T-028)
 
