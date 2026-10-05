@@ -293,4 +293,3 @@ defect). HEAD `-race -count=20`: green. Release at `loop_dispatch.go:26` neutral
 **SP-014** go, narrow (T-038, not built). **SP-015** no-go on the events; J06 already implemented.
 **B-020, B-022** were already fixed by T-032/T-033 (see their files). **B-025** T-033 entry
 reconstructed in `results-history-3.md`. **B-026, B-027** ticket homes now referenced from the docs.
-
