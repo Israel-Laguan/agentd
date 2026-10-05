@@ -34,6 +34,8 @@ Both reset the task to READY and emit a `RECOVERY` or `HEARTBEAT_RECONCILE` even
 
 The "started empty" bit means empty when the project was created. An operator who hand-populates such a workspace and calls `POST /workspace/ready` clears the bit, so that seeded content is preserved; until they do, files they drop into the directory are not tracked and would be deleted by the reset.
 
+**Decision (T-037): document, do not guard further.** Calling `POST /workspace/ready` is the supported way to say "this workspace now holds my content", and it is the guard. A second one (clearing the bit when a non-agent write is detected) would have to tell an operator's file from the interrupted attempt's output on disk, and nothing records which is which: the bit is the only record of the workspace. The reset is opt-in and refuses by default, so the exposure is an operator who enables it and then adds files by hand to a running start-empty project without calling ready. Both sides of the boundary are pinned in `internal/queue/recovery/recover_workspace_hand_added_test.go`: an untracked hand-added file is deleted, and the same file survives (the recovered task is refused loudly) once the bit is cleared. A change to either is a deliberate one.
+
 ## Known limits
 
 - **Without the flag there is no per-attempt workspace reset**, and with it only boot-recovered tasks of start-empty projects are reset.
