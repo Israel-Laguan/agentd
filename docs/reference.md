@@ -141,6 +141,8 @@ task["id"], task["project_id"], task["state"]
 | `TASK_BREAKDOWN_ROLLUP` | Worker | Resumed broken-down parent completed because all its breakdown subtasks completed; no LLM call. |
 | `LLM_OUTAGE_HANDOFF` | Daemon | HUMAN task created for AI provider outage diagnostics. |
 | `REBOOT_RECOVERY_HANDOFF` | Daemon | HUMAN review task created after resetting interrupted tasks on startup. |
+| `RECOVERY_WORKSPACE_RESET` | Daemon | `recovery.clean_workspace_on_recover` emptied the project workspace of a task recovered at startup, before its re-run. |
+| `RECOVERY_RESET_REFUSED` | Daemon | The reset was refused or failed (project not started empty, or another task that shares the workspace has begun or sits in a state outside PENDING/READY/QUEUED with no `started_at`); the recovered task is FAILED_REQUIRES_HUMAN. |
 | `DISK_SPACE_CRITICAL` | Watchdog | Free disk space below configured threshold. |
 | `TUNE` | Worker | Model parameters changed for a retry attempt. |
 | `HEALING_SPLIT` | Worker | Repeated-failure task forced into the breakdown path. |
@@ -165,6 +167,8 @@ task["id"], task["project_id"], task["state"]
 | `gateway.truncation.stash_threshold` | _(configured)_ | Character threshold above which content is saved to the file stash. |
 | `uploads_dir` | `<home>/uploads` | Directory for oversized uploaded or referenced file content. |
 | `breaker.handoff_after` | `2m` | Duration the LLM breaker must stay open before creating a HUMAN outage task. |
+| `breaker.open_timeout` | `5m` | How long an open LLM breaker pauses dispatch before admitting one probe task; a successful probe closes it, while a breaker-classified failure reopens it and restarts the timeout. Applies to the global breaker and each per-provider breaker; a task is handed to a human while its provider breaker is OPEN, but siblings wait (requeued) while that breaker's probe is still in flight. Non-positive values fall back to `5m`. |
+| `recovery.clean_workspace_on_recover` | `false` | At boot, empty the workspace of a recovered task's project before the task re-runs. Applies only to projects created with `start_empty_workspace` and no `source_path` and not since hand-seeded (`POST /workspace/ready` clears the bit); refuses (and fails the task as FAILED_REQUIRES_HUMAN) otherwise, when any other task in the project is not untouched (PENDING/READY/QUEUED with no `started_at`, which also covers a QUEUED sibling that has not begun), or when a recovered task is no longer READY because it was claimed elsewhere. A refused task whose state cannot be persisted aborts boot rather than leaving it claimable. Stale-heartbeat recoveries are never reset. See [recovery-rerun.md](architecture/recovery-rerun.md). |
 | `disk.free_threshold_percent` | `10.0` | Minimum acceptable free disk percentage. There is deliberately **no** `disk.check_interval`: the watchdog's cadence comes from the `disk-watchdog` line in `<AGENTD_HOME>/agentd.crontab` (see the cron row above), and the key is not read by any config struct. Set the interval there. |
 | `healing.enabled` | `true` | Self-healing ladder and provider-exhaustion HUMAN handoffs. When `false`, failures terminate without healing subtasks (product HITL gates unchanged). |
 | `healing.strategy` | `increase_effort` | Built-in healing ladder (`increase_effort` or `minimize_variables`). |
@@ -203,7 +207,7 @@ task["id"], task["project_id"], task["state"]
 | `agentic.capability_routing.min_confidence` | `0.35` | Minimum classifier confidence (0.0–1.0) to apply a capability mapping; below threshold continues with the normal agentic loop. |
 | `agentic.capability_routing.mappings` | _(none)_ | Map intent names (`generate_image`, `real_time_search`, `browse_url`, `spreadsheet_ops`) to adapter registry names (`capabilities.Registry.Register` name). |
 | `agentic.capability_routing.tools` | _(intent name)_ | Optional per-intent tool name override passed to `CallTool`; when omitted, the intent name is used. |
-| `sandbox.inactivity_timeout` | `60s` | Max stdout/stderr silence before sandbox timeout triggers. |
+| `sandbox.inactivity_timeout` | `60s` | Max silence on both stdout and stderr before sandbox timeout triggers; output on either stream resets it. |
 | `sandbox.wall_timeout` | `10m` | Max wall-clock execution time for each sandbox command payload. |
 | `sandbox.kill_grace` | `2s` | Grace window between SIGTERM and SIGKILL for timed-out process groups. |
 | `sandbox.max_log_bytes` | `5242880` | Per-stream cap for final command output buffers with head/tail truncation marker. |

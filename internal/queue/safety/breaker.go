@@ -24,6 +24,10 @@ const (
 // DefaultBreakerTimeout is the built-in half-open wait used by the circuit breaker.
 const DefaultBreakerTimeout = defaultBreakerTimeout
 
+// DefaultBreakerFailures is how many provider failure verdicts it takes to open
+// the circuit breaker.
+const DefaultBreakerFailures = defaultBreakerFailures
+
 type CircuitBreaker struct {
 	mu           sync.RWMutex
 	state        BreakerState
@@ -33,10 +37,21 @@ type CircuitBreaker struct {
 	now          func() time.Time
 	timeout      time.Duration
 	inflight     bool
+	probeOwner   string
 }
 
 func NewCircuitBreaker() *CircuitBreaker {
-	return &CircuitBreaker{state: BreakerClosed, now: time.Now, timeout: defaultBreakerTimeout}
+	return NewCircuitBreakerWithTimeout(defaultBreakerTimeout)
+}
+
+// NewCircuitBreakerWithTimeout returns a breaker that stays OPEN for timeout
+// before admitting a probe. A non-positive timeout falls back to the default,
+// so a bad config value can never make the pause zero or unbounded.
+func NewCircuitBreakerWithTimeout(timeout time.Duration) *CircuitBreaker {
+	if timeout <= 0 {
+		timeout = defaultBreakerTimeout
+	}
+	return &CircuitBreaker{state: BreakerClosed, now: time.Now, timeout: timeout}
 }
 
 // SetClockForTest replaces the time source (same-package tests may assign .now directly).
@@ -91,58 +106,91 @@ func (b *CircuitBreaker) LastError() error {
 	return b.lastError
 }
 
-func (b *CircuitBreaker) AllowRequest() bool {
-	return b.ProbeLimit(1) > 0
-}
-
-func (b *CircuitBreaker) ProbeLimit(available int) int {
-	if available <= 0 {
-		return 0
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	switch b.state {
-	case BreakerOpen:
-		if b.now().Sub(b.tripTime) < b.timeout {
-			return 0
-		}
-		b.state = BreakerHalfOpen
-		b.inflight = false
-		fallthrough
-	case BreakerHalfOpen:
-		if b.inflight {
-			return 0
-		}
-		b.inflight = true
-		return 1
-	default:
-		return available
-	}
-}
-
 func (b *CircuitBreaker) RecordError(err error) {
+	b.RecordErrorFor("", err)
+}
+
+// RecordErrorFor counts a provider failure reported for owner.
+//
+// The failure count, the last error and the breaker state move whoever reported
+// them: a task admitted while the breaker was CLOSED is still evidence about the
+// provider, and ignoring it would let a real outage look recovered. Only the
+// HALF_OPEN probe slot is reserved for the task that holds it, so a verdict from
+// any other task cannot hand a second probe to a sibling (B-014).
+//
+// It discards whether this record tripped the breaker; RecordErrorTrips is the
+// form a caller needs when it has to tell the trip apart from the failures
+// recorded before it (B-017).
+func (b *CircuitBreaker) RecordErrorFor(owner string, err error) {
+	b.recordError(owner, err)
+}
+
+// RecordErrorTrips reports whether err's record is the one that left the breaker
+// OPEN, so a caller can escalate exactly the task that tripped it and no other.
+//
+// The question has to be asked under the same lock acquisition as the record.
+// Reading IsOpen afterwards is a different question: it reports the breaker's
+// state by the time it is read, so of three concurrent verdicts the first two
+// would both be told "open" once the third had been recorded (B-017). Splitting
+// the outage into "escalate the trip, requeue the failures before it" needs the
+// verdict to belong to its own record.
+//
+// An error recorded while the breaker is already OPEN still reports true, so a
+// straggler that was admitted before the trip is escalated rather than requeued
+// into a queue nothing will dispatch.
+func (b *CircuitBreaker) RecordErrorTrips(err error) bool {
+	return b.recordError("", err)
+}
+
+// recordError counts one failure and reports whether that record left the
+// breaker OPEN.
+func (b *CircuitBreaker) recordError(owner string, err error) bool {
 	if !ClassifiesAsBreakerFailure(err) {
-		return
+		return false
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.failureCount++
 	b.lastError = err
-	b.inflight = false
+	b.settleProbeLocked(owner)
 	if b.failureCount >= defaultBreakerFailures {
 		b.state = BreakerOpen
 		b.tripTime = b.now()
+		return true
 	}
+	return false
 }
 
 func (b *CircuitBreaker) RecordSuccess() {
+	b.RecordSuccessFor("")
+}
+
+// RecordSuccessFor closes the breaker after a provider request for owner
+// succeeded.
+//
+// Any task's success is evidence the provider is up, so the breaker closes
+// whoever reports it — that is existing behaviour and a stuck OPEN breaker is the
+// worse failure. The probe slot is settled by its holder alone, which is safe
+// because probeLocked clears it whenever the breaker next reaches HALF_OPEN.
+func (b *CircuitBreaker) RecordSuccessFor(owner string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.failureCount = 0
 	b.state = BreakerClosed
 	b.tripTime = time.Time{}
 	b.lastError = nil
-	b.inflight = false
+	b.settleProbeLocked(owner)
+}
+
+// settleProbeLocked returns the HALF_OPEN probe slot to the pool when owner holds
+// it, and does nothing for any other owner: only the holder's own outcome settles
+// a probe (B-014). The unowned slot taken by ProbeLimit and Admit has no holder
+// to match, so the plain unscoped verdict and ReleaseProbe settle it, which is
+// what the dispatch path relies on.
+func (b *CircuitBreaker) settleProbeLocked(owner string) {
+	if b.state == BreakerHalfOpen && b.inflight && b.probeOwner == owner {
+		b.inflight = false
+	}
 }
 
 // ForceStateForTest overrides internal state for integration tests.
@@ -151,7 +199,7 @@ func (b *CircuitBreaker) ForceStateForTest(state BreakerState, tripTime time.Tim
 	defer b.mu.Unlock()
 	b.state = state
 	b.tripTime = tripTime
-	b.inflight = false
+	b.clearProbeLocked()
 }
 
 // Reset unconditionally returns the breaker to the CLOSED state and clears
@@ -164,7 +212,7 @@ func (b *CircuitBreaker) Reset() {
 	b.failureCount = 0
 	b.tripTime = time.Time{}
 	b.lastError = nil
-	b.inflight = false
+	b.clearProbeLocked()
 }
 
 // ArmForResilienceTest configures an OPEN breaker for queue integration tests.
@@ -176,7 +224,7 @@ func (b *CircuitBreaker) ArmForResilienceTest(now, tripTime time.Time, failureCo
 	b.tripTime = tripTime
 	b.failureCount = failureCount
 	b.lastError = lastErr
-	b.inflight = false
+	b.clearProbeLocked()
 }
 
 func ClassifiesAsBreakerFailure(err error) bool {

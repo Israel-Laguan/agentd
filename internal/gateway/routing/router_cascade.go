@@ -108,7 +108,15 @@ func decideTerminalError(req spec.AIRequest, matchedProvider, selectedHasToolSup
 	if len(providerErrs) == 0 {
 		return fmt.Errorf("%w: all providers skipped (tool mismatch or empty cascade)", models.ErrLLMUnreachable)
 	}
-	return fmt.Errorf("%w: %v", models.ErrLLMUnreachable, errors.Join(providerErrs...))
+	// Both sentinels have to survive into the chain, not just their text. A
+	// provider answering 429 has to stay recognisable as ErrLLMQuotaExceeded,
+	// because worker_handoffs.go's HandleGatewayError gates the per-provider
+	// breaker registry on errors.Is(err, ErrLLMQuotaExceeded) and feeds the
+	// global breaker on ErrLLMUnreachable. Formatting the join with %v kept only
+	// the text, so no per-provider breaker could ever open (B-016). Two %w verbs
+	// render exactly the same message and preserve both errors: the wrapped join
+	// is itself a tree, so errors.Is reaches every provider error under it.
+	return fmt.Errorf("%w: %w", models.ErrLLMUnreachable, errors.Join(providerErrs...))
 }
 
 func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {

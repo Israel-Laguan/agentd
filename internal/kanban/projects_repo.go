@@ -62,14 +62,14 @@ func (s *Store) MaterializePlan(ctx context.Context, plan models.DraftPlan) (*mo
 
 func (s *Store) GetProject(ctx context.Context, id string) (*models.Project, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, original_input, workspace_path, status, user_id, created_at, updated_at
+		SELECT id, name, original_input, workspace_path, status, user_id, started_empty, created_at, updated_at
 		FROM projects WHERE id = ?`, id)
 	return scanProject(row)
 }
 
 func (s *Store) ListProjects(ctx context.Context) ([]models.Project, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, original_input, workspace_path, status, user_id, created_at, updated_at
+		SELECT id, name, original_input, workspace_path, status, user_id, started_empty, created_at, updated_at
 		FROM projects ORDER BY created_at`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
@@ -132,7 +132,27 @@ func (s *Store) newProject(plan models.DraftPlan, now time.Time) (*models.Projec
 		WorkspacePath: filepath.Join(root, projectID),
 		Status:        models.ProjectStatusActive,
 		UserID:        strings.TrimSpace(plan.UserID),
+		StartedEmpty:  plan.StartEmptyWorkspace && strings.TrimSpace(plan.SourcePath) == "",
 	}, nil
+}
+
+// ClearProjectStartedEmpty records that a project materialized with an empty
+// workspace has since been populated by hand, so its content is no longer known to
+// be a leftover and recovery.clean_workspace_on_recover must not empty it.
+//
+// The bit is only ever cleared, never set: materialization is the only moment that
+// can attest a workspace started empty.
+func (s *Store) ClearProjectStartedEmpty(ctx context.Context, projectID string) error {
+	return retryOnBusyNoResult(ctx, func(ctx context.Context) error {
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE projects
+			SET started_empty = 0
+			WHERE id = ?`, projectID)
+		if err != nil {
+			return fmt.Errorf("clear projects.started_empty: %w", err)
+		}
+		return nil
+	})
 }
 
 func newTaskIDs(tasks []models.DraftTask) map[string]string {
@@ -145,10 +165,10 @@ func newTaskIDs(tasks []models.DraftTask) map[string]string {
 
 func insertProject(ctx context.Context, tx sqlExecutor, project *models.Project) error {
 	_, err := tx.ExecContext(ctx, `
-		INSERT INTO projects (id, name, original_input, workspace_path, status, user_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO projects (id, name, original_input, workspace_path, status, user_id, started_empty, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		project.ID, project.Name, project.OriginalInput, project.WorkspacePath, project.Status,
-		project.UserID,
+		project.UserID, project.StartedEmpty,
 		formatTime(project.CreatedAt), formatTime(project.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("insert project: %w", err)

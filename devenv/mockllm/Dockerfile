@@ -1,6 +1,6 @@
 FROM python:3.11.12-slim-bookworm
 WORKDIR /app
-COPY server.py capture.py /app/
+COPY server.py capture.py controls.py /app/
 RUN adduser --disabled-password --gecos '' --uid 10001 appuser && \
     chown -R appuser:appuser /app
 USER appuser

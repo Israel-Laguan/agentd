@@ -20,6 +20,9 @@ type GopsutilProbe = safety.GopsutilProbe
 // and integration tests rooted at internal/queue.
 var BootReconcile = recovery.BootReconcile
 
+// WorkspaceResetter re-exports recovery.WorkspaceResetter for cmd wiring.
+type WorkspaceResetter = recovery.WorkspaceResetter
+
 const (
 	RebootRecoveryHandoffEventType = recovery.RebootRecoveryHandoffEventType
 	HeartbeatReconcileEventType    = recovery.HeartbeatReconcileEventType
@@ -83,20 +86,32 @@ type CircuitBreaker = safety.CircuitBreaker
 type BreakerState = safety.BreakerState
 
 const (
-	BreakerClosed   = safety.BreakerClosed
-	BreakerOpen     = safety.BreakerOpen
-	BreakerHalfOpen = safety.BreakerHalfOpen
+	BreakerClosed          = safety.BreakerClosed
+	BreakerOpen            = safety.BreakerOpen
+	BreakerHalfOpen        = safety.BreakerHalfOpen
+	AdmissionDenied        = safety.AdmissionDenied
+	AdmissionProbeInFlight = safety.AdmissionProbeInFlight
+	// AdmissionGranted: the breaker is CLOSED, so Admit took no probe slot.
+	// Re-exported with the rest so a queue-only caller can tell "closed" from
+	// "half-open probe already in flight" and gate on the difference.
+	AdmissionGranted = safety.AdmissionGranted
+	AdmissionProbe   = safety.AdmissionProbe
 )
 
 var NewCircuitBreaker = safety.NewCircuitBreaker
+var NewCircuitBreakerWithTimeout = safety.NewCircuitBreakerWithTimeout
 
 type ProviderBreakers = safety.ProviderBreakers
 type ProviderBreakerEntry = safety.ProviderBreakerEntry
 
 var NewProviderBreakers = safety.NewProviderBreakers
+var NewProviderBreakersWithTimeout = safety.NewProviderBreakersWithTimeout
 
 // DefaultBreakerTimeout matches the circuit breaker open-state timeout.
 const DefaultBreakerTimeout = safety.DefaultBreakerTimeout
+
+// DefaultBreakerFailures matches how many provider failures open the breaker.
+const DefaultBreakerFailures = safety.DefaultBreakerFailures
 
 var NewSemaphore = safety.NewSemaphore
 

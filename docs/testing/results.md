@@ -2,344 +2,244 @@
 
 > Part of the [agentd testing plan](../../TESTING_PLAN.md). Historical run outcomes and
 > known gaps confirmed live. Append new runs here rather than growing the plan. Cycles
-> before T-029 live in [results-history.md](results-history.md).
+> before T-029 live in [results-history.md](results-history.md), T-029 to T-031 in
+> [results-history-2.md](results-history-2.md) and the pre-S10 cycles of 2026-10-01 in
+> [results-history-3.md](results-history-3.md).
 
 ## Execution results and notes
 
-Cycles before T-029 are in [results-history.md](results-history.md) (moved
-2026-10-01, T-033).
+This log holds the S10 cycles. Cycles before T-029 are in
+[results-history.md](results-history.md) (moved 2026-10-01, T-033); T-029 to T-031 in
+[results-history-2.md](results-history-2.md) (moved 2026-10-03); the 2026-10-01 pre-S10
+cycles in [results-history-3.md](results-history-3.md) (moved 2026-10-03, B-017).
 
-### T-029 cycle: build the agentd image once (2026-10-01)
-
-Fixed:
-
-- **B-007** (P3): `make dev-up` no longer compiles agentd six times. All six
-  agentd services in `devenv/compose.yaml` now take `image: agentd:local`
-  instead of declaring their own `build:` block, and a new `make dev-build`
-  target (`podman build -t agentd:local .`) runs once per `dev-up` ahead of
-  compose. `mockllm` keeps its own build context, so `up --build` is retained
-  for it. Verified after `touch internal/queue/recovery/recover.go` and a full
-  `make dev-clean`:
-  - `grep -c "CGO_ENABLED=0 go build" <dev-up log>` = **1** (was 6).
-  - `make dev-up` wall-clock **51s** (was 484s on a tree with edited Go).
-  - All six agentd containers report image `localhost/agentd:local`.
-
-`make check` green (exit 0) after the compose, Makefile and docs edits.
-
-`make test-e2e`: **17/17 in 294.85s** on a clean stack, no regressions
-from the compose change; every agentd profile went healthy.
-
-Confirmed live for T-030:
-
-- J08 logged `recovered 2m0s after restart (reset ghost task to READY)` — B-008
-  reproduces exactly as documented (PID 1 before and after, so only the
-  stale-heartbeat sweep recovers it). J08 is 123.25s of the 294.85s run.
-
-Also in this cycle (T-032 docs hygiene): `journeys.md` stale lines corrected
-(status, P1/P2 policy list, B-002 marked fixed); `repo-layout.md` set to
-**implemented** with 29 of 34 T-024 checklist boxes verified against the tree and
-ticked; `disk.check_interval` decided as **document, don't implement** and
-recorded on the `disk.free_threshold_percent` row in `docs/reference.md`.
-
-### T-030 cycle: recover interrupted tasks at boot under PID 1 (2026-10-01)
+### S10 cycle: breaker recovery and re-run result (2026-10-03)
 
 Fixed:
 
-- **B-008** (P2, major): `BootReconcile` now drops its own PID from the alive
-  set before reconciling (`withoutOwnPID` in
-  `internal/queue/recovery/recover.go`). `MarkTaskRunning` stamps
-  `os.Getpid()`, and in a container agentd is PID 1 before and after a
-  restart, so the liveness probe reported the killed daemon's tasks as owned by
-  a live process and boot reconcile skipped them. Boot runs before any worker
-  starts, so a RUNNING task stamped with our own PID cannot be ours. Only our
-  own PID is exempted, so a task owned by a different live daemon sharing the
-  home still goes through the probe. No schema change.
-- **B-003** (P3): **closed** — see below.
+- **T-035a (latch).** A HALF_OPEN probe slot taken on a tick that dispatched nothing is
+  now released (`CircuitBreaker.ReleaseProbe`, called from `dispatch`). The failing test
+  (`TestDispatchReleasesProbeSlotWhenQueueIsEmptyAtTimeout`) was red first, then green;
+  neutralising the release turns it and the breaker unit test red.
+- **T-035b.** `breaker.open_timeout` (default `5m`, non-positive falls back to it) is read
+  from config. J09 now covers the recovery: the breaker profile has a third provider on a
+  mock model the journey takes down and back (`POST /outage` on the mock LLM) and a 10s
+  timeout. Measured: breaker CLOSED and a waiting task COMPLETED **19s** after the provider
+  returned, with no reset call. With `open_timeout` put back at `5m` the journey fails at
+  its 55s bound.
+- **T-036a.** J08 now asserts the re-run's result. Measured: COMPLETED with the final line
+  in RESULT; a wrong marker fails it. J08 is **34.6s** (was 123s) because the slow command
+  is 30s, not 60s.
+- **T-036c.** Deleted `BuildExecutionPayload`, `ExecutionPayload.PreviousAttempts` and
+  their test; J08 shows a re-run completes without knowing the earlier attempt. The
+  contract is in `docs/architecture/recovery-rerun.md`.
 
-Evidence:
+Found:
 
-- J08 `recovered **0s** after restart (reset ghost task to READY)`, was
-  `2m0s`. The test's wait drops 180s→30s and its health budget 240s→90s.
-  J08 itself: **5.55s**, was 123.25s.
-- `TestJ08_UncleanKillRecovery` no longer needs the `KNOWN GAP` comment, and
-  `journeys.md` is back under its 400-line limit at exactly 400.
-- `TestBootReconcile_resetsTaskOwnedByOwnPID` fails on the pre-fix tree
-  (`state = RUNNING, want READY`), passes after. Guard test
-  `TestBootReconcile_leavesTaskOwnedByOtherLivePID` passes: a task owned by a
-  different live PID stays RUNNING with no events.
-- `make check` green (exit 0).
+- J08's 60s fixture could never complete: the re-run was killed at the 60s inactivity
+  limit on every attempt and evicted with `POISON_PILL_HANDOFF`. Cause is B-011, a
+  product defect (the inactivity timer is per stream, so a command silent on stderr is
+  killed at the limit however much it prints on stdout). Filed for S11.
+- Per-provider breakers are never probed, so an open one stays open until reset (B-012,
+  from reading the code, not yet reproduced). Filed for S11.
+- T-036b is not buildable as written: the workspace is per project and a project's seed
+  is not recorded. Split to B-010 with a recommended shape.
 
-**4 consecutive `go test -tags=e2e -count=1 ./test/e2e/...` on one stack
-(B-003 re-check): 17/17 each, 195.8s / 195.9s / 185.9s / 195.8s.** Suite
-wall-clock down from ~295s.
+`make check` green. J09 `TestJ09_BreakerOpens` and J08 `TestJ08_UncleanKillRecovery`
+pass against the rebuilt stack; the rest of `make test-e2e` was not run.
 
-B-003 outcome: one task was RUNNING immediately after run 4 finished — a
-`SLOW_TASK J08` from project `j08-kznz6w` with `os_process_id=1`. Its event log
-shows it was **not stuck**: live `LOG_CHUNK tick N` heartbeats and a `RETRY`
-("execution timed out: no output within limit") while it re-executed, and it
-reached a terminal state on its own ~90s later without intervention, leaving
-**0 RUNNING**. So B-003 was the still-executing re-dispatch caught mid-flight,
-not a leaked task. J08's own comment already said as much; this run confirms it.
-
-Two setup notes worth keeping:
-
-- The first J08 attempt failed against a **stale image**. `make test-e2e` depends
-  on `dev-up`, but the already-running container was created before the source
-  edit, and J08's kill/restart reuses that container's filesystem — so the old
-  binary kept running and the fix appeared not to work. `make dev-clean` before
-  judging a container-level change fixes it. Worth remembering: a plain
-  `podman compose up` is not enough after editing code that only takes effect on
-  a fresh container. (`dev-up` now recreates the `agentd_agentd*` containers for
-  you, so this only bites when driving compose directly.)
-- `make test-e2e -count=1` cannot be run as written — `make` parses `-count=1`
-  as its own option and fails with `invalid option -- 'c'`. The target hardcodes
-  `-count=1`, so `make test-e2e` is the same uncached run.
-
-### T-031 cycle: never drop a token-ledger write to a busy database (2026-10-01)
+### S10 follow-up: B-011, shared sandbox inactivity timer (2026-10-03)
 
 Fixed:
 
-- **B-001** (P2): the three token-ledger writes — `AddTokenUsage`,
-  `AddUsageDetails` (`internal/kanban/tasks_repo_token_usage.go`) and
-  `AppendEvent` (`internal/kanban/events.go`) — were the **only** unwrapped
-  writes in the kanban package, despite ~30 neighbouring call sites being
-  wrapped, including `AddComment` in the same file as `AppendEvent`. All three
-  are now wrapped in `RetryOnBusy`. `Worker.Emit`
-  (`internal/queue/worker/worker_support.go`) no longer discards the sink error
-  with `_ =`; it logs at Error.
+- **B-011.** `BashExecutor` gave stdout and stderr each their own inactivity timer, so a
+  command that printed only to stdout was killed at `sandbox.inactivity_timeout`. Both
+  streams now share one `activityTracker` (`internal/sandbox/inactivity.go`): a read on
+  either resets it, and it stops once both have ended. Failing test first
+  (`TestBashExecutorInactivityIsSharedAcrossStreams`, 500ms limit): chatty stdout and
+  chatty stderr each timed out before the fix and complete now; a silent command and a
+  command that closes stdout then goes silent are still killed.
+- Mutation checks: a separate tracker per stream turns the two chatty cases red; stopping
+  the timer on the first EOF turns the closed-stdout case red (it survived until that
+  case was added).
+- J08's `SLOW_TICKS` stays at 30 (restoring 60 is optional); its comment in
+  `devenv/mockllm/server.py` no longer cites B-011 as a live limit.
 
-The premise B-001 was filed on turned out to be wrong, and that is the real
-finding. `RetryOnBusy`'s ~156 ms of backoff *looks* pointless behind a 5 s
-`busy_timeout`. But that 156 ms is only the delay **between** attempts — every
-attempt independently gets the driver's own 5 s window, so the wrapper's real
-tolerance is **6 × 5 s ≈ 30 s**. Measured with the lock held for three
-durations:
+### S10 follow-up: B-012, per-provider breakers probe after the timeout (2026-10-03)
 
-| Lock hold | Writes landed |
-| --- | --- |
-| 8 s | 160/160 (no loss) |
-| 25 s | 160/160 (no loss) |
-| 32 s | 152/160 (loss returns) |
+Reproduced, then fixed:
 
-The cliff sits between 25 s and 32 s, matching 6 × 5 s = 30 s. So `RetryOnBusy`
-was always earning its place; it just had no test saying why.
+- **B-012.** Reproduced with `TestWorkerProviderBreakerProbesAfterTimeout`: a tripped
+  provider breaker, clock moved past the timeout, and the worker still made 0 gateway calls.
+  Both worker gates (`worker.go`, `worker_batch.go`) tested `IsOpen()`, and nothing ever
+  moved a provider breaker out of OPEN or recorded a success on it.
+- The gates now call `CircuitBreaker.Admit()`: after the timeout one task takes the
+  HALF_OPEN probe slot, and siblings are handed off exactly as while OPEN. A successful task
+  (`commitSucceeded`) closes the provider's breaker; a quota error reopens it and restarts
+  the timeout; a probe that ends with no verdict releases the slot (same latch as T-035a).
+- **Decision:** provider breakers honour `breaker.open_timeout` (`NewProviderBreakersWithTimeout`,
+  wired in `cmd/agentd/wiring.go`). One knob, and a second hard-coded `5m` would be a
+  surprise. Provider breakers have their own probe-slot release because the worker, not the
+  dispatch tick, takes their slot.
+- Mutation checks, each red for the stated reason: gate back to `IsOpen` (5 tests); drop the
+  deferred release (release test); drop `recordProviderSuccess` in `commitSucceeded`
+  (probe test); ignore the configured timeout (timeout test); `Admit` never reporting a
+  probe (sibling, release and timeout tests); batch gate back to `IsOpen` (batch test). A
+  success hook I first added in `handleLoopResult` survived its mutation because the loop
+  already commits through `commitSucceeded`, so it was deleted.
+- Not covered by a test: the one-line wiring of `cfg.Breaker.OpenTimeout` into the registry.
+- **Superseded end to end.** Both this fix and B-013 were inert in production until B-016: no
+  per-provider breaker could ever open, so neither the probe nor a sibling ever happened.
+  **J16 is the first end-to-end evidence for this entry** (see the B-016/J16 cycle below).
 
-Evidence:
+### S10 follow-up: B-010 / T-036b, opt-in workspace reset on recovery (2026-10-03)
 
-- **Reproduced the loss first.** 8 workers × 20 counter writes while a second
-  connection holds the write lock 8 s: `attempts=160 ok=152 failed=8` — a 5%
-  drop, with the first failure at 4.7 s. So B-001 was real, not theoretical.
-- **Fixed path loses nothing**: the same load through the real
-  `store.AddTokenUsage` is `160/160`.
-- Retry is safe despite neither write being idempotent (the counter is a
-  read-modify-write accumulate; the event mints a fresh uuid per attempt),
-  because SQLite guarantees a write that returned `SQLITE_BUSY` did not commit.
-  Empirically confirmed: the durable counter equals the successful write count
-  exactly in every run — no partial writes, no double-counts.
-- `TestRetryOnBusyToleratesLockHeldLongerThanOneTimeout`
-  (`internal/kanban/db/busy_window_test.go`) turns the mechanism into an
-  always-on ~0.6 s guard: an unwrapped write cannot outlast a single
-  `busy_timeout` and fails, the same write through `RetryOnBusy` lands, and
-  exactly one row lands so a replayed write would show as a double-count.
-- `TestEmitLogsDroppedEvent` failed before the `Emit` fix, passes after.
-- `make check` green. Full e2e suite 17/17 in 194.2 s.
+Built:
 
-A test that was wrong on the first attempt: the initial worker-level test
-asserted `Worker` retries a `SQLITE_BUSY` from its `TokenUsageStore`. It passed
-vacuously — `RecordTaskTokenUsage` calls both counter writes unconditionally, so
-it made two calls whether or not it retried, and the assertion could not fail.
-The retry belongs in the kanban store, not `Worker`, so the test was asserting
-the wrong layer. Replaced with the store-layer proof. Recorded because a
-vacuously-passing test would have shipped as false confidence.
+- **Baseline decision:** a persisted "started empty" bit (`projects.started_empty`, schema
+  v20), not a recorded `source_path`. Evidence: `DraftPlan.StartEmptyWorkspace` is already
+  known at materialize time and only needed persisting; "empty" is the one starting state
+  that can be restored exactly, whereas a recorded `source_path` restores what the directory
+  holds *now* and still cannot cover hand-populated projects. SP-010 rejected a schema change
+  because the cure was worth ~2m; this one is a single additive column on the v19 template,
+  existing rows default to 0 (the reset refuses them, the safe direction).
+- **`recovery.clean_workspace_on_recover`** (default off), boot reconcile only. It refuses and
+  fails the task as FAILED_REQUIRES_HUMAN (`RECOVERY_RESET_REFUSED`) when the project did not
+  start empty, has another COMPLETED or RUNNING task, or the reset errors; one reset per
+  project; `FSWorkspaceManager.ResetProjectDir` is jailed and refuses the root.
+- Failing tests first (recovery package, red by compile then by assertion). Mutation checks,
+  each red: skip the started-empty check; drop either half of the COMPLETED/RUNNING guard;
+  reset per task instead of per project; do not fail the task on refusal; ignore the reset
+  error; do not call the reset from boot; reset without the jail, without the root refusal,
+  or by deleting the directory itself; daemon not passing the option; store not persisting
+  the bit, or persisting it for seeded projects.
+- **J08** now runs with the flag on (`devenv/agentd/config.yaml`). The mock's slow command
+  drops `attempt.marker` and prints `carried-over` if it is already there; J08 waits for the
+  first attempt's output before the kill, then asserts the re-run's RESULT lacks
+  `carried-over` and a `RECOVERY_WORKSPACE_RESET` event exists. With the flag off J08 fails
+  with the marker carried over (measured). J08 passes in 42s.
+- Removed the mock test that pinned `SLOW_TICKS` under the inactivity limit (obsolete since B-011).
 
-Flake: `TestJ10_DiskWatchdogDedup` failed once at 0.51 s, then passed in
-isolation (16.5 s) and on a full re-run. Startup timing, unrelated to the ledger
-path.
+Verified: `make check` green after the stack was rebuilt (`dev-clean`, `dev-up`); full
+`make test-e2e` passes (J01 to J15, 246s), the first full run since S10.
 
-### SP-012 cycle: provider-outage time to resume (2026-10-01)
+### B-013 cycle: siblings wait for a provider probe (2026-10-03)
 
-Measured in `internal/queue/outage_recovery_test.go`: J09 covered the trip, the
-recovery half was unproven, and does not work in every case.
+While a provider breaker's probe is in flight, sibling tasks for that provider now go
+back to READY (no gateway call, no handoff, no RETRY event) instead of
+`PROVIDER_EXHAUSTED_HANDOFF`; an OPEN breaker still hands off. `Admit` reports the
+refusal reason atomically. The first sibling test failed with the task BLOCKED, then
+passed. Mutation checks, each red: `Admit` never reports "in flight", helper always
+hands off, requeue with a payload, probe slot not released, OPEN also waits, and
+`cfg.Breaker.OpenTimeout` dropped from the provider registry (new test in
+`cmd/agentd`). `make check` green. **J16 is the first end-to-end evidence for this
+entry** — until B-016 was fixed no provider breaker could open at all, so this
+behaviour was unreachable in production (see the B-016/J16 cycle below).
 
-**Time to first probe: 5 min; a failed probe restarts the full timeout.** OPEN holds for
-`DefaultBreakerTimeout` (`safety/breaker.go:21`), admits one probe task, closes when it
-succeeds. If the probe fails (e.g., during a flapping outage), the breaker reopens and the
-5-minute timeout restarts from the failure point, so recovery time extends per failed probe.
-It is a package constant, so an operator cannot shorten it.
+### B-014 cycle: only the probe holder settles the probe (2026-10-03)
 
-**Failed tasks split.** The 2 pre-trip failures requeue to READY with `RetryCount`
-== 0 (an outage does not consume the retry budget); the trip task is BLOCKED with a
-`PROVIDER_EXHAUSTED_HANDOFF`. A long outage ends in a human inbox.
+The HALF_OPEN probe slot now has an owner: `AdmitFor`/`RecordErrorFor`/
+`RecordSuccessFor`/`ReleaseProbeFor` name the task holding it, and a verdict from
+any other task moves the failure count and the breaker state without settling the
+slot. The dispatch path's unowned slot and the plain unscoped `Record*`/
+`ReleaseProbe` are unchanged. 13 mutations; 9 red, 4 equivalent (`RecordSuccess`
+clearing unconditionally, and the three call sites left unscoped) — all four are
+inert because a closed breaker takes no slot and the `OPEN` → `HALF_OPEN`
+transition resets the slot, both pinned by tests. `make check` green; no devenv
+journey run (no profile changed).
 
-**Defect: the breaker can latch HALF_OPEN forever.** `ProbeLimit` sets `inflight`
-= true before dispatch knows it has a task (`loop_dispatch.go:161`), so an empty
-queue at the crossing tick spends the probe on nothing; `inflight` is then cleared
-only by a result from a task that can no longer be dispatched, so nothing runs
-without an operator reset. Reproduced, not committed; sized as T-035.
+### B-013 gaps: real store, dispatch soak, admission invariant (2026-10-03)
 
-### T-034 cycle: J06 rewritten, drawer event log covered by component tests (2026-10-01)
+Closed three of four open B-013 test gaps, tests only. Real-store requeue in
+`internal/kanban` (depguard's `queue-test-isolation` and `kanban-test-isolation`
+rules keep the real board and the breaker package apart, so the store half lives
+there); dispatch-loop soak at `TaskInterval` 20ms measuring 49 ticks against a bound
+of 50 — siblings cycle **once per `TaskInterval` (3s in the devenv profiles) with
+no backoff**, since a requeue counts as dispatched; the 10s cap applies only to a
+tick that dispatches nothing; and the in-package proof that `AdmissionProbeInFlight` needs a reachable trap
+— `RecordSuccessFor` goes CLOSED before settling the probe, leaving a CLOSED breaker
+that still holds a slot. Seven mutations, all red. Full `make test-e2e` green (16
+journeys). The fourth gap, an e2e journey, is blocked: `decideTerminalError`
+formats joined provider errors with `%v`, which flattens the quota sentinel, so no
+per-provider breaker can ever open — filed as B-016 with a reproduced chain check.
+The mock gains the per-model `POST /quota` and `POST /slow_once` that journey will
+need (7 new unit tests, no other journey affected).
 
-J06 wanted `task-started` / `task-claimed` / `task-completed`, and claim and start
-write no event row (the same finding J14 made), so it could never pass. Redefined as
-**"the drawer renders the task's durable event log"** — the events that exist.
+### B-016 + J16 cycle: the cascade keeps the quota sentinel (2026-10-03)
 
-**Fixtures are captured, then adapted.** `GET /api/v1/tasks/{id}/events` was read off
-the devenv stack after `TestJ08_UncleanKillRecovery`. `WARNING`, `RECOVERY`,
-`TOKEN_USAGE` and `LOG_CHUNK` are the captured rows, with real payloads and nanosecond
-timestamps. The `RESULT` row's id, timestamp and payload were trimmed, the drawer
-fixture rewrites `task_id` to `task-under-test`, and its `some-other-task` event is
-invented. The snapshots pin the wire shape as of 2026-10-01; nothing re-validates them
-against the live endpoint, so they do not detect later drift. The stack was reset with
-`make dev-clean && make dev-up` first, per the B-008 stale-image trap.
+- **B-016.** `decideTerminalError` formatted the joined provider errors with `%v`, so
+  `errors.Is(err, ErrLLMQuotaExceeded)` was false for every cascaded failure and
+  `HandleGatewayError` always took the global branch — whose `RecordErrorFor` caller is
+  gated on exactly that check, so no per-provider breaker could ever open. Two `%w`
+  verbs keep both sentinels and render the same message.
+- **Decided, all pinned by tests.** (a) both sentinels survive (all-unreachable stays
+  unreachable-only, so an outage never opens a provider breaker); (b) the verdict stays
+  keyed on `lookupProvider`, because `admitProvider` takes the probe slot on that key;
+  (c) the branches stay mutually exclusive, so one provider's exhausted key cannot stall
+  the others, and an unreachable total outage still feeds only the global breaker.
+- **Tests, failing first:** 3 new `decideTerminalError` cases with a two-directional
+  `errors.Is` check, and 3 new `internal/queue` tests driving the **real**
+  `gateway.Router` through `Process` — every earlier test hand-fed the error.
+- **J16**, `TestJ16_SiblingsWaitForProviderProbe`, new `provider` profile on :8771 (one
+  provider on the mock model `prb-quota`): 3 real 429s open the provider breaker, a
+  sibling waits while the admitted probe is in flight (no `PROVIDER_EXHAUSTED_HANDOFF`,
+  no HUMAN subtask, re-checked every 500ms across 6s), then all 3 tasks COMPLETE and the
+  breaker is CLOSED with no reset. Green alone in 43.8s; full `make test-e2e` green, 18
+  tests / 17 journeys, 284s.
+- **Spec correction:** the tasks that trip a provider breaker cannot be the ones the
+  journey waits on (the quota branch hands them off too), so the trip is done by three
+  throwaway "arming" tasks and the asserted-on tasks are created after `open_timeout`.
+- **Mutations:** 4 unit + 3 journey, each red — `%v` again (J16 fails at its own arming
+  bound, breaker `CLOSED (0 failures)`), the join's `%w` dropped to `%s`, `errors.Join()`
+  emptied, the verdict on a hard-coded provider, `gateProvider` always handing off (22.7s),
+  `open_timeout` at `5m` (fails on its 90s bound, not hanging). Sources restored
+  byte-identical.
+- **B-017 filed:** `-race -count=20 ./internal/queue` failed once in each of two runs, in
+  two different outage tests, both on the `ErrLLMUnreachable` branch this fix leaves alone.
 
-**Three of the item's premises were wrong**, checked against the code:
+### B-017 cycle: only the tripping task is escalated (2026-10-03)
 
-- "First component tests in `web/`" — `web/` already had 17 vitest files. These are the
-  first for these two components, not the first in the repo.
-- The drawer's three behaviours were already implemented: the `task_id` filter is
-  inline in `task-drawer.tsx`, `eventRefreshKey` is in the effect deps, and the reject
-  path clears events. So this was a test-writing job, not a fix — smaller than the
-  P1 / ~1 day estimate suggested.
-- The component renders events **newest first**, not in API order. The tests pin the
-  real order rather than the order the item implied.
+The flake was a production race, not test-state leakage. `HandleGatewayError`
+asked whether the outage had tripped the breaker with two separate lock
+acquisitions:
 
-**One vacuous test, found and fixed.** The first rejected-fetch test asserted only
-that a drawer opened with a failing fetch shows no events — which passes even with the
-catch handler deleted, because a fresh drawer's events are already `[]`. Mutation
-testing caught it: deleting the handler left the suite green. Rewritten to fetch
-successfully once and then fail on refresh, so clearing the stale log is observable; it
-now fails against that mutation.
-
-Every other assertion was mutation-checked too. Removing the `task_id` filter, dropping
-`eventRefreshKey` from the deps, removing the `.reverse()`, mutating the caller's array,
-and removing the empty state each turn the suite red.
-
-`vitest.setup.ts` gained a `scrollIntoView` stub: jsdom does not implement it and
-`CommentPanel` calls it on mount, so mounting any component containing it threw instead
-of failing an assertion.
-
-`cd web && npm test`: 19 files, 105 tests, green.
-
-**Recorded gap:** no real-browser tier, so CSS layout and click-through are unproven.
-That is a product decision for a later sprint, recorded in `journeys.md` rather than
-backlogged. The three lifecycle events remain unimplemented — a product change, not a
-test gap.
-
-### B-009 cycle: two load-sensitive test waits made robust (2026-10-01)
-
-Both reported flakes are fixed by removing the fixed windows, but **neither
-reproduced**, so these are robustness fixes rather than verified root-cause
-fixes. Under 2–2.5× CPU oversubscription (20 busy loops on 8 cores) the queue
-suite passed 5/5 both with the old 3s budget and the new 30s one, and J10 passed
-3/3 at both the old and new windows. Recording that plainly: the change removes a
-known timing dependency, it is not a demonstrated cure.
-
-**Breaker scenario.** `waitFor` in `steps_dispatch_test.go` had a hardcoded 3s
-deadline shared by every queue scenario, which matches the 3s timeout B-009
-recorded exactly. It is now a named `stepWaitBudget` of 30s. Generous is safe
-here because every use of `waitFor` polls for an event that either happens on its
-own or never happens at all — no scenario legitimately needs to fail fast, since
-a failing step returns an error the suite already surfaces.
-
-A larger budget is only safe if still bounded, so `step_wait_budget_test.go` pins
-that: `waitFor` must give up, its error must name the budget so a reader can tell
-a slow pass from a hang, and `stepWaitBudget` itself must stay positive, above
-the 3s that flaked, and at most a minute. The timeout test uses a short explicit
-budget via `waitForBudget` so the suite does not pay 30s to prove a timeout works.
-
-**J10.** The dedup window was a single 15s `Sleep` for a crontab that says
-`@every 5s`. Under load a pass can start late, so 15s could elapse while fewer
-than three extra passes had run and the assertion would prove less than it
-claimed. Now a 20s window (3 passes + 5s slack) polled at 500ms, and the test's
-context budget goes 90s → 120s to cover it. J10 passes at 20.54s.
-
-Verification: `make check` green; `TestJ10_DiskWatchdogDedup` green under load.
-
-### SP-011 cycle: is re-running a recovered task safe? (2026-10-01)
-
-**Answer: go, with a caveat worth naming.** Nothing cleans the workspace between
-attempts, so a re-run is not starting fresh — but the sandbox's determinism and the
-worker's output-based commands make it safe in practice. Measured in
-`internal/sandbox/rerun_idempotency_spike_test.go`.
-
-**The workspace is not cleaned, confirmed.** A command that writes a file and
-sleeps is killed mid-task; the re-dispatch then runs `ls` and sees the file:
-
-```text
-FINDING: attempt 2 sees the first attempt's file.
-stdout:
-marker.txt
+```go
+w.breaker.RecordError(err)
+if w.breaker.IsOpen() {          // the breaker's state *now*, not after this record
+        w.handoffOrFail(ctx, task, err)
+        return
+}
+w.requeue(ctx, task, fmt.Sprintf("LLM outage: %v", err))
 ```
 
-`BashExecutor` only sets `cmd.Dir` to the workspace and runs. There is no
-per-attempt preparation anywhere: `FSWorkspaceManager` has `SecureDelete` (whole
-project removal) and `SeedFromPath` (initial seed), and nothing else touches the
-directory. So a recovered task resumes on top of whatever the killed attempt left.
+Three tasks are dispatched together and all three verdicts are in flight, so the
+two that recorded failures 1 and 2 could both be answered with "open" once the
+third had been recorded. Measured before the fix: **1.2%** of iterations of
+`TestOutageRecoveryFailedTasksSplitBetweenRequeueAndHandoff` alone
+(`-race -count=50`, 5 runs: 0/2/1/0/0 failures), and a `ready=1 blocked=2` split
+in 5 of 400 probe rounds. `breaker.FailureCount()` was 3 in every failing round —
+all three verdicts were accounted for, so nothing was lost in the store.
 
-**That is genuinely non-idempotent for some commands.** An appending command
-reports a different result on the second attempt than the first:
-
-```text
-attempt 1 reports "1" lines, attempt 2 reports "2" lines
-```
-
-**Why it is still a go.** The non-idempotency lands in the file, not in agentd's
-own state. The task's kanban row is reset to READY and dispatched from the start,
-so counters in SQLite cannot double-count.
-
-**Open: overlap with a surviving first attempt.** Nothing in recovery verifies or
-terminates the killed attempt's process group. Boot reconcile resets a task whose
-owner PID is dead immediately, and the stale-heartbeat sweep (2m without a
-heartbeat) only resets the kanban row. A command that outlives its daemon can
-therefore still be running while the retry starts in the same workspace. The
-spike did not measure this; it is the same shape as B-003, closed in S08 for the
-live-worker case, not for a command orphaned by a daemon crash.
-
-**A dead retry-awareness hook found on the way.** `models.ExecutionPayload` carries
-`PreviousAttempts []string` and `BuildExecutionPayload` populates it from the
-event history — but `BuildExecutionPayload` has **no callers**. It is a dead
-function, so nothing currently tells a re-run what the previous attempt did. Not a
-defect today (no code reads the field), but it is the natural hook for making
-re-runs safer, so it is named here rather than left as a surprise.
-
-Follow-up (not yet tracked in `tasks/backlog/`): give the recovery re-run a
-per-attempt workspace reset behind a flag, terminate or verify the dead attempt's
-process group before re-dispatch, and either wire `PreviousAttempts` into the
-prompt or delete it.
-
-### SP-010 and SP-013 cycle: two P3 limits, measured and accepted (2026-10-01)
-
-Both were half-done spikes whose remaining question was a bounded, accepted risk.
-Both are now measured rather than assumed, and both are recommended **dropped with
-the limit recorded** — the fixes are schema changes with a poor cost/benefit ratio
-against a 2-minute worst case that only follows a host reboot.
-
-**SP-013 — no single-instance guard.** Confirmed by reading the start path: a second
-`Open` on an already-initialised home succeeds and writes to it. There is no lock
-on the home; the only `flock` in the tree is on a per-document cache in
-`filecontext`, unrelated to the daemon. With two stores on one database
-(`internal/kanban/two_daemons_spike_test.go`):
-
-- **No double-dispatch.** `ClaimNextReadyTasks` runs `BEGIN IMMEDIATE`, so two
-  daemons racing the same READY task hand it out exactly once — A claimed 1, B 0.
-- **No false recovery.** Daemon A's boot reconcile leaves daemon B's task RUNNING,
-  because B's owner PID is genuinely alive.
-
-So the two feared failure modes do not occur. The remaining risk is both daemons
-polling and competing on the same queue, which costs throughput rather than
-correctness. **Dropped**, with the limit recorded.
-
-**SP-010 — PID reuse after reboot.** Confirmed: a RUNNING task whose owner PID is
-held by an unrelated live process is not recovered at boot, and waits for the
-stale-heartbeat sweep (~2m). Root cause, stated as an assertion: given only a PID,
-PID reuse and a live second daemon are *indistinguishable* — both leave the task
-RUNNING. Fixing it needs a per-boot instance ID or process start-time check, which
-is a schema change after v19. **Dropped**, with the limit recorded.
-
-Note T-030's fix does not touch this: it resets tasks owned by the daemon's *own*
-PID, and a reused PID is by definition not our own.
-
-Both sets of tests are written to fail if the behaviour ever changes, so the
-accepted limits cannot silently stop being true — the `withoutOwnPID` mutation
-turns SP-010's discriminator test red, and SP-013's claim-count test is
-self-checked against a double claim.
+- **`safety.RecordErrorTrips(err) bool`** records the failure and reports whether
+  *that record* left the breaker OPEN, under one lock acquisition. `RecordErrorFor`
+  and the plain `RecordError` are now the same helper with the answer discarded.
+- **Red first:** `TestHandleGatewayErrorHandsOffOnlyTheTrippingTask` fails 18 of 400
+  rounds pre-fix (0.15s, so P(no failure) ≈ 1e-8) and is green after.
+- **Ruled out, with evidence:** neither failing test has a channel gate at all
+  (`NewDaemon(..., nil, ...)` in both), so the `session task-0 exceeded 1 requests
+  in 1m0s` line in the old log window came from a different test in the package;
+  and the fake `queueStore` ignores `expectedUpdatedAt` and never returns
+  `ErrOptimisticLock`, so no lost store write is possible in them.
+- **Mutations, each red:** two calls again instead of `RecordErrorTrips` (15/400
+  rounds wrong); `RecordErrorTrips` never reporting a trip (400/400); the threshold
+  off by one, `>` for `>=` (400/400, and the deterministic count test red);
+  dropping `settleProbeLocked` in the refactor
+  (`TestFailedProbeBelowTheTripThresholdStillFreesTheSlot`). Sources restored
+  byte-identical.
+- **Not fixed here, filed as B-018:** the optimistic-lock write *is* lossy in
+  production. Forged against the real store, `UpdateTaskState` with a stale
+  `updated_at` returns `ErrOptimisticLock`, and both `requeueClaimedTask`
+  (logs it) and `Worker.requeue` (emits an `ERROR` event) drop the write, leaving
+  the task QUEUED until `ReconcileOrphanedQueued`'s age threshold elapses. It is
+  not what these two tests hit.
+- `-race -count=20 ./internal/queue` green 5 runs in a row.

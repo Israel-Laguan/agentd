@@ -73,7 +73,7 @@ func TestHeadTailBuffer_String_NotTruncated(t *testing.T) {
 func TestInactivityReader(t *testing.T) {
 	reader := strings.NewReader("hello world")
 	var timedOut bool
-	ir := newInactivityReader(reader, time.Hour, func() { timedOut = true })
+	ir := newActivityTracker(time.Hour, func() { timedOut = true }).watch(reader)
 	defer ir.stop()
 
 	p := make([]byte, 5)
@@ -92,7 +92,7 @@ func TestInactivityReader(t *testing.T) {
 func TestInactivityReader_EOFStopsTimer(t *testing.T) {
 	reader := strings.NewReader("hi")
 	var timedOut bool
-	ir := newInactivityReader(reader, time.Hour, func() { timedOut = true })
+	ir := newActivityTracker(time.Hour, func() { timedOut = true }).watch(reader)
 
 	p := make([]byte, 10)
 	n, err := ir.Read(p)
@@ -115,7 +115,7 @@ func TestInactivityReader_EOFStopsTimer(t *testing.T) {
 func TestInactivityReader_ResetsOnRead(t *testing.T) {
 	reader := strings.NewReader("hello")
 	var timeoutCount atomic.Int32
-	ir := newInactivityReader(reader, time.Millisecond*50, func() { timeoutCount.Add(1) })
+	ir := newActivityTracker(time.Millisecond*50, func() { timeoutCount.Add(1) }).watch(reader)
 
 	if _, err := ir.Read(make([]byte, 1)); err != nil {
 		t.Fatalf("first Read() error = %v", err)
@@ -137,7 +137,7 @@ func TestInactivityReader_ResetsOnRead(t *testing.T) {
 
 func TestInactivityReader_MultipleSmallReads(t *testing.T) {
 	reader := bytes.NewReader([]byte("hello"))
-	ir := newInactivityReader(reader, time.Hour, func() {})
+	ir := newActivityTracker(time.Hour, func() {}).watch(reader)
 
 	buf := make([]byte, 2)
 	for i := 0; i < 3; i++ {

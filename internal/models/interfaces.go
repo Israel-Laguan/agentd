@@ -66,6 +66,12 @@ type SandboxEnvironment interface {
 // KanbanStore is the persistence boundary shared by the daemon, queue, and API.
 type KanbanStore interface {
 	MaterializePlan(ctx context.Context, plan DraftPlan) (*Project, []Task, error)
+	// ClearProjectStartedEmpty records that a project materialized with an empty
+	// workspace has since been populated by hand, so recovery
+	// .clean_workspace_on_recover must not empty it. Mandatory rather than
+	// optional: a store that skipped the clear would leave the bit set and let
+	// recovery delete hand-seeded content.
+	ClearProjectStartedEmpty(ctx context.Context, projectID string) error
 	EnsureSystemProject(ctx context.Context) (*Project, error)
 	EnsureProjectTask(ctx context.Context, projectID string, draft DraftTask) (*Task, bool, error)
 	GetProject(ctx context.Context, id string) (*Project, error)

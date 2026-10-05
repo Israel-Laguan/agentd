@@ -19,6 +19,8 @@ type routingTestStore struct {
 	parents map[string][]models.Task
 }
 
+func (s *routingTestStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func (s *routingTestStore) MarkTaskRunning(_ context.Context, _ string, _ time.Time, _ int) (*models.Task, error) {
 	s.task.State = models.TaskStateRunning
 	return &s.task, nil

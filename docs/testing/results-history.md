@@ -5,8 +5,10 @@ Cycles run before 2026-10-01, moved out of
 cycles under the 400-line docs budget. Nothing here is deleted — it is the
 record of what was run, what passed, and what was found.
 
-Cycles from T-029 onward stay in [results.md](results.md), which is the active
-log; append new cycles there.
+Cycles T-029 to T-031 are in [results-history-2.md](results-history-2.md) and the
+pre-S10 cycles of 2026-10-01 in [results-history-3.md](results-history-3.md);
+later ones stay in [results.md](results.md), which is the active log. Append new
+cycles there.
 
 ## Execution results and notes
 

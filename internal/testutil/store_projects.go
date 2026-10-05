@@ -21,6 +21,7 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 		OriginalInput: plan.Description,
 		WorkspacePath: filepath.Join(s.projectsDir, projectID),
 		UserID:        strings.TrimSpace(plan.UserID),
+		StartedEmpty:  plan.StartEmptyWorkspace && strings.TrimSpace(plan.SourcePath) == "",
 	}
 	s.projects[project.ID] = project
 	tempToID := make(map[string]string, len(plan.Tasks))
@@ -100,6 +101,20 @@ func (s *FakeKanbanStore) GetProject(_ context.Context, id string) (*models.Proj
 		return nil, models.ErrProjectNotFound
 	}
 	return &p, nil
+}
+
+// ClearProjectStartedEmpty mirrors the production store: the bit is only ever
+// cleared, never set, so a project that does not exist is a no-op.
+func (s *FakeKanbanStore) ClearProjectStartedEmpty(_ context.Context, projectID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[projectID]
+	if !ok {
+		return models.ErrProjectNotFound
+	}
+	p.StartedEmpty = false
+	s.projects[projectID] = p
+	return nil
 }
 
 func (s *FakeKanbanStore) ListProjects(context.Context) ([]models.Project, error) {

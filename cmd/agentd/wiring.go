@@ -31,8 +31,8 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 	eventBus := bus.NewInProcess()
 	ws := &sandbox.FSWorkspaceManager{Root: cfg.ProjectsDir}
 	emitter := bus.NewEventEmitter(store, eventBus)
-	breaker := queue.NewCircuitBreaker()
-	providerBreakers := queue.NewProviderBreakers()
+	breaker := queue.NewCircuitBreakerWithTimeout(cfg.Breaker.OpenTimeout)
+	providerBreakers := queue.NewProviderBreakersWithTimeout(cfg.Breaker.OpenTimeout)
 	providerConfigs, err := cfg.Gateway.ProviderConfigs()
 	if err != nil {
 		return runtimeDeps{}, fmt.Errorf("resolve provider configs: %w", err)
@@ -80,4 +80,17 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 		project:          services.NewProjectService(store, ws),
 		runner:           queue.NewTaskRunner(gw, store, emitter, ws, cfg.ProjectsDir),
 	}, nil
+}
+
+// recoveryWorkspaceReset returns the resetter boot reconcile uses when
+// recovery.clean_workspace_on_recover is on, and nil (reset nothing) when off.
+func recoveryWorkspaceReset(cfg config.Config, deps runtimeDeps) (queue.WorkspaceResetter, error) {
+	if !cfg.Recovery.CleanWorkspaceOnRecover {
+		return nil, nil
+	}
+	resetter, ok := deps.workspace.(queue.WorkspaceResetter)
+	if !ok {
+		return nil, fmt.Errorf("recovery.clean_workspace_on_recover: workspace manager %T cannot reset a project directory", deps.workspace)
+	}
+	return resetter, nil
 }

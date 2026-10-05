@@ -22,10 +22,31 @@ func loadAPIConfig(v *viper.Viper) APIConfig {
 	}
 }
 
-const defaultBreakerHandoffAfter = 2 * time.Minute
+const (
+	defaultBreakerHandoffAfter = 2 * time.Minute
+	defaultBreakerOpenTimeout  = 5 * time.Minute
+)
 
 type BreakerConfig struct {
 	HandoffAfter time.Duration
+	// OpenTimeout is how long a tripped breaker pauses dispatch before it
+	// admits a single probe task. Non-positive values fall back to the default.
+	OpenTimeout time.Duration
+}
+
+// RecoveryConfig tunes how interrupted tasks are recovered.
+type RecoveryConfig struct {
+	// CleanWorkspaceOnRecover resets a recovered task's project workspace to its
+	// empty starting state at boot, before the task is re-run. Opt-in: the reset
+	// refuses (and fails the task) when it cannot restore the project's starting
+	// state or would delete another task's output. See docs/architecture/recovery-rerun.md.
+	CleanWorkspaceOnRecover bool
+}
+
+func loadRecoveryConfig(v *viper.Viper) RecoveryConfig {
+	return RecoveryConfig{
+		CleanWorkspaceOnRecover: v.GetBool("recovery.clean_workspace_on_recover"),
+	}
 }
 
 const defaultDiskFreeThresholdPercent = 10.0
@@ -49,7 +70,14 @@ func loadHeartbeatConfig(v *viper.Viper) HeartbeatConfig {
 }
 
 func loadBreakerConfig(v *viper.Viper) BreakerConfig {
-	return BreakerConfig{HandoffAfter: v.GetDuration("breaker.handoff_after")}
+	cfg := BreakerConfig{
+		HandoffAfter: v.GetDuration("breaker.handoff_after"),
+		OpenTimeout:  v.GetDuration("breaker.open_timeout"),
+	}
+	if cfg.OpenTimeout <= 0 {
+		cfg.OpenTimeout = defaultBreakerOpenTimeout
+	}
+	return cfg
 }
 
 const (

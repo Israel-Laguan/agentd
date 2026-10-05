@@ -67,6 +67,61 @@ func (m *FSWorkspaceManager) SecureDelete(ctx context.Context, projectID string)
 	return nil
 }
 
+// ResetProjectDir empties a project's workspace but keeps the directory itself,
+// so the persisted workspace path stays valid for the re-run. Like SecureDelete
+// it acts only on a path jailed under the configured root and refuses the root.
+func (m *FSWorkspaceManager) ResetProjectDir(ctx context.Context, projectID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	dir, err := JailPath(m.Root, m.ProjectDir(projectID))
+	if err != nil {
+		return err
+	}
+	root, err := filepath.EvalSymlinks(m.Root)
+	if err != nil {
+		return fmt.Errorf("resolve workspace root: %w", err)
+	}
+	if filepath.Clean(dir) == filepath.Clean(root) {
+		return fmt.Errorf("%w: refusing to reset workspace root", models.ErrSandboxViolation)
+	}
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return fmt.Errorf("locate project workspace under root: %w", err)
+	}
+	// Enumerate and delete through a directory handle rooted at the workspace root
+	// rather than through the resolved path. A concurrent writer can replace the
+	// project directory with a symlink between the jail check above and the
+	// removals below, and os.RemoveAll on a path then follows it out of the root.
+	// os.Root resolves every component under the root it was opened on, so the
+	// removal cannot leave the jail however the path is rewritten underneath us.
+	jail, err := os.OpenRoot(m.Root)
+	if err != nil {
+		return fmt.Errorf("open workspace root %s: %w", m.Root, err)
+	}
+	defer func() { _ = jail.Close() }()
+	projRoot, err := jail.OpenRoot(rel)
+	if err != nil {
+		return fmt.Errorf("open project workspace %s: %w", dir, err)
+	}
+	defer func() { _ = projRoot.Close() }()
+	handle, err := projRoot.Open(".")
+	if err != nil {
+		return fmt.Errorf("open project workspace %s: %w", dir, err)
+	}
+	defer func() { _ = handle.Close() }()
+	entries, err := handle.ReadDir(-1)
+	if err != nil {
+		return fmt.Errorf("read project workspace %s: %w", dir, err)
+	}
+	for _, entry := range entries {
+		if err := projRoot.RemoveAll(entry.Name()); err != nil {
+			return fmt.Errorf("reset project workspace %s: %w", dir, err)
+		}
+	}
+	return nil
+}
+
 // JailPath resolves requested and verifies it remains inside workspaceRoot.
 func JailPath(workspaceRoot, requested string) (string, error) {
 	root, err := filepath.EvalSymlinks(workspaceRoot)

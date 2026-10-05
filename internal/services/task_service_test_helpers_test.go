@@ -238,6 +238,8 @@ type fullStore struct {
 	*minimalStore
 }
 
+func (f fullStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func (f fullStore) ListComments(context.Context, string) ([]models.Comment, error) { return nil, nil }
 func (f fullStore) UpdateCriteriaMet(context.Context, string, []string) error      { return nil }
 func (f fullStore) ListCommentsSince(context.Context, string, time.Time) ([]models.Comment, error) {

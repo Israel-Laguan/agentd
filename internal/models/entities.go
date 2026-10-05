@@ -24,6 +24,13 @@ type Project struct {
 	// execution-time memory recall to that user's saved preferences; blank
 	// means no preferences are recalled.
 	UserID string `json:"user_id,omitempty"`
+	// StartedEmpty records that the workspace was created empty and never
+	// seeded (no source_path, not hand-populated). It is the only starting state
+	// agentd can restore, so the opt-in recovery reset (B-010) applies to these
+	// projects alone. False for every project that predates the column, and
+	// cleared when an operator seeds the workspace by hand and calls
+	// MarkWorkspaceReady.
+	StartedEmpty bool `json:"started_empty,omitempty"`
 }
 
 // Task is the durable unit of work moved by the Kanban state machine.

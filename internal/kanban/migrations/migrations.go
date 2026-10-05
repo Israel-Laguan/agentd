@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	currentSchemaVersion = 19
+	currentSchemaVersion = 20
 	schemaVersionKey     = "schema_version"
 )
 
@@ -56,6 +56,7 @@ func Run(ctx context.Context, db *sql.DB, projectsDir string) error {
 			return migrateWorkspacePaths(ctx, db, projectsDir, v18MigrateMode)
 		}},
 		{19, migrateToV19},
+		{20, migrateToV20},
 	}
 	for _, migration := range migrations {
 		if err := applyMigration(ctx, db, version, migration.version, migration.run); err != nil {

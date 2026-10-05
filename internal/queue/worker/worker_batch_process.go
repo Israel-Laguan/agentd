@@ -115,6 +115,11 @@ func (w *Worker) processBatchAgentic(
 	project models.Project,
 	profile models.AgentProfile,
 ) {
+	release, ok := w.gateBatchProvider(ctx, tasks, profile.Provider)
+	if !ok {
+		return
+	}
+	defer release()
 	resp, err := w.runBatchTextGateway(ctx, tasks, project, profile)
 	if err != nil {
 		for _, task := range tasks {
@@ -143,6 +148,11 @@ func (w *Worker) processBatchLegacy(
 	project models.Project,
 	profile models.AgentProfile,
 ) {
+	release, ok := w.gateBatchProvider(ctx, tasks, profile.Provider)
+	if !ok {
+		return
+	}
+	defer release()
 	resp, err := w.runBatchLegacyGateway(ctx, tasks, project, profile)
 	if err != nil {
 		for _, task := range tasks {

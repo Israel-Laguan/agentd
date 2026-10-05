@@ -174,6 +174,8 @@ type legacyHandoffStore struct {
 	subtasks []models.DraftTask
 }
 
+func (s *legacyHandoffStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func (s *legacyHandoffStore) BlockTaskWithSubtasks(_ context.Context, _ string, _ time.Time, drafts []models.DraftTask) (*models.Task, []models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -184,11 +184,11 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 	if w.tryTieredOrigin(ctx, task) {
 		return
 	}
-	if w.providerBreakers != nil && profile.Provider != "" && w.providerBreakers.Get(profile.Provider).IsOpen() {
-		w.handoffOrFail(ctx, task,
-			fmt.Errorf("%w: provider %s circuit breaker is open", models.ErrLLMQuotaExceeded, profile.Provider))
+	release, ok := w.gateProvider(ctx, task, profile.Provider)
+	if !ok {
 		return
 	}
+	defer release()
 	if w.dispatchTieredStep(ctx, task, project, profile) {
 		return
 	}

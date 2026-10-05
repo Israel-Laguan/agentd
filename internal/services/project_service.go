@@ -127,6 +127,17 @@ func (s *ProjectService) MarkWorkspaceReady(ctx context.Context, projectID strin
 		slog.Warn("mark workspace ready called but workspace is empty", "project_id", projectID)
 		return nil, fmt.Errorf("%w: workspace is empty; seed content before marking ready", models.ErrWorkspaceNotReady)
 	}
+	// Reaching here means the operator put content in the directory themselves, so
+	// the project no longer started empty and its content is not a leftover to be
+	// cleaned away by recovery. The bit records "this workspace was created empty and
+	// nothing else was put in it", and it is mandatory to clear before the tasks are
+	// unlocked: a failed clear leaves started_empty set, which would make a later
+	// boot recovery eligible to delete that hand-seeded content, so refuse to unlock
+	// the tasks and let the caller retry — the call is idempotent.
+	if err := s.store.ClearProjectStartedEmpty(ctx, projectID); err != nil {
+		slog.Error("clear started_empty failed", "project_id", projectID, "error", err)
+		return nil, fmt.Errorf("clear started_empty: %w", err)
+	}
 	tasks, err := s.store.MarkProjectTasksReady(ctx, projectID)
 	if err != nil {
 		slog.Error("mark project tasks ready failed", "project_id", projectID, "error", err)

@@ -177,6 +177,24 @@ func (c *APIClient) RetryTask(ctx context.Context, taskID string) (*http.Respons
 	return c.Post(ctx, path, nil)
 }
 
+// SetAgentProviderModel calls PATCH /api/v1/agents/{id} to point an agent
+// profile at one gateway provider and model
+// (internal/api/controllers/agents.go's Patch).
+//
+// A journey needs this when the profile's provider is what selects the per-provider
+// breaker: the worker's gate is a no-op for an empty profile provider
+// (internal/queue/worker/worker_provider_gate.go's admitProvider), and the profile
+// validator requires provider and model together, so no devenv profile ships a
+// provider. Each profile has its own data volume, so the change only affects the
+// journeys running against that profile's port.
+func (c *APIClient) SetAgentProviderModel(ctx context.Context, agentID, provider, model string, agentic bool) (*http.Response, error) {
+	return c.Patch(ctx, "/api/v1/agents/"+agentID, map[string]any{
+		"provider":     provider,
+		"model":        model,
+		"agentic_mode": agentic,
+	})
+}
+
 // Get makes a GET request.
 func (c *APIClient) Get(ctx context.Context, path string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
