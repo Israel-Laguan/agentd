@@ -19,6 +19,8 @@ type dispatchBatchStore struct {
 	queries  int
 }
 
+func (s *dispatchBatchStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func newDispatchBatchStore(tasks []models.Task) *dispatchBatchStore {
 	projects := map[string]models.Project{
 		"p1": {BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp/p1"},

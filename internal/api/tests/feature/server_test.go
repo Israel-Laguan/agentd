@@ -177,6 +177,8 @@ type apiStore struct {
 	comments []models.Comment
 }
 
+func (s *apiStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func newAPITestStore() *apiStore {
 	now := time.Now().UTC()
 	return &apiStore{

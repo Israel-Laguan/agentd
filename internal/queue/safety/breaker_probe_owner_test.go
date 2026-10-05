@@ -240,7 +240,7 @@ func TestUnscopedVerdictSettlesTheUnownedSlot(t *testing.T) {
 	})
 }
 
-// halfOpenWithCleanFailureCount returns a breaker sitting in the exact window
+// halfOpenProbeHeld returns a breaker sitting in the exact window
 // B-014 is about: HALF_OPEN with the probe slot taken and no failure counted yet,
 // so a foreign verdict raises the count without tripping the breaker — the only
 // state in which freeing the slot is observable.

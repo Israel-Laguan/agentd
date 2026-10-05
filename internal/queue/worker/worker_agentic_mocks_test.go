@@ -88,6 +88,8 @@ type mockCommitStore struct {
 	blockErr      error
 }
 
+func (s *mockCommitStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func (m *mockCommitStore) MarkTaskRunning(ctx context.Context, id string, t time.Time, pid int) (*models.Task, error) {
 	return nil, nil
 }

@@ -103,6 +103,20 @@ func (s *FakeKanbanStore) GetProject(_ context.Context, id string) (*models.Proj
 	return &p, nil
 }
 
+// ClearProjectStartedEmpty mirrors the production store: the bit is only ever
+// cleared, never set, so a project that does not exist is a no-op.
+func (s *FakeKanbanStore) ClearProjectStartedEmpty(_ context.Context, projectID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.projects[projectID]
+	if !ok {
+		return models.ErrProjectNotFound
+	}
+	p.StartedEmpty = false
+	s.projects[projectID] = p
+	return nil
+}
+
 func (s *FakeKanbanStore) ListProjects(context.Context) ([]models.Project, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

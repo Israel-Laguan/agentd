@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sync"
@@ -18,6 +19,8 @@ type queueStore struct {
 	project  models.Project
 	profile  models.AgentProfile
 }
+
+func (s *queueStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
 
 func newQueueStore() *queueStore {
 	return &queueStore{

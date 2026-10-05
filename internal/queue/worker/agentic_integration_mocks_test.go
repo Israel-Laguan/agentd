@@ -46,6 +46,8 @@ type mockAgenticStore struct {
 	drafts          []models.DraftTask
 }
 
+func (s *mockAgenticStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func newMockAgenticStore(taskID string) *mockAgenticStore {
 	store := &mockAgenticStore{
 		task: models.Task{

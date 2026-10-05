@@ -118,8 +118,12 @@ func resetProject(
 		// A sibling can write workspace output while RUNNING and then move to
 		// BLOCKED, FAILED, IN_CONSIDERATION, READY or QUEUED. StartedAt stays set
 		// across those transitions, so it — not the current state — is what says
-		// whether this sibling owns output in the directory.
-		untouched := (other.State == models.TaskStatePending || other.State == models.TaskStateReady) && other.StartedAt == nil
+		// whether this sibling owns output in the directory. QUEUED is safe only
+		// when it never began: at boot a QUEUED claim is an orphan whose
+		// started_at is still nil (the orphaned-QUEUED sweep only runs after this
+		// pass), so it holds no output.
+		untouched := other.StartedAt == nil && (other.State == models.TaskStatePending ||
+			other.State == models.TaskStateReady || other.State == models.TaskStateQueued)
 		if !untouched {
 			return fmt.Errorf("task %s is %s and shares this workspace; a reset would delete its output", other.ID, other.State)
 		}

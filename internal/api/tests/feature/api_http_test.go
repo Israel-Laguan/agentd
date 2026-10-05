@@ -211,6 +211,8 @@ type testStore struct {
 	comments []models.Comment
 }
 
+func (s *testStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func newTestStore() *testStore {
 	now := time.Now().UTC()
 	return &testStore{

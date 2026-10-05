@@ -23,6 +23,8 @@ type batchTestStore struct {
 	mu      sync.Mutex
 }
 
+func (s *batchTestStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func (s *batchTestStore) lookupTaskLocked(id string) models.Task {
 	if t, ok := s.tasks[id]; ok {
 		return t

@@ -114,19 +114,6 @@ func (s *ProjectService) ensureWorkspace(ctx context.Context, project models.Pro
 	return nil
 }
 
-// startedEmptyClearer clears projects.started_empty once an operator has populated
-// the workspace by hand.
-//
-// The bit records "this workspace was created empty and nothing else was put in
-// it", which is what recovery.clean_workspace_on_recover needs to know before it
-// may empty the directory. Seeding the directory by hand invalidates it. It is a
-// narrow optional interface rather than a KanbanStore method so stores that do not
-// implement it simply keep the bit — which only makes boot recovery refuse the
-// reset, never perform an unsafe one.
-type startedEmptyClearer interface {
-	ClearProjectStartedEmpty(ctx context.Context, projectID string) error
-}
-
 // MarkWorkspaceReady transitions all PENDING tasks for the given project to
 // READY, signaling that the workspace has been populated and workers may
 // claim tasks.
@@ -142,15 +129,14 @@ func (s *ProjectService) MarkWorkspaceReady(ctx context.Context, projectID strin
 	}
 	// Reaching here means the operator put content in the directory themselves, so
 	// the project no longer started empty and its content is not a leftover to be
-	// cleaned away by recovery. A failed clear leaves started_empty set, which
-	// would make a later boot recovery eligible to delete that hand-seeded
-	// content, so refuse to unlock the tasks and let the caller retry — the call
-	// is idempotent.
-	if clearer, ok := s.store.(startedEmptyClearer); ok {
-		if err := clearer.ClearProjectStartedEmpty(ctx, projectID); err != nil {
-			slog.Error("clear started_empty failed", "project_id", projectID, "error", err)
-			return nil, fmt.Errorf("clear started_empty: %w", err)
-		}
+	// cleaned away by recovery. The bit records "this workspace was created empty and
+	// nothing else was put in it", and it is mandatory to clear before the tasks are
+	// unlocked: a failed clear leaves started_empty set, which would make a later
+	// boot recovery eligible to delete that hand-seeded content, so refuse to unlock
+	// the tasks and let the caller retry — the call is idempotent.
+	if err := s.store.ClearProjectStartedEmpty(ctx, projectID); err != nil {
+		slog.Error("clear started_empty failed", "project_id", projectID, "error", err)
+		return nil, fmt.Errorf("clear started_empty: %w", err)
 	}
 	tasks, err := s.store.MarkProjectTasksReady(ctx, projectID)
 	if err != nil {

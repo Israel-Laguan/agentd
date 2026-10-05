@@ -232,6 +232,45 @@ func TestWorkspaceReadyUnlocksTasks(t *testing.T) {
 	}
 }
 
+// A project materialized with an empty workspace has its started_empty bit set;
+// workspace/ready clears it so a later boot recovery cannot delete the content the
+// operator just seeded by hand.
+func TestWorkspaceReadyClearsStartedEmpty(t *testing.T) {
+	t.Parallel()
+
+	wsRoot := t.TempDir()
+	store := testutil.NewFakeStore()
+	store.SetProjectsDir(wsRoot)
+	svc := services.NewProjectService(store, &sandbox.FSWorkspaceManager{Root: wsRoot})
+
+	project, _, err := svc.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName:         "seeded-test",
+		StartEmptyWorkspace: true,
+		Tasks:               []models.DraftTask{{Title: "T1", Description: "work"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	if !project.StartedEmpty {
+		t.Fatal("fixture did not set started_empty, so this test would pass without the clear")
+	}
+
+	if err := os.WriteFile(filepath.Join(project.WorkspacePath, "data.txt"), []byte("seeded"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.MarkWorkspaceReady(context.Background(), project.ID); err != nil {
+		t.Fatalf("MarkWorkspaceReady: %v", err)
+	}
+
+	reloaded, err := store.GetProject(context.Background(), project.ID)
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if reloaded.StartedEmpty {
+		t.Fatal("started_empty survived workspace/ready, so recovery may delete the hand-seeded content")
+	}
+}
+
 // TestSourcePathNotDirectory verifies that a non-directory source_path is
 // rejected with a clear error.
 func TestSourcePathNotDirectory(t *testing.T) {

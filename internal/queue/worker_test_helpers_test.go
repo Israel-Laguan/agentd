@@ -161,6 +161,8 @@ type workerStore struct {
 	heartbeats int
 }
 
+func (s *workerStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func newWorkerStore() *workerStore {
 	now := time.Now().UTC()
 	return &workerStore{

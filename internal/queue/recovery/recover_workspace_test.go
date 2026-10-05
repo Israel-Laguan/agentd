@@ -264,6 +264,44 @@ func TestBootReconcile_refusesResetWhenSiblingStartedThenLeftRunning(t *testing.
 	f.assertRefused(t, f.taskIDs[0])
 }
 
+// A sibling can be sitting in the dispatch queue — claimed by a daemon that died
+// before a worker picked it up. It never began, so it owns no output in the
+// directory and must not refuse the reset; boot runs before the orphaned-QUEUED
+// sweep would have re-queued it.
+func TestBootReconcile_resetsWhenSiblingQueuedButNeverStarted(t *testing.T) {
+	f := newResetFixture(t, true, "a", "other")
+	if _, err := f.store.UpdateTaskState(context.Background(), f.taskIDs[1], time.Now(), models.TaskStateQueued); err != nil {
+		t.Fatalf("UpdateTaskState to QUEUED: %v", err)
+	}
+
+	if err := f.boot(t, WithWorkspaceReset(f.ws)); err != nil {
+		t.Fatalf("BootReconcile() error = %v", err)
+	}
+
+	if f.partialExists() {
+		t.Fatal("the interrupted attempt's file survived the reset")
+	}
+}
+
+// A QUEUED sibling that has run keeps its started_at and still owns output, so it
+// refuses the reset just like any other sibling that ran.
+func TestBootReconcile_refusesResetWhenQueuedSiblingHadStarted(t *testing.T) {
+	f := newResetFixture(t, true, "a", "other")
+	f.markRunning(t, f.taskIDs[1], siblingPID())
+	if _, err := f.store.UpdateTaskState(context.Background(), f.taskIDs[1], time.Now(), models.TaskStateQueued); err != nil {
+		t.Fatalf("UpdateTaskState to QUEUED: %v", err)
+	}
+
+	if err := f.boot(t, WithWorkspaceReset(f.ws)); err != nil {
+		t.Fatalf("BootReconcile() error = %v", err)
+	}
+
+	if !f.partialExists() {
+		t.Fatal("workspace of a project with a QUEUED sibling that had run was deleted")
+	}
+	f.assertRefused(t, f.taskIDs[0])
+}
+
 // Boot reconcile resets each project once, but a second daemon sharing the home
 // can claim one of the just-recovered tasks in the window between recovery and
 // the reset. That task is no longer READY, and emptying the workspace underneath

@@ -10,8 +10,8 @@ Three toggles:
 - `outage` (503) — the provider is unreachable. Feeds the single *global* breaker.
 - `quota` (429) — the provider answers but is out of quota. Only
   `ErrLLMQuotaExceeded` reaches the *per-provider* breakers, so a journey that
-  wants to exercise a provider breaker needs this, not an outage. See B-016 for why
-  that distinction currently cannot be reached through the gateway cascade.
+  wants to exercise a provider breaker needs this, not an outage. Quota errors do
+  reach the breaker through the gateway cascade, which is what B-016 fixed.
 - `slow_once` — the next request for a model sleeps, then proceeds normally, and
   the entry is consumed by that one request. Lets a journey hold a breaker's probe
   in flight long enough to observe what the siblings do while it runs.

@@ -17,6 +17,8 @@ type workerTestStore struct {
 	result  *models.TaskResult
 }
 
+func (s *workerTestStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
+
 func (s *workerTestStore) MarkTaskRunning(_ context.Context, id string, _ time.Time, pid int) (*models.Task, error) {
 	s.task.State = models.TaskStateRunning
 	return &s.task, nil
