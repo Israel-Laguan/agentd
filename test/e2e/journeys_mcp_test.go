@@ -320,8 +320,8 @@ func j15LargePage(ctx context.Context, t *testing.T, client *APIClient, limit, o
 
 // TestJ15_MCPBoardExportStateFilter pins B-006 end to end: the state filter
 // must be honoured when project_id is also passed. A project whose tasks are
-// all COMPLETED returns nothing for state=FAILED — both scoped to the project
-// and board-wide — and returns its tasks for state=COMPLETED.
+// all COMPLETED returns nothing for state=FAILED — scoped to the project, and
+// absent from the board-wide FAILED list — and returns its tasks for state=COMPLETED.
 func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
@@ -368,13 +368,21 @@ func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 		t.Fatalf("J15-state [mcp board.list_tasks project+FAILED] returned %d task(s), want 0", len(failedInProject))
 	}
 
-	// The same filter board-wide: also none.
+	// The same filter board-wide. The stack is shared with the other journeys
+	// (J15-large retires its backlog to FAILED), so the board may legitimately
+	// hold FAILED tasks: assert the filter is honoured for every row returned
+	// and that none of this project's COMPLETED tasks leak into it.
 	var failedBoardWide []MCPTask
 	if err := client.CallMCPTool(ctx, "board.list_tasks", map[string]any{"state": "FAILED"}, &failedBoardWide); err != nil {
 		t.Fatalf("J15-state [mcp board.list_tasks FAILED] %v", err)
 	}
-	if len(failedBoardWide) != 0 {
-		t.Fatalf("J15-state [mcp board.list_tasks FAILED] returned %d task(s), want 0", len(failedBoardWide))
+	for _, task := range failedBoardWide {
+		if task.State != string(TaskStateFailed) {
+			t.Fatalf("J15-state [mcp board.list_tasks FAILED] task %s has state %q, want FAILED", task.ID, task.State)
+		}
+		if task.ProjectID == materialized.Project.ID {
+			t.Fatalf("J15-state [mcp board.list_tasks FAILED] returned task %s of the all-COMPLETED project", task.ID)
+		}
 	}
 
 	// state=COMPLETED with project_id: the project's tasks, proving the
@@ -386,7 +394,7 @@ func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 	if len(completedInProject) != len(materialized.Tasks) {
 		t.Fatalf("J15-state [mcp board.list_tasks project+COMPLETED] returned %d task(s), want %d", len(completedInProject), len(materialized.Tasks))
 	}
-	t.Logf("J15-state: state=FAILED returned 0 (project and board-wide); state=COMPLETED returned %d", len(completedInProject))
+	t.Logf("J15-state: state=FAILED returned 0 for the project and none of its tasks board-wide; state=COMPLETED returned %d", len(completedInProject))
 }
 
 // j15AssertTaskDetail is step 4: the per-task read. The detail shape carries
