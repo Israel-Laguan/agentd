@@ -24,13 +24,15 @@ type RequeueStore interface {
 // RequeueTask moves task back to READY. The write carries the caller's
 // updated_at, so a concurrent writer makes it fail with ErrOptimisticLock;
 // the row is then re-read and the write retried against the version the store
-// has now. A row that is no longer in one of the from states has been moved by
+// has now. The store checks the transition before the version, so a row moved
+// somewhere READY is unreachable from fails with ErrInvalidStateTransition
+// instead; it takes the same re-read path. A row that is no longer in one of the from states has been moved by
 // someone else (a reconcile, an operator, a finished run) and is left alone.
 func RequeueTask(ctx context.Context, store RequeueStore, task models.Task, from ...models.TaskState) error {
 	expected := task.UpdatedAt
 	for attempt := 0; attempt < requeueAttempts; attempt++ {
 		_, err := store.UpdateTaskState(ctx, task.ID, expected, models.TaskStateReady)
-		if !errors.Is(err, models.ErrOptimisticLock) {
+		if !errors.Is(err, models.ErrOptimisticLock) && !errors.Is(err, models.ErrInvalidStateTransition) {
 			return err
 		}
 		current, getErr := store.GetTask(ctx, task.ID)

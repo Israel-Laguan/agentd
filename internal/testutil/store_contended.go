@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 )
 
 // ContendedStateStore is a FakeKanbanStore whose UpdateTaskState enforces the
-// optimistic-lock version the way the real store does (UPDATE ... WHERE
+// optimistic-lock version the way the real store does (transition check, then UPDATE ... WHERE
 // updated_at = ?, ErrOptimisticLock when nothing matched), which the embedded
 // fake deliberately ignores. Its first Contended calls first let "another
 // writer" commit to the row, so the caller's version is stale by the time the
@@ -56,6 +57,10 @@ func (s *ContendedStateStore) UpdateTaskState(ctx context.Context, id string, ex
 		if current, err = s.GetTask(ctx, id); err != nil {
 			return nil, err
 		}
+	}
+	// Transition first, version second: the order the real store checks in.
+	if !current.State.CanTransitionTo(next) {
+		return nil, fmt.Errorf("%w: %s -> %s", models.ErrInvalidStateTransition, current.State, next)
 	}
 	if !current.UpdatedAt.Equal(expected) {
 		return nil, models.ErrOptimisticLock
