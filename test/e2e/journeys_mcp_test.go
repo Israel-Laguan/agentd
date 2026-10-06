@@ -216,6 +216,10 @@ func TestJ15_MCPBoardExportLargeBoard(t *testing.T) {
 		StartEmptyWorkspace: true,
 		Tasks:               drafts,
 	})
+	// The 150 tasks are only exported, never run. Left READY they would sit in
+	// the default profile's worker queue and starve every journey after this one
+	// (J15-state, J11), so retire them when the test ends.
+	t.Cleanup(func() { j15RetireProjectTasks(client, materialized.Project.ID) })
 
 	// Default board-wide call: the whole 150-task board, not a 100-task page.
 	var all []MCPTask
@@ -277,6 +281,33 @@ func j15LargeAssertAllExported(ctx context.Context, t *testing.T, client *APICli
 	t.Logf("J15-large: default board-wide call exported %d/%d task(s)", len(exported), len(materialized.Tasks))
 }
 
+// j15RetireProjectTasks moves every still-open task of a project to FAILED so
+// the worker stops picking them up. It runs from t.Cleanup, after the test
+// context is gone, so it uses its own. Best effort: a task the worker moved in
+// the meantime (an invalid transition) is logged by nobody and skipped, since
+// the goal is only to drain the backlog, not to assert on it.
+func j15RetireProjectTasks(client *APIClient, projectID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	var tasks []MCPTask
+	args := map[string]any{"project_id": projectID, "limit": 500}
+	if err := client.CallMCPTool(ctx, "board.list_tasks", args, &tasks); err != nil {
+		return
+	}
+	for _, task := range tasks {
+		switch TaskState(task.State) {
+		case TaskStateCompleted, TaskStateFailed, TaskStateFailedRequiresHuman:
+			continue
+		}
+		resp, err := client.Patch(ctx, "/api/v1/tasks/"+task.ID, map[string]string{"state": string(TaskStateFailed)})
+		if err != nil {
+			return
+		}
+		_ = resp.Body.Close()
+	}
+}
+
 // j15LargePage fetches one page of the board-wide export.
 func j15LargePage(ctx context.Context, t *testing.T, client *APIClient, limit, offset int) []MCPTask {
 	t.Helper()
@@ -296,7 +327,7 @@ func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 		t.Skip("skipping e2e test in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
 	harness := NewHarness(baseURL, "default")
@@ -318,7 +349,7 @@ func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 	// Let the workers complete the tasks so there is a real COMPLETED set to
 	// filter on.
 	poller := NewTaskPoller(client, materialized.Project.ID)
-	completed, err := poller.WaitForAllComplete(ctx, 120*time.Second)
+	completed, err := poller.WaitForAllComplete(ctx, 240*time.Second)
 	if err != nil {
 		t.Fatalf("J15-state [run] tasks did not complete: %v (last observed: %+v)", err, completed)
 	}

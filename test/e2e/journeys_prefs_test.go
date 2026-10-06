@@ -42,7 +42,7 @@ func TestJ11_PreferenceRecallOnLaterTask(t *testing.T) {
 		t.Skip("skipping e2e test in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 360*time.Second)
 	defer cancel()
 
 	harness := NewHarness(baseURL, "default")
@@ -130,7 +130,7 @@ func j11RunProject(
 	projectID, taskID := materialized.Project.ID, materialized.Tasks[0].ID
 
 	poller := NewTaskPoller(client, projectID)
-	if _, err := poller.WaitForAllComplete(ctx, 60*time.Second); err != nil {
+	if _, err := poller.WaitForAllComplete(ctx, 90*time.Second); err != nil {
 		t.Fatalf("%s [tasks] did not complete: %v", tag, err)
 	}
 
