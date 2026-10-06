@@ -52,6 +52,9 @@ jobs:
       GOLANGCI_LINT_VERSION: v2.12.2
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history so check-commits can diff the PR's commits against the base.
+          fetch-depth: 0
 
       - uses: actions/setup-go@v6
         with:
@@ -75,6 +78,34 @@ jobs:
               detail += '\n\nSee the job Summary tab for details.';
             }
             core.setFailed(detail);
+
+      - name: Commit trailer check
+        if: always() && github.event_name == 'pull_request'
+        id: commits_check
+        continue-on-error: true
+        run: make check-commits BASE=origin/${{ github.base_ref }}
+
+      - name: Enforce commit trailer check
+        if: always() && steps.commits_check.outcome == 'failure'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.setFailed(
+              'A commit in this PR carries a Co-Authored-By trailer. Remove it (git rebase -i, reword) and force-push.'
+            );
+
+      # Squash merges copy the PR title and body into the commit on main, so a
+      # trailer there lands on main even when every branch commit is clean.
+      - name: PR title and body trailer check
+        if: always() && github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | grep -qiE '^[[:space:]]*Co-Authored-By:'; then
+            echo "::error::PR title or body has a Co-Authored-By trailer line; a squash merge would copy it into main. Remove it."
+            exit 1
+          fi
 
       - name: Install golangci-lint
         if: always()

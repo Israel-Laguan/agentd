@@ -287,7 +287,7 @@ row; both pinned. Mutations: guard removed (2 red), guard widened to HALF_OPEN (
 both sides (untracked file deleted; kept once the bit is cleared). Mutations: always refuse, ignore the bit.
 **B-021.** Copy-then-swap (`StageSeed`/`Promote`/`Discard`). A mid-copy failure left 1 project; now 0.
 Mutations: swallowed error, staging kept, no `Discard`, `Promote` overwrites, `Discard` no-op.
-**B-023.** `ci-e2e.yml`: weekly, manual, and on `test/e2e`/`devenv` PRs. Unverified until it first runs.
+**B-023.** `ci-e2e.yml`: weekly, manual, and on `test/e2e`/`devenv` PRs. Verified: 3 consecutive green runs on PR #122 (about 6m40s each) after two fixes (`PODMAN_COMPOSE_PROVIDER` pinned to the pipx `podman-compose`; J15 large-board test split): run ids 37457124050, 37460953863, 37465186158.
 **SP-016.** `outage_latch_test.go` against `c635a218` (pre-#121): red, "latched HALF_OPEN" (SP-012's
 defect). HEAD `-race -count=20`: green. Release at `loop_dispatch.go:26` neutralised: red. Fix holds.
 **SP-014** go, narrow (T-038, not built). **SP-015** no-go on the events; J06 already implemented.

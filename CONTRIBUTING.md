@@ -16,7 +16,8 @@
 git clone <repo-url>
 cd agentd
 make tidy        # download dependencies
-make check       # run full quality gate (loc + minfunc + lint + test + lint-docs)
+make check       # run full quality gate (loc + minfunc + lint + test + lint-docs + check-commits)
+make hooks-install  # optional: pre-push hook running make check-commits (hooks are per-clone)
 ```
 
 ## Development Workflow
@@ -25,6 +26,14 @@ make check       # run full quality gate (loc + minfunc + lint + test + lint-doc
 2. Make your changes. Write tests alongside behavior changes.
 3. Run `make check` locally before pushing.
 4. Open a PR with a clear description of the change and any architectural decisions.
+
+### PR size limit
+
+Each PR must change fewer than 100 files and at most 1000 lines (additions plus deletions); split larger work into stacked PRs. The `CI (PR size)` workflow (`.github/workflows/ci-pr-size.yml`, logic in `tools/ci/pr_size.sh`) fails the PR otherwise. A maintainer can waive it for one PR by adding the `large-pr-ok` label (adding or removing the label re-runs the check); use it only for changes that cannot be split, such as generated or mechanical moves.
+
+### Commit trailers
+
+Commits must not carry a `Co-Authored-By` trailer. `make check-commits` (part of `make check`, and a CI step on PRs) rejects one on any commit the branch adds over `origin/main`; commits already on main are exempt. CI also rejects the trailer in the PR title or body, because a squash merge copies both into main.
 
 ## Make Targets
 
@@ -41,7 +50,9 @@ All compile/lint/test targets use `GOCACHE=$(pwd)/.gocache` and `GOMODCACHE` fro
 | `make coverage` | Run tests with coverage report |
 | `make lint` | Run `golangci-lint` (includes `depguard`, `cyclop`, `funlen`, `revive`) |
 | `make loc` | Check tracked file line counts: 300 default, 500 for `*_test.go`, 400 under `docs/` (see [`docs/guardrails.md`](docs/guardrails.md) / [`GUARDRAILS.md`](GUARDRAILS.md)) |
-| `make check` | `loc` + `minfunc` + `lint` + `test` + `lint-docs` (full quality gate) |
+| `make check-commits` | Fail if a commit added over `origin/main` (`BASE=` to override) has a `Co-Authored-By` trailer; commits already on main are exempt |
+| `make hooks-install` | Write an opt-in `.git/hooks/pre-push` that runs `make check-commits` (per clone) |
+| `make check` | `loc` + `minfunc` + `lint` + `test` + `lint-docs` + `check-commits` (full quality gate) |
 | `make tidy` | Run `go mod tidy` |
 
 ## Code Standards
