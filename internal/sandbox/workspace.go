@@ -3,7 +3,6 @@ package sandbox
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,9 +15,10 @@ type WorkspaceManager interface {
 	EnsureProjectDir(ctx context.Context, projectID string) (string, error)
 	ProjectDir(projectID string) string
 	SecureDelete(ctx context.Context, projectID string) error
-	// SeedFromPath copies content from sourcePath into the project workspace.
-	// The workspace directory must already exist (via EnsureProjectDir).
-	SeedFromPath(ctx context.Context, projectID, sourcePath string) error
+	// StageSeed copies sourcePath into a staging area before any project exists,
+	// so a copy that fails partway leaves nothing behind. The caller persists the
+	// project, then calls StagedSeed.Promote, and Discards on every other path.
+	StageSeed(ctx context.Context, sourcePath string) (StagedSeed, error)
 	// IsWorkspacePopulated returns true if the workspace contains at least one
 	// file or subdirectory.
 	IsWorkspacePopulated(ctx context.Context, projectID string) (bool, error)
@@ -141,8 +141,8 @@ func JailPath(workspaceRoot, requested string) (string, error) {
 // ValidateSourcePath resolves sourcePath to an absolute path and checks that
 // it names an existing directory, returning it ready to copy from. It is
 // exported so callers can reject a bad source_path *before* they persist any
-// board state: SeedFromPath's own failure happens after the project and task
-// rows are already committed, which would leave an orphan project behind.
+// board state. A copy failure is covered separately by StageSeed, which copies
+// before the project exists.
 //
 // It is deliberately not on the WorkspaceManager interface — it needs no
 // receiver, and adding it there would force every fake implementation to grow
@@ -160,51 +160,6 @@ func ValidateSourcePath(sourcePath string) (string, error) {
 		return "", fmt.Errorf("source_path must be a directory: %s", src)
 	}
 	return src, nil
-}
-
-// SeedFromPath copies the contents of sourcePath into the project workspace
-// using a recursive filesystem walk. It validates that sourcePath exists and
-// that the destination is within the jailed workspace root.
-func (m *FSWorkspaceManager) SeedFromPath(ctx context.Context, projectID, sourcePath string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	src, err := ValidateSourcePath(sourcePath)
-	if err != nil {
-		return err
-	}
-	destDir := m.ProjectDir(projectID)
-	if _, err := JailPath(m.Root, destDir); err != nil {
-		return err
-	}
-	return filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if d.Type()&fs.ModeSymlink != 0 {
-			return nil
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		dest := filepath.Join(destDir, rel)
-		if d.IsDir() {
-			return os.MkdirAll(dest, 0o755)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read %s: %w", path, err)
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(dest, data, info.Mode().Perm())
-	})
 }
 
 // IsWorkspacePopulated returns true if the project workspace contains at

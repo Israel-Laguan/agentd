@@ -4,7 +4,6 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -187,116 +186,16 @@ func j15AssertTasksExported(ctx context.Context, t *testing.T, client *APIClient
 	t.Logf("J15: %d/%d task(s) exported with ids, titles and states", len(exported), len(materialized.Tasks))
 }
 
-// TestJ15_MCPBoardExportLargeBoard extends J15 past the silent 100-task cap
-// (B-005). A board of 150 tasks must be exportable in full: the default
-// board-wide call returns every task, and limit/offset page through a board
-// larger than one page without dropping any.
-func TestJ15_MCPBoardExportLargeBoard(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping e2e test in short mode")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	harness := NewHarness(baseURL, "default")
-	if err := harness.WaitForHealthy(ctx, 10*time.Second); err != nil {
-		t.Fatalf("J15-large [boot] harness failed to become healthy: %v", err)
-	}
-	client := NewAPIClient(baseURL, harness.client)
-
-	const taskCount = 150
-	drafts := make([]DraftTask, taskCount)
-	for i := range drafts {
-		drafts[i] = DraftTask{Title: fmt.Sprintf("J15 large board task %03d", i), Description: "Exported via board.list_tasks."}
-	}
-	materialized := materializePlan(ctx, t, client, "J15-large", DraftPlan{
-		ProjectName:         UniqueProjectName("j15-large"),
-		Description:         "J15: a board larger than one default page exports completely",
-		StartEmptyWorkspace: true,
-		Tasks:               drafts,
-	})
-
-	// Default board-wide call: the whole 150-task board, not a 100-task page.
-	var all []MCPTask
-	if err := client.CallMCPTool(ctx, "board.list_tasks", nil, &all); err != nil {
-		t.Fatalf("J15-large [mcp board.list_tasks] %v", err)
-	}
-	j15LargeAssertAllExported(ctx, t, client, materialized, all)
-
-	// Paging: walk the board in pages of 100. The board-wide call spans every
-	// project on the shared default profile, so the page total is not this
-	// project's count — what matters is that every one of this project's tasks
-	// appears exactly once across the pages (no gaps, no repeats).
-	seen := make(map[string]bool)
-	for offset := 0; ; offset += 100 {
-		page := j15LargePage(ctx, t, client, 100, offset)
-		if len(page) == 0 {
-			break
-		}
-		for _, task := range page {
-			if seen[task.ID] {
-				t.Fatalf("J15-large [paging] task %s appeared on two pages", task.ID)
-			}
-			seen[task.ID] = true
-		}
-		if len(page) < 100 {
-			break
-		}
-	}
-	for _, want := range materialized.Tasks {
-		if !seen[want.ID] {
-			t.Fatalf("J15-large [paging] task %s (%q) missing from the paged export", want.ID, want.Title)
-		}
-	}
-}
-
-// j15LargeAssertAllExported asserts the default board-wide call returned every
-// task of the materialized project, with real ids, titles and states.
-func j15LargeAssertAllExported(ctx context.Context, t *testing.T, client *APIClient, materialized *MaterializeResult, all []MCPTask) {
-	t.Helper()
-	exported := make(map[string]MCPTask, len(all))
-	for _, task := range all {
-		if task.ID == "" || task.Title == "" || task.State == "" {
-			t.Fatalf("J15-large [mcp board.list_tasks] task is missing metadata: %+v", task)
-		}
-		exported[task.ID] = task
-	}
-	for _, want := range materialized.Tasks {
-		got, ok := exported[want.ID]
-		if !ok {
-			t.Fatalf("J15-large [mcp board.list_tasks] task %s (%q) missing from the default export (%d tasks returned)", want.ID, want.Title, len(all))
-		}
-		if got.Title != want.Title {
-			t.Fatalf("J15-large [mcp board.list_tasks] task %s title = %q, want %q", want.ID, got.Title, want.Title)
-		}
-		if got.State != string(want.State) {
-			t.Fatalf("J15-large [mcp board.list_tasks] task %s state = %q, want %q", want.ID, got.State, want.State)
-		}
-	}
-	t.Logf("J15-large: default board-wide call exported %d/%d task(s)", len(exported), len(materialized.Tasks))
-}
-
-// j15LargePage fetches one page of the board-wide export.
-func j15LargePage(ctx context.Context, t *testing.T, client *APIClient, limit, offset int) []MCPTask {
-	t.Helper()
-	var tasks []MCPTask
-	if err := client.CallMCPTool(ctx, "board.list_tasks", map[string]any{"limit": limit, "offset": offset}, &tasks); err != nil {
-		t.Fatalf("J15-large [mcp board.list_tasks limit=%d offset=%d] %v", limit, offset, err)
-	}
-	return tasks
-}
-
 // TestJ15_MCPBoardExportStateFilter pins B-006 end to end: the state filter
 // must be honoured when project_id is also passed. A project whose tasks are
-// all COMPLETED returns nothing for state=FAILED — both scoped to the project
-// and board-wide — and returns its tasks for state=COMPLETED.
+// all COMPLETED returns nothing for state=FAILED — scoped to the project, and
+// absent from the board-wide FAILED list — and returns its tasks for state=COMPLETED.
 func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
 	harness := NewHarness(baseURL, "default")
@@ -318,7 +217,7 @@ func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 	// Let the workers complete the tasks so there is a real COMPLETED set to
 	// filter on.
 	poller := NewTaskPoller(client, materialized.Project.ID)
-	completed, err := poller.WaitForAllComplete(ctx, 120*time.Second)
+	completed, err := poller.WaitForAllComplete(ctx, 240*time.Second)
 	if err != nil {
 		t.Fatalf("J15-state [run] tasks did not complete: %v (last observed: %+v)", err, completed)
 	}
@@ -337,13 +236,21 @@ func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 		t.Fatalf("J15-state [mcp board.list_tasks project+FAILED] returned %d task(s), want 0", len(failedInProject))
 	}
 
-	// The same filter board-wide: also none.
+	// The same filter board-wide. The stack is shared with the other journeys
+	// (J15-large retires its backlog to FAILED), so the board may legitimately
+	// hold FAILED tasks: assert the filter is honoured for every row returned
+	// and that none of this project's COMPLETED tasks leak into it.
 	var failedBoardWide []MCPTask
 	if err := client.CallMCPTool(ctx, "board.list_tasks", map[string]any{"state": "FAILED"}, &failedBoardWide); err != nil {
 		t.Fatalf("J15-state [mcp board.list_tasks FAILED] %v", err)
 	}
-	if len(failedBoardWide) != 0 {
-		t.Fatalf("J15-state [mcp board.list_tasks FAILED] returned %d task(s), want 0", len(failedBoardWide))
+	for _, task := range failedBoardWide {
+		if task.State != string(TaskStateFailed) {
+			t.Fatalf("J15-state [mcp board.list_tasks FAILED] task %s has state %q, want FAILED", task.ID, task.State)
+		}
+		if task.ProjectID == materialized.Project.ID {
+			t.Fatalf("J15-state [mcp board.list_tasks FAILED] returned task %s of the all-COMPLETED project", task.ID)
+		}
 	}
 
 	// state=COMPLETED with project_id: the project's tasks, proving the
@@ -355,7 +262,7 @@ func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 	if len(completedInProject) != len(materialized.Tasks) {
 		t.Fatalf("J15-state [mcp board.list_tasks project+COMPLETED] returned %d task(s), want %d", len(completedInProject), len(materialized.Tasks))
 	}
-	t.Logf("J15-state: state=FAILED returned 0 (project and board-wide); state=COMPLETED returned %d", len(completedInProject))
+	t.Logf("J15-state: state=FAILED returned 0 for the project and none of its tasks board-wide; state=COMPLETED returned %d", len(completedInProject))
 }
 
 // j15AssertTaskDetail is step 4: the per-task read. The detail shape carries

@@ -169,12 +169,23 @@ func (b *CircuitBreaker) RecordSuccess() {
 // succeeded.
 //
 // Any task's success is evidence the provider is up, so the breaker closes
-// whoever reports it — that is existing behaviour and a stuck OPEN breaker is the
+// whoever reports it while it is CLOSED or HALF_OPEN — a stuck breaker is the
 // worse failure. The probe slot is settled by its holder alone, which is safe
 // because probeLocked clears it whenever the breaker next reaches HALF_OPEN.
+//
+// A success reported while the breaker is OPEN is ignored (B-015). Nothing is
+// admitted while OPEN, so the reporter was admitted before the trip and its
+// success predates the outage: a task whose sandbox command was still running
+// when three others tripped the breaker would otherwise close a live outage and
+// wipe its failure count. OPEN cannot get stuck on this, because it leaves by
+// time alone — probeLocked moves it to HALF_OPEN once the timeout passes, and the
+// probe's own success then closes it.
 func (b *CircuitBreaker) RecordSuccessFor(owner string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.state == BreakerOpen {
+		return
+	}
 	b.failureCount = 0
 	b.state = BreakerClosed
 	b.tripTime = time.Time{}

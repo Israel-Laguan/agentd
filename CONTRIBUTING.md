@@ -37,6 +37,7 @@ All compile/lint/test targets use `GOCACHE=$(pwd)/.gocache` and `GOMODCACHE` fro
 | `make test PKG=./internal/api/...` | Same, scoped to one package tree |
 | `make test PKG=./path/... RUN=TestFoo` | Same, one package and test name regex |
 | `make test PKG=./internal/api/tests/feature` | API feature tests (formerly e2e) |
+| `make test-e2e` | Journey suite against a live podman stack (`test/e2e`, about 5 min of tests plus image builds); also run by CI weekly and on changes to `test/e2e/` or `devenv/` |
 | `make coverage` | Run tests with coverage report |
 | `make lint` | Run `golangci-lint` (includes `depguard`, `cyclop`, `funlen`, `revive`) |
 | `make loc` | Check tracked file line counts: 300 default, 500 for `*_test.go`, 400 under `docs/` (see [`docs/guardrails.md`](docs/guardrails.md) / [`GUARDRAILS.md`](GUARDRAILS.md)) |

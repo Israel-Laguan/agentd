@@ -32,7 +32,14 @@ func (s *stubWorkspace) ProjectDir(projectID string) string { return "/tmp/" + p
 
 func (s *stubWorkspace) SecureDelete(context.Context, string) error { return nil }
 
-func (s *stubWorkspace) SeedFromPath(context.Context, string, string) error { return nil }
+func (s *stubWorkspace) StageSeed(context.Context, string) (sandbox.StagedSeed, error) {
+	return stubStagedSeed{}, nil
+}
+
+type stubStagedSeed struct{}
+
+func (stubStagedSeed) Promote(context.Context, string) error { return nil }
+func (stubStagedSeed) Discard()                              {}
 
 func (s *stubWorkspace) IsWorkspacePopulated(context.Context, string) (bool, error) { return true, nil }
 

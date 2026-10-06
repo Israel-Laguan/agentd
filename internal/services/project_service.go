@@ -42,15 +42,12 @@ func (s *ProjectService) MaterializePlan(
 	plan.WorkspacePending = sourcePath != "" || !plan.StartEmptyWorkspace
 	plan.SourcePath = sourcePath
 
-	// Validate source_path before persisting anything: store.MaterializePlan
-	// commits project and task rows in its own transaction and the seed happens
-	// after, so a bad path would return 500 and leave an orphan project with
-	// PENDING tasks that nothing can unlock. ErrInvalidDraftPlan maps to 400.
-	if plan.SourcePath != "" {
-		if _, err := sandbox.ValidateSourcePath(plan.SourcePath); err != nil {
-			slog.Warn("materialize plan: invalid source_path", "source_path", plan.SourcePath, "error", err)
-			return nil, nil, fmt.Errorf("%w: source_path: %w", models.ErrInvalidDraftPlan, err)
-		}
+	staged, err := s.stageSeed(ctx, plan.SourcePath)
+	if err != nil {
+		return nil, nil, err
+	}
+	if staged != nil {
+		defer staged.Discard()
 	}
 
 	project, tasks, err := s.store.MaterializePlan(ctx, plan)
@@ -63,8 +60,8 @@ func (s *ProjectService) MaterializePlan(
 		return nil, nil, err
 	}
 
-	if plan.SourcePath != "" {
-		if err := s.ws.SeedFromPath(ctx, project.ID, plan.SourcePath); err != nil {
+	if staged != nil {
+		if err := staged.Promote(ctx, project.ID); err != nil {
 			slog.Error("seed workspace from source_path failed", "project_id", project.ID, "source_path", plan.SourcePath, "error", err)
 			return nil, nil, fmt.Errorf("seed workspace from source_path: %w", err)
 		}
@@ -97,6 +94,29 @@ func (s *ProjectService) MaterializePlan(
 		}
 	}
 	return project, tasks, nil
+}
+
+// stageSeed copies source_path into staging before anything is persisted.
+// store.MaterializePlan commits project and task rows in its own transaction, so
+// anything that can fail after it leaves an orphan project with PENDING tasks
+// that nothing can unlock. A bad path is rejected up front (ErrInvalidDraftPlan
+// maps to 400); a copy that fails partway fails here, before any row exists
+// (B-021). Only the swap of the finished copy into the project's directory
+// happens afterwards. An empty sourcePath stages nothing and returns nil.
+func (s *ProjectService) stageSeed(ctx context.Context, sourcePath string) (sandbox.StagedSeed, error) {
+	if sourcePath == "" {
+		return nil, nil
+	}
+	if _, err := sandbox.ValidateSourcePath(sourcePath); err != nil {
+		slog.Warn("materialize plan: invalid source_path", "source_path", sourcePath, "error", err)
+		return nil, fmt.Errorf("%w: source_path: %w", models.ErrInvalidDraftPlan, err)
+	}
+	staged, err := s.ws.StageSeed(ctx, sourcePath)
+	if err != nil {
+		slog.Error("stage workspace seed from source_path failed", "source_path", sourcePath, "error", err)
+		return nil, fmt.Errorf("seed workspace from source_path: %w", err)
+	}
+	return staged, nil
 }
 
 func (s *ProjectService) ensureWorkspace(ctx context.Context, project models.Project) error {

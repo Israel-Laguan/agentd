@@ -19,6 +19,9 @@ import (
 // fights over another daemon's tasks, and — the question behind the spike —
 // whether startup refuses.
 //
+// If a second daemon ever bites, size the fix together with SP-010's (both need a
+// per-boot instance ID); the ticket for that is B-026.
+//
 // The spike's own note says the absence of a lock was found by grep and should be
 // confirmed by reading the daemon start path before running anything. TestStartupDoesNotRefuseASecondInstance below is that confirmation, written as a test.
 

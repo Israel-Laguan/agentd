@@ -73,7 +73,12 @@ func TestBashExecutorInactivityTimeout(t *testing.T) {
 func TestBashExecutorWallTimeoutKillsProcessGroup(t *testing.T) {
 	exec, workspace := testExecutor(t, nil)
 	exec.KillGrace = 100 * time.Millisecond
-	payload := testPayload(workspace, "sleep 300")
+	sleepCmd, sleepPattern := uniqueSleep()
+	// Backgrounded so the sleep is a child of the shell, not the shell itself:
+	// bash exec()s a trailing foreground command, and then cancelling the
+	// context (which kills only the shell) would reap the sleep without the
+	// process-group kill this test is named for ever running.
+	payload := testPayload(workspace, sleepCmd+" & wait")
 	payload.TimeoutLimit = 1
 	started := time.Now()
 	result, err := exec.Execute(context.Background(), payload)
@@ -86,7 +91,7 @@ func TestBashExecutorWallTimeoutKillsProcessGroup(t *testing.T) {
 	if time.Since(started) > 2*time.Second {
 		t.Fatalf("timeout took %s, want close to 1s", time.Since(started))
 	}
-	assertNoSleep300(t)
+	assertProcessGone(t, sleepPattern)
 }
 
 func TestBashExecutorRejectsWorkspaceEscape(t *testing.T) {

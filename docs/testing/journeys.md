@@ -1,6 +1,6 @@
 # E2E Journey Suite (S07)
 
-Status: **implemented** (17 tests / 14 journeys, green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01).  
+Status: **implemented** (18 tests, J01-J16, green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01).  
 Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in git)
 
 ---
@@ -13,7 +13,8 @@ Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in
 
 - Rationale: Existing in-process API tests use httptest; e2e journeys run against a live `devenv/` stack started by test setup.
 - Non-goal: Playwright (UI testing comes later); shell (hard to assert without CLI parsing).
-- Impact: `make test` (unit + feature tests) stays fast. `make test-e2e` runs the suite only if `-tags=e2e` is passed or `TEST_E2E=1` is set.
+- Impact: `make test` (unit + feature tests) stays fast. `make test-e2e` brings the stack up and runs the suite with `-tags=e2e` already set; it is never part of `make test`.
+- CI: `.github/workflows/ci-e2e.yml` runs `make test-e2e` weekly on `main`, on demand, and on any pull request that touches `test/e2e/`, `devenv/` or the workflow itself (B-023). The per-PR Go check does not run it, so a change outside those paths is covered by the weekly run, not by its own PR.
 
 **UI journeys:** Browser verification is manual (documented in qa-and-browser-verification.md); not automated in S07.
 
@@ -234,9 +235,18 @@ off the devenv stack on 2026-10-01, pinning the wire shape and payloads (the RES
 row's id/payload and the drawer fixture's task IDs are adapted for the tests). They
 are static snapshots, so they do not detect later drift in the endpoint.
 
-**Explicit gap:** no real-browser tier, so layout and click-through are unproven —
-a product decision for a later sprint, recorded here rather than backlogged. The
-lifecycle events are still unimplemented; that is a product change, not a test gap.
+**Explicit gap:** no real-browser tier, so layout and click-through are unproven.
+That is a product decision, not a work item, so it is held open as B-027 (S11, P3)
+instead of the backlog; B-027 is where "where is the browser tier tracked?" points.
+
+**Decision (SP-015, 2026-10-05): `task-started` / `task-claimed` are not emitted.**
+Claim and start are already queryable as state (`started_at`, the task's state) and
+as the `LOG_CHUNK` stream, and nothing consumes them: no API, UI or journey reads
+such an event, and emitting two rows for every task would grow the event log for
+every task to serve a timeline nobody asked for. J06 is therefore neither parked
+nor dropped: it stays implemented as redefined above, and the old timeline is
+retired with this reason. Re-open only if a consumer needs the transitions as
+events.
 
 ### J12: implemented (2026-09-30, on T-028)
 

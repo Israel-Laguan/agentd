@@ -48,8 +48,11 @@ curl -X POST http://127.0.0.1:8765/api/v1/projects/materialize \
 
 **Behavior:**
 
-- The server creates the project and workspace directory.
-- All files from `source_path` are recursively copied into the workspace.
+- The server copies `source_path` into a staging directory under the projects
+  root first, then creates the project and its workspace directory and swaps the
+  finished copy in. A copy that fails partway (an unreadable file, a full disk)
+  fails the request with no project, no tasks and no directory left behind.
+- All files from `source_path` are recursively copied (symlinks are skipped).
 - Only after the copy completes are tasks transitioned from `PENDING` to `READY`.
 - Workers cannot claim the tasks until the copy finishes.
 

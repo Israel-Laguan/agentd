@@ -1,0 +1,72 @@
+name: CI (e2e journeys)
+
+# The journey suite (test/e2e, `make test-e2e`) needs a podman stack and takes
+# about five minutes of test time plus the image builds, so it is not part of
+# the per-PR Go check. S07's exit gate ("all P0 journeys pass on two consecutive
+# clean runs") used to rest on entries in docs/testing/results.md alone; this
+# workflow is what re-runs it without a person (B-023):
+#
+#   - weekly, on main;
+#   - on demand (Actions > CI (e2e journeys) > Run workflow);
+#   - on a pull request that touches the stack or the journeys themselves, so a
+#     change to devenv/ or test/e2e/ is proven by the suite it changes.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "test/e2e/**"
+      - "devenv/**"
+      - ".github/workflows/ci-e2e.yml"
+
+concurrency:
+  group: ci-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The Makefile's podman compose gotchas (absolute -f path, every profile in
+      # one invocation) are written against podman-compose 1.3.0. The runner image
+      # also ships Docker's compose plugin, which `podman compose` prefers over
+      # podman-compose and which then needs a Docker API socket that isn't there;
+      # PODMAN_COMPOSE_PROVIDER pins the wrapper to the one we installed.
+      - name: Install podman-compose
+        run: |
+          pipx install 'podman-compose==1.3.0'
+          # The runner image sets PIPX_BIN_DIR=/opt/pipx_bin, so the binary is not
+          # in ~/.local/bin; resolve wherever pipx actually put it.
+          provider="$(command -v podman-compose)"
+          echo "PODMAN_COMPOSE_PROVIDER=$provider" >> "$GITHUB_ENV"
+          echo "using $provider"
+          podman --version
+
+      - name: Journeys (make test-e2e)
+        run: make test-e2e
+
+      - name: Stack state on failure
+        if: failure()
+        run: |
+          podman ps -a --format '{{.Names}} {{.Status}}' || true
+          for name in $(podman ps -a --format '{{.Names}}' | grep -E 'agentd|litellm|mockllm' || true); do
+            echo "::group::logs $name"
+            podman logs --tail 200 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+      - name: Tear down
+        if: always()
+        run: make dev-clean || true

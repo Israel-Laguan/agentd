@@ -19,6 +19,9 @@ import (
 // pin the consequence, because "accepted limit" is only meaningful if the
 // behaviour it accepts is actually demonstrated.
 //
+// If the limit resurfaces, size the fix together with SP-013's (both need a
+// per-boot instance ID); the ticket for that is B-026.
+//
 // The existing TestBootReconcile_leavesTaskOwnedByOtherLivePID already covers a
 // PID that is alive. What it cannot express is *why* that is wrong: a live PID
 // is evidence of a live task only when the live process is the one that claimed
