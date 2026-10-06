@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-e2e test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-down dev-clean dev-logs
+.PHONY: build test test-e2e test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-down dev-clean dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -180,6 +180,22 @@ lint-docs: lint-md lint-links
 test-mockllm:
 	python3 -m unittest discover -s devenv/mockllm -p 'test_server.py'
 
+# Rejects a Co-Authored-By trailer on any commit this branch adds over
+# origin/main. Commits already on main are exempt. Override: BASE=origin/other.
+BASE ?= origin/main
+
+check-commits:
+	$(GO_ENV) $(GO) run ./tools/checkcommits --base $(BASE)
+
+# Opt-in, per clone: git hooks are not versioned, so each clone installs its own.
+hooks-install:
+	@hook="$$(git rev-parse --git-path hooks)/pre-push"; \
+	mkdir -p "$$(dirname "$$hook")"; \
+	printf '#!/bin/sh\nexec make check-commits\n' > "$$hook"; \
+	chmod +x "$$hook"; \
+	echo "installed $$hook"
+
 # check is the required merge gate: loc + minfunc + lint + test + lint-docs
-# (Markdown and link checks) + the mock LLM scenario tests. Run before pushing.
-check: loc minfunc lint test test-mockllm lint-docs
+# (Markdown and link checks) + the mock LLM scenario tests + commit trailers.
+# Run before pushing.
+check: loc minfunc lint test test-mockllm lint-docs check-commits
