@@ -27,6 +27,14 @@ make hooks-install  # optional: pre-push hook running make check-commits (hooks 
 3. Run `make check` locally before pushing.
 4. Open a PR with a clear description of the change and any architectural decisions.
 
+### PR size limit
+
+Each PR must change fewer than 100 files and at most 1000 lines (additions plus deletions); split larger work into stacked PRs. The `CI (PR size)` workflow (`.github/workflows/ci-pr-size.yml`, logic in `tools/ci/pr_size.sh`) fails the PR otherwise. A maintainer can waive it for one PR by adding the `large-pr-ok` label (adding or removing the label re-runs the check); use it only for changes that cannot be split, such as generated or mechanical moves.
+
+### Commit trailers
+
+Commits must not carry a `Co-Authored-By` trailer. `make check-commits` (part of `make check`, and a CI step on PRs) rejects one on any commit the branch adds over `origin/main`; commits already on main are exempt. CI also rejects the trailer in the PR title or body, because a squash merge copies both into main.
+
 ## Make Targets
 
 All compile/lint/test targets use `GOCACHE=$(pwd)/.gocache` and `GOMODCACHE` from your environment (defaulting to `$(HOME)/go/pkg/mod`). In agent/sandbox shells, export `GOMODCACHE="$HOME/go/pkg/mod"` before running `make` so inherited empty caches do not break module resolution. See [`REVIEW.md`](REVIEW.md#go-toolchain-troubleshooting) if tests fail with missing modules or stale builds.

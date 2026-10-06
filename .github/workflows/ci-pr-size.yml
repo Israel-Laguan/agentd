@@ -1,0 +1,29 @@
+name: CI (PR size)
+
+# Enforces the PR size rule from CONTRIBUTING.md: under 100 changed files and
+# at most 1000 changed lines (additions + deletions). A maintainer can add the
+# `large-pr-ok` label to waive it for one PR; the label events re-run the check.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+concurrency:
+  group: ci-pr-size-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  size:
+    name: PR size
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check PR size
+        env:
+          FILES: ${{ github.event.pull_request.changed_files }}
+          ADDITIONS: ${{ github.event.pull_request.additions }}
+          DELETIONS: ${{ github.event.pull_request.deletions }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: bash tools/ci/pr_size.sh "$FILES" "$ADDITIONS" "$DELETIONS" "$LABELS"
