@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -300,12 +301,65 @@ func j15RetireProjectTasks(client *APIClient, projectID string) {
 		case TaskStateCompleted, TaskStateFailed, TaskStateFailedRequiresHuman:
 			continue
 		}
-		resp, err := client.Patch(ctx, "/api/v1/tasks/"+task.ID, map[string]string{"state": string(TaskStateFailed)})
+		j15RetireTask(ctx, client, projectID, task.ID)
+	}
+}
+
+// j15RetireTask PATCHes one task to FAILED. A non-2xx response is not a
+// transport failure: HTTP 409 means a worker won the store's optimistic-lock
+// race (TaskService.UpdateTaskState) and the task may still be open, so the
+// task is re-read and retired again if it remains nonterminal. A terminal
+// re-read — the worker finished the task, or reached a state FAILED cannot
+// follow — stops the retry, as does a second non-2xx, so a task no worker
+// claims can stay open without spinning the cleanup.
+func j15RetireTask(ctx context.Context, client *APIClient, projectID, taskID string) {
+	for attempt := 0; ; attempt++ {
+		resp, err := client.Patch(ctx, "/api/v1/tasks/"+taskID, map[string]string{"state": string(TaskStateFailed)})
 		if err != nil {
 			return
 		}
+		ok := resp.StatusCode >= 200 && resp.StatusCode < 300
 		_ = resp.Body.Close()
+		if ok {
+			return
+		}
+		if attempt >= 1 {
+			return
+		}
+		state, err := j15ReadTaskState(ctx, client, projectID, taskID)
+		if err != nil {
+			return
+		}
+		switch state {
+		case TaskStateCompleted, TaskStateFailed, TaskStateFailedRequiresHuman:
+			return
+		}
 	}
+}
+
+// j15ReadTaskState re-reads one task's state from the project-scoped list;
+// there is no per-task GET endpoint (see the Task type's doc comment).
+func j15ReadTaskState(ctx context.Context, client *APIClient, projectID, taskID string) (TaskState, error) {
+	resp, err := client.ListTasks(ctx, projectID, "", false)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("list tasks returned %d", resp.StatusCode)
+	}
+	var envelope struct {
+		Data []Task `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return "", err
+	}
+	for _, task := range envelope.Data {
+		if task.ID == taskID {
+			return task.State, nil
+		}
+	}
+	return "", fmt.Errorf("task %s not found in project %s", taskID, projectID)
 }
 
 // j15LargePage fetches one page of the board-wide export.
