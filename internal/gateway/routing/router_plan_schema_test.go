@@ -92,7 +92,7 @@ func TestPhasePlanningPrompt_GuidesHostFactPlans(t *testing.T) {
 	t.Parallel()
 	for _, max := range []int{0, 3} {
 		got := phasePlanningPrompt(max)
-		for _, want := range []string{"hostnamectl", "lscpu", "report.md", "/etc, /proc or /sys"} {
+		for _, want := range []string{"hostnamectl", "lscpu", "report.md", "/etc, /proc or /sys", "depends_on", "bare relative file names"} {
 			if !strings.Contains(got, want) {
 				t.Fatalf("phasePlanningPrompt(%d) missing %q:\n%s", max, want, got)
 			}

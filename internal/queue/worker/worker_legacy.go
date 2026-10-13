@@ -75,7 +75,7 @@ func legacyJSONCommandSystemContent(profile models.AgentProfile) string {
 
 func workerMessages(task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
 	system := legacyJSONCommandSystemContent(profile)
-	user := fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
+	user := fmt.Sprintf("You are executing Task: %s\nDescription: %s\nWorking directory: the current directory is the project workspace; use relative file names only.", task.Title, task.Description)
 	return []gateway.PromptMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}
 }
 
