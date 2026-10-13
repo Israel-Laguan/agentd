@@ -61,7 +61,9 @@ Shell command rules:
 - Always use non-interactive flags (-y, --yes, --assume-yes, --non-interactive, DEBIAN_FRONTEND=noninteractive).
 - Never generate commands that prompt for user input, confirmation, or passwords.
 - Never use sudo or commands requiring root privileges.
-- Prefer redirects and pipes over embedding output in command arguments.`
+- Prefer redirects and pipes over embedding output in command arguments.
+- Commands run inside the project workspace and may not touch absolute paths outside it (except /dev/null), so never read /etc, /proc or /sys files.
+- For host facts (OS, kernel, CPU, memory, disks) run commands that need no paths: uname -a, hostnamectl, lsb_release -a, lscpu, free -h, lsblk, df -h. A report may state only values printed by commands you ran.`
 
 func legacyJSONCommandSystemContent(profile models.AgentProfile) string {
 	if profile.SystemPrompt.Valid {
