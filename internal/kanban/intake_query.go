@@ -16,7 +16,8 @@ func (s *Store) ListUnprocessedHumanComments(ctx context.Context) ([]models.Comm
 		SELECT t.id, e.id, e.payload, e.created_at
 		FROM tasks t
 		JOIN events e ON e.task_id = t.id AND e.type = ?
-		WHERE t.state = ? AND t.assignee = ?
+		WHERE t.assignee = ?
+		  AND t.state IN (?, ?, ?, ?)
 		  AND (e.payload LIKE 'USER:%' OR e.payload LIKE 'Human:%')
 		  AND NOT EXISTS (
 		    SELECT 1 FROM events done
@@ -24,7 +25,10 @@ func (s *Store) ListUnprocessedHumanComments(ctx context.Context) ([]models.Comm
 		      AND done.type = ?
 		      AND done.payload = e.id
 		  )
-		ORDER BY e.created_at`, models.EventTypeComment, models.TaskStateInConsideration, models.TaskAssigneeHuman, models.EventTypeCommentIntake)
+		ORDER BY e.created_at`, models.EventTypeComment, models.TaskAssigneeHuman,
+		models.TaskStateInConsideration,
+		models.TaskStateCompleted, models.TaskStateFailed, models.TaskStateFailedRequiresHuman,
+		models.EventTypeCommentIntake)
 	if err != nil {
 		return nil, fmt.Errorf("list unprocessed human comments: %w", err)
 	}

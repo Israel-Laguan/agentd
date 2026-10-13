@@ -9,14 +9,18 @@ import (
 
 // driveTerminal moves a task to a terminal state through the realistic
 // ladder so CompletedAt/assignee match production rows.
-func driveTerminal(t *testing.T, store *Store, ctx context.Context, task models.Task, next models.TaskState) models.Task {
+func driveTerminal(t *testing.T, store *Store, ctx context.Context, next models.TaskState) models.Task {
 	t.Helper()
-	running, err := store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, 4242)
+	claimed, err := store.ClaimNextReadyTasks(ctx, 10)
+	if err != nil || len(claimed) == 0 {
+		t.Fatalf("ClaimNextReadyTasks: %v", err)
+	}
+	running, err := store.MarkTaskRunning(ctx, claimed[0].ID, claimed[0].UpdatedAt, 4242)
 	if err != nil {
 		t.Fatalf("MarkTaskRunning: %v", err)
 	}
 	success := next == models.TaskStateCompleted
-	done, err := store.UpdateTaskResult(ctx, task.ID, running.UpdatedAt, models.TaskResult{Success: success})
+	done, err := store.UpdateTaskResult(ctx, claimed[0].ID, running.UpdatedAt, models.TaskResult{Success: success})
 	if err != nil {
 		t.Fatalf("UpdateTaskResult: %v", err)
 	}
@@ -44,11 +48,10 @@ func TestAddComment_TerminalTaskKeepsState(t *testing.T) {
 		t.Run(string(want), func(t *testing.T) {
 			store := newTestStore(t)
 			ctx := context.Background()
-			_, tasks, err := store.MaterializePlan(ctx, samplePlan())
-			if err != nil || len(tasks) == 0 {
+			if _, _, err := store.MaterializePlan(ctx, samplePlan()); err != nil {
 				t.Fatalf("materialize: %v", err)
 			}
-			terminal := driveTerminal(t, store, ctx, tasks[0], want)
+			terminal := driveTerminal(t, store, ctx, want)
 			if err := store.AddComment(ctx, models.Comment{
 				TaskID: terminal.ID,
 				Author: models.CommentAuthorUser,
@@ -75,11 +78,10 @@ func TestAddComment_TerminalTaskKeepsState(t *testing.T) {
 func TestListUnprocessed_IncludesTerminalTasks(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
-	_, tasks, err := store.MaterializePlan(ctx, samplePlan())
-	if err != nil || len(tasks) == 0 {
+	if _, _, err := store.MaterializePlan(ctx, samplePlan()); err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
-	terminal := driveTerminal(t, store, ctx, tasks[0], models.TaskStateCompleted)
+	terminal := driveTerminal(t, store, ctx, models.TaskStateCompleted)
 	if err := store.AddComment(ctx, models.Comment{
 		TaskID: terminal.ID,
 		Author: models.CommentAuthorUser,

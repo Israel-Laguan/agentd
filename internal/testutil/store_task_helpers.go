@@ -74,6 +74,11 @@ func (s *FakeKanbanStore) AppendTasksToProject(_ context.Context, projectID, par
 	for i := range created {
 		created[i].State = models.TaskStatePending
 		s.tasks[created[i].ID] = created[i]
+		// Mirror insertTaskRelationChecked: the edge runs parent -> child
+		// with type BLOCKS, so ListChildTasksByRelation sees intake
+		// follow-ups exactly like SQLite rows (B-041).
+		s.childParentRelations[created[i].ID] = append(s.childParentRelations[created[i].ID],
+			parentRelation{parentID: parentTaskID, relationType: models.TaskRelationBlocks})
 	}
 	return created, nil
 }
