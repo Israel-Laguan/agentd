@@ -193,7 +193,7 @@ check-commits:
 hooks-install:
 	@hook="$$(git rev-parse --git-path hooks)/pre-push"; \
 	mkdir -p "$$(dirname "$$hook")"; \
-	if [ -e "$$hook" ] && [ -z "$(FORCE)" ]; then \
+	if [ -e "$$hook" ] && [ "$(FORCE)" != "1" ]; then \
 		echo "refusing to overwrite existing $$hook (pass FORCE=1 to replace, or add 'make check-commits' to it manually)" >&2; \
 		exit 1; \
 	fi; \
