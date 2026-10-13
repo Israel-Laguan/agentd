@@ -254,6 +254,9 @@ func (w *Worker) evict(ctx context.Context, task models.Task, payload string) {
 		w.Emit(ctx, task, "ERROR", err.Error())
 		return
 	}
+	w.postFailureComment(ctx, task,
+		fmt.Sprintf("Task stopped after %d failed attempt(s) (retry budget %d) and needs human attention.", task.RetryCount, w.maxRetries),
+		payload)
 	if _, err := w.store.UpdateTaskState(ctx, updated.ID, updated.UpdatedAt, models.TaskStateFailedRequiresHuman); err != nil {
 		w.Emit(ctx, task, "ERROR", err.Error())
 	}
@@ -281,6 +284,7 @@ func (w *Worker) failTerminal(ctx context.Context, task models.Task, err error, 
 		w.Emit(ctx, task, "ERROR", updateErr.Error())
 		return
 	}
+	w.postFailureComment(ctx, task, "Task failed and will not be retried automatically.", err.Error())
 	// UpdateTaskResult already moves RUNNING → FAILED; skip redundant transition.
 	if state == models.TaskStateFailed {
 		return
