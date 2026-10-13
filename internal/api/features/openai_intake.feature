@@ -36,6 +36,15 @@ Feature: OpenAI-Compatible Intake
     And GeneratePlan should not be called
     And AnalyzeScope should not be called
 
+  Scenario: A question asking the agent to find something out is planned, not answered as a status report
+    Given the API server is running
+    When a client sends a host-investigation question "what os and hardware have this machine"
+    Then the HTTP status code should be 200
+    And the response body should be a chat completion
+    And the first choice content should contain a DraftPlan JSON document
+    And the first choice content kind should not be "status_report"
+    And the intent classifier should receive "what os and hardware have this machine"
+
   Scenario: Ambiguous intent returns clarification
     Given the API server is running
     When a client sends an ambiguous chat completion request

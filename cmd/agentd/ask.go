@@ -108,7 +108,7 @@ func decodeDraft(resp *http.Response) (models.DraftPlan, error) {
 	if err := json.Unmarshal([]byte(raw), &probe); err == nil && probe.Kind != "" {
 		switch probe.Kind {
 		case "feasibility_clarification", "intent_clarification", "scope_clarification", "status_report":
-			return models.DraftPlan{}, fmt.Errorf("planner returned %s instead of a draft plan; refine your prompt or use the API directly", probe.Kind)
+			return models.DraftPlan{}, nonPlanError(probe.Kind, raw)
 		}
 	}
 	var plan models.DraftPlan
@@ -116,6 +116,18 @@ func decodeDraft(resp *http.Response) (models.DraftPlan, error) {
 		return models.DraftPlan{}, err
 	}
 	return plan, nil
+}
+
+// nonPlanError surfaces the message of a status_report or clarification reply
+// so the user sees what agentd said rather than a generic failure.
+func nonPlanError(kind, raw string) error {
+	var reply struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(raw), &reply); err != nil || strings.TrimSpace(reply.Message) == "" {
+		return fmt.Errorf("planner returned %s instead of a draft plan; refine your prompt or use the API directly", kind)
+	}
+	return fmt.Errorf("no plan drafted (%s): %s", kind, strings.TrimSpace(reply.Message))
 }
 
 func mapDraftAPIError(status int, body []byte) error {
