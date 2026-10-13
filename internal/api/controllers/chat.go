@@ -15,6 +15,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -116,7 +117,11 @@ func writePlannerError(ctx context.Context, log *slog.Logger, w http.ResponseWri
 		httpx.WriteJSON(w, http.StatusOK, completion(model, systemTimeoutMessage, nil, finishReasonStop))
 	case errors.Is(err, models.ErrInvalidJSONResponse):
 		log.WarnContext(ctx, "chat intake: planner failed", "error", err)
-		httpx.WriteError(w, http.StatusUnprocessableEntity, httpx.CodeValidation, "planner returned an invalid plan: "+err.Error())
+		message := err.Error()
+		if validation, _, ok := strings.Cut(message, "; raw response:"); ok {
+			message = validation
+		}
+		httpx.WriteError(w, http.StatusUnprocessableEntity, httpx.CodeValidation, "planner returned an invalid plan: "+strings.TrimSpace(message))
 	default:
 		log.WarnContext(ctx, "chat intake: planner failed", "error", err)
 		httpx.WriteMappedError(w, err)

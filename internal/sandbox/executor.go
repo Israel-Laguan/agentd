@@ -47,7 +47,7 @@ func (e *BashExecutor) Execute(ctx context.Context, payload Payload) (Result, er
 	}
 	if err := validateCommandPaths(payload.Command, workspace); err != nil {
 		command := truncateCommand(payload.Command)
-		slog.Warn("sandbox: directory escape attempt blocked", "workspace", workspace, "task_id", payload.TaskID, "error", err, "command", command)
+		slog.Warn("sandbox: directory escape attempt blocked", "workspace", workspace, "task_id", payload.TaskID, "error", e.scrub(err.Error()), "command", e.scrub(command))
 		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub(err.Error()+"; command: "+command))
 		return Result{ExitCode: -1}, err
 	}

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -50,6 +51,9 @@ func TestFailTerminal_PostsFailureComment(t *testing.T) {
 	comments, _ := store.ListComments(ctx, task.ID)
 	if len(comments) != 1 || !strings.Contains(comments[0].Body, "max_healing_tasks cap reached") {
 		t.Fatalf("comments = %#v, want one naming the failure", comments)
+	}
+	if !strings.Contains(comments[0].Body, fmt.Sprintf("%d", task.RetryCount)) {
+		t.Fatalf("comments = %#v, want retry count %d", comments, task.RetryCount)
 	}
 }
 
