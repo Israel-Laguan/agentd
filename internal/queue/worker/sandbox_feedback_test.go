@@ -53,6 +53,11 @@ func TestPrependSandboxViolationFeedback(t *testing.T) {
 	if !strings.Contains(last.Content, "inside the project workspace") {
 		t.Fatalf("feedback = %q, want guidance to stay inside the workspace", last.Content)
 	}
+	for _, want := range []string{"hostnamectl", "lscpu", "uname -a"} {
+		if !strings.Contains(last.Content, want) {
+			t.Fatalf("feedback = %q, want host-introspection hint %q", last.Content, want)
+		}
+	}
 }
 
 func TestCommandIncludesSandboxViolationFeedbackOnRetry(t *testing.T) {

@@ -25,6 +25,12 @@ var changeDirPattern = regexp.MustCompile(`(?:^|[;&|])\s*(cd|pushd|chdir)\s+([^\
 // the exact cleaned path matches; /dev/null/x and /dev/nullx are still refused.
 const devNull = "/dev/null"
 
+// attachedPathPattern finds an absolute path glued to a quote, a redirect
+// operator (>, >>, <, 2>) or an option/assignment value (--file=/x, FOO=/x).
+// The whitespace tokenizer in validateAbsolutePathTokens never sees these
+// because the token does not start with "/".
+var attachedPathPattern = regexp.MustCompile("[\"'=<>`](/[^\\s\"'<>;|&()`]*)")
+
 func validateCommandPaths(command, workspace string) error {
 	trimmed := strings.TrimSpace(command)
 	if trimmed == "" {
@@ -37,6 +43,9 @@ func validateCommandPaths(command, workspace string) error {
 		return fmt.Errorf("%w: directory traversal is not allowed", models.ErrSandboxViolation)
 	}
 	if err := validateAbsolutePathTokens(trimmed, workspace); err != nil {
+		return err
+	}
+	if err := validateAttachedPaths(trimmed, workspace); err != nil {
 		return err
 	}
 	return validateChangeDirTargets(trimmed, workspace)
@@ -59,6 +68,27 @@ func validateAbsolutePathTokens(command, workspace string) error {
 			continue
 		}
 		return fmt.Errorf("%w: absolute path escapes workspace: %s", models.ErrSandboxViolation, token)
+	}
+	return nil
+}
+
+// validateAttachedPaths refuses attached absolute paths (see
+// attachedPathPattern) that leave the workspace. A quoted "/Mem/" in an awk or
+// grep program is not a path to anything on the host, so only paths whose
+// top-level directory exists are refused; the whitespace-separated form stays
+// strict in validateAbsolutePathTokens.
+func validateAttachedPaths(command, workspace string) error {
+	for _, match := range attachedPathPattern.FindAllStringSubmatch(command, -1) {
+		path := filepath.Clean(match[1])
+		if path == devNull || path == filepath.Clean(workspace) ||
+			strings.HasPrefix(path, workspace+string(os.PathSeparator)) {
+			continue
+		}
+		top := "/" + strings.SplitN(strings.TrimPrefix(path, "/"), "/", 2)[0]
+		if _, err := os.Lstat(top); err != nil {
+			continue
+		}
+		return fmt.Errorf("%w: absolute path escapes workspace: %s", models.ErrSandboxViolation, match[1])
 	}
 	return nil
 }
