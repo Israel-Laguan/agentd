@@ -42,15 +42,28 @@ func (e *BashExecutor) Execute(ctx context.Context, payload Payload) (Result, er
 	}
 	if containsSudo(payload.Command) {
 		slog.Debug("sandbox: sudo command blocked", "workspace", workspace, "task_id", payload.TaskID)
-		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub("sudo command blocked"))
+		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub("sudo command blocked; command: "+truncateCommand(payload.Command)))
 		return Result{ExitCode: -1, Stderr: e.scrub("sudo command blocked")}, fmt.Errorf("%w: sudo is not allowed", models.ErrSandboxViolation)
 	}
 	if err := validateCommandPaths(payload.Command, workspace); err != nil {
-		slog.Warn("sandbox: directory escape attempt blocked", "workspace", workspace, "task_id", payload.TaskID, "error", err)
-		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub("directory escape attempt blocked"))
+		command := truncateCommand(payload.Command)
+		slog.Warn("sandbox: directory escape attempt blocked", "workspace", workspace, "task_id", payload.TaskID, "error", err, "command", command)
+		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub(err.Error()+"; command: "+command))
 		return Result{ExitCode: -1}, err
 	}
 	return e.run(ctx, workspace, payload)
+}
+
+// maxViolationCommandRunes bounds how much of a refused command is logged and
+// stored in the SANDBOX_VIOLATION event.
+const maxViolationCommandRunes = 300
+
+func truncateCommand(command string) string {
+	runes := []rune(strings.TrimSpace(command))
+	if len(runes) <= maxViolationCommandRunes {
+		return string(runes)
+	}
+	return string(runes[:maxViolationCommandRunes]) + "..."
 }
 
 func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payload) (Result, error) {
