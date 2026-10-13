@@ -188,9 +188,15 @@ check-commits:
 	$(GO_ENV) $(GO) run ./tools/checkcommits --base $(BASE)
 
 # Opt-in, per clone: git hooks are not versioned, so each clone installs its own.
+# Refuses to overwrite an existing pre-push hook; pass FORCE=1 to replace it
+# explicitly, or combine manually by adding `make check-commits` to your hook.
 hooks-install:
 	@hook="$$(git rev-parse --git-path hooks)/pre-push"; \
 	mkdir -p "$$(dirname "$$hook")"; \
+	if [ -e "$$hook" ] && [ -z "$(FORCE)" ]; then \
+		echo "refusing to overwrite existing $$hook (pass FORCE=1 to replace, or add 'make check-commits' to it manually)" >&2; \
+		exit 1; \
+	fi; \
 	printf '#!/bin/sh\nexec make check-commits\n' > "$$hook"; \
 	chmod +x "$$hook"; \
 	echo "installed $$hook"

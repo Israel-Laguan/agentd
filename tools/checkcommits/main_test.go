@@ -47,6 +47,7 @@ func TestOffenders(t *testing.T) {
 		want               int
 	}{
 		{"real trailer is rejected", "base", "feat: x\n\nbody\n\n" + trailer, 1},
+		{"empty trailer value is rejected", "base", "feat: x\n\nbody\n\nCo-Authored-By:", 1},
 		{"lowercase key trailer is rejected", "base", "feat: x\n\nco-authored-by: A <a@a>", 1},
 		{"prose quoting the trailer at column 0 is accepted", "base", "docs: x\n\nThe rule bans\nCo-Authored-By: Someone <s@s>\nin commits, as prose.\n\nSigned-off-by: t <t@t>", 0},
 		{"clean commit is accepted", "base", "feat: clean", 0},

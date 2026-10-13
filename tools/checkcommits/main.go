@@ -39,7 +39,10 @@ func main() {
 // offenders returns "<hash> <value>" for every commit in base..HEAD that has a
 // Co-Authored-By trailer, run inside dir.
 func offenders(dir, base string) ([]string, error) {
-	format := "--format=%x00%h%n%(trailers:key=" + trailerKey + ",valueonly=true)"
+	// Ask for the full "Key: value" trailer line, not valueonly: an empty
+	// "Co-Authored-By:" value must still be rejected, and valueonly would
+	// report it as an empty string that looks like no trailer at all.
+	format := "--format=%x00%h%n%(trailers:key=" + trailerKey + ")"
 	cmd := exec.Command("git", "log", format, base+"..HEAD")
 	cmd.Dir = dir
 	var stderr bytes.Buffer

@@ -21,21 +21,10 @@ on:
       - ".lychee.toml"
       - ".github/workflows/ci-go.yml"
   pull_request:
-    paths:
-      - "**/*.go"
-      - "go.mod"
-      - "go.sum"
-      - "Makefile"
-      - ".golangci.yml"
-      - "tools/**"
-      - "README.md"
-      - "config.reference.yaml"
-      - "docs/**"
-      - "package.json"
-      - "package-lock.json"
-      - ".markdownlint.json"
-      - ".lychee.toml"
-      - ".github/workflows/ci-go.yml"
+    # Policy checks (commit trailers; PR title/body) must run on every PR,
+    # including docs-only PRs, so this trigger deliberately has no paths
+    # filter. Keep paths conditions on expensive jobs if they are added later.
+    types: [opened, synchronize, reopened, edited]
 
 concurrency:
   group: ci-go-${{ github.ref }}
