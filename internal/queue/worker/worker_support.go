@@ -253,7 +253,9 @@ func (w *Worker) SetSandbox(sb sandbox.Executor) {
 // directory exists but contains no files. This serves as a safety net
 // alerting operators that the workspace was not seeded before dispatch.
 func (w *Worker) warnIfWorkspaceEmpty(ctx context.Context, task models.Task, project *models.Project) {
-	if project == nil || project.WorkspacePath == "" {
+	// started_empty is the operator's explicit choice (start_empty_workspace), so
+	// an empty directory is expected and warning about it is noise.
+	if project == nil || project.WorkspacePath == "" || project.StartedEmpty {
 		return
 	}
 	wsPath := project.WorkspacePath
