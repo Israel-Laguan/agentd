@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/models"
@@ -74,6 +76,27 @@ func (w *Worker) executeLegacyCommand(
 	command string,
 	audit *legacyTaskAudit,
 ) {
+	// An empty model command can never succeed; fail it without touching the
+	// sandbox (B-043: the S5 empty fourth attempt executed as
+	// `RESULT command is required`).
+	if strings.TrimSpace(command) == "" {
+		audit.failed = true
+		w.handleAgentFailure(ctx, task, "model returned an empty command; nothing was executed")
+		return
+	}
+	// A retry that would send the exact command that just failed is
+	// deterministic waste; hand off early instead of burning the full budget
+	// (B-043). The RetryCount window keeps the human-retry escape hatch: a
+	// post-eviction operator retry runs at RetryCount == maxRetries and still
+	// gets one fresh attempt.
+	if task.RetryCount > 0 && task.RetryCount < w.maxRetries {
+		if prev, failure, repeat := w.repeatOfPreviousAttempt(ctx, task, command); repeat {
+			audit.failed = true
+			w.evict(ctx, task, fmt.Sprintf("deterministic failure: identical command re-suggested after failure; not re-executed (attempt %d of budget %d).\ncommand: %s\nlast error: %s",
+				task.RetryCount+1, w.maxRetries, truncate(prev, 500), truncate(failure, 500)))
+			return
+		}
+	}
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	w.RegisterCancel(task.ID, cancel)
