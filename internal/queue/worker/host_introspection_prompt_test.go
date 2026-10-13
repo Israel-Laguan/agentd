@@ -28,3 +28,15 @@ func TestWorkerPayloadCarriesTaskIntentForEvidenceGuard(t *testing.T) {
 		t.Fatalf("payload intent = %q, want task title and description", p.Intent)
 	}
 }
+
+// Models guess a /workspace root and get refused; the prompt must name the
+// real contract: the workspace is the current directory.
+func TestWorkerSystemPromptStatesWorkspaceIsCurrentDirectory(t *testing.T) {
+	t.Parallel()
+	system := workerMessages(models.Task{Title: "t"}, models.AgentProfile{})[0].Content
+	for _, want := range []string{"current directory", "relative paths", "never /workspace"} {
+		if !strings.Contains(system, want) {
+			t.Fatalf("worker system prompt missing %q:\n%s", want, system)
+		}
+	}
+}
