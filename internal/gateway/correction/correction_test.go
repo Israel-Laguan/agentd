@@ -166,3 +166,35 @@ func TestPromptAfterInvalidJSON(t *testing.T) {
 		t.Fatalf("msg = %#v", msg)
 	}
 }
+
+type hintedPayload struct {
+	N int `json:"n"`
+}
+
+func (hintedPayload) SchemaHint() string { return "SCHEMA-HINT-XYZ" }
+
+func TestGenerateJSONCorrectionIncludesSchemaHint(t *testing.T) {
+	var seen []spec.AIRequest
+	gw := &recordingGW{seen: &seen, steps: []string{`not-json`, `{"n":1}`}}
+	if _, err := correction.GenerateJSON[hintedPayload](context.Background(), gw, spec.AIRequest{}); err != nil {
+		t.Fatalf("GenerateJSON: %v", err)
+	}
+	last := seen[1].Messages[len(seen[1].Messages)-1].Content
+	if !strings.Contains(last, "SCHEMA-HINT-XYZ") {
+		t.Fatalf("correction message = %q, want schema hint", last)
+	}
+}
+
+type recordingGW struct {
+	seqFakeGW
+	seen  *[]spec.AIRequest
+	steps []string
+	n     int
+}
+
+func (g *recordingGW) Generate(_ context.Context, req spec.AIRequest) (spec.AIResponse, error) {
+	*g.seen = append(*g.seen, req)
+	c := g.steps[g.n]
+	g.n++
+	return spec.AIResponse{Content: c}, nil
+}

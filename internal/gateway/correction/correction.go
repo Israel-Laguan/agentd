@@ -44,7 +44,7 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 			if attempt == MaxJSONAttempts-1 {
 				return zero, totalUsage, details, WrapInvalidJSONError(err, lastRaw)
 			}
-			req.Messages = append(req.Messages, PromptAfterInvalidJSON(err))
+			req.Messages = append(req.Messages, promptAfterInvalid[T](err))
 			continue
 		}
 		var validatable spec.Validatable
@@ -58,7 +58,7 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 				if attempt == MaxJSONAttempts-1 {
 					return zero, totalUsage, details, WrapInvalidJSONError(err, lastRaw)
 				}
-				req.Messages = append(req.Messages, PromptAfterInvalidJSON(err))
+				req.Messages = append(req.Messages, promptAfterInvalid[T](err))
 				continue
 			}
 		}
@@ -73,6 +73,19 @@ func PromptAfterInvalidJSON(err error) spec.PromptMessage {
 		Role:    "user",
 		Content: "Your previous response was invalid JSON. Error: " + err.Error() + ". Please output ONLY valid JSON.",
 	}
+}
+
+// schemaHinter is implemented by target types that can describe their JSON
+// shape; the description is appended to corrective retry messages.
+type schemaHinter interface{ SchemaHint() string }
+
+func promptAfterInvalid[T any](err error) spec.PromptMessage {
+	msg := PromptAfterInvalidJSON(err)
+	var zero T
+	if h, ok := any(zero).(schemaHinter); ok {
+		msg.Content += "\n" + h.SchemaHint()
+	}
+	return msg
 }
 
 // WrapInvalidJSONError wraps a parse/validation error with optional raw model output.

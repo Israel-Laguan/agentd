@@ -125,12 +125,26 @@ func mapDraftAPIError(status int, body []byte) error {
 		strings.Contains(text, "no LLM providers available"),
 		strings.Contains(text, "LLM provider unreachable"):
 		return fmt.Errorf("draft request failed (HTTP %d): %w", status, config.ErrNoLLMProviders)
+	case status == http.StatusUnprocessableEntity && apiErrorMessage(body) != "":
+		return fmt.Errorf("draft request failed: %s", apiErrorMessage(body))
 	default:
 		if status > 0 {
 			return fmt.Errorf("draft request failed with status %s", http.StatusText(status))
 		}
 		return fmt.Errorf("draft request failed with empty response")
 	}
+}
+
+func apiErrorMessage(body []byte) string {
+	var env struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return ""
+	}
+	return env.Error.Message
 }
 
 func printPlan(cmd *cobra.Command, plan models.DraftPlan) error {

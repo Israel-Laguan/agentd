@@ -29,11 +29,12 @@ func (r *Router) GeneratePlan(ctx context.Context, userIntent string) (*models.D
 }
 
 func phasePlanningPrompt(maxTasksPerPhase int) string {
+	base := "Create an agentd DraftPlan. Output ONLY valid JSON.\n" + models.DraftPlan{}.SchemaHint()
 	if maxTasksPerPhase <= 0 {
-		return "Create an agentd DraftPlan. Output ONLY valid JSON."
+		return base
 	}
-	return fmt.Sprintf(
-		"Create an agentd DraftPlan. Output ONLY valid JSON. Emit at most %d tasks. If more work remains, make the last task titled %q with a description summarizing remaining work.",
+	return base + fmt.Sprintf(
+		"\nEmit at most %d tasks. If more work remains, make the last task titled %q with a description summarizing remaining work.",
 		maxTasksPerPhase,
 		"Plan Phase 2",
 	)

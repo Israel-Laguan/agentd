@@ -99,21 +99,28 @@ func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 		"result", requestOutcome(err, content), "content_length", len(content),
 	)
 	if err != nil {
-		if errors.Is(err, frontdesk.ErrMultipleApprovedScopes) {
-			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "send one turn per scope using approved_scopes with exactly one entry")
-			return
-		}
-		if isAICoreTimeout(err) {
-			log.WarnContext(ctx, "chat intake: LLM timeout", "error", err)
-			httpx.WriteJSON(w, http.StatusOK, completion(req.Model, systemTimeoutMessage, nil, finishReasonStop))
-			return
-		}
-		log.WarnContext(ctx, "chat intake: planner failed", "error", err)
-		httpx.WriteMappedError(w, err)
+		writePlannerError(ctx, log, w, req.Model, err)
 		return
 	}
 	toolCalls, finishReason := buildToolCalls(content, req.Tools, req.ToolChoice)
 	httpx.WriteJSON(w, http.StatusOK, completion(req.Model, string(content), toolCalls, finishReason))
+}
+
+// writePlannerError maps a non-streaming planner failure to its HTTP reply.
+func writePlannerError(ctx context.Context, log *slog.Logger, w http.ResponseWriter, model string, err error) {
+	switch {
+	case errors.Is(err, frontdesk.ErrMultipleApprovedScopes):
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "send one turn per scope using approved_scopes with exactly one entry")
+	case isAICoreTimeout(err):
+		log.WarnContext(ctx, "chat intake: LLM timeout", "error", err)
+		httpx.WriteJSON(w, http.StatusOK, completion(model, systemTimeoutMessage, nil, finishReasonStop))
+	case errors.Is(err, models.ErrInvalidJSONResponse):
+		log.WarnContext(ctx, "chat intake: planner failed", "error", err)
+		httpx.WriteError(w, http.StatusUnprocessableEntity, httpx.CodeValidation, "planner returned an invalid plan: "+err.Error())
+	default:
+		log.WarnContext(ctx, "chat intake: planner failed", "error", err)
+		httpx.WriteMappedError(w, err)
+	}
 }
 
 func parseChatRequest(w http.ResponseWriter, r *http.Request, ctx context.Context, log *slog.Logger) (chatRequest, string, bool) {
