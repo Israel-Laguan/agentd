@@ -62,27 +62,32 @@ type heredocDelim struct {
 	stripTabs bool
 }
 
-// shellHeredocReceiver matches a heredoc operator line that feeds a shell or
-// another interpreter (`bash <<EOF`, `python3 - <<EOF`). Such bodies are code, not payload
-// data, so they stay scanned: without this, `bash <<EOF` + `cat /etc/passwd`
-// would pass the filter that refused it before heredoc stripping (B-040
-// must not loosen the sandbox beyond data heredocs).
-var shellHeredocReceiver = regexp.MustCompile(`(^|[;&|()\s])\s*(bash|sh|dash|zsh|python[0-9.]*|perl|ruby|node|nodejs|php|awk|gawk)(\s|$|[;&|()<>])`)
+// interpreterPattern matches a command that executes text as code or turns
+// stdin lines into operands: shells, scripting interpreters, and the shell
+// builtins/utilities that run or expand a file (`source`, `.`, `eval`, `exec`,
+// `env`, `xargs`).
+var interpreterPattern = regexp.MustCompile(`(^|[;&|()\s])\s*(bash|sh|dash|zsh|python[0-9.]*|perl|ruby|node|nodejs|php|awk|gawk|xargs|source|eval|exec|env|\.)(\s|$|[;&|()<>])`)
 
 // stripHeredocBodies drops `<<[ -]DELIM ... DELIM` stdin bodies from command
-// text before path checks run. Bodies are payload data, never path operands,
-// so comment markers (`//`, `#`), globs (`/*`) and path-looking text inside
-// them must not be refused (B-040). Lines carrying the `<<` operator itself
-// are kept: real operands next to `<<` are still scanned.
+// text before path checks run. Data bodies (`cat > main.go <<EOF`) are payload,
+// never path operands, so comment markers (`//`, `#`), globs (`/*`) and
+// path-looking text inside them must not be refused (B-040). Lines carrying
+// the `<<` operator itself are kept: real operands next to `<<` are still
+// scanned.
+//
+// The allowance ends where the command can run what it wrote: if any line
+// outside a body executes an interpreter (`sh x.sh`, `python3 a.py`,
+// `xargs cat`, `source x`), the whole command is returned unstripped, so a
+// script body that reads host paths stays subject to the path checks. Bodies
+// are not searched for interpreter words. Runners such as `go test` are not
+// treated as interpreters; closing that gap is SP-019's isolation work.
 func stripHeredocBodies(command string) string {
 	lines := strings.Split(command, "\n")
 	kept := make([]string, 0, len(lines))
 	var pending []heredocDelim
 	for _, line := range lines {
 		if len(pending) == 0 {
-			if !shellHeredocReceiver.MatchString(line) {
-				pending = append(pending, parseHeredocDelims(line)...)
-			}
+			pending = append(pending, parseHeredocDelims(line)...)
 			kept = append(kept, line)
 			continue
 		}
@@ -94,7 +99,11 @@ func stripHeredocBodies(command string) string {
 			pending = pending[1:]
 		}
 	}
-	return strings.Join(kept, "\n")
+	stripped := strings.Join(kept, "\n")
+	if interpreterPattern.MatchString(stripped) {
+		return command
+	}
+	return stripped
 }
 
 // parseHeredocDelims returns the end markers for every unquoted `<<`

@@ -149,3 +149,30 @@ func TestMapDraftAPIError_NonJSONBodies(t *testing.T) {
 		})
 	}
 }
+
+// Review finding: only outage-shaped non-JSON bodies may carry the provider
+// sentinel; a proxy error page must not be reported as "no LLM providers".
+func TestDecodeDraft_NonJSONOnlyOutageBodiesWrapProviderSentinel(t *testing.T) {
+	long := strings.Repeat("x", 400) + " upstream request timed out"
+	for _, tt := range []struct {
+		name         string
+		body         string
+		wantSentinel bool
+	}{
+		{name: "proxy error page", body: `<html><body>502 Bad Gateway</body></html>`, wantSentinel: false},
+		{name: "plain text error", body: `Service Unavailable: LiteLLM overloaded`, wantSentinel: false},
+		{name: "outage text", body: `[SYSTEM] request timed out`, wantSentinel: true},
+		{name: "outage signal beyond the snippet", body: long, wantSentinel: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(tt.body))}
+			_, err := decodeDraft(resp)
+			if err == nil {
+				t.Fatal("decodeDraft() error = nil")
+			}
+			if got := errors.Is(err, config.ErrNoLLMProviders); got != tt.wantSentinel {
+				t.Fatalf("errors.Is(ErrNoLLMProviders) = %v, want %v; err = %v", got, tt.wantSentinel, err)
+			}
+		})
+	}
+}
