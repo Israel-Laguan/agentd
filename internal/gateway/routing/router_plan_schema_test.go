@@ -87,3 +87,15 @@ func TestGenerateStructuredJSON_DraftPlanTargetCarriesSchema(t *testing.T) {
 		t.Fatalf("system prompt lacks schema: %s", sys)
 	}
 }
+
+func TestPhasePlanningPrompt_GuidesHostFactPlans(t *testing.T) {
+	t.Parallel()
+	for _, max := range []int{0, 3} {
+		got := phasePlanningPrompt(max)
+		for _, want := range []string{"hostnamectl", "lscpu", "report.md", "/etc, /proc or /sys"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("phasePlanningPrompt(%d) missing %q:\n%s", max, want, got)
+			}
+		}
+	}
+}
