@@ -184,6 +184,11 @@ func approved(cmd *cobra.Command) (bool, error) {
 }
 
 func materializePlan(cmd *cobra.Command, client *http.Client, baseURL string, cfg config.Config, plan models.DraftPlan) error {
+	if strings.TrimSpace(plan.SourcePath) == "" {
+		// Like chat clients, approve an unseeded plan as an explicit empty
+		// workspace; otherwise its tasks stay PENDING until /workspace/ready.
+		plan.StartEmptyWorkspace = true
+	}
 	var body bytes.Buffer
 	if err := json.NewEncoder(&body).Encode(plan); err != nil {
 		return err
