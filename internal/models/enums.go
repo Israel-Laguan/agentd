@@ -216,6 +216,7 @@ const (
 	EventTypeLog                       EventType = "LOG"
 	EventTypeFailure                   EventType = "FAILURE"
 	EventTypeResult                    EventType = "RESULT"
+	EventTypeCommand                   EventType = "COMMAND"
 	EventTypeRecovery                  EventType = "RECOVERY"
 	EventTypeRebootRecovery            EventType = "REBOOT_RECOVERY"
 	EventTypeRecoveryWorkspaceReset    EventType = "RECOVERY_WORKSPACE_RESET"

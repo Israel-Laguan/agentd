@@ -80,6 +80,10 @@ func (w *Worker) executeLegacyCommand(
 	defer w.DeregisterCancel(task.ID)
 
 	result, runErr := w.sandbox.Execute(execCtx, w.payload(task, project, command))
+	if !errors.Is(runErr, models.ErrSandboxViolation) {
+		// Refused commands leave a SANDBOX_VIOLATION instead; this one ran.
+		w.Emit(ctx, task, string(models.EventTypeCommand), w.executedCommandPayload(command))
+	}
 	audit.exitCode = result.ExitCode
 	if runErr != nil || !result.Success {
 		audit.failed = true
@@ -102,6 +106,19 @@ func (w *Worker) executeLegacyCommand(
 		return
 	}
 	w.commit(ctx, task, result, runErr)
+}
+
+// maxCommandEventRunes bounds how much of an executed command is stored in its COMMAND event.
+const maxCommandEventRunes = 1000
+
+func (w *Worker) executedCommandPayload(command string) string {
+	if w.sandboxScrubber != nil {
+		command = w.sandboxScrubber.Scrub(command)
+	}
+	if runes := []rune(command); len(runes) > maxCommandEventRunes {
+		return string(runes[:maxCommandEventRunes]) + "..."
+	}
+	return command
 }
 
 func (w *Worker) CommitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
