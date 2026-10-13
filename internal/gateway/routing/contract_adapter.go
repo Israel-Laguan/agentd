@@ -32,6 +32,16 @@ func (r *Router) GenerateStructuredJSON(ctx context.Context, prompt string, targ
 	if target == nil {
 		return fmt.Errorf("target is required")
 	}
+	if draft, ok := target.(*models.DraftPlan); ok {
+		// DraftPlan targets share GeneratePlan's schema-bearing prompt and
+		// correction retries; the generic loop below has no schema to show.
+		plan, err := r.GeneratePlan(ctx, prompt)
+		if err != nil {
+			return err
+		}
+		*draft = *plan
+		return nil
+	}
 	req := spec.AIRequest{
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: "Output ONLY valid JSON matching the requested schema."},
