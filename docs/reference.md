@@ -137,6 +137,7 @@ task["id"], task["project_id"], task["state"]
 | `PERMISSION_HANDOFF` | Worker | Privileged work detected; HUMAN task created. |
 | `SANDBOX_VIOLATION` | Sandbox | Command blocked before execution due to sandbox policy (e.g., `sudo`, path escape). |
 | `LOG_CHUNK` | Sandbox | Streaming stdout/stderr line emitted during command execution (after scrubber redaction). |
+| `COMMAND` | Worker | The shell command a legacy-mode worker executed for the task (scrubbed, bounded). Not emitted for commands the sandbox refused; those produce `SANDBOX_VIOLATION`. |
 | `TASK_BREAKDOWN` | Worker | Oversized task split into child tasks; parent blocked. |
 | `TASK_BREAKDOWN_ROLLUP` | Worker | Resumed broken-down parent completed because all its breakdown subtasks completed; no LLM call. |
 | `LLM_OUTAGE_HANDOFF` | Daemon | HUMAN task created for AI provider outage diagnostics. |
