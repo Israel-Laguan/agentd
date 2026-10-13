@@ -96,12 +96,17 @@ func decodeDraft(resp *http.Response) (models.DraftPlan, error) {
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(body, &decoded); err != nil {
-		return models.DraftPlan{}, err
+		// A 200 with a non-JSON body is a provider-path failure (proxy error
+		// page, plain-text upstream error), never a plan bug (B-044).
+		return models.DraftPlan{}, nonJSONDraftError(resp.StatusCode, body)
 	}
 	if len(decoded.Choices) == 0 {
 		return models.DraftPlan{}, fmt.Errorf("draft response missing choices")
 	}
 	raw := decoded.Choices[0].Message.Content
+	if strings.TrimSpace(raw) == "" {
+		return models.DraftPlan{}, fmt.Errorf("draft response missing plan content")
+	}
 	var probe struct {
 		Kind string `json:"kind"`
 	}
@@ -110,6 +115,17 @@ func decodeDraft(resp *http.Response) (models.DraftPlan, error) {
 		case "feasibility_clarification", "intent_clarification", "scope_clarification", "status_report":
 			return models.DraftPlan{}, nonPlanError(probe.Kind, raw)
 		}
+	}
+	if !json.Valid([]byte(raw)) {
+		// The chat endpoint answers 200 with plain-text content when every
+		// provider is down (the J09 [SYSTEM] timeout message); surface the
+		// provider failure instead of a JSON decode artifact (B-044).
+		if isProviderOutageText(raw) {
+			return models.DraftPlan{}, fmt.Errorf("draft request failed: %w: provider outage instead of plan: %s",
+				config.ErrNoLLMProviders, draftBodySnippet([]byte(raw)))
+		}
+		return models.DraftPlan{}, fmt.Errorf("draft request failed: planner returned non-plan content instead of a draft plan: %s",
+			draftBodySnippet([]byte(raw)))
 	}
 	var plan models.DraftPlan
 	if err = json.Unmarshal([]byte(raw), &plan); err != nil {
@@ -140,11 +156,58 @@ func mapDraftAPIError(status int, body []byte) error {
 	case status == http.StatusUnprocessableEntity && apiErrorMessage(body) != "":
 		return fmt.Errorf("draft request failed: %s", apiErrorMessage(body))
 	default:
-		if status > 0 {
-			return fmt.Errorf("draft request failed with status %s", http.StatusText(status))
+		// Never drop the body: plain-text 5xx, 404 model-not-found text,
+		// and HTML error pages carry the real diagnosis (B-044).
+		if snippet := draftBodySnippet(body); snippet != "" {
+			return fmt.Errorf("draft request failed (HTTP %d %s): %s", status, http.StatusText(status), snippet)
 		}
-		return fmt.Errorf("draft request failed with empty response")
+		return fmt.Errorf("draft request failed (HTTP %d %s) with empty response body", status, http.StatusText(status))
 	}
+}
+
+// maxDraftBodySnippet bounds how much of a non-JSON response body is echoed
+// in an error so HTML error pages stay readable.
+const maxDraftBodySnippet = 200
+
+// draftBodySnippet collapses a response body to a single line for error
+// messages. It returns "" for an empty body.
+func draftBodySnippet(body []byte) string {
+	text := strings.Join(strings.Fields(string(body)), " ")
+	if text == "" {
+		return ""
+	}
+	if runes := []rune(text); len(runes) > maxDraftBodySnippet {
+		return string(runes[:maxDraftBodySnippet]) + "..."
+	}
+	return text
+}
+
+// isProviderOutageText matches plain-text bodies that mean the provider path
+// is down rather than the plan being bad: the J09 [SYSTEM] timeout message
+// and timeout/unreachable/no-provider phrases.
+func isProviderOutageText(text string) bool {
+	lowered := strings.ToLower(text)
+	for _, signal := range []string{"[system]", "timed out", "llm provider unreachable", "no llm providers"} {
+		if strings.Contains(lowered, signal) {
+			return true
+		}
+	}
+	return false
+}
+
+// nonJSONDraftError reports a 200 response whose body is not a chat
+// completion at all. An outage-shaped body wraps config.ErrNoLLMProviders so
+// the CLI prints the provider hint; anything else still names the body.
+func nonJSONDraftError(status int, body []byte) error {
+	if snippet := draftBodySnippet(body); snippet != "" {
+		if isProviderOutageText(snippet) {
+			return fmt.Errorf("draft request failed (HTTP %d): %w: provider outage response: %s",
+				status, config.ErrNoLLMProviders, snippet)
+		}
+		return fmt.Errorf("draft request failed (HTTP %d): %w: unexpected non-JSON response: %s",
+			status, config.ErrNoLLMProviders, snippet)
+	}
+	return fmt.Errorf("draft request failed (HTTP %d) with empty response body", status)
 }
 
 func apiErrorMessage(body []byte) string {
