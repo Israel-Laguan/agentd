@@ -45,13 +45,20 @@ func (e *BashExecutor) Execute(ctx context.Context, payload Payload) (Result, er
 		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub("sudo command blocked; command: "+truncateCommand(payload.Command)))
 		return Result{ExitCode: -1, Stderr: e.scrub("sudo command blocked")}, fmt.Errorf("%w: sudo is not allowed", models.ErrSandboxViolation)
 	}
-	if err := validateCommandPaths(payload.Command, workspace); err != nil {
+	if err := validateCommandPolicy(payload, workspace); err != nil {
 		command := truncateCommand(payload.Command)
 		slog.Warn("sandbox: directory escape attempt blocked", "workspace", workspace, "task_id", payload.TaskID, "error", e.scrub(err.Error()), "command", e.scrub(command))
 		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub(err.Error()+"; command: "+command))
 		return Result{ExitCode: -1}, err
 	}
 	return e.run(ctx, workspace, payload)
+}
+
+func validateCommandPolicy(payload Payload, workspace string) error {
+	if err := validateCommandPaths(payload.Command, workspace); err != nil {
+		return err
+	}
+	return validateHostFactEvidence(payload.Intent, payload.Command)
 }
 
 // maxViolationCommandRunes bounds how much of a refused command is logged and

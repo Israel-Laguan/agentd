@@ -85,6 +85,7 @@ func (w *Worker) payload(task models.Task, project models.Project, command strin
 		TaskID:        task.ID,
 		ProjectID:     task.ProjectID,
 		WorkspacePath: project.WorkspacePath,
+		Intent:        task.Title + "\n" + task.Description,
 		Command:       command,
 		EnvVars:       agenttools.BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
 		WallTimeout:   w.sandboxWallTimeout,
