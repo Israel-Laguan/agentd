@@ -28,8 +28,11 @@ type FakeKanbanStore struct {
 	profiles             map[string]models.AgentProfile
 	settings             map[string]string
 	scheduled            map[string]models.ScheduledTask
-	projectsDir          string
-	nextSeq              int
+	// processedComments tracks (taskID, commentEventID) pairs consumed by
+	// comment intake, mirroring the COMMENT_INTAKE dedupe rows in SQLite.
+	processedComments map[string]struct{}
+	projectsDir       string
+	nextSeq           int
 }
 
 // parentRelation tracks the relation type between a child and its parent.
@@ -54,6 +57,7 @@ func NewFakeStore() *FakeKanbanStore {
 		},
 		settings:    make(map[string]string),
 		scheduled:   make(map[string]models.ScheduledTask),
+		processedComments: make(map[string]struct{}),
 		projectsDir: filepath.Join(string(filepath.Separator), "tmp", "agentd-fake-projects"),
 	}
 }

@@ -131,6 +131,18 @@ func (s TaskState) CanTransitionTo(next TaskState) bool {
 	return ok
 }
 
+// Terminal reports whether the state ends task execution. Comments on
+// terminal tasks spawn follow-up work; they never re-queue the parent
+// (B-041: intake re-ran a COMPLETED `go mod init` until it FAILED).
+func (s TaskState) Terminal() bool {
+	switch s {
+	case TaskStateCompleted, TaskStateFailed, TaskStateFailedRequiresHuman:
+		return true
+	default:
+		return false
+	}
+}
+
 // TaskAssignee identifies who currently owns action on a task.
 type TaskAssignee string
 

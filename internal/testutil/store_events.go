@@ -62,7 +62,24 @@ func decodeCommentPayload(stored commentPayloadAtRest) models.Comment {
 func (s *FakeKanbanStore) AddComment(_ context.Context, c models.Comment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.comments = append(s.comments, encodeCommentPayload(c))
+	stored := encodeCommentPayload(c)
+	s.comments = append(s.comments, stored)
+	// Mirror kanban/events.go: only human-authored comments pause work, and
+	// comments on finished tasks flag the task for intake without re-queueing
+	// it (B-041).
+	if models.NormalizeCommentAuthor(string(c.Author)) != models.CommentAuthorUser {
+		return nil
+	}
+	t, ok := s.tasks[c.TaskID]
+	if !ok {
+		return nil
+	}
+	t.Assignee = models.TaskAssigneeHuman
+	if !t.State.Terminal() {
+		t.State = models.TaskStateInConsideration
+	}
+	t.UpdatedAt = now()
+	s.tasks[c.TaskID] = t
 	return nil
 }
 
@@ -89,12 +106,6 @@ func (s *FakeKanbanStore) ListCommentsSince(_ context.Context, taskID string, si
 	}
 	return out, nil
 }
-
-func (s *FakeKanbanStore) ListUnprocessedHumanComments(context.Context) ([]models.CommentRef, error) {
-	return nil, nil
-}
-
-func (s *FakeKanbanStore) MarkCommentProcessed(context.Context, string, string) error { return nil }
 
 func (s *FakeKanbanStore) AppendEvent(_ context.Context, e models.Event) error {
 	s.mu.Lock()

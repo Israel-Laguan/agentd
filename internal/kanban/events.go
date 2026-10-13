@@ -36,6 +36,23 @@ func (s *Store) AddComment(ctx context.Context, c models.Comment) error {
 		if author != models.CommentAuthorUser {
 			return commitTx(tx, "add comment")
 		}
+		if task.State.Terminal() {
+			// A comment on a finished task leaves it finished: yanking it
+			// into IN_CONSIDERATION made intake re-execute the parent and
+			// gate its own follow-ups behind that re-run (B-041). The
+			// assignee flip still lets intake discover the comment.
+			if _, err := tx.ExecContext(ctx, `
+			UPDATE tasks
+			SET assignee = ?, updated_at = ?
+			WHERE id = ?`,
+				models.TaskAssigneeHuman, formatTime(now), c.TaskID); err != nil {
+				return fmt.Errorf("flag finished task for intake: %w", err)
+			}
+			if err := tx.Commit(); err != nil {
+				return fmt.Errorf("commit add comment: %w", err)
+			}
+			return nil
+		}
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE tasks
 			SET state = ?, assignee = ?, updated_at = ?

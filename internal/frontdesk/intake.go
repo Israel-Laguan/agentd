@@ -29,7 +29,7 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 	if err != nil {
 		return err
 	}
-	if task.State != models.TaskStateInConsideration {
+	if task.State != models.TaskStateInConsideration && !task.State.Terminal() {
 		slog.DebugContext(ctx, "intake: skipping non-consideration task",
 			"task_id", ref.TaskID, "state", task.State)
 		return nil
@@ -61,10 +61,11 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 	}
 	slog.DebugContext(ctx, "intake: plan generated",
 		"task_id", ref.TaskID, "task_count", len(plan.Tasks))
-	if _, err := p.store.AppendTasksToProject(ctx, task.ProjectID, task.ID, plan.Tasks); err != nil {
+	created, err := p.store.AppendTasksToProject(ctx, task.ProjectID, task.ID, plan.Tasks)
+	if err != nil {
 		return err
 	}
-	if _, err := p.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateReady); err != nil {
+	if err := p.releaseParent(ctx, *task, created); err != nil {
 		return err
 	}
 	if err := p.store.MarkCommentProcessed(ctx, task.ID, ref.CommentEventID); err != nil {
@@ -73,6 +74,24 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 	slog.DebugContext(ctx, "intake: comment processed",
 		"task_id", ref.TaskID, "follow_up_tasks", len(plan.Tasks))
 	return p.emit(ctx, *task, len(plan.Tasks))
+}
+
+// releaseParent decides what happens to the commented task once follow-ups
+// exist. A finished parent stays finished and is never re-executed; its
+// follow-ups move straight to READY because the BLOCKS edge from a resolved
+// parent is already satisfied (B-041). Live parents re-queue to READY and
+// their follow-ups stay gated PENDING behind them.
+func (p *IntakeProcessor) releaseParent(ctx context.Context, task models.Task, created []models.Task) error {
+	if !task.State.Terminal() {
+		_, err := p.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateReady)
+		return err
+	}
+	for _, child := range created {
+		if _, err := p.store.UpdateTaskState(ctx, child.ID, child.UpdatedAt, models.TaskStateReady); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (p *IntakeProcessor) commentIntent(ctx context.Context, ref models.CommentRef) (string, error) {
