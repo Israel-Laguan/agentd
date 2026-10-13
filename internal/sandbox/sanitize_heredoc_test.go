@@ -141,6 +141,32 @@ func TestValidateCommandPaths_ShellFedHeredocStillScanned(t *testing.T) {
 	}
 }
 
+// Interpreters read their program from a heredoc too, so those bodies are
+// code and stay scanned. Data heredocs (cat/tee) are still stripped.
+func TestValidateCommandPaths_InterpreterFedHeredocStillScanned(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"python3", "python3 <<'EOF'\nprint(open('/etc/passwd').read())\nEOF"},
+		{"python versioned", "python3.12 - <<EOF\nopen(\"/etc/passwd\")\nEOF"},
+		{"perl", "perl <<'EOF'\nopen(F, '/etc/passwd');\nEOF"},
+		{"ruby", "ruby <<'EOF'\nFile.read('/etc/passwd')\nEOF"},
+		{"node", "node <<'EOF'\nrequire('fs').readFileSync('/etc/passwd')\nEOF"},
+		{"php", "php <<'EOF'\nfile_get_contents('/etc/passwd');\nEOF"},
+		{"awk program from stdin", "awk -f - <<'EOF'\nBEGIN { getline x < \"/etc/passwd\" }\nEOF"},
+		{"after a pipe", "echo hi | python3 <<'EOF'\nopen('/etc/passwd')\nEOF"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCommandPaths(tt.command, "/workspace")
+			if err == nil || !IsSandboxViolation(err) {
+				t.Fatalf("validateCommandPaths(%q) = %v, want sandbox violation", tt.command, err)
+			}
+		})
+	}
+}
+
 // B-040 diagnosis pin: the heredoc `//` refusal comes from the
 // pre-existing whitespace-token check (validateAbsolutePathTokens), not
 // from the B-034 attached-path check (validateAttachedPaths passes).
