@@ -3,8 +3,13 @@ name: CI (PR size)
 # Enforces the PR size rule from CONTRIBUTING.md: under 100 changed files and
 # at most 1000 changed lines (additions + deletions). A maintainer can add the
 # `large-pr-ok` label to waive it for one PR; the label events re-run the check.
+#
+# Uses pull_request_target so the workflow definition and the gate script run
+# from trusted, base-controlled code: a contributor must not be able to edit
+# tools/ci/pr_size.sh (or this file) to bypass the gate. The checkout below
+# pins the base SHA, never the PR merge commit.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
@@ -19,6 +24,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
 
       - name: Check PR size
         env:
