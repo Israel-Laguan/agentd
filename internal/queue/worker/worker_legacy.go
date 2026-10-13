@@ -86,6 +86,7 @@ func (w *Worker) routeLegacyProfile(ctx context.Context, task models.Task, proje
 func (w *Worker) command(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (workerResponse, int, gateway.UsageDetails, error) {
 	messages := w.seedMessages(ctx, task, project, profile)
 	messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
+	messages = w.PrependSandboxViolationFeedback(ctx, task, messages)
 	req := gateway.AIRequest{
 		Messages:    messages,
 		Temperature: profile.Temperature,

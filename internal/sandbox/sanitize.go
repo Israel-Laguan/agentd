@@ -20,6 +20,11 @@ var shellSplitSeparators = strings.NewReplacer(
 
 var changeDirPattern = regexp.MustCompile(`(?:^|[;&|])\s*(cd|pushd|chdir)\s+([^\s;&|]+)`)
 
+// devNull is the one absolute path outside the workspace commands may name:
+// reads return EOF and writes are discarded, so it exposes no host data. Only
+// the exact cleaned path matches; /dev/null/x and /dev/nullx are still refused.
+const devNull = "/dev/null"
+
 func validateCommandPaths(command, workspace string) error {
 	trimmed := strings.TrimSpace(command)
 	if trimmed == "" {
@@ -50,7 +55,10 @@ func validateAbsolutePathTokens(command, workspace string) error {
 		if filepath.Clean(path) == filepath.Clean(workspace) || strings.HasPrefix(path, workspace+string(os.PathSeparator)) {
 			continue
 		}
-		return fmt.Errorf("%w: absolute path escapes workspace", models.ErrSandboxViolation)
+		if path == devNull {
+			continue
+		}
+		return fmt.Errorf("%w: absolute path escapes workspace: %s", models.ErrSandboxViolation, token)
 	}
 	return nil
 }
