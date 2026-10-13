@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"agentd/internal/models"
@@ -48,6 +49,30 @@ func (w *Worker) repeatOfPreviousAttempt(ctx context.Context, task models.Task, 
 		return "", lastFailure, false
 	}
 	return prevCommand, lastFailure, prevCommand == wantExecuted || prevCommand == wantRefused
+}
+
+// rejectUnrunnableCommand applies the B-043 pre-execution guards: an empty
+// model command fails without touching the sandbox, and a retry that would
+// send the exact command that just failed hands off early via the existing
+// eviction path. It reports true when the caller must stop before Execute.
+func (w *Worker) rejectUnrunnableCommand(ctx context.Context, task models.Task, command string, audit *legacyTaskAudit) bool {
+	if strings.TrimSpace(command) == "" {
+		audit.failed = true
+		w.handleAgentFailure(ctx, task, "model returned an empty command; nothing was executed")
+		return true
+	}
+	// The RetryCount window keeps the human-retry escape hatch: a
+	// post-eviction operator retry runs at RetryCount == maxRetries and still
+	// gets one fresh attempt.
+	if task.RetryCount > 0 && task.RetryCount < w.maxRetries {
+		if prev, failure, repeat := w.repeatOfPreviousAttempt(ctx, task, command); repeat {
+			audit.failed = true
+			w.evict(ctx, task, fmt.Sprintf("deterministic failure: identical command re-suggested after failure; not re-executed (attempt %d of budget %d).\ncommand: %s\nlast error: %s",
+				task.RetryCount+1, w.maxRetries, truncate(prev, 500), truncate(failure, 500)))
+			return true
+		}
+	}
+	return false
 }
 
 // violationCommandOf extracts the refused command from a SANDBOX_VIOLATION

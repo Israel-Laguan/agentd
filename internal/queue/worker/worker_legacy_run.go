@@ -3,8 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 
 	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/models"
@@ -78,24 +76,11 @@ func (w *Worker) executeLegacyCommand(
 ) {
 	// An empty model command can never succeed; fail it without touching the
 	// sandbox (B-043: the S5 empty fourth attempt executed as
-	// `RESULT command is required`).
-	if strings.TrimSpace(command) == "" {
-		audit.failed = true
-		w.handleAgentFailure(ctx, task, "model returned an empty command; nothing was executed")
+	// `RESULT command is required`). A retry that would send the exact
+	// command that just failed is deterministic waste; hand it off early
+	// instead of burning the full budget.
+	if w.rejectUnrunnableCommand(ctx, task, command, audit) {
 		return
-	}
-	// A retry that would send the exact command that just failed is
-	// deterministic waste; hand off early instead of burning the full budget
-	// (B-043). The RetryCount window keeps the human-retry escape hatch: a
-	// post-eviction operator retry runs at RetryCount == maxRetries and still
-	// gets one fresh attempt.
-	if task.RetryCount > 0 && task.RetryCount < w.maxRetries {
-		if prev, failure, repeat := w.repeatOfPreviousAttempt(ctx, task, command); repeat {
-			audit.failed = true
-			w.evict(ctx, task, fmt.Sprintf("deterministic failure: identical command re-suggested after failure; not re-executed (attempt %d of budget %d).\ncommand: %s\nlast error: %s",
-				task.RetryCount+1, w.maxRetries, truncate(prev, 500), truncate(failure, 500)))
-			return
-		}
 	}
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -127,6 +112,18 @@ func (w *Worker) executeLegacyCommand(
 		audit.reviewHandoff = true
 		w.createReviewHandoff(ctx, task, result.Stdout)
 		return
+	}
+	// Exit 0 alone does not complete a task that declares success criteria:
+	// verify the cheap post-conditions first (B-039). A zero-exit command
+	// that breaks the workspace fails with retry feedback instead of
+	// COMPLETING, so the damage surfaces here rather than in a downstream
+	// build task.
+	if runErr == nil && result.Success && len(task.SuccessCriteria) > 0 {
+		if err := verifyPostConditions(task, project.WorkspacePath); err != nil {
+			audit.failed = true
+			w.handleAgentFailure(ctx, task, err.Error())
+			return
+		}
 	}
 	w.commit(ctx, task, result, runErr)
 }
