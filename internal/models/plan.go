@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -54,6 +55,11 @@ func (p *DraftPlan) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// systemPathPattern matches host system paths in task text. Workers run in a
+// jailed workspace, so a task that tells them to read one can never succeed
+// (/dev/null, the one allowed absolute path, is not matched).
+var systemPathPattern = regexp.MustCompile(`(?:^|[\s"'(=:,])/(?:etc|proc|sys|root|home|var|usr|boot|opt|mnt|srv|lib|bin|sbin)(?:/[^\s"'),;]*)?`)
+
 // Validate is invoked by gateway.GenerateJSON before returning a DraftPlan to
 // the caller, so structural errors trigger a corrective LLM retry instead of
 // bubbling up to the human approval step.
@@ -69,6 +75,9 @@ func (p *DraftPlan) Validate() error {
 		tid := t.ID()
 		if strings.TrimSpace(t.Title) == "" {
 			return fmt.Errorf("task %d: title is required", i+1)
+		}
+		if path := systemPathPattern.FindString(t.Title + "\n" + t.Description); path != "" {
+			return fmt.Errorf("task %d: names %q, which is outside the project workspace and unreadable to workers; use commands such as hostnamectl or lscpu instead of system files", i+1, strings.TrimRight(strings.TrimLeft(path, " \t\n\"'(=:,"), ".:"))
 		}
 		if tid != "" {
 			if _, dup := seen[tid]; dup {
