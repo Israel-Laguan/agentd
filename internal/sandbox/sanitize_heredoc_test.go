@@ -118,6 +118,29 @@ func TestValidateCommandPaths_QuotedRootOnlyIsNotAPath(t *testing.T) {
 	}
 }
 
+// A heredoc fed to a shell is code, not payload: literal paths inside it
+// must keep being refused, exactly as before heredoc stripping. This pins
+// the B-040 fix to data heredocs (`cat > file`) with no sandbox loosening.
+func TestValidateCommandPaths_ShellFedHeredocStillScanned(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"bash heredoc with absolute path", "bash << 'EOF'\ncat /etc/passwd\nEOF"},
+		{"sh heredoc with redirect path", "sh << 'EOF'\necho hi >/etc/agentd-probe\nEOF"},
+		{"bash attached heredoc with proc path", "bash<<'EOF'\ncat /proc/self/environ\nEOF"},
+		{"zsh heredoc with option path", "zsh << 'EOF'\ncat --file=/etc/passwd\nEOF"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCommandPaths(tt.command, "/workspace")
+			if err == nil || !IsSandboxViolation(err) {
+				t.Fatalf("validateCommandPaths(%q) = %v, want sandbox violation", tt.command, err)
+			}
+		})
+	}
+}
+
 // B-040 diagnosis pin: the heredoc `//` refusal comes from the
 // pre-existing whitespace-token check (validateAbsolutePathTokens), not
 // from the B-034 attached-path check (validateAttachedPaths passes).
