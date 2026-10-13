@@ -78,6 +78,9 @@ func registerAPIChatSteps(sc *godog.ScenarioContext, state *apiScenario) {
 	sc.Step(`^ClassifyIntent should not be called$`, state.classifyIntentNotCalled)
 	sc.Step(`^a client sends a status-check chat completion request$`, state.statusCheckChatCompletion)
 	sc.Step(`^a client sends an ambiguous chat completion request$`, state.ambiguousChatCompletion)
+	sc.Step(`^a client sends a host-investigation question "([^"]*)"$`, state.hostInvestigationChatCompletion)
+	sc.Step(`^the first choice content kind should not be "([^"]*)"$`, state.choiceContentKindNot)
+	sc.Step(`^the intent classifier should receive "([^"]*)"$`, state.classifierReceived)
 }
 
 func registerAPITaskSteps(sc *godog.ScenarioContext, state *apiScenario) {
@@ -230,6 +233,30 @@ func (s *apiScenario) statusCheckChatCompletion(context.Context) error {
 	body := `{"messages":[{"role":"user","content":"What's the status of my projects?"}]}`
 	s.resp = request(s.handler(), http.MethodPost, "/v1/chat/completions", body)
 	s.body = decodeBodyT(s.resp)
+	return nil
+}
+
+func (s *apiScenario) hostInvestigationChatCompletion(_ context.Context, question string) error {
+	s.gateway.intent = &gateway.IntentAnalysis{Intent: "plan_request", Reason: "asks the agent to find something out"}
+	body := fmt.Sprintf(`{"messages":[{"role":"user","content":%q}]}`, question)
+	s.resp = request(s.handler(), http.MethodPost, "/v1/chat/completions", body)
+	s.body = decodeBodyT(s.resp)
+	return nil
+}
+
+func (s *apiScenario) choiceContentKindNot(_ context.Context, kind string) error {
+	content := s.body["choices"].([]any)[0].(map[string]any)["message"].(map[string]any)["content"].(string)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(content), &parsed); err == nil && parsed["kind"] == kind {
+		return fmt.Errorf("content kind = %q, want anything else", kind)
+	}
+	return nil
+}
+
+func (s *apiScenario) classifierReceived(_ context.Context, want string) error {
+	if !strings.Contains(s.gateway.lastClassifyIntent, want) {
+		return fmt.Errorf("ClassifyIntent received %q, want %q", s.gateway.lastClassifyIntent, want)
+	}
 	return nil
 }
 

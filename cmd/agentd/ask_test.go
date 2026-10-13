@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -53,5 +54,20 @@ func TestMapDraftAPIError_ShowsValidationMessage(t *testing.T) {
 	err := mapDraftAPIError(http.StatusUnprocessableEntity, body)
 	if !strings.Contains(err.Error(), "task 1: title is required") {
 		t.Fatalf("error = %v, want validation text", err)
+	}
+}
+
+func TestDecodeDraft_NonPlanResponsesShowTheirMessage(t *testing.T) {
+	for _, kind := range []string{"status_report", "intent_clarification", "feasibility_clarification", "scope_clarification"} {
+		content := `{"kind":"` + kind + `","message":"No active projects. Send a plan request."}`
+		payload, _ := json.Marshal(content)
+		resp := &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"choices":[{"message":{"role":"assistant","content":` + string(payload) + `}}]}`)),
+		}
+		_, err := decodeDraft(resp)
+		if err == nil || !strings.Contains(err.Error(), "No active projects. Send a plan request.") {
+			t.Fatalf("%s: error = %v, want response message", kind, err)
+		}
 	}
 }
