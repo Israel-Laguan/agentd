@@ -47,3 +47,11 @@ func TestMapDraftAPIError_Generic(t *testing.T) {
 		t.Fatalf("error = %v, want status text", err)
 	}
 }
+
+func TestMapDraftAPIError_ShowsValidationMessage(t *testing.T) {
+	body := []byte(`{"status":"error","error":{"code":"VALIDATION_FAILED","message":"planner returned an invalid plan: task 1: title is required"}}`)
+	err := mapDraftAPIError(http.StatusUnprocessableEntity, body)
+	if !strings.Contains(err.Error(), "task 1: title is required") {
+		t.Fatalf("error = %v, want validation text", err)
+	}
+}
