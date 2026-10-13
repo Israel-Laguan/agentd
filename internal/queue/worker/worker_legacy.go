@@ -63,7 +63,7 @@ Shell command rules:
 - Never use sudo or commands requiring root privileges.
 - Prefer redirects and pipes over embedding output in command arguments.
 - Commands run inside the project workspace and may not touch absolute paths outside it (except /dev/null), so never read /etc, /proc or /sys files.
-- For host facts (OS, kernel, CPU, memory, disks) run commands that need no paths: uname -a, hostnamectl, lsb_release -a, lscpu, free -h, lsblk, df -h. A report may state only values printed by commands you ran.`
+- For host facts (OS, kernel, CPU, memory, disks) run commands that need no paths: uname -a, hostnamectl, lsb_release -a, lscpu, free -h, lsblk, df -h. A report may state only values printed by commands you ran: save each command's output to a file (e.g. uname -a > os.txt) so a later task can build report.md with cat; never type the facts yourself.`
 
 func legacyJSONCommandSystemContent(profile models.AgentProfile) string {
 	if profile.SystemPrompt.Valid {
