@@ -62,12 +62,12 @@ type heredocDelim struct {
 	stripTabs bool
 }
 
-// shellHeredocReceiver matches a heredoc operator line that feeds a shell
-// (`bash <<EOF`, `sh -s <<EOF`). Such bodies are commands, not payload
+// shellHeredocReceiver matches a heredoc operator line that feeds a shell or
+// another interpreter (`bash <<EOF`, `python3 - <<EOF`). Such bodies are code, not payload
 // data, so they stay scanned: without this, `bash <<EOF` + `cat /etc/passwd`
 // would pass the filter that refused it before heredoc stripping (B-040
 // must not loosen the sandbox beyond data heredocs).
-var shellHeredocReceiver = regexp.MustCompile(`(^|[;&|()\s])\s*(bash|sh|dash|zsh)(\s|$|[;&|()<>])`)
+var shellHeredocReceiver = regexp.MustCompile(`(^|[;&|()\s])\s*(bash|sh|dash|zsh|python[0-9.]*|perl|ruby|node|nodejs|php|awk|gawk)(\s|$|[;&|()<>])`)
 
 // stripHeredocBodies drops `<<[ -]DELIM ... DELIM` stdin bodies from command
 // text before path checks run. Bodies are payload data, never path operands,
