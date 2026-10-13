@@ -62,6 +62,13 @@ type heredocDelim struct {
 	stripTabs bool
 }
 
+// shellHeredocReceiver matches a heredoc operator line that feeds a shell
+// (`bash <<EOF`, `sh -s <<EOF`). Such bodies are commands, not payload
+// data, so they stay scanned: without this, `bash <<EOF` + `cat /etc/passwd`
+// would pass the filter that refused it before heredoc stripping (B-040
+// must not loosen the sandbox beyond data heredocs).
+var shellHeredocReceiver = regexp.MustCompile(`(^|[;&|()\s])\s*(bash|sh|dash|zsh)(\s|$|[;&|()<>])`)
+
 // stripHeredocBodies drops `<<[ -]DELIM ... DELIM` stdin bodies from command
 // text before path checks run. Bodies are payload data, never path operands,
 // so comment markers (`//`, `#`), globs (`/*`) and path-looking text inside
@@ -73,7 +80,9 @@ func stripHeredocBodies(command string) string {
 	var pending []heredocDelim
 	for _, line := range lines {
 		if len(pending) == 0 {
-			pending = append(pending, parseHeredocDelims(line)...)
+			if !shellHeredocReceiver.MatchString(line) {
+				pending = append(pending, parseHeredocDelims(line)...)
+			}
 			kept = append(kept, line)
 			continue
 		}
