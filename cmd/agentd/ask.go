@@ -196,18 +196,20 @@ func isProviderOutageText(text string) bool {
 }
 
 // nonJSONDraftError reports a 200 response whose body is not a chat
-// completion at all. An outage-shaped body wraps config.ErrNoLLMProviders so
-// the CLI prints the provider hint; anything else still names the body.
+// completion at all. Only an outage-shaped body wraps config.ErrNoLLMProviders
+// (so the CLI prints the provider hint); anything else is an ordinary error
+// that names the body.
 func nonJSONDraftError(status int, body []byte) error {
-	if snippet := draftBodySnippet(body); snippet != "" {
-		if isProviderOutageText(snippet) {
-			return fmt.Errorf("draft request failed (HTTP %d): %w: provider outage response: %s",
-				status, config.ErrNoLLMProviders, snippet)
-		}
-		return fmt.Errorf("draft request failed (HTTP %d): %w: unexpected non-JSON response: %s",
+	snippet := draftBodySnippet(body)
+	if snippet == "" {
+		return fmt.Errorf("draft request failed (HTTP %d) with empty response body", status)
+	}
+	// Judge the whole body: an outage phrase can sit past the snippet limit.
+	if isProviderOutageText(string(body)) {
+		return fmt.Errorf("draft request failed (HTTP %d): %w: provider outage response: %s",
 			status, config.ErrNoLLMProviders, snippet)
 	}
-	return fmt.Errorf("draft request failed (HTTP %d) with empty response body", status)
+	return fmt.Errorf("draft request failed (HTTP %d): unexpected non-JSON response: %s", status, snippet)
 }
 
 func apiErrorMessage(body []byte) string {

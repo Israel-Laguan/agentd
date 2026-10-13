@@ -55,10 +55,29 @@ func (p *DraftPlan) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// systemPathPattern matches host system paths in task text. Workers run in a
-// jailed workspace, so a task that tells them to read one can never succeed
+// Host system paths in task text are only a defect when a worker is told to
+// read them: /proc and /sys exist only on the host, and any other system path
+// preceded by a read verb is a host read. Paths named as project content (a
+// Dockerfile WORKDIR /usr/src/app, an nginx root /var/www/html) are fine.
+// Workers run in a jailed workspace, so a host read can never succeed
 // (/dev/null, the one allowed absolute path, is not matched).
-var systemPathPattern = regexp.MustCompile(`(?:^|[\s"'(=:,])/(?:etc|proc|sys|root|home|var|usr|boot|opt|mnt|srv|lib|bin|sbin)(?:/[^\s"'),;]*)?`)
+const systemPathBody = `/(?:etc|proc|sys|root|home|var|usr|boot|opt|mnt|srv|lib|bin|sbin)(?:/[^\s"'),;]*)?`
+
+var (
+	virtualFSPathPattern = regexp.MustCompile(`(?:^|[\s"'(=:,])/(?:proc|sys)(?:/[^\s"'),;]*)?`)
+	hostReadPathPattern  = regexp.MustCompile(`(?i)\b(?:cat|read|reads|reading|less|head|tail|ls|grep|open|view|print|parse|inspect|dump|list|show)\b[^\n/]{0,40}(?:^|[\s"'(=:,])(` + systemPathBody + `)`)
+)
+
+// hostReadPath returns the host path a task tells its worker to read, or "".
+func hostReadPath(text string) string {
+	if m := virtualFSPathPattern.FindString(text); m != "" {
+		return strings.TrimRight(strings.TrimLeft(m, " \t\n\"'(=:,"), ".:")
+	}
+	if m := hostReadPathPattern.FindStringSubmatch(text); m != nil {
+		return strings.TrimRight(m[1], ".:")
+	}
+	return ""
+}
 
 // Validate is invoked by gateway.GenerateJSON before returning a DraftPlan to
 // the caller, so structural errors trigger a corrective LLM retry instead of
@@ -76,8 +95,8 @@ func (p *DraftPlan) Validate() error {
 		if strings.TrimSpace(t.Title) == "" {
 			return fmt.Errorf("task %d: title is required", i+1)
 		}
-		if path := systemPathPattern.FindString(t.Title + "\n" + t.Description); path != "" {
-			return fmt.Errorf("task %d: names %q, which is outside the project workspace and unreadable to workers; use commands such as hostnamectl or lscpu instead of system files", i+1, strings.TrimRight(strings.TrimLeft(path, " \t\n\"'(=:,"), ".:"))
+		if path := hostReadPath(t.Title + "\n" + t.Description); path != "" {
+			return fmt.Errorf("task %d: reads %q, which is outside the project workspace and unreadable to workers; use commands such as hostnamectl or lscpu instead of system files", i+1, path)
 		}
 		if tid != "" {
 			if _, dup := seen[tid]; dup {

@@ -20,6 +20,10 @@ func TestDraftPlanValidate_RejectsSystemPathsInTasks(t *testing.T) {
 		{"commands only", "Gather OS", "Run uname -a and hostnamectl and save to os.txt", ""},
 		{"http route is not a system path", "API", "Expose GET /api/users and /healthz", ""},
 		{"dev null is allowed", "Quiet", "Run lscpu 2>/dev/null > cpu.txt", ""},
+		{"dockerfile workdir", "Write a Dockerfile", "Use WORKDIR /usr/src/app and COPY . .", ""},
+		{"nginx web root", "Add nginx.conf", "Serve static files from /var/www/html", ""},
+		{"systemd unit", "Add a unit file", "ExecStart=/opt/app/bin/server", ""},
+		{"read verb on usr path", "Inspect", "cat /usr/share/zoneinfo/UTC and save it", "/usr/share/zoneinfo/UTC"},
 		{"relative path", "Files", "Write notes to docs/etc/readme.md", ""},
 	}
 	for _, tt := range tests {

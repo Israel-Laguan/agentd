@@ -200,3 +200,42 @@ func TestBashExecutorWritesHeredocWithGoComment(t *testing.T) {
 		t.Fatalf("greet.go = %q, want the Go comment", content)
 	}
 }
+
+// Review finding: a heredoc body written to a script and run later must stay
+// scanned; the executing command can be on a later line than the operator.
+func TestValidateCommandPaths_HeredocBodyRunLaterStaysScanned(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+	}{
+		{"script written then run with sh", "cat > x.sh <<'EOF'\ncat /etc/passwd\nEOF\nsh x.sh > loot.txt"},
+		{"script written then run with bash", "cat > x.sh <<'EOF'\ncat /etc/passwd\nEOF\nbash x.sh"},
+		{"script written then sourced", "cat > x.sh <<'EOF'\ncat /etc/passwd\nEOF\nsource x.sh"},
+		{"script written then dot-sourced", "cat > x.sh <<'EOF'\ncat /etc/passwd\nEOF\n. ./x.sh"},
+		{"xargs consumes paths", "xargs cat <<'EOF'\n/etc/passwd\nEOF"},
+		{"python script run later", "cat > a.py <<'EOF'\nopen('/etc/passwd')\nEOF\npython3 a.py"},
+		{"eval", "cat > x.sh <<'EOF'\ncat /etc/passwd\nEOF\neval \"$(cat x.sh)\""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCommandPaths(tt.command, "/workspace")
+			if err == nil || !IsSandboxViolation(err) {
+				t.Fatalf("validateCommandPaths(%q) = %v, want sandbox violation", tt.command, err)
+			}
+		})
+	}
+}
+
+// Interpreter words inside a data body, or a non-interpreter runner such as
+// go, must not turn off the B-040 allowance.
+func TestValidateCommandPaths_HeredocAllowanceSurvivesNonInterpreterRunners(t *testing.T) {
+	tests := []string{
+		"cat > main.go <<'EOF'\npackage main\n// run sh to start\nEOF\ngo test ./...",
+		"cat > README.md <<'EOF'\nUse bash or node // both work\nEOF",
+	}
+	for _, command := range tests {
+		if err := validateCommandPaths(command, "/workspace"); err != nil {
+			t.Fatalf("validateCommandPaths(%q) = %v, want nil", command, err)
+		}
+	}
+}
