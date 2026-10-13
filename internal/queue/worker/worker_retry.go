@@ -284,7 +284,7 @@ func (w *Worker) failTerminal(ctx context.Context, task models.Task, err error, 
 		w.Emit(ctx, task, "ERROR", updateErr.Error())
 		return
 	}
-	w.postFailureComment(ctx, task, "Task failed and will not be retried automatically.", err.Error())
+	w.postFailureComment(ctx, task, fmt.Sprintf("Task failed and will not be retried automatically (attempt %d).", task.RetryCount), err.Error())
 	// UpdateTaskResult already moves RUNNING → FAILED; skip redundant transition.
 	if state == models.TaskStateFailed {
 		return

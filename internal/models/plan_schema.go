@@ -9,6 +9,8 @@ const draftPlanSchemaHint = `The JSON object must have exactly this shape:
 {
   "project_name": string (required, short kebab-case name),
   "description": string (optional),
+  "source_path": string (optional, local source directory to copy into the workspace),
+  "start_empty_workspace": boolean (optional, start with an empty workspace),
   "tasks": [ (required, at least one)
     {
       "ref_id": string (optional, unique id other tasks can reference),
