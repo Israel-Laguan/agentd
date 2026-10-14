@@ -239,3 +239,61 @@ func TestValidateCommandPaths_HeredocAllowanceSurvivesNonInterpreterRunners(t *t
 		}
 	}
 }
+
+// Review finding: shell quoting must not hide the command word from the
+// interpreter check; bash removes the quotes before running it.
+func TestValidateCommandPaths_QuotedInterpreterWordStaysScanned(t *testing.T) {
+	body := "cat > x.sh <<'EOF'\ncat /etc/passwd\nEOF\n"
+	for _, run := range []string{`'sh' x.sh`, `"sh" x.sh`, `s'h' x.sh`, `s"h" x.sh`, `\sh x.sh`, `'bash' x.sh`, `"source" x.sh`, `'python3' a.py`} {
+		t.Run(run, func(t *testing.T) {
+			err := validateCommandPaths(body+run, "/workspace")
+			if err == nil || !IsSandboxViolation(err) {
+				t.Fatalf("validateCommandPaths(%q) = %v, want sandbox violation", body+run, err)
+			}
+		})
+	}
+}
+
+// Review finding: adjacent quoted and unquoted segments form one delimiter
+// word (<<E'O'F closes on EOF), so stripping must stop at the real closing line.
+func TestValidateCommandPaths_MixedQuotedHeredocDelimiter(t *testing.T) {
+	hidden := []string{
+		"cat > x.sh <<E'O'F\ncat /etc/passwd\nEOF\nsh x.sh",
+		"cat > x.sh <<\"E\"OF\ncat /etc/passwd\nEOF\nsh x.sh",
+		"cat > x.sh <<E\\OF\ncat /etc/passwd\nEOF\nsh x.sh",
+		"cat > x.sh <<'E'\"O\"F\ncat /etc/passwd\nEOF\nbash x.sh",
+	}
+	for _, command := range hidden {
+		if err := validateCommandPaths(command, "/workspace"); err == nil || !IsSandboxViolation(err) {
+			t.Fatalf("validateCommandPaths(%q) = %v, want sandbox violation", command, err)
+		}
+	}
+	data := []string{
+		"cat > a.go <<E'O'F\npackage main\n// comment\nEOF",
+		"cat > a.go <<\"E\"OF\n// comment\nEOF",
+		"cat > a.go <<E\\OF\n// comment\nEOF\ngo vet ./...",
+	}
+	for _, command := range data {
+		if err := validateCommandPaths(command, "/workspace"); err != nil {
+			t.Fatalf("validateCommandPaths(%q) = %v, want nil", command, err)
+		}
+	}
+}
+
+func TestParseHeredocWord_JoinsAdjacentSegments(t *testing.T) {
+	tests := []struct{ line, want string }{
+		{`cat <<E'O'F`, "EOF"},
+		{`cat <<"E"OF`, "EOF"},
+		{`cat <<'E'"O"F`, "EOF"},
+		{`cat <<E\OF`, "EOF"},
+		{`cat <<'EOF'`, "EOF"},
+		{`cat <<EOF`, "EOF"},
+		{`cat <<-"E O F"`, "E O F"},
+	}
+	for _, tt := range tests {
+		delims := parseHeredocDelims(tt.line)
+		if len(delims) != 1 || delims[0].word != tt.want {
+			t.Fatalf("parseHeredocDelims(%q) = %#v, want word %q", tt.line, delims, tt.want)
+		}
+	}
+}

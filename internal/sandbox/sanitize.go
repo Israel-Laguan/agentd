@@ -100,11 +100,15 @@ func stripHeredocBodies(command string) string {
 		}
 	}
 	stripped := strings.Join(kept, "\n")
-	if interpreterPattern.MatchString(stripped) {
+	if interpreterPattern.MatchString(shellQuoteRemover.Replace(stripped)) {
 		return command
 	}
 	return stripped
 }
+
+// shellQuoteRemover mimics bash quote removal so `'sh'`, `s"h"` and `\sh` are
+// seen as the command word `sh` before interpreterPattern runs.
+var shellQuoteRemover = strings.NewReplacer(`'`, "", `"`, "", `\`, "")
 
 // parseHeredocDelims returns the end markers for every unquoted `<<`
 // operator on one line. `<<<` herestrings are not heredocs and are skipped;
@@ -158,7 +162,8 @@ func heredocOperator(line string, i int) (heredocDelim, int, bool) {
 }
 
 // parseHeredocWord reads the delimiter word at line[start:] (just past `<<`
-// or `<<-`) and returns it with the first index past it.
+// or `<<-`) and returns it with the first index past it. Like bash, adjacent
+// quoted and unquoted segments form one word (`<<E'O'F` closes on `EOF`).
 func parseHeredocWord(line string, start int) (string, bool, int) {
 	i := start
 	stripTabs := false
@@ -167,30 +172,35 @@ func parseHeredocWord(line string, start int) (string, bool, int) {
 		i++
 	}
 	i = skipHeredocBlanks(line, i)
-	quote := byte(0)
-	if i < len(line) && (line[i] == '\'' || line[i] == '"') {
-		quote = line[i]
-		i++
-	}
 	var word strings.Builder
+	var quote byte
 	for i < len(line) {
 		c := line[i]
-		if quote != 0 {
-			if c == quote {
-				i++
-				break
-			}
-		} else if isHeredocWordEnd(c) {
-			break
+		switch {
+		case quote != 0 && c == quote:
+			quote = 0
+		case quote != 0:
+			i = writeHeredocChar(&word, line, i)
+		case c == '\'' || c == '"':
+			quote = c
+		case isHeredocWordEnd(c):
+			return word.String(), stripTabs, i
+		default:
+			i = writeHeredocChar(&word, line, i)
 		}
-		if c == '\\' && i+1 < len(line) {
-			i++
-			c = line[i]
-		}
-		word.WriteByte(c)
 		i++
 	}
 	return word.String(), stripTabs, i
+}
+
+// writeHeredocChar appends line[i] to word, taking a backslash-escaped
+// character as the escaped byte, and returns the index of the last byte used.
+func writeHeredocChar(word *strings.Builder, line string, i int) int {
+	if line[i] == '\\' && i+1 < len(line) {
+		i++
+	}
+	word.WriteByte(line[i])
+	return i
 }
 
 // skipHeredocBlanks advances past the spaces and tabs between `<<` and its
@@ -206,7 +216,7 @@ func skipHeredocBlanks(line string, i int) int {
 // delimiter word.
 func isHeredocWordEnd(c byte) bool {
 	switch c {
-	case ' ', '\t', ';', '|', '&', '(', ')', '<', '>', '\'', '"':
+	case ' ', '\t', ';', '|', '&', '(', ')', '<', '>':
 		return true
 	}
 	return false
