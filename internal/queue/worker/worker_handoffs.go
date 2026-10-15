@@ -115,7 +115,7 @@ func (w *Worker) handlePromptRecovery(
 			w.Emit(ctx, task, "ERROR", err.Error())
 			return
 		}
-		recoveredResult, runErr := w.sandbox.Execute(ctx, w.payload(*retried, project, recoveredCommand))
+		recoveredResult, runErr := w.executeRecorded(ctx, *retried, project, recoveredCommand)
 		if runErr == nil && recoveredResult.Success {
 			w.commit(ctx, *retried, recoveredResult, nil)
 			return

@@ -137,7 +137,7 @@ func (w *Worker) recoverLegacyPrivilege(
 		return
 	}
 
-	result, runErr := w.sandbox.Execute(ctx, w.payload(task, project, alternative.Command))
+	result, runErr := w.executeRecorded(ctx, task, project, alternative.Command)
 	audit.exitCode = result.ExitCode
 	if runErr == nil && result.Success {
 		audit.command = alternative.Command
