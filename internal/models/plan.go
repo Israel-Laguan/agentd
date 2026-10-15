@@ -81,7 +81,9 @@ func hostReadPath(text string) string {
 
 // Validate is invoked by gateway.GenerateJSON before returning a DraftPlan to
 // the caller, so structural errors trigger a corrective LLM retry instead of
-// bubbling up to the human approval step.
+// bubbling up to the human approval step. It also normalizes the plan: a task
+// that reads a file another task writes gains the depends_on edge the model
+// left out (see ensureFileDependencies).
 func (p *DraftPlan) Validate() error {
 	if strings.TrimSpace(p.ProjectName) == "" {
 		return fmt.Errorf("project name is required")
@@ -112,7 +114,7 @@ func (p *DraftPlan) Validate() error {
 			}
 		}
 	}
-	return nil
+	return p.ensureFileDependencies()
 }
 
 // DraftTask is a plan-local task. TempID values are resolved to UUIDs when the
