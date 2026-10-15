@@ -77,10 +77,6 @@ func archFrom(inputs []Input, re *regexp.Regexp) string {
 	return ""
 }
 
-func (f Facts) empty() bool {
-	return f.OS == "" && f.Kernel == "" && f.CPUModel == "" && f.Memory == "" && len(f.Disks) == 0
-}
-
 func firstNonEmpty(current, next string) string {
 	if current != "" {
 		return current

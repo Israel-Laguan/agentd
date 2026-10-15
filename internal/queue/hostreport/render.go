@@ -30,7 +30,7 @@ func ReportTarget(title, description string) (string, bool) {
 // Render builds the summary, or false when the files carry no host facts.
 func Render(inputs []Input) (string, bool) {
 	f := Extract(inputs)
-	if f.empty() {
+	if f.OS == "" && f.Kernel == "" && f.CPUModel == "" && f.Memory == "" && len(f.Disks) == 0 {
 		return "", false
 	}
 	var b strings.Builder
