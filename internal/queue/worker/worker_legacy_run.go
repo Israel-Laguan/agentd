@@ -87,11 +87,7 @@ func (w *Worker) executeLegacyCommand(
 	w.RegisterCancel(task.ID, cancel)
 	defer w.DeregisterCancel(task.ID)
 
-	result, runErr := w.sandbox.Execute(execCtx, w.payload(task, project, command))
-	if !errors.Is(runErr, models.ErrSandboxViolation) {
-		// Refused commands leave a SANDBOX_VIOLATION instead; this one ran.
-		w.Emit(ctx, task, string(models.EventTypeCommand), w.executedCommandPayload(command))
-	}
+	result, runErr := w.executeRecorded(execCtx, task, project, command)
 	audit.exitCode = result.ExitCode
 	if runErr != nil || !result.Success {
 		audit.failed = true
@@ -126,6 +122,18 @@ func (w *Worker) executeLegacyCommand(
 		}
 	}
 	w.commit(ctx, task, result, runErr)
+}
+
+// executeRecorded runs command in the sandbox and records it as a COMMAND
+// event unless the sandbox refused it. Every path that executes a task's
+// command goes through here so reported values trace back to what ran (B-037).
+func (w *Worker) executeRecorded(ctx context.Context, task models.Task, project models.Project, command string) (sandbox.Result, error) {
+	result, err := w.sandbox.Execute(ctx, w.payload(task, project, command))
+	if !errors.Is(err, models.ErrSandboxViolation) {
+		// Refused commands leave a SANDBOX_VIOLATION instead; this one ran.
+		w.Emit(ctx, task, string(models.EventTypeCommand), w.executedCommandPayload(command))
+	}
+	return result, err
 }
 
 // maxCommandEventRunes bounds how much of an executed command is stored in its COMMAND event.

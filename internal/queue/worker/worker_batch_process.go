@@ -193,7 +193,7 @@ func (w *Worker) applyBatchLegacySlot(
 	defer cancel()
 	w.RegisterCancel(task.ID, cancel)
 	defer w.DeregisterCancel(task.ID)
-	result, runErr := w.sandbox.Execute(execCtx, w.payload(task, project, slot.Command))
+	result, runErr := w.executeRecorded(execCtx, task, project, slot.Command)
 	if w.isPromptHang(result, runErr) {
 		w.handlePromptRecovery(ctx, task, project, slot.Command, result)
 		return
