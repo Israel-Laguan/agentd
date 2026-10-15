@@ -14,6 +14,10 @@ func (w *Worker) RunLegacyTask(ctx context.Context, task models.Task, project mo
 		profile = w.routeLegacyProfile(ctx, task, project, profile)
 	}
 
+	if w.tryRenderHostReport(ctx, task, project) {
+		return
+	}
+
 	audit := w.beginLegacyTaskAudit(task, project, profile.Provider)
 	defer func() {
 		if r := recover(); r != nil {
