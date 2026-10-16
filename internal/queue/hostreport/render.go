@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"agentd/internal/models"
 )
 
 const notCollected = "not collected"
@@ -23,7 +25,10 @@ var (
 // or false when the task is not one. Paths with directories are not accepted.
 func ReportTarget(title, description string) (string, bool) {
 	text := title + "\n" + description
-	if !hostFactIntent.MatchString(text) || !reportVerb.MatchString(text) || !reportScope.MatchString(text) {
+	// The planner title is itself the host-report signal (B-055): descriptions
+	// often name only files (os_info.txt), which \bos\b-style words never match.
+	plannerTitle := strings.EqualFold(strings.TrimSpace(title), models.HostReportTaskTitle)
+	if (!plannerTitle && !hostFactIntent.MatchString(text)) || !reportVerb.MatchString(text) || !reportScope.MatchString(text) {
 		return "", false
 	}
 	if m := markdownTarget.FindStringSubmatch(text); m != nil {

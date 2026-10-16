@@ -23,3 +23,17 @@ func TestReportTargetAcceptsPlannerTitleWithLiveDescriptions(t *testing.T) {
 		}
 	}
 }
+
+// B-055: the planner varies its wording. A description whose only fact words
+// are file names (os_info.txt, ...) has no standalone \bos\b/\bcpu\b match, so
+// the planner title alone must be enough to recognize the host report task.
+func TestReportTargetAcceptsPlannerTitleWithFilenameOnlyDescription(t *testing.T) {
+	t.Parallel()
+	desc := "Combine os_info.txt, cpu_info.txt, memory_info.txt, and disk_info.txt into report.md"
+	if got, ok := ReportTarget(models.HostReportTaskTitle, desc); !ok || got != "report.md" {
+		t.Fatalf("ReportTarget(%q, %q) = %q, %v; want report.md", models.HostReportTaskTitle, desc, got, ok)
+	}
+	if _, ok := ReportTarget("Build report", desc); ok {
+		t.Fatalf("ReportTarget(\"Build report\", %q) matched; only the planner title may stand in for fact words", desc)
+	}
+}
