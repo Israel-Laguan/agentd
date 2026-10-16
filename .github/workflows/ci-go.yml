@@ -207,6 +207,15 @@ jobs:
           sudo install -m 0755 "${LYCHEE_BIN}" /usr/local/bin/lychee
           make lint-links
 
+      - name: Install bubblewrap
+        if: always()
+        run: |
+          # The sandbox escape probes and jail tests need bwrap plus
+          # unprivileged user namespaces; without them those tests skip.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          bwrap --version
+
       - name: Test
         if: always()
         id: test

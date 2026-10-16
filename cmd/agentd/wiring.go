@@ -57,6 +57,7 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 	sb := &sandbox.BashExecutor{
 		Root:        cfg.ProjectsDir,
 		Sink:        bus.EventBridge{Emitter: emitter},
+		Backend:     cfg.Sandbox.Backend,
 		Inactivity:  cfg.Sandbox.InactivityTimeout,
 		KillGrace:   cfg.Sandbox.KillGrace,
 		MaxLogBytes: cfg.Sandbox.MaxLogBytes,

@@ -28,6 +28,9 @@ type BashExecutor struct {
 	MaxLogBytes int
 	Scrubber    Scrubber
 	Limits      ResourceLimits
+	// Backend selects the execution isolation: auto (default), bubblewrap
+	// or filter-only. See internal/sandbox/bubblewrap.go.
+	Backend string
 }
 
 var _ Executor = (*BashExecutor)(nil)
@@ -79,14 +82,31 @@ func truncateCommand(command string) string {
 	return string(runes[:maxViolationCommandRunes]) + "..."
 }
 
+// startCommand builds the process: plain `bash -c` filter-only, or the
+// bubblewrap invocation when the backend resolves to a jail. A jailed
+// process gets no host environment of its own — --clearenv plus --setenv
+// carry everything — so cmd.Env stays nil there.
+func (e *BashExecutor) startCommand(execCtx context.Context, workspace string, payload Payload, shell string) *exec.Cmd {
+	name, args := "bash", []string{"-c", shell}
+	env := nonInheritedEnv(payload.EnvVars)
+	if path, ok := e.useJail(workspace, payload); ok {
+		jailed := jailArgv(path, workspace, env, shell)
+		name, args = jailed[0], jailed[1:]
+		env = nil
+	}
+	cmd := exec.CommandContext(execCtx, name, args...)
+	cmd.Dir = workspace
+	cmd.Env = env
+	cmd.Stdin = strings.NewReader("")
+	return cmd
+}
+
 func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payload) (Result, error) {
 	started := time.Now()
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	cmd := exec.CommandContext(execCtx, "bash", "-c", withResourceLimits(payload.Command, e.resourceLimits()))
-	cmd.Dir = workspace
-	cmd.Env = nonInheritedEnv(payload.EnvVars)
-	cmd.Stdin = strings.NewReader("")
+	shell := withResourceLimits(payload.Command, e.resourceLimits())
+	cmd := e.startCommand(execCtx, workspace, payload, shell)
 	configureProcess(cmd, e.resourceLimits())
 	stdout, stderr, err := commandPipes(cmd)
 	if err != nil {
