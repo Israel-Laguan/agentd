@@ -106,6 +106,15 @@ func (s *Store) validateTaskAgentIDs(ctx context.Context, drafts []models.DraftT
 }
 
 func prepareDraftPlan(plan models.DraftPlan) (models.DraftPlan, error) {
+	// Validate infers the producer-to-consumer file edges the planner may
+	// have omitted (ensureFileDependencies): without them a consumer reading
+	// a file a producer writes is inserted without the relation and can go
+	// READY before the producer completes. Validate's errors predate the
+	// ErrInvalidDraftPlan convention, so wrap them to keep the API's 400
+	// mapping for bad plans.
+	if err := plan.Validate(); err != nil {
+		return models.DraftPlan{}, fmt.Errorf("%w: %v", models.ErrInvalidDraftPlan, err)
+	}
 	normalized, err := domain.NormalizeDraftPlan(plan)
 	if err != nil {
 		return models.DraftPlan{}, err
