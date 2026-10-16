@@ -41,6 +41,20 @@ func TestBuildWorkerOptions_PassesAgenticConfig(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "capability_routing",
+			set: func(cfg *config.Config) {
+				cfg.Agentic.CapabilityRouting = config.CapabilityRoutingConfig{Enabled: true, Mappings: map[string]string{"generate_image": "dalle"}}
+			},
+			check: func(t *testing.T, opts queue.WorkerOptions) {
+				if !opts.CapabilityRouting.Enabled {
+					t.Fatal("WorkerOptions.CapabilityRouting.Enabled = false, want true")
+				}
+				if got := opts.CapabilityRouting.Mappings["generate_image"]; got != "dalle" {
+					t.Fatalf("WorkerOptions.CapabilityRouting.Mappings[generate_image] = %q, want dalle", got)
+				}
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
