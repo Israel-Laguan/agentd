@@ -205,7 +205,9 @@ func (w *Worker) RecoverAgenticPrivilege(
 		if suspended {
 			return agenttools.ToolResult{}, true
 		}
-		if alternativeResult.Status == agenttools.ToolStatusSuccess {
+		if alternativeResult.Status == agenttools.ToolStatusSuccess || isSandboxUnavailableResult(alternativeResult) {
+			// A refusal by an unavailable required jail is returned to the loop,
+			// which fails the task terminally; a human handoff cannot fix it.
 			return alternativeResult, false
 		}
 		outcome := "Non-privileged alternative failed: " + w.safePermissionText(alternativeResult.Content, 300)

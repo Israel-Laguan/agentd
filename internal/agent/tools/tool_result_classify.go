@@ -72,12 +72,16 @@ func ClassifyRawResult(callID, raw string, elapsedMs int64) ToolResult {
 		ExitCode   *int   `json:"ExitCode"`
 		Error      string `json:"error"`
 		FatalError string `json:"FatalError"`
+		Code       string `json:"Code"`
 		Status     string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(trimmed), &env); err == nil {
 		if env.FatalError != "" {
 			tr := FatalResult(callID, env.FatalError, elapsedMs)
 			tr.Content = raw
+			if env.Code != "" {
+				tr.Error.Code = env.Code
+			}
 			return tr
 		}
 		if env.Status == "timeout" {

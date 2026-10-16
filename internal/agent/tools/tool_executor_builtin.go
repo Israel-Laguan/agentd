@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
 
@@ -35,6 +36,9 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEn
 	}
 
 	result, err := t.sandbox.Execute(ctx, payload)
+	if errors.Is(err, models.ErrSandboxUnavailable) {
+		return SandboxUnavailableJSON(err)
+	}
 	if err != nil {
 		return JSONErrorf("execution failed: %v", err)
 	}

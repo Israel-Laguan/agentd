@@ -36,6 +36,8 @@ type LoopMeta struct {
 	LastError     string
 	ToolName      string
 	BudgetKind    string // "token" or "context"
+	// ErrorCode is the failing tool's error code, e.g. SANDBOX_UNAVAILABLE.
+	ErrorCode string
 }
 
 // LoopResult is the typed outcome of processAgentic when ok is true.
