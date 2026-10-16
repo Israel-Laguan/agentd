@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,12 +38,30 @@ func escapeWorkspace(t *testing.T) (*BashExecutor, string, string, string) {
 
 // requireJail skips the test when the bubblewrap jail is unavailable on this
 // platform: the remaining probes assert jail behavior and cannot run
-// filter-only. A skip means the platform cannot jail, never a pass.
+// filter-only. A skip means the platform cannot jail, never a pass. On CI the
+// same condition fails the test instead (see jailVerdict).
 func requireJail(t *testing.T) {
 	t.Helper()
-	if status := probeJail(); status.path == "" || !status.userNS {
-		t.Skip("bubblewrap jail unavailable on this platform")
+	status := probeJail()
+	if status.usable() {
+		return
 	}
+	fail, msg := jailVerdict(status)
+	if fail {
+		t.Fatal(msg)
+	}
+	t.Skip(msg)
+}
+
+// jailVerdict decides what an unusable jail means for a jail test. GitHub
+// Actions sets CI, and there the runner must jail, so a skip would hide a
+// broken jail: fail with the probe's reason. Elsewhere a skip is valid.
+func jailVerdict(status jailProbeResult) (bool, string) {
+	msg := fmt.Sprintf("bubblewrap jail unavailable: bwrap path=%q userns=%t", status.path, status.userNS)
+	if os.Getenv("CI") != "" {
+		return true, msg + " (CI must run the jail tests, not skip them; see B-049)"
+	}
+	return false, msg + " on this platform"
 }
 // slashFree rewrites an absolute path so the command text holds no literal
 // `/`: `s` is seeded once from `$(printf '\057')` and every separator
