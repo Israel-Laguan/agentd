@@ -37,6 +37,9 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 		if resp.UsageDetails != nil {
 			details.CachedTokens += resp.UsageDetails.CachedTokens
 			details.CacheWriteTokens += resp.UsageDetails.CacheWriteTokens
+			if resp.UsageDetails.Model != "" {
+				details.Model = resp.UsageDetails.Model
+			}
 		}
 		lastRaw = resp.Content
 		var out T
