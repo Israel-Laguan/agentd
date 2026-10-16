@@ -55,7 +55,7 @@ func (w *Worker) handleLoopResult(ctx context.Context, task models.Task, result 
 		if payload == "" {
 			payload = "required tool failed repeatedly"
 		}
-		w.handleAgentFailure(ctx, task, payload)
+		w.handleAgenticToolFailure(ctx, task, result.Meta, payload)
 	default:
 		parts := []string{"status=" + result.Status.String()}
 		if result.Meta.LastError != "" {

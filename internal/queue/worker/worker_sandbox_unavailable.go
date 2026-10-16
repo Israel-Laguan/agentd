@@ -3,7 +3,9 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
@@ -18,4 +20,24 @@ func (w *Worker) handleFailedSandboxResult(ctx context.Context, task models.Task
 		return
 	}
 	w.handleAgentFailure(ctx, task, failurePayload(result, err))
+}
+
+// handleAgenticToolFailure routes an agentic LoopToolFailure. A tool refused by
+// an unavailable required jail is terminal for the same reason as above; any
+// other tool failure keeps the retry path (B-052).
+func (w *Worker) handleAgenticToolFailure(ctx context.Context, task models.Task, meta LoopMeta, payload string) {
+	if meta.ErrorCode == agenttools.ToolErrorCodeSandboxUnavailable {
+		w.failTerminal(ctx, task, fmt.Errorf("%w: %s", models.ErrSandboxUnavailable, payload), models.TaskStateFailed)
+		return
+	}
+	w.handleAgentFailure(ctx, task, payload)
+}
+
+// isSandboxUnavailableResult reports whether a tool result is a refusal by an
+// unavailable required jail.
+func isSandboxUnavailableResult(tr agenttools.ToolResult) bool {
+	if tr.Error == nil {
+		return false
+	}
+	return tr.Error.Code == agenttools.ToolErrorCodeSandboxUnavailable
 }
