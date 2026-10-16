@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	defaultSandboxBackend           = "auto"
 	defaultSandboxInactivityTimeout = 60 * time.Second
 	defaultSandboxWallTimeout       = 10 * time.Minute
 	defaultSandboxKillGrace         = 2 * time.Second
@@ -28,6 +29,7 @@ type SandboxLimitsConfig struct {
 }
 
 type SandboxConfig struct {
+	Backend           string
 	InactivityTimeout time.Duration
 	WallTimeout       time.Duration
 	KillGrace         time.Duration
@@ -39,6 +41,7 @@ type SandboxConfig struct {
 }
 
 func setSandboxDefaults(v *viper.Viper) {
+	v.SetDefault("sandbox.backend", defaultSandboxBackend)
 	v.SetDefault("sandbox.inactivity_timeout", defaultSandboxInactivityTimeout.String())
 	v.SetDefault("sandbox.wall_timeout", defaultSandboxWallTimeout.String())
 	v.SetDefault("sandbox.kill_grace", defaultSandboxKillGrace.String())
@@ -54,6 +57,7 @@ func setSandboxDefaults(v *viper.Viper) {
 
 func loadSandboxConfig(v *viper.Viper) SandboxConfig {
 	cfg := SandboxConfig{
+		Backend:           v.GetString("sandbox.backend"),
 		InactivityTimeout: v.GetDuration("sandbox.inactivity_timeout"),
 		WallTimeout:       v.GetDuration("sandbox.wall_timeout"),
 		KillGrace:         v.GetDuration("sandbox.kill_grace"),
@@ -67,6 +71,9 @@ func loadSandboxConfig(v *viper.Viper) SandboxConfig {
 			OpenFiles:         v.GetUint64("sandbox.limits.open_files"),
 			Processes:         v.GetUint64("sandbox.limits.processes"),
 		},
+	}
+	if cfg.Backend == "" {
+		cfg.Backend = defaultSandboxBackend
 	}
 	if cfg.InactivityTimeout <= 0 {
 		cfg.InactivityTimeout = defaultSandboxInactivityTimeout

@@ -3,6 +3,8 @@ package config
 import (
 	"testing"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 func TestSandboxConfig_Defaults(t *testing.T) {
@@ -95,5 +97,24 @@ func TestSandboxEnvAllowlist(t *testing.T) {
 func TestSandboxExtraEnv(t *testing.T) {
 	if len(defaultSandboxExtraEnv) != 3 {
 		t.Errorf("defaultSandboxExtraEnv length = %v, want 3", len(defaultSandboxExtraEnv))
+	}
+}
+
+func TestLoadSandboxConfigBackendDefault(t *testing.T) {
+	v := viper.New()
+	setSandboxDefaults(v)
+	cfg := loadSandboxConfig(v)
+	if cfg.Backend != "auto" {
+		t.Fatalf("Backend = %q, want auto", cfg.Backend)
+	}
+}
+
+func TestLoadSandboxConfigBackendCustom(t *testing.T) {
+	v := viper.New()
+	setSandboxDefaults(v)
+	v.Set("sandbox.backend", "filter-only")
+	cfg := loadSandboxConfig(v)
+	if cfg.Backend != "filter-only" {
+		t.Fatalf("Backend = %q, want filter-only", cfg.Backend)
 	}
 }

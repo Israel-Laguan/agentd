@@ -13,12 +13,10 @@ import (
 // B-042 / SP-019 escape probes. Each test states the DESIRED behaviour
 // (the route out of the workspace must be refused) against a throwaway
 // temp workspace and throwaway canary files — never real host files.
-// Probe 1 (symlink-out) is enforced at admission and runs unskipped; the
-// run-time-built-path, /proc/self/root and /proc/<pid>/environ probes still
-// ESCAPE — the lexical filter sees no literal absolute path, so `bash -c`
-// runs and the canary leaks. They stay skipped (SP-019: needs isolation,
-// see B-042) so `make check` stays green; remove the t.Skip once
-// execution-plane isolation lands and each flips to a real acceptance test.
+// Probe 1 (symlink-out) is enforced at admission and runs everywhere; probes
+// 2-4 need the bubblewrap jail and run wherever it is available (they skip
+// where the binary or user namespaces are missing, so `make check` stays
+// green there; CI installs bubblewrap — see .github/workflows/ci-go.yml).
 
 // escapeWorkspace sets up a throwaway workspace plus a canary file outside
 // it, and returns the executor, workspace, canary path and canary content.
@@ -37,6 +35,15 @@ func escapeWorkspace(t *testing.T) (*BashExecutor, string, string, string) {
 	return exec, workspace, filepath.Join(outside, "secret.txt"), canary
 }
 
+// requireJail skips the test when the bubblewrap jail is unavailable on this
+// platform: the remaining probes assert jail behavior and cannot run
+// filter-only. A skip means the platform cannot jail, never a pass.
+func requireJail(t *testing.T) {
+	t.Helper()
+	if status := probeJail(); status.path == "" || !status.userNS {
+		t.Skip("bubblewrap jail unavailable on this platform")
+	}
+}
 // slashFree rewrites an absolute path so the command text holds no literal
 // `/`: `s` is seeded once from `$(printf '\057')` and every separator
 // becomes `${s}`. The shell assembles the real path at run time, which the
@@ -91,7 +98,7 @@ func TestSandboxEscapeProbe_SymlinkOut(t *testing.T) {
 // 2. Paths assembled at run time against a canary outside the workspace:
 // command substitution, variable concatenation, and glob expansion.
 func TestSandboxEscapeProbe_RuntimeBuiltPath(t *testing.T) {
-	t.Skip("SP-019: needs isolation, see B-042")
+	requireJail(t)
 	ctx := context.Background()
 	exec, workspace, canaryFile, canary := escapeWorkspace(t)
 
@@ -125,7 +132,7 @@ func TestSandboxEscapeProbe_RuntimeBuiltPath(t *testing.T) {
 
 // 3. /proc/self/root/<canary path> alias reaches the same outside file.
 func TestSandboxEscapeProbe_ProcSelfRoot(t *testing.T) {
-	t.Skip("SP-019: needs isolation, see B-042")
+	requireJail(t)
 	ctx := context.Background()
 	exec, workspace, canaryFile, canary := escapeWorkspace(t)
 	alias := filepath.Join("/proc/self/root", canaryFile)
@@ -141,7 +148,7 @@ func TestSandboxEscapeProbe_ProcSelfRoot(t *testing.T) {
 // read itself. A non-secret-shaped marker proves arbitrary environ bytes
 // are readable by the sandboxed command.
 func TestSandboxEscapeProbe_ProcPidEnviron(t *testing.T) {
-	t.Skip("SP-019: needs isolation, see B-042")
+	requireJail(t)
 	const fakeMarker = "AGENTD_FAKE_CANARY=canary-123"
 	helper := exec.Command("sleep", "60")
 	helper.Env = []string{fakeMarker, "PATH=/usr/bin:/bin"}
