@@ -105,3 +105,28 @@ func containsString(list []string, want string) bool {
 	}
 	return false
 }
+
+// depends_on must follow the order the files appear in the task text, so the
+// same plan always normalizes the same way (flaked on CI as [cpu os]).
+func TestValidateOrdersDerivedDependsOnByTextOrder(t *testing.T) {
+	t.Parallel()
+	names := []string{"a", "b", "c", "d", "e", "f"}
+	plan := DraftPlan{ProjectName: "p"}
+	var inputs []string
+	for _, n := range names {
+		plan.Tasks = append(plan.Tasks, DraftTask{ReferenceID: n, Title: "Collect " + n, Description: "Run uname > " + n + ".txt"})
+		inputs = append(inputs, n+".txt")
+	}
+	plan.Tasks = append(plan.Tasks, DraftTask{ReferenceID: "report", Title: "Build report", Description: "Summarize " + strings.Join(inputs, ", ")})
+	for i := 0; i < 20; i++ {
+		p := plan
+		p.Tasks = append([]DraftTask(nil), plan.Tasks...)
+		p.Tasks[len(names)].DependsOn = nil
+		if err := p.Validate(); err != nil {
+			t.Fatalf("Validate() = %v", err)
+		}
+		if got := p.Tasks[len(names)].DependsOn; !reflect.DeepEqual(got, names) {
+			t.Fatalf("run %d: report depends_on = %v, want text order %v", i, got, names)
+		}
+	}
+}
