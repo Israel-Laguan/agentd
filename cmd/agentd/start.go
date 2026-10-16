@@ -16,6 +16,7 @@ import (
 	"agentd/internal/mcp"
 	"agentd/internal/models"
 	"agentd/internal/queue"
+	"agentd/internal/sandbox"
 )
 
 func newStartCommand(opts *rootOptions) *cobra.Command {
@@ -37,6 +38,7 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	defer cleanup()
 
+	slog.Info(sandbox.BackendStartupLine(cfg.Sandbox.Backend))
 	if err := seedAndValidateStartup(cmd.Context(), store, cfg, deps, startOpts); err != nil {
 		return err
 	}

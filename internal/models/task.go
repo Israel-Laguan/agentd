@@ -40,6 +40,9 @@ type ExecutionResult struct {
 	Duration    time.Duration
 	TimedOut    bool
 	OSProcessID int
+	// Backend names the isolation that ran the command: "bubblewrap" or
+	// "filter-only". Empty when the command never reached a backend.
+	Backend string
 }
 
 // Err returns a materialized error from FatalError if present.

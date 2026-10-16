@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -100,6 +101,40 @@ func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool)
 		}
 		return status.path, usable
 	}
+}
+
+// BackendStartupLine is the one INFO line the daemon logs at start: the backend
+// it resolves to and why. It reads the same cached probe as useJail, so the
+// line and the per-execution record agree.
+func BackendStartupLine(configured string) string {
+	backend, reason := describeBackend(configured)
+	line := fmt.Sprintf("sandbox backend=%s (%s)", backend, reason)
+	return line
+}
+
+// describeBackend resolves the backend for the startup line without a
+// workspace. An explicit filter-only skips the probe entirely.
+func describeBackend(configured string) (string, string) {
+	if resolveBackend(configured) == BackendFilterOnly {
+		return BackendFilterOnly, "configured filter-only"
+	}
+	status := probeJail()
+	if status.path != "" && status.userNS {
+		return BackendBubblewrap, "bwrap and userns available"
+	}
+	reason := unavailableReason(status)
+	if resolveBackend(configured) == BackendBubblewrap {
+		reason = "bubblewrap requested: " + reason + "; running filter-only"
+	}
+	return BackendFilterOnly, reason
+}
+
+// unavailableReason names why the jail cannot run, for the startup line.
+func unavailableReason(status jailProbeResult) string {
+	if status.path == "" {
+		return "bwrap not found"
+	}
+	return "unprivileged user namespaces unavailable"
 }
 
 // jailArgv builds the full bubblewrap invocation for one workspace: a
