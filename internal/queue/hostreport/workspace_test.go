@@ -1,6 +1,7 @@
 package hostreport
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,9 @@ func TestWriteReportFromWorkspace(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	writeFile(t, dir, "os_info.txt", hostnamectlOut+unameOut)
+	writeFile(t, dir, "cpu_info.txt", lscpuOut)
 	writeFile(t, dir, "mem.txt", freeOut)
+	writeFile(t, dir, "disk_info.txt", lsblkOut)
 	got, ok, err := WriteReport(dir, "report.md")
 	if err != nil || !ok {
 		t.Fatalf("WriteReport() = ok %v, err %v", ok, err)
@@ -29,6 +32,36 @@ func TestWriteReportFromWorkspace(t *testing.T) {
 	}
 	if strings.Contains(got, "Machine ID") || strings.Contains(got, "report.md") {
 		t.Fatalf("report mentions identifiers or itself:\n%s", got)
+	}
+	if strings.Contains(got, "not collected") {
+		t.Fatalf("complete collection still has gaps:\n%s", got)
+	}
+}
+
+// B-046: a partial collection writes nothing and names the missing facts plus
+// the files they were looked for in, so the worker fails the task instead of
+// completing a gapped report.
+func TestWriteReportRefusesPartialFacts(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeFile(t, dir, "os_info.txt", hostnamectlOut+unameOut)
+	writeFile(t, dir, "mem.txt", freeOut)
+	_, ok, err := WriteReport(dir, "report.md")
+	if ok || err == nil {
+		t.Fatalf("WriteReport() ok %v err %v, want a missing-facts refusal", ok, err)
+	}
+	var missing *MissingFactsError
+	if !errors.As(err, &missing) {
+		t.Fatalf("WriteReport() err = %T, want *MissingFactsError", err)
+	}
+	if len(missing.Missing) != 2 || missing.Missing[0] != "CPU" || missing.Missing[1] != "disks" {
+		t.Fatalf("missing = %q, want [CPU disks]", missing.Missing)
+	}
+	if len(missing.Files) != 2 || missing.Files[0] != "mem.txt" || missing.Files[1] != "os_info.txt" {
+		t.Fatalf("files = %q, want the sorted files read", missing.Files)
+	}
+	if _, serr := os.Stat(filepath.Join(dir, "report.md")); serr == nil {
+		t.Fatal("report.md was written for partial facts")
 	}
 }
 
@@ -43,6 +76,9 @@ func TestWriteReportIgnoresSymlinks(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	writeFile(t, dir, "mem.txt", freeOut)
+	writeFile(t, dir, "os_info.txt", hostnamectlOut+unameOut)
+	writeFile(t, dir, "cpu_info.txt", lscpuOut)
+	writeFile(t, dir, "disk_info.txt", lsblkOut)
 	got, ok, err := WriteReport(dir, "report.md")
 	if err != nil || !ok || strings.Contains(got, "LEAKED") {
 		t.Fatalf("WriteReport() = %q ok %v err %v, want no leaked symlink content", got, ok, err)

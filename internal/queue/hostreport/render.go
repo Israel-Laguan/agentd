@@ -27,6 +27,24 @@ func ReportTarget(title, description string) (string, bool) {
 	return "", false
 }
 
+// Diagnose checks the collected files before anything is written. Found is
+// false when the files carry no host facts at all, and the caller falls back
+// to the model path. Missing names the core facts absent from an otherwise
+// useful collection, and the caller fails the report task with retry feedback
+// instead of publishing "not collected". Otherwise report holds the complete
+// summary and nothing is missing.
+func Diagnose(inputs []Input) (report string, missing []string, found bool) {
+	if f := Extract(inputs); HasAnyFact(f) {
+		if missing = MissingFacts(f); len(missing) > 0 {
+			return "", missing, true
+		}
+	} else {
+		return "", nil, false
+	}
+	report, _ = Render(inputs)
+	return report, nil, true
+}
+
 // Render builds the summary, or false when the files carry no host facts.
 func Render(inputs []Input) (string, bool) {
 	f := Extract(inputs)

@@ -14,6 +14,63 @@ const hostIntent = "Compile System Report: write report.md with the OS, CPU, mem
 // introduce values that no collected file contains.
 const summaryIntent = "Build report: Create system report summarizing the OS and hardware details from os_info.txt and cpu_info.txt"
 
+// B-046: a chained `a && b > file` redirects only b, so a collecting task
+// loses a's output. The admission check must refuse the command with grouping
+// feedback; the grouped form the feedback recommends must keep passing.
+func TestValidateHostFactEvidenceChainedRedirectLoss(t *testing.T) {
+	diskIntent := "Collect disk information: run lsblk and df -h and save their combined output to disk_info.txt"
+	tests := []struct {
+		name    string
+		intent  string
+		command string
+		wantErr bool
+	}{
+		{"live B-046 shape", diskIntent, `lsblk && df -h > disk_info.txt 2>&1`, true},
+		{"semicolon chain", diskIntent, `lsblk; df -h > disk_info.txt`, true},
+		{"append chain", diskIntent, `lsblk && df -h >> disk_info.txt`, true},
+		{"fallback chain", diskIntent, `lsblk || df -h > disk_info.txt`, true},
+		{"grouped braces pass", diskIntent, `{ lsblk; df -h; } > disk_info.txt 2>&1`, false},
+		{"subshell group passes", diskIntent, `(lsblk; df -h) > disk_info.txt`, false},
+		{"one command per file passes", diskIntent, `lsblk > lsblk.txt && df -h > df.txt`, false},
+		{"single redirect passes", diskIntent, `df -h > disk_info.txt`, false},
+		{"piped saver keeps earlier output", diskIntent, `df -h | tee disk_info.txt`, false},
+		{"dev null discard is intentional", diskIntent, `echo hi > /dev/null && lscpu > cpu_info.txt`, false},
+		{"unrelated task untouched", "Write a README for the project", `make docs && cp out.md README.md > notes.txt`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateHostFactEvidence(tt.intent, tt.command)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateHostFactEvidence() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && !IsSandboxViolation(err) {
+				t.Fatalf("error = %v, want sandbox violation", err)
+			}
+		})
+	}
+}
+
+// The B-046 refusal must travel the SANDBOX_VIOLATION retry-feedback channel
+// and name the file plus the grouping fix.
+func TestBashExecutorRefusesChainedRedirectLoss(t *testing.T) {
+	sink := &recordingSink{}
+	exec, workspace := testExecutor(t, sink)
+	payload := testPayload(workspace, `lsblk && df -h > disk_info.txt 2>&1`)
+	payload.Intent = "Collect disk information: run lsblk and df -h and save their combined output to disk_info.txt"
+	if _, err := exec.Execute(context.Background(), payload); err == nil {
+		t.Fatal("Execute() error = nil, want refusal")
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "disk_info.txt")); err == nil {
+		t.Fatal("disk_info.txt was written; the command must not run")
+	}
+	if len(sink.events) != 1 {
+		t.Fatalf("events = %#v, want one SANDBOX_VIOLATION", sink.events)
+	}
+	got := sink.events[0].Payload
+	if !strings.Contains(got, "disk_info.txt") || !strings.Contains(got, "{ lsblk; df -h; }") {
+		t.Fatalf("payload = %q, want the file name and a grouping example", got)
+	}
+}
 func TestValidateHostFactEvidence(t *testing.T) {
 	tests := []struct {
 		name    string
