@@ -211,10 +211,14 @@ jobs:
         if: always()
         run: |
           # The sandbox escape probes and jail tests need bwrap plus
-          # unprivileged user namespaces; without them those tests skip.
+          # unprivileged user namespaces. The runner restricts those, so
+          # tools/ci/allow_bwrap_userns.sh grants bwrap a narrow AppArmor
+          # profile. requireJail fails the jail tests here if it still cannot
+          # run, so a skip cannot hide it (B-049).
           sudo apt-get update -qq
           sudo apt-get install -y -qq bubblewrap
           bwrap --version
+          ./tools/ci/allow_bwrap_userns.sh
 
       - name: Test
         if: always()

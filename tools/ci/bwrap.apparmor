@@ -1,0 +1,10 @@
+# AppArmor profile that lets /usr/bin/bwrap create unprivileged user namespaces
+# on hosts with kernel.apparmor_restrict_unprivileged_userns=1 (Ubuntu 24.04
+# runners). It grants userns to bwrap alone; the sysctl and other binaries keep
+# the restriction. Installed by tools/ci/allow_bwrap_userns.sh (B-049).
+abi <abi/4.0>,
+include <tunables/global>
+
+profile agentd-bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+}
