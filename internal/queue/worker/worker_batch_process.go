@@ -51,6 +51,9 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 
 	runnable, stopHeartbeats := w.prepareBatchRunnable(ctx, tasks, *profile)
 	defer stopHeartbeats()
+	if !profile.AgenticMode {
+		runnable = w.renderBatchHostReports(ctx, runnable, *project)
+	}
 
 	if len(runnable) < 2 {
 		for _, task := range runnable {
