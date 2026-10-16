@@ -13,11 +13,12 @@ import (
 // B-042 / SP-019 escape probes. Each test states the DESIRED behaviour
 // (the route out of the workspace must be refused) against a throwaway
 // temp workspace and throwaway canary files — never real host files.
-// Every probe below currently ESCAPES: the lexical filter sees no literal
-// absolute path, so `bash -c` runs and the canary leaks. They are kept
-// skipped (SP-019: needs isolation, see B-042) so `make check` stays green;
-// remove the t.Skip once execution-plane isolation lands and each flips to
-// a real acceptance test.
+// Probe 1 (symlink-out) is enforced at admission and runs unskipped; the
+// run-time-built-path, /proc/self/root and /proc/<pid>/environ probes still
+// ESCAPE — the lexical filter sees no literal absolute path, so `bash -c`
+// runs and the canary leaks. They stay skipped (SP-019: needs isolation,
+// see B-042) so `make check` stays green; remove the t.Skip once
+// execution-plane isolation lands and each flips to a real acceptance test.
 
 // escapeWorkspace sets up a throwaway workspace plus a canary file outside
 // it, and returns the executor, workspace, canary path and canary content.
@@ -71,9 +72,10 @@ func assertNoEscape(t *testing.T, ctx context.Context, exec *BashExecutor, works
 }
 
 // 1. Symlink inside the workspace pointing outside, read by relative name
-// (seeded the way source_path materialization can plant one).
+// (seeded the way source_path materialization can plant one). Fixed by the
+// admission check (B-042 slice 1): workspace symlinks resolving outside are
+// refused before execution, so this probe is a real acceptance test.
 func TestSandboxEscapeProbe_SymlinkOut(t *testing.T) {
-	t.Skip("SP-019: needs isolation, see B-042")
 	ctx := context.Background()
 	exec, workspace, canaryFile, canary := escapeWorkspace(t)
 	content, err := os.ReadFile(canaryFile)
