@@ -123,6 +123,7 @@ agentic:
     tools:
       generate_image: generate
 sandbox:
+  backend: "auto"
   inactivity_timeout: "60s"
   wall_timeout: "10m"
   kill_grace: "2s"
