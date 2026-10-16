@@ -229,6 +229,7 @@ const (
 	EventTypeFailure                   EventType = "FAILURE"
 	EventTypeResult                    EventType = "RESULT"
 	EventTypeCommand                   EventType = "COMMAND"
+	EventTypeSandboxBackend            EventType = "SANDBOX_BACKEND"
 	EventTypeRecovery                  EventType = "RECOVERY"
 	EventTypeRebootRecovery            EventType = "REBOOT_RECOVERY"
 	EventTypeRecoveryWorkspaceReset    EventType = "RECOVERY_WORKSPACE_RESET"

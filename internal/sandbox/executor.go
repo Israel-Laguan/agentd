@@ -85,20 +85,23 @@ func truncateCommand(command string) string {
 // startCommand builds the process: plain `bash -c` filter-only, or the
 // bubblewrap invocation when the backend resolves to a jail. A jailed
 // process gets no host environment of its own — --clearenv plus --setenv
-// carry everything — so cmd.Env stays nil there.
-func (e *BashExecutor) startCommand(execCtx context.Context, workspace string, payload Payload, shell string) *exec.Cmd {
+// carry everything — so cmd.Env stays nil there. The returned backend names
+// which of the two ran the command.
+func (e *BashExecutor) startCommand(execCtx context.Context, workspace string, payload Payload, shell string) (*exec.Cmd, string) {
 	name, args := "bash", []string{"-c", shell}
 	env := nonInheritedEnv(payload.EnvVars)
+	backend := BackendFilterOnly
 	if path, ok := e.useJail(workspace, payload); ok {
 		jailed := jailArgv(path, workspace, env, shell)
 		name, args = jailed[0], jailed[1:]
 		env = nil
+		backend = BackendBubblewrap
 	}
 	cmd := exec.CommandContext(execCtx, name, args...)
 	cmd.Dir = workspace
 	cmd.Env = env
 	cmd.Stdin = strings.NewReader("")
-	return cmd
+	return cmd, backend
 }
 
 func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payload) (Result, error) {
@@ -106,7 +109,7 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	shell := withResourceLimits(payload.Command, e.resourceLimits())
-	cmd := e.startCommand(execCtx, workspace, payload, shell)
+	cmd, backend := e.startCommand(execCtx, workspace, payload, shell)
 	configureProcess(cmd, e.resourceLimits())
 	stdout, stderr, err := commandPipes(cmd)
 	if err != nil {
@@ -142,9 +145,10 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	waitErr := waitCommand(cmd, timedOut, e.killGrace())
 	if drainErr := output.drainError(); drainErr != nil {
 		slog.Error("sandbox: drain output failed", "workspace", workspace, "task_id", payload.TaskID, "error", drainErr)
-		return Result{}, fmt.Errorf("drain output: %w", drainErr)
+		return Result{Backend: backend}, fmt.Errorf("drain output: %w", drainErr)
 	}
 	result := output.result(cmd, started, hasTimedOut(timedOut))
+	result.Backend = backend
 	if result.TimedOut {
 		slog.Warn("sandbox: command timed out", "workspace", workspace, "task_id", payload.TaskID, "timeout_seconds", e.Inactivity.Seconds())
 	} else if result.ExitCode != 0 {
