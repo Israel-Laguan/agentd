@@ -85,7 +85,7 @@ func (w *Worker) commitSucceeded(ctx context.Context, task models.Task, result s
 		return false
 	}
 	if err != nil || !result.Success {
-		w.handleAgentFailure(ctx, task, failurePayload(result, err))
+		w.handleFailedSandboxResult(ctx, task, result, err)
 		return false
 	}
 	if w.breaker != nil {

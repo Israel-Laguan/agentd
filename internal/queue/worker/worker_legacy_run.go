@@ -136,8 +136,8 @@ func (w *Worker) executeLegacyCommand(
 // payload.
 func (w *Worker) executeRecorded(ctx context.Context, task models.Task, project models.Project, command string) (sandbox.Result, error) {
 	result, err := w.sandbox.Execute(ctx, w.payload(task, project, command))
-	if !errors.Is(err, models.ErrSandboxViolation) {
-		// Refused commands leave a SANDBOX_VIOLATION instead; this one ran.
+	if !errors.Is(err, models.ErrSandboxViolation) && !errors.Is(err, models.ErrSandboxUnavailable) {
+		// Refused commands leave a SANDBOX_VIOLATION (or, with no usable jail, nothing); this one ran.
 		w.Emit(ctx, task, string(models.EventTypeCommand), w.executedCommandPayload(command))
 		if result.Backend != "" {
 			w.Emit(ctx, task, string(models.EventTypeSandboxBackend), result.Backend)

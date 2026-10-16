@@ -36,7 +36,8 @@ func TestBackendStartupLine(t *testing.T) {
 		{"auto with broken userns", "", broken, "sandbox backend=filter-only (unprivileged user namespaces unavailable)"},
 		{"explicit filter-only", BackendFilterOnly, present, "sandbox backend=filter-only (configured filter-only)"},
 		{"explicit bubblewrap with jail", BackendBubblewrap, present, "sandbox backend=bubblewrap (bwrap and userns available)"},
-		{"explicit bubblewrap without bwrap", BackendBubblewrap, absent, "sandbox backend=filter-only (bubblewrap requested: bwrap not found; running filter-only)"},
+		{"explicit bubblewrap without bwrap", BackendBubblewrap, absent, "sandbox backend=bubblewrap REQUIRED but unavailable (bwrap not found); commands will be refused"},
+		{"explicit bubblewrap with broken userns", BackendBubblewrap, broken, "sandbox backend=bubblewrap REQUIRED but unavailable (unprivileged user namespaces unavailable); commands will be refused"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -67,7 +68,7 @@ func TestExecutionResultRecordsBackend(t *testing.T) {
 		{"auto with broken userns", "", true, false, BackendFilterOnly, false},
 		{"explicit filter-only with working jail", BackendFilterOnly, true, true, BackendFilterOnly, false},
 		{"explicit bubblewrap with working jail", BackendBubblewrap, true, true, BackendBubblewrap, true},
-		{"explicit bubblewrap with broken userns", BackendBubblewrap, true, false, BackendFilterOnly, false},
+		// An explicit bubblewrap with a broken jail is refused, not run; see backend_required_test.go.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

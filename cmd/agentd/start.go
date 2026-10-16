@@ -38,7 +38,7 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	}
 	defer cleanup()
 
-	slog.Info(sandbox.BackendStartupLine(cfg.Sandbox.Backend))
+	slog.Log(cmd.Context(), sandbox.BackendStartupLevel(cfg.Sandbox.Backend), sandbox.BackendStartupLine(cfg.Sandbox.Backend))
 	if err := seedAndValidateStartup(cmd.Context(), store, cfg, deps, startOpts); err != nil {
 		return err
 	}
