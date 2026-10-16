@@ -167,6 +167,8 @@ func ClassifyDelegateRawResult(callID, raw string, elapsedMs int64) ToolResult {
 type classifiedSubagentResult struct {
 	Status string `json:"status"`
 	Error  string `json:"error,omitempty"`
+	// ErrorCode carries a fatal tag such as SANDBOX_UNAVAILABLE (B-052).
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 const (
@@ -176,6 +178,11 @@ const (
 )
 
 func classifySubagentBatch(callID, raw string, batch []classifiedSubagentResult, elapsedMs int64) ToolResult {
+	for _, sr := range batch {
+		if sr.ErrorCode == ToolErrorCodeSandboxUnavailable {
+			return subagentResultToToolResult(callID, raw, sr, elapsedMs)
+		}
+	}
 	for _, sr := range batch {
 		if sr.Status != classifiedSubagentStatusSuccess {
 			return subagentResultToToolResult(callID, raw, sr, elapsedMs)
@@ -196,6 +203,12 @@ func subagentResultToToolResult(callID, raw string, sr classifiedSubagentResult,
 		msg := sr.Error
 		if msg == "" {
 			msg = "subagent " + string(sr.Status)
+		}
+		if sr.ErrorCode == ToolErrorCodeSandboxUnavailable {
+			tr := FatalResult(callID, msg, elapsedMs)
+			tr.Error.Code = sr.ErrorCode
+			tr.Content = raw
+			return tr
 		}
 		tr := NonRetryableErrorResult(callID, msg, "", elapsedMs)
 		tr.Content = raw

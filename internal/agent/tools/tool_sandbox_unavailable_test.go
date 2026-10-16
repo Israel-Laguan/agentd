@@ -53,3 +53,24 @@ func TestBashOtherExecutionErrorStaysNonFatal(t *testing.T) {
 		t.Fatalf("error code = %q, want untagged", tr.Error.Code)
 	}
 }
+
+// B-052 follow-up: a delegate result tagged SANDBOX_UNAVAILABLE classifies as
+// fatal with the code, alone or inside a parallel batch behind another failure.
+func TestClassifyDelegateRawResultCarriesSandboxUnavailable(t *testing.T) {
+	t.Parallel()
+	tagged := `{"status":"failure","error":"refused","error_code":"SANDBOX_UNAVAILABLE"}`
+	other := `{"status":"failure","error":"boom"}`
+	for name, raw := range map[string]string{
+		"single":        tagged,
+		"batch":         "[" + other + "," + tagged + "]",
+		"batch-success": `[{"status":"success"},` + tagged + "]",
+	} {
+		tr := ClassifyDelegateRawResult("c1", raw, 1)
+		if tr.Status != ToolStatusFatal || tr.Error == nil || tr.Error.Code != ToolErrorCodeSandboxUnavailable {
+			t.Fatalf("%s: status=%s error=%+v, want fatal SANDBOX_UNAVAILABLE", name, tr.Status, tr.Error)
+		}
+	}
+	if tr := ClassifyDelegateRawResult("c1", other, 1); tr.Status == ToolStatusFatal {
+		t.Fatalf("untagged failure must stay non-fatal, got %s", tr.Status)
+	}
+}
