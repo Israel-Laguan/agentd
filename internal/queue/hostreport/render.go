@@ -11,6 +11,11 @@ const notCollected = "not collected"
 var (
 	hostFactIntent = regexp.MustCompile(`(?i)\b(operating system|os|hardware|cpu|processor|ram|memory|disks?|storage|kernel|machine)\b`)
 	reportVerb     = regexp.MustCompile(`(?i)\b(report|summar\w*)\b`)
+	// reportScope is the explicit host/system signal that keeps ordinary
+	// documentation tasks off the WriteReport path: without "host" or
+	// "system" in the task, a summary mentioning memory, storage or other
+	// host-related words stays on the model path.
+	reportScope    = regexp.MustCompile(`(?i)\b(host|system)\b`)
 	markdownTarget = regexp.MustCompile("(?:^|[\\s\"'(`])([A-Za-z0-9_][A-Za-z0-9_.-]*\\.md)\\b")
 )
 
@@ -18,7 +23,7 @@ var (
 // or false when the task is not one. Paths with directories are not accepted.
 func ReportTarget(title, description string) (string, bool) {
 	text := title + "\n" + description
-	if !hostFactIntent.MatchString(text) || !reportVerb.MatchString(text) {
+	if !hostFactIntent.MatchString(text) || !reportVerb.MatchString(text) || !reportScope.MatchString(text) {
 		return "", false
 	}
 	if m := markdownTarget.FindStringSubmatch(text); m != nil {
@@ -30,8 +35,8 @@ func ReportTarget(title, description string) (string, bool) {
 // Diagnose checks the collected files before anything is written. Found is
 // false when the files carry no host facts at all, and the caller falls back
 // to the model path. Missing names the core facts absent from an otherwise
-// useful collection, and the caller fails the report task with retry feedback
-// instead of publishing "not collected". Otherwise report holds the complete
+// useful collection, and the caller falls back to the model path instead of
+// publishing "not collected". Otherwise report holds the complete
 // summary and nothing is missing.
 func Diagnose(inputs []Input) (report string, missing []string, found bool) {
 	if f := Extract(inputs); HasAnyFact(f) {

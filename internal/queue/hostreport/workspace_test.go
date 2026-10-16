@@ -108,3 +108,22 @@ func TestWriteReportWithoutFactsWritesNothing(t *testing.T) {
 		t.Fatal("report.md was created without facts")
 	}
 }
+
+// An existing regular target belongs to the model path: overwriting a NOTES.md
+// the user owns (or a report from an earlier attempt) with a system report is
+// never the renderer's call.
+func TestWriteReportLeavesExistingFileToModel(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeFile(t, dir, "os_info.txt", hostnamectlOut+unameOut)
+	writeFile(t, dir, "cpu_info.txt", lscpuOut)
+	writeFile(t, dir, "mem.txt", freeOut)
+	writeFile(t, dir, "disk_info.txt", lsblkOut)
+	writeFile(t, dir, "report.md", "my notes")
+	if _, ok, err := WriteReport(dir, "report.md"); ok || err != nil {
+		t.Fatalf("WriteReport() ok %v err %v, want ok=false for an existing file", ok, err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "report.md")); string(got) != "my notes" {
+		t.Fatalf("report.md = %q, want the existing content untouched", got)
+	}
+}

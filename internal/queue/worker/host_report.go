@@ -15,9 +15,10 @@ import (
 // for a shell command that would paste raw output (B-045). Code writes the
 // report, so every value in it comes from a collected file and machine or boot
 // identifiers are never read. It returns false, leaving the task untouched,
-// when the task is not a report task or no host facts were collected. When
-// some facts exist but core ones are missing, the task fails with retry
-// feedback naming the gap instead of completing a "not collected" report
+// when the task is not a report task, when no host facts were collected, or
+// when the collection is partial: retrying the render on the same workspace
+// cannot produce the missing facts (the collectors already ran), so the model
+// path runs instead of burning the retry budget on an unchanged workspace
 // (B-046).
 func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, project models.Project) bool {
 	target, ok := hostreport.ReportTarget(task.Title, task.Description)
@@ -28,8 +29,8 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 	if err != nil {
 		var missing *hostreport.MissingFactsError
 		if errors.As(err, &missing) {
-			w.handleAgentFailure(ctx, task, "the "+target+" report cannot be completed: "+missing.Error()+". Re-run the collectors so every command's output lands in its file (group chained commands, e.g. { lsblk; df -h; } > disk_info.txt), then rebuild the report")
-			return true
+			slog.Warn("host report incomplete; falling back to the model path", "task_id", task.ID, "error", err)
+			return false
 		}
 		slog.Warn("host report render failed; falling back to the model path", "task_id", task.ID, "error", err)
 		return false

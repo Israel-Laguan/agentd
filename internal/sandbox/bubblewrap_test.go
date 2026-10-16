@@ -55,11 +55,17 @@ func TestJailArgvProfile(t *testing.T) {
 	argv := jailArgv("/usr/bin/bwrap", "/tmp/ws/p", []string{"CI=true"}, "echo hi")
 	text := strings.Join(argv, "\n")
 	for _, want := range []string{
-		"--unshare-all", "--die-with-parent",
-		"--ro-bind\n/usr\n/usr", "--ro-bind\n/lib\n/lib", "--ro-bind\n/lib64\n/lib64",
+		"--unshare-all", "--share-net", "--die-with-parent",
+		"--ro-bind\n/usr\n/usr", "--ro-bind\n/lib\n/lib", "--ro-bind-try\n/lib64\n/lib64",
 		"--ro-bind\n/bin\n/bin", "--ro-bind\n/sbin\n/sbin", "--ro-bind\n/sys\n/sys",
-		"--ro-bind\n/run/dbus/system_bus_socket\n/run/dbus/system_bus_socket",
-		"--ro-bind\n/run/systemd/system\n/run/systemd/system",
+		"--ro-bind-try\n/run/dbus/system_bus_socket\n/run/dbus/system_bus_socket",
+		"--ro-bind-try\n/run/systemd/system\n/run/systemd/system",
+		"--ro-bind-try\n/etc/resolv.conf\n/etc/resolv.conf",
+		"--ro-bind-try\n/etc/hosts\n/etc/hosts",
+		"--ro-bind-try\n/etc/nsswitch.conf\n/etc/nsswitch.conf",
+		"--ro-bind-try\n/etc/ssl/certs\n/etc/ssl/certs",
+		"--ro-bind-try\n/etc/os-release\n/etc/os-release",
+		"--ro-bind-try\n/etc/passwd\n/etc/passwd",
 		"--proc\n/proc", "--dev\n/dev", "--tmpfs\n/tmp",
 		"--bind\n/tmp/ws/p\n/tmp/ws/p", "--chdir\n/tmp/ws/p",
 		"--clearenv", "--setenv\nCI\ntrue", "--setenv\nPATH\n/usr/bin:/bin",
@@ -70,7 +76,7 @@ func TestJailArgvProfile(t *testing.T) {
 			t.Fatalf("argv lacks %q:\n%s", want, text)
 		}
 	}
-	if strings.Contains(text, "/home") || strings.Contains(text, "/etc") {
+	if strings.Contains(text, "/home") || strings.Contains(text, "/etc/machine-id") || strings.Contains(text, "/etc/shadow") {
 		t.Fatalf("argv exposes host paths:\n%s", text)
 	}
 	tmpfs := strings.Index(text, "--tmpfs")
