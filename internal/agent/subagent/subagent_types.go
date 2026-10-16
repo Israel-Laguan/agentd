@@ -59,6 +59,9 @@ type SubagentResult struct {
 	ToolsCalled []string `json:"tools_called,omitempty"`
 	// Error carries any error message when status != success.
 	Error string `json:"error,omitempty"`
+	// ErrorCode tags a failure the parent must treat as fatal, e.g.
+	// SANDBOX_UNAVAILABLE when a required jail refused the child's command.
+	ErrorCode string `json:"error_code,omitempty"`
 	// Iterations is the number of tool-calling rounds executed.
 	Iterations int `json:"iterations"`
 }

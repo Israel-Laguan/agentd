@@ -104,6 +104,10 @@ func (d *SubagentDelegate) runSubagentStep(
 			ToolCallID: call.ID,
 			Content:    callResult,
 		})
+		if failSandboxUnavailable(call, callResult, result) {
+			result.Iterations = i + 1
+			return true
+		}
 	}
 	if i == maxIter-1 {
 		result.Status = SubagentStatusTimeout
@@ -112,6 +116,23 @@ func (d *SubagentDelegate) runSubagentStep(
 	}
 	result.Iterations = i + 1
 	return false
+}
+
+// failSandboxUnavailable ends the child when a bash call was refused by an
+// unavailable required jail: the model cannot fix a missing jail, so the result
+// carries the SANDBOX_UNAVAILABLE code for the parent to fail terminally (B-052).
+func failSandboxUnavailable(call gateway.ToolCall, raw string, result *SubagentResult) bool {
+	if call.Function.Name != agenttools.ToolNameBash {
+		return false
+	}
+	tr := agenttools.ClassifyBuiltinToolResult(call.ID, call.Function.Name, raw, 0)
+	if tr.Error == nil || tr.Error.Code != agenttools.ToolErrorCodeSandboxUnavailable {
+		return false
+	}
+	result.Status = SubagentStatusFailure
+	result.Error = tr.Error.Message
+	result.ErrorCode = tr.Error.Code
+	return true
 }
 
 // enforceSubagentContextBudget keeps the first two messages (system + user) and

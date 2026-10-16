@@ -23,6 +23,13 @@ func bashCall(id, command string) gateway.AIResponse {
 // returns the worker, sink and running task.
 func runAgenticTask(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor) (*Worker, *mockEventSink, models.Task) {
 	t.Helper()
+	return runAgenticTaskIn(t, gw, sb, nil)
+}
+
+// runAgenticTaskIn is runAgenticTask with a hook that can seed the workspace
+// (for example with subagent definitions) before the loop starts.
+func runAgenticTaskIn(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, prep func(workspace string)) (*Worker, *mockEventSink, models.Task) {
+	t.Helper()
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	store.SetProjectsDir(t.TempDir())
@@ -33,6 +40,9 @@ func runAgenticTask(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor) (*W
 	}
 	if err := os.MkdirAll(proj.WorkspacePath, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
+	}
+	if prep != nil {
+		prep(proj.WorkspacePath)
 	}
 	profile := models.AgentProfile{ID: tasks[0].AgentID, Provider: "openai", Model: "gpt-4", AgenticMode: true}
 	if err := store.UpsertAgentProfile(ctx, profile); err != nil {
