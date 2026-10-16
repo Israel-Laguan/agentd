@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"agentd/internal/models"
 )
 
 // Execution backends for worker commands.
@@ -16,8 +18,8 @@ const (
 	// BackendAuto jails with bubblewrap where the binary and unprivileged
 	// user namespaces exist, and runs filter-only elsewhere.
 	BackendAuto = "auto"
-	// BackendBubblewrap always jails; a missing jail still runs the command
-	// filter-only, with a loud log on every such execution.
+	// BackendBubblewrap requires the jail: when it is unusable, commands are
+	// refused with models.ErrSandboxUnavailable and never run unjailed.
 	BackendBubblewrap = "bubblewrap"
 	// BackendFilterOnly never jails: the lexical filter plus the admission
 	// checks are the whole sandbox. Only for platforms without bubblewrap
@@ -77,59 +79,72 @@ var probeJailOnce = sync.OnceValue(probeJailHost)
 // production always runs the cached real probe.
 var probeJail = func() jailProbeResult { return probeJailOnce() }
 
-// useJail decides whether this execution runs under bubblewrap and warns
-// loudly when an expected jail is missing. Auto stays quiet when the binary
-// is absent entirely (platforms without bubblewrap must not log-scare on
-// every task); a present-but-broken jail and an explicit backend warn on
-// every fallback execution because the operator asked for a jail.
-func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool) {
+// useJail decides whether this execution runs under bubblewrap. Auto falls back
+// to filter-only: quiet when the binary is absent entirely (platforms without
+// bubblewrap must not log-scare on every task), and warned when bwrap is present
+// but unprivileged user namespaces are not. An explicit bubblewrap is a
+// requirement: an unusable jail returns ErrSandboxUnavailable, so the command is
+// refused before any shell starts and the error names the reason.
+func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool, error) {
 	status := probeJail()
-	usable := status.path != "" && status.userNS
 	switch resolveBackend(e.Backend) {
 	case BackendFilterOnly:
-		return "", false
+		return "", false, nil
 	case BackendBubblewrap:
-		if !usable {
-			slog.Warn("sandbox: bubblewrap backend requested but unavailable; running filter-only (not a jail)",
+		if !status.usable() {
+			slog.Error("sandbox: bubblewrap backend required but unavailable; command refused",
 				"workspace", workspace, "task_id", payload.TaskID, "bwrap", status.path)
+			return "", false, fmt.Errorf("%w: sandbox.backend=bubblewrap is required, but %s; command refused",
+				models.ErrSandboxUnavailable, unavailableReason(status))
 		}
-		return status.path, usable
+		return status.path, true, nil
 	default:
 		if status.path != "" && !status.userNS {
 			slog.Warn("sandbox: bubblewrap user namespaces unavailable; running filter-only (not a jail)",
 				"workspace", workspace, "task_id", payload.TaskID, "bwrap", status.path)
 		}
-		return status.path, usable
+		return status.path, status.usable(), nil
 	}
 }
 
-// BackendStartupLine is the one INFO line the daemon logs at start: the backend
-// it resolves to and why. It reads the same cached probe as useJail, so the
+// BackendStartupLine is the one line the daemon logs at start: the backend that
+// will run commands and why. It reads the same cached probe as useJail, so the
 // line and the per-execution record agree.
 func BackendStartupLine(configured string) string {
-	backend, reason := describeBackend(configured)
-	line := fmt.Sprintf("sandbox backend=%s (%s)", backend, reason)
-	return line
-}
-
-// describeBackend resolves the backend for the startup line without a
-// workspace. An explicit filter-only skips the probe entirely.
-func describeBackend(configured string) (string, string) {
 	if resolveBackend(configured) == BackendFilterOnly {
-		return BackendFilterOnly, "configured filter-only"
+		return "sandbox backend=filter-only (configured filter-only)"
 	}
 	status := probeJail()
-	if status.path != "" && status.userNS {
-		return BackendBubblewrap, "bwrap and userns available"
+	if status.usable() {
+		return "sandbox backend=bubblewrap (bwrap and userns available)"
 	}
-	reason := unavailableReason(status)
 	if resolveBackend(configured) == BackendBubblewrap {
-		reason = "bubblewrap requested: " + reason + "; running filter-only"
+		return fmt.Sprintf("sandbox backend=bubblewrap REQUIRED but unavailable (%s); commands will be refused", unavailableReason(status))
 	}
-	return BackendFilterOnly, reason
+	return fmt.Sprintf("sandbox backend=filter-only (%s)", unavailableReason(status))
 }
 
-// unavailableReason names why the jail cannot run, for the startup line.
+// BackendStartupLevel is the level for BackendStartupLine. An explicit bubblewrap
+// that is required but unavailable is ERROR: every command will be refused. Auto's
+// fallback is a configured outcome, so it stays INFO.
+func BackendStartupLevel(configured string) slog.Level {
+	if resolveBackend(configured) == BackendBubblewrap && !probeJail().usable() {
+		return slog.LevelError
+	}
+	return slog.LevelInfo
+}
+
+// usable reports whether bubblewrap can run commands: the binary exists and
+// unprivileged user namespaces work under it.
+func (status jailProbeResult) usable() bool {
+	if status.path == "" {
+		return false
+	}
+	return status.userNS
+}
+
+// unavailableReason names why the jail cannot run, for the startup line and the
+// refusal error.
 func unavailableReason(status jailProbeResult) string {
 	if status.path == "" {
 		return "bwrap not found"

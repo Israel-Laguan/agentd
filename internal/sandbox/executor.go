@@ -86,14 +86,19 @@ func truncateCommand(command string) string {
 // bubblewrap invocation when the backend resolves to a jail. A jailed
 // process gets no host environment of its own — --clearenv plus --setenv
 // carry everything — so cmd.Env stays nil there. The returned backend names
-// which of the two ran the command.
-func (e *BashExecutor) startCommand(execCtx context.Context, workspace string, payload Payload, shell string) (*exec.Cmd, string) {
+// which of the two ran the command. An explicit bubblewrap with no usable jail
+// returns an error and no process: the command is refused, not run unjailed.
+func (e *BashExecutor) startCommand(execCtx context.Context, workspace string, payload Payload, shell string) (*exec.Cmd, string, error) {
 	name, args := "bash", []string{"-c", shell}
 	env := nonInheritedEnv(payload.EnvVars)
 	backend := BackendFilterOnly
-	if path, ok := e.useJail(workspace, payload); ok {
-		jailed := jailArgv(path, workspace, env, shell)
-		name, args = jailed[0], jailed[1:]
+	path, jailed, err := e.useJail(workspace, payload)
+	if err != nil {
+		return nil, "", err
+	}
+	if jailed {
+		argv := jailArgv(path, workspace, env, shell)
+		name, args = argv[0], argv[1:]
 		env = nil
 		backend = BackendBubblewrap
 	}
@@ -101,7 +106,7 @@ func (e *BashExecutor) startCommand(execCtx context.Context, workspace string, p
 	cmd.Dir = workspace
 	cmd.Env = env
 	cmd.Stdin = strings.NewReader("")
-	return cmd, backend
+	return cmd, backend, nil
 }
 
 func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payload) (Result, error) {
@@ -109,7 +114,10 @@ func (e *BashExecutor) run(ctx context.Context, workspace string, payload Payloa
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	shell := withResourceLimits(payload.Command, e.resourceLimits())
-	cmd, backend := e.startCommand(execCtx, workspace, payload, shell)
+	cmd, backend, err := e.startCommand(execCtx, workspace, payload, shell)
+	if err != nil {
+		return Result{ExitCode: -1}, err
+	}
 	configureProcess(cmd, e.resourceLimits())
 	stdout, stderr, err := commandPipes(cmd)
 	if err != nil {

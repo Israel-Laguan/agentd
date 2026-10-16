@@ -209,7 +209,7 @@ task["id"], task["project_id"], task["state"]
 | `agentic.capability_routing.min_confidence` | `0.35` | Minimum classifier confidence (0.0–1.0) to apply a capability mapping; below threshold continues with the normal agentic loop. |
 | `agentic.capability_routing.mappings` | _(none)_ | Map intent names (`generate_image`, `real_time_search`, `browse_url`, `spreadsheet_ops`) to adapter registry names (`capabilities.Registry.Register` name). |
 | `agentic.capability_routing.tools` | _(intent name)_ | Optional per-intent tool name override passed to `CallTool`; when omitted, the intent name is used. |
-| `sandbox.backend` | `auto` | Execution isolation: `auto` (bubblewrap where the binary and unprivileged user namespaces exist, filter-only elsewhere), `bubblewrap` (always jail, loud log on fallback), or `filter-only` (lexical filter plus admission checks only). |
+| `sandbox.backend` | `auto` | Execution isolation: `auto` (bubblewrap where the binary and unprivileged user namespaces exist, filter-only elsewhere), `bubblewrap` (required: when the jail is unusable every command is refused and its task fails with the reason; the startup log is ERROR), or `filter-only` (lexical filter plus admission checks only). |
 | `sandbox.inactivity_timeout` | `60s` | Max silence on both stdout and stderr before sandbox timeout triggers; output on either stream resets it. |
 | `sandbox.wall_timeout` | `10m` | Max wall-clock execution time for each sandbox command payload. |
 | `sandbox.kill_grace` | `2s` | Grace window between SIGTERM and SIGKILL for timed-out process groups. |

@@ -110,16 +110,15 @@ func TestUseJailDecisionMatrix(t *testing.T) {
 		{"auto without binary", "", absent, false},
 		{"auto with broken userns", "", broken, false},
 		{"explicit jail available", BackendBubblewrap, present, true},
-		{"explicit jail broken falls back", BackendBubblewrap, broken, false},
 		{"filter-only never jails", BackendFilterOnly, present, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			withProbe(t, tt.probe, func() {
 				exec := &BashExecutor{Backend: tt.backend}
-				_, ok := exec.useJail("ws", testPayload("ws", "true"))
-				if ok != tt.want {
-					t.Fatalf("useJail() = %v, want %v", ok, tt.want)
+				_, ok, err := exec.useJail("ws", testPayload("ws", "true"))
+				if err != nil || ok != tt.want {
+					t.Fatalf("useJail() = %v, err = %v, want %v", ok, err, tt.want)
 				}
 			})
 		})
