@@ -10,6 +10,10 @@ import (
 
 const hostIntent = "Compile System Report: write report.md with the OS, CPU, memory and disk of this machine"
 
+// summaryIntent is the B-045 report task: a model-written summary must not
+// introduce values that no collected file contains.
+const summaryIntent = "Build report: Create system report summarizing the OS and hardware details from os_info.txt and cpu_info.txt"
+
 func TestValidateHostFactEvidence(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -23,6 +27,9 @@ func TestValidateHostFactEvidence(t *testing.T) {
 		{"literal after real command", hostIntent, `uname -a > os.txt; echo "RAM: 32 GB" >> report.md`, true},
 		{"literal piped to tee", hostIntent, `echo "RAM: 32 GB" | tee report.md`, true},
 		{"literal after &&", hostIntent, `lscpu > cpu.txt && echo "RAM: 32 GB" > report.md`, true},
+		{"prose summary with invented values", summaryIntent, `echo "This machine runs Ubuntu 22.04 on an i7 with 32 GB RAM" > report.md`, true},
+		{"prose summary mixed with real files", summaryIntent, "cat os_info.txt > report.md; printf 'RAM: 32 GB\\n' >> report.md", true},
+		{"summary heredoc with invented values", summaryIntent, "cat > report.md <<EOF\n## Summary\nUbuntu 22.04, 32 GB\nEOF", true},
 		{"command output redirect", hostIntent, `{ uname -a; hostnamectl; lscpu; } > report.md`, false},
 		{"substitution inside echo", hostIntent, `echo "$(uname -a)" > report.md`, false},
 		{"backtick inside echo", hostIntent, "echo \"`uname -r`\" > report.md", false},
