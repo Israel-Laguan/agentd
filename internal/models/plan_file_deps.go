@@ -21,9 +21,12 @@ var (
 const planCueWindow = 100
 
 // planFileUse records which files a task writes and which it only mentions.
+// readOrder keeps the read files in text order, so derived depends_on edges
+// come out the same way every time (map iteration order is random).
 type planFileUse struct {
-	writes map[string]bool
-	reads  map[string]bool
+	writes    map[string]bool
+	reads     map[string]bool
+	readOrder []string
 }
 
 func scanPlanFileUse(text string) planFileUse {
@@ -34,8 +37,9 @@ func scanPlanFileUse(text string) planFileUse {
 		name := strings.ToLower(text[loc[0]:loc[1]])
 		if planWriteCuePattern.MatchString(text[start:loc[0]]) {
 			use.writes[name] = true
-		} else {
+		} else if !use.reads[name] {
 			use.reads[name] = true
+			use.readOrder = append(use.readOrder, name)
 		}
 		prevEnd = loc[1]
 	}
@@ -51,7 +55,7 @@ func (p *DraftPlan) ensureFileDependencies() error {
 		uses[i] = scanPlanFileUse(t.Title + "\n" + t.Description)
 	}
 	for c := range p.Tasks {
-		for file := range uses[c].reads {
+		for _, file := range uses[c].readOrder {
 			if uses[c].writes[file] {
 				continue
 			}
