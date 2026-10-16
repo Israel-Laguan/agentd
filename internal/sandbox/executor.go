@@ -51,6 +51,12 @@ func (e *BashExecutor) Execute(ctx context.Context, payload Payload) (Result, er
 		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub(err.Error()+"; command: "+command))
 		return Result{ExitCode: -1}, err
 	}
+	if err := refuseEscapingSymlinks(workspace); err != nil {
+		command := truncateCommand(payload.Command)
+		slog.Warn("sandbox: workspace symlink escape blocked", "workspace", workspace, "task_id", payload.TaskID, "error", e.scrub(err.Error()), "command", e.scrub(command))
+		emitLine(ctx, e.Sink, payload, "SANDBOX_VIOLATION", e.scrub(err.Error()+"; command: "+command))
+		return Result{ExitCode: -1}, err
+	}
 	return e.run(ctx, workspace, payload)
 }
 
