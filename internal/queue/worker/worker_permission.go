@@ -139,6 +139,12 @@ func (w *Worker) recoverLegacyPrivilege(
 
 	result, runErr := w.executeRecorded(ctx, task, project, alternative.Command)
 	audit.exitCode = result.ExitCode
+	if errors.Is(runErr, models.ErrSandboxUnavailable) {
+		// An unusable explicit jail is terminal, not a human handoff (B-049).
+		audit.failed = true
+		w.commit(ctx, task, result, runErr)
+		return
+	}
 	if runErr == nil && result.Success {
 		audit.command = alternative.Command
 		audit.failed = false
