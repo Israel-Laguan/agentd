@@ -182,11 +182,12 @@ func TestIsReportTask(t *testing.T) {
 	tests := []struct {
 		name, title, desc, out string
 	}{
-		{"report", "Build report", "Create report.md summarizing the OS and hardware details from os_info.txt", "report.md"},
+		{"report", "Build report", "Create system report.md summarizing the OS and hardware details from os_info.txt", "report.md"},
 		{"summary", "Write system summary", "Summarize the machine hardware into summary.md", "summary.md"},
 		{"collect", "Collect CPU info", "Run lscpu and save the output to cpu_info.txt", ""},
 		{"not host", "Build report", "Create report.md summarizing test coverage", ""},
-		{"nested path", "Build report", "Summarize the OS and CPU into out/report.md", ""},
+		{"ordinary doc task", "Summarize cache", "Summarize memory usage of the cache into NOTES.md", ""},
+		{"nested path", "Build system report", "Summarize the OS and CPU into out/report.md", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

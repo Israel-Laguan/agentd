@@ -56,7 +56,7 @@ func TestRunLegacyTaskRendersHostReportWithoutModelOrShell(t *testing.T) {
 		"mem_info.txt":  "               total        used        free\nMem:            15Gi       7.9Gi       1.2Gi\n",
 		"disk_info.txt": "NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS\nnvme0n1     259:0    0 476.9G  0 disk\n",
 	}
-	task, project := seedHostReportTask(t, store, "Create report.md summarizing the OS and hardware from the collected files", files)
+	task, project := seedHostReportTask(t, store, "Create system report.md summarizing the OS and hardware from the collected files", files)
 	gw := &routingTestGateway{}
 	sink := &mockEventSink{}
 	w := NewWorker(store, gw, panicSandbox{t}, nil, sink, WorkerOptions{})
@@ -82,35 +82,37 @@ func TestRunLegacyTaskRendersHostReportWithoutModelOrShell(t *testing.T) {
 	}
 }
 
-// B-046: a report missing a core fact must fail with retry feedback instead
-// of writing "not collected" and COMPLETING. No model call happens either way.
-func TestRunLegacyTaskFailsPartialReportWithRetryFeedback(t *testing.T) {
+// B-046: a report missing a core fact must not burn retries re-rendering the
+// same workspace (the collectors already ran, so the next attempt would hit
+// the same gap). The renderer steps aside and the normal model path runs.
+func TestRunLegacyTaskFallsBackToModelOnPartialReport(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	files := map[string]string{
 		"os_info.txt": hostReportFixture,
 		"mem.txt":     "               total        used        free\nMem:            15Gi       7.9Gi       1.2Gi\n",
 	}
-	task, project := seedHostReportTask(t, store, "Create report.md summarizing the OS and hardware from the collected files", files)
+	task, project := seedHostReportTask(t, store, "Create system report.md summarizing the OS and hardware from the collected files", files)
 	gw := &routingTestGateway{}
-	w := NewWorker(store, gw, panicSandbox{t}, nil, &mockEventSink{}, WorkerOptions{})
+	w := NewWorker(store, gw, fixedResultSandbox{result: sandbox.Result{Success: true}}, nil, &mockEventSink{}, WorkerOptions{})
 	w.RunLegacyTask(ctx, task, project, models.AgentProfile{}, true)
 
-	if len(gw.requests) != 0 {
-		t.Fatalf("gateway called %d times, want 0", len(gw.requests))
+	if len(gw.requests) == 0 {
+		t.Fatal("gateway never called, want the model path for partial facts")
 	}
 	if _, err := os.Stat(filepath.Join(project.WorkspacePath, "report.md")); err == nil {
-		t.Fatal("report.md was written for partial facts; the task must fail instead")
+		t.Fatal("report.md was written for partial facts; the model path owns the task instead")
 	}
-	if after, _ := store.GetTask(ctx, task.ID); after.State == models.TaskStateCompleted {
-		t.Fatal("task COMPLETED with CPU and disks missing, want retry feedback instead")
+	if after, _ := store.GetTask(ctx, task.ID); after.State != models.TaskStateCompleted {
+		t.Fatalf("task state = %s, want COMPLETED via the model path", after.State)
 	}
 }
+
 // With nothing collected the renderer steps aside and the normal model path runs.
 func TestRunLegacyTaskFallsBackToModelWhenNoHostFactsCollected(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
-	task, project := seedHostReportTask(t, store, "Create report.md summarizing the OS and hardware", map[string]string{"notes.txt": "nothing"})
+	task, project := seedHostReportTask(t, store, "Create system report.md summarizing the OS and hardware", map[string]string{"notes.txt": "nothing"})
 	gw := &routingTestGateway{}
 	w := NewWorker(store, gw, fixedResultSandbox{result: sandbox.Result{Success: true}}, nil, &mockEventSink{}, WorkerOptions{})
 	w.RunLegacyTask(ctx, task, project, models.AgentProfile{}, true)

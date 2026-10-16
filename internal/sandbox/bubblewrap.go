@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -43,18 +44,26 @@ type jailProbeResult struct {
 	userNS bool
 }
 
-// probeJailHost checks the real machine: the binary must exist and a join of
-// a user namespace with a bound root must run /bin/true. The bind keeps the
-// probe honest — bwrap always pivots to a fresh root, so a bare namespace
-// join would prove nothing about execution.
+// probeJailHost checks the real machine by running the same mount profile
+// real executions use: the binary must exist and a jailed `true` must run
+// inside it. Probing the real profile keeps the check honest — a bare
+// namespace join would prove nothing about execution, and a profile that
+// fails here (a missing hard bind, a kernel that refuses an unshare) makes
+// auto fall back to filter-only instead of failing every Execute call.
 func probeJailHost() jailProbeResult {
 	path, err := exec.LookPath("bwrap")
 	if err != nil {
 		return jailProbeResult{}
 	}
+	dir, err := os.MkdirTemp("", "agentd-jail-probe-*")
+	if err != nil {
+		return jailProbeResult{path: path}
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	probe := exec.CommandContext(ctx, path, "--unshare-user", "--dev-bind", "/", "/", "--", "/bin/true")
+	argv := jailArgv(path, dir, nil, "true")
+	probe := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	if err := probe.Run(); err != nil {
 		return jailProbeResult{path: path}
 	}
@@ -95,24 +104,36 @@ func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool)
 
 // jailArgv builds the full bubblewrap invocation for one workspace: a
 // read-only host runtime (/usr, /lib, /bin, /sbin, /sys), the narrow dbus
-// and systemd mounts hostnamectl needs to report OS facts (read-only; the
-// alternative is a jail where OS collection fails), a fresh proc/dev/tmp,
-// the workspace bound writable at the same path with cwd inside it, and a
-// cleared environment rebuilt from env. Mounts apply in order, so the /tmp
-// tmpfs precedes the workspace bind — a workspace under /tmp would
-// otherwise be hidden by it. Hostile tenancy stays out of scope: rootless
-// podman per task is the SP-019 answer there, not a wider bind list here.
+// and systemd mounts hostnamectl needs to report OS facts, the /etc files
+// ordinary commands need (name resolution, TLS trust, OS release, user
+// lookup), a fresh proc/dev/tmp, the workspace bound writable at the same
+// path with cwd inside it, and a cleared environment rebuilt from env.
+// Network stays shared: --unshare-all would otherwise isolate default worker
+// commands (git clone, curl, go mod download, npm install). Mounts that can
+// be absent on some hosts (/lib64 on some arm64 distros, dbus/systemd on
+// hosts without them, any single /etc file) use --ro-bind-try so a missing
+// path degrades instead of failing the exec before bash starts. Mounts apply
+// in order, so the /tmp tmpfs precedes the workspace bind — a workspace under
+// /tmp would otherwise be hidden by it. Hostile tenancy stays out of scope:
+// rootless podman per task is the SP-019 answer there, not a wider bind list
+// here.
 func jailArgv(bwrap, workspace string, env []string, shell string) []string {
 	argv := []string{bwrap,
-		"--unshare-all", "--die-with-parent",
+		"--unshare-all", "--share-net", "--die-with-parent",
 		"--ro-bind", "/usr", "/usr",
 		"--ro-bind", "/lib", "/lib",
-		"--ro-bind", "/lib64", "/lib64",
+		"--ro-bind-try", "/lib64", "/lib64",
 		"--ro-bind", "/bin", "/bin",
 		"--ro-bind", "/sbin", "/sbin",
 		"--ro-bind", "/sys", "/sys",
-		"--ro-bind", "/run/dbus/system_bus_socket", "/run/dbus/system_bus_socket",
-		"--ro-bind", "/run/systemd/system", "/run/systemd/system",
+		"--ro-bind-try", "/run/dbus/system_bus_socket", "/run/dbus/system_bus_socket",
+		"--ro-bind-try", "/run/systemd/system", "/run/systemd/system",
+		"--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf",
+		"--ro-bind-try", "/etc/hosts", "/etc/hosts",
+		"--ro-bind-try", "/etc/nsswitch.conf", "/etc/nsswitch.conf",
+		"--ro-bind-try", "/etc/ssl/certs", "/etc/ssl/certs",
+		"--ro-bind-try", "/etc/os-release", "/etc/os-release",
+		"--ro-bind-try", "/etc/passwd", "/etc/passwd",
 		"--proc", "/proc",
 		"--dev", "/dev",
 		"--tmpfs", "/tmp",

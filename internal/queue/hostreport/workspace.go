@@ -29,17 +29,19 @@ func (e *MissingFactsError) Error() string {
 
 // WriteReport renders a report from the regular files in dir and writes it to
 // dir/target. It reports false, writing nothing, when the files carry no facts
-// or when target exists as something other than a regular file. When some
+// or when target already exists: an existing file (a NOTES.md the user owns,
+// a report from an earlier attempt) belongs to the model path, which can read
+// and extend it, instead of being overwritten with a system report. When some
 // facts exist but core ones are missing it writes nothing and returns a
-// *MissingFactsError so the worker fails the task instead of completing a
-// gapped report. Symlinks in the workspace are never followed: a sandboxed
-// command can create one, and the daemon must not read or overwrite what it
-// points to.
+// *MissingFactsError so the worker falls back to the model path instead of
+// completing a gapped report. Symlinks in the workspace are never followed: a
+// sandboxed command can create one, and the daemon must not read or overwrite
+// what it points to.
 func WriteReport(dir, target string) (string, bool, error) {
 	if filepath.Base(target) != target {
 		return "", false, fmt.Errorf("report target %q must be a bare file name", target)
 	}
-	if info, err := os.Lstat(filepath.Join(dir, target)); err == nil && !info.Mode().IsRegular() {
+	if _, err := os.Lstat(filepath.Join(dir, target)); err == nil {
 		return "", false, nil
 	}
 	inputs, err := readInputs(dir, target)
