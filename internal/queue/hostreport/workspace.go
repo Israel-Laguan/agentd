@@ -5,16 +5,36 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // maxInputBytes bounds one collected file; real command output is far smaller.
 const maxInputBytes = 256 << 10
 
+// MissingFactsError reports a collection that carries some host facts but
+// lacks core ones. The report task must fail with retry feedback naming what
+// is missing and which files were read, instead of writing "not collected"
+// and completing (B-046).
+type MissingFactsError struct {
+	Missing []string
+	Files   []string
+}
+
+// Error names the missing facts and the files they were looked for in.
+func (e *MissingFactsError) Error() string {
+	files := strings.Join(e.Files, ", ")
+	missing := strings.Join(e.Missing, ", ")
+	return fmt.Sprintf("collected files (%s) are missing: %s", files, missing)
+}
+
 // WriteReport renders a report from the regular files in dir and writes it to
 // dir/target. It reports false, writing nothing, when the files carry no facts
-// or when target exists as something other than a regular file. Symlinks in the
-// workspace are never followed: a sandboxed command can create one, and the
-// daemon must not read or overwrite what it points to.
+// or when target exists as something other than a regular file. When some
+// facts exist but core ones are missing it writes nothing and returns a
+// *MissingFactsError so the worker fails the task instead of completing a
+// gapped report. Symlinks in the workspace are never followed: a sandboxed
+// command can create one, and the daemon must not read or overwrite what it
+// points to.
 func WriteReport(dir, target string) (string, bool, error) {
 	if filepath.Base(target) != target {
 		return "", false, fmt.Errorf("report target %q must be a bare file name", target)
@@ -26,9 +46,16 @@ func WriteReport(dir, target string) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	report, ok := Render(inputs)
-	if !ok {
+	report, missing, found := Diagnose(inputs)
+	if !found {
 		return "", false, nil
+	}
+	if len(missing) > 0 {
+		names := make([]string, len(inputs))
+		for i, in := range inputs {
+			names[i] = in.Name
+		}
+		return "", false, &MissingFactsError{Missing: missing, Files: names}
 	}
 	if err := writeAtomic(dir, target, report); err != nil {
 		return "", false, err

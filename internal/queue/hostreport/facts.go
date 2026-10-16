@@ -84,6 +84,39 @@ func firstNonEmpty(current, next string) string {
 	return next
 }
 
+// HasAnyFact reports whether any host fact was collected at all. Without one
+// the renderer steps aside and the worker falls back to the model path.
+func HasAnyFact(f Facts) bool {
+	scalar := f.OS != "" || f.Kernel != "" || f.CPUModel != "" || f.Memory != ""
+	if scalar {
+		return true
+	}
+	return len(f.Disks) != 0
+}
+
+// MissingFacts names the core facts no collected file carried, in report
+// order. A non-empty result means the collection is partial: the report task
+// must fail with retry feedback instead of writing "not collected".
+func MissingFacts(f Facts) []string {
+	var missing []string
+	if f.OS == "" {
+		missing = append(missing, "OS")
+	}
+	if f.Kernel == "" {
+		missing = append(missing, "kernel")
+	}
+	if f.CPUModel == "" {
+		missing = append(missing, "CPU")
+	}
+	if f.Memory == "" {
+		missing = append(missing, "memory")
+	}
+	if len(f.Disks) == 0 {
+		missing = append(missing, "disks")
+	}
+	return missing
+}
+
 func submatch(re *regexp.Regexp, text string) string {
 	if m := re.FindStringSubmatch(text); m != nil {
 		return m[1]
@@ -111,6 +144,9 @@ func kernelFrom(text string) string {
 }
 
 // disksFrom parses lsblk output by its header columns and keeps TYPE == disk.
+// Without an lsblk table it falls back to `df -h` rows for /dev entries, so a
+// collector that lost the lsblk output still yields disk sizes (B-046). Both
+// readings stay inside the collected file, so the evidence rule holds.
 func disksFrom(text string) []Disk {
 	var disks []Disk
 	sizeCol, typeCol := -1, -1
@@ -126,6 +162,25 @@ func disksFrom(text string) []Disk {
 		if fields[typeCol] == "disk" {
 			disks = append(disks, Disk{Name: strings.TrimLeft(fields[0], treePrefix), Size: fields[sizeCol]})
 		}
+	}
+	if len(disks) > 0 {
+		return disks
+	}
+	return disksFromDf(text)
+}
+
+// disksFromDf reads `df -h` output: the device and size of mounted /dev
+// entries. Pseudo filesystems (udev, tmpfs) carry no /dev entry and are
+// skipped; partitions are kept as named because df cannot tell them apart
+// from whole disks.
+func disksFromDf(text string) []Disk {
+	var disks []Disk
+	for _, line := range strings.Split(text, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || !strings.HasPrefix(fields[0], "/dev/") {
+			continue
+		}
+		disks = append(disks, Disk{Name: strings.TrimPrefix(fields[0], "/dev/"), Size: fields[1]})
 	}
 	return disks
 }

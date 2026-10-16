@@ -73,6 +73,35 @@ func TestExtractFallsBackToUnameAndOSRelease(t *testing.T) {
 	}
 }
 
+const dfOut = `Filesystem      Size  Used Avail Use% Mounted on
+udev            7.6G     0  7.6G   0% /dev
+tmpfs           1.6G  5.0M  1.6G   1% /run
+/dev/nvme0n1p2  469G  388G   57G  88% /
+tmpfs           7.7G   56M  7.6G   1% /dev/shm
+/dev/nvme0n1p1  253M  8.8M  244M   4% /boot/efi
+`
+
+// B-046: when the collector lost the lsblk output (the redirect bound only
+// the last command), disk sizes still come from `df -h`. Every value stays
+// inside the collected file, so the evidence rule holds; pseudo filesystems
+// without a /dev entry are skipped.
+func TestExtractFallsBackToDfForDisks(t *testing.T) {
+	t.Parallel()
+	f := Extract([]Input{{Name: "disk_info.txt", Content: dfOut}})
+	want := []Disk{{Name: "nvme0n1p2", Size: "469G"}, {Name: "nvme0n1p1", Size: "253M"}}
+	if len(f.Disks) != len(want) || f.Disks[0] != want[0] || f.Disks[1] != want[1] {
+		t.Fatalf("Disks = %#v, want %#v", f.Disks, want)
+	}
+}
+
+func TestExtractPrefersLsblkOverDf(t *testing.T) {
+	t.Parallel()
+	f := Extract([]Input{{Name: "disk_info.txt", Content: lsblkOut + dfOut}})
+	if len(f.Disks) != 2 || f.Disks[0].Name != "sda" || f.Disks[1].Name != "nvme0n1" {
+		t.Fatalf("Disks = %#v, want the lsblk devices", f.Disks)
+	}
+}
+
 // Every value in the report must come from the collected files (SP-018), and
 // machine/boot identifiers must never reach it (B-045).
 func TestRenderUsesOnlyCollectedValuesAndOmitsIdentifiers(t *testing.T) {
@@ -111,11 +140,40 @@ func TestRenderRefusesWithoutAnyFacts(t *testing.T) {
 	}
 }
 
-func TestRenderMarksMissingFactsInsteadOfInventingThem(t *testing.T) {
+// B-046: a report missing a core fact must not pass silently. Diagnose names
+// the missing facts so the worker can fail the task with retry feedback
+// instead of writing "not collected" and COMPLETING.
+func TestDiagnoseNamesMissingCoreFacts(t *testing.T) {
 	t.Parallel()
-	report, ok := Render([]Input{{Name: "m.txt", Content: freeOut}})
-	if !ok || !strings.Contains(report, "15Gi") || !strings.Contains(report, "not collected") {
-		t.Fatalf("report = %q (ok=%v), want memory plus 'not collected' markers", report, ok)
+	inputs := []Input{
+		{Name: "os_info.txt", Content: hostnamectlOut + unameOut},
+		{Name: "mem.txt", Content: freeOut},
+	}
+	report, missing, found := Diagnose(inputs)
+	if !found {
+		t.Fatal("Diagnose() found = false, want facts recognized")
+	}
+	if report != "" {
+		t.Fatalf("Diagnose() report = %q, want nothing written for partial facts", report)
+	}
+	want := []string{"CPU", "disks"}
+	if len(missing) != len(want) || missing[0] != want[0] || missing[1] != want[1] {
+		t.Fatalf("Diagnose() missing = %q, want %q", missing, want)
+	}
+}
+
+func TestDiagnoseCompleteFactsRenders(t *testing.T) {
+	t.Parallel()
+	report, missing, found := Diagnose(collected())
+	if !found || len(missing) != 0 || !strings.Contains(report, "nvme0n1") {
+		t.Fatalf("Diagnose() found %v missing %q report %q, want a full report", found, missing, report)
+	}
+}
+
+func TestDiagnoseWithoutAnyFactsStepsAside(t *testing.T) {
+	t.Parallel()
+	if report, missing, found := Diagnose([]Input{{Name: "x.txt", Content: "hello world"}}); found || report != "" || len(missing) != 0 {
+		t.Fatalf("Diagnose() = %q %q %v, want no facts", report, missing, found)
 	}
 }
 
