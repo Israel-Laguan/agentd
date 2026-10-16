@@ -14,6 +14,7 @@ import (
 type gwStep struct {
 	content string
 	err     error
+	model   string // answering model reported in UsageDetails, when set
 }
 
 type seqFakeGW struct {
@@ -27,7 +28,11 @@ func (g *seqFakeGW) Generate(_ context.Context, _ spec.AIRequest) (spec.AIRespon
 	}
 	s := g.steps[g.i]
 	g.i++
-	return spec.AIResponse{Content: s.content}, s.err
+	resp := spec.AIResponse{Content: s.content}
+	if s.model != "" {
+		resp.UsageDetails = &spec.UsageDetails{Model: s.model}
+	}
+	return resp, s.err
 }
 
 func (g *seqFakeGW) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
@@ -197,4 +202,20 @@ func (g *recordingGW) Generate(_ context.Context, req spec.AIRequest) (spec.AIRe
 	c := g.steps[g.n]
 	g.n++
 	return spec.AIResponse{Content: c}, nil
+}
+
+// B-054: the usage details of a JSON call name the model that produced the
+// accepted answer, so TOKEN_USAGE can record it after correction retries.
+func TestGenerateJSONWithUsageKeepsAnsweringModel(t *testing.T) {
+	gw := &seqFakeGW{steps: []gwStep{
+		{content: `not json`, model: "poolside/laguna-m.1"},
+		{content: `{"name":"alice"}`, model: "poolside/laguna-s-2.1"},
+	}}
+	_, _, details, err := correction.GenerateJSONWithUsage[simplePayload](context.Background(), gw, spec.AIRequest{})
+	if err != nil {
+		t.Fatalf("GenerateJSONWithUsage: %v", err)
+	}
+	if details.Model != "poolside/laguna-s-2.1" {
+		t.Fatalf("details.Model = %q, want the model of the accepted answer", details.Model)
+	}
 }

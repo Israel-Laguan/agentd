@@ -157,7 +157,7 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 			log.DebugContext(ctx, "router provider success",
 				"provider", string(p.Name()), "model", resp.ModelUsed, "tokens", resp.TokenUsage)
 			r.recordBudget(req.TaskID, resp.TokenUsage)
-			return resp, nil
+			return withAnsweringModel(resp), nil
 		}
 		log.DebugContext(ctx, "router provider skipped", "provider", string(p.Name()))
 	}

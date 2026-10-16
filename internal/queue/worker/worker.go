@@ -123,7 +123,7 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 		}
 	}
 	slog.Debug("recorded token usage", "task_id", task.ID, "tokens", tokens, "cached_tokens", details.CachedTokens, "cache_write_tokens", details.CacheWriteTokens)
-	payload, _ := json.Marshal(models.TokenUsagePayload{Tokens: tokens, CachedTokens: details.CachedTokens, CacheWriteTokens: details.CacheWriteTokens})
+	payload, _ := json.Marshal(models.TokenUsagePayload{Tokens: tokens, CachedTokens: details.CachedTokens, CacheWriteTokens: details.CacheWriteTokens, Model: details.Model})
 	w.Emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
 }
 

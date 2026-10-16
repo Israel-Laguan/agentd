@@ -117,9 +117,10 @@ type TokenUsageEvent struct {
 // fields are omitempty so legacy payloads ({"tokens":N}) and bare integers still
 // parse, and zero-cache calls still serialize to {"tokens":N}.
 type TokenUsagePayload struct {
-	Tokens           int `json:"tokens"`
-	CachedTokens     int `json:"cached_tokens,omitempty"`
-	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+	Tokens           int    `json:"tokens"`
+	CachedTokens     int    `json:"cached_tokens,omitempty"`
+	CacheWriteTokens int    `json:"cache_write_tokens,omitempty"`
+	Model            string `json:"model,omitempty"`
 }
 
 // UsageDetails carries prompt-cache token fields surfaced by providers that
@@ -130,6 +131,10 @@ type TokenUsagePayload struct {
 type UsageDetails struct {
 	CachedTokens     int `json:"cached_tokens,omitempty"`
 	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+	// Model is the model that answered, as the provider reported it, which can
+	// differ from the one requested when a proxy falls back (SP-021). It is
+	// recorded in TOKEN_USAGE events, not persisted with the cache counters.
+	Model string `json:"model,omitempty"`
 }
 
 // AgentProfile configures a concrete model/provider pair.
