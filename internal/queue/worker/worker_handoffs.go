@@ -120,6 +120,11 @@ func (w *Worker) handlePromptRecovery(
 			w.commit(ctx, *retried, recoveredResult, nil)
 			return
 		}
+		if errors.Is(runErr, models.ErrSandboxUnavailable) {
+			// An unusable explicit jail is terminal, not a human handoff (B-049).
+			w.commit(ctx, *retried, recoveredResult, runErr)
+			return
+		}
 		payload = detectionPayload(detection.Pattern, recoveredCommand, recoveredResult)
 		if runErr != nil {
 			payload += "\nRecovery error: " + runErr.Error()
