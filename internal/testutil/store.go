@@ -55,10 +55,10 @@ func NewFakeStore() *FakeKanbanStore {
 		profiles: map[string]models.AgentProfile{
 			"default": {ID: "default", Name: "Default", Temperature: 0.2, SystemPrompt: sql.NullString{String: "Return JSON.", Valid: true}},
 		},
-		settings:    make(map[string]string),
-		scheduled:   make(map[string]models.ScheduledTask),
+		settings:          make(map[string]string),
+		scheduled:         make(map[string]models.ScheduledTask),
 		processedComments: make(map[string]struct{}),
-		projectsDir: filepath.Join(string(filepath.Separator), "tmp", "agentd-fake-projects"),
+		projectsDir:       filepath.Join(string(filepath.Separator), "tmp", "agentd-fake-projects"),
 	}
 }
 

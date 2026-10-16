@@ -17,10 +17,10 @@ func TestBubblewrapCollectorsProduceParseableFacts(t *testing.T) {
 	ctx := context.Background()
 	exec, workspace := testExecutor(t, nil)
 	collectors := map[string]string{
-		"os_info.txt":    "{ uname -a; hostnamectl; } > os_info.txt",
-		"cpu_info.txt":   "lscpu > cpu_info.txt",
+		"os_info.txt":     "{ uname -a; hostnamectl; } > os_info.txt",
+		"cpu_info.txt":    "lscpu > cpu_info.txt",
 		"memory_info.txt": "free -h > memory_info.txt",
-		"disk_info.txt":  "{ lsblk; df -h; } > disk_info.txt",
+		"disk_info.txt":   "{ lsblk; df -h; } > disk_info.txt",
 	}
 	for name, command := range collectors {
 		result, err := exec.Execute(ctx, testPayload(workspace, command))
@@ -29,10 +29,10 @@ func TestBubblewrapCollectorsProduceParseableFacts(t *testing.T) {
 		}
 	}
 	facts := map[string][]string{
-		"os_info.txt":    {"Linux", "Operating System:", "Kernel:"},
-		"cpu_info.txt":   {"Model name:", "CPU(s):"},
+		"os_info.txt":     {"Linux", "Operating System:", "Kernel:"},
+		"cpu_info.txt":    {"Model name:", "CPU(s):"},
 		"memory_info.txt": {"Mem:"},
-		"disk_info.txt":  {"TYPE", "disk"},
+		"disk_info.txt":   {"TYPE", "disk"},
 	}
 	for name, markers := range facts {
 		content, err := os.ReadFile(filepath.Join(workspace, name))
