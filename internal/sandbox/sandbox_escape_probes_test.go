@@ -63,6 +63,7 @@ func jailVerdict(status jailProbeResult) (bool, string) {
 	}
 	return false, msg + " on this platform"
 }
+
 // slashFree rewrites an absolute path so the command text holds no literal
 // `/`: `s` is seeded once from `$(printf '\057')` and every separator
 // becomes `${s}`. The shell assembles the real path at run time, which the
