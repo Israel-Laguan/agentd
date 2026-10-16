@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | slice 1 review (branch fix/b-042-symlink-admission, not pushed; bubblewrap design approved 2026-10-16, implementation pending) |
+| Status | review (branch fix/b-042-symlink-admission, not pushed; admission slice 1 + bubblewrap jail implemented, all four probes green) |
 | Priority | P1 |
 | Sprint | backlog (next sprint) |
 | Severity | major |
@@ -65,6 +65,20 @@ refused.
   ro /usr + ro /sys + fresh proc/dev/tmpfs, loud per-execution fallback,
   `sandbox.backend: auto|bubblewrap|filter-only` default auto);
   implementation is slices 2+.
+- Slices 2+ (2026-10-16, same branch, not pushed): bubblewrap jail
+  implemented per the approved design with two evidence-driven changes:
+  the loader paths (/lib, /lib64, /bin, /sbin ro) are bound or no binary
+  executes, and narrow ro dbus+systemd mounts keep hostnamectl (exit 0,
+  full facts) so S14 collectors keep working — a dbus-less jail fails
+  them with exit 1. Deviations from the proposal: no /etc bind at all;
+  HOST PATH/HOME are replaced with jail-valid values (other env passes
+  through); auto stays quiet when the bwrap binary is absent (platforms
+  without it must not log-scare), warning loudly only for
+  present-but-broken jails and explicit backend requests. Probes 2-4
+  unskipped behind requireJail (skip where bwrap/userns missing; CI
+  installs bubblewrap) — all four probes green, plus S14
+  collector-compat, cwd and filter-only tests. `sandbox.backend` wired
+  through config, reference yaml and docs.
 
 - Positive control: the SP-018 literal-write guard held twice in the same
   run (fabricated heredoc `report.md` refused; worker then ran real
