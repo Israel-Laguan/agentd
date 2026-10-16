@@ -17,6 +17,11 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 	if len(tasks) == 0 {
 		return
 	}
+	taskIDs := make([]string, len(tasks))
+	for i, task := range tasks {
+		taskIDs[i] = task.ID
+	}
+	slog.DebugContext(ctx, "worker: processing batch", "batch_size", len(tasks), "task_ids", taskIDs)
 	if len(tasks) == 1 {
 		w.Process(ctx, tasks[0])
 		return
@@ -24,10 +29,6 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			taskIDs := make([]string, len(tasks))
-			for i, task := range tasks {
-				taskIDs[i] = task.ID
-			}
 			slog.Error("worker batch panic recovered", "task_ids", taskIDs, "panic", r)
 			for _, task := range tasks {
 				w.Emit(ctx, task, "PANIC", fmt.Sprintf("worker batch panic: %v", r))
