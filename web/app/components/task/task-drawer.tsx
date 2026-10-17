@@ -8,6 +8,7 @@ import { CommentPanel } from "../comment/comment-panel";
 import { fetchTaskEvents } from "@/lib/api";
 import { HumanResolutionForm } from "./human-resolution-form";
 import { TaskEventList } from "./task-event-list";
+import { TaskDescriptionEditor } from "./task-description-editor";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 
@@ -186,40 +187,17 @@ export function TaskDrawer({
             </div>
 
             {/* DESCRIPTION (editable) */}
-            <div>
-              <label className="text-[10px] text-text-dim">Description</label>
-
-              {isEditingDescription ? (
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  onBlur={() => {
-                    setIsEditingDescription(false);
-                    if (!suppressBlurSaveRef.current) {
-                      handleSave({ description }).catch(() => {});
-                    }
-                  }}
-                  autoFocus
-                  className="w-full text-sm text-text-dim bg-bg border border-border rounded px-2 py-1 min-h-[100px]"
-                />
-              ) : (
-                <p
-                  className="text-sm text-text-dim cursor-text whitespace-pre-wrap focus:outline-none focus:ring-2 focus:ring-accent rounded px-1 -mx-1"
-                  onClick={() => setIsEditingDescription(true)}
-                  tabIndex={0}
-                  role="button"
-                  aria-label="Edit description"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setIsEditingDescription(true);
-                    }
-                  }}
-                >
-                  {description}
-                </p>
-              )}
-            </div>
+            <TaskDescriptionEditor
+              value={description}
+              editing={isEditingDescription}
+              onChange={setDescription}
+              onEditingChange={setIsEditingDescription}
+              onCommit={() => {
+                if (!suppressBlurSaveRef.current) {
+                  handleSave({ description }).catch(() => {});
+                }
+              }}
+            />
 
             {/* STATUS */}
             <div>
