@@ -20,7 +20,8 @@ import (
 // behaviour it accepts is actually demonstrated.
 //
 // If the limit resurfaces, size the fix together with SP-013's (both need a
-// per-boot instance ID); the ticket for that is B-026.
+// per-boot instance ID). The limit and that fix are recorded under Known limits
+// in docs/architecture/recovery-rerun.md; this test fails when the behaviour changes.
 //
 // The existing TestBootReconcile_leavesTaskOwnedByOtherLivePID already covers a
 // PID that is alive. What it cannot express is *why* that is wrong: a live PID
@@ -106,7 +107,9 @@ func TestBootReconcileCannotDistinguishReuseFromASecondDaemon(t *testing.T) {
 	}
 
 	if stateA.State != stateB.State {
-		t.Skip("the two cases are now distinguishable; SP-010's finding no longer holds")
+		t.Fatalf("states = %s and %s: a reused PID and a second daemon are now distinguishable, so SP-010's limit no longer holds; "+
+			"update Known limits in docs/architecture/recovery-rerun.md and this test, and size the per-boot instance ID fix with SP-013's",
+			stateA.State, stateB.State)
 	}
 	if stateA.State != models.TaskStateRunning {
 		t.Fatalf("states = %s and %s, want both RUNNING — an identical PID should lead to identical treatment", stateA.State, stateB.State)

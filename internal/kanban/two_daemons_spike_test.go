@@ -20,7 +20,8 @@ import (
 // whether startup refuses.
 //
 // If a second daemon ever bites, size the fix together with SP-010's (both need a
-// per-boot instance ID); the ticket for that is B-026.
+// per-boot instance ID). The limit and that fix are recorded under Known limits
+// in docs/architecture/recovery-rerun.md; these tests fail when the behaviour changes.
 //
 // The spike's own note says the absence of a lock was found by grep and should be
 // confirmed by reading the daemon start path before running anything. TestStartupDoesNotRefuseASecondInstance below is that confirmation, written as a test.
@@ -159,7 +160,8 @@ func TestStartupDoesNotRefuseASecondInstance(t *testing.T) {
 	second, err := Open(dsn, t.TempDir())
 	if err != nil {
 		t.Fatalf("second Open() on the same home error = %v, want nil — "+
-			"a guard would reject a second daemon here", err)
+			"a guard would reject a second daemon here; if one was added on purpose, update Known limits "+
+			"in docs/architecture/recovery-rerun.md and this test", err)
 	}
 	defer func() { _ = second.Close() }()
 
