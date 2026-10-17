@@ -65,6 +65,10 @@ func TestHumanCommentCancelsRunningTask(t *testing.T) {
 
 func request(handler http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Host = "localhost:8765"
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	return rec

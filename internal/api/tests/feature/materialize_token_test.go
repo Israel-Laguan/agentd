@@ -46,6 +46,10 @@ func TestMaterializeSucceedsWithMatchingToken(t *testing.T) {
 
 func requestWithHeader(handler http.Handler, method, path, body, key, val string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Host = "localhost:8765"
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set(key, val)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

@@ -13,12 +13,18 @@ type APIConfig struct {
 	// MaterializeToken, when non-empty, requires clients to send the same value
 	// in header X-Agentd-Materialize-Token on POST /api/v1/projects/materialize.
 	MaterializeToken string
+	// AllowedHosts lists Host header values the API accepts besides loopback
+	// names (localhost, 127.0.0.1, ::1). An entry without a port matches any
+	// port. Set it when clients reach the daemon by another name, for example
+	// a compose service name. Anything else is refused to stop DNS rebinding.
+	AllowedHosts []string
 }
 
 func loadAPIConfig(v *viper.Viper) APIConfig {
 	return APIConfig{
 		Address:          v.GetString("api.address"),
 		MaterializeToken: v.GetString("api.materialize_token"),
+		AllowedHosts:     v.GetStringSlice("api.allowed_hosts"),
 	}
 }
 

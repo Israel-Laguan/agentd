@@ -23,6 +23,7 @@ type ServerDeps struct {
 	Bus              bus.Bus
 	Project          *services.ProjectService
 	MaterializeToken string
+	AllowedHosts     []string // extra Host header values accepted besides loopback
 	Tasks            *services.TaskService
 	System           *services.SystemService
 	Agents           *services.AgentService
@@ -94,7 +95,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	if deps.MCPHandler != nil {
 		mux.Handle("/mcp", deps.MCPHandler)
 	}
-	return requestLoggingMiddleware(corsMiddleware(mux))
+	return requestLoggingMiddleware(corsMiddleware(guardMiddleware(deps.AllowedHosts, mux)))
 }
 
 // handleLanding serves a minimal daemon landing page so GET / identifies the

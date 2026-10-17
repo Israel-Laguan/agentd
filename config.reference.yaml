@@ -6,6 +6,7 @@ log_level: info
 api:
   address: "127.0.0.1:8765"
   materialize_token: "" # see docs/config-reference.md#api
+  allowed_hosts: [] # extra Host values besides loopback; see docs/config-reference.md#api
 gateway:
   order: [openai, anthropic, gemini, ollama]
   warmup_enabled: true

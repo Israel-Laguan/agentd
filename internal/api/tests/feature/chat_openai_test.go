@@ -124,6 +124,8 @@ func TestChatCompletionStreamsChunks(t *testing.T) {
 	})
 	body := `{"model":"agentd","stream":true,"messages":[{"role":"user","content":"A Python script to scrape a website"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req.Host = "localhost:8765"
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/event-stream") {

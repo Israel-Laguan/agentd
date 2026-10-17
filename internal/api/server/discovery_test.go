@@ -30,6 +30,7 @@ func newDiscoveryHandler() http.Handler {
 func TestDiscoveryRootServesLandingPage(t *testing.T) {
 	h := newDiscoveryHandler()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "localhost:8765"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -51,6 +52,7 @@ func TestDiscoveryRootServesLandingPage(t *testing.T) {
 func TestDiscoveryHealthCheck(t *testing.T) {
 	h := newDiscoveryHandler()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.Host = "localhost:8765"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -70,6 +72,7 @@ func TestDiscoveryHealthCheck(t *testing.T) {
 func TestDiscoveryDocsListsEndpoints(t *testing.T) {
 	h := newDiscoveryHandler()
 	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	req.Host = "localhost:8765"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -88,6 +91,7 @@ func TestDiscoveryDocsListsEndpoints(t *testing.T) {
 func TestDiscoveryUnknownPathStill404(t *testing.T) {
 	h := newDiscoveryHandler()
 	req := httptest.NewRequest(http.MethodGet, "/nope", nil)
+	req.Host = "localhost:8765"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
