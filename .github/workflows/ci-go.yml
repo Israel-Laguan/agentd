@@ -50,12 +50,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # make test's own GOCACHE (.gocache): main tests cold and saves it, PRs restore it so
-      # go test re-runs only packages the diff reaches. Image in key: the cache cannot see
-      # binaries tests exec (bwrap). Label full-ci to test cold.
-      - name: Go test cache key
+      # make test's GOCACHE (.gocache): main tests cold and saves it; PRs restore it, so go test re-runs only
+      # packages the diff reaches. Image in key: the cache cannot see exec'd bwrap. full-ci label: test cold.
+      - name: Go test cache key and file mtimes
         id: gocache
-        run: echo "prefix=go-test-${ImageOS}-${ImageVersion}-${{ hashFiles('go.mod', 'go.sum') }}-" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "prefix=go-test-${ImageOS}-${ImageVersion}-${{ hashFiles('go.mod', 'go.sum') }}-" >> "$GITHUB_OUTPUT"
+          ./tools/ci/restore_mtimes.sh
 
       - name: Restore Go test cache
         if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci')
