@@ -103,11 +103,19 @@ if [[ $legacy -eq 0 ]]; then
   files=0
   lines=0
 
-  # Three-dot: measure from the merge base, so changes that landed on the base
-  # branch after the PR branched do not count against the PR.
-  range="$base...$head"
+  # Prefer the three-dot range (base...head): it measures from the merge base,
+  # so changes that landed on the base branch after the PR branched do not
+  # count against the PR. If the history is too shallow to find a merge base
+  # (CI depth-1 checkout), fall back to the two-dot direct diff.
+  range=()
+  if git merge-base "$base" "$head" >/dev/null 2>&1; then
+    range=("$base...$head")
+  else
+    echo "warning: no merge base between $base and $head; diffing directly (two-dot)" >&2
+    range=("$base" "$head")
+  fi
 
-  if [[ -z "$(git diff --numstat "$range" | head -1)" && -z "${PR_FALLBACK:-}" ]]; then
+  if [[ -z "$(git diff --numstat "${range[@]}" | head -1)" && -z "${PR_FALLBACK:-}" ]]; then
     echo "error: git diff returned nothing; pass legacy totals via legacy mode" >&2
     exit 2
   fi
@@ -132,9 +140,9 @@ if [[ $legacy -eq 0 ]]; then
     if [[ "$added" != "-" && "$deleted" != "-" ]]; then
       lines=$((lines + added + deleted))
     fi
-  done < <(git diff --numstat "$range")
+  done < <(git diff --numstat "${range[@]}")
 
-  echo "PR size (git diff $range): $files files, $lines changed lines; excluded $excluded_files generated files (<$MAX_FILES files, <=$MAX_LINES lines)"
+  echo "PR size (git diff ${range[*]}): $files files, $lines changed lines; excluded $excluded_files generated files (<$MAX_FILES files, <=$MAX_LINES lines)"
 else
   lines=$((additions + deletions))
   echo "PR size (legacy totals): $files files, $lines changed lines (+$additions/-$deletions); limits: <$MAX_FILES files, <=$MAX_LINES lines"
