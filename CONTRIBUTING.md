@@ -29,7 +29,17 @@ make hooks-install  # optional: pre-push hook running make check-commits (hooks 
 
 ### PR size limit
 
-Each PR must change fewer than 100 files and at most 1000 lines (additions plus deletions); split larger work into stacked PRs. The `CI (PR size)` workflow (`.github/workflows/ci-pr-size.yml`, logic in `tools/ci/pr_size.sh`) fails the PR otherwise. A maintainer can waive it for one PR by adding the `large-pr-ok` label (adding or removing the label re-runs the check); use it only for changes that cannot be split, such as generated or mechanical moves.
+Each PR must change fewer than 100 files and at most 1000 *source* lines
+(additions plus deletions among files that are actually reviewed). Generated
+files and machine-produced churn (lockfiles, minified assets, build caches)
+are excluded from the accounting, because their churn is one-for-many noise —
+not code a maintainer will read.
+
+The `CI (PR size)` workflow (`.github/workflows/ci-pr-size.yml`, gate in
+`tools/ci/pr_size.sh`) fails the PR otherwise. A maintainer can waive it for
+one PR by adding the `large-pr-ok` label (adding or removing the label
+re-runs the check); use it only for changes that cannot be split, such as
+generated or mechanical moves.
 
 ### Commit trailers
 

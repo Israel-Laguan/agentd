@@ -1,13 +1,17 @@
 name: CI (PR size)
 
 # Enforces the PR size rule from CONTRIBUTING.md: under 100 changed files and
-# at most 1000 changed lines (additions + deletions). A maintainer can add the
-# `large-pr-ok` label to waive it for one PR; the label events re-run the check.
+# at most 1000 changed *source* lines (generated files excluded). A maintainer
+# can add the `large-pr-ok` label to waive it for one PR; the label events
+# re-run the check.
 #
-# Uses pull_request_target so the workflow definition and the gate script run
-# from trusted, base-controlled code: a contributor must not be able to edit
-# tools/ci/pr_size.sh (or this file) to bypass the gate. The checkout below
-# pins the base SHA, never the PR merge commit.
+# Changed lines are computed from the real base..head diff (git diff --numstat),
+# not GitHub's aggregated additions+deletions totals, so deletion-heavy PRs
+# (dependency drops, lockfile regeneration) aren't punished one-for-one.
+#
+# Uses pull_request_target so the gate runs from trusted, base-controlled code:
+# the counting + exclusion logic lives only in tools/ci/pr_size.sh, and the
+# checkout fetches the PR head so that base..head can be diffed with git.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, labeled, unlabeled]
@@ -25,13 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: refs/pull/${{ github.event.pull_request.number }}/head
           persist-credentials: false
 
       - name: Check PR size
         env:
-          FILES: ${{ github.event.pull_request.changed_files }}
-          ADDITIONS: ${{ github.event.pull_request.additions }}
-          DELETIONS: ${{ github.event.pull_request.deletions }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-        run: bash tools/ci/pr_size.sh "$FILES" "$ADDITIONS" "$DELETIONS" "$LABELS"
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_GIT: "1"
+        run: bash tools/ci/pr_size.sh "$BASE_SHA" "$HEAD_SHA" "$LABELS"
