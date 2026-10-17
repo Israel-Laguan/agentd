@@ -6,10 +6,12 @@ on:
     paths:
       - "web/**"
       - ".github/workflows/ci-web.yml"
+      - "!**/*.md"
   pull_request:
     paths:
       - "web/**"
       - ".github/workflows/ci-web.yml"
+      - "!**/*.md"
 
 concurrency:
   group: ci-web-${{ github.ref }}
