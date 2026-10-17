@@ -47,11 +47,23 @@ func TestIsTaskBatchable_RouterMatchWithoutRegistryStaysBatchable(t *testing.T) 
 	}
 }
 
-func TestIsTaskBatchable_RouterMatchWithRegistryIsNotBatchable(t *testing.T) {
+func TestIsTaskBatchable_RouterMatchWithAdapterIsNotBatchable(t *testing.T) {
+	t.Parallel()
+	registry := capabilities.NewRegistry()
+	registry.Register("stability_api", fakeCapabilityCallAdapter{name: "stability_api"})
+	w := capabilityBatchWorker(registry)
+	if w.isTaskBatchable(context.Background(), imageTask()) {
+		t.Fatal("isTaskBatchable = true, want false: the mapped adapter exists, so the task is routed")
+	}
+}
+
+// A registry without the mapped adapter also falls through in
+// TryExternalCapabilityRoute ("adapter not registered"), so the task stays batchable.
+func TestIsTaskBatchable_RouterMatchWithoutMappedAdapterStaysBatchable(t *testing.T) {
 	t.Parallel()
 	w := capabilityBatchWorker(capabilities.NewRegistry())
-	if w.isTaskBatchable(context.Background(), imageTask()) {
-		t.Fatal("isTaskBatchable = true, want false: a registry exists, so the task is routed")
+	if !w.isTaskBatchable(context.Background(), imageTask()) {
+		t.Fatal("isTaskBatchable = false, want true: the mapped adapter is not registered, so the task cannot be routed")
 	}
 }
 
