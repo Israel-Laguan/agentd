@@ -152,7 +152,9 @@ func TestPRSizeGit(t *testing.T) {
 			gitCmd(t, dir, "config", "user.name", "t")
 			writeFile(t, dir, "big.go", strings.Repeat("z\n", 1001))
 			base := makeCommit(t, dir, "add-big")
-			os.Remove(filepath.Join(dir, "big.go"))
+			if err := os.Remove(filepath.Join(dir, "big.go")); err != nil {
+				t.Fatal(err)
+			}
 			head := makeCommit(t, dir, "del-big")
 			return base, head
 		}, "bug", 1, "1001 changed lines"},
@@ -162,7 +164,9 @@ func TestPRSizeGit(t *testing.T) {
 			gitCmd(t, dir, "config", "user.name", "t")
 			writeFile(t, dir, "big.go", strings.Repeat("z\n", 1001))
 			base := makeCommit(t, dir, "add-big")
-			os.Remove(filepath.Join(dir, "big.go"))
+			if err := os.Remove(filepath.Join(dir, "big.go")); err != nil {
+				t.Fatal(err)
+			}
 			head := makeCommit(t, dir, "del-big")
 			return base, head
 		}, "large-pr-ok", 0, "over limit, overridden"},
