@@ -41,6 +41,7 @@ export function TaskDrawer({
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [status, setStatus] = useState<TaskStatus>(task?.state || TaskStatus.PENDING);
   const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const committedTitleRef = useRef(task?.title ?? "");
   const committedDescriptionRef = useRef(task?.description ?? "");
@@ -73,6 +74,7 @@ export function TaskDrawer({
     setStatus(task.state || TaskStatus.PENDING);
     setIsEditingTitle(false);
     setIsEditingDescription(false);
+    setSaveError(null);
     committedTitleRef.current = task.title ?? "";
     committedDescriptionRef.current = task.description ?? "";
     committedStatusRef.current = task.state || TaskStatus.PENDING;
@@ -87,6 +89,7 @@ export function TaskDrawer({
 
     try {
       await onUpdateTask(task.id, patch);
+      setSaveError(null);
       if (patch.title !== undefined) committedTitleRef.current = patch.title;
       if (patch.description !== undefined) committedDescriptionRef.current = patch.description;
       if (patch.state !== undefined) committedStatusRef.current = patch.state;
@@ -95,6 +98,7 @@ export function TaskDrawer({
       setDescription(committedDescriptionRef.current);
       setStatus(committedStatusRef.current);
       console.error("Failed to save task:", err);
+      setSaveError(err instanceof Error ? err.message : "Could not save the change");
       throw err;
     }
   };
@@ -132,6 +136,12 @@ export function TaskDrawer({
 
           {/* content */}
           <div className="flex-1 p-4 space-y-5 overflow-y-auto">
+
+            {saveError && (
+              <p role="alert" className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded px-2 py-1">
+                {saveError}
+              </p>
+            )}
 
             {/* TITLE (editable in mock mode only; daemon PATCH does not support title yet) */}
             <div>

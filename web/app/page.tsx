@@ -47,7 +47,7 @@ export default function Page() {
     refreshDashboard,
   } = useDashboard(setSelectedTask);
 
-  const { handleDragEnd, handleUpdateTask } = useTaskBoard(
+  const { handleDragEnd, handleUpdateTask, writeError, clearWriteError } = useTaskBoard(
     localTasks,
     setLocalTasks,
     setSelectedTask
@@ -168,6 +168,17 @@ export default function Page() {
                 {boardError && (
                   <div className="mx-4 mt-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
                     Could not reach daemon — board may be stale. Retrying&hellip;
+                  </div>
+                )}
+                {writeError && (
+                  <div
+                    role="alert"
+                    className="mx-4 mt-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center justify-between gap-3"
+                  >
+                    <span>{writeError}</span>
+                    <button type="button" onClick={clearWriteError} aria-label="Dismiss error">
+                      &times;
+                    </button>
                   </div>
                 )}
                 <BoardView
