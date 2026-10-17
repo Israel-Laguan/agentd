@@ -50,6 +50,21 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # make test's own GOCACHE (.gocache): main tests cold and saves it, PRs restore it so
+      # go test re-runs only packages the diff reaches. Image in key: the cache cannot see
+      # binaries tests exec (bwrap). Label full-ci to test cold.
+      - name: Go test cache key
+        id: gocache
+        run: echo "prefix=go-test-${ImageOS}-${ImageVersion}-${{ hashFiles('go.mod', 'go.sum') }}-" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go test cache
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci')
+        uses: actions/cache/restore@v6
+        with:
+          path: .gocache
+          key: ${{ steps.gocache.outputs.prefix }}${{ github.sha }}
+          restore-keys: ${{ steps.gocache.outputs.prefix }}
+
       - name: Verify go.mod is tidy
         id: gomod_check
         continue-on-error: true
@@ -234,6 +249,13 @@ jobs:
             core.setFailed(
               'Go tests failed. Open the Test step log for package and assertion details.'
             );
+
+      - name: Save Go test cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v6
+        with:
+          path: .gocache
+          key: ${{ steps.gocache.outputs.prefix }}${{ github.sha }}
 
       - name: Comment CI failure on PR
         if: failure() && github.event_name == 'pull_request'
