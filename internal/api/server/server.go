@@ -24,6 +24,7 @@ type ServerDeps struct {
 	Project          *services.ProjectService
 	MaterializeToken string
 	AllowedHosts     []string // extra Host header values accepted besides loopback
+	UIOrigin         string   // web UI origin trusted for CORS and writes; empty trusts none
 	Tasks            *services.TaskService
 	System           *services.SystemService
 	Agents           *services.AgentService
@@ -95,7 +96,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	if deps.MCPHandler != nil {
 		mux.Handle("/mcp", deps.MCPHandler)
 	}
-	return requestLoggingMiddleware(corsMiddleware(guardMiddleware(deps.AllowedHosts, mux)))
+	return requestLoggingMiddleware(corsMiddleware(deps.UIOrigin, guardMiddleware(guardConfig{allowedHosts: deps.AllowedHosts, uiOrigin: deps.UIOrigin}, mux)))
 }
 
 // handleLanding serves a minimal daemon landing page so GET / identifies the
@@ -141,30 +142,23 @@ func handleDocs(w http.ResponseWriter, _ *http.Request) {
 `))
 }
 
-// corsAllowedOrigins is the set of origins permitted to make cross-origin
-// requests to the daemon. Restricted to the local Next.js dev server so that
-// arbitrary websites cannot read daemon API responses in a user's browser.
-var corsAllowedOrigins = map[string]struct{}{
-	"http://localhost:3000": {},
-}
-
-// corsMiddleware adds CORS headers for allowed origins so the Next.js dev
-// server (localhost:3000) can reach the daemon (localhost:8765) without a
-// proxy. Origins not in the allowlist receive no CORS headers.
-func corsMiddleware(next http.Handler) http.Handler {
+// corsMiddleware adds CORS headers for the configured web UI origin
+// (api.ui_origin, default http://localhost:3000) so the Next.js app can reach
+// the daemon on another port without a proxy. Other origins receive no CORS
+// headers, so arbitrary websites cannot read API responses in the browser.
+func corsMiddleware(uiOrigin string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if _, ok := corsAllowedOrigins[origin]; ok {
+		trusted := isUIOrigin(origin, uiOrigin)
+		if trusted {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Agentd-Materialize-Token")
 		}
-		if r.Method == http.MethodOptions && origin != "" {
-			if _, ok := corsAllowedOrigins[origin]; ok {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
+		if r.Method == http.MethodOptions && trusted {
+			w.WriteHeader(http.StatusNoContent)
+			return
 		}
 		next.ServeHTTP(w, r)
 	})

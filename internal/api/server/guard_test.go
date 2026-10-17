@@ -8,7 +8,7 @@ import (
 )
 
 func guardedOK(allowed ...string) http.Handler {
-	return guardMiddleware(allowed, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	return guardMiddleware(guardConfig{allowedHosts: allowed, uiOrigin: "http://localhost:3000"}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 }
