@@ -252,7 +252,7 @@ jobs:
             );
 
       - name: Save Go test cache
-        if: always()  # TRIAL ONLY (SP-026): save from PR runs too; revert before merge
+        if: github.event_name == 'push'
         uses: actions/cache/save@v6
         with:
           path: .gocache
