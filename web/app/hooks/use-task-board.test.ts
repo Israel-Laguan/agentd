@@ -24,14 +24,14 @@ const task: Task = {
 
 function setup() {
   return renderHook(() => {
-    const [tasks, setTasks] = useState<Task[]>([task]);
+    const [tasks, setTasks] = useState<Task[]>([task, { ...task, id: "t2" }]);
     const [, setSelected] = useState<Task | null>(null);
     return { tasks, board: useTaskBoard(tasks, setTasks, setSelected) };
   });
 }
 
-const drop = (to: TaskStatus) =>
-  ({ active: { id: "t1" }, over: { id: to } }) as unknown as Parameters<
+const drop = (to: TaskStatus, id = "t1") =>
+  ({ active: { id }, over: { id: to } }) as unknown as Parameters<
     ReturnType<typeof useTaskBoard>["handleDragEnd"]
   >[0];
 
@@ -68,5 +68,19 @@ describe("useTaskBoard drag errors", () => {
     mockUpdate.mockResolvedValueOnce({ ...task, state: TaskStatus.QUEUED, updated_at: 9 });
     act(() => result.current.board.handleDragEnd(drop(TaskStatus.QUEUED)));
     await waitFor(() => expect(result.current.board.writeError).toBeNull());
+  });
+
+  it("ignores a rejection from an older drag once a newer drag has started", async () => {
+    let rejectFirst: (e: Error) => void = () => {};
+    mockUpdate.mockImplementationOnce(() => new Promise((_, reject) => (rejectFirst = reject)));
+    mockUpdate.mockResolvedValueOnce({ ...task, id: "t2", state: TaskStatus.QUEUED, updated_at: 9 });
+    const { result } = setup();
+
+    act(() => result.current.board.handleDragEnd(drop(TaskStatus.COMPLETED, "t1")));
+    act(() => result.current.board.handleDragEnd(drop(TaskStatus.QUEUED, "t2")));
+    await act(async () => rejectFirst(new ApiError("stale failure", 409)));
+
+    expect(result.current.board.writeError).toBeNull();
+    expect(result.current.tasks.find((t) => t.id === "t1")?.state).toBe(TaskStatus.READY);
   });
 });

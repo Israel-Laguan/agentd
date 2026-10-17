@@ -11,6 +11,8 @@ export function useTaskBoard(
   setSelectedTask: React.Dispatch<React.SetStateAction<Task | null>>
 ) {
   const dragVersionRef = useRef<Map<string, number>>(new Map());
+  // Board-wide drag counter: only the latest drag may set writeError.
+  const latestDragRef = useRef(0);
   // The daemon's message for the latest rejected drag, for the board to show.
   const [writeError, setWriteError] = useState<string | null>(null);
 
@@ -34,6 +36,7 @@ export function useTaskBoard(
     const prevUpdatedAt = currentTask?.updated_at;
     const dragVersion = (dragVersionRef.current.get(taskId) ?? 0) + 1;
     dragVersionRef.current.set(taskId, dragVersion);
+    const dragSequence = ++latestDragRef.current;
     const now = Date.now();
     setWriteError(null);
 
@@ -73,7 +76,9 @@ export function useTaskBoard(
       .catch((err) => {
       console.error("Failed to persist task status", err);
       if (dragVersionRef.current.get(taskId) !== dragVersion) return;
-      setWriteError(err instanceof Error ? err.message : "Could not move the task");
+      if (latestDragRef.current === dragSequence) {
+        setWriteError(err instanceof Error ? err.message : "Could not move the task");
+      }
       if (prevStatus === undefined || prevUpdatedAt === undefined) return;
 
       setLocalTasks((tasks) =>

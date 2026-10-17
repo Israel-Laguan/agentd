@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Task, TaskStatus } from "@/lib/types";
+import { addTaskComment } from "@/lib/api";
 import { ApiError } from "@/lib/http";
 import { TaskDrawer } from "./task-drawer";
 
@@ -66,5 +67,18 @@ describe("TaskDrawer failed edits", () => {
     await userEvent.selectOptions(select, TaskStatus.READY);
 
     await vi.waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("does not show a late comment error from the previous task", async () => {
+    let rejectPost: (e: Error) => void = () => {};
+    vi.mocked(addTaskComment).mockImplementationOnce(() => new Promise((_, reject) => (rejectPost = reject)));
+    const { rerender } = render(<TaskDrawer task={task} onClose={vi.fn()} />);
+
+    await userEvent.type(screen.getByPlaceholderText("Write a comment..."), "for task one");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    rerender(<TaskDrawer task={{ ...task, id: "t2" }} onClose={vi.fn()} />);
+    await act(async () => rejectPost(new ApiError("task one failure", 409)));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

@@ -270,7 +270,7 @@ export function TaskDrawer({
 
             {/* COMMENTS */}
             <div className="pt-4 border-t border-border">
-              <CommentPanel taskId={task.id} />
+              <CommentPanel key={task.id} taskId={task.id} />
             </div>
           </div>
         </motion.div>
