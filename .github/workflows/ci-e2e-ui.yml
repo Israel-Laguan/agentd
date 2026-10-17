@@ -9,8 +9,9 @@ name: CI (e2e UI smoke)
 # Runs:
 #   - weekly, on main;
 #   - on demand (Actions > CI (e2e UI smoke) > Run workflow);
-#   - on a pull request that touches the web app, the stack it runs against,
-#     or the Makefile target that drives both.
+#   - on a pull request that touches the web app, the stack it runs against
+#     (devenv/, the Dockerfile that builds the agentd image), or the Makefile
+#     target that drives both. Markdown-only changes never trigger it.
 on:
   schedule:
     - cron: "17 5 * * 1"
@@ -20,7 +21,10 @@ on:
       - "web/**"
       - "devenv/**"
       - "Makefile"
+      - "Dockerfile"
+      - ".dockerignore"
       - ".github/workflows/ci-e2e-ui.yml"
+      - "!**/*.md"
 
 concurrency:
   group: ci-e2e-ui-${{ github.ref }}

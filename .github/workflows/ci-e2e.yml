@@ -16,7 +16,8 @@ name: CI (e2e journeys)
 #   - weekly, on main;
 #   - on demand (Actions > CI (e2e journeys) > Run workflow);
 #   - on a pull request that touches the stack or the journeys themselves, so a
-#     change to devenv/ or test/e2e/ is proven by the suite it changes.
+#     change to devenv/, the Dockerfile or test/e2e/ is proven by the suite it
+#     changes. Markdown-only changes (test/e2e/README.md) never trigger it.
 on:
   schedule:
     - cron: "17 5 * * 1"
@@ -26,7 +27,10 @@ on:
       - "test/e2e/**"
       - "devenv/**"
       - "Makefile"
+      - "Dockerfile"
+      - ".dockerignore"
       - ".github/workflows/ci-e2e.yml"
+      - "!**/*.md"
 
 concurrency:
   group: ci-e2e-${{ github.ref }}
