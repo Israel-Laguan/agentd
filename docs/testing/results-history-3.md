@@ -194,6 +194,8 @@ PID, and a reused PID is by definition not our own.
 If either limit resurfaces, size the two together: both need a per-boot instance ID
 (or process start-time check), so that change is costed once. That conditional now
 has a ticket home, B-026 (S11, P3), instead of living only in this paragraph.
+(Later, S15: B-026 was retired. The limits and this conditional now live under Known limits in
+[`recovery-rerun.md`](../architecture/recovery-rerun.md#known-limits), and both guard tests fail on a change.)
 
 Both sets of tests are written to fail if the behaviour ever changes, so the
 accepted limits cannot silently stop being true — the `withoutOwnPID` mutation
