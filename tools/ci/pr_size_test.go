@@ -170,6 +170,14 @@ func TestPRSizeGit(t *testing.T) {
 			head := makeCommit(t, dir, "del-big")
 			return base, head
 		}, "large-pr-ok", 0, "over limit, overridden"},
+		{"missing base object is a usage error with a hint", func(t *testing.T, dir string) (string, string) {
+			gitCmd(t, dir, "init", "-q")
+			gitCmd(t, dir, "config", "user.email", "t@t")
+			gitCmd(t, dir, "config", "user.name", "t")
+			writeFile(t, dir, "a.go", "package main\n")
+			head := makeCommit(t, dir, "only")
+			return "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", head
+		}, "bug", 2, "fetch-depth: 0"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

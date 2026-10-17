@@ -31,6 +31,10 @@ jobs:
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/head
           persist-credentials: false
+          # Full history: the gate diffs base..head, so the base commit must
+          # exist locally. A shallow checkout leaves only the head commit and
+          # git diff fails with "bad object <base_sha>".
+          fetch-depth: 0
 
       - name: Check PR size
         env:
