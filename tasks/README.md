@@ -55,7 +55,7 @@ this README/backlog before the sprint folder is cleared.
 | Series | Next free (seeded) |
 | --- | --- |
 | US- | US-011 |
-| T- | T-040 |
+| T- | T-041 |
 | B- | B-064 |
 | SP- | SP-022 |
 
