@@ -128,6 +128,16 @@ func (w *Worker) commitCapabilityRouteResult(
 	return agentruntime.LoopResult{Status: agentruntime.LoopSuccessfulCompletion}
 }
 
+// warnCapabilityRoutingUnavailable says once, at startup, that an enabled
+// capability router has no adapter registry, so matching tasks take the normal
+// path (B-061).
+func (w *Worker) warnCapabilityRoutingUnavailable() {
+	if w.capabilityRouter == nil || w.capabilities != nil {
+		return
+	}
+	slog.Warn("capability routing is enabled but no capability adapters are available; matching tasks use the normal path")
+}
+
 func (w *Worker) TryExternalCapabilityRoute(
 	ctx context.Context,
 	task models.Task,

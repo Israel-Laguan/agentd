@@ -245,6 +245,7 @@ func NewWorker(
 	w.modelRouter = agentruntime.NewModelRouter(opts.ModelRouting)
 	w.toolManifest = agenttools.NewToolManifest(opts.ToolManifest)
 	w.capabilityRouter = agentruntime.NewCapabilityRouter(opts.CapabilityRouting)
+	w.warnCapabilityRoutingUnavailable()
 	w.batcher = NewTaskBatcher(opts.Batching, w)
 	w.setupFileContext(opts)
 	w.setupPromptLibrary(opts)
