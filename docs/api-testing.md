@@ -22,6 +22,14 @@ The agentd API follows a consistent JSON envelope format:
 
 **Base URL**: `http://localhost:8765`
 
+### Write guard
+
+A web page you open can make your browser send requests to the daemon, so every request passes a guard first:
+
+- **`Host`** must be `localhost`, a loopback IP, or an entry of `api.allowed_hosts`. Anything else gets `403 FORBIDDEN` (this stops DNS rebinding).
+- **Writes** (`POST`, `PUT`, `PATCH`, `DELETE`) that carry an `Origin` header must come from the web UI origin (`http://localhost:3000`). Other origins get `403 FORBIDDEN`. Clients that are not browsers send no `Origin` and are not affected.
+- **Writes with a body** must send `Content-Type: application/json`, otherwise `415`. With curl, add `-H 'Content-Type: application/json'` (`-d` alone sends a form type). Writes without a body, such as `workspace/ready` and `breaker/reset`, need no content type.
+
 ---
 
 ## System Endpoints
