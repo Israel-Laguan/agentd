@@ -13,6 +13,10 @@ uploads_dir: /home/agentd/uploads
 
 api:
   address: "0.0.0.0:8765"
+  # source_path seeds must resolve under this root. The default (the user's
+  # home) is the agentd home in this image, which is always refused, so the
+  # e2e journeys seed from here instead (test/e2e/devenv.go).
+  source_root: /tmp/agentd-sources
 
 gateway:
   order: [litellm]

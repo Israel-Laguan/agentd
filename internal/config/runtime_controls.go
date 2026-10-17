@@ -1,7 +1,12 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
+
+	"agentd/internal/paths"
 
 	"github.com/spf13/viper"
 )
@@ -22,6 +27,9 @@ type APIConfig struct {
 	// CORS headers only to it, accepts browser writes only from it, and lets
 	// those writes skip MaterializeToken. Empty trusts no browser origin.
 	UIOrigin string
+	// SourceRoot is the host directory materialize's source_path must resolve
+	// under. Default: the user's home. Empty refuses every source_path.
+	SourceRoot string
 }
 
 const defaultUIOrigin = "http://localhost:3000"
@@ -30,6 +38,9 @@ func setAPIDefaults(v *viper.Viper) {
 	v.SetDefault("api.address", defaultAPIAddress)
 	v.SetDefault("api.materialize_token", "")
 	v.SetDefault("api.ui_origin", defaultUIOrigin)
+	if home, err := os.UserHomeDir(); err == nil {
+		v.SetDefault("api.source_root", home)
+	}
 }
 
 func loadAPIConfig(v *viper.Viper) APIConfig {
@@ -38,7 +49,24 @@ func loadAPIConfig(v *viper.Viper) APIConfig {
 		MaterializeToken: v.GetString("api.materialize_token"),
 		AllowedHosts:     v.GetStringSlice("api.allowed_hosts"),
 		UIOrigin:         v.GetString("api.ui_origin"),
+		SourceRoot:       resolveSourceRoot(v.GetString("api.source_root")),
 	}
+}
+
+// resolveSourceRoot expands "~/" and makes the path absolute. Empty stays empty,
+// which refuses every source_path.
+func resolveSourceRoot(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "~") {
+		raw = paths.ExpandTildePrefix(raw)
+	}
+	if abs, err := filepath.Abs(raw); err == nil {
+		return abs
+	}
+	return raw
 }
 
 const (

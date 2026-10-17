@@ -266,3 +266,28 @@ func TestLoad_APIUIOrigin(t *testing.T) {
 		t.Errorf("UIOrigin = %q", got)
 	}
 }
+
+func TestLoad_APISourceRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(LoadOptions{HomeOverride: homeDir})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.API.SourceRoot != home {
+		t.Errorf("SourceRoot default = %q, want the user's home %q", cfg.API.SourceRoot, home)
+	}
+	v := viper.New()
+	v.Set("api.source_root", "~/code")
+	if got := loadAPIConfig(v).SourceRoot; got != filepath.Join(home, "code") {
+		t.Errorf("SourceRoot = %q, want ~ expanded", got)
+	}
+	v.Set("api.source_root", "")
+	if got := loadAPIConfig(v).SourceRoot; got != "" {
+		t.Errorf("SourceRoot = %q, want empty to stay empty", got)
+	}
+}

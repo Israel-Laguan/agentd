@@ -78,7 +78,7 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 		breaker:          breaker,
 		providerBreakers: providerBreakers,
 		canceller:        queue.NewCancelRegistry(),
-		project:          services.NewProjectService(store, ws),
+		project:          services.NewProjectService(store, ws).WithSourcePolicy(sandbox.SourcePolicy{Root: cfg.API.SourceRoot, AgentdHome: cfg.HomeDir}),
 		runner:           queue.NewTaskRunner(gw, store, emitter, ws, cfg.ProjectsDir),
 	}, nil
 }
