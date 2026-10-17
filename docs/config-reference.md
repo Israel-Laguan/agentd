@@ -14,7 +14,11 @@ Effective home is resolved from `--home`, `AGENTD_HOME`, or `.env` (CWD then `~/
 
 ## API
 
-When `api.materialize_token` is non-empty, `POST /api/v1/projects/materialize` requires header `X-Agentd-Materialize-Token` with that exact value. The CLI `agentd ask` sends it automatically.
+When `api.materialize_token` is non-empty, `POST /api/v1/projects/materialize` (and `workspace/ready`, `human-resolution`) requires header `X-Agentd-Materialize-Token` with that exact value. The CLI `agentd ask` sends it automatically. Requests whose `Origin` is `api.ui_origin` skip the token.
+
+`api.ui_origin` (default `http://localhost:3000`) is the web UI's origin. The daemon sends CORS headers only to it, accepts browser writes only from it, and lets those writes skip the materialize token. Set it to the exact `scheme://host:port` the UI is served from; `""` trusts no browser origin.
+
+`api.source_root` (default: your home directory, `~` is expanded) limits `source_path` on materialize. The path, after following symlinks, must be under this root, and must not be the agentd home, inside it, or a parent of it. Otherwise materialize returns `400`. `""` refuses every `source_path`.
 
 `api.allowed_hosts` (list, default empty) names extra `Host` header values the API accepts. Loopback names (`localhost`, `127.0.0.1`, `::1`) always pass; any other `Host` gets `403`. Add an entry when clients reach the daemon under another name, for example `agentd` for a compose service name. An entry without a port matches any port; `agentd:8765` matches only that port. Env: `AGENTD_API_ALLOWED_HOSTS` (space-separated). See the write guard in [`api-testing.md`](api-testing.md#write-guard).
 
