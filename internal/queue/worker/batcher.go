@@ -160,7 +160,9 @@ func (w *Worker) isTaskBatchable(ctx context.Context, task models.Task) bool {
 }
 
 func (w *Worker) wouldCapabilityRoute(task models.Task, profile models.AgentProfile) bool {
-	if w.capabilityRouter == nil {
+	// Without a registry TryExternalCapabilityRoute falls through, so the task
+	// is not routed and stays batchable (B-061).
+	if w.capabilityRouter == nil || w.capabilities == nil {
 		return false
 	}
 	_, ok := w.capabilityRouter.Route(task, profile)

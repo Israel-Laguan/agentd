@@ -112,6 +112,7 @@ agentic:
   batching:
     enabled: false
     max_batch_size: 5
+  # No capability adapters exist yet (B-061, B-063): enabling this only logs a startup warning.
   capability_routing:
     enabled: false
     min_confidence: 0.35
