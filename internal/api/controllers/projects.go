@@ -119,9 +119,11 @@ func (h ProjectHandler) WorkspaceReady(w http.ResponseWriter, r *http.Request) {
 
 const materializeTokenHeader = "X-Agentd-Materialize-Token"
 
+// verifyMaterializeToken passes requests the guard marked as coming from the
+// web UI origin; other clients must send the token when one is configured.
 func verifyMaterializeToken(r *http.Request, wantValue string) error {
 	want := strings.TrimSpace(wantValue)
-	if want == "" {
+	if want == "" || httpx.FromTrustedOrigin(r.Context()) {
 		return nil
 	}
 	got := strings.TrimSpace(r.Header.Get(materializeTokenHeader))

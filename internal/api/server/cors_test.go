@@ -10,7 +10,7 @@ func TestCorsMiddleware_AllowedOrigin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := corsMiddleware(next)
+	handler := corsMiddleware("http://localhost:3000", next)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
 	req.Header.Set("Origin", "http://localhost:3000")
@@ -32,7 +32,7 @@ func TestCorsMiddleware_DisallowedOrigin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := corsMiddleware(next)
+	handler := corsMiddleware("http://localhost:3000", next)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
 	req.Header.Set("Origin", "https://evil.example")
@@ -48,7 +48,7 @@ func TestCorsMiddleware_OptionsPreflight(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		t.Fatal("next handler should not run for OPTIONS preflight")
 	})
-	handler := corsMiddleware(next)
+	handler := corsMiddleware("http://localhost:3000", next)
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/projects", nil)
 	req.Header.Set("Origin", "http://localhost:3000")
@@ -64,7 +64,7 @@ func TestCorsMiddleware_OptionsDisallowedOrigin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := corsMiddleware(next)
+	handler := corsMiddleware("http://localhost:3000", next)
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/projects", nil)
 	req.Header.Set("Origin", "https://evil.example")
@@ -83,7 +83,7 @@ func TestCorsMiddleware_OptionsWithoutOrigin(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := corsMiddleware(next)
+	handler := corsMiddleware("http://localhost:3000", next)
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/projects", nil)
 	rec := httptest.NewRecorder()

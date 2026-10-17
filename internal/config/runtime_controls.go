@@ -18,6 +18,18 @@ type APIConfig struct {
 	// port. Set it when clients reach the daemon by another name, for example
 	// a compose service name. Anything else is refused to stop DNS rebinding.
 	AllowedHosts []string
+	// UIOrigin is the web UI's origin (scheme://host:port). The daemon sends
+	// CORS headers only to it, accepts browser writes only from it, and lets
+	// those writes skip MaterializeToken. Empty trusts no browser origin.
+	UIOrigin string
+}
+
+const defaultUIOrigin = "http://localhost:3000"
+
+func setAPIDefaults(v *viper.Viper) {
+	v.SetDefault("api.address", defaultAPIAddress)
+	v.SetDefault("api.materialize_token", "")
+	v.SetDefault("api.ui_origin", defaultUIOrigin)
 }
 
 func loadAPIConfig(v *viper.Viper) APIConfig {
@@ -25,6 +37,7 @@ func loadAPIConfig(v *viper.Viper) APIConfig {
 		Address:          v.GetString("api.address"),
 		MaterializeToken: v.GetString("api.materialize_token"),
 		AllowedHosts:     v.GetStringSlice("api.allowed_hosts"),
+		UIOrigin:         v.GetString("api.ui_origin"),
 	}
 }
 

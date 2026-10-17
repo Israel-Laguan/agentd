@@ -247,3 +247,22 @@ func TestLoadAPIConfig_AllowedHosts(t *testing.T) {
 		t.Errorf("AllowedHosts = %v", got)
 	}
 }
+
+func TestLoad_APIUIOrigin(t *testing.T) {
+	homeDir := filepath.Join(t.TempDir(), "agentd")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(LoadOptions{HomeOverride: homeDir})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.API.UIOrigin != "http://localhost:3000" {
+		t.Errorf("UIOrigin default = %q, want http://localhost:3000", cfg.API.UIOrigin)
+	}
+	v := viper.New()
+	v.Set("api.ui_origin", "http://board.example:3000")
+	if got := loadAPIConfig(v).UIOrigin; got != "http://board.example:3000" {
+		t.Errorf("UIOrigin = %q", got)
+	}
+}

@@ -55,3 +55,21 @@ func requestWithHeader(handler http.Handler, method, path, body, key, val string
 	handler.ServeHTTP(rec, req)
 	return rec
 }
+
+// D1: the web UI proves itself by its Origin, which a browser page on another
+// site cannot forge, so it no longer needs the token in its bundle (B-064).
+func TestMaterializeFromTrustedUIOriginSkipsToken(t *testing.T) {
+	store := testutil.NewFakeStore()
+	wsRoot := t.TempDir()
+	store.SetProjectsDir(wsRoot)
+	projectService := services.NewProjectService(store, &sandbox.FSWorkspaceManager{Root: wsRoot})
+	handler := api.NewHandler(api.ServerDeps{
+		Store: store, Gateway: newAPIGateway(), Bus: bus.NewInProcess(), Project: projectService,
+		Summarizer:       frontdesk.NewStatusSummarizer(store),
+		MaterializeToken: "expected-secret-token",
+		UIOrigin:         "http://localhost:3000",
+	})
+	body := `{"project_name":"p","tasks":[{"title":"t","description":"d"}]}`
+	resp := requestWithHeader(handler, http.MethodPost, "/api/v1/projects/materialize", body, "Origin", "http://localhost:3000")
+	assertStatus(t, resp, http.StatusCreated)
+}
