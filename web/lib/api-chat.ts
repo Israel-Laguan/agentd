@@ -4,10 +4,21 @@ import {
   DraftPlan,
   MaterializeResult,
 } from "@/lib/types";
-import { unwrapData, mapDaemonDraftPlan } from "@/lib/mappers";
+import { mapDaemonDraftPlan } from "@/lib/mappers";
+import { requestJSON } from "@/lib/http";
 import { parseStructuredIntake, displayContentForChat } from "@/lib/chat-intake";
 import { API, CREATE_PLAN_TOOL_DEF, MATERIALIZE_TOKEN, USE_MOCK } from "@/lib/api-config";
 import type { ChatSettings } from "@/lib/chat-settings";
+
+interface ChatCompletion {
+  id?: string;
+  choices?: {
+    message?: {
+      content?: string | null;
+      tool_calls?: { function?: { name?: string; arguments?: string } }[];
+    };
+  }[];
+}
 
 export async function sendChat(
   message: string,
@@ -25,17 +36,14 @@ export async function sendChat(
     body.approved_scopes = approvedScopes;
   }
 
-  const res = await fetch(`${API}/v1/chat/completions`, {
+  const envelope = await requestJSON<ChatCompletion | null>(`${API}/v1/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body,
+    unwrap: false,
   });
-  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-  const envelope = await res.json();
   const choice = envelope?.choices?.[0];
-  const content: string | null | undefined = choice?.message?.content;
-  const toolCalls: { function?: { name?: string; arguments?: string } }[] | undefined =
-    choice?.message?.tool_calls;
+  const content = choice?.message?.content;
+  const toolCalls = choice?.message?.tool_calls;
 
   if (!content && (!toolCalls || toolCalls.length === 0)) {
     throw new Error("Invalid chat response: missing choices[0].message.content and tool_calls");
@@ -102,22 +110,11 @@ export async function postApprovePlan(plan: DraftPlan): Promise<MaterializeResul
     })),
   };
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (MATERIALIZE_TOKEN) {
-    headers["X-Agentd-Materialize-Token"] = MATERIALIZE_TOKEN;
-  }
-
-  const res = await fetch(`${API}/api/v1/projects/materialize`, {
+  const data = await requestJSON<Record<string, unknown>>(`${API}/api/v1/projects/materialize`, {
     method: "POST",
-    headers,
-    body: JSON.stringify(daemonBody),
+    body: daemonBody,
+    token: MATERIALIZE_TOKEN,
   });
-
-  if (!res.ok) {
-    throw new Error(`Failed to approve plan: ${res.status}`);
-  }
-
-  const data = unwrapData<Record<string, unknown>>(await res.json());
   const project = (data?.project ?? data?.Project) as Record<string, unknown> | undefined;
   const projectId = String(
     project?.id ??
