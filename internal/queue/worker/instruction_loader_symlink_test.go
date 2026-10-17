@@ -18,8 +18,8 @@ func TestLoadProjectInstructions_SymlinkOutsideWorkspaceNotRead(t *testing.T) {
 
 	l := &InstructionLoader{}
 	pi, err := l.LoadProjectInstructions(ws, "")
-	if err == nil && pi != nil {
-		t.Fatalf("instructions read through a symlink that leaves the workspace: %+v", pi)
+	if err != nil || pi != nil {
+		t.Fatalf("escaping AGENTS.md must be skipped without error: pi=%+v err=%v", pi, err)
 	}
 }
 
