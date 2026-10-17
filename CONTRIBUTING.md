@@ -78,6 +78,7 @@ Portkey / OpenRouter) for provider diversity. See
 - Unit tests: `*_test.go` files alongside the code they test. Use table-driven tests for multi-case scenarios.
 - BDD tests: `*.feature` files with Godog step definitions in `*_feature_steps_test.go` files.
 - All tests must pass with the race detector enabled (CI runs `make test`, which uses `-race`).
+- On a PR, `CI (Go)` restores the Go test cache saved by the last `main` run, so `go test` re-runs only the packages your diff reaches; the rest log `(cached)`. To test every package cold, add the `full-ci` label: that starts a new run (re-running an old run keeps its original labels, so it still restores the cache). A PR that changes only documentation (`docs/**`, `*.md`, `.markdownlint.json`, `.lychee.toml`) skips lint and tests; the commit, LOC and docs checks still run.
 
 **While editing** — run only what you changed:
 
