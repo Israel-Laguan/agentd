@@ -164,7 +164,7 @@ Enabled per agent profile via `AgentProfile.agentic_mode`. Tool rate limits are 
 | `prompt_templates_path` | Named prompt templates with typed slots (embedded defaults + optional file override). |
 | `scheduler` | Cron/deferred dispatch (minute tick); fields: `id`, `cron_expr`, `task_type`, `context_fn`, `context_args`, `output_target`, `title`. |
 | `batching` | Batch independent tool-free tasks in one LLM call (same project + agent). |
-| `capability_routing` | Route matching intents to external adapters, bypassing the agentic turn loop. Runs after `model_routing`. |
+| `capability_routing` | Route matching intents to external adapters, bypassing the agentic turn loop. Runs after `model_routing`. No capability adapters are available yet (plugins are not loaded, B-063), so enabling it only logs a startup warning and matching tasks take the normal path (B-061). |
 
 ## Healing
 
@@ -209,4 +209,6 @@ Cron schedules live in `<home>/agentd.crontab`.
 
 ## Plugins
 
-Plugins are directories inside the configured path, each containing a `manifest.json` declaring hooks, capabilities, and env requirements. Load order follows numeric directory prefix (`01-security/`, `02-observability/`, `10-code-quality/`) or the manifest `priority` field. A restart is required to pick up new or changed plugins.
+> **Not loaded yet (B-063).** The daemon does not mount plugins, and no config key sets a plugins directory. The format below is the planned one.
+
+Plugins are directories inside a plugins directory, each containing a `manifest.json` declaring hooks, capabilities, and env requirements. Load order follows numeric directory prefix (`01-security/`, `02-observability/`, `10-code-quality/`) or the manifest `priority` field. A restart is required to pick up new or changed plugins.
