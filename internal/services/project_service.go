@@ -14,14 +14,21 @@ import (
 // ProjectService materializes approved DraftPlans into board state and
 // ensures the project workspace exists on disk.
 type ProjectService struct {
-	store models.KanbanStore
-	ws    sandbox.WorkspaceManager
+	store        models.KanbanStore
+	ws           sandbox.WorkspaceManager
+	sourcePolicy *sandbox.SourcePolicy
 }
 
 // NewProjectService wires the store and workspace manager required to
 // materialize plans.
 func NewProjectService(store models.KanbanStore, ws sandbox.WorkspaceManager) *ProjectService {
 	return &ProjectService{store: store, ws: ws}
+}
+
+// WithSourcePolicy limits source_path to the policy's root (decision D2).
+func (s *ProjectService) WithSourcePolicy(p sandbox.SourcePolicy) *ProjectService {
+	s.sourcePolicy = &p
+	return s
 }
 
 // MaterializePlan persists the project and its tasks, then provisions the
@@ -110,6 +117,14 @@ func (s *ProjectService) stageSeed(ctx context.Context, sourcePath string) (sand
 	if _, err := sandbox.ValidateSourcePath(sourcePath); err != nil {
 		slog.Warn("materialize plan: invalid source_path", "source_path", sourcePath, "error", err)
 		return nil, fmt.Errorf("%w: source_path: %w", models.ErrInvalidDraftPlan, err)
+	}
+	if s.sourcePolicy != nil {
+		real, err := s.sourcePolicy.Resolve(sourcePath)
+		if err != nil {
+			slog.Warn("materialize plan: source_path refused", "source_path", sourcePath, "error", err)
+			return nil, fmt.Errorf("%w: source_path: %w", models.ErrInvalidDraftPlan, err)
+		}
+		sourcePath = real
 	}
 	staged, err := s.ws.StageSeed(ctx, sourcePath)
 	if err != nil {
