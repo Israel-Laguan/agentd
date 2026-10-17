@@ -84,6 +84,16 @@ if [[ $legacy -eq 0 ]]; then
     exit 2
   fi
 
+  # Both endpoints must exist locally. In CI this fails with a shallow
+  # checkout (only the head commit is fetched); fix with `fetch-depth: 0`.
+  for rev in "$base" "$head"; do
+    if ! git cat-file -e "$rev" 2>/dev/null; then
+      echo "error: git object '$rev' not found locally." >&2
+      echo "hint: fetch full history (actions/checkout fetch-depth: 0), or pass legacy totals via legacy mode" >&2
+      exit 2
+    fi
+  done
+
   files=0
   lines=0
 
