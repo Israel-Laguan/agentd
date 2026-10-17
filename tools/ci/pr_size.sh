@@ -97,17 +97,22 @@ if [[ $legacy -eq 0 ]]; then
   files=0
   lines=0
 
-  if [[ -z "$(git diff --numstat "$base" "$head" | head -1)" && -z "${PR_FALLBACK:-}" ]]; then
+  # Three-dot: measure from the merge base, so changes that landed on the base
+  # branch after the PR branched do not count against the PR.
+  range="$base...$head"
+
+  if [[ -z "$(git diff --numstat "$range" | head -1)" && -z "${PR_FALLBACK:-}" ]]; then
     echo "error: git diff returned nothing; pass legacy totals via legacy mode" >&2
     exit 2
   fi
 
   while IFS=$'\t' read -r added deleted file; do
-    [[ "$added" == "-" || "$deleted" == "-" ]] && continue
-    # Skip files whose churn is excluded (their lines do not count).
+    # Skip files whose churn is excluded (their lines do not count). Patterns
+    # match the full path or the basename, so nested lockfiles are covered.
     matched=0
     for pat in "${EXCLUDE_PATTERNS[@]}"; do
-      if [[ "$file" == $pat ]]; then
+      # shellcheck disable=SC2053 # the pattern is a glob on purpose
+      if [[ "$file" == $pat || "${file##*/}" == $pat ]]; then
         matched=1
         break
       fi
@@ -117,10 +122,13 @@ if [[ $legacy -eq 0 ]]; then
       continue
     fi
     files=$((files + 1))
-    lines=$((lines + added + deleted))
-  done < <(git diff --numstat "$base" "$head")
+    # Binary files report "-" for both counts: they count as a file, not as lines.
+    if [[ "$added" != "-" && "$deleted" != "-" ]]; then
+      lines=$((lines + added + deleted))
+    fi
+  done < <(git diff --numstat "$range")
 
-  echo "PR size (git diff $base..$head): $files files, $lines changed lines; excluded $excluded_files generated files (<$MAX_FILES files, <=$MAX_LINES lines)"
+  echo "PR size (git diff $range): $files files, $lines changed lines; excluded $excluded_files generated files (<$MAX_FILES files, <=$MAX_LINES lines)"
 else
   lines=$((additions + deletions))
   echo "PR size (legacy totals): $files files, $lines changed lines (+$additions/-$deletions); limits: <$MAX_FILES files, <=$MAX_LINES lines"

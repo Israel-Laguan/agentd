@@ -5,13 +5,14 @@ name: CI (PR size)
 # can add the `large-pr-ok` label to waive it for one PR; the label events
 # re-run the check.
 #
-# Changed lines are computed from the real base..head diff (git diff --numstat),
+# Changed lines are computed from the real merge-base..head diff (git diff --numstat base...head),
 # not GitHub's aggregated additions+deletions totals, so deletion-heavy PRs
 # (dependency drops, lockfile regeneration) aren't punished one-for-one.
 #
 # Uses pull_request_target so the gate runs from trusted, base-controlled code:
-# the counting + exclusion logic lives only in tools/ci/pr_size.sh, and the
-# checkout fetches the PR head so that base..head can be diffed with git.
+# the counting + exclusion logic lives only in tools/ci/pr_size.sh. The checkout
+# is the trusted base commit; the PR head (possibly from a fork) is fetched as
+# Git data only and never checked out, so no PR-controlled code runs here.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, labeled, unlabeled]
@@ -29,12 +30,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: refs/pull/${{ github.event.pull_request.number }}/head
+          ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
-          # Full history: the gate diffs base..head, so the base commit must
-          # exist locally. A shallow checkout leaves only the head commit and
-          # git diff fails with "bad object <base_sha>".
+          # Full history, so the merge base of base and head can be found.
           fetch-depth: 0
+
+      - name: Fetch the PR head as data
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
 
       - name: Check PR size
         env:
