@@ -52,6 +52,9 @@ curl -X POST http://127.0.0.1:8765/api/v1/projects/materialize \
   root first, then creates the project and its workspace directory and swaps the
   finished copy in. A copy that fails partway (an unreadable file, a full disk)
   fails the request with no project, no tasks and no directory left behind.
+- `source_path` must resolve, after following symlinks, under `api.source_root`
+  (default: your home directory) and must not overlap the agentd home. Anything
+  else returns `400`; see [`config-reference.md`](config-reference.md#api).
 - All files from `source_path` are recursively copied (symlinks are skipped).
 - Only after the copy completes are tasks transitioned from `PENDING` to `READY`.
 - Workers cannot claim the tasks until the copy finishes.
