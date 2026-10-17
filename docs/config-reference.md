@@ -16,6 +16,8 @@ Effective home is resolved from `--home`, `AGENTD_HOME`, or `.env` (CWD then `~/
 
 When `api.materialize_token` is non-empty, `POST /api/v1/projects/materialize` requires header `X-Agentd-Materialize-Token` with that exact value. The CLI `agentd ask` sends it automatically.
 
+`api.allowed_hosts` (list, default empty) names extra `Host` header values the API accepts. Loopback names (`localhost`, `127.0.0.1`, `::1`) always pass; any other `Host` gets `403`. Add an entry when clients reach the daemon under another name, for example `agentd` for a compose service name. An entry without a port matches any port; `agentd:8765` matches only that port. Env: `AGENTD_API_ALLOWED_HOSTS` (space-separated). See the write guard in [`api-testing.md`](api-testing.md#write-guard).
+
 ## Gateway
 
 Tool/JSON fallback behavior is documented in [`provider-tool-calling.md`](provider-tool-calling.md).
