@@ -15,6 +15,7 @@ Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in
 - Non-goal: Playwright (UI testing comes later); shell (hard to assert without CLI parsing).
 - Impact: `make test` (unit + feature tests) stays fast. `make test-e2e` brings the stack up and runs the suite with `-tags=e2e` already set; it is never part of `make test`.
 - CI: `.github/workflows/ci-e2e.yml` runs `make test-e2e` weekly on `main`, on demand, and on any pull request that touches `test/e2e/`, `devenv/` or the workflow itself (B-023). The per-PR Go check does not run it, so a change outside those paths is covered by the weekly run, not by its own PR.
+- CI (UI smoke): `.github/workflows/ci-e2e-ui.yml` runs `make test-ui` (Playwright, `web/e2e`, default profile only) on the same cadence for pull requests that touch `web/`, `devenv/` or the Makefile. It shares no runner with the journey suite, so neither pays for the other's resource needs.
 
 **UI journeys:** Browser verification is manual (documented in qa-and-browser-verification.md); not automated in S07.
 
