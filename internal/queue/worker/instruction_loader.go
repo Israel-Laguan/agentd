@@ -1,13 +1,17 @@
 package worker
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"agentd/internal/paths"
 )
 
 // InstructionLoader reads instruction files from the filesystem.
@@ -28,7 +32,18 @@ type InstructionLoader struct {
 func (l *InstructionLoader) LoadProjectInstructions(workspacePath, overridePath string) (*ProjectInstructions, error) {
 	candidates := l.instructionCandidates(workspacePath, overridePath)
 	for _, path := range candidates {
-		data, err := os.ReadFile(path)
+		real, err := resolveInsideWorkspace(workspacePath, path)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if errors.Is(err, paths.ErrPathEscapesWorkspace) {
+			slog.Warn("instruction file resolves outside the workspace, skipped", "path", path, "workspace", workspacePath)
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("resolve project instructions %s: %w", path, err)
+		}
+		data, err := os.ReadFile(real)
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -40,6 +55,17 @@ func (l *InstructionLoader) LoadProjectInstructions(workspacePath, overridePath 
 		return pi, nil
 	}
 	return nil, nil
+}
+
+// resolveInsideWorkspace follows symlinks in a candidate path and refuses a
+// result outside the workspace: the sandbox can plant AGENTS.md as a link to a
+// host file, and the daemon reads it from outside the jail.
+func resolveInsideWorkspace(workspacePath, full string) (string, error) {
+	rel, err := filepath.Rel(workspacePath, full)
+	if err != nil {
+		return "", fmt.Errorf("relative instruction path: %w", err)
+	}
+	return paths.ResolveWorkspaceFile(workspacePath, rel)
 }
 
 // instructionCandidates returns an ordered list of candidate file paths

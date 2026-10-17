@@ -36,9 +36,32 @@ func WriteContextPack(workspace string, cp *ContextPack) error {
 		return fmt.Errorf("marshal context pack: %w", err)
 	}
 	name := PackFilePath(cp.ParentTaskID, cp.Version)
-	path := filepath.Join(workspace, name)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeFileAtomic(workspace, name, data); err != nil {
 		return fmt.Errorf("write context pack %s: %w", name, err)
+	}
+	return nil
+}
+
+// writeFileAtomic renames a temp file over dir/name. The rename replaces a
+// symlink planted at the target instead of writing through it.
+func writeFileAtomic(dir, name string, data []byte) error {
+	tmp, err := os.CreateTemp(dir, ".context-pack-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }() // best-effort cleanup; gone after a successful rename
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close() // the write error is the one worth returning
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), filepath.Join(dir, name)); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
 	}
 	return nil
 }
