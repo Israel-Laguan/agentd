@@ -10,6 +10,7 @@ export function CommentPanel({ taskId }: { taskId: string }) {
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +57,7 @@ export function CommentPanel({ taskId }: { taskId: string }) {
     };
 
     setComments((prev) => [...prev, optimistic]);
-    setText("");
+    setError(null);
     setLoading(true);
 
     try {
@@ -67,8 +68,11 @@ export function CommentPanel({ taskId }: { taskId: string }) {
           c.id === optimistic.id ? saved : c
         )
       );
+      // Clear only what was sent; keep anything typed while the post was in flight.
+      setText((current) => (current.trim() === trimmed ? "" : current));
     } catch (err) {
       console.error(err);
+      setError(err instanceof Error ? err.message : "Could not post the comment");
 
       setComments((prev) =>
         prev.filter((c) => c.id !== optimistic.id)
@@ -81,6 +85,7 @@ export function CommentPanel({ taskId }: { taskId: string }) {
   // ---------------- CANCEL ----------------
   function handleCancel() {
     setText("");
+    setError(null);
   }
 
   return (
@@ -113,6 +118,12 @@ export function CommentPanel({ taskId }: { taskId: string }) {
           rows={3}
           className="w-full resize-none bg-bg border border-border rounded px-3 py-2 text-sm text-text focus:outline-none"
         />
+
+        {error && (
+          <p role="alert" className="mt-2 text-xs text-red-400">
+            {error}
+          </p>
+        )}
 
         {/* ACTIONS */}
         <div className="flex justify-end gap-2 mt-2">

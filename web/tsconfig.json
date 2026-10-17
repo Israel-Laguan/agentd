@@ -9,6 +9,9 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",

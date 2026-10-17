@@ -10,7 +10,7 @@ import {
   MaterializeResult,
 } from "@/lib/types";
 import { sendChat, postApprovePlan } from "@/lib/api";
-import { ChatSettings } from "./chat-settings-modal";
+import type { ChatSettings } from "@/lib/chat-settings";
 
 function createMessageId() {
   return globalThis.crypto?.randomUUID?.() ?? `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;

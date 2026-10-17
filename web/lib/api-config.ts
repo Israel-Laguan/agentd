@@ -1,5 +1,3 @@
-import { ChatSettings } from "@/app/components/chat/chat-settings-modal";
-
 // Set NEXT_PUBLIC_USE_MOCK=false to disable mock mode and hit the real daemon.
 export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 // Set NEXT_PUBLIC_API_URL to override the daemon address (default: http://localhost:8765).
@@ -17,5 +15,3 @@ export const CREATE_PLAN_TOOL_DEF = {
     parameters: { type: "object", properties: {} },
   },
 } as const;
-
-export type { ChatSettings };

@@ -68,6 +68,36 @@ jobs:
               'Web tests failed. Open the Test step log for failure details.'
             );
 
+      - name: Typecheck
+        id: typecheck
+        if: always()
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Enforce typecheck
+        if: always() && steps.typecheck.outcome == 'failure'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.setFailed(
+              'Web typecheck failed. Open the Typecheck step log for tsc errors.'
+            );
+
+      - name: Build
+        id: build
+        if: always()
+        continue-on-error: true
+        run: npm run build
+
+      - name: Enforce build
+        if: always() && steps.build.outcome == 'failure'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.setFailed(
+              'Web build failed. Open the Build step log for next build errors.'
+            );
+
       - name: Comment CI failure on PR
         if: failure() && github.event_name == 'pull_request'
         uses: actions/github-script@v8

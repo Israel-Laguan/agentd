@@ -8,30 +8,30 @@ import {
   SystemStatus,
 } from "@/lib/types";
 import { mockSystemStatus } from "@/lib/mocks/system.mock";
-import { unwrapData, mapDaemonTask } from "@/lib/mappers";
+import { mapDaemonTask } from "@/lib/mappers";
+import { requestJSON } from "@/lib/http";
 import { API, USE_MOCK } from "@/lib/api-config";
 
 export { sendChat, postApprovePlan } from "@/lib/api-chat";
 export { fetchTaskComments, fetchTaskEvents, updateTask, addTaskComment, resolveHumanHandoff } from "@/lib/api-tasks";
-export type { ChatSettings } from "@/lib/api-config";
+export type { ChatSettings } from "@/lib/chat-settings";
 
 // ---------------- BOARD ----------------
 export async function getBoard(): Promise<{ tasks: Task[] }> {
   if (USE_MOCK) return structuredClone(mockBoard);
 
-  const projectsRes = await fetch(`${API}/api/v1/projects`);
-  if (!projectsRes.ok) throw new Error(`HTTP error! status: ${projectsRes.status}`);
-  const projects = unwrapData<Record<string, unknown>[]>(await projectsRes.json());
+  const projects = await requestJSON<Record<string, unknown>[]>(`${API}/api/v1/projects`);
 
   const taskArrays = await Promise.all(
     projects.map(async (p) => {
       const projectId = (p.ID ?? p.id) as string;
       if (!projectId) return [] as Task[];
-      const r = await fetch(
+      // A project whose tasks fail to load is skipped; B-071 revisits this.
+      return requestJSON<Record<string, unknown>[]>(
         `${API}/api/v1/projects/${projectId}/tasks?limit=200&include_healing=true`
-      );
-      if (!r.ok) return [] as Task[];
-      return unwrapData<Record<string, unknown>[]>(await r.json()).map(mapDaemonTask);
+      )
+        .then((rows) => rows.map(mapDaemonTask))
+        .catch(() => [] as Task[]);
     })
   );
   return { tasks: taskArrays.flat() };
@@ -41,9 +41,7 @@ export async function getBoard(): Promise<{ tasks: Task[] }> {
 export async function getSystemStatus(): Promise<SystemStatus> {
   if (USE_MOCK) return structuredClone(mockSystemStatus);
 
-  const res = await fetch(`${API}/api/v1/system/status`);
-  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-  const raw = unwrapData<Record<string, unknown>>(await res.json());
+  const raw = await requestJSON<Record<string, unknown>>(`${API}/api/v1/system/status`);
   const status = raw.status ?? raw.Status;
   const summary =
     status && typeof status === "object"
@@ -93,8 +91,5 @@ export async function getWorkforce(): Promise<WorkforceState | null> {
 export async function fetchProviders(): Promise<Provider[]> {
   if (USE_MOCK) return mockProviders;
 
-  const res = await fetch(`${API}/api/v1/gateway/providers`);
-  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-  const envelope = await res.json();
-  return envelope.data as Provider[];
+  return requestJSON<Provider[]>(`${API}/api/v1/gateway/providers`);
 }

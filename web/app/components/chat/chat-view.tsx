@@ -19,10 +19,8 @@ import {
   ChatIntentClarificationPanel,
 } from "./chat-clarification-panel";
 import { Settings } from "lucide-react";
-import {
-  ChatSettingsModal,
-  ChatSettings,
-} from "./chat-settings-modal";
+import { ChatSettingsModal } from "./chat-settings-modal";
+import type { ChatSettings } from "@/lib/chat-settings";
 import { useChatSession } from "./use-chat-session";
 
 interface ChatViewProps {

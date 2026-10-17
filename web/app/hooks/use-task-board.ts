@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { DragEndEvent } from "@dnd-kit/core";
 import { Task, TaskStatus } from "@/lib/types";
 import { updateTask } from "@/lib/api";
@@ -11,6 +11,8 @@ export function useTaskBoard(
   setSelectedTask: React.Dispatch<React.SetStateAction<Task | null>>
 ) {
   const dragVersionRef = useRef<Map<string, number>>(new Map());
+  // The daemon's message for the latest rejected drag, for the board to show.
+  const [writeError, setWriteError] = useState<string | null>(null);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -33,6 +35,7 @@ export function useTaskBoard(
     const dragVersion = (dragVersionRef.current.get(taskId) ?? 0) + 1;
     dragVersionRef.current.set(taskId, dragVersion);
     const now = Date.now();
+    setWriteError(null);
 
     setLocalTasks((tasks) =>
       tasks.map((task) =>
@@ -70,6 +73,7 @@ export function useTaskBoard(
       .catch((err) => {
       console.error("Failed to persist task status", err);
       if (dragVersionRef.current.get(taskId) !== dragVersion) return;
+      setWriteError(err instanceof Error ? err.message : "Could not move the task");
       if (prevStatus === undefined || prevUpdatedAt === undefined) return;
 
       setLocalTasks((tasks) =>
@@ -97,5 +101,7 @@ export function useTaskBoard(
     setSelectedTask((prev) => (prev?.id === id ? updated : prev));
   };
 
-  return { handleDragEnd, handleUpdateTask };
+  const clearWriteError = () => setWriteError(null);
+
+  return { handleDragEnd, handleUpdateTask, writeError, clearWriteError };
 }

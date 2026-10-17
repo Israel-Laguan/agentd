@@ -1,7 +1,8 @@
 import { mockBoard } from "@/lib/mocks/board.mock";
 import { mockTaskComments } from "@/lib/mocks/mock-task-comment";
 import { TaskComment, TaskEvent, HumanHandoffResolution, TaskStatus } from "@/lib/types";
-import { unwrapData, mapDaemonTask, mapDaemonComment, mapDaemonTaskEvent } from "@/lib/mappers";
+import { mapDaemonTask, mapDaemonComment, mapDaemonTaskEvent } from "@/lib/mappers";
+import { requestJSON } from "@/lib/http";
 import { API, MATERIALIZE_TOKEN, USE_MOCK } from "@/lib/api-config";
 import { mockTaskEvents } from "@/lib/mocks/task-event.mock";
 
@@ -10,13 +11,8 @@ export async function fetchTaskComments(taskId: string): Promise<TaskComment[]> 
     return mockTaskComments.filter((c: { task_id: string }) => c.task_id === taskId);
   }
 
-  const res = await fetch(`${API}/api/v1/tasks/${taskId}/comments`);
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch comments");
-  }
-
-  return unwrapData<Record<string, unknown>[]>(await res.json()).map(mapDaemonComment);
+  const rows = await requestJSON<Record<string, unknown>[]>(`${API}/api/v1/tasks/${taskId}/comments`);
+  return rows.map(mapDaemonComment);
 }
 
 export async function fetchTaskEvents(taskId: string): Promise<TaskEvent[]> {
@@ -24,12 +20,8 @@ export async function fetchTaskEvents(taskId: string): Promise<TaskEvent[]> {
     return structuredClone(mockTaskEvents.filter((event) => event.task_id === taskId));
   }
 
-  const res = await fetch(`${API}/api/v1/tasks/${taskId}/events?limit=200`);
-  if (!res.ok) {
-    throw new Error("Failed to fetch task events");
-  }
-
-  return unwrapData<Record<string, unknown>[]>(await res.json()).map(mapDaemonTaskEvent);
+  const rows = await requestJSON<Record<string, unknown>[]>(`${API}/api/v1/tasks/${taskId}/events?limit=200`);
+  return rows.map(mapDaemonTaskEvent);
 }
 
 export async function updateTask(
@@ -46,20 +38,14 @@ export async function updateTask(
     return structuredClone(task);
   }
 
-  const res = await fetch(`${API}/api/v1/tasks/${id}`, {
+  const raw = await requestJSON<Record<string, unknown>>(`${API}/api/v1/tasks/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    body: {
       ...(updates.description !== undefined ? { description: updates.description } : {}),
       ...(updates.state !== undefined ? { state: updates.state } : {}),
-    }),
+    },
   });
-
-  if (!res.ok) {
-    throw new Error("Failed to update task");
-  }
-
-  return mapDaemonTask(unwrapData<Record<string, unknown>>(await res.json()));
+  return mapDaemonTask(raw);
 }
 
 export async function resolveHumanHandoff(
@@ -101,26 +87,17 @@ export async function resolveHumanHandoff(
     return structuredClone({ task, parent, result });
   }
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (MATERIALIZE_TOKEN) {
-    headers["X-Agentd-Materialize-Token"] = MATERIALIZE_TOKEN;
-  }
-  const res = await fetch(`${API}/api/v1/tasks/${taskId}/human-resolution`, {
+  const data = await requestJSON<Record<string, unknown>>(`${API}/api/v1/tasks/${taskId}/human-resolution`, {
     method: "POST",
-    headers,
-    body: JSON.stringify({
+    token: MATERIALIZE_TOKEN,
+    body: {
       result,
       // The daemon compares expected_updated_at against the full-precision stored
       // timestamp, so a raw daemon string is sent unchanged.
       expected_updated_at:
         typeof expectedUpdatedAt === "string" ? expectedUpdatedAt : new Date(expectedUpdatedAt).toISOString(),
-    }),
+    },
   });
-  if (!res.ok) {
-    throw new Error(`Failed to resolve human handoff: ${res.status}`);
-  }
-
-  const data = unwrapData<Record<string, unknown>>(await res.json());
   return {
     task: mapDaemonTask((data.task ?? data.Task) as Record<string, unknown>),
     parent: mapDaemonTask((data.parent ?? data.Parent) as Record<string, unknown>),
@@ -144,17 +121,9 @@ export async function addTaskComment(id: string, message: string) {
     return comment;
   }
 
-  const res = await fetch(`${API}/api/v1/tasks/${id}/comments`, {
+  const raw = await requestJSON<Record<string, unknown>>(`${API}/api/v1/tasks/${id}/comments`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ content: message }),
+    body: { content: message },
   });
-
-  if (!res.ok) {
-    throw new Error("Failed to add comment");
-  }
-
-  return mapDaemonComment(unwrapData<Record<string, unknown>>(await res.json()));
+  return mapDaemonComment(raw);
 }
