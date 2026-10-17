@@ -3,6 +3,7 @@ package ci_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -118,6 +119,13 @@ func commitRev(t *testing.T, dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
+func initRepo(t *testing.T, dir string) {
+	t.Helper()
+	gitCmd(t, dir, "init", "-q")
+	gitCmd(t, dir, "config", "user.email", "t@t")
+	gitCmd(t, dir, "config", "user.name", "t")
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
@@ -125,59 +133,85 @@ func writeFile(t *testing.T, dir, name, content string) {
 	}
 }
 
+type gitSetup func(t *testing.T, dir string) (base, head string)
+
+func setupLockfileChurn(t *testing.T, dir string) (string, string) {
+	initRepo(t, dir)
+	writeFile(t, dir, "a.go", "package main\nfunc A() {}\n")
+	writeFile(t, dir, "package-lock.json", strings.Repeat("x\n", 1200))
+	base := makeCommit(t, dir, "base")
+	writeFile(t, dir, "package-lock.json", strings.Repeat("y\n", 36))
+	writeFile(t, dir, "api.ts", "import \"agentd\"\n")
+	return base, makeCommit(t, dir, "head")
+}
+
+func setupBigDeletion(t *testing.T, dir string) (string, string) {
+	initRepo(t, dir)
+	writeFile(t, dir, "big.go", strings.Repeat("z\n", 1001))
+	base := makeCommit(t, dir, "add-big")
+	if err := os.Remove(filepath.Join(dir, "big.go")); err != nil {
+		t.Fatal(err)
+	}
+	return base, makeCommit(t, dir, "del-big")
+}
+
+func setupMissingBase(t *testing.T, dir string) (string, string) {
+	initRepo(t, dir)
+	writeFile(t, dir, "a.go", "package main\n")
+	head := makeCommit(t, dir, "only")
+	return "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", head
+}
+
+func setupNestedLockfile(t *testing.T, dir string) (string, string) {
+	initRepo(t, dir)
+	writeFile(t, dir, "a.go", "package main\n")
+	base := makeCommit(t, dir, "base")
+	if err := os.MkdirAll(filepath.Join(dir, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "web/package-lock.json", strings.Repeat("x\n", 2000))
+	return base, makeCommit(t, dir, "lock")
+}
+
+func setupBinaryFiles(t *testing.T, dir string) (string, string) {
+	initRepo(t, dir)
+	writeFile(t, dir, "a.go", "package main\n")
+	base := makeCommit(t, dir, "base")
+	for i := 0; i < 100; i++ {
+		writeFile(t, dir, fmt.Sprintf("img%d.bin", i), "\x00\x01\x02")
+	}
+	return base, makeCommit(t, dir, "bins")
+}
+
+// setupAdvancedBase leaves the base branch ahead of the PR's merge base.
+func setupAdvancedBase(t *testing.T, dir string) (string, string) {
+	initRepo(t, dir)
+	writeFile(t, dir, "a.go", "package main\n")
+	makeCommit(t, dir, "root")
+	gitCmd(t, dir, "checkout", "-q", "-b", "pr")
+	writeFile(t, dir, "small.go", "package main\n")
+	head := makeCommit(t, dir, "pr-change")
+	gitCmd(t, dir, "checkout", "-q", "-")
+	writeFile(t, dir, "big.go", strings.Repeat("z\n", 1500))
+	return makeCommit(t, dir, "base-advances"), head
+}
+
 func TestPRSizeGit(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
-		setup    func(t *testing.T, dir string) (string, string)
+		setup    gitSetup
 		labels   string
 		wantCode int
 		wantOut  string
 	}{
-		{"deletion-heavy lockfile churn excluded", func(t *testing.T, dir string) (string, string) {
-			gitCmd(t, dir, "init", "-q")
-			gitCmd(t, dir, "config", "user.email", "t@t")
-			gitCmd(t, dir, "config", "user.name", "t")
-			writeFile(t, dir, "a.go", "package main\nfunc A() {}\n")
-			writeFile(t, dir, "package-lock.json", strings.Repeat("x\n", 1200))
-			base := makeCommit(t, dir, "base")
-			writeFile(t, dir, "package-lock.json", strings.Repeat("y\n", 36))
-			writeFile(t, dir, "api.ts", "import \"agentd\"\n")
-			head := makeCommit(t, dir, "head")
-			return base, head
-		}, "bug", 0, "1 files, 1 changed lines; excluded 1 generated files"},
-		{"real deletions still counted and fail", func(t *testing.T, dir string) (string, string) {
-			gitCmd(t, dir, "init", "-q")
-			gitCmd(t, dir, "config", "user.email", "t@t")
-			gitCmd(t, dir, "config", "user.name", "t")
-			writeFile(t, dir, "big.go", strings.Repeat("z\n", 1001))
-			base := makeCommit(t, dir, "add-big")
-			if err := os.Remove(filepath.Join(dir, "big.go")); err != nil {
-				t.Fatal(err)
-			}
-			head := makeCommit(t, dir, "del-big")
-			return base, head
-		}, "bug", 1, "1001 changed lines"},
-		{"large-pr-ok label overrides the line limit", func(t *testing.T, dir string) (string, string) {
-			gitCmd(t, dir, "init", "-q")
-			gitCmd(t, dir, "config", "user.email", "t@t")
-			gitCmd(t, dir, "config", "user.name", "t")
-			writeFile(t, dir, "big.go", strings.Repeat("z\n", 1001))
-			base := makeCommit(t, dir, "add-big")
-			if err := os.Remove(filepath.Join(dir, "big.go")); err != nil {
-				t.Fatal(err)
-			}
-			head := makeCommit(t, dir, "del-big")
-			return base, head
-		}, "large-pr-ok", 0, "over limit, overridden"},
-		{"missing base object is a usage error with a hint", func(t *testing.T, dir string) (string, string) {
-			gitCmd(t, dir, "init", "-q")
-			gitCmd(t, dir, "config", "user.email", "t@t")
-			gitCmd(t, dir, "config", "user.name", "t")
-			writeFile(t, dir, "a.go", "package main\n")
-			head := makeCommit(t, dir, "only")
-			return "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", head
-		}, "bug", 2, "fetch-depth: 0"},
+		{"deletion-heavy lockfile churn excluded", setupLockfileChurn, "bug", 0, "1 files, 1 changed lines; excluded 1 generated files"},
+		{"real deletions still counted and fail", setupBigDeletion, "bug", 1, "1001 changed lines"},
+		{"large-pr-ok label overrides the line limit", setupBigDeletion, "large-pr-ok", 0, "over limit, overridden"},
+		{"missing base object is a usage error with a hint", setupMissingBase, "bug", 2, "fetch-depth: 0"},
+		{"nested lockfile is excluded by basename", setupNestedLockfile, "bug", 0, "excluded 1 generated files"},
+		{"binary files count toward the file limit", setupBinaryFiles, "bug", 1, "files: 100 >= 100"},
+		{"base branch advancing does not count against the PR", setupAdvancedBase, "bug", 0, "1 files, 1 changed lines"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
