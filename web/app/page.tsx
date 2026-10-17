@@ -16,7 +16,7 @@ import { Footer } from "@/app/components/layout/footer";
 import { Header } from "@/app/components/layout/header";
 import { Sidebar } from "./components/layout/sidebar";
 import { TaskDrawer } from "@/app/components/task/task-drawer";
-import { ChatSettings } from "./components/chat/chat-settings-modal";
+import type { ChatSettings } from "@/lib/chat-settings";
 import { useDashboard } from "@/app/hooks/use-dashboard";
 import { useTaskBoard } from "@/app/hooks/use-task-board";
 

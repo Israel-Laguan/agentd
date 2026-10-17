@@ -13,7 +13,7 @@ import { API, USE_MOCK } from "@/lib/api-config";
 
 export { sendChat, postApprovePlan } from "@/lib/api-chat";
 export { fetchTaskComments, fetchTaskEvents, updateTask, addTaskComment, resolveHumanHandoff } from "@/lib/api-tasks";
-export type { ChatSettings } from "@/lib/api-config";
+export type { ChatSettings } from "@/lib/chat-settings";
 
 // ---------------- BOARD ----------------
 export async function getBoard(): Promise<{ tasks: Task[] }> {

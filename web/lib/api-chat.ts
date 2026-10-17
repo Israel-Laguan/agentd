@@ -6,7 +6,8 @@ import {
 } from "@/lib/types";
 import { unwrapData, mapDaemonDraftPlan } from "@/lib/mappers";
 import { parseStructuredIntake, displayContentForChat } from "@/lib/chat-intake";
-import { API, CREATE_PLAN_TOOL_DEF, MATERIALIZE_TOKEN, USE_MOCK, ChatSettings } from "@/lib/api-config";
+import { API, CREATE_PLAN_TOOL_DEF, MATERIALIZE_TOKEN, USE_MOCK } from "@/lib/api-config";
+import type { ChatSettings } from "@/lib/chat-settings";
 
 export async function sendChat(
   message: string,

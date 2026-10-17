@@ -5,12 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { fetchProviders } from "@/lib/api";
 import { Provider } from "@/lib/types";
-
-export interface ChatSettings {
-  provider: string;
-  model: string;
-  effort: "low" | "medium" | "high";
-}
+import type { ChatSettings } from "@/lib/chat-settings";
 
 interface ChatSettingsModalProps {
   open: boolean;
