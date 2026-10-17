@@ -198,3 +198,5 @@ make minfunc    # flag functions shorter than the configured minimum
 they are (interface methods, trivial helpers). See
 [`docs/architecture/repo-layout.md`](docs/architecture/repo-layout.md) for the
 layout these live in.
+
+<!-- SP-026 docs-only probe -->

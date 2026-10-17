@@ -288,3 +288,5 @@ make test-e2e
 ```
 
 Tests skip gracefully in short mode (`go test -short`), which is useful for CI that doesn't have container support.
+
+<!-- SP-026 docs-only probe -->
