@@ -50,6 +50,11 @@ func TestRestoreMtimes(t *testing.T) {
 	git(t, dir, 1000, "init", "-q", "-b", "main")
 	commitFile(t, dir, "a.txt", "a1", 1000)
 	commitFile(t, dir, "b.txt", "b1", 2000)
+	if err := os.MkdirAll(filepath.Join(dir, "d", "e"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	commitFile(t, dir, "d/e/f.txt", "f1", 2500)
+	commitFile(t, dir, "d/g.txt", "g1", 1500)
 	commitFile(t, dir, "a.txt", "a2", 3000)
 	git(t, dir, 3000, "branch", "base")
 	commitFile(t, dir, "c.txt", "c1", 4000)
@@ -64,7 +69,10 @@ func TestRestoreMtimes(t *testing.T) {
 	}
 
 	run()
-	for name, want := range map[string]int64{"a.txt": 3000, "b.txt": 2000, "c.txt": 4000} {
+	for name, want := range map[string]int64{
+		"a.txt": 3000, "b.txt": 2000, "c.txt": 4000, "d/e/f.txt": 2500, "d/g.txt": 1500,
+		"d/e": 2500, "d": 2500, // a directory takes the newest commit time under it
+	} {
 		if got := mtime(t, dir, name); got != want {
 			t.Errorf("%s mtime = %d, want its last commit time %d", name, got, want)
 		}
