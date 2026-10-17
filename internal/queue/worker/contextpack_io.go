@@ -2,7 +2,9 @@ package worker
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,7 +73,7 @@ func writeFileAtomic(dir, name string, data []byte) error {
 // validation so previously written packs remain readable. Explicit
 // zero counters are preserved so Validate can reject them.
 func ReadContextPack(path string) (*ContextPack, error) {
-	data, err := os.ReadFile(path)
+	data, err := readFileNoEscape(path)
 	if err != nil {
 		return nil, fmt.Errorf("read context pack: %w", err)
 	}
@@ -83,10 +85,10 @@ func ReadContextPack(path string) (*ContextPack, error) {
 // path so pipelines that were started before the filename migration can
 // still be resumed.
 func ReadContextPackWithFallback(scopedPath, legacyPath string) (*ContextPack, error) {
-	data, readErr := os.ReadFile(scopedPath)
+	data, readErr := readFileNoEscape(scopedPath)
 	if readErr != nil {
-		if os.IsNotExist(readErr) && legacyPath != "" {
-			legacyData, legacyErr := os.ReadFile(legacyPath)
+		if errors.Is(readErr, fs.ErrNotExist) && legacyPath != "" {
+			legacyData, legacyErr := readFileNoEscape(legacyPath)
 			if legacyErr != nil {
 				return nil, fmt.Errorf("read context pack (scoped: %w, legacy: %v)", readErr, legacyErr)
 			}
@@ -96,6 +98,18 @@ func ReadContextPackWithFallback(scopedPath, legacyPath string) (*ContextPack, e
 		}
 	}
 	return unmarshalContextPack(data)
+}
+
+// readFileNoEscape reads path through an os.Root on its directory, so a
+// symlink the sandbox planted at the pack name cannot point the daemon at a
+// file outside the workspace.
+func readFileNoEscape(path string) ([]byte, error) {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }() // read-only handle; nothing to flush
+	return root.ReadFile(filepath.Base(path))
 }
 
 func unmarshalContextPack(data []byte) (*ContextPack, error) {
