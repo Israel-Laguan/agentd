@@ -21,7 +21,8 @@ import (
 //
 // If a second daemon ever bites, size the fix together with SP-010's (both need a
 // per-boot instance ID). The limit and that fix are recorded under Known limits
-// in docs/architecture/recovery-rerun.md; these tests fail when the behaviour changes.
+// in docs/architecture/recovery-rerun.md. These tests pin the storage-layer behaviour
+// only; a guard added at daemon startup would not trip them.
 //
 // The spike's own note says the absence of a lock was found by grep and should be
 // confirmed by reading the daemon start path before running anything. TestStartupDoesNotRefuseASecondInstance below is that confirmation, written as a test.
