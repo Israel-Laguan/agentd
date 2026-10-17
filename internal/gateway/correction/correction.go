@@ -34,12 +34,12 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 			return zero, totalUsage, details, err
 		}
 		totalUsage += resp.TokenUsage
+		// Model names only this response's model, never a rejected earlier one.
+		details.Model = ""
 		if resp.UsageDetails != nil {
 			details.CachedTokens += resp.UsageDetails.CachedTokens
 			details.CacheWriteTokens += resp.UsageDetails.CacheWriteTokens
-			if resp.UsageDetails.Model != "" {
-				details.Model = resp.UsageDetails.Model
-			}
+			details.Model = resp.UsageDetails.Model
 		}
 		lastRaw = resp.Content
 		var out T
