@@ -235,3 +235,15 @@ func TestLoad_RecoveryCleanWorkspaceOnRecover(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadAPIConfig_AllowedHosts(t *testing.T) {
+	v := viper.New()
+	if got := loadAPIConfig(v).AllowedHosts; len(got) != 0 {
+		t.Errorf("AllowedHosts default = %v, want none", got)
+	}
+	v.Set("api.allowed_hosts", []string{"agentd.internal", "agentd:8765"})
+	got := loadAPIConfig(v).AllowedHosts
+	if len(got) != 2 || got[0] != "agentd.internal" || got[1] != "agentd:8765" {
+		t.Errorf("AllowedHosts = %v", got)
+	}
+}

@@ -49,6 +49,7 @@ func TestNewHandlerGETProjectsSmoke(t *testing.T) {
 		Summarizer: frontdesk.NewStatusSummarizer(store),
 	})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+	req.Host = "localhost:8765"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -76,6 +77,7 @@ func TestNewHandlerRoutesTaskEvents(t *testing.T) {
 	}
 	handler := server.NewHandler(server.ServerDeps{Store: store, Summarizer: frontdesk.NewStatusSummarizer(store)})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+tasks[0].ID+"/events", nil)
+	req.Host = "localhost:8765"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"event-1"`) {
@@ -99,6 +101,7 @@ func TestAgentCreateWarnsUnknownModelWhenGatewayIsRouter(t *testing.T) {
 	})
 	body := `{"id":"warn-agent","name":"Warn","provider":"openai","model":"gpt-4o"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Host = "localhost:8765"
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -131,6 +134,7 @@ func TestAgentCreateRejectsUnknownProviderWhenGatewayIsRouter(t *testing.T) {
 	})
 	body := `{"id":"bad-agent","name":"Bad","provider":"poolside","model":"poolside/laguna"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Host = "localhost:8765"
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
