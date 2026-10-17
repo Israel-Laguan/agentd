@@ -3,9 +3,9 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | backlog |
+| Status | ready |
 | Priority | P3 |
-| Sprint | backlog (proposed for S16) |
+| Sprint | S16-real-browser-tier |
 | Parent | none |
 | Estimate | M (feasibility check first; re-estimate after it) |
 | Links | docs/testing/journeys.md (J06), .github/workflows/ci-e2e.yml, devenv/compose.yaml, Makefile (`dev-up`, `test-e2e`), web/package.json |
