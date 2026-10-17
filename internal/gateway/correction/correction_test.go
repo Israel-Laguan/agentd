@@ -219,3 +219,19 @@ func TestGenerateJSONWithUsageKeepsAnsweringModel(t *testing.T) {
 		t.Fatalf("details.Model = %q, want the model of the accepted answer", details.Model)
 	}
 }
+
+// B-054: when the accepted answer reports no model, details.Model is empty
+// rather than the model of an earlier, rejected answer.
+func TestGenerateJSONWithUsageDropsRejectedAnswerModel(t *testing.T) {
+	gw := &seqFakeGW{steps: []gwStep{
+		{content: `not json`, model: "poolside/laguna-m.1"},
+		{content: `{"name":"alice"}`},
+	}}
+	_, _, details, err := correction.GenerateJSONWithUsage[simplePayload](context.Background(), gw, spec.AIRequest{})
+	if err != nil {
+		t.Fatalf("GenerateJSONWithUsage: %v", err)
+	}
+	if details.Model != "" {
+		t.Fatalf("details.Model = %q, want empty: the accepted answer reported no model", details.Model)
+	}
+}
