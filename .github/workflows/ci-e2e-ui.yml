@@ -1,0 +1,106 @@
+name: CI (e2e UI smoke)
+
+# The Playwright UI smoke (web/e2e, SP-025): a real browser against a running
+# default-profile stack (`make test-ui`). It lives on its own runner instead of
+# riding along with the journey suite (ci-e2e.yml), so a web-only change never
+# pays for the Go suite and a journey change never pays for Chromium. This is
+# the scaffold T-040 ("real-browser e2e tier") grows the suite on.
+#
+# Runs:
+#   - weekly, on main;
+#   - on demand (Actions > CI (e2e UI smoke) > Run workflow);
+#   - on a pull request that touches the web app, the stack it runs against,
+#     or the Makefile target that drives both.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "web/**"
+      - "devenv/**"
+      - "Makefile"
+      - ".github/workflows/ci-e2e-ui.yml"
+
+concurrency:
+  group: ci-e2e-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    name: UI smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      # Same pin as ci-e2e.yml: the Makefile's podman compose invocations are
+      # written against podman-compose 1.3.0, and PODMAN_COMPOSE_PROVIDER keeps
+      # `podman compose` from preferring the runner's Docker compose plugin.
+      - name: Install podman-compose
+        run: |
+          pipx install 'podman-compose==1.3.0'
+          # The runner image sets PIPX_BIN_DIR=/opt/pipx_bin, so the binary is not
+          # in ~/.local/bin; resolve wherever pipx actually put it.
+          provider="$(command -v podman-compose)"
+          echo "PODMAN_COMPOSE_PROVIDER=$provider" >> "$GITHUB_ENV"
+          echo "using $provider"
+          podman --version
+
+      # SP-025: the browser runs on the runner, not in a container. The stack
+      # publishes its ports on the runner host, and so does the web dev server,
+      # so this is exactly how a developer reaches `make test-ui` locally.
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # The Chromium build is pinned by the @playwright/test version in
+      # web/package.json; hashing the lockfile invalidates the cache whenever
+      # any web dependency changes, so a stale browser can never be reused.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
+      # Host install must finish before `make test-ui`: dev-up-ui's web
+      # container runs its own `npm ci` over the bind-mounted tree, and
+      # reinstalling node_modules under a live dev server would be a race.
+      - name: Install web deps and Chromium
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # dev-up-ui brings up the default profile only (agentd, litellm, mockllm,
+      # web); the target then waits for :3000 and runs the Playwright suite --
+      # the same recipe a developer runs locally, so the tier has exactly one
+      # definition.
+      - name: UI smoke (make test-ui)
+        run: make test-ui
+
+      - name: Playwright trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-trace
+          path: web/test-results/
+          retention-days: 7
+
+      - name: Stack state on failure
+        if: failure()
+        run: |
+          podman ps -a --format '{{.Names}} {{.Status}}' || true
+          for name in $(podman ps -a --format '{{.Names}}' | grep -E 'agentd|litellm|mockllm|web' || true); do
+            echo "::group::logs $name"
+            podman logs --tail 200 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+      - name: Tear down
+        if: always()
+        run: make dev-clean || true

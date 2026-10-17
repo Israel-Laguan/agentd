@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-e2e test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-down dev-clean dev-logs
+.PHONY: build test test-e2e test-ui test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-up-ui dev-down dev-clean dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -41,6 +41,21 @@ test:
 # to verify flakiness fixes.
 test-e2e: dev-up
 	$(GO_ENV) $(GO) test -v -race -tags=e2e -count=1 -timeout=1800s ./test/e2e/...
+
+# UI smoke (web/e2e, Playwright) against the default-profile stack. Unlike
+# test-e2e this needs no Go, and it starts only the profiles the board and
+# its API need. One-time browser install per clone:
+#   cd web && npx playwright install chromium
+# web has no compose healthcheck, so readiness for :3000 is asserted here;
+# the curl also warms the Next.js dev compile before the test starts.
+test-ui: dev-up-ui
+	@echo "waiting up to 60s for the web UI on :3000"
+	@deadline=$$(( $$(date +%s) + 60 )); \
+	while ! curl -sf --max-time 5 -o /dev/null http://localhost:3000; do \
+		if [ $$(date +%s) -ge $$deadline ]; then echo "web UI not reachable on http://localhost:3000" >&2; exit 1; fi; \
+		sleep 2; \
+	done
+	cd web && npx playwright test
 
 # Compile (but don't run) per-package test binaries, e.g. for a debugger that
 # needs a standalone `go test -c` binary. Output is scoped to bin/test/ (git-
@@ -90,6 +105,11 @@ COMPOSE_PROFILES := --profile default --profile healing --profile faults \
                      --profile breaker --profile disk --profile tiered \
                      --profile provider
 
+# The UI smoke (web/e2e) needs the default profile only: agentd + litellm +
+# mockllm + web. Nothing in the UI tier touches the other variants, and
+# leaving them down is what keeps `make test-ui` (and the CI UI job) cheap.
+COMPOSE_PROFILES_UI := --profile default
+
 # dev-up blocks until every container with a healthcheck is healthy. podman-compose
 # does not reliably honour depends_on service_healthy, and `up -d` returns as soon
 # as containers exist; without this wait the first tasks reach litellm while it is
@@ -124,10 +144,14 @@ dev-build:
 # The name filter matches only the agentd variants (agentd_agentd_1,
 # agentd_agentd-healing_1, ...); litellm, mockllm and web do not match. This
 # requires web to have no depends_on: agentd -- see devenv/compose.yaml.
-dev-up: dev-build
+#
+# The dev-up body, shared by the full stack and the default-only UI stack;
+# PROFILE_ARGS is set per target below. One definition so the recreate and
+# health-wait cannot drift between the two targets.
+define dev-up-recipe
 	@for id in $$(podman ps -aq --filter label=io.podman.compose.project \
 	    --filter name=agentd_agentd); do podman rm -f $$id; done
-	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) up --build -d
+	podman compose -f $(COMPOSE) $(PROFILE_ARGS) up --build -d
 	@echo "waiting up to $(DEV_HEALTH_WAIT)s for containers to become healthy"
 	@deadline=$$(( $$(date +%s) + $(DEV_HEALTH_WAIT) )); \
 	while :; do \
@@ -136,6 +160,17 @@ dev-up: dev-build
 		if [ $$(date +%s) -ge $$deadline ]; then echo "not healthy in time:"; echo "$$pending"; exit 1; fi; \
 		sleep 2; \
 	done
+endef
+
+dev-up: PROFILE_ARGS := $(COMPOSE_PROFILES)
+dev-up: dev-build
+	$(call dev-up-recipe)
+
+# Default profile only, for the Playwright tier: `make test-ui` and the CI
+# UI workflow bring up the stack through this target.
+dev-up-ui: PROFILE_ARGS := $(COMPOSE_PROFILES_UI)
+dev-up-ui: dev-build
+	$(call dev-up-recipe)
 
 dev-down:
 	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) down

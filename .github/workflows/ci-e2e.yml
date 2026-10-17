@@ -6,11 +6,13 @@ name: CI (e2e journeys)
 # clean runs") used to rest on entries in docs/testing/results.md alone; this
 # workflow is what re-runs it without a person (B-023).
 #
-# It also runs the Playwright UI smoke (web/e2e, SP-025): one real-browser test
-# against the same stack, on the runner. The tier is seeded by the spike and
-# only grows if the spike says go.
+# This is the backend half of the e2e split (T-040 scaffold): it no longer
+# installs Node or Chromium. The Playwright UI smoke lives in ci-e2e-ui.yml on
+# its own runner, so a web-only change never pays for this suite and a suite
+# change never pays for a browser. A change to devenv/ or the Makefile runs
+# both.
 #
-#
+# Runs:
 #   - weekly, on main;
 #   - on demand (Actions > CI (e2e journeys) > Run workflow);
 #   - on a pull request that touches the stack or the journeys themselves, so a
@@ -23,6 +25,7 @@ on:
     paths:
       - "test/e2e/**"
       - "devenv/**"
+      - "Makefile"
       - ".github/workflows/ci-e2e.yml"
 
 concurrency:
@@ -59,58 +62,8 @@ jobs:
           echo "using $provider"
           podman --version
 
-      # SP-025: the browser runs on the runner, not in a container. The stack
-      # publishes its ports on the runner host, and so does the web dev server,
-      # so this is exactly how a developer reaches `make dev-up` locally.
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: web/.nvmrc
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      # The Chromium build is pinned by the @playwright/test version in
-      # web/package.json; hashing the lockfile invalidates the cache whenever
-      # any web dependency changes, so a stale browser can never be reused.
-      - name: Cache Playwright browsers
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ms-playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
-
-      # Host install must finish before `make test-e2e`: dev-up's web container
-      # runs its own `npm ci` over the bind-mounted tree, and reinstalling
-      # node_modules under a live dev server would be a race.
-      - name: Install web deps and Chromium
-        working-directory: web
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-
       - name: Journeys (make test-e2e)
         run: make test-e2e
-
-      # web has no healthcheck and dev-up does not wait for it; the Go suite
-      # does not touch :3000, so readiness has to be asserted here.
-      - name: Wait for the web UI
-        run: |
-          for _ in $(seq 1 60); do
-            curl -sf --max-time 30 -o /dev/null http://localhost:3000 && exit 0
-            sleep 2
-          done
-          echo "::error::the web UI never came up on http://localhost:3000"
-          exit 1
-
-      - name: UI smoke (Playwright)
-        working-directory: web
-        run: npx playwright test
-
-      - name: Playwright trace on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-trace
-          path: web/test-results/
-          retention-days: 7
 
       - name: Stack state on failure
         if: failure()
