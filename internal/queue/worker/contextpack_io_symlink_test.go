@@ -29,3 +29,23 @@ func TestWriteContextPack_DoesNotWriteThroughSymlink(t *testing.T) {
 		t.Fatalf("pack should exist in the workspace: %v", err)
 	}
 }
+
+func TestReadContextPack_DoesNotReadThroughSymlink(t *testing.T) {
+	outside := t.TempDir()
+	cp := NewContextPack("t1", "parent1", "host secret", []string{"a.go"}, ContextPackConfig{})
+	if err := WriteContextPack(outside, cp); err != nil {
+		t.Fatal(err)
+	}
+	name := PackFilePath(cp.ParentTaskID, cp.Version)
+	ws := t.TempDir()
+	if err := os.Symlink(filepath.Join(outside, name), filepath.Join(ws, name)); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := ReadContextPack(filepath.Join(ws, name)); err == nil {
+		t.Fatalf("ReadContextPack followed a symlink out of the workspace: %q", got.Summary)
+	}
+	if got, err := ReadContextPackWithFallback(filepath.Join(ws, name), ""); err == nil {
+		t.Fatalf("ReadContextPackWithFallback followed a symlink out of the workspace: %q", got.Summary)
+	}
+}
