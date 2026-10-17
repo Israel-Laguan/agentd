@@ -32,7 +32,7 @@ type InstructionLoader struct {
 func (l *InstructionLoader) LoadProjectInstructions(workspacePath, overridePath string) (*ProjectInstructions, error) {
 	candidates := l.instructionCandidates(workspacePath, overridePath)
 	for _, path := range candidates {
-		real, err := resolveInsideWorkspace(workspacePath, path)
+		rel, err := resolveInsideWorkspace(workspacePath, path)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
@@ -43,8 +43,10 @@ func (l *InstructionLoader) LoadProjectInstructions(workspacePath, overridePath 
 		if err != nil {
 			return nil, fmt.Errorf("resolve project instructions %s: %w", path, err)
 		}
-		data, err := os.ReadFile(real)
-		if os.IsNotExist(err) {
+		// The check above classifies the candidate; the read itself is confined
+		// to the workspace, so a symlink swapped in since then cannot escape.
+		data, err := readFileNoEscape(workspacePath, rel)
+		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		if err != nil {
@@ -57,15 +59,19 @@ func (l *InstructionLoader) LoadProjectInstructions(workspacePath, overridePath 
 	return nil, nil
 }
 
-// resolveInsideWorkspace follows symlinks in a candidate path and refuses a
-// result outside the workspace: the sandbox can plant AGENTS.md as a link to a
-// host file, and the daemon reads it from outside the jail.
+// resolveInsideWorkspace returns the candidate's workspace-relative path, or
+// paths.ErrPathEscapesWorkspace when its symlinks lead outside the workspace:
+// the sandbox can plant AGENTS.md as a link to a host file, and the daemon
+// reads it from outside the jail.
 func resolveInsideWorkspace(workspacePath, full string) (string, error) {
 	rel, err := filepath.Rel(workspacePath, full)
 	if err != nil {
 		return "", fmt.Errorf("relative instruction path: %w", err)
 	}
-	return paths.ResolveWorkspaceFile(workspacePath, rel)
+	if _, err := paths.ResolveWorkspaceFile(workspacePath, rel); err != nil {
+		return "", err
+	}
+	return rel, nil
 }
 
 // instructionCandidates returns an ordered list of candidate file paths
