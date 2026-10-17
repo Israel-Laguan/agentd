@@ -236,8 +236,8 @@ row's id/payload and the drawer fixture's task IDs are adapted for the tests). T
 are static snapshots, so they do not detect later drift in the endpoint.
 
 **Explicit gap:** no real-browser tier, so layout and click-through are unproven.
-That is a product decision, not a work item, so it is held open as B-027 (S11, P3)
-instead of the backlog; B-027 is where "where is the browser tier tracked?" points.
+Planned as T-040 (backlog, proposed for S16); it starts with a check that Playwright
+runs under the podman CI job. Until S15 this was held open as B-027.
 
 **Decision (SP-015, 2026-10-05): `task-started` / `task-claimed` are not emitted.**
 Claim and start are already queryable as state (`started_at`, the task's state) and
