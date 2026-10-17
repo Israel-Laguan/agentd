@@ -81,7 +81,7 @@ jobs:
           npx playwright install --with-deps chromium
 
       # dev-up-ui brings up the default profile only (agentd, litellm, mockllm,
-      # web); the target then waits for :3000 and runs the Playwright suite --
+      # web), waiting on the web healthcheck; the target then runs the Playwright suite --
       # the same recipe a developer runs locally, so the tier has exactly one
       # definition.
       - name: UI smoke (make test-ui)

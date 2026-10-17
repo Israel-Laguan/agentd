@@ -285,6 +285,14 @@ services:
     # it. The plain `npm install` this replaced rewrote the bind-mounted
     # lockfile on every container start (B-002), dirtying the host tree.
     command: ["sh", "-c", "npm ci --legacy-peer-deps && npm run dev"]
+    # Healthy once the dev server answers on :3000. The request also warms the
+    # first Next.js compile, and `make dev-up` waits on this like on the other
+    # services. The long retry budget covers npm ci plus that first compile.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000"]
+      interval: 3s
+      timeout: 30s
+      retries: 60
     # Deliberately no depends_on: agentd. The browser is what calls the daemon
     # (NEXT_PUBLIC_API_URL is inlined client-side, and the browser runs on the
     # host, not in this container), so web does not need the daemon at boot.

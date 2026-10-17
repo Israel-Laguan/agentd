@@ -46,15 +46,9 @@ test-e2e: dev-up
 # test-e2e this needs no Go, and it starts only the profiles the board and
 # its API need. One-time browser install per clone:
 #   cd web && npx playwright install chromium
-# web has no compose healthcheck, so readiness for :3000 is asserted here;
-# the curl also warms the Next.js dev compile before the test starts.
+# dev-up-ui returns once every container is healthy, web included (its
+# compose healthcheck answers on :3000 and warms the Next.js dev compile).
 test-ui: dev-up-ui
-	@echo "waiting up to 60s for the web UI on :3000"
-	@deadline=$$(( $$(date +%s) + 60 )); \
-	while ! curl -sf --max-time 5 -o /dev/null http://localhost:3000; do \
-		if [ $$(date +%s) -ge $$deadline ]; then echo "web UI not reachable on http://localhost:3000" >&2; exit 1; fi; \
-		sleep 2; \
-	done
 	cd web && npx playwright test
 
 # Compile (but don't run) per-package test binaries, e.g. for a debugger that
