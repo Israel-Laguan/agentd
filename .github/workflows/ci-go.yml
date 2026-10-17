@@ -24,7 +24,7 @@ on:
     # Policy checks (commit trailers; PR title/body) must run on every PR,
     # including docs-only PRs, so this trigger deliberately has no paths
     # filter. Keep paths conditions on expensive jobs if they are added later.
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, labeled]  # labeled: full-ci starts a fresh run
 
 concurrency:
   group: ci-go-${{ github.ref }}
