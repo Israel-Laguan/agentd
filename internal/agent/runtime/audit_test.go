@@ -247,38 +247,6 @@ func TestFileAuditSink_HistoryEdit(t *testing.T) {
 	}
 }
 
-func TestStructuredAuditHook_PassThrough(t *testing.T) {
-	t.Parallel()
-	path := filepathJoinTemp(t, "audit-hook.jsonl")
-	logger := NewAuditLogger(NewFileAuditSink(path), true)
-	hook := StructuredAuditHook(logger)
-
-	var verdicts []string
-	verdicts = append(verdicts, "scrub_result:pass")
-	ctx := hooks.HookContext{
-		ToolName:         "bash",
-		Args:             `{}`,
-		SessionID:        "s1",
-		TurnID:           "s1:0",
-		Timestamp:        time.Now().Add(-10 * time.Millisecond),
-		ResultStatus:     hooks.ToolStatusSuccess,
-		ResultStatusSet:  true,
-		Verdicts:         &verdicts,
-		TokenCountBefore: 100,
-		TokenCountAfter:  100,
-	}
-	got, err := hook.Fn(ctx, "result body")
-	if err != nil {
-		t.Fatalf("hook error: %v", err)
-	}
-	if got != "result body" {
-		t.Fatalf("hook mutated result: %q", got)
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("audit file not written: %v", err)
-	}
-}
-
 func filepathJoinTemp(t *testing.T, name string) string {
 	t.Helper()
 	return filepath.Join(t.TempDir(), name)
@@ -402,7 +370,6 @@ func TestAuditLogger_RecordTaskEvent_NilSafe(t *testing.T) {
 	t.Parallel()
 	var l *AuditLogger
 	l.RecordTaskEvent(TaskAuditRecord{RecordType: RecordTypeTaskStart, TaskID: "x"})
-	l.RecordDaemonStart()
 }
 
 func assertTaskRecordCoreFields(t *testing.T, rec map[string]any, line int, wantType string) {

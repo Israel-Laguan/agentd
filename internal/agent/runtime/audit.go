@@ -113,46 +113,6 @@ func (l *AuditLogger) RecordTaskEvent(rec TaskAuditRecord) {
 	}
 }
 
-// RecordDaemonStart writes a daemon_start marker to the audit file.
-func (l *AuditLogger) RecordDaemonStart() {
-	if !l.Enabled() {
-		return
-	}
-	rec := DaemonStartRecord{
-		Type:       RecordTypeDaemonStart,
-		RecordType: RecordTypeDaemonStart,
-		Timestamp:  time.Now().UTC(),
-	}
-	if err := l.sink.WriteDaemonStart(rec); err != nil {
-		slog.Warn("structured audit write failed", "record_type", RecordTypeDaemonStart, "error", err)
-	}
-}
-
-// StructuredAuditHook returns a PostHook that records a tool dispatch audit entry.
-// Production dispatch uses recordToolDispatch after the full hook chain instead;
-// this hook exists for isolated unit tests.
-func StructuredAuditHook(logger *AuditLogger) hooks.PostHook {
-	return hooks.PostHook{
-		Name:   "structured_audit",
-		Policy: hooks.FailOpen,
-		Fn: func(ctx hooks.HookContext, result string) (string, error) {
-			if logger == nil || !logger.Enabled() {
-				return result, nil
-			}
-			tr := tools.ToolResult{Content: result}
-			if ctx.ResultStatusSet {
-				tr.Status = tools.ToolStatus(ctx.ResultStatus)
-			}
-			var verdicts []string
-			if ctx.Verdicts != nil {
-				verdicts = *ctx.Verdicts
-			}
-			logger.RecordToolDispatch(ctx, tr, verdicts, ctx.TokenCountAfter)
-			return result, nil
-		},
-	}
-}
-
 func auditResultStatus(ctx hooks.HookContext, tr tools.ToolResult) string {
 	if ctx.ResultStatusSet {
 		return ctx.ResultStatus.String()
