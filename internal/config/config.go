@@ -209,7 +209,6 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 		return Config{}, err
 	}
 	cfg.Agentic.Audit.Path = ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path)
-	cfg.Agentic.PromptTemplatesPath = ResolvePromptTemplatesPath(cfg.HomeDir, cfg.Agentic.PromptTemplatesPath)
 	cfg.Tiered = loadTieredConfig(v)
 	cfg.Channel = loadChannelConfig(v)
 	cfg.LogLevel = loadLogLevelConfig(v)

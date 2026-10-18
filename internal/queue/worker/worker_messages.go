@@ -14,7 +14,6 @@ import (
 	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	wskills "agentd/internal/agent/skills"
-	agenttools "agentd/internal/agent/tools"
 )
 
 // appendMemoryLessons appends optional memory context after the stable system
@@ -166,41 +165,6 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 	return builder.Build()
 }
 
-func (w *Worker) shouldUseCodePromptTemplate(task models.Task, profile models.AgentProfile) bool {
-	if strings.EqualFold(strings.TrimSpace(profile.ToolManifestType), agenttools.TaskTypeCodeGen) {
-		return true
-	}
-	if w.toolManifest == nil {
-		return false
-	}
-	classification := w.toolManifest.ClassifyTask(task)
-	return classification.Type == agenttools.TaskTypeCodeGen && classification.Confidence >= w.toolManifest.MinConfidence()
-}
-
-func (w *Worker) promptTemplateForTask(task models.Task, profile models.AgentProfile) (name string, slots map[string]string, ok bool) {
-	if w.promptLibrary == nil {
-		return "", nil, false
-	}
-	if w.shouldUseCodePromptTemplate(task, profile) {
-		return agentruntime.TemplateCodePromptBuilder, agentruntime.BuildCodeGenSlots(task), true
-	}
-	return "", nil, false
-}
-
-func (w *Worker) buildPromptMessages(task models.Task, project models.Project, profile models.AgentProfile) (system, user string) {
-	systemPrefix := w.buildSystemPromptContent(task, project, profile)
-	if name, slots, ok := w.promptTemplateForTask(task, profile); ok {
-		rendered, err := w.promptLibrary.Render(name, agentruntime.RenderSession{SystemPrefix: systemPrefix}, slots)
-		if err != nil {
-			slog.Warn("prompt template render failed, using default messages",
-				"template", name, "task_id", task.ID, "error", err)
-		} else {
-			return rendered.System, rendered.User
-		}
-	}
-	return systemPrefix, fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
-}
-
 // assembleAgenticSystemPrompt builds the full layered system prompt for agentic
 // mode using the instruction hierarchy and skill router. It returns the initial
 // message list: [layered system prompt, user task, optional memory lessons].
@@ -215,7 +179,8 @@ func (w *Worker) buildPromptMessages(task models.Task, project models.Project, p
 // The legacy seedMessages path is still used by the non-agentic
 // command() path in worker_legacy.go.
 func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	systemPrompt, userContent := w.buildPromptMessages(task, project, profile)
+	systemPrompt := w.buildSystemPromptContent(task, project, profile)
+	userContent := fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
 	messages := []gateway.PromptMessage{
 		gateway.PromptMessage{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userContent},
@@ -233,8 +198,7 @@ func (w *Worker) AssembleAgenticSystemPromptWithUserContent(
 	profile models.AgentProfile,
 	userContent string,
 ) []gateway.PromptMessage {
-	// Topic drift resets use the new user input as anchor; skip CODE_PROMPT_BUILDER
-	// so code-gen system instructions are not kept after a non-code topic change.
+	// Topic drift resets use the new user input as anchor.
 	systemPrompt := w.buildSystemPromptContent(task, project, profile)
 	messages := []gateway.PromptMessage{
 		gateway.PromptMessage{Role: "system", Content: systemPrompt},

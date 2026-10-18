@@ -167,7 +167,6 @@ Enabled per agent profile via `AgentProfile.agentic_mode`. Tool rate limits are 
 | `planning` | Plan→execute mode; `complexity_threshold` `0` disables (e.g. `500` enables). |
 | `model_routing` | Complexity routing by keyword score; see [`reference.md`](reference.md). |
 | `tool_manifest` | Filter tools by classified task type. Quote wildcard: `code_gen: ["*"]` (unquoted `*` is YAML alias syntax). |
-| `prompt_templates_path` | Named prompt templates with typed slots (embedded defaults + optional file override). |
 | `scheduler` | Cron/deferred dispatch (minute tick); fields: `id`, `cron_expr`, `task_type`, `context_fn`, `context_args`, `output_target`, `title`. |
 | `batching` | Batch independent tool-free tasks in one LLM call (same project + agent). |
 | `capability_routing` | Route matching intents to external adapters, bypassing the agentic turn loop. Runs after `model_routing`. No capability adapters are available yet (plugins are not loaded, B-063), so enabling it only logs a startup warning and matching tasks take the normal path (B-061). |
