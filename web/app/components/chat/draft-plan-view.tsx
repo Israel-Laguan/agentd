@@ -4,10 +4,12 @@ import { motion } from "framer-motion";
 
 export function DraftPlanView({
   plan,
+  approving = false,
   onApprove,
   onReplan,
 }: {
   plan: DraftPlan;
+  approving?: boolean;
   onApprove: () => void;
   onReplan: () => void;
 }) {
@@ -43,8 +45,8 @@ export function DraftPlanView({
       </div>
 
       <div className="flex gap-2">
-        <button onClick={onApprove} className="flex-1 py-2 bg-accent text-white text-[11px] font-bold rounded hover:bg-accent-hover transition-all uppercase tracking-widest shadow-lg shadow-accent/10">
-          EXECUTE STRATEGY
+        <button onClick={onApprove} disabled={approving} aria-busy={approving} className="flex-1 py-2 bg-accent text-white text-[11px] font-bold rounded hover:bg-accent-hover transition-all uppercase tracking-widest shadow-lg shadow-accent/10 disabled:opacity-60 disabled:cursor-wait">
+          {approving ? "DEPLOYING…" : "EXECUTE STRATEGY"}
         </button>
         <button onClick={onReplan} className="px-4 py-2 border border-border text-text-dim text-[11px] font-bold rounded hover:bg-bg transition-all uppercase">
           REPLAN

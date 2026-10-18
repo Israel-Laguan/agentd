@@ -67,6 +67,7 @@ export function ChatView({
     handleScopeSelect,
     sendSuggested,
     approvePlan,
+    approving,
   } = useChatSession(
     chatSettings,
     setMessages,
@@ -132,6 +133,7 @@ export function ChatView({
         {draftPlan && (
           <DraftPlanView
             plan={draftPlan}
+            approving={approving}
             onApprove={approvePlan}
             onReplan={() => setDraftPlan(null)}
           />

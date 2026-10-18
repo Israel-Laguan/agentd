@@ -27,6 +27,8 @@ export function useChatSession(
   const [pendingScopeOptions, setPendingScopeOptions] = useState<ChatScopeOption[]>([]);
   const [showIntentActions, setShowIntentActions] = useState(false);
   const [statusReport, setStatusReport] = useState<ChatStatusReport | null>(null);
+  const [approving, setApproving] = useState(false);
+  const approvingRef = useRef(false);
   const lastUserMessageRef = useRef<string>("");
 
   const clearStructuredUi = useCallback(() => {
@@ -166,12 +168,18 @@ export function useChatSession(
     }
   };
 
+  // The ref, not the state, guards re-entry: a double click lands before React
+  // re-renders the disabled button, and each POST materializes a new project.
   const approvePlan = async () => {
-    if (!draftPlan) return;
+    if (!draftPlan || approvingRef.current) return;
+    approvingRef.current = true;
+    setApproving(true);
     let result: MaterializeResult;
     try {
       result = await postApprovePlan(draftPlan);
     } catch (e) {
+      approvingRef.current = false;
+      setApproving(false);
       console.error(e);
       setMessages((p) => [
         ...p,
@@ -183,6 +191,8 @@ export function useChatSession(
       ]);
       return;
     }
+    approvingRef.current = false;
+    setApproving(false);
     setDraftPlan(null);
     clearStructuredUi();
     setMessages((p) => [
@@ -210,5 +220,6 @@ export function useChatSession(
     handleScopeSelect,
     sendSuggested,
     approvePlan,
+    approving,
   };
 }
