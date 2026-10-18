@@ -109,7 +109,7 @@ func TestSessionManager_ArchiveAndReset_InheritsPrefsNotHistory(t *testing.T) {
 	}
 }
 
-func TestSessionManager_ArchiveAndReset_SkipsCodeGenTemplateOnDrift(t *testing.T) {
+func TestSessionManager_ArchiveAndReset_RebuildsSystemPromptOnDrift(t *testing.T) {
 	host := &mockHost{}
 	e := NewEngine(Config{}, host)
 	sm := NewSessionManager("task-1", "Implement add", nil)
@@ -121,7 +121,7 @@ func TestSessionManager_ArchiveAndReset_SkipsCodeGenTemplateOnDrift(t *testing.T
 	}
 	profile := models.AgentProfile{}
 	messages := []gateway.PromptMessage{
-		{Role: "system", Content: "sys with raw source code"},
+		{Role: "system", Content: "sys with stale instructions"},
 		{Role: "user", Content: "Implement add"},
 		{Role: "assistant", Content: "done"},
 	}
@@ -133,8 +133,8 @@ func TestSessionManager_ArchiveAndReset_SkipsCodeGenTemplateOnDrift(t *testing.T
 	if len(messages) < 2 {
 		t.Fatalf("expected system+user messages, got %d", len(messages))
 	}
-	if strings.Contains(messages[0].Content, "raw source code") {
-		t.Fatalf("drift reset should not keep CODE_PROMPT_BUILDER system text: %q", messages[0].Content)
+	if strings.Contains(messages[0].Content, "stale instructions") {
+		t.Fatalf("drift reset should not keep the old system prompt: %q", messages[0].Content)
 	}
 	if !strings.Contains(messages[0].Content, "sys") {
 		t.Fatal("fresh session should use host prompt output")
