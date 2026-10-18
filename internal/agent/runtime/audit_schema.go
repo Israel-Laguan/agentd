@@ -106,7 +106,6 @@ type AuditSink interface {
 	WriteTurnSnapshot(TurnSnapshotRecord) error
 	WriteHistoryEdit(HistoryEditRecord) error
 	WriteTaskEvent(TaskAuditRecord) error
-	WriteDaemonStart(DaemonStartRecord) error
 }
 
 // FileAuditSink appends JSON lines to a file.
