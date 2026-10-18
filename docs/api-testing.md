@@ -61,6 +61,17 @@ Returns system health, memory usage, circuit breaker state, and task summary.
 }
 ```
 
+`breaker` is the global dispatch breaker; `provider_breakers` (present once a provider has a breaker) maps each provider name to the same fields:
+
+| Field | Meaning |
+|-------|---------|
+| `state` | `CLOSED` (dispatching), `OPEN` (dispatch stopped) or `HALF_OPEN` (one probe allowed) |
+| `failure_count` | Consecutive failures counted toward tripping |
+| `open_for` | Time since the breaker opened, in **nanoseconds** (a Go `time.Duration`); `0` unless `OPEN` |
+| `last_error` | Last recorded failure; left out when there is none |
+
+The web UI shows any breaker that is not `CLOSED` in the header, and the footer reads `PAUSED: BREAKER OPEN` while the global one is open.
+
 **Test Coverage**: `internal/api/tests/feature/api_http_test.go` (`TestSystemStatus`)
 
 ### POST /api/v1/system/breaker/reset
