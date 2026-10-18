@@ -206,6 +206,7 @@ export default function Page() {
 
       <Footer
         daemonReachable={!boardError}
+        breakerState={systemStatus?.breaker?.state}
         totalTokens={systemStatus?.total_token_usage ?? null}
         runningTasks={
           systemStatus?.status?.summary.tasks_by_state?.RUNNING ?? null

@@ -2,6 +2,9 @@ import { formatTokenCount } from "@/lib/format";
 
 interface FooterProps {
   daemonReachable: boolean;
+  // breakerState is the global dispatch breaker from /system/status. While it
+  // is OPEN the daemon answers but runs nothing, so RUNNING would be wrong.
+  breakerState?: string;
   totalTokens: number | null;
   runningTasks: number | null;
   rollingBudget?: {
@@ -12,12 +15,25 @@ interface FooterProps {
 
 export const Footer = ({
   daemonReachable,
+  breakerState,
   totalTokens,
   runningTasks,
   rollingBudget,
 }: FooterProps) => {
   const tokenLabel =
     totalTokens === null ? "—" : formatTokenCount(totalTokens);
+  const daemonLabel = !daemonReachable
+    ? "UNREACHABLE"
+    : breakerState === "OPEN"
+      ? "PAUSED: BREAKER OPEN"
+      : breakerState === "HALF_OPEN"
+        ? "RECOVERING"
+        : "RUNNING";
+  const daemonColor = !daemonReachable || breakerState === "OPEN"
+    ? "text-error"
+    : breakerState === "HALF_OPEN"
+      ? "text-warning"
+      : "text-accent";
   const runningLabel = runningTasks === null ? "—" : String(runningTasks);
   const budgetLabel =
     rollingBudget && rollingBudget.limit > 0
@@ -29,9 +45,7 @@ export const Footer = ({
       <div className="flex gap-6 items-center">
         <div className="flex items-center gap-1.5">
           <span className="text-[9px] font-bold text-text-dim uppercase tracking-widest">Daemon</span>
-          <span className={`text-[9px] font-bold ${daemonReachable ? "text-accent" : "text-error"}`}>
-            {daemonReachable ? "RUNNING" : "UNREACHABLE"}
-          </span>
+          <span className={`text-[9px] font-bold ${daemonColor}`}>{daemonLabel}</span>
         </div>
       </div>
       <div className="flex gap-6 items-center text-[9px] font-mono text-text-dim">
