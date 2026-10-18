@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	agentruntime "agentd/internal/agent/runtime"
 	wskills "agentd/internal/agent/skills"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
@@ -273,8 +272,8 @@ func TestAssembleAgenticSystemPrompt_MissingFilesAreNonFatal(t *testing.T) {
 	}
 }
 
-func TestAssembleAgenticSystemPrompt_NilPromptLibrary(t *testing.T) {
-	w := &Worker{promptLibrary: nil}
+func TestAssembleAgenticSystemPrompt_CodeGenUsesDefaultMessages(t *testing.T) {
+	w := &Worker{}
 	task := models.Task{
 		BaseEntity:  models.BaseEntity{ID: "t-nil-lib"},
 		Title:       "Implement add",
@@ -286,38 +285,10 @@ func TestAssembleAgenticSystemPrompt_NilPromptLibrary(t *testing.T) {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}
 	if !strings.Contains(messages[1].Content, "You are executing Task:") {
-		t.Fatalf("nil promptLibrary should use default user prompt, got %q", messages[1].Content)
+		t.Fatalf("code_gen should use default user prompt, got %q", messages[1].Content)
 	}
-}
-
-func TestAssembleAgenticSystemPrompt_CodeGenTemplate(t *testing.T) {
-	lib, err := agentruntime.NewPromptLibrary("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	w := &Worker{promptLibrary: lib}
-	task := models.Task{
-		BaseEntity:  models.BaseEntity{ID: "t-codegen"},
-		Title:       "Implement add",
-		Description: "Add function in math.go\nSignature:\nfunc Add(a, b int) int\nTest cases:\n- Add(1,2) == 3",
-	}
-	profile := models.AgentProfile{ToolManifestType: agenttools.TaskTypeCodeGen}
-	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, models.Project{}, profile)
-	if len(messages) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(messages))
-	}
-	user := messages[1].Content
-	if strings.Contains(user, "You are executing Task:") {
-		t.Fatalf("code_gen should use template user prompt, got %q", user)
-	}
-	if !strings.Contains(user, "math.go") || !strings.Contains(user, "func Add") {
-		t.Fatalf("template user missing structured slots: %q", user)
-	}
-	if !strings.Contains(messages[0].Content, "autonomous agent") {
-		t.Fatal("system should include instruction hierarchy prefix")
-	}
-	if !strings.Contains(messages[0].Content, "raw source code") {
-		t.Fatal("system should include CODE_PROMPT_BUILDER template")
+	if strings.Contains(messages[0].Content, "raw source code") {
+		t.Fatalf("agentic system prompt must not tell the model to skip tools: %q", messages[0].Content)
 	}
 }
 

@@ -21,7 +21,6 @@ internal/agent/runtime/guards.go (*ContextBudgetGuard).TotalBudget
 internal/agent/runtime/loop_result.go (LoopResult).IsTerminalSuccess
 internal/agent/runtime/model_router.go tierConfigured
 internal/agent/runtime/model_router.go TotalToolChars
-internal/agent/runtime/prompt_library.go BuildCodeGenSlots
 internal/agent/runtime/runner.go NewTurnLoopRunner
 internal/agent/runtime/topic_guard.go NewTopicGuard
 internal/agent/skills/skills.go (*Skill).IsEmpty

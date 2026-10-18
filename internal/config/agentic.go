@@ -18,7 +18,6 @@ const (
 	DefaultPlanContextMaxChars       = 4000
 	DefaultTopicGuardSensitivity     = 0.5
 	DefaultModelRoutingContextTokens = 150000
-	DefaultPromptTemplatesPath       = "prompt_templates.json"
 )
 
 // TopicGuardConfig controls topic drift detection in the agentic loop.
@@ -84,8 +83,6 @@ type AgenticConfig struct {
 	CapabilityRouting CapabilityRoutingConfig
 	// Batching consolidates independent tool-free tasks into a single LLM call.
 	Batching BatchingConfig
-	// PromptTemplatesPath is the JSON file of named prompt templates (relative to agentd home).
-	PromptTemplatesPath string
 	// Scheduler configures recurring and deferred task dispatch.
 	Scheduler SchedulerConfig
 }
@@ -128,7 +125,6 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.batching.enabled", false)
 	v.SetDefault("agentic.batching.max_batch_size", DefaultBatchingMaxBatchSize)
 	setSchedulerDefaults(v)
-	v.SetDefault("agentic.prompt_templates_path", DefaultPromptTemplatesPath)
 }
 
 func loadAgenticConfig(v *viper.Viper) (AgenticConfig, error) {
@@ -155,15 +151,14 @@ func loadAgenticConfig(v *viper.Viper) (AgenticConfig, error) {
 			Enabled: v.GetBool("agentic.audit.enabled"),
 			Path:    v.GetString("agentic.audit.path"),
 		},
-		FileContext:         loadFileContextConfig(v),
-		Planning:            loadAgenticPlanningConfig(v),
-		TopicGuard:          loadTopicGuardConfig(v),
-		ModelRouting:        loadModelRoutingConfig(v),
-		ToolManifest:        tm,
-		CapabilityRouting:   cr,
-		Batching:            batching,
-		PromptTemplatesPath: v.GetString("agentic.prompt_templates_path"),
-		Scheduler:           scheduler,
+		FileContext:       loadFileContextConfig(v),
+		Planning:          loadAgenticPlanningConfig(v),
+		TopicGuard:        loadTopicGuardConfig(v),
+		ModelRouting:      loadModelRoutingConfig(v),
+		ToolManifest:      tm,
+		CapabilityRouting: cr,
+		Batching:          batching,
+		Scheduler:         scheduler,
 	}, nil
 }
 
@@ -251,17 +246,6 @@ func loadFileContextConfig(v *viper.Viper) FileContextConfig {
 func ResolveAuditPath(homeDir, raw string) string {
 	if raw == "" {
 		raw = "audit.jsonl"
-	}
-	if filepath.IsAbs(raw) {
-		return raw
-	}
-	return filepath.Join(homeDir, raw)
-}
-
-// ResolvePromptTemplatesPath returns the absolute prompt templates JSON path.
-func ResolvePromptTemplatesPath(homeDir, raw string) string {
-	if raw == "" {
-		raw = DefaultPromptTemplatesPath
 	}
 	if filepath.IsAbs(raw) {
 		return raw

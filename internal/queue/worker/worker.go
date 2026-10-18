@@ -83,7 +83,6 @@ type Worker struct {
 	toolManifest                  *agenttools.ToolManifest
 	capabilityRouter              *agentruntime.CapabilityRouter
 	batcher                       *TaskBatcher
-	promptLibrary                 *agentruntime.PromptLibrary
 	healingEnabled                bool
 	maxHealingTasks               int
 	legacyMaxBreakdownDepth       int
