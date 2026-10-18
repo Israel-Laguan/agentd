@@ -62,8 +62,18 @@ export interface SystemStatusReport {
   summary: SystemStatusSummary;
 }
 
+// BreakerInfo is one circuit breaker from /system/status: CLOSED, OPEN or
+// HALF_OPEN. While one is open the daemon stops dispatching to that provider.
+export interface BreakerInfo {
+  state: string;
+  failure_count: number;
+  last_error?: string;
+}
+
 export interface SystemStatus {
   total_token_usage: number;
+  breaker?: BreakerInfo;
+  provider_breakers?: Record<string, BreakerInfo>;
   rolling_budget_enabled?: boolean;
   rolling_token_limit?: number;
   rolling_token_remaining?: number;

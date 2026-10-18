@@ -25,7 +25,9 @@ export function LogsView({ tasks }: LogsViewProps) {
         {/* HEADER (unchanged) */}
         <div className="mb-4 text-text-dim/40 italic flex justify-between items-center border-b border-border pb-2">
           <span>agentd Kernel View - Task Execution Stream</span>
-          <span className="animate-pulse">● System Live</span>
+          <span className={cn(connected && "animate-pulse")}>
+            {connected ? "● Stream live" : "○ Stream disconnected"}
+          </span>
         </div>
 
         {/* TOOL ACTIVITY — live tool_called / tool_result stream */}

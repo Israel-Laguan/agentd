@@ -9,6 +9,7 @@ import {
   DraftPlan,
 } from '@/lib/types';
 import { fetchProviders, resolveHumanHandoff } from "@/lib/api";
+import { USE_MOCK } from "@/lib/api-config";
 import { BoardView } from "@/app/components/board/board-view";
 import { BoardNotices } from "@/app/components/board/board-notices";
 import { ChatView } from "@/app/components/chat/chat-view";
@@ -44,6 +45,7 @@ export default function Page() {
     setLocalTasks,
     boardError,
     boardIssues,
+    daemonState,
     systemStatus,
     handleMaterialized,
     refreshDashboard,
@@ -142,7 +144,7 @@ export default function Page() {
       />
 
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        <Header onStartNewIntake={handleNewIntake} />
+        <Header daemon={daemonState} mock={USE_MOCK} status={systemStatus} onStartNewIntake={handleNewIntake} />
 
         <div className="flex-1 overflow-y-auto p-6 md:p-8">
           <AnimatePresence mode="wait">

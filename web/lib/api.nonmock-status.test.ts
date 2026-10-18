@@ -31,4 +31,23 @@ describe('API (non-mock status)', () => {
     expect(status.status?.summary.tasks_by_state.RUNNING).toBe(3);
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/system/status'));
   });
+
+  it('getSystemStatus keeps the breaker and per-provider breakers', async () => {
+    enableNonMock();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          total_token_usage: 0,
+          breaker: { state: 'OPEN', failure_count: 3, open_for: 5e9, last_error: 'provider 503' },
+          provider_breakers: { openai: { state: 'HALF_OPEN', failure_count: 2, open_for: 0 } },
+        },
+      }),
+    }));
+
+    const { getSystemStatus } = await NON_MOCK_ENV.importApi();
+    const status = await getSystemStatus();
+    expect(status.breaker).toEqual({ state: 'OPEN', failure_count: 3, last_error: 'provider 503' });
+    expect(status.provider_breakers).toEqual({ openai: { state: 'HALF_OPEN', failure_count: 2 } });
+  });
 });

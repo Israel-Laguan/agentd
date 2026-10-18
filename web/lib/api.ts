@@ -9,7 +9,7 @@ import {
   SystemStatus,
 } from "@/lib/types";
 import { mockSystemStatus } from "@/lib/mocks/system.mock";
-import { mapDaemonTask } from "@/lib/mappers";
+import { mapBreaker, mapDaemonTask, mapProviderBreakers } from "@/lib/mappers";
 import { requestJSON } from "@/lib/http";
 import { API, USE_MOCK } from "@/lib/api-config";
 
@@ -97,6 +97,8 @@ export async function getSystemStatus(): Promise<SystemStatus> {
     rolling_token_remaining:
       Number(raw.rolling_token_remaining ?? raw.RollingTokenRemaining ?? 0),
     rolling_token_window: (raw.rolling_token_window ?? raw.RollingTokenWindow) as string | undefined,
+    breaker: mapBreaker(raw.breaker),
+    provider_breakers: mapProviderBreakers(raw.provider_breakers),
     status:
       status && typeof status === "object"
         ? {

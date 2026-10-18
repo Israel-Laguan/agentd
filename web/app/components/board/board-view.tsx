@@ -72,23 +72,6 @@ export function BoardView({
             REAL-TIME WORKFORCE DISPATCH SYSTEM
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex -space-x-2">
-            {[1, 2, 3].map(i => (
-              <div
-                key={i}
-                className="w-6 h-6 rounded-full bg-border border-2 border-panel flex items-center justify-center text-[8px] font-bold"
-              >
-                W{i}
-              </div>
-            ))}
-          </div>
-
-          <span className="ml-2 px-2 py-0.5 bg-blue/10 text-blue text-[9px] font-bold rounded border border-blue/20 uppercase tracking-widest">
-            Queue Healthy
-          </span>
-        </div>
       </div>
 
       <DndContext onDragEnd={onDragEnd}>

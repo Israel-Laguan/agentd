@@ -1,4 +1,5 @@
 import {
+  BreakerInfo,
   Task,
   TaskStatus,
   TaskAssignee,
@@ -13,6 +14,29 @@ import {
 // { status, data, meta?, error? }. Used by all real-API fetch functions.
 export function unwrapData<T>(envelope: unknown): T {
   return (envelope as { data: T }).data;
+}
+
+// mapBreaker keeps the fields the UI shows from a daemon breaker entry, or
+// undefined when the daemon sent none.
+export function mapBreaker(raw: unknown): BreakerInfo | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const lastError = typeof r.last_error === "string" && r.last_error ? r.last_error : undefined;
+  return {
+    state: String(r.state ?? ""),
+    failure_count: Number(r.failure_count ?? 0),
+    ...(lastError ? { last_error: lastError } : {}),
+  };
+}
+
+export function mapProviderBreakers(raw: unknown): Record<string, BreakerInfo> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, BreakerInfo> = {};
+  for (const [name, entry] of Object.entries(raw as Record<string, unknown>)) {
+    const b = mapBreaker(entry);
+    if (b) out[name] = b;
+  }
+  return out;
 }
 
 // isoToMs converts an ISO 8601 timestamp string (time.Time Go output) to a

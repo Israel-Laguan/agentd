@@ -5,6 +5,10 @@ import { BoardSnapshot, Task, WorkforceState, SystemStatus, MaterializeResult } 
 
 export type BoardIssues = Pick<BoardSnapshot, "failedProjects" | "cappedProjects">;
 
+// DaemonState is what the header says about the daemon: connecting until the
+// first refresh settles, then online or unreachable.
+export type DaemonState = "connecting" | "online" | "unreachable";
+
 const NO_ISSUES: BoardIssues = { failedProjects: [], cappedProjects: [] };
 import { getBoard, getWorkforce, getSystemStatus } from "@/lib/api";
 
@@ -14,6 +18,7 @@ export function useDashboard(
   const [workforce, setWorkforce] = useState<WorkforceState | null>(null);
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
   const [boardError, setBoardError] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [boardIssues, setBoardIssues] = useState<BoardIssues>(NO_ISSUES);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
 
@@ -25,6 +30,7 @@ export function useDashboard(
       replaceTasks: boolean
     ) => {
       setBoardError(false);
+      setLoaded(true);
       setWorkforce(workforce);
       setSystemStatus(status);
       setBoardIssues({ failedProjects: board.failedProjects, cappedProjects: board.cappedProjects });
@@ -123,6 +129,7 @@ export function useDashboard(
     setLocalTasks,
     boardError,
     boardIssues,
+    daemonState: (boardError ? "unreachable" : loaded ? "online" : "connecting") as DaemonState,
     systemStatus,
     refreshDashboard,
     handleMaterialized,
