@@ -191,7 +191,11 @@ func (h TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteMappedError(w, err)
 		return
 	}
-	httpx.WriteSuccess(w, http.StatusOK, h.attachAgents(r.Context(), page.Data), httpx.MetaFromPagination(filter.Pagination, page.Total))
+	meta := httpx.MetaFromPagination(filter.Pagination, page.Total)
+	// The store knows the clamped page size; has_more is what a paging client
+	// (the web board) reads to fetch the next page.
+	meta.HasMore = page.HasNext
+	httpx.WriteSuccess(w, http.StatusOK, h.attachAgents(r.Context(), page.Data), meta)
 }
 
 // Assign handles POST /api/v1/tasks/{id}/assign.

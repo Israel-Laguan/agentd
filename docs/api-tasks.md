@@ -30,8 +30,11 @@ List tasks for a project with optional filters.
 }
 ```
 
+`meta.has_more` is `true` when tasks remain after this page: fetch the next one with `offset` increased by the page size. It is left out on the last page. The web board pages this way.
+
 **Test Coverage**:
 
+- Has more pages: `internal/api/controllers/tasks_list_meta_test.go`
 - Basic listing: `internal/api/tests/feature/routes_test.go:24`
 - Unknown project: `internal/api/tests/feature/routes_test.go:43`
 - Bad state filter: `internal/api/tests/feature/routes_test.go:52`
