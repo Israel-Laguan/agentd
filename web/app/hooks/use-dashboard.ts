@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Task, WorkforceState, SystemStatus, MaterializeResult } from "@/lib/types";
+import { BoardSnapshot, Task, WorkforceState, SystemStatus, MaterializeResult } from "@/lib/types";
+
+export type BoardIssues = Pick<BoardSnapshot, "failedProjects" | "cappedProjects">;
+
+const NO_ISSUES: BoardIssues = { failedProjects: [], cappedProjects: [] };
 import { getBoard, getWorkforce, getSystemStatus } from "@/lib/api";
 
 export function useDashboard(
@@ -10,11 +14,12 @@ export function useDashboard(
   const [workforce, setWorkforce] = useState<WorkforceState | null>(null);
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
   const [boardError, setBoardError] = useState(false);
+  const [boardIssues, setBoardIssues] = useState<BoardIssues>(NO_ISSUES);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
 
   const applyDashboardSnapshot = useCallback(
     (
-      board: { tasks: Task[] },
+      board: BoardSnapshot,
       workforce: WorkforceState | null,
       status: SystemStatus | null,
       replaceTasks: boolean
@@ -22,18 +27,23 @@ export function useDashboard(
       setBoardError(false);
       setWorkforce(workforce);
       setSystemStatus(status);
-      setLocalTasks((prev) =>
-        replaceTasks
-          ? board.tasks
-          : prev.length === 0
+      setBoardIssues({ failedProjects: board.failedProjects, cappedProjects: board.cappedProjects });
+      // A project whose fetch failed keeps its last known tasks: dropping them
+      // would make its cards vanish as if the work were gone.
+      const failed = new Set(board.failedProjects.map((f) => f.projectId));
+      setLocalTasks((prev) => {
+        const kept = prev.filter((t) => failed.has(t.project_id));
+        const fresh =
+          replaceTasks || prev.length === 0
             ? board.tasks
             : board.tasks.map((serverTask: Task) => {
                 const localTask = prev.find((t) => t.id === serverTask.id);
                 return localTask && localTask.updated_at > serverTask.updated_at
                   ? localTask
                   : serverTask;
-              })
-      );
+              });
+        return [...fresh, ...kept];
+      });
       setSelectedTask?.((prev) => {
         if (!prev) return prev;
         const fresh = board.tasks.find((t: Task) => t.id === prev.id);
@@ -112,6 +122,7 @@ export function useDashboard(
     localTasks,
     setLocalTasks,
     boardError,
+    boardIssues,
     systemStatus,
     refreshDashboard,
     handleMaterialized,

@@ -134,6 +134,21 @@ export interface ChatResponse {
   intentClarification?: ChatIntentClarification;
 }
 
+// ProjectLoadError is a project whose task fetch failed on the last refresh;
+// the board keeps that project's last known tasks and shows the message.
+export interface ProjectLoadError {
+  projectId: string;
+  message: string;
+}
+
+// BoardSnapshot is one board fetch: the tasks that loaded, the projects that
+// did not, and the projects with more tasks than the board fetches.
+export interface BoardSnapshot {
+  tasks: Task[];
+  failedProjects: ProjectLoadError[];
+  cappedProjects: string[];
+}
+
 export interface MaterializeResult {
   projectId: string;
   taskIds: string[];

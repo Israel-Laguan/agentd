@@ -2,6 +2,7 @@ import { mockBoard } from "@/lib/mocks/board.mock";
 import { mockWorkforce } from "@/lib/mocks/workforce.mock";
 import { mockProviders } from "@/lib/mocks/providers.mock";
 import {
+  BoardSnapshot,
   Provider,
   Task,
   WorkforceState,
@@ -17,24 +18,59 @@ export { fetchTaskComments, fetchTaskEvents, updateTask, addTaskComment, resolve
 export type { ChatSettings } from "@/lib/chat-settings";
 
 // ---------------- BOARD ----------------
-export async function getBoard(): Promise<{ tasks: Task[] }> {
+// The daemon caps a task page at 200; the board reads up to MAX_TASK_PAGES
+// pages per project and flags the project when tasks are left over.
+const TASK_PAGE_SIZE = 200;
+const MAX_TASK_PAGES = 5;
+
+interface TaskPage {
+  data?: Record<string, unknown>[];
+  meta?: { total?: number; has_more?: boolean };
+}
+
+async function fetchProjectTasks(projectId: string): Promise<{ tasks: Task[]; capped: boolean }> {
+  const tasks: Task[] = [];
+  for (let page = 0; ; page++) {
+    const offset = page * TASK_PAGE_SIZE;
+    const body = await requestJSON<TaskPage>(
+      `${API}/api/v1/projects/${projectId}/tasks?limit=${TASK_PAGE_SIZE}&offset=${offset}&include_healing=true`,
+      { unwrap: false }
+    );
+    const rows = body.data ?? [];
+    tasks.push(...rows.map(mapDaemonTask));
+    const more = Boolean(body.meta?.has_more) || (body.meta?.total ?? 0) > offset + rows.length;
+    if (!more || rows.length === 0) return { tasks, capped: false };
+    if (page + 1 >= MAX_TASK_PAGES) return { tasks, capped: true };
+  }
+}
+
+export async function getBoard(): Promise<BoardSnapshot> {
   if (USE_MOCK) return structuredClone(mockBoard);
 
   const projects = await requestJSON<Record<string, unknown>[]>(`${API}/api/v1/projects`);
+  const snapshot: BoardSnapshot = { tasks: [], failedProjects: [], cappedProjects: [] };
 
-  const taskArrays = await Promise.all(
+  const results = await Promise.all(
     projects.map(async (p) => {
       const projectId = (p.ID ?? p.id) as string;
-      if (!projectId) return [] as Task[];
-      // A project whose tasks fail to load is skipped; B-071 revisits this.
-      return requestJSON<Record<string, unknown>[]>(
-        `${API}/api/v1/projects/${projectId}/tasks?limit=200&include_healing=true`
-      )
-        .then((rows) => rows.map(mapDaemonTask))
-        .catch(() => [] as Task[]);
+      if (!projectId) return null;
+      try {
+        return { projectId, ...(await fetchProjectTasks(projectId)) };
+      } catch (e) {
+        return { projectId, error: e instanceof Error ? e.message : String(e) };
+      }
     })
   );
-  return { tasks: taskArrays.flat() };
+  for (const r of results) {
+    if (!r) continue;
+    if (r.error !== undefined) {
+      snapshot.failedProjects.push({ projectId: r.projectId, message: r.error });
+      continue;
+    }
+    snapshot.tasks.push(...r.tasks);
+    if (r.capped) snapshot.cappedProjects.push(r.projectId);
+  }
+  return snapshot;
 }
 
 // ---------------- SYSTEM STATUS ----------------

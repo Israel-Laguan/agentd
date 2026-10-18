@@ -10,6 +10,7 @@ import {
 } from '@/lib/types';
 import { fetchProviders, resolveHumanHandoff } from "@/lib/api";
 import { BoardView } from "@/app/components/board/board-view";
+import { BoardNotices } from "@/app/components/board/board-notices";
 import { ChatView } from "@/app/components/chat/chat-view";
 import { LogsView } from "@/app/components/logs-view";
 import { Footer } from "@/app/components/layout/footer";
@@ -42,6 +43,7 @@ export default function Page() {
     localTasks,
     setLocalTasks,
     boardError,
+    boardIssues,
     systemStatus,
     handleMaterialized,
     refreshDashboard,
@@ -165,11 +167,7 @@ export default function Page() {
 
             {activeTab === 'board' && (
               <>
-                {boardError && (
-                  <div className="mx-4 mt-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
-                    Could not reach daemon — board may be stale. Retrying&hellip;
-                  </div>
-                )}
+                <BoardNotices unreachable={boardError} issues={boardIssues} />
                 {writeError && (
                   <div
                     role="alert"

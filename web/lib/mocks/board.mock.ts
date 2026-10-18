@@ -1,6 +1,8 @@
-import { Task, TaskAssignee, TaskStatus } from "@/lib/types";
+import { BoardSnapshot, TaskAssignee, TaskStatus } from "@/lib/types";
 
-export const mockBoard: { tasks: Task[] } = {
+export const mockBoard: BoardSnapshot = {
+  failedProjects: [],
+  cappedProjects: [],
   tasks: [
     {
       id: "t1",
