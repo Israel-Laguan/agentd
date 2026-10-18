@@ -2,8 +2,8 @@
 export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 // Set NEXT_PUBLIC_API_URL to override the daemon address (default: http://localhost:8765).
 export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8765").replace(/\/+$/, "");
-// Set NEXT_PUBLIC_MATERIALIZE_TOKEN to match api.materialize_token in the daemon config.
-export const MATERIALIZE_TOKEN = process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN ?? "";
+// No materialize token here: NEXT_PUBLIC_ values are inlined into the browser
+// bundle. The daemon trusts writes from its api.ui_origin instead (B-064).
 
 // OpenAI function-tool definition sent with every chat request so the daemon
 // emits tool_calls (create_plan / status_report) when the response is structured.

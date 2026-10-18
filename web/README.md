@@ -17,7 +17,8 @@ NEXT_PUBLIC_USE_MOCK=false npm run dev
 | --- | --- |
 | `NEXT_PUBLIC_USE_MOCK` | Set to `false` to call the daemon instead of mocks (default: mock on). |
 | `NEXT_PUBLIC_API_URL` | Daemon base URL (default: `http://localhost:8765`). |
-| `NEXT_PUBLIC_MATERIALIZE_TOKEN` | When `api.materialize_token` is set in daemon config, send the same value as `X-Agentd-Materialize-Token` on plan approval (`POST /api/v1/projects/materialize`). |
+
+The UI never sends `api.materialize_token`: a `NEXT_PUBLIC_` value is inlined into the browser bundle, so anyone who loads the page could read it. The daemon trusts writes whose `Origin` is `api.ui_origin` (default `http://localhost:3000`) and skips the token for them. If you serve the UI from another address, set `api.ui_origin` in the daemon config to that exact `scheme://host:port`. See [docs/config-reference.md](../docs/config-reference.md).
 
 Chat sends `tools: [{ name: "create_plan" }]` on `/v1/chat/completions` so the daemon can return `tool_calls` (`create_plan`, `status_report`). The UI maps `project_name` → plan card fields, renders status/clarification panels instead of raw JSON, and approves via materialize (refreshing the board and opening the first new task).
 

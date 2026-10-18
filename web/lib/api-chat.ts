@@ -7,7 +7,7 @@ import {
 import { mapDaemonDraftPlan } from "@/lib/mappers";
 import { requestJSON } from "@/lib/http";
 import { parseStructuredIntake, displayContentForChat } from "@/lib/chat-intake";
-import { API, CREATE_PLAN_TOOL_DEF, MATERIALIZE_TOKEN, USE_MOCK } from "@/lib/api-config";
+import { API, CREATE_PLAN_TOOL_DEF, USE_MOCK } from "@/lib/api-config";
 import type { ChatSettings } from "@/lib/chat-settings";
 
 interface ChatCompletion {
@@ -113,7 +113,6 @@ export async function postApprovePlan(plan: DraftPlan): Promise<MaterializeResul
   const data = await requestJSON<Record<string, unknown>>(`${API}/api/v1/projects/materialize`, {
     method: "POST",
     body: daemonBody,
-    token: MATERIALIZE_TOKEN,
   });
   const project = (data?.project ?? data?.Project) as Record<string, unknown> | undefined;
   const projectId = String(

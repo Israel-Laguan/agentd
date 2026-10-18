@@ -54,7 +54,10 @@ describe('API (non-mock materialize)', () => {
     expect(result.taskIds).toEqual(['task-b']);
   });
 
-  it('postApprovePlan sends materialize token header when env set', async () => {
+  // B-064: the token is a secret for non-browser clients. Anything NEXT_PUBLIC_
+  // is inlined into the client bundle, so the UI must never read or send it;
+  // the daemon trusts the UI by its Origin (api.ui_origin) instead.
+  it('postApprovePlan never sends a materialize token, even if one is in the env', async () => {
     enableNonMock();
     process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN = 'secret-token';
     vi.resetModules();
@@ -66,21 +69,6 @@ describe('API (non-mock materialize)', () => {
     const { postApprovePlan } = await NON_MOCK_ENV.importApi();
     await postApprovePlan({ name: 'P', description: '', tasks: [] });
     const headers = fetchMock.mock.calls[0][1].headers;
-    expect(headers['X-Agentd-Materialize-Token']).toBe('secret-token');
-  });
-
-  it('postApprovePlan omits token header when env unset', async () => {
-    enableNonMock();
-    delete process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN;
-    vi.resetModules();
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: { id: 'p1' } }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const { postApprovePlan } = await NON_MOCK_ENV.importApi();
-    await postApprovePlan({ name: 'P', description: '', tasks: [] });
-    const headers = fetchMock.mock.calls[0][1].headers;
-    expect(headers['X-Agentd-Materialize-Token']).toBeUndefined();
+    expect(headers).toEqual({ 'Content-Type': 'application/json' });
   });
 });

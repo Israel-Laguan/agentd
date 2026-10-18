@@ -65,18 +65,12 @@ describe("requestJSON", () => {
     expect(err.status).toBe(502);
   });
 
-  it("sends a JSON body with a content type and the token only when asked", async () => {
+  it("sends a JSON body with a content type and no other header", async () => {
     const fetchMock = stubFetch({ ok: true, status: 200, json: async () => ({ data: {} }) });
-    await requestJSON("http://d/x", { method: "POST", body: { a: 1 }, token: "s3cret" });
-    await requestJSON("http://d/y", { method: "POST", body: { a: 1 } });
-    const [, withToken] = fetchMock.mock.calls[0];
-    const [, withoutToken] = fetchMock.mock.calls[1];
-    expect(withToken.method).toBe("POST");
-    expect(withToken.body).toBe('{"a":1}');
-    expect(withToken.headers).toEqual({
-      "Content-Type": "application/json",
-      "X-Agentd-Materialize-Token": "s3cret",
-    });
-    expect(withoutToken.headers).toEqual({ "Content-Type": "application/json" });
+    await requestJSON("http://d/x", { method: "POST", body: { a: 1 } });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe('{"a":1}');
+    expect(init.headers).toEqual({ "Content-Type": "application/json" });
   });
 });

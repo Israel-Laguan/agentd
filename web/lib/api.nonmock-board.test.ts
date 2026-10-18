@@ -85,7 +85,7 @@ describe("API (non-mock board and human resolution)", () => {
     expect(board.cappedProjects).toEqual(["big"]);
   });
 
-  it("posts the result, version, and materialize token", async () => {
+  it("posts the result and version without a materialize token", async () => {
     enableNonMock();
     process.env.NEXT_PUBLIC_MATERIALIZE_TOKEN = "secret-token";
     vi.resetModules();
@@ -105,7 +105,7 @@ describe("API (non-mock board and human resolution)", () => {
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe("http://localhost:8765/api/v1/tasks/t2/human-resolution");
     expect(options.method).toBe("POST");
-    expect(options.headers["X-Agentd-Materialize-Token"]).toBe("secret-token");
+    expect(options.headers).toEqual({ "Content-Type": "application/json" });
     expect(JSON.parse(options.body)).toEqual({
       result: "operator output",
       expected_updated_at: new Date(1234).toISOString(),

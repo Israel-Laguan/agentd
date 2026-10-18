@@ -3,7 +3,7 @@ import { mockTaskComments } from "@/lib/mocks/mock-task-comment";
 import { TaskComment, TaskEvent, HumanHandoffResolution, TaskStatus } from "@/lib/types";
 import { mapDaemonTask, mapDaemonComment, mapDaemonTaskEvent } from "@/lib/mappers";
 import { requestJSON } from "@/lib/http";
-import { API, MATERIALIZE_TOKEN, USE_MOCK } from "@/lib/api-config";
+import { API, USE_MOCK } from "@/lib/api-config";
 import { mockTaskEvents } from "@/lib/mocks/task-event.mock";
 
 export async function fetchTaskComments(taskId: string): Promise<TaskComment[]> {
@@ -89,7 +89,6 @@ export async function resolveHumanHandoff(
 
   const data = await requestJSON<Record<string, unknown>>(`${API}/api/v1/tasks/${taskId}/human-resolution`, {
     method: "POST",
-    token: MATERIALIZE_TOKEN,
     body: {
       result,
       // The daemon compares expected_updated_at against the full-precision stored

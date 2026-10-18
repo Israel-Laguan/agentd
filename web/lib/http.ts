@@ -17,8 +17,6 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: string;
   body?: unknown;
-  // Sent as X-Agentd-Materialize-Token when non-empty.
-  token?: string;
   // Default true: return the envelope's `data`. Set false for bodies that are
   // not the daemon envelope (OpenAI-style chat completions).
   unwrap?: boolean;
@@ -40,10 +38,9 @@ async function errorFromResponse(res: Response): Promise<ApiError> {
 }
 
 export async function requestJSON<T>(url: string, options: RequestOptions = {}): Promise<T> {
-  const { method, body, token, unwrap = true } = options;
+  const { method, body, unwrap = true } = options;
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (token) headers["X-Agentd-Materialize-Token"] = token;
 
   const init: RequestInit = {
     ...(method ? { method } : {}),
