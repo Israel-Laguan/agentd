@@ -38,3 +38,19 @@ func TestLoadProjectInstructions_SymlinkInsideWorkspaceStillRead(t *testing.T) {
 		t.Fatalf("in-workspace symlink should load: pi=%v err=%v", pi, err)
 	}
 }
+
+func TestLoadProjectInstructions_AbsoluteSymlinkInsideWorkspaceStillRead(t *testing.T) {
+	ws := t.TempDir()
+	if err := os.WriteFile(filepath.Join(ws, "real.md"), []byte("# Rules\n- local rule\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(ws, "real.md"), filepath.Join(ws, "AGENTS.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	l := &InstructionLoader{}
+	pi, err := l.LoadProjectInstructions(ws, "")
+	if err != nil || pi == nil {
+		t.Fatalf("in-workspace absolute symlink should load: pi=%v err=%v", pi, err)
+	}
+}

@@ -59,19 +59,30 @@ func (l *InstructionLoader) LoadProjectInstructions(workspacePath, overridePath 
 	return nil, nil
 }
 
-// resolveInsideWorkspace returns the candidate's workspace-relative path, or
-// paths.ErrPathEscapesWorkspace when its symlinks lead outside the workspace:
-// the sandbox can plant AGENTS.md as a link to a host file, and the daemon
-// reads it from outside the jail.
+// resolveInsideWorkspace returns the validated target as a path relative to
+// the workspace root, or paths.ErrPathEscapesWorkspace when its symlinks lead
+// outside the workspace: the sandbox can plant AGENTS.md as a link to a host
+// file, and the daemon reads it from outside the jail. Returning the resolved
+// target keeps absolute in-workspace symlinks loadable through os.Root, which
+// refuses absolute links even when they point back inside the root.
 func resolveInsideWorkspace(workspacePath, full string) (string, error) {
 	rel, err := filepath.Rel(workspacePath, full)
 	if err != nil {
 		return "", fmt.Errorf("relative instruction path: %w", err)
 	}
-	if _, err := paths.ResolveWorkspaceFile(workspacePath, rel); err != nil {
+	workspaceRoot, err := paths.EvalWorkspaceRoot(workspacePath)
+	if err != nil {
+		return "", fmt.Errorf("workspace path is invalid: %w", err)
+	}
+	resolved, err := paths.ResolveWorkspaceFileWithRoot(workspacePath, workspaceRoot, rel)
+	if err != nil {
 		return "", err
 	}
-	return rel, nil
+	relToRoot, err := filepath.Rel(workspaceRoot, resolved)
+	if err != nil {
+		return "", fmt.Errorf("relative instruction path: %w", err)
+	}
+	return relToRoot, nil
 }
 
 // instructionCandidates returns an ordered list of candidate file paths

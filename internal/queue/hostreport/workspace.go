@@ -101,11 +101,14 @@ func writeAtomic(dir, target, content string) error {
 		_ = tmp.Close() // the write error is the one worth returning
 		return fmt.Errorf("write report: %w", err)
 	}
+	// Chmod the open handle: the sandbox can swap the temp name for a symlink,
+	// and a path-based chmod would follow it.
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close() // the chmod error is the one worth returning
+		return fmt.Errorf("chmod report: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close report: %w", err)
-	}
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
-		return fmt.Errorf("chmod report: %w", err)
 	}
 	if err := os.Rename(tmp.Name(), filepath.Join(dir, target)); err != nil {
 		return fmt.Errorf("install report: %w", err)
