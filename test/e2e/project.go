@@ -86,6 +86,8 @@ type DraftTask struct {
 	Description     string   `json:"description,omitempty"`
 	SuccessCriteria []string `json:"success_criteria,omitempty"`
 	DependsOn       []string `json:"depends_on,omitempty"`
+	// AgentID pre-assigns the task to an agent profile at creation.
+	AgentID string `json:"agent_id,omitempty"`
 }
 
 // MaterializeResult is the response body of POST /api/v1/projects/materialize.

@@ -195,6 +195,31 @@ func (c *APIClient) SetAgentProviderModel(ctx context.Context, agentID, provider
 	})
 }
 
+// CreateAgent calls POST /api/v1/agents to add an agent profile and returns its
+// ID. A journey that needs agentic mode creates its own profile instead of
+// patching "default", so it cannot change how other journeys' tasks run.
+func (c *APIClient) CreateAgent(ctx context.Context, name, provider, model string, agentic bool) (string, error) {
+	resp, err := c.Post(ctx, "/api/v1/agents", map[string]any{
+		"name": name, "provider": provider, "model": model, "agentic_mode": agentic,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("create agent returned %d", resp.StatusCode)
+	}
+	var envelope struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return "", fmt.Errorf("decode created agent: %w", err)
+	}
+	return envelope.Data.ID, nil
+}
+
 // Get makes a GET request.
 func (c *APIClient) Get(ctx context.Context, path string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)

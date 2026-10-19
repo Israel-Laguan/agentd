@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -192,4 +193,23 @@ func (m *MockLLMClient) SetSlowOnce(ctx context.Context, model string, seconds f
 		return errors.New("mock slow_once: seconds must be >= 0")
 	}
 	return m.postControl(ctx, "/slow_once", map[string]any{"model": model, "seconds": seconds})
+}
+
+// ScriptedToolCall is one tool call the mock LLM returns to the agentic loop.
+type ScriptedToolCall struct {
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+// ToolCallsTag returns the in-band tag that scripts the mock's tool calls for a
+// task: put it in the task description (devenv/mockllm/toolcalls.py). The mock
+// answers the agentic loop's first turn with these calls and its next turn with
+// a final message. The tag rides in the request, so parallel journeys never
+// share mock state.
+func ToolCallsTag(calls ...ScriptedToolCall) string {
+	raw, err := json.Marshal(calls)
+	if err != nil {
+		panic(err) // fixed-shape struct: cannot fail
+	}
+	return "@tool_calls=" + base64.URLEncoding.EncodeToString(raw)
 }

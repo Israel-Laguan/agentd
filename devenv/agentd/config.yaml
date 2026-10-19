@@ -39,6 +39,14 @@ gateway:
 
 queue:
   token_budget: 50000
+  # J20: the working-zone cut (gateway.truncation.strategy, default head_tail)
+  # only shows when this total (10000) is under the agentic character budget
+  # (gateway.truncator.max_input_chars, 12000); with the product defaults
+  # (60000) the gateway's head-only cut runs first. Only agentic tasks read it.
+  agentic_context:
+    anchor_budget: 3000
+    working_budget: 5000
+    compressed_budget: 2000
 
 # Keep the dev stack quiet: no self-healing handoffs or outage tasks.
 healing:
