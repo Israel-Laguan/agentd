@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -32,6 +33,22 @@ func NewScrubber(customPatterns []string) Scrubber {
 		patterns = append(patterns, compiled)
 	}
 	return regexScrubber{patterns: patterns}
+}
+
+// ValidateScrubPatterns reports the first custom pattern NewScrubber would
+// silently drop because it does not compile, so a bad redaction rule is a
+// load-time error instead of a secret that leaks.
+func ValidateScrubPatterns(customPatterns []string) error {
+	for _, pattern := range customPatterns {
+		trimmed := strings.TrimSpace(pattern)
+		if trimmed == "" {
+			continue
+		}
+		if _, err := regexp.Compile(trimmed); err != nil {
+			return fmt.Errorf("invalid pattern %q: %w", pattern, err)
+		}
+	}
+	return nil
 }
 
 func (s regexScrubber) Scrub(value string) string {

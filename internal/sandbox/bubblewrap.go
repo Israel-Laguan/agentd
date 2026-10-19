@@ -40,6 +40,16 @@ func resolveBackend(configured string) string {
 	}
 }
 
+// ValidateBackend rejects a configured backend that resolveBackend would
+// silently turn into auto. Empty is valid and means auto.
+func ValidateBackend(configured string) error {
+	switch strings.ToLower(strings.TrimSpace(configured)) {
+	case "", BackendAuto, BackendBubblewrap, BackendFilterOnly:
+		return nil
+	}
+	return fmt.Errorf("unknown backend %q (valid: %s, %s, %s)", configured, BackendAuto, BackendBubblewrap, BackendFilterOnly)
+}
+
 // jailProbeResult is one cached availability check: the bwrap path when the
 // binary exists, and whether unprivileged user namespaces work under it.
 type jailProbeResult struct {

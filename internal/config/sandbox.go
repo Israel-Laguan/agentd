@@ -1,9 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/spf13/viper"
+
+	"agentd/internal/sandbox"
 )
 
 const (
@@ -106,4 +109,17 @@ func loadSandboxConfig(v *viper.Viper) SandboxConfig {
 		cfg.Limits.Processes = defaultSandboxProcessesLimit
 	}
 	return cfg
+}
+
+// validateSandboxConfig rejects settings the sandbox would otherwise accept
+// and quietly weaken: an unknown backend became auto and a pattern that does
+// not compile was dropped from the scrubber.
+func validateSandboxConfig(cfg SandboxConfig) error {
+	if err := sandbox.ValidateBackend(cfg.Backend); err != nil {
+		return fmt.Errorf("sandbox.backend: %w", err)
+	}
+	if err := sandbox.ValidateScrubPatterns(cfg.ScrubPatterns); err != nil {
+		return fmt.Errorf("sandbox.scrub_patterns: %w", err)
+	}
+	return nil
 }

@@ -196,6 +196,9 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 		return Config{}, fmt.Errorf("load gateway config: %w", err)
 	}
 	cfg.Sandbox = loadSandboxConfig(v)
+	if err = validateSandboxConfig(cfg.Sandbox); err != nil {
+		return Config{}, err
+	}
 	cfg.Healing = loadHealingConfig(v)
 	cfg.Breaker = loadBreakerConfig(v)
 	cfg.Recovery = loadRecoveryConfig(v)
