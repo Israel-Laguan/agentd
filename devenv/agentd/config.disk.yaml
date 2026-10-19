@@ -48,3 +48,12 @@ healing:
 # silently ignored and the watchdog stayed on the default */10 schedule.
 disk:
   free_threshold_percent: 100
+
+# J18 shares this profile: the memory curator curates and purges a completed
+# task on its first pass (retention 0 hours, archive grace 0 days), and the
+# bind-mounted crontab runs it every 5s, so the journey can watch later passes
+# leave the task alone (B-066). J10's HUMAN task never completes, so the
+# curator does not touch it.
+librarian:
+  retention_hours: 0
+  archive_grace_days: 0

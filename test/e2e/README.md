@@ -86,6 +86,13 @@ The journey suite is defined in [docs/testing/journeys.md](../../docs/testing/jo
   and every tool payload is a JSON string in `content[0].text`. Requires
   `mcp.enabled: true` (set in devenv/agentd/config.yaml; the product default
   is off).
+- **J17**: Events API scrubs secrets — a task whose title carries a token
+  matching the default profile's `sandbox.scrub_patterns` completes, and
+  `GET /tasks/{id}/events` serves `[REDACTED]`, never the token (B-065)
+- **J18**: Curator curates each task once (disk profile) — with retention 0
+  and the curator every 5s, a completed task is curated and purged to one
+  `EVENTS_PURGED` marker, and that same marker is the task's only event after
+  three more passes (B-066)
 
 Deferred (see docs/testing/journeys.md for the policy and re-entry conditions):
 - **J06**: task drawer event log — needs a browser (UI journeys move to
@@ -182,7 +189,7 @@ Devenv supports multiple configurations via profiles in `devenv/compose.yaml`:
 | healing | Self-healing (J07) | agentd-healing | healing.enabled: true |
 | faults | Provider cascade (J09-A) | agentd-faults | gateway.order: [dead, secondary] |
 | breaker | Breaker trip (J09-B) | agentd-brk | gateway.order: [dead, dead2] (all dead) |
-| disk | Disk watchdog (J10) | agentd-disk | disk.free_threshold_percent: 100 + a crontab with `@every 5s disk-watchdog` |
+| disk | Disk watchdog (J10), curator once (J18) | agentd-disk | disk.free_threshold_percent: 100, librarian retention 0 h / grace 0 d + a crontab with `@every 5s disk-watchdog` and `@every 5s memory-curator` |
 | tiered | Tiered execution (J12) | agentd-tiered | tiered.enabled: true |
 
 The `default` profile also sets `mcp.enabled: true` / `transport: http` so
