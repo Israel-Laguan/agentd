@@ -17,7 +17,7 @@ Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in
 - CI: `.github/workflows/ci-e2e.yml` runs `make test-e2e` weekly on `main`, on demand, and on any pull request that touches `test/e2e/`, `devenv/`, the `Makefile`, `Dockerfile` or `.dockerignore` (they build the `agentd:local` image) or the workflow itself (B-023); a change to Markdown files alone never triggers it. The per-PR Go check does not run it, so a change outside those paths is covered by the weekly run, not by its own PR.
 - CI (UI tier): `.github/workflows/ci-e2e-ui.yml` runs `make test-ui` (Playwright, `web/e2e`, default profile only) on the same cadence for pull requests that touch `web/`, `devenv/`, `internal/api/`, `internal/config/`, the Go wire types and status sources the web app reads (listed in the workflow), the Makefile, `Dockerfile`, `.dockerignore` or the workflow itself. Markdown-only changes and `*_test.go` files never trigger it. It shares no runner with the journey suite, so neither pays for the other's resource needs.
 
-**UI journeys:** Browser verification is manual (documented in qa-and-browser-verification.md); not automated in S07.
+**UI journeys:** The Go journey suite does not drive a browser (S07). Real-browser flows live in the Playwright tier (`web/e2e`, `make test-ui`, T-040; see the CI (UI tier) line above and the J06 section); the broader manual checklist is in qa-and-browser-verification.md.
 
 ### Per-Journey Config Mechanism
 
