@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-e2e test-ui test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-up-ui dev-down dev-clean dev-logs
+.PHONY: build test test-integration test-e2e test-ui test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-up-ui dev-down dev-clean dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -23,8 +23,14 @@ ifneq ($(strip $(RUN)),)
 TEST_FLAGS += -run $(RUN)
 endif
 
-test:
+test: test-integration
 	$(GO_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
+
+# The memory curator tests import internal/memory, which the queue-test-isolation
+# depguard rule forbids in untagged queue tests, so they carry
+# //go:build integration. Run them here so make test, make check and CI cover them.
+test-integration:
+	$(GO_ENV) $(GO) test -race -tags integration ./internal/queue -run 'CurateMemories|CuratorDelay|MemoryRecallProvider'
 
 # E2E tests against live devenv stack. Starts devenv if not already running
 # (or reuses it). dev-up brings up every profile, not just `default`, because
