@@ -44,6 +44,15 @@ async function fetchProjectTasks(projectId: string): Promise<{ tasks: Task[]; ca
   }
 }
 
+// getProjectTasks refetches one project, for a board refresh driven by an SSE
+// frame that names it.
+export async function getProjectTasks(projectId: string): Promise<{ tasks: Task[]; capped: boolean }> {
+  if (USE_MOCK) {
+    return { tasks: structuredClone(mockBoard).tasks.filter((t) => t.project_id === projectId), capped: false };
+  }
+  return fetchProjectTasks(projectId);
+}
+
 export async function getBoard(): Promise<BoardSnapshot> {
   if (USE_MOCK) return structuredClone(mockBoard);
 

@@ -10,7 +10,11 @@ export type BoardIssues = Pick<BoardSnapshot, "failedProjects" | "cappedProjects
 export type DaemonState = "connecting" | "online" | "unreachable";
 
 const NO_ISSUES: BoardIssues = { failedProjects: [], cappedProjects: [] };
-import { getBoard, getWorkforce, getSystemStatus } from "@/lib/api";
+import { getBoard, getProjectTasks, getWorkforce, getSystemStatus } from "@/lib/api";
+
+// The SSE stream (use-board-stream) drives refreshes; this poll only covers
+// events it missed.
+const FALLBACK_POLL_MS = 30_000;
 
 export function useDashboard(
   setSelectedTask?: React.Dispatch<React.SetStateAction<Task | null>>
@@ -89,26 +93,72 @@ export function useDashboard(
     [applyDashboardSnapshot]
   );
 
+  // Replace one project's tasks after an SSE frame named it. A failed fetch is
+  // left to the fallback poll.
+  const refreshProject = useCallback(
+    async (projectId: string): Promise<void> => {
+      let fresh: { tasks: Task[]; capped: boolean };
+      try {
+        fresh = await getProjectTasks(projectId);
+      } catch (e) {
+        console.error("Project refresh failed", e);
+        return;
+      }
+      setLocalTasks((prev) => [
+        ...prev.filter((t) => t.project_id !== projectId),
+        ...fresh.tasks.map((serverTask) => {
+          const localTask = prev.find((t) => t.id === serverTask.id);
+          return localTask && localTask.updated_at > serverTask.updated_at ? localTask : serverTask;
+        }),
+      ]);
+      setBoardIssues((prev) => ({
+        failedProjects: prev.failedProjects.filter((f) => f.projectId !== projectId),
+        cappedProjects: [
+          ...prev.cappedProjects.filter((id) => id !== projectId),
+          ...(fresh.capped ? [projectId] : []),
+        ],
+      }));
+      setSelectedTask?.((prev) => {
+        if (!prev) return prev;
+        const next = fresh.tasks.find((t) => t.id === prev.id);
+        return next && next.updated_at > prev.updated_at ? next : prev;
+      });
+    },
+    [setSelectedTask]
+  );
+
   useEffect(() => {
     let mounted = true;
-    let timerId: ReturnType<typeof setTimeout>;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
 
     const poll = async () => {
+      clearTimeout(timerId);
+      timerId = undefined;
       try {
         await refreshDashboard(false);
       } catch (e) {
         console.error("Polling failed", e);
         if (mounted) setBoardError(true);
       } finally {
-        if (mounted) timerId = setTimeout(poll, 3000);
+        // A hidden tab stops polling; the visibility handler resumes it.
+        if (mounted && !document.hidden) timerId = setTimeout(poll, FALLBACK_POLL_MS);
+      }
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        clearTimeout(timerId);
+        timerId = undefined;
+      } else {
+        void poll();
       }
     };
 
     void poll();
-
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       mounted = false;
       clearTimeout(timerId);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refreshDashboard]);
 
@@ -132,6 +182,7 @@ export function useDashboard(
     daemonState: (boardError ? "unreachable" : loaded ? "online" : "connecting") as DaemonState,
     systemStatus,
     refreshDashboard,
+    refreshProject,
     handleMaterialized,
   };
 }
