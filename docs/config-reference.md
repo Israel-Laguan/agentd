@@ -131,7 +131,7 @@ Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First 
 
 ### Truncation
 
-`truncator.policy`: `head_tail`, `middle_out`, `summarize`, or `reject`. Of the `truncation` block only `stash_threshold` (file-stash offload) is read. `truncation.strategy`, `truncation.head_ratio` and `truncation.max_input_chars` are not implemented: they are parsed and ignored, so use `truncator.*`.
+`truncator.policy`: `head_tail`, `middle_out`, `summarize`, or `reject`. Of the `truncation` block, `stash_threshold` (file-stash offload) is read, and `head_ratio` sets the share of the budget kept from the head when `truncator.policy` is `head_tail`. `truncation.strategy` and `truncation.max_input_chars` are not implemented: they are parsed and ignored, so use `truncator.*`.
 
 ### MCP servers
 
@@ -194,6 +194,10 @@ Dispatch validation defaults apply when absent. Set both `max_message_size` and 
 - **rate_limit**: max task admissions per task within `rate_window` (queue path keys `session_id` to task ID); `0` = unlimited.
 - **rate_window**: sliding window in seconds for per-session rate limiting.
 
+## Librarian
+
+`librarian.*` tunes memory retention, chunking, recall and dream clustering; `config.reference.yaml` lists the keys and defaults. `librarian.preferences_top_k` is not implemented: it is parsed and ignored, because saved preferences are always recalled in full.
+
 ## Queue
 
 Cron schedules live in `<home>/agentd.crontab`.
@@ -215,6 +219,6 @@ Cron schedules live in `<home>/agentd.crontab`.
 
 ## Plugins
 
-> **Not loaded yet (B-063).** The daemon does not mount plugins, and no config key sets a plugins directory. The format below is the planned one.
+> **Not loaded yet (B-063).** The daemon does not mount plugins. The `plugins` block in `config.reference.yaml` (`enabled`, `path`, `shell_hook_timeout`) is not implemented: nothing reads it. The format below is the planned one.
 
 Plugins are directories inside a plugins directory, each containing a `manifest.json` declaring hooks, capabilities, and env requirements. Load order follows numeric directory prefix (`01-security/`, `02-observability/`, `10-code-quality/`) or the manifest `priority` field. A restart is required to pick up new or changed plugins.
