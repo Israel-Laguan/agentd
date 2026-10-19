@@ -191,17 +191,23 @@ func (t *AgenticTruncator) collectMessagesInReverse(messages []spec.PromptMessag
 	// Iterate from most recent (end) to oldest (start)
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
-		// Calculate message length including content AND tool call arguments
-		msgLen := utf8.RuneCountInString(msg.Content)
-		for _, tc := range msg.ToolCalls {
-			msgLen += utf8.RuneCountInString(tc.Function.Name)
-			msgLen += utf8.RuneCountInString(tc.Function.Arguments)
-		}
+		msgLen := messageChars(msg)
 
 		if *budget >= msgLen {
 			reversed = append(reversed, msg)
 			*budget -= msgLen
 		} else if *budget > 0 {
+			// A cut tool result leaves room for the call it answers; without
+			// the call, the dangling-result cleanup drops the result too (B-079).
+			reserve := 0
+			if msg.Role == "tool" {
+				reserve = pairedCallChars(messages[:i], msg.ToolCallID)
+			}
+			if reserve > 0 && *budget-reserve > markerLen {
+				reversed = append(reversed, t.truncateSingleMessage(msg, *budget-reserve-markerLen))
+				*budget = reserve
+				continue
+			}
 			truncatedMsg := t.truncateSingleMessage(msg, *budget-markerLen)
 			reversed = append(reversed, truncatedMsg)
 			*budget = 0
@@ -210,6 +216,29 @@ func (t *AgenticTruncator) collectMessagesInReverse(messages []spec.PromptMessag
 	}
 
 	return reversed
+}
+
+// messageChars is a message's content plus its tool call names and arguments.
+func messageChars(msg spec.PromptMessage) int {
+	n := utf8.RuneCountInString(msg.Content)
+	for _, tc := range msg.ToolCalls {
+		n += utf8.RuneCountInString(tc.Function.Name)
+		n += utf8.RuneCountInString(tc.Function.Arguments)
+	}
+	return n
+}
+
+// pairedCallChars is the size of the nearest earlier assistant message that
+// calls callID, or 0 when there is none.
+func pairedCallChars(earlier []spec.PromptMessage, callID string) int {
+	for i := len(earlier) - 1; i >= 0 && callID != ""; i-- {
+		for _, tc := range earlier[i].ToolCalls {
+			if tc.ID == callID {
+				return messageChars(earlier[i])
+			}
+		}
+	}
+	return 0
 }
 
 // truncateSingleMessage truncates a single message to fit within budget
