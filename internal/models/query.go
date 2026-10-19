@@ -18,6 +18,13 @@ type PaginatedResult[T any] struct {
 }
 
 // TaskFilter safely constrains task list queries.
+// TaskStateCount is the number of tasks one project has in one state.
+type TaskStateCount struct {
+	ProjectID string
+	State     TaskState
+	Count     int
+}
+
 type TaskFilter struct {
 	Pagination     PaginationParams
 	ProjectID      *string
