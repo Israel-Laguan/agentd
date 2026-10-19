@@ -260,9 +260,9 @@ func TestContextBudgetGuard_WarnAndExhausted(t *testing.T) {
 	if exhausted {
 		t.Fatal("9000 chars should not be exhausted at 10000 cap")
 	}
-	_, exhausted = g.Check(10000)
+	_, exhausted = g.Check(10001)
 	if !exhausted {
-		t.Fatal("expected exhausted at hard cap")
+		t.Fatal("expected exhausted past the hard cap")
 	}
 }
 
@@ -297,5 +297,17 @@ func TestDeadlineExpiredBeforeSecondIteration(t *testing.T) {
 	err := g.BeforeIteration()
 	if err == nil {
 		t.Fatal("expected error when deadline expired")
+	}
+}
+
+// The context manager cuts a context to fit exactly the budget, so a context
+// at the budget is full, not exhausted.
+func TestContextBudgetGuard_AtBudgetIsNotExhausted(t *testing.T) {
+	g := NewContextBudgetGuard(400, 0)
+	if _, exhausted := g.Check(400); exhausted {
+		t.Fatal("400 chars of a 400 budget reported as exhausted")
+	}
+	if _, exhausted := g.Check(401); !exhausted {
+		t.Fatal("401 chars of a 400 budget not reported as exhausted")
 	}
 }
