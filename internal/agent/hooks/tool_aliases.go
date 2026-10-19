@@ -8,7 +8,6 @@ const (
 	toolNameWrite            = agenttools.ToolNameWrite
 	toolNameDelegate         = agenttools.ToolNameDelegate
 	toolNameDelegateParallel = agenttools.ToolNameDelegateParallel
-	toolErrorPrefix          = agenttools.ToolErrorPrefix
 )
 
 type ToolResult = agenttools.ToolResult

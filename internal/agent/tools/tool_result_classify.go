@@ -49,10 +49,10 @@ func ClassifyBuiltinToolResult(callID, toolName, raw string, elapsedMs int64) To
 	}
 }
 
-// classifyPrecomputedReadResult classifies hook/cache read results. Errors are
-// distinguished by toolErrorPrefix (set by jsonErrorf and sandboxFailureJSON);
-// file content that happens to be a single-key {"error":...} JSON object is treated as success,
-// matching classifyBuiltinToolResult for live reads.
+// ClassifyPrecomputedReadResult classifies read results a pre-hook supplied
+// instead of running the tool. Errors are distinguished by toolErrorPrefix (set
+// by jsonErrorf and sandboxFailureJSON); file content that happens to be a
+// single-key {"error":...} JSON object is treated as success, matching classifyBuiltinToolResult for live reads.
 func ClassifyPrecomputedReadResult(callID, raw string, elapsedMs int64) ToolResult {
 	trimmed := strings.TrimSpace(raw)
 	if strings.HasPrefix(raw, toolErrorPrefix) {
