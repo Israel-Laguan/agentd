@@ -57,12 +57,24 @@ func DenylistHookFor(rootFor func(projectID string) string) PreHook {
 					return v, nil
 				}
 			}
+			if !plainProjectID(ctx.ProjectID) {
+				return HookVerdict{Veto: true, Reason: fmt.Sprintf("project id %q is not a single path element", ctx.ProjectID)}, nil
+			}
 			if v := checkPathTraversal(ctx.Args, filepath.Clean(rootFor(ctx.ProjectID))); v.Veto {
 				return v, nil
 			}
 			return HookVerdict{}, nil
 		},
 	}
+}
+
+// plainProjectID reports whether id names one directory under the projects
+// dir: no separator, not "." or "..". Empty stays allowed (no project).
+func plainProjectID(id string) bool {
+	if id == "." || id == ".." {
+		return false
+	}
+	return !strings.ContainsAny(id, `/\`)
 }
 
 func checkDangerousCommand(argsJSON string) HookVerdict {
