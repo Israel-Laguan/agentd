@@ -103,7 +103,9 @@ func (s *Store) ClaimNextReadyTasks(ctx context.Context, limit int) ([]models.Ta
 }
 
 func (s *Store) MarkProjectTasksReady(ctx context.Context, projectID string) ([]models.Task, error) {
-	return s.notifyTasks(retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+	var changed []models.Task
+	ready, err := retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+		changed = nil
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin mark project tasks ready: %w", err)
@@ -125,6 +127,11 @@ func (s *Store) MarkProjectTasksReady(ctx context.Context, projectID string) ([]
 		if err != nil {
 			return nil, fmt.Errorf("mark project tasks ready: %w", err)
 		}
+		// Only the rows this call unlocked changed; the READY list below also
+		// holds tasks that were already READY.
+		if changed, err = selectProjectTasksChangedAt(ctx, tx, projectID, now); err != nil {
+			return nil, err
+		}
 		rows, err := tx.QueryContext(ctx,
 			selectTaskSQL()+" WHERE project_id = ? AND state = ? ORDER BY created_at",
 			projectID, models.TaskStateReady)
@@ -137,7 +144,9 @@ func (s *Store) MarkProjectTasksReady(ctx context.Context, projectID string) ([]
 			return nil, err
 		}
 		return tasks, commitTx(tx, "mark project tasks ready")
-	}))
+	})
+	_, _ = s.notifyTasks(changed, err)
+	return ready, err
 }
 
 func (s *Store) UpdateTaskState(
@@ -146,7 +155,9 @@ func (s *Store) UpdateTaskState(
 	expectedUpdatedAt time.Time,
 	next models.TaskState,
 ) (*models.Task, error) {
-	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	var changed []models.Task
+	task, err := retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+		changed = nil
 		current, err := s.GetTask(ctx, id)
 		if err != nil {
 			return nil, err
@@ -171,8 +182,13 @@ func (s *Store) UpdateTaskState(
 		if err != nil {
 			return nil, err
 		}
+		if changed, err = selectProjectTasksChangedAt(ctx, tx, task.ProjectID, now); err != nil {
+			return nil, err
+		}
 		return task, commitTx(tx, "task state update")
-	}))
+	})
+	_, _ = s.notifyTasks(changed, err)
+	return task, err
 }
 
 func (s *Store) UpdateTaskResult(
@@ -181,7 +197,9 @@ func (s *Store) UpdateTaskResult(
 	expectedUpdatedAt time.Time,
 	result models.TaskResult,
 ) (*models.Task, error) {
-	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	var changed []models.Task
+	task, err := retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+		changed = nil
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin task result update: %w", err)
@@ -199,8 +217,13 @@ func (s *Store) UpdateTaskResult(
 		if err != nil {
 			return nil, err
 		}
+		if changed, err = selectProjectTasksChangedAt(ctx, tx, task.ProjectID, now); err != nil {
+			return nil, err
+		}
 		return task, commitTx(tx, "task result update")
-	}))
+	})
+	_, _ = s.notifyTasks(changed, err)
+	return task, err
 }
 
 func (s *Store) ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]models.Task, error) {

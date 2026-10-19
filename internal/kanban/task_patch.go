@@ -20,7 +20,9 @@ func (s *Store) UpdateTaskPatch(
 	state *models.TaskState,
 	description *string,
 ) (*models.Task, error) {
-	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	var changed []models.Task
+	task, err := retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+		changed = nil
 		current, err := s.GetTask(ctx, id)
 		if err != nil {
 			return nil, err
@@ -55,15 +57,7 @@ func (s *Store) UpdateTaskPatch(
 		}
 
 		if description != nil {
-			result, err := tx.ExecContext(ctx, `
-				UPDATE tasks
-				SET description = ?, updated_at = ?
-				WHERE id = ? AND updated_at = ?`,
-				*description, formatTime(now), id, formatTime(rowUpdatedAt))
-			if err != nil {
-				return nil, fmt.Errorf("update task description: %w", err)
-			}
-			if err := requireRowsAffected(result, 1, models.ErrStateConflict); err != nil {
+			if err := updateDescriptionInTx(ctx, tx, id, *description, now, rowUpdatedAt); err != nil {
 				return nil, err
 			}
 		}
@@ -72,6 +66,25 @@ func (s *Store) UpdateTaskPatch(
 		if err != nil {
 			return nil, err
 		}
+		if changed, err = selectProjectTasksChangedAt(ctx, tx, task.ProjectID, now); err != nil {
+			return nil, err
+		}
 		return task, commitTx(tx, "task patch")
-	}))
+	})
+	_, _ = s.notifyTasks(changed, err)
+	return task, err
+}
+
+// updateDescriptionInTx writes the description under the same optimistic lock
+// as the state write that may precede it in the transaction.
+func updateDescriptionInTx(ctx context.Context, tx *immediateTx, id, description string, now, rowUpdatedAt time.Time) error {
+	result, err := tx.ExecContext(ctx, `
+		UPDATE tasks
+		SET description = ?, updated_at = ?
+		WHERE id = ? AND updated_at = ?`,
+		description, formatTime(now), id, formatTime(rowUpdatedAt))
+	if err != nil {
+		return fmt.Errorf("update task description: %w", err)
+	}
+	return requireRowsAffected(result, 1, models.ErrStateConflict)
 }
