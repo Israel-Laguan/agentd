@@ -15,6 +15,7 @@ import (
 	"agentd/internal/gateway/spec"
 	"agentd/internal/memory"
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 	"agentd/internal/services"
 )
 
@@ -38,7 +39,8 @@ type ServerDeps struct {
 	Hub              *sse.Hub
 	Retriever        *memory.Retriever
 	ProviderConfigs  []spec.ProviderConfig
-	MCPHandler       http.Handler // optional: MCP board-export HTTP handler
+	MCPHandler       http.Handler     // optional: MCP board-export HTTP handler
+	Scrubber         sandbox.Scrubber // redacts event payloads served by the API; nil uses the built-in patterns
 }
 
 // NewHandler builds the API mux.
@@ -185,6 +187,7 @@ func newTaskHandler(deps ServerDeps) controllers.TaskHandler {
 		Store: deps.Store, Tasks: resolveTaskService(deps),
 		MaterializeToken: deps.MaterializeToken,
 		HumanResolver:    resolveHumanHandoffResolver(deps.Store),
+		Scrubber:         deps.Scrubber,
 	}
 }
 

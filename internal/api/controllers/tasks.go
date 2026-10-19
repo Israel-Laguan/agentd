@@ -7,6 +7,7 @@ import (
 
 	"agentd/internal/api/httpx"
 	"agentd/internal/models"
+	"agentd/internal/sandbox"
 	"agentd/internal/services"
 )
 
@@ -15,6 +16,8 @@ type TaskHandler struct {
 	Tasks            *services.TaskService
 	HumanResolver    models.HumanHandoffResolver
 	MaterializeToken string
+	// Scrubber redacts event payloads; nil uses the built-in patterns only.
+	Scrubber sandbox.Scrubber
 }
 
 type commentRequest struct {

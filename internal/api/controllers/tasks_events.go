@@ -18,7 +18,7 @@ const (
 	maxTaskEventPayload   = 16 * 1024
 )
 
-var taskEventScrubber = sandbox.NewScrubber(nil)
+var defaultTaskEventScrubber = sandbox.NewScrubber(nil)
 
 type taskEventResponse struct {
 	ID               string           `json:"id"`
@@ -60,7 +60,7 @@ func (h TaskHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	selected := events[start:]
 	out := make([]taskEventResponse, 0, len(selected))
 	for _, event := range selected {
-		out = append(out, representTaskEvent(event))
+		out = append(out, representTaskEvent(event, h.eventScrubber()))
 	}
 	hasMore := start > 0
 	httpx.WriteSuccess(w, http.StatusOK, out, &httpx.Meta{
@@ -86,8 +86,15 @@ func (*invalidTaskEventLimitError) Error() string {
 	return "limit must be an integer between 1 and 200"
 }
 
-func representTaskEvent(event models.Event) taskEventResponse {
-	payload, truncated := boundedEventPayload(taskEventScrubber.Scrub(event.Payload))
+func (h TaskHandler) eventScrubber() sandbox.Scrubber {
+	if h.Scrubber != nil {
+		return h.Scrubber
+	}
+	return defaultTaskEventScrubber
+}
+
+func representTaskEvent(event models.Event, scrubber sandbox.Scrubber) taskEventResponse {
+	payload, truncated := boundedEventPayload(scrubber.Scrub(event.Payload))
 	taskID := ""
 	if event.TaskID.Valid {
 		taskID = event.TaskID.String
