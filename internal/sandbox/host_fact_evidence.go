@@ -9,8 +9,14 @@ import (
 )
 
 var (
-	// hostFactIntent marks a task whose own text is about facts of the host.
-	hostFactIntent = regexp.MustCompile(`(?i)\b(operating system|os|hardware|cpu|processor|ram|memory|disk|storage|kernel|hostname|machine)\b`)
+	// hostFactStrong are nouns that name host facts on their own.
+	hostFactStrong = regexp.MustCompile(`(?i)\b(operating system|hardware|processor|kernel|hostname)\b`)
+	// hostFactNoun are nouns that also name agentd's own features (the memory
+	// curator, the disk watchdog, a state machine), so they count as host facts
+	// only next to hostContext (B-077).
+	hostFactNoun = regexp.MustCompile(`(?i)\b(os|cpu|ram|memory|disk|storage|machine)\b`)
+	// hostContext marks a task as asking about the host itself.
+	hostContext = regexp.MustCompile(`(?i)\b((this|the|local|host)\s+(machine|host|system|computer|server)|system\s+(information|info|report|details|specs?)|host\s+(information|info)|(lsblk|lscpu|hostnamectl|uname|df\s+-h|free\s+-h))\b`)
 	// commandSegments splits a command into the simple commands run in order.
 	commandSegments = regexp.MustCompile(`;|&&|\|\||\n`)
 	// literalEchoWrite is echo/printf sending text into a file, directly or via tee.
@@ -38,7 +44,10 @@ var (
 // else, and writes whose content comes from a command substitution or
 // from earlier output files, are untouched.
 func validateHostFactEvidence(intent, command string) error {
-	if !hostFactIntent.MatchString(intent) {
+	// Ambiguous nouns need host context next to them (B-077).
+	hostFacts := hostFactStrong.MatchString(intent) ||
+		(hostFactNoun.MatchString(intent) && hostContext.MatchString(intent))
+	if !hostFacts {
 		return nil
 	}
 	if writesLiteralText(command) {
