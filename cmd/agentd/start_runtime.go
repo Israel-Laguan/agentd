@@ -93,7 +93,25 @@ func buildDaemon(ctx context.Context, store models.KanbanStore, worker *queue.Wo
 	if err != nil {
 		return nil, err
 	}
-	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, queue.DaemonOptions{OutageHandoffEnabled: &outage, WorkspaceReset: workspaceReset, MaxWorkers: opts.workers, TaskInterval: cfg.Cron.TaskDispatch, MaxTaskInterval: cfg.Queue.PollMaxInterval, TaskDeadline: cfg.Queue.TaskDeadline, IntakeInterval: cfg.Cron.Intake, HeartbeatInterval: cfg.Cron.Heartbeat, StaleAfter: cfg.Heartbeat.StaleAfter, HandoffAfter: cfg.Breaker.HandoffAfter, DiskWatchdogEvery: cfg.Cron.DiskWatchdog.Every, DiskWatchdogSchedule: cfg.Cron.DiskWatchdog.Schedule, HITLReconcileEvery: cfg.Cron.HITLReconcile.Every, HITLReconcileSchedule: cfg.Cron.HITLReconcile.Schedule, DiskFreeThreshold: cfg.Disk.FreeThresholdPercent, DiskCheckPath: cfg.HomeDir, Librarian: librarian, Dreamer: dreamer, CuratorEvery: cfg.Cron.MemoryCurator.Every, CuratorSchedule: cfg.Cron.MemoryCurator.Schedule, DreamEvery: cfg.Cron.Dream.Every, DreamSchedule: cfg.Cron.Dream.Schedule, Channel: channel, QueuedReconcileAfter: cfg.Queue.QueuedReconcileAfter, RateLimitedRequeueAfter: requeue, RollingTokenLedger: ledger, Scheduler: scheduler}), nil
+	parts := daemonParts{channel: channel, scheduler: scheduler, librarian: librarian, dreamer: dreamer, ledger: ledger, requeue: requeue, outage: outage, workspaceReset: workspaceReset}
+	return queue.NewDaemon(store, worker, intake, deps.breaker, deps.emitter, buildDaemonOptions(cfg, opts, parts)), nil
+}
+
+// daemonParts are the collaborators buildDaemon constructs before the daemon
+// options are assembled.
+type daemonParts struct {
+	channel        queue.Channel
+	scheduler      *queue.Scheduler
+	librarian      *memory.Librarian
+	dreamer        *memory.DreamAgent
+	ledger         *queue.RollingTokenLedger
+	requeue        time.Duration
+	outage         bool
+	workspaceReset queue.WorkspaceResetter
+}
+
+func buildDaemonOptions(cfg config.Config, opts *startOptions, parts daemonParts) queue.DaemonOptions {
+	return queue.DaemonOptions{OutageHandoffEnabled: &parts.outage, WorkspaceReset: parts.workspaceReset, MaxWorkers: opts.workers, TaskInterval: cfg.Cron.TaskDispatch, MaxTaskInterval: cfg.Queue.PollMaxInterval, TaskDeadline: cfg.Queue.TaskDeadline, IntakeInterval: cfg.Cron.Intake, HeartbeatInterval: cfg.Cron.Heartbeat, StaleAfter: cfg.Heartbeat.StaleAfter, HandoffAfter: cfg.Breaker.HandoffAfter, DiskWatchdogEvery: cfg.Cron.DiskWatchdog.Every, DiskWatchdogSchedule: cfg.Cron.DiskWatchdog.Schedule, HITLReconcileEvery: cfg.Cron.HITLReconcile.Every, HITLReconcileSchedule: cfg.Cron.HITLReconcile.Schedule, DiskFreeThreshold: cfg.Disk.FreeThresholdPercent, DiskCheckPath: cfg.HomeDir, Librarian: parts.librarian, Dreamer: parts.dreamer, CuratorEvery: cfg.Cron.MemoryCurator.Every, CuratorSchedule: cfg.Cron.MemoryCurator.Schedule, DreamEvery: cfg.Cron.Dream.Every, DreamSchedule: cfg.Cron.Dream.Schedule, Channel: parts.channel, QueuedReconcileAfter: cfg.Queue.QueuedReconcileAfter, RateLimitedRequeueAfter: parts.requeue, RollingTokenLedger: parts.ledger, Scheduler: parts.scheduler}
 }
 
 func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Config, ledger *queue.RollingTokenLedger) (*http.Server, error) {
