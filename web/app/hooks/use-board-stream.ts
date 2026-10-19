@@ -28,8 +28,9 @@ interface BoardStreamOptions {
  * polling: a frame that changes a task row refetches just that frame's project,
  * and activity on the selected task bumps `taskActivityKey` (throttled) so the
  * open drawer re-reads its events, and `commentActivityKey` (only for
- * comment_added) so it re-reads its comments. After the stream drops and returns it asks
- * for a full resync. No-op in mock mode or where EventSource is missing.
+ * comment_added) so it re-reads its comments. After the stream drops and
+ * returns it asks for a full resync and bumps both keys, since frames for the
+ * open drawer may have been missed. No-op in mock mode or where EventSource is missing.
  */
 export function useBoardStream({ selectedTaskId, refreshProject, resync }: BoardStreamOptions) {
   const [taskActivityKey, setTaskActivityKey] = useState(0);
@@ -85,7 +86,12 @@ export function useBoardStream({ selectedTaskId, refreshProject, resync }: Board
         return [name, handler] as const;
       });
       es.onopen = () => {
-        if (wasDown) latest.current.resync();
+        if (wasDown) {
+          latest.current.resync();
+          // Frames for the open drawer may have been missed while down.
+          setCommentActivityKey((k) => k + 1);
+          setTaskActivityKey((k) => k + 1);
+        }
         wasDown = false;
       };
       es.onerror = () => {
