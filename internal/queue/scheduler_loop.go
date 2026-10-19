@@ -23,7 +23,7 @@ func (d *Daemon) schedulerLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			logDaemonError("scheduler tick failed", d.scheduler.Tick(ctx, now))
+			guardTick("scheduler tick failed", func() error { return d.scheduler.Tick(ctx, now) })
 		}
 	}
 }

@@ -16,7 +16,7 @@ func (d *Daemon) hitlTimeoutLoop(ctx context.Context) {
 			timer.Stop()
 			return
 		case <-timer.C:
-			logDaemonError("hitl timeout reconcile failed", d.reconcileHITLTimeouts(ctx))
+			guardTick("hitl timeout reconcile failed", func() error { return d.reconcileHITLTimeouts(ctx) })
 		}
 	}
 }

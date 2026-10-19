@@ -16,7 +16,7 @@ func (d *Daemon) memoryCuratorLoop(ctx context.Context) {
 			timer.Stop()
 			return
 		case <-timer.C:
-			logDaemonError("memory curator failed", d.curateMemories(ctx))
+			guardTick("memory curator failed", func() error { return d.curateMemories(ctx) })
 		}
 	}
 }

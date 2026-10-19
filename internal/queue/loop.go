@@ -15,8 +15,11 @@ func (d *Daemon) taskLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			dispatched, nacked, err := d.dispatch(ctx)
-			logDaemonError("queue dispatch failed", err)
+			var dispatched, nacked int
+			guardTick("queue dispatch failed", func() (err error) {
+				dispatched, nacked, err = d.dispatch(ctx)
+				return err
+			})
 			wait = d.nextDispatchDelay(wait, dispatched, nacked)
 			timer.Reset(wait)
 		}
@@ -43,7 +46,7 @@ func (d *Daemon) intakeLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			logDaemonError("comment intake failed", d.processComments(ctx))
+			guardTick("comment intake failed", func() error { return d.processComments(ctx) })
 		}
 	}
 }
@@ -57,7 +60,7 @@ func (d *Daemon) heartbeatReconcileLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			logDaemonError("heartbeat reconciliation failed", d.reconcileHeartbeats(ctx))
+			guardTick("heartbeat reconciliation failed", func() error { return d.reconcileHeartbeats(ctx) })
 		}
 	}
 }
@@ -86,7 +89,7 @@ func (d *Daemon) queuedReconcileLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			logDaemonError("orphaned queued reconcile failed", d.reconcileOrphanedQueued(ctx))
+			guardTick("orphaned queued reconcile failed", func() error { return d.reconcileOrphanedQueued(ctx) })
 		}
 	}
 }
