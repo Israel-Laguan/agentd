@@ -131,7 +131,7 @@ Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First 
 
 ### Truncation
 
-`truncator.policy`: `head_tail`, `middle_out`, `summarize`, or `reject`. The `truncation` block holds active strategy parameters including `stash_threshold` for file-stash offload.
+`truncator.policy`: `head_tail`, `middle_out`, `summarize`, or `reject`. Of the `truncation` block only `stash_threshold` (file-stash offload) is read. `truncation.strategy`, `truncation.head_ratio` and `truncation.max_input_chars` are not implemented: they are parsed and ignored, so use `truncator.*`.
 
 ### MCP servers
 
@@ -150,7 +150,7 @@ gateway:
 
 ## Agentic
 
-Enabled per agent profile via `AgentProfile.agentic_mode`. Tool rate limits are per-session PreToolUse caps.
+Enabled per agent profile via `AgentProfile.agentic_mode`. Keys marked **not implemented** are parsed and ignored (B-065); `config.reference.yaml` carries the same marker and a test fails when the two drift.
 
 | Key | Notes |
 | --- | --- |
@@ -158,11 +158,12 @@ Enabled per agent profile via `AgentProfile.agentic_mode`. Tool rate limits are 
 | `tool_failure_streak` | Consecutive errors on the same tool before `LoopToolFailure`; `0` = fatal-only. |
 | `topic_guard` | Drift detection; opens a fresh in-task session when human input is unrelated. `sensitivity` 0–1 (default `0.5`). |
 | `tool_credentials` | Map tool name → env var (injected per call, never in args). See [`reference.md`](reference.md). |
-| `approval_gates` | High-stakes tools require human approval via HUMAN subtask before execution. |
+| `approval_gates` | **Not implemented.** Planned: high-stakes tools require human approval via HUMAN subtask before execution. Nothing sets `AgentProfile.GatedTools` yet. |
+| `tool_rate_limits` | **Not implemented.** Planned: per-session PreToolUse call caps. `RateLimitHook` has no production caller. |
 | `audit` | JSONL log of tool dispatches, turn snapshots, history edits; args stored as SHA-256 hash. |
 | `external_tools` | Wrap in `<external_content>`; empty = all non-builtin; list limits scope. |
-| `review` | Review loop; override per profile via `AgentProfile.RequireReview`. |
-| `skills` | Markdown injected when TF-IDF matches task; see also `queue.skills.global_dir`. |
+| `review` | **Not implemented.** Planned: review loop; `AgentProfile.RequireReview` is never set. |
+| `skills` | **Not implemented** under `agentic`. Skills are configured under `queue.skills` (`project_dir`, `global_dir`, `threshold`, `top_k`). |
 | `file_context` | Smart file context for `read` (convert → cache → embed → select). Requires `pdftotext` (poppler) on PATH; embeddings use first OpenAI-compatible provider. |
 | `planning` | Plan→execute mode; `complexity_threshold` `0` disables (e.g. `500` enables). |
 | `model_routing` | Complexity routing by keyword score; see [`reference.md`](reference.md). |
@@ -201,7 +202,7 @@ Cron schedules live in `<home>/agentd.crontab`.
 | --- | --- |
 | `task_deadline` | Wall-clock timeout per worker task (the Reaper). |
 | `queued_reconcile_after` | Min age before resetting stale `QUEUED` claims; independent of `task_deadline`. |
-| `token_budget` | Worker-level per-task token cap; `0` = unlimited. See also `gateway.budget.tokens_per_task`. |
+| `token_budget` | Worker-level per-task token cap; `0` = unlimited. `gateway.budget` (`tokens_per_task`) is not implemented (parsed and ignored); use this key. |
 | `agentic_character_budget` | `0` inherits `gateway.truncator.max_input_chars`. |
 | `hitl.legacy_handoff_timeout` | Prompt/permission/healing/provider handoffs. Approval, review, and clarification use the 30m approval path. |
 | `legacy.max_breakdown_depth` | Max parent→child `too_complex` generations in legacy JSON mode before `LEGACY_MODE_HANDOFF` (`0` = no cap; default `2`). |

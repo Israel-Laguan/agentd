@@ -48,7 +48,7 @@ gateway:
     api_key: ""
     max_input_chars: 0
     timeout: "5m"
-  budget:
+  budget: # not implemented: parsed and ignored; use queue.token_budget
     tokens_per_task: 50000
   role_models:
     chat:
@@ -64,9 +64,9 @@ gateway:
     policy: "head_tail"
     max_input_chars: 12000
   truncation:
-    strategy: "head_tail"
-    head_ratio: 0.5
-    max_input_chars: 12000
+    strategy: "head_tail" # not implemented: parsed and ignored; use truncator.policy
+    head_ratio: 0.5 # not implemented: parsed and ignored
+    max_input_chars: 12000 # not implemented: parsed and ignored; use truncator.max_input_chars
     stash_threshold: 50000
 agentic:
   context_warning_threshold: 0.85
@@ -74,10 +74,10 @@ agentic:
   topic_guard:
     enabled: true
     sensitivity: 0.5
-  tool_rate_limits:
+  tool_rate_limits: # not implemented: no hook enforces these limits
     bash: 50
     default: 100
-  approval_gates:
+  approval_gates: # not implemented: AgentProfile.GatedTools is never set
     enabled: false
     tools: []
     timeout: "30m"
@@ -85,9 +85,9 @@ agentic:
     enabled: false
     path: "audit.jsonl"
   external_tools: []
-  review:
+  review: # not implemented: the review loop never runs
     enabled: false
-  skills:
+  skills: # not implemented under agentic: skills are read from queue.skills
     threshold: 0.1
     top_k: 3
     global_path: "skills"
