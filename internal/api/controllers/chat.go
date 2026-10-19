@@ -154,6 +154,14 @@ func parseChatRequest(w http.ResponseWriter, r *http.Request, ctx context.Contex
 	return req, message, true
 }
 
+// streamErrorText logs a streaming planner failure with the request ID and
+// returns the generic text the client sees in its place.
+func streamErrorText(ctx context.Context, log *slog.Logger, w http.ResponseWriter, err error) string {
+	id := w.Header().Get(httpx.HeaderRequestID)
+	log.ErrorContext(ctx, "chat intake: streaming planner failed", "request_id", id, "error", err)
+	return "error: " + httpx.MessageInternal
+}
+
 // completeStreaming emits the response as an SSE stream of chatChunk
 // frames terminated by "data: [DONE]\n\n", matching OpenAI's stream:true
 // wire format.
@@ -207,8 +215,7 @@ func (h ChatHandler) completeStreaming(
 	case isAICoreTimeout(err):
 		writeFrame(chatChunkDelta{Content: systemTimeoutMessage}, &finishStop)
 	case err != nil:
-		httpx.LogInternal(w, "chat intake: streaming planner failed", err)
-		writeFrame(chatChunkDelta{Content: "error: " + httpx.MessageInternal}, &finishStop)
+		writeFrame(chatChunkDelta{Content: streamErrorText(ctx, log, w, err)}, &finishStop)
 	default:
 		toolCalls, finish := buildToolCalls(content, req.Tools, req.ToolChoice)
 		f := finish

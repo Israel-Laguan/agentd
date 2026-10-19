@@ -10,5 +10,8 @@ const DefaultMaxBody int64 = 1 << 20
 // an error, so the handler's existing "invalid JSON request body" branch
 // rejects the request instead of buffering it.
 func LimitBody(w http.ResponseWriter, r *http.Request, max int64) {
+	if r.Body == nil {
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, max)
 }
