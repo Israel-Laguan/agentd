@@ -228,23 +228,6 @@ func (s *Store) DeleteCuratedEvents(ctx context.Context, taskID string) error {
 	return nil
 }
 
-func (s *Store) ListCompletedTasksOlderThan(ctx context.Context, age time.Duration) ([]models.Task, error) {
-	cutoff := utcNow().Add(-age)
-	rows, err := s.db.QueryContext(ctx, selectTaskSQL()+`
-		WHERE state = ? AND updated_at < ?
-		AND id NOT IN (
-			SELECT DISTINCT task_id FROM events
-			WHERE task_id IS NOT NULL AND updated_at LIKE 'CURATED:%'
-		)
-		ORDER BY updated_at`,
-		models.TaskStateCompleted, formatTime(cutoff))
-	if err != nil {
-		return nil, fmt.Errorf("list completed tasks older than %v: %w", age, err)
-	}
-	defer func() { _ = rows.Close() }()
-	return scanTasks(rows)
-}
-
 // AppendEvent inserts an event row. normalizeEvent runs once, before the retry
 // loop, so every attempt reuses the same event.ID -- a BUSY attempt never
 // committed, and the replay carries the same id rather than a fresh one.
