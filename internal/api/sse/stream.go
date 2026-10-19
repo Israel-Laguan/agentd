@@ -114,7 +114,7 @@ func eventName(t string) string {
 		return "log_chunk"
 	case models.EventTypeFailure:
 		return "task_failed"
-	case models.EventTypeResult:
+	case models.EventTypeResult, models.EventTypeTaskUpdated:
 		return "task_updated"
 	case models.EventTypeComment, models.EventTypeCommentIntake:
 		return "comment_added"

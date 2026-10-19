@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"agentd/internal/bus"
+	"agentd/internal/models"
 )
 
 func frameData(t *testing.T, sig bus.Signal) map[string]string {
@@ -51,5 +52,13 @@ func TestWriteEventOmitsEmptyIDs(t *testing.T) {
 	}
 	if _, ok := got["project_id"]; ok {
 		t.Fatalf("frame = %v, want no project_id", got)
+	}
+}
+
+// TestEventNameForBroadcastTaskUpdate keeps the SSE name the web board
+// subscribes to in step with the broadcast-only TASK_UPDATED event type.
+func TestEventNameForBroadcastTaskUpdate(t *testing.T) {
+	if got := eventName(string(models.EventTypeTaskUpdated)); got != "task_updated" {
+		t.Fatalf("eventName = %q, want task_updated", got)
 	}
 }

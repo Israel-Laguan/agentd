@@ -95,6 +95,13 @@ func (b TaskBridge) PublishTaskSplit(ctx context.Context, parent models.Task, ch
 	b.publishToTask(ctx, "task_split", parent, payload)
 }
 
+func (b TaskBridge) PublishTaskUpdated(ctx context.Context, task models.Task) {
+	if task.ID == "" {
+		return // nothing to name; a frame without a task would not be refetchable
+	}
+	b.publishTask(ctx, "task_updated", task)
+}
+
 func (b TaskBridge) PublishTaskRetried(ctx context.Context, task models.Task) {
 	b.publishTask(ctx, "task_retried", task)
 }

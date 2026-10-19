@@ -157,3 +157,16 @@ func TestTaskBridge_PublishTaskSplit_NoProjectID(t *testing.T) {
 		AgentID:    "agent-1",
 	}, []models.Task{{BaseEntity: models.BaseEntity{ID: "child-1"}}})
 }
+
+func TestTaskBridge_PublishTaskUpdated_NamesTaskAndProject(t *testing.T) {
+	mb := NewInProcess()
+	ch, unsubscribe := mb.Subscribe(GlobalTopic, 1)
+	defer unsubscribe()
+	TaskBridge{Bus: mb}.PublishTaskUpdated(context.Background(), models.Task{
+		BaseEntity: models.BaseEntity{ID: "task-1"}, ProjectID: "proj-1", State: models.TaskStateReady,
+	})
+	got := <-ch
+	if got.Type != "task_updated" || got.TaskID != "task-1" || got.ProjectID != "proj-1" {
+		t.Fatalf("signal = %#v, want task_updated for task-1/proj-1", got)
+	}
+}
