@@ -31,7 +31,8 @@ var consumedKeys = map[string]keyConsumer{
 	"gateway.warmup_enabled": {`WarmupEnabled`}, "gateway.max_tasks_per_phase": {`MaxTasksPerPhase`},
 	"gateway.order": {`Gateway\.Order|c\.Order`}, "gateway.role_models": {`RoleModels\.Chat`},
 	"gateway.truncator": {`Truncator\.MaxInputChars`}, "gateway.truncation.stash_threshold": {`Truncation\.StashThreshold`},
-	"gateway.openai": {`ProviderConfigs`}, "gateway.anthropic": {`ProviderConfigs`}, "gateway.gemini": {`ProviderConfigs`},
+	"gateway.truncation.head_ratio": {`Truncation\.HeadRatio`},
+	"gateway.openai":                {`ProviderConfigs`}, "gateway.anthropic": {`ProviderConfigs`}, "gateway.gemini": {`ProviderConfigs`},
 	"gateway.ollama": {`ProviderConfigs`}, "gateway.llamacpp": {`ProviderConfigs`}, "gateway.horde": {`ProviderConfigs`},
 	"agentic.context_warning_threshold": {`Agentic\.ContextWarningThreshold`}, "agentic.tool_failure_streak": {`Agentic\.ToolFailureStreak`},
 	"agentic.topic_guard": {`Agentic\.TopicGuard`}, "agentic.audit": {`Agentic\.Audit`},
@@ -58,15 +59,14 @@ var consumedKeys = map[string]keyConsumer{
 	"queue.tool_timeouts": {`Queue\.ToolTimeouts`}, "queue.tool_retries": {`Queue\.ToolRetries`},
 	"librarian": {`cfg\.Librarian`}, "tiered": {`cfg\.Tiered`},
 	"mcp.enabled": {`MCP\.Enabled`}, "mcp.transport": {`MCP\.Transport`},
-	"plugins": {`cfg\.Plugins|Plugins\.`},
 }
 
 // notImplementedKeys are documented, parsed and ignored. Remove an entry when
 // its feature is wired; add a consumedKeys entry in the same change.
 var notImplementedKeys = []string{
 	"agentic.review", "agentic.tool_rate_limits", "agentic.approval_gates", "agentic.skills",
-	"gateway.budget", "gateway.truncation.strategy", "gateway.truncation.head_ratio",
-	"gateway.truncation.max_input_chars", "mcp.http_addr",
+	"gateway.budget", "gateway.truncation.strategy", "gateway.truncation.max_input_chars",
+	"mcp.http_addr", "librarian.preferences_top_k", "plugins",
 }
 
 func TestConfigReferenceKeysHaveConsumers(t *testing.T) {
