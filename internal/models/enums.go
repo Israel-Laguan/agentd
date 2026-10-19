@@ -223,11 +223,14 @@ func (v VerifyResultOutcome) Valid() bool {
 type EventType string
 
 const (
-	EventTypeComment                   EventType = "COMMENT"
-	EventTypeCommentIntake             EventType = "COMMENT_INTAKE"
-	EventTypeLog                       EventType = "LOG"
-	EventTypeFailure                   EventType = "FAILURE"
-	EventTypeResult                    EventType = "RESULT"
+	EventTypeComment       EventType = "COMMENT"
+	EventTypeCommentIntake EventType = "COMMENT_INTAKE"
+	EventTypeLog           EventType = "LOG"
+	EventTypeFailure       EventType = "FAILURE"
+	EventTypeResult        EventType = "RESULT"
+	// EventTypeTaskUpdated is broadcast only (never persisted): a task row
+	// changed outside a result or failure, so a live board should refetch it.
+	EventTypeTaskUpdated               EventType = "TASK_UPDATED"
 	EventTypeCommand                   EventType = "COMMAND"
 	EventTypeSandboxBackend            EventType = "SANDBOX_BACKEND"
 	EventTypeRecovery                  EventType = "RECOVERY"
