@@ -27,11 +27,10 @@ func (e *Engine) prepareAgenticIteration(
 		e.ingestHumanCorrections(ctx, task.ID, cm)
 	}
 
-	chars := agentcontext.TotalChars(*messages)
-	warn, preExhausted := ctxBudgetGuard.Check(chars)
-	if preExhausted {
-		return true, nil
-	}
+	// Only the warning is taken from the raw size: preparing the context cuts
+	// the working zone to the budget, and the check after it decides whether
+	// what cannot be cut (anchor, summary, corrections) is still too large.
+	warn, _ := ctxBudgetGuard.Check(agentcontext.TotalChars(*messages))
 
 	var prepared []gateway.PromptMessage
 	if warn {

@@ -157,12 +157,13 @@ func NewContextBudgetGuard(totalBudget int, threshold float64) *ContextBudgetGua
 }
 
 // Check reports whether the warning threshold was newly crossed and whether the
-// hard character budget is exhausted.
+// hard character budget is exhausted, which is more than totalBudget: the
+// context manager cuts a context to fit exactly totalBudget.
 func (g *ContextBudgetGuard) Check(chars int) (warn bool, exhausted bool) {
 	if g.totalBudget <= 0 {
 		return false, false
 	}
-	exhausted = chars >= g.totalBudget
+	exhausted = chars > g.totalBudget
 	if g.threshold <= 0 || g.warned || g.totalBudget <= 0 {
 		return false, exhausted
 	}
