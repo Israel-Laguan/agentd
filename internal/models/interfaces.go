@@ -63,6 +63,20 @@ type SandboxEnvironment interface {
 	CleanupZombie(pid int) error
 }
 
+// TaskStatusStore is the read side the status summary needs: project listing
+// plus grouped state counts and the few tasks that can need attention, so a
+// summary never loads every task of every project.
+type TaskStatusStore interface {
+	ListProjects(ctx context.Context) ([]Project, error)
+	// CountTasksByState counts tasks per (project, state) in one grouped query;
+	// includeHealing=false leaves out self-healing manual-review handoffs.
+	CountTasksByState(ctx context.Context, includeHealing bool) ([]TaskStateCount, error)
+	// ListAttentionTasks loads only the open tasks a human may need to act on
+	// (human-assigned, BLOCKED, FAILED_REQUIRES_HUMAN, IN_CONSIDERATION,
+	// NEEDS_CONTEXT).
+	ListAttentionTasks(ctx context.Context) ([]Task, error)
+}
+
 // KanbanStore is the persistence boundary shared by the daemon, queue, and API.
 type KanbanStore interface {
 	MaterializePlan(ctx context.Context, plan DraftPlan) (*Project, []Task, error)

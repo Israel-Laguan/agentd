@@ -100,7 +100,49 @@ func (s *StatusSummarizer) SummarizeWithOptions(ctx context.Context, opts Summar
 	}, nil
 }
 
+// collectTaskStatus counts states with one grouped query and loads full rows
+// only for the open tasks that can need attention. Stores that cannot do that
+// (models.TaskStatusStore) fall back to loading every project's tasks.
 func (s *StatusSummarizer) collectTaskStatus(ctx context.Context, projects []models.Project, opts SummarizeOptions) (map[string]int, []AttentionItem, error) {
+	if grouped, ok := s.store.(models.TaskStatusStore); ok {
+		return collectGrouped(ctx, grouped, projects, opts)
+	}
+	return s.collectByLoadingTasks(ctx, projects, opts)
+}
+
+func collectGrouped(ctx context.Context, store models.TaskStatusStore, projects []models.Project, opts SummarizeOptions) (map[string]int, []AttentionItem, error) {
+	byID := make(map[string]models.Project, len(projects))
+	for _, project := range projects {
+		byID[project.ID] = project
+	}
+	counts, err := store.CountTasksByState(ctx, opts.IncludeHealing)
+	if err != nil {
+		return nil, nil, err
+	}
+	byState := map[string]int{}
+	for _, c := range counts {
+		if _, ok := byID[c.ProjectID]; ok {
+			byState[string(c.State)] += c.Count
+		}
+	}
+	tasks, err := store.ListAttentionTasks(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	var attention []AttentionItem
+	for _, task := range tasks {
+		project, ok := byID[task.ProjectID]
+		if !ok || (!opts.IncludeHealing && models.IsSelfHealingHandoffTask(task)) {
+			continue
+		}
+		if item, ok := buildAttentionItem(project, task); ok {
+			attention = append(attention, item)
+		}
+	}
+	return byState, attention, nil
+}
+
+func (s *StatusSummarizer) collectByLoadingTasks(ctx context.Context, projects []models.Project, opts SummarizeOptions) (map[string]int, []AttentionItem, error) {
 	byState := map[string]int{}
 	var attention []AttentionItem
 	for _, project := range projects {
