@@ -27,6 +27,13 @@ func (e *Engine) prepareAgenticIteration(
 		e.ingestHumanCorrections(ctx, task.ID, cm)
 	}
 
+	// The iteration-limit message goes in before the context is prepared, so
+	// it counts against the budget like any other working message.
+	if iterationGuard.ShouldInjectFinalMessage() {
+		*messages = append(*messages, iterationGuard.FinalMessage())
+		iterationGuard.ResetAllowFinal()
+	}
+
 	// Only the warning is taken from the raw size: preparing the context cuts
 	// the working zone to the budget, and the check after it decides whether
 	// what cannot be cut (anchor, summary, corrections) is still too large.
@@ -47,15 +54,8 @@ func (e *Engine) prepareAgenticIteration(
 	}
 	*messages = prepared
 
-	if _, exhausted := ctxBudgetGuard.Check(agentcontext.TotalChars(*messages)); exhausted {
-		return true, nil
-	}
-
-	if iterationGuard.ShouldInjectFinalMessage() {
-		*messages = append(*messages, iterationGuard.FinalMessage())
-		iterationGuard.ResetAllowFinal()
-	}
-	return false, nil
+	_, exhausted := ctxBudgetGuard.Check(agentcontext.TotalChars(*messages))
+	return exhausted, nil
 }
 
 func (e *Engine) applyAgenticTruncation(ctx context.Context, messages []gateway.PromptMessage) ([]gateway.PromptMessage, error) {
