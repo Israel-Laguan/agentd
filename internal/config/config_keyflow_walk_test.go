@@ -42,7 +42,7 @@ func (w *walk) up(e ast.Node, idx int, via []*ast.CallExpr) {
 	case *ast.AssignStmt:
 		w.upAssign(p, e, idx, via)
 	case *ast.ValueSpec:
-		w.upValueSpec(p, e, via)
+		w.upValueSpec(p, e, idx, via)
 	case *ast.ReturnStmt:
 		w.upReturn(p, e, idx, via)
 	case *ast.RangeStmt, *ast.SwitchStmt:
@@ -109,15 +109,17 @@ func (w *walk) upAssign(as *ast.AssignStmt, e ast.Node, idx int, via []*ast.Call
 	}
 }
 
-func (w *walk) upValueSpec(vs *ast.ValueSpec, e ast.Node, via []*ast.CallExpr) {
+func (w *walk) upValueSpec(vs *ast.ValueSpec, e ast.Node, idx int, via []*ast.CallExpr) {
 	pos := position(vs.Values, e)
 	if pos < 0 {
 		return
 	}
 	if len(vs.Names) != len(vs.Values) {
-		pos = 0
+		pos = idx // var a, b = f(): the call's tuple position picks the name
 	}
-	w.target(vs.Names[pos], via)
+	if pos < len(vs.Names) {
+		w.target(vs.Names[pos], via)
+	}
 }
 
 func (w *walk) upReturn(ret *ast.ReturnStmt, e ast.Node, idx int, via []*ast.CallExpr) {
