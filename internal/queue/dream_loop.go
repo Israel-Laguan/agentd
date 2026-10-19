@@ -15,7 +15,7 @@ func (d *Daemon) dreamLoop(ctx context.Context) {
 			timer.Stop()
 			return
 		case <-timer.C:
-			logDaemonError("dream agent failed", d.runDream(ctx))
+			guardTick("dream agent failed", func() error { return d.runDream(ctx) })
 		}
 	}
 }

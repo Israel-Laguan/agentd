@@ -3,6 +3,8 @@ package subagent
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 
 	agentcontext "agentd/internal/agent/context"
 	agenttools "agentd/internal/agent/tools"
@@ -171,6 +173,12 @@ func (d *SubagentDelegate) DelegateParallel(
 			defer func() {
 				<-sem
 				done <- struct{}{}
+			}()
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("parallel subagent panic recovered", "subagent", t.Definition.Name, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+					results[idx] = &SubagentResult{Status: SubagentStatusFailure, Error: fmt.Sprintf("subagent panicked: %v", r)}
+				}
 			}()
 			res, err := d.Delegate(ctx, t.Definition, t.Description, provider, model, temperature, maxTokens)
 			if err != nil {

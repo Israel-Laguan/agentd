@@ -22,7 +22,7 @@ func (d *Daemon) diskWatchdogLoop(ctx context.Context) {
 			timer.Stop()
 			return
 		case <-timer.C:
-			logDaemonError("disk watchdog failed", d.checkDiskSpace(ctx))
+			guardTick("disk watchdog failed", func() error { return d.checkDiskSpace(ctx) })
 		}
 	}
 }
