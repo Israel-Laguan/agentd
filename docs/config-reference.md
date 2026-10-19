@@ -159,7 +159,7 @@ Enabled per agent profile via `AgentProfile.agentic_mode`. Keys marked **not imp
 | `topic_guard` | Drift detection; opens a fresh in-task session when human input is unrelated. `sensitivity` 0–1 (default `0.5`). |
 | `tool_credentials` | Map tool name → env var (injected per call, never in args). See [`reference.md`](reference.md). |
 | `approval_gates` | **Not implemented.** Planned: high-stakes tools require human approval via HUMAN subtask before execution. Nothing sets `AgentProfile.GatedTools` yet. |
-| `tool_rate_limits` | **Not implemented.** Planned: per-session PreToolUse call caps. `RateLimitHook` has no production caller. |
+| `tool_rate_limits` | **Not implemented.** Planned: per-session PreToolUse call caps. The unused rate-limit hook was removed; a future implementation starts from the call seam (S18). |
 | `audit` | JSONL log of tool dispatches, turn snapshots, history edits; args stored as SHA-256 hash. |
 | `external_tools` | Wrap in `<external_content>`; empty = all non-builtin; list limits scope. |
 | `review` | **Not implemented.** Planned: review loop; `AgentProfile.RequireReview` is never set. |
