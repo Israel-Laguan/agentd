@@ -21,6 +21,7 @@ from controls import (
     set_slow_once,
     take_slow_once,
 )
+from toolcalls import configured_tool_calls, tool_calls_completion
 
 # Re-exported so callers that only import this module — including the tests — can
 # keep using server.set_outage(...) and friends. The per-model control toggles now
@@ -352,6 +353,12 @@ def chat_completion(body: dict, headers=None) -> dict:
     if scenario and not scenario.startswith(("error", "latency", "slow", "timeout")):
         sys.stderr.write(f"[mockllm] scenario={scenario}\n")
         sys.stderr.flush()
+
+    scripted = configured_tool_calls(body)
+    if scripted:
+        sys.stderr.write(f"[mockllm] scripted tool calls task_id={task_id} calls={len(scripted)}\n")
+        sys.stderr.flush()
+        return tool_calls_completion(body, scripted)
 
     step = tiered_step(system_content)
     if step:

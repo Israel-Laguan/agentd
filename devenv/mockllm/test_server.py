@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import server  # noqa: E402
+import toolcalls  # noqa: E402
 
 
 def headers(**kwargs):
@@ -301,6 +302,70 @@ class QuotaAndSlowOnceTest(unittest.TestCase):
         started = time.monotonic()
         self.assertEqual(self._chat("prb-quota"), 429)
         self.assertLess(time.monotonic() - started, 2.0, "the quota failure waited out the armed delay")
+
+
+class ToolCallScenarioTest(unittest.TestCase):
+    """T-053: a task can script `tool_calls` for the agentic loop."""
+
+    CALLS = [{"name": "bash", "arguments": {"command": "sudo id"}}]
+
+    def _body(self, calls=None, tools=True, tool_result=None):
+        tag = toolcalls.encode_tool_calls(self.CALLS if calls is None else calls)
+        messages = [
+            {"role": "system", "content": "You are an agent."},
+            {"role": "user", "content": f"Task: scripted\n@tool_calls={tag}"},
+        ]
+        if tool_result is not None:
+            messages += [
+                {"role": "assistant", "content": None, "tool_calls": [{"id": "c0"}]},
+                {"role": "tool", "tool_call_id": "c0", "content": tool_result},
+            ]
+        body = {"model": "agentd", "messages": messages}
+        if tools:
+            body["tools"] = [{"type": "function", "function": {"name": "bash"}}]
+        return body
+
+    def test_first_turn_returns_the_configured_tool_calls(self):
+        reply = server.chat_completion(self._body())
+        choice = reply["choices"][0]
+        self.assertEqual(choice["finish_reason"], "tool_calls")
+        calls = choice["message"]["tool_calls"]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["type"], "function")
+        self.assertEqual(calls[0]["function"]["name"], "bash")
+        self.assertEqual(json.loads(calls[0]["function"]["arguments"]), {"command": "sudo id"})
+
+    def test_next_turn_is_a_final_message(self):
+        reply = server.chat_completion(self._body(tool_result="refused"))
+        choice = reply["choices"][0]
+        self.assertEqual(choice["finish_reason"], "stop")
+        self.assertEqual(choice["message"]["content"], toolcalls.FINAL_MESSAGE)
+        self.assertNotIn("tool_calls", choice["message"])
+
+    def test_request_without_tools_keeps_the_default_reply(self):
+        reply = server.chat_completion(self._body(tools=False))
+        self.assertIn("command", json.loads(reply["choices"][0]["message"]["content"]))
+
+    def test_malformed_tag_keeps_the_default_reply(self):
+        body = self._body()
+        body["messages"][1]["content"] = "Task: scripted\n@tool_calls=!!!not-base64"
+        reply = server.chat_completion(body)
+        self.assertIn("command", json.loads(reply["choices"][0]["message"]["content"]))
+        self.assertEqual(toolcalls.configured_tool_calls(self._body(calls=[{"arguments": {}}])), [])
+
+    def test_tool_call_reply_is_served_over_http(self):
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{httpd.server_address[1]}/v1/chat/completions",
+            data=json.dumps(self._body()).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req) as resp:
+            reply = json.load(resp)
+        self.assertEqual(reply["choices"][0]["message"]["tool_calls"][0]["function"]["name"], "bash")
 
 
 if __name__ == "__main__":
