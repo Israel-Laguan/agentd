@@ -165,7 +165,7 @@ task["id"], task["project_id"], task["state"]
 | --- | --- | --- |
 | `gateway.truncation.strategy` | `head_tail` | How the agent and its subagents cut working context over the `queue.agentic_context` budgets (`head_tail` or `middle_out`). |
 | `gateway.truncation.head_ratio` | `0.5` | Share kept from the head wherever `head_tail` applies (this strategy, or `gateway.truncator.policy`). |
-| `gateway.truncation.max_input_chars` | _(provider-dependent)_ | Default per-message character budget for gateway truncation. |
+| `gateway.truncation.max_input_chars` | `12000` | Not implemented: parsed and ignored. Use `gateway.truncator.max_input_chars`. |
 | `gateway.truncation.stash_threshold` | _(configured)_ | Character threshold above which content is saved to the file stash. |
 | `uploads_dir` | `<home>/uploads` | Directory for oversized uploaded or referenced file content. |
 | `breaker.handoff_after` | `2m` | Duration the LLM breaker must stay open before creating a HUMAN outage task. |
@@ -229,6 +229,6 @@ task["id"], task["project_id"], task["state"]
 | `librarian.fallback_head_tail_chars` | _(configured)_ | Characters to keep from head and tail in deterministic fallback extraction. |
 | `librarian.recall_timeout` | `500ms` | Hard timeout for memory recall queries (Danger B). |
 | `librarian.recall_top_k` | `5` | Maximum memories returned per recall query. |
-| `librarian.preferences_top_k` | `3` | Maximum user preferences returned per recall. |
+| `librarian.preferences_top_k` | `3` | Not implemented: parsed and ignored; saved preferences are always recalled in full. |
 | `librarian.dream_cluster_min_size` | `3` | Minimum cluster size for dream consolidation. |
 | `librarian.dream_similarity_threshold` | `0.7` | Jaccard similarity threshold for memory clustering. |
