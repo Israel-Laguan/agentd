@@ -49,3 +49,19 @@ describe("CommentPanel failed post", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
+
+describe("CommentPanel live refresh", () => {
+  it("re-reads comments when refreshKey changes", async () => {
+    const mockFetch = vi.mocked(fetchTaskComments);
+    const { rerender } = render(<CommentPanel taskId="t1" refreshKey={0} />);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+    mockFetch.mockResolvedValue([
+      { id: "c9", task_id: "t1", message: "arrived over SSE", created_at: "2026-10-19T10:00:00Z", author: { id: "u", name: "Ana" } },
+    ]);
+    rerender(<CommentPanel taskId="t1" refreshKey={1} />);
+
+    expect(await screen.findByText("arrived over SSE")).toBeInTheDocument();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+});

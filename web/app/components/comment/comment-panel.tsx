@@ -6,7 +6,9 @@ import { CommentItem } from "./comment-item";
 import { TaskComment } from "@/lib/types";
 
 
-export function CommentPanel({ taskId }: { taskId: string }) {
+// refreshKey changes when the daemon streams activity for this task, which
+// re-reads the comments.
+export function CommentPanel({ taskId, refreshKey = 0 }: { taskId: string; refreshKey?: number }) {
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,14 +26,15 @@ export function CommentPanel({ taskId }: { taskId: string }) {
         if (!cancelled) setComments(data || []);
       } catch (err) {
         console.error(err);
-        if (!cancelled) setComments([]);
+        // A failed live refresh keeps what is on screen.
+        if (!cancelled && refreshKey === 0) setComments([]);
       }
     }
     load();
     return () => {
       cancelled = true;
     };
-  }, [taskId]);
+  }, [taskId, refreshKey]);
 
   // ---------------- AUTO SCROLL ----------------
   useEffect(() => {
