@@ -73,3 +73,28 @@ func precedenceContext(strategy gateway.TruncationStrategy) (*agentcontext.Conte
 func precedenceEngine() *Engine {
 	return &Engine{config: Config{Store: testutil.NewFakeStore()}}
 }
+
+// The iteration-limit message is part of the budget, not appended after it.
+func TestPrepareAgenticIteration_FinalMessageStaysWithinBudget(t *testing.T) {
+	cm, guard := precedenceContext(nil)
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: strings.Repeat("x", 1000)},
+	}
+	iterations := agentruntime.NewIterationGuard(1)
+	iterations.AfterIteration(true)
+
+	exhausted, err := precedenceEngine().prepareAgenticIteration(
+		context.Background(), &messages, iterations, cm, guard, models.Task{})
+
+	if err != nil || exhausted {
+		t.Fatalf("prepareAgenticIteration: exhausted=%v err=%v", exhausted, err)
+	}
+	if got := agentcontext.TotalChars(messages); got > cm.TotalBudget() {
+		t.Fatalf("prompt is %d chars after the final message, over the %d budget", got, cm.TotalBudget())
+	}
+	if last := messages[len(messages)-1]; last.Content != agentruntime.IterationExceededMessage {
+		t.Fatalf("last message = %q, want the iteration-limit message", last.Content)
+	}
+}

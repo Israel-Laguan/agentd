@@ -27,15 +27,21 @@ func TestEnforceBudget_DoesNotCorruptMessagesBetweenCorrectionsAndSummary(t *tes
 		{Role: "assistant", Content: strings.Repeat("x", 1000)},
 	}
 
-	prepared := cm.enforceBudget(messages, len("system")+len("task")+len(correction)+len(summary)+len(intervening))
-	if len(prepared) != 5 {
-		t.Fatalf("expected anchor, correction, summary, and intervening message, got %#v", prepared)
+	budget := len("system") + len("task") + len(correction) + len(summary) + len(intervening)
+	prepared := cm.enforceBudget(messages, budget)
+	if len(prepared) != 6 {
+		t.Fatalf("expected anchor, correction, summary, then both working messages, got %#v", prepared)
 	}
 	if prepared[3].Content != summary {
 		t.Fatalf("expected protected summary before working messages, got %#v", prepared)
 	}
-	if prepared[4].Content != intervening {
-		t.Fatalf("expected uncorrupted intervening message in working set, got %#v", prepared)
+	// The working zone keeps chronological order, and the cut favours the
+	// newest message: it is kept (cut), and the older one gets what is left.
+	if !strings.HasPrefix(intervening, prepared[4].Content) || !strings.HasPrefix(prepared[5].Content, "x") {
+		t.Fatalf("working messages out of order or corrupted, got %#v", prepared[4:])
+	}
+	if TotalChars(prepared) > budget {
+		t.Fatalf("prepared context is %d chars, over the %d budget", TotalChars(prepared), budget)
 	}
 }
 
