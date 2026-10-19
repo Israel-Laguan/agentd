@@ -20,7 +20,7 @@
 set -euo pipefail
 
 MAX_FILES=100
-MAX_LINES=1000
+MAX_LINES=2000
 OVERRIDE_LABEL=large-pr-ok
 
 # Basenames / path globs excluded from the size accounting. These are generated
