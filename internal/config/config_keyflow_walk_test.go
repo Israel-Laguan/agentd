@@ -50,6 +50,10 @@ func (w *walk) up(e ast.Node, idx int, via []*ast.CallExpr) {
 			w.target(p.Key, via)
 			w.target(p.Value, via)
 		}
+	case *ast.SwitchStmt:
+		if p.Tag == e {
+			w.upCaseReturns(p, via)
+		}
 	default:
 		w.upExpr(p, e, via)
 	}
@@ -145,6 +149,20 @@ func (w *walk) upReturn(ret *ast.ReturnStmt, e ast.Node, idx int, via []*ast.Cal
 	for _, call := range w.k.calls[fn] {
 		w.up(call, pos, via)
 	}
+}
+
+// upCaseReturns follows a switch tag into the values its cases return: the
+// tag picks the result (as in TruncationConfig.StrategyImpl).
+func (w *walk) upCaseReturns(sw *ast.SwitchStmt, via []*ast.CallExpr) {
+	ast.Inspect(sw.Body, func(n ast.Node) bool {
+		if ret, ok := n.(*ast.ReturnStmt); ok {
+			for _, r := range ret.Results {
+				w.upReturn(ret, r, 0, via)
+			}
+		}
+		_, isLit := n.(*ast.FuncLit)
+		return !isLit
+	})
 }
 
 func (w *walk) enclosingFunc(n ast.Node) types.Object {

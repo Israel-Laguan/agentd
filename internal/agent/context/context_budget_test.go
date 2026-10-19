@@ -6,6 +6,7 @@ import (
 
 	"agentd/internal/config"
 	"agentd/internal/gateway/spec"
+	"agentd/internal/gateway/truncation"
 )
 
 func TestEnforceBudget_DoesNotCorruptMessagesBetweenCorrectionsAndSummary(t *testing.T) {
@@ -35,5 +36,38 @@ func TestEnforceBudget_DoesNotCorruptMessagesBetweenCorrectionsAndSummary(t *tes
 	}
 	if prepared[4].Content != intervening {
 		t.Fatalf("expected uncorrupted intervening message in working set, got %#v", prepared)
+	}
+}
+
+// gateway.truncation.strategy reaches the working zone: the configured
+// strategy, not a hardcoded middle-out, cuts what exceeds the budget.
+func TestEnforceBudget_UsesConfiguredTruncationStrategy(t *testing.T) {
+	cm := NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task")
+	strategy := truncation.HeadTailStrategy{HeadRatio: 0.8}
+	cm.SetTruncationStrategy(strategy)
+	long := strings.Repeat("h", 500) + strings.Repeat("t", 500)
+	messages := []spec.PromptMessage{
+		{Role: "system", Content: "system"},
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: long},
+	}
+
+	prepared := cm.enforceBudget(messages, len("system")+len("task")+200)
+
+	want := strategy.Truncate(long, 200)
+	if want == (truncation.MiddleOutStrategy{}).Truncate(long, 200) {
+		t.Fatal("test input does not tell head_tail from middle_out")
+	}
+	if got := prepared[len(prepared)-1].Content; got != want {
+		t.Fatalf("working message = %q, want head_tail cut %q", got, want)
+	}
+}
+
+func TestTruncationStrategy_DefaultsToMiddleOut(t *testing.T) {
+	var unset *ContextManager
+	for _, cm := range []*ContextManager{unset, {}, NewContextManager(config.AgenticContextConfig{}, nil, "a", "t")} {
+		if _, ok := cm.TruncationStrategy().(truncation.MiddleOutStrategy); !ok {
+			t.Fatalf("TruncationStrategy() = %T, want MiddleOutStrategy", cm.TruncationStrategy())
+		}
 	}
 }

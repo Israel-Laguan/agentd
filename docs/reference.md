@@ -163,8 +163,8 @@ task["id"], task["project_id"], task["state"]
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `gateway.truncation.strategy` | `head_tail` | Active truncation algorithm (`head_tail` or `middle_out`). |
-| `gateway.truncation.head_ratio` | `0.5` | Head/tail budget portion allocated to the beginning of content. |
+| `gateway.truncation.strategy` | `head_tail` | How the agent and its subagents cut working context over the `queue.agentic_context` budgets (`head_tail` or `middle_out`). |
+| `gateway.truncation.head_ratio` | `0.5` | Share kept from the head wherever `head_tail` applies (this strategy, or `gateway.truncator.policy`). |
 | `gateway.truncation.max_input_chars` | _(provider-dependent)_ | Default per-message character budget for gateway truncation. |
 | `gateway.truncation.stash_threshold` | _(configured)_ | Character threshold above which content is saved to the file stash. |
 | `uploads_dir` | `<home>/uploads` | Directory for oversized uploaded or referenced file content. |
@@ -187,7 +187,7 @@ task["id"], task["project_id"], task["state"]
 | `gateway.horde.timeout` | `5m` | Maximum wait time for an AI Horde queued generation. |
 | `gateway.horde.poll_interval` | `4s` | Delay between AI Horde status checks (legacy key; populates `options.poll_interval` on the Horde provider entry). Prefer `options.poll_interval` under `gateway.providers` or the legacy horde block — see [`config-reference.md`](config-reference.md#custom-provider-registry). |
 | `gateway.max_tasks_per_phase` | `7` | Maximum tasks Frontdesk may emit for a single planning phase. |
-| `gateway.truncator.policy` | `middle_out` | Default truncation policy for outbound LLM requests. |
+| `gateway.truncator.policy` | `head_tail` | Default truncation policy for outbound LLM requests. |
 | `gateway.truncator.max_input_chars` | _(configured)_ | Default input character budget for the truncator. |
 | `queue.task_deadline` | `10m` | Wall-clock timeout per dispatched worker task (the Reaper). |
 | `queue.queued_reconcile_after` | `10m` | Minimum age of a QUEUED claim before orphan recovery resets it to READY. Independent of `task_deadline`. Set to `0` to disable. |

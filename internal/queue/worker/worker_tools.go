@@ -201,7 +201,8 @@ func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gatew
 		0, // depth=0: parent is delegating
 	).WithCapabilities(w.capabilities, scopedCaps).
 		WithExternalTools(w.externalTools).
-		WithCallEnv(callEnv)
+		WithCallEnv(callEnv).
+		WithTruncationStrategy(w.contextTruncation)
 
 	result, err := delegate.Delegate(
 		ctx,
@@ -260,7 +261,8 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 		0,
 	).WithCapabilities(w.capabilities, scopedCaps).
 		WithExternalTools(w.externalTools).
-		WithCallEnv(callEnv)
+		WithCallEnv(callEnv).
+		WithTruncationStrategy(w.contextTruncation)
 
 	results := delegate.DelegateParallel(ctx, tasks, "", "", 0.2, 0)
 	encoded, err := json.Marshal(results)

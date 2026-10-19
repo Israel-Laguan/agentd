@@ -28,6 +28,7 @@ type Config struct {
 	FileContextCfg          config.FileContextConfig
 	DocStore                *wfilecontext.DocStore
 	ContextCfg              config.AgenticContextConfig
+	ContextTruncation       gateway.TruncationStrategy
 	MaxToolIterations       int
 	BudgetTracker           spec.BudgetTracker
 	ContextWarningThreshold float64

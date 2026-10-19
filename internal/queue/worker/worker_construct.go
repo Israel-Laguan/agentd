@@ -30,6 +30,7 @@ type WorkerOptions struct {
 	AgenticTruncatorMax        int
 	AgenticCharacterBudget     int
 	AgenticContext             config.AgenticContextConfig
+	ContextTruncation          gateway.TruncationStrategy // cuts agent and subagent context over budget
 	Canceller                  *CancelRegistry
 	Tuner                      *planning.ParameterTuner
 	Retriever                  MemoryRetriever
@@ -186,6 +187,7 @@ func newWorkerCore(
 		hooks:                         hooks,
 		pluginMounter:                 opts.PluginMounter,
 		contextCfg:                    opts.AgenticContext,
+		contextTruncation:             opts.ContextTruncation,
 		legacyHandoffTimeout:          opts.LegacyHandoffTimeout,
 		externalTools:                 agenthooks.ExternalToolsSet(opts.ExternalTools),
 		auditLogger:                   newAuditLogger(opts.Audit),

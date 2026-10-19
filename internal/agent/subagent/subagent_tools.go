@@ -164,17 +164,7 @@ func (d *SubagentDelegate) runDelegate(ctx context.Context, call gateway.ToolCal
 	if err != nil {
 		return agenttools.JSONErrorf("failed to load subagent definition: %v", err)
 	}
-	child := NewSubagentDelegate(
-		d.gateway,
-		d.sandbox,
-		d.workspacePath,
-		d.envVars,
-		d.wallTimeout,
-		d.depth+1,
-	).withMaxDelegationDepth(d.delegationDepthLimit()).
-		WithCapabilities(d.capabilities, d.scopedCapabilities).
-		WithExternalTools(d.externalTools).
-		WithCallEnv(d.callEnv)
+	child := d.child()
 	result, err := child.Delegate(ctx, *subDef, args.Task, "", "", 0.2, 0)
 	if err != nil {
 		return agenttools.JSONErrorf("delegation failed: %v", err)
@@ -215,17 +205,7 @@ func (d *SubagentDelegate) runDelegateParallel(ctx context.Context, call gateway
 			Description: task.Task,
 		})
 	}
-	child := NewSubagentDelegate(
-		d.gateway,
-		d.sandbox,
-		d.workspacePath,
-		d.envVars,
-		d.wallTimeout,
-		d.depth+1,
-	).withMaxDelegationDepth(d.delegationDepthLimit()).
-		WithCapabilities(d.capabilities, d.scopedCapabilities).
-		WithExternalTools(d.externalTools).
-		WithCallEnv(d.callEnv)
+	child := d.child()
 	results := child.DelegateParallel(ctx, tasks, "", "", 0.2, 0)
 	encoded, err := json.Marshal(results)
 	if err != nil {

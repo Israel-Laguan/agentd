@@ -66,7 +66,7 @@ func (d *SubagentDelegate) runSubagentStep(
 	result *SubagentResult, toolsCalled map[string]struct{}, filesModified *[]string,
 	def SubagentDefinition, toolExec *agenttools.ToolExecutor,
 ) bool {
-	requestMessages := enforceSubagentContextBudget(*messages, def.ContextBudget)
+	requestMessages := enforceSubagentContextBudget(*messages, def.ContextBudget, d.truncation)
 	req := gateway.AIRequest{
 		Messages:    requestMessages,
 		Temperature: temperature,
@@ -138,8 +138,8 @@ func failSandboxUnavailable(call gateway.ToolCall, raw string, result *SubagentR
 }
 
 // enforceSubagentContextBudget keeps the first two messages (system + user) and
-// truncates the rest with the same middle-out strategy as ContextManager (see TruncateWorkingMessages).
-func enforceSubagentContextBudget(messages []gateway.PromptMessage, budget int) []gateway.PromptMessage {
+// truncates the rest with the parent's ContextManager strategy (nil: middle-out).
+func enforceSubagentContextBudget(messages []gateway.PromptMessage, budget int, strategy gateway.TruncationStrategy) []gateway.PromptMessage {
 	if budget <= 0 || agentcontext.TotalChars(messages) <= budget {
 		return messages
 	}
@@ -151,7 +151,7 @@ func enforceSubagentContextBudget(messages []gateway.PromptMessage, budget int) 
 	if remaining <= 0 {
 		return fixed
 	}
-	return append(fixed, agentcontext.TruncateWorkingMessages(messages[2:], remaining)...)
+	return append(fixed, agentcontext.TruncateWorkingMessages(messages[2:], remaining, strategy)...)
 }
 
 // DelegateParallel runs multiple subagent tasks concurrently and collects results.
