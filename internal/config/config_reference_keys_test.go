@@ -20,10 +20,10 @@ import (
 // and the struct field its value lands in, and requires non-test code outside
 // internal/config to read that field. A key under a map or list read whole
 // (queue.tool_timeouts, tool_manifest.mappings) is covered by that read.
-// notImplementedKeys are prefixes the reference file and the docs must say
-// are not implemented; they cover their sub-keys.
-// notImplementedKeys are documented, parsed and ignored. Remove an entry when
-// its feature is wired; add a consumedKeys entry in the same change.
+// notImplementedKeys are prefixes that are documented, parsed and ignored.
+// The reference file and the docs must say they are not implemented; each
+// entry covers its sub-keys. Remove an entry in the change that wires its
+// feature to a consumer.
 var notImplementedKeys = []string{
 	"agentic.review", "agentic.tool_rate_limits", "agentic.approval_gates", "agentic.skills",
 	"gateway.budget", "gateway.truncation.max_input_chars",
