@@ -18,6 +18,7 @@ interface TaskDrawerProps {
   onUpdateTask?: (id: string, patch: Partial<Task>) => Promise<void>;
   onResolveHandoff?: (taskId: string, result: string, expectedUpdatedAt: number | string) => Promise<void>;
   eventRefreshKey?: number;
+  commentRefreshKey?: number;
 }
 
 // Only manual-action handoffs are resolvable by a human via the
@@ -34,6 +35,7 @@ export function TaskDrawer({
   onUpdateTask,
   onResolveHandoff,
   eventRefreshKey = 0,
+  commentRefreshKey = 0,
 }: TaskDrawerProps) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
@@ -270,7 +272,7 @@ export function TaskDrawer({
 
             {/* COMMENTS */}
             <div className="pt-4 border-t border-border">
-              <CommentPanel key={task.id} taskId={task.id} refreshKey={eventRefreshKey} />
+              <CommentPanel key={task.id} taskId={task.id} refreshKey={commentRefreshKey} />
             </div>
           </div>
         </motion.div>

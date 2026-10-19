@@ -78,15 +78,43 @@ describe("useBoardStream", () => {
     const { result } = mount("t1");
     const before = result.current.taskActivityKey;
     act(() => {
-      latest().frame("comment_added", { task_id: "other", project_id: "pa" });
-      vi.advanceTimersByTime(300);
+      latest().frame("log_chunk", { task_id: "other", project_id: "pa" });
+      vi.advanceTimersByTime(2000);
     });
     expect(result.current.taskActivityKey).toBe(before);
+    act(() => {
+      latest().frame("log_chunk", { task_id: "t1", project_id: "pa" });
+      vi.advanceTimersByTime(2000);
+    });
+    expect(result.current.taskActivityKey).toBe(before + 1);
+  });
+
+  it("re-reads comments only on comment_added, not on log or tool frames", () => {
+    const { result } = mount("t1");
+    const comments = result.current.commentActivityKey;
+    act(() => {
+      latest().frame("log_chunk", { task_id: "t1", project_id: "pa" });
+      latest().frame("tool_called", { task_id: "t1", project_id: "pa" });
+      vi.advanceTimersByTime(2000);
+    });
+    expect(result.current.commentActivityKey).toBe(comments);
     act(() => {
       latest().frame("comment_added", { task_id: "t1", project_id: "pa" });
       vi.advanceTimersByTime(300);
     });
-    expect(result.current.taskActivityKey).toBe(before + 1);
+    expect(result.current.commentActivityKey).toBe(comments + 1);
+  });
+
+  it("throttles the event list: a log stream costs one refetch per window", () => {
+    const { result } = mount("t1");
+    const before = result.current.taskActivityKey;
+    act(() => {
+      for (let i = 0; i < 20; i++) {
+        latest().frame("log_chunk", { task_id: "t1", project_id: "pa" });
+        vi.advanceTimersByTime(100);
+      }
+    });
+    expect(result.current.taskActivityKey - before).toBeLessThanOrEqual(2);
   });
 
   it("resyncs the whole board when the stream reopens after an error", () => {

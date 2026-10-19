@@ -53,7 +53,7 @@ export default function Page() {
     refreshProject,
   } = useDashboard(setSelectedTask);
 
-  const { taskActivityKey } = useBoardStream({
+  const { taskActivityKey, commentActivityKey } = useBoardStream({
     selectedTaskId: selectedTask?.id,
     refreshProject: (projectId) => void refreshProject(projectId),
     resync: () => void refreshDashboard(false).catch(() => {}),
@@ -236,6 +236,7 @@ export default function Page() {
         onUpdateTask={onUpdateTask}
         onResolveHandoff={handleResolveHandoff}
         eventRefreshKey={taskEventRefreshKey + taskActivityKey}
+        commentRefreshKey={commentActivityKey}
       />
     </div>
   );
