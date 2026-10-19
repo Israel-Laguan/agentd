@@ -67,7 +67,8 @@ Update a task's state.
 **Error Responses**:
 
 - `404 NOT_FOUND` - Task not found
-- `409 STATE_CONFLICT` - Invalid state transition
+- `400 VALIDATION_FAILED` - State does not exist
+- `409 STATE_CONFLICT` - Transition the rules forbid
 
 **Test Coverage**:
 

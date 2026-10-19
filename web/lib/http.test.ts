@@ -52,6 +52,21 @@ describe("requestJSON", () => {
     );
   });
 
+  // T-054: the paths whose status or code changed still surface the daemon's message.
+  it.each([
+    [503, "UNAVAILABLE", "event bus is unavailable"],
+    [503, "UNAVAILABLE", "breaker reset is not available"],
+    [400, "VALIDATION_FAILED", 'unknown task state: "BOGUS"'],
+    [409, "STATE_CONFLICT", "invalid task state transition"],
+    [404, "NOT_FOUND", 'provider not found: no breaker for "typo"'],
+  ])("shows the message of a %i %s response", async (status, code, message) => {
+    stubFetch({ ok: false, status, json: async () => ({ status: "error", error: { code, message } }) });
+    const err = (await requestJSON("http://d/x").catch((e: unknown) => e)) as ApiError;
+    expect(err.message).toBe(message);
+    expect(err.status).toBe(status);
+    expect(err.code).toBe(code);
+  });
+
   it("falls back to the status when the body is not the daemon's envelope", async () => {
     stubFetch({
       ok: false,

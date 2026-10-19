@@ -85,10 +85,15 @@ func TestSystemResetSuccess(t *testing.T) {
 type stubProviderBreakers struct {
 	resetProvider  string
 	resetAllCalled bool
+	known          map[string]bool
 }
 
 func (s *stubProviderBreakers) Snapshot() map[string]services.ProviderBreakerEntry {
-	return nil
+	out := make(map[string]services.ProviderBreakerEntry, len(s.known))
+	for name := range s.known {
+		out[name] = services.ProviderBreakerEntry{State: "CLOSED"}
+	}
+	return out
 }
 func (s *stubProviderBreakers) Reset(provider string) { s.resetProvider = provider }
 func (s *stubProviderBreakers) ResetAll()             { s.resetAllCalled = true }
@@ -97,7 +102,7 @@ func TestSystemResetProviderSuccess(t *testing.T) {
 	store := testutil.NewFakeStore()
 	sum := frontdesk.NewStatusSummarizer(store)
 	sys := services.NewSystemService(sum, nil)
-	pb := &stubProviderBreakers{}
+	pb := &stubProviderBreakers{known: map[string]bool{"gemini": true}}
 	sys.ProviderBreakers = pb
 	h := controllers.SystemHandler{System: sys}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/breaker/reset?provider=gemini", nil)

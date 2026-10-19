@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agentd/internal/frontdesk"
+	"agentd/internal/models"
 )
 
 // BreakerSnapshot is a read-only view of the LLM circuit breaker for the
@@ -182,6 +183,9 @@ func (s *SystemService) ResetBreaker(provider string) error {
 	if provider != "" {
 		if s.ProviderBreakers == nil {
 			return fmt.Errorf("per-provider breaker reset not available")
+		}
+		if _, ok := s.ProviderBreakers.Snapshot()[provider]; !ok {
+			return fmt.Errorf("%w: no breaker for %q", models.ErrProviderNotFound, provider)
 		}
 		s.ProviderBreakers.Reset(provider)
 		return nil

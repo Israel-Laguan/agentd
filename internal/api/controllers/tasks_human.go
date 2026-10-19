@@ -26,7 +26,7 @@ func (h TaskHandler) ResolveHumanHandoff(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if h.HumanResolver == nil {
-		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", "human handoff resolution is not configured")
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeUnavailable, "human handoff resolution is not configured")
 		return
 	}
 	var req humanResolutionRequest

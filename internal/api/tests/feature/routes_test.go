@@ -81,8 +81,8 @@ func TestPatchTaskRejectsUnknownState(t *testing.T) {
 	handler := newTestHandler(store)
 
 	resp := request(handler, http.MethodPatch, "/api/v1/tasks/123", `{"state":"NONSENSE"}`)
-	assertStatus(t, resp, http.StatusConflict)
-	assertNestedField(t, resp, "error", "code", "STATE_CONFLICT")
+	assertStatus(t, resp, http.StatusBadRequest)
+	assertNestedField(t, resp, "error", "code", "VALIDATION_FAILED")
 }
 
 func TestPatchTaskMissingTaskReturnsNotFound(t *testing.T) {

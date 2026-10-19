@@ -1,9 +1,11 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
 
 	"agentd/internal/api/httpx"
+	"agentd/internal/models"
 	"agentd/internal/services"
 )
 
@@ -19,7 +21,7 @@ type SystemHandler struct {
 //   - include_system:  include _system project tasks in counts (default false)
 func (h SystemHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h.System == nil {
-		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", "system service is not configured")
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeUnavailable, "system service is not configured")
 		return
 	}
 	opts := services.StatusOptions{
@@ -39,12 +41,16 @@ func (h SystemHandler) Get(w http.ResponseWriter, r *http.Request) {
 // breaker; omitting it resets the global breaker and all per-provider breakers.
 func (h SystemHandler) Reset(w http.ResponseWriter, r *http.Request) {
 	if h.System == nil {
-		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", "system service is not configured")
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeUnavailable, "system service is not configured")
 		return
 	}
 	provider := r.URL.Query().Get("provider")
 	if err := h.System.ResetBreaker(provider); err != nil {
-		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", err.Error())
+		if errors.Is(err, models.ErrProviderNotFound) {
+			httpx.WriteMappedError(w, err)
+			return
+		}
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeUnavailable, "breaker reset is not available")
 		return
 	}
 	httpx.WriteSuccess(w, http.StatusOK, map[string]any{"reset": true, "provider": provider}, nil)
