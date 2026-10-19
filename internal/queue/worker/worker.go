@@ -60,6 +60,7 @@ type Worker struct {
 	hooks                         *agenthooks.HookChain
 	pluginMounter                 PluginMounter
 	contextCfg                    config.AgenticContextConfig
+	contextTruncation             gateway.TruncationStrategy
 	instructionLoader             *InstructionLoader
 	skillLoader                   *wskills.SkillLoader
 	skillRouter                   *wskills.SkillRouter
@@ -248,13 +249,19 @@ func (w *Worker) dispatchTieredStep(ctx context.Context, task models.Task, proje
 }
 
 func (w *Worker) processAgentic(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (LoopResult, bool) {
-	engine := agentic.NewEngine(agentic.Config{
+	engine := agentic.NewEngine(w.agenticConfig(), w)
+	return engine.Process(ctx, task, project, profile)
+}
+
+func (w *Worker) agenticConfig() agentic.Config {
+	return agentic.Config{
 		Store: w.store, Gateway: w.gateway, Sandbox: w.sandbox,
 		SandboxEnvAllowlist: w.sandboxEnvAllowlist,
 		SandboxExtraEnv:     w.sandboxExtraEnv,
 		SandboxWallTimeout:  w.sandboxWallTimeout,
 		FileContextCfg:      w.fileContextCfg, DocStore: w.docStore,
-		ContextCfg: w.contextCfg, MaxToolIterations: w.maxToolIterations,
+		ContextCfg: w.contextCfg, ContextTruncation: w.contextTruncation,
+		MaxToolIterations:       w.maxToolIterations,
 		BudgetTracker:           w.budgetTracker,
 		ContextWarningThreshold: w.contextWarningThreshold,
 		ToolFailureStreak:       w.toolFailureStreak, TruncatorMax: w.truncatorMax,
@@ -262,6 +269,5 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		MessageEditor: w.messageEditor, CheckpointStore: w.checkpointStore,
 		TopicGuard: w.topicGuard, ModelRouter: w.modelRouter,
 		Capabilities: w.capabilities,
-	}, w)
-	return engine.Process(ctx, task, project, profile)
+	}
 }

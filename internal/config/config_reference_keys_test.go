@@ -26,7 +26,7 @@ import (
 // its feature is wired; add a consumedKeys entry in the same change.
 var notImplementedKeys = []string{
 	"agentic.review", "agentic.tool_rate_limits", "agentic.approval_gates", "agentic.skills",
-	"gateway.budget", "gateway.truncation.strategy", "gateway.truncation.max_input_chars",
+	"gateway.budget", "gateway.truncation.max_input_chars",
 	"mcp.http_addr", "librarian.preferences_top_k", "plugins",
 }
 

@@ -25,7 +25,25 @@ func (cm *ContextManager) enforceBudget(messages []spec.PromptMessage, totalBudg
 		return fixed
 	}
 
-	return append(fixed, TruncateWorkingMessages(working, remainingBudget)...)
+	return append(fixed, TruncateWorkingMessages(working, remainingBudget, cm.TruncationStrategy())...)
+}
+
+// SetTruncationStrategy sets how working messages over the budget are cut
+// (gateway.truncation.strategy). Nil keeps middle-out.
+func (cm *ContextManager) SetTruncationStrategy(strategy truncation.TruncationStrategy) {
+	if cm == nil {
+		return
+	}
+	cm.truncation = strategy
+}
+
+// TruncationStrategy returns the strategy that cuts working messages over the
+// budget: the one set, else middle-out.
+func (cm *ContextManager) TruncationStrategy() truncation.TruncationStrategy {
+	if cm == nil || cm.truncation == nil {
+		return truncation.MiddleOutStrategy{}
+	}
+	return cm.truncation
 }
 
 func summaryMessageIndex(messages []spec.PromptMessage) int {
@@ -71,10 +89,12 @@ func fixedAndWorkingMessages(
 	return fixed, working
 }
 
-// TruncateWorkingMessages applies the context manager's middle-out truncation
-// strategy to a working message slice.
-func TruncateWorkingMessages(working []spec.PromptMessage, budget int) []spec.PromptMessage {
-	strategy := truncation.MiddleOutStrategy{}
+// TruncateWorkingMessages cuts a working message slice to budget with
+// strategy; nil means middle-out.
+func TruncateWorkingMessages(working []spec.PromptMessage, budget int, strategy truncation.TruncationStrategy) []spec.PromptMessage {
+	if strategy == nil {
+		strategy = truncation.MiddleOutStrategy{}
+	}
 	truncated := make([]spec.PromptMessage, 0, len(working))
 	remaining := budget
 	for _, m := range working {
@@ -97,7 +117,7 @@ func TruncateWorkingMessages(working []spec.PromptMessage, budget int) []spec.Pr
 func truncateToolCalls(
 	toolCalls []spec.ToolCall,
 	remaining int,
-	strategy truncation.MiddleOutStrategy,
+	strategy truncation.TruncationStrategy,
 ) ([]spec.ToolCall, int) {
 	tcCopy := make([]spec.ToolCall, len(toolCalls))
 	copy(tcCopy, toolCalls)

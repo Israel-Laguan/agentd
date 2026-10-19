@@ -79,6 +79,7 @@ type SubagentDelegate struct {
 	scopedCapabilities *capabilities.Registry
 	externalTools      map[string]struct{}
 	callEnv            []string
+	truncation         gateway.TruncationStrategy
 }
 
 // NewSubagentDelegate constructs a delegate at the given depth.
@@ -141,6 +142,24 @@ func (d *SubagentDelegate) WithCallEnv(env []string) *SubagentDelegate {
 	}
 	d.callEnv = append([]string(nil), env...)
 	return d
+}
+
+// WithTruncationStrategy sets how the subagent cuts context over its budget;
+// nested delegates inherit it. Nil keeps middle-out.
+func (d *SubagentDelegate) WithTruncationStrategy(strategy gateway.TruncationStrategy) *SubagentDelegate {
+	d.truncation = strategy
+	return d
+}
+
+// child builds the delegate for a nested delegation, one level deeper, with
+// this delegate's settings.
+func (d *SubagentDelegate) child() *SubagentDelegate {
+	return NewSubagentDelegate(d.gateway, d.sandbox, d.workspacePath, d.envVars, d.wallTimeout, d.depth+1).
+		withMaxDelegationDepth(d.delegationDepthLimit()).
+		WithCapabilities(d.capabilities, d.scopedCapabilities).
+		WithExternalTools(d.externalTools).
+		WithCallEnv(d.callEnv).
+		WithTruncationStrategy(d.truncation)
 }
 
 // ErrDepthExceeded is returned when a delegation attempt exceeds MaxDelegationDepth.

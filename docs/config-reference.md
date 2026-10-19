@@ -131,7 +131,7 @@ Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First 
 
 ### Truncation
 
-`truncator.policy`: `head_tail`, `middle_out`, `summarize`, or `reject`. Of the `truncation` block, `stash_threshold` (file-stash offload) is read, and `head_ratio` sets the share of the budget kept from the head when `truncator.policy` is `head_tail`. `truncation.strategy` and `truncation.max_input_chars` are not implemented: they are parsed and ignored, so use `truncator.*`.
+`truncator.policy`: `head_tail`, `middle_out`, `summarize`, or `reject`; it cuts what is sent to the provider. `truncation.strategy` (`head_tail` or `middle_out`) cuts the agent's own working context, and each subagent's, when it exceeds the `queue.agentic_context` budgets. `truncation.head_ratio` is the share kept from the head wherever `head_tail` applies, in either place. `truncation.stash_threshold` sets the file-stash offload. `truncation.max_input_chars` is not implemented: it is parsed and ignored, so use `truncator.max_input_chars`.
 
 ### MCP servers
 

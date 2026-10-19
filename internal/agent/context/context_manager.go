@@ -78,6 +78,7 @@ type ContextManager struct {
 	lastCommentPoll  time.Time
 	commentHighWater time.Time
 	goalTracker      *GoalTracker
+	truncation       gateway.TruncationStrategy
 }
 
 func cloneTurnSummary(ts TurnSummary) TurnSummary {

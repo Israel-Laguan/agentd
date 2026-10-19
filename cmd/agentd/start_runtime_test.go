@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"agentd/internal/config"
+	"agentd/internal/gateway"
 	"agentd/internal/queue"
 )
 
@@ -23,6 +24,18 @@ var agenticConfigCases = []struct {
 			}
 			if opts.Batching.MaxBatchSize != 3 {
 				t.Fatalf("WorkerOptions.Batching.MaxBatchSize = %d, want 3", opts.Batching.MaxBatchSize)
+			}
+		},
+	},
+	{
+		name: "context_truncation",
+		set: func(cfg *config.Config) {
+			cfg.Gateway.Truncation = config.TruncationConfig{Strategy: gateway.TruncationStrategyHeadTail, HeadRatio: 0.8}
+		},
+		check: func(t *testing.T, opts queue.WorkerOptions) {
+			want := gateway.HeadTailStrategy{HeadRatio: 0.8}
+			if opts.ContextTruncation != want {
+				t.Fatalf("WorkerOptions.ContextTruncation = %#v, want %#v", opts.ContextTruncation, want)
 			}
 		},
 	},

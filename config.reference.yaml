@@ -64,8 +64,8 @@ gateway:
     policy: "head_tail"
     max_input_chars: 12000
   truncation:
-    strategy: "head_tail" # not implemented: parsed and ignored; use truncator.policy
-    head_ratio: 0.5 # head share kept when truncator.policy is head_tail
+    strategy: "head_tail" # cuts agent and subagent context over budget: head_tail or middle_out
+    head_ratio: 0.5 # head share for head_tail, here and in truncator.policy
     max_input_chars: 12000 # not implemented: parsed and ignored; use truncator.max_input_chars
     stash_threshold: 50000
 agentic:
