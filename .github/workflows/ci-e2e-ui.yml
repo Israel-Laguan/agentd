@@ -1,6 +1,6 @@
 name: CI (e2e UI smoke)
 
-# The Playwright UI smoke (web/e2e, SP-025): a real browser against a running
+# The Playwright UI tier (web/e2e, SP-025, T-040): a real browser against a running
 # default-profile stack (`make test-ui`). It lives on its own runner instead of
 # riding along with the journey suite (ci-e2e.yml), so a web-only change never
 # pays for the Go suite and a journey change never pays for Chromium. This is
@@ -11,8 +11,8 @@ name: CI (e2e UI smoke)
 #   - on demand (Actions > CI (e2e UI smoke) > Run workflow);
 #   - on a pull request that touches the web app, the stack it runs against
 #     (devenv/, the Dockerfile that builds the agentd image), the daemon's
-#     request guard and config (internal/api/, internal/config/), or the
-#     Makefile target that drives both. Markdown-only changes never trigger it.
+#     HTTP contract (see the path list below), or the Makefile target that
+#     drives both. Markdown-only changes and Go test files never trigger it.
 on:
   schedule:
     - cron: "17 5 * * 1"
@@ -23,11 +23,25 @@ on:
       - "devenv/**"
       - "internal/api/**"
       - "internal/config/**"
+      # The daemon's HTTP contract, as the web app consumes it (SP-026, T-040).
+      # internal/api/** above already covers the routes and CORS
+      # (server/), handlers and response shapes (controllers/), /events/stream
+      # framing (sse/) and the response envelope (httpx/). The rest is listed
+      # per file: a new file that carries wire `json:` types or the state
+      # strings the board maps to columns must be added here; the weekly cron
+      # is the backstop.
+      - "internal/models/entities.go"  # Task/Project JSON
+      - "internal/models/enums.go"     # task state strings the board maps
+      - "internal/models/plan.go"      # materialize request body
+      - "internal/services/system_service.go"  # /system/status
+      - "internal/bus/agent_bus.go"    # SSE event payloads
+      - "internal/frontdesk/status.go" # chat status replies
       - "Makefile"
       - "Dockerfile"
       - ".dockerignore"
       - ".github/workflows/ci-e2e-ui.yml"
       - "!**/*.md"
+      - "!**/*_test.go"
 
 concurrency:
   group: ci-e2e-ui-${{ github.ref }}
