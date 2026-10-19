@@ -82,7 +82,7 @@ func (w *Worker) executeToolCore(ctx context.Context, sessionID, projectID strin
 	if w.hooks != nil {
 		if verdict := w.hooks.RunPre(hookCtx); verdict.ShortCircuit {
 			// Intentionally skips post-hooks (audit, scrub). Hooks that need
-			// observability should use Veto+Result without ShortCircuit; see DryRunHook.
+			// observability should use Veto+Result without ShortCircuit.
 			return agenttools.ClassifyPrecomputedToolResult(call.ID, call.Function.Name, verdict.Result, time.Since(start).Milliseconds())
 		} else if verdict.Veto && verdict.Result != "" {
 			result := verdict.Result
