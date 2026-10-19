@@ -10,7 +10,7 @@ import (
 
 // PartitionAnchor separates the system/task anchor from the remaining turn
 // history.
-func (cm *ContextManager) PartitionAnchor(messages []spec.PromptMessage) ([]spec.PromptMessage, []spec.PromptMessage) {
+func PartitionAnchor(messages []spec.PromptMessage) ([]spec.PromptMessage, []spec.PromptMessage) {
 	if len(messages) == 0 {
 		return nil, nil
 	}

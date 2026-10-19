@@ -160,7 +160,7 @@ func (cm *ContextManager) prepareContext(ctx context.Context, messages []spec.Pr
 		return messages, nil
 	}
 	messages = stripCorrectionMessages(messages)
-	anchor, remaining := cm.PartitionAnchor(messages)
+	anchor, remaining := PartitionAnchor(messages)
 	turns := cm.GroupTurns(remaining)
 
 	var out []spec.PromptMessage
@@ -180,7 +180,7 @@ func (cm *ContextManager) prepareContext(ctx context.Context, messages []spec.Pr
 
 	totalBudget := cm.cfg.AnchorBudget + cm.cfg.WorkingBudget + cm.cfg.CompressedBudget
 	if totalBudget > 0 && TotalChars(out) > totalBudget {
-		out = cm.enforceBudget(out, totalBudget)
+		out = EnforceBudget(out, totalBudget, cm.TruncationStrategy())
 	}
 	return out, nil
 }

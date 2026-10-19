@@ -44,7 +44,6 @@ func newTestCM(seed []spec.PromptMessage) *ContextManager {
 // ---------------------------------------------------------------------------
 
 func TestPartitionAnchor(t *testing.T) {
-	cm := &ContextManager{}
 	messages := []spec.PromptMessage{
 		{Role: "system", Content: "sys1"},
 		{Role: "system", Content: "sys2"},
@@ -52,7 +51,7 @@ func TestPartitionAnchor(t *testing.T) {
 		{Role: "assistant", Content: "ast1"},
 		{Role: "tool", Content: "tool1"},
 	}
-	anchor, rest := cm.PartitionAnchor(messages)
+	anchor, rest := PartitionAnchor(messages)
 	if len(anchor) != 3 {
 		t.Errorf("expected 3 anchor messages, got %d", len(anchor))
 	}

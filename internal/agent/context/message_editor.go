@@ -151,7 +151,7 @@ func applyTurnEdit(messages []gateway.PromptMessage, turnIndex int, newContent s
 	if cm == nil {
 		cm = &ContextManager{}
 	}
-	anchor, rest := cm.PartitionAnchor(messages)
+	anchor, rest := PartitionAnchor(messages)
 	if turnIndex == EditAnchorUserTurn {
 		return applyAnchorUserEdit(anchor, newContent)
 	}

@@ -47,11 +47,8 @@ func (w *Worker) buildTurnRespecRequest(
 	}
 }
 
-func anchorUserContent(messages []gateway.PromptMessage, cm *agentcontext.ContextManager) string {
-	if cm == nil {
-		cm = &agentcontext.ContextManager{}
-	}
-	anchor, _ := cm.PartitionAnchor(messages)
+func anchorUserContent(messages []gateway.PromptMessage) string {
+	anchor, _ := agentcontext.PartitionAnchor(messages)
 	for i := len(anchor) - 1; i >= 0; i-- {
 		if anchor[i].Role == "user" {
 			return anchor[i].Content
@@ -74,7 +71,7 @@ func (w *Worker) GenerateRespecifiedUserTurn(
 			return "", err
 		}
 	}
-	original := anchorUserContent(messages, cm)
+	original := anchorUserContent(messages)
 	req := w.buildTurnRespecRequest(task, plan, failing, original)
 	resp, err := w.gateway.Generate(ctx, req)
 	if err != nil {

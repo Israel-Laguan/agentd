@@ -28,7 +28,7 @@ func TestEnforceBudget_DoesNotCorruptMessagesBetweenCorrectionsAndSummary(t *tes
 	}
 
 	budget := len("system") + len("task") + len(correction) + len(summary) + len(intervening)
-	prepared := cm.enforceBudget(messages, budget)
+	prepared := EnforceBudget(messages, budget, cm.TruncationStrategy())
 	if len(prepared) != 6 {
 		t.Fatalf("expected anchor, correction, summary, then both working messages, got %#v", prepared)
 	}
@@ -58,7 +58,7 @@ func TestEnforceBudget_UsesConfiguredTruncationStrategy(t *testing.T) {
 		{Role: "assistant", Content: long},
 	}
 
-	prepared := cm.enforceBudget(messages, len("system")+len("task")+200)
+	prepared := EnforceBudget(messages, len("system")+len("task")+200, cm.TruncationStrategy())
 
 	want := strategy.Truncate(long, 200)
 	if want == (truncation.MiddleOutStrategy{}).Truncate(long, 200) {

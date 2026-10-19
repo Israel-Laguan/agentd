@@ -338,7 +338,7 @@ func TestEnforceBudget_ProtectsCorrectionMessages(t *testing.T) {
 		{Role: "assistant", Content: strings.Repeat("x", 1000)},
 	}
 
-	prepared := cm.enforceBudget(messages, len("system")+len("task")+len(correction))
+	prepared := EnforceBudget(messages, len("system")+len("task")+len(correction), cm.TruncationStrategy())
 	if len(prepared) != 3 {
 		t.Fatalf("expected only fixed messages, got %#v", prepared)
 	}
@@ -363,7 +363,7 @@ func TestEnforceBudget_ProtectsCorrectionMessagesWithSummary(t *testing.T) {
 		{Role: "assistant", Content: strings.Repeat("x", 1000)},
 	}
 
-	prepared := cm.enforceBudget(messages, len("system")+len("task")+len(correction)+len(summary))
+	prepared := EnforceBudget(messages, len("system")+len("task")+len(correction)+len(summary), cm.TruncationStrategy())
 	if len(prepared) != 4 {
 		t.Fatalf("expected anchor, correction, and summary, got %#v", prepared)
 	}

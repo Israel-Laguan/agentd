@@ -174,9 +174,13 @@ func (h *noteTuningHost) ApplyTuning(req gateway.AIRequest, _ models.Task, _ mod
 
 // buildAgenticRequest applies tuning after the iteration pre-check, and a
 // compressing retry can append a note. The request must be cut back to budget
-// before generation, since SkipTruncation leaves the gateway's cut off.
+// before generation, since SkipTruncation leaves the gateway's cut off. The cut
+// comes out of working messages only: corrections and the summary are fixed
+// context and must survive to the provider.
 func TestGenerateAgenticTurn_TruncatesAfterTuning(t *testing.T) {
 	const budget = 200
+	const correction = "[CORRECTION] Earlier context may state: \"prior fact\". The correct information is: \"new fact\"."
+	const summary = "PREVIOUS CONTEXT SUMMARY: earlier turns established the task context."
 	gw := &recordingGateway{}
 	e := &Engine{
 		config: Config{Gateway: gw, TruncatorMax: 100, CharacterBudget: budget},
@@ -185,6 +189,8 @@ func TestGenerateAgenticTurn_TruncatesAfterTuning(t *testing.T) {
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: "system"},
 		{Role: "user", Content: "task"},
+		{Role: "system", Content: correction},
+		{Role: "system", Content: summary},
 		{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("z", 500)},
 	}
 
@@ -204,6 +210,21 @@ func TestGenerateAgenticTurn_TruncatesAfterTuning(t *testing.T) {
 	if len(gw.lastMessages) == 0 || !strings.HasPrefix(gw.lastMessages[len(gw.lastMessages)-1].Content, "n") {
 		t.Fatalf("tuning note missing from the generated request: %#v", gw.lastMessages)
 	}
+	if !containsMessage(gw.lastMessages, correction) {
+		t.Fatalf("correction dropped from the generated request: %#v", gw.lastMessages)
+	}
+	if !containsMessage(gw.lastMessages, summary) {
+		t.Fatalf("summary dropped from the generated request: %#v", gw.lastMessages)
+	}
+}
+
+func containsMessage(messages []gateway.PromptMessage, content string) bool {
+	for _, m := range messages {
+		if m.Content == content {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildAgenticRequest_SkipTruncation(t *testing.T) {
