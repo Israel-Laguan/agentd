@@ -127,9 +127,6 @@ func writeConfig(out interface {
 	if err := writeFormat(out, "gateway.truncator.max_input_chars=%d\n", cfg.Gateway.Truncator.MaxInputChars); err != nil {
 		return err
 	}
-	if err := writeFormat(out, "gateway.truncation.max_input_chars=%d\n", cfg.Gateway.Truncation.MaxInputChars); err != nil {
-		return err
-	}
 	if err := writeFormat(out, "gateway.truncation.stash_threshold=%d\n", cfg.Gateway.Truncation.StashThreshold); err != nil {
 		return err
 	}
