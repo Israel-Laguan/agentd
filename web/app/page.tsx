@@ -20,6 +20,7 @@ import { Sidebar } from "./components/layout/sidebar";
 import { TaskDrawer } from "@/app/components/task/task-drawer";
 import type { ChatSettings } from "@/lib/chat-settings";
 import { useDashboard } from "@/app/hooks/use-dashboard";
+import { useBoardStream } from "@/app/hooks/use-board-stream";
 import { useTaskBoard } from "@/app/hooks/use-task-board";
 
 const DEFAULT_CHAT_SETTINGS: ChatSettings = {
@@ -49,7 +50,14 @@ export default function Page() {
     systemStatus,
     handleMaterialized,
     refreshDashboard,
+    refreshProject,
   } = useDashboard(setSelectedTask);
+
+  const { taskActivityKey } = useBoardStream({
+    selectedTaskId: selectedTask?.id,
+    refreshProject: (projectId) => void refreshProject(projectId),
+    resync: () => void refreshDashboard(false).catch(() => {}),
+  });
 
   const { handleDragEnd, handleUpdateTask, writeError, clearWriteError } = useTaskBoard(
     localTasks,
@@ -227,7 +235,7 @@ export default function Page() {
         onClose={() => setSelectedTask(null)}
         onUpdateTask={onUpdateTask}
         onResolveHandoff={handleResolveHandoff}
-        eventRefreshKey={taskEventRefreshKey}
+        eventRefreshKey={taskEventRefreshKey + taskActivityKey}
       />
     </div>
   );
