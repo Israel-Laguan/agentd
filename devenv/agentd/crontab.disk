@@ -11,6 +11,9 @@
 # applyCronJob and internal/config/runtime_controls.go's DiskConfig (which
 # only carries FreeThresholdPercent).
 #
+# The memory curator is also shortened, from hourly to "@every 5s", for J18
+# (curate each task once; see config.disk.yaml's librarian block).
+#
 # @every <duration> <job>    (robfig/cron descriptor, sub-minute)
 # m h dom mon dow <job>      (Vixie crontab, minute resolution)
 
@@ -19,4 +22,4 @@
 @every 30s      heartbeat
 @every 5s       disk-watchdog
 @every 1m       hitl-reconcile
-0 * * * *       memory-curator
+@every 5s       memory-curator

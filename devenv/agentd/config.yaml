@@ -58,3 +58,8 @@ recovery:
 mcp:
   enabled: true
   transport: http
+
+# J17: the events API must scrub this pattern (sandbox.scrub_patterns, B-065).
+# It matches only the journey's own token, so no other journey's events change.
+sandbox:
+  scrub_patterns: ["E2E-SCRUB-[0-9]{6}"]
