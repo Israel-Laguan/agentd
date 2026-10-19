@@ -28,7 +28,9 @@ var dangerousCommands = []struct {
 }
 
 func commandRE(pattern string) *regexp.Regexp {
-	return regexp.MustCompile("(?i)(^|[\\s;&|()`])" + pattern)
+	const boundary = "(^|[\\s;&|()`])"
+	full := "(?i)" + boundary + pattern
+	return regexp.MustCompile(full)
 }
 
 // DenylistHook returns a PreHook that blocks dangerous commands for bash
@@ -36,7 +38,10 @@ func commandRE(pattern string) *regexp.Regexp {
 // resolved once at construction time and used to verify that any argument
 // whose key contains "path" stays within bounds.
 func DenylistHook(allowedRoot string) PreHook {
-	return DenylistHookFor(func(string) string { return allowedRoot })
+	fixedRoot := func(string) string {
+		return allowedRoot
+	}
+	return DenylistHookFor(fixedRoot)
 }
 
 // DenylistHookFor is DenylistHook with the allowed root chosen per call from
