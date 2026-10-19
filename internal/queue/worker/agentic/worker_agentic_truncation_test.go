@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	agentcontext "agentd/internal/agent/context"
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
@@ -149,6 +150,60 @@ func TestApplyAgenticTruncation_ToolPairConsistency(t *testing.T) {
 		t.Fatalf("applyAgenticTruncation() error = %v", err)
 	}
 	verifyAgenticToolConsistency(t, got)
+}
+
+type recordingGateway struct {
+	sequenceGateway
+	lastMessages []gateway.PromptMessage
+}
+
+func (g *recordingGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	g.lastMessages = req.Messages
+	return g.sequenceGateway.Generate(ctx, req)
+}
+
+type noteTuningHost struct {
+	*noopHost
+	note string
+}
+
+func (h *noteTuningHost) ApplyTuning(req gateway.AIRequest, _ models.Task, _ models.AgentProfile, _ int) gateway.AIRequest {
+	req.Messages = append(req.Messages, gateway.PromptMessage{Role: "user", Content: h.note})
+	return req
+}
+
+// buildAgenticRequest applies tuning after the iteration pre-check, and a
+// compressing retry can append a note. The request must be cut back to budget
+// before generation, since SkipTruncation leaves the gateway's cut off.
+func TestGenerateAgenticTurn_TruncatesAfterTuning(t *testing.T) {
+	const budget = 200
+	gw := &recordingGateway{}
+	e := &Engine{
+		config: Config{Gateway: gw, TruncatorMax: 100, CharacterBudget: budget},
+		host:   &noteTuningHost{noopHost: &noopHost{}, note: strings.Repeat("n", 500)},
+	}
+	messages := []gateway.PromptMessage{
+		{Role: "system", Content: "system"},
+		{Role: "user", Content: "task"},
+		{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("z", 500)},
+	}
+
+	_, stop, err := e.generateAgenticTurn(
+		context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t1"}},
+		models.AgentProfile{}, &messages, nil,
+		agentruntime.NewBudgetGuard(nil, ""), agentruntime.NewContextBudgetGuard(budget, 0),
+		0, 0,
+	)
+
+	if err != nil || stop != nil {
+		t.Fatalf("generateAgenticTurn: stop=%v err=%v", stop, err)
+	}
+	if agentcontext.TotalChars(gw.lastMessages) > budget {
+		t.Fatalf("request has %d chars, over the %d budget after tuning", agentcontext.TotalChars(gw.lastMessages), budget)
+	}
+	if len(gw.lastMessages) == 0 || !strings.HasPrefix(gw.lastMessages[len(gw.lastMessages)-1].Content, "n") {
+		t.Fatalf("tuning note missing from the generated request: %#v", gw.lastMessages)
+	}
 }
 
 func TestBuildAgenticRequest_SkipTruncation(t *testing.T) {

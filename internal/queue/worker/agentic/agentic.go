@@ -133,6 +133,15 @@ func (e *Engine) generateAgenticTurn(
 	sessionRecoveryGen int,
 ) (gateway.AIResponse, *agentruntime.LoopResult, error) {
 	req := e.buildAgenticRequest(task, profile, *messages, tools, sessionRecoveryGen)
+	// ApplyTuning can grow the request after the iteration pre-check (for
+	// example, a compressing retry appends a note). SkipTruncation is set, so
+	// the gateway would not cut it; re-truncate here before generation.
+	truncated, err := e.applyAgenticTruncation(ctx, req.Messages)
+	if err != nil {
+		e.host.HandleGatewayError(ctx, task, err)
+		return gateway.AIResponse{}, nil, err
+	}
+	req.Messages = truncated
 	correlation.Logger(ctx).DebugContext(ctx, "agentic: llm call start",
 		"task_id", task.ID, "turn_index", turnIndex,
 		"provider", req.Provider, "model", req.Model,
