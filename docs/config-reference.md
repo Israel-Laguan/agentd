@@ -168,7 +168,7 @@ Enabled per agent profile via `AgentProfile.agentic_mode`. Keys marked **not imp
 | `planning` | Plan→execute mode; `complexity_threshold` `0` disables (e.g. `500` enables). |
 | `model_routing` | Complexity routing by keyword score; see [`reference.md`](reference.md). |
 | `tool_manifest` | Filter tools by classified task type. Quote wildcard: `code_gen: ["*"]` (unquoted `*` is YAML alias syntax). |
-| `scheduler` | Cron/deferred dispatch, checked every `tick_interval` (default `1m`); task fields: `id`, `cron_expr`, `run_after`, `task_type`, `context_fn`, `context_args`, `output_target`, `title`, `description_template`, `project_id`. A task runs in its `project_id`, else `scheduler.project_id`; with neither it lands in the `_system` project, which the worker does not execute (B-076), so set one for tasks meant to run. |
+| `scheduler` | Cron/deferred dispatch, checked every `tick_interval` (default `1m`); task fields: `id`, `cron_expr`, `run_after`, `task_type`, `context_fn`, `context_args`, `output_target`, `title`, `description_template`, `project_id`. A task runs in its `project_id`, else `scheduler.project_id`; with neither, config load fails when the scheduler is enabled (B-076): `_system` is not an executable workspace. |
 | `batching` | Batch independent tool-free tasks in one LLM call (same project + agent). |
 | `capability_routing` | Route matching intents to external adapters, bypassing the agentic turn loop. Runs after `model_routing`. No capability adapters are available yet (plugins are not loaded, B-063), so enabling it only logs a startup warning and matching tasks take the normal path (B-061). |
 

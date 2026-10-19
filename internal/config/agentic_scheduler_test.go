@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,7 @@ func TestLoadSchedulerConfigParsesTasks(t *testing.T) {
 			"context_fn":   "static",
 			"context_args": map[string]interface{}{"body": "hi"},
 			"title":        "Job",
+			"project_id":   "p1",
 		},
 	})
 	cfg, err := loadSchedulerConfig(v)
@@ -62,5 +64,43 @@ func TestLoadSchedulerConfigInvalidTasksReturnsError(t *testing.T) {
 	_, err := loadSchedulerConfig(v)
 	if err == nil {
 		t.Fatal("expected error for invalid agentic.scheduler.tasks")
+	}
+}
+
+func TestLoadSchedulerConfigRejectsTaskWithoutProject(t *testing.T) {
+	task := func(projectID string) map[string]interface{} {
+		m := map[string]interface{}{"id": "s1", "run_after": "2020-01-01T00:00:00Z", "title": "t"}
+		if projectID != "" {
+			m["project_id"] = projectID
+		}
+		return m
+	}
+	tests := []struct {
+		name      string
+		enabled   bool
+		schedProj string
+		taskProj  string
+		wantErr   bool
+	}{
+		{"enabled, no project anywhere", true, "", "", true},
+		{"enabled, scheduler project", true, "p1", "", false},
+		{"enabled, task project", true, "", "p2", false},
+		{"disabled, no project", false, "", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v := viper.New()
+			setSchedulerDefaults(v)
+			v.Set("agentic.scheduler.enabled", tc.enabled)
+			v.Set("agentic.scheduler.project_id", tc.schedProj)
+			v.Set("agentic.scheduler.tasks", []map[string]interface{}{task(tc.taskProj)})
+			_, err := loadSchedulerConfig(v)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), "s1") {
+				t.Fatalf("error should name the task: %v", err)
+			}
+		})
 	}
 }

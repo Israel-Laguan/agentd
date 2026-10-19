@@ -110,6 +110,7 @@ agentic:
     enabled: false
     min_confidence: 0.35
     mappings: {summarize: [], code_gen: [bash, read, write], doc_qa: [read], web_research: [read]}
+  # Enabled schedulers need project_id (here or per task), or config load fails (B-076).
   scheduler: {enabled: false, tick_interval: "1m", project_id: "", tasks: []}
   batching:
     enabled: false
