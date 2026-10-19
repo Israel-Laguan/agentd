@@ -16,11 +16,17 @@ func (d *Daemon) taskLoop(ctx context.Context) {
 			return
 		case <-timer.C:
 			var dispatched, nacked int
-			guardTick("queue dispatch failed", func() (err error) {
+			panicked := guardTick("queue dispatch failed", func() (err error) {
 				dispatched, nacked, err = d.dispatch(ctx)
 				return err
 			})
-			wait = d.nextDispatchDelay(wait, dispatched, nacked)
+			if panicked {
+				// The tick did not run to completion, so it says nothing about
+				// idleness: retry at the base interval rather than back off.
+				wait = d.taskInterval
+			} else {
+				wait = d.nextDispatchDelay(wait, dispatched, nacked)
+			}
 			timer.Reset(wait)
 		}
 	}
