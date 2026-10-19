@@ -66,13 +66,26 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// frameEnvelope is the "data:" JSON of one frame. task_id and project_id are
+// additive: clients that ignore them keep working, and signals that belong to
+// no task omit them.
+type frameEnvelope struct {
+	Topic     string `json:"topic"`
+	Type      string `json:"type"`
+	Payload   string `json:"payload"`
+	TaskID    string `json:"task_id,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
+}
+
 // writeEvent serializes a Signal into a single SSE frame. The "event:"
 // line carries the cockpit-friendly lowercased event name (so EventSource
 // listeners can subscribe to "task_failed", "log_chunk", etc.) while the
 // "data:" line keeps the same JSON shape we always emitted for
 // backwards compatibility with clients that ignore the event line.
 func writeEvent(w http.ResponseWriter, evt bus.Signal) bool {
-	data, err := json.Marshal(map[string]string{"topic": evt.Topic, "type": evt.Type, "payload": evt.Payload})
+	data, err := json.Marshal(frameEnvelope{
+		Topic: evt.Topic, Type: evt.Type, Payload: evt.Payload, TaskID: evt.TaskID, ProjectID: evt.ProjectID,
+	})
 	if err != nil {
 		return false
 	}

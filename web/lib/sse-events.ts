@@ -5,7 +5,12 @@
 // line that keeps the machine envelope:
 //
 //   event: tool_called
-//   data: {"topic":"task:abc","type":"TOOL_CALL","payload":"{\"...\":...}"}
+//   data: {"topic":"*","type":"TOOL_CALL","payload":"{\"...\":...}","task_id":"abc","project_id":"p1"}
+//
+// "topic" is the topic the client subscribed to: "*" on the unfiltered global
+// stream, "task:abc" when subscribed with ?task_id=abc. "task_id" and
+// "project_id" are present on every frame that belongs to a task, whatever the
+// topic, and omitted on frames that do not (agent events).
 //
 // The envelope's "payload" field is itself a JSON-encoded string holding the
 // real event body, so consumers JSON.parse the envelope and then the payload.

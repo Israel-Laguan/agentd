@@ -42,6 +42,12 @@ func TestEventEmitterEmit(t *testing.T) {
 	if global.Topic != bus.GlobalTopic || global.Type != "LOG" {
 		t.Fatalf("global event = %#v", global)
 	}
+	if global.TaskID != tasks[0].ID || global.ProjectID != project.ID {
+		t.Fatalf("global signal ids = %q/%q, want %q/%q", global.TaskID, global.ProjectID, tasks[0].ID, project.ID)
+	}
+	if got.TaskID != tasks[0].ID || got.ProjectID != project.ID {
+		t.Fatalf("task signal ids = %q/%q, want %q/%q", got.TaskID, got.ProjectID, tasks[0].ID, project.ID)
+	}
 }
 
 func materializeEmitterPlan(t *testing.T, store *testutil.FakeKanbanStore) (*models.Project, []models.Task) {
