@@ -77,7 +77,7 @@ func (s *Store) ClaimNextReadyTasks(ctx context.Context, limit int) ([]models.Ta
 	if limit <= 0 {
 		limit = 1
 	}
-	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+	return s.notifyTasks(retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin claim ready tasks: %w", err)
@@ -99,11 +99,11 @@ func (s *Store) ClaimNextReadyTasks(ctx context.Context, limit int) ([]models.Ta
 			return nil, err
 		}
 		return tasks, commitTx(tx, "ready task claim")
-	})
+	}))
 }
 
 func (s *Store) MarkProjectTasksReady(ctx context.Context, projectID string) ([]models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+	return s.notifyTasks(retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin mark project tasks ready: %w", err)
@@ -137,7 +137,7 @@ func (s *Store) MarkProjectTasksReady(ctx context.Context, projectID string) ([]
 			return nil, err
 		}
 		return tasks, commitTx(tx, "mark project tasks ready")
-	})
+	}))
 }
 
 func (s *Store) UpdateTaskState(
@@ -146,7 +146,7 @@ func (s *Store) UpdateTaskState(
 	expectedUpdatedAt time.Time,
 	next models.TaskState,
 ) (*models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
 		current, err := s.GetTask(ctx, id)
 		if err != nil {
 			return nil, err
@@ -172,7 +172,7 @@ func (s *Store) UpdateTaskState(
 			return nil, err
 		}
 		return task, commitTx(tx, "task state update")
-	})
+	}))
 }
 
 func (s *Store) UpdateTaskResult(
@@ -181,7 +181,7 @@ func (s *Store) UpdateTaskResult(
 	expectedUpdatedAt time.Time,
 	result models.TaskResult,
 ) (*models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin task result update: %w", err)
@@ -200,11 +200,11 @@ func (s *Store) UpdateTaskResult(
 			return nil, err
 		}
 		return task, commitTx(tx, "task result update")
-	})
+	}))
 }
 
 func (s *Store) ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+	return s.notifyTasks(retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin ghost task reconciliation: %w", err)
@@ -216,10 +216,10 @@ func (s *Store) ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]mod
 			return nil, err
 		}
 		return reconcileAndRecover(ctx, tx, ghosts, resetGhostTasks, "ghost task reconciliation")
-	})
+	}))
 }
 func (s *Store) ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleThreshold time.Duration) ([]models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+	return s.notifyTasks(retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin stale task reconciliation: %w", err)
@@ -233,13 +233,13 @@ func (s *Store) ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleT
 			return nil, err
 		}
 		return reconcileAndRecover(ctx, tx, stale, resetGhostTasks, "stale task reconciliation")
-	})
+	}))
 }
 func (s *Store) ReconcileOrphanedQueued(ctx context.Context, minAge time.Duration) ([]models.Task, error) {
 	if minAge <= 0 {
 		return nil, nil
 	}
-	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+	return s.notifyTasks(retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin orphaned queued reconciliation: %w", err)
@@ -253,7 +253,7 @@ func (s *Store) ReconcileOrphanedQueued(ctx context.Context, minAge time.Duratio
 			return nil, err
 		}
 		return reconcileAndRecover(ctx, tx, orphaned, resetGhostTasks, "orphaned queued reconciliation")
-	})
+	}))
 }
 
 func reconcileAndRecover(ctx context.Context, tx *immediateTx, ghosts []models.Task, reset func(context.Context, *immediateTx, []models.Task, []string, time.Time) error, commitMsg string) ([]models.Task, error) {

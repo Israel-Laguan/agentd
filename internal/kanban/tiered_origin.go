@@ -14,7 +14,7 @@ func (s *Store) CompleteTieredOrigin(
 	expectedUpdatedAt time.Time,
 	result models.TaskResult,
 ) (*models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin tiered origin completion: %w", err)
@@ -40,5 +40,5 @@ func (s *Store) CompleteTieredOrigin(
 			return nil, err
 		}
 		return task, commitTx(tx, "tiered origin completion")
-	})
+	}))
 }

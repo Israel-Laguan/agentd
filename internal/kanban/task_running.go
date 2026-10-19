@@ -15,7 +15,7 @@ func (s *Store) MarkTaskRunning(
 	expectedUpdatedAt time.Time,
 	pid int,
 ) (*models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
 		now := kdb.UTCNow()
 		result, err := s.db.ExecContext(ctx, `
 			UPDATE tasks
@@ -30,7 +30,7 @@ func (s *Store) MarkTaskRunning(
 			return nil, err
 		}
 		return s.GetTask(ctx, id)
-	})
+	}))
 }
 
 func (s *Store) UpdateTaskHeartbeat(ctx context.Context, id string) error {

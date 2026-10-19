@@ -20,7 +20,7 @@ func (s *Store) UpdateTaskPatch(
 	state *models.TaskState,
 	description *string,
 ) (*models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
 		current, err := s.GetTask(ctx, id)
 		if err != nil {
 			return nil, err
@@ -73,5 +73,5 @@ func (s *Store) UpdateTaskPatch(
 			return nil, err
 		}
 		return task, commitTx(tx, "task patch")
-	})
+	}))
 }

@@ -32,6 +32,12 @@ type TaskCanceller interface {
 	Cancel(taskID string) bool
 }
 
+// TaskChangeNotifier is called once for each task row a store write changed,
+// after the write has committed and never inside its transaction. It must not
+// block or write back to the store: a subscriber that does would stall the
+// SQLite writer (see EventBroadcaster for the same constraint).
+type TaskChangeNotifier func(task Task)
+
 type HumanHandoffResolver interface {
 	ResolveHumanHandoff(ctx context.Context, taskID string, expectedUpdatedAt *time.Time, result string) (*HumanHandoffResolution, error)
 }
