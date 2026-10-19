@@ -92,11 +92,7 @@ func (b TaskBridge) PublishTaskSplit(ctx context.Context, parent models.Task, ch
 		return
 	}
 	payload := string(encoded)
-	b.Bus.Publish(ctx, Signal{Topic: GlobalTopic, Type: "task_split", Payload: payload})
-	b.Bus.Publish(ctx, Signal{Topic: "task:" + parent.ID, Type: "task_split", Payload: payload})
-	if parent.ProjectID != "" {
-		b.Bus.Publish(ctx, Signal{Topic: "project:" + parent.ProjectID, Type: "task_split", Payload: payload})
-	}
+	b.publishToTask(ctx, "task_split", parent, payload)
 }
 
 func (b TaskBridge) PublishTaskRetried(ctx context.Context, task models.Task) {
@@ -117,9 +113,17 @@ func (b TaskBridge) publishTask(ctx context.Context, eventType string, task mode
 		return
 	}
 	payload := string(encoded)
-	b.Bus.Publish(ctx, Signal{Topic: GlobalTopic, Type: eventType, Payload: payload})
-	b.Bus.Publish(ctx, Signal{Topic: "task:" + task.ID, Type: eventType, Payload: payload})
+	b.publishToTask(ctx, eventType, task, payload)
+}
+
+// publishToTask fans one task signal out to the global, task and project
+// topics, tagging each copy with the task and project IDs.
+func (b TaskBridge) publishToTask(ctx context.Context, eventType string, task models.Task, payload string) {
+	topics := []string{GlobalTopic, "task:" + task.ID}
 	if task.ProjectID != "" {
-		b.Bus.Publish(ctx, Signal{Topic: "project:" + task.ProjectID, Type: eventType, Payload: payload})
+		topics = append(topics, "project:"+task.ProjectID)
+	}
+	for _, topic := range topics {
+		b.Bus.Publish(ctx, Signal{Topic: topic, Type: eventType, Payload: payload, TaskID: task.ID, ProjectID: task.ProjectID})
 	}
 }

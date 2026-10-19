@@ -40,9 +40,11 @@ func (e *EventEmitter) Broadcast(ctx context.Context, evt models.Event) error {
 
 func (e *EventEmitter) publish(ctx context.Context, topic string, evt models.Event) {
 	e.bus.Publish(ctx, Signal{
-		Topic:   topic,
-		Type:    string(evt.Type),
-		Payload: evt.Payload,
+		Topic:     topic,
+		Type:      string(evt.Type),
+		Payload:   evt.Payload,
+		TaskID:    evt.TaskID.String,
+		ProjectID: evt.ProjectID,
 	})
 }
 
