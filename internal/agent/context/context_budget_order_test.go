@@ -42,6 +42,54 @@ func TestTruncateWorkingMessages_KeepsToolCallPairs(t *testing.T) {
 	}
 }
 
+// The newest tool result is what the agent needs next, so it is fitted before
+// optional assistant content and call arguments; long arguments cannot starve
+// it.
+func TestTruncateWorkingMessages_ReservesNewestToolResult(t *testing.T) {
+	call := spec.ToolCall{ID: "a"}
+	call.Function.Name = "bash"
+	call.Function.Arguments = strings.Repeat("x", 1000)
+	result := strings.Repeat("R", 300)
+	working := []spec.PromptMessage{
+		{Role: "assistant", ToolCalls: []spec.ToolCall{call}},
+		{Role: "tool", ToolCallID: "a", Content: result},
+	}
+	budget := len(call.Function.Name) + len(result)
+
+	got := TruncateWorkingMessages(working, budget, truncation.MiddleOutStrategy{})
+
+	assertToolPairs(t, got)
+	if last := got[len(got)-1]; last.Content != result {
+		t.Fatalf("newest tool result not kept whole: %q", last.Content)
+	}
+	if TotalChars(got) > budget {
+		t.Fatalf("cut context is %d chars, over the %d budget", TotalChars(got), budget)
+	}
+}
+
+// Call names cannot be cut, so a unit whose names alone exceed the budget is
+// omitted whole instead of pushing the context over budget.
+func TestTruncateWorkingMessages_DropsUnitWhenCallNamesExceedBudget(t *testing.T) {
+	working := []spec.PromptMessage{
+		{Role: "assistant", ToolCalls: []spec.ToolCall{
+			toolCallMsg("a").ToolCalls[0],
+			toolCallMsg("b").ToolCalls[0],
+		}},
+		{Role: "tool", ToolCallID: "a", Content: "ra"},
+		{Role: "tool", ToolCallID: "b", Content: "rb"},
+	}
+	budget := len("bash")
+
+	got := TruncateWorkingMessages(working, budget, truncation.MiddleOutStrategy{})
+
+	if len(got) != 0 {
+		t.Fatalf("kept %d messages, want the unit omitted when its call names exceed the budget", len(got))
+	}
+	if TotalChars(got) > budget {
+		t.Fatalf("cut context is %d chars, over the %d budget", TotalChars(got), budget)
+	}
+}
+
 func toolCallMsg(id string) spec.PromptMessage {
 	call := spec.ToolCall{ID: id}
 	call.Function.Name = "bash"

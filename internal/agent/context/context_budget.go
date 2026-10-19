@@ -126,23 +126,54 @@ func workingUnits(working []spec.PromptMessage) [][]spec.PromptMessage {
 	return units
 }
 
-// fitUnit cuts every message of a unit to what is left of the budget. No
-// message is dropped: an emptied tool result still answers its call.
+// fitUnit cuts every message of a unit to what is left of the budget. Call
+// names cannot be cut, so a unit whose names do not fit is omitted whole,
+// keeping every call paired with its result. Within a unit, the newest tool
+// result is fitted first, since it is what the agent needs next; optional
+// assistant content and call arguments get what remains.
 func fitUnit(unit []spec.PromptMessage, remaining int, strategy truncation.TruncationStrategy) ([]spec.PromptMessage, int) {
+	nameChars := toolCallNameChars(unit)
+	if nameChars > remaining {
+		return nil, remaining
+	}
+	remaining -= nameChars
+
 	out := make([]spec.PromptMessage, len(unit))
-	for i, m := range unit {
-		m.Content = cutTo(m.Content, remaining, strategy)
-		remaining -= utf8.RuneCountInString(m.Content)
-		if len(m.ToolCalls) > 0 {
-			m.ToolCalls, remaining = truncateToolCalls(m.ToolCalls, remaining, strategy)
+	copy(out, unit)
+
+	newestResult := -1
+	if last := len(out) - 1; last > 0 && out[last].Role == "tool" {
+		newestResult = last
+		out[last].Content = cutTo(out[last].Content, remaining, strategy)
+		remaining -= utf8.RuneCountInString(out[last].Content)
+	}
+
+	for i := range out {
+		if i == newestResult {
+			continue
 		}
-		out[i] = m
+		out[i].Content = cutTo(out[i].Content, remaining, strategy)
+		remaining -= utf8.RuneCountInString(out[i].Content)
+		if len(out[i].ToolCalls) > 0 {
+			out[i].ToolCalls, remaining = truncateToolCalls(out[i].ToolCalls, remaining, strategy)
+		}
 	}
 	return out, remaining
 }
 
+func toolCallNameChars(unit []spec.PromptMessage) int {
+	total := 0
+	for _, m := range unit {
+		for _, tc := range m.ToolCalls {
+			total += utf8.RuneCountInString(tc.Function.Name)
+		}
+	}
+	return total
+}
+
 // truncateToolCalls cuts call arguments to the budget; every call is kept so
-// its tool result stays paired.
+// its tool result stays paired. Call names are unit overhead, already charged
+// by fitUnit.
 func truncateToolCalls(
 	toolCalls []spec.ToolCall,
 	remaining int,
@@ -151,7 +182,6 @@ func truncateToolCalls(
 	tcCopy := make([]spec.ToolCall, len(toolCalls))
 	copy(tcCopy, toolCalls)
 	for j := range tcCopy {
-		remaining -= utf8.RuneCountInString(tcCopy[j].Function.Name)
 		tcCopy[j].Function.Arguments = cutTo(tcCopy[j].Function.Arguments, remaining, strategy)
 		remaining -= utf8.RuneCountInString(tcCopy[j].Function.Arguments)
 	}
