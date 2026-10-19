@@ -8,13 +8,18 @@ import (
 	"agentd/internal/gateway/truncation"
 )
 
-func (cm *ContextManager) enforceBudget(messages []spec.PromptMessage, totalBudget int) []spec.PromptMessage {
+// EnforceBudget fits messages into totalBudget by cutting the working zone.
+// Anchor, correction, and summary messages are kept as fixed context so a cut
+// never drops them in favor of older working turns.
+func EnforceBudget(
+	messages []spec.PromptMessage, totalBudget int, strategy truncation.TruncationStrategy,
+) []spec.PromptMessage {
 	if totalBudget <= 0 || TotalChars(messages) <= totalBudget {
 		return messages
 	}
 
 	// Find the point where working zone starts (after anchor and potential summary)
-	anchor, rest := cm.PartitionAnchor(messages)
+	anchor, rest := PartitionAnchor(messages)
 	summaryIdx := summaryMessageIndex(rest)
 	correctionEnd := correctionMessageEnd(rest)
 	fixed, working := fixedAndWorkingMessages(anchor, rest, summaryIdx, correctionEnd)
@@ -25,7 +30,7 @@ func (cm *ContextManager) enforceBudget(messages []spec.PromptMessage, totalBudg
 		return fixed
 	}
 
-	return append(fixed, TruncateWorkingMessages(working, remainingBudget, cm.TruncationStrategy())...)
+	return append(fixed, TruncateWorkingMessages(working, remainingBudget, strategy)...)
 }
 
 // SetTruncationStrategy sets how working messages over the budget are cut

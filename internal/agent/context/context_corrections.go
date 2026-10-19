@@ -219,7 +219,7 @@ func (cm *ContextManager) injectPendingCorrections(messages []spec.PromptMessage
 		return filtered
 	}
 
-	anchor, rest := cm.PartitionAnchor(filtered)
+	anchor, rest := PartitionAnchor(filtered)
 	corrMsgs := make([]spec.PromptMessage, 0, len(corrections))
 	for _, c := range corrections {
 		corrMsgs = append(corrMsgs, spec.PromptMessage{

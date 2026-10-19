@@ -134,8 +134,13 @@ func (e *Engine) generateAgenticTurn(
 ) (gateway.AIResponse, *agentruntime.LoopResult, error) {
 	req := e.buildAgenticRequest(task, profile, *messages, tools, sessionRecoveryGen)
 	// ApplyTuning can grow the request after the iteration pre-check (for
-	// example, a compressing retry appends a note). SkipTruncation is set, so
-	// the gateway would not cut it; re-truncate here before generation.
+	// example, a compressing retry appends a note). Reserve its space by
+	// cutting working messages, keeping the anchor, corrections, and summary.
+	if e.config.CharacterBudget > 0 {
+		req.Messages = agentcontext.EnforceBudget(req.Messages, e.config.CharacterBudget, e.config.ContextTruncation)
+	}
+	// SkipTruncation leaves the gateway's own cut off, so enforce the message
+	// count (and any budget left after fixed context) here before generation.
 	truncated, err := e.applyAgenticTruncation(ctx, req.Messages)
 	if err != nil {
 		e.host.HandleGatewayError(ctx, task, err)
