@@ -45,15 +45,8 @@ func (w *walk) up(e ast.Node, idx int, via []*ast.CallExpr) {
 		w.upValueSpec(p, e, via)
 	case *ast.ReturnStmt:
 		w.upReturn(p, e, idx, via)
-	case *ast.RangeStmt:
-		if p.X == e {
-			w.target(p.Key, via)
-			w.target(p.Value, via)
-		}
-	case *ast.SwitchStmt:
-		if p.Tag == e {
-			w.upCaseReturns(p, via)
-		}
+	case *ast.RangeStmt, *ast.SwitchStmt:
+		w.upControl(p, e, via)
 	default:
 		w.upExpr(p, e, via)
 	}
@@ -148,6 +141,22 @@ func (w *walk) upReturn(ret *ast.ReturnStmt, e ast.Node, idx int, via []*ast.Cal
 	}
 	for _, call := range w.k.calls[fn] {
 		w.up(call, pos, via)
+	}
+}
+
+// upControl follows a value a statement controls: a range over it into the
+// loop variables, a switch on it into what its cases return.
+func (w *walk) upControl(p ast.Node, e ast.Node, via []*ast.CallExpr) {
+	switch p := p.(type) {
+	case *ast.RangeStmt:
+		if p.X == e {
+			w.target(p.Key, via)
+			w.target(p.Value, via)
+		}
+	case *ast.SwitchStmt:
+		if p.Tag == e {
+			w.upCaseReturns(p, via)
+		}
 	}
 }
 
