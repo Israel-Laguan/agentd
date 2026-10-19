@@ -33,7 +33,7 @@ type taskEventResponse struct {
 
 func (h TaskHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	if h.Store == nil {
-		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", "task store is not configured")
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeUnavailable, "task store is not configured")
 		return
 	}
 	taskID := r.PathValue("id")

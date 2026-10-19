@@ -95,7 +95,7 @@ Reset the LLM circuit breaker without restarting the daemon. Use this after quot
 
 When `?provider=gemini` is supplied, `"provider"` in the response is `"gemini"`.
 
-**Error Responses** (all `503`, code `UNAVAILABLE`): system service not configured; global reset unavailable; per-provider reset unavailable when `ProviderBreakers` is nil.
+**Error Responses** (all `503`, code `UNAVAILABLE`): system service not configured; global reset unavailable; per-provider reset unavailable when `ProviderBreakers` is nil. An unknown `?provider=` (no breaker recorded for that name yet) is `404 NOT_FOUND`.
 
 **Test Coverage**:
 
@@ -292,9 +292,15 @@ For the event-name mapping and the `tool_called` / `tool_result` payload contrac
 | Code | HTTP Status | Description |
 | ------ | ------------- | ------------- |
 | `NOT_FOUND` | 404 | Resource not found |
-| `STATE_CONFLICT` | 409 | Invalid state transition |
-| `VALIDATION_FAILED` | 400 | Invalid request parameters |
-| `INTERNAL` | 500 | Server error |
+| `BAD_REQUEST` | 400 | Malformed request (unreadable or invalid JSON body) |
+| `VALIDATION_FAILED` | 400 | Invalid request parameters, including a task state that does not exist |
+| `FORBIDDEN` | 403 | Sandbox path violation |
+| `NOT_FOUND` | 404 | Resource not found, including a breaker `provider` with no breaker |
+| `STATE_CONFLICT` | 409 | A task transition the rules forbid, or a stale write |
+| `INTERNAL_ERROR` | 500 | Server error |
+| `UNAVAILABLE` | 503 | A daemon component is not configured (system service, task store, human handoff, event bus) |
+
+Every error, including the `GET /events/stream` 503, uses the `{status: "error", error: {code, message}}` envelope. Controllers take the code from an `httpx.Code*` constant; a test pins that. Chat streaming (`stream: true`) reports a planner failure as a chunk of assistant text, as the OpenAI wire format has no error frame.
 
 ---
 

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"agentd/internal/models"
@@ -75,7 +76,7 @@ func (s *TaskService) AddHumanComment(ctx context.Context, taskID, content strin
 // which case ErrStateConflict propagates back to the controller.
 func (s *TaskService) UpdateTaskState(ctx context.Context, taskID string, next models.TaskState) (*models.Task, error) {
 	if !next.Valid() {
-		return nil, models.ErrInvalidStateTransition
+		return nil, fmt.Errorf("%w: %q", models.ErrUnknownTaskState, next)
 	}
 	current, err := s.Store.GetTask(ctx, taskID)
 	if err != nil {
@@ -100,7 +101,7 @@ func (s *TaskService) UpdateTaskDescription(ctx context.Context, taskID, descrip
 // the entire patch succeeds or fails together — no partial commit.
 func (s *TaskService) PatchTask(ctx context.Context, taskID string, state *models.TaskState, description *string) (*models.Task, error) {
 	if state != nil && !state.Valid() {
-		return nil, models.ErrInvalidStateTransition
+		return nil, fmt.Errorf("%w: %q", models.ErrUnknownTaskState, *state)
 	}
 	current, err := s.Store.GetTask(ctx, taskID)
 	if err != nil {

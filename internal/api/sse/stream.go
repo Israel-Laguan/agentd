@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agentd/internal/api/httpx"
 	"agentd/internal/bus"
 	"agentd/internal/models"
 )
@@ -23,7 +24,7 @@ type Handler struct {
 
 func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.Bus == nil {
-		http.Error(w, "event bus is unavailable", http.StatusServiceUnavailable)
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeUnavailable, "event bus is unavailable")
 		return
 	}
 	hub := h.Hub

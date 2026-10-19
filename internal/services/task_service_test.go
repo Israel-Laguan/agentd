@@ -84,7 +84,7 @@ func TestUpdateTaskStateValidatesIncomingState(t *testing.T) {
 	store.getTask = &models.Task{BaseEntity: models.BaseEntity{ID: "task-1", UpdatedAt: now}, State: models.TaskStateRunning}
 	svc := services.NewTaskService(full, &store.stubBoard)
 
-	if _, err := svc.UpdateTaskState(context.Background(), "task-1", models.TaskState("BOGUS")); !errors.Is(err, models.ErrInvalidStateTransition) {
+	if _, err := svc.UpdateTaskState(context.Background(), "task-1", models.TaskState("BOGUS")); !errors.Is(err, models.ErrUnknownTaskState) {
 		t.Fatalf("expected invalid state error, got %v", err)
 	}
 

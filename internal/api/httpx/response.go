@@ -55,6 +55,7 @@ const (
 	CodeStateConflict = "STATE_CONFLICT"
 	CodeForbidden     = "FORBIDDEN"
 	CodeInternal      = "INTERNAL_ERROR"
+	CodeUnavailable   = "UNAVAILABLE"
 )
 
 // WriteSuccess emits a 2xx envelope. Pass a nil meta when the response
@@ -137,6 +138,8 @@ func MapError(err error) (int, string, string) {
 		return http.StatusNotFound, CodeNotFound, "project not found"
 	case errors.Is(err, models.ErrTaskNotFound):
 		return http.StatusNotFound, CodeNotFound, "task not found"
+	case errors.Is(err, models.ErrProviderNotFound):
+		return http.StatusNotFound, CodeNotFound, err.Error()
 	case errors.Is(err, models.ErrAgentProfileNotFound):
 		return http.StatusNotFound, CodeNotFound, err.Error()
 	case errors.Is(err, models.ErrAgentProfileProtected),
@@ -149,6 +152,7 @@ func MapError(err error) (int, string, string) {
 		errors.Is(err, models.ErrTaskBlocked):
 		return http.StatusConflict, CodeStateConflict, err.Error()
 	case errors.Is(err, models.ErrInvalidDraftPlan),
+		errors.Is(err, models.ErrUnknownTaskState),
 		errors.Is(err, models.ErrCircularDependency),
 		errors.Is(err, models.ErrAgentProfileInvalid):
 		return http.StatusBadRequest, CodeValidation, err.Error()

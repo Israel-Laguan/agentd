@@ -28,6 +28,8 @@ var (
 	ErrLLMUnreachable         = errors.New("LLM provider unreachable")
 	ErrOptimisticLock         = errors.New("optimistic lock conflict")
 	ErrProjectNotFound        = errors.New("project not found")
+	ErrProviderNotFound       = errors.New("provider not found")
+	ErrUnknownTaskState       = errors.New("unknown task state")
 	ErrSandboxViolation       = errors.New("sandbox path violation")
 	ErrSandboxUnavailable     = errors.New("sandbox backend unavailable")
 	ErrStateConflict          = errors.New("task state conflict")

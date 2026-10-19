@@ -42,8 +42,8 @@ func TestTaskService_PatchTask_InvalidState(t *testing.T) {
 	svc := services.NewTaskService(full, nil)
 
 	bogus := models.TaskState("BOGUS")
-	if _, err := svc.PatchTask(context.Background(), "task-1", &bogus, nil); !errors.Is(err, models.ErrInvalidStateTransition) {
-		t.Fatalf("expected ErrInvalidStateTransition, got %v", err)
+	if _, err := svc.PatchTask(context.Background(), "task-1", &bogus, nil); !errors.Is(err, models.ErrUnknownTaskState) {
+		t.Fatalf("expected ErrUnknownTaskState, got %v", err)
 	}
 }
 
