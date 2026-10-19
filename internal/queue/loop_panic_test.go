@@ -52,3 +52,14 @@ func TestBackgroundLoopsSurviveTickPanic(t *testing.T) {
 		t.Fatalf("loops did not tick again after a panic: hitl=%d orphan=%d", h, o)
 	}
 }
+
+// A recovered panic is reported to the caller so taskLoop can retry at the base
+// interval instead of treating the tick as idle and backing off.
+func TestGuardTickReportsPanic(t *testing.T) {
+	if !guardTick("boom", func() error { panic("x") }) {
+		t.Fatal("guardTick = false after a panic, want true")
+	}
+	if guardTick("ok", func() error { return nil }) {
+		t.Fatal("guardTick = true without a panic, want false")
+	}
+}
