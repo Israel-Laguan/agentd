@@ -128,6 +128,29 @@ func TestConfigReferenceMarksNotImplementedKeys(t *testing.T) {
 	}
 }
 
+// docs/reference.md tables every key: a row for a not-implemented key must
+// say so rather than describe it as active.
+func TestReferenceTableMarksNotImplementedKeys(t *testing.T) {
+	table := readFile(t, filepath.Join(repoRoot(t), "docs", "reference.md"))
+	for _, line := range strings.Split(table, "\n") {
+		key, ok := tableKey(line)
+		if _, marked := longestPrefix(key, notImplementedKeys); ok && marked &&
+			!strings.Contains(strings.ToLower(line), "not implemented") {
+			t.Errorf("docs/reference.md: %s is not implemented, but its row does not say so", key)
+		}
+	}
+}
+
+// tableKey returns the key a "| `key` | ..." table row documents.
+func tableKey(line string) (string, bool) {
+	rest, ok := strings.CutPrefix(line, "| `")
+	if !ok {
+		return "", false
+	}
+	key, _, found := strings.Cut(rest, "`")
+	return key, found
+}
+
 // hasDocMarker reports whether a docs line names the key (bare or dotted, in
 // backticks) and says "not implemented".
 func hasDocMarker(docs, leaf string) bool {
