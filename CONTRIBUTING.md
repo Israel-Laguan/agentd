@@ -29,7 +29,7 @@ make hooks-install  # optional: pre-push hook running make check-commits (hooks 
 
 ### PR size limit
 
-Each PR must change fewer than 100 files and at most 1000 *source* lines
+Each PR must change fewer than 100 files and at most 2000 *source* lines
 (additions plus deletions among files that are actually reviewed). Generated
 files and machine-produced churn (lockfiles, minified assets, build caches)
 are excluded from the accounting, because their churn is one-for-many noise —

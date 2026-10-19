@@ -38,10 +38,10 @@ func TestPRSize(t *testing.T) {
 		{"well under limits", []string{"5", "100", "20", ""}, 0, ""},
 		{"99 files passes", []string{"99", "10", "10", ""}, 0, ""},
 		{"100 files fails", []string{"100", "10", "10", ""}, 1, "files"},
-		{"1000 changed lines passes", []string{"10", "600", "400", ""}, 0, ""},
-		{"1001 changed lines fails", []string{"10", "600", "401", ""}, 1, "lines"},
-		{"deletions count toward lines", []string{"10", "0", "1001", ""}, 1, "lines"},
-		{"additions count toward lines", []string{"10", "1001", "0", ""}, 1, "lines"},
+		{"2000 changed lines passes", []string{"10", "1200", "800", ""}, 0, ""},
+		{"2001 changed lines fails", []string{"10", "1200", "801", ""}, 1, "lines"},
+		{"deletions count toward lines", []string{"10", "0", "2001", ""}, 1, "lines"},
+		{"additions count toward lines", []string{"10", "2001", "0", ""}, 1, "lines"},
 		{"label overrides both limits", []string{"150", "5000", "600", "bug,large-pr-ok"}, 0, "large-pr-ok"},
 		{"similar label does not override", []string{"150", "10", "10", "large-pr-okay,not-large-pr-ok"}, 1, "files"},
 		{"label absent from list fails", []string{"150", "10", "10", "bug"}, 1, "files"},
@@ -138,7 +138,7 @@ type gitSetup func(t *testing.T, dir string) (base, head string)
 func setupLockfileChurn(t *testing.T, dir string) (string, string) {
 	initRepo(t, dir)
 	writeFile(t, dir, "a.go", "package main\nfunc A() {}\n")
-	writeFile(t, dir, "package-lock.json", strings.Repeat("x\n", 1200))
+	writeFile(t, dir, "package-lock.json", strings.Repeat("x\n", 2500))
 	base := makeCommit(t, dir, "base")
 	writeFile(t, dir, "package-lock.json", strings.Repeat("y\n", 36))
 	writeFile(t, dir, "api.ts", "import \"agentd\"\n")
@@ -147,7 +147,7 @@ func setupLockfileChurn(t *testing.T, dir string) (string, string) {
 
 func setupBigDeletion(t *testing.T, dir string) (string, string) {
 	initRepo(t, dir)
-	writeFile(t, dir, "big.go", strings.Repeat("z\n", 1001))
+	writeFile(t, dir, "big.go", strings.Repeat("z\n", 2001))
 	base := makeCommit(t, dir, "add-big")
 	if err := os.Remove(filepath.Join(dir, "big.go")); err != nil {
 		t.Fatal(err)
@@ -169,7 +169,7 @@ func setupNestedLockfile(t *testing.T, dir string) (string, string) {
 	if err := os.MkdirAll(filepath.Join(dir, "web"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, dir, "web/package-lock.json", strings.Repeat("x\n", 2000))
+	writeFile(t, dir, "web/package-lock.json", strings.Repeat("x\n", 3000))
 	return base, makeCommit(t, dir, "lock")
 }
 
@@ -192,7 +192,7 @@ func setupAdvancedBase(t *testing.T, dir string) (string, string) {
 	writeFile(t, dir, "small.go", "package main\n")
 	head := makeCommit(t, dir, "pr-change")
 	gitCmd(t, dir, "checkout", "-q", "-")
-	writeFile(t, dir, "big.go", strings.Repeat("z\n", 1500))
+	writeFile(t, dir, "big.go", strings.Repeat("z\n", 2500))
 	return makeCommit(t, dir, "base-advances"), head
 }
 
@@ -206,7 +206,7 @@ func TestPRSizeGit(t *testing.T) {
 		wantOut  string
 	}{
 		{"deletion-heavy lockfile churn excluded", setupLockfileChurn, "bug", 0, "1 files, 1 changed lines; excluded 1 generated files"},
-		{"real deletions still counted and fail", setupBigDeletion, "bug", 1, "1001 changed lines"},
+		{"real deletions still counted and fail", setupBigDeletion, "bug", 1, "2001 changed lines"},
 		{"large-pr-ok label overrides the line limit", setupBigDeletion, "large-pr-ok", 0, "over limit, overridden"},
 		{"missing base object is a usage error with a hint", setupMissingBase, "bug", 2, "fetch-depth: 0"},
 		{"nested lockfile is excluded by basename", setupNestedLockfile, "bug", 0, "excluded 1 generated files"},

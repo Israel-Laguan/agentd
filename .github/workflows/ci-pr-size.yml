@@ -1,7 +1,7 @@
 name: CI (PR size)
 
 # Enforces the PR size rule from CONTRIBUTING.md: under 100 changed files and
-# at most 1000 changed *source* lines (generated files excluded). A maintainer
+# at most 2000 changed *source* lines (generated files excluded). A maintainer
 # can add the `large-pr-ok` label to waive it for one PR; the label events
 # re-run the check.
 #
