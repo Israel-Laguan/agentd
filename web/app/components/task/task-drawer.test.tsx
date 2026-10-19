@@ -3,29 +3,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { Task, TaskEvent, TaskStatus } from "@/lib/types";
 import { fetchTaskEvents } from "@/lib/api";
 import { TaskDrawer } from "./task-drawer";
+import taskEventsFixture from "./__fixtures__/task-events.json";
 
-// Captured from the devenv stack on 2026-10-01 (T-034); see
-// ./task-event-list.test.tsx for the capture provenance.
-const CAPTURED_EVENTS: TaskEvent[] = [
-  {
-    id: "4d3ea4ab-43c1-44a1-81de-44f366e54057",
-    project_id: "89bfee74-42b5-433f-bbf1-260bd9f5e36d",
-    task_id: "task-under-test",
-    type: "RECOVERY",
-    payload: "reset ghost task to READY",
-    created_at: "2026-10-01T17:33:37.188144663Z",
-    updated_at: "2026-10-01T17:33:37.188144663Z",
-  },
-  {
-    id: "78832ae1-0031-4b05-993b-254271a714dc",
-    project_id: "89bfee74-42b5-433f-bbf1-260bd9f5e36d",
-    task_id: "task-under-test",
-    type: "LOG_CHUNK",
-    payload: "tick 0",
-    created_at: "2026-10-01T17:33:40.211024831Z",
-    updated_at: "2026-10-01T17:33:40.211024831Z",
-  },
-];
+// The shared fixture (see ./task-event-list.test.tsx), re-keyed to the open task.
+const CAPTURED_EVENTS: TaskEvent[] = taskEventsFixture.data
+  .filter((event) => ["RECOVERY", "LOG_CHUNK"].includes(event.type))
+  .map((event) => ({ ...event, task_id: "task-under-test" }));
 
 // A second task's event, so a drawer that forgets to scope by task_id would
 // show it. The daemon only ever returns one task's events, so this row cannot
