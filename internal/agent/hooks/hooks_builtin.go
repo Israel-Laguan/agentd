@@ -4,21 +4,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
 )
 
-// dangerousPatterns are command substrings that indicate risky operations.
-// This is a best-effort hint, not a security boundary.
-var dangerousPatterns = []string{
-	"sudo",
-	"su -",
-	"rm -rf /",
-	"mkfs",
-	"dd if=",
-	":(){:|:&};:",
+// dangerousCommands match risky commands at a command boundary (start of the
+// line or after whitespace, ;, &, |, parentheses or a backtick), so "sudo ls" is
+// refused but "grep pseudocode" and "rm -rf /tmp/build" are not. This is a
+// best-effort hint, not a security boundary.
+var dangerousCommands = []struct {
+	name string
+	re   *regexp.Regexp
+}{
+	{"sudo", commandRE(`sudo\b`)},
+	{"su -", commandRE(`su\s+-`)},
+	{"rm -rf /", commandRE(`rm\s+-[a-z]*(r[a-z]*f|f[a-z]*r)[a-z]*\s+/(\s|\*|$)`)},
+	{"mkfs", commandRE(`mkfs\b`)},
+	{"dd if=", commandRE(`dd\s+if=`)},
+	{":(){:|:&};:", regexp.MustCompile(`:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:`)},
+}
+
+func commandRE(pattern string) *regexp.Regexp {
+	return regexp.MustCompile("(?i)(^|[\\s;&|()`])" + pattern)
 }
 
 // DenylistHook returns a PreHook that blocks dangerous commands for bash
@@ -26,7 +36,13 @@ var dangerousPatterns = []string{
 // resolved once at construction time and used to verify that any argument
 // whose key contains "path" stays within bounds.
 func DenylistHook(allowedRoot string) PreHook {
-	root := filepath.Clean(allowedRoot)
+	return DenylistHookFor(func(string) string { return allowedRoot })
+}
+
+// DenylistHookFor is DenylistHook with the allowed root chosen per call from
+// the project the tool call belongs to, so one project's tools cannot name a
+// path in another project's workspace.
+func DenylistHookFor(rootFor func(projectID string) string) PreHook {
 	return PreHook{
 		Name:   "denylist",
 		Policy: FailClosed,
@@ -36,7 +52,7 @@ func DenylistHook(allowedRoot string) PreHook {
 					return v, nil
 				}
 			}
-			if v := checkPathTraversal(ctx.Args, root); v.Veto {
+			if v := checkPathTraversal(ctx.Args, filepath.Clean(rootFor(ctx.ProjectID))); v.Veto {
 				return v, nil
 			}
 			return HookVerdict{}, nil
@@ -51,10 +67,9 @@ func checkDangerousCommand(argsJSON string) HookVerdict {
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return HookVerdict{}
 	}
-	lower := strings.ToLower(args.Command)
-	for _, p := range dangerousPatterns {
-		if strings.Contains(lower, p) {
-			return HookVerdict{Veto: true, Reason: fmt.Sprintf("command blocked: contains dangerous pattern %q", p)}
+	for _, d := range dangerousCommands {
+		if d.re.MatchString(args.Command) {
+			return HookVerdict{Veto: true, Reason: fmt.Sprintf("command blocked: contains dangerous pattern %q", d.name)}
 		}
 	}
 	return HookVerdict{}

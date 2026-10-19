@@ -67,10 +67,12 @@ func buildWorkerOptions(store models.KanbanStore, deps runtimeDeps, cfg config.C
 
 // defaultToolHooks is the guard chain every worker starts from. The denylist
 // refuses sudo, rm -rf /, fork bombs and path arguments that climb out of the
-// projects directory; it was written and tested but never registered (B-065).
+// calling project's workspace (projectsDir/<project id>); it was written and tested but never registered (B-065).
 func defaultToolHooks(projectsDir string) *agenthooks.HookChain {
 	chain := agenthooks.NewHookChain()
-	chain.RegisterPre(agenthooks.DenylistHook(projectsDir))
+	chain.RegisterPre(agenthooks.DenylistHookFor(func(projectID string) string {
+		return filepath.Join(projectsDir, projectID)
+	}))
 	return chain
 }
 

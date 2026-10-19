@@ -36,6 +36,10 @@ func TestBuildWorkerOptions_RegistersDenylistHook(t *testing.T) {
 			t.Errorf("bash %q was not refused by the worker hooks", command)
 		}
 	}
+	sibling := opts.Hooks.RunPre(agenthooks.HookContext{ToolName: "read", ProjectID: "p1", Args: `{"path":"../p2/secret"}`})
+	if !sibling.Veto {
+		t.Error("a path into another project's workspace was not refused")
+	}
 	allowed := opts.Hooks.RunPre(agenthooks.HookContext{ToolName: "bash", Args: `{"command":"go test ./..."}`})
 	if allowed.Veto {
 		t.Errorf("an ordinary command was refused: %s", allowed.Reason)
