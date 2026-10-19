@@ -4,7 +4,10 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"agentd/internal/api/controllers"
+	"agentd/internal/api/httpx"
 	"agentd/internal/api/sse"
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
@@ -164,11 +167,15 @@ func corsMiddleware(uiOrigin string, next http.Handler) http.Handler {
 	})
 }
 
-// requestLoggingMiddleware logs HTTP requests at Debug level (only visible with -v/verbose mode).
+// requestLoggingMiddleware stamps every response with a fresh X-Request-ID (never
+// taken from the client) so a logged 500 can be matched to what the caller saw,
+// and logs HTTP requests at Debug level (only visible with -v/verbose mode).
 // This provides visibility into endpoint access patterns without cluttering Info-level logs.
 func requestLoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		slog.Debug("http request", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
+		id := uuid.NewString()
+		w.Header().Set(httpx.HeaderRequestID, id)
+		slog.Debug("http request", "request_id", id, "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 		next.ServeHTTP(w, r)
 	})
 }
