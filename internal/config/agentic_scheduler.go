@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -49,12 +50,31 @@ func loadSchedulerConfig(v *viper.Viper) (SchedulerConfig, error) {
 	if err != nil {
 		return SchedulerConfig{}, fmt.Errorf("decode agentic.scheduler.tasks: %w", err)
 	}
-	return SchedulerConfig{
+	cfg := SchedulerConfig{
 		Enabled:      v.GetBool("agentic.scheduler.enabled"),
 		TickInterval: tick,
 		ProjectID:    v.GetString("agentic.scheduler.project_id"),
 		Tasks:        tasks,
-	}, nil
+	}
+	if err := cfg.validateProjects(); err != nil {
+		return SchedulerConfig{}, err
+	}
+	return cfg, nil
+}
+
+// validateProjects rejects an enabled scheduler whose task resolves to no
+// project: it would land in _system, which the worker refuses to execute (B-076).
+func (c SchedulerConfig) validateProjects() error {
+	if !c.Enabled || strings.TrimSpace(c.ProjectID) != "" {
+		return nil
+	}
+	for _, t := range c.Tasks {
+		if strings.TrimSpace(t.ID) == "" || strings.TrimSpace(t.ProjectID) != "" {
+			continue
+		}
+		return fmt.Errorf("agentic.scheduler: task %q has no project_id and agentic.scheduler.project_id is unset; set one so the task can run", t.ID)
+	}
+	return nil
 }
 
 func loadSchedulerTasks(v *viper.Viper) ([]SchedulerTaskConfig, error) {
