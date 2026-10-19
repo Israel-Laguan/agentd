@@ -1,61 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { TaskEvent } from "@/lib/types";
+import taskEventsFixture from "./__fixtures__/task-events.json";
 import { TaskEventList } from "./task-event-list";
 
-// Captured verbatim from GET /api/v1/tasks/e6e62f50-.../events on the devenv
-// stack (2026-10-01, T-034), after TestJ08_UncleanKillRecovery ran. Types and
-// payload strings are the real wire values, pinned as a static snapshot (nothing
-// re-validates them against the live endpoint). The RESULT row is real except
-// for its id, timestamp and payload, which were trimmed to keep the fixture short.
-const CAPTURED_EVENTS: TaskEvent[] = [
-  {
-    id: "59919cd9-183e-4bd2-aef8-25219c819cfd",
-    project_id: "89bfee74-42b5-433f-bbf1-260bd9f5e36d",
-    task_id: "e6e62f50-587e-4cdc-b67d-aa7e6e85f45b",
-    type: "WARNING",
-    payload:
-      "workspace empty at dispatch time; consider using source_path on materialize or calling POST /workspace/ready after seeding",
-    created_at: "2026-10-01T17:33:35.908161133Z",
-    updated_at: "2026-10-01T17:33:35.908161133Z",
-  },
-  {
-    id: "4d3ea4ab-43c1-44a1-81de-44f366e54057",
-    project_id: "89bfee74-42b5-433f-bbf1-260bd9f5e36d",
-    task_id: "e6e62f50-587e-4cdc-b67d-aa7e6e85f45b",
-    type: "RECOVERY",
-    payload: "reset ghost task to READY",
-    created_at: "2026-10-01T17:33:37.188144663Z",
-    updated_at: "2026-10-01T17:33:37.188144663Z",
-  },
-  {
-    id: "c78814d4-14a2-49dd-ac58-41e341abd002",
-    project_id: "89bfee74-42b5-433f-bbf1-260bd9f5e36d",
-    task_id: "e6e62f50-587e-4cdc-b67d-aa7e6e85f45b",
-    type: "TOKEN_USAGE",
-    payload: '{"tokens":2}',
-    created_at: "2026-10-01T17:33:40.205145409Z",
-    updated_at: "2026-10-01T17:33:40.205145409Z",
-  },
-  {
-    id: "78832ae1-0031-4b05-993b-254271a714dc",
-    project_id: "89bfee74-42b5-433f-bbf1-260bd9f5e36d",
-    task_id: "e6e62f50-587e-4cdc-b67d-aa7e6e85f45b",
-    type: "LOG_CHUNK",
-    payload: "tick 0",
-    created_at: "2026-10-01T17:33:40.211024831Z",
-    updated_at: "2026-10-01T17:33:40.211024831Z",
-  },
-  {
-    id: "b1c0ffee-0000-4000-8000-000000000001",
-    project_id: "89bfee74-42b5-433f-bbf1-260bd9f5e36d",
-    task_id: "e6e62f50-587e-4cdc-b67d-aa7e6e85f45b",
-    type: "RESULT",
-    payload: "exit=0 duration=1.2s\ntick 0\ntick 1",
-    created_at: "2026-10-01T17:33:44.000000000Z",
-    updated_at: "2026-10-01T17:33:44.000000000Z",
-  },
-];
+// Captured from GET /api/v1/tasks/e6e62f50-.../events on the devenv stack
+// (2026-10-01, T-034). The Go test TestTaskEventsResponseMatchesUIFixture
+// (internal/api/controllers) checks the real handler still has this shape.
+const CAPTURED_EVENTS: TaskEvent[] = taskEventsFixture.data;
 
 describe("TaskEventList", () => {
   it("shows an empty state when the task has no events", () => {
