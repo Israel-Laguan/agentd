@@ -23,7 +23,17 @@ ifneq ($(strip $(RUN)),)
 TEST_FLAGS += -run $(RUN)
 endif
 
-test: test-integration
+# A scoped run (PKG set by the caller, or RUN set) skips the fixed
+# integration suite below; plain make test and make check keep it.
+TEST_DEPS := test-integration
+ifneq ($(origin PKG),file)
+TEST_DEPS :=
+endif
+ifneq ($(strip $(RUN)),)
+TEST_DEPS :=
+endif
+
+test: $(TEST_DEPS)
 	$(GO_ENV) $(GO) test $(TEST_FLAGS) $(PKG)
 
 # The memory curator tests import internal/memory, which the queue-test-isolation
