@@ -233,7 +233,7 @@ tiered:
 mcp:
   enabled: false
   transport: stdio     # "stdio" (Claude Code/Cline), "http" (Streamable HTTP at /mcp), or "both"
-  http_addr: "127.0.0.1:0"  # loopback, random port (only used when transport includes "http")
+  http_addr: "127.0.0.1:0"  # not implemented: parsed and ignored; the HTTP transport is served on api.address
 plugins:
   enabled: false
   path: "~/.agentd/plugins"

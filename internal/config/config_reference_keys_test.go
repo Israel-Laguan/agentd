@@ -56,7 +56,8 @@ var consumedKeys = map[string]keyConsumer{
 	"queue.instructions": {`Queue\.Instructions`}, "queue.skills": {`Queue\.Skills`},
 	"queue.hitl": {`Queue\.HITL`}, "queue.legacy": {`Queue\.Legacy`},
 	"queue.tool_timeouts": {`Queue\.ToolTimeouts`}, "queue.tool_retries": {`Queue\.ToolRetries`},
-	"librarian": {`cfg\.Librarian`}, "tiered": {`cfg\.Tiered`}, "mcp": {`cfg\.MCP`},
+	"librarian": {`cfg\.Librarian`}, "tiered": {`cfg\.Tiered`},
+	"mcp.enabled": {`MCP\.Enabled`}, "mcp.transport": {`MCP\.Transport`},
 	"plugins": {`cfg\.Plugins|Plugins\.`},
 }
 
@@ -65,7 +66,7 @@ var consumedKeys = map[string]keyConsumer{
 var notImplementedKeys = []string{
 	"agentic.review", "agentic.tool_rate_limits", "agentic.approval_gates", "agentic.skills",
 	"gateway.budget", "gateway.truncation.strategy", "gateway.truncation.head_ratio",
-	"gateway.truncation.max_input_chars",
+	"gateway.truncation.max_input_chars", "mcp.http_addr",
 }
 
 func TestConfigReferenceKeysHaveConsumers(t *testing.T) {
@@ -104,14 +105,15 @@ func TestConfigReferenceKeysHaveConsumers(t *testing.T) {
 func TestConfigReferenceMarksNotImplementedKeys(t *testing.T) {
 	root := repoRoot(t)
 	ref := readFile(t, filepath.Join(root, "config.reference.yaml"))
-	docs := readFile(t, filepath.Join(root, "docs", "config-reference.md"))
+	docs := readFile(t, filepath.Join(root, "docs", "config-reference.md")) +
+		readFile(t, filepath.Join(root, "docs", "mcp-board-export.md"))
 	for _, key := range notImplementedKeys {
 		leaf := key[strings.LastIndex(key, ".")+1:]
 		if !hasMarker(ref, leaf+":", "#") {
 			t.Errorf("config.reference.yaml: %s lacks a 'not implemented' comment", key)
 		}
 		if !hasDocMarker(docs, leaf) {
-			t.Errorf("docs/config-reference.md: %s is not listed as not implemented", key)
+			t.Errorf("docs: %s is not listed as not implemented", key)
 		}
 	}
 }
