@@ -61,6 +61,10 @@ type chatFile struct {
 	Content string `json:"content,omitempty"`
 }
 
+// maxChatBody caps a chat request; it is larger than the default because
+// attached files travel inline in the JSON.
+const maxChatBody int64 = 4 << 20
+
 // Complete handles POST /v1/chat/completions.
 func (h ChatHandler) Complete(w http.ResponseWriter, r *http.Request) {
 	corrID := uuid.NewString()
@@ -129,6 +133,7 @@ func writePlannerError(ctx context.Context, log *slog.Logger, w http.ResponseWri
 }
 
 func parseChatRequest(w http.ResponseWriter, r *http.Request, ctx context.Context, log *slog.Logger) (chatRequest, string, bool) {
+	httpx.LimitBody(w, r, maxChatBody)
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.WarnContext(ctx, "chat intake: failed to read request body", "error", err)

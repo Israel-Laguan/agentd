@@ -30,7 +30,7 @@ func (h TaskHandler) ResolveHumanHandoff(w http.ResponseWriter, r *http.Request)
 		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", "human handoff resolution is not configured")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxHumanResolutionBody)
+	httpx.LimitBody(w, r, maxHumanResolutionBody)
 	var req humanResolutionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		slog.Debug("resolve human handoff: json decode failed", "task_id", taskID, "error", err)

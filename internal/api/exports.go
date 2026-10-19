@@ -3,6 +3,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"agentd/internal/api/httpx"
 	"agentd/internal/api/server"
@@ -13,7 +14,13 @@ type ServerDeps = server.ServerDeps
 
 var (
 	NewServer = func(deps server.ServerDeps) *http.Server {
-		return &http.Server{Addr: deps.Addr, Handler: server.NewHandler(deps)}
+		return &http.Server{
+			Addr: deps.Addr, Handler: server.NewHandler(deps),
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       60 * time.Second,
+			IdleTimeout:       2 * time.Minute,
+			// No WriteTimeout: the SSE event stream stays open for hours.
+		}
 	}
 	NewHandler = server.NewHandler
 )

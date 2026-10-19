@@ -106,5 +106,5 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 	if cfg.MCP.Enabled && (cfg.MCP.Transport == "http" || cfg.MCP.Transport == "both") {
 		mcpHandler = mcp.New(store).HTTPHandler()
 	}
-	return &http.Server{Addr: cfg.API.Address, Handler: api.NewHandler(api.ServerDeps{Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus, Project: deps.project, Tasks: tasks, System: system, Summarizer: summarizer, FileStash: stash, Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars, Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken, AllowedHosts: cfg.API.AllowedHosts, UIOrigin: cfg.API.UIOrigin, ProviderConfigs: providers, MCPHandler: mcpHandler})}, nil
+	return api.NewServer(api.ServerDeps{Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus, Project: deps.project, Tasks: tasks, System: system, Summarizer: summarizer, FileStash: stash, Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars, Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken, AllowedHosts: cfg.API.AllowedHosts, UIOrigin: cfg.API.UIOrigin, ProviderConfigs: providers, MCPHandler: mcpHandler}), nil
 }
