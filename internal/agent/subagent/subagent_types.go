@@ -145,8 +145,11 @@ func (d *SubagentDelegate) WithCallEnv(env []string) *SubagentDelegate {
 }
 
 // WithTruncationStrategy sets how the subagent cuts context over its budget;
-// nested delegates inherit it. Nil keeps middle-out.
+// nested delegates inherit it. Nil means middle-out.
 func (d *SubagentDelegate) WithTruncationStrategy(strategy gateway.TruncationStrategy) *SubagentDelegate {
+	if strategy == nil {
+		strategy = gateway.MiddleOutStrategy{}
+	}
 	d.truncation = strategy
 	return d
 }
