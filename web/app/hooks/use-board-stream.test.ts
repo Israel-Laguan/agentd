@@ -126,6 +126,16 @@ describe("useBoardStream", () => {
     expect(resync).toHaveBeenCalledTimes(1);
   });
 
+  it("re-reads the open drawer's comments and events after a reconnect", () => {
+    const { result } = mount("t1");
+    act(() => latest().onopen?.());
+    const { taskActivityKey: events, commentActivityKey: comments } = result.current;
+    act(() => latest().onerror?.());
+    act(() => latest().onopen?.());
+    expect(result.current.commentActivityKey).toBe(comments + 1);
+    expect(result.current.taskActivityKey).toBe(events + 1);
+  });
+
   it("opens a fresh stream after the browser gives up, and closes on unmount", () => {
     const { unmount } = mount();
     const first = latest();
