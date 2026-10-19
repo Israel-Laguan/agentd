@@ -18,3 +18,15 @@ test("the header and footer report the daemon's real state", async ({ page, requ
   await expect(page.getByText("Mock mode")).toHaveCount(0);
   await expect(page.getByRole("contentinfo")).toContainText(footerLabel);
 });
+
+// The other half of B-072: a header that always said "online" would pass the
+// test above. With the board's project list failing at the network, the header
+// must say so.
+test("the header reports the daemon unreachable when the board cannot load", async ({ page }) => {
+  await page.route(/\/api\/v1\/projects(\?.*)?$/, (route) => route.abort());
+
+  await page.goto("/");
+
+  await expect(page.getByText("Daemon unreachable")).toBeVisible();
+  await expect(page.getByText("Daemon online")).toHaveCount(0);
+});
