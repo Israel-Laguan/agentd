@@ -14,7 +14,7 @@ func (s *Store) IncrementRetryCount(
 	id string,
 	expectedUpdatedAt time.Time,
 ) (*models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
 		now := kdb.UTCNow()
 		result, err := s.db.ExecContext(ctx, `
 			UPDATE tasks
@@ -28,5 +28,5 @@ func (s *Store) IncrementRetryCount(
 			return nil, err
 		}
 		return s.GetTask(ctx, id)
-	})
+	}))
 }

@@ -16,7 +16,7 @@ const hitlTimeoutEventPayload = "human-in-the-loop request timed out"
 // ReconcileExpiredBlockedTasks transitions BLOCKED parents past their HITL
 // deadline to FAILED_REQUIRES_HUMAN and fails open human subtasks.
 func (s *Store) ReconcileExpiredBlockedTasks(ctx context.Context, now time.Time) ([]models.Task, error) {
-	return retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
+	return s.notifyTasks(retryOnBusy(ctx, func(ctx context.Context) ([]models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, fmt.Errorf("begin hitl timeout reconcile: %w", err)
@@ -49,7 +49,7 @@ func (s *Store) ReconcileExpiredBlockedTasks(ctx context.Context, now time.Time)
 			expired = append(expired, *updated)
 		}
 		return expired, commitTx(tx, "hitl timeout reconcile")
-	})
+	}))
 }
 
 func selectBlockedParentsWithOpenChildren(ctx context.Context, tx *immediateTx) ([]models.Task, error) {

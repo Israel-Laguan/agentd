@@ -59,6 +59,8 @@ func (s *Store) BlockTaskWithSubtasks(
 	if err != nil {
 		return nil, nil, err
 	}
+	_, _ = s.notifyTask(r.blocked, nil)
+	_, _ = s.notifyTasks(r.children, nil)
 	return r.blocked, r.children, nil
 }
 
@@ -118,6 +120,8 @@ func (s *Store) BlockTaskWithSubtasksAndComments(
 	if err != nil {
 		return nil, nil, err
 	}
+	_, _ = s.notifyTask(r.blocked, nil)
+	_, _ = s.notifyTasks(r.children, nil)
 	return r.blocked, r.children, nil
 }
 

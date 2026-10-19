@@ -8,14 +8,27 @@ import (
 	"time"
 
 	"agentd/internal/api"
+	"agentd/internal/bus"
 	"agentd/internal/config"
 	"agentd/internal/frontdesk"
+	"agentd/internal/kanban"
 	"agentd/internal/mcp"
 	"agentd/internal/memory"
 	"agentd/internal/models"
 	"agentd/internal/queue"
 	"agentd/internal/services"
 )
+
+// withLiveTaskNotifier makes the store announce every committed task row change
+// on the bus as a task_updated frame, so the board hears about a claim, a retry
+// or a block without each caller publishing (B-074).
+func withLiveTaskNotifier(store *kanban.Store, eventBus bus.Bus) *kanban.Store {
+	bridge := bus.TaskBridge{Bus: eventBus}
+	return store.WithTaskNotifier(func(task models.Task) {
+		// Bus publishing never blocks, so it is safe on the store's write path.
+		bridge.PublishTaskUpdated(context.Background(), task)
+	})
+}
 
 func buildStartRuntime(ctx context.Context, cfg config.Config, store models.KanbanStore, deps runtimeDeps, startOpts *startOptions) (*queue.Daemon, *http.Server, error) {
 	ledger := queue.NewRollingTokenLedger(cfg.Queue.RollingTokenWindow, cfg.Queue.RollingTokenLimit)

@@ -43,7 +43,7 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 		return err
 	}
 
-	store = store.WithCanceller(deps.canceller)
+	store = withLiveTaskNotifier(store.WithCanceller(deps.canceller), deps.bus)
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

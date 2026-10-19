@@ -26,6 +26,7 @@ type Store struct {
 	db          *sql.DB
 	projectsDir string
 	canceller   models.TaskCanceller
+	notifier    models.TaskChangeNotifier
 }
 
 var (
