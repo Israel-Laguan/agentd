@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -34,7 +35,7 @@ func TestTaskEventsResponseMatchesUIFixture(t *testing.T) {
 	projectID, taskID := seedProjectTask(t, store)
 	for i, ev := range fixtureEvents(t, fixture) {
 		err := store.AppendEvent(context.Background(), models.Event{
-			BaseEntity: models.BaseEntity{ID: "shape-" + string(rune('a'+i))},
+			BaseEntity: models.BaseEntity{ID: fmt.Sprintf("shape-%d", i)},
 			ProjectID:  projectID,
 			TaskID:     sql.NullString{String: taskID, Valid: true},
 			Type:       models.EventType(ev["type"].(string)),
@@ -67,6 +68,41 @@ func TestTaskEventsResponseMatchesUIFixture(t *testing.T) {
 			t.Fatalf("live response has no %s event", typ)
 		}
 		assertSameShape(t, "data["+typ+"]", shapeOf(want), shapeOf(got))
+	}
+}
+
+// meta.has_more and meta.truncated are omitted when false, so the fixture (five
+// events, default limit) cannot show them. A page that cuts the log must carry
+// both as booleans.
+func TestTaskEventsPaginatedMetaCarriesBothFlags(t *testing.T) {
+	h, store := taskTestHandler()
+	projectID, taskID := seedProjectTask(t, store)
+	for i := 0; i < 3; i++ {
+		err := store.AppendEvent(context.Background(), models.Event{
+			BaseEntity: models.BaseEntity{ID: fmt.Sprintf("page-%d", i)},
+			ProjectID:  projectID,
+			TaskID:     sql.NullString{String: taskID, Valid: true},
+			Type:       models.EventTypeLog,
+			Payload:    "line",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+taskID+"/events?limit=2", nil)
+	req.SetPathValue("id", taskID)
+	rec := httptest.NewRecorder()
+	h.ListEvents(rec, req)
+	var live struct {
+		Meta map[string]any `json:"meta"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &live); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"has_more", "truncated"} {
+		if v, ok := live.Meta[key].(bool); !ok || !v {
+			t.Fatalf("meta.%s = %v, want true (meta = %v)", key, live.Meta[key], live.Meta)
+		}
 	}
 }
 
