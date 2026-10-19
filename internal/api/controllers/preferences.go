@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -21,9 +20,8 @@ type preferenceRequest struct {
 }
 
 func (h PreferencesHandler) Save(w http.ResponseWriter, r *http.Request) {
-	httpx.LimitBody(w, r, httpx.DefaultMaxBody)
 	var req preferenceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}

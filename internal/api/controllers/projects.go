@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"crypto/subtle"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -63,9 +62,8 @@ func (h ProjectHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusForbidden, httpx.CodeForbidden, err.Error())
 		return
 	}
-	httpx.LimitBody(w, r, httpx.DefaultMaxBody)
 	var plan models.DraftPlan
-	if err := json.NewDecoder(r.Body).Decode(&plan); err != nil {
+	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &plan); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}

@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -30,9 +29,8 @@ func (h TaskHandler) ResolveHumanHandoff(w http.ResponseWriter, r *http.Request)
 		httpx.WriteError(w, http.StatusServiceUnavailable, "UNAVAILABLE", "human handoff resolution is not configured")
 		return
 	}
-	httpx.LimitBody(w, r, maxHumanResolutionBody)
 	var req humanResolutionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, maxHumanResolutionBody, &req); err != nil {
 		slog.Debug("resolve human handoff: json decode failed", "task_id", taskID, "error", err)
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return

@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -91,9 +90,8 @@ func (h TaskHandler) attachAgents(ctx context.Context, tasks []models.Task) []ta
 // AddComment handles POST /api/v1/tasks/{id}/comments.
 func (h TaskHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
-	httpx.LimitBody(w, r, httpx.DefaultMaxBody)
 	var req commentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}
@@ -113,9 +111,8 @@ func (h TaskHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 // Patch handles PATCH /api/v1/tasks/{id}.
 func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
-	httpx.LimitBody(w, r, httpx.DefaultMaxBody)
 	var req patchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}
@@ -203,9 +200,8 @@ func (h TaskHandler) ListByProject(w http.ResponseWriter, r *http.Request) {
 // Assign handles POST /api/v1/tasks/{id}/assign.
 func (h TaskHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
-	httpx.LimitBody(w, r, httpx.DefaultMaxBody)
 	var req assignRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}
@@ -229,9 +225,8 @@ func (h TaskHandler) Assign(w http.ResponseWriter, r *http.Request) {
 // Split handles POST /api/v1/tasks/{id}/split.
 func (h TaskHandler) Split(w http.ResponseWriter, r *http.Request) {
 	taskID := r.PathValue("id")
-	httpx.LimitBody(w, r, httpx.DefaultMaxBody)
 	var req splitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}
