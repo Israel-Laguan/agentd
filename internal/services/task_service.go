@@ -23,9 +23,6 @@ type TaskBus interface {
 	PublishTaskAssigned(ctx context.Context, task models.Task)
 	PublishTaskSplit(ctx context.Context, parent models.Task, children []models.Task)
 	PublishTaskRetried(ctx context.Context, task models.Task)
-	// PublishTaskUpdated tells live subscribers a task's row changed (a human
-	// state or description patch), so a board refetches its project.
-	PublishTaskUpdated(ctx context.Context, task models.Task)
 }
 
 // NewTaskService wires the persistence boundary used by task controllers.
@@ -84,16 +81,7 @@ func (s *TaskService) UpdateTaskState(ctx context.Context, taskID string, next m
 	if err != nil {
 		return nil, err
 	}
-	updated, err := s.Store.UpdateTaskState(ctx, taskID, current.UpdatedAt, next)
-	s.publishUpdated(ctx, updated, err)
-	return updated, err
-}
-
-// publishUpdated announces a committed change; failed writes publish nothing.
-func (s *TaskService) publishUpdated(ctx context.Context, task *models.Task, err error) {
-	if err == nil && task != nil && s.Bus != nil {
-		s.Bus.PublishTaskUpdated(ctx, *task)
-	}
+	return s.Store.UpdateTaskState(ctx, taskID, current.UpdatedAt, next)
 }
 
 // UpdateTaskDescription updates task description metadata via the store's
@@ -118,9 +106,7 @@ func (s *TaskService) PatchTask(ctx context.Context, taskID string, state *model
 	if err != nil {
 		return nil, err
 	}
-	updated, err := s.Store.UpdateTaskPatch(ctx, taskID, current.UpdatedAt, state, description)
-	s.publishUpdated(ctx, updated, err)
-	return updated, err
+	return s.Store.UpdateTaskPatch(ctx, taskID, current.UpdatedAt, state, description)
 }
 
 // ListByProject returns a paginated slice of tasks for a project, applying
