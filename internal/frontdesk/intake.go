@@ -2,7 +2,6 @@ package frontdesk
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -83,29 +82,15 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 // parent is already satisfied (B-041). Live parents re-queue to READY and
 // their follow-ups stay gated PENDING behind them.
 func (p *IntakeProcessor) releaseParent(ctx context.Context, task models.Task, created []models.Task) error {
+	// The store announces each committed state change to live subscribers (B-074).
 	if !task.State.Terminal() {
-		return p.markReady(ctx, task)
-	}
-	for _, child := range created {
-		if err := p.markReady(ctx, child); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// markReady moves a task to READY and tells live subscribers, so an open board
-// refetches it instead of waiting for its fallback poll.
-func (p *IntakeProcessor) markReady(ctx context.Context, task models.Task) error {
-	if _, err := p.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateReady); err != nil {
+		_, err := p.store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateReady)
 		return err
 	}
-	if b, ok := p.sink.(models.EventBroadcaster); ok {
-		return b.Broadcast(ctx, models.Event{
-			ProjectID: task.ProjectID,
-			TaskID:    sql.NullString{String: task.ID, Valid: true},
-			Type:      models.EventTypeTaskUpdated,
-		})
+	for _, child := range created {
+		if _, err := p.store.UpdateTaskState(ctx, child.ID, child.UpdatedAt, models.TaskStateReady); err != nil {
+			return err
+		}
 	}
 	return nil
 }

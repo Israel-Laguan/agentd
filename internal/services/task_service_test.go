@@ -148,7 +148,6 @@ type spyTaskBus struct {
 	assigned int
 	split    int
 	retried  int
-	updated  []string
 }
 
 func (b *spyTaskBus) PublishTaskAssigned(context.Context, models.Task) { b.assigned++ }
@@ -156,9 +155,6 @@ func (b *spyTaskBus) PublishTaskSplit(context.Context, models.Task, []models.Tas
 	b.split++
 }
 func (b *spyTaskBus) PublishTaskRetried(context.Context, models.Task) { b.retried++ }
-func (b *spyTaskBus) PublishTaskUpdated(_ context.Context, task models.Task) {
-	b.updated = append(b.updated, task.ID)
-}
 
 func TestTaskService_WithBus(t *testing.T) {
 	_, full := newStore()

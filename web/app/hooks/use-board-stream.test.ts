@@ -64,6 +64,20 @@ describe("useBoardStream", () => {
     expect(refreshProject).toHaveBeenCalledWith("pa");
   });
 
+  // B-074: the store now sends task_updated for every committed row change, so
+  // a change that also has a specialised frame (retry, split, assign, failure)
+  // arrives twice. The daemon does not dedupe; this absorbs it.
+  it("costs one refetch when a specialised frame and the store's task_updated name the same task", () => {
+    mount();
+    act(() => {
+      latest().frame("task_retried", { task_id: "a1", project_id: "pa" });
+      latest().frame("task_updated", { task_id: "a1", project_id: "pa" });
+      vi.advanceTimersByTime(300);
+    });
+    expect(refreshProject).toHaveBeenCalledTimes(1);
+    expect(refreshProject).toHaveBeenCalledWith("pa");
+  });
+
   it("ignores frames that do not change a task row", () => {
     mount();
     act(() => {
