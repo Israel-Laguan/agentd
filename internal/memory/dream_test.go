@@ -16,6 +16,7 @@ type dreamStore struct {
 	models.KanbanStore
 	memories   []models.Memory
 	superseded map[string]string
+	listCalls  int
 }
 
 func newDreamStore() *dreamStore {
@@ -23,6 +24,7 @@ func newDreamStore() *dreamStore {
 }
 
 func (s *dreamStore) ListUnsupersededMemories(_ context.Context) ([]models.Memory, error) {
+	s.listCalls++
 	var out []models.Memory
 	for _, m := range s.memories {
 		if !m.SupersededBy.Valid {

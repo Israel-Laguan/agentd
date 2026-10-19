@@ -11,6 +11,8 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+
+	"github.com/google/uuid"
 )
 
 // DreamAgent consolidates redundant memories during off-peak hours.
@@ -77,7 +79,7 @@ func (d *DreamAgent) cluster(memories []models.Memory) [][]models.Memory {
 		group := []models.Memory{entries[i].memory}
 		used[i] = true
 		for j := i + 1; j < len(entries); j++ {
-			if used[j] {
+			if used[j] || !sameScope(entries[i].memory, entries[j].memory) {
 				continue
 			}
 			if jaccard(entries[i].tokens, entries[j].tokens) >= d.similarityThreshold() {
@@ -90,6 +92,15 @@ func (d *DreamAgent) cluster(memories []models.Memory) [][]models.Memory {
 		}
 	}
 	return clusters
+}
+
+// sameScope keeps a merge inside one scope and project (B-068): a lesson
+// learned in one project must not be folded into another's.
+func sameScope(a, b models.Memory) bool {
+	if a.Scope != b.Scope {
+		return false
+	}
+	return a.ProjectID == b.ProjectID
 }
 
 func (d *DreamAgent) similarityThreshold() float64 {
@@ -112,6 +123,7 @@ func (d *DreamAgent) mergeCluster(ctx context.Context, cluster []models.Memory) 
 	projectID := cluster[0].ProjectID
 
 	newMem := models.Memory{
+		ID:        uuid.NewString(),
 		Scope:     scope,
 		ProjectID: projectID,
 		Symptom:   sqlStr(merged.Symptom),
@@ -121,10 +133,7 @@ func (d *DreamAgent) mergeCluster(ctx context.Context, cluster []models.Memory) 
 	if err := d.Store.RecordMemory(ctx, newMem); err != nil {
 		return fmt.Errorf("dream record merged memory: %w", err)
 	}
-	newID, err := d.findMergedMemoryID(ctx, merged)
-	if err != nil {
-		return err
-	}
+	newID := newMem.ID
 	if err := d.supersedeCluster(ctx, cluster, newID); err != nil {
 		return fmt.Errorf("dream supersede old memories: %w", err)
 	}
@@ -164,20 +173,6 @@ func mergeClusterInput(cluster []models.Memory) string {
 		parts = append(parts, fmt.Sprintf("- Symptom: %s\n  Solution: %s", m.Symptom.String, m.Solution.String))
 	}
 	return strings.Join(parts, "\n")
-}
-
-func (d *DreamAgent) findMergedMemoryID(ctx context.Context, merged memorySummary) (string, error) {
-	mems, err := d.Store.ListUnsupersededMemories(ctx)
-	if err != nil {
-		return "", fmt.Errorf("dream find new memory: %w", err)
-	}
-	for _, m := range mems {
-		if m.Tags.Valid && m.Tags.String == "dream_consolidated" &&
-			m.Symptom.String == merged.Symptom && m.Solution.String == merged.Solution {
-			return m.ID, nil
-		}
-	}
-	return "", fmt.Errorf("dream: could not locate newly recorded memory")
 }
 
 func (d *DreamAgent) supersedeCluster(ctx context.Context, cluster []models.Memory, newID string) error {
