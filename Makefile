@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: build test test-integration test-e2e test-ui test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-up-ui dev-down dev-clean dev-logs
+.PHONY: print-pkg build test test-integration test-e2e test-ui test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-up-ui dev-down dev-clean dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -16,7 +16,11 @@ build:
 	$(GO_ENV) $(GO) build -o bin/agentd ./cmd/agentd
 
 # Scoped runs: make test PKG=./internal/api/controllers/... RUN=TestGateway
-PKG ?= $(shell go list ./... | grep -vE '^agentd/(web|docs)$$' | sed 's|^agentd/|./|')
+PKG ?= $(shell go list ./... | grep -vE '^agentd/(web|docs)$$|/node_modules/' | sed 's|^agentd/|./|')
+# Prints the default package list, one per line; tools/ci/makefile_pkg_test.go pins it.
+print-pkg:
+	@printf '%s\n' $(PKG)
+
 RUN ?=
 TEST_FLAGS = -v -race -cover
 ifneq ($(strip $(RUN)),)
