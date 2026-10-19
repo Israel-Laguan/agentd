@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -84,9 +83,8 @@ func (h AgentHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Create handles POST /api/v1/agents.
 func (h AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
-	httpx.LimitBody(w, r, httpx.DefaultMaxBody)
 	var req agentCreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}
@@ -113,9 +111,8 @@ func (h AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Patch handles PATCH /api/v1/agents/{id}.
 func (h AgentHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	httpx.LimitBody(w, r, httpx.DefaultMaxBody)
 	var req agentPatchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}

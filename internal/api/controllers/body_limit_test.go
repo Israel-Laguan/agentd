@@ -30,6 +30,7 @@ func TestJSONHandlersRejectOversizedBody(t *testing.T) {
 		{"agent create", `{"system_prompt":"` + huge + `"}`, agents.Create},
 		{"preferences", `{"user_id":"u","text":"` + huge + `"}`, prefs.Save},
 		{"materialize", `{"name":"` + huge + `"}`, projects.Materialize},
+		{"preferences whitespace suffix", `{"user_id":"u","text":"hi"}` + strings.Repeat(" ", 2<<20), prefs.Save},
 		{"chat", `{"messages":[{"role":"user","content":"` + huge + `"}]}`, chat.Complete},
 	}
 	for _, tc := range cases {
