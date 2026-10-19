@@ -97,13 +97,7 @@ func listPackages(t *testing.T, root string) []listedPkg {
 
 func checkPackage(t *testing.T, fset *token.FileSet, imp types.Importer, p listedPkg, rel string) *srcPkg {
 	t.Helper()
-	sp := &srcPkg{path: p.path, info: &types.Info{
-		Types:      map[ast.Expr]types.TypeAndValue{},
-		Defs:       map[*ast.Ident]types.Object{},
-		Uses:       map[*ast.Ident]types.Object{},
-		Selections: map[*ast.SelectorExpr]*types.Selection{},
-		Implicits:  map[ast.Node]types.Object{},
-	}}
+	sp := &srcPkg{path: p.path, info: newTypesInfo()}
 	for _, name := range p.files {
 		f, err := parser.ParseFile(fset, filepath.Join(p.dir, name), nil, 0)
 		if err != nil {
@@ -117,6 +111,16 @@ func checkPackage(t *testing.T, fset *token.FileSet, imp types.Importer, p liste
 		t.Fatalf("type-check %s: %v", p.path, err)
 	}
 	return sp
+}
+
+func newTypesInfo() *types.Info {
+	return &types.Info{
+		Types:      map[ast.Expr]types.TypeAndValue{},
+		Defs:       map[*ast.Ident]types.Object{},
+		Uses:       map[*ast.Ident]types.Object{},
+		Selections: map[*ast.SelectorExpr]*types.Selection{},
+		Implicits:  map[ast.Node]types.Object{},
+	}
 }
 
 // consumers is what non-test code outside internal/config reads: struct
