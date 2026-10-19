@@ -207,7 +207,8 @@ func (h ChatHandler) completeStreaming(
 	case isAICoreTimeout(err):
 		writeFrame(chatChunkDelta{Content: systemTimeoutMessage}, &finishStop)
 	case err != nil:
-		writeFrame(chatChunkDelta{Content: fmt.Sprintf("error: %v", err)}, &finishStop)
+		httpx.LogInternal(w, "chat intake: streaming planner failed", err)
+		writeFrame(chatChunkDelta{Content: "error: " + httpx.MessageInternal}, &finishStop)
 	default:
 		toolCalls, finish := buildToolCalls(content, req.Tools, req.ToolChoice)
 		f := finish

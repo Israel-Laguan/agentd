@@ -7,7 +7,7 @@ package httpx
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"log/slog"
 	"net/http"
 
 	"agentd/internal/models"
@@ -88,7 +88,22 @@ func WriteValidationError(w http.ResponseWriter, status int, code, message strin
 // MapError and writes the envelope.
 func WriteMappedError(w http.ResponseWriter, err error) {
 	status, code, message := MapError(err)
+	if status == http.StatusInternalServerError {
+		LogInternal(w, "request failed", err)
+	}
 	WriteError(w, status, code, message)
+}
+
+// HeaderRequestID carries the per-request ID the server stamps on responses.
+const HeaderRequestID = "X-Request-ID"
+
+// MessageInternal is the only text a client sees for an unmapped failure.
+const MessageInternal = "internal error"
+
+// LogInternal records err at ERROR level with the request ID already set on
+// w, so the generic message returned to the client can be traced to it.
+func LogInternal(w http.ResponseWriter, msg string, err error) {
+	slog.Error(msg, "request_id", w.Header().Get(HeaderRequestID), "error", err)
 }
 
 // WriteJSON serializes value as JSON and writes the response with the
@@ -146,6 +161,6 @@ func MapError(err error) (int, string, string) {
 	case errors.Is(err, models.ErrSandboxViolation):
 		return http.StatusForbidden, CodeForbidden, err.Error()
 	default:
-		return http.StatusInternalServerError, CodeInternal, fmt.Sprintf("internal error: %v", err)
+		return http.StatusInternalServerError, CodeInternal, MessageInternal
 	}
 }
