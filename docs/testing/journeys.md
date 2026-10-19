@@ -231,10 +231,14 @@ Covered by `web/app/components/task/task-event-list.test.tsx` and
 | `TaskDrawer` › clears the list when a refresh rejects | a failed read drops the stale log |
 | `TaskDrawer` › does not fetch when no task is open | no spurious request for a closed drawer |
 
-Fixtures are copied from a real `GET /api/v1/tasks/{id}/events` response captured
-off the devenv stack on 2026-10-01, pinning the wire shape and payloads (the RESULT
-row's id/payload and the drawer fixture's task IDs are adapted for the tests). They
-are static snapshots, so they do not detect later drift in the endpoint.
+Both files import one shared fixture, `web/app/components/task/__fixtures__/task-events.json`,
+copied from a real `GET /api/v1/tasks/{id}/events` response captured off the devenv stack
+on 2026-10-01 (the RESULT row's id/payload and the drawer's task IDs are adapted). It is
+checked against the real handler: `TestTaskEventsResponseMatchesUIFixture`
+(`internal/api/controllers/tasks_events_shape_test.go`) builds the same event types through
+`ListEvents` and fails if a key or value type differs in the envelope (`status`, `data`,
+`meta`) or in any event. It compares shape, not values, and runs on every PR in CI (Go);
+the fixture lives under `web/`, so editing it also starts CI (Web).
 
 **Explicit gap:** no real-browser tier, so layout and click-through are unproven.
 Scheduled as T-040 in S16; it starts with a check that Playwright
