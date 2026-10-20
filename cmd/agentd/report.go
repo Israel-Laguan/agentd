@@ -23,7 +23,7 @@ func newReportCommand(opts *rootOptions) *cobra.Command {
 
 type reportAIFlags struct {
 	apiURL, groupBy, from, to, task, request, purpose, stage, model string
-	asJSON                                                          bool
+	asJSON, mix                                                     bool
 }
 
 func (f reportAIFlags) query() url.Values {
@@ -60,6 +60,9 @@ func newReportAICommand(opts *rootOptions) *cobra.Command {
 			if err := json.Unmarshal(raw, &report); err != nil {
 				return fmt.Errorf("decode ai usage report: %w", err)
 			}
+			if f.mix {
+				return printAIMix(cmd.OutOrStdout(), report)
+			}
 			return printAIUsage(cmd.OutOrStdout(), report)
 		},
 	}
@@ -73,6 +76,7 @@ func newReportAICommand(opts *rootOptions) *cobra.Command {
 	fl.StringVar(&f.purpose, "purpose", "", "only this purpose, e.g. exec.turn")
 	fl.StringVar(&f.stage, "stage", "", "only this stage, e.g. exec")
 	fl.StringVar(&f.model, "model", "", "only this model")
+	fl.BoolVar(&f.mix, "mix", false, "show what the input was made of and which layer cut it, instead of tokens")
 	fl.BoolVar(&f.asJSON, "json", false, "print the report as JSON")
 	return cmd
 }
