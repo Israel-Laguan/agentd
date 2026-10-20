@@ -22,6 +22,7 @@ func buildWorkerHooks(
 	toolExecutor *agenttools.ToolExecutor,
 	sink models.EventSink,
 	scrubber sandbox.Scrubber,
+	store models.KanbanStore,
 ) *agenthooks.HookChain {
 	base := opts.Hooks
 	if base == nil {
@@ -40,6 +41,9 @@ func buildWorkerHooks(
 	hooks.PrependPost(agenthooks.ScrubResultHook(scrubber))
 	hooks.RegisterPost(agenthooks.InjectionResistanceHook(agenthooks.ExternalToolsSet(opts.ExternalTools)))
 	hooks.RegisterPost(agenthooks.AuditHook(sink, scrubber))
+	if rec, ok := store.(agenthooks.ToolCallRecorder); ok {
+		hooks.RegisterPost(agenthooks.ToolUseHook(rec))
+	}
 	return hooks
 }
 
