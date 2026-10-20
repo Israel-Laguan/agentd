@@ -105,7 +105,9 @@ func (e *Engine) handleAgenticToolCalls(
 		if detected := cm.CheckToolResult(contextContent); len(detected) > 0 {
 			slog.Info("auto-detected context corrections", "task_id", task.ID, "count", len(detected))
 		}
-		*messages = append(*messages, gateway.PromptMessage{Role: "tool", ToolCallID: call.ID, Content: contextContent})
+		*messages = append(*messages, gateway.PromptMessage{
+			Role: "tool", ToolCallID: call.ID, Content: contextContent, Section: toolResultSection(call.Function.Name),
+		})
 
 		if failed, _ := toolTracker.Record(call.Function.Name, tr.Status); failed || tr.Status == agenttools.ToolStatusFatal {
 			meta := agentruntime.BuildLoopMeta(
@@ -232,4 +234,13 @@ func appendAssistantMessage(messages *[]gateway.PromptMessage, resp gateway.AIRe
 		Content:   resp.Content,
 		ToolCalls: append([]gateway.ToolCall(nil), resp.ToolCalls...),
 	})
+}
+
+// toolResultSection files a `read` result as file context (the file pipeline
+// feeds it) and every other tool's output as tool results.
+func toolResultSection(tool string) gateway.Section {
+	if tool == "read" {
+		return gateway.SectionFileContext
+	}
+	return gateway.SectionToolResults
 }
