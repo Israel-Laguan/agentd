@@ -4,6 +4,7 @@ package aicalls
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -168,5 +169,18 @@ func toAICall(r spec.CallRecord) models.AICall {
 		Truncated: r.Truncated, MessageCount: r.MessageCount, ToolCount: r.ToolCount,
 		InputChars: r.InputChars, OutputChars: r.OutputChars, Tokens: r.Tokens,
 		CachedTokens: r.CachedTokens, CacheWriteTokens: r.CacheWrite, LatencyMS: r.Latency.Milliseconds(),
+		ContextMix: encodeMix(r.Mix), TruncatedBy: r.TruncatedBy,
 	}
+}
+
+// encodeMix stores the mix as JSON; an empty mix is an empty string.
+func encodeMix(m spec.Mix) string {
+	if len(m) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }

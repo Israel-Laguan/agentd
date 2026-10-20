@@ -52,18 +52,19 @@ func TestMigrateToV21_CreatesAICallsOnAnUpgrade(t *testing.T) {
 	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	assertAICallsShape(t, db)
+	assertAICallsShape(t, db, "context_mix", "truncated_by")
 	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("second Run() error = %v", err)
 	}
-	assertSchemaVersion(t, db, ctx, "21")
+	assertSchemaVersion(t, db, ctx, "22")
 }
 
-func assertAICallsShape(t *testing.T, db *sql.DB) {
+func assertAICallsShape(t *testing.T, db *sql.DB, extra ...string) {
 	t.Helper()
 	want := []string{"id", "at", "kind", "purpose", "stage", "role", "task_id", "agent_id", "correlation_id",
 		"provider", "model", "attempt", "cascade", "outcome", "truncated", "message_count", "tool_count",
 		"input_chars", "output_chars", "tokens", "cached_tokens", "cache_write_tokens", "latency_ms"}
+	want = append(want, extra...)
 	got := aiCallsColumns(t, db)
 	if len(got) != len(want) {
 		t.Fatalf("ai_calls columns = %v, want %v", got, want)

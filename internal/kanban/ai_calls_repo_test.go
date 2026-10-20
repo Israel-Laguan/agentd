@@ -27,6 +27,7 @@ func TestInsertAICallsStoresEveryColumn(t *testing.T) {
 		AgentID: "a1", CorrelationID: "req-1", Provider: "openai", Model: "m", Attempt: "json_repair",
 		Cascade: true, Outcome: "invalid_json", Truncated: true, MessageCount: 3, ToolCount: 2,
 		InputChars: 400, OutputChars: 50, Tokens: 120, CachedTokens: 30, CacheWriteTokens: 5, LatencyMS: 250,
+		ContextMix: `{"system":{"chars":10,"messages":1}}`, TruncatedBy: "agentic_head",
 	}
 	if err := store.InsertAICalls(ctx, []models.AICall{in}); err != nil {
 		t.Fatalf("InsertAICalls: %v", err)
@@ -36,10 +37,11 @@ func TestInsertAICallsStoresEveryColumn(t *testing.T) {
 	var cascade, truncated int
 	err := store.db.QueryRowContext(ctx, `SELECT at, kind, purpose, stage, role, task_id, agent_id, correlation_id,
 		provider, model, attempt, cascade, outcome, truncated, message_count, tool_count, input_chars,
-		output_chars, tokens, cached_tokens, cache_write_tokens, latency_ms FROM ai_calls`).Scan(
+		output_chars, tokens, cached_tokens, cache_write_tokens, latency_ms, context_mix, truncated_by FROM ai_calls`).Scan(
 		&atStr, &got.Kind, &got.Purpose, &got.Stage, &got.Role, &got.TaskID, &got.AgentID, &got.CorrelationID,
 		&got.Provider, &got.Model, &got.Attempt, &cascade, &got.Outcome, &truncated, &got.MessageCount,
-		&got.ToolCount, &got.InputChars, &got.OutputChars, &got.Tokens, &got.CachedTokens, &got.CacheWriteTokens, &got.LatencyMS)
+		&got.ToolCount, &got.InputChars, &got.OutputChars, &got.Tokens, &got.CachedTokens, &got.CacheWriteTokens, &got.LatencyMS,
+		&got.ContextMix, &got.TruncatedBy)
 	if err != nil {
 		t.Fatalf("read back: %v", err)
 	}
