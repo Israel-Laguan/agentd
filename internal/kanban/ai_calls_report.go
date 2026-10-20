@@ -21,7 +21,9 @@ var aiDimensionSQL = map[string]string{
 	models.AIDimRequest: "correlation_id",
 }
 
-const aiAggregateColumns = `COUNT(*),
+var aiAggregateColumns = aiBaseColumns + ", " + aiMixColumns()
+
+const aiBaseColumns = `COUNT(*),
 	COALESCE(SUM(outcome = 'failed'), 0),
 	COALESCE(SUM(tokens), 0), COALESCE(SUM(cached_tokens), 0),
 	COALESCE(SUM(input_chars), 0), COALESCE(SUM(output_chars), 0),
@@ -122,15 +124,19 @@ func aiOrder(dims, exprs []string) string {
 func scanAIUsageRow(scan func(...any) error, dims []string) (models.AIUsageRow, error) {
 	var row models.AIUsageRow
 	vals := make([]string, len(dims))
+	mix := newMixScan()
 	dest := make([]any, 0, len(dims)+11)
 	for i := range vals {
 		dest = append(dest, &vals[i])
 	}
 	dest = append(dest, &row.Calls, &row.Failed, &row.Tokens, &row.CachedTokens, &row.InputChars,
 		&row.OutputChars, &row.AvgLatencyMS, &row.MaxLatencyMS, &row.FirstAttempts, &row.RepairAttempts, &row.CascadeCalls)
+	dest = append(dest, mix.dest()...)
 	if err := scan(dest...); err != nil {
 		return row, fmt.Errorf("scan ai usage row: %w", err)
 	}
+	row.MixChars, row.CutBy, row.TruncatedCalls = map[string]int{}, map[string]int{}, mix.any
+	mix.fill(row.MixChars, row.CutBy)
 	if len(dims) > 0 {
 		row.Group = make(map[string]string, len(dims))
 		for i, d := range dims {
