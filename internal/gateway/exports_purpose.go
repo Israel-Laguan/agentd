@@ -40,3 +40,11 @@ var (
 	WithPurpose        = spec.WithPurpose
 	PurposeFromContext = spec.PurposeFromContext
 )
+
+// Attempt kinds for retry loops that sit above the router.
+type AttemptKind = spec.AttemptKind
+
+const (
+	AttemptFirst      = spec.AttemptFirst
+	AttemptJSONRepair = spec.AttemptJSONRepair
+)

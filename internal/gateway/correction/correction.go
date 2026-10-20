@@ -29,6 +29,9 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 	var details spec.UsageDetails
 	var lastRaw string
 	for attempt := 0; attempt < MaxJSONAttempts; attempt++ {
+		if attempt > 0 {
+			req.Attempt = spec.AttemptJSONRepair
+		}
 		resp, err := gw.Generate(ctx, req)
 		if err != nil {
 			return zero, totalUsage, details, err

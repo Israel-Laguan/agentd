@@ -128,6 +128,9 @@ func (w *Worker) GeneratePlan(
 	req := w.buildPlanRequest(task, planContext)
 	req.JSONMode = true
 	for attempt := 0; attempt < correction.MaxJSONAttempts; attempt++ {
+		if attempt > 0 {
+			req.Attempt = gateway.AttemptJSONRepair
+		}
 		if budgetGuard != nil {
 			if err := budgetGuard.BeforeCall(); err != nil {
 				return nil, err
