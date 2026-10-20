@@ -32,6 +32,7 @@ type ServerDeps struct {
 	Tasks            *services.TaskService
 	System           *services.SystemService
 	Agents           *services.AgentService
+	AIUsage          *services.AIUsageService // optional: built from Store when it records AI calls
 	Summarizer       *frontdesk.StatusSummarizer
 	FileStash        *frontdesk.FileStash
 	Truncator        gateway.Truncator
@@ -64,6 +65,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	preferences := controllers.PreferencesHandler{Store: deps.Store}
 	system := controllers.SystemHandler{System: resolveSystemService(deps)}
 	agents := controllers.AgentHandler{Service: resolveAgentService(deps)}
+	reports := controllers.ReportsHandler{AIUsage: resolveAIUsageService(deps)}
 	gway := controllers.GatewayHandler{Configs: toProviderEntries(deps.ProviderConfigs)}
 
 	mux.HandleFunc("GET /api/v1/projects", projects.List)
@@ -85,6 +87,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	mux.HandleFunc("PATCH /api/v1/agents/{id}", agents.Patch)
 	mux.HandleFunc("DELETE /api/v1/agents/{id}", agents.Delete)
 	mux.HandleFunc("GET /api/v1/gateway/providers", gway.List)
+	mux.HandleFunc("GET /api/v1/reports/ai-usage", reports.AIUsageReport)
 	mux.HandleFunc("GET /api/v1/system/status", system.Get)
 	mux.HandleFunc("POST /api/v1/system/breaker/reset", system.Reset)
 	mux.HandleFunc("GET /api/v1/events/stream", stream.ServeHTTP)
@@ -139,6 +142,7 @@ func handleDocs(w http.ResponseWriter, _ *http.Request) {
 <li>GET/POST /api/v1/tasks/{id}/comments, GET /api/v1/tasks/{id}/events, PATCH /api/v1/tasks/{id}</li>
 <li>POST /api/v1/tasks/{id}/assign, /split, /retry, /human-resolution</li>
 <li>GET /api/v1/agents, POST /api/v1/agents, GET/PATCH/DELETE /api/v1/agents/{id}, GET /api/v1/gateway/providers</li>
+<li>GET /api/v1/reports/ai-usage</li>
 <li>GET /api/v1/system/status, POST /api/v1/system/breaker/reset</li>
 <li>GET /api/v1/events/stream (SSE), POST /api/v1/preferences</li>
 </ul>
@@ -230,6 +234,16 @@ func resolveTaskService(deps ServerDeps) *services.TaskService {
 		svc = svc.WithBus(bus.TaskBridge{Bus: deps.Bus})
 	}
 	return svc
+}
+
+func resolveAIUsageService(deps ServerDeps) *services.AIUsageService {
+	if deps.AIUsage != nil {
+		return deps.AIUsage
+	}
+	if source, ok := any(deps.Store).(services.AIUsageSource); ok {
+		return services.NewAIUsageService(source, nil)
+	}
+	return nil
 }
 
 func resolveSystemService(deps ServerDeps) *services.SystemService {
