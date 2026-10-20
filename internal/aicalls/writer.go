@@ -113,10 +113,7 @@ func (w *Writer) run() {
 	for {
 		select {
 		case rec := <-w.ch:
-			batch = append(batch, toAICall(rec))
-			if len(batch) >= w.opts.BatchSize {
-				batch = w.flush(batch)
-			}
+			batch = w.add(batch, rec)
 		case <-ticker.C:
 			batch = w.flush(batch)
 		case <-w.stop:
@@ -126,15 +123,21 @@ func (w *Writer) run() {
 	}
 }
 
+// add appends a record and flushes once the batch is full.
+func (w *Writer) add(batch []models.AICall, rec spec.CallRecord) []models.AICall {
+	batch = append(batch, toAICall(rec))
+	if len(batch) >= w.opts.BatchSize {
+		return w.flush(batch)
+	}
+	return batch
+}
+
 // drain writes the batch in hand and everything still queued.
 func (w *Writer) drain(batch []models.AICall) {
 	for {
 		select {
 		case rec := <-w.ch:
-			batch = append(batch, toAICall(rec))
-			if len(batch) >= w.opts.BatchSize {
-				batch = w.flush(batch)
-			}
+			batch = w.add(batch, rec)
 		default:
 			w.flush(batch)
 			return

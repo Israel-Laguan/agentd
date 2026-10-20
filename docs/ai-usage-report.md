@@ -1,9 +1,9 @@
 # AI usage report
 
 Where do the tokens go? agentd records every model and embedding call at the
-gateway, labels it with a purpose, and aggregates the records into a report by
-purpose, stage, model, day, task or chat request. The records hold sizes,
-counts, tokens and timing; they never hold prompt or response bodies.
+gateway under a purpose, and reports them by purpose, stage, model, day, task or
+chat request. Records hold sizes, counts, tokens and timing, never prompt or
+response bodies.
 
 ## What a record is
 
@@ -36,9 +36,8 @@ repair.
 
 The set is closed: 25 purposes in the form `<stage>.<name>`. A call that arrives
 with an empty or unknown purpose is stored as `unlabelled` and counted, never
-dropped; a Go test (`internal/gateway/purpose_sites_test.go`) fails when a known
-call site sends no purpose. The minimum level is provisional (SP-023): L1 is a
-single model call with no tools or workspace, L3 needs an ACP agent.
+dropped. The minimum level is provisional (SP-023): L1 is a single model call
+with no tools or workspace, L3 needs an ACP agent.
 
 | Purpose | Meaning | Min level |
 | --- | --- | --- |
@@ -69,18 +68,16 @@ single model call with no tools or workspace, L3 needs an ACP agent.
 | `legacy.contract_json` | `GenerateStructuredJSON` generic branch, unreachable in production; removed by T-055 | drop |
 | `unlabelled` | Reserved: any call that arrives with an empty or unknown purpose | n/a |
 
-`system.warmup` is one row per daemon start (unless `--skip-llm-warmup`) and is
-part of the totals. `legacy.*` rows should stay at zero.
+`system.warmup` is one row per daemon start and is part of the totals;
+`legacy.*` rows should stay at zero.
 
 ## Reading the report
 
 ```bash
 agentd report ai                                  # by purpose, all time
 agentd report ai --group-by stage,model --from 2026-10-18
-agentd report ai --group-by day,purpose --to 2026-10-19
 agentd report ai --group-by task --stage exec     # tokens per task
-agentd report ai --group-by purpose,request --request <correlation-id>
-agentd report ai --group-by request --json
+agentd report ai --group-by purpose --request <correlation-id> --json
 ```
 
 The command reads `GET /api/v1/reports/ai-usage` from the running daemon, so
@@ -107,13 +104,11 @@ The questions the report is built to answer:
 - **Per task:** `--group-by task`, or `--task <id> --group-by purpose`.
 - **Per day:** `--group-by day`, or `day,purpose` for the split.
 
-### Per chat
-
 "Per chat" means per chat request: one `POST /v1/chat/completions` gets one
 correlation ID, and every call made while serving it (intent, scope, draft
 plan, repairs, cascade attempts) carries it. A multi-turn conversation is
-several requests. Calls a worker makes later for a task the chat created carry
-that task's ID and no chat correlation ID, so use `--task` to follow them.
+several requests. A worker's later calls for a task the chat created carry that
+task's ID and no chat correlation ID, so use `--task` to follow them.
 
 ## Known limits
 
@@ -128,13 +123,9 @@ that task's ID and no chat correlation ID, so use `--task` to follow them.
 - **No retention.** `ai_calls` grows without bound. A retention setting is a
   follow-up, not part of this change.
 - **Gateway calls only.** Usage by external CLI agents (SP-022) will be
-  self-reported, marked as such, and will not match gateway-measured numbers
-  exactly.
-- **Provider-reported tokens.** `tokens` is whatever the provider returned; a
-  provider that omits usage records 0. Embedding calls carry no tokens.
+  self-reported and will not match gateway-measured numbers exactly.
+- **Provider-reported tokens.** A provider that omits usage records 0, and
+  embedding calls carry no tokens. A failed attempt has no model.
 
-## API
-
-`GET /api/v1/reports/ai-usage` takes the same options as query parameters:
-`group_by`, `from`, `to`, `task_id`, `request`, `purpose`, `stage`, `model`. See
+The same report is `GET /api/v1/reports/ai-usage`; see
 [api-testing.md](api-testing.md#get-apiv1reportsai-usage).

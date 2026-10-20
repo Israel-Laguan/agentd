@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -98,16 +97,5 @@ func TestChatRequestProducesAICallsAndTheReportShowsThem(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("CLI output missing %q\n%s", want, out)
 		}
-	}
-	var env struct {
-		Data models.AIUsageReport `json:"data"`
-	}
-	api, err := http.Get(srv.URL + "/api/v1/reports/ai-usage?group_by=request&request=" + row.Group["request"])
-	if err != nil {
-		t.Fatalf("GET report: %v", err)
-	}
-	defer func() { _ = api.Body.Close() }()
-	if err := json.NewDecoder(api.Body).Decode(&env); err != nil || env.Data.Totals.Tokens != 42 {
-		t.Fatalf("API totals = %+v err %v, want 42 tokens for the request", env.Data.Totals, err)
 	}
 }

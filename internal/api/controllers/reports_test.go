@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,18 +65,10 @@ func TestAIUsageReturnsTheReportAndPassesFiltersThrough(t *testing.T) {
 	if !q.To.Equal(time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("to = %v, want the end of 2026-10-19", q.To)
 	}
-	var env struct {
-		Status string `json:"status"`
-		Data   struct {
-			Rows   []struct{ Calls, Tokens int } `json:"rows"`
-			Totals struct{ Tokens int }          `json:"totals"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if env.Status != "success" || len(env.Data.Rows) != 1 || env.Data.Totals.Tokens != 90 {
-		t.Fatalf("envelope = %+v", env)
+	for _, want := range []string{`"status":"success"`, `"calls":2`, `"totals":{"calls":2,"failed":0,"tokens":90`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("body missing %s: %s", want, rec.Body)
+		}
 	}
 }
 

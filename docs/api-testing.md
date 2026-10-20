@@ -132,17 +132,11 @@ chosen dimensions. What a record is, the purposes and how to read the columns:
   "status": "success",
   "data": {
     "group_by": ["purpose"],
-    "rows": [
-      {
-        "group": { "purpose": "exec.turn" },
-        "calls": 3, "failed": 1, "tokens": 350, "cached_tokens": 0,
-        "input_chars": 9000, "output_chars": 1200,
-        "avg_latency_ms": 166.7, "max_latency_ms": 300,
-        "first_attempts": 2, "repair_attempts": 1, "cascade_calls": 1,
-        "repair_rate": 0.5, "cascade_rate": 0.333
-      }
-    ],
-    "totals": { "calls": 4, "tokens": 360, "...": "same fields, no group" },
+    "rows": [{
+      "group": { "purpose": "exec.turn" }, "calls": 3, "failed": 1, "tokens": 350,
+      "avg_latency_ms": 166.7, "max_latency_ms": 300, "repair_rate": 0.5, "cascade_rate": 0.333
+    }],
+    "totals": { "calls": 3, "tokens": 350 },
     "dropped_records": 0
   }
 }
@@ -156,9 +150,7 @@ discarded since the daemon started.
 or `to` not after `from`; `503 UNAVAILABLE` when the daemon's store keeps no
 `ai_calls`.
 
-**Test Coverage**: `internal/api/controllers/reports_test.go`,
-`internal/api/server/reports_route_test.go`, and
-`cmd/agentd/ai_usage_wiring_test.go` (a chat request through to the report).
+**Test Coverage**: `internal/api/controllers/reports_test.go`, `cmd/agentd/ai_usage_wiring_test.go`
 
 ---
 
