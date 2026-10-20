@@ -45,6 +45,7 @@ func attemptRecord(p providers.Backend, req spec.AIRequest, inputBefore int, sta
 		MessageCount: len(req.Messages), ToolCount: len(req.Tools),
 		InputChars: messageChars(req.Messages), Latency: time.Since(started),
 	}
+	rec.Mix = spec.MixOf(req.Messages)
 	rec.Truncated = rec.InputChars < inputBefore
 	if err != nil {
 		return rec

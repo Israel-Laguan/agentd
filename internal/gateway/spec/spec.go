@@ -17,6 +17,9 @@ type PromptMessage struct {
 	Name       string     `json:"name,omitempty"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
+	// Section labels what the message is made of, for the call record's
+	// context mix. Never sent to a provider.
+	Section Section `json:"-"`
 }
 
 // Role classifies the caller so the gateway can route to the optimal
