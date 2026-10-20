@@ -144,10 +144,11 @@ each layer (a call can be cut by more than one):
 | `HEAD` | Agentic head cut | the same character budget, plus `queue.agentic_truncator_max` messages |
 | `ROUTER` | The gateway's own truncator | `gateway.truncator.max_input_chars`; agentic calls skip it |
 
-Compare `INPUT_CHARS` per call with the two limits: with product defaults the
-12,000-character layers run before a 60,000-character working zone has anything
-to cut, so `ZONE` stays at 0 and `gateway.truncation.strategy` only applies where
-`BUDGET` shows up. The report states what happened; it does not change a limit.
+Compare `INPUT_CHARS` per call with these limits. The 12,000-character layers
+(`BUDGET`, `HEAD`) sit below the 60,000-character working-zone default, so with
+product defaults they are expected to cut first and `ZONE` to stay near 0; the
+e2e profile sets a 10,000-character working zone, where `ZONE` cuts first. The
+report states what happened and does not change a limit.
 
 ## Tool use and repeated reads
 
