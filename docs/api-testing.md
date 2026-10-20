@@ -150,7 +150,24 @@ discarded since the daemon started.
 or `to` not after `from`; `503 UNAVAILABLE` when the daemon's store keeps no
 `ai_calls`.
 
+Rows also carry `mix_chars` (input chars per prompt section), `truncated_calls`
+and `cut_by` (calls cut per layer); see "What the context is made of" in the
+report doc. `agentd report ai --mix` prints them.
+
 **Test Coverage**: `internal/api/controllers/reports_test.go`, `cmd/agentd/ai_usage_wiring_test.go`
+
+---
+
+### GET /api/v1/reports/tool-use
+
+Tool calls by tool, and the files a task read more than once. Query parameters
+(all optional): `task_id`, `from`, `to` (same rules as above). The response
+`data` has `tools` (`tool`, `calls`, `failed`, `result_bytes`), `reads`,
+`read_bytes`, `reread_bytes` and `repeated_reads` (`task_id`, `path`, `reads`,
+`bytes`, `reread_bytes`, top 20). `503 UNAVAILABLE` when the store keeps no tool
+calls. The CLI equivalent is `agentd report tools`.
+
+**Test Coverage**: `internal/api/server/tool_use_route_test.go`, `cmd/agentd/report_tools_test.go`
 
 ---
 
