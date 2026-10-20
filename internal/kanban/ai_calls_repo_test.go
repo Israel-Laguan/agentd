@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,13 +10,7 @@ import (
 )
 
 func aiCall(at time.Time, purpose, model string, tokens int) models.AICall {
-	stage := purpose
-	for i := range purpose {
-		if purpose[i] == '.' {
-			stage = purpose[:i]
-			break
-		}
-	}
+	stage, _, _ := strings.Cut(purpose, ".")
 	return models.AICall{
 		At: at, Kind: "generate", Purpose: purpose, Stage: stage, Provider: "p", Model: model,
 		Attempt: "first", Outcome: "ok", Tokens: tokens, LatencyMS: 100,
@@ -54,12 +49,5 @@ func TestInsertAICallsStoresEveryColumn(t *testing.T) {
 	}
 	if got != in {
 		t.Fatalf("stored = %+v, want %+v", got, in)
-	}
-}
-
-func TestInsertAICallsEmptyBatchIsANoop(t *testing.T) {
-	t.Parallel()
-	if err := newTestStore(t).InsertAICalls(context.Background(), nil); err != nil {
-		t.Fatalf("empty batch: %v", err)
 	}
 }

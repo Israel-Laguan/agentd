@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -111,15 +111,11 @@ func fetchAIUsage(ctx context.Context, base string, query url.Values) (json.RawM
 }
 
 func printJSON(cmd *cobra.Command, raw json.RawMessage) error {
-	var buf strings.Builder
-	enc := json.NewEncoder(&buf)
-	enc.SetIndent("", "  ")
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return fmt.Errorf("decode report: %w", err)
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, raw, "", "  "); err != nil {
+		return fmt.Errorf("format report: %w", err)
 	}
-	if err := enc.Encode(v); err != nil {
-		return fmt.Errorf("encode report: %w", err)
-	}
-	return writeFormat(cmd.OutOrStdout(), "%s", buf.String())
+	buf.WriteByte('\n')
+	_, err := cmd.OutOrStdout().Write(buf.Bytes())
+	return err
 }

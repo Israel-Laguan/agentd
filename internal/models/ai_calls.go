@@ -113,8 +113,7 @@ type AIUsageRow struct {
 }
 
 // AIUsageReport is the aggregated result. Dropped counts records the writer
-// discarded because its buffer was full since the daemon started; it is filled
-// by the service, not the store.
+// discarded since the daemon started; the service fills it, not the store.
 type AIUsageReport struct {
 	GroupBy []string     `json:"group_by"`
 	Rows    []AIUsageRow `json:"rows"`
