@@ -153,6 +153,7 @@ func MapError(err error) (int, string, string) {
 		return http.StatusConflict, CodeStateConflict, err.Error()
 	case errors.Is(err, models.ErrInvalidDraftPlan),
 		errors.Is(err, models.ErrUnknownTaskState),
+		errors.Is(err, models.ErrInvalidAIUsageQuery),
 		errors.Is(err, models.ErrCircularDependency),
 		errors.Is(err, models.ErrAgentProfileInvalid):
 		return http.StatusBadRequest, CodeValidation, err.Error()
