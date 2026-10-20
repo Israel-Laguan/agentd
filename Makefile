@@ -16,7 +16,11 @@ build:
 	$(GO_ENV) $(GO) build -o bin/agentd ./cmd/agentd
 
 # Scoped runs: make test PKG=./internal/api/controllers/... RUN=TestGateway
-PKG ?= $(shell go list ./... | grep -vE '^agentd/(web|docs)$$|/node_modules/' | sed 's|^agentd/|./|')
+# Default: agentd's own packages only. The roots are listed, not ./..., so
+# go list never walks web/node_modules (npm packages can ship Go code, B-075).
+# $(shell) drops go list's exit status, so a failure yields ./GO_LIST_FAILED,
+# which every go command then refuses, instead of a silently short list.
+PKG ?= $(shell go list -f '.{{slice .ImportPath (len .Module.Path)}}' ./cmd/... ./internal/... ./tools/... || echo ./GO_LIST_FAILED)
 # Prints the default package list, one per line; tools/ci/makefile_pkg_test.go pins it.
 print-pkg:
 	@printf '%s\n' $(PKG)
