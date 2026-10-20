@@ -110,6 +110,69 @@ plan, repairs, cascade attempts) carries it. A multi-turn conversation is
 several requests. A worker's later calls for a task the chat created carry that
 task's ID and no chat correlation ID, so use `--task` to follow them.
 
+## What the context is made of
+
+`agentd report ai --mix` swaps the token columns for the input's composition.
+Each record carries the input size by section (chars and message counts, never
+bodies); the report sums chars per section and shows each as a share of
+`INPUT_CHARS`.
+
+| Column | Section | What it holds |
+| --- | --- | --- |
+| `SYSTEM%` | `system` | System prompt, house rules, project instructions, skills |
+| `MEMORIES%` | `memories` | Recalled lessons and saved user preferences |
+| `TASK%` | `task` | Task title and description (the first user message) |
+| `PARENT%` | `parent_outcome` | Results of parent tasks. Only the tiered path builds these; expect 0 for `exec.turn` |
+| `COMMENTS%` | `comments` | Feedback added mid-task: human comments, corrections, review rejections, sandbox feedback |
+| `FILE%` | `file_context` | Results of the `read` tool, which the file pipeline feeds |
+| `HISTORY%` | `history` | Earlier assistant turns and compressed summaries |
+| `TOOL%` | `tool_results` | Output of every other tool |
+
+A message the builder did not label falls back to its role (`tool` → tool
+results, `assistant` → history, the first `user` → task, a later `user` →
+comments, anything else → system). Rows recorded before this column existed
+count as no mix, so shares only cover calls that have one.
+
+**Which layer cut the input.** `CUT%` is the share of calls whose input was
+shortened before the provider saw it. The next four columns count calls cut by
+each layer (a call can be cut by more than one):
+
+| Column | Layer | Limit |
+| --- | --- | --- |
+| `ZONE` | Working zone, in `PrepareContext` | `queue.agentic_context` (budgets sum to the zone total) |
+| `BUDGET` | Character budget with the configured strategy | `queue.agentic_character_budget`, which inherits `gateway.truncator.max_input_chars` (12,000) when 0; the strategy is `gateway.truncation.strategy` |
+| `HEAD` | Agentic head cut | the same character budget, plus `queue.agentic_truncator_max` messages |
+| `ROUTER` | The gateway's own truncator | `gateway.truncator.max_input_chars`; agentic calls skip it |
+
+Compare `INPUT_CHARS` per call with the two limits: with product defaults the
+12,000-character layers run before a 60,000-character working zone has anything
+to cut, so `ZONE` stays at 0 and `gateway.truncation.strategy` only applies where
+`BUDGET` shows up. The report states what happened; it does not change a limit.
+
+## Tool use and repeated reads
+
+```bash
+agentd report tools                         # all tasks
+agentd report tools --task <id>             # one task
+agentd report tools --from 2026-10-20
+```
+
+One row per tool dispatch goes into `tool_calls` (task, tool, file path for
+file tools, ok or failed, result bytes; no arguments or output). The TOOL_CALL
+and TOOL_RESULT events cannot be the source: they keep only 200 characters of
+arguments and are deleted once a task is curated.
+
+| Output | Meaning |
+| --- | --- |
+| `TOOL`, `CALLS`, `FAILED`, `RESULT_BYTES` | Per tool: dispatches, those that did not end `ok`, bytes returned |
+| `re-read: X of Y bytes read` | Bytes the second and later reads of the same file added, over all bytes `read` returned |
+| `TASK`, `PATH`, `READS`, `BYTES`, `REREAD_BYTES` | The 20 files with the most re-read bytes, per task |
+
+A repeated read is the same `read` path more than once in one task. A `cat`
+inside `bash` counts as a bash call, not a read, and a different spelling of the
+same path counts as another file. Nothing here deduplicates reads; it is the
+baseline for deciding whether that is worth building.
+
 ## Known limits
 
 - **Empty task ID.** Topic guard, subagent, librarian, dream and truncator
@@ -120,12 +183,13 @@ task's ID and no chat correlation ID, so use `--task` to follow them.
   the records are dropped and counted. `dropped_records` is the count since the
   daemon started and resets on restart; a persistent non-zero value means the
   database is too slow or full.
-- **No retention.** `ai_calls` grows without bound. A retention setting is a
+- **No retention.** `ai_calls` and `tool_calls` grow without bound. A retention setting is a
   follow-up, not part of this change.
 - **Gateway calls only.** Usage by external CLI agents (SP-022) will be
   self-reported and will not match gateway-measured numbers exactly.
 - **Provider-reported tokens.** A provider that omits usage records 0, and
   embedding calls carry no tokens. A failed attempt has no model.
 
-The same report is `GET /api/v1/reports/ai-usage`; see
+The same report is `GET /api/v1/reports/ai-usage`, and the tool use report is
+`GET /api/v1/reports/tool-use`; see
 [api-testing.md](api-testing.md#get-apiv1reportsai-usage).
