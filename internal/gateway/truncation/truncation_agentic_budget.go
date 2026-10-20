@@ -251,6 +251,7 @@ func (t *AgenticTruncator) truncateSingleMessage(msg spec.PromptMessage, keep in
 		Content:    truncatedContent,
 		ToolCalls:  nil, // Clear tool calls to ensure budget enforcement terminates
 		ToolCallID: msg.ToolCallID,
+		Section:    msg.Section,
 	}
 }
 
