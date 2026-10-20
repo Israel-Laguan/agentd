@@ -188,57 +188,50 @@ func (t *AgenticTruncator) collectMessagesInReverse(messages []spec.PromptMessag
 	var reversed []spec.PromptMessage
 	markerLen := utf8.RuneCountInString(TruncationMarker)
 
+	// A kept tool result, whole or cut, reserves room for the call it answers
+	// until the loop reaches that call; without the call, the dangling-result
+	// cleanup drops the result too (B-079). Messages in between, such as
+	// sibling results of the same call, see only what is left over.
+	reserveIdx, reserved := -1, 0
+
 	// Iterate from most recent (end) to oldest (start)
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 		msgLen := messageChars(msg)
 
-		if *budget >= msgLen {
+		if i == reserveIdx {
 			reversed = append(reversed, msg)
 			*budget -= msgLen
-		} else if *budget > 0 {
-			// A cut tool result leaves room for the call it answers; without
-			// the call, the dangling-result cleanup drops the result too (B-079).
-			reserve := 0
-			if msg.Role == "tool" {
-				reserve = pairedCallChars(messages[:i], msg.ToolCallID)
-			}
-			if reserve > 0 && *budget-reserve > markerLen {
-				reversed = append(reversed, t.truncateSingleMessage(msg, *budget-reserve-markerLen))
-				*budget = reserve
+			reserveIdx, reserved = -1, 0
+			continue
+		}
+		avail := *budget - reserved
+		if msg.Role == "tool" && reserveIdx < 0 && avail > 0 {
+			if idx, size := pairedCall(messages[:i], msg.ToolCallID); idx >= 0 && avail-size > markerLen {
+				if avail-size >= msgLen {
+					reversed = append(reversed, msg)
+					*budget -= msgLen
+				} else {
+					reversed = append(reversed, t.truncateSingleMessage(msg, avail-size-markerLen))
+					*budget = size
+				}
+				reserveIdx, reserved = idx, size
 				continue
 			}
-			truncatedMsg := t.truncateSingleMessage(msg, *budget-markerLen)
-			reversed = append(reversed, truncatedMsg)
-			*budget = 0
 		}
-		// If budget <= 0, message is dropped (truncated = true)
+		if avail >= msgLen {
+			reversed = append(reversed, msg)
+			*budget -= msgLen
+			continue
+		}
+		if avail <= 0 {
+			continue // dropped (truncated = true)
+		}
+		reversed = append(reversed, t.truncateSingleMessage(msg, avail-markerLen))
+		*budget = reserved
 	}
 
 	return reversed
-}
-
-// messageChars is a message's content plus its tool call names and arguments.
-func messageChars(msg spec.PromptMessage) int {
-	n := utf8.RuneCountInString(msg.Content)
-	for _, tc := range msg.ToolCalls {
-		n += utf8.RuneCountInString(tc.Function.Name)
-		n += utf8.RuneCountInString(tc.Function.Arguments)
-	}
-	return n
-}
-
-// pairedCallChars is the size of the nearest earlier assistant message that
-// calls callID, or 0 when there is none.
-func pairedCallChars(earlier []spec.PromptMessage, callID string) int {
-	for i := len(earlier) - 1; i >= 0 && callID != ""; i-- {
-		for _, tc := range earlier[i].ToolCalls {
-			if tc.ID == callID {
-				return messageChars(earlier[i])
-			}
-		}
-	}
-	return 0
 }
 
 // truncateSingleMessage truncates a single message to fit within budget
