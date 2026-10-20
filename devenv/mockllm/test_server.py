@@ -353,6 +353,12 @@ class ToolCallScenarioTest(unittest.TestCase):
         self.assertIn("command", json.loads(reply["choices"][0]["message"]["content"]))
         self.assertEqual(toolcalls.configured_tool_calls(self._body(calls=[{"arguments": {}}])), [])
 
+    def test_non_object_arguments_keep_the_default_reply(self):
+        for bad in (None, [], "sudo id", 3):
+            calls = [{"name": "bash", "arguments": bad}]
+            self.assertEqual(toolcalls.configured_tool_calls(self._body(calls=calls)), [], bad)
+        self.assertEqual(len(toolcalls.configured_tool_calls(self._body(calls=[{"name": "bash"}]))), 1)
+
     def test_tool_call_reply_is_served_over_http(self):
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
