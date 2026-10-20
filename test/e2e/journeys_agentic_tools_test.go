@@ -99,6 +99,10 @@ func TestJ19_AgenticDenylistRefusesSudo(t *testing.T) {
 		t.Fatalf("J19 [denylist] the command ran: output %q", got.OutputSummary)
 	}
 
+	if use := toolUse(ctx, t, client, task.ID); len(use.Tools) != 1 || use.Tools[0].Tool != "bash" || use.Tools[0].Calls != 1 || use.Tools[0].Failed != 1 {
+		t.Fatalf("J19 [tool use] report = %+v, want one failed bash call", use.Tools)
+	}
+
 	prompts, err := NewMockLLMClient(mockLLMBaseURL).WorkerPrompts(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("J19 [mock capture] %v", err)
@@ -149,6 +153,11 @@ func TestJ20_AgenticOversizedToolResultIsCut(t *testing.T) {
 			}
 		}
 	}
+	row := execTurnRow(ctx, t, client, task.ID, 2)
+	t.Logf("J20 [composition] input chars %d, mix %v, truncated %d, cut by %v", row.InputChars, row.MixChars, row.TruncatedCalls, row.CutBy)
+	if row.MixChars["tool_results"] == 0 || row.MixChars["system"] == 0 || row.TruncatedCalls == 0 {
+		t.Fatalf("J20 [composition] want a tool-result and system share and a cut call, got mix %v truncated %d", row.MixChars, row.TruncatedCalls)
+	}
 	if toolMessage == "" {
 		t.Fatalf("J20 [mock capture] no request for task %s carried a tool result", task.ID)
 	}
@@ -159,5 +168,33 @@ func TestJ20_AgenticOversizedToolResultIsCut(t *testing.T) {
 		if !strings.Contains(toolMessage, want) {
 			t.Fatalf("J20 [truncation] cut tool result lacks %q (len %d)", want, len(toolMessage))
 		}
+	}
+}
+
+// TestJ21_AgenticRepeatedReadIsCounted tests J21: a task that reads the same
+// file twice shows up in the tool use report as one repeated read, with the
+// bytes the second read added. This is the baseline for any later
+// "don't re-read files" work; nothing here deduplicates.
+func TestJ21_AgenticRepeatedReadIsCounted(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	harness := NewHarness(baseURL, "default")
+	if err := harness.WaitForHealthy(ctx, 10*time.Second); err != nil {
+		t.Fatalf("J21 [boot] harness failed to become healthy: %v", err)
+	}
+	client := NewAPIClient(baseURL, harness.client)
+	read := ScriptedToolCall{Name: "read", Arguments: map[string]any{"path": "notes.txt"}}
+	task := agenticTask(ctx, t, client, "J21",
+		ScriptedToolCall{Name: "bash", Arguments: map[string]any{"command": "echo hello > notes.txt"}}, read, read)
+
+	use := toolUse(ctx, t, client, task.ID)
+	t.Logf("J21 [tool use] tools %+v, reads %d, read bytes %d, re-read bytes %d, repeated %+v",
+		use.Tools, use.Reads, use.ReadBytes, use.RereadBytes, use.RepeatedReads)
+	if use.Reads != 2 || len(use.RepeatedReads) != 1 || use.RepeatedReads[0].Path != "notes.txt" || use.RepeatedReads[0].Reads != 2 || use.RereadBytes == 0 {
+		t.Fatalf("J21 [tool use] want notes.txt read twice with re-read bytes, got %+v", use)
 	}
 }
