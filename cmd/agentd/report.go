@@ -17,7 +17,7 @@ import (
 
 func newReportCommand(opts *rootOptions) *cobra.Command {
 	cmd := &cobra.Command{Use: "report", Short: "Print reports built from the daemon's records"}
-	cmd.AddCommand(newReportAICommand(opts))
+	cmd.AddCommand(newReportAICommand(opts), newReportToolsCommand(opts))
 	return cmd
 }
 
@@ -49,7 +49,7 @@ func newReportAICommand(opts *rootOptions) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load config: %w", err)
 			}
-			raw, err := fetchAIUsage(cmd.Context(), base, f.query())
+			raw, err := fetchReport(cmd.Context(), base, "ai-usage", f.query())
 			if err != nil {
 				return err
 			}
@@ -81,9 +81,9 @@ func newReportAICommand(opts *rootOptions) *cobra.Command {
 	return cmd
 }
 
-// fetchAIUsage calls GET /api/v1/reports/ai-usage and returns the data object.
-func fetchAIUsage(ctx context.Context, base string, query url.Values) (json.RawMessage, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/reports/ai-usage?"+query.Encode(), nil)
+// fetchReport calls GET /api/v1/reports/<name> and returns the data object.
+func fetchReport(ctx context.Context, base, name string, query url.Values) (json.RawMessage, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/reports/"+name+"?"+query.Encode(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("build report request: %w", err)
 	}
