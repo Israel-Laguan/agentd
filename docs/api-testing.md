@@ -107,6 +107,61 @@ When `?provider=gemini` is supplied, `"provider"` in the response is `"gemini"`.
 
 ---
 
+## Report Endpoints
+
+### GET /api/v1/reports/ai-usage
+
+Aggregates the stored AI call records (one per provider attempt) into rows by the
+chosen dimensions. What a record is, the purposes and how to read the columns:
+[ai-usage-report.md](ai-usage-report.md). The CLI equivalent is `agentd report ai`.
+
+**Query Parameters** (all optional):
+
+| Parameter | Meaning |
+|-----------|---------|
+| `group_by` | Comma list of `purpose`, `stage`, `model`, `day`, `task`, `request` (default `purpose`) |
+| `from`, `to` | `YYYY-MM-DD` or RFC3339. `from` is inclusive, `to` exclusive; a bare date for `to` includes that whole day |
+| `task_id` | Only this task |
+| `request` | Only this chat request (its correlation ID) |
+| `purpose`, `stage`, `model` | Exact-match filters |
+
+**Response**:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "group_by": ["purpose"],
+    "rows": [
+      {
+        "group": { "purpose": "exec.turn" },
+        "calls": 3, "failed": 1, "tokens": 350, "cached_tokens": 0,
+        "input_chars": 9000, "output_chars": 1200,
+        "avg_latency_ms": 166.7, "max_latency_ms": 300,
+        "first_attempts": 2, "repair_attempts": 1, "cascade_calls": 1,
+        "repair_rate": 0.5, "cascade_rate": 0.333
+      }
+    ],
+    "totals": { "calls": 4, "tokens": 360, "...": "same fields, no group" },
+    "dropped_records": 0
+  }
+}
+```
+
+`repair_rate` is `json_repair` attempts over first attempts; `cascade_rate` is
+cascade attempts over all attempts. `dropped_records` counts records the writer
+discarded since the daemon started.
+
+**Errors**: `400 VALIDATION_FAILED` for an unknown `group_by`, an unparsable date
+or `to` not after `from`; `503 UNAVAILABLE` when the daemon's store keeps no
+`ai_calls`.
+
+**Test Coverage**: `internal/api/controllers/reports_test.go`,
+`internal/api/server/reports_route_test.go`, and
+`cmd/agentd/ai_usage_wiring_test.go` (a chat request through to the report).
+
+---
+
 ## Project Endpoints
 
 ### GET /api/v1/projects
@@ -293,12 +348,12 @@ For the event-name mapping and the `tool_called` / `tool_result` payload contrac
 | ------ | ------------- | ------------- |
 | `NOT_FOUND` | 404 | Resource not found |
 | `BAD_REQUEST` | 400 | Malformed request (unreadable or invalid JSON body) |
-| `VALIDATION_FAILED` | 400 | Invalid request parameters, including a task state that does not exist |
+| `VALIDATION_FAILED` | 400 | Invalid request parameters, including a task state that does not exist or a bad AI usage report query |
 | `FORBIDDEN` | 403 | Sandbox path violation |
 | `NOT_FOUND` | 404 | Resource not found, including a breaker `provider` with no breaker |
 | `STATE_CONFLICT` | 409 | A task transition the rules forbid, or a stale write |
 | `INTERNAL_ERROR` | 500 | Server error |
-| `UNAVAILABLE` | 503 | A daemon component is not configured (system service, task store, human handoff, event bus) |
+| `UNAVAILABLE` | 503 | A daemon component is not configured (system service, task store, human handoff, event bus, AI usage records) |
 
 Every error, including the `GET /events/stream` 503, uses the `{status: "error", error: {code, message}}` envelope. Controllers take the code from an `httpx.Code*` constant; a test pins that. Chat streaming (`stream: true`) reports a planner failure as a chunk of assistant text, as the OpenAI wire format has no error frame.
 
