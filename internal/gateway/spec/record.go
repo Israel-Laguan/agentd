@@ -46,6 +46,7 @@ type CallRecord struct {
 	Cascade       bool          `json:"cascade"`
 	Outcome       Outcome       `json:"outcome"`
 	Truncated     bool          `json:"truncated"`
+	TruncatedBy   string        `json:"truncated_by,omitempty"`
 	MessageCount  int           `json:"message_count"`
 	ToolCount     int           `json:"tool_count"`
 	InputChars    int           `json:"input_chars"`

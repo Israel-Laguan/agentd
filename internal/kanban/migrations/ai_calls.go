@@ -49,3 +49,21 @@ func migrateToV21(ctx context.Context, db *sql.DB) error {
 	}
 	return setSchemaVersion(ctx, db, 21)
 }
+
+// migrateToV22 adds the context mix and the truncation layer to ai_calls.
+// A fresh database already has both from schema.sql, so each add is guarded.
+func migrateToV22(ctx context.Context, db *sql.DB) error {
+	for _, col := range []string{"context_mix", "truncated_by"} {
+		has, err := tableHasColumn(ctx, db, "ai_calls", col)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, `ALTER TABLE ai_calls ADD COLUMN `+col+` TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("add ai_calls.%s: %w", col, err)
+		}
+	}
+	return setSchemaVersion(ctx, db, 22)
+}

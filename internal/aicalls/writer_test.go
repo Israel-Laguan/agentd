@@ -148,3 +148,17 @@ func TestWriterRecordAfterCloseCountsAndDoesNotPanic(t *testing.T) {
 	}
 	closeWriter(t, w) // closing twice is harmless
 }
+
+func TestWriterStoresTheMixAsJSONAndTheTruncationLayer(t *testing.T) {
+	sink := &fakeSink{}
+	w := NewWriter(sink, Options{Buffer: 8, BatchSize: 8, Interval: time.Hour})
+	r := rec(1)
+	r.Mix = spec.Mix{spec.SectionMemories: {Chars: 7, Messages: 1}}
+	r.TruncatedBy = "agentic_head"
+	w.Record(r)
+	closeWriter(t, w)
+	got := sink.batches[0][0]
+	if got.ContextMix != `{"memories":{"chars":7,"messages":1}}` || got.TruncatedBy != "agentic_head" {
+		t.Fatalf("mix = %q, truncated_by = %q", got.ContextMix, got.TruncatedBy)
+	}
+}

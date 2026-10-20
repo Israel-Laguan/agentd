@@ -124,7 +124,9 @@ CREATE TABLE IF NOT EXISTS ai_calls (
     tokens INTEGER NOT NULL DEFAULT 0 CHECK (tokens >= 0),
     cached_tokens INTEGER NOT NULL DEFAULT 0 CHECK (cached_tokens >= 0),
     cache_write_tokens INTEGER NOT NULL DEFAULT 0 CHECK (cache_write_tokens >= 0),
-    latency_ms INTEGER NOT NULL DEFAULT 0 CHECK (latency_ms >= 0)
+    latency_ms INTEGER NOT NULL DEFAULT 0 CHECK (latency_ms >= 0),
+    context_mix TEXT NOT NULL DEFAULT '',
+    truncated_by TEXT NOT NULL DEFAULT ''
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_tasks_state_assignee ON tasks(state, assignee);

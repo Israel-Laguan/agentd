@@ -33,6 +33,12 @@ type AICall struct {
 	CachedTokens     int
 	CacheWriteTokens int
 	LatencyMS        int64
+	// ContextMix is the input size by prompt section as JSON (chars and
+	// message counts per section); empty when the call recorded none.
+	ContextMix string
+	// TruncatedBy names the layer that cut the input ("agentic_head",
+	// "working_zone", "router"); empty when nothing was cut.
+	TruncatedBy string
 }
 
 // AI usage report dimensions: the names accepted in AIUsageQuery.GroupBy.

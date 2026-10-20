@@ -9,8 +9,8 @@ import (
 
 const insertAICallSQL = `INSERT INTO ai_calls (at, kind, purpose, stage, role, task_id, agent_id, correlation_id,
 	provider, model, attempt, cascade, outcome, truncated, message_count, tool_count, input_chars,
-	output_chars, tokens, cached_tokens, cache_write_tokens, latency_ms)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	output_chars, tokens, cached_tokens, cache_write_tokens, latency_ms, context_mix, truncated_by)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 // InsertAICalls writes a batch of call records in one transaction.
 func (s *Store) InsertAICalls(ctx context.Context, calls []models.AICall) error {
@@ -43,6 +43,6 @@ func aiCallArgs(c models.AICall) []any {
 		formatTime(c.At), c.Kind, c.Purpose, c.Stage, c.Role, c.TaskID, c.AgentID, c.CorrelationID,
 		c.Provider, c.Model, c.Attempt, boolToInt(c.Cascade), c.Outcome, boolToInt(c.Truncated),
 		c.MessageCount, c.ToolCount, c.InputChars, c.OutputChars, c.Tokens, c.CachedTokens,
-		c.CacheWriteTokens, c.LatencyMS,
+		c.CacheWriteTokens, c.LatencyMS, c.ContextMix, c.TruncatedBy,
 	}
 }
