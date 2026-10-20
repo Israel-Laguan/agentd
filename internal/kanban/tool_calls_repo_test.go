@@ -36,20 +36,24 @@ func TestInsertToolCallStoresEveryColumn(t *testing.T) {
 	}
 }
 
-func TestToolUseReportCountsToolsAndRepeatedReads(t *testing.T) {
-	t.Parallel()
-	store := newTestStore(t)
-	ctx := context.Background()
+func seedToolUse(t *testing.T, store *Store) {
+	t.Helper()
 	for _, c := range []models.ToolCall{
 		toolCall("t1", "read", "a.go", 1000), toolCall("t1", "read", "a.go", 1000), toolCall("t1", "read", "a.go", 1000),
 		toolCall("t1", "read", "b.go", 50), toolCall("t2", "read", "a.go", 1000),
 		toolCall("t1", "bash", "", 10), {At: time.Now(), TaskID: "t1", CallID: "f", Tool: "bash", Status: "failed"},
 	} {
-		if err := store.InsertToolCall(ctx, c); err != nil {
+		if err := store.InsertToolCall(context.Background(), c); err != nil {
 			t.Fatal(err)
 		}
 	}
-	rep, err := store.ToolUseReport(ctx, models.ToolUseQuery{})
+}
+
+func TestToolUseReportCountsCallsAndFailuresByTool(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	seedToolUse(t, store)
+	rep, err := store.ToolUseReport(context.Background(), models.ToolUseQuery{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +67,16 @@ func TestToolUseReportCountsToolsAndRepeatedReads(t *testing.T) {
 	if r := byTool["bash"]; r.Calls != 2 || r.Failed != 1 {
 		t.Errorf("bash row = %+v, want 2 calls / 1 failed", r)
 	}
+}
+
+func TestToolUseReportFindsOnlyFilesReadMoreThanOncePerTask(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	seedToolUse(t, store)
+	rep, err := store.ToolUseReport(context.Background(), models.ToolUseQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(rep.RepeatedReads) != 1 {
 		t.Fatalf("repeated reads = %+v, want only t1:a.go", rep.RepeatedReads)
 	}
@@ -72,7 +86,7 @@ func TestToolUseReportCountsToolsAndRepeatedReads(t *testing.T) {
 	if rep.Reads != 5 || rep.ReadBytes != 4050 || rep.RereadBytes != 2000 {
 		t.Errorf("totals = %d reads %d bytes %d re-read, want 5, 4050, 2000", rep.Reads, rep.ReadBytes, rep.RereadBytes)
 	}
-	one, _ := store.ToolUseReport(ctx, models.ToolUseQuery{TaskID: "t2"})
+	one, _ := store.ToolUseReport(context.Background(), models.ToolUseQuery{TaskID: "t2"})
 	if len(one.RepeatedReads) != 0 || one.Reads != 1 {
 		t.Errorf("task filter: %+v", one)
 	}
