@@ -129,6 +129,17 @@ CREATE TABLE IF NOT EXISTS ai_calls (
     truncated_by TEXT NOT NULL DEFAULT ''
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS tool_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    call_id TEXT NOT NULL DEFAULT '',
+    tool TEXT NOT NULL,
+    path TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    result_bytes INTEGER NOT NULL DEFAULT 0 CHECK (result_bytes >= 0)
+) STRICT;
+
 CREATE INDEX IF NOT EXISTS idx_tasks_state_assignee ON tasks(state, assignee);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_state ON tasks(project_id, state);
@@ -145,3 +156,4 @@ CREATE INDEX IF NOT EXISTS idx_memories_superseded_by ON memories(superseded_by)
 CREATE INDEX IF NOT EXISTS idx_ai_calls_at_purpose ON ai_calls(at, purpose, stage, model);
 CREATE INDEX IF NOT EXISTS idx_ai_calls_task ON ai_calls(task_id) WHERE task_id != '';
 CREATE INDEX IF NOT EXISTS idx_ai_calls_correlation ON ai_calls(correlation_id) WHERE correlation_id != '';
+CREATE INDEX IF NOT EXISTS idx_tool_calls_task_path ON tool_calls(task_id, path);
