@@ -49,6 +49,7 @@ type CallRecord struct {
 	MessageCount  int           `json:"message_count"`
 	ToolCount     int           `json:"tool_count"`
 	InputChars    int           `json:"input_chars"`
+	Mix           Mix           `json:"mix,omitempty"`
 	OutputChars   int           `json:"output_chars"`
 	Tokens        int           `json:"tokens"`
 	CachedTokens  int           `json:"cached_tokens"`
