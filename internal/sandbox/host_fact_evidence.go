@@ -10,13 +10,13 @@ import (
 
 var (
 	// hostFactStrong are nouns that name host facts on their own.
-	hostFactStrong = regexp.MustCompile(`(?i)\b(operating system|hardware|processor|kernel|hostname)\b`)
+	hostFactStrong = regexp.MustCompile(`(?i)\b(operating system|hardware|kernel|hostname)\b`)
 	// hostFactNoun are nouns that also name agentd's own features (the memory
-	// curator, the disk watchdog, a state machine), so they count as host facts
-	// only next to hostContext (B-077).
-	hostFactNoun = regexp.MustCompile(`(?i)\b(os|cpu|ram|memory|disk|storage|machine)\b`)
+	// curator, the disk watchdog, a state machine, a task processor), so they
+	// count as host facts only next to hostContext (B-077).
+	hostFactNoun = regexp.MustCompile(`(?i)\b(os|cpu|processor|ram|memory|disks?|storage|machine)\b`)
 	// hostContext marks a task as asking about the host itself.
-	hostContext = regexp.MustCompile(`(?i)\b((this|the|local|host)\s+(machine|host|system|computer|server)|system\s+(information|info|report|details|specs?)|host\s+(information|info)|(lsblk|lscpu|hostnamectl|uname|df\s+-h|free\s+-h))\b`)
+	hostContext = regexp.MustCompile(`(?i)\b((this|the|local|host)\s+(machine|host|system|computer|server)|(host|server|machine)'?s?\s+(os|cpu|processor|ram|memory|disks?|storage)|system\s+(information|info|report|details|specs?)|host\s+(information|info)|(lsblk|lscpu|hostnamectl|uname|df\s+-h|free\s+-h))\b`)
 	// commandSegments splits a command into the simple commands run in order.
 	commandSegments = regexp.MustCompile(`;|&&|\|\||\n`)
 	// literalEchoWrite is echo/printf sending text into a file, directly or via tee.
