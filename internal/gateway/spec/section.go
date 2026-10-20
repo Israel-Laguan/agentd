@@ -50,6 +50,8 @@ func MixOf(msgs []PromptMessage) Mix {
 		s := m.Section
 		if s == "" {
 			s = roleSection(m.Role, &seenUser)
+		} else if m.Role == "user" {
+			seenUser = true
 		}
 		size := mix[s]
 		size.Chars += len(m.Content)
