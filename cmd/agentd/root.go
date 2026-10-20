@@ -40,6 +40,7 @@ func newRootCommand() *cobra.Command {
 	rootCmd.AddCommand(newInitCommand(opts))
 	rootCmd.AddCommand(newStartCommand(opts))
 	rootCmd.AddCommand(newStatusCommand(opts))
+	rootCmd.AddCommand(newReportCommand(opts))
 	rootCmd.AddCommand(newCommentCommand(opts))
 	rootCmd.AddCommand(newConfigCommand(opts))
 	rootCmd.AddCommand(newProjectCommand(opts))
