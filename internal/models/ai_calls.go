@@ -116,6 +116,13 @@ type AIUsageRow struct {
 	CascadeCalls   int               `json:"cascade_calls"`
 	RepairRate     float64           `json:"repair_rate"`
 	CascadeRate    float64           `json:"cascade_rate"`
+	// MixChars sums input chars by prompt section (a key per section, zero
+	// when absent); only calls recorded with a mix contribute.
+	MixChars map[string]int `json:"mix_chars"`
+	// TruncatedCalls counts calls whose input was cut; CutBy counts them per
+	// layer (a call cut by two layers counts in both).
+	TruncatedCalls int            `json:"truncated_calls"`
+	CutBy          map[string]int `json:"cut_by"`
 }
 
 // AIUsageReport is the aggregated result. Dropped counts records the writer
