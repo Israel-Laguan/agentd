@@ -47,6 +47,9 @@ func TestAgenticTruncatorKeepsReservationAcrossSiblingResults(t *testing.T) {
 	if !found || !strings.HasPrefix(cut.Content, "HEAD-MARK") {
 		t.Fatalf("cut result not paired with its call: calls=%+v", call.ToolCalls)
 	}
+	// c0's result was dropped, so its call must be gone too: every kept call
+	// has a result and every kept result has a call.
+	verifyToolConsistency(t, out)
 	if got := totalChars(out); got > 12000 {
 		t.Fatalf("total %d over budget", got)
 	}
