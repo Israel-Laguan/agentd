@@ -43,5 +43,5 @@ func (w *Worker) PrependSandboxViolationFeedback(
 		"The sandbox refused your earlier command(s):\n- %s\nCommands may only read and write files inside the project workspace: no absolute paths outside it (except /dev/null), no '..', no $HOME or '~/'. Choose a different command that stays inside the project workspace. For host facts use commands that need no paths: uname -a, hostnamectl, lsb_release -a, lscpu, free -h, lsblk, df -h.",
 		strings.Join(refusals, "\n- "),
 	)
-	return append(messages, gateway.PromptMessage{Role: "user", Content: feedback})
+	return append(messages, gateway.PromptMessage{Role: "user", Content: feedback, Section: gateway.SectionComments})
 }

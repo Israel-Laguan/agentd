@@ -82,6 +82,7 @@ func (cm *ContextManager) AddSummary(ts TurnSummary) {
 		cm.compressedZone.Messages = append(cm.compressedZone.Messages, spec.PromptMessage{
 			Role:    "system",
 			Content: ts.Summary,
+			Section: spec.SectionHistory,
 		})
 	}
 }
@@ -225,6 +226,7 @@ func (cm *ContextManager) injectPendingCorrections(messages []spec.PromptMessage
 		corrMsgs = append(corrMsgs, spec.PromptMessage{
 			Role:    "system",
 			Content: c.FormatMessage(),
+			Section: spec.SectionComments,
 		})
 	}
 

@@ -110,7 +110,7 @@ func (w *Worker) PrependReviewRejectionFeedback(
 		"Human review rejected your previous draft. Feedback: %s. Revise your output accordingly.",
 		reason,
 	)
-	return append(messages, gateway.PromptMessage{Role: "user", Content: feedback}), subtaskID
+	return append(messages, gateway.PromptMessage{Role: "user", Content: feedback, Section: gateway.SectionComments}), subtaskID
 }
 
 func findLatestDraftReview(comments []models.Comment) (string, bool) {
