@@ -37,11 +37,14 @@ func (s *Store) ToolUseReport(ctx context.Context, q models.ToolUseQuery) (model
 // repeatedReads fills the repeated reads: per task and path with more than one
 // read, the bytes of every read after the first.
 func (s *Store) repeatedReads(ctx context.Context, where string, args []any, report *models.ToolUseReport) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT t.task_id, t.path, COUNT(*), SUM(t.result_bytes),
-		SUM(t.result_bytes) - (SELECT f.result_bytes FROM tool_calls f
-			WHERE f.task_id = t.task_id AND f.path = t.path AND f.tool = 'read' ORDER BY f.id LIMIT 1)
-		FROM tool_calls t WHERE `+where+` AND t.tool = 'read' AND t.path != ''
-		GROUP BY t.task_id, t.path HAVING COUNT(*) > 1 ORDER BY 5 DESC, t.task_id, t.path`, args...)
+	rows, err := s.db.QueryContext(ctx, `WITH r AS (
+			SELECT task_id, path, result_bytes,
+				ROW_NUMBER() OVER (PARTITION BY task_id, path ORDER BY id) AS n
+			FROM tool_calls WHERE `+where+` AND tool = 'read' AND path != '')
+		SELECT task_id, path, COUNT(*), SUM(result_bytes),
+			SUM(CASE WHEN n > 1 THEN result_bytes ELSE 0 END)
+		FROM r GROUP BY task_id, path HAVING COUNT(*) > 1
+		ORDER BY 5 DESC, task_id, path`, args...)
 	if err != nil {
 		return fmt.Errorf("query repeated reads: %w", err)
 	}

@@ -91,3 +91,23 @@ func TestToolUseReportFindsOnlyFilesReadMoreThanOncePerTask(t *testing.T) {
 		t.Errorf("task filter: %+v", one)
 	}
 }
+
+func TestRepeatedReadsInsideADateFilterIgnoreEarlierReads(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	ctx := context.Background()
+	early := toolCall("t1", "read", "a.go", 1000)
+	early.At = early.At.AddDate(0, 0, -1)
+	for _, c := range []models.ToolCall{early, toolCall("t1", "read", "a.go", 400), toolCall("t1", "read", "a.go", 400)} {
+		if err := store.InsertToolCall(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rep, err := store.ToolUseReport(ctx, models.ToolUseQuery{From: early.At.AddDate(0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.RereadBytes != 400 || len(rep.RepeatedReads) != 1 || rep.RepeatedReads[0].Reads != 2 {
+		t.Fatalf("re-read = %d, repeated = %+v, want 400 bytes over 2 reads inside the filter", rep.RereadBytes, rep.RepeatedReads)
+	}
+}
