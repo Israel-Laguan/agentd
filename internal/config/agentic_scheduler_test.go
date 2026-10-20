@@ -86,6 +86,10 @@ func TestLoadSchedulerConfigRejectsTaskWithoutProject(t *testing.T) {
 		{"enabled, scheduler project", true, "p1", "", false},
 		{"enabled, task project", true, "", "p2", false},
 		{"disabled, no project", false, "", "", false},
+		{"scheduler project is _system", true, "_system", "", true},
+		{"task project is _system", true, "", " _system ", true},
+		{"task project is the system project id", true, "p1", "00000000-0000-0000-0000-000000000001", true},
+		{"disabled, _system project", false, "_system", "", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -98,8 +102,8 @@ func TestLoadSchedulerConfigRejectsTaskWithoutProject(t *testing.T) {
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
 			}
-			if err != nil && !strings.Contains(err.Error(), "s1") {
-				t.Fatalf("error should name the task: %v", err)
+			if err != nil && !strings.Contains(err.Error(), "project_id") {
+				t.Fatalf("error should name the project_id setting: %v", err)
 			}
 		})
 	}

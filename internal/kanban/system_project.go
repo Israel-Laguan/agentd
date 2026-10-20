@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	systemProjectID            = "00000000-0000-0000-0000-000000000001"
-	systemProjectName          = "_system"
+	systemProjectID            = models.SystemProjectID
+	systemProjectName          = models.SystemProjectName
 	systemProjectWorkspacePath = "_system"
 )
 
