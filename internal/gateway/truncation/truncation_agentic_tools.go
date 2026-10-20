@@ -1,6 +1,8 @@
 package truncation
 
 import (
+	"unicode/utf8"
+
 	"agentd/internal/gateway/spec"
 )
 
@@ -96,4 +98,27 @@ func (t *AgenticTruncator) removeDanglingToolCalls(messages []spec.PromptMessage
 	}
 
 	return out
+}
+
+// messageChars is a message's content plus its tool call names and arguments.
+func messageChars(msg spec.PromptMessage) int {
+	n := utf8.RuneCountInString(msg.Content)
+	for _, tc := range msg.ToolCalls {
+		n += utf8.RuneCountInString(tc.Function.Name)
+		n += utf8.RuneCountInString(tc.Function.Arguments)
+	}
+	return n
+}
+
+// pairedCall finds the nearest earlier assistant message that calls callID
+// and returns its index and size, or -1 when there is none.
+func pairedCall(earlier []spec.PromptMessage, callID string) (int, int) {
+	for i := len(earlier) - 1; i >= 0 && callID != ""; i-- {
+		for _, tc := range earlier[i].ToolCalls {
+			if tc.ID == callID {
+				return i, messageChars(earlier[i])
+			}
+		}
+	}
+	return -1, 0
 }
