@@ -226,7 +226,7 @@ func NewWorker(
 	}
 	scrubber := sandbox.NewScrubber(opts.SandboxScrubPatterns)
 	toolExecutor := agenttools.NewToolExecutor(sb, "", envVars, opts.SandboxWallTimeout)
-	hooks := buildWorkerHooks(opts, toolExecutor, sink, scrubber)
+	hooks := buildWorkerHooks(opts, toolExecutor, sink, scrubber, store)
 
 	w := newWorkerCore(store, gw, sb, breaker, sink, opts, scrubber, budgetTracker, toolExecutor, hooks)
 	w.topicGuard = agentruntime.NewTopicGuard(gw, opts.TopicGuard)
