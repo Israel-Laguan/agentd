@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/providers"
@@ -26,6 +27,7 @@ type Router struct {
 	maxTasksPerPhase int
 	budget           spec.BudgetTracker
 	roleRoutes       map[spec.Role]spec.RoleTarget
+	recorder         spec.Recorder
 }
 
 var _ spec.AIGateway = (*Router)(nil)
@@ -171,12 +173,16 @@ func (r *Router) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 // Embed implements spec.AIGateway by delegating to the first EmbedBackend provider.
 func (r *Router) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	var errs []error
+	attempts := 0
 	for _, p := range r.providers {
 		eb, ok := p.(providers.EmbedBackend)
 		if !ok {
 			continue
 		}
+		started := time.Now()
 		resp, err := eb.Embed(ctx, req)
+		r.emit(ctx, embedRecord(p, req, started, err, attempts > 0))
+		attempts++
 		if err == nil {
 			return resp, nil
 		}
@@ -237,6 +243,9 @@ func (r *Router) generateJSON(ctx context.Context, req spec.AIRequest) (spec.AIR
 	var lastResp spec.AIResponse
 	var lastErr error
 	for attempt := 0; attempt < correction.MaxJSONAttempts; attempt++ {
+		if attempt > 0 {
+			req.Attempt = spec.AttemptJSONRepair
+		}
 		resp, err := r.generateOnce(ctx, req)
 		if err != nil {
 			return spec.AIResponse{}, err

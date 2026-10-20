@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"agentd/internal/api/correlation"
 	"agentd/internal/gateway/providers"
@@ -26,7 +27,7 @@ func (e errTruncation) Unwrap() error { return e.err }
 //     to the next candidate and NOT accumulate an error.
 //   - ok=false, err!=nil: provider failure; the caller may aggregate the error
 //     and continue cascading.
-func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq spec.AIRequest, hasRequestedTools bool, selectedHasToolSupport bool) (spec.AIResponse, bool, error) {
+func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq spec.AIRequest, hasRequestedTools bool, selectedHasToolSupport bool, cascade bool) (spec.AIResponse, bool, error) {
 	req := baseReq
 	if hasRequestedTools && !p.Capabilities().SupportsChatTools {
 		if selectedHasToolSupport {
@@ -36,6 +37,7 @@ func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq s
 		req.JSONMode = true
 		correlation.Logger(ctx).WarnContext(ctx, "provider does not support tools, falling back to legacy mode", "provider", string(p.Name()))
 	}
+	inputBefore := messageChars(req.Messages)
 	if !req.SkipTruncation {
 		messages, err := r.applyTruncation(ctx, req.Messages, p.MaxInputChars())
 		if err != nil {
@@ -43,7 +45,9 @@ func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq s
 		}
 		req.Messages = messages
 	}
+	started := time.Now()
 	resp, err := p.Generate(ctx, req)
+	r.emit(ctx, attemptRecord(p, req, inputBefore, started, resp, err, cascade))
 	if err != nil {
 		return spec.AIResponse{}, false, err
 	}
@@ -139,10 +143,11 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 		"candidates", len(candidates), "matched_provider", matchedProvider,
 		"selected_has_tool_support", selectedHasToolSupport,
 	)
+	attempted := 0
 	for _, p := range candidates {
 		log.DebugContext(ctx, "router trying provider",
 			"provider", string(p.Name()), "supports_tools", p.Capabilities().SupportsChatTools)
-		resp, ok, err := r.tryProvider(ctx, p, req, hasRequestedTools, selectedHasToolSupport)
+		resp, ok, err := r.tryProvider(ctx, p, req, hasRequestedTools, selectedHasToolSupport, attempted > 0)
 		if err != nil {
 			log.DebugContext(ctx, "router provider error",
 				"provider", string(p.Name()), "error", err.Error())
@@ -151,6 +156,7 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 				return spec.AIResponse{}, te.err
 			}
 			providerErrs = append(providerErrs, err)
+			attempted++
 			continue
 		}
 		if ok {

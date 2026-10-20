@@ -91,6 +91,12 @@ type AIRequest struct {
 	Model       string           `json:"model,omitempty"`
 	Role        Role             `json:"role,omitempty"`
 	TaskID      string           `json:"task_id,omitempty"`
+	// Purpose says why this call is made (SP-023 taxonomy). Empty is recorded
+	// as PurposeUnlabelled.
+	Purpose Purpose `json:"-"`
+	// Attempt is set by retry loops above the router (AttemptJSONRepair) so the
+	// record counts a repair separately from the first try.
+	Attempt AttemptKind `json:"-"`
 	// ProviderFromRole is set when applyRoleRouting injects Provider from
 	// gateway.role_models. Role-selected providers keep cascade-style tool
 	// fallback (JSON mode) instead of the explicit-provider error path.
@@ -198,8 +204,9 @@ type IntentAnalysis struct {
 
 // EmbedRequest is the provider-neutral input for embedding API calls.
 type EmbedRequest struct {
-	Input []string `json:"input"`
-	Model string   `json:"model,omitempty"`
+	Input   []string `json:"input"`
+	Model   string   `json:"model,omitempty"`
+	Purpose Purpose  `json:"-"`
 }
 
 // EmbedResponse holds embedding vectors aligned with EmbedRequest.Input order.
