@@ -72,19 +72,8 @@ func TestEachProviderAttemptGetsItsOwnRecord(t *testing.T) {
 	if len(rec.recs) != 2 {
 		t.Fatalf("got %d records, want 2 (one per provider attempt)", len(rec.recs))
 	}
-	a, b := rec.recs[0], rec.recs[1]
-	if a.Provider != "down" || a.Outcome != spec.OutcomeFailed || a.Cascade {
-		t.Errorf("first attempt = %+v, want failed on down, not cascade", a)
-	}
-	if b.Provider != "up" || b.Outcome != spec.OutcomeOK || !b.Cascade {
-		t.Errorf("second attempt = %+v, want ok on up, marked cascade", b)
-	}
-	if b.Tokens != 42 || b.CachedTokens != 3 || b.Model != "up-m" || b.InputChars != 5 {
-		t.Errorf("sizes wrong: %+v", b)
-	}
-	if b.Purpose != spec.PurposeExecTurn || b.Stage != "exec" || b.TaskID != "t1" || b.AgentID != "a1" {
-		t.Errorf("attribution wrong: %+v", b)
-	}
+	assertCascadeOutcomes(t, rec.recs[0], rec.recs[1])
+	assertAttempt(t, rec.recs[1])
 }
 
 func TestEmptyPurposeIsRecordedAsUnlabelled(t *testing.T) {
@@ -235,5 +224,25 @@ func TestGenericStructuredJSONRetryIsMarkedAsRepair(t *testing.T) {
 	}
 	if rec.recs[1].Purpose != spec.PurposeLegacyContractJSON {
 		t.Errorf("purpose = %q", rec.recs[1].Purpose)
+	}
+}
+
+func assertCascadeOutcomes(t *testing.T, a, b spec.CallRecord) {
+	t.Helper()
+	if a.Provider != "down" || a.Outcome != spec.OutcomeFailed || a.Cascade {
+		t.Errorf("first attempt = %+v, want failed on down, not cascade", a)
+	}
+	if b.Provider != "up" || b.Outcome != spec.OutcomeOK || !b.Cascade {
+		t.Errorf("second attempt = %+v, want ok on up, marked cascade", b)
+	}
+}
+
+func assertAttempt(t *testing.T, b spec.CallRecord) {
+	t.Helper()
+	if b.Tokens != 42 || b.CachedTokens != 3 || b.Model != "up-m" || b.InputChars != 5 {
+		t.Errorf("sizes wrong: %+v", b)
+	}
+	if b.Purpose != spec.PurposeExecTurn || b.Stage != "exec" || b.TaskID != "t1" || b.AgentID != "a1" {
+		t.Errorf("attribution wrong: %+v", b)
 	}
 }
