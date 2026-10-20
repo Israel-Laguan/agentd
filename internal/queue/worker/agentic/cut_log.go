@@ -16,7 +16,8 @@ type cutLogKey struct{}
 
 func withCutLog(ctx context.Context) (context.Context, *cutLog) {
 	log := &cutLog{}
-	return context.WithValue(ctx, cutLogKey{}, log), log
+	ctx = context.WithValue(ctx, cutLogKey{}, log)
+	return ctx, log
 }
 
 // noteCut records the layer when it shrank the input; a no-op without a log.
@@ -35,6 +36,8 @@ func (l *cutLog) String() string {
 }
 
 func cutsFrom(ctx context.Context) string {
-	log, _ := ctx.Value(cutLogKey{}).(*cutLog)
-	return log.String()
+	if log, ok := ctx.Value(cutLogKey{}).(*cutLog); ok {
+		return log.String()
+	}
+	return ""
 }

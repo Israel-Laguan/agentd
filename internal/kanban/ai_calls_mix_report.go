@@ -35,7 +35,10 @@ type mixScan struct {
 }
 
 func newMixScan() *mixScan {
-	return &mixScan{chars: make([]int, len(spec.AllSections())), cuts: make([]int, len(aiCutLayers))}
+	return &mixScan{
+		chars: make([]int, len(spec.AllSections())),
+		cuts:  make([]int, len(aiCutLayers)),
+	}
 }
 
 func (m *mixScan) dest() []any {
