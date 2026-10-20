@@ -149,6 +149,7 @@ func (d *DreamAgent) mergeCluster(ctx context.Context, cluster []models.Memory) 
 func (d *DreamAgent) generateMergedSummary(ctx context.Context, cluster []models.Memory) (memorySummary, error) {
 	ctx = gateway.WithHouseRules(ctx, models.LoadHouseRules(ctx, d.Store))
 	resp, err := d.Gateway.Generate(ctx, gateway.AIRequest{
+		Purpose: gateway.PurposeMaintMergeMemories,
 		Messages: []gateway.PromptMessage{
 			{Role: "system", Content: `You are given multiple similar lessons learned from past tasks. Synthesize them into one consolidated rule. If the lessons contradict each other, keep the most recent/accurate one. Output only valid JSON: {"symptom":"...","solution":"..."}.`},
 			{Role: "user", Content: mergeClusterInput(cluster)},

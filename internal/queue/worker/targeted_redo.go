@@ -37,6 +37,7 @@ func (w *Worker) buildTurnRespecRequest(
 	}
 	b.WriteString("\nOutput ONLY the revised user message text (no markdown fences, no role labels).")
 	return gateway.AIRequest{
+		Purpose: gateway.PurposeExecRespecTurn,
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: "You rewrite user task prompts for autonomous coding agents."},
 			{Role: "user", Content: b.String()},
@@ -108,6 +109,7 @@ func (w *Worker) buildRedoRequest(
 	}
 	b.WriteString("\nOutput ONLY the section body (no markers). It will be inserted between step markers.")
 	return gateway.AIRequest{
+		Purpose: gateway.PurposeExecRepairSection,
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: "You repair a single section of a multi-step agent response."},
 			{Role: "user", Content: b.String()},

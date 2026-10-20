@@ -82,6 +82,7 @@ func (r *TaskRunner) commandSuggestion(
 	profile *models.AgentProfile,
 ) (suggestedCommand, error) {
 	req := gateway.AIRequest{
+		Purpose:     gateway.PurposeExecSuggestCommand,
 		Messages:    suggestionMessages(task, profile),
 		Temperature: profile.Temperature,
 		JSONMode:    true,

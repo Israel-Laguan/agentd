@@ -32,6 +32,7 @@ func WarmupLLM(ctx context.Context, gw gateway.AIGateway, gatewayCfg GatewayConf
 	defer cancel()
 
 	resp, err := gw.Generate(warmupCtx, gateway.AIRequest{
+		Purpose:   gateway.PurposeSystemWarmup,
 		Messages:  []gateway.PromptMessage{{Role: "user", Content: "Hi"}},
 		MaxTokens: 64,
 	})

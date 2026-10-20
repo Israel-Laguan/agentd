@@ -68,6 +68,7 @@ func (d *SubagentDelegate) runSubagentStep(
 ) bool {
 	requestMessages := enforceSubagentContextBudget(*messages, def.ContextBudget, d.truncation)
 	req := gateway.AIRequest{
+		Purpose:     gateway.PurposeSubagentTurn,
 		Messages:    requestMessages,
 		Temperature: temperature,
 		Tools:       tools,

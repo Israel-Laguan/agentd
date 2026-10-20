@@ -32,6 +32,7 @@ func (cm *ContextManager) generateSummary(ctx context.Context, turns []Turn) (Tu
 		}
 	}
 	req := gateway.AIRequest{
+		Purpose: gateway.PurposeOverheadCompactContext,
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: "You are a concise summarizer for an autonomous agent. Extract key information from the provided turns into a structured JSON summary. Focus on decisions, facts, completed work, and remaining work. If files were modified or errors occurred, list them."},
 			{Role: "user", Content: b.String()},

@@ -175,6 +175,7 @@ func (e *Engine) buildAgenticRequest(
 	sessionRecoveryGen int,
 ) gateway.AIRequest {
 	req := gateway.AIRequest{
+		Purpose:        gateway.PurposeExecTurn,
 		Messages:       messages,
 		Temperature:    profile.Temperature,
 		Tools:          tools,

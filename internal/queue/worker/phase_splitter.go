@@ -107,6 +107,7 @@ Rules:
 
 func (w *Worker) buildPlanRequest(task models.Task, planContext string) gateway.AIRequest {
 	return gateway.AIRequest{
+		Purpose: gateway.PurposeExecWorkPlan,
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: planSystemPrompt},
 			{Role: "user", Content: planContext},

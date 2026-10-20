@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"agentd/internal/config"
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
@@ -123,6 +124,9 @@ func TestWorkerPhasePlanningTaskAppendsNextPhase(t *testing.T) {
 	}
 	if store.result == nil || !store.result.Success {
 		t.Fatalf("result = %#v, want success", store.result)
+	}
+	if gw.planPurpose != gateway.PurposeCreateNextPhase {
+		t.Fatalf("plan purpose = %q, want %q", gw.planPurpose, gateway.PurposeCreateNextPhase)
 	}
 	if !strings.Contains(gw.lastPlanIntent, "Plan Phase 3") {
 		t.Fatalf("last plan intent missing next phase: %q", gw.lastPlanIntent)

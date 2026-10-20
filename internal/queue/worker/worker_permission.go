@@ -73,6 +73,7 @@ func (w *Worker) requestPermissionAlternative(
 	original := w.safePermissionText(command, 500)
 	taskText := w.safePermissionText(task.Title+"\n"+task.Description, 1000)
 	response, err := w.gateway.Generate(ctx, gateway.AIRequest{
+		Purpose: gateway.PurposeExecPermissionAlt,
 		Messages: []gateway.PromptMessage{
 			{Role: "system", Content: "Return exactly one JSON object. Provide one safe non-privileged shell command that can complete the same objective, or set no_alternative=true with a brief reason. Never include sudo or any command requiring elevated privileges."},
 			{Role: "user", Content: "Task:\n" + taskText + "\n\nBlocked command:\n" + original},

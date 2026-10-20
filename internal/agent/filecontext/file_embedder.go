@@ -27,8 +27,9 @@ func (g *GatewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float3
 		return nil, errors.New("gateway is nil")
 	}
 	resp, err := g.Gateway.Embed(ctx, spec.EmbedRequest{
-		Input: texts,
-		Model: g.Model,
+		Purpose: spec.PurposeOverheadEmbedFiles,
+		Input:   texts,
+		Model:   g.Model,
 	})
 	if err != nil {
 		return nil, err

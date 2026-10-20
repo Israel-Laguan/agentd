@@ -12,6 +12,7 @@ import (
 // GeneratePlan implements spec.AIGateway.
 func (r *Router) GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error) {
 	req := spec.AIRequest{
+		Purpose: planPurpose(ctx),
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: phasePlanningPrompt(r.maxTasksPerPhase)},
 			{Role: "user", Content: userIntent},
@@ -45,4 +46,13 @@ func phasePlanningPrompt(maxTasksPerPhase int) string {
 		maxTasksPerPhase,
 		"Plan Phase 2",
 	)
+}
+
+// planPurpose lets callers of GeneratePlan (which has no purpose argument) say
+// which plan they ask for through the context; the default is a chat plan.
+func planPurpose(ctx context.Context) spec.Purpose {
+	if p := spec.PurposeFromContext(ctx); p != "" {
+		return p
+	}
+	return spec.PurposeIntakeDraftPlan
 }
