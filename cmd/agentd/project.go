@@ -147,5 +147,5 @@ func openRuntime(opts *rootOptions) (config.Config, *kanban.Store, runtimeDeps, 
 		closeStore(store)
 		return config.Config{}, nil, runtimeDeps{}, nil, fmt.Errorf("initialize runtime: %w", err)
 	}
-	return cfg, store, deps, func() { closeStore(store) }, nil
+	return cfg, store, deps, func() { deps.flushAICalls(); closeStore(store) }, nil
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"agentd/internal/aicalls"
 	"agentd/internal/bus"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
@@ -25,6 +27,7 @@ type runtimeDeps struct {
 	canceller        *queue.CancelRegistry
 	project          *services.ProjectService
 	runner           *queue.TaskRunner
+	aiCalls          *aicalls.Writer // nil when the store cannot record AI calls
 }
 
 func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, error) {
@@ -42,6 +45,7 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 		return runtimeDeps{}, fmt.Errorf("build gateway router: %w", err)
 	}
 	gw = gw.WithPhaseCap(cfg.Gateway.MaxTasksPerPhase)
+	callWriter := attachCallRecorder(gw, store)
 	if routes := cfg.Gateway.RoleRoutes(); routes != nil {
 		gw = gw.WithRoleRouting(routes)
 	}
@@ -80,6 +84,7 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 		canceller:        queue.NewCancelRegistry(),
 		project:          services.NewProjectService(store, ws).WithSourcePolicy(sandbox.SourcePolicy{Root: cfg.API.SourceRoot, AgentdHome: cfg.HomeDir}),
 		runner:           queue.NewTaskRunner(gw, store, emitter, ws, cfg.ProjectsDir),
+		aiCalls:          callWriter,
 	}, nil
 }
 
@@ -94,4 +99,29 @@ func recoveryWorkspaceReset(cfg config.Config, deps runtimeDeps) (queue.Workspac
 		return nil, fmt.Errorf("recovery.clean_workspace_on_recover: workspace manager %T cannot reset a project directory", deps.workspace)
 	}
 	return resetter, nil
+}
+
+// attachCallRecorder sends the router's per-attempt call records to the store
+// through an async writer. It returns nil, and leaves the router's debug-log
+// recorder in place, when the store does not keep ai_calls.
+func attachCallRecorder(gw *gateway.Router, store models.KanbanStore) *aicalls.Writer {
+	sink, ok := store.(aicalls.Sink)
+	if !ok {
+		return nil
+	}
+	writer := aicalls.NewWriter(sink, aicalls.Options{})
+	gw.WithRecorder(writer)
+	return writer
+}
+
+// flushAICalls writes any queued call records. Run it before the store closes.
+func (d runtimeDeps) flushAICalls() {
+	if d.aiCalls == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := d.aiCalls.Close(ctx); err != nil {
+		slog.Warn("flush ai call records", "error", err)
+	}
 }

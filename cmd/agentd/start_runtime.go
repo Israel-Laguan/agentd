@@ -163,6 +163,7 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 	board, _ := any(store).(models.KanbanBoardContract)
 	tasks := services.NewTaskService(store, board)
 	system := services.NewSystemService(summarizer, breakerProbe{breaker: deps.breaker})
+	aiUsage := newAIUsageService(store, deps)
 	system.Resetter = breakerProbe{breaker: deps.breaker}
 	system.ProviderBreakers = providerBreakersProbe{pb: deps.providerBreakers}
 	if tc, ok := store.(services.TokenCounter); ok {
@@ -179,5 +180,18 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 	if cfg.MCP.Enabled && (cfg.MCP.Transport == "http" || cfg.MCP.Transport == "both") {
 		mcpHandler = mcp.New(store).HTTPHandler()
 	}
-	return api.NewServer(api.ServerDeps{Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus, Project: deps.project, Tasks: tasks, System: system, Summarizer: summarizer, FileStash: stash, Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars, Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken, AllowedHosts: cfg.API.AllowedHosts, UIOrigin: cfg.API.UIOrigin, ProviderConfigs: providers, MCPHandler: mcpHandler, Scrubber: sandbox.NewScrubber(cfg.Sandbox.ScrubPatterns)}), nil
+	return api.NewServer(api.ServerDeps{Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus, Project: deps.project, Tasks: tasks, System: system, AIUsage: aiUsage, Summarizer: summarizer, FileStash: stash, Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars, Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken, AllowedHosts: cfg.API.AllowedHosts, UIOrigin: cfg.API.UIOrigin, ProviderConfigs: providers, MCPHandler: mcpHandler, Scrubber: sandbox.NewScrubber(cfg.Sandbox.ScrubPatterns)}), nil
+}
+
+// newAIUsageService builds the report service, or nil when the store keeps no
+// ai_calls (the route then answers 503 UNAVAILABLE).
+func newAIUsageService(store models.KanbanStore, deps runtimeDeps) *services.AIUsageService {
+	source, ok := store.(services.AIUsageSource)
+	if !ok {
+		return nil
+	}
+	if deps.aiCalls == nil {
+		return services.NewAIUsageService(source, nil)
+	}
+	return services.NewAIUsageService(source, deps.aiCalls)
 }
