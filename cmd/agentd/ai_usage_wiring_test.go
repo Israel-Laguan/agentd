@@ -92,6 +92,10 @@ func TestChatRequestProducesAICallsAndTheReportShowsThem(t *testing.T) {
 		t.Fatalf("row = %+v, want one classify_intent call of 42 tokens under a correlation ID", row)
 	}
 
+	if row.InputChars == 0 || row.MixChars["system"]+row.MixChars["task"] != row.InputChars {
+		t.Fatalf("mix = %v for %d input chars, want system and task to account for all of it", row.MixChars, row.InputChars)
+	}
+
 	out := runCLI(t, t.TempDir(), "report", "ai", "--api-url", srv.URL, "--group-by", "stage,model")
 	for _, want := range []string{"STAGE", "intake", "fake-model", "42", "dropped records: 0"} {
 		if !strings.Contains(out, want) {
