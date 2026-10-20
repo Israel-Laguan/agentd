@@ -100,6 +100,9 @@ type AIRequest struct {
 	// Attempt is set by retry loops above the router (AttemptJSONRepair) so the
 	// record counts a repair separately from the first try.
 	Attempt AttemptKind `json:"-"`
+	// TruncatedBy names the layers above the router that shortened the input
+	// (for example "agentic_head"); it only labels the call record.
+	TruncatedBy string `json:"-"`
 	// ProviderFromRole is set when applyRoleRouting injects Provider from
 	// gateway.role_models. Role-selected providers keep cascade-style tool
 	// fallback (JSON mode) instead of the explicit-provider error path.

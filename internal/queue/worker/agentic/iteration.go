@@ -36,6 +36,7 @@ func (e *Engine) processAgenticIteration(
 	sessionRecoveryNeedsPlanInject *bool,
 ) (continueLoop bool, result agentruntime.LoopResult, report bool, rewindTo int, err error) {
 	log := correlation.Logger(ctx)
+	ctx, _ = withCutLog(ctx)
 	stop, guardErr := e.guardAgenticIteration(
 		ctx, task, project, profile, messages, tools, iterationGuard, budgetGuard, deadlineGuard,
 		ctxBudgetGuard, cm, goalTracker, sessionMgr, turnID, turnIndex,

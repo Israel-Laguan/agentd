@@ -47,6 +47,10 @@ func attemptRecord(p providers.Backend, req spec.AIRequest, inputBefore int, sta
 	}
 	rec.Mix = spec.MixOf(req.Messages)
 	rec.Truncated = rec.InputChars < inputBefore
+	rec.TruncatedBy = req.TruncatedBy
+	if rec.Truncated && rec.TruncatedBy == "" {
+		rec.TruncatedBy = "router"
+	}
 	if err != nil {
 		return rec
 	}
