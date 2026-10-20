@@ -55,6 +55,9 @@ func (r *Router) GenerateStructuredJSON(ctx context.Context, prompt string, targ
 	}
 	var lastRaw string
 	for attempt := 0; attempt < correction.MaxJSONAttempts; attempt++ {
+		if attempt > 0 {
+			req.Attempt = spec.AttemptJSONRepair
+		}
 		resp, err := r.Generate(ctx, req)
 		if err != nil {
 			return err
