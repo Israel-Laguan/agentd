@@ -18,6 +18,13 @@ func (e *ProviderNotConfiguredError) Error() string {
 		e.Provider, strings.Join(e.Available, ", "))
 }
 
+// SystemProjectID and SystemProjectName identify the _system project, which
+// holds diagnostics and operator items and is never an executable workspace.
+const (
+	SystemProjectID   = "00000000-0000-0000-0000-000000000001"
+	SystemProjectName = "_system"
+)
+
 var (
 	ErrCircularDependency     = errors.New("circular task dependency")
 	ErrInvalidDraftPlan       = errors.New("invalid draft plan")

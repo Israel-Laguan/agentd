@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+
+	"agentd/internal/models"
 )
 
 const (
@@ -63,18 +65,36 @@ func loadSchedulerConfig(v *viper.Viper) (SchedulerConfig, error) {
 }
 
 // validateProjects rejects an enabled scheduler whose task resolves to no
-// project: it would land in _system, which the worker refuses to execute (B-076).
+// project, or to _system: either way it lands in _system, which the worker
+// refuses to execute (B-076).
 func (c SchedulerConfig) validateProjects() error {
-	if !c.Enabled || strings.TrimSpace(c.ProjectID) != "" {
+	if !c.Enabled {
 		return nil
 	}
+	if isSystemProject(c.ProjectID) {
+		return fmt.Errorf("agentic.scheduler.project_id %q is the _system project, which cannot run tasks", c.ProjectID)
+	}
 	for _, t := range c.Tasks {
-		if strings.TrimSpace(t.ID) == "" || strings.TrimSpace(t.ProjectID) != "" {
+		if strings.TrimSpace(t.ID) == "" {
 			continue
 		}
-		return fmt.Errorf("agentic.scheduler: task %q has no project_id and agentic.scheduler.project_id is unset; set one so the task can run", t.ID)
+		if isSystemProject(t.ProjectID) {
+			return fmt.Errorf("agentic.scheduler: task %q project_id %q is the _system project, which cannot run tasks", t.ID, t.ProjectID)
+		}
+		if strings.TrimSpace(t.ProjectID) == "" && strings.TrimSpace(c.ProjectID) == "" {
+			return fmt.Errorf("agentic.scheduler: task %q has no project_id and agentic.scheduler.project_id is unset; set one so the task can run", t.ID)
+		}
 	}
 	return nil
+}
+
+// isSystemProject reports a project_id that names the _system project, by ID or name.
+func isSystemProject(id string) bool {
+	switch strings.TrimSpace(id) {
+	case models.SystemProjectID, models.SystemProjectName:
+		return true
+	}
+	return false
 }
 
 func loadSchedulerTasks(v *viper.Viper) ([]SchedulerTaskConfig, error) {
