@@ -79,3 +79,31 @@ func parseReportTime(name, value string) (t time.Time, dateOnly bool, err error)
 	}
 	return time.Time{}, false, fmt.Errorf("%s must be YYYY-MM-DD or RFC3339, got %q", name, value)
 }
+
+// ToolUseReport handles GET /api/v1/reports/tool-use: tool calls by tool and
+// the files a task read more than once. Query params (all optional): task_id,
+// from, to (same rules as the AI usage report).
+func (h ReportsHandler) ToolUseReport(w http.ResponseWriter, r *http.Request) {
+	v := r.URL.Query()
+	q := models.ToolUseQuery{TaskID: v.Get("task_id")}
+	var err error
+	if q.From, _, err = parseReportTime("from", v.Get("from")); err == nil {
+		var dateOnly bool
+		if q.To, dateOnly, err = parseReportTime("to", v.Get("to")); err == nil && dateOnly {
+			q.To = q.To.AddDate(0, 0, 1)
+		}
+	}
+	if err != nil {
+		httpx.WriteValidationError(w, http.StatusBadRequest, httpx.CodeValidation, err.Error(), nil)
+		return
+	}
+	report, err := h.AIUsage.ToolUse(r.Context(), q)
+	switch {
+	case errors.Is(err, services.ErrAIUsageUnavailable):
+		httpx.WriteError(w, http.StatusServiceUnavailable, httpx.CodeUnavailable, "tool use report is not available")
+	case err != nil:
+		httpx.WriteMappedError(w, err)
+	default:
+		httpx.WriteSuccess(w, http.StatusOK, report, nil)
+	}
+}

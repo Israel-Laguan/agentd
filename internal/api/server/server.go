@@ -142,6 +142,7 @@ func handleDocs(w http.ResponseWriter, _ *http.Request) {
 <li>POST /api/v1/tasks/{id}/assign, /split, /retry, /human-resolution</li>
 <li>GET /api/v1/agents, POST /api/v1/agents, GET/PATCH/DELETE /api/v1/agents/{id}, GET /api/v1/gateway/providers</li>
 <li>GET /api/v1/reports/ai-usage</li>
+<li>GET /api/v1/reports/tool-use</li>
 <li>GET /api/v1/system/status, POST /api/v1/system/breaker/reset</li>
 <li>GET /api/v1/events/stream (SSE), POST /api/v1/preferences</li>
 </ul>
@@ -240,6 +241,7 @@ func registerReportRoutes(mux *http.ServeMux, deps ServerDeps) {
 	usage := resolveAIUsageService(deps)
 	reports := controllers.ReportsHandler{AIUsage: usage}
 	mux.HandleFunc("GET /api/v1/reports/ai-usage", reports.AIUsageReport)
+	mux.HandleFunc("GET /api/v1/reports/tool-use", reports.ToolUseReport)
 }
 
 func resolveAIUsageService(deps ServerDeps) *services.AIUsageService {

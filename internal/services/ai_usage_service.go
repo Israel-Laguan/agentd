@@ -15,6 +15,24 @@ type AIUsageSource interface {
 	AIUsageReport(ctx context.Context, q models.AIUsageQuery) (models.AIUsageReport, error)
 }
 
+// ToolUseSource aggregates stored tool calls. The kanban store implements it.
+type ToolUseSource interface {
+	ToolUseReport(ctx context.Context, q models.ToolUseQuery) (models.ToolUseReport, error)
+}
+
+// ToolUse aggregates tool calls and repeated reads. It needs a source that
+// also keeps tool calls; the kanban store does.
+func (s *AIUsageService) ToolUse(ctx context.Context, q models.ToolUseQuery) (models.ToolUseReport, error) {
+	if s == nil {
+		return models.ToolUseReport{}, ErrAIUsageUnavailable
+	}
+	src, ok := s.source.(ToolUseSource)
+	if !ok {
+		return models.ToolUseReport{}, ErrAIUsageUnavailable
+	}
+	return src.ToolUseReport(ctx, q)
+}
+
 // DropCounter reports how many call records the writer discarded.
 type DropCounter interface {
 	Dropped() uint64
