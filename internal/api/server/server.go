@@ -65,7 +65,6 @@ func NewHandler(deps ServerDeps) http.Handler {
 	preferences := controllers.PreferencesHandler{Store: deps.Store}
 	system := controllers.SystemHandler{System: resolveSystemService(deps)}
 	agents := controllers.AgentHandler{Service: resolveAgentService(deps)}
-	reports := controllers.ReportsHandler{AIUsage: resolveAIUsageService(deps)}
 	gway := controllers.GatewayHandler{Configs: toProviderEntries(deps.ProviderConfigs)}
 
 	mux.HandleFunc("GET /api/v1/projects", projects.List)
@@ -87,7 +86,7 @@ func NewHandler(deps ServerDeps) http.Handler {
 	mux.HandleFunc("PATCH /api/v1/agents/{id}", agents.Patch)
 	mux.HandleFunc("DELETE /api/v1/agents/{id}", agents.Delete)
 	mux.HandleFunc("GET /api/v1/gateway/providers", gway.List)
-	mux.HandleFunc("GET /api/v1/reports/ai-usage", reports.AIUsageReport)
+	registerReportRoutes(mux, deps)
 	mux.HandleFunc("GET /api/v1/system/status", system.Get)
 	mux.HandleFunc("POST /api/v1/system/breaker/reset", system.Reset)
 	mux.HandleFunc("GET /api/v1/events/stream", stream.ServeHTTP)
@@ -234,6 +233,13 @@ func resolveTaskService(deps ServerDeps) *services.TaskService {
 		svc = svc.WithBus(bus.TaskBridge{Bus: deps.Bus})
 	}
 	return svc
+}
+
+// registerReportRoutes mounts the read-only report endpoints.
+func registerReportRoutes(mux *http.ServeMux, deps ServerDeps) {
+	usage := resolveAIUsageService(deps)
+	reports := controllers.ReportsHandler{AIUsage: usage}
+	mux.HandleFunc("GET /api/v1/reports/ai-usage", reports.AIUsageReport)
 }
 
 func resolveAIUsageService(deps ServerDeps) *services.AIUsageService {

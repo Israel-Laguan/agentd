@@ -29,7 +29,10 @@ type AIUsageService struct {
 // NewAIUsageService builds the service. Both arguments may be nil: no source
 // makes Report fail with ErrAIUsageUnavailable, no counter reports 0 dropped.
 func NewAIUsageService(source AIUsageSource, drops DropCounter) *AIUsageService {
-	return &AIUsageService{source: source, drops: drops}
+	return &AIUsageService{
+		source: source,
+		drops:  drops,
+	}
 }
 
 // Report validates the query, groups by purpose when no dimension is given,

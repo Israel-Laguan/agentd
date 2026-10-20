@@ -47,7 +47,10 @@ const (
 
 // AIUsageDimensions lists every valid GroupBy name.
 func AIUsageDimensions() []string {
-	return []string{AIDimPurpose, AIDimStage, AIDimModel, AIDimDay, AIDimTask, AIDimRequest}
+	return []string{
+		AIDimPurpose, AIDimStage, AIDimModel,
+		AIDimDay, AIDimTask, AIDimRequest,
+	}
 }
 
 // AIUsageQuery filters and groups the AI usage report. Zero filters match
