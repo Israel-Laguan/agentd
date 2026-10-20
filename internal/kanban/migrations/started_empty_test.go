@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"testing"
 )
 
@@ -52,7 +53,7 @@ func TestMigrateToV20_AddsProjectStartedEmpty(t *testing.T) {
 	if err := Run(ctx, db, projectsDir); err != nil {
 		t.Fatalf("second Run() error = %v", err)
 	}
-	assertSchemaVersion(t, db, ctx, "20")
+	assertSchemaVersion(t, db, ctx, strconv.Itoa(currentSchemaVersion))
 }
 
 func TestMigrateToV20_WithoutProjectsTable(t *testing.T) {
