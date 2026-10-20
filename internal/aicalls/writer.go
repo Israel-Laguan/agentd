@@ -83,7 +83,12 @@ func (w *Writer) Record(rec spec.CallRecord) {
 
 // Dropped is how many records were discarded since the writer started: buffer
 // full, written after Close, or lost to a failed insert.
-func (w *Writer) Dropped() uint64 { return w.dropped.Load() }
+func (w *Writer) Dropped() uint64 {
+	if w == nil {
+		return 0
+	}
+	return w.dropped.Load()
+}
 
 // Close stops accepting records, writes what is queued, and waits for the
 // writer to finish or ctx to end. It is safe to call more than once.
