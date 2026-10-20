@@ -51,7 +51,11 @@ def configured_tool_calls(body: dict) -> list:
         except (binascii.Error, ValueError):
             return []
         if not isinstance(calls, list) or not all(
-            isinstance(c, dict) and isinstance(c.get("name"), str) and c["name"] for c in calls
+            isinstance(c, dict)
+            and isinstance(c.get("name"), str)
+            and c["name"]
+            and isinstance(c.get("arguments", {}), dict)
+            for c in calls
         ):
             return []
         return calls
