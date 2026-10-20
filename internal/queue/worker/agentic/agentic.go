@@ -137,16 +137,21 @@ func (e *Engine) generateAgenticTurn(
 	// example, a compressing retry appends a note). Reserve its space by
 	// cutting working messages, keeping the anchor, corrections, and summary.
 	if e.config.CharacterBudget > 0 {
+		before := agentcontext.TotalChars(req.Messages)
 		req.Messages = agentcontext.EnforceBudget(req.Messages, e.config.CharacterBudget, e.config.ContextTruncation)
+		noteCut(ctx, "strategy_budget", before, agentcontext.TotalChars(req.Messages))
 	}
 	// SkipTruncation leaves the gateway's own cut off, so enforce the message
 	// count (and any budget left after fixed context) here before generation.
+	before := agentcontext.TotalChars(req.Messages)
 	truncated, err := e.applyAgenticTruncation(ctx, req.Messages)
+	noteCut(ctx, "agentic_head", before, agentcontext.TotalChars(truncated))
 	if err != nil {
 		e.host.HandleGatewayError(ctx, task, err)
 		return gateway.AIResponse{}, nil, err
 	}
 	req.Messages = truncated
+	req.TruncatedBy = cutsFrom(ctx)
 	correlation.Logger(ctx).DebugContext(ctx, "agentic: llm call start",
 		"task_id", task.ID, "turn_index", turnIndex,
 		"provider", req.Provider, "model", req.Model,

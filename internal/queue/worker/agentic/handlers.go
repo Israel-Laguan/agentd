@@ -39,6 +39,7 @@ func (e *Engine) prepareAgenticIteration(
 	// what cannot be cut (anchor, summary, corrections) is still too large.
 	warn, _ := ctxBudgetGuard.Check(agentcontext.TotalChars(*messages))
 
+	rawChars := agentcontext.TotalChars(*messages)
 	var prepared []gateway.PromptMessage
 	if warn {
 		prepared, err = cm.PrepareContextForceSummarize(ctx, *messages)
@@ -48,10 +49,13 @@ func (e *Engine) prepareAgenticIteration(
 	if err != nil {
 		return false, err
 	}
+	noteCut(ctx, "working_zone", rawChars, agentcontext.TotalChars(prepared))
+	before := agentcontext.TotalChars(prepared)
 	prepared, err = e.applyAgenticTruncation(ctx, prepared)
 	if err != nil {
 		return false, err
 	}
+	noteCut(ctx, "agentic_head", before, agentcontext.TotalChars(prepared))
 	*messages = prepared
 
 	_, exhausted := ctxBudgetGuard.Check(agentcontext.TotalChars(*messages))
