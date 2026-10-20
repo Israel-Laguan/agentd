@@ -14,6 +14,7 @@ const scopeAnalyzerSystemPrompt = "You are the Frontdesk scope analyzer. Return 
 // AnalyzeScope implements spec.AIGateway.
 func (r *Router) AnalyzeScope(ctx context.Context, userIntent string) (*spec.ScopeAnalysis, error) {
 	req := spec.AIRequest{
+		Purpose: spec.PurposeIntakeAnalyzeScope,
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: scopeAnalyzerSystemPrompt},
 			{Role: "user", Content: userIntent},

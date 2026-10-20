@@ -37,6 +37,7 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 	slog.DebugContext(ctx, "intake: processing comment",
 		"task_id", ref.TaskID, "project_id", task.ProjectID)
 	ctx = gateway.WithHouseRules(ctx, models.LoadHouseRules(ctx, p.store))
+	ctx = gateway.WithPurpose(ctx, gateway.PurposeCreateReplanComment)
 	intent, err := p.commentIntent(ctx, ref)
 	if err != nil {
 		slog.WarnContext(ctx, "intake: failed to build intent", "task_id", ref.TaskID, "error", err)

@@ -70,6 +70,7 @@ func (w *Worker) buildBatchRequest(
 	}
 
 	req := gateway.AIRequest{
+		Purpose: gateway.PurposeExecBatch,
 		Messages: []gateway.PromptMessage{
 			{Role: "system", Content: system},
 			{Role: "user", Content: batchUserPrompt(tasks)},

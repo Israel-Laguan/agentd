@@ -91,6 +91,7 @@ func (w *Worker) command(ctx context.Context, task models.Task, project models.P
 	messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
 	messages = w.PrependSandboxViolationFeedback(ctx, task, messages)
 	req := gateway.AIRequest{
+		Purpose:     gateway.PurposeExecLegacyCommand,
 		Messages:    messages,
 		Temperature: profile.Temperature,
 		JSONMode:    true,

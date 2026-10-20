@@ -28,6 +28,7 @@ var validIntents = map[string]bool{
 // ClassifyIntent implements spec.AIGateway.
 func (r *Router) ClassifyIntent(ctx context.Context, userIntent string) (*spec.IntentAnalysis, error) {
 	req := spec.AIRequest{
+		Purpose: spec.PurposeIntakeClassifyIntent,
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: intentClassifierSystemPrompt},
 			{Role: "user", Content: userIntent},

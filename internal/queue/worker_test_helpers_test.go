@@ -23,6 +23,7 @@ type fakeGateway struct {
 	plan           *models.DraftPlan
 	planCalls      int
 	lastPlanIntent string
+	planPurpose    gateway.Purpose
 	toolCalls      []gateway.ToolCall
 	nextToolCalls  []gateway.ToolCall
 	// onRequest runs inside Generate, so a test can change the world between the
@@ -76,11 +77,12 @@ func (g *fakeGateway) Generate(_ context.Context, req gateway.AIRequest) (gatewa
 	return gateway.AIResponse{Content: content, ToolCalls: toolCalls}, g.err
 }
 
-func (g *fakeGateway) GeneratePlan(_ context.Context, intent string) (*models.DraftPlan, error) {
+func (g *fakeGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.planCalls++
 	g.lastPlanIntent = intent
+	g.planPurpose = gateway.PurposeFromContext(ctx)
 	if g.plan != nil {
 		return g.plan, g.err
 	}

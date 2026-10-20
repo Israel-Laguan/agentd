@@ -197,3 +197,26 @@ func TestEmbedAttemptsAreRecordedWithPurpose(t *testing.T) {
 		t.Errorf("outcomes = %q/%q cascade=%v", rec.recs[0].Outcome, rec.recs[1].Outcome, rec.recs[1].Cascade)
 	}
 }
+
+const onePlan = `{"project_name":"p","description":"d","tasks":[{"title":"t","description":"d"}]}`
+
+func TestGeneratePlanTakesItsPurposeFromContext(t *testing.T) {
+	cases := []struct {
+		name string
+		ctx  context.Context
+		want spec.Purpose
+	}{
+		{"default is a chat plan", context.Background(), spec.PurposeIntakeDraftPlan},
+		{"next phase", spec.WithPurpose(context.Background(), spec.PurposeCreateNextPhase), spec.PurposeCreateNextPhase},
+	}
+	for _, tc := range cases {
+		p := &scriptedProvider{name: "p", replies: []scriptedReply{{content: onePlan}}}
+		rec := &sliceRecorder{}
+		if _, err := NewRouter(p).WithRecorder(rec).GeneratePlan(tc.ctx, "build it"); err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if len(rec.recs) != 1 || rec.recs[0].Purpose != tc.want {
+			t.Errorf("%s: records = %+v, want purpose %q", tc.name, rec.recs, tc.want)
+		}
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	agentcontext "agentd/internal/agent/context"
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/sandbox"
@@ -75,7 +76,7 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		return
 	}
 	intent := planning.BuildPhaseIntent(task, project, tasks)
-	plan, err := w.gateway.GeneratePlan(ctx, intent)
+	plan, err := w.gateway.GeneratePlan(gateway.WithPurpose(ctx, gateway.PurposeCreateNextPhase), intent)
 	if err != nil {
 		w.HandleGatewayError(ctx, task, err)
 		return

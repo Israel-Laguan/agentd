@@ -45,6 +45,7 @@ func (l *Librarian) summarize(ctx context.Context, rawLog string) (memorySummary
 
 func (l *Librarian) mapChunk(ctx context.Context, chunk string) (string, error) {
 	resp, err := l.Gateway.Generate(ctx, gateway.AIRequest{
+		Purpose: gateway.PurposeMaintSummarizeLog,
 		Messages: []gateway.PromptMessage{
 			{Role: "system", Content: "Summarize this task execution log chunk. Preserve errors, commands, outcomes, key decisions, and any environment observations. Output only the summary."},
 			{Role: "user", Content: chunk},
@@ -61,6 +62,7 @@ func (l *Librarian) mapChunk(ctx context.Context, chunk string) (string, error) 
 
 func (l *Librarian) reduceText(ctx context.Context, text string) (string, error) {
 	resp, err := l.Gateway.Generate(ctx, gateway.AIRequest{
+		Purpose: gateway.PurposeMaintSummarizeLog,
 		Messages: []gateway.PromptMessage{
 			{Role: "system", Content: "Condense the following summaries of a task execution log into a single coherent summary. Preserve errors, final outcomes, and key decisions. Output only the condensed summary."},
 			{Role: "user", Content: text},
@@ -77,6 +79,7 @@ func (l *Librarian) reduceText(ctx context.Context, text string) (string, error)
 
 func (l *Librarian) extractMemory(ctx context.Context, condensed string) (memorySummary, error) {
 	resp, err := l.Gateway.Generate(ctx, gateway.AIRequest{
+		Purpose: gateway.PurposeMaintExtractMemory,
 		Messages: []gateway.PromptMessage{
 			{Role: "system", Content: `Given these summarized task execution logs, produce a JSON object with two fields:
 - "symptom": describes what the task attempted and any failures encountered.

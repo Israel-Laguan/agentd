@@ -47,6 +47,7 @@ func (tg *TopicGuard) DetectDrift(
 
 	prompt := buildTopicDriftPrompt(sessionTopic, newInput, tg.cfg.Sensitivity)
 	req := gateway.AIRequest{
+		Purpose: gateway.PurposeOverheadTopicDrift,
 		Messages: []gateway.PromptMessage{
 			{Role: "system", Content: "You classify whether two messages are about completely different topics. Reply with exactly YES or NO."},
 			{Role: "user", Content: prompt},

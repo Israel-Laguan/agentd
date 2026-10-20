@@ -16,6 +16,7 @@ var _ spec.ContractAdapter = (*Router)(nil)
 // GenerateText adapts the proposal contract to the existing provider router.
 func (r *Router) GenerateText(ctx context.Context, prompt string, limit int) (string, error) {
 	resp, err := r.Generate(ctx, spec.AIRequest{
+		Purpose:     spec.PurposeLegacyContractText,
 		Messages:    []spec.PromptMessage{{Role: "user", Content: prompt}},
 		MaxTokens:   limit,
 		Temperature: 0.2,
@@ -43,6 +44,7 @@ func (r *Router) GenerateStructuredJSON(ctx context.Context, prompt string, targ
 		return nil
 	}
 	req := spec.AIRequest{
+		Purpose: spec.PurposeLegacyContractJSON,
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: "Output ONLY valid JSON matching the requested schema."},
 			{Role: "user", Content: prompt},

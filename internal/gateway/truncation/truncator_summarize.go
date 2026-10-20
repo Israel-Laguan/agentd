@@ -41,6 +41,7 @@ func (t SummarizeTruncator) summarizeOrFallback(ctx context.Context, content str
 	summaryCtx, cancel := context.WithTimeout(ctx, summarizeTimeout)
 	defer cancel()
 	resp, err := t.Gateway.Generate(summaryCtx, spec.AIRequest{
+		Purpose: spec.PurposeHiddenTruncateSummary,
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: "Summarize the following content concisely, preserving key facts, decisions, and action items. Output only the summary."},
 			{Role: "user", Content: content},

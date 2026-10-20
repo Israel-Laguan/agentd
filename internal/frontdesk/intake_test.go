@@ -165,14 +165,21 @@ func TestIntakeProcessorGeneratePlanFallback(t *testing.T) {
 	if err := p.Process(ctx, models.CommentRef{TaskID: task.ID, CommentEventID: "x", Body: "go"}); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
+	if gw.purpose != gateway.PurposeCreateReplanComment {
+		t.Fatalf("plan purpose = %q, want %q", gw.purpose, gateway.PurposeCreateReplanComment)
+	}
 }
 
-type stubPlanOnlyGW struct{ out *models.DraftPlan }
+type stubPlanOnlyGW struct {
+	out     *models.DraftPlan
+	purpose gateway.Purpose
+}
 
 func (*stubPlanOnlyGW) Generate(context.Context, gateway.AIRequest) (gateway.AIResponse, error) {
 	return gateway.AIResponse{}, nil
 }
-func (g *stubPlanOnlyGW) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
+func (g *stubPlanOnlyGW) GeneratePlan(ctx context.Context, _ string) (*models.DraftPlan, error) {
+	g.purpose = gateway.PurposeFromContext(ctx)
 	return g.out, nil
 }
 func (*stubPlanOnlyGW) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {

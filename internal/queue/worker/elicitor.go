@@ -71,6 +71,7 @@ func (e *Elicitor) Analyze(ctx context.Context, task models.Task, project models
 	}
 	userContent := buildElicitationUserContent(task, project, fileContext)
 	req := gateway.AIRequest{
+		Purpose: gateway.PurposeCreateElicit,
 		Messages: []gateway.PromptMessage{
 			{Role: "system", Content: elicitorSystemPrompt},
 			{Role: "user", Content: userContent},
