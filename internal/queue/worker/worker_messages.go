@@ -32,7 +32,7 @@ func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, project
 	}
 	recalled := w.retriever.Recall(ctx, intent, projectID, userID)
 	if lessons := memoryFormatLessons(recalled); lessons != "" {
-		messages = append(messages, gateway.PromptMessage{Role: "system", Content: lessons})
+		messages = append(messages, gateway.PromptMessage{Role: "system", Content: lessons, Section: gateway.SectionMemories})
 	}
 	// Preferences are formatted separately from lessons: memoryFormatLessons
 	// deliberately skips USER_PREFERENCE rows, so without this they would be
@@ -40,7 +40,7 @@ func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, project
 	// memory.FormatPreferences is shared with the chat planner so both render
 	// preferences identically.
 	if prefs := memory.FormatPreferences(recalled); prefs != "" {
-		messages = append(messages, gateway.PromptMessage{Role: "system", Content: prefs})
+		messages = append(messages, gateway.PromptMessage{Role: "system", Content: prefs, Section: gateway.SectionMemories})
 	}
 	return messages
 }
@@ -182,8 +182,8 @@ func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Ta
 	systemPrompt := w.buildSystemPromptContent(task, project, profile)
 	userContent := fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
 	messages := []gateway.PromptMessage{
-		gateway.PromptMessage{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: userContent},
+		{Role: "system", Content: systemPrompt, Section: gateway.SectionSystem},
+		{Role: "user", Content: userContent, Section: gateway.SectionTask},
 	}
 	intent := task.Title + " " + task.Description
 	return w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages)
@@ -201,8 +201,8 @@ func (w *Worker) AssembleAgenticSystemPromptWithUserContent(
 	// Topic drift resets use the new user input as anchor.
 	systemPrompt := w.buildSystemPromptContent(task, project, profile)
 	messages := []gateway.PromptMessage{
-		gateway.PromptMessage{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: userContent},
+		{Role: "system", Content: systemPrompt, Section: gateway.SectionSystem},
+		{Role: "user", Content: userContent, Section: gateway.SectionTask},
 	}
 	intent := task.Title + " " + task.Description
 	return w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages)

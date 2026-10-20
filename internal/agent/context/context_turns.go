@@ -79,7 +79,7 @@ func (cm *ContextManager) applyRollingSummarization(ctx context.Context, anchor 
 		return nil, fmt.Errorf("summarize turns: %w", err)
 	}
 	out := append([]spec.PromptMessage{}, anchor...)
-	out = append(out, spec.PromptMessage{Role: "system", Content: cm.formatSummary(summary)})
+	out = append(out, spec.PromptMessage{Role: "system", Content: cm.formatSummary(summary), Section: spec.SectionHistory})
 	for _, t := range workingTurns {
 		out = append(out, t.Messages...)
 	}
