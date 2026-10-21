@@ -171,6 +171,10 @@ Two distinct failure shapes, and clients need to tell them apart:
 
 1. The agent can now list tasks, read project state, add comments, and transition tasks — all through the MCP protocol while agentd maintains board ownership.
 
+## Driving agents over ACP
+
+What opencode and cline did when agentd acted as their ACP client with this server attached is recorded in [`acp-agents.md`](acp-agents.md).
+
 ## Debug logging
 
 Set `log_level: debug` or use `-v` to trace MCP tool calls:
