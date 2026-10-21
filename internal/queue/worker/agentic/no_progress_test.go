@@ -21,8 +21,9 @@ import (
 // when vary is set, so a test can pick a same-result or a changing-result run.
 type countingHost struct {
 	*noopHost
-	vary  bool
-	calls int
+	vary   bool
+	failed bool // answer with an error result instead of a success
+	calls  int
 }
 
 func (h *countingHost) DispatchToolWithHooks(
@@ -34,6 +35,9 @@ func (h *countingHost) DispatchToolWithHooks(
 	if h.vary {
 		out = fmt.Sprintf("out-%d", h.calls)
 	}
+	if h.failed {
+		return agenttools.ErrorResult(call.ID, out, "EXIT_127", 0), false
+	}
 	return agenttools.SuccessResult(call.ID, out, 0), false
 }
 
@@ -43,6 +47,7 @@ func dispatchSameCall(t *testing.T, e *Engine, turns int) (bool, agentruntime.Lo
 	t.Helper()
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-loop", UpdatedAt: time.Now()}, ProjectID: "proj"}
 	cm := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent", task.ID)
+	streak := agenttools.NewToolFailureTracker(3) // one per run, as in the real loop
 	var (
 		abort, report bool
 		result        agentruntime.LoopResult
@@ -55,7 +60,7 @@ func dispatchSameCall(t *testing.T, e *Engine, turns int) (bool, agentruntime.Lo
 		}}}
 		abort, result, report = e.handleAgenticToolCalls(
 			context.Background(), task, models.AgentProfile{}, "", resp, &messages, nil, nil, nil, nil, cm,
-			agenttools.NewToolFailureTracker(3), turn, agentruntime.NewBudgetGuard(nil, task.ID),
+			streak, turn, agentruntime.NewBudgetGuard(nil, task.ID),
 		)
 		if abort {
 			return abort, result, report
@@ -95,5 +100,18 @@ func TestHandleAgenticToolCalls_RepeatedCallWithNewResultsContinues(t *testing.T
 	twice := &Engine{config: Config{Store: testutil.NewFakeStore()}, host: &countingHost{noopHost: &noopHost{}}}
 	if abort, _, _ := dispatchSameCall(t, twice, 2); abort {
 		t.Fatal("stopped after only two identical results")
+	}
+}
+
+// With tool_failure_streak at 3, three identical error results also complete a
+// failure streak. The repeat check must win: a failure streak takes the retry
+// path, which would run the same cycle again.
+func TestHandleAgenticToolCalls_RepeatedSameErrorIsNoProgressNotAStreak(t *testing.T) {
+	t.Parallel()
+	e := &Engine{config: Config{Store: testutil.NewFakeStore()}, host: &countingHost{noopHost: &noopHost{}, failed: true}}
+
+	abort, result, _ := dispatchSameCall(t, e, 3)
+	if !abort || result.Meta.ErrorCode != agenttools.ToolErrorCodeNoProgress {
+		t.Fatalf("abort = %v code = %q after 3 identical errors, want %q", abort, result.Meta.ErrorCode, agenttools.ToolErrorCodeNoProgress)
 	}
 }

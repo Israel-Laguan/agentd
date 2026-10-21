@@ -9,23 +9,31 @@ import (
 	"agentd/internal/gateway"
 )
 
-// toolLoopStop ends the loop after a fatal tool result, a failure streak on
-// one tool, or a no-progress repeat; nil means the loop goes on.
+// toolLoopStop ends the loop after a fatal tool result, a no-progress repeat,
+// or a failure streak on one tool, in that order; nil means the loop goes on.
+// The repeat check comes before the streak: identical errors also complete a
+// streak, whose retry path would only run the same cycle again.
 func (e *Engine) toolLoopStop(
 	call gateway.ToolCall, tr agenttools.ToolResult, contextContent string, toolTracker *agenttools.ToolFailureTracker,
 	turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages *[]gateway.PromptMessage,
 ) *agentruntime.LoopResult {
-	if failed, _ := toolTracker.Record(call.Function.Name, tr.Status); failed || tr.Status == agenttools.ToolStatusFatal {
-		meta := agentruntime.BuildLoopMeta(
-			turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(*messages), 0,
-			contextContent, call.Function.Name, "",
-		)
-		if tr.Error != nil {
-			meta.ErrorCode = tr.Error.Code
+	streakFailed, _ := toolTracker.Record(call.Function.Name, tr.Status)
+	if tr.Status != agenttools.ToolStatusFatal {
+		if stop := e.noProgressStop(call, contextContent, turnIndex, budgetGuard, messages); stop != nil {
+			return stop
 		}
-		return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
+		if !streakFailed {
+			return nil
+		}
 	}
-	return e.noProgressStop(call, contextContent, turnIndex, budgetGuard, messages)
+	meta := agentruntime.BuildLoopMeta(
+		turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(*messages), 0,
+		contextContent, call.Function.Name, "",
+	)
+	if tr.Error != nil {
+		meta.ErrorCode = tr.Error.Code
+	}
+	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
 }
 
 // noProgressStop ends the loop when this exact call has now returned this
