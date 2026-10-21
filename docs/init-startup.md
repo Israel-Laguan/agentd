@@ -5,7 +5,7 @@ This note captures the startup path validated during the bootstrap work and the 
 ## Findings
 
 - `agentd init` prepares the local home directory, creates or preserves the cron file, opens the SQLite database, applies migrations, and seeds the default agent profiles.
-- `agentd start` performs the same runtime preflight, validates provider availability, warms up the active LLM provider, binds the API port, runs boot reconciliation, and then starts the daemon loops.
+- `agentd start` performs the same runtime preflight, validates provider availability, binds the API port, warms up the active LLM provider (while `/health` reports `warming_up`), runs boot reconciliation, and then starts the daemon loops.
 - The most common startup failures we observed were a stale API key, an unavailable model, and an occupied API port.
 - CLI failures now print a short human summary plus technical details so users can fix simple issues without re-running in verbose mode.
 

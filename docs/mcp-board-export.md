@@ -173,7 +173,7 @@ Two distinct failure shapes, and clients need to tell them apart:
 
 ## Driving agents over ACP
 
-What opencode and cline did when agentd acted as their ACP client with this server attached is recorded in [`acp-agents.md`](acp-agents.md).
+What opencode and cline did when agentd acted as their ACP client is recorded in [`acp-agents.md`](acp-agents.md). Those runs did not use this board-export server: each session attached a throwaway contract server (`report_outcome`, plus `submit_plan`, `submit_tasks` and `ask_human` for the stage comparison). One opencode run reached this server with its full board tools, and it is identified as such there.
 
 ## Debug logging
 

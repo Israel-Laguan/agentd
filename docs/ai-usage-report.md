@@ -147,7 +147,12 @@ each layer (a call can be cut by more than one):
 Compare `INPUT_CHARS` per call with these limits. The 12,000-character layers
 (`BUDGET`, `HEAD`) sit below the 60,000-character working-zone default. One
 measurement at product defaults (2026-10-21: 3 read-heavy tasks, 11 agentic
-calls) found `HEAD` cut 8 calls, `ZONE` 2, `BUDGET` 0 and `ROUTER` 0. The e2e
+calls) found `HEAD` cut 8 calls, `ZONE` 2, `BUDGET` 0 and `ROUTER` 0. Setup: a
+local daemon with no `queue` overrides (working zone 60,000 = 10,000 + 40,000 +
+10,000; `agentic_character_budget` 0, so 12,000; `agentic_truncator_max` 30), an
+agentic profile on Nemotron 3 Ultra (free) via OpenRouter, and a task that reads
+10 named Go files (93,511 bytes) and writes `SUMMARY.md`. Per run, as
+`exec.turn` calls / `HEAD` / `ZONE`: 2 / 1 / 1, 5 / 4 / 0, 4 / 3 / 1. The e2e
 profile sets a 10,000-character working zone, where `ZONE` cuts first. The
 report states what happened and does not change a limit.
 
