@@ -32,6 +32,10 @@ type FeasibilityClarification struct {
 	Reason  string `json:"reason,omitempty"`
 }
 
+// vagueRequestQuestion ends every refusal of a request too vague to plan, so
+// the user always gets the same specific question back (B-085).
+const vagueRequestQuestion = `Describe it like "add input validation to the signup form" or "make the home page load in under one second": what should change in which part of the workspace, and how will you know it is done?`
+
 // ErrMultipleApprovedScopes is returned when the caller passes more than one
 // approved scope in a single turn.
 var ErrMultipleApprovedScopes = errors.New("invalid approved scopes request")
@@ -81,13 +85,13 @@ func (p *Planner) PlanContent(
 	case "status_check":
 		return p.statusReport(ctx)
 	case "out_of_scope":
-		msg := "This request cannot be turned into a concrete software project for agentd, or it is too vague to plan safely. Describe a specific app, script, API, or refactor you want built in your workspace."
+		msg := "This request cannot be turned into a concrete software project for agentd, or it is too vague to plan safely."
 		if strings.TrimSpace(classification.Reason) != "" {
 			msg += " (" + strings.TrimSpace(classification.Reason) + ")"
 		}
 		return json.Marshal(FeasibilityClarification{
 			Kind:    "feasibility_clarification",
-			Message: msg,
+			Message: msg + " " + vagueRequestQuestion,
 			Reason:  classification.Reason,
 		})
 	case "plan_request":
@@ -95,7 +99,7 @@ func (p *Planner) PlanContent(
 	default:
 		return json.Marshal(IntentClarification{
 			Kind:    "intent_clarification",
-			Message: "I'm not sure what you need. You can ask for a status update or describe work you'd like to plan.",
+			Message: "I'm not sure what you need. You can ask for a status update, or describe work to plan. " + vagueRequestQuestion,
 		})
 	}
 }

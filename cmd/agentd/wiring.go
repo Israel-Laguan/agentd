@@ -59,13 +59,15 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 	}
 	slog.Info("connector topology", "topology", cfg.Gateway.ConnectorTopology(providerConfigs))
 	sb := &sandbox.BashExecutor{
-		Root:        cfg.ProjectsDir,
-		Sink:        bus.EventBridge{Emitter: emitter},
-		Backend:     cfg.Sandbox.Backend,
-		Inactivity:  cfg.Sandbox.InactivityTimeout,
-		KillGrace:   cfg.Sandbox.KillGrace,
-		MaxLogBytes: cfg.Sandbox.MaxLogBytes,
-		Scrubber:    sandbox.NewScrubber(cfg.Sandbox.ScrubPatterns),
+		Root:    cfg.ProjectsDir,
+		Sink:    bus.EventBridge{Emitter: emitter},
+		Backend: cfg.Sandbox.Backend,
+		// B-081: toolchains installed outside /usr (e.g. ~/.local/go).
+		ToolchainPaths: cfg.Sandbox.ToolchainPaths,
+		Inactivity:     cfg.Sandbox.InactivityTimeout,
+		KillGrace:      cfg.Sandbox.KillGrace,
+		MaxLogBytes:    cfg.Sandbox.MaxLogBytes,
+		Scrubber:       sandbox.NewScrubber(cfg.Sandbox.ScrubPatterns),
 		Limits: sandbox.ResourceLimits{
 			AddressSpaceBytes: cfg.Sandbox.Limits.AddressSpaceBytes,
 			CPUSeconds:        cfg.Sandbox.Limits.CPUSeconds,

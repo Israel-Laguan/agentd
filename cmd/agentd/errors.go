@@ -33,6 +33,8 @@ func describeCommandError(err error) (string, string) {
 		return "agentd could not write to one of its data directories.", "Check the permissions for AGENTD_HOME, projects, uploads, and archives directories."
 	case errors.Is(err, config.ErrLLMWarmup):
 		return "agentd reached your LLM provider, but the startup warmup failed.", "Check the provider order, API key, model name, and network access."
+	case errors.Is(err, errNoApprovalTerminal):
+		return "agentd drafted a plan but had no terminal to ask for approval, so nothing was created.", "Pass --yes to approve without a prompt, or run agentd ask in a terminal."
 	case errors.Is(err, config.ErrNoLLMProviders):
 		return "agentd could not find a usable LLM provider.", "Set an API key or configure a local OpenAI-compatible provider in your config."
 	}

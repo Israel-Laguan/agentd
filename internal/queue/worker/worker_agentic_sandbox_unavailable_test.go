@@ -107,6 +107,7 @@ func TestHandleLoopResultToolFailureRouting(t *testing.T) {
 		wantState models.TaskState
 	}{
 		{"sandbox unavailable is terminal", agenttools.ToolErrorCodeSandboxUnavailable, models.TaskStateFailed},
+		{"no progress goes to a human", agenttools.ToolErrorCodeNoProgress, models.TaskStateFailedRequiresHuman},
 		{"other tool failure keeps retry path", "", models.TaskStateReady},
 	}
 	for _, tt := range tests {
@@ -122,5 +123,29 @@ func TestHandleLoopResultToolFailureRouting(t *testing.T) {
 				t.Fatalf("state = %s, want %s", got.State, tt.wantState)
 			}
 		})
+	}
+}
+
+// B-081: a worker whose `go test` keeps failing the same way (no toolchain in
+// the jail) stops on the third identical result and hands the task to a human,
+// instead of looping until the wall timeout.
+func TestAgenticRepeatedSameResultHandsTaskToHuman(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		bashCall("c1", "go test ./..."), bashCall("c2", "go test ./..."), bashCall("c3", "go test ./..."),
+		bashCall("c4", "apt-get install -y golang-go"), {Content: "done"},
+	}}
+	notFound := scriptedStep{result: sandbox.Result{ExitCode: 127, Stderr: "bash: go: command not found"}}
+	sb := &scriptedSandbox{steps: []scriptedStep{notFound, notFound, notFound, notFound}}
+	w, _, task := runAgenticTask(t, gw, sb)
+	got, err := w.store.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State != models.TaskStateFailedRequiresHuman || got.RetryCount != 0 {
+		t.Fatalf("state = %s retries = %d, want FAILED_REQUIRES_HUMAN with no retry", got.State, got.RetryCount)
+	}
+	if gw.callCount != 3 {
+		t.Fatalf("gateway calls = %d, want 3: the loop must stop before the apt-get turn", gw.callCount)
 	}
 }

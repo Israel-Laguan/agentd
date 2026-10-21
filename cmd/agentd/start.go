@@ -39,7 +39,7 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	defer cleanup()
 
 	slog.Log(cmd.Context(), sandbox.BackendStartupLevel(cfg.Sandbox.Backend), sandbox.BackendStartupLine(cfg.Sandbox.Backend))
-	if err := seedAndValidateStartup(cmd.Context(), store, cfg, deps, startOpts); err != nil {
+	if err := seedAndValidateStartup(cmd.Context(), store, cfg); err != nil {
 		return err
 	}
 
@@ -74,7 +74,12 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 		startMCPServer(ctx, store, cfg.MCP)
 	}
 
+	gate := newWarmupGate(apiServer.Handler)
+	apiServer.Handler = gate
 	apiErrCh := startAPIServer(ctx, listener, apiServer, stop)
+	if warmed, err := warmUpWhileServing(ctx, stop, apiErrCh, gate, deps, cfg, startOpts); !warmed {
+		return err
+	}
 
 	slog.Debug("starting daemon")
 	if err := daemon.Start(ctx); err != nil {
@@ -100,7 +105,9 @@ func startMCPServer(ctx context.Context, store models.KanbanStore, mcpCfg config
 	}
 }
 
-func seedAndValidateStartup(ctx context.Context, store *kanban.Store, cfg config.Config, deps runtimeDeps, startOpts *startOptions) error {
+// seedAndValidateStartup runs the checks that need no network. The LLM warmup
+// runs later, once the API listens (B-083).
+func seedAndValidateStartup(ctx context.Context, store *kanban.Store, cfg config.Config) error {
 	if err := seedDefaultAgent(ctx, store, false); err != nil {
 		return fmt.Errorf("seed default agent profiles: %w", err)
 	}
@@ -111,10 +118,6 @@ func seedAndValidateStartup(ctx context.Context, store *kanban.Store, cfg config
 		return fmt.Errorf("agentic.tool_credentials: %w", err)
 	}
 	slog.Debug("tool credentials validated")
-
-	if err := warmupLLMIfNeeded(ctx, deps.gateway, cfg.Gateway, startOpts.skipLLMWarmup, cfg.Gateway.WarmupEnabled); err != nil {
-		return err
-	}
 	return nil
 }
 

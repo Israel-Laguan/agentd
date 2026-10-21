@@ -217,6 +217,7 @@ task["id"], task["project_id"], task["state"]
 | `sandbox.env_allowlist` | `PATH,HOME,LANG,LC_ALL,USER` | Parent environment keys allowed into sandbox payload env vars. |
 | `sandbox.extra_env` | `CI=true,DEBIAN_FRONTEND=noninteractive,NO_COLOR=1` | Forced non-interactive environment variables appended to payload env vars. |
 | `sandbox.scrub_patterns` | `[]` | Extra regex patterns used by sandbox log scrubber before persistence. |
+| `sandbox.toolchain_paths` | `[]` | Absolute host directories bound read-only into the bubblewrap jail at the same path, for toolchains installed outside `/usr` (e.g. `/home/me/.local/go`). Each one's `bin/` directory, or the directory itself when it has none, goes first on the jail's `PATH`. A path that is relative, `/`, missing or not a directory fails config load. |
 | `sandbox.limits.address_space_bytes` | `2147483648` | Requested virtual memory cap applied via Unix `ulimit -Sv` guard. |
 | `sandbox.limits.cpu_seconds` | `600` | Requested CPU-time cap applied via Unix `ulimit -t` guard. |
 | `sandbox.limits.open_files` | `1024` | Requested open-file-descriptor cap applied via Unix `ulimit -n` guard. |

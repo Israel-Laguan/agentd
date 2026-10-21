@@ -2,6 +2,7 @@ package worker_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -300,9 +301,11 @@ func (g *workerTestGateway) Generate(_ context.Context, req gateway.AIRequest) (
 		return resp, g.err
 	}
 
-	// For max iterations test - always return tool calls
+	// For max iterations test - always return tool calls. Each turn's command
+	// differs: an identical call with an identical result three times is a
+	// no-progress stop (B-081), not the iteration limit under test.
 	if g.returnToolCalls && len(g.toolCalls) > 0 {
-		resp := gateway.AIResponse{Content: "Executing command", ToolCalls: g.toolCalls}
+		resp := gateway.AIResponse{Content: "Executing command", ToolCalls: numberedToolCalls(g.toolCalls, g.callCount)}
 		g.lastResponseToolCalls = len(g.toolCalls)
 		return resp, g.err
 	}
@@ -340,4 +343,15 @@ type workerTestSandbox struct {
 func (s *workerTestSandbox) Execute(ctx context.Context, payload sandbox.Payload) (sandbox.Result, error) {
 	s.commands = append(s.commands, payload.Command)
 	return s.result, nil
+}
+
+// numberedToolCalls copies calls with the turn number appended to each bash
+// command, so repeated turns are distinct calls.
+func numberedToolCalls(calls []gateway.ToolCall, turn int) []gateway.ToolCall {
+	out := make([]gateway.ToolCall, len(calls))
+	for i, call := range calls {
+		call.Function.Arguments = strings.Replace(call.Function.Arguments, `"}`, fmt.Sprintf(` %d"}`, turn), 1)
+		out[i] = call
+	}
+	return out
 }

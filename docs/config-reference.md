@@ -155,7 +155,7 @@ Enabled per agent profile via `AgentProfile.agentic_mode`. Keys marked **not imp
 | Key | Notes |
 | --- | --- |
 | `context_warning_threshold` | Fraction (0–1) of zone budget triggering preemptive summarization; `0` disables. Default `0.85`. |
-| `tool_failure_streak` | Consecutive errors on the same tool before `LoopToolFailure`; `0` = fatal-only. |
+| `tool_failure_streak` | Consecutive errors on the same tool before `LoopToolFailure`; `0` = fatal-only. Separately, and not configurable, the same tool call (name and arguments) returning the same result 3 times in one task run stops the loop with `NO_PROGRESS` and moves the task to `FAILED_REQUIRES_HUMAN` without a retry (B-081). |
 | `topic_guard` | Drift detection; opens a fresh in-task session when human input is unrelated. `sensitivity` 0–1 (default `0.5`). |
 | `tool_credentials` | Map tool name → env var (injected per call, never in args). See [`reference.md`](reference.md). |
 | `approval_gates` | **Not implemented.** Planned: high-stakes tools require human approval via HUMAN subtask before execution. Nothing sets `AgentProfile.GatedTools` yet. |

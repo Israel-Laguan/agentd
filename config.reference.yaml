@@ -135,6 +135,9 @@ sandbox:
   env_allowlist: [PATH, HOME, LANG, LC_ALL, USER]
   extra_env: ["CI=true", "DEBIAN_FRONTEND=noninteractive", "NO_COLOR=1"]
   scrub_patterns: []
+  # Host directories bound read-only into the jail (e.g. ["/home/me/.local/go"]);
+  # each one's bin/ (or the directory itself) goes first on the jail's PATH.
+  toolchain_paths: []
   limits:
     address_space_bytes: 2147483648
     cpu_seconds: 600

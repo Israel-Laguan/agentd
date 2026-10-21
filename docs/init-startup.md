@@ -5,7 +5,7 @@ This note captures the startup path validated during the bootstrap work and the 
 ## Findings
 
 - `agentd init` prepares the local home directory, creates or preserves the cron file, opens the SQLite database, applies migrations, and seeds the default agent profiles.
-- `agentd start` performs the same runtime preflight, validates provider availability, warms up the active LLM provider, binds the API port, runs boot reconciliation, and then starts the daemon loops.
+- `agentd start` performs the same runtime preflight, validates provider availability, binds the API port, warms up the active LLM provider (while `/health` reports `warming_up`), runs boot reconciliation, and then starts the daemon loops.
 - The most common startup failures we observed were a stale API key, an unavailable model, and an occupied API port.
 - CLI failures now print a short human summary plus technical details so users can fix simple issues without re-running in verbose mode.
 
@@ -34,9 +34,9 @@ If any step fails, the CLI now says what part of init failed and shows the wrapp
 3. Verify that at least one LLM provider is available.
 4. Open the database.
 5. Validate tool credentials.
-6. Warm up the selected LLM provider (unless `gateway.warmup_enabled: false` or `agentd start --skip-llm-warmup`).
-7. Build the daemon and API server.
-8. Bind the API listener.
+6. Build the daemon and API server.
+7. Bind the API listener and start serving.
+8. Warm up the selected LLM provider (unless `gateway.warmup_enabled: false` or `agentd start --skip-llm-warmup`). While it runs, `GET /health` answers `{"status":"ok","warming_up":true}`; a failed warmup stops the daemon.
 9. Run boot reconciliation and start the daemon loops.
 
 If startup fails, the CLI now prints a friendly explanation first and then the technical details that caused the failure.

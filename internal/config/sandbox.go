@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/viper"
@@ -40,7 +42,10 @@ type SandboxConfig struct {
 	EnvAllowlist      []string
 	ExtraEnv          []string
 	ScrubPatterns     []string
-	Limits            SandboxLimitsConfig
+	// ToolchainPaths are host directories bound read-only into the jail, with
+	// their bin directories on its PATH (B-081).
+	ToolchainPaths []string
+	Limits         SandboxLimitsConfig
 }
 
 func setSandboxDefaults(v *viper.Viper) {
@@ -52,6 +57,7 @@ func setSandboxDefaults(v *viper.Viper) {
 	v.SetDefault("sandbox.env_allowlist", defaultSandboxEnvAllowlist)
 	v.SetDefault("sandbox.extra_env", defaultSandboxExtraEnv)
 	v.SetDefault("sandbox.scrub_patterns", []string{})
+	v.SetDefault("sandbox.toolchain_paths", []string{})
 	v.SetDefault("sandbox.limits.address_space_bytes", defaultSandboxAddressSpaceBytes)
 	v.SetDefault("sandbox.limits.cpu_seconds", defaultSandboxCPULimitSeconds)
 	v.SetDefault("sandbox.limits.open_files", defaultSandboxOpenFilesLimit)
@@ -68,6 +74,7 @@ func loadSandboxConfig(v *viper.Viper) SandboxConfig {
 		EnvAllowlist:      v.GetStringSlice("sandbox.env_allowlist"),
 		ExtraEnv:          v.GetStringSlice("sandbox.extra_env"),
 		ScrubPatterns:     v.GetStringSlice("sandbox.scrub_patterns"),
+		ToolchainPaths:    v.GetStringSlice("sandbox.toolchain_paths"),
 		Limits: SandboxLimitsConfig{
 			AddressSpaceBytes: v.GetUint64("sandbox.limits.address_space_bytes"),
 			CPUSeconds:        v.GetUint64("sandbox.limits.cpu_seconds"),
@@ -120,6 +127,36 @@ func validateSandboxConfig(cfg SandboxConfig) error {
 	}
 	if err := sandbox.ValidateScrubPatterns(cfg.ScrubPatterns); err != nil {
 		return fmt.Errorf("sandbox.scrub_patterns: %w", err)
+	}
+	if err := validateToolchainPaths(cfg.ToolchainPaths); err != nil {
+		return fmt.Errorf("sandbox.toolchain_paths: %w", err)
+	}
+	return nil
+}
+
+// validateToolchainPaths requires each toolchain path to be an existing,
+// absolute, clean directory other than / (also after resolving symlinks):
+// bwrap would otherwise fail every command on a missing bind, and / would
+// expose the whole host.
+func validateToolchainPaths(paths []string) error {
+	for _, path := range paths {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
+			return fmt.Errorf("%q must be an absolute, clean path other than /", path)
+		}
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return fmt.Errorf("%q: %w", path, err)
+		}
+		if resolved == "/" {
+			return fmt.Errorf("%q resolves to /", path)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("%q: %w", path, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("%q is not a directory", path)
+		}
 	}
 	return nil
 }

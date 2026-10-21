@@ -378,18 +378,21 @@ func TestAgenticLoop_TurnLimitExceeded(t *testing.T) {
 		{
 			Content: "tool2",
 			ToolCalls: []gateway.ToolCall{{
-				ID: "c2", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"true"}`},
+				ID: "c2", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"true; true"}`},
 			}},
 		},
 		{
 			Content: "grace tool",
 			ToolCalls: []gateway.ToolCall{{
-				ID: "c3", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"true"}`},
+				ID: "c3", Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"true; true; true"}`},
 			}},
 		},
 	}}
+	// Distinct commands: three identical results are a no-progress stop (B-081).
 	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
-		"true": {Success: true, ExitCode: 0, Stdout: "ok\n"},
+		"true":             {Success: true, ExitCode: 0, Stdout: "ok\n"},
+		"true; true":       {Success: true, ExitCode: 0, Stdout: "ok\n"},
+		"true; true; true": {Success: true, ExitCode: 0, Stdout: "ok\n"},
 	}}
 	store := &mockAgenticStore{}
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 2})
