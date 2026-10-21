@@ -76,7 +76,7 @@ Cline names the tool `agentd__report_outcome` (server and tool joined by `__`); 
 ## Not measured yet
 
 - Real agentd stages (intake, task creation, execution) compared across a single model call, agentd's builtin agent and each external agent.
-- Running the agent process inside the jail.
+- Running the agent process inside the jail: measured in [Inside the jail (SP-025)](#inside-the-jail-sp-025).
 - Whether a cline system prompt or rules file, rather than the task prompt, makes the outcome call reliable.
 - agy, which has MCP but no ACP.
 
@@ -120,7 +120,7 @@ What the numbers say:
 - **Repeated reads are the builtin baseline.** In every small and multi-file run it read each file twice (4 reads of 2 files, 6 reads of 3), once to plan and once to verify. cline repeated one file in 4 of 6 runs. opencode's update titles carry no file path, so its repeats cannot be counted from the update stream.
 - **Token reporting differs.** Builtin and opencode report tokens; cline does not. opencode's figure includes about 17,000 cached tokens of its own prompt.
 
-Not measured: running an external agent inside the jail, agy, and the ambiguous task with the Go toolchain available to the builtin sandbox.
+Not measured: agy, and the ambiguous task with the Go toolchain available to the builtin sandbox.
 
 ## Pitfalls when driving these agents
 
@@ -132,3 +132,85 @@ Errors hit while measuring them, with the fix for each:
 - **Killing a process in the same shell command can kill the shell.** Run the kill as its own command, with a bracketed pattern such as `pkill -f "cline-hub-daemo[n]"`.
 - **Test servers must not use a port that a running agentd uses.** The dev daemon on 8765 once answered a probe's MCP calls and explored the real board.
 - **A permission client that approves everything will approve `npx -y <unknown package>`.** Deny package installs and unknown commands.
+
+## Inside the jail (SP-025)
+
+Measured 2026-10-21 with a throwaway client and launcher (scratch scripts, not in the repo). The agent process ran under bubblewrap with the same mount profile as `jailArgv()` (read-only `/usr /lib /lib64 /bin /sbin /sys` and the `/etc` files, tmpfs `/tmp`, `--clearenv`, workspace bound writable) plus the Go toolchain through `sandbox.toolchain_paths`. Same models as above (Nemotron 3 Ultra, free), same word-counter project and the same three execution prompts. **3 runs per cell is a smoke result, not a rate** (SP-026 does n ≥ 10). Workspaces were checked by hand on the host: `go test`, `go vet`, and a behavior test of my own (`CountLines` on `""`, `"one"`, `"one\n"`, `"a\nb"`, `"a\nb\n"`, `"\n"`, `"\n\n"`; `CountChars` on ASCII; the built CLI's `-l`, `-c` and default output). Podman (jail B) was **not run**: bubblewrap reached both models, so the fallback was not needed.
+
+### Result
+
+Network: `--unshare-net`, with the only way out a host-side CONNECT proxy on a unix socket bound into the jail, allowing only the model host. A second socket forwards the loopback MCP port. Both agents' tool calls ran inside the jail.
+
+| | opencode | cline |
+| --- | --- | --- |
+| Starts and authenticates | yes, with a copy of `auth.json` holding only the `opencode` key | yes, with a copy of the config dir holding only the `cline` provider |
+| Reaches the model | yes, `opencode.ai:443` | yes, `api.cline.bot:443` and `data.cline.bot:443` |
+| Small: `go test` passes / my behavior check | 3 of 3 / **2 of 3** | 3 of 3 / **2 of 3** |
+| Multi-file: `go test` passes / my behavior check | 3 of 3 / **0 of 3** | 3 of 3 / **2 of 3** |
+| Ambiguous: asked and did not guess (`NeedsHuman`) | 3 of 3, workspace unchanged | 3 of 3, but `test.txt` left in the workspace in 3 of 3, and one run followed `NeedsHuman` with a `Completed` call |
+| Wall time (small, multi, ambiguous) | 29-64 s, 60-140 s, 25-35 s | 29-44 s, 60-138 s, 35-53 s |
+| Tool calls | 5-18 | 6-34 |
+| Client `fs/*` and `terminal/*` requests | 0 | 0 |
+| `report_outcome` reached agentd's MCP server | 9 of 9 (http, through the forwarded loopback port) | 9 of 9 (stdio, from the settings file) |
+
+The "wrong" rows are real defects in the agent's code, not jail effects. opencode's multi-file `CountLines` was wrong three different ways in its three runs: `len(strings.Split(text, "\n"))` and `strings.Count(text, "\n") + 1` over-count a trailing newline (`"a\nb\n"` gives 3), and `strings.Count(text, "\n")` drops an unterminated last line (`"a\nb"` gives 1). Cline's failing small run and multi-file run counted a trailing newline as an extra line (`"one\n"` gives 2). Both wrote tests that pin the wrong value, so `go test` stays green. A `go test` pass is not evidence, which is what the S17 table above also warned about for the builtin agent. Whether the same agents are better outside the jail was not measured here, so these rows say nothing about the jail's cost.
+
+### What the jail blocked
+
+Probe task (one run per agent and jail; the agent was told to run each command and not to work around failures):
+
+| Attempt | Restricted jail | agentd's current profile (`--share-net`) |
+| --- | --- | --- |
+| Read a canary file in the host home | not found | not found |
+| Write under the host home | succeeds, but into the jail's throwaway root; the host file was never created | same |
+| Write to `/usr` | read-only file system | read-only file system |
+| Read the host's `~/code` | not found | not found |
+| Write in the workspace | ok | ok |
+| HTTP to `example.com` | 403 from the proxy | **200** |
+| Connect to a listener on host loopback | refused | **connected** |
+
+The last row is the important one. With `--share-net`, a jailed agent reaches any service on the host's loopback, including the dev daemon and its board API, and the whole internet. The host listener used in the probe was a dummy on port 8792. Port 8765 was never probed.
+
+During the matrix the proxy denied `models.opencode.ai:443` (14 times, opencode's model catalog) and nothing else; opencode used its cached copy and worked. No `EACCES`/`EROFS` errors appeared in any agent's stderr during the tasks.
+
+### Minimal bind and network list
+
+Binds, beyond agentd's current `jailArgv()` profile:
+
+| Path | Mode | Why |
+| --- | --- | --- |
+| the agent's own executable (`~/.opencode/bin/opencode`; cline's `bin/.cline`) | read-only | cline's `cline` is a Node wrapper that writes a CA bundle into `~/.cline`; running the compiled `.cline` binary directly avoids Node and that write |
+| `sandbox.toolchain_paths` (Go) | read-only | already supported; PATH gets its `bin/` |
+| a per-run agent home, mounted as `HOME` | **read-write** | both agents fail without it (`EROFS` on `mkdir` in their data dir); holds config, cache, sessions and a database. 58 MB (cline) and 134 MB (opencode) after one run |
+| the workspace | read-write | as today |
+| a directory for the MCP server's stdio script (cline) | read-only | cline spawns its MCP server from its own settings file |
+| the proxy and MCP sockets | read-write | the only network path |
+
+`/lib64` is required (both agents are dynamically linked ELF binaries; without it neither even starts). Not needed for the model call: `/etc/ssl/certs`, `/etc/resolv.conf`, `/etc/hosts`, `/etc/nsswitch.conf`, `/etc/passwd`, `/etc/os-release`, `/sys`, `/sbin`, and the dbus and systemd mounts (each dropped in a one-word prompt and the agent still answered). Shell tools the agent runs (git, curl) may still want the `/etc` files, so keep them.
+
+Environment (`--clearenv`): `PATH` with the toolchain first, `HOME` pointing at the agent home (not the workspace, which agentd uses today, because the agent's state would then land in the repo), `LANG`, `CI=true`, `NO_COLOR=1`, proxy variables (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, and `NODE_USE_ENV_PROXY=1`), and for cline `CLINE_MCP_SETTINGS_PATH`.
+
+Network, with a CONNECT allowlist:
+
+| Agent | Hosts | Notes |
+| --- | --- | --- |
+| opencode | `opencode.ai:443` | plus the loopback MCP port. **Only when its home is pre-warmed.** From a cold home it also contacted `registry.npmjs.org` (28 connections: it installs its plugin package into `~/.config/opencode`), `github.com` and `release-assets.githubusercontent.com` (it downloads ripgrep at start), and `models.opencode.ai`. Those are runtime downloads of code into the jail, so seed the cache and config and keep them off the allowlist |
+| cline | `api.cline.bot:443`, `data.cline.bot:443` | nothing else |
+
+### Findings that change the plan
+
+- **Go.** The jail works for both agents; the blocker for T-042 is not the jail but network policy: agentd's current profile is `--share-net`, which lets the agent reach the host's loopback and the internet. An external agent needs `--unshare-net` plus a host-side allowlist proxy (the setup above), or a podman network that does the same.
+- **The MCP server must be reachable from inside the jail.** With the network unshared, `127.0.0.1:<port>` is the jail's own loopback. agentd's MCP server on the host needs a forwarded socket (opencode, http) or a stdio command inside the jail (cline). Cline's server is spawned from its own settings file inside the jail, so that file's content is part of the jail setup.
+- **Credentials enter the jail.** The agent home needs a login: an `auth.json` copy (opencode) or a `providers.json` with the OAuth tokens (cline). Copy only the one provider, as done here. Cline refreshes the token and rewrites that file inside the jail, so a copy may diverge from the original if the provider rotates refresh tokens; I saw identical tokens after one run, so rotation was not observed.
+- **Cline's config is `--config <dir>`**, with `data/settings/providers.json` under it. `--data-dir` is ignored in ACP mode, and a `--config` dir without `data/` fails with "Authentication required".
+- **Hub daemon.** After each jailed cline run no daemon process was left on the host (the jail's PID namespace ends with the run), and its lock file lived in the jail's own config dir, so a jailed cline could not attach to a daemon on the host. I did not establish whether the daemon or the ACP process executes the tool calls; every command ran inside the jail either way.
+- **A write outside the workspace "succeeds"** into the jail's tmpfs root, and is lost. Only the read-only mounts fail. Anything that must be a hard error needs a read-only root.
+- **Cold-start cost.** Cold `go test` in the jail takes about 4 s, so the Go toolchain bind is cheap.
+
+### Go / no-go
+
+**Go**, conditional on network isolation. Both agents start, authenticate, reach their model through an allowlist proxy, finish every task they could finish outside, ask instead of guessing in the ambiguous case (3 of 3 each), and could not read or write host paths. The jail does not change what the agents get wrong: workspaces still need a check beyond `go test`.
+
+**No-go for agentd's current profile as is.** `--share-net` gives the agent the host's loopback and the internet, and the jail cannot be called a jail for an external agent until the network is cut down.
+
+Not covered: podman (jail B), more than 3 runs per cell, agents other than these two, hostile prompts beyond the one probe, and a check of whether an agent behaves differently outside the jail.
