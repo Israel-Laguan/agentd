@@ -34,7 +34,7 @@ type FeasibilityClarification struct {
 
 // vagueRequestQuestion ends every refusal of a request too vague to plan, so
 // the user always gets the same specific question back (B-085).
-const vagueRequestQuestion = `What should change in which part of the workspace, and how will you know it is done? For example: "add input validation to the signup form" or "make the home page load in under one second".`
+const vagueRequestQuestion = `Describe it like "add input validation to the signup form" or "make the home page load in under one second": what should change in which part of the workspace, and how will you know it is done?`
 
 // ErrMultipleApprovedScopes is returned when the caller passes more than one
 // approved scope in a single turn.
