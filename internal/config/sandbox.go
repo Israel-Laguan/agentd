@@ -135,12 +135,20 @@ func validateSandboxConfig(cfg SandboxConfig) error {
 }
 
 // validateToolchainPaths requires each toolchain path to be an existing,
-// absolute, clean directory other than /: bwrap would otherwise fail every
-// command on a missing bind, and / would expose the whole host.
+// absolute, clean directory other than / (also after resolving symlinks):
+// bwrap would otherwise fail every command on a missing bind, and / would
+// expose the whole host.
 func validateToolchainPaths(paths []string) error {
 	for _, path := range paths {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
 			return fmt.Errorf("%q must be an absolute, clean path other than /", path)
+		}
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return fmt.Errorf("%q: %w", path, err)
+		}
+		if resolved == "/" {
+			return fmt.Errorf("%q resolves to /", path)
 		}
 		info, err := os.Stat(path)
 		if err != nil {
