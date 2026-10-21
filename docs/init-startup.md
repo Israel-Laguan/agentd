@@ -34,9 +34,9 @@ If any step fails, the CLI now says what part of init failed and shows the wrapp
 3. Verify that at least one LLM provider is available.
 4. Open the database.
 5. Validate tool credentials.
-6. Warm up the selected LLM provider (unless `gateway.warmup_enabled: false` or `agentd start --skip-llm-warmup`).
-7. Build the daemon and API server.
-8. Bind the API listener.
+6. Build the daemon and API server.
+7. Bind the API listener and start serving.
+8. Warm up the selected LLM provider (unless `gateway.warmup_enabled: false` or `agentd start --skip-llm-warmup`). While it runs, `GET /health` answers `{"status":"ok","warming_up":true}`; a failed warmup stops the daemon.
 9. Run boot reconciliation and start the daemon loops.
 
 If startup fails, the CLI now prints a friendly explanation first and then the technical details that caused the failure.

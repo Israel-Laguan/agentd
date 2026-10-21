@@ -245,9 +245,19 @@ func (s *bootstrapScenario) buildStartConfig() (string, error) {
 	if s.openAIURL != "" {
 		fmt.Fprintf(&sb, "  openai:\n    base_url: %q\n", s.openAIURL)
 	}
-	if s.apiAddr != "" {
-		fmt.Fprintf(&sb, "api:\n  address: %q\n", s.apiAddr)
+	// The API listens before the warmup runs (B-083), so a scenario without its
+	// own address gets a free port instead of the default 8765, which a running
+	// dev daemon may hold.
+	addr := s.apiAddr
+	if addr == "" {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return "", fmt.Errorf("pick a free API port: %w", err)
+		}
+		addr = ln.Addr().String()
+		_ = ln.Close()
 	}
+	fmt.Fprintf(&sb, "api:\n  address: %q\n", addr)
 	configPath := filepath.Join(os.TempDir(), fmt.Sprintf("agentd-bscfg-%d.yaml", time.Now().UnixNano()))
 	return configPath, os.WriteFile(configPath, []byte(sb.String()), 0o644)
 }
