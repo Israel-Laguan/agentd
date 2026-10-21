@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,8 +19,14 @@ import (
 
 type askOptions struct {
 	apiURL string
+	yes    bool
 	client *http.Client
 }
+
+// errNoApprovalTerminal is returned when the approval prompt cannot be
+// answered because stdin is empty or closed (a script, CI, `< /dev/null`).
+// The plan was only drafted, so nothing exists yet (B-084).
+var errNoApprovalTerminal = errors.New("no terminal to approve the plan")
 
 func newAskCommand(opts *rootOptions) *cobra.Command {
 	askOpts := &askOptions{client: http.DefaultClient}
@@ -32,6 +39,7 @@ func newAskCommand(opts *rootOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&askOpts.apiURL, "api-url", "", "agentd API base URL")
+	cmd.Flags().BoolVarP(&askOpts.yes, "yes", "y", false, "approve the drafted plan without prompting")
 	return cmd
 }
 
@@ -51,7 +59,7 @@ func runAsk(cmd *cobra.Command, opts *rootOptions, askOpts *askOptions, prompt s
 	if err := printPlan(cmd, plan); err != nil {
 		return err
 	}
-	approved, err := approved(cmd)
+	approved, err := askOpts.approve(cmd)
 	if err != nil || !approved {
 		if err == nil {
 			err = writeLine(cmd.OutOrStdout(), "plan rejected")
@@ -236,12 +244,22 @@ func printPlan(cmd *cobra.Command, plan models.DraftPlan) error {
 	return nil
 }
 
+func (o *askOptions) approve(cmd *cobra.Command) (bool, error) {
+	if o.yes {
+		return true, writeLine(cmd.OutOrStdout(), "plan approved (--yes)")
+	}
+	return approved(cmd)
+}
+
 func approved(cmd *cobra.Command) (bool, error) {
 	if err := writeFormat(cmd.OutOrStdout(), "Do you approve this plan? [Y/n] "); err != nil {
 		return false, err
 	}
 	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 	if err != nil && strings.TrimSpace(line) == "" {
+		if errors.Is(err, io.EOF) {
+			return false, fmt.Errorf("%w: stdin closed before an answer", errNoApprovalTerminal)
+		}
 		return false, err
 	}
 	answer := strings.ToLower(strings.TrimSpace(line))
