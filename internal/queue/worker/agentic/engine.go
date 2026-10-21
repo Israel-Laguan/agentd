@@ -128,6 +128,9 @@ type Engine struct {
 	config                        Config
 	host                          Host
 	privilegeAlternativeAttempted bool
+	// repeats spots the same tool call returning the same result again and
+	// again in this task run (B-081); created on first use.
+	repeats *agenttools.RepeatTracker
 }
 
 func NewEngine(cfg Config, host Host) *Engine {

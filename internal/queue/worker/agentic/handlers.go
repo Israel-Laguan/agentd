@@ -113,15 +113,8 @@ func (e *Engine) handleAgenticToolCalls(
 			Role: "tool", ToolCallID: call.ID, Content: contextContent, Section: toolResultSection(call.Function.Name),
 		})
 
-		if failed, _ := toolTracker.Record(call.Function.Name, tr.Status); failed || tr.Status == agenttools.ToolStatusFatal {
-			meta := agentruntime.BuildLoopMeta(
-				turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(*messages), 0,
-				contextContent, call.Function.Name, "",
-			)
-			if tr.Error != nil {
-				meta.ErrorCode = tr.Error.Code
-			}
-			return true, agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}, true
+		if stop := e.toolLoopStop(call, tr, contextContent, toolTracker, turnIndex, budgetGuard, messages); stop != nil {
+			return true, *stop, true
 		}
 		if suspended {
 			return true, agentruntime.LoopResult{}, false

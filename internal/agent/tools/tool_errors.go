@@ -12,6 +12,11 @@ import (
 // fails such a task terminally instead of retrying it.
 const ToolErrorCodeSandboxUnavailable = "SANDBOX_UNAVAILABLE"
 
+// ToolErrorCodeNoProgress tags a loop stop after the same tool call returned
+// the same result DefaultNoProgressRepeats times (B-081). Retrying would
+// repeat the cycle, so the worker hands the task to a human instead.
+const ToolErrorCodeNoProgress = "NO_PROGRESS"
+
 // SandboxUnavailableJSON reports a refusal by an unavailable required jail as a
 // fatal, tagged tool result: the model cannot fix a missing jail, so the
 // agentic loop must stop instead of feeding the error back for another try.
