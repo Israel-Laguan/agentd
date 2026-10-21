@@ -20,8 +20,6 @@ func newWarmupGate(next http.Handler) *warmupGate {
 	return g
 }
 
-func (g *warmupGate) ready() { g.warming.Store(false) }
-
 func (g *warmupGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if g.warming.Load() && r.Method == http.MethodGet && r.URL.Path == "/health" {
 		w.Header().Set("Content-Type", "application/json")

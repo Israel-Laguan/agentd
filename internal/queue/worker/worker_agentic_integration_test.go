@@ -388,8 +388,7 @@ func TestAgenticLoop_TurnLimitExceeded(t *testing.T) {
 			}},
 		},
 	}}
-	// Distinct commands: an identical call with an identical result three
-	// times is a no-progress stop (B-081), not the turn limit under test.
+	// Distinct commands: three identical results are a no-progress stop (B-081).
 	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
 		"true":             {Success: true, ExitCode: 0, Stdout: "ok\n"},
 		"true; true":       {Success: true, ExitCode: 0, Stdout: "ok\n"},

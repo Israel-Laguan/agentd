@@ -82,7 +82,7 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 		_ = drainAPIServerError(apiErrCh)
 		return err
 	}
-	gate.ready()
+	gate.warming.Store(false) // warmup done: /health reports plain ok
 
 	slog.Debug("starting daemon")
 	if err := daemon.Start(ctx); err != nil {
