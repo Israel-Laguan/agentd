@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -75,7 +76,7 @@ func probeJailHost() jailProbeResult {
 	defer func() { _ = os.RemoveAll(dir) }()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	argv := jailArgv(path, dir, nil, "true")
+	argv := jailArgv(path, dir, nil, nil, "true")
 	probe := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	if err := probe.Run(); err != nil {
 		return jailProbeResult{path: path}
@@ -176,8 +177,9 @@ func unavailableReason(status jailProbeResult) string {
 // in order, so the /tmp tmpfs precedes the workspace bind — a workspace under
 // /tmp would otherwise be hidden by it. Hostile tenancy stays out of scope:
 // rootless podman per task is the SP-019 answer there, not a wider bind list
-// here.
-func jailArgv(bwrap, workspace string, env []string, shell string) []string {
+// here. Configured toolchain directories (sandbox.toolchain_paths, B-081) are
+// bound read-only after the /tmp tmpfs, for the same reason as the workspace.
+func jailArgv(bwrap, workspace string, env, toolchains []string, shell string) []string {
 	argv := []string{bwrap,
 		"--unshare-all", "--share-net", "--die-with-parent",
 		"--ro-bind", "/usr", "/usr",
@@ -197,11 +199,16 @@ func jailArgv(bwrap, workspace string, env []string, shell string) []string {
 		"--proc", "/proc",
 		"--dev", "/dev",
 		"--tmpfs", "/tmp",
+	}
+	for _, dir := range toolchains {
+		argv = append(argv, "--ro-bind", dir, dir)
+	}
+	argv = append(argv,
 		"--bind", workspace, workspace,
 		"--chdir", workspace,
 		"--clearenv",
-	}
-	for _, pair := range jailEnv(env, workspace) {
+	)
+	for _, pair := range jailEnv(env, workspace, toolchainPathEntries(toolchains)) {
 		key, value, _ := strings.Cut(pair, "=")
 		argv = append(argv, "--setenv", key, value)
 	}
@@ -210,16 +217,18 @@ func jailArgv(bwrap, workspace string, env []string, shell string) []string {
 
 // jailEnv rebuilds the payload environment for the jail. Host PATH and HOME
 // point outside the visible filesystem, so they are replaced with jail-valid
-// values; every other allowlisted variable passes through unchanged.
-func jailEnv(env []string, workspace string) []string {
+// values; every other allowlisted variable passes through unchanged. Toolchain
+// bin directories come first on PATH.
+func jailEnv(env []string, workspace string, toolchainBins []string) []string {
 	out := make([]string, 0, len(env)+2)
+	jailPath := "PATH=" + strings.Join(append(append([]string(nil), toolchainBins...), "/usr/bin", "/bin"), ":")
 	var havePath, haveHome bool
 	for _, pair := range env {
 		key, _, _ := strings.Cut(pair, "=")
 		switch key {
 		case "PATH":
 			havePath = true
-			out = append(out, "PATH=/usr/bin:/bin")
+			out = append(out, jailPath)
 		case "HOME":
 			haveHome = true
 			out = append(out, "HOME="+workspace)
@@ -228,10 +237,25 @@ func jailEnv(env []string, workspace string) []string {
 		}
 	}
 	if !havePath {
-		out = append(out, "PATH=/usr/bin:/bin")
+		out = append(out, jailPath)
 	}
 	if !haveHome {
 		out = append(out, "HOME="+workspace)
 	}
 	return out
+}
+
+// toolchainPathEntries maps each toolchain directory to the PATH entry that
+// exposes it: its bin subdirectory when one exists, else the directory itself.
+func toolchainPathEntries(toolchains []string) []string {
+	entries := make([]string, 0, len(toolchains))
+	for _, dir := range toolchains {
+		bin := filepath.Join(dir, "bin")
+		if info, err := os.Stat(bin); err == nil && info.IsDir() {
+			entries = append(entries, bin)
+			continue
+		}
+		entries = append(entries, dir)
+	}
+	return entries
 }

@@ -28,7 +28,7 @@ func TestResolveBackend(t *testing.T) {
 }
 
 func TestJailEnvReplacesHostPaths(t *testing.T) {
-	got := jailEnv([]string{"PATH=/home/u/bin:/usr/bin", "HOME=/home/u", "LANG=C.UTF-8", "CI=true"}, "/ws")
+	got := jailEnv([]string{"PATH=/home/u/bin:/usr/bin", "HOME=/home/u", "LANG=C.UTF-8", "CI=true"}, "/ws", nil)
 	joined := strings.Join(got, "\n")
 	for _, want := range []string{"PATH=/usr/bin:/bin", "HOME=/ws", "LANG=C.UTF-8", "CI=true"} {
 		if !strings.Contains(joined, want) {
@@ -41,7 +41,7 @@ func TestJailEnvReplacesHostPaths(t *testing.T) {
 }
 
 func TestJailEnvAddsDefaultsWhenAbsent(t *testing.T) {
-	got := jailEnv([]string{"CI=true"}, "/ws")
+	got := jailEnv([]string{"CI=true"}, "/ws", nil)
 	joined := strings.Join(got, "\n")
 	if !strings.Contains(joined, "PATH=/usr/bin:/bin") || !strings.Contains(joined, "HOME=/ws") {
 		t.Fatalf("jailEnv() = %q, want jail PATH and HOME defaults", got)
@@ -52,7 +52,7 @@ func TestJailEnvAddsDefaultsWhenAbsent(t *testing.T) {
 // and apply mounts in order: the /tmp tmpfs would otherwise cover a workspace
 // bound under /tmp.
 func TestJailArgvProfile(t *testing.T) {
-	argv := jailArgv("/usr/bin/bwrap", "/tmp/ws/p", []string{"CI=true"}, "echo hi")
+	argv := jailArgv("/usr/bin/bwrap", "/tmp/ws/p", []string{"CI=true"}, nil, "echo hi")
 	text := strings.Join(argv, "\n")
 	for _, want := range []string{
 		"--unshare-all", "--share-net", "--die-with-parent",

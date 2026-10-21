@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -43,5 +44,29 @@ func TestLoadAcceptsKnownSandboxSettings(t *testing.T) {
 	}
 	if len(cfg.Sandbox.ScrubPatterns) != 1 {
 		t.Fatalf("ScrubPatterns = %v", cfg.Sandbox.ScrubPatterns)
+	}
+}
+
+func TestLoadToolchainPaths(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := loadWithYAML(t, "sandbox:\n  toolchain_paths: ["+strconv.Quote(dir)+"]\n")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(cfg.Sandbox.ToolchainPaths) != 1 || cfg.Sandbox.ToolchainPaths[0] != dir {
+		t.Fatalf("ToolchainPaths = %q, want [%q]", cfg.Sandbox.ToolchainPaths, dir)
+	}
+}
+
+func TestLoadRejectsBadToolchainPaths(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"relative/go", "/", "/no/such/agentd-toolchain", file} {
+		_, err := loadWithYAML(t, "sandbox:\n  toolchain_paths: ["+strconv.Quote(path)+"]\n")
+		if err == nil || !strings.Contains(err.Error(), "sandbox.toolchain_paths") {
+			t.Errorf("Load(%q) error = %v, want a sandbox.toolchain_paths error", path, err)
+		}
 	}
 }

@@ -31,6 +31,10 @@ type BashExecutor struct {
 	// Backend selects the execution isolation: auto (default), bubblewrap
 	// or filter-only. See internal/sandbox/bubblewrap.go.
 	Backend string
+	// ToolchainPaths are absolute host directories bound read-only into the
+	// jail at the same path; each one's bin directory (or the directory
+	// itself when it has none) goes first on the jail's PATH (B-081).
+	ToolchainPaths []string
 }
 
 var _ Executor = (*BashExecutor)(nil)
@@ -97,7 +101,7 @@ func (e *BashExecutor) startCommand(execCtx context.Context, workspace string, p
 		return nil, "", err
 	}
 	if jailed {
-		argv := jailArgv(path, workspace, env, shell)
+		argv := jailArgv(path, workspace, env, e.ToolchainPaths, shell)
 		name, args = argv[0], argv[1:]
 		env = nil
 		backend = BackendBubblewrap
