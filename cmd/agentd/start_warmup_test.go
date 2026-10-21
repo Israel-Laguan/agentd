@@ -13,53 +13,83 @@ import (
 	"time"
 )
 
-// B-083: the daemon only listened after the LLM warmup answered, so /health
-// and every API call got "connection refused" for as long as the provider
-// took. The stub provider below holds the warmup call open until the test
-// has seen /health answer.
-func TestStart_HealthAnswersWhileWarmupRuns(t *testing.T) {
-	release := make(chan struct{})
+// heldWarmup starts `agentd start` against a stub provider that holds the
+// warmup call open until release is closed. done receives start's error.
+type heldWarmup struct {
+	addr    string
+	release chan struct{}
+	cancel  context.CancelFunc
+	done    chan error
+}
+
+func startWithHeldWarmup(t *testing.T) *heldWarmup {
+	t.Helper()
+	h := &heldWarmup{release: make(chan struct{}), done: make(chan error, 1)}
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
-		case <-release:
+		case <-h.release:
 		case <-r.Context().Done():
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(mockOpenAISuccessBody))
 	}))
-	defer provider.Close()
-	defer closeOnce(release)
+	t.Cleanup(provider.Close)
+	t.Cleanup(func() { closeOnce(h.release) })
 
 	home := t.TempDir()
 	t.Setenv("AGENTD_GATEWAY_OPENAI_API_KEY", "test-key")
 	runCommand(t, context.Background(), "--home", home, "init")
-	addr := freeAddress(t)
+	h.addr = freeAddress(t)
 	configPath := filepath.Join(t.TempDir(), "agentd.yaml")
-	config := fmt.Sprintf("gateway:\n  order:\n  - openai\n  openai:\n    base_url: %q\napi:\n  address: %q\n", provider.URL+"/v1", addr)
+	config := fmt.Sprintf("gateway:\n  order:\n  - openai\n  openai:\n    base_url: %q\napi:\n  address: %q\n", provider.URL+"/v1", h.addr)
 	if err := os.WriteFile(configPath, []byte(config), 0o600); err != nil {
 		t.Fatal(err)
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	done := make(chan error, 1)
+	h.cancel = cancel
+	t.Cleanup(cancel)
 	go func() {
 		cmd := newRootCommand()
 		cmd.SetArgs([]string{"--home", home, "--config", configPath, "start"})
-		done <- cmd.ExecuteContext(ctx)
+		h.done <- cmd.ExecuteContext(ctx)
 	}()
+	return h
+}
 
-	body := waitForHealth(t, "http://"+addr+"/health", 10*time.Second)
+func (h *heldWarmup) wait(t *testing.T) error {
+	t.Helper()
+	select {
+	case err := <-h.done:
+		return err
+	case <-time.After(15 * time.Second):
+		t.Fatal("start did not return after cancel")
+		return nil
+	}
+}
+
+// B-083: the daemon only listened after the LLM warmup answered, so /health
+// and every API call got "connection refused" for as long as the provider
+// took.
+func TestStart_HealthAnswersWhileWarmupRuns(t *testing.T) {
+	h := startWithHeldWarmup(t)
+	body := waitForHealth(t, "http://"+h.addr+"/health", 10*time.Second)
 	if warming, _ := body["warming_up"].(bool); !warming {
 		t.Errorf("/health during warmup = %v; want warming_up true", body)
 	}
-	closeOnce(release)
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(15 * time.Second):
-		t.Fatal("start did not return after cancel")
+	closeOnce(h.release)
+	h.cancel()
+	_ = h.wait(t)
+}
+
+// An interrupt (Ctrl-C, SIGTERM) while the warmup runs is a clean stop, not a
+// failed warmup: the CLI must not print the warmup hint and exit non-zero.
+func TestStart_InterruptDuringWarmupIsACleanStop(t *testing.T) {
+	h := startWithHeldWarmup(t)
+	waitForHealth(t, "http://"+h.addr+"/health", 10*time.Second)
+	h.cancel()
+	if err := h.wait(t); err != nil {
+		t.Fatalf("start after an interrupt during warmup = %v; want a clean stop (nil)", err)
 	}
 }
 

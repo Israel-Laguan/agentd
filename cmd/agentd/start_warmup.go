@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"sync/atomic"
+
+	"agentd/internal/config"
 )
 
 // warmupGate answers GET /health with warming_up while the LLM warmup runs,
@@ -28,4 +31,27 @@ func (g *warmupGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.next.ServeHTTP(w, r)
+}
+
+// warmUpWhileServing runs the LLM warmup while the API already serves, then
+// lets /health report plain ok. On failure it stops the API server and reports
+// false with the error to return. A canceled ctx means an interrupt, or an API
+// server failure that already called stop(): that is reported (nil for a clean
+// interrupt), not the warmup it cut short.
+func warmUpWhileServing(
+	ctx context.Context, stop context.CancelFunc, apiErrCh <-chan error,
+	gate *warmupGate, deps runtimeDeps, cfg config.Config, startOpts *startOptions,
+) (bool, error) {
+	err := warmupLLMIfNeeded(ctx, deps.gateway, cfg.Gateway, startOpts.skipLLMWarmup, cfg.Gateway.WarmupEnabled)
+	if err == nil {
+		gate.warming.Store(false)
+		return true, nil
+	}
+	interrupted := ctx.Err() != nil
+	stop()
+	drainErr := drainAPIServerError(apiErrCh)
+	if interrupted {
+		return false, drainErr
+	}
+	return false, err
 }

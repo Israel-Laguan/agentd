@@ -77,12 +77,9 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	gate := newWarmupGate(apiServer.Handler)
 	apiServer.Handler = gate
 	apiErrCh := startAPIServer(ctx, listener, apiServer, stop)
-	if err := warmupLLMIfNeeded(ctx, deps.gateway, cfg.Gateway, startOpts.skipLLMWarmup, cfg.Gateway.WarmupEnabled); err != nil {
-		stop()
-		_ = drainAPIServerError(apiErrCh)
+	if warmed, err := warmUpWhileServing(ctx, stop, apiErrCh, gate, deps, cfg, startOpts); !warmed {
 		return err
 	}
-	gate.warming.Store(false) // warmup done: /health reports plain ok
 
 	slog.Debug("starting daemon")
 	if err := daemon.Start(ctx); err != nil {
