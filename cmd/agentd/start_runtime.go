@@ -126,6 +126,7 @@ type daemonParts struct {
 func buildDaemonOptions(cfg config.Config, opts *startOptions, parts daemonParts) queue.DaemonOptions {
 	return queue.DaemonOptions{
 		OutageHandoffEnabled:    &parts.outage,
+		UsageRetentionDays:      cfg.AIUsage.RetentionDays,
 		WorkspaceReset:          parts.workspaceReset,
 		MaxWorkers:              opts.workers,
 		TaskInterval:            cfg.Cron.TaskDispatch,

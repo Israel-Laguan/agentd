@@ -190,8 +190,9 @@ baseline for deciding whether that is worth building.
   the records are dropped and counted. `dropped_records` is the count since the
   daemon started and resets on restart; a persistent non-zero value means the
   database is too slow or full.
-- **No retention.** `ai_calls` and `tool_calls` grow without bound. A retention setting is a
-  follow-up, not part of this change.
+- **Retention.** `ai_calls` and `tool_calls` keep every row unless
+  `ai_usage.retention_days` is set (see [config-reference.md](config-reference.md#ai-usage)).
+  Pruning removes rows older than the cut; the totals then cover only the kept window.
 - **Gateway calls only.** Usage by external CLI agents (SP-022) will be
   self-reported and will not match gateway-measured numbers exactly.
 - **Provider-reported tokens.** A provider that omits usage records 0, and

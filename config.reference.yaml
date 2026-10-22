@@ -161,6 +161,10 @@ recovery:
   # Only projects created with start_empty_workspace (and no source_path) are reset;
   # others, and projects with another COMPLETED/RUNNING task, fail the recovered task.
   clean_workspace_on_recover: false
+ai_usage:
+  # Delete ai_calls and tool_calls rows older than this many days (checked at
+  # start and every 6 hours). 0 keeps them forever.
+  retention_days: 0
 disk:
   free_threshold_percent: 10.0
 channel:
