@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"database/sql"
+	"strings"
 	"testing"
 
 	agenttools "agentd/internal/agent/tools"
@@ -93,5 +95,25 @@ func TestAgenticLoop_ToolErrorStringStillContinuesToFinalResponse(t *testing.T) 
 	}
 	if recorded.Status != LoopToolFailure || recorded.Meta.ErrorCode != agenttools.ToolErrorCodeUnverified {
 		t.Fatalf("loop result = %s code %q, want tool_failure with %q", recorded.Status, recorded.Meta.ErrorCode, agenttools.ToolErrorCodeUnverified)
+	}
+}
+
+// The agentic default prompt is prose with no JSON contract. When the routed
+// provider cannot do tool calls the engine falls back to the legacy JSON path,
+// which decodes a workerResponse; the profile prompt alone then gives the model
+// nothing to answer in (B-080 review).
+func TestLegacySystemContentAddsTheJSONContractToAProseOnlyPrompt(t *testing.T) {
+	t.Parallel()
+	prose := models.AgentProfile{SystemPrompt: sql.NullString{String: "Do the requested task in the workspace with the tools you have.", Valid: true}}
+	got := legacyJSONCommandSystemContent(prose)
+	if !strings.HasPrefix(got, prose.SystemPrompt.String) {
+		t.Errorf("profile prompt must come first, got %q", got)
+	}
+	if !strings.Contains(got, `{"command":`) {
+		t.Errorf("content = %q; want the JSON command contract appended to a prose-only prompt", got)
+	}
+	json := models.AgentProfile{SystemPrompt: sql.NullString{String: "Suggest one safe shell command. Output only JSON.", Valid: true}}
+	if got := legacyJSONCommandSystemContent(json); got != json.SystemPrompt.String {
+		t.Errorf("a prompt that already asks for JSON must be used as it is, got %q", got)
 	}
 }

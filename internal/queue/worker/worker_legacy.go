@@ -67,10 +67,16 @@ Shell command rules:
 - For host facts (OS, kernel, CPU, memory, disks) run commands that need no paths: uname -a, hostnamectl, lsb_release -a, lscpu, free -h, lsblk, df -h. A report may state only values printed by commands you ran: save each command's output to a file (e.g. uname -a > os.txt) so a later task can build report.md with cat; never type the facts yourself.`
 
 func legacyJSONCommandSystemContent(profile models.AgentProfile) string {
-	if profile.SystemPrompt.Valid {
-		return profile.SystemPrompt.String
+	if !profile.SystemPrompt.Valid {
+		return legacyJSONCommandSystemSentinel + legacyJSONCommandSystemBase
 	}
-	return legacyJSONCommandSystemSentinel + legacyJSONCommandSystemBase
+	prompt := profile.SystemPrompt.String
+	if strings.Contains(strings.ToLower(prompt), "json") {
+		return prompt
+	}
+	// A prose-only prompt (the agentic default) gives the legacy path nothing to
+	// answer in, and the reply is decoded as a workerResponse.
+	return prompt + "\n\n" + legacyJSONCommandSystemSentinel + legacyJSONCommandSystemBase
 }
 
 func workerMessages(task models.Task, profile models.AgentProfile) []gateway.PromptMessage {
