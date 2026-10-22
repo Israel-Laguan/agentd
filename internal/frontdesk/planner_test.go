@@ -218,13 +218,9 @@ func TestPlanner_PlanContent_ambiguousIntent(t *testing.T) {
 	}
 }
 
-func TestPlanner_PlanContent_structuredJSONPlan(t *testing.T) {
-	gw := &contractMockGateway{
-		mockGateway:   mockGateway{},
-		useStructured: true,
-		plan:          &models.DraftPlan{ProjectName: "from-structured"},
-	}
-	p := newTestPlannerWithGateway(t, testutil.NewFakeStore(), gw)
+func TestPlanner_PlanContent_returnsTheGeneratedPlan(t *testing.T) {
+	gw := &mockGateway{plan: &models.DraftPlan{ProjectName: "from-generated"}}
+	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
 
 	out, err := p.PlanContent(context.Background(), []string{"scope-a"}, "build", nil)
 	if err != nil {
@@ -234,11 +230,11 @@ func TestPlanner_PlanContent_structuredJSONPlan(t *testing.T) {
 	if err := json.Unmarshal(out, &plan); err != nil {
 		t.Fatalf("unmarshal plan: %v", err)
 	}
-	if plan.ProjectName != "from-structured" {
-		t.Fatalf("ProjectName = %q, want from-structured", plan.ProjectName)
+	if plan.ProjectName != "from-generated" {
+		t.Fatalf("ProjectName = %q, want from-generated", plan.ProjectName)
 	}
-	if gw.planCalls != 0 {
-		t.Fatalf("GeneratePlan calls = %d, want 0 when structured JSON succeeds", gw.planCalls)
+	if gw.planCalls != 1 {
+		t.Fatalf("GeneratePlan calls = %d, want 1: the planner calls it directly", gw.planCalls)
 	}
 }
 
@@ -315,12 +311,6 @@ type mockGateway struct {
 	lastHouseRules string
 }
 
-type contractMockGateway struct {
-	mockGateway
-	useStructured bool
-	plan          *models.DraftPlan
-}
-
 func (m *mockGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
 	return gateway.AIResponse{}, nil
 }
@@ -363,13 +353,4 @@ func (m *mockGateway) ClassifyIntent(_ context.Context, intent string) (*spec.In
 
 func (m *mockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.NoopEmbed(ctx, req)
-}
-
-// GeneratePlan returns the configured structured plan when useStructured is
-// set; otherwise the plain mock plan (T-055a: the adapter path is gone).
-func (m *contractMockGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
-	if m.useStructured && m.plan != nil {
-		return m.plan, nil
-	}
-	return m.mockGateway.GeneratePlan(ctx, intent)
 }
