@@ -304,6 +304,52 @@ class QuotaAndSlowOnceTest(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 2.0, "the quota failure waited out the armed delay")
 
 
+class AgenticDefaultReplyTest(unittest.TestCase):
+    """B-080: the default profile is agentic. An untagged worker request that
+    offers tools gets one bash call for the usual command, then the command's
+    output as the final message; never the command JSON as plain text."""
+
+    TOOLS = [{"type": "function", "function": {"name": "bash"}}]
+
+    def _body(self, title="build a thing", tool_result=None):
+        messages = [
+            {"role": "system", "content": "You are an agent."},
+            {"role": "user", "content": f"You are executing Task: {title}"},
+        ]
+        if tool_result is not None:
+            messages += [
+                {"role": "assistant", "content": None, "tool_calls": [{"id": "c0"}]},
+                {"role": "tool", "tool_call_id": "c0", "content": tool_result},
+            ]
+        return {"model": "agentd", "messages": messages, "tools": self.TOOLS}
+
+    def _call_args(self, reply):
+        choice = reply["choices"][0]
+        self.assertEqual(choice["finish_reason"], "tool_calls")
+        call = choice["message"]["tool_calls"][0]
+        self.assertEqual(call["function"]["name"], "bash")
+        return json.loads(call["function"]["arguments"])
+
+    def test_first_turn_runs_the_usual_command_through_bash(self):
+        args = self._call_args(server.chat_completion(self._body()))
+        self.assertEqual(args["command"], server.build_command("unknown", "build a thing"))
+
+    def test_slow_task_runs_the_slow_command_through_bash(self):
+        args = self._call_args(server.chat_completion(self._body(title=f"{server.SLOW_MARKER} recover")))
+        self.assertEqual(args["command"], server.slow_command())
+
+    def test_final_message_carries_the_command_output(self):
+        reply = server.chat_completion(self._body(tool_result="tick 28\ntick 29"))
+        choice = reply["choices"][0]
+        self.assertEqual(choice["finish_reason"], "stop")
+        self.assertIn("tick 29", choice["message"]["content"])
+
+    def test_request_without_tools_keeps_the_command_json(self):
+        body = self._body()
+        del body["tools"]
+        self.assertIn("command", json.loads(server.chat_completion(body)["choices"][0]["message"]["content"]))
+
+
 class ToolCallScenarioTest(unittest.TestCase):
     """T-053: a task can script `tool_calls` for the agentic loop."""
 
@@ -347,10 +393,14 @@ class ToolCallScenarioTest(unittest.TestCase):
         self.assertIn("command", json.loads(reply["choices"][0]["message"]["content"]))
 
     def test_malformed_tag_keeps_the_default_reply(self):
+        # The default for a request that offers tools is the untagged agentic
+        # reply: one bash call for the usual command (B-080).
         body = self._body()
         body["messages"][1]["content"] = "Task: scripted\n@tool_calls=!!!not-base64"
         reply = server.chat_completion(body)
-        self.assertIn("command", json.loads(reply["choices"][0]["message"]["content"]))
+        call = reply["choices"][0]["message"]["tool_calls"][0]
+        self.assertEqual(call["function"]["name"], "bash")
+        self.assertNotIn("sudo id", call["function"]["arguments"])
         self.assertEqual(toolcalls.configured_tool_calls(self._body(calls=[{"arguments": {}}])), [])
 
     def test_non_object_arguments_keep_the_default_reply(self):
