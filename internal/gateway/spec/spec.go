@@ -230,11 +230,3 @@ type AIGateway interface {
 	AnalyzeScope(ctx context.Context, userIntent string) (*ScopeAnalysis, error)
 	ClassifyIntent(ctx context.Context, userIntent string) (*IntentAnalysis, error)
 }
-
-// ContractAdapter exposes proposal-aligned entry points while Router keeps its
-// richer role-aware surface area.
-type ContractAdapter interface {
-	GenerateText(ctx context.Context, prompt string, limit int) (string, error)
-	GenerateStructuredJSON(ctx context.Context, prompt string, target interface{}) error
-	TruncateToBudget(input string, maxTokens int) string
-}

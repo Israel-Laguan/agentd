@@ -61,7 +61,7 @@ func assertSchemaReachedModel(t *testing.T, prov *recordingProvider) {
 	}
 }
 
-func TestPlanApprovedScope_ContractAdapterSendsDraftPlanSchema(t *testing.T) {
+func TestPlanApprovedScope_SendsDraftPlanSchema(t *testing.T) {
 	prov := &recordingProvider{responses: []string{wrongShapePlan, validPlan}}
 	p := &Planner{Gateway: routing.NewRouter(prov)}
 	out, err := p.planApprovedScope(context.Background(), "what os and hardware have this machine", "", nil)
@@ -74,7 +74,7 @@ func TestPlanApprovedScope_ContractAdapterSendsDraftPlanSchema(t *testing.T) {
 	assertSchemaReachedModel(t, prov)
 }
 
-func TestIntakeProcess_ContractAdapterSendsDraftPlanSchema(t *testing.T) {
+func TestIntakeProcess_SendsDraftPlanSchema(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{

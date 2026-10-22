@@ -3,7 +3,6 @@ package frontdesk
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
@@ -319,7 +318,6 @@ type mockGateway struct {
 type contractMockGateway struct {
 	mockGateway
 	useStructured bool
-	structuredErr error
 	plan          *models.DraftPlan
 }
 
@@ -367,29 +365,11 @@ func (m *mockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.Em
 	return spec.NoopEmbed(ctx, req)
 }
 
-func (m *contractMockGateway) GenerateText(context.Context, string, int) (string, error) {
-	return "", nil
-}
-
-func (m *contractMockGateway) GenerateStructuredJSON(_ context.Context, _ string, target interface{}) error {
-	if m.structuredErr != nil {
-		return m.structuredErr
+// GeneratePlan returns the configured structured plan when useStructured is
+// set; otherwise the plain mock plan (T-055a: the adapter path is gone).
+func (m *contractMockGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
+	if m.useStructured && m.plan != nil {
+		return m.plan, nil
 	}
-	if !m.useStructured {
-		return errors.New("structured plan not configured")
-	}
-	draft, ok := target.(*models.DraftPlan)
-	if !ok {
-		return errors.New("expected *models.DraftPlan target")
-	}
-	plan := m.plan
-	if plan == nil {
-		plan = &models.DraftPlan{}
-	}
-	*draft = *plan
-	return nil
-}
-
-func (m *contractMockGateway) TruncateToBudget(input string, _ int) string {
-	return input
+	return m.mockGateway.GeneratePlan(ctx, intent)
 }

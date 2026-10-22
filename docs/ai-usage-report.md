@@ -34,7 +34,7 @@ repair.
 
 ## Purposes
 
-The set is closed: 25 purposes in the form `<stage>.<name>`. A call that arrives
+The set is closed: 23 purposes in the form `<stage>.<name>`. A call that arrives
 with an empty or unknown purpose is stored as `unlabelled` and counted, never
 dropped. The minimum level is provisional (SP-023): L1 is a single model call
 with no tools or workspace, L3 needs an ACP agent.
@@ -64,12 +64,12 @@ with no tools or workspace, L3 needs an ACP agent.
 | `maint.merge_memories` | Merge a cluster of similar memories into one | L1 |
 | `hidden.truncate_summary` | Gateway truncator summarizes an oversized message | L1 |
 | `system.warmup` | Daemon start ping | n/a |
-| `legacy.contract_text` | `GenerateText`, no production caller; removed by T-055 | drop |
-| `legacy.contract_json` | `GenerateStructuredJSON` generic branch, unreachable in production; removed by T-055 | drop |
 | `unlabelled` | Reserved: any call that arrives with an empty or unknown purpose | n/a |
 
 `system.warmup` is one row per daemon start and is part of the totals;
-`legacy.*` rows should stay at zero.
+Removed in S18 (T-055a): the `legacy.contract_text` and `legacy.contract_json`
+purposes, which had no production caller. Their rows, if an old database has
+any, are historical.
 
 ## Reading the report
 

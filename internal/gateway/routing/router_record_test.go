@@ -210,23 +210,6 @@ func TestGeneratePlanTakesItsPurposeFromContext(t *testing.T) {
 	}
 }
 
-func TestGenericStructuredJSONRetryIsMarkedAsRepair(t *testing.T) {
-	// Valid JSON of the wrong shape passes the router's syntax check, so only the
-	// adapter loop above it retries; it must mark its own retry.
-	p := &scriptedProvider{name: "p", replies: []scriptedReply{{content: `{"a":"x"}`}, {content: `{"a":1}`}}}
-	rec := &sliceRecorder{}
-	var out map[string]int
-	if err := NewRouter(p).WithRecorder(rec).GenerateStructuredJSON(context.Background(), "go", &out); err != nil {
-		t.Fatal(err)
-	}
-	if len(rec.recs) != 2 || rec.recs[0].Attempt != spec.AttemptFirst || rec.recs[1].Attempt != spec.AttemptJSONRepair {
-		t.Fatalf("records = %+v, want [first json_repair]", rec.recs)
-	}
-	if rec.recs[1].Purpose != spec.PurposeLegacyContractJSON {
-		t.Errorf("purpose = %q", rec.recs[1].Purpose)
-	}
-}
-
 func assertCascadeOutcomes(t *testing.T, a, b spec.CallRecord) {
 	t.Helper()
 	if a.Provider != "down" || a.Outcome != spec.OutcomeFailed || a.Cascade {

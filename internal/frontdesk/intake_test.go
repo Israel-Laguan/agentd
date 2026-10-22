@@ -21,6 +21,9 @@ func (g *stubIntakeGateway) Generate(context.Context, gateway.AIRequest) (gatewa
 }
 
 func (g *stubIntakeGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
+	if g.planOut == nil && g.planErr == nil {
+		return &g.structDraft, nil
+	}
 	return g.planOut, g.planErr
 }
 
@@ -35,19 +38,6 @@ func (g *stubIntakeGateway) ClassifyIntent(context.Context, string) (*gateway.In
 func (g *stubIntakeGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
-
-func (g *stubIntakeGateway) GenerateText(context.Context, string, int) (string, error) {
-	return "", nil
-}
-
-func (g *stubIntakeGateway) GenerateStructuredJSON(_ context.Context, _ string, target interface{}) error {
-	if p, ok := target.(*models.DraftPlan); ok {
-		*p = g.structDraft
-	}
-	return nil
-}
-
-func (g *stubIntakeGateway) TruncateToBudget(input string, _ int) string { return input }
 
 type stubTruncator struct{}
 
@@ -73,7 +63,7 @@ func TestIntakeProcessorSkipsNonConsiderationTask(t *testing.T) {
 	}
 }
 
-func TestIntakeProcessorUsesContractAdapter(t *testing.T) {
+func TestIntakeProcessorUsesStructuredDraft(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
@@ -159,7 +149,6 @@ func TestIntakeProcessorGeneratePlanFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateTaskState: %v", err)
 	}
-	// Gateway without ContractAdapter: type assertion fails, GeneratePlan path runs.
 	gw := &stubPlanOnlyGW{out: &models.DraftPlan{Tasks: []models.DraftTask{{Title: "from-plan"}}}}
 	p := NewIntakeProcessor(store, gw, nil, nil, 0)
 	if err := p.Process(ctx, models.CommentRef{TaskID: task.ID, CommentEventID: "x", Body: "go"}); err != nil {

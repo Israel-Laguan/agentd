@@ -24,7 +24,6 @@ type (
 	ProviderConfig     = spec.ProviderConfig
 	Provider           = spec.Provider
 	AIGateway          = spec.AIGateway
-	ContractAdapter    = spec.ContractAdapter
 	Truncator          = spec.Truncator
 	ScopeAnalysis      = spec.ScopeAnalysis
 	ScopeOption        = spec.ScopeOption

@@ -139,19 +139,7 @@ func (p *Planner) planApprovedScope(ctx context.Context, intent, approvedScope s
 		}
 		planningIntent = withContents
 	}
-	var (
-		plan *models.DraftPlan
-		err  error
-	)
-	if adapter, ok := any(p.Gateway).(gateway.ContractAdapter); ok {
-		var draft models.DraftPlan
-		if err = adapter.GenerateStructuredJSON(ctx, planningIntent, &draft); err == nil {
-			plan = &draft
-		}
-	}
-	if plan == nil && err == nil {
-		plan, err = p.Gateway.GeneratePlan(ctx, planningIntent)
-	}
+	plan, err := p.Gateway.GeneratePlan(ctx, planningIntent)
 	if err != nil {
 		return nil, err
 	}

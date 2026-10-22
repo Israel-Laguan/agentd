@@ -40,8 +40,6 @@ var purposeLevels = map[Purpose]Level{
 	PurposeMaintMergeMemories:     LevelL1,
 	PurposeHiddenTruncateSummary:  LevelL1,
 	PurposeSystemWarmup:           LevelNone,
-	PurposeLegacyContractText:     LevelDrop,
-	PurposeLegacyContractJSON:     LevelDrop,
 }
 
 // MinLevel returns the provisional minimum level, or "" for an unknown purpose.

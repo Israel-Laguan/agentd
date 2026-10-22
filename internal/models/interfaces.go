@@ -55,14 +55,6 @@ type KanbanBoardContract interface {
 	ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]Task, error)
 }
 
-// AIGatewayContract captures proposal-aligned capabilities used by frontdesk
-// and worker flows, independent of provider-specific routing methods.
-type AIGatewayContract interface {
-	GenerateText(ctx context.Context, prompt string, limit int) (string, error)
-	GenerateStructuredJSON(ctx context.Context, prompt string, target interface{}) error
-	TruncateToBudget(input string, maxTokens int) string
-}
-
 // SandboxEnvironment models the physical execution boundary.
 type SandboxEnvironment interface {
 	Execute(ctx context.Context, payload ExecutionPayload) ExecutionResult

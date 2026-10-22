@@ -8,8 +8,14 @@ import (
 
 func TestPurposeTaxonomyIsClosedAndWellFormed(t *testing.T) {
 	all := AllPurposes()
-	if len(all) != 25 {
-		t.Fatalf("taxonomy has %d purposes, SP-023 approved 25", len(all))
+	// T-055a removed the two legacy.contract_* purposes (no production caller).
+	if len(all) != 23 {
+		t.Fatalf("taxonomy has %d purposes, want 23 after T-055a", len(all))
+	}
+	for _, p := range all {
+		if strings.HasPrefix(string(p), "legacy.") {
+			t.Errorf("legacy purpose %q is still in the taxonomy", p)
+		}
 	}
 	seen := map[Purpose]bool{}
 	for _, p := range all {
@@ -58,7 +64,6 @@ func TestSP023Levels(t *testing.T) {
 		PurposeExecTurn:             LevelL3,
 		PurposeSubagentTurn:         LevelL3,
 		PurposeIntakeClassifyIntent: LevelL1,
-		PurposeLegacyContractText:   LevelDrop,
 		PurposeSystemWarmup:         LevelNone,
 	}
 	for p, lvl := range want {

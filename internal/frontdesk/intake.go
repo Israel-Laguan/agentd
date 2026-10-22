@@ -43,19 +43,7 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 		slog.WarnContext(ctx, "intake: failed to build intent", "task_id", ref.TaskID, "error", err)
 		return err
 	}
-	var (
-		plan    *models.DraftPlan
-		planErr error
-	)
-	if adapter, ok := any(p.gateway).(gateway.ContractAdapter); ok {
-		var draft models.DraftPlan
-		if planErr = adapter.GenerateStructuredJSON(ctx, intent, &draft); planErr == nil {
-			plan = &draft
-		}
-	}
-	if plan == nil && planErr == nil {
-		plan, planErr = p.gateway.GeneratePlan(ctx, intent)
-	}
+	plan, planErr := p.gateway.GeneratePlan(ctx, intent)
 	if planErr != nil {
 		slog.WarnContext(ctx, "intake: plan generation failed", "task_id", ref.TaskID, "error", planErr)
 		return planErr
