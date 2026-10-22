@@ -55,7 +55,7 @@ func TestJailArgvProfile(t *testing.T) {
 	argv := jailArgv("/usr/bin/bwrap", "/tmp/ws/p", []string{"CI=true"}, nil, "echo hi")
 	text := strings.Join(argv, "\n")
 	for _, want := range []string{
-		"--unshare-all", "--share-net", "--die-with-parent",
+		"--unshare-all", "--die-with-parent",
 		"--ro-bind\n/usr\n/usr", "--ro-bind\n/lib\n/lib", "--ro-bind-try\n/lib64\n/lib64",
 		"--ro-bind\n/bin\n/bin", "--ro-bind\n/sbin\n/sbin", "--ro-bind\n/sys\n/sys",
 		"--ro-bind-try\n/run/dbus/system_bus_socket\n/run/dbus/system_bus_socket",
@@ -78,6 +78,9 @@ func TestJailArgvProfile(t *testing.T) {
 	}
 	if strings.Contains(text, "/home") || strings.Contains(text, "/etc/machine-id") || strings.Contains(text, "/etc/shadow") {
 		t.Fatalf("argv exposes host paths:\n%s", text)
+	}
+	if strings.Contains(text, "--share-net") {
+		t.Fatalf("argv shares the host network (B-086):\n%s", text)
 	}
 	tmpfs := strings.Index(text, "--tmpfs")
 	bind := strings.Index(text, "--bind\n/tmp/ws/p")

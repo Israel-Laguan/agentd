@@ -169,8 +169,12 @@ func unavailableReason(status jailProbeResult) string {
 // ordinary commands need (name resolution, TLS trust, OS release, user
 // lookup), a fresh proc/dev/tmp, the workspace bound writable at the same
 // path with cwd inside it, and a cleared environment rebuilt from env.
-// Network stays shared: --unshare-all would otherwise isolate default worker
-// commands (git clone, curl, go mod download, npm install). Mounts that can
+// --unshare-all includes the network (B-086): a jailed command gets only its
+// own private loopback, never the host's (the daemon's board API listens
+// there) or the internet. Model calls run in the daemon, not the jail, so no
+// agentic command needs the network; dependency downloads (go mod download,
+// npm install) need a vendored tree or a warm cache until an egress allowlist
+// exists (see docs/agentic-harness-roadmap.md). Mounts that can
 // be absent on some hosts (/lib64 on some arm64 distros, dbus/systemd on
 // hosts without them, any single /etc file) use --ro-bind-try so a missing
 // path degrades instead of failing the exec before bash starts. Mounts apply
@@ -181,7 +185,7 @@ func unavailableReason(status jailProbeResult) string {
 // bound read-only after the /tmp tmpfs, for the same reason as the workspace.
 func jailArgv(bwrap, workspace string, env, toolchains []string, shell string) []string {
 	argv := []string{bwrap,
-		"--unshare-all", "--share-net", "--die-with-parent",
+		"--unshare-all", "--die-with-parent",
 		"--ro-bind", "/usr", "/usr",
 		"--ro-bind", "/lib", "/lib",
 		"--ro-bind-try", "/lib64", "/lib64",
