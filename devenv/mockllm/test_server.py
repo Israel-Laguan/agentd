@@ -344,6 +344,14 @@ class AgenticDefaultReplyTest(unittest.TestCase):
         self.assertEqual(choice["finish_reason"], "stop")
         self.assertIn("tick 29", choice["message"]["content"])
 
+    def test_tools_without_bash_keep_the_command_json(self):
+        # A request that offers only other tools must not get a bash call.
+        body = self._body()
+        body["tools"] = [{"type": "function", "function": {"name": "read"}}]
+        message = server.chat_completion(body)["choices"][0]["message"]
+        self.assertNotIn("tool_calls", message)
+        self.assertIn("command", json.loads(message["content"]))
+
     def test_request_without_tools_keeps_the_command_json(self):
         body = self._body()
         del body["tools"]

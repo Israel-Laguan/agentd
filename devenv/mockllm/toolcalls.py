@@ -70,6 +70,14 @@ def has_tool_result(body: dict) -> bool:
     return any(msg.get("role") == "tool" for msg in body.get("messages", []))
 
 
+def offers_tool(body: dict, name: str) -> bool:
+    """Whether the request's `tools` include a function called `name`."""
+    return any(
+        isinstance(tool, dict) and tool.get("function", {}).get("name") == name
+        for tool in body.get("tools") or []
+    )
+
+
 def last_tool_result(body: dict) -> str:
     """The content of the latest tool message, or "" when there is none."""
     for msg in reversed(body.get("messages", [])):
