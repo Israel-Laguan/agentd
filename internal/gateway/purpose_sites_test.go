@@ -18,7 +18,6 @@ var wantSites = map[string][]string{
 	"internal/gateway/routing/intent.go":                 {"PurposeIntakeClassifyIntent"},
 	"internal/gateway/routing/scope.go":                  {"PurposeIntakeAnalyzeScope"},
 	"internal/gateway/routing/router_plan.go":            {"planPurpose"},
-	"internal/gateway/routing/contract_adapter.go":       {"PurposeLegacyContractJSON", "PurposeLegacyContractText"},
 	"internal/gateway/truncation/truncator_summarize.go": {"PurposeHiddenTruncateSummary"},
 	"internal/agent/runtime/topic_guard.go":              {"PurposeOverheadTopicDrift"},
 	"internal/agent/context/context_summarize.go":        {"PurposeOverheadCompactContext"},

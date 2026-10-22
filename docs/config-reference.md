@@ -217,6 +217,12 @@ Cron schedules live in `<home>/agentd.crontab`.
 | `tool_timeouts` | Per-tool dispatch timeouts; `"default"` applies to unlisted tools. Go duration strings (`"30s"`, `"1m"`). |
 | `tool_retries` | Transient failures retried with exponential backoff + jitter; model never sees intermediate failures. Only listed tools are eligible. |
 
+## AI usage
+
+| Key | Notes |
+| --- | --- |
+| `ai_usage.retention_days` | Delete `ai_calls` and `tool_calls` rows older than this many days. `0` (default) keeps them forever; a negative value fails config load. The daemon prunes at start and every 6 hours. See [ai-usage-report.md](ai-usage-report.md). |
+
 ## Plugins
 
 > **Not loaded yet (B-063).** The daemon does not mount plugins. The `plugins` block in `config.reference.yaml` (`enabled`, `path`, `shell_hook_timeout`) is not implemented: nothing reads it. The format below is the planned one.

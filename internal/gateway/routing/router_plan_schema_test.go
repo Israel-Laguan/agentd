@@ -8,7 +8,6 @@ import (
 
 	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 )
 
 type recordingSeqProvider struct {
@@ -70,15 +69,15 @@ func TestGeneratePlan_WrongShapeThenCorrectionCarriesSchema(t *testing.T) {
 	}
 }
 
-func TestGenerateStructuredJSON_DraftPlanTargetCarriesSchema(t *testing.T) {
+func TestGeneratePlan_WrongShapeIsRetriedWithSchema(t *testing.T) {
 	t.Parallel()
 	prov := &recordingSeqProvider{responses: []string{
 		`{"project":"x","plan":[]}`,
 		`{"project_name":"host-report","tasks":[{"title":"t","description":"d","assignee":"SYSTEM"}]}`,
 	}}
-	var draft models.DraftPlan
-	if err := NewRouter(prov).GenerateStructuredJSON(context.Background(), "inspect", &draft); err != nil {
-		t.Fatalf("GenerateStructuredJSON() error = %v", err)
+	draft, err := NewRouter(prov).GeneratePlan(context.Background(), "inspect")
+	if err != nil {
+		t.Fatalf("GeneratePlan() error = %v", err)
 	}
 	if draft.ProjectName != "host-report" || len(prov.requests) != 2 {
 		t.Fatalf("draft = %+v, calls = %d", draft, len(prov.requests))

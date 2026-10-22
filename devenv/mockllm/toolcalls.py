@@ -16,6 +16,10 @@ When a request that offers tools carries the tag:
   ends the agentic loop.
 
 Requests without `tools` (intake, planning, summaries) never match.
+
+Untagged worker requests that offer tools (the agentic default profile, B-080)
+get `agentic_command_completion`: one `bash` call for the usual command, then
+the command's output as the final message, so RESULT still carries it.
 """
 
 import base64
@@ -66,11 +70,34 @@ def has_tool_result(body: dict) -> bool:
     return any(msg.get("role") == "tool" for msg in body.get("messages", []))
 
 
-def tool_calls_completion(body: dict, calls: list) -> dict:
+def offers_tool(body: dict, name: str) -> bool:
+    """Whether the request's `tools` include a function called `name`."""
+    return any(
+        isinstance(tool, dict) and tool.get("function", {}).get("name") == name
+        for tool in body.get("tools") or []
+    )
+
+
+def last_tool_result(body: dict) -> str:
+    """The content of the latest tool message, or "" when there is none."""
+    for msg in reversed(body.get("messages", [])):
+        if msg.get("role") == "tool" and isinstance(msg.get("content"), str):
+            return msg["content"]
+    return ""
+
+
+def agentic_command_completion(body: dict, command: str) -> dict:
+    """Answer an untagged agentic worker request: run `command` through bash,
+    then end with the command's output as the final message."""
+    final = last_tool_result(body) or FINAL_MESSAGE
+    return tool_calls_completion(body, [{"name": "bash", "arguments": {"command": command}}], final)
+
+
+def tool_calls_completion(body: dict, calls: list, final: str = FINAL_MESSAGE) -> dict:
     """An OpenAI chat completion that asks for `calls`, or ends with a final
     message once a tool result is in the conversation."""
     if has_tool_result(body):
-        message = {"role": "assistant", "content": FINAL_MESSAGE}
+        message = {"role": "assistant", "content": final}
         finish = "stop"
     else:
         message = {

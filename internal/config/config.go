@@ -42,6 +42,7 @@ type Config struct {
 	Healing     HealingConfig
 	Breaker     BreakerConfig
 	Recovery    RecoveryConfig
+	AIUsage     AIUsageConfig
 	Disk        DiskConfig
 	Heartbeat   HeartbeatConfig
 	Librarian   LibrarianConfig
@@ -154,6 +155,7 @@ func newConfigViper(cfg Config, homeDir, configFile string) *viper.Viper {
 	v.SetDefault("breaker.handoff_after", defaultBreakerHandoffAfter.String())
 	v.SetDefault("breaker.open_timeout", defaultBreakerOpenTimeout.String())
 	v.SetDefault("recovery.clean_workspace_on_recover", false)
+	v.SetDefault("ai_usage.retention_days", 0)
 	v.SetDefault("disk.free_threshold_percent", defaultDiskFreeThresholdPercent)
 	v.SetDefault("heartbeat.stale_after", defaultHeartbeatStaleAfter.String())
 	setLibrarianDefaults(v)
@@ -195,8 +197,7 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	if err != nil {
 		return Config{}, fmt.Errorf("load gateway config: %w", err)
 	}
-	cfg.Sandbox = loadSandboxConfig(v)
-	if err = validateSandboxConfig(cfg.Sandbox); err != nil {
+	if err = hydrateChecked(&cfg, v); err != nil {
 		return Config{}, err
 	}
 	cfg.Healing = loadHealingConfig(v)

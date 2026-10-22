@@ -21,7 +21,7 @@ Init prints a short hint listing seeded profiles, the first detected LLM provide
 
 Seeded profiles start with empty `provider` / `model` and follow `gateway.order` on each task. Re-running `agentd init` does **not** overwrite profiles that already exist (operator PATCHes are preserved). Use `agentd init --reset-profiles` to restore empty provider/model or clear stale pins from older installs.
 
-Enable agentic mode per profile via PATCH (`agentic_mode: true`); empty provider works with agentic when at least one configured backend in order supports chat tools.
+The `default` profile is agentic (`agentic_mode: true`): tasks run through the tool loop. Its prompt asks the agent to run the project's tests before it reports Completed, but the worker does not require a passing test: a task that finishes right after a failed shell command goes to a human instead of COMPLETED, and a later successful shell command clears that failure. An install from before this change is upgraded to agentic on the next `agentd init`, unless the operator changed its prompt; a changed prompt is kept as it is. Other profiles start with agentic mode off; enable it per profile via PATCH (`agentic_mode: true`). An empty provider works with agentic when at least one configured backend in order supports chat tools.
 
 For Gemini-only setups, cascade routing is usually enough; optionally PATCH explicit `provider` / `model` (see [README § First Run](../README.md#first-run)).
 

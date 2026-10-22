@@ -151,6 +151,19 @@ Completed execution order (historical, all done): `13 → (14, 16, 19 in paralle
 
 ---
 
+## Follow-ups: network egress for jailed commands (after B-086)
+
+Since B-086 the bubblewrap jail unshares the network: a jailed `bash` call reaches neither the host's loopback (the daemon's API and board) nor the internet. Model calls run in the daemon, so the agentic loop itself needs no network, but dependency downloads (`go mod download`, `npm install`, `pip install`) fail inside the jail until a workspace has vendored dependencies or a warm cache. Two ways to give commands controlled egress, in the order we expect to take them:
+
+| Option | Shape | Trade-off | Status |
+| --- | --- | --- | --- |
+| Egress allowlist proxy | `--unshare-net`, plus a config key such as `sandbox.egress_allow: [host:port, ...]` enforced by a CONNECT proxy in the daemon, reached through a unix socket bound into the jail (a small forwarder inside the jail gives tools the TCP `HTTPS_PROXY` they expect) | The intended end state, and the same mechanism T-042 needs to jail external ACP agents (measured in [acp-agents.md](acp-agents.md#inside-the-jail-sp-025)). Build it once and share it | Not started; build with T-042 |
+| Coarse network switch | `sandbox.network: none \| host`, default `none` | Cheap, but `host` reopens the whole hole, the host's loopback included, not only package registries. Only worth it as a stopgap if the proxy slips | Not planned |
+
+Until then, a project that must download dependencies at task time can run with `sandbox.backend: filter-only`, which drops the jail entirely.
+
+---
+
 ## Risk register
 
 | Risk | Mitigation |
@@ -159,3 +172,4 @@ Completed execution order (historical, all done): `13 → (14, 16, 19 in paralle
 | Infinite tool chatter | Phase 5 caps, deadlines, budgets. |
 | Provider lacks tools | Phase 9 routing; until then, only enable agentic mode for OpenAI. |
 | Token explosion | Existing `BudgetTracker` across inner iterations; truncation task 10. |
+| Jailed command reaches the host or the internet | The jail unshares the network (B-086); controlled egress is the allowlist-proxy follow-up above. |

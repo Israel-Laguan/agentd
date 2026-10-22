@@ -42,6 +42,9 @@ type ToolExecutor struct {
 	wallTimeout   time.Duration
 	maxReadBytes  int64
 	filePipeline  *wfilecontext.FilePipeline
+	// taskID and projectID tag shell commands, so the sandbox's LOG_CHUNK
+	// events are stored under the task they ran for (set by ForTask).
+	taskID, projectID string
 
 	workspaceRoot     string
 	workspaceRootErr  error
@@ -56,6 +59,15 @@ func NewToolExecutor(sb sandbox.Executor, workspacePath string, envVars []string
 		wallTimeout:   wallTimeout,
 		maxReadBytes:  defaultMaxToolReadFileBytes,
 	}
+}
+
+// ForTask tags the executor's shell commands with the task and project they
+// run for. Without it, LOG_CHUNK events carried task "tool" and no project,
+// and the store rejected them, so no live output reached the board.
+func (t *ToolExecutor) ForTask(taskID, projectID string) *ToolExecutor {
+	t.taskID = taskID
+	t.projectID = projectID
+	return t
 }
 
 func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall, extraEnv ...string) string {

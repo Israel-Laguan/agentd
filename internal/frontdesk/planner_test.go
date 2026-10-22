@@ -3,7 +3,6 @@ package frontdesk
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
@@ -219,13 +218,9 @@ func TestPlanner_PlanContent_ambiguousIntent(t *testing.T) {
 	}
 }
 
-func TestPlanner_PlanContent_structuredJSONPlan(t *testing.T) {
-	gw := &contractMockGateway{
-		mockGateway:   mockGateway{},
-		useStructured: true,
-		plan:          &models.DraftPlan{ProjectName: "from-structured"},
-	}
-	p := newTestPlannerWithGateway(t, testutil.NewFakeStore(), gw)
+func TestPlanner_PlanContent_returnsTheGeneratedPlan(t *testing.T) {
+	gw := &mockGateway{plan: &models.DraftPlan{ProjectName: "from-generated"}}
+	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
 
 	out, err := p.PlanContent(context.Background(), []string{"scope-a"}, "build", nil)
 	if err != nil {
@@ -235,11 +230,11 @@ func TestPlanner_PlanContent_structuredJSONPlan(t *testing.T) {
 	if err := json.Unmarshal(out, &plan); err != nil {
 		t.Fatalf("unmarshal plan: %v", err)
 	}
-	if plan.ProjectName != "from-structured" {
-		t.Fatalf("ProjectName = %q, want from-structured", plan.ProjectName)
+	if plan.ProjectName != "from-generated" {
+		t.Fatalf("ProjectName = %q, want from-generated", plan.ProjectName)
 	}
-	if gw.planCalls != 0 {
-		t.Fatalf("GeneratePlan calls = %d, want 0 when structured JSON succeeds", gw.planCalls)
+	if gw.planCalls != 1 {
+		t.Fatalf("GeneratePlan calls = %d, want 1: the planner calls it directly", gw.planCalls)
 	}
 }
 
@@ -316,13 +311,6 @@ type mockGateway struct {
 	lastHouseRules string
 }
 
-type contractMockGateway struct {
-	mockGateway
-	useStructured bool
-	structuredErr error
-	plan          *models.DraftPlan
-}
-
 func (m *mockGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
 	return gateway.AIResponse{}, nil
 }
@@ -365,31 +353,4 @@ func (m *mockGateway) ClassifyIntent(_ context.Context, intent string) (*spec.In
 
 func (m *mockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.NoopEmbed(ctx, req)
-}
-
-func (m *contractMockGateway) GenerateText(context.Context, string, int) (string, error) {
-	return "", nil
-}
-
-func (m *contractMockGateway) GenerateStructuredJSON(_ context.Context, _ string, target interface{}) error {
-	if m.structuredErr != nil {
-		return m.structuredErr
-	}
-	if !m.useStructured {
-		return errors.New("structured plan not configured")
-	}
-	draft, ok := target.(*models.DraftPlan)
-	if !ok {
-		return errors.New("expected *models.DraftPlan target")
-	}
-	plan := m.plan
-	if plan == nil {
-		plan = &models.DraftPlan{}
-	}
-	*draft = *plan
-	return nil
-}
-
-func (m *contractMockGateway) TruncateToBudget(input string, _ int) string {
-	return input
 }

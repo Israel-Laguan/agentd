@@ -131,6 +131,9 @@ type Engine struct {
 	// repeats spots the same tool call returning the same result again and
 	// again in this task run (B-081); created on first use.
 	repeats *agenttools.RepeatTracker
+	// lastBashFailure is the failing result of the most recent shell command
+	// that did not pass, and "" once a later command passes (B-082).
+	lastBashFailure string
 }
 
 func NewEngine(cfg Config, host Host) *Engine {

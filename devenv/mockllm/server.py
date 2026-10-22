@@ -21,7 +21,7 @@ from controls import (
     set_slow_once,
     take_slow_once,
 )
-from toolcalls import configured_tool_calls, tool_calls_completion
+from toolcalls import agentic_command_completion, configured_tool_calls, offers_tool, tool_calls_completion
 
 # Re-exported so callers that only import this module — including the tests — can
 # keep using server.set_outage(...) and friends. The per-model control toggles now
@@ -391,9 +391,11 @@ def chat_completion(body: dict, headers=None) -> dict:
         sys.stderr.write(f"[mockllm] decomposing plan for task_id={task_id}\n")
         sys.stderr.flush()
         return completion(body, decompose_plan(title))
-    if SLOW_MARKER in title:
-        return completion(body, {"command": slow_command()})
-    return completion(body, {"command": build_command(task_id, title)})
+    command = slow_command() if SLOW_MARKER in title else build_command(task_id, title)
+    if offers_tool(body, "bash"):
+        # B-080: the default profile is agentic; run the command through bash.
+        return agentic_command_completion(body, command)
+    return completion(body, {"command": command})
 
 
 class Handler(BaseHTTPRequestHandler):

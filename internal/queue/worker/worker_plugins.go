@@ -251,7 +251,7 @@ func (w *Worker) newAgenticTaskToolExecutor(project models.Project, task models.
 		project.WorkspacePath,
 		agenttools.BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
 		w.sandboxWallTimeout,
-	)
+	).ForTask(task.ID, task.ProjectID)
 	if w.fileContextCfg.Enabled && w.docStore != nil {
 		taskQuery := strings.TrimSpace(task.Description)
 		if ctx := strings.TrimSpace(project.OriginalInput); ctx != "" {

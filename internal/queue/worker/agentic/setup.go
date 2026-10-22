@@ -55,7 +55,7 @@ func (e *Engine) newAgenticTaskToolExecutor(project models.Project, task models.
 	ex := agenttools.NewToolExecutor(
 		e.config.Sandbox,
 		project.WorkspacePath, agenttools.BuildSandboxEnv(e.config.SandboxEnvAllowlist, e.config.SandboxExtraEnv), e.config.SandboxWallTimeout,
-	)
+	).ForTask(task.ID, task.ProjectID)
 	if e.config.FileContextCfg.Enabled && e.config.DocStore != nil {
 		taskQuery := strings.TrimSpace(task.Description)
 		if ctx := strings.TrimSpace(project.OriginalInput); ctx != "" {

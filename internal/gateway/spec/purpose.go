@@ -44,10 +44,6 @@ const (
 
 	PurposeHiddenTruncateSummary Purpose = "hidden.truncate_summary"
 	PurposeSystemWarmup          Purpose = "system.warmup"
-
-	// Labelled in S17, deleted by T-055 in S18.
-	PurposeLegacyContractText Purpose = "legacy.contract_text"
-	PurposeLegacyContractJSON Purpose = "legacy.contract_json"
 )
 
 // Stage returns the part before the dot ("exec" for "exec.turn").

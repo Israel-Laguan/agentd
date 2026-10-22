@@ -30,8 +30,6 @@ const (
 	PurposeMaintMergeMemories     = spec.PurposeMaintMergeMemories
 	PurposeHiddenTruncateSummary  = spec.PurposeHiddenTruncateSummary
 	PurposeSystemWarmup           = spec.PurposeSystemWarmup
-	PurposeLegacyContractText     = spec.PurposeLegacyContractText
-	PurposeLegacyContractJSON     = spec.PurposeLegacyContractJSON
 	PurposeUnlabelled             = spec.PurposeUnlabelled
 )
 

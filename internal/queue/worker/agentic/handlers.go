@@ -113,6 +113,7 @@ func (e *Engine) handleAgenticToolCalls(
 			Role: "tool", ToolCallID: call.ID, Content: contextContent, Section: toolResultSection(call.Function.Name),
 		})
 
+		e.noteBashOutcome(call, tr)
 		if stop := e.toolLoopStop(call, tr, contextContent, toolTracker, turnIndex, budgetGuard, messages); stop != nil {
 			return true, *stop, true
 		}

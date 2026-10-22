@@ -49,6 +49,9 @@ func seedDefaultAgent(ctx context.Context, store *kanban.Store, reset bool) erro
 		if !reset {
 			existing, err := store.GetAgentProfile(ctx, profile.ID)
 			if err == nil && existing != nil {
+				if err := upgradeLegacyDefault(ctx, store, profile, existing); err != nil {
+					return err
+				}
 				if strings.HasPrefix(profile.ID, "tier-") && !existing.AgenticMode {
 					existing.AgenticMode = true
 					if err := store.UpsertAgentProfile(ctx, *existing); err != nil {
@@ -68,14 +71,33 @@ func seedDefaultAgent(ctx context.Context, store *kanban.Store, reset bool) erro
 	return nil
 }
 
+// legacyDefaultSystemPrompt is the default profile's prompt before B-080: the
+// legacy one-command path. An untouched row still carrying it is upgraded.
+const legacyDefaultSystemPrompt = "Suggest one safe shell command for the requested task. Output only JSON."
+
+// defaultSystemPrompt drives the agentic loop: the work is done with tools, and
+// a task is only reported Completed after its own tests pass (B-080).
+const defaultSystemPrompt = "Do the requested task in the workspace with the tools you have. Run the project's tests before you report Completed. If a key detail is missing, or a check cannot run, report NeedsHuman with one question instead of guessing."
+
+// upgradeLegacyDefault makes an untouched pre-B-080 default profile agentic. A
+// default whose prompt an operator changed is left alone.
+func upgradeLegacyDefault(ctx context.Context, store *kanban.Store, seeded models.AgentProfile, existing *models.AgentProfile) error {
+	if seeded.ID != "default" || existing.AgenticMode || !existing.SystemPrompt.Valid || existing.SystemPrompt.String != legacyDefaultSystemPrompt {
+		return nil
+	}
+	existing.AgenticMode = true
+	existing.SystemPrompt = seeded.SystemPrompt
+	return store.UpsertAgentProfile(ctx, *existing)
+}
+
 func defaultAgentProfiles() []models.AgentProfile {
 	return []models.AgentProfile{
 		{
 			ID: "default", Name: "Default Coding Agent",
 			Provider: "", Model: "", Temperature: 0.2, MaxTokens: 1024,
-			Role: "CODE_GEN",
+			Role: "CODE_GEN", AgenticMode: true,
 			SystemPrompt: sql.NullString{
-				String: "Suggest one safe shell command for the requested task. Output only JSON.",
+				String: defaultSystemPrompt,
 				Valid:  true,
 			},
 		},

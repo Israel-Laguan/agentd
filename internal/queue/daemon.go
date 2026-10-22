@@ -50,6 +50,7 @@ type Daemon struct {
 	dreamSchedule            cron.Schedule
 	channel                  Channel
 	queuedReconcileAfter     time.Duration
+	usageRetentionDays       int
 	rateLimitedRequeueAfter  time.Duration
 	rollingLedger            *RollingTokenLedger
 	scheduler                *Scheduler
@@ -59,30 +60,33 @@ type Daemon struct {
 }
 
 type DaemonOptions struct {
-	MaxWorkers              int
-	TaskInterval            time.Duration
-	MaxTaskInterval         time.Duration
-	TaskDeadline            time.Duration
-	IntakeInterval          time.Duration
-	HeartbeatInterval       time.Duration
-	StaleAfter              time.Duration
-	HandoffAfter            time.Duration
-	OutageHandoffEnabled    *bool
-	DiskWatchdogEvery       time.Duration
-	DiskWatchdogSchedule    cron.Schedule
-	HITLReconcileEvery      time.Duration
-	HITLReconcileSchedule   cron.Schedule
-	DiskFreeThreshold       float64
-	DiskCheckPath           string
-	Probe                   safety.PIDProbe
-	Librarian               *memory.Librarian
-	Dreamer                 *memory.DreamAgent
-	CuratorEvery            time.Duration
-	CuratorSchedule         cron.Schedule
-	DreamEvery              time.Duration
-	DreamSchedule           cron.Schedule
-	Channel                 Channel
-	QueuedReconcileAfter    time.Duration
+	MaxWorkers            int
+	TaskInterval          time.Duration
+	MaxTaskInterval       time.Duration
+	TaskDeadline          time.Duration
+	IntakeInterval        time.Duration
+	HeartbeatInterval     time.Duration
+	StaleAfter            time.Duration
+	HandoffAfter          time.Duration
+	OutageHandoffEnabled  *bool
+	DiskWatchdogEvery     time.Duration
+	DiskWatchdogSchedule  cron.Schedule
+	HITLReconcileEvery    time.Duration
+	HITLReconcileSchedule cron.Schedule
+	DiskFreeThreshold     float64
+	DiskCheckPath         string
+	Probe                 safety.PIDProbe
+	Librarian             *memory.Librarian
+	Dreamer               *memory.DreamAgent
+	CuratorEvery          time.Duration
+	CuratorSchedule       cron.Schedule
+	DreamEvery            time.Duration
+	DreamSchedule         cron.Schedule
+	Channel               Channel
+	QueuedReconcileAfter  time.Duration
+	// UsageRetentionDays deletes ai_calls and tool_calls older than this many
+	// days; 0 keeps them forever (T-056).
+	UsageRetentionDays      int
 	RateLimitedRequeueAfter time.Duration
 	RollingTokenLedger      *RollingTokenLedger
 	Scheduler               *Scheduler
@@ -121,6 +125,7 @@ func NewDaemon(
 		dreamEvery: opts.DreamEvery, dreamSchedule: opts.DreamSchedule,
 		channel:                 opts.Channel,
 		queuedReconcileAfter:    opts.QueuedReconcileAfter,
+		usageRetentionDays:      opts.UsageRetentionDays,
 		rateLimitedRequeueAfter: opts.RateLimitedRequeueAfter,
 		rollingLedger:           opts.RollingTokenLedger,
 		scheduler:               opts.Scheduler,
@@ -139,6 +144,9 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	loops := 8
 	if d.scheduler != nil && d.scheduler.Enabled() {
+		loops++
+	}
+	if d.usageRetentionDays > 0 {
 		loops++
 	}
 	d.wg.Add(loops)
@@ -161,6 +169,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if d.scheduler != nil && d.scheduler.Enabled() {
 		slog.Debug("starting daemon loop", "name", "scheduler")
 		go d.schedulerLoop(ctx)
+	}
+	if d.usageRetentionDays > 0 {
+		slog.Debug("starting daemon loop", "name", "usage_retention")
+		go d.usageRetentionLoop(ctx)
 	}
 	slog.Info("all daemon loops started")
 	<-ctx.Done()

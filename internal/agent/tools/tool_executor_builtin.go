@@ -26,9 +26,13 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEn
 		return JSONErrorf("command is required")
 	}
 
+	taskID := t.taskID
+	if taskID == "" {
+		taskID = "tool" // an executor that runs for no task
+	}
 	payload := sandbox.Payload{
-		TaskID:        "tool",
-		ProjectID:     "",
+		TaskID:        taskID,
+		ProjectID:     t.projectID,
 		WorkspacePath: t.workspacePath,
 		Command:       args.Command,
 		EnvVars:       t.BuildEnv(extraEnv...),
