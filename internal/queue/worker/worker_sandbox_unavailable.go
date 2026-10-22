@@ -31,7 +31,7 @@ func (w *Worker) handleAgenticToolFailure(ctx context.Context, task models.Task,
 		w.failTerminal(ctx, task, fmt.Errorf("%w: %s", models.ErrSandboxUnavailable, payload), models.TaskStateFailed)
 		return
 	}
-	if meta.ErrorCode == agenttools.ToolErrorCodeNoProgress {
+	if meta.ErrorCode == agenttools.ToolErrorCodeNoProgress || meta.ErrorCode == agenttools.ToolErrorCodeUnverified {
 		// A retry would run the same cycle again (B-081); a human has to fix
 		// the cause, e.g. expose the toolchain with sandbox.toolchain_paths.
 		w.failTerminal(ctx, task, errors.New(payload), models.TaskStateFailedRequiresHuman)

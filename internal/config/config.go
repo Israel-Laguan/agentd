@@ -201,7 +201,7 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	if err = validateSandboxConfig(cfg.Sandbox); err != nil {
 		return Config{}, err
 	}
-	cfg.AIUsage = loadAIUsageConfig(v)
+	cfg.AIUsage = AIUsageConfig{RetentionDays: v.GetInt("ai_usage.retention_days")}
 	if err = validateAIUsageConfig(cfg.AIUsage); err != nil {
 		return Config{}, err
 	}

@@ -1,0 +1,35 @@
+package agentic
+
+import (
+	agentcontext "agentd/internal/agent/context"
+	agentruntime "agentd/internal/agent/runtime"
+	agenttools "agentd/internal/agent/tools"
+	"agentd/internal/gateway"
+)
+
+// noteBashOutcome records whether the latest shell command passed. A failed
+// command leaves its result behind; a passing one clears it (B-082).
+func (e *Engine) noteBashOutcome(call gateway.ToolCall, tr agenttools.ToolResult) {
+	if call.Function.Name != "bash" {
+		return
+	}
+	switch tr.Status {
+	case agenttools.ToolStatusError, agenttools.ToolStatusFatal, agenttools.ToolStatusTimeout:
+		e.lastBashFailure = truncateForReason(tr.Content)
+	case agenttools.ToolStatusSuccess:
+		e.lastBashFailure = ""
+	}
+}
+
+// unverifiedFinish stops a text-only finish that follows a failed shell command:
+// the work was never verified, so it is not COMPLETED. It returns nil when the
+// last command passed or nothing has run.
+func (e *Engine) unverifiedFinish(turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
+	if e.lastBashFailure == "" {
+		return nil
+	}
+	reason := "unverified: the last shell command failed and nothing passed after it: " + e.lastBashFailure
+	meta := agentruntime.BuildLoopMeta(turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(messages), 0, reason, "bash", "")
+	meta.ErrorCode = agenttools.ToolErrorCodeUnverified
+	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
+}

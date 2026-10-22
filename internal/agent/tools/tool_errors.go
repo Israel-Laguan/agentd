@@ -17,6 +17,11 @@ const ToolErrorCodeSandboxUnavailable = "SANDBOX_UNAVAILABLE"
 // repeat the cycle, so the worker hands the task to a human instead.
 const ToolErrorCodeNoProgress = "NO_PROGRESS"
 
+// ToolErrorCodeUnverified tags a text-only finish made right after a failed
+// shell command, so the worker sends the task to a human instead of marking it
+// COMPLETED (B-082).
+const ToolErrorCodeUnverified = "UNVERIFIED_COMPLETION"
+
 // SandboxUnavailableJSON reports a refusal by an unavailable required jail as a
 // fatal, tagged tool result: the model cannot fix a missing jail, so the
 // agentic loop must stop instead of feeding the error back for another try.
