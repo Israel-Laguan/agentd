@@ -48,7 +48,7 @@ The client advertised `fs.readTextFile`, `fs.writeTextFile` and `terminal`, appr
 
 ## What this means for agentd
 
-- **Neither agent sends file or shell I/O through agentd.** Both read, write and run commands themselves even when the client offers `fs` and `terminal`. agentd cannot deduplicate their file reads or jail their commands through ACP. A jail has to wrap the whole agent process (bubblewrap or podman, with network access to the model), and that is not tested yet. Tool counts and repeated reads for these agents can only come from their `tool_call` updates.
+- **Neither agent sends file or shell I/O through agentd.** Both read, write and run commands themselves even when the client offers `fs` and `terminal`. agentd cannot deduplicate their file reads or jail their commands through ACP. A jail has to wrap the whole agent process (bubblewrap or podman, with network access to the model); SP-025 below tested it. Tool counts and repeated reads for these agents can only come from their `tool_call` updates.
 - **Only cline can be gated.** Cline asks permission before editing, so agentd's hooks and human approval can sit on that request. opencode, with its default settings, never asks.
 - **opencode met the outcome contract with nothing extra.** It called `report_outcome` every time, from the server passed in `session/new`.
 - **cline meets it only through its own config and a prompt that names the tool** (details in the next section).
@@ -159,7 +159,7 @@ The "wrong" rows are real defects in the agent's code, not jail effects. opencod
 
 Probe task (one run per agent and jail; the agent was told to run each command and not to work around failures):
 
-| Attempt | Restricted jail | agentd's current profile (`--share-net`) |
+| Attempt | Restricted jail | agentd's profile when measured (`--share-net`, before B-086) |
 | --- | --- | --- |
 | Read a canary file in the host home | not found | not found |
 | Write under the host home | succeeds, but into the jail's throwaway root; the host file was never created | same |
@@ -169,13 +169,13 @@ Probe task (one run per agent and jail; the agent was told to run each command a
 | HTTP to `example.com` | 403 from the proxy | **200** |
 | Connect to a listener on host loopback | refused | **connected** |
 
-The last row is the important one. With `--share-net`, a jailed agent reaches any service on the host's loopback, including the dev daemon and its board API, and the whole internet. The host listener used in the probe was a dummy on port 8792. Port 8765 was never probed.
+The last row is the important one. With `--share-net`, a jailed agent reached any service on the host's loopback, including the dev daemon and its board API, and the whole internet. B-086 has since removed `--share-net` from `jailArgv()`, so the current profile has no network at all (see Go / no-go). The host listener used in the probe was a dummy on port 8792. Port 8765 was never probed.
 
 During the matrix the proxy denied `models.opencode.ai:443` (14 times, opencode's model catalog) and nothing else; opencode used its cached copy and worked. No `EACCES`/`EROFS` errors appeared in any agent's stderr during the tasks.
 
 ### Minimal bind and network list
 
-Binds, beyond agentd's current `jailArgv()` profile:
+Binds, beyond the `jailArgv()` profile as measured:
 
 | Path | Mode | Why |
 | --- | --- | --- |
@@ -199,7 +199,7 @@ Network, with a CONNECT allowlist:
 
 ### Findings that change the plan
 
-- **Go.** The jail works for both agents; the blocker for T-042 is not the jail but network policy: agentd's current profile is `--share-net`, which lets the agent reach the host's loopback and the internet. An external agent needs `--unshare-net` plus a host-side allowlist proxy (the setup above), or a podman network that does the same.
+- **Go.** The jail works for both agents; the blocker for T-042 is not the jail but network policy: the profile as measured was `--share-net`, which let the agent reach the host's loopback and the internet. B-086 removed that, so the jail now has no network. An external agent still needs a way to reach its model: a host-side allowlist proxy (the setup above), or a podman network that does the same. That proxy is not in agentd yet.
 - **The MCP server must be reachable from inside the jail.** With the network unshared, `127.0.0.1:<port>` is the jail's own loopback. agentd's MCP server on the host needs a forwarded socket (opencode, http) or a stdio command inside the jail (cline). Cline's server is spawned from its own settings file inside the jail, so that file's content is part of the jail setup.
 - **Credentials enter the jail.** The agent home needs a login: an `auth.json` copy (opencode) or a `providers.json` with the OAuth tokens (cline). Copy only the one provider, as done here. Cline refreshes the token and rewrites that file inside the jail, so a copy may diverge from the original if the provider rotates refresh tokens; I saw identical tokens after one run, so rotation was not observed.
 - **Cline's config is `--config <dir>`**, with `data/settings/providers.json` under it. `--data-dir` is ignored in ACP mode, and a `--config` dir without `data/` fails with "Authentication required".
@@ -211,7 +211,7 @@ Network, with a CONNECT allowlist:
 
 **Go**, conditional on network isolation. Both agents start, authenticate, reach their model through an allowlist proxy, finish every task they could finish outside, ask instead of guessing in the ambiguous case (3 of 3 each), and could not read or write host paths. The jail does not change what the agents get wrong: workspaces still need a check beyond `go test`.
 
-**No-go for agentd's current profile as is.** `--share-net` gives the agent the host's loopback and the internet, and the jail cannot be called a jail for an external agent until the network is cut down.
+**No-go for the profile as measured.** `--share-net` gave the agent the host's loopback and the internet, so it could not be called a jail for an external agent. B-086 fixed that: the current `jailArgv()` profile isolates the network. It does not yet provide the allowlist proxy and the forwarded MCP socket an external agent needs to reach its model and agentd, so external agents cannot run in the jail until T-042 adds them.
 
 Not covered: podman (jail B), more than 3 runs per cell, agents other than these two, hostile prompts beyond the one probe, and a check of whether an agent behaves differently outside the jail.
 
