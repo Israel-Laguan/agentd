@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -29,5 +30,16 @@ func TestLoadRejectsNegativeAIUsageRetention(t *testing.T) {
 	_, err := loadWithYAML(t, "ai_usage:\n  retention_days: -1\n")
 	if err == nil || !strings.Contains(err.Error(), "ai_usage.retention_days") {
 		t.Fatalf("Load() error = %v, want an ai_usage.retention_days error", err)
+	}
+}
+
+// "14d" read through GetInt became 0, passed the range check, and kept every
+// row forever: a typo turned retention off silently.
+func TestLoadRejectsANonNumericAIUsageRetention(t *testing.T) {
+	for _, value := range []string{"14d", "two weeks", "1.5"} {
+		_, err := loadWithYAML(t, "ai_usage:\n  retention_days: "+strconv.Quote(value)+"\n")
+		if err == nil || !strings.Contains(err.Error(), "ai_usage.retention_days") {
+			t.Errorf("Load(%q) error = %v, want an ai_usage.retention_days error", value, err)
+		}
 	}
 }

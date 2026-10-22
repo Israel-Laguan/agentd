@@ -197,12 +197,7 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	if err != nil {
 		return Config{}, fmt.Errorf("load gateway config: %w", err)
 	}
-	cfg.Sandbox = loadSandboxConfig(v)
-	if err = validateSandboxConfig(cfg.Sandbox); err != nil {
-		return Config{}, err
-	}
-	cfg.AIUsage = AIUsageConfig{RetentionDays: v.GetInt("ai_usage.retention_days")}
-	if err = validateAIUsageConfig(cfg.AIUsage); err != nil {
+	if err = hydrateChecked(&cfg, v); err != nil {
 		return Config{}, err
 	}
 	cfg.Healing = loadHealingConfig(v)
