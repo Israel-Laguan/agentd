@@ -105,27 +105,30 @@ func breakdownChildrenCompleted(children []models.Task, count int) bool {
 	return true
 }
 
-// VerifyBreakdownComplete returns an error while the task's breakdown subtasks
-// are not all completed. The agentic engine calls it before a text-only finish
-// is committed as COMPLETED (T-055b gap 2). A failed read also refuses the
-// finish, so an unreadable breakdown never completes the parent.
+// VerifyBreakdownComplete returns an error while any of the task's breakdown
+// subtasks is not completed. The agentic engine calls it before a text-only
+// finish is committed as COMPLETED (T-055b gap 2). It refuses a finish, never
+// grants one, so it does not need the breakdown marker: a lost marker or a
+// forged count cannot open the gate. A failed read also refuses the finish, so
+// an unreadable breakdown never completes the parent.
 func (w *Worker) VerifyBreakdownComplete(ctx context.Context, task models.Task) error {
-	comments, err := w.store.ListComments(ctx, task.ID)
+	// Breakdown subtasks are linked SPLIT (handleTaskBreakdown). BLOCKS
+	// children are plan dependents, which wait on this task, and human
+	// handoff subtasks such as a review, so they are not counted.
+	children, err := w.store.ListChildTasksByRelation(ctx, task.ID, models.TaskRelationSplit)
 	if err != nil {
-		return fmt.Errorf("breakdown check: list comments: %w", err)
+		return fmt.Errorf("breakdown check: list split children: %w", err)
 	}
-	count, marked := latestBreakdownSubtaskCount(comments)
-	if !marked {
+	open := 0
+	for _, child := range children {
+		if child.State != models.TaskStateCompleted {
+			open++
+		}
+	}
+	if open == 0 {
 		return nil
 	}
-	children, err := w.store.ListChildTasks(ctx, task.ID)
-	if err != nil {
-		return fmt.Errorf("breakdown check: list children: %w", err)
-	}
-	if breakdownChildrenCompleted(children, count) {
-		return nil
-	}
-	return fmt.Errorf("unverified: %d breakdown subtasks are not all completed", count)
+	return fmt.Errorf("unverified: %d of %d breakdown subtasks are not completed", open, len(children))
 }
 
 // tryRollUpBreakdown completes a resumed parent whose breakdown subtasks have
