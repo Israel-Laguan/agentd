@@ -104,7 +104,7 @@ func TestExecuteLegacyCommand_BrokenWorkspaceDoesNotComplete(t *testing.T) {
 }
 
 // Control: a healthy workspace still completes on exit 0.
-func TestExecuteLegacyCommand_HealthyWorkspaceCompletes(t *testing.T) {
+func TestPostconditionHealthyWorkspaceCompletes(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	task, _ := seedWorkspaceWithMain(t, store, ctx, []string{"main.go parses"})
@@ -117,7 +117,7 @@ func TestExecuteLegacyCommand_HealthyWorkspaceCompletes(t *testing.T) {
 }
 
 // A criterion file that is missing or emptied fails the check too.
-func TestExecuteLegacyCommand_MissingCriterionFileFails(t *testing.T) {
+func TestPostconditionMissingCriterionFileFails(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	task, _ := seedWorkspaceWithMain(t, store, ctx, []string{"missing.go exists and parses"})
@@ -129,7 +129,7 @@ func TestExecuteLegacyCommand_MissingCriterionFileFails(t *testing.T) {
 }
 
 // Tasks without success criteria keep the old exit-0 behavior.
-func TestExecuteLegacyCommand_NoCriteriaKeepsExitZeroBehavior(t *testing.T) {
+func TestPostconditionNoCriteriaKeepsExitZeroBehavior(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	task, _ := seedWorkspaceWithMain(t, store, ctx, nil)
