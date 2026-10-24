@@ -8,7 +8,7 @@ import (
 )
 
 func TestWorkerTooComplexWithoutSubtasksFailsNormally(t *testing.T) {
-	store := newWorkerStore()
+	store := newLegacyWorkerStore()
 	gw := &fakeGateway{content: `{"too_complex":true}`}
 	sb := &fakeSandbox{}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})

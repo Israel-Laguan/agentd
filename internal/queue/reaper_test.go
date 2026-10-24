@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 func TestReaperCancelsWorkerAfterDeadline(t *testing.T) {
@@ -14,7 +16,7 @@ func TestReaperCancelsWorkerAfterDeadline(t *testing.T) {
 	store.seed(1, models.TaskStateReady)
 
 	sb := &queueSandbox{blockOnCtx: true, started: make(chan struct{}), cancelled: make(chan struct{})}
-	gw := &queueGateway{content: `{"command":"sleep 999"}`}
+	gw := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "sleep 999")}}
 	breaker := NewCircuitBreaker()
 	sink := &queueSink{}
 	worker := NewWorker(store, gw, sb, breaker, sink, WorkerOptions{})
@@ -52,7 +54,7 @@ func TestReaperDoesNotCancelFastWorker(t *testing.T) {
 	store := newQueueStore()
 	store.seed(1, models.TaskStateReady)
 
-	gw := &queueGateway{content: `{"command":"true"}`}
+	gw := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
 	sb := &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
 	breaker := NewCircuitBreaker()
 	sink := &queueSink{}

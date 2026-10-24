@@ -91,6 +91,7 @@ func (s *promptSandbox) Execute(_ context.Context, p sandbox.Payload) (sandbox.R
 func newPromptPermScenario() *promptPermScenario {
 	s := &promptPermScenario{}
 	s.store = newQueueStore()
+	s.store.profile.AgenticMode = false
 	s.breaker = NewCircuitBreaker()
 	s.gateway = &queueGateway{content: `{"command":"echo hello"}`}
 	s.sandbox = &promptSandbox{}

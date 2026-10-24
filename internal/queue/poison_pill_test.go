@@ -4,21 +4,23 @@ import (
 	"context"
 	"testing"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 func TestEvictedTaskIsNeverReClaimed(t *testing.T) {
 	store := newQueueStore()
 	store.seed(1, models.TaskStateReady)
 
-	gw := &queueGateway{content: `{"command":"exit 1"}`}
+	gw := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "exit 1")}}
 	sb := &queueSandbox{
 		result: sandbox.Result{Success: false, ExitCode: 1},
 	}
 	breaker := NewCircuitBreaker()
 	sink := &queueSink{}
-	worker := NewWorker(store, gw, sb, breaker, sink, WorkerOptions{MaxRetries: 3})
+	worker := NewWorker(store, gw, sb, breaker, sink, WorkerOptions{MaxRetries: 3, ToolFailureStreak: 1})
 
 	ctx := context.Background()
 

@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // A dispatched global HALF_OPEN probe must give its slot back when the task ends
@@ -20,7 +22,7 @@ import (
 // same reason (worker_provider_gate.go); this is the global breaker's equivalent.
 func TestDispatchReleasesGlobalProbeWhenProbeTaskFailsWithoutVerdict(t *testing.T) {
 	store := newQueueStore()
-	gateway := &queueGateway{content: `{"command":"false"}`}
+	gateway := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}
 	// A non-zero exit: the gateway answered, so nothing here is a breaker failure.
 	sb := &queueSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stdout: "boom"}}
 	breaker := NewCircuitBreaker()

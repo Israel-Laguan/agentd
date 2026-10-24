@@ -10,7 +10,7 @@ import (
 )
 
 func TestWorkerPromptHangRetriesRecoverableCommandOnce(t *testing.T) {
-	store := newWorkerStore()
+	store := newLegacyWorkerStore()
 	gw := &fakeGateway{content: `{"command":"apt-get install foo"}`}
 	sb := &fakeSandbox{
 		results: []sandbox.Result{
@@ -35,7 +35,7 @@ func TestWorkerPromptHangRetriesRecoverableCommandOnce(t *testing.T) {
 }
 
 func TestWorkerPromptHangCreatesHumanTaskForNonRecoverableCommand(t *testing.T) {
-	store := newWorkerStore()
+	store := newLegacyWorkerStore()
 	gw := &fakeGateway{content: `{"command":"ssh example.com"}`}
 	sb := &fakeSandbox{
 		result: sandbox.Result{TimedOut: true, ExitCode: -1, Stderr: "Password:"},
@@ -57,7 +57,7 @@ func TestWorkerPromptHangCreatesHumanTaskForNonRecoverableCommand(t *testing.T) 
 }
 
 func TestWorkerTimeoutWithoutPromptUsesExistingRetryFlow(t *testing.T) {
-	store := newWorkerStore()
+	store := newLegacyWorkerStore()
 	gw := &fakeGateway{content: `{"command":"sleep 5"}`}
 	sb := &fakeSandbox{
 		result: sandbox.Result{TimedOut: true, ExitCode: -1},
@@ -73,7 +73,7 @@ func TestWorkerTimeoutWithoutPromptUsesExistingRetryFlow(t *testing.T) {
 }
 
 func TestWorkerPromptHangAlreadyRetriedCreatesHumanTask(t *testing.T) {
-	store := newWorkerStore()
+	store := newLegacyWorkerStore()
 	store.task.RetryCount = 1
 	gw := &fakeGateway{content: `{"command":"apt-get install foo"}`}
 	sb := &fakeSandbox{
@@ -93,7 +93,7 @@ func TestWorkerPromptHangAlreadyRetriedCreatesHumanTask(t *testing.T) {
 }
 
 func TestWorkerPermissionFailureCreatesHumanTask(t *testing.T) {
-	store := newWorkerStore()
+	store := newLegacyWorkerStore()
 	gw := &fakeGateway{content: `{"command":"touch /etc/agentd.conf"}`}
 	sb := &fakeSandbox{
 		result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "touch: /etc/agentd.conf: Permission denied"},
@@ -117,7 +117,7 @@ func TestWorkerPermissionFailureCreatesHumanTask(t *testing.T) {
 }
 
 func TestWorkerSudoBlockExecutesOneNonPrivilegedAlternative(t *testing.T) {
-	store := newWorkerStore()
+	store := newLegacyWorkerStore()
 	gw := &fakeGateway{
 		content:     `{"command":"sudo dmidecode -t memory"}`,
 		nextContent: `{"command":"free -h"}`,
@@ -148,7 +148,7 @@ func TestWorkerSudoBlockExecutesOneNonPrivilegedAlternative(t *testing.T) {
 }
 
 func TestWorkerSudoBlockRejectsSudoAlternativeWithoutSecondExecution(t *testing.T) {
-	store := newWorkerStore()
+	store := newLegacyWorkerStore()
 	gw := &fakeGateway{
 		content:     `{"command":"sudo dmidecode -t memory"}`,
 		nextContent: `{"command":"sudo cat /proc/meminfo"}`,
@@ -173,7 +173,7 @@ func TestWorkerSudoBlockRejectsSudoAlternativeWithoutSecondExecution(t *testing.
 }
 
 func TestWorkerPermissionFailureFromSandboxViolationCreatesHumanTask(t *testing.T) {
-	store := newWorkerStore()
+	store := newLegacyWorkerStore()
 	gw := &fakeGateway{content: `{"command":"sudo touch /etc/agentd.conf"}`}
 	sb := &fakeSandbox{
 		result: sandbox.Result{Success: false, ExitCode: -1, Stderr: "sudo command blocked"},

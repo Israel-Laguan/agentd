@@ -8,8 +8,10 @@ import (
 
 	"github.com/cucumber/godog"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // --- Daemon safety steps (deadline, backoff, panic) ---
@@ -67,7 +69,7 @@ func (s *daemonSafetyScenario) setTaskDeadline(_ context.Context, raw string) er
 	}
 	s.store = newQueueStore()
 	s.breaker = NewCircuitBreaker()
-	s.gateway = &queueGateway{content: `{"command":"true"}`}
+	s.gateway = &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
 	s.sink = &queueSink{}
 	s.worker = NewWorker(s.store, s.gateway, nil, s.breaker, s.sink, WorkerOptions{})
 	s.daemon = NewDaemon(s.store, s.worker, nil, s.breaker, s.sink, DaemonOptions{
@@ -219,7 +221,7 @@ func (s *daemonSafetyScenario) assertCurrentDelay(_ context.Context, raw string)
 func (s *daemonSafetyScenario) daemonWithSlots(_ context.Context, slots int) error {
 	s.store = newQueueStore()
 	s.breaker = NewCircuitBreaker()
-	s.gateway = &queueGateway{content: `{"command":"true"}`}
+	s.gateway = &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
 	s.sink = &queueSink{}
 	s.worker = NewWorker(s.store, s.gateway, &queueSandbox{result: sandbox.Result{Success: true}}, s.breaker, s.sink, WorkerOptions{})
 	s.daemon = NewDaemon(s.store, s.worker, nil, s.breaker, s.sink, DaemonOptions{

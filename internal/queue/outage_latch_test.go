@@ -5,15 +5,17 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // T-035: a probe slot spent on a tick that admitted no task must be released,
 // otherwise the breaker latches HALF_OPEN and needs an operator reset.
 func TestDispatchReleasesProbeSlotWhenQueueIsEmptyAtTimeout(t *testing.T) {
 	store := newQueueStore()
-	gateway := &queueGateway{content: `{"command":"true"}`}
+	gateway := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
 	sb := &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
 	breaker := NewCircuitBreaker()
 	now := time.Now().UTC()

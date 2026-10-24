@@ -9,19 +9,20 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 func TestWorkerTuneStepRequeuesAndAppliesNextAttemptOverride(t *testing.T) {
 	store := newWorkerStore()
 	store.task.RetryCount = 1
-	gw := &fakeGateway{content: `{"command":"false"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}}
 	sink := &recordingSink{}
 	tuner := NewParameterTuner(config.HealingConfig{
 		Enabled: true,
 		Steps:   []string{HealingStepLowerTemperature, HealingStepLowerTemperature},
 	})
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink, WorkerOptions{Tuner: tuner})
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink, WorkerOptions{Tuner: tuner, ToolFailureStreak: 1})
 
 	worker.Process(context.Background(), store.task)
 
@@ -39,7 +40,7 @@ func TestWorkerTuneStepRequeuesAndAppliesNextAttemptOverride(t *testing.T) {
 func TestWorkerUpgradeModelOverride(t *testing.T) {
 	store := newWorkerStore()
 	store.task.RetryCount = 1
-	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	gw := &fakeGateway{content: "done"}
 	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"}}
 	tuner := NewParameterTuner(config.HealingConfig{
 		Enabled:         true,
@@ -58,13 +59,13 @@ func TestWorkerUpgradeModelOverride(t *testing.T) {
 
 func TestWorkerHealingSplitBlocksTaskWithSubtasks(t *testing.T) {
 	store := newWorkerStore()
-	gw := &fakeGateway{content: `{"command":"false"}`, nextContent: `{"too_complex":true,"subtasks":[{"title":"Smaller","description":"Do smaller"}]}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}, nextContent: `{"too_complex":true,"subtasks":[{"title":"Smaller","description":"Do smaller"}]}`}
 	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}}
 	tuner := NewParameterTuner(config.HealingConfig{
 		Enabled: true,
 		Steps:   []string{HealingStepSplitTask},
 	})
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{Tuner: tuner})
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{Tuner: tuner, ToolFailureStreak: 1})
 
 	worker.Process(context.Background(), store.task)
 
@@ -75,13 +76,13 @@ func TestWorkerHealingSplitBlocksTaskWithSubtasks(t *testing.T) {
 
 func TestWorkerHealingHumanHandoff(t *testing.T) {
 	store := newWorkerStore()
-	gw := &fakeGateway{content: `{"command":"false"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}}
 	tuner := NewParameterTuner(config.HealingConfig{
 		Enabled: true,
 		Steps:   []string{HealingStepHumanHandoff},
 	})
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{Tuner: tuner})
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{Tuner: tuner, ToolFailureStreak: 1})
 
 	worker.Process(context.Background(), store.task)
 

@@ -176,10 +176,18 @@ func newWorkerStore() *workerStore {
 			State:       models.TaskStateQueued,
 		},
 		project: models.Project{BaseEntity: models.BaseEntity{ID: "project"}, WorkspacePath: "/tmp"},
-		profile: models.AgentProfile{ID: "default", Temperature: 0.2, SystemPrompt: sql.NullString{
+		profile: models.AgentProfile{ID: "default", Provider: "openai", AgenticMode: true, Temperature: 0.2, SystemPrompt: sql.NullString{
 			String: "Return JSON.", Valid: true,
 		}},
 	}
+}
+
+// newLegacyWorkerStore keeps the legacy command engine for the prompt and
+// breakdown scenarios that PR 05 of S18 deletes or rewrites.
+func newLegacyWorkerStore() *workerStore {
+	store := newWorkerStore()
+	store.profile.AgenticMode = false
+	return store
 }
 
 func (s *workerStore) MarkTaskRunning(_ context.Context, _ string, _ time.Time, pid int) (*models.Task, error) {

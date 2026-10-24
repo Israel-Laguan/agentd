@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 func TestDispatchConcurrencyCapIsRespected(t *testing.T) {
@@ -25,7 +27,7 @@ func TestDispatchConcurrencyCapIsRespected(t *testing.T) {
 		peak:    &peak,
 	}
 
-	gw := &queueGateway{content: `{"command":"true"}`}
+	gw := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
 	breaker := NewCircuitBreaker()
 	sink := &queueSink{}
 	worker := NewWorker(store, gw, wrappedSb, breaker, sink, WorkerOptions{})
