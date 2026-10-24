@@ -52,7 +52,9 @@ func (r *attemptRecords) finish(taskID string, succeeded bool) {
 		return
 	}
 	if rec := r.byTask[taskID]; rec != nil {
-		rec.last = rec.current
+		if rec.current != nil {
+			rec.last = rec.current
+		}
 		rec.current = nil
 	}
 }
@@ -92,7 +94,7 @@ func (w *Worker) RecordAttemptFailure(task models.Task, call gateway.ToolCall, t
 	if command == "" {
 		return
 	}
-	w.attempts.recordFirst(task.ID, attemptFailure{command: command, failure: tr.Content})
+	w.attempts.recordFirst(task.ID, attemptFailure{command: command, failure: truncate(tr.Content, 500)})
 }
 
 // RepeatedAttemptFailure returns the refusal feedback for a bash call that sends
