@@ -136,7 +136,8 @@ type Host interface {
 	VerifyPostConditions(task models.Task, project models.Project) error
 	// VerifyBreakdownComplete returns an error while the task's breakdown
 	// subtasks are not all completed, so a text-only finish cannot complete the
-	// parent early (T-055b gap 2).
+	// parent early (T-055b gap 2). Open subtasks wrap
+	// models.ErrBreakdownIncomplete; any other error is a failed read.
 	VerifyBreakdownComplete(ctx context.Context, task models.Task) error
 	TryExternalCapabilityRoute(
 		ctx context.Context,

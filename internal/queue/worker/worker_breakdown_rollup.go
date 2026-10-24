@@ -128,7 +128,7 @@ func (w *Worker) VerifyBreakdownComplete(ctx context.Context, task models.Task) 
 	if open == 0 {
 		return nil
 	}
-	return fmt.Errorf("unverified: %d of %d breakdown subtasks are not completed", open, len(children))
+	return fmt.Errorf("unverified: %w: %d of %d open", models.ErrBreakdownIncomplete, open, len(children))
 }
 
 // tryRollUpBreakdown completes a resumed parent whose breakdown subtasks have

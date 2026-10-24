@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"agentd/internal/models"
@@ -71,8 +72,8 @@ func TestVerifyBreakdownComplete_MissingMarkerStillRefusesOpenSubtasks(t *testin
 	store, w, parent, subtasks := seedBrokenDownParent(t, false)
 	completeTasks(t, store, subtasks[:1])
 
-	if err := w.VerifyBreakdownComplete(context.Background(), parent); err == nil {
-		t.Fatal("VerifyBreakdownComplete = nil with an open subtask and no marker, want a refusal")
+	if err := w.VerifyBreakdownComplete(context.Background(), parent); !errors.Is(err, models.ErrBreakdownIncomplete) {
+		t.Fatalf("VerifyBreakdownComplete = %v with an open subtask and no marker, want ErrBreakdownIncomplete", err)
 	}
 }
 

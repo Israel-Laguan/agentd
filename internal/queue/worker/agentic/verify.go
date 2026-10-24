@@ -2,6 +2,7 @@ package agentic
 
 import (
 	"context"
+	"errors"
 
 	agentcontext "agentd/internal/agent/context"
 	agentruntime "agentd/internal/agent/runtime"
@@ -51,14 +52,18 @@ func (e *Engine) unmetCriteriaFinish(task models.Task, project models.Project, t
 
 // openBreakdownFinish stops a text-only finish of a parent whose breakdown
 // subtasks are not all completed. The parent completes once they do, so the
-// model cannot complete it early (T-055b gap 2).
+// model cannot complete it early (T-055b gap 2). A failed read also stops the
+// finish, but only open subtasks make it unverified: a read error carries no
+// code, so the task is retried instead of handed to a human.
 func (e *Engine) openBreakdownFinish(ctx context.Context, task models.Task, turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
 	err := e.host.VerifyBreakdownComplete(ctx, task)
 	if err == nil {
 		return nil
 	}
 	meta := agentruntime.BuildLoopMeta(turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(messages), 0, err.Error(), "", "")
-	meta.ErrorCode = agenttools.ToolErrorCodeUnverified
+	if errors.Is(err, models.ErrBreakdownIncomplete) {
+		meta.ErrorCode = agenttools.ToolErrorCodeUnverified
+	}
 	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
 }
 
