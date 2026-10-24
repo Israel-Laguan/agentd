@@ -114,7 +114,6 @@ func TestDispatchLoopRequeueRateIsBoundedWhileProbeInFlight(t *testing.T) {
 
 	store := &countingStore{queueStore: newQueueStore()}
 	store.profile.Provider = "gemini"
-	store.profile.AgenticMode = false
 	store.seed(siblings, models.TaskStateReady)
 
 	pb := NewProviderBreakers()

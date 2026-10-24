@@ -9,6 +9,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // trippedProviderBreakers returns a registry whose "gemini" breaker is OPEN and
@@ -35,7 +36,6 @@ func trippedProviderBreakersFor(t *testing.T, provider string) (*ProviderBreaker
 func providerStore() *workerStore {
 	store := newWorkerStore()
 	store.profile.Provider = "gemini"
-	store.profile.AgenticMode = false
 	return store
 }
 
@@ -45,7 +45,7 @@ func TestWorkerProviderBreakerProbesAfterTimeout(t *testing.T) {
 	store := providerStore()
 	pb, clock := trippedProviderBreakers(t)
 	*clock = clock.Add(6 * time.Minute)
-	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: true, Stdout: "ok"}}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), &recordingSink{}, WorkerOptions{ProviderBreakers: pb})
 
@@ -86,7 +86,7 @@ func TestWorkerProviderBreakerSiblingWaitsWhileProbeInFlight(t *testing.T) {
 	if got := pb.Get("gemini").Admit(); got != AdmissionProbe {
 		t.Fatalf("setup: Admit() = %v, want the probe slot", got)
 	}
-	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
 	sink := &recordingSink{}
 	worker := NewWorker(store, gw, &fakeSandbox{}, NewCircuitBreaker(), sink, WorkerOptions{ProviderBreakers: pb})
 
@@ -117,7 +117,7 @@ func TestWorkerProviderBreakerSiblingWaitsWhileProbeInFlight(t *testing.T) {
 func TestWorkerProviderBreakerStillOpenHandsOff(t *testing.T) {
 	store := providerStore()
 	pb, _ := trippedProviderBreakers(t)
-	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
 	sink := &recordingSink{}
 	worker := NewWorker(store, gw, &fakeSandbox{}, NewCircuitBreaker(), sink, WorkerOptions{ProviderBreakers: pb})
 
@@ -161,7 +161,7 @@ func TestWorkerProviderBreakerClosesOnProviderSuccessNotSandboxResult(t *testing
 	store := providerStore()
 	pb, clock := trippedProviderBreakers(t)
 	*clock = clock.Add(6 * time.Minute)
-	gw := &fakeGateway{content: `{"command":"false"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1}}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), &recordingSink{}, WorkerOptions{ProviderBreakers: pb})
 
