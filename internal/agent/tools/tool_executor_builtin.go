@@ -125,6 +125,11 @@ type writeArgs struct {
 }
 
 func (t *ToolExecutor) executeWrite(ctx context.Context, argsJSON string) string {
+	// The write tool runs in the daemon, outside the jail, so a read-only
+	// workspace is held here as well as by the jail.
+	if t.readOnlyWorkspace {
+		return JSONErrorf("workspace is read-only: write is not allowed")
+	}
 	if err := ctx.Err(); err != nil {
 		return JSONErrorf("write cancelled: %v", err)
 	}

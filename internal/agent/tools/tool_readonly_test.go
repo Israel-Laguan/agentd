@@ -2,6 +2,9 @@ package tools
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,5 +55,22 @@ func TestToolExecutorDefaultWorkspaceIsWritable(t *testing.T) {
 	}
 	if ex.ReadOnlyWorkspace() {
 		t.Fatal("ReadOnlyWorkspace() = true on a default executor")
+	}
+}
+
+// The write tool runs in the daemon, outside the jail, so a read-only workspace
+// must refuse it as well: the flag cannot rely on the profile's allowlist.
+func TestToolExecutorReadOnlyWorkspaceRefusesWriteTool(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ex := NewToolExecutor(&capturingSandbox{}, dir, nil, time.Second).WithReadOnlyWorkspace(true)
+	call := gateway.ToolCall{ID: "w1", Type: "function", Function: gateway.ToolCallFunction{Name: ToolNameWrite, Arguments: `{"path":"x.txt","content":"x"}`}}
+
+	out := ex.Execute(context.Background(), call)
+	if _, err := os.Stat(filepath.Join(dir, "x.txt")); err == nil {
+		t.Fatal("write tool created x.txt in a read-only workspace")
+	}
+	if !strings.Contains(out, "read-only") {
+		t.Fatalf("write output = %q, want a read-only refusal", out)
 	}
 }

@@ -85,3 +85,23 @@ func TestResearcherCannotChangeWorkspaceThroughWriteOrDelegate(t *testing.T) {
 		t.Fatalf("sandbox payloads = %+v, want the one bash command to run read-only", sb.payloads)
 	}
 }
+
+// A read-only workspace holds even without an allowlist, where the write tool is
+// offered: the flag refuses the write, not only the allowlist.
+func TestReadOnlyWorkspaceRefusesWriteWithoutAllowlist(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		{ToolCalls: []gateway.ToolCall{{ID: "w1", Type: "function", Function: gateway.ToolCallFunction{
+			Name: "write", Arguments: `{"path":"notes.txt","content":"changed"}`}}}},
+		{Content: "Done."},
+	}}
+	sb := &payloadCapturingSandbox{}
+	w, _, task, project, profile := agenticFixture(t, gw, sb, retryDraft(), nil)
+	profile.WorkspaceReadonly = true
+
+	w.processAgentic(context.Background(), task, project, profile)
+
+	if _, err := os.Stat(filepath.Join(project.WorkspacePath, "notes.txt")); err == nil {
+		t.Fatal("write created notes.txt in a read-only workspace")
+	}
+}
