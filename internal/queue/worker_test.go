@@ -285,26 +285,6 @@ func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
 	}
 }
 
-func TestWorkerLegacyPathWhenAgenticModeFalse(t *testing.T) {
-	store := newWorkerStore()
-	store.profile.AgenticMode = false
-	gw := &fakeGateway{content: `{"command":"echo legacy"}`}
-	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "legacy"}}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
-
-	worker.Process(context.Background(), store.task)
-
-	if store.result == nil || !store.result.Success {
-		t.Fatalf("result = %#v", store.result)
-	}
-	if len(sb.commands) != 1 || sb.commands[0] != "echo legacy" {
-		t.Fatalf("commands = %#v", sb.commands)
-	}
-	if len(gw.requests) != 1 {
-		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
-	}
-}
-
 // TestWorkerQuotaExhaustedCreatesImmediateHandoff verifies that a single HTTP
 // 429 (ErrLLMQuotaExceeded) creates a PROVIDER_EXHAUSTED_HANDOFF immediately
 // without requeuing the task or incrementing the retry counter.

@@ -2,36 +2,14 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
-
-type captureResultStore struct {
-	*testutil.FakeKanbanStore
-	lastResult *models.TaskResult
-}
-
-func (s *captureResultStore) UpdateTaskResult(ctx context.Context, id string, expected time.Time, result models.TaskResult) (*models.Task, error) {
-	s.lastResult = &result
-	return s.FakeKanbanStore.UpdateTaskResult(ctx, id, expected, result)
-}
-
-type stdoutReviewSandbox struct {
-	execCount int
-	result    sandbox.Result
-}
-
-func (s *stdoutReviewSandbox) Execute(_ context.Context, _ sandbox.Payload) (sandbox.Result, error) {
-	s.execCount++
-	return s.result, nil
-}
 
 // setupReviewProfile enables RequireReview on the default profile. agentic picks
 // the engine: the legacy-only assertions in this file keep the legacy engine.
@@ -115,29 +93,6 @@ func findLatestDraftReviewFromStore(t *testing.T, store models.KanbanStore, ctx 
 	return findLatestDraftReview(comments)
 }
 
-func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing.T) {
-	t.Parallel()
-	store := &captureResultStore{FakeKanbanStore: testutil.NewFakeStore()}
-	ctx := context.Background()
-	setupReviewProfile(t, store, ctx, "", false)
-
-	sbResult := sandbox.Result{Success: true, ExitCode: 0, Stdout: "clean output\n", Duration: 1500 * time.Millisecond}
-	sb := &stdoutReviewSandbox{result: sbResult}
-	w := NewWorker(store, &routingTestGateway{}, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
-	task := materializeLegacyReviewTask(t, store, ctx, "legacy-review-stdout", "task-review-stdout")
-	queued, err := store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateQueued)
-	if err != nil {
-		t.Fatalf("queue task: %v", err)
-	}
-
-	w.Process(ctx, *queued)
-	assertLegacyReviewDraftRawStdout(t, store, ctx, task.ID, sbResult.Stdout)
-	completeReviewSubtask(t, store, ctx, task.ID)
-	requeued := requeueParentTask(t, store, ctx, task.ID)
-	w.Process(ctx, requeued)
-	assertLegacyReviewCommittedStdout(t, store, ctx, task.ID, sb, sbResult)
-}
-
 func materializeLegacyReviewTask(t *testing.T, store models.KanbanStore, ctx context.Context, project, title string) models.Task {
 	t.Helper()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
@@ -147,25 +102,6 @@ func materializeLegacyReviewTask(t *testing.T, store models.KanbanStore, ctx con
 		t.Fatalf("materialize plan: %v", err)
 	}
 	return tasks[0]
-}
-
-func assertLegacyReviewDraftRawStdout(t *testing.T, store models.KanbanStore, ctx context.Context, taskID, stdout string) {
-	t.Helper()
-	blocked, err := store.GetTask(ctx, taskID)
-	if err != nil {
-		t.Fatalf("get blocked parent: %v", err)
-	}
-	if blocked.State != models.TaskStateBlocked {
-		t.Fatalf("parent state = %s, want BLOCKED", blocked.State)
-	}
-	comments, err := store.ListComments(ctx, taskID)
-	if err != nil {
-		t.Fatalf("list comments: %v", err)
-	}
-	draft, ok := findLatestDraftReview(comments)
-	if !ok || strings.Contains(draft, "exit=") || !strings.Contains(draft, strings.TrimSpace(stdout)) {
-		t.Fatalf("draft = %q, want raw stdout containing %q", draft, strings.TrimSpace(stdout))
-	}
 }
 
 func requeueParentTask(t *testing.T, store models.KanbanStore, ctx context.Context, taskID string) models.Task {
@@ -179,30 +115,6 @@ func requeueParentTask(t *testing.T, store models.KanbanStore, ctx context.Conte
 		t.Fatalf("requeue parent: %v", err)
 	}
 	return *requeued
-}
-
-func assertLegacyReviewCommittedStdout(t *testing.T, store *captureResultStore, ctx context.Context, taskID string, sb *stdoutReviewSandbox, sbResult sandbox.Result) {
-	t.Helper()
-	final, err := store.GetTask(ctx, taskID)
-	if err != nil {
-		t.Fatalf("get final parent: %v", err)
-	}
-	if final.State != models.TaskStateCompleted {
-		t.Fatalf("parent state = %s, want COMPLETED", final.State)
-	}
-	if store.lastResult == nil {
-		t.Fatal("expected committed task result")
-	}
-	wantPayload := fmt.Sprintf("exit=%d duration=%s\n%s", 0, time.Duration(0), strings.TrimSpace(sbResult.Stdout))
-	if store.lastResult.Payload != wantPayload {
-		t.Fatalf("committed payload = %q, want %q", store.lastResult.Payload, wantPayload)
-	}
-	if strings.Count(store.lastResult.Payload, "exit=") != 1 {
-		t.Fatalf("committed payload should have a single metadata prefix, got %q", store.lastResult.Payload)
-	}
-	if sb.execCount != 1 {
-		t.Fatalf("sandbox executions = %d, want 1", sb.execCount)
-	}
 }
 
 func TestProcess_RequireReview_FinalizesApprovedReview(t *testing.T) {

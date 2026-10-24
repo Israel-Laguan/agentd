@@ -115,3 +115,11 @@ func TestProcessBatchAgenticRendersHostReportTask(t *testing.T) {
 		t.Fatalf("report task result = %#v, want a successful commit", res)
 	}
 }
+
+// completeHostFacts carries every core fact the renderer requires (B-046).
+var completeHostFacts = map[string]string{
+	"os_info.txt":     "Operating System: Debian GNU/Linux 13 (trixie)\n      Machine ID: 9ebbf53566051e82c3e15b536a381807\n          Kernel: Linux 7.2.9-2-liquorix-amd64\n",
+	"cpu_info.txt":    "Model name:                              Intel(R) Core(TM) Ultra 5 226V\nCPU(s):                                  8\n",
+	"memory_info.txt": "               total        used\nMem:            15Gi       7.9Gi\n",
+	"disk_info.txt":   "NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS\nnvme0n1     259:0    0 476.9G  0 disk\n",
+}
