@@ -9,6 +9,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // fakeTokenStore records AddTokenUsage calls for test assertions.
@@ -60,6 +61,10 @@ type singleResponseGateway struct {
 	err  error
 }
 
+func (g *singleResponseGateway) ProviderSupportsChatTools(provider string) bool {
+	return testutil.ProviderSupportsChatTools(provider)
+}
+
 func (g *singleResponseGateway) Generate(_ context.Context, _ gateway.AIRequest) (gateway.AIResponse, error) {
 	return g.resp, g.err
 }
@@ -76,9 +81,9 @@ func (g *singleResponseGateway) Embed(_ context.Context, _ gateway.EmbedRequest)
 	return gateway.EmbedResponse{}, nil
 }
 
-// newLegacyTokenUsageWorker creates a worker wired for legacy mode with the
+// newTokenUsageWorker creates an agentic worker wired with the
 // given gateway and token store.
-func newLegacyTokenUsageWorker(t *testing.T, gw gateway.AIGateway, ts TokenUsageStore) (*mockAgenticStore, *Worker, models.Task) {
+func newTokenUsageWorker(t *testing.T, gw gateway.AIGateway, ts TokenUsageStore) (*mockAgenticStore, *Worker, models.Task) {
 	t.Helper()
 	store := &mockAgenticStore{}
 	sb := &fakeSuccessExecutor{}
@@ -98,7 +103,7 @@ func newLegacyTokenUsageWorker(t *testing.T, gw gateway.AIGateway, ts TokenUsage
 		ID:          "agent-legacy",
 		Provider:    "openai",
 		Model:       "gpt-4",
-		AgenticMode: false, // legacy path
+		AgenticMode: true,
 	}
 	store.project = models.Project{
 		BaseEntity:    models.BaseEntity{ID: "proj-1"},
@@ -179,17 +184,15 @@ func TestTokenUsage_EmitsTokenUsageEvent(t *testing.T) {
 	}
 }
 
-// TestTokenUsage_LegacyPath_WritesUsage verifies that the legacy worker records
+// TestTokenUsage_FinalTurn_WritesUsage verifies that the worker records
 // token usage from the gateway response via AddTokenUsage.
-func TestTokenUsage_LegacyPath_WritesUsage(t *testing.T) {
+func TestTokenUsage_FinalTurn_WritesUsage(t *testing.T) {
 	t.Parallel()
 	ts := &fakeTokenStore{}
-	cmd := workerResponse{Command: "echo hi"}
-	raw, _ := json.Marshal(cmd)
 	gw := &singleResponseGateway{
-		resp: gateway.AIResponse{Content: string(raw), TokenUsage: 10},
+		resp: gateway.AIResponse{Content: "done", TokenUsage: 10},
 	}
-	_, w, task := newLegacyTokenUsageWorker(t, gw, ts)
+	_, w, task := newTokenUsageWorker(t, gw, ts)
 
 	w.Process(context.Background(), task)
 
@@ -238,10 +241,8 @@ func TestTokenUsage_AgenticPath_Accumulates(t *testing.T) {
 func TestTokenUsage_RollingLimitZero_StillRecords(t *testing.T) {
 	t.Parallel()
 	ts := &fakeTokenStore{}
-	cmd := workerResponse{Command: "echo hi"}
-	raw, _ := json.Marshal(cmd)
 	gw := &singleResponseGateway{
-		resp: gateway.AIResponse{Content: string(raw), TokenUsage: 7},
+		resp: gateway.AIResponse{Content: "done", TokenUsage: 7},
 	}
 	// Wire TokenStore but NOT TokenUsageHook (simulates rolling_token_limit=0)
 	store := &mockAgenticStore{}
@@ -263,7 +264,7 @@ func TestTokenUsage_RollingLimitZero_StillRecords(t *testing.T) {
 		ID:          "agent-x",
 		Provider:    "openai",
 		Model:       "gpt-4",
-		AgenticMode: false,
+		AgenticMode: true,
 	}
 	store.project = models.Project{
 		BaseEntity:    models.BaseEntity{ID: "proj-1"},
@@ -351,17 +352,15 @@ func TestTokenUsage_AgenticPath_SurfacesCacheFieldsInEvent(t *testing.T) {
 	}
 }
 
-// TestTokenUsage_LegacyPath_SurfacesCacheFieldsInEvent verifies the legacy
+// TestTokenUsage_FinalTurn_SurfacesCacheFieldsInEvent verifies the
 // path threads UsageDetails through GenerateJSONWithUsage into the event payload.
-func TestTokenUsage_LegacyPath_SurfacesCacheFieldsInEvent(t *testing.T) {
+func TestTokenUsage_FinalTurn_SurfacesCacheFieldsInEvent(t *testing.T) {
 	t.Parallel()
 	ts := &fakeTokenStore{}
 	sink := &mockEventSink{}
-	cmd := workerResponse{Command: "echo hi"}
-	raw, _ := json.Marshal(cmd)
 	gw := &singleResponseGateway{
 		resp: gateway.AIResponse{
-			Content:    string(raw),
+			Content:    "done",
 			TokenUsage: 20,
 			UsageDetails: &gateway.UsageDetails{
 				CachedTokens:     12,
@@ -369,7 +368,7 @@ func TestTokenUsage_LegacyPath_SurfacesCacheFieldsInEvent(t *testing.T) {
 			},
 		},
 	}
-	_, w, task := newLegacyTokenUsageWorker(t, gw, ts)
+	_, w, task := newTokenUsageWorker(t, gw, ts)
 	w.sink = sink
 
 	w.Process(context.Background(), task)
@@ -380,12 +379,12 @@ func TestTokenUsage_LegacyPath_SurfacesCacheFieldsInEvent(t *testing.T) {
 			found = true
 			want := `{"tokens":20,"cached_tokens":12,"cache_write_tokens":4}`
 			if ev.Payload != want {
-				t.Errorf("legacy payload = %q, want %q", ev.Payload, want)
+				t.Errorf("payload = %q, want %q", ev.Payload, want)
 			}
 		}
 	}
 	if !found {
-		t.Fatal("expected TOKEN_USAGE event carrying cache fields on legacy path")
+		t.Fatal("expected TOKEN_USAGE event carrying cache fields")
 	}
 	if len(ts.detailsCalls) != 1 || ts.detailsCalls[0].CachedTokens != 12 || ts.detailsCalls[0].CacheWriteTokens != 4 {
 		t.Errorf("AddUsageDetails details = %+v, want cached=12 write=4", ts.detailsCalls)

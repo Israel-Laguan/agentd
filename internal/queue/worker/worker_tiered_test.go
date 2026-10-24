@@ -60,7 +60,7 @@ func TestApplyTieredStepProfile_ToolAllowlists(t *testing.T) {
 	w := &Worker{}
 	profile := models.AgentProfile{
 		ID:           "base",
-		AgenticMode:  false,
+		AgenticMode:  true,
 		AllowedTools: nil,
 	}
 	tests := []struct {
