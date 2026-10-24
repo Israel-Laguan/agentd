@@ -121,3 +121,13 @@ func TestProcessBatchLegacyRefusedTaskFailsAloneSiblingCompletes(t *testing.T) {
 		t.Fatalf("sibling task result = %#v, want success", r)
 	}
 }
+
+func eventCount(sink *mockEventSink, typ string) int {
+	n := 0
+	for _, ev := range sink.events {
+		if string(ev.Type) == typ {
+			n++
+		}
+	}
+	return n
+}

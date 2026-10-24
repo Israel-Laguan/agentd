@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"agentd/internal/config"
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
 
@@ -59,4 +61,27 @@ func containsEvent(kinds []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// legacyContentGateway returns a fixed JSON payload for legacy routing tests.
+type legacyContentGateway struct {
+	routingTestGateway
+	content string
+}
+
+func (g *legacyContentGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	g.requests = append(g.requests, req)
+	return gateway.AIResponse{Content: g.content}, nil
+}
+
+func legacyCapOptions() WorkerOptions {
+	return WorkerOptions{
+		MaxToolIterations: 5,
+		Legacy: config.LegacyConfig{
+			PreflightScore:    6,
+			RejectScore:       9,
+			MaxDescriptionLen: 2000,
+		},
+		Split: config.SplitConfig{MaxDepth: 2, MaxSubtasks: 5},
+	}
 }
