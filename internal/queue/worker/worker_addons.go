@@ -49,7 +49,7 @@ func truncate(value string, max int) string {
 
 // === Planning Logic ===
 
-func (w *Worker) handleTaskBreakdown(ctx context.Context, task models.Task, subtasks []workerSubtask) {
+func (w *Worker) handleTaskBreakdown(ctx context.Context, task models.Task, subtasks []planning.SplitSubtask) {
 	drafts := make([]models.DraftTask, 0, len(subtasks))
 	for _, subtask := range subtasks {
 		drafts = append(drafts, models.DraftTask{

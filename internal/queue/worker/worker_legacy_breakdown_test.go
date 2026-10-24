@@ -27,12 +27,11 @@ func legacyCapOptions() WorkerOptions {
 	return WorkerOptions{
 		MaxToolIterations: 5,
 		Legacy: config.LegacyConfig{
-			MaxBreakdownDepth:       2,
-			MaxSubtasksPerBreakdown: 5,
-			PreflightScore:          6,
-			RejectScore:             9,
-			MaxDescriptionLen:       2000,
+			PreflightScore:    6,
+			RejectScore:       9,
+			MaxDescriptionLen: 2000,
 		},
+		Split: config.SplitConfig{MaxDepth: 2, MaxSubtasks: 5},
 	}
 }
 
@@ -53,7 +52,7 @@ func TestLegacyBreakdown_SubtaskCountCap_EmitsHandoff(t *testing.T) {
 	}
 	gw := &legacyContentGateway{content: `{"too_complex":true,"subtasks":[{"title":"a","description":"1"},{"title":"b","description":"2"},{"title":"c","description":"3"},{"title":"d","description":"4"},{"title":"e","description":"5"},{"title":"f","description":"6"}]}`}
 	opts := legacyCapOptions()
-	opts.Legacy.MaxSubtasksPerBreakdown = 5
+	opts.Split.MaxSubtasks = 5
 
 	w := NewWorker(store, gw, &routingTestSandbox{}, nil, &legacyHandoffSink{}, opts)
 	w.Process(context.Background(), store.task)
@@ -263,7 +262,7 @@ func TestHandleHealingSplit_SubtaskCap_EmitsHealingHandoff(t *testing.T) {
 	gw := &legacyContentGateway{content: `{"too_complex":true,"subtasks":[{"title":"a","description":"1"},{"title":"b","description":"2"},{"title":"c","description":"3"},{"title":"d","description":"4"},{"title":"e","description":"5"},{"title":"f","description":"6"}]}`}
 	sink := &legacyHandoffSink{}
 	opts := legacyCapOptions()
-	opts.Legacy.MaxSubtasksPerBreakdown = 5
+	opts.Split.MaxSubtasks = 5
 	w := NewWorker(store, gw, &routingTestSandbox{}, nil, sink, opts)
 
 	w.handleHealingSplit(context.Background(), store.task, store.project, store.profile)

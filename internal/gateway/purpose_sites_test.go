@@ -31,6 +31,7 @@ var wantSites = map[string][]string{
 	"internal/queue/worker/task_runner.go":               {"PurposeExecSuggestCommand"},
 	"internal/queue/worker/agentic/handlers.go":          {"PurposeExecTurn"},
 	"internal/queue/worker/elicitor.go":                  {"PurposeCreateElicit"},
+	"internal/queue/worker/healing_split.go":             {"PurposeCreateSplitTask"},
 	"internal/memory/librarian_summarize.go":             {"PurposeMaintExtractMemory", "PurposeMaintSummarizeLog", "PurposeMaintSummarizeLog"},
 	"internal/memory/dream.go":                           {"PurposeMaintMergeMemories"},
 	"internal/config/health_warmup.go":                   {"PurposeSystemWarmup"},

@@ -23,6 +23,7 @@ const (
 	PurposeCreateReplanComment Purpose = "create.replan_comment"
 	PurposeCreateNextPhase     Purpose = "create.next_phase"
 	PurposeCreateElicit        Purpose = "create.elicit"
+	PurposeCreateSplitTask     Purpose = "create.split_task"
 
 	PurposeExecTurn           Purpose = "exec.turn"
 	PurposeExecWorkPlan       Purpose = "exec.work_plan"

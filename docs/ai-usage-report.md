@@ -34,7 +34,7 @@ repair.
 
 ## Purposes
 
-The set is closed: 23 purposes in the form `<stage>.<name>`. A call that arrives
+The set is closed: 24 purposes in the form `<stage>.<name>`. A call that arrives
 with an empty or unknown purpose is stored as `unlabelled` and counted, never
 dropped. The minimum level is provisional (SP-023): L1 is a single model call
 with no tools or workspace, L3 needs an ACP agent.
@@ -47,9 +47,10 @@ with no tools or workspace, L3 needs an ACP agent.
 | `create.replan_comment` | Turn a human comment on an IN_CONSIDERATION task into follow-up tasks | L1 (L3 read-only on brownfield) |
 | `create.next_phase` | Expand a "Plan Phase N" task into the next phase's tasks | L1 (L3 read-only on brownfield) |
 | `create.elicit` | Decide whether a task needs clarifying questions before it runs | L1 |
+| `create.split_task` | Break a task that keeps failing into subtasks (healing split) | L1 |
 | `exec.turn` | One iteration of the main tool-calling loop | L3 |
 | `exec.work_plan` | Draft the step plan inside an agentic task | L1 |
-| `exec.legacy_command` | Legacy one-shot JSON command, including healing-split breakdowns | L1 |
+| `exec.legacy_command` | Legacy one-shot JSON command | L1 |
 | `exec.batch` | Run several small tasks in one model call | L1 |
 | `exec.respec_turn` | Rewrite the user turn after plan validation fails | L1 |
 | `exec.repair_section` | Redo one failing plan step's section | L1 |

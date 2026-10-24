@@ -176,42 +176,6 @@ func (w *Worker) handleAgentFailure(ctx context.Context, task models.Task, paylo
 	w.evict(ctx, *retried, payload)
 }
 
-func (w *Worker) handleHealingSplit(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
-	w.Emit(ctx, task, "HEALING_SPLIT", fmt.Sprintf("attempt=%d step=%s", task.RetryCount, planning.HealingStepSplitTask))
-	response, err := w.breakdownCommand(ctx, task, project, profile)
-	if err != nil {
-		w.createHealingHandoff(ctx, task, planning.HealingAction{
-			Type:     planning.HealingActionHuman,
-			StepName: planning.HealingStepHumanHandoff,
-			Reason:   "failed to ask model for task breakdown: " + err.Error(),
-		}, err.Error())
-		return
-	}
-	if !response.TooComplex || len(response.Subtasks) == 0 {
-		w.createHealingHandoff(ctx, task, planning.HealingAction{
-			Type:     planning.HealingActionHuman,
-			StepName: planning.HealingStepHumanHandoff,
-			Reason:   "model could not split task after repeated failures",
-		}, "worker did not return subtasks during healing split")
-		return
-	}
-	w.handleLegacyTaskBreakdown(ctx, task, response.Subtasks, true)
-}
-
-func (w *Worker) breakdownCommand(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (workerResponse, error) {
-	prompt := "This task has failed multiple times. Break it into smaller independently executable subtasks instead of attempting a single command."
-	if profile.SystemPrompt.Valid {
-		profile.SystemPrompt.String = profile.SystemPrompt.String + "\n\n" + prompt
-	} else {
-		profile.SystemPrompt.Valid = true
-		profile.SystemPrompt.String = prompt
-	}
-	profile = w.routeLegacyProfile(ctx, task, project, profile)
-	resp, tokenUsage, details, err := w.command(ctx, task, project, profile)
-	w.RecordTaskTokenUsage(ctx, task, tokenUsage, details)
-	return resp, err
-}
-
 func (w *Worker) tunePayload(profile models.AgentProfile, action planning.HealingAction, attempt int) string {
 	parts := []string{fmt.Sprintf("attempt=%d", attempt), "step=" + action.StepName}
 	if action.Overrides.Temperature != nil {
