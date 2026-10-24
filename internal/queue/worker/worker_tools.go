@@ -192,6 +192,8 @@ func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gatew
 		return agenttools.JSONErrorf("failed to load subagent definition: %v", err)
 	}
 
+	// T-057: the subagent's model turns belong to the task that delegated.
+	ctx = gateway.WithTaskID(ctx, toolExecutor.TaskID())
 	delegate := agentsubagent.NewSubagentDelegate(
 		w.gateway,
 		w.sandbox,
@@ -252,6 +254,8 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 		})
 	}
 
+	// T-057: the subagent turns of every parallel task belong to the delegating task.
+	ctx = gateway.WithTaskID(ctx, toolExecutor.TaskID())
 	delegate := agentsubagent.NewSubagentDelegate(
 		w.gateway,
 		w.sandbox,
