@@ -17,10 +17,15 @@ const ToolErrorCodeSandboxUnavailable = "SANDBOX_UNAVAILABLE"
 // repeat the cycle, so the worker hands the task to a human instead.
 const ToolErrorCodeNoProgress = "NO_PROGRESS"
 
-// ToolErrorCodeUnverified tags a text-only finish made right after a failed
-// shell command, so the worker sends the task to a human instead of marking it
-// COMPLETED (B-082).
+// ToolErrorCodeUnverified tags a text-only finish the worker cannot verify, such
+// as one with an unmet success criterion or open breakdown subtasks, so the
+// worker sends the task to a human instead of marking it COMPLETED.
 const ToolErrorCodeUnverified = "UNVERIFIED_COMPLETION"
+
+// ToolErrorCodeUnverifiedCommand tags a text-only finish made right after a
+// failed shell command (B-082). The model can fix the command, so the worker
+// retries the task with the failure as feedback (T-055b gap 3).
+const ToolErrorCodeUnverifiedCommand = "UNVERIFIED_COMMAND"
 
 // SandboxUnavailableJSON reports a refusal by an unavailable required jail as a
 // fatal, tagged tool result: the model cannot fix a missing jail, so the

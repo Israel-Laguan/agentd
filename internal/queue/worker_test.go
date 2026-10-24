@@ -258,9 +258,9 @@ func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
 	worker.Process(context.Background(), store.task)
 
 	// B-082: the final text came after a failed command and nothing passed
-	// after it, so the task must not be recorded as a success.
-	if store.result == nil || store.result.Success || !strings.Contains(store.result.Payload, "unverified") {
-		t.Fatalf("result = %#v, want an unverified failure after a failed command", store.result)
+	// after it, so the task must not be recorded as a success; it is retried.
+	if (store.result != nil && store.result.Success) || store.task.RetryCount != 1 {
+		t.Fatalf("result = %#v retries = %d, want a retry after a failed command", store.result, store.task.RetryCount)
 	}
 	if len(sb.commands) != 1 || sb.commands[0] != "false" {
 		t.Fatalf("commands = %#v, want [false]", sb.commands)

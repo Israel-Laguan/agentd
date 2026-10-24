@@ -14,8 +14,10 @@ import (
 
 // B-082: the builtin agent reported COMPLETED after its own verification had
 // failed (a test it wrote fails, or the toolchain was missing). A finish with
-// no tool call right after a failed shell command must not be COMPLETED.
-func TestAgenticFinishAfterFailedCommandHandsTaskToHuman(t *testing.T) {
+// no tool call right after a failed shell command must not be COMPLETED. The
+// model can fix a failing command, so the task takes the retry ladder with the
+// failure as feedback (T-055b gap 3).
+func TestAgenticFinishAfterFailedCommandRetries(t *testing.T) {
 	t.Parallel()
 	gw := &sequenceGateway{responses: []gateway.AIResponse{
 		bashCall("c1", "go test ./..."), {Content: "Done. The feature is complete."},
@@ -23,13 +25,16 @@ func TestAgenticFinishAfterFailedCommandHandsTaskToHuman(t *testing.T) {
 	sb := &scriptedSandbox{steps: []scriptedStep{
 		{result: sandbox.Result{ExitCode: 1, Stderr: "--- FAIL: TestCountLines"}},
 	}}
-	w, _, task := runAgenticTask(t, gw, sb)
+	w, sink, task := runAgenticTask(t, gw, sb)
 	got, err := w.store.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if got.State != models.TaskStateFailedRequiresHuman {
-		t.Fatalf("state = %s, want FAILED_REQUIRES_HUMAN: the last command failed and the task finished without a passing run", got.State)
+	if got.State == models.TaskStateCompleted || got.State == models.TaskStateFailedRequiresHuman || got.RetryCount != 1 {
+		t.Fatalf("state = %s retries = %d, want a retry: the last command failed and the task finished without a passing run", got.State, got.RetryCount)
+	}
+	if !sinkPayloadContains(sink, "RETRY", "TestCountLines") {
+		t.Fatalf("events = %#v, want a RETRY carrying the failed command's output", sink.events)
 	}
 }
 
@@ -93,8 +98,8 @@ func TestAgenticLoop_ToolErrorStringStillContinuesToFinalResponse(t *testing.T) 
 	if store.committedResult != nil && store.committedResult.Success {
 		t.Fatalf("final response after a failed command must not be committed as success, got %#v", store.committedResult)
 	}
-	if recorded.Status != LoopToolFailure || recorded.Meta.ErrorCode != agenttools.ToolErrorCodeUnverified {
-		t.Fatalf("loop result = %s code %q, want tool_failure with %q", recorded.Status, recorded.Meta.ErrorCode, agenttools.ToolErrorCodeUnverified)
+	if recorded.Status != LoopToolFailure || recorded.Meta.ErrorCode != agenttools.ToolErrorCodeUnverifiedCommand {
+		t.Fatalf("loop result = %s code %q, want tool_failure with %q", recorded.Status, recorded.Meta.ErrorCode, agenttools.ToolErrorCodeUnverifiedCommand)
 	}
 }
 

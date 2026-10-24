@@ -63,14 +63,15 @@ func (e *Engine) openBreakdownFinish(ctx context.Context, task models.Task, turn
 }
 
 // unverifiedFinish stops a text-only finish that follows a failed shell command:
-// the work was never verified, so it is not COMPLETED. It returns nil when the
-// last command passed or nothing has run.
+// the work was never verified, so it is not COMPLETED. The model can fix the
+// command, so the stop is tagged for a retry. It returns nil when the last
+// command passed or nothing has run.
 func (e *Engine) unverifiedFinish(turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
 	if e.lastBashFailure == "" {
 		return nil
 	}
 	reason := "unverified: the last shell command failed and nothing passed after it: " + e.lastBashFailure
 	meta := agentruntime.BuildLoopMeta(turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(messages), 0, reason, "bash", "")
-	meta.ErrorCode = agenttools.ToolErrorCodeUnverified
+	meta.ErrorCode = agenttools.ToolErrorCodeUnverifiedCommand
 	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
 }
