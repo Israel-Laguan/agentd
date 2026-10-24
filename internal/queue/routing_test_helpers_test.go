@@ -10,7 +10,7 @@ import (
 func testProviderConfigForName(name string) (spec.ProviderConfig, bool) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	switch name {
-	case "openai", "synth-tools", "synth-openai":
+	case "openai", "gemini", "synth-tools", "synth-openai":
 		return spec.ProviderConfig{Name: name, Adapter: "openai", BaseURL: "https://example.com/v1", Model: "test-model", APIKey: "test-key"}, true
 	case "anthropic", "synth-anthropic":
 		return spec.ProviderConfig{Name: name, Adapter: "anthropic", BaseURL: "https://example.com", Model: "test-model", APIKey: "test-key"}, true

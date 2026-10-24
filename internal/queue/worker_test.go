@@ -6,14 +6,16 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 func TestWorkerCompletesSuccessfulTask(t *testing.T) {
 	store := newWorkerStore()
-	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"}}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
 	worker.Process(context.Background(), store.task)
@@ -24,7 +26,7 @@ func TestWorkerCompletesSuccessfulTask(t *testing.T) {
 
 func TestWorkerHeartbeatUpdatesWhileRunning(t *testing.T) {
 	store := newWorkerStore()
-	gw := &fakeGateway{content: `{"command":"sleep 1"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "sleep 1")}}
 	sb := &fakeSandbox{
 		result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"},
 		delay:  25 * time.Millisecond,
@@ -41,10 +43,10 @@ func TestWorkerHeartbeatUpdatesWhileRunning(t *testing.T) {
 func TestWorkerRetriesThenEvicts(t *testing.T) {
 	store := newWorkerStore()
 	store.task.RetryCount = 2
-	gw := &fakeGateway{content: `{"command":"false"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}}
 	sink := &recordingSink{}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink, WorkerOptions{MaxRetries: 3})
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink, WorkerOptions{MaxRetries: 3, ToolFailureStreak: 1})
 	worker.Process(context.Background(), store.task)
 	if store.task.State != models.TaskStateFailedRequiresHuman {
 		t.Fatalf("state=%s, want FAILED_REQUIRES_HUMAN", store.task.State)
@@ -92,9 +94,13 @@ func TestWorkerBreakerErrorCreatesHumanTaskWhenBreakerOpens(t *testing.T) {
 
 func TestWorkerBreaksDownTooComplexTask(t *testing.T) {
 	store := newWorkerStore()
-	gw := &fakeGateway{content: `{"too_complex":true,"subtasks":[{"title":"First","description":"Do first"},{"title":"Second","description":"Do second"}]}`}
+	gw := &fakeGateway{
+		toolCalls:   []gateway.ToolCall{testutil.ReadToolCall("call_1", "missing.txt")},
+		nextContent: `{"subtasks":[{"title":"First","description":"Do first"},{"title":"Second","description":"Do second"}]}`,
+	}
 	sb := &fakeSandbox{}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
+	tuner := NewParameterTuner(config.HealingConfig{Enabled: true, Steps: []string{HealingStepSplitTask}})
+	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{Tuner: tuner, ToolFailureStreak: 1})
 
 	worker.Process(context.Background(), store.task)
 
@@ -118,7 +124,7 @@ func TestWorkerPayloadUsesSandboxEnvAllowlist(t *testing.T) {
 	t.Setenv("LANG", "C")
 
 	store := newWorkerStore()
-	gw := &fakeGateway{content: `{"command":"env"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "env")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"}}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{
 		SandboxWallTimeout:  2 * time.Minute,
@@ -169,7 +175,7 @@ func TestWorkerPayloadEnvironmentDoesNotDependOnProcessEnvOrder(t *testing.T) {
 	t.Setenv("PATH", "/bin")
 	t.Setenv("HOME", "/tmp/home")
 	store := newWorkerStore()
-	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"}}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{
 		SandboxEnvAllowlist: []string{"HOME", "PATH"},
@@ -360,7 +366,6 @@ func TestWorkerPerProviderBreakerIsolation(t *testing.T) {
 func TestWorkerPreExecPerProviderBreakerCheck(t *testing.T) {
 	store := newWorkerStore()
 	store.profile.Provider = "gemini"
-	store.profile.AgenticMode = false
 
 	pb := NewProviderBreakers()
 	// Manually open the gemini breaker.
@@ -368,7 +373,7 @@ func TestWorkerPreExecPerProviderBreakerCheck(t *testing.T) {
 		pb.Get("gemini").RecordError(models.ErrLLMQuotaExceeded)
 	}
 
-	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: true}}
 	sink := &recordingSink{}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink,

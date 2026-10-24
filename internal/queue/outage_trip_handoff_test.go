@@ -5,8 +5,10 @@ import (
 	"sync"
 	"testing"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // B-017: exactly one task may be handed to a human when three admitted tasks
@@ -29,7 +31,7 @@ func TestHandleGatewayErrorHandsOffOnlyTheTrippingTask(t *testing.T) {
 
 	for range rounds {
 		store := newQueueStore()
-		gateway := &queueGateway{content: `{"command":"true"}`, err: models.ErrLLMUnreachable}
+		gateway := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}, err: models.ErrLLMUnreachable}
 		breaker := NewCircuitBreaker()
 		sink := &queueSink{}
 		worker := NewWorker(store, gateway, &queueSandbox{result: sandbox.Result{Success: true}},

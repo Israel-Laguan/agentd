@@ -33,14 +33,16 @@ func (s *stdoutReviewSandbox) Execute(_ context.Context, _ sandbox.Payload) (san
 	return s.result, nil
 }
 
-func setupLegacyReviewProfile(t *testing.T, store models.KanbanStore, ctx context.Context, provider string) {
+// setupReviewProfile enables RequireReview on the default profile. agentic picks
+// the engine: the legacy-only assertions in this file keep the legacy engine.
+func setupReviewProfile(t *testing.T, store models.KanbanStore, ctx context.Context, provider string, agentic bool) {
 	t.Helper()
 	profile, err := store.GetAgentProfile(ctx, "default")
 	if err != nil {
 		t.Fatalf("get profile: %v", err)
 	}
 	profile.RequireReview = true
-	profile.AgenticMode = false
+	profile.AgenticMode = agentic
 	if provider != "" {
 		profile.Provider = provider
 	}
@@ -117,7 +119,7 @@ func TestProcess_LegacyRequireReview_DraftAndFinalPayloadUseRawStdout(t *testing
 	t.Parallel()
 	store := &captureResultStore{FakeKanbanStore: testutil.NewFakeStore()}
 	ctx := context.Background()
-	setupLegacyReviewProfile(t, store, ctx, "")
+	setupReviewProfile(t, store, ctx, "", false)
 
 	sbResult := sandbox.Result{Success: true, ExitCode: 0, Stdout: "clean output\n", Duration: 1500 * time.Millisecond}
 	sb := &stdoutReviewSandbox{result: sbResult}
@@ -203,11 +205,11 @@ func assertLegacyReviewCommittedStdout(t *testing.T, store *captureResultStore, 
 	}
 }
 
-func TestProcess_LegacyRequireReview_FinalizesApprovedReview(t *testing.T) {
+func TestProcess_RequireReview_FinalizesApprovedReview(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
 	ctx := context.Background()
-	setupLegacyReviewProfile(t, store, ctx, "")
+	setupReviewProfile(t, store, ctx, "", true)
 	gw := &routingTestGateway{}
 	sb := &routingTestSandbox{}
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
@@ -258,7 +260,7 @@ func TestProcess_LegacyRequireReview_InjectsRejectionFeedback(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
 	ctx := context.Background()
-	setupLegacyReviewProfile(t, store, ctx, "ollama")
+	setupReviewProfile(t, store, ctx, "ollama", false)
 	gw := &routingTestGateway{}
 	sb := &routingTestSandbox{}
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})

@@ -7,10 +7,15 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
+
+// agenticHostProfile is the profile the host-report renderer runs under: the
+// agentic path renders the report before any model call.
+var agenticHostProfile = models.AgentProfile{ID: "default", Provider: "openai", Model: "gpt-4", AgenticMode: true}
 
 const hostReportFixture = "Operating System: Debian GNU/Linux 13 (trixie)\n  Machine ID: 9ebbf53566051e82c3e15b536a381807\n          Kernel: Linux 7.2.9-2-liquorix-amd64\n"
 
@@ -47,7 +52,7 @@ func (s panicSandbox) Execute(context.Context, sandbox.Payload) (sandbox.Result,
 
 // B-045: the report is a summary rendered from the collected files, never the
 // model's own text or a cat of raw output, and it never carries identifiers.
-func TestRunLegacyTaskRendersHostReportWithoutModelOrShell(t *testing.T) {
+func TestHostReportRendersWithoutModelOrShell(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	files := map[string]string{
@@ -60,7 +65,7 @@ func TestRunLegacyTaskRendersHostReportWithoutModelOrShell(t *testing.T) {
 	gw := &routingTestGateway{}
 	sink := &mockEventSink{}
 	w := NewWorker(store, gw, panicSandbox{t}, nil, sink, WorkerOptions{})
-	w.RunLegacyTask(ctx, task, project, models.AgentProfile{}, true)
+	w.dispatchProcess(ctx, task, project, agenticHostProfile)
 
 	if len(gw.requests) != 0 {
 		t.Fatalf("gateway called %d times, want 0", len(gw.requests))
@@ -85,7 +90,7 @@ func TestRunLegacyTaskRendersHostReportWithoutModelOrShell(t *testing.T) {
 // B-046: a report missing a core fact must not burn retries re-rendering the
 // same workspace (the collectors already ran, so the next attempt would hit
 // the same gap). The renderer steps aside and the normal model path runs.
-func TestRunLegacyTaskFallsBackToModelOnPartialReport(t *testing.T) {
+func TestHostReportFallsBackToModelOnPartialReport(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	files := map[string]string{
@@ -93,9 +98,9 @@ func TestRunLegacyTaskFallsBackToModelOnPartialReport(t *testing.T) {
 		"mem.txt":     "               total        used        free\nMem:            15Gi       7.9Gi       1.2Gi\n",
 	}
 	task, project := seedHostReportTask(t, store, "Create system report.md summarizing the OS and hardware from the collected files", files)
-	gw := &routingTestGateway{}
+	gw := &sequenceGateway{responses: []gateway.AIResponse{{Content: "done"}}}
 	w := NewWorker(store, gw, fixedResultSandbox{result: sandbox.Result{Success: true}}, nil, &mockEventSink{}, WorkerOptions{})
-	w.RunLegacyTask(ctx, task, project, models.AgentProfile{}, true)
+	w.dispatchProcess(ctx, task, project, agenticHostProfile)
 
 	if len(gw.requests) == 0 {
 		t.Fatal("gateway never called, want the model path for partial facts")
@@ -109,13 +114,13 @@ func TestRunLegacyTaskFallsBackToModelOnPartialReport(t *testing.T) {
 }
 
 // With nothing collected the renderer steps aside and the normal model path runs.
-func TestRunLegacyTaskFallsBackToModelWhenNoHostFactsCollected(t *testing.T) {
+func TestHostReportFallsBackToModelWhenNoHostFactsCollected(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	task, project := seedHostReportTask(t, store, "Create system report.md summarizing the OS and hardware", map[string]string{"notes.txt": "nothing"})
-	gw := &routingTestGateway{}
+	gw := &sequenceGateway{responses: []gateway.AIResponse{{Content: "done"}}}
 	w := NewWorker(store, gw, fixedResultSandbox{result: sandbox.Result{Success: true}}, nil, &mockEventSink{}, WorkerOptions{})
-	w.RunLegacyTask(ctx, task, project, models.AgentProfile{}, true)
+	w.dispatchProcess(ctx, task, project, agenticHostProfile)
 	if len(gw.requests) == 0 {
 		t.Fatal("gateway never called, want the model path when no facts were collected")
 	}

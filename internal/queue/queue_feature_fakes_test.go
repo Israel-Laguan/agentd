@@ -8,16 +8,32 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 type queueGateway struct {
-	content string
-	err     error
+	content   string
+	toolCalls []gateway.ToolCall
+	err       error
 }
 
-func (g *queueGateway) Generate(context.Context, gateway.AIRequest) (gateway.AIResponse, error) {
+// Generate answers the first request of a turn with toolCalls, then content once
+// the tool results are back. Without toolCalls every request gets content.
+func (g *queueGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	if len(g.toolCalls) > 0 && !lastMessageIsToolResult(req) {
+		return gateway.AIResponse{ToolCalls: g.toolCalls}, g.err
+	}
 	return gateway.AIResponse{Content: g.content}, g.err
 }
+
+func (g *queueGateway) ProviderSupportsChatTools(provider string) bool {
+	return testutil.ProviderSupportsChatTools(provider)
+}
+
+func lastMessageIsToolResult(req gateway.AIRequest) bool {
+	return len(req.Messages) > 0 && req.Messages[len(req.Messages)-1].Role == "tool"
+}
+
 func (g *queueGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
 	return &models.DraftPlan{}, g.err
 }

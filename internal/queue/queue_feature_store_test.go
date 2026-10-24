@@ -25,7 +25,7 @@ func (s *queueStore) ClearProjectStartedEmpty(context.Context, string) error { r
 func newQueueStore() *queueStore {
 	return &queueStore{
 		project: models.Project{BaseEntity: models.BaseEntity{ID: "project"}, WorkspacePath: "/tmp"},
-		profile: models.AgentProfile{ID: "default", Temperature: 0.2, SystemPrompt: sql.NullString{
+		profile: models.AgentProfile{ID: "default", Provider: "openai", AgenticMode: true, Temperature: 0.2, SystemPrompt: sql.NullString{
 			String: "Return JSON.", Valid: true,
 		}},
 	}

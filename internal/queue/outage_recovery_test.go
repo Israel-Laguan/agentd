@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // SP-012: how long until work resumes after a provider outage ends?
@@ -33,7 +35,7 @@ import (
 // automatically" has no single answer.
 func TestOutageRecoveryFailedTasksSplitBetweenRequeueAndHandoff(t *testing.T) {
 	store := newQueueStore()
-	gateway := &queueGateway{content: `{"command":"true"}`, err: models.ErrLLMUnreachable}
+	gateway := &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}, err: models.ErrLLMUnreachable}
 	sb := &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
 	breaker := NewCircuitBreaker()
 	now := time.Now().UTC()

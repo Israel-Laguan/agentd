@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // countingStore wraps the shared queueStore fake and records when the dispatch
@@ -82,7 +84,7 @@ func holdGeminiProbe(t *testing.T, pb *ProviderBreakers) *time.Time {
 // the *provider* registry, which is where the sibling wait happens.
 func newSoakDaemon(t *testing.T, store *countingStore, pb *ProviderBreakers, taskInterval, maxTaskInterval time.Duration) *Daemon {
 	t.Helper()
-	gw := &fakeGateway{content: `{"command":"echo ok"}`}
+	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: true}}
 	sink := &recordingSink{}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink,
@@ -112,7 +114,6 @@ func TestDispatchLoopRequeueRateIsBoundedWhileProbeInFlight(t *testing.T) {
 
 	store := &countingStore{queueStore: newQueueStore()}
 	store.profile.Provider = "gemini"
-	store.profile.AgenticMode = false
 	store.seed(siblings, models.TaskStateReady)
 
 	pb := NewProviderBreakers()

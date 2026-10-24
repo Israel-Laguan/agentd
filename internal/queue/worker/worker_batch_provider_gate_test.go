@@ -20,7 +20,7 @@ func TestProcessBatch_OpenProviderBreakerBlocksTheBatchedCall(t *testing.T) {
 	store := &batchTestStore{
 		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp/ws"},
 		profile: models.AgentProfile{
-			ID: "ag1", Provider: "gemini", Model: "gpt-4", AgenticMode: false,
+			ID: "ag1", Provider: "gemini", Model: "gpt-4", AgenticMode: true,
 		},
 		tasks:   make(map[string]models.Task),
 		results: make(map[string]*models.TaskResult),

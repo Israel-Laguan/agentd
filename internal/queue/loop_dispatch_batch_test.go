@@ -27,7 +27,7 @@ func newDispatchBatchStore(tasks []models.Task) *dispatchBatchStore {
 		"p2": {BaseEntity: models.BaseEntity{ID: "p2"}, WorkspacePath: "/tmp/p2"},
 	}
 	profile := models.AgentProfile{
-		ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: false,
+		ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: true,
 	}
 	return &dispatchBatchStore{
 		tasks:    append([]models.Task(nil), tasks...),

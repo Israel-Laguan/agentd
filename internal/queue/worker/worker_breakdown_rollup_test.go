@@ -7,21 +7,99 @@ import (
 	"testing"
 	"time"
 
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/queue/planning"
+	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
 )
 
 const breakdownMarkerTitle = "AGENT_PLAN"
 
 // titleBreakdownGateway decomposes any task whose prompt carries
-// breakdownMarkerTitle and returns a shell command otherwise, like a model that always splits
-// plan-marked tasks.
+// breakdownMarkerTitle. The agentic path reaches the healing split through a
+// failing tool call, so the marked task's first turn runs a command that fails,
+// and the split call returns the subtasks. Other tasks run one command and finish.
 type titleBreakdownGateway struct {
 	routingTestGateway
+	split bool
+}
+
+func lastMessageIsToolResult(req gateway.AIRequest) bool {
+	return len(req.Messages) > 0 && req.Messages[len(req.Messages)-1].Role == "tool"
+}
+
+func (g *titleBreakdownGateway) ProviderSupportsChatTools(provider string) bool {
+	return testutil.ProviderSupportsChatTools(provider)
+}
+
+// breakdownSandbox fails the command the marked task runs, so its failing tool
+// call reaches the healing split. Every other command succeeds.
+type breakdownSandbox struct {
+	routingTestSandbox
+}
+
+func (s *breakdownSandbox) Execute(ctx context.Context, p sandbox.Payload) (sandbox.Result, error) {
+	if p.Command == "false" {
+		s.execCount++
+		return sandbox.Result{Success: false, ExitCode: 1, Stderr: "boom"}, nil
+	}
+	return s.routingTestSandbox.Execute(ctx, p)
 }
 
 func (g *titleBreakdownGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	g.requests = append(g.requests, req)
+	if req.Purpose == gateway.PurposeCreateElicit {
+		return gateway.AIResponse{Content: `{"needs_clarification":false}`}, nil
+	}
+	if req.Purpose == gateway.PurposeCreateSplitTask {
+		g.split = true
+		return gateway.AIResponse{Content: `{"subtasks":[` +
+			`{"title":"Step 1","description":"scaffold"},{"title":"Step 2","description":"implement"}]}`}, nil
+	}
+	if lastMessageIsToolResult(req) {
+		return gateway.AIResponse{Content: "done"}, nil
+	}
+	for _, m := range req.Messages {
+		if m.Role == "user" && strings.Contains(m.Content, breakdownMarkerTitle) {
+			if g.split {
+				// A resumed parent answers in one turn: the split already ran.
+				return gateway.AIResponse{Content: "done"}, nil
+			}
+			return gateway.AIResponse{ToolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "false")}}, nil
+		}
+	}
+	return gateway.AIResponse{ToolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}, nil
+}
+
+func newBreakdownRollupFixture(t *testing.T) (*testutil.FakeKanbanStore, *titleBreakdownGateway, *Worker, models.Task) {
+	t.Helper()
+	store := testutil.NewFakeStore()
+	if err := store.UpsertAgentProfile(context.Background(), models.AgentProfile{ID: "default", Provider: "ollama", Model: "llama3", AgenticMode: true}); err != nil {
+		t.Fatalf("UpsertAgentProfile: %v", err)
+	}
+	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
+		ProjectName: "breakdown-rollup",
+		Tasks:       []models.DraftTask{{Title: breakdownMarkerTitle + ": Produce a status report", Description: testutil.AgenticTestTaskDescription(), AgentID: "default"}},
+	})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	gw := &titleBreakdownGateway{}
+	tuner := planning.NewParameterTuner(config.HealingConfig{Enabled: true, Steps: []string{planning.HealingStepSplitTask}})
+	w := NewWorker(store, gw, &breakdownSandbox{}, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 5, Tuner: tuner, ToolFailureStreak: 1})
+	return store, gw, w, tasks[0]
+}
+
+// legacyTitleBreakdownGateway decomposes any task whose prompt carries
+// breakdownMarkerTitle and returns a shell command otherwise, like a model that always splits
+// plan-marked tasks.
+type legacyTitleBreakdownGateway struct {
+	routingTestGateway
+}
+
+func (g *legacyTitleBreakdownGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
 	g.requests = append(g.requests, req)
 	for _, m := range req.Messages {
 		if m.Role == "user" && strings.Contains(m.Content, breakdownMarkerTitle) {
@@ -32,7 +110,7 @@ func (g *titleBreakdownGateway) Generate(_ context.Context, req gateway.AIReques
 	return gateway.AIResponse{Content: `{"command":"echo ok"}`}, nil
 }
 
-func newBreakdownRollupFixture(t *testing.T) (*testutil.FakeKanbanStore, *titleBreakdownGateway, *Worker, models.Task) {
+func newLegacyBreakdownRollupFixture(t *testing.T) (*testutil.FakeKanbanStore, *legacyTitleBreakdownGateway, *Worker, models.Task) {
 	t.Helper()
 	store := testutil.NewFakeStore()
 	if err := store.UpsertAgentProfile(context.Background(), models.AgentProfile{ID: "default", Provider: "ollama", Model: "llama3"}); err != nil {
@@ -40,12 +118,12 @@ func newBreakdownRollupFixture(t *testing.T) (*testutil.FakeKanbanStore, *titleB
 	}
 	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
 		ProjectName: "breakdown-rollup",
-		Tasks:       []models.DraftTask{{Title: breakdownMarkerTitle + ": Produce a status report", Description: "decompose me", AgentID: "default"}},
+		Tasks:       []models.DraftTask{{Title: breakdownMarkerTitle + ": Produce a status report", Description: testutil.AgenticTestTaskDescription(), AgentID: "default"}},
 	})
 	if err != nil {
 		t.Fatalf("MaterializePlan: %v", err)
 	}
-	gw := &titleBreakdownGateway{}
+	gw := &legacyTitleBreakdownGateway{}
 	w := NewWorker(store, gw, &routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 5})
 	return store, gw, w, tasks[0]
 }
@@ -153,7 +231,7 @@ func TestBreakdownRollup_BatchPathCompletesResumedParent(t *testing.T) {
 func TestBreakdownRollup_IncompleteSubtasksFallThrough(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newBreakdownRollupFixture(t)
+	store, gw, w, parent := newLegacyBreakdownRollupFixture(t)
 
 	w.Process(ctx, parent)
 	blocked := mustGetTask(t, store, parent.ID)
@@ -198,7 +276,7 @@ func TestLatestBreakdownSubtaskCount_UsesNewestWorkerMarker(t *testing.T) {
 func TestBreakdownRollup_ForgedSubsetMarkerIsRejected(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newBreakdownRollupFixture(t)
+	store, gw, w, parent := newLegacyBreakdownRollupFixture(t)
 
 	w.Process(ctx, parent)
 	children := mustListChildren(t, store, parent.ID)

@@ -7,7 +7,9 @@ import (
 
 	"github.com/cucumber/godog"
 
+	"agentd/internal/gateway"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 func TestQueueFeatures(t *testing.T) {
@@ -118,7 +120,7 @@ func (s *queueScenario) reset() {
 	s.breaker = NewCircuitBreaker()
 	s.now = time.Now().UTC()
 	s.breaker.SetClockForTest(func() time.Time { return s.now })
-	s.gateway = &queueGateway{content: `{"command":"true"}`}
+	s.gateway = &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
 	s.sandbox = &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
 	s.sink = &queueSink{}
 	s.maxRetries = DefaultWorkerMaxRetries
@@ -130,7 +132,7 @@ func (s *queueScenario) reset() {
 }
 
 func (s *queueScenario) rebuild(maxWorkers int) {
-	s.worker = NewWorker(s.store, s.gateway, s.sandbox, s.breaker, s.sink, WorkerOptions{MaxRetries: s.maxRetries})
+	s.worker = NewWorker(s.store, s.gateway, s.sandbox, s.breaker, s.sink, WorkerOptions{MaxRetries: s.maxRetries, ToolFailureStreak: 1})
 	s.daemon = NewDaemon(s.store, s.worker, nil, s.breaker, s.sink, DaemonOptions{
 		MaxWorkers: maxWorkers, Probe: s.probe, TaskInterval: time.Hour, IntakeInterval: time.Hour,
 	})
