@@ -53,6 +53,7 @@ func (l *Librarian) mapChunk(ctx context.Context, chunk string) (string, error) 
 		Temperature:    0.1,
 		SkipTruncation: true,
 		Role:           gateway.RoleMemory,
+		TaskID:         gateway.TaskIDFromContext(ctx),
 	})
 	if err != nil {
 		return "", err
@@ -70,6 +71,7 @@ func (l *Librarian) reduceText(ctx context.Context, text string) (string, error)
 		Temperature:    0.1,
 		SkipTruncation: true,
 		Role:           gateway.RoleMemory,
+		TaskID:         gateway.TaskIDFromContext(ctx),
 	})
 	if err != nil {
 		return "", err
@@ -91,6 +93,7 @@ Output only valid JSON.`},
 		JSONMode:       true,
 		SkipTruncation: true,
 		Role:           gateway.RoleMemory,
+		TaskID:         gateway.TaskIDFromContext(ctx),
 	})
 	if err != nil {
 		return memorySummary{}, err
