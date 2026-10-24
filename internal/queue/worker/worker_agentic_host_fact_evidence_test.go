@@ -134,3 +134,46 @@ func TestDelegatedBashCarriesParentTaskIntent(t *testing.T) {
 		t.Fatalf("sandbox payloads = %+v, want the child's bash payload to carry the parent task's intent", sb.payloads)
 	}
 }
+
+// Answers to pre-task clarification questions extend the task description
+// before the loop runs, so the evidence guard must check commands against the
+// clarified task, not the text the run started with.
+func TestAgenticBashIntentIncludesClarificationAnswers(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw := &sequenceGateway{responses: []gateway.AIResponse{bashCall("c1", "uname -a"), {Content: "done"}}}
+	sb := &payloadCapturingSandbox{}
+	draft := models.DraftTask{Title: "Inspect host", Description: testutil.AgenticTestTaskDescription()}
+	w, _, running, project, profile := agenticFixture(t, gw, sb, draft, nil)
+	store := w.store.(*testutil.FakeKanbanStore)
+
+	if err := recordElicitationQuestions(ctx, store, running.ID, []ElicitationQuestion{{Question: "Which host?"}}); err != nil {
+		t.Fatalf("record questions: %v", err)
+	}
+	_, children, err := store.BlockTaskWithSubtasks(ctx, running.ID, running.UpdatedAt, []models.DraftTask{{
+		Title: models.HITLSubtaskTitleClarification + "Which host?", Description: "clarify", Assignee: models.TaskAssigneeHuman,
+	}})
+	if err != nil {
+		t.Fatalf("block: %v", err)
+	}
+	if err := store.AddComment(ctx, models.Comment{TaskID: children[0].ID, Author: models.CommentAuthorUser, Body: "The staging database server."}); err != nil {
+		t.Fatalf("add comment: %v", err)
+	}
+	if _, err := store.UpdateTaskState(ctx, children[0].ID, children[0].UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete clarification: %v", err)
+	}
+	resumed, err := store.GetTask(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	rerun, err := store.MarkTaskRunning(ctx, resumed.ID, resumed.UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("MarkTaskRunning (state %s): %v", resumed.State, err)
+	}
+
+	w.processAgentic(ctx, *rerun, project, profile)
+
+	if len(sb.payloads) != 1 || !strings.Contains(sb.payloads[0].Intent, "The staging database server.") {
+		t.Fatalf("sandbox payloads = %+v, want the bash intent to carry the clarification answer", sb.payloads)
+	}
+}
