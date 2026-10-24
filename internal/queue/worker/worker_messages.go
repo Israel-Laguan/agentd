@@ -76,7 +76,7 @@ func (w *Worker) ApplyModelRouting(
 	return profile
 }
 
-func agenticToolUseSystemText(goal ...*agentcontext.AgentGoal) string {
+func agenticToolUseSystemText(readOnly bool, goal ...*agentcontext.AgentGoal) string {
 	text := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
 When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
@@ -84,7 +84,7 @@ When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.
 Never retry a command that the sandbox blocked for sudo or elevated privileges. Try at most one safe non-privileged alternative, then report that no alternative exists if it cannot complete the task.
 The project workspace is the current directory: use relative paths (for example lscpu > cpu.txt), never /workspace or any other absolute path. Commands run inside the workspace and may not touch paths outside it (except /dev/null), so never read /etc, /proc or /sys files.
-For host facts (OS, kernel, CPU, memory, disks) run commands that need no paths: uname -a, hostnamectl, lsb_release -a, lscpu, free -h, lsblk, df -h. A report may state only values printed by commands you ran: save each command's output to a file (for example uname -a > os.txt) so a later step can build report.md from it; never type the facts yourself.
+For host facts (OS, kernel, CPU, memory, disks) run commands that need no paths: uname -a, hostnamectl, lsb_release -a, lscpu, free -h, lsblk, df -h. A report may state only values printed by commands you ran in this run; never type the facts yourself.` + hostFactsSuffix(readOnly) + `
 
 ` + agenthooks.ExternalContentInstruction
 	if len(goal) == 0 || goal[0] == nil || len(goal[0].SuccessCriteria) == 0 {
@@ -98,6 +98,13 @@ For host facts (OS, kernel, CPU, memory, disks) run commands that need no paths:
 When a success criterion becomes complete, include a line exactly like [COMPLETED] criterion text.
 When a success criterion is blocked, include a line exactly like [BLOCKED] criterion text.
 Use the exact criterion text from the task success criteria.`
+}
+
+func hostFactsSuffix(readOnly bool) string {
+	if readOnly {
+		return ""
+	}
+	return " Save each command's output to a file (for example uname -a > os.txt) so a later step can build report.md from it."
 }
 
 // enrichBuilderUserPreferences loads user-level instructions into the system prompt builder.
@@ -157,7 +164,7 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 		goal = g
 	}
 	builder := NewSystemPromptBuilder().
-		WithGlobal(agenticToolUseSystemText(goal))
+		WithGlobal(agenticToolUseSystemText(profile.WorkspaceReadonly, goal))
 	w.enrichBuilderUserPreferences(builder)
 	w.enrichBuilderProjectInstructions(builder, project, profile)
 	w.enrichBuilderMatchedSkills(builder, task, project)

@@ -186,6 +186,8 @@ func (w *Worker) applyTieredStepProfile(profile models.AgentProfile, stepKind Ti
 	}
 	if tieredStepReadOnly[stepKind] {
 		p.WorkspaceReadonly = true
+	} else {
+		p.WorkspaceReadonly = false
 	}
 	if suffix, ok := tieredStepSystemPrompts[stepKind]; ok {
 		if p.SystemPrompt.Valid {
