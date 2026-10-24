@@ -136,8 +136,8 @@ agentd ask "Create a todo list web application in React using REST API"
 ## Agentic tool calling (optional)
 
 By default the llama.cpp adapter reports `SupportsChatTools: false`, so
-`AgenticMode: true` falls back to legacy JSON mode (a warning log line names the
-reason). Native tool calling
+`AgenticMode: true` is rejected for a llama.cpp profile: the API refuses to save
+it, and a task already on it fails with the reason. Native tool calling
 depends on server startup (`llama-server --jinja`), the chat template, and the
 model — it cannot be asserted statically.
 

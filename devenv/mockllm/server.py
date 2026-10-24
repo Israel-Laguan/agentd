@@ -43,7 +43,7 @@ __all__ = [
 PORT = int(os.environ.get("PORT", "8000"))
 # Where to append every received request body as JSONL. Read back via
 # GET /requests. Set MOCKLLM_CAPTURE="" to disable capture entirely.
-PLAN_MARKER = "AGENT_PLAN"
+ELICITOR_MARKER = "pre-task ambiguity analyzer"
 SLOW_MARKER = "SLOW_TASK"
 PLAN_KEYWORDS = (
     "build", "create", "implement", "design", "plan", "scrape", "tool", "api",
@@ -252,17 +252,6 @@ def completion(body: dict, content: dict, response_id: str = "chatcmpl-mock") ->
     }
 
 
-def decompose_plan(title: str) -> dict:
-    safe_title = title.replace(PLAN_MARKER, "").strip().lstrip(":").strip() or title
-    return {
-        "too_complex": True,
-        "subtasks": [
-            {"title": f"{safe_title} :: Step 1 - scaffold", "description": "Create the scaffold for the requested work."},
-            {"title": f"{safe_title} :: Step 2 - implement", "description": "Implement the core of the requested work."},
-        ],
-    }
-
-
 # --- Tiered execution replies ----------------------------------------------
 #
 # The tiered worker runs each pipeline step (context/decision/execute/verify/
@@ -387,14 +376,14 @@ def chat_completion(body: dict, headers=None) -> dict:
         sys.stderr.flush()
         return completion(body, plan, "chatcmpl-mock-plan")
 
-    if PLAN_MARKER in title:
-        sys.stderr.write(f"[mockllm] decomposing plan for task_id={task_id}\n")
-        sys.stderr.flush()
-        return completion(body, decompose_plan(title))
+    if ELICITOR_MARKER in system_content:
+        return completion(body, {"needs_clarification": False, "reason": "mock: task is specific enough"}, "chatcmpl-mock-elicit")
     command = slow_command() if SLOW_MARKER in title else build_command(task_id, title)
     if offers_tool(body, "bash"):
-        # B-080: the default profile is agentic; run the command through bash.
+        # B-080: worker requests are agentic; the command runs through bash.
         return agentic_command_completion(body, command)
+    # Only JSON-mode callers that offer no tools reach this reply (the legacy
+    # engine, for a profile with agentic_mode off). It goes with that engine.
     return completion(body, {"command": command})
 
 

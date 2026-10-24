@@ -37,5 +37,5 @@ func TestMigrateToV23_CreatesToolCallsAndIsIdempotent(t *testing.T) {
 	if err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type='index' AND name='idx_tool_calls_task_path'`).Scan(&idx); err != nil {
 		t.Fatalf("index missing: %v", err)
 	}
-	assertSchemaVersion(t, db, ctx, "24")
+	assertSchemaVersion(t, db, ctx, "25")
 }

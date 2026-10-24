@@ -80,10 +80,10 @@ type AgentProfile struct {
 
 | `AgenticMode` | Provider | Behavior |
 | --------------- | ---------- | ---------- |
-| `false` (default) | any | Legacy single-shot JSON mode: one LLM call, one sandbox execution |
+| `false` | any | Legacy single-shot JSON mode: one LLM call, one sandbox execution. Only set explicitly; new profiles default to `true` |
 | `true` | `openai` (incl. openai-compatible e.g. LiteLLM/Portkey/OpenRouter) | Agentic mode: inner loop with tool calling; shell via `bash` tool only |
 | `true` | `anthropic` (native) | **Single one tool turn only.** Multi-turn tool round-trip is broken (see [provider-tool-calling.md](provider-tool-calling.md)). For a working agentic loop on Anthropic-family models, use the managed proxy path (`adapter: openai`) instead. |
-| `true` | other (native, `SupportsChatTools: false`) | Falls back to legacy mode with a warning log |
+| `true` | other (native, `SupportsChatTools: false`) | Rejected: the profile cannot be created or patched with it, and a task on it fails |
 
 ### Enabling agentic mode
 

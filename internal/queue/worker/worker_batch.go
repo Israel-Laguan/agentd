@@ -132,6 +132,9 @@ func (w *Worker) processRunningTask(
 		return
 	}
 	if profile.AgenticMode {
+		if w.tryRenderHostReport(ctx, task, project) {
+			return
+		}
 		if result, ok := w.processAgentic(ctx, task, project, profile); ok {
 			w.handleLoopResult(ctx, task, result)
 		}

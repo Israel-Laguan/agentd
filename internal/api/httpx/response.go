@@ -155,7 +155,8 @@ func MapError(err error) (int, string, string) {
 		errors.Is(err, models.ErrUnknownTaskState),
 		errors.Is(err, models.ErrInvalidAIUsageQuery),
 		errors.Is(err, models.ErrCircularDependency),
-		errors.Is(err, models.ErrAgentProfileInvalid):
+		errors.Is(err, models.ErrAgentProfileInvalid),
+		errors.Is(err, models.ErrAgentProfileNoToolSupport):
 		return http.StatusBadRequest, CodeValidation, err.Error()
 	case errors.Is(err, models.ErrSandboxViolation):
 		return http.StatusForbidden, CodeForbidden, err.Error()

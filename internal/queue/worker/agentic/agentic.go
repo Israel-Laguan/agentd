@@ -2,6 +2,7 @@ package agentic
 
 import (
 	"context"
+	"fmt"
 
 	"agentd/internal/api/correlation"
 
@@ -31,11 +32,7 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		return result, true
 	}
 	if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
-		correlation.Logger(ctx).Warn("agentic mode requested but routed provider does not support tool round-tripping; falling back to legacy mode",
-			"task_id", task.ID,
-			"provider", profile.Provider,
-		)
-		e.host.RunLegacyTask(cancelCtx, task, project, profile, true)
+		e.rejectWithoutToolSupport(cancelCtx, task, profile.Provider)
 		return agentruntime.LoopResult{}, false
 	}
 
@@ -174,4 +171,12 @@ func (e *Engine) generateAgenticTurn(
 	}
 	e.host.RecordProviderSuccess(ctx, task)
 	return resp, nil, nil
+}
+
+// rejectWithoutToolSupport fails a task whose routed provider cannot call tools.
+// The legacy command path would report success without any tool work (B-080).
+func (e *Engine) rejectWithoutToolSupport(ctx context.Context, task models.Task, provider string) {
+	correlation.Logger(ctx).Error("agentic profile's routed provider cannot call tools; failing the task",
+		"task_id", task.ID, "provider", provider)
+	e.host.FailHard(ctx, task, fmt.Errorf("%w (%q)", models.ErrAgentProfileNoToolSupport, provider))
 }

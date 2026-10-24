@@ -52,7 +52,7 @@ func j16ResetBreaker(ctx context.Context, t *testing.T, client *APIClient) {
 func j16SetAgentProvider(ctx context.Context, t *testing.T, client *APIClient) {
 	t.Helper()
 
-	resp, err := client.SetAgentProviderModel(ctx, "default", j16Provider, j16Model, false)
+	resp, err := client.SetAgentProviderModel(ctx, "default", j16Provider, j16Model, true)
 	if err != nil {
 		t.Fatalf("J16 [agent] patch default profile failed: %v", err)
 	}

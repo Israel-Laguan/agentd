@@ -110,8 +110,8 @@ func registerWorkerSteps(sc *godog.ScenarioContext, state *workerScenario) {
 	// Then steps for agentic mode toggle
 	sc.Step(`^the worker should use the legacy JSON command path$`, state.useLegacyPath)
 	sc.Step(`^the worker should use the agentic loop with tools$`, state.useAgenticLoop)
-	sc.Step(`^the worker should fall back to legacy mode$`, state.fallBackToLegacy)
-	sc.Step(`^a warning should be logged about unsupported provider$`, state.warningLogged)
+	sc.Step(`^the worker should fail the task for lack of tool support$`, state.failsForToolSupport)
+	sc.Step(`^the gateway should receive no requests$`, state.gatewayReceivesNoRequests)
 
 	// Given steps for agentic mode loop
 	sc.Step(`^the worker is configured with agentic mode enabled$`, state.agenticModeEnabled)
@@ -204,35 +204,26 @@ func (s *workerScenario) useAgenticLoop(context.Context) error {
 	return nil
 }
 
-func (s *workerScenario) fallBackToLegacy(context.Context) error {
-	// When falling back to legacy mode, should behave like legacy:
-	// - 1 gateway request
-	// - No tools in request
-	// - 1 sandbox command executed
-	if len(s.gateway.requests) != 1 {
-		return fmt.Errorf("expected 1 gateway request for fallback path, got %d", len(s.gateway.requests))
+// failsForToolSupport checks that a provider without tool support fails the
+// task with the tool-support error, and does not fall back to the legacy path.
+func (s *workerScenario) failsForToolSupport(context.Context) error {
+	if s.store.task.State != models.TaskStateFailed {
+		return fmt.Errorf("task state = %s, want FAILED", s.store.task.State)
 	}
-	if len(s.gateway.requests[0].Tools) > 0 {
-		return fmt.Errorf("fallback path should not include tools")
+	if s.store.result == nil || !strings.Contains(s.store.result.Payload, "cannot call tools") {
+		return fmt.Errorf("task result = %#v, want the tool-support error", s.store.result)
 	}
-	if len(s.sandbox.commands) != 1 {
-		return fmt.Errorf("expected 1 sandbox command for fallback path, got %d", len(s.sandbox.commands))
+	if len(s.sandbox.commands) != 0 {
+		return fmt.Errorf("expected no sandbox command, got %d", len(s.sandbox.commands))
 	}
 	return nil
 }
 
-func (s *workerScenario) warningLogged(context.Context) error {
-	if s.logHandler == nil {
-		return fmt.Errorf("no log handler captured; workerProcessesTask must run first")
+func (s *workerScenario) gatewayReceivesNoRequests(context.Context) error {
+	if n := len(s.gateway.requests); n != 0 {
+		return fmt.Errorf("gateway received %d requests, want none", n)
 	}
-	s.logHandler.mu.Lock()
-	defer s.logHandler.mu.Unlock()
-	for _, r := range s.logHandler.records {
-		if r.Level == slog.LevelWarn && strings.Contains(r.Message, "does not support tool round-tripping") {
-			return nil
-		}
-	}
-	return fmt.Errorf("expected a slog.Warn about unsupported provider, but none was recorded")
+	return nil
 }
 
 // New step implementations for agentic mode loop feature

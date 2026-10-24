@@ -6,22 +6,24 @@ import (
 	"log/slog"
 	"strings"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 )
 
 // tieredStepToolAllowlists restricts which tools each step kind may use.
 // These are enforced by setting profile.AllowedTools before dispatching
-// to the agentic engine. The context step is read-only; decision reads
-// the pack plus workspace files; execute writes within the decision
-// allowlist; verify runs checks.
+// to the agentic engine, so a call outside the list is vetoed. Context and
+// decision explore with read and bash; execute writes within that set; verify
+// runs checks. Context and decision are not yet mounted read-only, so their
+// bash can still write.
 var tieredStepToolAllowlists = map[TieredStepKind][]string{
-	TieredStepContext:  {"read", "grep", "glob", "list"},
-	TieredStepDecision: {"read", "grep", "glob", "list"},
-	TieredStepExecute:  {"read", "write", "bash", "grep", "glob"},
-	TieredStepVerify:   {"read", "bash", "grep", "glob"},
+	TieredStepContext:  {"read", "bash"},
+	TieredStepDecision: {"read", "bash"},
+	TieredStepExecute:  {"read", "write", "bash"},
+	TieredStepVerify:   {"read", "bash"},
 	// Escalate needs the union of execute+verify: it both fixes the
 	// conflict and re-runs checks to confirm the fix in one pass.
-	TieredStepEscalate: {"read", "write", "bash", "grep", "glob", "list"},
+	TieredStepEscalate: {"read", "write", "bash"},
 }
 
 // tieredStepSystemPrompts provides per-step system prompt suffixes that
@@ -114,7 +116,12 @@ handed off to a human — resolve it completely rather than partially.`
 // execute, or verify) through the agentic engine with step-appropriate
 // tool restrictions and system prompt injection.
 func (w *Worker) processTieredStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, stepKind TieredStepKind, parentTask models.Task) {
+	profileRestricted := len(profile.AllowedTools) > 0
 	profile = w.applyTieredStepProfile(profile, stepKind)
+	if profileRestricted && len(profile.AllowedTools) == 0 {
+		w.failTieredStepNoTools(ctx, task, parentTask, stepKind)
+		return
+	}
 	profile.AgenticMode = true
 
 	if stepKind == TieredStepContext {
@@ -122,7 +129,7 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 		return
 	}
 
-	if stepKind == TieredStepDecision || stepKind == TieredStepExecute || stepKind == TieredStepVerify || stepKind == TieredStepEscalate {
+	if isTieredContextInjectStep(stepKind) {
 		var err error
 		task, err = w.injectContextPack(task, parentTask, project)
 		if err != nil {
@@ -167,7 +174,7 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 func (w *Worker) applyTieredStepProfile(profile models.AgentProfile, stepKind TieredStepKind) models.AgentProfile {
 	p := profile
 	if allowlist, ok := tieredStepToolAllowlists[stepKind]; ok {
-		p.AllowedTools = append([]string(nil), allowlist...)
+		p.AllowedTools = intersectAllowedTools(allowlist, profile.AllowedTools)
 	}
 	if suffix, ok := tieredStepSystemPrompts[stepKind]; ok {
 		if p.SystemPrompt.Valid {
@@ -178,6 +185,27 @@ func (w *Worker) applyTieredStepProfile(profile models.AgentProfile, stepKind Ti
 		}
 	}
 	return p
+}
+
+// intersectAllowedTools keeps the step's tools that the profile also permits.
+// An empty profile list means the profile is unrestricted, so the step list
+// applies unchanged. A non-empty profile list that normalizes to no names
+// permits nothing rather than silently becoming unrestricted.
+func intersectAllowedTools(step, profile []string) []string {
+	if len(profile) == 0 {
+		return append([]string(nil), step...)
+	}
+	allowed := agenttools.ProfileAllowlist(profile)
+	if allowed == nil {
+		return nil
+	}
+	out := make([]string, 0, len(step))
+	for _, name := range step {
+		if agenttools.AllowsTool(allowed, name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // tieredStepProfiles is the set of AgentID values that identify tiered steps.
@@ -204,6 +232,27 @@ func (w *Worker) tieredStepKind(task models.Task) TieredStepKind {
 		return kind
 	}
 	return TieredStepContext
+}
+
+func isTieredContextInjectStep(stepKind TieredStepKind) bool {
+	switch stepKind {
+	case TieredStepDecision, TieredStepExecute, TieredStepVerify, TieredStepEscalate:
+		return true
+	}
+	return false
+}
+
+// failTieredStepNoTools handles the case where a profile's allowlist intersects
+// to empty tools for a tiered step: fail the step and its dependents, handing
+// the origin to FAILED_REQUIRES_HUMAN for escalate steps.
+func (w *Worker) failTieredStepNoTools(ctx context.Context, task, parentTask models.Task, stepKind TieredStepKind) {
+	w.failTieredStep(ctx, task, "no tools are permitted by the profile and tiered step allowlists")
+	w.failTieredDependents(ctx, task, parentTask)
+	if stepKind == TieredStepEscalate {
+		if err := w.transitionTaskState(ctx, parentTask.ID, models.TaskStateFailedRequiresHuman); err != nil {
+			slog.Error("tiered: failed to hand off origin after profile allowlist failure", "task_id", parentTask.ID, "error", err)
+		}
+	}
 }
 
 // persistTieredDAG blocks the parent task and persists the tiered step

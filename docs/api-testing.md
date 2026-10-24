@@ -267,7 +267,9 @@ List all agent profiles.
 }
 ```
 
-`agentic_mode` (boolean, default `false`) enables the inner agentic worker loop with tool round-tripping. When `true` and the provider supports agentic mode, tasks use `processAgentic`; otherwise the worker falls back to legacy single-shot JSON execution with a warning log.
+`agentic_mode` (boolean, default `true`) enables the inner agentic worker loop with tool round-tripping. A profile whose provider cannot call tools is rejected with HTTP 400 (`agentic profile's provider cannot call tools`) on create and patch, and a task already on such a profile fails rather than running a legacy command.
+
+`allowed_tools` (string array, default empty) limits the profile to the named tools. A call to any other tool is vetoed at dispatch, delegation included. Empty means no allowlist. `workspace_readonly` (boolean, default `false`) is stored now; nothing enforces it yet.
 
 **Test Coverage**: `internal/api/tests/feature/api_http_test.go` (`TestAgentsList`)
 
@@ -283,11 +285,11 @@ Get a specific agent profile.
 
 ### POST /api/v1/agents
 
-Create an agent profile. Optional `agentic_mode` (boolean, default `false`). Omit `provider` and `model` (or set both to empty strings) to delegate routing to `gateway.order` and `gateway.role_models`, matching the built-in seeded profiles from `agentd init`.
+Create an agent profile. Optional `agentic_mode` (boolean, default `true`), `allowed_tools` and `workspace_readonly`. Omit `provider` and `model` (or set both to empty strings) to delegate routing to `gateway.order` and `gateway.role_models`, matching the built-in seeded profiles from `agentd init`.
 
 ### PATCH /api/v1/agents/{id}
 
-Sparse update. Set `agentic_mode` to `true` or `false` to enable or disable agentic worker behavior for that profile.
+Sparse update. Set `agentic_mode` to `true` or `false` to enable or disable agentic worker behavior for that profile. Setting `agentic_mode` to `true` on a provider that cannot call tools is rejected. `allowed_tools` and `workspace_readonly` can also be patched.
 
 ---
 

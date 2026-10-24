@@ -42,6 +42,9 @@ type ToolExecutor struct {
 	wallTimeout   time.Duration
 	maxReadBytes  int64
 	filePipeline  *wfilecontext.FilePipeline
+	// allowedTools carries the profile allowlist through to subagents so a
+	// delegate cannot outgrow the delegating profile. Empty means unrestricted.
+	allowedTools []string
 	// taskID and projectID tag shell commands, so the sandbox's LOG_CHUNK
 	// events are stored under the task they ran for (set by ForTask).
 	taskID, projectID string
@@ -68,6 +71,28 @@ func (t *ToolExecutor) ForTask(taskID, projectID string) *ToolExecutor {
 	t.taskID = taskID
 	t.projectID = projectID
 	return t
+}
+
+// WithAllowedTools records the profile allowlist so delegated subagents inherit
+// it. An empty list means unrestricted.
+func (t *ToolExecutor) WithAllowedTools(tools []string) *ToolExecutor {
+	if t == nil {
+		return t
+	}
+	if len(tools) == 0 {
+		t.allowedTools = nil
+		return t
+	}
+	t.allowedTools = append([]string(nil), tools...)
+	return t
+}
+
+// AllowedTools returns the profile allowlist carried by the executor.
+func (t *ToolExecutor) AllowedTools() []string {
+	if t == nil {
+		return nil
+	}
+	return append([]string(nil), t.allowedTools...)
 }
 
 func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall, extraEnv ...string) string {

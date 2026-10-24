@@ -139,9 +139,7 @@ func (h *topicDriftHost) PrependReviewRejectionFeedback(ctx context.Context, tas
 	return messages, ""
 }
 
-func (h *topicDriftHost) FailHard(ctx context.Context, task models.Task, err error) {}
-func (h *topicDriftHost) RunLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, force bool) {
-}
+func (h *topicDriftHost) FailHard(ctx context.Context, task models.Task, err error)           {}
 func (h *topicDriftHost) RegisterCancel(taskID string, cancel context.CancelFunc)             {}
 func (h *topicDriftHost) DeregisterCancel(taskID string)                                      {}
 func (h *topicDriftHost) HandleGatewayError(ctx context.Context, task models.Task, err error) {}

@@ -173,9 +173,13 @@ type AgentProfile struct {
 	// Empty = use the keyword classifier when capability routing is enabled.
 	CapabilityRouteIntent string
 	// AllowedTools, when non-empty, bypasses classifier and manifest; only listed
-	// tools are advertised to the model.
+	// tools are advertised to the model, and a call to any other tool is vetoed
+	// at dispatch.
 	AllowedTools []string
-	UpdatedAt    time.Time
+	// WorkspaceReadonly marks the profile's workspace as read-only. Stored and
+	// returned now; the read-only mount that enforces it is not in place yet.
+	WorkspaceReadonly bool
+	UpdatedAt         time.Time
 }
 
 // Memory stores lessons learned globally or per project.

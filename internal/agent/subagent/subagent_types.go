@@ -80,6 +80,7 @@ type SubagentDelegate struct {
 	externalTools      map[string]struct{}
 	callEnv            []string
 	truncation         gateway.TruncationStrategy
+	allowedTools       []string
 }
 
 // NewSubagentDelegate constructs a delegate at the given depth.
@@ -133,6 +134,25 @@ func (d *SubagentDelegate) WithExternalTools(externalTools map[string]struct{}) 
 	return d
 }
 
+// WithAllowedTools caps every subagent in this delegation tree at the
+// delegating profile's allowlist. An empty list means unrestricted.
+func (d *SubagentDelegate) WithAllowedTools(tools []string) *SubagentDelegate {
+	if len(tools) == 0 {
+		d.allowedTools = nil
+		return d
+	}
+	d.allowedTools = append([]string(nil), tools...)
+	return d
+}
+
+func (d *SubagentDelegate) profileAllows(name string) bool {
+	if len(d.allowedTools) == 0 {
+		return true
+	}
+	allowed := agenttools.ProfileAllowlist(d.allowedTools)
+	return allowed != nil && agenttools.AllowsTool(allowed, name)
+}
+
 // WithCallEnv sets per-call KEY=VALUE env pairs propagated to capability tools
 // (e.g. MCP auth via AGENTD_TOOL_CREDENTIAL). The slice is copied defensively.
 func (d *SubagentDelegate) WithCallEnv(env []string) *SubagentDelegate {
@@ -161,6 +181,7 @@ func (d *SubagentDelegate) child() *SubagentDelegate {
 		withMaxDelegationDepth(d.delegationDepthLimit()).
 		WithCapabilities(d.capabilities, d.scopedCapabilities).
 		WithExternalTools(d.externalTools).
+		WithAllowedTools(d.allowedTools).
 		WithCallEnv(d.callEnv).
 		WithTruncationStrategy(d.truncation)
 }

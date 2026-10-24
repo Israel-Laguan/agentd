@@ -45,7 +45,6 @@ type Config struct {
 
 type Host interface {
 	FailHard(ctx context.Context, task models.Task, err error)
-	RunLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, force bool)
 	RegisterCancel(taskID string, cancel context.CancelFunc)
 	DeregisterCancel(taskID string)
 	HandleGatewayError(ctx context.Context, task models.Task, err error)
