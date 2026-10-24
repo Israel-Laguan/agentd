@@ -9,9 +9,20 @@ import (
 
 func TestSplitResultRejectsASubtaskWithoutATitle(t *testing.T) {
 	t.Parallel()
-	r := SplitResult{Subtasks: []SplitSubtask{{Title: "a"}, {Title: "  ", Description: "d"}}}
+	r := SplitResult{Subtasks: []SplitSubtask{
+		{Title: "a", Description: "d"},
+		{Title: "  ", Description: "d"},
+	}}
 	if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "subtasks[1].title") {
 		t.Fatalf("Validate() = %v, want an error naming subtasks[1].title", err)
+	}
+}
+
+func TestSplitResultRejectsASubtaskWithoutADescription(t *testing.T) {
+	t.Parallel()
+	r := SplitResult{Subtasks: []SplitSubtask{{Title: "a", Description: "  "}}}
+	if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "subtasks[0].description") {
+		t.Fatalf("Validate() = %v, want an error naming subtasks[0].description", err)
 	}
 }
 

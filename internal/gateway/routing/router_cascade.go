@@ -41,7 +41,7 @@ func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq s
 	if !req.SkipTruncation {
 		// T-057: a summary the truncator makes belongs to this request's task;
 		// an empty TaskID is set on purpose so it cannot inherit an outer one.
-		messages, err := r.applyTruncation(spec.WithTaskID(ctx, req.TaskID), req.Messages, p.MaxInputChars())
+		messages, err := r.applyTruncation(spec.WithExactTaskID(ctx, req.TaskID), req.Messages, p.MaxInputChars())
 		if err != nil {
 			return spec.AIResponse{}, false, errTruncation{err}
 		}

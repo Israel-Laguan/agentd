@@ -27,3 +27,21 @@ func TestSplitConfig_ReadsQueueSplitKeys(t *testing.T) {
 		t.Errorf("SplitConfig = %+v, want depth 4 and subtasks 9", cfg)
 	}
 }
+
+func TestSplitConfig_RejectsNegativeCaps(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		cfg  SplitConfig
+	}{
+		{name: "max depth", cfg: SplitConfig{MaxDepth: -1, MaxSubtasks: DefaultSplitMaxSubtasks}},
+		{name: "max subtasks", cfg: SplitConfig{MaxDepth: DefaultSplitMaxDepth, MaxSubtasks: -1}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if err := validateSplitConfig(tt.cfg); err == nil {
+				t.Fatalf("validateSplitConfig(%+v) = nil, want an error", tt.cfg)
+			}
+		})
+	}
+}

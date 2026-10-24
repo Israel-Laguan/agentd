@@ -81,6 +81,7 @@ func TestTaskRelationTypeValidIncludesDependsOn(t *testing.T) {
 		TaskRelationBlocks,
 		TaskRelationSpawnedBy,
 		TaskRelationDependsOn,
+		TaskRelationSplit,
 	}
 	for _, rel := range valid {
 		if !rel.Valid() {

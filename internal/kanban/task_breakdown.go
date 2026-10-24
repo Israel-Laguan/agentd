@@ -155,7 +155,11 @@ func insertReadySubtasks(
 		if err := insertTask(ctx, tx, task.Title, task); err != nil {
 			return nil, err
 		}
-		if err := insertTaskRelationChecked(ctx, tx, parentID, task.ID); err != nil {
+		relType := models.TaskRelationBlocks
+		if draft.SplitChild {
+			relType = models.TaskRelationSplit
+		}
+		if err := insertTaskRelationTypeChecked(ctx, tx, parentID, task.ID, relType); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, task)

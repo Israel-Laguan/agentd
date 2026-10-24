@@ -38,6 +38,37 @@ func TestBlockTaskWithSubtasksCreatesReadyChildrenAndBlocksParent(t *testing.T) 
 	assertRelationCount(t, store, parent.ID, 2)
 }
 
+// A split child is linked by SPLIT, not BLOCKS, so the split depth cap follows
+// split ancestry instead of ordinary dependencies.
+func TestBlockTaskWithSubtasksLinksSplitChildrenBySplitRelation(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	parent := seedTestTask(t, store, "parent-split", models.TaskStateRunning)
+
+	_, children, err := store.BlockTaskWithSubtasks(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{
+		{Title: "split child", Description: "step", SplitChild: true},
+		{Title: "ordinary child", Description: "step"},
+	})
+	if err != nil {
+		t.Fatalf("BlockTaskWithSubtasks() error = %v", err)
+	}
+
+	splitParents, err := store.ListParentTasksByRelation(ctx, children[0].ID, models.TaskRelationSplit)
+	if err != nil {
+		t.Fatalf("ListParentTasksByRelation(SPLIT): %v", err)
+	}
+	if len(splitParents) != 1 || splitParents[0].ID != parent.ID {
+		t.Fatalf("split parents = %+v, want [%s]", splitParents, parent.ID)
+	}
+	blockParents, err := store.ListParentTasksByRelation(ctx, children[1].ID, models.TaskRelationBlocks)
+	if err != nil {
+		t.Fatalf("ListParentTasksByRelation(BLOCKS): %v", err)
+	}
+	if len(blockParents) != 1 || blockParents[0].ID != parent.ID {
+		t.Fatalf("blocks parents = %+v, want [%s]", blockParents, parent.ID)
+	}
+}
+
 func TestBlockTaskWithSubtasksAndCommentsCreatesChildrenAndCommentsInOrder(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()

@@ -187,12 +187,16 @@ const (
 	TaskRelationBlocks    TaskRelationType = "BLOCKS"
 	TaskRelationSpawnedBy TaskRelationType = "SPAWNED_BY"
 	TaskRelationDependsOn TaskRelationType = "DEPENDS_ON"
+	// TaskRelationSplit links a breakdown parent to a child the split stage
+	// created. It marks split ancestry for the split depth cap and is not an
+	// ordinary dependency.
+	TaskRelationSplit TaskRelationType = "SPLIT"
 )
 
 // Valid reports whether the relation type is known to agentd.
 func (r TaskRelationType) Valid() bool {
 	switch r {
-	case TaskRelationBlocks, TaskRelationSpawnedBy, TaskRelationDependsOn:
+	case TaskRelationBlocks, TaskRelationSpawnedBy, TaskRelationDependsOn, TaskRelationSplit:
 		return true
 	default:
 		return false

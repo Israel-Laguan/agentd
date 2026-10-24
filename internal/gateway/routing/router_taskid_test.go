@@ -36,6 +36,25 @@ func TestRouterHandsTheRequestTaskToTheTruncator(t *testing.T) {
 	}
 }
 
+// T-057: a request with no task of its own must not label its truncation
+// summary with the caller's outer task.
+func TestRouterClearsAnOuterTaskForTruncationWhenTheRequestHasNone(t *testing.T) {
+	t.Parallel()
+
+	p := &scriptedProvider{name: "p", replies: []scriptedReply{{content: "x"}}}
+	trunc := &taskSeenTruncator{}
+	ctx := spec.WithTaskID(context.Background(), "task-9")
+	req := userReq(spec.PurposeExecTurn, "hello")
+	req.TaskID = ""
+
+	if _, err := NewRouter(p).WithTruncation(trunc, 0).Generate(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if len(trunc.seen) != 1 || trunc.seen[0] != "" {
+		t.Errorf("truncator saw tasks %q, want [\"\"]", trunc.seen)
+	}
+}
+
 // T-057: the record for each provider attempt names the request's task, which
 // is what the per-task view of ai_calls groups by.
 func TestCallRecordCarriesTheRequestTaskID(t *testing.T) {

@@ -12,11 +12,12 @@ import (
 // routingTestStore is a minimal mock store for routing tests that lets us
 // inspect which execution path Worker.Process took.
 type routingTestStore struct {
-	task    models.Task
-	project models.Project
-	profile models.AgentProfile
-	result  *models.TaskResult
-	parents map[string][]models.Task
+	task         models.Task
+	project      models.Project
+	profile      models.AgentProfile
+	result       *models.TaskResult
+	parents      map[string][]models.Task
+	splitParents map[string][]models.Task
 }
 
 func (s *routingTestStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
@@ -169,7 +170,10 @@ func (s *routingTestStore) ListParentTasks(_ context.Context, childID string) ([
 	return s.parents[childID], nil
 }
 
-func (s *routingTestStore) ListParentTasksByRelation(context.Context, string, models.TaskRelationType) ([]models.Task, error) {
+func (s *routingTestStore) ListParentTasksByRelation(_ context.Context, childID string, relType models.TaskRelationType) ([]models.Task, error) {
+	if relType == models.TaskRelationSplit {
+		return s.splitParents[childID], nil
+	}
 	return nil, nil
 }
 

@@ -245,6 +245,7 @@ func (s *FakeKanbanStore) BlockTaskWithSubtasks(_ context.Context, id string, _ 
 	ts := now()
 	t = *s.blockParentTaskLocked(id, ts)
 	children := s.addDraftTasksLocked(t.ProjectID, id, drafts)
+	s.linkBreakdownRelationsLocked(id, drafts, children)
 	return &t, children, nil
 }
 
@@ -273,6 +274,7 @@ func (s *FakeKanbanStore) BlockTaskWithSubtasksAndComments(
 	ts := now()
 	t = *s.blockParentTaskLocked(id, ts)
 	children := s.addDraftTasksLocked(t.ProjectID, id, drafts)
+	s.linkBreakdownRelationsLocked(id, drafts, children)
 	commentBase := ts.Add(-time.Duration(len(comments)-1) * time.Nanosecond)
 	for i, c := range comments {
 		commentTime := commentBase.Add(time.Duration(i) * time.Nanosecond)

@@ -56,6 +56,7 @@ func (w *Worker) handleTaskBreakdown(ctx context.Context, task models.Task, subt
 			Title:       subtask.Title,
 			Description: subtask.Description,
 			Assignee:    models.TaskAssigneeSystem,
+			SplitChild:  true,
 		})
 	}
 	if len(drafts) == 0 {

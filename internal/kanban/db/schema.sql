@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS task_relations (
     relation_type TEXT NOT NULL DEFAULT 'BLOCKS',
     PRIMARY KEY (parent_task_id, child_task_id),
     CHECK (parent_task_id != child_task_id),
-    CHECK (relation_type IN ('BLOCKS', 'SPAWNED_BY', 'DEPENDS_ON'))
+    CHECK (relation_type IN ('BLOCKS', 'SPAWNED_BY', 'DEPENDS_ON', 'SPLIT'))
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS events (

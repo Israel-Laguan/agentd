@@ -62,3 +62,32 @@ func TestSchemaAllowsDependsOnTaskRelations(t *testing.T) {
 		t.Fatalf("insert DEPENDS_ON relation: %v", err)
 	}
 }
+
+func TestSchemaAllowsSplitTaskRelations(t *testing.T) {
+	db, err := Open("file:migrate-split-relation?mode=memory&cache=shared", t.TempDir())
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+	now := formatTime(time.Now().UTC())
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO projects (id, name, original_input, workspace_path, status, created_at, updated_at)
+		VALUES ('project', 'Project', 'input', 'workspace', 'ACTIVE', ?, ?)`, now, now); err != nil {
+		t.Fatalf("insert project: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO tasks (id, project_id, agent_id, title, description, state, assignee, created_at, updated_at)
+		VALUES
+			('parent', 'project', 'default', 'Parent', 'parent desc', 'BLOCKED', 'SYSTEM', ?, ?),
+			('child', 'project', 'default', 'Child', 'child desc', 'READY', 'SYSTEM', ?, ?)`,
+		now, now, now, now); err != nil {
+		t.Fatalf("insert tasks: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO task_relations (parent_task_id, child_task_id, relation_type)
+		VALUES ('parent', 'child', 'SPLIT')`); err != nil {
+		t.Fatalf("insert SPLIT relation: %v", err)
+	}
+}

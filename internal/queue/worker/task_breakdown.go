@@ -10,12 +10,14 @@ import (
 
 const breakdownDepthSanityCap = 32
 
-// breakdownDepth returns how many parent tasks lie above taskID in the breakdown tree.
+// breakdownDepth returns how many split ancestors lie above taskID. Only SPLIT
+// relations count: ordinary BLOCKS and DEPENDS_ON edges are not split
+// generations.
 func (w *Worker) breakdownDepth(ctx context.Context, taskID string) (int, error) {
 	depth := 0
 	current := taskID
 	for depth < breakdownDepthSanityCap {
-		parents, err := w.store.ListParentTasks(ctx, current)
+		parents, err := w.store.ListParentTasksByRelation(ctx, current, models.TaskRelationSplit)
 		if err != nil {
 			return 0, err
 		}

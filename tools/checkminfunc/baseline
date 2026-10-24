@@ -71,6 +71,7 @@ internal/gateway/providers/provider.go capabilitiesFromConfig
 internal/gateway/routing/router_cascade.go (errTruncation).Error
 internal/gateway/routing/router_cascade.go (errTruncation).Unwrap
 internal/gateway/spec/embed_stub.go NoopEmbed
+internal/gateway/spec/task_context.go WithExactTaskID
 internal/gateway/truncation/truncate.go CollapseMarkerFor
 internal/gateway/truncation/truncate.go (MiddleOutStrategy).Name
 internal/gateway/truncation/truncate.go MiddleOut

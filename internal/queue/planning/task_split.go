@@ -29,11 +29,15 @@ type SplitResult struct {
 	Subtasks []SplitSubtask `json:"subtasks"`
 }
 
-// Validate rejects a subtask with no title, so the correction loop asks again.
+// Validate rejects a subtask with no title or description, so the correction
+// loop asks again.
 func (r SplitResult) Validate() error {
 	for i, s := range r.Subtasks {
 		if strings.TrimSpace(s.Title) == "" {
 			return fmt.Errorf("subtasks[%d].title is required", i)
+		}
+		if strings.TrimSpace(s.Description) == "" {
+			return fmt.Errorf("subtasks[%d].description is required", i)
 		}
 	}
 	return nil

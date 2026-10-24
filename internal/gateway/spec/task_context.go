@@ -15,6 +15,12 @@ func WithTaskID(ctx context.Context, taskID string) context.Context {
 	return context.WithValue(ctx, taskCtxKey{}, taskID)
 }
 
+// WithExactTaskID attaches taskID to ctx even when it is empty, so a request
+// with no task cannot inherit an outer one.
+func WithExactTaskID(ctx context.Context, taskID string) context.Context {
+	return context.WithValue(ctx, taskCtxKey{}, taskID)
+}
+
 // TaskIDFromContext returns the task set by WithTaskID, or "".
 func TaskIDFromContext(ctx context.Context) string {
 	if id, ok := ctx.Value(taskCtxKey{}).(string); ok {

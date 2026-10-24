@@ -188,8 +188,9 @@ baseline for deciding whether that is worth building.
   (`maint.merge_memories`) span many tasks. They show up under their purpose with
   an empty task and are left out of a per-task view. Subagent turns, librarian
   summaries and truncator summaries carry the task of the call they belong to,
-  and so do intake replans and next-phase plans. Frontdesk planning works from a
-  user's request before any task exists, so its calls stay empty as well.
+  and so do `create.replan_comment` and `create.next_phase` calls. Frontdesk
+  planning works from a user's request before any task exists, so its calls stay
+  empty as well.
 - **Dropped records.** The writer holds 1,024 records and inserts in batches of
   100 or every 2 seconds. When the buffer is full, or a batch fails to insert,
   the records are dropped and counted. `dropped_records` is the count since the

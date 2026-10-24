@@ -37,6 +37,19 @@ func (s *FakeKanbanStore) addDraftTasksLocked(projectID, parentTaskID string, dr
 	return created
 }
 
+// linkBreakdownRelationsLocked mirrors insertReadySubtasks: split children get
+// a SPLIT edge, every other breakdown child a BLOCKS edge.
+func (s *FakeKanbanStore) linkBreakdownRelationsLocked(parentID string, drafts []models.DraftTask, children []models.Task) {
+	for i, child := range children {
+		relType := models.TaskRelationBlocks
+		if i < len(drafts) && drafts[i].SplitChild {
+			relType = models.TaskRelationSplit
+		}
+		s.childParentRelations[child.ID] = append(s.childParentRelations[child.ID],
+			parentRelation{parentID: parentID, relationType: relType})
+	}
+}
+
 func (s *FakeKanbanStore) blockParentTaskLocked(id string, ts time.Time) *models.Task {
 	t := s.tasks[id]
 	t.State = models.TaskStateBlocked
