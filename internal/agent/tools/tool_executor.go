@@ -49,6 +49,10 @@ type ToolExecutor struct {
 	// read-only (see sandbox.Payload.ReadOnlyWorkspace), and it carries through
 	// to subagents like allowedTools.
 	readOnlyWorkspace bool
+	// intent is the task's title and description. The sandbox's host-fact
+	// evidence guard reads it (see sandbox.Payload.Intent), and it carries
+	// through to subagents like readOnlyWorkspace.
+	intent string
 	// taskID and projectID tag shell commands, so the sandbox's LOG_CHUNK
 	// events are stored under the task they ran for (set by ForTask).
 	taskID, projectID string
@@ -100,6 +104,24 @@ func (t *ToolExecutor) WithReadOnlyWorkspace(readOnly bool) *ToolExecutor {
 	}
 	t.readOnlyWorkspace = readOnly
 	return t
+}
+
+// WithIntent sets the task text the sandbox's host-fact evidence guard checks
+// each shell command against (B-046).
+func (t *ToolExecutor) WithIntent(intent string) *ToolExecutor {
+	if t == nil {
+		return t
+	}
+	t.intent = intent
+	return t
+}
+
+// Intent returns the task text set by WithIntent.
+func (t *ToolExecutor) Intent() string {
+	if t == nil {
+		return ""
+	}
+	return t.intent
 }
 
 // ReadOnlyWorkspace reports whether the executor's shell commands run with the

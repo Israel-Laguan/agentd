@@ -34,6 +34,7 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEn
 		TaskID:            taskID,
 		ProjectID:         t.projectID,
 		WorkspacePath:     t.workspacePath,
+		Intent:            t.intent,
 		Command:           args.Command,
 		EnvVars:           t.BuildEnv(extraEnv...),
 		WallTimeout:       t.wallTimeout,

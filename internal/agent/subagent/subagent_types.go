@@ -84,6 +84,9 @@ type SubagentDelegate struct {
 	// readOnlyWorkspace keeps the delegating profile's read-only workspace in
 	// force for every subagent of the delegation tree.
 	readOnlyWorkspace bool
+	// intent is the delegating task's text, which the sandbox's host-fact
+	// evidence guard checks every subagent's shell commands against.
+	intent string
 }
 
 // NewSubagentDelegate constructs a delegate at the given depth.
@@ -155,6 +158,16 @@ func (d *SubagentDelegate) WithReadOnlyWorkspace(readOnly bool) *SubagentDelegat
 	return d
 }
 
+// WithIntent checks every subagent's shell commands against the delegating
+// task's text, as the delegating executor does (B-046).
+func (d *SubagentDelegate) WithIntent(intent string) *SubagentDelegate {
+	if d == nil {
+		return d
+	}
+	d.intent = intent
+	return d
+}
+
 func (d *SubagentDelegate) profileAllows(name string) bool {
 	if len(d.allowedTools) == 0 {
 		return true
@@ -193,6 +206,7 @@ func (d *SubagentDelegate) child() *SubagentDelegate {
 		WithExternalTools(d.externalTools).
 		WithAllowedTools(d.allowedTools).
 		WithReadOnlyWorkspace(d.readOnlyWorkspace).
+		WithIntent(d.intent).
 		WithCallEnv(d.callEnv).
 		WithTruncationStrategy(d.truncation)
 }
