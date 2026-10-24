@@ -44,13 +44,16 @@ func (w *Worker) DispatchTool(ctx context.Context, sessionID string, call gatewa
 	return w.dispatchToolWithProject(ctx, sessionID, "", call, toolToAdapter, toolExecutor, nil, retry, nil, nil)
 }
 
-// FilterAgenticTools applies per-task tool manifest filtering when enabled.
+// FilterAgenticTools offers only the profile's AllowedTools, then applies
+// per-task tool manifest filtering when enabled. The allowlist does not depend on
+// the manifest, and the dispatch veto enforces it either way.
 func (w *Worker) FilterAgenticTools(
 	tools []gateway.ToolDefinition,
 	index map[string]string,
 	task models.Task,
 	profile models.AgentProfile,
 ) ([]gateway.ToolDefinition, map[string]string) {
+	tools, index = agenttools.FilterAllowedTools(tools, index, agenttools.ProfileAllowlist(profile.AllowedTools))
 	if w.toolManifest == nil {
 		return tools, index
 	}

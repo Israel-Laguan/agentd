@@ -42,6 +42,9 @@ func runStartCommand(cmd *cobra.Command, opts *rootOptions, startOpts *startOpti
 	if err := seedAndValidateStartup(cmd.Context(), store, cfg); err != nil {
 		return err
 	}
+	if err := warnAgenticProfilesWithoutTools(cmd.Context(), store, deps.gateway); err != nil {
+		return err
+	}
 
 	store = withLiveTaskNotifier(store.WithCanceller(deps.canceller), deps.bus)
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)

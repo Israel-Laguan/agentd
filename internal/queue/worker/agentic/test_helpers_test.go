@@ -19,9 +19,6 @@ type noopHost struct{}
 
 func (h *noopHost) FailHard(_ context.Context, _ models.Task, _ error) {}
 
-func (h *noopHost) RunLegacyTask(_ context.Context, _ models.Task, _ models.Project, _ models.AgentProfile, _ bool) {
-}
-
 func (h *noopHost) RegisterCancel(_ string, _ context.CancelFunc) {}
 
 func (h *noopHost) DeregisterCancel(_ string) {}

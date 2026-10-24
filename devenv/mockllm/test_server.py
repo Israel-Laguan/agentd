@@ -338,6 +338,12 @@ class AgenticDefaultReplyTest(unittest.TestCase):
         args = self._call_args(server.chat_completion(self._body(title=f"{server.SLOW_MARKER} recover")))
         self.assertEqual(args["command"], server.slow_command())
 
+    def test_plan_titled_task_runs_the_command_through_bash(self):
+        # The old decomposition reply is gone: an AGENT_PLAN task is an ordinary
+        # worker request and gets the usual bash call.
+        args = self._call_args(server.chat_completion(self._body(title="AGENT_PLAN: build a thing")))
+        self.assertEqual(args["command"], server.build_command("unknown", "AGENT_PLAN: build a thing"))
+
     def test_final_message_carries_the_command_output(self):
         reply = server.chat_completion(self._body(tool_result="tick 28\ntick 29"))
         choice = reply["choices"][0]
@@ -356,6 +362,19 @@ class AgenticDefaultReplyTest(unittest.TestCase):
         body = self._body()
         del body["tools"]
         self.assertIn("command", json.loads(server.chat_completion(body)["choices"][0]["message"]["content"]))
+
+
+class ElicitorReplyTest(unittest.TestCase):
+    """The pre-task elicitor reads needs_clarification from its reply. The mock
+    answers it explicitly rather than relying on the command JSON default."""
+
+    def test_elicitor_request_needs_no_clarification(self):
+        body = {"model": "agentd", "messages": [
+            {"role": "system", "content": "You are a pre-task ambiguity analyzer for agentd. Return ONLY strict JSON."},
+            {"role": "user", "content": "Title: fix the bug"},
+        ]}
+        content = json.loads(server.chat_completion(body, headers())["choices"][0]["message"]["content"])
+        self.assertIs(content["needs_clarification"], False)
 
 
 class ToolCallScenarioTest(unittest.TestCase):

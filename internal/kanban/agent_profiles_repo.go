@@ -3,6 +3,7 @@ package kanban
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -12,7 +13,7 @@ import (
 
 func (s *Store) GetAgentProfile(ctx context.Context, id string) (*models.AgentProfile, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, disable_topic_drift, capability_route_intent, updated_at
+		SELECT id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, disable_topic_drift, capability_route_intent, allowed_tools, workspace_readonly, updated_at
 		FROM agent_profiles WHERE id = ?`, id)
 	profile, err := scanAgentProfile(row)
 	if err != nil {
@@ -26,7 +27,7 @@ func (s *Store) GetAgentProfile(ctx context.Context, id string) (*models.AgentPr
 
 func (s *Store) ListAgentProfiles(ctx context.Context) ([]models.AgentProfile, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, disable_topic_drift, capability_route_intent, updated_at
+		SELECT id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, disable_topic_drift, capability_route_intent, allowed_tools, workspace_readonly, updated_at
 		FROM agent_profiles ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list agent profiles: %w", err)
@@ -55,9 +56,13 @@ func (s *Store) UpsertAgentProfile(ctx context.Context, p models.AgentProfile) e
 	if p.Role == "" {
 		p.Role = "CODE_GEN"
 	}
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO agent_profiles (id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, disable_topic_drift, capability_route_intent, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	allowedToolsJSON, err := encodeAllowedTools(p.AllowedTools)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO agent_profiles (id, name, provider, model, temperature, system_prompt, role, max_tokens, agentic_mode, disable_topic_drift, capability_route_intent, allowed_tools, workspace_readonly, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			provider = excluded.provider,
@@ -69,11 +74,13 @@ func (s *Store) UpsertAgentProfile(ctx context.Context, p models.AgentProfile) e
 			agentic_mode = excluded.agentic_mode,
 			disable_topic_drift = excluded.disable_topic_drift,
 			capability_route_intent = excluded.capability_route_intent,
+			allowed_tools = excluded.allowed_tools,
+			workspace_readonly = excluded.workspace_readonly,
 			updated_at = excluded.updated_at`,
 		p.ID, p.Name, p.Provider, p.Model, p.Temperature, nullString(p.SystemPrompt),
 		p.Role, p.MaxTokens, boolToInt(p.AgenticMode), boolToInt(p.DisableTopicDrift),
 		nullString(sql.NullString{String: p.CapabilityRouteIntent, Valid: p.CapabilityRouteIntent != ""}),
-		formatTime(p.UpdatedAt))
+		allowedToolsJSON, boolToInt(p.WorkspaceReadonly), formatTime(p.UpdatedAt))
 	if err != nil {
 		return fmt.Errorf("upsert agent profile: %w", err)
 	}
@@ -142,10 +149,12 @@ func (s *Store) AssignTaskAgent(
 func scanAgentProfile(row scanner) (*models.AgentProfile, error) {
 	var p models.AgentProfile
 	var updatedAt string
-	var agenticMode, disableTopicDrift int
+	var agenticMode, disableTopicDrift, workspaceReadonly int
 	var capabilityRouteIntent sql.NullString
+	var allowedTools string
 	err := row.Scan(&p.ID, &p.Name, &p.Provider, &p.Model, &p.Temperature,
-		&p.SystemPrompt, &p.Role, &p.MaxTokens, &agenticMode, &disableTopicDrift, &capabilityRouteIntent, &updatedAt)
+		&p.SystemPrompt, &p.Role, &p.MaxTokens, &agenticMode, &disableTopicDrift, &capabilityRouteIntent,
+		&allowedTools, &workspaceReadonly, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -154,8 +163,12 @@ func scanAgentProfile(row scanner) (*models.AgentProfile, error) {
 	}
 	p.AgenticMode = agenticMode != 0
 	p.DisableTopicDrift = disableTopicDrift != 0
+	p.WorkspaceReadonly = workspaceReadonly != 0
 	if capabilityRouteIntent.Valid {
 		p.CapabilityRouteIntent = capabilityRouteIntent.String
+	}
+	if p.AllowedTools, err = decodeAllowedTools(allowedTools); err != nil {
+		return nil, err
 	}
 	updated, err := parseTime(updatedAt)
 	if err != nil {
@@ -170,4 +183,25 @@ func boolToInt(v bool) int {
 		return 1
 	}
 	return 0
+}
+
+// encodeAllowedTools stores a profile's allowlist as a JSON array. A nil or
+// empty list is "[]", which reads back as no allowlist.
+func encodeAllowedTools(tools []string) (string, error) {
+	if len(tools) == 0 {
+		return "[]", nil
+	}
+	encoded, err := json.Marshal(tools)
+	if err != nil {
+		return "", fmt.Errorf("encode agent profile allowed_tools: %w", err)
+	}
+	return string(encoded), nil
+}
+
+func decodeAllowedTools(raw string) ([]string, error) {
+	var tools []string
+	if err := json.Unmarshal([]byte(raw), &tools); err != nil {
+		return nil, fmt.Errorf("decode agent profile allowed_tools: %w", err)
+	}
+	return tools, nil
 }

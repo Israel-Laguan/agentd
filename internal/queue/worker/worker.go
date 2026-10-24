@@ -193,6 +193,9 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 		return
 	}
 	if profile.AgenticMode {
+		if w.tryRenderHostReport(ctx, task, project) {
+			return
+		}
 		slog.DebugContext(ctx, "worker: entering agentic loop", "task_id", task.ID)
 		if result, ok := w.processAgentic(ctx, task, project, profile); ok {
 			w.handleLoopResult(ctx, task, result)

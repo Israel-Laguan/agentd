@@ -49,9 +49,9 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 	return true
 }
 
-// renderBatchHostReports completes the host report tasks of a legacy batch the
-// same way RunLegacyTask does, before the batch model call, and returns the
-// tasks still needing a model command (B-050).
+// renderBatchHostReports completes the host report tasks of a batch the same
+// way the single-task paths do, before the batch model call, and returns the
+// tasks still needing a model call (B-050).
 func (w *Worker) renderBatchHostReports(ctx context.Context, tasks []models.Task, project models.Project) []models.Task {
 	remaining := tasks[:0:0]
 	for _, task := range tasks {

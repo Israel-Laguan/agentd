@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 )
 
@@ -66,10 +67,10 @@ func TestApplyTieredStepProfile_ToolAllowlists(t *testing.T) {
 		kind      TieredStepKind
 		wantTools []string
 	}{
-		{TieredStepContext, []string{"read", "grep", "glob", "list"}},
-		{TieredStepDecision, []string{"read", "grep", "glob", "list"}},
-		{TieredStepExecute, []string{"read", "write", "bash", "grep", "glob"}},
-		{TieredStepVerify, []string{"read", "bash", "grep", "glob"}},
+		{TieredStepContext, []string{"read", "bash"}},
+		{TieredStepDecision, []string{"read", "bash"}},
+		{TieredStepExecute, []string{"read", "write", "bash"}},
+		{TieredStepVerify, []string{"read", "bash"}},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.kind), func(t *testing.T) {
@@ -83,6 +84,26 @@ func TestApplyTieredStepProfile_ToolAllowlists(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The allowlists are enforced at dispatch, so a name that is not a builtin tool
+// (grep, glob, list) would hide every tool it was meant to cover.
+func TestTieredStepAllowlistsNameOnlyBuiltinTools(t *testing.T) {
+	t.Parallel()
+	builtin := map[string]bool{
+		agenttools.ToolNameBash:             true,
+		agenttools.ToolNameRead:             true,
+		agenttools.ToolNameWrite:            true,
+		agenttools.ToolNameDelegate:         true,
+		agenttools.ToolNameDelegateParallel: true,
+	}
+	for kind, allowlist := range tieredStepToolAllowlists {
+		for _, tool := range allowlist {
+			if !builtin[tool] {
+				t.Errorf("%s allowlist names %q, which is not a builtin tool", kind, tool)
+			}
+		}
 	}
 }
 

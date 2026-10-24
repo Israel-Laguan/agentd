@@ -401,3 +401,52 @@ func TestAgentHandler_Delete(t *testing.T) {
 		t.Fatalf("expected not found after delete, got %d body = %s", getRec.Code, getRec.Body.String())
 	}
 }
+
+// A profile created without agentic_mode is agentic: legacy command profiles are
+// retired, so the default is the agentic path.
+func TestAgentHandler_CreateDefaultsToAgentic(t *testing.T) {
+	h := agentTestHandler()
+	body := `{"id":"default-agentic","name":"Default Agentic","provider":"openai","model":"gpt-4"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Create code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			AgenticMode bool `json:"agentic_mode"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if !resp.Data.AgenticMode {
+		t.Fatalf("agentic_mode = false for a profile created without the field; body = %s", rec.Body.String())
+	}
+}
+
+// An explicit agentic_mode false is still honoured on create.
+func TestAgentHandler_CreateExplicitFalseStaysLegacy(t *testing.T) {
+	h := agentTestHandler()
+	body := `{"id":"explicit-legacy","name":"Explicit Legacy","provider":"openai","model":"gpt-4","agentic_mode":false}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.Create(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Create code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			AgenticMode bool `json:"agentic_mode"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if resp.Data.AgenticMode {
+		t.Fatalf("agentic_mode = true for an explicit false; body = %s", rec.Body.String())
+	}
+}

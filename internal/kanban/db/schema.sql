@@ -80,10 +80,13 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     agentic_mode INTEGER NOT NULL DEFAULT 0,
     disable_topic_drift INTEGER NOT NULL DEFAULT 0,
     capability_route_intent TEXT,
+    allowed_tools TEXT NOT NULL DEFAULT '[]',
+    workspace_readonly INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     CHECK (max_tokens >= 0),
     CHECK (agentic_mode IN (0, 1)),
-    CHECK (disable_topic_drift IN (0, 1))
+    CHECK (disable_topic_drift IN (0, 1)),
+    CHECK (workspace_readonly IN (0, 1))
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS memories (

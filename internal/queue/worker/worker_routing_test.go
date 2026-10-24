@@ -178,9 +178,9 @@ func TestRoutingDecision_AgenticModeTrue_EmptyProviderCascade(t *testing.T) {
 	}
 }
 
-// TestRoutingDecision_AgenticModeTrue_ProviderNotSupported verifies by calling Process
-// that when AgenticMode is true but provider doesn't support it, the legacy path is taken.
-// Validates: Requirements 1, 3, 4, 6.2
+// TestRoutingDecision_AgenticModeTrue_ProviderNotSupported verifies that an agentic
+// profile on a provider without tool support fails its task. The legacy command
+// path used to run here and report success without any tool work (B-080).
 func TestRoutingDecision_AgenticModeTrue_ProviderNotSupported(t *testing.T) {
 	t.Parallel()
 
@@ -207,26 +207,33 @@ func TestRoutingDecision_AgenticModeTrue_ProviderNotSupported(t *testing.T) {
 			w, store, gw, sb := newRoutingTest(profile)
 			w.Process(context.Background(), store.task)
 
-			// Fallback to legacy: exactly one JSONMode request, no tools
-			if len(gw.requests) != 1 {
-				t.Fatalf("expected exactly 1 gateway request for legacy fallback with provider %q, got %d", tc.provider, len(gw.requests))
-			}
-			if !gw.requests[0].JSONMode {
-				t.Errorf("expected JSONMode=true for legacy fallback with provider %q", tc.provider)
-			}
-			if len(gw.requests[0].Tools) != 0 {
-				t.Fatalf("expected no tools in legacy fallback for provider %q, got %d", tc.provider, len(gw.requests[0].Tools))
-			}
-			if sb.execCount != 1 {
-				t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)
-			}
+			assertRejectedWithoutModelCall(t, store, gw, sb, tc.provider)
 		})
 	}
 }
 
-// TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_LegacyNotBlocked verifies that
-// unsupported providers skip agentic setup (including elicitation) and run legacy immediately.
-func TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_LegacyNotBlocked(t *testing.T) {
+// assertRejectedWithoutModelCall checks that a task on a tool-less provider
+// failed with the tool-support error, and that no model request or command ran.
+func assertRejectedWithoutModelCall(t *testing.T, store *routingTestStore, gw *routingTestGateway, sb *routingTestSandbox, provider string) {
+	t.Helper()
+	if len(gw.requests) != 0 {
+		t.Fatalf("provider %q: gateway received %d requests, want none", provider, len(gw.requests))
+	}
+	if sb.execCount != 0 {
+		t.Fatalf("provider %q: %d sandbox runs, want none", provider, sb.execCount)
+	}
+	if store.task.State != models.TaskStateFailed {
+		t.Fatalf("provider %q: task state = %s, want FAILED", provider, store.task.State)
+	}
+	if store.result == nil || !strings.Contains(store.result.Payload, "cannot call tools") {
+		t.Fatalf("provider %q: result = %#v, want the tool-support error", provider, store.result)
+	}
+}
+
+// TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_FailsWithoutModelCall verifies
+// that an unsupported provider fails before agentic setup, so elicitation never blocks
+// the task and no legacy command runs.
+func TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_FailsWithoutModelCall(t *testing.T) {
 	t.Parallel()
 
 	profile := models.AgentProfile{
@@ -241,17 +248,9 @@ func TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_LegacyNotBlocked(t
 	w.Process(context.Background(), store.task)
 
 	if store.task.State == models.TaskStateBlocked {
-		t.Fatal("expected legacy fallback, not BLOCKED from agentic elicitation")
+		t.Fatal("expected a rejection, not BLOCKED from agentic elicitation")
 	}
-	if len(gw.requests) != 1 {
-		t.Fatalf("expected exactly 1 legacy gateway request, got %d", len(gw.requests))
-	}
-	if !gw.requests[0].JSONMode {
-		t.Fatal("expected legacy JSON mode request")
-	}
-	if sb.execCount != 1 {
-		t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)
-	}
+	assertRejectedWithoutModelCall(t, store, gw, sb, "ollama")
 }
 
 // TestAgenticFallbackPreservesRoutedProvider verifies that when processAgentic routes to a
@@ -308,9 +307,9 @@ func TestAgenticFallbackPreservesRoutedProvider(t *testing.T) {
 	}
 }
 
-// TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback verifies that
-// when model routing selects a provider without tool support, the worker falls back to legacy.
-func TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback(t *testing.T) {
+// TestRoutingDecision_ModelRoutingToUnsupportedProvider_Rejects verifies that when model
+// routing selects a provider without tool support, the task is rejected, not run legacy.
+func TestRoutingDecision_ModelRoutingToUnsupportedProvider_Rejects(t *testing.T) {
 	t.Parallel()
 
 	profile := models.AgentProfile{
@@ -331,19 +330,7 @@ func TestRoutingDecision_ModelRoutingToUnsupportedProvider_LegacyFallback(t *tes
 
 	w.Process(context.Background(), store.task)
 
-	if len(gw.requests) != 1 {
-		t.Fatalf("expected exactly 1 gateway request after unsupported-provider fallback, got %d", len(gw.requests))
-	}
-	legacyReq := gw.requests[0]
-	if !legacyReq.JSONMode {
-		t.Fatal("expected first gateway request to be legacy JSON mode")
-	}
-	if len(legacyReq.Tools) != 0 {
-		t.Fatalf("expected no tools in legacy fallback after routing to ollama, got %d", len(legacyReq.Tools))
-	}
-	if sb.execCount != 1 {
-		t.Fatalf("expected legacy command to execute once, got %d sandbox runs", sb.execCount)
-	}
+	assertRejectedWithoutModelCall(t, store, gw, sb, "ollama (routed)")
 }
 
 // TestProcessAgentic_ManifestFilterDoesNotShrinkRoutingEstimate verifies the full

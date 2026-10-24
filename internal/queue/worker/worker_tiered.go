@@ -11,17 +11,18 @@ import (
 
 // tieredStepToolAllowlists restricts which tools each step kind may use.
 // These are enforced by setting profile.AllowedTools before dispatching
-// to the agentic engine. The context step is read-only; decision reads
-// the pack plus workspace files; execute writes within the decision
-// allowlist; verify runs checks.
+// to the agentic engine, so a call outside the list is vetoed. Context and
+// decision explore with read and bash; execute writes within that set; verify
+// runs checks. Context and decision are not yet mounted read-only, so their
+// bash can still write.
 var tieredStepToolAllowlists = map[TieredStepKind][]string{
-	TieredStepContext:  {"read", "grep", "glob", "list"},
-	TieredStepDecision: {"read", "grep", "glob", "list"},
-	TieredStepExecute:  {"read", "write", "bash", "grep", "glob"},
-	TieredStepVerify:   {"read", "bash", "grep", "glob"},
+	TieredStepContext:  {"read", "bash"},
+	TieredStepDecision: {"read", "bash"},
+	TieredStepExecute:  {"read", "write", "bash"},
+	TieredStepVerify:   {"read", "bash"},
 	// Escalate needs the union of execute+verify: it both fixes the
 	// conflict and re-runs checks to confirm the fix in one pass.
-	TieredStepEscalate: {"read", "write", "bash", "grep", "glob", "list"},
+	TieredStepEscalate: {"read", "write", "bash"},
 }
 
 // tieredStepSystemPrompts provides per-step system prompt suffixes that

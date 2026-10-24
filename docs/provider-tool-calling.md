@@ -149,13 +149,13 @@ flow and for single-shot worker requests.
 calls `providerSupportsAgentic` in
 [`internal/queue/worker/worker_support.go`](../internal/queue/worker/worker_support.go),
 which wraps `gateway.ProviderSupportsChatTools` before entering `processAgentic`. If the
-resolved provider returns `SupportsChatTools: false`, the worker silently falls back to the
-legacy single-shot JSON path (`runLegacyTask`) and emits a warning log line. No error is
-surfaced to the task; execution continues in legacy mode.
+resolved provider returns `SupportsChatTools: false`, the task fails with
+`agentic profile's provider cannot call tools`. The worker no longer falls back to the legacy
+single-shot JSON path, because that path reported success without any tool work.
 
-As a result, any provider listed as `SupportsChatTools: false` in the Capability Matrix above
-will use legacy mode even when `AgenticMode: true` is set on the agent profile. Run
-`agentd start -v` to see the fallback warning.
+So any provider listed as `SupportsChatTools: false` in the Capability Matrix above cannot
+carry an agentic profile. The API rejects such a profile on create and patch, and at startup
+`agentd start` logs an error for each stored profile that it cannot serve.
 
 > ⚠️ **Note on Anthropic.** The native `anthropic` adapter returns `SupportsChatTools: true`,
 > so `AgenticMode: true` enters `processAgentic` — but its **multi-turn** tool round-trip is

@@ -19,42 +19,48 @@ type AgentHandler struct {
 }
 
 type agentResponse struct {
-	ID                    string  `json:"id"`
-	Name                  string  `json:"name"`
-	Provider              string  `json:"provider"`
-	Model                 string  `json:"model"`
-	Temperature           float64 `json:"temperature"`
-	SystemPrompt          string  `json:"system_prompt,omitempty"`
-	Role                  string  `json:"role"`
-	MaxTokens             int     `json:"max_tokens"`
-	AgenticMode           bool    `json:"agentic_mode"`
-	CapabilityRouteIntent string  `json:"capability_route_intent,omitempty"`
-	UpdatedAt             string  `json:"updated_at"`
+	ID                    string   `json:"id"`
+	Name                  string   `json:"name"`
+	Provider              string   `json:"provider"`
+	Model                 string   `json:"model"`
+	Temperature           float64  `json:"temperature"`
+	SystemPrompt          string   `json:"system_prompt,omitempty"`
+	Role                  string   `json:"role"`
+	MaxTokens             int      `json:"max_tokens"`
+	AgenticMode           bool     `json:"agentic_mode"`
+	CapabilityRouteIntent string   `json:"capability_route_intent,omitempty"`
+	AllowedTools          []string `json:"allowed_tools"`
+	WorkspaceReadonly     bool     `json:"workspace_readonly"`
+	UpdatedAt             string   `json:"updated_at"`
 }
 
 type agentCreateRequest struct {
-	ID                    string  `json:"id,omitempty"`
-	Name                  string  `json:"name"`
-	Provider              string  `json:"provider"`
-	Model                 string  `json:"model"`
-	Temperature           float64 `json:"temperature,omitempty"`
-	SystemPrompt          string  `json:"system_prompt,omitempty"`
-	Role                  string  `json:"role,omitempty"`
-	MaxTokens             int     `json:"max_tokens,omitempty"`
-	AgenticMode           bool    `json:"agentic_mode,omitempty"`
-	CapabilityRouteIntent string  `json:"capability_route_intent,omitempty"`
+	ID                    string   `json:"id,omitempty"`
+	Name                  string   `json:"name"`
+	Provider              string   `json:"provider"`
+	Model                 string   `json:"model"`
+	Temperature           float64  `json:"temperature,omitempty"`
+	SystemPrompt          string   `json:"system_prompt,omitempty"`
+	Role                  string   `json:"role,omitempty"`
+	MaxTokens             int      `json:"max_tokens,omitempty"`
+	AgenticMode           *bool    `json:"agentic_mode,omitempty"`
+	CapabilityRouteIntent string   `json:"capability_route_intent,omitempty"`
+	AllowedTools          []string `json:"allowed_tools,omitempty"`
+	WorkspaceReadonly     bool     `json:"workspace_readonly,omitempty"`
 }
 
 type agentPatchRequest struct {
-	Name                  *string  `json:"name,omitempty"`
-	Provider              *string  `json:"provider,omitempty"`
-	Model                 *string  `json:"model,omitempty"`
-	Temperature           *float64 `json:"temperature,omitempty"`
-	SystemPrompt          *string  `json:"system_prompt,omitempty"`
-	Role                  *string  `json:"role,omitempty"`
-	MaxTokens             *int     `json:"max_tokens,omitempty"`
-	AgenticMode           *bool    `json:"agentic_mode,omitempty"`
-	CapabilityRouteIntent *string  `json:"capability_route_intent,omitempty"`
+	Name                  *string   `json:"name,omitempty"`
+	Provider              *string   `json:"provider,omitempty"`
+	Model                 *string   `json:"model,omitempty"`
+	Temperature           *float64  `json:"temperature,omitempty"`
+	SystemPrompt          *string   `json:"system_prompt,omitempty"`
+	Role                  *string   `json:"role,omitempty"`
+	MaxTokens             *int      `json:"max_tokens,omitempty"`
+	AgenticMode           *bool     `json:"agentic_mode,omitempty"`
+	CapabilityRouteIntent *string   `json:"capability_route_intent,omitempty"`
+	AllowedTools          *[]string `json:"allowed_tools,omitempty"`
+	WorkspaceReadonly     *bool     `json:"workspace_readonly,omitempty"`
 }
 
 // List handles GET /api/v1/agents.
@@ -92,10 +98,16 @@ func (h AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		id = uuid.NewString()
 	}
+	// New profiles are agentic unless the request says otherwise.
+	agentic := true
+	if req.AgenticMode != nil {
+		agentic = *req.AgenticMode
+	}
 	profile := models.AgentProfile{
 		ID: id, Name: req.Name, Provider: req.Provider, Model: req.Model,
 		Temperature: req.Temperature, Role: req.Role, MaxTokens: req.MaxTokens,
-		AgenticMode: req.AgenticMode, CapabilityRouteIntent: strings.TrimSpace(req.CapabilityRouteIntent),
+		AgenticMode: agentic, CapabilityRouteIntent: strings.TrimSpace(req.CapabilityRouteIntent),
+		AllowedTools: req.AllowedTools, WorkspaceReadonly: req.WorkspaceReadonly,
 	}
 	if req.SystemPrompt != "" {
 		profile.SystemPrompt.Valid = true
@@ -121,6 +133,7 @@ func (h AgentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		Temperature: req.Temperature, SystemPrompt: req.SystemPrompt,
 		Role: req.Role, MaxTokens: req.MaxTokens, AgenticMode: req.AgenticMode,
 		CapabilityRouteIntent: req.CapabilityRouteIntent,
+		AllowedTools:          req.AllowedTools, WorkspaceReadonly: req.WorkspaceReadonly,
 	}
 	result, err := h.Service.Patch(r.Context(), r.PathValue("id"), patch)
 	if err != nil {
@@ -144,6 +157,7 @@ func toAgentResponse(p models.AgentProfile) agentResponse {
 		ID: p.ID, Name: p.Name, Provider: p.Provider, Model: p.Model,
 		Temperature: p.Temperature, Role: p.Role, MaxTokens: p.MaxTokens,
 		AgenticMode: p.AgenticMode, CapabilityRouteIntent: p.CapabilityRouteIntent,
+		AllowedTools: p.AllowedTools, WorkspaceReadonly: p.WorkspaceReadonly,
 		UpdatedAt: p.UpdatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
 	}
 	if p.SystemPrompt.Valid {

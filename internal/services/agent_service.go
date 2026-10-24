@@ -14,6 +14,12 @@ type ProviderLister interface {
 	ProviderNames() []string
 }
 
+// toolCapableLister is the optional part of a ProviderLister that reports tool
+// support. The gateway Router implements it.
+type toolCapableLister interface {
+	ProviderSupportsChatTools(provider string) bool
+}
+
 // AgentService coordinates HTTP-driven CRUD on AgentProfile records.
 // Validation that requires DB transactions (delete protections, in-use
 // checks) lives inside the store; this service is intentionally thin and
@@ -48,6 +54,8 @@ type AgentPatch struct {
 	MaxTokens             *int
 	AgenticMode           *bool
 	CapabilityRouteIntent *string
+	AllowedTools          *[]string
+	WorkspaceReadonly     *bool
 }
 
 // List returns all known agent profiles.
@@ -72,6 +80,9 @@ func (s *AgentService) Create(ctx context.Context, p models.AgentProfile) (Agent
 		return AgentWriteResult{}, err
 	}
 	if err := s.validateProviderExists(p.Provider); err != nil {
+		return AgentWriteResult{}, err
+	}
+	if err := s.validateToolSupport(p); err != nil {
 		return AgentWriteResult{}, err
 	}
 	if existing, _ := s.Store.GetAgentProfile(ctx, p.ID); existing != nil {
@@ -103,6 +114,9 @@ func (s *AgentService) Patch(ctx context.Context, id string, patch AgentPatch) (
 		return AgentWriteResult{}, err
 	}
 	if err := s.validateProviderExists(current.Provider); err != nil {
+		return AgentWriteResult{}, err
+	}
+	if err := s.validateToolSupport(*current); err != nil {
 		return AgentWriteResult{}, err
 	}
 	if err := s.Store.UpsertAgentProfile(ctx, *current); err != nil {
@@ -143,6 +157,7 @@ func validateForCreate(p *models.AgentProfile) error {
 	p.Model = strings.TrimSpace(p.Model)
 	p.Role = strings.TrimSpace(p.Role)
 	p.CapabilityRouteIntent = strings.TrimSpace(p.CapabilityRouteIntent)
+	p.AllowedTools = cleanAllowedTools(p.AllowedTools)
 	if p.Name == "" {
 		return fmt.Errorf("%w: name is required", models.ErrAgentProfileInvalid)
 	}
@@ -169,6 +184,21 @@ func (s *AgentService) validateProviderExists(provider string) error {
 		}
 	}
 	return &models.ProviderNotConfiguredError{Provider: provider, Available: names}
+}
+
+// validateToolSupport refuses an agentic profile whose provider cannot call
+// tools. Its tasks would otherwise fail at dispatch. Non-agentic profiles are
+// not checked, and neither is a lister that cannot report tool support. An empty
+// provider is the gateway cascade, which passes when any backend supports tools.
+func (s *AgentService) validateToolSupport(p models.AgentProfile) error {
+	checker, ok := s.Lister.(toolCapableLister)
+	if !p.AgenticMode || !ok || checker.ProviderSupportsChatTools(p.Provider) {
+		return nil
+	}
+	if p.Provider == "" {
+		return fmt.Errorf("%w (no backend in the gateway cascade supports tools); set agentic_mode to false or configure a tool-capable provider", models.ErrAgentProfileNoToolSupport)
+	}
+	return fmt.Errorf("%w (%q); pick a tool-capable provider or set agentic_mode to false", models.ErrAgentProfileNoToolSupport, p.Provider)
 }
 
 func validateProviderModelPair(provider, model string) error {
@@ -207,4 +237,23 @@ func applyPatch(profile *models.AgentProfile, patch AgentPatch) {
 	if patch.CapabilityRouteIntent != nil {
 		profile.CapabilityRouteIntent = strings.TrimSpace(*patch.CapabilityRouteIntent)
 	}
+	if patch.AllowedTools != nil {
+		profile.AllowedTools = cleanAllowedTools(*patch.AllowedTools)
+	}
+	if patch.WorkspaceReadonly != nil {
+		profile.WorkspaceReadonly = *patch.WorkspaceReadonly
+	}
+}
+
+// cleanAllowedTools trims tool names and drops blanks, so " read " and "" in
+// a request store as "read" and nothing. A list that cleans to nothing means
+// no allowlist.
+func cleanAllowedTools(tools []string) []string {
+	var out []string
+	for _, tool := range tools {
+		if name := strings.TrimSpace(tool); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
 }
