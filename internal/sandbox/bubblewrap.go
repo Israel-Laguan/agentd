@@ -14,6 +14,10 @@ import (
 	"agentd/internal/models"
 )
 
+// readOnlyHome is HOME for a read-only workspace. The workspace cannot hold it,
+// so it sits on the jail's /tmp tmpfs.
+const readOnlyHome = "/tmp/home"
+
 // Execution backends for worker commands.
 const (
 	// BackendAuto jails with bubblewrap where the binary and unprivileged
@@ -76,7 +80,7 @@ func probeJailHost() jailProbeResult {
 	defer func() { _ = os.RemoveAll(dir) }()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	argv := jailArgv(path, dir, nil, nil, "true")
+	argv := jailArgv(path, dir, false, nil, nil, "true")
 	probe := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	if err := probe.Run(); err != nil {
 		return jailProbeResult{path: path}
@@ -100,6 +104,9 @@ func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool,
 	status := probeJail()
 	switch resolveBackend(e.Backend) {
 	case BackendFilterOnly:
+		if payload.ReadOnlyWorkspace {
+			return "", false, readOnlyWithoutJail(workspace, payload, "sandbox.backend=filter-only does not jail commands")
+		}
 		return "", false, nil
 	case BackendBubblewrap:
 		if !status.usable() {
@@ -114,8 +121,21 @@ func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool,
 			slog.Warn("sandbox: bubblewrap user namespaces unavailable; running filter-only (not a jail)",
 				"workspace", workspace, "task_id", payload.TaskID, "bwrap", status.path)
 		}
+		if payload.ReadOnlyWorkspace && !status.usable() {
+			return "", false, readOnlyWithoutJail(workspace, payload, unavailableReason(status))
+		}
 		return status.path, status.usable(), nil
 	}
+}
+
+// readOnlyWithoutJail refuses a read-only workspace when no jail can enforce it.
+// Plain bash could write anywhere in the workspace, and a pattern filter cannot
+// stop every writing command, so the command is refused rather than run.
+func readOnlyWithoutJail(workspace string, payload Payload, reason string) error {
+	slog.Error("sandbox: read-only workspace needs the jail; command refused",
+		"workspace", workspace, "task_id", payload.TaskID, "reason", reason)
+	return fmt.Errorf("%w: a read-only workspace needs the bubblewrap jail, and %s; command refused",
+		models.ErrSandboxUnavailable, reason)
 }
 
 // BackendStartupLine is the one line the daemon logs at start: the backend that
@@ -183,7 +203,9 @@ func unavailableReason(status jailProbeResult) string {
 // rootless podman per task is the SP-019 answer there, not a wider bind list
 // here. Configured toolchain directories (sandbox.toolchain_paths, B-081) are
 // bound read-only after the /tmp tmpfs, for the same reason as the workspace.
-func jailArgv(bwrap, workspace string, env, toolchains []string, shell string) []string {
+// A read-only workspace (readOnly) is bound read-only as well, and HOME moves to
+// a directory on that tmpfs, since the workspace can no longer hold it.
+func jailArgv(bwrap, workspace string, readOnly bool, env, toolchains []string, shell string) []string {
 	argv := []string{bwrap,
 		"--unshare-all", "--die-with-parent",
 		"--ro-bind", "/usr", "/usr",
@@ -207,12 +229,18 @@ func jailArgv(bwrap, workspace string, env, toolchains []string, shell string) [
 	for _, dir := range toolchains {
 		argv = append(argv, "--ro-bind", dir, dir)
 	}
+	home := workspace
+	if readOnly {
+		argv = append(argv, "--dir", readOnlyHome, "--ro-bind", workspace, workspace)
+		home = readOnlyHome
+	} else {
+		argv = append(argv, "--bind", workspace, workspace)
+	}
 	argv = append(argv,
-		"--bind", workspace, workspace,
 		"--chdir", workspace,
 		"--clearenv",
 	)
-	for _, pair := range jailEnv(env, workspace, toolchainPathEntries(toolchains)) {
+	for _, pair := range jailEnv(env, home, toolchainPathEntries(toolchains)) {
 		key, value, _ := strings.Cut(pair, "=")
 		argv = append(argv, "--setenv", key, value)
 	}
@@ -221,9 +249,10 @@ func jailArgv(bwrap, workspace string, env, toolchains []string, shell string) [
 
 // jailEnv rebuilds the payload environment for the jail. Host PATH and HOME
 // point outside the visible filesystem, so they are replaced with jail-valid
-// values; every other allowlisted variable passes through unchanged. Toolchain
-// bin directories come first on PATH.
-func jailEnv(env []string, workspace string, toolchainBins []string) []string {
+// values: HOME is home, the workspace or the scratch home of a read-only one.
+// Every other allowlisted variable passes through unchanged. Toolchain bin
+// directories come first on PATH.
+func jailEnv(env []string, home string, toolchainBins []string) []string {
 	out := make([]string, 0, len(env)+2)
 	jailPath := "PATH=" + strings.Join(append(append([]string(nil), toolchainBins...), "/usr/bin", "/bin"), ":")
 	var havePath, haveHome bool
@@ -235,7 +264,7 @@ func jailEnv(env []string, workspace string, toolchainBins []string) []string {
 			out = append(out, jailPath)
 		case "HOME":
 			haveHome = true
-			out = append(out, "HOME="+workspace)
+			out = append(out, "HOME="+home)
 		default:
 			out = append(out, pair)
 		}
@@ -244,7 +273,7 @@ func jailEnv(env []string, workspace string, toolchainBins []string) []string {
 		out = append(out, jailPath)
 	}
 	if !haveHome {
-		out = append(out, "HOME="+workspace)
+		out = append(out, "HOME="+home)
 	}
 	return out
 }

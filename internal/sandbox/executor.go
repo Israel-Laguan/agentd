@@ -101,7 +101,7 @@ func (e *BashExecutor) startCommand(execCtx context.Context, workspace string, p
 		return nil, "", err
 	}
 	if jailed {
-		argv := jailArgv(path, workspace, env, e.ToolchainPaths, shell)
+		argv := jailArgv(path, workspace, payload.ReadOnlyWorkspace, env, e.ToolchainPaths, shell)
 		name, args = argv[0], argv[1:]
 		env = nil
 		backend = BackendBubblewrap

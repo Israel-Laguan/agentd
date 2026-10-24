@@ -207,6 +207,7 @@ func (w *Worker) executeDelegateWithCapabilities(ctx context.Context, call gatew
 	).WithCapabilities(w.capabilities, scopedCaps).
 		WithExternalTools(w.externalTools).
 		WithAllowedTools(toolExecutor.AllowedTools()).
+		WithReadOnlyWorkspace(toolExecutor.ReadOnlyWorkspace()).
 		WithCallEnv(callEnv).
 		WithTruncationStrategy(w.contextTruncation)
 
@@ -270,6 +271,7 @@ func (w *Worker) executeDelegateParallel(ctx context.Context, call gateway.ToolC
 	).WithCapabilities(w.capabilities, scopedCaps).
 		WithExternalTools(w.externalTools).
 		WithAllowedTools(toolExecutor.AllowedTools()).
+		WithReadOnlyWorkspace(toolExecutor.ReadOnlyWorkspace()).
 		WithCallEnv(callEnv).
 		WithTruncationStrategy(w.contextTruncation)
 

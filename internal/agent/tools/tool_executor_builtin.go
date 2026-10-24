@@ -31,12 +31,13 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEn
 		taskID = "tool" // an executor that runs for no task
 	}
 	payload := sandbox.Payload{
-		TaskID:        taskID,
-		ProjectID:     t.projectID,
-		WorkspacePath: t.workspacePath,
-		Command:       args.Command,
-		EnvVars:       t.BuildEnv(extraEnv...),
-		WallTimeout:   t.wallTimeout,
+		TaskID:            taskID,
+		ProjectID:         t.projectID,
+		WorkspacePath:     t.workspacePath,
+		Command:           args.Command,
+		EnvVars:           t.BuildEnv(extraEnv...),
+		WallTimeout:       t.wallTimeout,
+		ReadOnlyWorkspace: t.readOnlyWorkspace,
 	}
 
 	result, err := t.sandbox.Execute(ctx, payload)
