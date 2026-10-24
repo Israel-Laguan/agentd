@@ -103,6 +103,9 @@ type Host interface {
 		userContent string,
 	) []gateway.PromptMessage
 	PrependReviewRejectionFeedback(ctx context.Context, task models.Task, messages []gateway.PromptMessage) ([]gateway.PromptMessage, string)
+	// PrependSandboxViolationFeedback tells the model which earlier commands the
+	// sandbox refused, so a retry does not repeat them.
+	PrependSandboxViolationFeedback(ctx context.Context, task models.Task, messages []gateway.PromptMessage) []gateway.PromptMessage
 	ApplyModelRouting(task models.Task, profile models.AgentProfile, messages []gateway.PromptMessage, tools []gateway.ToolDefinition) models.AgentProfile
 	ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest
 	MountAgenticHooks(project models.Project, profile models.AgentProfile) (*agenthooks.HookChain, *capabilities.Registry)

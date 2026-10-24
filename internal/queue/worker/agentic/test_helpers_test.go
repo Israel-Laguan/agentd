@@ -95,6 +95,10 @@ func (h *noopHost) PrependReviewRejectionFeedback(_ context.Context, _ models.Ta
 	return messages, ""
 }
 
+func (h *noopHost) PrependSandboxViolationFeedback(_ context.Context, _ models.Task, messages []gateway.PromptMessage) []gateway.PromptMessage {
+	return messages
+}
+
 func (h *noopHost) ApplyModelRouting(_ models.Task, profile models.AgentProfile, _ []gateway.PromptMessage, _ []gateway.ToolDefinition) models.AgentProfile {
 	return profile
 }
