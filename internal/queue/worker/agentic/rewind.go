@@ -168,7 +168,7 @@ func (e *Engine) applyAgenticNoToolsPlanContent(
 }
 
 func (e *Engine) finishAgenticTurnNoTools(
-	ctx context.Context, task models.Task, profile models.AgentProfile,
+	ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile,
 	content string, workPlan *agentcontext.Plan, goalTracker *agentcontext.GoalTracker,
 	turnID string, turnIndex int, budgetGuard *agentruntime.BudgetGuard, ctxBudgetGuard *agentruntime.ContextBudgetGuard,
 	cm *agentcontext.ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
@@ -190,6 +190,9 @@ func (e *Engine) finishAgenticTurnNoTools(
 		return false, agentruntime.LoopResult{}, false, rewindNone, stallErr
 	}
 	if stop := e.unverifiedFinish(turnIndex, budgetGuard, *messages); stop != nil {
+		return false, *stop, true, rewindNone, nil
+	}
+	if stop := e.unmetCriteriaFinish(task, project, turnIndex, budgetGuard, *messages); stop != nil {
 		return false, *stop, true, rewindNone, nil
 	}
 	e.host.CommitTextWithProfile(ctx, task, content, &profile)

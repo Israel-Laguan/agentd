@@ -87,23 +87,12 @@ func (e *Engine) handleAgenticToolCalls(
 		} else if fresh != nil {
 			taskUpdatedAt = fresh.UpdatedAt
 		}
-		tr, suspended := e.host.DispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, call, toolToAdapter, toolExecutor, taskHooks, taskCaps, providerName)
-		if command, blocked := e.host.AgenticPrivilegeBlock(call, tr); blocked {
-			allowAlternative := !e.privilegeAlternativeAttempted
-			e.privilegeAlternativeAttempted = true
-			tr, suspended = e.host.RecoverAgenticPrivilege(
-				ctx, task, profile, command, tr, allowAlternative,
-				func(alternativeCall gateway.ToolCall) (agenttools.ToolResult, bool) {
-					alternativeResult, alternativeSuspended := e.host.DispatchToolWithHooks(
-						ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, alternativeCall,
-						toolToAdapter, toolExecutor, taskHooks, taskCaps, providerName,
-					)
-					return alternativeResult, alternativeSuspended
-				},
-			)
-			if suspended {
-				return true, agentruntime.LoopResult{}, false
-			}
+		dispatch := func(c gateway.ToolCall) (agenttools.ToolResult, bool) {
+			return e.host.DispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, c, toolToAdapter, toolExecutor, taskHooks, taskCaps, providerName)
+		}
+		tr, suspended, handedOff := e.runAgenticCall(ctx, task, profile, call, dispatch)
+		if handedOff {
+			return true, agentruntime.LoopResult{}, false
 		}
 		contextContent := tr.ForContext()
 		if detected := cm.CheckToolResult(contextContent); len(detected) > 0 {
@@ -122,6 +111,61 @@ func (e *Engine) handleAgenticToolCalls(
 		}
 	}
 	return false, agentruntime.LoopResult{}, false
+}
+
+// runAgenticCall runs one tool call of a turn. A call that repeats the command
+// that failed first in the previous attempt is refused without running (B-043).
+// Any other call runs, and one blocked at a prompt or by a permission failure
+// is recovered. handedOff reports that the task went to a human.
+func (e *Engine) runAgenticCall(
+	ctx context.Context, task models.Task, profile models.AgentProfile, call gateway.ToolCall,
+	dispatch func(gateway.ToolCall) (agenttools.ToolResult, bool),
+) (tr agenttools.ToolResult, suspended, handedOff bool) {
+	if feedback, repeated := e.host.RepeatedAttemptFailure(task, call); repeated {
+		return agenttools.NonRetryableErrorResult(call.ID, feedback, "", 0), false, false
+	}
+	tr, suspended = dispatch(call)
+	tr, handedOff = e.recoverBlockedCall(ctx, task, profile, call, tr, dispatch)
+	if !handedOff && isBashFailure(call, tr) {
+		e.host.RecordAttemptFailure(task, call, tr)
+	}
+	return tr, suspended, handedOff
+}
+
+// recoverBlockedCall handles a bash call that stopped at an interactive prompt
+// or hit a permission failure. handedOff reports that the task went to a human,
+// so the loop must stop.
+func (e *Engine) recoverBlockedCall(
+	ctx context.Context, task models.Task, profile models.AgentProfile, call gateway.ToolCall,
+	tr agenttools.ToolResult, dispatch func(gateway.ToolCall) (agenttools.ToolResult, bool),
+) (agenttools.ToolResult, bool) {
+	if hang, ok := e.host.AgenticPromptHang(call, tr); ok {
+		return e.recoverPromptHang(ctx, task, hang, tr)
+	}
+	command, blocked := e.host.AgenticPrivilegeBlock(call, tr)
+	if !blocked {
+		return tr, false
+	}
+	allowAlternative := !e.privilegeAlternativeAttempted
+	e.privilegeAlternativeAttempted = true
+	return e.host.RecoverAgenticPrivilege(ctx, task, profile, command, tr, allowAlternative, dispatch)
+}
+
+// recoverPromptHang answers a command that stopped at an interactive prompt.
+// The first hang of a command returns corrective feedback as its tool result,
+// so the model can rerun it non-interactively. The same command hanging again
+// hands the task to a human.
+func (e *Engine) recoverPromptHang(ctx context.Context, task models.Task, hang PromptHang, tr agenttools.ToolResult) (agenttools.ToolResult, bool) {
+	e.host.Emit(ctx, task, "PROMPT_DETECTED", hang.Payload)
+	if e.hungCommands[hang.Command] {
+		e.host.HandlePromptHandoff(ctx, task, hang.Payload)
+		return tr, true
+	}
+	if e.hungCommands == nil {
+		e.hungCommands = map[string]bool{}
+	}
+	e.hungCommands[hang.Command] = true
+	return agenttools.NonRetryableErrorResult(tr.CallID, hang.Feedback, "", tr.ElapsedMs), false
 }
 
 func (e *Engine) continueAgenticAfterTools(

@@ -31,9 +31,10 @@ func TestSeededDefaultProfileIsAgentic(t *testing.T) {
 	}
 }
 
-// An install from before this fix kept the old default row. If the operator
-// never changed it, the upgrade makes it agentic; a customized row is left alone.
-func TestSeedUpgradesUntouchedLegacyDefaultOnly(t *testing.T) {
+// An install from before this fix kept the old default row. The upgrade makes
+// it agentic. An untouched row also takes the seeded prompt; a customized prompt
+// is kept as it is.
+func TestSeedUpgradesLegacyDefaultAndKeepsOperatorPrompt(t *testing.T) {
 	ctx := context.Background()
 	untouched := models.AgentProfile{
 		ID: "default", Name: "Default Coding Agent", Role: "CODE_GEN", Temperature: 0.2, MaxTokens: 1024,
@@ -48,7 +49,7 @@ func TestSeedUpgradesUntouchedLegacyDefaultOnly(t *testing.T) {
 		want     bool
 	}{
 		{"untouched legacy row is upgraded", untouched, true},
-		{"operator prompt is kept as it is", customized, false},
+		{"operator prompt is kept as it is", customized, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store, err := openTestStore(t, filepath.Join(t.TempDir(), "global.db"))
@@ -69,7 +70,7 @@ func TestSeedUpgradesUntouchedLegacyDefaultOnly(t *testing.T) {
 			if got.AgenticMode != tc.want {
 				t.Fatalf("AgenticMode = %v, want %v", got.AgenticMode, tc.want)
 			}
-			if !tc.want && got.SystemPrompt.String != tc.existing.SystemPrompt.String {
+			if tc.existing.SystemPrompt.String == "Our own prompt." && got.SystemPrompt.String != tc.existing.SystemPrompt.String {
 				t.Fatalf("operator prompt was changed to %q", got.SystemPrompt.String)
 			}
 		})

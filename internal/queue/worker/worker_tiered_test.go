@@ -87,6 +87,33 @@ func TestApplyTieredStepProfile_ToolAllowlists(t *testing.T) {
 	}
 }
 
+// Context and decision only explore and plan, so their bash runs on a read-only
+// workspace (SP-028). Execute, verify and escalate change files or run checks
+// that may write, so their workspace stays writable.
+func TestApplyTieredStepProfile_ReadOnlyWorkspace(t *testing.T) {
+	t.Parallel()
+	w := &Worker{}
+	profile := models.AgentProfile{ID: "base", AgenticMode: true}
+	tests := []struct {
+		kind     TieredStepKind
+		readOnly bool
+	}{
+		{TieredStepContext, true},
+		{TieredStepDecision, true},
+		{TieredStepExecute, false},
+		{TieredStepVerify, false},
+		{TieredStepEscalate, false},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.kind), func(t *testing.T) {
+			got := w.applyTieredStepProfile(profile, tt.kind)
+			if got.WorkspaceReadonly != tt.readOnly {
+				t.Fatalf("WorkspaceReadonly = %v, want %v", got.WorkspaceReadonly, tt.readOnly)
+			}
+		})
+	}
+}
+
 // The allowlists are enforced at dispatch, so a name that is not a builtin tool
 // (grep, glob, list) would hide every tool it was meant to cover.
 func TestTieredStepAllowlistsNameOnlyBuiltinTools(t *testing.T) {

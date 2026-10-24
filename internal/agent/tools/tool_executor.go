@@ -45,6 +45,10 @@ type ToolExecutor struct {
 	// allowedTools carries the profile allowlist through to subagents so a
 	// delegate cannot outgrow the delegating profile. Empty means unrestricted.
 	allowedTools []string
+	// readOnlyWorkspace makes every shell command run with the workspace mounted
+	// read-only (see sandbox.Payload.ReadOnlyWorkspace), and it carries through
+	// to subagents like allowedTools.
+	readOnlyWorkspace bool
 	// taskID and projectID tag shell commands, so the sandbox's LOG_CHUNK
 	// events are stored under the task they ran for (set by ForTask).
 	taskID, projectID string
@@ -85,6 +89,23 @@ func (t *ToolExecutor) WithAllowedTools(tools []string) *ToolExecutor {
 	}
 	t.allowedTools = append([]string(nil), tools...)
 	return t
+}
+
+// WithReadOnlyWorkspace makes the executor's shell commands run with the
+// workspace mounted read-only. Only a jail can enforce that, so the sandbox
+// refuses them without one.
+func (t *ToolExecutor) WithReadOnlyWorkspace(readOnly bool) *ToolExecutor {
+	if t == nil {
+		return t
+	}
+	t.readOnlyWorkspace = readOnly
+	return t
+}
+
+// ReadOnlyWorkspace reports whether the executor's shell commands run with the
+// workspace mounted read-only.
+func (t *ToolExecutor) ReadOnlyWorkspace() bool {
+	return t != nil && t.readOnlyWorkspace
 }
 
 // AllowedTools returns the profile allowlist carried by the executor.

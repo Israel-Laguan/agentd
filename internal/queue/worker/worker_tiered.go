@@ -14,8 +14,7 @@ import (
 // These are enforced by setting profile.AllowedTools before dispatching
 // to the agentic engine, so a call outside the list is vetoed. Context and
 // decision explore with read and bash; execute writes within that set; verify
-// runs checks. Context and decision are not yet mounted read-only, so their
-// bash can still write.
+// runs checks.
 var tieredStepToolAllowlists = map[TieredStepKind][]string{
 	TieredStepContext:  {"read", "bash"},
 	TieredStepDecision: {"read", "bash"},
@@ -24,6 +23,15 @@ var tieredStepToolAllowlists = map[TieredStepKind][]string{
 	// Escalate needs the union of execute+verify: it both fixes the
 	// conflict and re-runs checks to confirm the fix in one pass.
 	TieredStepEscalate: {"read", "write", "bash"},
+}
+
+// tieredStepReadOnly marks the steps whose bash runs on a read-only workspace
+// (SP-028). Context and decision only explore and plan, so they cannot change
+// files. Execute, verify and escalate write, or run checks that may write, so
+// their workspace stays writable.
+var tieredStepReadOnly = map[TieredStepKind]bool{
+	TieredStepContext:  true,
+	TieredStepDecision: true,
 }
 
 // tieredStepSystemPrompts provides per-step system prompt suffixes that
@@ -175,6 +183,9 @@ func (w *Worker) applyTieredStepProfile(profile models.AgentProfile, stepKind Ti
 	p := profile
 	if allowlist, ok := tieredStepToolAllowlists[stepKind]; ok {
 		p.AllowedTools = intersectAllowedTools(allowlist, profile.AllowedTools)
+	}
+	if tieredStepReadOnly[stepKind] {
+		p.WorkspaceReadonly = true
 	}
 	if suffix, ok := tieredStepSystemPrompts[stepKind]; ok {
 		if p.SystemPrompt.Valid {

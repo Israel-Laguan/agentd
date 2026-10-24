@@ -81,6 +81,9 @@ type SubagentDelegate struct {
 	callEnv            []string
 	truncation         gateway.TruncationStrategy
 	allowedTools       []string
+	// readOnlyWorkspace keeps the delegating profile's read-only workspace in
+	// force for every subagent of the delegation tree.
+	readOnlyWorkspace bool
 }
 
 // NewSubagentDelegate constructs a delegate at the given depth.
@@ -145,6 +148,13 @@ func (d *SubagentDelegate) WithAllowedTools(tools []string) *SubagentDelegate {
 	return d
 }
 
+// WithReadOnlyWorkspace runs every subagent's shell commands with the workspace
+// mounted read-only, as the delegating profile does.
+func (d *SubagentDelegate) WithReadOnlyWorkspace(readOnly bool) *SubagentDelegate {
+	d.readOnlyWorkspace = readOnly
+	return d
+}
+
 func (d *SubagentDelegate) profileAllows(name string) bool {
 	if len(d.allowedTools) == 0 {
 		return true
@@ -182,6 +192,7 @@ func (d *SubagentDelegate) child() *SubagentDelegate {
 		WithCapabilities(d.capabilities, d.scopedCapabilities).
 		WithExternalTools(d.externalTools).
 		WithAllowedTools(d.allowedTools).
+		WithReadOnlyWorkspace(d.readOnlyWorkspace).
 		WithCallEnv(d.callEnv).
 		WithTruncationStrategy(d.truncation)
 }

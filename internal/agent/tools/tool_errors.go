@@ -49,6 +49,23 @@ func SandboxFailureJSON(result sandbox.Result) string {
 	return toolErrorPrefix + string(payload)
 }
 
+// SandboxTimeoutJSON reports a command the sandbox stopped for lack of output.
+// The output it printed rides along, so a prompt the command waited on can be
+// recognised (PROMPT_DETECTED).
+func SandboxTimeoutJSON(result sandbox.Result, err error) string {
+	payload, marshalErr := json.Marshal(map[string]any{
+		"error":    err.Error(),
+		"TimedOut": true,
+		"ExitCode": result.ExitCode,
+		"Stdout":   result.Stdout,
+		"Stderr":   result.Stderr,
+	})
+	if marshalErr != nil {
+		return toolErrorPrefix + `{"error":"sandbox timed out"}`
+	}
+	return toolErrorPrefix + string(payload)
+}
+
 func JSONErrorf(format string, args ...any) string {
 	payload, err := json.Marshal(map[string]string{
 		"error": fmt.Sprintf(format, args...),

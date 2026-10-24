@@ -24,6 +24,7 @@ internal/agent/runtime/topic_guard.go NewTopicGuard
 internal/agent/skills/skills.go (*Skill).IsEmpty
 internal/agent/subagent/subagent_tools.go (*SubagentDelegate).ExecuteTool
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithMaxDelegationDepth
+internal/agent/tools/tool_executor.go (*ToolExecutor).ReadOnlyWorkspace
 internal/agent/tools/tool_manifest.go NewTaskClassifier
 internal/agent/tools/tool_manifest.go FilterToolsByNames
 internal/agent/tools/tool_retry.go NewRetryingExecutor
@@ -160,6 +161,7 @@ internal/agent/runtime/audit_schema.go HashArgs
 internal/agent/runtime/model_router.go EstimateContextTokens
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).withMaxDelegationDepth
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithExternalTools
+internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithReadOnlyWorkspace
 internal/api/httpx/trust.go FromTrustedOrigin
 internal/capabilities/registry.go (*Registry).GetTools
 internal/config/split.go setSplitDefaults

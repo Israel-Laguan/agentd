@@ -83,6 +83,8 @@ When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.
 Never retry a command that the sandbox blocked for sudo or elevated privileges. Try at most one safe non-privileged alternative, then report that no alternative exists if it cannot complete the task.
+The project workspace is the current directory: use relative paths (for example lscpu > cpu.txt), never /workspace or any other absolute path. Commands run inside the workspace and may not touch paths outside it (except /dev/null), so never read /etc, /proc or /sys files.
+For host facts (OS, kernel, CPU, memory, disks) run commands that need no paths: uname -a, hostnamectl, lsb_release -a, lscpu, free -h, lsblk, df -h. A report may state only values printed by commands you ran: save each command's output to a file (for example uname -a > os.txt) so a later step can build report.md from it; never type the facts yourself.
 
 ` + agenthooks.ExternalContentInstruction
 	if len(goal) == 0 || goal[0] == nil || len(goal[0].SuccessCriteria) == 0 {

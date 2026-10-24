@@ -31,17 +31,21 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEn
 		taskID = "tool" // an executor that runs for no task
 	}
 	payload := sandbox.Payload{
-		TaskID:        taskID,
-		ProjectID:     t.projectID,
-		WorkspacePath: t.workspacePath,
-		Command:       args.Command,
-		EnvVars:       t.BuildEnv(extraEnv...),
-		WallTimeout:   t.wallTimeout,
+		TaskID:            taskID,
+		ProjectID:         t.projectID,
+		WorkspacePath:     t.workspacePath,
+		Command:           args.Command,
+		EnvVars:           t.BuildEnv(extraEnv...),
+		WallTimeout:       t.wallTimeout,
+		ReadOnlyWorkspace: t.readOnlyWorkspace,
 	}
 
 	result, err := t.sandbox.Execute(ctx, payload)
 	if errors.Is(err, models.ErrSandboxUnavailable) {
 		return SandboxUnavailableJSON(err)
+	}
+	if errors.Is(err, models.ErrExecutionTimeout) {
+		return SandboxTimeoutJSON(result, err)
 	}
 	if err != nil {
 		return JSONErrorf("execution failed: %v", err)
@@ -121,6 +125,11 @@ type writeArgs struct {
 }
 
 func (t *ToolExecutor) executeWrite(ctx context.Context, argsJSON string) string {
+	// The write tool runs in the daemon, outside the jail, so a read-only
+	// workspace is held here as well as by the jail.
+	if t.readOnlyWorkspace {
+		return JSONErrorf("workspace is read-only: write is not allowed")
+	}
 	if err := ctx.Err(); err != nil {
 		return JSONErrorf("write cancelled: %v", err)
 	}

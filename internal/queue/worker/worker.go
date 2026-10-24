@@ -31,6 +31,9 @@ import (
 const DefaultMaxRetries = 3
 
 type Worker struct {
+	// attempts keeps, per task, the first failing shell command of its agentic
+	// attempts (see worker_agentic_attempts.go).
+	attempts                attemptRecords
 	store                   models.KanbanStore
 	gateway                 gateway.AIGateway
 	sandbox                 sandbox.Executor
@@ -268,5 +271,13 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		TopicGuard: w.topicGuard, ModelRouter: w.modelRouter,
 		Capabilities: w.capabilities,
 	}, w)
-	return engine.Process(ctx, task, project, profile)
+	w.attempts.begin(task.ID)
+	audit := w.beginLegacyTaskAudit(task, project, profile.Provider)
+	result, ok := engine.Process(ctx, task, project, profile)
+	succeeded := ok && result.IsTerminalSuccess()
+	audit.failed = !succeeded
+	audit.reviewHandoff = succeeded && profile.RequireReview
+	w.finishLegacyTaskAudit(task, project, profile.Provider, audit)
+	w.attempts.finish(task.ID, succeeded)
+	return result, ok
 }
