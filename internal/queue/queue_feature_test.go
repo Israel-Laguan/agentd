@@ -29,14 +29,12 @@ func TestQueueFeatures(t *testing.T) {
 
 func initializeQueueScenario(sc *godog.ScenarioContext) {
 	state := &queueScenario{}
-	promptState := newPromptPermScenario()
 	resilienceState := newResilienceScenario()
 	healingState := newHealingScenario()
 	heartbeatState := newHeartbeatScenario()
 	safetyState := newDaemonSafetyScenario()
 	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 		state.reset()
-		*promptState = *newPromptPermScenario()
 		*resilienceState = *newResilienceScenario()
 		*healingState = *newHealingScenario()
 		*heartbeatState = *newHeartbeatScenario()
@@ -44,7 +42,6 @@ func initializeQueueScenario(sc *godog.ScenarioContext) {
 		return ctx, nil
 	})
 	registerQueueSteps(sc, state)
-	registerPromptPermSteps(sc, promptState)
 	registerResilienceSteps(sc, resilienceState)
 	registerHealingSteps(sc, healingState)
 	registerHeartbeatSteps(sc, heartbeatState)

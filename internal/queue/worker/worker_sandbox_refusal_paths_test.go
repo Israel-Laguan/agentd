@@ -55,25 +55,6 @@ func assertRefusedTerminal(t *testing.T, w *Worker, sink *mockEventSink, taskID 
 	}
 }
 
-// Permission recovery: `sudo` is blocked at admission, so the worker asks for a
-// non-privileged alternative and runs it. The alternative hits the refusing jail.
-func TestPermissionRecoveryFailsTerminalWhenSandboxRefuses(t *testing.T) {
-	t.Parallel()
-	blocked := sandbox.Result{ExitCode: -1, Stderr: "sudo command blocked"}
-	sb := &scriptedSandbox{steps: []scriptedStep{
-		{result: blocked, err: fmt.Errorf("%w: sudo is not allowed", models.ErrSandboxViolation)},
-		{result: sandbox.Result{ExitCode: -1}, err: refusedWithoutJail()},
-	}}
-	ctx, w, sink, task, project := newCommandEventWorker(t, sb)
-	running, err := w.store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, 1)
-	if err != nil {
-		t.Fatalf("MarkTaskRunning: %v", err)
-	}
-	// routingTestGateway answers the alternative request with {"command":"echo ok"}.
-	w.executeLegacyCommand(ctx, *running, project, models.AgentProfile{}, "sudo lscpu", &legacyTaskAudit{})
-	assertRefusedTerminal(t, w, sink, task.ID)
-}
-
 // Prompt recovery: a prompt hang on `apt-get install` is retried once with -y.
 // The retry hits the refusing jail, so it must not become a prompt handoff.
 func TestPromptRecoveryFailsTerminalWhenSandboxRefuses(t *testing.T) {

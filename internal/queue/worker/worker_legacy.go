@@ -8,14 +8,7 @@ import (
 	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/queue/planning"
 )
-
-type workerResponse struct {
-	Command    string                  `json:"command,omitempty"`
-	TooComplex bool                    `json:"too_complex,omitempty"`
-	Subtasks   []planning.SplitSubtask `json:"subtasks,omitempty"`
-}
 
 // legacyJSONCommandSystemSentinel matches the non-agentic JSON-command worker system prompt.
 // It is also used as a probe in tests to detect that the default prompt is in use.
@@ -68,51 +61,8 @@ func (w *Worker) routeLegacyProfile(ctx context.Context, task models.Task, proje
 	return w.ApplyModelRouting(task, profile, messages, nil)
 }
 
-func (w *Worker) command(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (workerResponse, int, gateway.UsageDetails, error) {
-	messages := w.seedMessages(ctx, task, project, profile)
-	messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
-	messages = w.PrependSandboxViolationFeedback(ctx, task, messages)
-	req := gateway.AIRequest{
-		Purpose:     gateway.PurposeExecLegacyCommand,
-		Messages:    messages,
-		Temperature: profile.Temperature,
-		JSONMode:    true,
-		AgentID:     task.AgentID,
-		Role:        gateway.RoleWorker,
-		TaskID:      task.ID,
-		Provider:    profile.Provider,
-		Model:       profile.Model,
-		MaxTokens:   profile.MaxTokens,
-	}
-	// Legacy JSON command mode does not execute tool calls; do not advertise tools here.
-	req = w.ApplyTuning(req, task, profile, 0)
-	resp, tokenUsage, details, err := gateway.GenerateJSONWithUsage[workerResponse](ctx, w.gateway, req)
-	if err != nil {
-		return workerResponse{}, tokenUsage, details, err
-	}
-	w.RecordProviderSuccess(ctx, task)
-	return resp, tokenUsage, details, nil
-}
-
 const legacyPreflightUserNote = `LEGACY MODE CONSTRAINT: respond with exactly one JSON object containing a single shell command.
 Use redirects and pipes to write files (e.g. find, du, tee). Do not embed large file contents in the command string.`
-
-func (w *Worker) legacyDispatchRejectReason(task models.Task, _ models.AgentProfile) string {
-	score := (agentruntime.ComplexityScorer{}).ScoreTask(task)
-	if w.legacyRejectScore > 0 && score >= w.legacyRejectScore {
-		return fmt.Sprintf(
-			"Task complexity score %d exceeds legacy reject threshold %d; agentic mode is required.",
-			score, w.legacyRejectScore,
-		)
-	}
-	if w.legacyMaxDescriptionLen > 0 && len(task.Description) > w.legacyMaxDescriptionLen {
-		return fmt.Sprintf(
-			"Task description length %d exceeds legacy limit %d; agentic mode is required.",
-			len(task.Description), w.legacyMaxDescriptionLen,
-		)
-	}
-	return ""
-}
 
 func (w *Worker) legacySeedMessages(task models.Task, _ models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	messages := workerMessages(task, profile)

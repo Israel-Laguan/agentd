@@ -206,8 +206,6 @@ func newWorkerCore(
 		splitMaxDepth:           opts.Split.MaxDepth,
 		splitMaxSubtasks:        opts.Split.MaxSubtasks,
 		legacyPreflightScore:    opts.Legacy.PreflightScore,
-		legacyRejectScore:       opts.Legacy.RejectScore,
-		legacyMaxDescriptionLen: opts.Legacy.MaxDescriptionLen,
 	}
 }
 

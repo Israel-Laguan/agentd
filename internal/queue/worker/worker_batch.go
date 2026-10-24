@@ -131,16 +131,12 @@ func (w *Worker) processRunningTask(
 		w.handlePhasePlanning(ctx, task, project)
 		return
 	}
-	if profile.AgenticMode {
-		if w.tryRenderHostReport(ctx, task, project) {
-			return
-		}
-		if result, ok := w.processAgentic(ctx, task, project, profile); ok {
-			w.handleLoopResult(ctx, task, result)
-		}
+	if w.tryRenderHostReport(ctx, task, project) {
 		return
 	}
-	w.RunLegacyTask(ctx, task, project, profile, false)
+	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
+		w.handleLoopResult(ctx, task, result)
+	}
 }
 
 type batchTextSlot struct {

@@ -168,34 +168,6 @@ func findReviewSubtask(t *testing.T, store models.KanbanStore, ctx context.Conte
 	return models.Task{}
 }
 
-func TestProcess_LegacyRequireReview_InjectsRejectionFeedback(t *testing.T) {
-	t.Parallel()
-	store := testutil.NewFakeStore()
-	ctx := context.Background()
-	setupReviewProfile(t, store, ctx, "ollama", false)
-	gw := &routingTestGateway{}
-	sb := &routingTestSandbox{}
-	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})
-	task := materializeLegacyReviewTask(t, store, ctx, "legacy-review-reject", "task-review-reject")
-	const rejectionComment = "Please add error handling"
-	w.createReviewHandoff(ctx, task, "first draft output")
-	failReviewWithComment(t, store, ctx, task.ID, rejectionComment)
-	queued := requeueParentTask(t, store, ctx, task.ID)
-	w.Process(ctx, queued)
-	if len(gw.requests) != 1 {
-		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
-	}
-	for _, msg := range gw.requests[0].Messages {
-		if strings.Contains(msg.Content, rejectionComment) {
-			if sb.execCount != 1 {
-				t.Fatalf("sandbox executions = %d, want 1", sb.execCount)
-			}
-			return
-		}
-	}
-	t.Fatalf("gateway messages missing rejection feedback %q", rejectionComment)
-}
-
 // bumpOnCommentStore bumps the parent task's UpdatedAt on AddComment to simulate
 // store side effects between markReviewUsed and commit.
 type bumpOnCommentStore struct {
