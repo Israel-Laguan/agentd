@@ -68,7 +68,7 @@ func (e *Engine) processAgenticIteration(
 	)
 	if len(resp.ToolCalls) == 0 {
 		return e.finishAgenticTurnNoTools(
-			ctx, task, profile, resp.Content, workPlan, goalTracker,
+			ctx, task, project, profile, resp.Content, workPlan, goalTracker,
 			turnID, turnIndex, budgetGuard, ctxBudgetGuard, cm, messages, respecAttempts,
 			checkpointer, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject,
 		)

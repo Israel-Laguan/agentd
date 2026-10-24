@@ -303,6 +303,7 @@ func TestFinishAgenticTurnNoTools_RespecFailurePreservesMessages(t *testing.T) {
 	cont, _, report, _, err := e.finishAgenticTurnNoTools(
 		context.Background(),
 		task,
+		models.Project{},
 		models.AgentProfile{},
 		"<!-- step:only -->\n<!-- /step:only -->\n",
 		plan,

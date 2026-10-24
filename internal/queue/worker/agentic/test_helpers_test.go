@@ -47,6 +47,8 @@ func (h *noopHost) DispatchToolWithHooks(
 	return agenttools.SuccessResult(call.ID, "noop", 0), false
 }
 
+func (h *noopHost) VerifyPostConditions(models.Task, models.Project) error { return nil }
+
 func (h *noopHost) AgenticPromptHang(gateway.ToolCall, agenttools.ToolResult) (PromptHang, bool) {
 	return PromptHang{}, false
 }

@@ -5,6 +5,7 @@ import (
 	agentruntime "agentd/internal/agent/runtime"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
+	"agentd/internal/models"
 )
 
 // noteBashOutcome records whether the latest shell command passed. A failed
@@ -19,6 +20,19 @@ func (e *Engine) noteBashOutcome(call gateway.ToolCall, tr agenttools.ToolResult
 	case agenttools.ToolStatusSuccess:
 		e.lastBashFailure = ""
 	}
+}
+
+// unmetCriteriaFinish stops a text-only finish while a success-criteria file the
+// task names is missing, empty or no longer parses (B-039). The work is not
+// verified, so it is not COMPLETED: it goes to a human like an unverified finish.
+func (e *Engine) unmetCriteriaFinish(task models.Task, project models.Project, turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
+	err := e.host.VerifyPostConditions(task, project)
+	if err == nil {
+		return nil
+	}
+	meta := agentruntime.BuildLoopMeta(turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(messages), 0, err.Error(), "", "")
+	meta.ErrorCode = agenttools.ToolErrorCodeUnverified
+	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
 }
 
 // unverifiedFinish stops a text-only finish that follows a failed shell command:

@@ -122,6 +122,9 @@ type Host interface {
 		budget *agentruntime.BudgetGuard,
 	) (string, error)
 	RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error
+	// VerifyPostConditions checks the success-criteria files a task names
+	// before a text-only finish is committed (B-039).
+	VerifyPostConditions(task models.Task, project models.Project) error
 	TryExternalCapabilityRoute(
 		ctx context.Context,
 		task models.Task,
