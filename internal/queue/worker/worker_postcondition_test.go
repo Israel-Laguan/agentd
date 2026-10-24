@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
@@ -61,6 +62,30 @@ func runPostconditionCommand(t *testing.T, store *testutil.FakeKanbanStore, sb s
 	return sink, *after
 }
 
+// runPostconditionAgentic runs one agentic turn that edits main.go with sed,
+// then answers with text. The post-condition gate runs before that answer
+// commits, so a criterion file that no longer parses keeps the task from
+// completing.
+func runPostconditionAgentic(t *testing.T, store *testutil.FakeKanbanStore, sb sandbox.Executor, task models.Task) (*mockEventSink, models.Task) {
+	t.Helper()
+	ctx := context.Background()
+	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{ID: task.AgentID, Provider: "openai", Model: "gpt-4", AgenticMode: true}); err != nil {
+		t.Fatalf("upsert profile: %v", err)
+	}
+	sink := &mockEventSink{}
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		{ToolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "sed -i 's/x/y/' main.go")}},
+		{Content: "done"},
+	}}
+	w := NewWorker(store, gw, sb, nil, sink, WorkerOptions{})
+	w.Process(ctx, task)
+	after, err := store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	return sink, *after
+}
+
 // B-039: the S2 sed corrupted main.go, exited 0, and the task COMPLETED.
 // Exit 0 must not complete a task whose success-criteria files no longer parse.
 func TestExecuteLegacyCommand_BrokenWorkspaceDoesNotComplete(t *testing.T) {
@@ -82,8 +107,8 @@ func TestExecuteLegacyCommand_BrokenWorkspaceDoesNotComplete(t *testing.T) {
 func TestExecuteLegacyCommand_HealthyWorkspaceCompletes(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
-	task, project := seedWorkspaceWithMain(t, store, ctx, []string{"main.go parses"})
-	sink, after := runPostconditionCommand(t, store, fixedResultSandbox{result: sandbox.Result{Success: true, Stdout: "ok"}}, task, project)
+	task, _ := seedWorkspaceWithMain(t, store, ctx, []string{"main.go parses"})
+	sink, after := runPostconditionAgentic(t, store, fixedResultSandbox{result: sandbox.Result{Success: true, Stdout: "ok"}}, task)
 
 	if after.State != models.TaskStateCompleted {
 		t.Fatalf("task state = %s, want COMPLETED for the happy path", after.State)
@@ -95,8 +120,8 @@ func TestExecuteLegacyCommand_HealthyWorkspaceCompletes(t *testing.T) {
 func TestExecuteLegacyCommand_MissingCriterionFileFails(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
-	task, project := seedWorkspaceWithMain(t, store, ctx, []string{"missing.go exists and parses"})
-	_, after := runPostconditionCommand(t, store, fixedResultSandbox{result: sandbox.Result{Success: true, Stdout: "ok"}}, task, project)
+	task, _ := seedWorkspaceWithMain(t, store, ctx, []string{"missing.go exists and parses"})
+	_, after := runPostconditionAgentic(t, store, fixedResultSandbox{result: sandbox.Result{Success: true, Stdout: "ok"}}, task)
 
 	if after.State == models.TaskStateCompleted {
 		t.Fatal("task COMPLETED with a missing criterion file; want failure handling")
@@ -107,9 +132,9 @@ func TestExecuteLegacyCommand_MissingCriterionFileFails(t *testing.T) {
 func TestExecuteLegacyCommand_NoCriteriaKeepsExitZeroBehavior(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
-	task, project := seedWorkspaceWithMain(t, store, ctx, nil)
+	task, _ := seedWorkspaceWithMain(t, store, ctx, nil)
 	broken := "package main\n\nfunc main() {\n"
-	_, after := runPostconditionCommand(t, store, breakingSandbox{breakWith: broken}, task, project)
+	_, after := runPostconditionAgentic(t, store, breakingSandbox{breakWith: broken}, task)
 
 	if after.State != models.TaskStateCompleted {
 		t.Fatalf("task state = %s, want COMPLETED when no criteria constrain it", after.State)
