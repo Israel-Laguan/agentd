@@ -1,6 +1,8 @@
 package agentic
 
 import (
+	"context"
+
 	agentcontext "agentd/internal/agent/context"
 	agentruntime "agentd/internal/agent/runtime"
 	agenttools "agentd/internal/agent/tools"
@@ -38,7 +40,19 @@ func (e *Engine) noteBashOutcome(call gateway.ToolCall, tr agenttools.ToolResult
 // task names is missing, empty or no longer parses (B-039). The work is not
 // verified, so it is not COMPLETED: it goes to a human like an unverified finish.
 func (e *Engine) unmetCriteriaFinish(task models.Task, project models.Project, turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
-	err := e.host.VerifyPostConditions(task, project)
+	return unverifiedStop(e.host.VerifyPostConditions(task, project), turnIndex, budgetGuard, messages)
+}
+
+// openBreakdownFinish stops a text-only finish of a parent whose breakdown
+// subtasks are not all completed. The parent completes once they do, so the
+// model cannot complete it early (T-055b gap 2).
+func (e *Engine) openBreakdownFinish(ctx context.Context, task models.Task, turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
+	return unverifiedStop(e.host.VerifyBreakdownComplete(ctx, task), turnIndex, budgetGuard, messages)
+}
+
+// unverifiedStop is the loop result for a finish that cannot be committed
+// because the work is not verified. It returns nil when err is nil.
+func unverifiedStop(err error, turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
 	if err == nil {
 		return nil
 	}

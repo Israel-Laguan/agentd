@@ -134,6 +134,10 @@ type Host interface {
 	// VerifyPostConditions checks the success-criteria files a task names
 	// before a text-only finish is committed (B-039).
 	VerifyPostConditions(task models.Task, project models.Project) error
+	// VerifyBreakdownComplete returns an error while the task's breakdown
+	// subtasks are not all completed, so a text-only finish cannot complete the
+	// parent early (T-055b gap 2).
+	VerifyBreakdownComplete(ctx context.Context, task models.Task) error
 	TryExternalCapabilityRoute(
 		ctx context.Context,
 		task models.Task,

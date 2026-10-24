@@ -195,6 +195,9 @@ func (e *Engine) finishAgenticTurnNoTools(
 	if stop := e.unmetCriteriaFinish(task, project, turnIndex, budgetGuard, *messages); stop != nil {
 		return false, *stop, true, rewindNone, nil
 	}
+	if stop := e.openBreakdownFinish(ctx, task, turnIndex, budgetGuard, *messages); stop != nil {
+		return false, *stop, true, rewindNone, nil
+	}
 	e.host.CommitTextWithProfile(ctx, task, content, &profile)
 	r := agentruntime.LoopResult{
 		Status: agentruntime.LoopSuccessfulCompletion,

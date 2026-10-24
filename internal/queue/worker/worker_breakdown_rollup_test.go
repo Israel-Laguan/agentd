@@ -92,42 +92,6 @@ func newBreakdownRollupFixture(t *testing.T) (*testutil.FakeKanbanStore, *titleB
 	return store, gw, w, tasks[0]
 }
 
-// legacyTitleBreakdownGateway decomposes any task whose prompt carries
-// breakdownMarkerTitle and returns a shell command otherwise, like a model that always splits
-// plan-marked tasks.
-type legacyTitleBreakdownGateway struct {
-	routingTestGateway
-}
-
-func (g *legacyTitleBreakdownGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
-	g.requests = append(g.requests, req)
-	for _, m := range req.Messages {
-		if m.Role == "user" && strings.Contains(m.Content, breakdownMarkerTitle) {
-			return gateway.AIResponse{Content: `{"too_complex":true,"subtasks":[` +
-				`{"title":"Step 1","description":"scaffold"},{"title":"Step 2","description":"implement"}]}`}, nil
-		}
-	}
-	return gateway.AIResponse{Content: `{"command":"echo ok"}`}, nil
-}
-
-func newLegacyBreakdownRollupFixture(t *testing.T) (*testutil.FakeKanbanStore, *legacyTitleBreakdownGateway, *Worker, models.Task) {
-	t.Helper()
-	store := testutil.NewFakeStore()
-	if err := store.UpsertAgentProfile(context.Background(), models.AgentProfile{ID: "default", Provider: "ollama", Model: "llama3"}); err != nil {
-		t.Fatalf("UpsertAgentProfile: %v", err)
-	}
-	_, tasks, err := store.MaterializePlan(context.Background(), models.DraftPlan{
-		ProjectName: "breakdown-rollup",
-		Tasks:       []models.DraftTask{{Title: breakdownMarkerTitle + ": Produce a status report", Description: testutil.AgenticTestTaskDescription(), AgentID: "default"}},
-	})
-	if err != nil {
-		t.Fatalf("MaterializePlan: %v", err)
-	}
-	gw := &legacyTitleBreakdownGateway{}
-	w := NewWorker(store, gw, &routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{MaxToolIterations: 5})
-	return store, gw, w, tasks[0]
-}
-
 func mustGetTask(t *testing.T, store *testutil.FakeKanbanStore, id string) models.Task {
 	t.Helper()
 	task, err := store.GetTask(context.Background(), id)
@@ -227,11 +191,12 @@ func TestBreakdownRollup_BatchPathCompletesResumedParent(t *testing.T) {
 }
 
 // A parent resumed before its breakdown subtasks completed (e.g. a manual
-// retry) is not rolled up; it runs normally.
-func TestBreakdownRollup_IncompleteSubtasksFallThrough(t *testing.T) {
+// retry) is not rolled up and runs normally. On the agentic path its model
+// reply cannot complete it while a subtask is still open (T-055b gap 2).
+func TestBreakdownRollup_IncompleteSubtasksBlockAgenticCompletion(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newLegacyBreakdownRollupFixture(t)
+	store, gw, w, parent := newBreakdownRollupFixture(t)
 
 	w.Process(ctx, parent)
 	blocked := mustGetTask(t, store, parent.ID)
@@ -247,7 +212,7 @@ func TestBreakdownRollup_IncompleteSubtasksFallThrough(t *testing.T) {
 		t.Fatalf("gateway requests on retry = %d, want 1", got)
 	}
 	if got := mustGetTask(t, store, parent.ID).State; got == models.TaskStateCompleted {
-		t.Fatal("parent rolled up to COMPLETED while subtasks were still open")
+		t.Fatal("model completed the parent while its subtasks were still open")
 	}
 }
 
@@ -272,11 +237,12 @@ func TestLatestBreakdownSubtaskCount_UsesNewestWorkerMarker(t *testing.T) {
 
 // A caller-supplied comment that claims fewer children than the parent
 // actually has must not roll the parent up: the recorded child set is the
-// relations table, and a subset claim would strand the other subtasks.
-func TestBreakdownRollup_ForgedSubsetMarkerIsRejected(t *testing.T) {
+// relations table, and a subset claim would strand the other subtasks. On the
+// agentic path the model's completion is refused for the same reason.
+func TestBreakdownRollup_ForgedSubsetMarkerBlocksAgenticCompletion(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store, gw, w, parent := newLegacyBreakdownRollupFixture(t)
+	store, gw, w, parent := newBreakdownRollupFixture(t)
 
 	w.Process(ctx, parent)
 	children := mustListChildren(t, store, parent.ID)

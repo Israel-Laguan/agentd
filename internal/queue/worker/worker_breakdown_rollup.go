@@ -105,6 +105,29 @@ func breakdownChildrenCompleted(children []models.Task, count int) bool {
 	return true
 }
 
+// VerifyBreakdownComplete returns an error while the task's breakdown subtasks
+// are not all completed. The agentic engine calls it before a text-only finish
+// is committed as COMPLETED (T-055b gap 2). A failed read also refuses the
+// finish, so an unreadable breakdown never completes the parent.
+func (w *Worker) VerifyBreakdownComplete(ctx context.Context, task models.Task) error {
+	comments, err := w.store.ListComments(ctx, task.ID)
+	if err != nil {
+		return fmt.Errorf("breakdown check: list comments: %w", err)
+	}
+	count, marked := latestBreakdownSubtaskCount(comments)
+	if !marked {
+		return nil
+	}
+	children, err := w.store.ListChildTasks(ctx, task.ID)
+	if err != nil {
+		return fmt.Errorf("breakdown check: list children: %w", err)
+	}
+	if breakdownChildrenCompleted(children, count) {
+		return nil
+	}
+	return fmt.Errorf("unverified: %d breakdown subtasks are not all completed", count)
+}
+
 // tryRollUpBreakdown completes a resumed parent whose breakdown subtasks have
 // all completed, instead of asking the model to redo the decomposed work. It
 // reports whether the task was handled; a non-nil error means the roll-up
