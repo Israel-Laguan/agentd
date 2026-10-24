@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
@@ -76,18 +75,6 @@ func (w *Worker) validateProjectWorkspace(project models.Project) error {
 		return fmt.Errorf("%w: refusing to execute at workspace root for project %s", models.ErrSandboxViolation, project.ID)
 	}
 	return nil
-}
-
-func (w *Worker) payload(task models.Task, project models.Project, command string) sandbox.Payload {
-	return sandbox.Payload{
-		TaskID:        task.ID,
-		ProjectID:     task.ProjectID,
-		WorkspacePath: project.WorkspacePath,
-		Intent:        task.Title + "\n" + task.Description,
-		Command:       command,
-		EnvVars:       agenttools.BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
-		WallTimeout:   w.sandboxWallTimeout,
-	}
 }
 
 func (w *Worker) recoverPanic(ctx context.Context, task models.Task) {

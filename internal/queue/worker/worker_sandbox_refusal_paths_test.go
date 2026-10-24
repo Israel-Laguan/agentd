@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
 )
 
 func refusedWithoutJail() error {
@@ -39,21 +38,6 @@ func assertRefusedTerminal(t *testing.T, w *Worker, sink *mockEventSink, taskID 
 	if len(comments) != 1 || !strings.Contains(comments[0].Body, "not be retried") {
 		t.Fatalf("comments = %#v, want one terminal failure comment", comments)
 	}
-}
-
-// Prompt recovery: a prompt hang on `apt-get install` is retried once with -y.
-// The retry hits the refusing jail, so it must not become a prompt handoff.
-func TestPromptRecoveryFailsTerminalWhenSandboxRefuses(t *testing.T) {
-	t.Parallel()
-	sb := &scriptedSandbox{steps: []scriptedStep{{result: sandbox.Result{ExitCode: -1}, err: refusedWithoutJail()}}}
-	ctx, w, sink, task, project := newCommandEventWorker(t, sb)
-	running, err := w.store.MarkTaskRunning(ctx, task.ID, task.UpdatedAt, 1)
-	if err != nil {
-		t.Fatalf("MarkTaskRunning: %v", err)
-	}
-	hung := sandbox.Result{TimedOut: true, Stdout: "Do you want to continue? [Y/n]"}
-	w.handlePromptRecovery(ctx, *running, project, "apt-get install foo", hung)
-	assertRefusedTerminal(t, w, sink, task.ID)
 }
 
 func eventCount(sink *mockEventSink, typ string) int {

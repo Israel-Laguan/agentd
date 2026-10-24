@@ -113,63 +113,6 @@ func valueOrEmptyUsage(details *gateway.UsageDetails) gateway.UsageDetails {
 	return *details
 }
 
-func (w *Worker) recoverLegacyPrivilege(
-	ctx context.Context,
-	task models.Task,
-	project models.Project,
-	profile models.AgentProfile,
-	command string,
-	audit *legacyTaskAudit,
-) {
-	alternative, tokens, details, err := w.requestPermissionAlternative(ctx, task, profile, command)
-	w.RecordTaskTokenUsage(ctx, task, tokens, details)
-	if err != nil {
-		w.handlePermissionFailure(ctx, task, command, "Alternative request failed: "+w.safePermissionText(err.Error(), 300))
-		return
-	}
-	if alternative.NoAlternative {
-		outcome := "No non-privileged alternative was available."
-		if alternative.Reason != "" {
-			outcome += " Reason: " + w.safePermissionText(alternative.Reason, 300)
-		}
-		w.handlePermissionFailure(ctx, task, command, outcome)
-		return
-	}
-	if containsSudoToken(alternative.Command) {
-		w.handlePermissionFailure(ctx, task, command, "Rejected alternative because it attempted privileged execution: "+w.safePermissionText(alternative.Command, 300))
-		return
-	}
-
-	result, runErr := w.executeRecorded(ctx, task, project, alternative.Command)
-	audit.exitCode = result.ExitCode
-	if errors.Is(runErr, models.ErrSandboxUnavailable) {
-		// An unusable explicit jail is terminal, not a human handoff (B-049).
-		audit.failed = true
-		w.commit(ctx, task, result, runErr)
-		return
-	}
-	if runErr == nil && result.Success {
-		audit.command = alternative.Command
-		audit.failed = false
-		slog.Info("permission recovery: non-privileged alternative succeeded", "task_id", task.ID, "project_id", task.ProjectID)
-		if profile.RequireReview {
-			w.createReviewHandoff(ctx, task, result.Stdout)
-			return
-		}
-		w.commit(ctx, task, result, nil)
-		return
-	}
-	audit.failed = true
-	slog.Warn("permission recovery: non-privileged alternative failed", "task_id", task.ID, "project_id", task.ProjectID, "exit_code", result.ExitCode)
-	outcome := "Non-privileged alternative failed"
-	if result.Stderr != "" {
-		outcome += ": " + w.safePermissionText(result.Stderr, 300)
-	} else if runErr != nil {
-		outcome += ": " + w.safePermissionText(runErr.Error(), 300)
-	}
-	w.handlePermissionFailure(ctx, task, command, outcome)
-}
-
 func (w *Worker) RecoverAgenticPrivilege(
 	ctx context.Context,
 	task models.Task,

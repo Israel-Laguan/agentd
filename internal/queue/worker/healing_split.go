@@ -30,7 +30,7 @@ func (w *Worker) handleHealingSplit(ctx context.Context, task models.Task, proje
 		}, "split stage returned no subtasks")
 		return
 	}
-	w.applyBreakdown(ctx, task, result.Subtasks, true)
+	w.applyBreakdown(ctx, task, result.Subtasks)
 }
 
 // splitTask is the split stage's one model call. Its context and contract come

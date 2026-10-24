@@ -112,7 +112,4 @@ func TestHandleHealingSplit_SubtaskCap_EmitsHealingHandoff(t *testing.T) {
 	if !containsEvent(kinds, "HEALING_HANDOFF") {
 		t.Fatalf("expected HEALING_HANDOFF event; got %v", kinds)
 	}
-	if containsEvent(kinds, "LEGACY_MODE_HANDOFF") {
-		t.Fatalf("unexpected LEGACY_MODE_HANDOFF event; got %v", kinds)
-	}
 }

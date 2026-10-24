@@ -10,9 +10,7 @@ import (
 
 	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/models"
-	"agentd/internal/queue/recovery"
 	"agentd/internal/queue/safety"
-	"agentd/internal/sandbox"
 )
 
 // HITLMessage is the structured envelope for all human-in-the-loop
@@ -97,45 +95,6 @@ func (w *Worker) recordLegacyHandoffExpiry(ctx context.Context, task models.Task
 	return true
 }
 
-func (w *Worker) handlePromptRecovery(
-	ctx context.Context,
-	task models.Task,
-	project models.Project,
-	command string,
-	result sandbox.Result,
-) {
-	detection := safety.DetectPrompt(result.Stdout, result.Stderr)
-	payload := detectionPayload(detection.Pattern, command, result)
-	w.Emit(ctx, task, "PROMPT_DETECTED", truncate(payload, 1000))
-
-	recoverable, recoveredCommand := recovery.CanRecover(command)
-	if recoverable && task.RetryCount == 0 {
-		retried, err := w.store.IncrementRetryCount(ctx, task.ID, task.UpdatedAt)
-		if err != nil {
-			w.Emit(ctx, task, "ERROR", err.Error())
-			return
-		}
-		recoveredResult, runErr := w.executeRecorded(ctx, *retried, project, recoveredCommand)
-		if runErr == nil && recoveredResult.Success {
-			w.commit(ctx, *retried, recoveredResult, nil)
-			return
-		}
-		if errors.Is(runErr, models.ErrSandboxUnavailable) {
-			// An unusable explicit jail is terminal, not a human handoff (B-049).
-			w.commit(ctx, *retried, recoveredResult, runErr)
-			return
-		}
-		payload = detectionPayload(detection.Pattern, recoveredCommand, recoveredResult)
-		if runErr != nil {
-			payload += "\nRecovery error: " + runErr.Error()
-		}
-		w.createPromptHandoff(ctx, *retried, payload)
-		return
-	}
-
-	w.createPromptHandoff(ctx, task, payload)
-}
-
 func (w *Worker) createPromptHandoff(ctx context.Context, task models.Task, payload string) {
 	_, _, err := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
 		Title:       models.HITLSubtaskTitleManualAction + " command waiting for input",
@@ -193,40 +152,6 @@ func formatCriteria(criteria []string) string {
 		fmt.Fprintf(&b, "- %s\n", c)
 	}
 	return b.String()
-}
-
-// createLegacyModeHandoff blocks the task with a HUMAN subtask when the
-// legacy JSON-command worker cannot obtain a valid JSON response after all
-// internal retries are exhausted. This typically means the task requires
-// multi-step reasoning or produces too much output for a single shell
-// command argument, and the agent should be switched to agentic mode.
-func (w *Worker) createLegacyModeHandoff(ctx context.Context, task models.Task, cause string, err error) {
-	detail := cause
-	if err != nil {
-		detail += "\n\nLast error:\n" + truncate(err.Error(), 1500)
-	}
-	description := FormatForHuman(HITLMessage{
-		Summary: "Task cannot be completed in legacy (one-shot JSON) mode.",
-		Action: "Switch the agent to agentic mode:\n" +
-			"  PATCH /api/v1/agents/" + task.AgentID + "\n" +
-			`  {"agentic_mode":true,"provider":"openai"}  ` + "(or \"anthropic\")\n" +
-			"Then re-queue the task by setting its state to READY.",
-		Urgency: "blocking",
-		Detail:  detail,
-	})
-	_, _, blockErr := w.store.BlockTaskWithSubtasks(ctx, task.ID, task.UpdatedAt, []models.DraftTask{{
-		Title:       models.HITLSubtaskTitleManualAction + " switch to agentic mode",
-		Description: description,
-		Assignee:    models.TaskAssigneeHuman,
-	}})
-	if blockErr != nil {
-		w.Emit(ctx, task, "ERROR", blockErr.Error())
-		return
-	}
-	if !w.recordLegacyHandoffExpiry(ctx, task) {
-		return
-	}
-	w.Emit(ctx, task, "LEGACY_MODE_HANDOFF", truncate(description, 1000))
 }
 
 // createReviewHandoff blocks the task with a HUMAN subtask so a human

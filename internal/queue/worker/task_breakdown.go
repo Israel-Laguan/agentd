@@ -30,22 +30,18 @@ func (w *Worker) breakdownDepth(ctx context.Context, taskID string) (int, error)
 	return depth, fmt.Errorf("breakdown depth exceeded sanity cap %d", breakdownDepthSanityCap)
 }
 
-// rejectBreakdown hands a split that breaks a cap to a human: a healing split
-// gets a healing handoff, the legacy too_complex reply a legacy-mode handoff.
-func (w *Worker) rejectBreakdown(ctx context.Context, task models.Task, cause string, healingCap bool) {
-	if healingCap {
-		w.createHealingHandoff(ctx, task, planning.HealingAction{
-			Type:     planning.HealingActionHuman,
-			StepName: planning.HealingStepHumanHandoff,
-			Reason:   cause,
-		}, cause)
-		return
-	}
-	w.createLegacyModeHandoff(ctx, task, cause, nil)
+// rejectBreakdown hands a split that breaks a cap to a human with a healing
+// handoff.
+func (w *Worker) rejectBreakdown(ctx context.Context, task models.Task, cause string) {
+	w.createHealingHandoff(ctx, task, planning.HealingAction{
+		Type:     planning.HealingActionHuman,
+		StepName: planning.HealingStepHumanHandoff,
+		Reason:   cause,
+	}, cause)
 }
 
 // applyBreakdown turns subtasks into child tasks of task, within the split caps.
-func (w *Worker) applyBreakdown(ctx context.Context, task models.Task, subtasks []planning.SplitSubtask, healingCap bool) {
+func (w *Worker) applyBreakdown(ctx context.Context, task models.Task, subtasks []planning.SplitSubtask) {
 	if len(subtasks) == 0 {
 		w.handleAgentFailure(ctx, task, "worker reported task too complex without subtasks")
 		return
@@ -53,20 +49,20 @@ func (w *Worker) applyBreakdown(ctx context.Context, task models.Task, subtasks 
 	if w.splitMaxSubtasks > 0 && len(subtasks) > w.splitMaxSubtasks {
 		cause := fmt.Sprintf("Model returned %d subtasks but at most %d are allowed per split.",
 			len(subtasks), w.splitMaxSubtasks)
-		w.rejectBreakdown(ctx, task, cause, healingCap)
+		w.rejectBreakdown(ctx, task, cause)
 		return
 	}
 	if w.splitMaxDepth > 0 {
 		depth, err := w.breakdownDepth(ctx, task.ID)
 		if err != nil {
 			cause := fmt.Sprintf("Breakdown sanity check failed: %v", err)
-			w.rejectBreakdown(ctx, task, cause, healingCap)
+			w.rejectBreakdown(ctx, task, cause)
 			return
 		}
 		if depth >= w.splitMaxDepth {
 			cause := fmt.Sprintf("Breakdown depth %d reached limit %d; further decomposition is not supported.",
 				depth, w.splitMaxDepth)
-			w.rejectBreakdown(ctx, task, cause, healingCap)
+			w.rejectBreakdown(ctx, task, cause)
 			return
 		}
 	}
