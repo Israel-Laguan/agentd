@@ -182,9 +182,15 @@ baseline for deciding whether that is worth building.
 
 ## Known limits
 
-- **Empty task ID.** Topic guard, subagent, librarian, dream and truncator
-  summary calls have no `task_id` today, so they show up under their purpose with
-  an empty task and are missing from a per-task view.
+- **Empty task ID.** Two purposes have no task on purpose: the topic-drift check
+  (`overhead.topic_drift`) runs across a session, and dream merges
+  (`maint.merge_memories`) span many tasks. They show up under their purpose with
+  an empty task and are left out of a per-task view. Subagent turns, librarian
+  summaries and truncator summaries carry the task of the call they belong to.
+  Frontdesk planning works from a user's request before any task exists, so its
+  calls stay empty as well. Frontdesk intake runs against an existing task, but
+  its calls do not carry that task yet, so they are still missing from a per-task
+  view.
 - **Dropped records.** The writer holds 1,024 records and inserts in batches of
   100 or every 2 seconds. When the buffer is full, or a batch fails to insert,
   the records are dropped and counted. `dropped_records` is the count since the
