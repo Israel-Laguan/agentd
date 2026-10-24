@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 
-	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/models"
-	"agentd/internal/sandbox"
 )
 
 func (w *Worker) RunLegacyTask(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, profileAlreadyRouted bool) {
@@ -126,100 +124,4 @@ func (w *Worker) executeLegacyCommand(
 		}
 	}
 	w.commit(ctx, task, result, runErr)
-}
-
-// executeRecorded runs command in the sandbox and records it as a COMMAND
-// event unless the sandbox refused it. Every path that executes a task's
-// command goes through here so reported values trace back to what ran (B-037).
-// A command that reached a backend also gets one SANDBOX_BACKEND event beside
-// its COMMAND, so the record of which isolation ran it lives outside COMMAND's
-// payload.
-func (w *Worker) executeRecorded(ctx context.Context, task models.Task, project models.Project, command string) (sandbox.Result, error) {
-	result, err := w.sandbox.Execute(ctx, w.payload(task, project, command))
-	if !errors.Is(err, models.ErrSandboxViolation) && !errors.Is(err, models.ErrSandboxUnavailable) {
-		// Refused commands leave a SANDBOX_VIOLATION (or, with no usable jail, nothing); this one ran.
-		w.Emit(ctx, task, string(models.EventTypeCommand), w.executedCommandPayload(command))
-		if result.Backend != "" {
-			w.Emit(ctx, task, string(models.EventTypeSandboxBackend), result.Backend)
-		}
-	}
-	return result, err
-}
-
-// maxCommandEventRunes bounds how much of an executed command is stored in its COMMAND event.
-const maxCommandEventRunes = 1000
-
-func (w *Worker) executedCommandPayload(command string) string {
-	if w.sandboxScrubber != nil {
-		command = w.sandboxScrubber.Scrub(command)
-	}
-	if runes := []rune(command); len(runes) > maxCommandEventRunes {
-		return string(runes[:maxCommandEventRunes]) + "..."
-	}
-	return command
-}
-
-func (w *Worker) CommitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
-	if profile != nil && profile.RequireReview {
-		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
-			w.Emit(ctx, task, "ERROR", err.Error())
-			w.FailHard(ctx, task, err)
-			return
-		} else if done {
-			return
-		}
-		w.createReviewHandoff(ctx, task, content)
-		return
-	}
-	if w.interceptTieredNeedsContext(ctx, task, content) {
-		return
-	}
-	result := sandbox.Result{
-		Success: true,
-		Stdout:  content,
-	}
-	w.commit(ctx, task, result, nil)
-}
-
-type legacyTaskAudit struct {
-	command       string
-	exitCode      int
-	tokenUsage    int
-	failed        bool
-	reviewHandoff bool
-}
-
-func (w *Worker) beginLegacyTaskAudit(task models.Task, project models.Project, provider string) *legacyTaskAudit {
-	if w.auditLogger == nil || !w.auditLogger.Enabled() {
-		return &legacyTaskAudit{}
-	}
-	w.auditLogger.RecordTaskEvent(agentruntime.TaskAuditRecord{
-		RecordType: agentruntime.RecordTypeTaskStart,
-		TaskID:     task.ID,
-		ProjectID:  project.ID,
-		Provider:   provider,
-	})
-	return &legacyTaskAudit{}
-}
-
-func (w *Worker) finishLegacyTaskAudit(task models.Task, project models.Project, provider string, audit *legacyTaskAudit) {
-	if w.auditLogger == nil || !w.auditLogger.Enabled() {
-		return
-	}
-	recType := agentruntime.RecordTypeTaskComplete
-	switch {
-	case audit.failed:
-		recType = agentruntime.RecordTypeTaskFail
-	case audit.reviewHandoff:
-		recType = agentruntime.RecordTypeTaskReview
-	}
-	w.auditLogger.RecordTaskEvent(agentruntime.TaskAuditRecord{
-		RecordType: recType,
-		TaskID:     task.ID,
-		ProjectID:  project.ID,
-		Provider:   provider,
-		Command:    audit.command,
-		ExitCode:   audit.exitCode,
-		TokenUsage: audit.tokenUsage,
-	})
 }

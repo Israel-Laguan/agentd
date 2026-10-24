@@ -17,25 +17,6 @@ type workerResponse struct {
 	Subtasks   []planning.SplitSubtask `json:"subtasks,omitempty"`
 }
 
-// memoryFormatLessons renders non-preference memories as numbered lessons.
-// USER_PREFERENCE rows are skipped here and rendered by
-// memory.FormatPreferences instead, so a preference is never mangled into
-// "Symptom/Solution" prose.
-func memoryFormatLessons(memories []models.Memory) string {
-	if len(memories) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("LESSONS LEARNED (from previous tasks):\n")
-	for i, m := range memories {
-		if m.Scope == "USER_PREFERENCE" {
-			continue
-		}
-		fmt.Fprintf(&b, "%d. Symptom: %s\n   Solution: %s\n", i+1, m.Symptom.String, m.Solution.String)
-	}
-	return b.String()
-}
-
 // legacyJSONCommandSystemSentinel matches the non-agentic JSON-command worker system prompt.
 // It is also used as a probe in tests to detect that the default prompt is in use.
 const legacyJSONCommandSystemSentinel = "You are a non-agentic shell executor. Respond with exactly one JSON object"
@@ -111,32 +92,6 @@ func (w *Worker) command(ctx context.Context, task models.Task, project models.P
 	}
 	w.RecordProviderSuccess(ctx, task)
 	return resp, tokenUsage, details, nil
-}
-
-func tuningAttempt(task models.Task, sessionRecoveryGen int) int {
-	if sessionRecoveryGen > task.RetryCount {
-		return sessionRecoveryGen
-	}
-	return task.RetryCount
-}
-
-func (w *Worker) ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest {
-	attempt := tuningAttempt(task, sessionRecoveryGen)
-	if w.tuner == nil || attempt <= 0 {
-		return req
-	}
-	action := w.tuner.ForAttempt(attempt, profile)
-	if action.Type != planning.HealingActionTune {
-		return req
-	}
-	req = w.tuner.Apply(req, action)
-	if action.Overrides.Compress {
-		req.Messages = append(req.Messages, gateway.PromptMessage{
-			Role:    "user",
-			Content: "Previous attempts failed. Minimize assumptions, reduce variables, and return the smallest safe next command.",
-		})
-	}
-	return req
 }
 
 const legacyPreflightUserNote = `LEGACY MODE CONSTRAINT: respond with exactly one JSON object containing a single shell command.

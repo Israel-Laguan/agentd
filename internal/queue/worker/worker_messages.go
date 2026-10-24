@@ -16,6 +16,25 @@ import (
 	wskills "agentd/internal/agent/skills"
 )
 
+// memoryFormatLessons renders non-preference memories as numbered lessons.
+// USER_PREFERENCE rows are skipped here and rendered by
+// memory.FormatPreferences instead, so a preference is never mangled into
+// "Symptom/Solution" prose.
+func memoryFormatLessons(memories []models.Memory) string {
+	if len(memories) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("LESSONS LEARNED (from previous tasks):\n")
+	for i, m := range memories {
+		if m.Scope == "USER_PREFERENCE" {
+			continue
+		}
+		fmt.Fprintf(&b, "%d. Symptom: %s\n   Solution: %s\n", i+1, m.Symptom.String, m.Solution.String)
+	}
+	return b.String()
+}
+
 // appendMemoryLessons appends optional memory context after the stable system
 // prompt + task seed. Placing it after the stable context keeps the cache
 // prefix stable across tasks while still surfacing durable memories and the
