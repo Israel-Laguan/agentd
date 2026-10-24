@@ -23,6 +23,7 @@ var purposeLevels = map[Purpose]Level{
 	PurposeCreateReplanComment:    LevelL1,
 	PurposeCreateNextPhase:        LevelL1,
 	PurposeCreateElicit:           LevelL1,
+	PurposeCreateSplitTask:        LevelL1,
 	PurposeExecTurn:               LevelL3,
 	PurposeExecWorkPlan:           LevelL1,
 	PurposeExecLegacyCommand:      LevelL1,

@@ -175,10 +175,10 @@ func validateBatchTextResponse(want int, resp batchTextResponse) error {
 }
 
 type batchLegacySlot struct {
-	Slot       int             `json:"slot"`
-	Command    string          `json:"command,omitempty"`
-	TooComplex bool            `json:"too_complex,omitempty"`
-	Subtasks   []workerSubtask `json:"subtasks,omitempty"`
+	Slot       int                     `json:"slot"`
+	Command    string                  `json:"command,omitempty"`
+	TooComplex bool                    `json:"too_complex,omitempty"`
+	Subtasks   []planning.SplitSubtask `json:"subtasks,omitempty"`
 }
 
 type batchLegacyResponse struct {

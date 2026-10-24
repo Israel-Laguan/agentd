@@ -80,18 +80,18 @@ func appendedTask(projectID string, draft models.DraftTask, nowTime time.Time) m
 
 func linkChildrenToParent(ctx context.Context, tx *immediateTx, parentID string, tasks []models.Task) error {
 	for _, task := range tasks {
-		if err := insertTaskRelationChecked(ctx, tx, parentID, task.ID); err != nil {
+		if err := insertTaskRelationTypeChecked(ctx, tx, parentID, task.ID, models.TaskRelationBlocks); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// insertTaskRelationChecked inserts a dependency edge and verifies the
-// insertion does not create a cycle in the task graph.
-func insertTaskRelationChecked(ctx context.Context, tx *immediateTx, parentID, childID string) error {
+// insertTaskRelationTypeChecked inserts an edge of the given type and verifies
+// the insertion does not create a cycle in the task graph.
+func insertTaskRelationTypeChecked(ctx context.Context, tx *immediateTx, parentID, childID string, relType models.TaskRelationType) error {
 	if err := ensureNoCycle(ctx, tx, parentID, childID); err != nil {
 		return err
 	}
-	return insertTaskRelation(ctx, tx, parentID, childID)
+	return insertTaskRelationWithType(ctx, tx, parentID, childID, relType)
 }

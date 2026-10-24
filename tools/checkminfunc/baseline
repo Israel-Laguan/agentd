@@ -5,8 +5,6 @@
 #
 internal/sandbox/platform_windows.go configureProcess
 internal/agent/filecontext/file_converter.go NewFileConverter
-internal/agent/hooks/hooks_ratelimit.go NewRateLimitStore
-internal/agent/hooks/hooks_ratelimit.go ResolveLimit
 internal/agent/runtime/audit.go NewAuditLogger
 internal/agent/runtime/audit.go (*AuditLogger).Enabled
 internal/agent/runtime/audit_schema.go NewFileAuditSink
@@ -73,6 +71,7 @@ internal/gateway/providers/provider.go capabilitiesFromConfig
 internal/gateway/routing/router_cascade.go (errTruncation).Error
 internal/gateway/routing/router_cascade.go (errTruncation).Unwrap
 internal/gateway/spec/embed_stub.go NoopEmbed
+internal/gateway/spec/task_context.go WithExactTaskID
 internal/gateway/truncation/truncate.go CollapseMarkerFor
 internal/gateway/truncation/truncate.go (MiddleOutStrategy).Name
 internal/gateway/truncation/truncate.go MiddleOut
@@ -161,9 +160,9 @@ internal/agent/runtime/audit_schema.go HashArgs
 internal/agent/runtime/model_router.go EstimateContextTokens
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).withMaxDelegationDepth
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithExternalTools
-internal/api/httpx/response.go WriteMappedError
 internal/api/httpx/trust.go FromTrustedOrigin
 internal/capabilities/registry.go (*Registry).GetTools
+internal/config/split.go setSplitDefaults
 internal/gateway/correction/correction.go GenerateJSON
 internal/gateway/routing/house_rules.go HouseRulesFromContext
 internal/gateway/routing/router.go (*Router).WithBudget
@@ -172,6 +171,7 @@ internal/kanban/db/hitl_sql.go SelfHealingHandoffExcludeSQL
 internal/kanban/db/tasks_queries.go SelectTaskSQL
 internal/models/errors.go (*ProviderNotConfiguredError).Error
 internal/models/hitl.go IsSelfHealingHandoffTask
+internal/queue/planning/task_split.go (SplitResult).SchemaHint
 internal/queue/safety/breaker_probe.go (*CircuitBreaker).clearProbeLocked
 internal/queue/worker/agentic/handlers.go (*Engine).applyAgenticTruncation
 internal/queue/worker/agentic/rewind.go resetAgenticStateForTopicDrift

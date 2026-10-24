@@ -49,13 +49,14 @@ func truncate(value string, max int) string {
 
 // === Planning Logic ===
 
-func (w *Worker) handleTaskBreakdown(ctx context.Context, task models.Task, subtasks []workerSubtask) {
+func (w *Worker) handleTaskBreakdown(ctx context.Context, task models.Task, subtasks []planning.SplitSubtask) {
 	drafts := make([]models.DraftTask, 0, len(subtasks))
 	for _, subtask := range subtasks {
 		drafts = append(drafts, models.DraftTask{
 			Title:       subtask.Title,
 			Description: subtask.Description,
 			Assignee:    models.TaskAssigneeSystem,
+			SplitChild:  true,
 		})
 	}
 	if len(drafts) == 0 {
@@ -76,7 +77,7 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		return
 	}
 	intent := planning.BuildPhaseIntent(task, project, tasks)
-	plan, err := w.gateway.GeneratePlan(gateway.WithPurpose(ctx, gateway.PurposeCreateNextPhase), intent)
+	plan, err := w.gateway.GeneratePlan(gateway.WithTaskID(gateway.WithPurpose(ctx, gateway.PurposeCreateNextPhase), task.ID), intent)
 	if err != nil {
 		w.HandleGatewayError(ctx, task, err)
 		return

@@ -84,7 +84,8 @@ func (l *Librarian) CurateTask(ctx context.Context, task models.Task) error {
 
 	rawLog := assembleLog(events)
 
-	summary, err := l.summarize(ctx, rawLog)
+	// T-057: the map, reduce and extract calls are made for this task.
+	summary, err := l.summarize(gateway.WithTaskID(ctx, task.ID), rawLog)
 	if err != nil {
 		slog.Warn("librarian LLM summarization failed, using fallback", "task", task.ID, "error", err)
 		summary = l.fallbackExtract(rawLog)

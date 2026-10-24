@@ -48,6 +48,7 @@ func (t SummarizeTruncator) summarizeOrFallback(ctx context.Context, content str
 		},
 		Temperature:    0.1,
 		SkipTruncation: true,
+		TaskID:         spec.TaskIDFromContext(summaryCtx),
 	})
 	if err != nil {
 		return fallback.Truncate(content, budget)

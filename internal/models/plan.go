@@ -134,6 +134,10 @@ type DraftTask struct {
 	AgentID         string   `json:"agent_id,omitempty"`
 	DependsOn       []string `json:"depends_on,omitempty"`
 	SuccessCriteria []string `json:"success_criteria,omitempty"`
+	// SplitChild marks a draft created by the split stage, so the store links
+	// it to its parent with a SPLIT relation instead of an ordinary BLOCKS
+	// dependency. It is never read from plan JSON.
+	SplitChild bool `json:"-"`
 }
 
 // UnmarshalJSON accepts both proposal snake_case and legacy camel-case keys.

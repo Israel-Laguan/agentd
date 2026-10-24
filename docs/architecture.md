@@ -121,7 +121,7 @@ Transitions are validated at the model/store layer. Invalid transitions must fai
 - Fresh bootstrap must initialize schema and set `settings.schema_version` to current.
 - Migrations must preserve existing task rows and enforce current constraints.
 - Foreign keys and check constraints are mandatory.
-- `task_relations.relation_type` supports `BLOCKS`, `SPAWNED_BY`, and `DEPENDS_ON`.
+- `task_relations.relation_type` supports `BLOCKS`, `SPAWNED_BY`, `DEPENDS_ON`, and `SPLIT`.
 
 ### Store CRUD Contract
 

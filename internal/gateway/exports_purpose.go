@@ -13,6 +13,7 @@ const (
 	PurposeCreateReplanComment    = spec.PurposeCreateReplanComment
 	PurposeCreateNextPhase        = spec.PurposeCreateNextPhase
 	PurposeCreateElicit           = spec.PurposeCreateElicit
+	PurposeCreateSplitTask        = spec.PurposeCreateSplitTask
 	PurposeExecTurn               = spec.PurposeExecTurn
 	PurposeExecWorkPlan           = spec.PurposeExecWorkPlan
 	PurposeExecLegacyCommand      = spec.PurposeExecLegacyCommand

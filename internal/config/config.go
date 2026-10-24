@@ -207,6 +207,9 @@ func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string
 	cfg.Heartbeat = loadHeartbeatConfig(v)
 	cfg.Librarian = loadLibrarianConfig(v)
 	cfg.Queue = loadQueueConfig(v)
+	if err = validateSplitConfig(cfg.Queue.Split); err != nil {
+		return Config{}, err
+	}
 	cfg.Queue.Skills.GlobalDir = resolveSkillsGlobalDir(cfg.HomeDir, cfg.Queue.Skills.GlobalDir)
 	cfg.Agentic, err = loadAgenticConfig(v)
 	if err != nil {

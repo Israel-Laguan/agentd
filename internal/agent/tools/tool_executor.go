@@ -164,6 +164,15 @@ func (t *ToolExecutor) WallTimeout() time.Duration {
 	return t.wallTimeout
 }
 
+// TaskID returns the task the executor was scoped to by ForTask, or "" for an
+// executor that runs for no task.
+func (t *ToolExecutor) TaskID() string {
+	if t == nil {
+		return ""
+	}
+	return t.taskID
+}
+
 func (t *ToolExecutor) SetFilePipeline(filePipeline *wfilecontext.FilePipeline) {
 	if t == nil {
 		return

@@ -8,9 +8,10 @@ import (
 
 func TestPurposeTaxonomyIsClosedAndWellFormed(t *testing.T) {
 	all := AllPurposes()
-	// T-055a removed the two legacy.contract_* purposes (no production caller).
-	if len(all) != 23 {
-		t.Fatalf("taxonomy has %d purposes, want 23 after T-055a", len(all))
+	// T-055a removed the two legacy.contract_* purposes (no production caller);
+	// the healing split then moved off exec.legacy_command to create.split_task.
+	if len(all) != 24 {
+		t.Fatalf("taxonomy has %d purposes, want 24", len(all))
 	}
 	for _, p := range all {
 		if strings.HasPrefix(string(p), "legacy.") {

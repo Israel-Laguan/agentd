@@ -12,14 +12,9 @@ import (
 )
 
 type workerResponse struct {
-	Command    string          `json:"command,omitempty"`
-	TooComplex bool            `json:"too_complex,omitempty"`
-	Subtasks   []workerSubtask `json:"subtasks,omitempty"`
-}
-
-type workerSubtask struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	Command    string                  `json:"command,omitempty"`
+	TooComplex bool                    `json:"too_complex,omitempty"`
+	Subtasks   []planning.SplitSubtask `json:"subtasks,omitempty"`
 }
 
 // memoryFormatLessons renders non-preference memories as numbered lessons.
@@ -147,26 +142,6 @@ func (w *Worker) ApplyTuning(req gateway.AIRequest, task models.Task, profile mo
 const legacyPreflightUserNote = `LEGACY MODE CONSTRAINT: respond with exactly one JSON object containing a single shell command.
 Use redirects and pipes to write files (e.g. find, du, tee). Do not embed large file contents in the command string.`
 
-const legacyBreakdownDepthSanityCap = 32
-
-// legacyBreakdownDepth returns how many parent tasks lie above taskID in the breakdown tree.
-func (w *Worker) legacyBreakdownDepth(ctx context.Context, taskID string) (int, error) {
-	depth := 0
-	current := taskID
-	for depth < legacyBreakdownDepthSanityCap {
-		parents, err := w.store.ListParentTasks(ctx, current)
-		if err != nil {
-			return 0, err
-		}
-		if len(parents) == 0 {
-			return depth, nil
-		}
-		depth++
-		current = parents[0].ID
-	}
-	return depth, fmt.Errorf("legacy breakdown depth exceeded sanity cap %d", legacyBreakdownDepthSanityCap)
-}
-
 func (w *Worker) legacyDispatchRejectReason(task models.Task, _ models.AgentProfile) string {
 	score := (agentruntime.ComplexityScorer{}).ScoreTask(task)
 	if w.legacyRejectScore > 0 && score >= w.legacyRejectScore {
@@ -195,44 +170,4 @@ func (w *Worker) legacySeedMessages(task models.Task, _ models.Project, profile 
 		}
 	}
 	return messages
-}
-
-func (w *Worker) rejectLegacyBreakdown(ctx context.Context, task models.Task, cause string, healingCap bool) {
-	if healingCap {
-		w.createHealingHandoff(ctx, task, planning.HealingAction{
-			Type:     planning.HealingActionHuman,
-			StepName: planning.HealingStepHumanHandoff,
-			Reason:   cause,
-		}, cause)
-		return
-	}
-	w.createLegacyModeHandoff(ctx, task, cause, nil)
-}
-
-func (w *Worker) handleLegacyTaskBreakdown(ctx context.Context, task models.Task, subtasks []workerSubtask, healingCap bool) {
-	if len(subtasks) == 0 {
-		w.handleAgentFailure(ctx, task, "worker reported task too complex without subtasks")
-		return
-	}
-	if w.legacyMaxSubtasksPerBreakdown > 0 && len(subtasks) > w.legacyMaxSubtasksPerBreakdown {
-		cause := fmt.Sprintf("Model returned %d subtasks but legacy mode allows at most %d per breakdown.",
-			len(subtasks), w.legacyMaxSubtasksPerBreakdown)
-		w.rejectLegacyBreakdown(ctx, task, cause, healingCap)
-		return
-	}
-	if w.legacyMaxBreakdownDepth > 0 {
-		depth, err := w.legacyBreakdownDepth(ctx, task.ID)
-		if err != nil {
-			cause := fmt.Sprintf("Legacy breakdown sanity check failed: %v", err)
-			w.rejectLegacyBreakdown(ctx, task, cause, healingCap)
-			return
-		}
-		if depth >= w.legacyMaxBreakdownDepth {
-			cause := fmt.Sprintf("Legacy breakdown depth %d reached limit %d; further decomposition is not supported.",
-				depth, w.legacyMaxBreakdownDepth)
-			w.rejectLegacyBreakdown(ctx, task, cause, healingCap)
-			return
-		}
-	}
-	w.handleTaskBreakdown(ctx, task, subtasks)
 }

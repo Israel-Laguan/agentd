@@ -63,7 +63,7 @@ func (w *Worker) prepareLegacyExecution(
 	}
 	if response.TooComplex {
 		audit.failed = true
-		w.handleLegacyTaskBreakdown(ctx, task, response.Subtasks, false)
+		w.applyBreakdown(ctx, task, response.Subtasks, false)
 		return workerResponse{}, false
 	}
 

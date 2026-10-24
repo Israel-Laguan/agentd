@@ -13,6 +13,7 @@ import (
 func (r *Router) GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error) {
 	req := spec.AIRequest{
 		Purpose: planPurpose(ctx),
+		TaskID:  spec.TaskIDFromContext(ctx),
 		Messages: []spec.PromptMessage{
 			{Role: "system", Content: phasePlanningPrompt(r.maxTasksPerPhase)},
 			{Role: "user", Content: userIntent},

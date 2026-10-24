@@ -209,8 +209,8 @@ Cron schedules live in `<home>/agentd.crontab`.
 | `token_budget` | Worker-level per-task token cap; `0` = unlimited. `gateway.budget` (`tokens_per_task`) is not implemented (parsed and ignored); use this key. |
 | `agentic_character_budget` | `0` inherits `gateway.truncator.max_input_chars`. |
 | `hitl.legacy_handoff_timeout` | Prompt/permission/healing/provider handoffs. Approval, review, and clarification use the 30m approval path. |
-| `legacy.max_breakdown_depth` | Max parent→child `too_complex` generations in legacy JSON mode before `LEGACY_MODE_HANDOFF` (`0` = no cap; default `2`). |
-| `legacy.max_subtasks_per_breakdown` | Max subtasks from one `too_complex` response (`0` = no cap; default `5`). |
+| `split.max_depth` | Max parent→child split generations before a HUMAN handoff, for the healing split and the legacy `too_complex` reply (`0` = no cap; default `2`). Replaces `legacy.max_breakdown_depth`. |
+| `split.max_subtasks` | Max subtasks from one split (`0` = no cap; default `5`). Replaces `legacy.max_subtasks_per_breakdown`. |
 | `legacy.preflight_score` | When task complexity score ≥ threshold, append a one-command hint to the legacy prompt (`0` = off; default `6`). |
 | `legacy.reject_score` | Skip the LLM and hand off when complexity ≥ threshold (`0` = off; default `9`). |
 | `legacy.max_description_len` | Skip the LLM when description length exceeds limit (`0` = off; default `2000`). |
