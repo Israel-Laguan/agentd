@@ -1,6 +1,9 @@
 package agentic
 
 import (
+	"context"
+	"errors"
+
 	agentcontext "agentd/internal/agent/context"
 	agentruntime "agentd/internal/agent/runtime"
 	agenttools "agentd/internal/agent/tools"
@@ -47,15 +50,33 @@ func (e *Engine) unmetCriteriaFinish(task models.Task, project models.Project, t
 	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
 }
 
+// openBreakdownFinish stops a text-only finish of a parent whose breakdown
+// subtasks are not all completed. The parent completes once they do, so the
+// model cannot complete it early (T-055b gap 2). A failed read also stops the
+// finish, but only open subtasks make it unverified: a read error carries no
+// code, so the task is retried instead of handed to a human.
+func (e *Engine) openBreakdownFinish(ctx context.Context, task models.Task, turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
+	err := e.host.VerifyBreakdownComplete(ctx, task)
+	if err == nil {
+		return nil
+	}
+	meta := agentruntime.BuildLoopMeta(turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(messages), 0, err.Error(), "", "")
+	if errors.Is(err, models.ErrBreakdownIncomplete) {
+		meta.ErrorCode = agenttools.ToolErrorCodeUnverified
+	}
+	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
+}
+
 // unverifiedFinish stops a text-only finish that follows a failed shell command:
-// the work was never verified, so it is not COMPLETED. It returns nil when the
-// last command passed or nothing has run.
+// the work was never verified, so it is not COMPLETED. The model can fix the
+// command, so the stop is tagged for a retry. It returns nil when the last
+// command passed or nothing has run.
 func (e *Engine) unverifiedFinish(turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
 	if e.lastBashFailure == "" {
 		return nil
 	}
 	reason := "unverified: the last shell command failed and nothing passed after it: " + e.lastBashFailure
 	meta := agentruntime.BuildLoopMeta(turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(messages), 0, reason, "bash", "")
-	meta.ErrorCode = agenttools.ToolErrorCodeUnverified
+	meta.ErrorCode = agenttools.ToolErrorCodeUnverifiedCommand
 	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
 }

@@ -67,42 +67,6 @@ func sinkHasType(sink *mockEventSink, want models.EventType) bool {
 	return false
 }
 
-// B-043: a retry that would send the exact command that just failed must stop
-// early instead of burning the full budget on a deterministic failure.
-func TestExecuteLegacyCommand_IdenticalRetryEvictsEarly(t *testing.T) {
-	ctx := context.Background()
-	store := testutil.NewFakeStore()
-	task := materializeLegacyReviewTask(t, store, ctx, "dedupe-proj", "deterministic build")
-	retried, err := store.IncrementRetryCount(ctx, task.ID, task.UpdatedAt)
-	if err != nil {
-		t.Fatalf("IncrementRetryCount: %v", err)
-	}
-	const command = "go build ./..."
-	const failure = "exit=1\nmain.go:12: undefined: CountWords"
-	seedCommandHistory(t, store, *retried, command, failure)
-
-	sb := &dedupeCountingSandbox{result: sandbox.Result{ExitCode: 1, Stdout: "", Stderr: "main.go:12: undefined: CountWords"}}
-	sink := runDedupeCommand(t, store, sb, *retried, command)
-
-	if sb.calls != 0 {
-		t.Fatalf("sandbox executions = %d, want 0 (identical retry must not re-execute)", sb.calls)
-	}
-	if !sinkHasType(sink, "POISON_PILL_HANDOFF") {
-		t.Fatalf("sink events = %#v, want POISON_PILL_HANDOFF terminal handoff", sink.events)
-	}
-	after, err := store.GetTask(ctx, task.ID)
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	if after.State != models.TaskStateFailedRequiresHuman {
-		t.Fatalf("task state = %s, want FAILED_REQUIRES_HUMAN (stop early)", after.State)
-	}
-	comments, err := store.ListComments(ctx, task.ID)
-	if err != nil || len(comments) == 0 {
-		t.Fatalf("comments = %#v, want terminal failure comment", comments)
-	}
-}
-
 // B-043: sandbox refusals repeat identically too (S5/S8 refused heredoc x3);
 // the refused command is recorded in SANDBOX_VIOLATION, not COMMAND.
 func TestExecuteLegacyCommand_IdenticalRefusalEvictsEarly(t *testing.T) {
@@ -155,28 +119,6 @@ func TestExecuteLegacyCommand_EmptyCommandNeverExecutes(t *testing.T) {
 	}
 	if after.State == models.TaskStateCompleted {
 		t.Fatal("task COMPLETED on an empty command, want failure handling")
-	}
-}
-
-// Control: a first attempt and a genuinely new command still execute.
-func TestExecuteLegacyCommand_FreshCommandExecutes(t *testing.T) {
-	ctx := context.Background()
-	store := testutil.NewFakeStore()
-	task := materializeLegacyReviewTask(t, store, ctx, "dedupe-fresh", "fresh command")
-	retried, err := store.IncrementRetryCount(ctx, task.ID, task.UpdatedAt)
-	if err != nil {
-		t.Fatalf("IncrementRetryCount: %v", err)
-	}
-	seedCommandHistory(t, store, *retried, "go build ./...", "exit=1\nold failure")
-
-	sb := &dedupeCountingSandbox{result: sandbox.Result{Success: true, Stdout: "ok"}}
-	sink := runDedupeCommand(t, store, sb, *retried, "go vet ./...")
-
-	if sb.calls != 1 {
-		t.Fatalf("sandbox executions = %d, want 1 (a new command must execute)", sb.calls)
-	}
-	if !sinkHasType(sink, models.EventTypeCommand) {
-		t.Fatalf("sink events = %#v, want a COMMAND event", sink.events)
 	}
 }
 

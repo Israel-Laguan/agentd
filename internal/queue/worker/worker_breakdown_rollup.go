@@ -66,7 +66,7 @@ func blockTaskWithBreakdown(
 // server-generated breakdown marker on the task. Only worker-agent markers
 // count: board.add_comment lets a caller choose the author, so authorship
 // alone is not trustworthy. The returned count is cross-checked against the
-// parent->child links (see breakdownChildrenCompleted) before the parent is
+// parent's split children (see breakdownChildrenCompleted) before the parent is
 // ever completed.
 func latestBreakdownSubtaskCount(comments []models.Comment) (int, bool) {
 	count := 0
@@ -88,7 +88,7 @@ func latestBreakdownSubtaskCount(comments []models.Comment) (int, bool) {
 	return count, found
 }
 
-// breakdownChildrenCompleted reports whether the parent's recorded child set
+// breakdownChildrenCompleted reports whether the parent's split child set
 // is exactly the one the marker describes and every member has completed. The
 // count check is what stops a forged marker naming a subset of the children:
 // the relations table is written by the breakdown transaction, so it is the
@@ -105,6 +105,32 @@ func breakdownChildrenCompleted(children []models.Task, count int) bool {
 	return true
 }
 
+// VerifyBreakdownComplete returns an error while any of the task's breakdown
+// subtasks is not completed. The agentic engine calls it before a text-only
+// finish is committed as COMPLETED (T-055b gap 2). It refuses a finish, never
+// grants one, so it does not need the breakdown marker: a lost marker or a
+// forged count cannot open the gate. A failed read also refuses the finish, so
+// an unreadable breakdown never completes the parent.
+func (w *Worker) VerifyBreakdownComplete(ctx context.Context, task models.Task) error {
+	// Breakdown subtasks are linked SPLIT (handleTaskBreakdown). BLOCKS
+	// children are plan dependents, which wait on this task, and human
+	// handoff subtasks such as a review, so they are not counted.
+	children, err := w.store.ListChildTasksByRelation(ctx, task.ID, models.TaskRelationSplit)
+	if err != nil {
+		return fmt.Errorf("breakdown check: list split children: %w", err)
+	}
+	open := 0
+	for _, child := range children {
+		if child.State != models.TaskStateCompleted {
+			open++
+		}
+	}
+	if open == 0 {
+		return nil
+	}
+	return fmt.Errorf("unverified: %w: %d of %d open", models.ErrBreakdownIncomplete, open, len(children))
+}
+
 // tryRollUpBreakdown completes a resumed parent whose breakdown subtasks have
 // all completed, instead of asking the model to redo the decomposed work. It
 // reports whether the task was handled; a non-nil error means the roll-up
@@ -119,9 +145,10 @@ func (w *Worker) tryRollUpBreakdown(ctx context.Context, task models.Task) (bool
 	if !marked {
 		return false, nil
 	}
-	children, err := w.store.ListChildTasks(ctx, task.ID)
+	// Only SPLIT children are breakdown subtasks, as in VerifyBreakdownComplete.
+	children, err := w.store.ListChildTasksByRelation(ctx, task.ID, models.TaskRelationSplit)
 	if err != nil {
-		return false, fmt.Errorf("breakdown roll-up: list children: %w", err)
+		return false, fmt.Errorf("breakdown roll-up: list split children: %w", err)
 	}
 	if !breakdownChildrenCompleted(children, count) {
 		return false, nil

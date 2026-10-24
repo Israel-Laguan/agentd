@@ -35,6 +35,7 @@ func seedWorkspaceWithMain(t *testing.T, store *testutil.FakeKanbanStore, ctx co
 		ProjectName: "wordcount", Description: "d",
 		Tasks: []models.DraftTask{{
 			Title:           "Wire CountVowels into CLI",
+			Description:     testutil.AgenticTestTaskDescription(),
 			SuccessCriteria: criteria,
 		}},
 	})
@@ -48,18 +49,6 @@ func seedWorkspaceWithMain(t *testing.T, store *testutil.FakeKanbanStore, ctx co
 		t.Fatalf("seed main.go: %v", err)
 	}
 	return tasks[0], *proj
-}
-
-func runPostconditionCommand(t *testing.T, store *testutil.FakeKanbanStore, sb sandbox.Executor, task models.Task, project models.Project) (*mockEventSink, models.Task) {
-	t.Helper()
-	sink := &mockEventSink{}
-	w := NewWorker(store, &routingTestGateway{}, sb, nil, sink, WorkerOptions{})
-	w.executeLegacyCommand(context.Background(), task, project, models.AgentProfile{}, "sed -i 's/x/y/' main.go", &legacyTaskAudit{})
-	after, err := store.GetTask(context.Background(), task.ID)
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	return sink, *after
 }
 
 // runPostconditionAgentic runs one agentic turn that edits main.go with sed,
@@ -88,18 +77,16 @@ func runPostconditionAgentic(t *testing.T, store *testutil.FakeKanbanStore, sb s
 
 // B-039: the S2 sed corrupted main.go, exited 0, and the task COMPLETED.
 // Exit 0 must not complete a task whose success-criteria files no longer parse.
-func TestExecuteLegacyCommand_BrokenWorkspaceDoesNotComplete(t *testing.T) {
+// On the agentic path the finish is unverified, so it goes to a human.
+func TestPostconditionBrokenWorkspaceHandsTaskToHuman(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
-	task, project := seedWorkspaceWithMain(t, store, ctx, []string{"main.go parses", "CountVowels wired into CLI"})
+	task, _ := seedWorkspaceWithMain(t, store, ctx, []string{"main.go parses", "CountVowels wired into CLI"})
 	broken := "package main\n\nfunc main() {\n    fmt.Printf(\"Vowel count: %d\\n\", vowelCount)\n}\n}\n"
-	sink, after := runPostconditionCommand(t, store, breakingSandbox{breakWith: broken}, task, project)
+	_, after := runPostconditionAgentic(t, store, breakingSandbox{breakWith: broken}, task)
 
-	if after.State == models.TaskStateCompleted {
-		t.Fatal("task COMPLETED after exit-0 corrupted main.go; want failure handling with retry feedback")
-	}
-	if !sinkHasType(sink, "RETRY") {
-		t.Fatalf("sink events = %#v, want RETRY feedback so the model can repair", sink.events)
+	if after.State != models.TaskStateFailedRequiresHuman {
+		t.Fatalf("task state = %s after exit-0 corrupted main.go, want FAILED_REQUIRES_HUMAN", after.State)
 	}
 }
 

@@ -125,6 +125,8 @@ func TestHandleLoopResultToolFailureRouting(t *testing.T) {
 		{"sandbox unavailable is terminal", agenttools.ToolErrorCodeSandboxUnavailable, models.TaskStateFailed},
 		{"no progress goes to a human", agenttools.ToolErrorCodeNoProgress, models.TaskStateFailedRequiresHuman},
 		{"other tool failure keeps retry path", "", models.TaskStateReady},
+		{"finish after a failed command keeps retry path", agenttools.ToolErrorCodeUnverifiedCommand, models.TaskStateReady},
+		{"unverified finish goes to a human", agenttools.ToolErrorCodeUnverified, models.TaskStateFailedRequiresHuman},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

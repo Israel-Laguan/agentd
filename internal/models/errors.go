@@ -39,6 +39,7 @@ var (
 	ErrUnknownTaskState          = errors.New("unknown task state")
 	ErrSandboxViolation          = errors.New("sandbox path violation")
 	ErrSandboxUnavailable        = errors.New("sandbox backend unavailable")
+	ErrBreakdownIncomplete       = errors.New("breakdown subtasks are not all completed")
 	ErrStateConflict             = errors.New("task state conflict")
 	ErrTaskBlocked               = errors.New("task is blocked")
 	ErrTaskNotFound              = errors.New("task not found")

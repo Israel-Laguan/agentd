@@ -32,10 +32,12 @@ func (e *Engine) prepareAgenticRun(
 ) {
 	taskToolExecutor = e.newAgenticTaskToolExecutor(project, task).
 		WithAllowedTools(profile.AllowedTools).
-		WithReadOnlyWorkspace(profile.WorkspaceReadonly)
+		WithReadOnlyWorkspace(profile.WorkspaceReadonly).
+		WithIntent(task.Title + "\n" + task.Description)
 	taskHooks, taskCaps = e.host.MountAgenticHooks(project, profile)
 	messages = e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile)
 	messages, _ = e.host.PrependReviewRejectionFeedback(ctx, task, messages)
+	messages = e.host.PrependSandboxViolationFeedback(ctx, task, messages)
 	tools, toolToAdapter = e.host.AgenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 	routingTools = append([]gateway.ToolDefinition(nil), tools...)
 	tools, toolToAdapter = e.host.FilterAgenticTools(tools, toolToAdapter, task, profile)

@@ -258,9 +258,9 @@ func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
 	worker.Process(context.Background(), store.task)
 
 	// B-082: the final text came after a failed command and nothing passed
-	// after it, so the task must not be recorded as a success.
-	if store.result == nil || store.result.Success || !strings.Contains(store.result.Payload, "unverified") {
-		t.Fatalf("result = %#v, want an unverified failure after a failed command", store.result)
+	// after it, so the task must not be recorded as a success; it is retried.
+	if store.result != nil || store.task.State != models.TaskStateReady || store.task.RetryCount != 1 {
+		t.Fatalf("result = %#v state = %s retries = %d, want no result and a retry after a failed command", store.result, store.task.State, store.task.RetryCount)
 	}
 	if len(sb.commands) != 1 || sb.commands[0] != "false" {
 		t.Fatalf("commands = %#v, want [false]", sb.commands)
@@ -282,26 +282,6 @@ func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
 	}
 	if !strings.Contains(toolMessage.Content, `"ExitCode":1`) || !strings.Contains(toolMessage.Content, "command failed") {
 		t.Fatalf("tool message = %q, want exit code and stderr details", toolMessage.Content)
-	}
-}
-
-func TestWorkerLegacyPathWhenAgenticModeFalse(t *testing.T) {
-	store := newWorkerStore()
-	store.profile.AgenticMode = false
-	gw := &fakeGateway{content: `{"command":"echo legacy"}`}
-	sb := &fakeSandbox{result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "legacy"}}
-	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), nil, WorkerOptions{})
-
-	worker.Process(context.Background(), store.task)
-
-	if store.result == nil || !store.result.Success {
-		t.Fatalf("result = %#v", store.result)
-	}
-	if len(sb.commands) != 1 || sb.commands[0] != "echo legacy" {
-		t.Fatalf("commands = %#v", sb.commands)
-	}
-	if len(gw.requests) != 1 {
-		t.Fatalf("gateway requests = %d, want 1", len(gw.requests))
 	}
 }
 

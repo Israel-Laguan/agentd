@@ -103,6 +103,9 @@ type Host interface {
 		userContent string,
 	) []gateway.PromptMessage
 	PrependReviewRejectionFeedback(ctx context.Context, task models.Task, messages []gateway.PromptMessage) ([]gateway.PromptMessage, string)
+	// PrependSandboxViolationFeedback tells the model which earlier commands the
+	// sandbox refused, so a retry does not repeat them.
+	PrependSandboxViolationFeedback(ctx context.Context, task models.Task, messages []gateway.PromptMessage) []gateway.PromptMessage
 	ApplyModelRouting(task models.Task, profile models.AgentProfile, messages []gateway.PromptMessage, tools []gateway.ToolDefinition) models.AgentProfile
 	ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest
 	MountAgenticHooks(project models.Project, profile models.AgentProfile) (*agenthooks.HookChain, *capabilities.Registry)
@@ -131,6 +134,11 @@ type Host interface {
 	// VerifyPostConditions checks the success-criteria files a task names
 	// before a text-only finish is committed (B-039).
 	VerifyPostConditions(task models.Task, project models.Project) error
+	// VerifyBreakdownComplete returns an error while the task's breakdown
+	// subtasks are not all completed, so a text-only finish cannot complete the
+	// parent early (T-055b gap 2). Open subtasks wrap
+	// models.ErrBreakdownIncomplete; any other error is a failed read.
+	VerifyBreakdownComplete(ctx context.Context, task models.Task) error
 	TryExternalCapabilityRoute(
 		ctx context.Context,
 		task models.Task,

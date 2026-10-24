@@ -30,7 +30,7 @@ func (d *SubagentDelegate) Delegate(
 		maxIter = 20
 	}
 
-	toolExec := agenttools.NewToolExecutor(d.sandbox, d.workspacePath, d.envVars, d.wallTimeout).WithReadOnlyWorkspace(d.readOnlyWorkspace)
+	toolExec := agenttools.NewToolExecutor(d.sandbox, d.workspacePath, d.envVars, d.wallTimeout).WithReadOnlyWorkspace(d.readOnlyWorkspace).WithIntent(d.intent)
 	tools := d.buildToolSet(def, toolExec)
 
 	systemPrompt := d.buildSystemPrompt(def)

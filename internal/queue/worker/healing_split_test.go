@@ -81,3 +81,46 @@ func TestHealingSplitWithNoSubtasksHandsOff(t *testing.T) {
 		t.Fatalf("blocked=%v events=%v, want a HEALING_HANDOFF", blocked, sink.kinds)
 	}
 }
+
+func TestHandleHealingSplit_SubtaskCap_EmitsHealingHandoff(t *testing.T) {
+	t.Parallel()
+
+	store := &legacyHandoffStore{
+		routingTestStore: routingTestStore{
+			task: models.Task{
+				BaseEntity: models.BaseEntity{ID: "task-heal-cap"},
+				ProjectID:  "project-1",
+				AgentID:    "agent-1",
+				State:      models.TaskStateQueued,
+				RetryCount: 3,
+			},
+			project: models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}},
+			profile: models.AgentProfile{
+				ID: "agent-1", Provider: "ollama", Model: "llama3", AgenticMode: true,
+			},
+		},
+	}
+	gw := &legacyContentGateway{content: `{"too_complex":true,"subtasks":[{"title":"a","description":"1"},{"title":"b","description":"2"},{"title":"c","description":"3"},{"title":"d","description":"4"},{"title":"e","description":"5"},{"title":"f","description":"6"}]}`}
+	sink := &legacyHandoffSink{}
+	opts := legacyCapOptions()
+	opts.Split.MaxSubtasks = 5
+	w := NewWorker(store, gw, &routingTestSandbox{}, nil, sink, opts)
+
+	w.handleHealingSplit(context.Background(), store.task, store.project, store.profile)
+
+	store.mu.Lock()
+	blocked := store.blocked
+	store.mu.Unlock()
+	if !blocked {
+		t.Fatal("expected handoff when healing split exceeds subtask cap")
+	}
+	sink.mu.Lock()
+	kinds := sink.kinds
+	sink.mu.Unlock()
+	if !containsEvent(kinds, "HEALING_HANDOFF") {
+		t.Fatalf("expected HEALING_HANDOFF event; got %v", kinds)
+	}
+	if containsEvent(kinds, "LEGACY_MODE_HANDOFF") {
+		t.Fatalf("unexpected LEGACY_MODE_HANDOFF event; got %v", kinds)
+	}
+}

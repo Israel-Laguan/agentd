@@ -25,6 +25,17 @@ func (m *mockEventSink) Emit(ctx context.Context, ev models.Event) error {
 	return nil
 }
 
+// sinkPayloadContains reports whether sink holds an event of type typ whose
+// payload contains want.
+func sinkPayloadContains(sink *mockEventSink, typ models.EventType, want string) bool {
+	for _, ev := range sink.events {
+		if ev.Type == typ && strings.Contains(ev.Payload, want) {
+			return true
+		}
+	}
+	return false
+}
+
 // ToolCallSequence represents a sequence of tool calls for property testing.
 type ToolCallSequence struct {
 	Calls []gateway.ToolCall

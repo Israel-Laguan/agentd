@@ -24,8 +24,9 @@ func (w *Worker) handleFailedSandboxResult(ctx context.Context, task models.Task
 
 // handleAgenticToolFailure routes an agentic LoopToolFailure. A tool refused by
 // an unavailable required jail is terminal for the same reason as above; a
-// no-progress stop goes to a human; any other tool failure keeps the retry
-// path (B-052).
+// no-progress stop or an unverified finish goes to a human; any other tool
+// failure, including a finish right after a failed command, keeps the retry
+// path (B-052, T-055b gap 3).
 func (w *Worker) handleAgenticToolFailure(ctx context.Context, task models.Task, meta LoopMeta, payload string) {
 	if meta.ErrorCode == agenttools.ToolErrorCodeSandboxUnavailable {
 		w.failTerminal(ctx, task, fmt.Errorf("%w: %s", models.ErrSandboxUnavailable, payload), models.TaskStateFailed)

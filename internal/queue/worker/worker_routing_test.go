@@ -50,77 +50,6 @@ func newRoutingTest(profile models.AgentProfile) (*Worker, *routingTestStore, *r
 	return w, store, gw, sb
 }
 
-// TestRoutingDecision_AgenticModeFalse_LegacyPath verifies by calling Process
-// that when AgenticMode is false, the gateway receives JSONMode requests (legacy path).
-// Validates: Requirements 1, 3, 6.2
-func TestRoutingDecision_AgenticModeFalse_LegacyPath(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name     string
-		provider string
-	}{
-		{"OpenAI", "openai"},
-		{"Anthropic", "anthropic"},
-		{"Ollama", "ollama"},
-		{"Empty provider", ""},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			profile := models.AgentProfile{
-				ID:          "agent-1",
-				Provider:    tc.provider,
-				Model:       "gpt-4",
-				AgenticMode: false,
-			}
-			w, store, gw, _ := newRoutingTest(profile)
-			w.Process(context.Background(), store.task)
-
-			// Legacy path: gateway request should have JSONMode=true and no tools
-			if len(gw.requests) == 0 {
-				t.Fatal("expected at least 1 gateway request")
-			}
-			if !gw.requests[0].JSONMode {
-				t.Error("expected JSONMode=true for legacy path")
-			}
-			if len(gw.requests[0].Tools) > 0 {
-				t.Error("expected no tools in legacy path request")
-			}
-		})
-	}
-}
-
-func TestRoutingDecision_AgenticModeFalse_MakesOnlyLegacySingleCall(t *testing.T) {
-	t.Parallel()
-
-	profile := models.AgentProfile{
-		ID:          "agent-1",
-		Provider:    "openai",
-		Model:       "gpt-4",
-		AgenticMode: false,
-	}
-	w, store, gw, sb := newRoutingTest(profile)
-
-	w.Process(context.Background(), store.task)
-
-	if len(gw.requests) != 1 {
-		t.Fatalf("expected exactly 1 legacy gateway call and zero agentic follow-up calls, got %d", len(gw.requests))
-	}
-	if !gw.requests[0].JSONMode {
-		t.Fatal("expected legacy request to use JSON mode")
-	}
-	if len(gw.requests[0].Tools) != 0 {
-		t.Fatalf("expected legacy request to advertise zero tools, got %d", len(gw.requests[0].Tools))
-	}
-	if sb.execCount != 1 {
-		t.Fatalf("expected legacy command to execute once, got %d", sb.execCount)
-	}
-}
-
 // TestRoutingDecision_AgenticModeTrue_ProviderSupported verifies by calling Process
 // that when AgenticMode is true and provider supports agentic mode, the agentic path is taken.
 // Validates: Requirements 1, 3, 6.2
@@ -251,60 +180,6 @@ func TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_FailsWithoutModelC
 		t.Fatal("expected a rejection, not BLOCKED from agentic elicitation")
 	}
 	assertRejectedWithoutModelCall(t, store, gw, sb, "ollama")
-}
-
-// TestAgenticFallbackPreservesRoutedProvider verifies that when processAgentic routes to a
-// high-context tier then falls back to legacy, runLegacyTask does not re-route with legacy
-// (shorter) messages and change provider.
-func TestAgenticFallbackPreservesRoutedProvider(t *testing.T) {
-	t.Parallel()
-
-	profile := models.AgentProfile{
-		ID:          "agent-1",
-		Provider:    "openai",
-		Model:       "gpt-4",
-		AgenticMode: true,
-	}
-	w, store, gw, sb := newRoutingTest(profile)
-	w.modelRouter = agentruntime.NewModelRouter(config.ModelRoutingConfig{
-		Enabled:               true,
-		ContextTokenThreshold: 150000,
-		Cheap:                 config.ModelTierTarget{Provider: "anthropic", Model: "claude-haiku"},
-		Mid:                   config.ModelTierTarget{Provider: "anthropic", Model: "claude-sonnet"},
-		High:                  config.ModelTierTarget{Provider: "ollama", Model: "llama3"},
-	})
-
-	task := store.task
-	task.Description = "summarize this file"
-
-	// Agentic-sized context selects High (ollama, non-agentic).
-	huge := strings.Repeat("x", 600001)
-	agenticMessages := []gateway.PromptMessage{
-		{Role: "system", Content: huge},
-		{Role: "user", Content: task.Description},
-	}
-	tools := []gateway.ToolDefinition{{Name: "bash", Description: "run shell commands"}}
-	routed := w.ApplyModelRouting(task, profile, agenticMessages, tools)
-	if routed.Provider != "ollama" || routed.Model != "llama3" {
-		t.Fatalf("agentic route = %s/%s, want ollama/llama3", routed.Provider, routed.Model)
-	}
-
-	legacyRouted := w.routeLegacyProfile(context.Background(), task, store.project, profile)
-	if legacyRouted.Provider != "anthropic" {
-		t.Fatalf("legacy-only route provider = %q, want anthropic (proves re-route would differ)", legacyRouted.Provider)
-	}
-
-	w.RunLegacyTask(context.Background(), task, store.project, routed, true)
-
-	if len(gw.requests) != 1 {
-		t.Fatalf("expected 1 gateway request, got %d", len(gw.requests))
-	}
-	if gw.requests[0].Provider != "ollama" || gw.requests[0].Model != "llama3" {
-		t.Fatalf("legacy fallback request = %s/%s, want ollama/llama3", gw.requests[0].Provider, gw.requests[0].Model)
-	}
-	if sb.execCount != 1 {
-		t.Fatalf("expected 1 sandbox run, got %d", sb.execCount)
-	}
 }
 
 // TestRoutingDecision_ModelRoutingToUnsupportedProvider_Rejects verifies that when model

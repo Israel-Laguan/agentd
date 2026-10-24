@@ -60,6 +60,9 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation complete",
 		"task_id", task.ID,
 	)
+	// Consumed clarification answers extend the description, so the evidence
+	// guard checks commands against the clarified task.
+	taskToolExecutor.WithIntent(task.Title + "\n" + task.Description)
 
 	guards := e.newAgenticLoopGuards(cancelCtx, task)
 	checkpointer := wsession.NewSessionCheckpointer(task.ID)

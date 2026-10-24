@@ -49,6 +49,8 @@ func (h *noopHost) DispatchToolWithHooks(
 
 func (h *noopHost) VerifyPostConditions(models.Task, models.Project) error { return nil }
 
+func (h *noopHost) VerifyBreakdownComplete(context.Context, models.Task) error { return nil }
+
 func (h *noopHost) RecordAttemptFailure(models.Task, gateway.ToolCall, agenttools.ToolResult) {}
 
 func (h *noopHost) RepeatedAttemptFailure(models.Task, gateway.ToolCall) (string, bool) {
@@ -93,6 +95,10 @@ func (h *noopHost) AssembleAgenticSystemPromptWithUserContent(_ context.Context,
 
 func (h *noopHost) PrependReviewRejectionFeedback(_ context.Context, _ models.Task, messages []gateway.PromptMessage) ([]gateway.PromptMessage, string) {
 	return messages, ""
+}
+
+func (h *noopHost) PrependSandboxViolationFeedback(_ context.Context, _ models.Task, messages []gateway.PromptMessage) []gateway.PromptMessage {
+	return messages
 }
 
 func (h *noopHost) ApplyModelRouting(_ models.Task, profile models.AgentProfile, _ []gateway.PromptMessage, _ []gateway.ToolDefinition) models.AgentProfile {
