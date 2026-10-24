@@ -235,8 +235,11 @@ func (w *Worker) tieredStepKind(task models.Task) TieredStepKind {
 }
 
 func isTieredContextInjectStep(stepKind TieredStepKind) bool {
-	return stepKind == TieredStepDecision || stepKind == TieredStepExecute ||
-		stepKind == TieredStepVerify || stepKind == TieredStepEscalate
+	switch stepKind {
+	case TieredStepDecision, TieredStepExecute, TieredStepVerify, TieredStepEscalate:
+		return true
+	}
+	return false
 }
 
 // failTieredStepNoTools handles the case where a profile's allowlist intersects
