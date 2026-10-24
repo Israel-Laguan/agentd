@@ -43,6 +43,9 @@ func (t *ToolExecutor) executeBash(ctx context.Context, argsJSON string, extraEn
 	if errors.Is(err, models.ErrSandboxUnavailable) {
 		return SandboxUnavailableJSON(err)
 	}
+	if errors.Is(err, models.ErrExecutionTimeout) {
+		return SandboxTimeoutJSON(result, err)
+	}
 	if err != nil {
 		return JSONErrorf("execution failed: %v", err)
 	}
