@@ -75,3 +75,26 @@ func TestVerifyBreakdownComplete_MissingMarkerStillRefusesOpenSubtasks(t *testin
 		t.Fatal("VerifyBreakdownComplete = nil with an open subtask and no marker, want a refusal")
 	}
 }
+
+// The roll-up uses the same child set as the finish gate: a plan dependent
+// must not stop a parent whose split subtasks all completed from rolling up.
+func TestTryRollUpBreakdown_IgnoresPlanDependents(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store, _, parent, subtasks := seedBrokenDownParent(t, true)
+	completeTasks(t, store, subtasks)
+	resumed := mustGetTask(t, store, parent.ID)
+	running, err := store.MarkTaskRunning(ctx, resumed.ID, resumed.UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("MarkTaskRunning (state %s): %v", resumed.State, err)
+	}
+	w := NewWorker(store, nil, nil, nil, &mockEventSink{}, WorkerOptions{})
+
+	handled, err := w.tryRollUpBreakdown(ctx, *running)
+	if err != nil || !handled {
+		t.Fatalf("tryRollUpBreakdown = %v, %v; want the parent rolled up", handled, err)
+	}
+	if got := mustGetTask(t, store, parent.ID).State; got != models.TaskStateCompleted {
+		t.Fatalf("parent state = %s, want COMPLETED", got)
+	}
+}
