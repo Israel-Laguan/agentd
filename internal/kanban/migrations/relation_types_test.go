@@ -41,12 +41,33 @@ func TestMigrateToV24AcceptsSplitRelations(t *testing.T) {
 		t.Fatalf("migrateToV24: %v", err)
 	}
 
-	var relations int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM task_relations`).Scan(&relations); err != nil {
-		t.Fatalf("count relations: %v", err)
+	type relation struct {
+		parent string
+		child  string
+		kind   string
 	}
-	if relations != 1 {
-		t.Fatalf("relations = %d, want 1 (existing edges must survive the rebuild)", relations)
+	var preserved []relation
+	rows, err := db.QueryContext(ctx, `
+		SELECT parent_task_id, child_task_id, relation_type FROM task_relations`)
+	if err != nil {
+		t.Fatalf("query relations: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var r relation
+		if err := rows.Scan(&r.parent, &r.child, &r.kind); err != nil {
+			t.Fatalf("scan relation: %v", err)
+		}
+		preserved = append(preserved, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate relations: %v", err)
+	}
+	if len(preserved) != 1 {
+		t.Fatalf("relations = %d, want 1 (existing edges must survive the rebuild)", len(preserved))
+	}
+	if got := preserved[0]; got != (relation{parent: "parent", child: "child", kind: "BLOCKS"}) {
+		t.Fatalf("relation = %+v, want {parent:parent child:child kind:BLOCKS}", got)
 	}
 
 	if _, err := db.ExecContext(ctx, `
