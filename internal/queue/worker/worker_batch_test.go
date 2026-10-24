@@ -29,7 +29,7 @@ func TestRunBatchTextGateway_ValidResponse(t *testing.T) {
 		ToolManifest: config.ToolManifestConfig{Enabled: true, MinConfidence: 0.35},
 	})
 	tasks := summarizeTasks(3)
-	req := w.buildBatchRequest(context.Background(), tasks, store.project, store.profile, true)
+	req := w.buildBatchRequest(context.Background(), tasks, store.project, store.profile)
 	for i, m := range req.Messages {
 		if m.Role == "user" {
 			if got := countBatchSlots(m.Content); got != 3 {

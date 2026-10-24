@@ -10,20 +10,6 @@ import (
 	"agentd/internal/sandbox"
 )
 
-// refuseTaskSandbox refuses every command of one task with err and runs the
-// rest, so a batch can show that one refused task leaves its siblings intact.
-type refuseTaskSandbox struct {
-	taskID string
-	err    error
-}
-
-func (s refuseTaskSandbox) Execute(_ context.Context, p sandbox.Payload) (sandbox.Result, error) {
-	if p.TaskID == s.taskID {
-		return sandbox.Result{ExitCode: -1}, s.err
-	}
-	return sandbox.Result{Success: true, Stdout: "ok"}, nil
-}
-
 func refusedWithoutJail() error {
 	return fmt.Errorf("%w: sandbox.backend=bubblewrap is required, but bwrap not found; command refused", models.ErrSandboxUnavailable)
 }
@@ -68,39 +54,6 @@ func TestPromptRecoveryFailsTerminalWhenSandboxRefuses(t *testing.T) {
 	hung := sandbox.Result{TimedOut: true, Stdout: "Do you want to continue? [Y/n]"}
 	w.handlePromptRecovery(ctx, *running, project, "apt-get install foo", hung)
 	assertRefusedTerminal(t, w, sink, task.ID)
-}
-
-// Batch path: a refused first task must end FAILED on its own, and the second
-// task in the same batch must still complete. Both go through processBatchLegacy.
-func TestProcessBatchLegacyRefusedTaskFailsAloneSiblingCompletes(t *testing.T) {
-	t.Parallel()
-	store := &batchTestStore{
-		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp/ws"},
-		profile: models.AgentProfile{ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: false},
-		tasks:   make(map[string]models.Task),
-		results: make(map[string]*models.TaskResult),
-	}
-	tasks := summarizeTasks(2)
-	for _, task := range tasks {
-		store.tasks[task.ID] = task
-	}
-	w := NewWorker(store, &batchTrackingGateway{}, refuseTaskSandbox{taskID: tasks[0].ID, err: refusedWithoutJail()}, nil, nil, WorkerOptions{})
-
-	w.processBatchLegacy(context.Background(), tasks, store.project, store.profile)
-
-	first, second := tasks[0].ID, tasks[1].ID
-	if store.tasks[first].State != models.TaskStateFailed {
-		t.Fatalf("refused task state = %s, want %s", store.tasks[first].State, models.TaskStateFailed)
-	}
-	if r := store.results[first]; r == nil || r.Success || !strings.Contains(r.Payload, "command refused") {
-		t.Fatalf("refused task result = %#v, want a failed result naming the refusal", r)
-	}
-	if store.tasks[second].State != models.TaskStateCompleted {
-		t.Fatalf("sibling task state = %s, want %s: a refused sibling must not corrupt the batch", store.tasks[second].State, models.TaskStateCompleted)
-	}
-	if r := store.results[second]; r == nil || !r.Success {
-		t.Fatalf("sibling task result = %#v, want success", r)
-	}
 }
 
 func eventCount(sink *mockEventSink, typ string) int {

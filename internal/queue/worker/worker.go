@@ -91,7 +91,6 @@ type Worker struct {
 	maxHealingTasks         int
 	splitMaxDepth           int
 	splitMaxSubtasks        int
-	legacyPreflightScore    int
 }
 
 type MemoryRetriever interface {

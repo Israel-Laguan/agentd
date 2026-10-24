@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"testing"
 
 	"agentd/internal/gateway"
@@ -31,9 +30,7 @@ func healingSplitStore(id string) *legacyHandoffStore {
 	}
 }
 
-// The healing split is its own task-creation stage: it no longer goes through
-// the legacy shell-command prompt, so deleting the legacy engine (T-055b)
-// leaves it working.
+// The healing split is its own task-creation stage, not a worker turn.
 func TestHealingSplitRunsAsItsOwnStage(t *testing.T) {
 	t.Parallel()
 
@@ -49,11 +46,6 @@ func TestHealingSplitRunsAsItsOwnStage(t *testing.T) {
 	req := gw.requests[0]
 	if req.Purpose != gateway.PurposeCreateSplitTask || req.TaskID != "task-split" {
 		t.Errorf("request purpose %q task %q, want %q task-split", req.Purpose, req.TaskID, gateway.PurposeCreateSplitTask)
-	}
-	for _, m := range req.Messages {
-		if strings.Contains(m.Content, legacyJSONCommandSystemSentinel) {
-			t.Errorf("split call carries the legacy command prompt:\n%s", m.Content)
-		}
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()

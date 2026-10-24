@@ -64,12 +64,6 @@ func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, project
 	return messages
 }
 
-func (w *Worker) seedMessages(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	messages := w.legacySeedMessages(task, project, profile)
-	intent := task.Title + " " + task.Description
-	return w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages)
-}
-
 // applyModelRouting selects provider/model from complexity routing when enabled.
 func (w *Worker) ApplyModelRouting(
 	task models.Task,
@@ -204,8 +198,6 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 // This replaces the old buildAgenticMessages which modified an existing message
 // list in-place. The new implementation builds messages from scratch via
 // SystemPromptBuilder, appends a user message, then appends memory lessons.
-// The legacy seedMessages path is still used by the non-agentic
-// command() path in worker_legacy.go.
 func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	systemPrompt := w.buildSystemPromptContent(task, project, profile)
 	userContent := fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)

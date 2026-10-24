@@ -15,10 +15,6 @@ const (
 Return ONLY valid JSON with a "results" array. Each element must have:
 - "slot": zero-based index matching the task slot in the user message
 - "content": your complete answer for that task (plain text, no tools)`
-	batchLegacySystemSuffix = `You are processing multiple independent tasks in one response.
-Return ONLY valid JSON with a "results" array. Each element must have:
-- "slot": zero-based index matching the task slot in the user message
-- either {"command":"..."} for a safe shell command, or {"too_complex":true,"subtasks":[{"title":"...","description":"..."}]}`
 )
 
 func (w *Worker) runBatchTextGateway(
@@ -27,28 +23,10 @@ func (w *Worker) runBatchTextGateway(
 	project models.Project,
 	profile models.AgentProfile,
 ) (batchTextResponse, error) {
-	req := w.buildBatchRequest(ctx, tasks, project, profile, true)
+	req := w.buildBatchRequest(ctx, tasks, project, profile)
 	resp, err := gateway.GenerateJSON[batchTextResponse](ctx, w.gateway, req)
 	if err != nil {
 		return batchTextResponse{}, err
-	}
-	w.RecordProviderSuccess(ctx, tasks[0])
-	return resp, nil
-}
-
-func (w *Worker) runBatchLegacyGateway(
-	ctx context.Context,
-	tasks []models.Task,
-	project models.Project,
-	profile models.AgentProfile,
-) (batchLegacyResponse, error) {
-	req := w.buildBatchRequest(ctx, tasks, project, profile, false)
-	profile = w.routeLegacyProfile(ctx, tasks[0], project, profile)
-	req.Provider = profile.Provider
-	req.Model = profile.Model
-	resp, err := gateway.GenerateJSON[batchLegacyResponse](ctx, w.gateway, req)
-	if err != nil {
-		return batchLegacyResponse{}, err
 	}
 	w.RecordProviderSuccess(ctx, tasks[0])
 	return resp, nil
@@ -59,15 +37,9 @@ func (w *Worker) buildBatchRequest(
 	tasks []models.Task,
 	project models.Project,
 	profile models.AgentProfile,
-	agenticText bool,
 ) gateway.AIRequest {
-	var system string
-	if agenticText {
-		system = w.buildSystemPromptContent(tasks[0], project, profile) + "\n\n" + batchTextSystemSuffix
-		profile = w.ApplyModelRouting(tasks[0], profile, nil, nil)
-	} else {
-		system = legacyJSONCommandSystemContent(profile) + "\n\n" + batchLegacySystemSuffix
-	}
+	system := w.buildSystemPromptContent(tasks[0], project, profile) + "\n\n" + batchTextSystemSuffix
+	profile = w.ApplyModelRouting(tasks[0], profile, nil, nil)
 
 	req := gateway.AIRequest{
 		Purpose: gateway.PurposeExecBatch,
@@ -169,30 +141,6 @@ func validateBatchTextResponse(want int, resp batchTextResponse) error {
 		if _, ok := seen[i]; !ok {
 			return fmt.Errorf("missing slot %d", i)
 		}
-	}
-	return nil
-}
-
-type batchLegacySlot struct {
-	Slot       int                     `json:"slot"`
-	Command    string                  `json:"command,omitempty"`
-	TooComplex bool                    `json:"too_complex,omitempty"`
-	Subtasks   []planning.SplitSubtask `json:"subtasks,omitempty"`
-}
-
-type batchLegacyResponse struct {
-	Results []batchLegacySlot `json:"results"`
-}
-
-func validateBatchLegacySlot(slot batchLegacySlot) error {
-	if slot.TooComplex {
-		if len(slot.Subtasks) == 0 {
-			return fmt.Errorf("too_complex without subtasks")
-		}
-		return nil
-	}
-	if strings.TrimSpace(slot.Command) == "" {
-		return fmt.Errorf("missing command")
 	}
 	return nil
 }

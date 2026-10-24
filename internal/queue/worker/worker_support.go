@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,7 +15,6 @@ import (
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
 )
 
@@ -219,15 +217,6 @@ func (w *Worker) loadContext(
 	}
 	profile, err := w.store.GetAgentProfile(ctx, task.AgentID)
 	return project, profile, err
-}
-
-func (w *Worker) isPromptHang(result sandbox.Result, err error) bool {
-	return result.TimedOut && errors.Is(err, models.ErrExecutionTimeout) && safety.DetectPrompt(result.Stdout, result.Stderr).Detected
-}
-
-func (w *Worker) isPermissionFailure(result sandbox.Result, err error) bool {
-	failed := err != nil || !result.Success
-	return failed && safety.DetectPermission(result.Stdout, result.Stderr).Detected
 }
 
 func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {

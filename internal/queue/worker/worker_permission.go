@@ -61,11 +61,6 @@ func permissionFailure(result agenttools.ToolResult) safety.PermissionDetection 
 	return safety.DetectPermission(result.Content, errorOutput)
 }
 
-func (w *Worker) isPrivilegeBlock(result sandbox.Result, err error) bool {
-	detection := safety.DetectPermission(result.Stdout, result.Stderr)
-	return err != nil && errors.Is(err, models.ErrSandboxViolation) && detection.Blocked
-}
-
 func (w *Worker) requestPermissionAlternative(
 	ctx context.Context,
 	task models.Task,

@@ -77,11 +77,6 @@ func (g *legacyContentGateway) Generate(ctx context.Context, req gateway.AIReque
 func legacyCapOptions() WorkerOptions {
 	return WorkerOptions{
 		MaxToolIterations: 5,
-		Legacy: config.LegacyConfig{
-			PreflightScore:    6,
-			RejectScore:       9,
-			MaxDescriptionLen: 2000,
-		},
-		Split: config.SplitConfig{MaxDepth: 2, MaxSubtasks: 5},
+		Split:             config.SplitConfig{MaxDepth: 2, MaxSubtasks: 5},
 	}
 }
