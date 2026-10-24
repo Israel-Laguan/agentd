@@ -76,7 +76,7 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		return
 	}
 	intent := planning.BuildPhaseIntent(task, project, tasks)
-	plan, err := w.gateway.GeneratePlan(gateway.WithPurpose(ctx, gateway.PurposeCreateNextPhase), intent)
+	plan, err := w.gateway.GeneratePlan(gateway.WithTaskID(gateway.WithPurpose(ctx, gateway.PurposeCreateNextPhase), task.ID), intent)
 	if err != nil {
 		w.HandleGatewayError(ctx, task, err)
 		return

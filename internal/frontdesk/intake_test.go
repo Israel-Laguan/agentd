@@ -157,11 +157,16 @@ func TestIntakeProcessorGeneratePlanFallback(t *testing.T) {
 	if gw.purpose != gateway.PurposeCreateReplanComment {
 		t.Fatalf("plan purpose = %q, want %q", gw.purpose, gateway.PurposeCreateReplanComment)
 	}
+	// T-057: the replan runs for the commented task, so its call carries it.
+	if gw.taskID != task.ID {
+		t.Fatalf("plan TaskID = %q, want %q", gw.taskID, task.ID)
+	}
 }
 
 type stubPlanOnlyGW struct {
 	out     *models.DraftPlan
 	purpose gateway.Purpose
+	taskID  string
 }
 
 func (*stubPlanOnlyGW) Generate(context.Context, gateway.AIRequest) (gateway.AIResponse, error) {
@@ -169,6 +174,7 @@ func (*stubPlanOnlyGW) Generate(context.Context, gateway.AIRequest) (gateway.AIR
 }
 func (g *stubPlanOnlyGW) GeneratePlan(ctx context.Context, _ string) (*models.DraftPlan, error) {
 	g.purpose = gateway.PurposeFromContext(ctx)
+	g.taskID = gateway.TaskIDFromContext(ctx)
 	return g.out, nil
 }
 func (*stubPlanOnlyGW) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
