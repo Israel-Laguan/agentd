@@ -15,9 +15,11 @@ import (
 	"testing"
 
 	"agentd/internal/bus"
+	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
+	"agentd/internal/queue/planning"
 	"agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
 	"agentd/internal/testutil"
@@ -68,30 +70,38 @@ func (f *fakeOpenAI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			title = strings.TrimSpace(match[1])
 		}
 	}
-	f.mu.Lock()
-	f.requests = append(f.requests, fakeChatRequest{Title: title, Metadata: body.Metadata})
-	f.mu.Unlock()
+	// Elicitation and the healing split are stages of the worker, not turns of
+	// the agent, so only agent turns are recorded.
+	stage := systemContains(body.Messages, elicitationSentinel) || systemContains(body.Messages, splitSentinel)
+	if !stage {
+		f.mu.Lock()
+		f.requests = append(f.requests, fakeChatRequest{Title: title, Metadata: body.Metadata})
+		f.mu.Unlock()
+	}
 
-	var content any
-	if strings.Contains(title, planMarker) {
-		base := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(title, planMarker), ":"))
-		content = map[string]any{"too_complex": true, "subtasks": []map[string]string{
-			{"title": base + " :: Step 1 - scaffold", "description": "Create the scaffold for the requested work."},
-			{"title": base + " :: Step 2 - implement", "description": "Implement the core of the requested work."},
-		}}
-	} else {
+	message := map[string]any{"role": "assistant", "content": ""}
+	switch {
+	case systemContains(body.Messages, elicitationSentinel):
+		message["content"] = `{"needs_clarification":false}`
+	case systemContains(body.Messages, splitSentinel):
+		message["content"] = splitReply(body.Messages)
+	case lastIsToolResult(body.Messages):
+		message["content"] = "done"
+	case strings.Contains(title, planMarker):
+		message["tool_calls"] = bashToolCalls("false")
+	default:
 		taskID := body.Metadata["task_id"]
 		if taskID == "" {
 			taskID = "unknown"
 		}
-		content = map[string]string{"command": fmt.Sprintf("echo 'task=%s executed' >> PLAN_RESULTS.log", taskID)}
+		message["tool_calls"] = bashToolCalls(fmt.Sprintf("echo 'task=%s executed' >> PLAN_RESULTS.log", taskID))
 	}
-	encoded, _ := json.Marshal(content)
+	content := message
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"model": "agentd",
 		"choices": []map[string]any{{
-			"message": map[string]string{"role": "assistant", "content": string(encoded)},
+			"message": content,
 		}},
 		"usage": map[string]int{"total_tokens": 2},
 	})
@@ -107,7 +117,7 @@ func seedDefaultProfile(t *testing.T, store models.KanbanStore) {
 	t.Helper()
 	ctx := context.Background()
 	if err := store.UpsertAgentProfile(ctx, models.AgentProfile{
-		ID: "default", Name: "Default Coding Agent", Temperature: 0.2, MaxTokens: 1024, Role: "CODE_GEN",
+		ID: "default", Name: "Default Coding Agent", Provider: "litellm", AgenticMode: true, Temperature: 0.2, MaxTokens: 1024, Role: "CODE_GEN",
 		SystemPrompt: sql.NullString{String: "Suggest one safe shell command for the requested task. Output only JSON.", Valid: true},
 	}); err != nil {
 		t.Fatalf("seed default profile: %v", err)
@@ -259,11 +269,67 @@ func TestPlanExecute_ThroughOpenAIAdapter(t *testing.T) {
 	router := buildOpenAIAdapterRouter(t, server.URL)
 	emitter := bus.NewEventEmitter(store, bus.NewInProcess())
 	sb := &sandbox.BashExecutor{Root: projectsDir, Sink: bus.EventBridge{Emitter: emitter}}
-	w := worker.NewWorker(store, router, sb, nil, emitter, worker.WorkerOptions{ProjectsDir: projectsDir})
+	tuner := planning.NewParameterTuner(config.HealingConfig{Enabled: true, Steps: []string{planning.HealingStepSplitTask}})
+	w := worker.NewWorker(store, router, sb, nil, emitter, worker.WorkerOptions{ProjectsDir: projectsDir, Tuner: tuner, ToolFailureStreak: 1})
 
 	project := materializePlan(t, store, ctx, projectsDir)
 	tasks := drivePlanToRest(t, store, w, project.ID)
 	verifyPlanExecution(t, ctx, store, tasks, project, fake)
+}
+
+// elicitationSentinel and splitSentinel identify the two non-agentic calls the
+// worker makes: the pre-task elicitation check and the healing split.
+const (
+	elicitationSentinel = "pre-task ambiguity"
+	splitSentinel       = "This task has failed several times as one unit"
+)
+
+func systemContains(messages []struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}, sentinel string) bool {
+	for _, m := range messages {
+		if m.Role == "system" && strings.Contains(m.Content, sentinel) {
+			return true
+		}
+	}
+	return false
+}
+
+func lastIsToolResult(messages []struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}) bool {
+	return len(messages) > 0 && messages[len(messages)-1].Role == "tool"
+}
+
+// splitReply splits the parent task into two steps named after it.
+func splitReply(messages []struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}) string {
+	base := ""
+	for _, m := range messages {
+		if m.Role == "user" {
+			base = strings.TrimSpace(strings.TrimPrefix(strings.SplitN(m.Content, "\n", 2)[0], "Task:"))
+		}
+	}
+	// The steps drop the marker, so they are not split again.
+	base = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(base, planMarker), ":"))
+	encoded, _ := json.Marshal(map[string]any{"subtasks": []map[string]string{
+		{"title": base + " :: Step 1 - scaffold", "description": "Create the scaffold for the requested work."},
+		{"title": base + " :: Step 2 - implement", "description": "Implement the core of the requested work."},
+	}})
+	return string(encoded)
+}
+
+// bashToolCalls is the tool call an agentic model makes to run command.
+func bashToolCalls(command string) []map[string]any {
+	args, _ := json.Marshal(map[string]string{"command": command})
+	return []map[string]any{{
+		"id": "call_1", "type": "function",
+		"function": map[string]string{"name": "bash", "arguments": string(args)},
+	}}
 }
 
 // drivePlanToRest runs the daemon's claim-and-process cycle until no task in
