@@ -30,8 +30,8 @@ func TestAgenticFinishAfterFailedCommandRetries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if got.State == models.TaskStateCompleted || got.State == models.TaskStateFailedRequiresHuman || got.RetryCount != 1 {
-		t.Fatalf("state = %s retries = %d, want a retry: the last command failed and the task finished without a passing run", got.State, got.RetryCount)
+	if got.State != models.TaskStateReady || got.RetryCount != 1 {
+		t.Fatalf("state = %s retries = %d, want READY with one retry: the last command failed and the task finished without a passing run", got.State, got.RetryCount)
 	}
 	if !sinkPayloadContains(sink, "RETRY", "TestCountLines") {
 		t.Fatalf("events = %#v, want a RETRY carrying the failed command's output", sink.events)
