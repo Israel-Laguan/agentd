@@ -259,8 +259,8 @@ func TestWorkerAgenticModeHandlesToolExecutionError(t *testing.T) {
 
 	// B-082: the final text came after a failed command and nothing passed
 	// after it, so the task must not be recorded as a success; it is retried.
-	if (store.result != nil && store.result.Success) || store.task.RetryCount != 1 {
-		t.Fatalf("result = %#v retries = %d, want a retry after a failed command", store.result, store.task.RetryCount)
+	if store.result != nil || store.task.State != models.TaskStateReady || store.task.RetryCount != 1 {
+		t.Fatalf("result = %#v state = %s retries = %d, want no result and a retry after a failed command", store.result, store.task.State, store.task.RetryCount)
 	}
 	if len(sb.commands) != 1 || sb.commands[0] != "false" {
 		t.Fatalf("commands = %#v, want [false]", sb.commands)

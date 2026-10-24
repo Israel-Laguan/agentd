@@ -94,7 +94,8 @@ func TestAgenticLoop_ToolErrorStringStillContinuesToFinalResponse(t *testing.T) 
 		t.Fatalf("expected second request to include tool stderr in context, got %#v", mockGateway.requests[1].Messages)
 	}
 	// B-082: a final answer given after a failed command with nothing passing
-	// after it is not committed as a result; the task goes to a human.
+	// after it is not committed as a result; the task is retried with the
+	// failure as feedback.
 	if store.committedResult != nil && store.committedResult.Success {
 		t.Fatalf("final response after a failed command must not be committed as success, got %#v", store.committedResult)
 	}
