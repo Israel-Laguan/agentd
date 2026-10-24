@@ -119,8 +119,7 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 	profileRestricted := len(profile.AllowedTools) > 0
 	profile = w.applyTieredStepProfile(profile, stepKind)
 	if profileRestricted && len(profile.AllowedTools) == 0 {
-		w.failTieredStep(ctx, task, "no tools are permitted by the profile and tiered step allowlists")
-		w.failTieredDependents(ctx, task, parentTask)
+		w.failTieredStepNoTools(ctx, task, parentTask, stepKind)
 		return
 	}
 	profile.AgenticMode = true
@@ -130,7 +129,7 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 		return
 	}
 
-	if stepKind == TieredStepDecision || stepKind == TieredStepExecute || stepKind == TieredStepVerify || stepKind == TieredStepEscalate {
+	if isTieredContextInjectStep(stepKind) {
 		var err error
 		task, err = w.injectContextPack(task, parentTask, project)
 		if err != nil {
@@ -233,6 +232,24 @@ func (w *Worker) tieredStepKind(task models.Task) TieredStepKind {
 		return kind
 	}
 	return TieredStepContext
+}
+
+func isTieredContextInjectStep(stepKind TieredStepKind) bool {
+	return stepKind == TieredStepDecision || stepKind == TieredStepExecute ||
+		stepKind == TieredStepVerify || stepKind == TieredStepEscalate
+}
+
+// failTieredStepNoTools handles the case where a profile's allowlist intersects
+// to empty tools for a tiered step: fail the step and its dependents, handing
+// the origin to FAILED_REQUIRES_HUMAN for escalate steps.
+func (w *Worker) failTieredStepNoTools(ctx context.Context, task, parentTask models.Task, stepKind TieredStepKind) {
+	w.failTieredStep(ctx, task, "no tools are permitted by the profile and tiered step allowlists")
+	w.failTieredDependents(ctx, task, parentTask)
+	if stepKind == TieredStepEscalate {
+		if err := w.transitionTaskState(ctx, parentTask.ID, models.TaskStateFailedRequiresHuman); err != nil {
+			slog.Error("tiered: failed to hand off origin after profile allowlist failure", "task_id", parentTask.ID, "error", err)
+		}
+	}
 }
 
 // persistTieredDAG blocks the parent task and persists the tiered step
