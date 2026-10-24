@@ -8,14 +8,18 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestMigrateToV24AcceptsSplitRelations(t *testing.T) {
+func openMigrateV24DB(t *testing.T) (*sql.DB, context.Context) {
+	t.Helper()
 	db, err := sql.Open("sqlite", "file:migrate-v24?mode=memory&cache=shared")
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	return db, context.Background()
+}
 
-	ctx := context.Background()
+func seedV23Schema(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
 	for _, stmt := range []string{
 		`CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)`,
 		`CREATE TABLE tasks (id TEXT PRIMARY KEY NOT NULL) STRICT`,
@@ -36,11 +40,10 @@ func TestMigrateToV24AcceptsSplitRelations(t *testing.T) {
 			t.Fatalf("seed v23 schema: %v", err)
 		}
 	}
+}
 
-	if err := migrateToV24(ctx, db); err != nil {
-		t.Fatalf("migrateToV24: %v", err)
-	}
-
+func assertPreservedRelations(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
 	type relation struct {
 		parent string
 		child  string
@@ -69,6 +72,16 @@ func TestMigrateToV24AcceptsSplitRelations(t *testing.T) {
 	if got := preserved[0]; got != (relation{parent: "parent", child: "child", kind: "BLOCKS"}) {
 		t.Fatalf("relation = %+v, want {parent:parent child:child kind:BLOCKS}", got)
 	}
+}
+
+func TestMigrateToV24AcceptsSplitRelations(t *testing.T) {
+	db, ctx := openMigrateV24DB(t)
+	seedV23Schema(t, ctx, db)
+
+	if err := migrateToV24(ctx, db); err != nil {
+		t.Fatalf("migrateToV24: %v", err)
+	}
+	assertPreservedRelations(t, ctx, db)
 
 	if _, err := db.ExecContext(ctx, `
 		INSERT INTO task_relations (parent_task_id, child_task_id, relation_type)
