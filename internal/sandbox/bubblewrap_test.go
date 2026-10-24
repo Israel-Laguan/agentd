@@ -52,7 +52,7 @@ func TestJailEnvAddsDefaultsWhenAbsent(t *testing.T) {
 // and apply mounts in order: the /tmp tmpfs would otherwise cover a workspace
 // bound under /tmp.
 func TestJailArgvProfile(t *testing.T) {
-	argv := jailArgv("/usr/bin/bwrap", "/tmp/ws/p", []string{"CI=true"}, nil, "echo hi")
+	argv := jailArgv("/usr/bin/bwrap", "/tmp/ws/p", false, []string{"CI=true"}, nil, "echo hi")
 	text := strings.Join(argv, "\n")
 	for _, want := range []string{
 		"--unshare-all", "--die-with-parent",

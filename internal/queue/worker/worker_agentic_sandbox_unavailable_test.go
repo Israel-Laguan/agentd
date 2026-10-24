@@ -30,11 +30,30 @@ func runAgenticTask(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor) (*W
 // (for example with subagent definitions) before the loop starts.
 func runAgenticTaskIn(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, prep func(workspace string)) (*Worker, *mockEventSink, models.Task) {
 	t.Helper()
+	return runAgenticDraft(t, gw, sb, models.DraftTask{Title: "Inspect host", Description: testutil.AgenticTestTaskDescription()}, prep)
+}
+
+// runAgenticDraft is runAgenticTaskIn for a task made from draft, so a test can
+// set its success criteria.
+func runAgenticDraft(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, draft models.DraftTask, prep func(workspace string)) (*Worker, *mockEventSink, models.Task) {
+	t.Helper()
+	w, sink, task, project, profile := agenticFixture(t, gw, sb, draft, prep)
+	if result, ok := w.processAgentic(context.Background(), task, project, profile); ok {
+		w.handleLoopResult(context.Background(), task, result)
+	}
+	return w, sink, task
+}
+
+// agenticFixture materializes a task made from draft, claims it, and returns
+// the worker with the claimed task, its project and its profile. The caller
+// runs the attempts, so a test can run several on the same worker.
+func agenticFixture(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, draft models.DraftTask, prep func(workspace string)) (*Worker, *mockEventSink, models.Task, models.Project, models.AgentProfile) {
+	t.Helper()
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	store.SetProjectsDir(t.TempDir())
 	proj, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{ProjectName: "host", Description: "d",
-		Tasks: []models.DraftTask{{Title: "Inspect host", Description: testutil.AgenticTestTaskDescription()}}})
+		Tasks: []models.DraftTask{draft}})
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
@@ -54,10 +73,7 @@ func runAgenticTaskIn(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, p
 	}
 	sink := &mockEventSink{}
 	w := NewWorker(store, gw, sb, nil, sink, WorkerOptions{MaxToolIterations: 5})
-	if result, ok := w.processAgentic(ctx, *running, *proj, profile); ok {
-		w.handleLoopResult(ctx, *running, result)
-	}
-	return w, sink, *running
+	return w, sink, *running, *proj, profile
 }
 
 func assertAgenticRefusedTerminal(t *testing.T, w *Worker, taskID string) {

@@ -47,6 +47,17 @@ func criterionFiles(criteria []string) []string {
 	return out
 }
 
+// VerifyPostConditions checks the success-criteria files before an agentic
+// text-only finish is committed (B-039).
+func (w *Worker) VerifyPostConditions(task models.Task, project models.Project) error {
+	// Without a workspace the names would resolve against the daemon's own
+	// working directory, so there is nothing to check.
+	if project.WorkspacePath == "" {
+		return nil
+	}
+	return verifyPostConditions(task, project.WorkspacePath)
+}
+
 // verifyPostConditions checks the cheap post-conditions derivable from a
 // task's success criteria after an exit-0 command (B-039): every named file
 // must exist and be non-empty, and named Go files must still parse. It is

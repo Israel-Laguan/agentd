@@ -21,8 +21,12 @@ type ExecutionPayload struct {
 	EnvVars      []string
 	TimeoutLimit int
 	WallTimeout  time.Duration
-	Why          string
-	What         string
+	// ReadOnlyWorkspace mounts the workspace read-only in the jail, so the
+	// command can read it but not write to it. It needs the jail: without one
+	// the command is refused (see sandbox.BashExecutor).
+	ReadOnlyWorkspace bool
+	Why               string
+	What              string
 }
 
 // ExecutionResult is the cross-box return shape from sandbox to queue/store.

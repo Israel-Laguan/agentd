@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
+	"log/slog"
 
 	"agentd/internal/config"
 	"agentd/internal/kanban"
@@ -42,22 +42,14 @@ func gatewayOrderIncludes(order []string, name string) bool {
 // On a fresh database all three profiles are written. On subsequent
 // calls (e.g. repeated "agentd init") each profile is skipped when it
 // already exists, preserving any operator PATCH. Pass reset=true to
-// force-overwrite all profiles regardless of existing data.
+// force-overwrite all profiles regardless of existing data. Either way, every
+// profile still in non-agentic mode is upgraded afterwards.
 func seedDefaultAgent(ctx context.Context, store *kanban.Store, reset bool) error {
 	profiles := append(defaultAgentProfiles(), tieredAgentProfiles()...)
 	for _, profile := range profiles {
 		if !reset {
 			existing, err := store.GetAgentProfile(ctx, profile.ID)
 			if err == nil && existing != nil {
-				if err := upgradeLegacyDefault(ctx, store, profile, existing); err != nil {
-					return err
-				}
-				if strings.HasPrefix(profile.ID, "tier-") && !existing.AgenticMode {
-					existing.AgenticMode = true
-					if err := store.UpsertAgentProfile(ctx, *existing); err != nil {
-						return err
-					}
-				}
 				continue
 			}
 			if err != nil && !errors.Is(err, models.ErrAgentProfileNotFound) {
@@ -68,26 +60,97 @@ func seedDefaultAgent(ctx context.Context, store *kanban.Store, reset bool) erro
 			return err
 		}
 	}
-	return nil
+	return upgradeNonAgenticProfiles(ctx, store, profiles)
+}
+
+// legacySeededPrompts are the prompts the seeded profiles carried while they
+// were not agentic. A row still carrying one is untouched by the operator.
+var legacySeededPrompts = map[string]string{
+	"default":    legacyDefaultSystemPrompt,
+	"researcher": legacyResearcherSystemPrompt,
+	"qa":         legacyQASystemPrompt,
 }
 
 // legacyDefaultSystemPrompt is the default profile's prompt before B-080: the
 // legacy one-command path. An untouched row still carrying it is upgraded.
 const legacyDefaultSystemPrompt = "Suggest one safe shell command for the requested task. Output only JSON."
 
+// legacyResearcherSystemPrompt and legacyQASystemPrompt are the seeded prompts
+// before those profiles were agentic.
+const (
+	legacyResearcherSystemPrompt = "Investigate and summarize. Prefer information-gathering shell commands; never mutate state. Output only JSON."
+	legacyQASystemPrompt         = "Run tests, lints, and assertions. Be deterministic and conservative. Output only JSON."
+)
+
 // defaultSystemPrompt drives the agentic loop: the work is done with tools, and
 // a task is only reported Completed after its own tests pass (B-080).
 const defaultSystemPrompt = "Do the requested task in the workspace with the tools you have. Run the project's tests before you report Completed. If a key detail is missing, or a check cannot run, report NeedsHuman with one question instead of guessing."
 
-// upgradeLegacyDefault makes an untouched pre-B-080 default profile agentic. A
-// default whose prompt an operator changed is left alone.
-func upgradeLegacyDefault(ctx context.Context, store *kanban.Store, seeded models.AgentProfile, existing *models.AgentProfile) error {
-	if seeded.ID != "default" || existing.AgenticMode || !existing.SystemPrompt.Valid || existing.SystemPrompt.String != legacyDefaultSystemPrompt {
-		return nil
+// researcherSystemPrompt names the researcher's job. Its read-only part is held
+// by the profile's allowed tools and read-only workspace, not by this text.
+const researcherSystemPrompt = "Investigate and summarize. Use bash and read only; never modify the workspace. Report what you find, including where you looked."
+
+// qaSystemPrompt drives the agentic loop for QA runs.
+const qaSystemPrompt = "Run tests, lints, and assertions. Be deterministic and conservative."
+
+// upgradeNonAgenticProfiles upgrades every profile row still in non-agentic
+// mode, operator-created rows included (see upgradeLegacyProfile).
+func upgradeNonAgenticProfiles(ctx context.Context, store *kanban.Store, seeds []models.AgentProfile) error {
+	rows, err := store.ListAgentProfiles(ctx)
+	if err != nil {
+		return err
 	}
+	seeded := make(map[string]*models.AgentProfile, len(seeds))
+	for i := range seeds {
+		seeded[seeds[i].ID] = &seeds[i]
+	}
+	for i := range rows {
+		if rows[i].AgenticMode {
+			continue
+		}
+		if err := upgradeLegacyProfile(ctx, store, &rows[i], seeded[rows[i].ID]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// upgradeLegacyProfile makes a non-agentic row agentic. A seeded row also takes
+// the seeded read-only policy when the operator set no tools, and the seeded
+// prompt while it still carries the legacy one. Everything else the operator set
+// is kept, and the upgrade is logged and recorded as an event.
+func upgradeLegacyProfile(ctx context.Context, store *kanban.Store, existing *models.AgentProfile, seeded *models.AgentProfile) error {
 	existing.AgenticMode = true
-	existing.SystemPrompt = seeded.SystemPrompt
-	return store.UpsertAgentProfile(ctx, *existing)
+	if seeded != nil {
+		if legacy, ok := legacySeededPrompts[existing.ID]; ok && existing.SystemPrompt.Valid && existing.SystemPrompt.String == legacy {
+			existing.SystemPrompt = seeded.SystemPrompt
+		}
+		if len(existing.AllowedTools) == 0 && !existing.WorkspaceReadonly {
+			existing.AllowedTools = seeded.AllowedTools
+			existing.WorkspaceReadonly = seeded.WorkspaceReadonly
+		}
+	}
+	if err := store.UpsertAgentProfile(ctx, *existing); err != nil {
+		return err
+	}
+	slog.Info("profile upgraded to agentic", "profile_id", existing.ID,
+		"allowed_tools", existing.AllowedTools, "workspace_readonly", existing.WorkspaceReadonly)
+	return recordProfileUpgrade(ctx, store, existing)
+}
+
+// recordProfileUpgrade leaves a PROFILE_UPGRADED event on the system project,
+// where operators look for startup changes.
+func recordProfileUpgrade(ctx context.Context, store *kanban.Store, profile *models.AgentProfile) error {
+	system, err := store.EnsureSystemProject(ctx)
+	if err != nil {
+		return err
+	}
+	return store.AppendEvent(ctx, models.Event{
+		ProjectID: system.ID,
+		Type:      models.EventTypeProfileUpgraded,
+		Payload: fmt.Sprintf("profile %s is now agentic (allowed_tools=%v, workspace_readonly=%t)",
+			profile.ID, profile.AllowedTools, profile.WorkspaceReadonly),
+	})
 }
 
 func defaultAgentProfiles() []models.AgentProfile {
@@ -104,18 +167,21 @@ func defaultAgentProfiles() []models.AgentProfile {
 		{
 			ID: "researcher", Name: "Research Specialist",
 			Provider: "", Model: "", Temperature: 0.7, MaxTokens: 2048,
-			Role: "RESEARCH",
+			Role: "RESEARCH", AgenticMode: true,
+			// Read-only: bash and read, with the workspace mounted read-only (SP-028).
+			AllowedTools:      []string{"bash", "read"},
+			WorkspaceReadonly: true,
 			SystemPrompt: sql.NullString{
-				String: "Investigate and summarize. Prefer information-gathering shell commands; never mutate state. Output only JSON.",
+				String: researcherSystemPrompt,
 				Valid:  true,
 			},
 		},
 		{
 			ID: "qa", Name: "Quality Assurance",
 			Provider: "", Model: "", Temperature: 0.0, MaxTokens: 1024,
-			Role: "QA",
+			Role: "QA", AgenticMode: true,
 			SystemPrompt: sql.NullString{
-				String: "Run tests, lints, and assertions. Be deterministic and conservative. Output only JSON.",
+				String: qaSystemPrompt,
 				Valid:  true,
 			},
 		},

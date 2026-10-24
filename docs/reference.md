@@ -68,8 +68,11 @@ task["id"], task["project_id"], task["state"]
 | Feature | Description | Feature File |
 | --- | --- | --- |
 | User-editable cron | The daemon reads `<home>/agentd.crontab` for background job schedules. Recognized jobs include `task-dispatch`, `intake`, `heartbeat`, `disk-watchdog`, `hitl-reconcile` (default `@every 1m`), `memory-curator`, and `dream`. Standard 5-field entries and `@every <duration>` sub-minute entries are supported. | [`cron_schedule.feature`](../cmd/agentd/features/cron_schedule.feature) |
-| Prompt recovery | Timed-out sandbox executions are scanned for interactive prompt patterns. Allowlisted commands get a one-shot non-interactive retry; unrecoverable prompts create a HUMAN task. | [`prompt_recovery.feature`](../internal/queue/features/prompt_recovery.feature) |
-| Permission detection | `sudo` is blocked before execution. Failed commands with permission-like output create a HUMAN child task for the privileged host action. | [`permission_detection.feature`](../internal/queue/features/permission_detection.feature) |
+| Prompt recovery | Timed-out sandbox executions are scanned for interactive prompt patterns. Allowlisted commands get a one-shot non-interactive retry; unrecoverable prompts create a HUMAN task. On the agentic path, the first hang of a command returns corrective feedback so the model can rerun it non-interactively; the same command hanging again creates a HUMAN task. | [`prompt_recovery.feature`](../internal/queue/features/prompt_recovery.feature) |
+| Permission detection | `sudo` is blocked before execution. Failed commands with permission-like output create a HUMAN child task for the privileged host action, on the legacy and agentic paths alike. | [`permission_detection.feature`](../internal/queue/features/permission_detection.feature) |
+| Success-criteria check | A text-only finish is not COMPLETED while a success-criteria file it names is missing, empty, or no longer parses as Go. The task goes to a human. | [`worker_agentic_postcondition_test.go`](../internal/queue/worker/worker_agentic_postcondition_test.go) |
+| Retry dedupe | A retry that re-sends the command which failed first in the previous attempt is refused, and that failure goes back to the model. The command is not run again. | [`worker_agentic_retry_dedupe_test.go`](../internal/queue/worker/worker_agentic_retry_dedupe_test.go) |
+| Read-only workspace | A profile with `workspace_readonly` runs its bash with the workspace mounted read-only inside the jail, and its `write` tool is refused. The seeded `researcher` and the tiered `context` and `decision` steps use it. Without a jail the command is refused. | [`jail_readonly_test.go`](../internal/sandbox/jail_readonly_test.go) |
 | Worker self-breakdown | Workers can return `{too_complex: true, subtasks: [...]}`. The parent moves to `BLOCKED`, child tasks are created, and the parent returns to `READY` after all children complete; the worker then rolls it up to `COMPLETED` without re-prompting the model (`TASK_BREAKDOWN_ROLLUP`). | [`task_dependencies.feature`](../internal/kanban/features/task_dependencies.feature) |
 
 ### Journey 3: System Resilience and Hardware
@@ -132,9 +135,10 @@ task["id"], task["project_id"], task["state"]
 
 | Event Type | Source | Meaning |
 | --- | --- | --- |
-| `PROMPT_DETECTED` | Worker | Interactive prompt detected in sandbox output after a timeout. |
-| `PROMPT_HANDOFF` | Worker | HUMAN task created for an unrecoverable interactive prompt. |
+| `PROMPT_DETECTED` | Worker | Interactive prompt detected in sandbox output after a timeout. On the agentic path, one per hang of a bash command. |
+| `PROMPT_HANDOFF` | Worker | HUMAN task created for an interactive prompt that hung a second time. |
 | `PERMISSION_HANDOFF` | Worker | Privileged work detected; HUMAN task created. |
+| `PROFILE_UPGRADED` | System | A profile still in non-agentic mode was made agentic at startup. Written to the `_system` project. |
 | `SANDBOX_VIOLATION` | Sandbox | Command blocked before execution due to sandbox policy (e.g., `sudo`, path escape). |
 | `LOG_CHUNK` | Sandbox | Streaming stdout/stderr line emitted during command execution (after scrubber redaction). |
 | `COMMAND` | Worker | The shell command a legacy-mode worker executed for the task (scrubbed, bounded). Not emitted for commands the sandbox refused; those produce `SANDBOX_VIOLATION`. |

@@ -461,7 +461,7 @@ func TestIsExternalTool_ExplicitSetFilters(t *testing.T) {
 
 func TestAgenticSystemPrompt_ContainsExternalContentInstruction(t *testing.T) {
 	t.Parallel()
-	text := agenticToolUseSystemText()
+	text := agenticToolUseSystemText(false)
 	if !strings.Contains(text, "external_content") {
 		t.Fatalf("system prompt should contain external_content instruction, got %q", text)
 	}
@@ -475,7 +475,7 @@ func TestAgenticSystemPrompt_ContainsExternalContentInstruction_WithGoals(t *tes
 	goal := &agentcontext.AgentGoal{
 		SuccessCriteria: []string{"criterion1"},
 	}
-	text := agenticToolUseSystemText(goal)
+	text := agenticToolUseSystemText(false, goal)
 	if !strings.Contains(text, "external_content") {
 		t.Fatalf("system prompt with goals should contain external_content instruction")
 	}

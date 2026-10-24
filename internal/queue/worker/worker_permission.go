@@ -36,6 +36,8 @@ func containsSudoToken(command string) bool {
 	return sudoTokenPattern.MatchString(command)
 }
 
+// AgenticPrivilegeBlock reports the command of a failed bash call whose output
+// shows a permission failure, sudo refusals included.
 func (w *Worker) AgenticPrivilegeBlock(call gateway.ToolCall, result agenttools.ToolResult) (string, bool) {
 	if call.Function.Name != agenttools.ToolNameBash || result.Status == agenttools.ToolStatusSuccess {
 		return "", false
@@ -46,12 +48,17 @@ func (w *Worker) AgenticPrivilegeBlock(call gateway.ToolCall, result agenttools.
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil || strings.TrimSpace(args.Command) == "" {
 		return "", false
 	}
+	return args.Command, permissionFailure(result).Detected
+}
+
+// permissionFailure classifies a failed tool result's output as a permission
+// failure.
+func permissionFailure(result agenttools.ToolResult) safety.PermissionDetection {
 	errorOutput := ""
 	if result.Error != nil {
 		errorOutput = result.Error.Message
 	}
-	detection := safety.DetectPermission(result.Content, errorOutput)
-	return args.Command, detection.Blocked
+	return safety.DetectPermission(result.Content, errorOutput)
 }
 
 func (w *Worker) isPrivilegeBlock(result sandbox.Result, err error) bool {
@@ -177,7 +184,10 @@ func (w *Worker) RecoverAgenticPrivilege(
 	allowAlternative bool,
 	dispatch func(gateway.ToolCall) (agenttools.ToolResult, bool),
 ) (agenttools.ToolResult, bool) {
-	if allowAlternative {
+	// Only a sudo refusal by the sandbox itself may get a non-privileged
+	// alternative. Any other permission failure goes straight to a human.
+	sudoRefusal := permissionFailure(blockedResult).Blocked
+	if allowAlternative && sudoRefusal {
 		alternative, tokens, details, err := w.requestPermissionAlternative(ctx, task, profile, command)
 		w.RecordTaskTokenUsage(ctx, task, tokens, details)
 		if err != nil {
@@ -217,6 +227,9 @@ func (w *Worker) RecoverAgenticPrivilege(
 	}
 
 	outcome := "Privileged command blocked before execution."
+	if !sudoRefusal {
+		outcome = "The sandbox reported a permission failure; no non-privileged recovery was attempted."
+	}
 	w.handlePermissionFailure(ctx, task, command, outcome)
 	return agenttools.ToolResult{}, true
 }

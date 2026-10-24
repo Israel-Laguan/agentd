@@ -43,6 +43,16 @@ type Config struct {
 	Capabilities            *capabilities.Registry
 }
 
+// PromptHang is a bash call that stopped at an interactive prompt.
+type PromptHang struct {
+	// Command is the command as the model sent it; a repeat of it hands off.
+	Command string
+	// Payload is the PROMPT_DETECTED payload.
+	Payload string
+	// Feedback is the corrective tool result the model gets on the first hang.
+	Feedback string
+}
+
 type Host interface {
 	FailHard(ctx context.Context, task models.Task, err error)
 	RegisterCancel(taskID string, cancel context.CancelFunc)
@@ -66,6 +76,12 @@ type Host interface {
 		taskCaps *capabilities.Registry,
 		providerName string,
 	) (agenttools.ToolResult, bool)
+	// AgenticPromptHang reports a bash call that timed out with an interactive
+	// prompt in its output.
+	AgenticPromptHang(call gateway.ToolCall, result agenttools.ToolResult) (PromptHang, bool)
+	// HandlePromptHandoff blocks the task for a human after a command hung at a
+	// prompt a second time (PROMPT_HANDOFF).
+	HandlePromptHandoff(ctx context.Context, task models.Task, payload string)
 	AgenticPrivilegeBlock(call gateway.ToolCall, result agenttools.ToolResult) (string, bool)
 	RecoverAgenticPrivilege(
 		ctx context.Context,
@@ -106,6 +122,15 @@ type Host interface {
 		budget *agentruntime.BudgetGuard,
 	) (string, error)
 	RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error
+	// RecordAttemptFailure remembers the first failing shell command of this
+	// attempt for the next attempt to check (B-043).
+	RecordAttemptFailure(task models.Task, call gateway.ToolCall, result agenttools.ToolResult)
+	// RepeatedAttemptFailure returns the refusal feedback for a bash call that
+	// repeats the command that failed first in the previous attempt (B-043).
+	RepeatedAttemptFailure(task models.Task, call gateway.ToolCall) (string, bool)
+	// VerifyPostConditions checks the success-criteria files a task names
+	// before a text-only finish is committed (B-039).
+	VerifyPostConditions(task models.Task, project models.Project) error
 	TryExternalCapabilityRoute(
 		ctx context.Context,
 		task models.Task,
@@ -133,6 +158,9 @@ type Engine struct {
 	// lastBashFailure is the failing result of the most recent shell command
 	// that did not pass, and "" once a later command passes (B-082).
 	lastBashFailure string
+	// hungCommands holds the commands that already stopped at a prompt in this
+	// run; a repeat of one hands the task to a human. Created on first use.
+	hungCommands map[string]bool
 }
 
 func NewEngine(cfg Config, host Host) *Engine {
