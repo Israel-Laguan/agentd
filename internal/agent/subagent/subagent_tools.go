@@ -35,7 +35,7 @@ func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *agentt
 		allTools = append(allTools, DelegateParallelToolDefinition())
 	}
 
-	if len(def.AllowedTools) == 0 && len(def.ForbiddenTools) == 0 {
+	if len(def.AllowedTools) == 0 && len(def.ForbiddenTools) == 0 && len(d.allowedTools) == 0 {
 		gateway.SortTools(allTools)
 		return allTools
 	}
@@ -50,6 +50,9 @@ func (d *SubagentDelegate) buildToolSet(def SubagentDefinition, toolExec *agentt
 			continue
 		}
 		if len(def.AllowedTools) > 0 && !allowed[name] {
+			continue
+		}
+		if !d.profileAllows(tool.Name) {
 			continue
 		}
 		filtered = append(filtered, tool)
@@ -120,6 +123,9 @@ func (d *SubagentDelegate) executeTool(
 ) string {
 	if isToolForbidden(call.Function.Name, def) {
 		return agenttools.JSONErrorf("tool %q is not available to this subagent", call.Function.Name)
+	}
+	if !d.profileAllows(call.Function.Name) {
+		return agenttools.JSONErrorf("tool %q is outside the delegating profile's allowed_tools", call.Function.Name)
 	}
 	switch call.Function.Name {
 	case agenttools.ToolNameBash, agenttools.ToolNameRead, agenttools.ToolNameWrite:

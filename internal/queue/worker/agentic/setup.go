@@ -30,7 +30,7 @@ func (e *Engine) prepareAgenticRun(
 	taskHooks *agenthooks.HookChain,
 	taskCaps *capabilities.Registry,
 ) {
-	taskToolExecutor = e.newAgenticTaskToolExecutor(project, task)
+	taskToolExecutor = e.newAgenticTaskToolExecutor(project, task).WithAllowedTools(profile.AllowedTools)
 	taskHooks, taskCaps = e.host.MountAgenticHooks(project, profile)
 	messages = e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile)
 	messages, _ = e.host.PrependReviewRejectionFeedback(ctx, task, messages)

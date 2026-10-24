@@ -105,7 +105,9 @@ func (s *AgentService) Patch(ctx context.Context, id string, patch AgentPatch) (
 	if err != nil {
 		return AgentWriteResult{}, err
 	}
-	applyPatch(current, patch)
+	if err := applyPatch(current, patch); err != nil {
+		return AgentWriteResult{}, err
+	}
 	current.Name = strings.TrimSpace(current.Name)
 	if current.Name == "" {
 		return AgentWriteResult{}, fmt.Errorf("%w: name is required", models.ErrAgentProfileInvalid)
@@ -157,7 +159,11 @@ func validateForCreate(p *models.AgentProfile) error {
 	p.Model = strings.TrimSpace(p.Model)
 	p.Role = strings.TrimSpace(p.Role)
 	p.CapabilityRouteIntent = strings.TrimSpace(p.CapabilityRouteIntent)
-	p.AllowedTools = cleanAllowedTools(p.AllowedTools)
+	cleaned, err := cleanAllowedTools(p.AllowedTools)
+	if err != nil {
+		return err
+	}
+	p.AllowedTools = cleaned
 	if p.Name == "" {
 		return fmt.Errorf("%w: name is required", models.ErrAgentProfileInvalid)
 	}
@@ -208,7 +214,7 @@ func validateProviderModelPair(provider, model string) error {
 	return nil
 }
 
-func applyPatch(profile *models.AgentProfile, patch AgentPatch) {
+func applyPatch(profile *models.AgentProfile, patch AgentPatch) error {
 	if patch.Name != nil {
 		profile.Name = strings.TrimSpace(*patch.Name)
 	}
@@ -238,22 +244,29 @@ func applyPatch(profile *models.AgentProfile, patch AgentPatch) {
 		profile.CapabilityRouteIntent = strings.TrimSpace(*patch.CapabilityRouteIntent)
 	}
 	if patch.AllowedTools != nil {
-		profile.AllowedTools = cleanAllowedTools(*patch.AllowedTools)
+		cleaned, err := cleanAllowedTools(*patch.AllowedTools)
+		if err != nil {
+			return err
+		}
+		profile.AllowedTools = cleaned
 	}
 	if patch.WorkspaceReadonly != nil {
 		profile.WorkspaceReadonly = *patch.WorkspaceReadonly
 	}
+	return nil
 }
 
 // cleanAllowedTools trims tool names and drops blanks, so " read " and "" in
 // a request store as "read" and nothing. A list that cleans to nothing means
 // no allowlist.
-func cleanAllowedTools(tools []string) []string {
+func cleanAllowedTools(tools []string) ([]string, error) {
 	var out []string
 	for _, tool := range tools {
-		if name := strings.TrimSpace(tool); name != "" {
-			out = append(out, name)
+		name := strings.TrimSpace(tool)
+		if name == "" {
+			return nil, fmt.Errorf("%w: allowed_tools must not contain blank names", models.ErrAgentProfileInvalid)
 		}
+		out = append(out, name)
 	}
-	return out
+	return out, nil
 }

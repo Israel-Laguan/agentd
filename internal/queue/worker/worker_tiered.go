@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 )
 
@@ -115,7 +116,13 @@ handed off to a human — resolve it completely rather than partially.`
 // execute, or verify) through the agentic engine with step-appropriate
 // tool restrictions and system prompt injection.
 func (w *Worker) processTieredStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, stepKind TieredStepKind, parentTask models.Task) {
+	profileRestricted := len(profile.AllowedTools) > 0
 	profile = w.applyTieredStepProfile(profile, stepKind)
+	if profileRestricted && len(profile.AllowedTools) == 0 {
+		w.failTieredStep(ctx, task, "no tools are permitted by the profile and tiered step allowlists")
+		w.failTieredDependents(ctx, task, parentTask)
+		return
+	}
 	profile.AgenticMode = true
 
 	if stepKind == TieredStepContext {
@@ -168,7 +175,7 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 func (w *Worker) applyTieredStepProfile(profile models.AgentProfile, stepKind TieredStepKind) models.AgentProfile {
 	p := profile
 	if allowlist, ok := tieredStepToolAllowlists[stepKind]; ok {
-		p.AllowedTools = append([]string(nil), allowlist...)
+		p.AllowedTools = intersectAllowedTools(allowlist, profile.AllowedTools)
 	}
 	if suffix, ok := tieredStepSystemPrompts[stepKind]; ok {
 		if p.SystemPrompt.Valid {
@@ -179,6 +186,27 @@ func (w *Worker) applyTieredStepProfile(profile models.AgentProfile, stepKind Ti
 		}
 	}
 	return p
+}
+
+// intersectAllowedTools keeps the step's tools that the profile also permits.
+// An empty profile list means the profile is unrestricted, so the step list
+// applies unchanged. A non-empty profile list that normalizes to no names
+// permits nothing rather than silently becoming unrestricted.
+func intersectAllowedTools(step, profile []string) []string {
+	if len(profile) == 0 {
+		return append([]string(nil), step...)
+	}
+	allowed := agenttools.ProfileAllowlist(profile)
+	if allowed == nil {
+		return nil
+	}
+	out := make([]string, 0, len(step))
+	for _, name := range step {
+		if agenttools.AllowsTool(allowed, name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // tieredStepProfiles is the set of AgentID values that identify tiered steps.

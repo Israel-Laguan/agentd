@@ -16,7 +16,7 @@ func TestAgentServiceCreateCleansAllowedTools(t *testing.T) {
 
 	result, err := svc.Create(context.Background(), models.AgentProfile{
 		ID: "scoped", Name: "Scoped", Provider: "openai", Model: "gpt-4",
-		AllowedTools: []string{" read ", "", "bash"}, WorkspaceReadonly: true,
+		AllowedTools: []string{" read ", "bash"}, WorkspaceReadonly: true,
 	})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)

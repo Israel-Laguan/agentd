@@ -173,6 +173,12 @@ func (w *Worker) TryExternalCapabilityRoute(
 		return agentruntime.LoopResult{}, false, nil
 	}
 
+	allowed := agenttools.ProfileAllowlist(profile.AllowedTools)
+	if !agenttools.AllowsTool(allowed, decision.Tool) {
+		routeErr := fmt.Errorf("capability routing: tool %q is outside the profile's allowed_tools", decision.Tool)
+		w.FailHard(ctx, task, routeErr)
+		return agentruntime.LoopResult{}, false, routeErr
+	}
 	out, err := w.capabilities.CallTool(ctx, decision.Adapter, decision.Tool, decision.Args)
 	if err != nil {
 		routeErr := fmt.Errorf("capability routing: %s/%s: %w", decision.Adapter, decision.Tool, err)
