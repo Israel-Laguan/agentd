@@ -49,6 +49,12 @@ func (h *noopHost) DispatchToolWithHooks(
 
 func (h *noopHost) VerifyPostConditions(models.Task, models.Project) error { return nil }
 
+func (h *noopHost) RecordAttemptFailure(models.Task, gateway.ToolCall, agenttools.ToolResult) {}
+
+func (h *noopHost) RepeatedAttemptFailure(models.Task, gateway.ToolCall) (string, bool) {
+	return "", false
+}
+
 func (h *noopHost) AgenticPromptHang(gateway.ToolCall, agenttools.ToolResult) (PromptHang, bool) {
 	return PromptHang{}, false
 }

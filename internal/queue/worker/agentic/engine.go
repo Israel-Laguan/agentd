@@ -122,6 +122,12 @@ type Host interface {
 		budget *agentruntime.BudgetGuard,
 	) (string, error)
 	RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error
+	// RecordAttemptFailure remembers the first failing shell command of this
+	// attempt for the next attempt to check (B-043).
+	RecordAttemptFailure(task models.Task, call gateway.ToolCall, result agenttools.ToolResult)
+	// RepeatedAttemptFailure returns the refusal feedback for a bash call that
+	// repeats the command that failed first in the previous attempt (B-043).
+	RepeatedAttemptFailure(task models.Task, call gateway.ToolCall) (string, bool)
 	// VerifyPostConditions checks the success-criteria files a task names
 	// before a text-only finish is committed (B-039).
 	VerifyPostConditions(task models.Task, project models.Project) error

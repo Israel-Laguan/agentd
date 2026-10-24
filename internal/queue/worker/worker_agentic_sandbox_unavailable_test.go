@@ -37,6 +37,18 @@ func runAgenticTaskIn(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, p
 // set its success criteria.
 func runAgenticDraft(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, draft models.DraftTask, prep func(workspace string)) (*Worker, *mockEventSink, models.Task) {
 	t.Helper()
+	w, sink, task, project, profile := agenticFixture(t, gw, sb, draft, prep)
+	if result, ok := w.processAgentic(context.Background(), task, project, profile); ok {
+		w.handleLoopResult(context.Background(), task, result)
+	}
+	return w, sink, task
+}
+
+// agenticFixture materializes a task made from draft, claims it, and returns
+// the worker with the claimed task, its project and its profile. The caller
+// runs the attempts, so a test can run several on the same worker.
+func agenticFixture(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, draft models.DraftTask, prep func(workspace string)) (*Worker, *mockEventSink, models.Task, models.Project, models.AgentProfile) {
+	t.Helper()
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	store.SetProjectsDir(t.TempDir())
@@ -61,10 +73,7 @@ func runAgenticDraft(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, dr
 	}
 	sink := &mockEventSink{}
 	w := NewWorker(store, gw, sb, nil, sink, WorkerOptions{MaxToolIterations: 5})
-	if result, ok := w.processAgentic(ctx, *running, *proj, profile); ok {
-		w.handleLoopResult(ctx, *running, result)
-	}
-	return w, sink, *running
+	return w, sink, *running, *proj, profile
 }
 
 func assertAgenticRefusedTerminal(t *testing.T, w *Worker, taskID string) {

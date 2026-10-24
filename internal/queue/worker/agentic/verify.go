@@ -8,6 +8,18 @@ import (
 	"agentd/internal/models"
 )
 
+// isBashFailure reports whether call is a shell command whose result did not pass.
+func isBashFailure(call gateway.ToolCall, tr agenttools.ToolResult) bool {
+	if call.Function.Name != "bash" {
+		return false
+	}
+	switch tr.Status {
+	case agenttools.ToolStatusError, agenttools.ToolStatusFatal, agenttools.ToolStatusTimeout:
+		return true
+	}
+	return false
+}
+
 // noteBashOutcome records whether the latest shell command passed. A failed
 // command leaves its result behind; a passing one clears it (B-082).
 func (e *Engine) noteBashOutcome(call gateway.ToolCall, tr agenttools.ToolResult) {
