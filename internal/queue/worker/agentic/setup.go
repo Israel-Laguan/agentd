@@ -63,6 +63,9 @@ func (e *Engine) runPreTaskElicitation(
 	project models.Project,
 	profile models.AgentProfile,
 	messages *[]gateway.PromptMessage,
+	tools *[]gateway.ToolDefinition,
+	toolToAdapter *map[string]string,
+	routedProfile *models.AgentProfile,
 	taskToolExecutor *agenttools.ToolExecutor,
 ) (models.Task, bool) {
 	described := task.Description
@@ -79,6 +82,8 @@ func (e *Engine) runPreTaskElicitation(
 	taskToolExecutor.WithIntent(task.Title + "\n" + task.Description)
 	if task.Description != described {
 		*messages = e.buildAgenticMessages(cancelCtx, task, project, profile)
+		*tools, *toolToAdapter = e.host.FilterAgenticTools(*tools, *toolToAdapter, task, profile)
+		*routedProfile = e.host.ApplyModelRouting(task, profile, *messages, *tools)
 	}
 	return task, true
 }

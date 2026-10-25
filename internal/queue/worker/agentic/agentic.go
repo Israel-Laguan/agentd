@@ -47,7 +47,7 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		return agentruntime.LoopResult{}, false
 	}
 
-	task, ok := e.runPreTaskElicitation(ctx, cancelCtx, task, project, profile, &messages, taskToolExecutor)
+	task, ok := e.runPreTaskElicitation(ctx, cancelCtx, task, project, profile, &messages, &tools, &toolToAdapter, &profile, taskToolExecutor)
 	if !ok {
 		return agentruntime.LoopResult{}, false
 	}
