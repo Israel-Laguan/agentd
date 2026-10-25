@@ -20,6 +20,7 @@ import (
 	wsession "agentd/internal/agent/session"
 	wskills "agentd/internal/agent/skills"
 	agenttools "agentd/internal/agent/tools"
+	"agentd/internal/stage"
 )
 
 type WorkerOptions struct {
@@ -68,16 +69,18 @@ type WorkerOptions struct {
 	FileContext           config.FileContextConfig
 	FileContextCachePath  string
 	Planning              config.AgenticPlanningConfig
-	Tiered                config.TieredConfig
-	TopicGuard            config.TopicGuardConfig
-	ModelRouting          config.ModelRoutingConfig
-	ToolManifest          config.ToolManifestConfig
-	CapabilityRouting     config.CapabilityRoutingConfig
-	Batching              config.BatchingConfig
-	ProviderBreakers      *safety.ProviderBreakers
-	HealingDisabled       bool
-	MaxHealingTasks       int
-	Split                 config.SplitConfig
+	// MaxTasksPerPhase caps the tasks in one next-phase plan (gateway.max_tasks_per_phase).
+	MaxTasksPerPhase  int
+	Tiered            config.TieredConfig
+	TopicGuard        config.TopicGuardConfig
+	ModelRouting      config.ModelRoutingConfig
+	ToolManifest      config.ToolManifestConfig
+	CapabilityRouting config.CapabilityRoutingConfig
+	Batching          config.BatchingConfig
+	ProviderBreakers  *safety.ProviderBreakers
+	HealingDisabled   bool
+	MaxHealingTasks   int
+	Split             config.SplitConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -161,6 +164,7 @@ func newWorkerCore(
 ) *Worker {
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
+		intakeAgent: stage.NewModelAgent(gw), maxTasksPerPhase: opts.MaxTasksPerPhase,
 		projectsDir:      opts.ProjectsDir,
 		providerBreakers: opts.ProviderBreakers,
 		canceller:        opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,
