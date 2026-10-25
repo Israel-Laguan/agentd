@@ -149,3 +149,22 @@ func TestTaskBatcher_Group_MaxBatchSize(t *testing.T) {
 		t.Fatalf("batch sizes = [%d, %d], want [2, 1]", len(batches[0].Tasks), len(batches[1].Tasks))
 	}
 }
+
+// Every agentic task is offered ask_human, and a summarize task keeps only that
+// tool. A batch has no loop to suspend, so ask_human alone must not take the
+// task out of the batch path, or nothing would ever batch.
+func TestRequiresAgenticTools_AskHumanAloneStillBatches(t *testing.T) {
+	t.Parallel()
+	store := &batchTestStore{
+		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp"},
+		profile: models.AgentProfile{ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: true},
+	}
+	w := NewWorker(store, nil, nil, nil, nil, WorkerOptions{
+		Batching:     config.BatchingConfig{Enabled: true, MaxBatchSize: 5},
+		ToolManifest: config.ToolManifestConfig{Enabled: true, MinConfidence: 0.35},
+	})
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t1"}, ProjectID: "p1", AgentID: "ag1", Title: "Summarize A", Description: "condense doc A"}
+	if w.requiresAgenticTools(context.Background(), task, store.project, store.profile) {
+		t.Fatalf("requiresAgenticTools = true for a summarize task whose only tool is ask_human, want false")
+	}
+}
