@@ -27,12 +27,12 @@ func (t *fakeTarget) Validate() error {
 type scriptedGateway struct {
 	spec.AIGateway
 	replies []string
-	calls   int
+	seen    []spec.AIRequest
 }
 
-func (g *scriptedGateway) Generate(context.Context, spec.AIRequest) (spec.AIResponse, error) {
-	reply := g.replies[g.calls]
-	g.calls++
+func (g *scriptedGateway) Generate(_ context.Context, req spec.AIRequest) (spec.AIResponse, error) {
+	g.seen = append(g.seen, req)
+	reply := g.replies[len(g.seen)-1]
 	return spec.AIResponse{Content: reply}, nil
 }
 
@@ -90,8 +90,8 @@ func TestContractDecodeRetriesUntilValid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gw.calls != 2 {
-		t.Fatalf("gateway calls = %d, want 2 (one corrective retry)", gw.calls)
+	if len(gw.seen) != 2 {
+		t.Fatalf("gateway calls = %d, want 2 (one corrective retry)", len(gw.seen))
 	}
 	var got fakeTarget
 	if err := json.Unmarshal(raw, &got); err != nil {

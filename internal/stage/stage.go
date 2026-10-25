@@ -51,6 +51,9 @@ type StageRequest struct {
 	Context  []spec.PromptMessage
 	Contract Contract
 	Access   WorkspaceAccess
+	// Temperature is the sampling temperature for this call. Each stage keeps
+	// the value its prompt was tuned with.
+	Temperature float64
 }
 
 // Validate reports a request that is missing what every call needs.

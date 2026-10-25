@@ -34,6 +34,7 @@ var wantSites = map[string][]string{
 	"internal/memory/librarian_summarize.go":             {"PurposeMaintExtractMemory", "PurposeMaintSummarizeLog", "PurposeMaintSummarizeLog"},
 	"internal/memory/dream.go":                           {"PurposeMaintMergeMemories"},
 	"internal/config/health_warmup.go":                   {"PurposeSystemWarmup"},
+	"internal/stage/model_agent.go":                      {"Purpose"},
 }
 
 func TestEveryCallSiteSendsItsPurpose(t *testing.T) {
