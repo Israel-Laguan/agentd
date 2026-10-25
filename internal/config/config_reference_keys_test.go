@@ -28,6 +28,7 @@ var notImplementedKeys = []string{
 	"agentic.review", "agentic.tool_rate_limits", "agentic.approval_gates", "agentic.skills",
 	"gateway.budget", "gateway.truncation.max_input_chars",
 	"mcp.http_addr", "librarian.preferences_top_k", "plugins",
+	"queue.legacy.preflight_score", "queue.legacy.reject_score", "queue.legacy.max_description_len",
 }
 
 func TestConfigReferenceKeysHaveConsumers(t *testing.T) {

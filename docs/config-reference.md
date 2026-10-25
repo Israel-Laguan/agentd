@@ -211,9 +211,9 @@ Cron schedules live in `<home>/agentd.crontab`.
 | `hitl.legacy_handoff_timeout` | Prompt/permission/healing/provider handoffs. Approval, review, and clarification use the 30m approval path. |
 | `split.max_depth` | Max parent→child split generations before a HUMAN handoff, for the healing split and the legacy `too_complex` reply (`0` = no cap; default `2`). Replaces `legacy.max_breakdown_depth`. |
 | `split.max_subtasks` | Max subtasks from one split (`0` = no cap; default `5`). Replaces `legacy.max_subtasks_per_breakdown`. |
-| `legacy.preflight_score` | When task complexity score ≥ threshold, append a one-command hint to the legacy prompt (`0` = off; default `6`). |
-| `legacy.reject_score` | Skip the LLM and hand off when complexity ≥ threshold (`0` = off; default `9`). |
-| `legacy.max_description_len` | Skip the LLM when description length exceeds limit (`0` = off; default `2000`). |
+| `legacy.preflight_score` | Not implemented (parsed and ignored). |
+| `legacy.reject_score` | Not implemented (parsed and ignored). |
+| `legacy.max_description_len` | Not implemented (parsed and ignored). |
 | `tool_timeouts` | Per-tool dispatch timeouts; `"default"` applies to unlisted tools. Go duration strings (`"30s"`, `"1m"`). |
 | `tool_retries` | Transient failures retried with exponential backoff + jitter; model never sees intermediate failures. Only listed tools are eligible. |
 
