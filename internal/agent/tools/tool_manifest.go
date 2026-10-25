@@ -227,6 +227,9 @@ func (m *ToolManifest) Filter(
 	}
 
 	allowed := normalizeToolNameSet(names)
+	// ask_human is never a task-type tool: a mapping that drops every other tool
+	// (summarize: []) still lets the agent ask a human.
+	allowed[ToolNameAskHuman] = true
 	return filterToolsByNames(tools, index, allowed)
 }
 

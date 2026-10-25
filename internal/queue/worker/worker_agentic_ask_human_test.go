@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/testutil"
 )
 
 // askHumanCall is a model turn that calls the ask_human builtin with question.
@@ -50,5 +52,36 @@ func TestAgenticAskHumanBlocksTaskWithClarification(t *testing.T) {
 	}
 	if gw.callCount != 1 {
 		t.Fatalf("gateway calls = %d, want 1: the loop must stop at the ask_human call", gw.callCount)
+	}
+}
+
+// A profile whose AllowedTools leave out ask_human never blocks the task on it:
+// the call goes to dispatch, whose allowlist veto refuses it.
+func TestAgenticAskHumanRefusedByAllowlist(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		askHumanCall("c1", "Which format?"), {Content: "Done."},
+	}}
+	w, _, task, project, profile := agenticFixture(t, gw, &scriptedSandbox{}, models.DraftTask{Title: "Inspect host", Description: testutil.AgenticTestTaskDescription()}, nil)
+	profile.AllowedTools = []string{"bash"}
+	if result, ok := w.processAgentic(context.Background(), task, project, profile); ok {
+		w.handleLoopResult(context.Background(), task, result)
+	}
+	got, err := w.store.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State == models.TaskStateBlocked {
+		t.Fatalf("state = BLOCKED, want the allowlist to refuse ask_human")
+	}
+}
+
+// ask_human is offered by the worker, never by the executor: a subagent builds
+// its tools from the executor's definitions and cannot suspend a task.
+func TestAskHumanIsNotAnExecutorTool(t *testing.T) {
+	t.Parallel()
+	executor := agenttools.NewToolExecutor(nil, "", nil, 0)
+	if containsTool(executor.Definitions(), agenttools.ToolNameAskHuman) {
+		t.Fatalf("executor definitions include ask_human; subagents would inherit it")
 	}
 }

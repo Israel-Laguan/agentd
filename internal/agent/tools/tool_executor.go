@@ -17,6 +17,7 @@ const (
 	toolNameWrite            = "write"
 	toolNameDelegate         = "delegate"
 	toolNameDelegateParallel = "delegate_parallel"
+	toolNameAskHuman         = "ask_human"
 
 	defaultMaxToolReadFileBytes = 10 << 20 // 10 MiB
 
@@ -32,6 +33,7 @@ const (
 	ToolNameWrite            = toolNameWrite
 	ToolNameDelegate         = toolNameDelegate
 	ToolNameDelegateParallel = toolNameDelegateParallel
+	ToolNameAskHuman         = toolNameAskHuman
 	ToolErrorPrefix          = toolErrorPrefix
 )
 

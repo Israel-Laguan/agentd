@@ -107,6 +107,12 @@ func (w *Worker) RequestClarificationFromAgent(
 	return nil
 }
 
+// AskHuman blocks the task for a human answer to the agent's question (the
+// ask_human builtin).
+func (w *Worker) AskHuman(ctx context.Context, task models.Task, question string, options []string) error {
+	return w.RequestClarificationFromAgent(ctx, task, question, options, "")
+}
+
 const elicitationEmptyAnswerFallback = "(no comment provided — subtask marked complete without written answer)"
 
 const (

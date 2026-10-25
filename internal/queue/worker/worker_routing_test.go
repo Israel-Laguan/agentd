@@ -257,7 +257,8 @@ func TestProcessAgentic_ManifestFilterDoesNotShrinkRoutingEstimate(t *testing.T)
 	if req.Provider != "anthropic" || req.Model != "claude-opus" {
 		t.Fatalf("routed request = %s/%s, want anthropic/claude-opus (full tools exceed threshold)", req.Provider, req.Model)
 	}
-	if len(req.Tools) != 0 {
-		t.Fatalf("expected manifest-filtered zero tools in turn request, got %d: %v", len(req.Tools), toolNamesFromDefinitions(req.Tools))
+	// The summarize mapping keeps no task tools; ask_human is the one tool left.
+	if len(req.Tools) != 1 || req.Tools[0].Name != "ask_human" {
+		t.Fatalf("expected manifest-filtered tools to keep only ask_human in turn request, got %d: %v", len(req.Tools), toolNamesFromDefinitions(req.Tools))
 	}
 }

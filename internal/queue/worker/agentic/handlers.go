@@ -90,7 +90,15 @@ func (e *Engine) handleAgenticToolCalls(
 		dispatch := func(c gateway.ToolCall) (agenttools.ToolResult, bool) {
 			return e.host.DispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, c, toolToAdapter, toolExecutor, taskHooks, taskCaps, providerName)
 		}
-		tr, suspended, handedOff := e.runAgenticCall(ctx, task, profile, call, dispatch)
+		var tr agenttools.ToolResult
+		var suspended, handedOff bool
+		if isAskHumanCall(profile, call) {
+			current := task
+			current.UpdatedAt = taskUpdatedAt
+			tr, suspended = e.askHuman(ctx, current, call)
+		} else {
+			tr, suspended, handedOff = e.runAgenticCall(ctx, task, profile, call, dispatch)
+		}
 		if handedOff {
 			return true, agentruntime.LoopResult{}, false
 		}
