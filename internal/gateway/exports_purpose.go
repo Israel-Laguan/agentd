@@ -16,7 +16,6 @@ const (
 	PurposeCreateSplitTask        = spec.PurposeCreateSplitTask
 	PurposeExecTurn               = spec.PurposeExecTurn
 	PurposeExecWorkPlan           = spec.PurposeExecWorkPlan
-	PurposeExecLegacyCommand      = spec.PurposeExecLegacyCommand
 	PurposeExecBatch              = spec.PurposeExecBatch
 	PurposeExecRespecTurn         = spec.PurposeExecRespecTurn
 	PurposeExecRepairSection      = spec.PurposeExecRepairSection

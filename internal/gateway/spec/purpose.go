@@ -27,7 +27,6 @@ const (
 
 	PurposeExecTurn           Purpose = "exec.turn"
 	PurposeExecWorkPlan       Purpose = "exec.work_plan"
-	PurposeExecLegacyCommand  Purpose = "exec.legacy_command"
 	PurposeExecBatch          Purpose = "exec.batch"
 	PurposeExecRespecTurn     Purpose = "exec.respec_turn"
 	PurposeExecRepairSection  Purpose = "exec.repair_section"

@@ -26,7 +26,6 @@ var purposeLevels = map[Purpose]Level{
 	PurposeCreateSplitTask:        LevelL1,
 	PurposeExecTurn:               LevelL3,
 	PurposeExecWorkPlan:           LevelL1,
-	PurposeExecLegacyCommand:      LevelL1,
 	PurposeExecBatch:              LevelL1,
 	PurposeExecRespecTurn:         LevelL1,
 	PurposeExecRepairSection:      LevelL1,
