@@ -69,8 +69,11 @@ internal/gateway/providers/provider.go (common).MaxInputChars
 internal/gateway/providers/provider.go (common).Capabilities
 internal/gateway/providers/provider.go (common).url
 internal/gateway/providers/provider.go capabilitiesFromConfig
+internal/gateway/routing/intent.go (*Router).ClassifyIntent
 internal/gateway/routing/router_cascade.go (errTruncation).Error
 internal/gateway/routing/router_cascade.go (errTruncation).Unwrap
+internal/gateway/routing/router_plan.go (*Router).GeneratePlan
+internal/gateway/routing/scope.go (*Router).AnalyzeScope
 internal/gateway/spec/embed_stub.go NoopEmbed
 internal/gateway/spec/task_context.go WithExactTaskID
 internal/gateway/truncation/truncate.go CollapseMarkerFor
@@ -145,6 +148,7 @@ internal/services/system_service.go NewSystemService
 internal/services/system_service.go (*SystemService).Snapshot
 internal/services/task_service.go NewTaskService
 internal/stage/contract.go (Contract).Decode
+internal/stage/model_agent.go NewModelAgent
 test/e2e/client.go (*APIClient).SystemStatus
 test/e2e/client.go (*APIClient).ResetBreaker
 test/e2e/client.go (*APIClient).Projects

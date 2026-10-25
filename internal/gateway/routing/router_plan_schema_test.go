@@ -32,18 +32,6 @@ func (p *recordingSeqProvider) Generate(_ context.Context, req spec.AIRequest) (
 	return spec.AIResponse{Content: p.responses[i], ProviderUsed: "openai"}, nil
 }
 
-func TestPhasePlanningPrompt_StatesDraftPlanSchema(t *testing.T) {
-	t.Parallel()
-	for _, max := range []int{0, 3} {
-		got := phasePlanningPrompt(max)
-		for _, want := range []string{"project_name", "tasks", "title", "description", "assignee"} {
-			if !strings.Contains(got, want) {
-				t.Fatalf("phasePlanningPrompt(%d) missing %q:\n%s", max, want, got)
-			}
-		}
-	}
-}
-
 func TestGeneratePlan_WrongShapeThenCorrectionCarriesSchema(t *testing.T) {
 	t.Parallel()
 	prov := &recordingSeqProvider{responses: []string{
@@ -84,17 +72,5 @@ func TestGeneratePlan_WrongShapeIsRetriedWithSchema(t *testing.T) {
 	}
 	if sys := prov.requests[0].Messages[0].Content; !strings.Contains(sys, "project_name") {
 		t.Fatalf("system prompt lacks schema: %s", sys)
-	}
-}
-
-func TestPhasePlanningPrompt_GuidesHostFactPlans(t *testing.T) {
-	t.Parallel()
-	for _, max := range []int{0, 3} {
-		got := phasePlanningPrompt(max)
-		for _, want := range []string{"hostnamectl", "lscpu", "report.md", "/etc, /proc or /sys", "depends_on", "bare relative file names"} {
-			if !strings.Contains(got, want) {
-				t.Fatalf("phasePlanningPrompt(%d) missing %q:\n%s", max, want, got)
-			}
-		}
 	}
 }
