@@ -58,7 +58,7 @@ Outer retry/healing/handoff must continue to wrap the **whole** inner loop as on
 
 - Requests include **`tools`** (JSON schemas). Responses can include **`tool_calls`** on the assistant message.
 - The worker appends assistant messages (including `tool_calls`) and tool result messages, then calls the gateway again until there are no more tool calls.
-- **Task completion:** non-empty final assistant text without `tool_calls` closes the task, and it is stored as the task result (see the sandbox model rules below).
+- **Task completion:** non-empty final assistant text without `tool_calls` ends the loop and is stored as the task result. The task is COMPLETED only when the completion checks in rule 5 below pass.
 
 ## Agentic mode flag
 
@@ -107,7 +107,8 @@ The inner loop runs shell commands through the same hardened [`BashExecutor`](..
 1. The inner tool loop is the only execution path. If model routing selects a provider without tool round-tripping, the task fails with `agentic profile's provider cannot call tools`; there is no fallback to a single-shot command (see [provider-tool-calling.md](provider-tool-calling.md)).
 2. When both model routing and the per-task tool manifest are enabled, routing token estimates use the **full** tool registry (`routingTools`); [`filterAgenticTools`](../internal/queue/worker/worker_tools.go) runs afterward and only affects tools sent in turn-loop gateway requests. This prevents manifest-reduced tool lists from understating context size and routing to a cheaper tier than `context_token_threshold` intends.
 3. Each `bash` tool invocation is a separate sandbox execution (subject to hooks, timeouts, and scrubbing).
-4. Non-empty final assistant text without further `tool_calls` closes the task; it is stored as the task result payload, not executed as a shell command.
+4. Non-empty final assistant text without further `tool_calls` ends the loop; it is stored as the task result payload, not executed as a shell command.
+5. A finish is not COMPLETED when a text-only finish follows a failed shell command, when a success-criteria file it names is missing, empty or does not parse, or when breakdown subtasks are still open. Those finishes are stopped instead (see [`verify.go`](../internal/queue/worker/agentic/verify.go)).
 
 ## Conversation persistence across BLOCKED → READY
 
