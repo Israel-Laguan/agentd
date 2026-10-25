@@ -49,29 +49,26 @@ Outer retry/healing/handoff must continue to wrap the **whole** inner loop as on
 
 ## Two LLM contracts
 
-### Current (default worker): agentic tool-calling
+### Current (every worker task): agentic tool-calling
 
 - Messages are built via `AssembleAgenticSystemPrompt` from `AgentProfile` and the task; the worker enters `processAgentic` and drives the agentic tool-calling loop.
-- The worker calls the gateway with JSON mode and decodes a **`workerResponse`**: `command`, or `too_complex` with `subtasks`, via `GenerateJSON` in [`worker.go`](../internal/queue/worker/worker.go).
-- Exactly **one** LLM generation per attempt drives **one** sandbox execution for the shell command path.
+- There is no single-shot JSON `command` path any more. The legacy engine that decoded a `workerResponse` was removed in T-055b, so every task takes this loop.
 
-### Target (opt-in agentic mode): native tool calling
+### Native tool calling
 
 - Requests include **`tools`** (JSON schemas). Responses can include **`tool_calls`** on the assistant message.
 - The worker appends assistant messages (including `tool_calls`) and tool result messages, then calls the gateway again until there are no more tool calls.
 - **Task completion semantics** (for implementers): define explicitly how final assistant text maps to task success—for example, treat non-empty final text as a summary that closes the task, or require a small structured tail (JSON) in the last message for `command`/status. The roadmap and task prompts assume this is decided in the orchestration task so the state machine and events stay consistent.
 
-## Agentic mode toggle
+## Agentic mode flag
 
-The agentic mode is controlled by the **`AgenticMode`** boolean field on the `AgentProfile` entity:
+The **`AgenticMode`** boolean field on the `AgentProfile` entity is still stored and checked against the provider. It no longer picks a worker path:
 
 ```go
 type AgentProfile struct {
     // ...
-    // AgenticMode enables the inner agentic loop with tool calling.
-    // When false (default), the worker uses legacy single-shot JSON mode.
-    // When true and provider supports agentic mode, the worker executes
-    // the inner loop via processAgentic.
+    // AgenticMode is refused for a provider without tool calling. Every
+    // task runs the inner loop via processAgentic, whatever the flag says.
     AgenticMode bool
 }
 ```
@@ -80,40 +77,34 @@ type AgentProfile struct {
 
 | `AgenticMode` | Provider | Behavior |
 | --------------- | ---------- | ---------- |
-| `false` | any | Legacy single-shot JSON mode: one LLM call, one sandbox execution. Only set explicitly; new profiles default to `true` |
+| `false` | any | Stored, but not used to choose a path: every task still runs the inner loop. The legacy single-shot JSON mode was removed in T-055b. New profiles default to `true` |
 | `true` | `openai` (incl. openai-compatible e.g. LiteLLM/Portkey/OpenRouter) | Agentic mode: inner loop with tool calling; shell via `bash` tool only |
 | `true` | `anthropic` (native) | **Single one tool turn only.** Multi-turn tool round-trip is broken (see [provider-tool-calling.md](provider-tool-calling.md)). For a working agentic loop on Anthropic-family models, use the managed proxy path (`adapter: openai`) instead. |
 | `true` | other (native, `SupportsChatTools: false`) | Rejected: the profile cannot be created or patched with it, and a task on it fails |
 
-### Enabling agentic mode
+### Choosing a provider
 
-To enable agentic mode for a profile:
+Use a provider with reliable multi-turn tool round-tripping — `openai` and any
+openai-compatible endpoint (including the LiteLLM/Portkey/OpenRouter managed
+proxy, via `adapter: openai`). Native `anthropic` is single-turn only (see
+[provider-tool-calling.md](provider-tool-calling.md)); for Anthropic-family
+models, route through the managed proxy path with `adapter: openai` instead.
 
-1. Set `AgenticMode: true` on the `AgentProfile`
-2. Use a provider with reliable multi-turn tool round-tripping — `openai` and any
-   openai-compatible endpoint (including the LiteLLM/Portkey/OpenRouter managed
-   proxy, via `adapter: openai`). Native `anthropic` is single-turn only (see
-   [provider-tool-calling.md](provider-tool-calling.md)); for Anthropic-family
-   models, route through the managed proxy path with `adapter: openai` instead.
-
-The worker checks `profile.AgenticMode` at task processing time and routes to either:
-
-- Legacy path: `command()` → single sandbox run
-- Agentic path: `processAgentic()` → inner loop with tool calling
+Every task goes through `processAgentic()`, the inner loop with tool calling. There is no second path.
 
 ## Sandbox model in agentic mode
 
-Agentic and legacy modes use the same hardened [`BashExecutor`](../internal/sandbox/executor.go), but **orchestration differs**:
+The inner loop runs shell commands through the same hardened [`BashExecutor`](../internal/sandbox/executor.go):
 
-| Step | Legacy (`AgenticMode: false`) | Agentic (`AgenticMode: true`) |
-| --- | --- | --- |
-| LLM contract | One `GenerateJSON` → `command` string | Repeated `Generate` with `tools` until no `tool_calls` |
-| Shell execution | One `sandbox.Execute` for the JSON `command` | Only via the **`bash` tool** (and `read` / `write` for files) inside the inner loop |
-| Task completion | Sandbox stdout/stderr → task result | Final assistant **text** → `commitTextWithProfile` (no extra sandbox run for that text) |
+| Step | How it works |
+| --- | --- |
+| LLM contract | Repeated `Generate` with `tools` until no `tool_calls` |
+| Shell execution | Only via the **`bash` tool** (and `read` / `write` for files) inside the inner loop |
+| Task completion | Final assistant **text** → `commitTextWithProfile` (no extra sandbox run for that text) |
 
 **Rules:**
 
-1. Agentic mode normally uses the inner tool loop only. If model routing selects a provider without tool round-tripping, [`processAgentic`](../internal/queue/worker/worker.go) falls back to `runLegacyTask` / `command()` and **preserves the provider and model selected by routing** (no second model routing pass).
+1. The inner tool loop is the only execution path. If model routing selects a provider without tool round-tripping, the task fails with `agentic profile's provider cannot call tools`; there is no fallback to a single-shot command (see [provider-tool-calling.md](provider-tool-calling.md)).
 2. When both model routing and the per-task tool manifest are enabled, routing token estimates use the **full** tool registry (`routingTools`); [`filterAgenticTools`](../internal/queue/worker/worker_tools.go) runs afterward and only affects tools sent in turn-loop gateway requests. This prevents manifest-reduced tool lists from understating context size and routing to a cheaper tier than `context_token_threshold` intends.
 3. Each `bash` tool invocation is a separate sandbox execution (subject to hooks, timeouts, and scrubbing).
 4. Non-empty final assistant text without further `tool_calls` closes the task; it is stored as the task result payload, not executed as a shell command.
@@ -131,13 +122,13 @@ transcripts is planned follow-up work (see the forward milestones in the
 | Concept | agentd today |
 | --- | --- |
 | Shell execution | [`internal/sandbox/executor.go`](../internal/sandbox/executor.go) — `BashExecutor.Execute()` with sudo blocking, path jailing, ulimits, scrubbing, inactivity timeout. |
-| Read/write as **LLM-invokable** tools | Exposed as `bash`, `read`, and `write` tool definitions via `ToolExecutor` in [`tool_executor.go`](../internal/agent/tools/tool_executor.go). In agentic mode (`AgenticMode: true`), these tools are advertised to the LLM and executed through the inner loop. Legacy JSON `command` path still drives the sandbox when agentic mode is off. |
+| Read/write as **LLM-invokable** tools | Exposed as `bash`, `read`, and `write` tool definitions via `ToolExecutor` in [`tool_executor.go`](../internal/agent/tools/tool_executor.go). They are advertised to the LLM and executed through the inner loop. |
 
 ### Tool definitions and parsing
 
 | Concept | agentd today |
 | --- | --- |
-| `tools` on API requests | Wired via `AIRequest.Tools` field in [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go). Agentic mode populates `Tools` with executor and capability definitions; legacy mode omits them. |
+| `tools` on API requests | Wired via `AIRequest.Tools` field in [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go). The inner loop populates `Tools` with executor and capability definitions. |
 | `tool_calls` on responses | Parsed via `AIResponse.ToolCalls` and `PromptMessage.ToolCalls`/`ToolCallID` in [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go). OpenAI provider maps response tool calls in [`internal/gateway/providers/openai.go`](../internal/gateway/providers/openai.go). |
 
 ### Messages and history
@@ -145,7 +136,7 @@ transcripts is planned follow-up work (see the forward milestones in the
 | Concept | agentd today |
 | --- | --- |
 | Per-task messages | Built per invocation; [`PromptMessage`](../internal/gateway/spec/spec.go) includes `role`, `content`, `tool_calls`, and `tool_call_id`. In agentic mode, assistant messages carry `tool_calls` and tool result messages carry `tool_call_id`. |
-| Tool results in the model context | In agentic mode, tool results are appended as `role: tool` messages with `tool_call_id` for the next gateway call. In legacy mode, sandbox stdout/stderr become task result and **events**. A retry or a recovered re-run builds a fresh prompt from the task, profile and recalled memory; no output from the earlier attempt is carried in. Retries reuse the workspace files as they stand; recovered re-runs do too, unless boot recovery empties an eligible project first via `recovery.clean_workspace_on_recover` (see [recovery-rerun.md](architecture/recovery-rerun.md)). |
+| Tool results in the model context | Tool results are appended as `role: tool` messages with `tool_call_id` for the next gateway call. A retry or a recovered re-run builds a fresh prompt from the task, profile and recalled memory; no output from the earlier attempt is carried in. Retries reuse the workspace files as they stand; recovered re-runs do too, unless boot recovery empties an eligible project first via `recovery.clean_workspace_on_recover` (see [recovery-rerun.md](architecture/recovery-rerun.md)). |
 | Event stream | First-class tool events exist: `TOOL_CALL` and `TOOL_RESULT` are persisted event types carrying scrubbed/truncated payloads, emitted by worker + audit hooks and mapped to SSE `tool_called` / `tool_result` — see [`internal/models/enums.go`](../internal/models/enums.go), [`worker_events.go`](../internal/queue/worker/worker_events.go), and [`internal/api/sse/stream.go`](../internal/api/sse/stream.go). Cockpit rendering is complete — see the [tool-event payload contract](sse-events.md#tool-event-payload-contract) and `web/`. |
 
 ### Client / input surface

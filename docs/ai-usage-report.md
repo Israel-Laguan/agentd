@@ -50,7 +50,6 @@ with no tools or workspace, L3 needs an ACP agent.
 | `create.split_task` | Break a task that keeps failing into subtasks (healing split) | L1 |
 | `exec.turn` | One iteration of the main tool-calling loop | L3 |
 | `exec.work_plan` | Draft the step plan inside an agentic task | L1 |
-| `exec.legacy_command` | Legacy one-shot JSON command | L1 |
 | `exec.batch` | Run several small tasks in one model call | L1 |
 | `exec.respec_turn` | Rewrite the user turn after plan validation fails | L1 |
 | `exec.repair_section` | Redo one failing plan step's section | L1 |
@@ -69,8 +68,11 @@ with no tools or workspace, L3 needs an ACP agent.
 
 `system.warmup` is one row per daemon start and is part of the totals;
 Removed in S18 (T-055a): the `legacy.contract_text` and `legacy.contract_json`
-purposes, which had no production caller. Their rows, if an old database has
-any, are historical.
+purposes, which had no production caller. Removed in S18 (T-055b):
+the one-shot JSON command purpose of the legacy engine. Their
+rows, if an old database has any, are historical. The report groups the stored
+purpose as written, so those rows still show under their old name, not as
+`unlabelled`.
 
 ## Reading the report
 

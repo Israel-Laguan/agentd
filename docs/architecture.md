@@ -214,7 +214,7 @@ The execution cycle separates durable intent from active execution. SQLite recor
 
 - **Risk:** The worker tries to read too much code or log data, overflowing context.
 - **Mitigation:** The Context Truncator must reject or summarize excessive payloads, and the worker should split the task into smaller board tasks when needed.
-- **Status today:** Mitigated. The truncator in [`internal/gateway/truncation/truncator.go`](../internal/gateway/truncation/truncator.go) supports `middle_out`, `head_tail`, `summarize`, and `reject` policies with per-provider budgets. Workers split oversized tasks via `BlockTaskWithSubtasks` when the LLM returns `{too_complex: true}`.
+- **Status today:** Mitigated. The truncator in [`internal/gateway/truncation/truncator.go`](../internal/gateway/truncation/truncator.go) supports `middle_out`, `head_tail`, `summarize`, and `reject` policies with per-provider budgets. Workers split a task that keeps failing through the healing split stage, which blocks it with subtasks via `BlockTaskWithSubtasks`.
 
 - **Risk:** A worker gets caught in a retry loop, sending millions of tokens to a paid API (Danger A: Silent Wallet Drain).
 - **Mitigation:** The router enforces per-task token budgets via `BudgetTracker`. When accumulated usage reaches `gateway.budget.tokens_per_task`, further requests return `ErrBudgetExceeded` without contacting any provider.

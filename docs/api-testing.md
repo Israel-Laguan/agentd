@@ -267,7 +267,7 @@ List all agent profiles.
 }
 ```
 
-`agentic_mode` (boolean, default `true`) enables the inner agentic worker loop with tool round-tripping. A profile whose provider cannot call tools is rejected with HTTP 400 (`agentic profile's provider cannot call tools`) on create and patch, and a task already on such a profile fails rather than running a legacy command.
+`agentic_mode` (boolean, default `true`): a profile whose provider cannot call tools is rejected with HTTP 400 (`agentic profile's provider cannot call tools`) on create and patch, and a task already on such a profile fails. Every task runs the inner agentic worker loop with tool round-tripping; the worker has no legacy single-shot path.
 
 `allowed_tools` (string array, default empty) limits the profile to the named tools. A call to any other tool is vetoed at dispatch, delegation included. Empty means no allowlist. `workspace_readonly` (boolean, default `false`) is stored now; nothing enforces it yet.
 
@@ -289,7 +289,7 @@ Create an agent profile. Optional `agentic_mode` (boolean, default `true`), `all
 
 ### PATCH /api/v1/agents/{id}
 
-Sparse update. Set `agentic_mode` to `true` or `false` to enable or disable agentic worker behavior for that profile. Setting `agentic_mode` to `true` on a provider that cannot call tools is rejected. `allowed_tools` and `workspace_readonly` can also be patched.
+Sparse update. Set `agentic_mode` to `true` or `false` for that profile. Setting it to `true` on a provider that cannot call tools is rejected. `allowed_tools` and `workspace_readonly` can also be patched.
 
 ---
 

@@ -1,5 +1,7 @@
 # Agentic harness — implementation roadmap
 
+> **Historical.** The single-shot JSON worker that this plan kept as the default was removed in T-055b (S18). Where the text below describes that path as current, it describes the plan as written.
+
 Phased work to add an **opt-in inner agentic loop** (tool calling with accumulated messages inside `Worker.Process`) while keeping the **default** single-shot JSON worker unchanged until explicitly enabled.
 
 Canonical architecture and terminology: [docs/agentic-harness.md](agentic-harness.md).
