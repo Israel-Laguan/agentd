@@ -18,8 +18,13 @@ const hostFactPlanningRule = "\nTasks run as shell commands inside the project w
 	"saving each output to a file, and finish with a task titled \"" + models.HostReportTaskTitle + "\" that builds report.md from those files; never state facts you did not collect. " +
 	"Name files with bare relative file names such as cpu_info.txt (never a /workspace or workspace/ prefix), and give every collecting task a ref_id and the report task a depends_on listing all of them, because tasks without depends_on run in parallel."
 
+// workspaceChangePlanningRule asks for the flag the worker's evidence gate reads
+// (PR 11): a task that changes the workspace cannot finish on text alone.
+const workspaceChangePlanningRule = "\nSet requires_workspace_change to true on every task that must create or change a file, or run a command, in the project workspace. " +
+	"Set it to false, or leave it out, on a task that only reasons or writes text, such as a summary or a review."
+
 func phasePlanningPrompt(maxTasksPerPhase int) string {
-	base := "Create an agentd DraftPlan. Output ONLY valid JSON.\n" + models.DraftPlan{}.SchemaHint() + hostFactPlanningRule
+	base := "Create an agentd DraftPlan. Output ONLY valid JSON.\n" + models.DraftPlan{}.SchemaHint() + hostFactPlanningRule + workspaceChangePlanningRule
 	if maxTasksPerPhase <= 0 {
 		return base
 	}
