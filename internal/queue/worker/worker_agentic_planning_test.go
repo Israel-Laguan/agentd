@@ -63,15 +63,6 @@ func (g *planningSequenceGateway) Generate(_ context.Context, req gateway.AIRequ
 	return resp, nil
 }
 
-func (g *planningSequenceGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (g *planningSequenceGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (g *planningSequenceGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *planningSequenceGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

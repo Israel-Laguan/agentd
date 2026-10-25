@@ -44,18 +44,6 @@ func (g *sequenceGateway) Generate(ctx context.Context, req gateway.AIRequest) (
 	return res, nil
 }
 
-func (g *sequenceGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (g *sequenceGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (g *sequenceGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
-
 func (g *sequenceGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
@@ -83,18 +71,6 @@ func (g *driftThenSequenceGateway) Generate(ctx context.Context, req gateway.AIR
 		return gateway.AIResponse{Content: "YES"}, nil
 	}
 	return g.seq.Generate(ctx, req)
-}
-
-func (g *driftThenSequenceGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (g *driftThenSequenceGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (g *driftThenSequenceGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
 }
 
 func (g *driftThenSequenceGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {

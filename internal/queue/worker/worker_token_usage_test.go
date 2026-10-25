@@ -68,15 +68,6 @@ func (g *singleResponseGateway) ProviderSupportsChatTools(provider string) bool 
 func (g *singleResponseGateway) Generate(_ context.Context, _ gateway.AIRequest) (gateway.AIResponse, error) {
 	return g.resp, g.err
 }
-func (g *singleResponseGateway) GeneratePlan(_ context.Context, _ string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (g *singleResponseGateway) AnalyzeScope(_ context.Context, _ string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (g *singleResponseGateway) ClassifyIntent(_ context.Context, _ string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *singleResponseGateway) Embed(_ context.Context, _ gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

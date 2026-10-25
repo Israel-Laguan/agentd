@@ -63,15 +63,6 @@ func (g *elicitationSequenceGateway) Generate(_ context.Context, req gateway.AIR
 	return gateway.AIResponse{Content: "done"}, nil
 }
 
-func (g *elicitationSequenceGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (g *elicitationSequenceGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (g *elicitationSequenceGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *elicitationSequenceGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

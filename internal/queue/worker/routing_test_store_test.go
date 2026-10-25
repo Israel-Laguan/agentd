@@ -203,15 +203,6 @@ func (g *routingTestGateway) Generate(_ context.Context, req gateway.AIRequest) 
 	g.requests = append(g.requests, req)
 	return gateway.AIResponse{Content: `{"command":"echo ok"}`}, nil
 }
-func (g *routingTestGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (g *routingTestGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (g *routingTestGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *routingTestGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

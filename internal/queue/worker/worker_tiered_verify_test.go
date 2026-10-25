@@ -30,15 +30,6 @@ func (g *plainTextVerifyGateway) Generate(ctx context.Context, req gateway.AIReq
 	g.callCount++
 	return gateway.AIResponse{Content: g.content, ProviderUsed: "test-provider", ModelUsed: "test-model"}, nil
 }
-func (g *plainTextVerifyGateway) GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (g *plainTextVerifyGateway) AnalyzeScope(ctx context.Context, userIntent string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (g *plainTextVerifyGateway) ClassifyIntent(ctx context.Context, userIntent string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *plainTextVerifyGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

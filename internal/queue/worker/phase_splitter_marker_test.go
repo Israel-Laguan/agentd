@@ -22,18 +22,6 @@ func (*attemptGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.Emb
 	return gateway.EmbedResponse{}, nil
 }
 
-func (*attemptGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (*attemptGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (*attemptGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
-
 func TestWorkPlanRetryIsMarkedAsRepair(t *testing.T) {
 	gw := &attemptGateway{replies: []string{"not json", `{"steps":[{"id":"a","action":"do it"}]}`}}
 	w := &Worker{gateway: gw}

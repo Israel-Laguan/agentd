@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"agentd/internal/gateway"
-	"agentd/internal/models"
 )
 
 // maxIterationsGateway always returns tool calls, simulating a gateway that
@@ -26,17 +25,6 @@ func (m *maxIterationsGateway) Generate(ctx context.Context, req gateway.AIReque
 	}, nil
 }
 
-func (m *maxIterationsGateway) GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (m *maxIterationsGateway) AnalyzeScope(ctx context.Context, userIntent string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (m *maxIterationsGateway) ClassifyIntent(ctx context.Context, userIntent string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (m *maxIterationsGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
@@ -65,17 +53,6 @@ func (g *tokenUsageGateway) Generate(ctx context.Context, req gateway.AIRequest)
 	}, nil
 }
 
-func (g *tokenUsageGateway) GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (g *tokenUsageGateway) AnalyzeScope(ctx context.Context, userIntent string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (g *tokenUsageGateway) ClassifyIntent(ctx context.Context, userIntent string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *tokenUsageGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
@@ -101,17 +78,6 @@ func (m *sequenceGateway) Generate(ctx context.Context, req gateway.AIRequest) (
 	return resp, nil
 }
 
-func (m *sequenceGateway) GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (m *sequenceGateway) AnalyzeScope(ctx context.Context, userIntent string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (m *sequenceGateway) ClassifyIntent(ctx context.Context, userIntent string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (m *sequenceGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
