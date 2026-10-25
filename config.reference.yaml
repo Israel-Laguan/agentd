@@ -200,10 +200,6 @@ queue:
   split:
     max_depth: 2
     max_subtasks: 5
-  legacy:
-    preflight_score: 6 # not implemented: parsed and ignored, the legacy engine is gone
-    reject_score: 9 # not implemented: parsed and ignored, the legacy engine is gone
-    max_description_len: 2000 # not implemented: parsed and ignored, the legacy engine is gone
   tool_timeouts:
     bash: "60s"
     read: "10s"
