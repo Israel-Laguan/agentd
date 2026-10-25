@@ -141,8 +141,8 @@ task["id"], task["project_id"], task["state"]
 | `PROFILE_UPGRADED` | System | A profile still in non-agentic mode was made agentic at startup. Written to the `_system` project. |
 | `SANDBOX_VIOLATION` | Sandbox | Command blocked before execution due to sandbox policy (e.g., `sudo`, path escape). |
 | `LOG_CHUNK` | Sandbox | Streaming stdout/stderr line emitted during command execution (after scrubber redaction). |
-| `COMMAND` | Worker | Not emitted since the legacy engine was removed (T-055b). Tool calls are recorded as `TOOL_CALL` and `TOOL_RESULT`. |
-| `SANDBOX_BACKEND` | Worker | Not emitted since the legacy engine was removed (T-055b), along with `COMMAND`. |
+| `COMMAND` | Worker | Historical: only an old database holds it, since the legacy engine was removed (T-055b). Tool calls are recorded as `TOOL_CALL` and `TOOL_RESULT`. |
+| `SANDBOX_BACKEND` | Worker | Historical: only an old database holds it, like `COMMAND`. |
 | `TASK_BREAKDOWN` | Worker | Oversized task split into child tasks; parent blocked. |
 | `TASK_BREAKDOWN_ROLLUP` | Worker | Resumed broken-down parent completed because all its breakdown subtasks completed; no LLM call. |
 | `LLM_OUTAGE_HANDOFF` | Daemon | HUMAN task created for AI provider outage diagnostics. |

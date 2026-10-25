@@ -121,3 +121,17 @@ func TestAIUsageReportEmptyTableAndBadQuery(t *testing.T) {
 		t.Fatal("unknown group_by accepted")
 	}
 }
+
+func TestAIUsageReportLabelsTheRemovedLegacyPurpose(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	old := aiCall(day1, "exec.legacy_command", "m1", 30)
+	if err := store.InsertAICalls(context.Background(), []models.AICall{old, aiCall(day1, "exec.turn", "m1", 5)}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	rep := reportRows(t, store, models.AIUsageQuery{GroupBy: []string{models.AIDimPurpose}})
+	if row := rowFor(t, rep, "purpose", "legacy (removed)"); row.Calls != 1 || row.Tokens != 30 {
+		t.Fatalf("legacy row = %+v", row)
+	}
+	rowFor(t, rep, "purpose", "exec.turn")
+}

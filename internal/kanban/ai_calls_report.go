@@ -13,13 +13,20 @@ var _ models.AICallStore = (*Store)(nil)
 // aiDimensionSQL maps a report dimension to its column expression. It is the
 // only text ever interpolated into the report query.
 var aiDimensionSQL = map[string]string{
-	models.AIDimPurpose: "purpose",
+	models.AIDimPurpose: "CASE purpose WHEN '" + removedLegacyPurpose + "' THEN '" + removedLegacyLabel + "' ELSE purpose END",
 	models.AIDimStage:   "stage",
 	models.AIDimModel:   "model",
 	models.AIDimDay:     "substr(at, 1, 10)",
 	models.AIDimTask:    "task_id",
 	models.AIDimRequest: "correlation_id",
 }
+
+// removedLegacyPurpose is the purpose the deleted legacy engine stored. Old
+// rows keep it, so the report shows them under removedLegacyLabel.
+const (
+	removedLegacyPurpose = "exec.legacy_command"
+	removedLegacyLabel   = "legacy (removed)"
+)
 
 var aiAggregateColumns = aiBaseColumns + ", " + aiMixColumns()
 

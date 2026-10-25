@@ -70,9 +70,9 @@ with no tools or workspace, L3 needs an ACP agent.
 Removed in S18 (T-055a): the `legacy.contract_text` and `legacy.contract_json`
 purposes, which had no production caller. Removed in S18 (T-055b):
 the one-shot JSON command purpose of the legacy engine. Their
-rows, if an old database has any, are historical. The report groups the stored
-purpose as written, so those rows still show under their old name, not as
-`unlabelled`.
+rows, if an old database has any, are historical. The report shows them under
+the label `legacy (removed)`, not as `unlabelled`. Filtering by `--purpose`
+still takes the stored name.
 
 ## Reading the report
 
