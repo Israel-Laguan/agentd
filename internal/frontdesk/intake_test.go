@@ -7,6 +7,7 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/stage"
 	"agentd/internal/testutil"
 )
 
@@ -33,6 +34,11 @@ func (g *stubIntakeGateway) AnalyzeScope(context.Context, string) (*gateway.Scop
 
 func (g *stubIntakeGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
 	return &gateway.IntentAnalysis{}, nil
+}
+
+// Call answers the replan-comment stage with the fake's plan.
+func (g *stubIntakeGateway) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
+	return stageOutput(g.GeneratePlan(ctx, lastMessage(req)))
 }
 
 func (g *stubIntakeGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
@@ -172,10 +178,10 @@ type stubPlanOnlyGW struct {
 func (*stubPlanOnlyGW) Generate(context.Context, gateway.AIRequest) (gateway.AIResponse, error) {
 	return gateway.AIResponse{}, nil
 }
-func (g *stubPlanOnlyGW) GeneratePlan(ctx context.Context, _ string) (*models.DraftPlan, error) {
-	g.purpose = gateway.PurposeFromContext(ctx)
+func (g *stubPlanOnlyGW) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
+	g.purpose = req.Purpose
 	g.taskID = gateway.TaskIDFromContext(ctx)
-	return g.out, nil
+	return stageOutput(g.out, nil)
 }
 func (*stubPlanOnlyGW) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
 	return &gateway.ScopeAnalysis{}, nil

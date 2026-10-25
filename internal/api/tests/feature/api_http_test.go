@@ -422,8 +422,10 @@ type testGateway struct {
 
 func newTestGateway() *testGateway { return &testGateway{} }
 
-func (g *testGateway) Generate(_ context.Context, _ gateway.AIRequest) (gateway.AIResponse, error) {
-	return gateway.AIResponse{}, nil
+// Generate answers the intake purposes from the fake's methods, so the real
+// ModelAgent and contract run over them. Other purposes get an empty response.
+func (g *testGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	return intakeResponse(ctx, req, g.ClassifyIntent, g.AnalyzeScope, g.GeneratePlan)
 }
 
 func (g *testGateway) GeneratePlan(_ context.Context, intent string) (*models.DraftPlan, error) {

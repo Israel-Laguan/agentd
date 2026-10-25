@@ -169,6 +169,7 @@ internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithReadOnlyWorksp
 internal/api/httpx/trust.go FromTrustedOrigin
 internal/capabilities/registry.go (*Registry).GetTools
 internal/config/split.go setSplitDefaults
+internal/frontdesk/intake.go (*IntakeProcessor).WithPhaseCap
 internal/gateway/correction/correction.go GenerateJSON
 internal/gateway/routing/house_rules.go HouseRulesFromContext
 internal/gateway/routing/router.go (*Router).WithBudget

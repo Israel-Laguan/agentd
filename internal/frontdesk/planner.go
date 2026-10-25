@@ -9,6 +9,8 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/stage"
+	"agentd/internal/stage/intake"
 )
 
 // ScopeClarification is returned when multiple scopes are detected.
@@ -43,7 +45,10 @@ var ErrMultipleApprovedScopes = errors.New("invalid approved scopes request")
 // Planner routes user intent through classification, scope analysis, and plan
 // generation. It is the primary entry point of Box 1 (Frontdesk).
 type Planner struct {
-	Gateway gateway.AIGateway
+	// Agent runs the intake stages (classify, scope, plan).
+	Agent stage.Agent
+	// MaxTasksPerPhase caps the tasks in one generated plan.
+	MaxTasksPerPhase int
 	// SettingsStore is optional. When set, row "house_rules" is injected into
 	// planning LLM calls via gateway context (see models.SettingKeyHouseRules).
 	SettingsStore models.KanbanStore
@@ -72,7 +77,7 @@ func (p *Planner) PlanContent(
 	}
 
 	slog.DebugContext(ctx, "planner: classifying intent")
-	classification, err := p.Gateway.ClassifyIntent(ctx, intent)
+	classification, err := intake.ClassifyIntent(ctx, p.Agent, intent)
 	if err != nil {
 		slog.WarnContext(ctx, "planner: intent classification failed", "error", err)
 		return nil, err
@@ -113,7 +118,7 @@ func (p *Planner) statusReport(ctx context.Context) ([]byte, error) {
 }
 
 func (p *Planner) analyzeAndPlan(ctx context.Context, intent string, files []FileRef) ([]byte, error) {
-	analysis, err := p.Gateway.AnalyzeScope(ctx, intent)
+	analysis, err := intake.AnalyzeScope(ctx, p.Agent, intent)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +144,7 @@ func (p *Planner) planApprovedScope(ctx context.Context, intent, approvedScope s
 		}
 		planningIntent = withContents
 	}
-	plan, err := p.Gateway.GeneratePlan(ctx, planningIntent)
+	plan, err := intake.Plan(ctx, p.Agent, gateway.PurposeIntakeDraftPlan, p.MaxTasksPerPhase, planningIntent)
 	if err != nil {
 		return nil, err
 	}

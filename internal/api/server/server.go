@@ -17,6 +17,7 @@ import (
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 	"agentd/internal/services"
+	"agentd/internal/stage"
 )
 
 // ServerDeps bundles dependencies for the HTTP API.
@@ -42,6 +43,8 @@ type ServerDeps struct {
 	ProviderConfigs  []spec.ProviderConfig
 	MCPHandler       http.Handler     // optional: MCP board-export HTTP handler
 	Scrubber         sandbox.Scrubber // redacts event payloads served by the API; nil uses the built-in patterns
+	// MaxTasksPerPhase caps the tasks in one generated plan (gateway.max_tasks_per_phase).
+	MaxTasksPerPhase int
 }
 
 // NewHandler builds the API mux.
@@ -54,9 +57,10 @@ func NewHandler(deps ServerDeps) http.Handler {
 	tasks := newTaskHandler(deps)
 	chat := controllers.ChatHandler{
 		Planner: &frontdesk.Planner{
-			Gateway: deps.Gateway, Summarizer: deps.Summarizer,
-			SettingsStore: deps.Store,
-			Stash:         deps.FileStash, Truncator: deps.Truncator, Budget: deps.Budget,
+			Agent: stage.NewModelAgent(deps.Gateway), Summarizer: deps.Summarizer,
+			MaxTasksPerPhase: deps.MaxTasksPerPhase,
+			SettingsStore:    deps.Store,
+			Stash:            deps.FileStash, Truncator: deps.Truncator, Budget: deps.Budget,
 		},
 		Retriever: deps.Retriever,
 	}

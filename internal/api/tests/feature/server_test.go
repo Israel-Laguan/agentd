@@ -105,8 +105,10 @@ func decodeBody(t *testing.T, resp *httptest.ResponseRecorder) map[string]any {
 	return decoded
 }
 
-func (g *apiGateway) Generate(context.Context, gateway.AIRequest) (gateway.AIResponse, error) {
-	return gateway.AIResponse{}, nil
+// Generate answers the intake purposes from the fake's methods, so the real
+// ModelAgent and contract run over them. Other purposes get an empty response.
+func (g *apiGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
+	return intakeResponse(ctx, req, g.ClassifyIntent, g.AnalyzeScope, g.GeneratePlan)
 }
 
 func (g *apiGateway) GeneratePlan(_ context.Context, intent string) (*models.DraftPlan, error) {
