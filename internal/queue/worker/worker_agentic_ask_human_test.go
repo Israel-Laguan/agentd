@@ -55,6 +55,53 @@ func TestAgenticAskHumanBlocksTaskWithClarification(t *testing.T) {
 	}
 }
 
+// The question is recorded on the task, so the run that resumes after the
+// answer sees it. Without it the resumed run sees only "Clarification".
+func TestAskHumanRecordsQuestionForResumedRun(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "ask-proj",
+		Tasks:       []models.DraftTask{{Title: "Report", Description: "write the report"}},
+	})
+	if err != nil || len(tasks) == 0 {
+		t.Fatalf("materialize: %v", err)
+	}
+	running, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	w := &Worker{store: store}
+	if err := w.AskHuman(ctx, *running, "Which output format?", []string{"CSV", "JSON"}); err != nil {
+		t.Fatalf("AskHuman: %v", err)
+	}
+	children, err := store.ListChildTasks(ctx, running.ID)
+	if err != nil || len(children) != 1 {
+		t.Fatalf("children = %d (err %v), want one clarification subtask", len(children), err)
+	}
+	if err := store.AddComment(ctx, models.Comment{TaskID: children[0].ID, Author: models.CommentAuthorUser, Body: "CSV"}); err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+	if _, err := store.UpdateTaskState(ctx, children[0].ID, children[0].UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete child: %v", err)
+	}
+	current, err := store.GetTask(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+
+	resumed, consumed, err := w.tryConsumeElicitationAnswers(ctx, *current)
+	if err != nil || !consumed {
+		t.Fatalf("tryConsumeElicitationAnswers consumed=%v err=%v, want the answer consumed", consumed, err)
+	}
+	for _, want := range []string{"Which output format?", "CSV"} {
+		if !strings.Contains(resumed.Description, want) {
+			t.Fatalf("resumed description = %q, want it to hold %q", resumed.Description, want)
+		}
+	}
+}
+
 // A profile whose AllowedTools leave out ask_human never blocks the task on it:
 // the call goes to dispatch, whose allowlist veto refuses it.
 func TestAgenticAskHumanRefusedByAllowlist(t *testing.T) {
