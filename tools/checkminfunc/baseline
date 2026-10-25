@@ -144,6 +144,7 @@ internal/services/project_service.go NewProjectService
 internal/services/system_service.go NewSystemService
 internal/services/system_service.go (*SystemService).Snapshot
 internal/services/task_service.go NewTaskService
+internal/stage/contract.go (Contract).Decode
 test/e2e/client.go (*APIClient).SystemStatus
 test/e2e/client.go (*APIClient).ResetBreaker
 test/e2e/client.go (*APIClient).Projects
