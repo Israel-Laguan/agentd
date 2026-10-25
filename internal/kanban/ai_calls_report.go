@@ -32,9 +32,10 @@ const removedLabel = "legacy (removed)"
 func purposeLabelSQL() string {
 	quoted := make([]string, len(removedPurposes))
 	for i, p := range removedPurposes {
-		quoted[i] = "'" + p + "'"
+		quoted[i] = "'" + strings.ReplaceAll(p, "'", "''") + "'"
+
 	}
-	return "CASE WHEN purpose IN (" + strings.Join(quoted, ", ") + ") THEN '" + removedLabel + "' ELSE purpose END"
+	return "CASE WHEN purpose IN (" + strings.Join(quoted, ", ") + ") THEN '" + strings.ReplaceAll(removedLabel, "'", "''") + "' ELSE purpose END"
 }
 
 var aiAggregateColumns = aiBaseColumns + ", " + aiMixColumns()
