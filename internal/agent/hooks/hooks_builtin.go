@@ -27,6 +27,10 @@ var dangerousCommands = []struct {
 	{":(){:|:&};:", regexp.MustCompile(`:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:`)},
 }
 
+// DenylistSudoReason is the veto reason the denylist gives a sudo command. The
+// worker reads it as the sudo refusal, which is a privilege block.
+const DenylistSudoReason = `command blocked: contains dangerous pattern "sudo"`
+
 func commandRE(pattern string) *regexp.Regexp {
 	const boundary = "(^|[\\s;&|()`])"
 	full := "(?i)" + boundary + pattern
