@@ -34,17 +34,6 @@ func lastMessageIsToolResult(req gateway.AIRequest) bool {
 	return len(req.Messages) > 0 && req.Messages[len(req.Messages)-1].Role == "tool"
 }
 
-func (g *queueGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return &models.DraftPlan{}, g.err
-}
-
-func (*queueGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (*queueGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (*queueGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

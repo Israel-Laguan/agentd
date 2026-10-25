@@ -95,12 +95,6 @@ func (g *fakeGateway) nextPhaseResponse(req gateway.AIRequest) (gateway.AIRespon
 	return gateway.AIResponse{Content: string(raw)}, nil
 }
 
-func (g *fakeGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.planLocked(gateway.PurposeFromContext(ctx), intent)
-}
-
 // planLocked records the plan call and returns the canned plan. Caller holds g.mu.
 func (g *fakeGateway) planLocked(purpose gateway.Purpose, intent string) (*models.DraftPlan, error) {
 	g.planCalls++
@@ -112,13 +106,6 @@ func (g *fakeGateway) planLocked(purpose gateway.Purpose, intent string) (*model
 	return &models.DraftPlan{ProjectName: "Roadmap", Tasks: []models.DraftTask{{Title: "follow"}}}, g.err
 }
 
-func (*fakeGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (*fakeGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (*fakeGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
