@@ -1,8 +1,8 @@
 # Agentic harness architecture (agentd)
 
-This document describes the **inner agentic loop** pattern agentd is moving toward, how it maps onto the codebase today, and how it differs from the **current worker contract** (single LLM call, structured JSON, then sandbox).
+This document describes the **inner agentic loop**, the only worker path agentd runs today, and how it maps onto the codebase. The single-call contract it replaced (one LLM call, structured JSON, then sandbox) was removed in T-055b.
 
-## Inner agentic loop (target behavior)
+## Inner agentic loop
 
 An inner agentic loop is a **per-task** cycle that:
 
@@ -25,7 +25,7 @@ flowchart TB
     WP[Worker_Process]
     TL --> DP --> WP
   end
-  subgraph inner [Inner_agentic_loop_opt_in]
+  subgraph inner [Inner_agentic_loop]
     M0[Build_messages]
     LLM[Gateway_generate]
     Br{tool_calls?}
@@ -43,9 +43,9 @@ flowchart TB
 | Layer | Responsibility | Where it lives |
 | --- | --- | --- |
 | **Outer loop** | Poll the store, claim ready work, run one worker invocation per claimed task, then commit, retry, heal, or hand off. | [`internal/queue/daemon.go`](../internal/queue/daemon.go) starts `taskLoop`; [`internal/queue/loop.go`](../internal/queue/loop.go) implements `taskLoop`, `dispatch`, and related intake behavior. |
-| **Inner loop** | Multiple gateway round-trips **inside** a single task, accumulating assistant and tool messages until a final text response. | Implemented via `processAgentic` in [`Worker.Process`](../internal/queue/worker/worker.go); opt-in per profile via `AgenticMode` flag. |
+| **Inner loop** | Multiple gateway round-trips **inside** a single task, accumulating assistant and tool messages until a final text response. | Implemented via `processAgentic` in [`Worker.Process`](../internal/queue/worker/worker.go); every task runs it. |
 
-Outer retry/healing/handoff must continue to wrap the **whole** inner loop as one logical attempt (or one explicitly designed unit of work), not each tool invocation. A tool error should be returned to the model as tool output unless policy says otherwise; it should not automatically trigger the same outer path as a sandbox failure on the legacy single command.
+Outer retry/healing/handoff must continue to wrap the **whole** inner loop as one logical attempt (or one explicitly designed unit of work), not each tool invocation. A tool error should be returned to the model as tool output unless policy says otherwise; it should not automatically trigger the same outer path as a sandbox failure.
 
 ## Two LLM contracts
 
@@ -58,7 +58,7 @@ Outer retry/healing/handoff must continue to wrap the **whole** inner loop as on
 
 - Requests include **`tools`** (JSON schemas). Responses can include **`tool_calls`** on the assistant message.
 - The worker appends assistant messages (including `tool_calls`) and tool result messages, then calls the gateway again until there are no more tool calls.
-- **Task completion semantics** (for implementers): define explicitly how final assistant text maps to task success—for example, treat non-empty final text as a summary that closes the task, or require a small structured tail (JSON) in the last message for `command`/status. The roadmap and task prompts assume this is decided in the orchestration task so the state machine and events stay consistent.
+- **Task completion:** non-empty final assistant text without `tool_calls` closes the task, and it is stored as the task result (see the sandbox model rules below).
 
 ## Agentic mode flag
 

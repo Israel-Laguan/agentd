@@ -149,7 +149,8 @@ type AgentProfile struct {
 	MaxTokens    int
 	// AgenticMode is kept for the API and the startup check. Every task runs the
 	// agentic loop (tool round-tripping), so Provider must name a tool-capable
-	// backend (openai or anthropic today). The API refuses false.
+	// backend (openai or anthropic today), or stay empty when a backend in
+	// gateway.order can call tools. The API refuses false.
 	AgenticMode bool
 	// InstructionsPath overrides the default project instructions file path
 	// (e.g., ".agentd/AGENTS.md"). When empty, the loader uses the config default.

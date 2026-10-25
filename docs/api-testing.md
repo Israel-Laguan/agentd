@@ -255,8 +255,8 @@ List all agent profiles.
     {
       "id": "default",
       "name": "Default Coding Agent",
-      "provider": "llamacpp",
-      "model": "qwen",
+      "provider": "openai",
+      "model": "gpt-4o",
       "temperature": 0.2,
       "system_prompt": "Suggest one safe shell command...",
       "role": "CODE_GEN",

@@ -198,7 +198,7 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 1. **Threshold default:** `tiered.enabled` default `false`; when enabled, `tiered.complexity_threshold` default **`200`** (`EstimateTaskComplexity`). `0` disables splitting. Per-task Frontdesk override = later; v1 config-only.
 2. **Pack storage:** workspace file `context_pack.vN.json` + board pointer (path/version). No SQLite blob in v1.
 3. **Verify:** runs **decision-specified** checks only; classifies outcomes; does not invent tests.
-4. **Agentic mode:** allowed on **execute** (and escalate) profiles only; context/decision stay structured / tool-bounded as specified above.
+4. **Agentic mode:** every step runs the agentic loop, since the legacy engine was removed (T-055b). The tools each step may use are the table above: context and decision are read-only, execute may write within the decision allowlist, and verify runs checks.
 
 See SP-002.
 

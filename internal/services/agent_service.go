@@ -194,8 +194,8 @@ func (s *AgentService) validateProviderExists(provider string) error {
 
 // validateToolSupport refuses a profile whose provider cannot call tools. Every
 // profile runs the agentic loop, so its tasks would otherwise fail at dispatch.
-// Neither is a lister that cannot report tool support. An empty provider is the
-// gateway cascade, which passes when any backend supports tools.
+// A lister that cannot report tool support is not checked. An empty provider is
+// the gateway cascade, which passes when any backend supports tools.
 func (s *AgentService) validateToolSupport(p models.AgentProfile) error {
 	checker, ok := s.Lister.(toolCapableLister)
 	if !ok || checker.ProviderSupportsChatTools(p.Provider) {

@@ -34,7 +34,7 @@ repair.
 
 ## Purposes
 
-The set is closed: 24 purposes in the form `<stage>.<name>`. A call that arrives
+The set is closed: 23 purposes in the form `<stage>.<name>`. A call that arrives
 with an empty or unknown purpose is stored as `unlabelled` and counted, never
 dropped. The minimum level is provisional (SP-023): L1 is a single model call
 with no tools or workspace, L3 needs an ACP agent.
