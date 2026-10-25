@@ -190,7 +190,7 @@ func (w *Worker) requiresAgenticTools(
 			return true
 		}
 	}
-	return len(tools) > 0
+	return false
 }
 
 // GroupClaimed is the dispatch entry point for batch grouping.

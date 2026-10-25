@@ -70,13 +70,17 @@ func (w *Worker) ApplyModelRouting(
 	return profile
 }
 
+// askHumanGuidance tells the agentic model when to call ask_human. A batch
+// request offers no tools and cannot suspend, so buildBatchRequest drops it.
+const askHumanGuidance = "When a detail the task needs is missing and the workspace cannot answer it, call ask_human with one question instead of guessing; the task waits for a human's answer."
+
 func agenticToolUseSystemText(readOnly bool, goal ...*agentcontext.AgentGoal) string {
 	text := `You are an autonomous agent that can execute shell commands, read files, and write files to complete tasks.
 When you need to execute a command, use the bash tool.
 When you need to read a file, use the read tool.
 When you need to create or modify a file, use the write tool.
 Return your response as plain text when the task is complete, or use tools to continue working.
-When a detail the task needs is missing and the workspace cannot answer it, call ask_human with one question instead of guessing; the task waits for a human's answer.
+` + askHumanGuidance + `
 Never retry a command that the sandbox blocked for sudo or elevated privileges. Try at most one safe non-privileged alternative, then report that no alternative exists if it cannot complete the task.
 The project workspace is the current directory: use relative paths (for example lscpu > cpu.txt), never /workspace or any other absolute path. Commands run inside the workspace and may not touch paths outside it (except /dev/null), so never read /etc, /proc or /sys files.
 For host facts (OS, kernel, CPU, memory, disks) run commands that need no paths: uname -a, hostnamectl, lsb_release -a, lscpu, free -h, lsblk, df -h. A report may state only values printed by commands you ran in this run; never type the facts yourself.` + hostFactsSuffix(readOnly) + `
