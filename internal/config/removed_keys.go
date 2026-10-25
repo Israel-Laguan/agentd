@@ -32,7 +32,8 @@ var removedKeys = []removedKey{
 func checkRemovedKeys(v *viper.Viper, dotenv map[string]string) error {
 	var problems []string
 	for _, r := range removedKeys {
-		_, inDotEnv := dotenv[r.envName()]
+		envName := envPrefix + "_" + strings.ToUpper(strings.ReplaceAll(r.Key, ".", "_"))
+		_, inDotEnv := dotenv[envName]
 		if v.IsSet(r.Key) || inDotEnv {
 			problems = append(problems, r.problem())
 		}
@@ -41,11 +42,6 @@ func checkRemovedKeys(v *viper.Viper, dotenv map[string]string) error {
 		return nil
 	}
 	return fmt.Errorf("%w: removed config key: %s", ErrConfigRead, strings.Join(problems, "; "))
-}
-
-// envName is the AGENTD_* spelling of the key, as applyDotEnvToViper reads it.
-func (r removedKey) envName() string {
-	return envPrefix + "_" + strings.ToUpper(strings.ReplaceAll(r.Key, ".", "_"))
 }
 
 func (r removedKey) problem() string {
