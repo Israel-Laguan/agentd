@@ -26,15 +26,17 @@ var removedKeys = []removedKey{
 }
 
 // checkRemovedKeys fails when the config sets a removed key in the config file,
-// the environment or a .env file. IsSet sees file and env values but not
-// defaults, and applyDotEnvToViper forwards only keys viper already knows, so
-// the .env file is checked by each key's AGENTD_* name.
-func checkRemovedKeys(v *viper.Viper, dotenv map[string]string) error {
+// the process environment or a .env file. IsSet sees file and env values but not
+// defaults, and it treats an empty env var as unset. applyDotEnvToViper forwards
+// only keys viper already knows. So the environment and .env are checked by each
+// key's AGENTD_* name.
+func checkRemovedKeys(v *viper.Viper, process, dotenv map[string]string) error {
 	var problems []string
 	for _, r := range removedKeys {
 		envName := envPrefix + "_" + strings.ToUpper(strings.ReplaceAll(r.Key, ".", "_"))
+		_, inProcess := process[envName]
 		_, inDotEnv := dotenv[envName]
-		if v.IsSet(r.Key) || inDotEnv {
+		if v.IsSet(r.Key) || inProcess || inDotEnv {
 			problems = append(problems, r.problem())
 		}
 	}

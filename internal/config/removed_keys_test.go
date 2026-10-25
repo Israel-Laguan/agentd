@@ -85,6 +85,16 @@ func TestLoad_RemovedKeyFromEnvFails(t *testing.T) {
 	}
 }
 
+// Viper treats an empty env var as unset, so an empty AGENTD_* setting is
+// caught only by the process environment itself.
+func TestLoad_EmptyRemovedEnvFails(t *testing.T) {
+	t.Setenv("AGENTD_QUEUE_LEGACY_REJECT_SCORE", "")
+	_, err := loadConfigBody(t, "")
+	if err == nil || !strings.Contains(err.Error(), "queue.legacy.reject_score") {
+		t.Fatalf("Load() error = %v, want the empty removed env key named", err)
+	}
+}
+
 // applyDotEnvToViper forwards only keys viper already knows, and removed keys
 // have no defaults, so a removed key in .env needs its own check.
 func TestLoad_RemovedKeyFromDotEnvFails(t *testing.T) {
