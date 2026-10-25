@@ -26,7 +26,8 @@ func (e *Engine) prepareAgenticRun(
 	messages []gateway.PromptMessage,
 	tools []gateway.ToolDefinition,
 	toolToAdapter map[string]string,
-	routingTools []gateway.ToolDefinition,
+	allTools []gateway.ToolDefinition,
+	allToolToAdapter map[string]string,
 	routedProfile models.AgentProfile,
 	taskToolExecutor *agenttools.ToolExecutor,
 	taskHooks *agenthooks.HookChain,
@@ -38,11 +39,24 @@ func (e *Engine) prepareAgenticRun(
 		WithIntent(task.Title + "\n" + task.Description)
 	taskHooks, taskCaps = e.host.MountAgenticHooks(project, profile)
 	messages = e.buildAgenticMessages(ctx, task, project, profile)
-	tools, toolToAdapter = e.host.AgenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
-	routingTools = append([]gateway.ToolDefinition(nil), tools...)
-	tools, toolToAdapter = e.host.FilterAgenticTools(tools, toolToAdapter, task, profile)
-	routedProfile = e.host.ApplyModelRouting(task, profile, messages, routingTools)
-	return messages, tools, toolToAdapter, routingTools, routedProfile, taskToolExecutor, taskHooks, taskCaps
+	allTools, allToolToAdapter = e.host.AgenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
+	tools, toolToAdapter, routedProfile = e.selectAgenticTools(task, profile, messages, allTools, allToolToAdapter)
+	return messages, tools, toolToAdapter, allTools, allToolToAdapter, routedProfile, taskToolExecutor, taskHooks, taskCaps
+}
+
+// selectAgenticTools filters the full tool set for task and routes its model.
+// Routing sizes the context by the full set, as the filter only narrows what is
+// offered. profile is the unrouted one, so a rerun does not route from a prior
+// route.
+func (e *Engine) selectAgenticTools(
+	task models.Task,
+	profile models.AgentProfile,
+	messages []gateway.PromptMessage,
+	allTools []gateway.ToolDefinition,
+	allToolToAdapter map[string]string,
+) ([]gateway.ToolDefinition, map[string]string, models.AgentProfile) {
+	tools, toolToAdapter := e.host.FilterAgenticTools(allTools, allToolToAdapter, task, profile)
+	return tools, toolToAdapter, e.host.ApplyModelRouting(task, profile, messages, allTools)
 }
 
 // buildAgenticMessages is the prompt for task: the layered system prompt and the
@@ -55,20 +69,14 @@ func (e *Engine) buildAgenticMessages(ctx context.Context, task models.Task, pro
 
 // runPreTaskElicitation runs pre-task elicitation and reports whether the run
 // goes on. Consumed clarification answers extend the description, so the
-// evidence guard checks commands against the clarified task, and the prompt
-// (built before elicitation) is rebuilt so the model sees the human's answer.
+// evidence guard checks commands against the clarified task; the caller rebuilds
+// what was derived from the description before elicitation.
 func (e *Engine) runPreTaskElicitation(
 	ctx, cancelCtx context.Context,
 	task models.Task,
 	project models.Project,
-	profile models.AgentProfile,
-	messages *[]gateway.PromptMessage,
-	tools *[]gateway.ToolDefinition,
-	toolToAdapter *map[string]string,
-	routedProfile *models.AgentProfile,
 	taskToolExecutor *agenttools.ToolExecutor,
 ) (models.Task, bool) {
-	described := task.Description
 	task, blocked, err := e.host.RunPreTaskElicitation(cancelCtx, task, project)
 	if err != nil {
 		e.host.FailHard(cancelCtx, task, err)
@@ -80,11 +88,6 @@ func (e *Engine) runPreTaskElicitation(
 	}
 	correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation complete", "task_id", task.ID)
 	taskToolExecutor.WithIntent(task.Title + "\n" + task.Description)
-	if task.Description != described {
-		*messages = e.buildAgenticMessages(cancelCtx, task, project, profile)
-		*tools, *toolToAdapter = e.host.FilterAgenticTools(*tools, *toolToAdapter, task, profile)
-		*routedProfile = e.host.ApplyModelRouting(task, profile, *messages, *tools)
-	}
 	return task, true
 }
 
