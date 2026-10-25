@@ -30,7 +30,7 @@ The folder-size audit document was intentionally kept as transient analysis outp
 
 Responsibilities are split across:
 
-- Worker orchestration: `worker.go`, `worker_construct.go`, `worker_support.go`, `worker_batch.go`, `worker_batch_process.go`, `batcher.go`, `worker_legacy.go`, `worker_legacy_run.go`, and `worker_retry.go`.
+- Worker orchestration: `worker.go`, `worker_construct.go`, `worker_support.go`, `worker_batch.go`, `worker_batch_process.go`, `batcher.go`, and `worker_retry.go`.
 - Agentic mode: `worker_agentic_host.go` at the worker root, plus `internal/queue/worker/agentic/` for `engine.go`, `agentic.go`, `handlers.go`, `iteration.go`, `setup.go`, `rewind.go`, and `session.go`.
 - User interaction: `worker_elicitation.go`, `elicitor.go`, `hitl_tasks.go`, `hitl_review.go`, and `hitl_approval.go`.
 - Hooks, tools, plugins, and instructions: `hooks_approval.go`, `worker_tools.go`, `worker_tools_capability.go`, `worker_plugins.go`, `instruction_loader.go`, `instructions.go`, `worker_events.go`, and `worker_addons.go`.
