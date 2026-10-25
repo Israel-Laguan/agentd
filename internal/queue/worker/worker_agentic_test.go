@@ -110,6 +110,9 @@ func TestAgenticToolsIncludesExecutorAndCapabilityTools(t *testing.T) {
 	if !containsTool(tools, "delegate_parallel") {
 		t.Fatal("expected delegate_parallel tool")
 	}
+	if !containsTool(tools, agenttools.ToolNameAskHuman) {
+		t.Fatal("expected ask_human tool")
+	}
 }
 
 // TestProcessAgentic_CallsGatewayWithTools verifies that agenticTools returns tool definitions
@@ -127,6 +130,9 @@ func TestProcessAgentic_CallsGatewayWithTools(t *testing.T) {
 	// Should have 6 tools (bash, read, write, delegate, delegate_parallel, ask_human)
 	if len(tools) != 6 {
 		t.Fatalf("expected 6 tools when no capabilities, got %d", len(tools))
+	}
+	if !containsTool(tools, agenttools.ToolNameAskHuman) {
+		t.Fatal("expected ask_human tool when no capabilities")
 	}
 
 	// No toolToAdapter when no capabilities

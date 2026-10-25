@@ -159,6 +159,9 @@ func TestAgenticAskHumanRefusedByAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
+	if len(gw.requests) < 2 || !requestContainsToolResult(gw.requests[1], "c1", "not in this profile's allowed_tools") {
+		t.Fatalf("ask_human was not refused by the allowlist veto: requests = %d", len(gw.requests))
+	}
 	if got.State == models.TaskStateBlocked {
 		t.Fatalf("state = BLOCKED, want the allowlist to refuse ask_human")
 	}

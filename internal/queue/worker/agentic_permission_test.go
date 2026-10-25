@@ -62,13 +62,11 @@ func TestAgenticPermissionTextInSuccessfulOutputIsNotAHandoff(t *testing.T) {
 // The always-on denylist refuses sudo before the sandbox sees it, so in
 // production the sandbox's "sudo command blocked" output never appears. The
 // denylist's veto is the sudo refusal, and it is a privilege block too.
-const denylistSudoVetoReason = `command blocked: contains dangerous pattern "sudo"`
-
 func TestAgenticPrivilegeBlockDetectsDenylistSudoVeto(t *testing.T) {
 	t.Parallel()
 	w := &Worker{}
 	call := bashCall("c1", "sudo dmidecode -t memory").ToolCalls[0]
-	veto := agenttools.VetoedResult("c1", denylistSudoVetoReason)
+	veto := agenttools.VetoedResult("c1", agenthooks.DenylistSudoReason)
 
 	command, blocked := w.AgenticPrivilegeBlock(call, veto)
 	if !blocked || command != "sudo dmidecode -t memory" {
