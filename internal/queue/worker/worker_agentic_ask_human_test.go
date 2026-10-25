@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	agenthooks "agentd/internal/agent/hooks"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -141,6 +142,43 @@ func TestAgenticResumedRunPromptCarriesTheAnswer(t *testing.T) {
 		}
 	}
 	t.Fatalf("resumed run's task message lacks the human's answer: %#v", gw.requests[1].Messages)
+}
+
+// ask_human goes through tool dispatch like any other tool: a pre-hook can veto
+// it, and a post-hook (the dispatch audit among them) sees the call.
+func TestAgenticAskHumanRunsThroughDispatchHooks(t *testing.T) {
+	t.Parallel()
+	for _, veto := range []bool{true, false} {
+		gw := &sequenceGateway{responses: []gateway.AIResponse{
+			askHumanCall("c1", "Which format?"), {Content: "Done."},
+		}}
+		w, _, task, project, profile := agenticFixture(t, gw, &scriptedSandbox{}, models.DraftTask{Title: "Write the report", Description: testutil.AgenticTestTaskDescription()}, nil)
+		var posted []string
+		w.hooks = agenthooks.NewHookChain()
+		w.hooks.RegisterPre(agenthooks.PreHook{Name: "gate", Policy: agenthooks.FailClosed, Fn: func(ctx agenthooks.HookContext) (agenthooks.HookVerdict, error) {
+			if veto && ctx.ToolName == agenttools.ToolNameAskHuman {
+				return agenthooks.HookVerdict{Veto: true, Reason: "humans are off today"}, nil
+			}
+			return agenthooks.HookVerdict{}, nil
+		}})
+		w.hooks.RegisterPost(agenthooks.PostHook{Name: "seen", Policy: agenthooks.FailOpen, Fn: func(ctx agenthooks.HookContext, result string) (string, error) {
+			posted = append(posted, ctx.ToolName)
+			return result, nil
+		}})
+		if result, ok := w.processAgentic(context.Background(), task, project, profile); ok {
+			w.handleLoopResult(context.Background(), task, result)
+		}
+		got, err := w.store.GetTask(context.Background(), task.ID)
+		if err != nil {
+			t.Fatalf("GetTask: %v", err)
+		}
+		if blocked := got.State == models.TaskStateBlocked; blocked == veto {
+			t.Fatalf("veto=%v: state = %s, want blocked only without the veto", veto, got.State)
+		}
+		if len(posted) != 1 || posted[0] != agenttools.ToolNameAskHuman {
+			t.Fatalf("veto=%v: post-hooks saw %v, want the ask_human call once", veto, posted)
+		}
+	}
 }
 
 // A profile whose AllowedTools leave out ask_human never blocks the task on it:
