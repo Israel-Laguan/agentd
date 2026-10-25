@@ -52,7 +52,7 @@ func (w *Worker) tryResolveTieredOrigin(ctx context.Context, task models.Task) b
 	}
 	if !found {
 		// No verify step ever recorded a verdict — e.g. every verify attempt
-		// handed off, suspended, fell back to legacy execution, or exhausted
+		// handed off, suspended, failed the tool-support check, or exhausted
 		// its budget/turn-limit/tool-retries before classifying an outcome.
 		// All steps being COMPLETED does NOT mean the work was verified, so
 		// this must resolve as failure, never success: reporting success here

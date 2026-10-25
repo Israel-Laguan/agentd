@@ -15,12 +15,10 @@ import (
 // to gather workspace context, then intercepts the committed text to
 // parse, validate, and persist the ContextPack.
 func (w *Worker) processTieredContextStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, parentTask models.Task) {
-	// A tiered context step must run through the agentic engine: legacy
-	// one-shot mode produces a shell command, not a ContextPack. If the
-	// selected provider cannot round-trip tools, the engine would fall back
-	// to legacy execution and commit a *successful* result with no pack,
-	// letting decision/execute/verify run without the required artifact.
-	// Fail the step up front instead.
+	// A tiered context step must run through the agentic engine: a one-shot
+	// reply produces no ContextPack. If the selected provider cannot round-trip
+	// tools, fail the step up front; otherwise decision/execute/verify would run
+	// without the required artifact.
 	if !w.providerSupportsAgentic(profile) {
 		slog.Warn("tiered context: provider does not support chat tools; failing step",
 			"task_id", task.ID, "provider", profile.Provider)
@@ -31,7 +29,7 @@ func (w *Worker) processTieredContextStep(ctx context.Context, task models.Task,
 	result, ok := w.processAgentic(ctx, task, project, profile)
 	if !ok {
 		// The engine exits without a LoopResult when it handed off, suspended,
-		// or fell back to legacy execution. No ContextPack can be parsed here,
+		// or failed the tool-support check. No ContextPack can be parsed here,
 		// so record the failure (or surface the conflict if the step was
 		// already resolved) rather than leaving the DAG looking satisfied.
 		w.failTieredStep(ctx, task, "tiered context step produced no ContextPack result")

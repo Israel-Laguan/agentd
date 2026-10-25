@@ -22,7 +22,8 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	defer cleanup()
 
 	// prepareAgenticRun builds messages/tools before routing; session start and
-	// pre-task elicitation run after the fallback check so legacy path is unaffected.
+	// pre-task elicitation run after the tool-support check, so a provider without
+	// tools fails before either.
 	messages, tools, toolToAdapter, _, profile, taskToolExecutor, taskHooks, taskCaps :=
 		e.prepareAgenticRun(ctx, task, project, profile)
 
@@ -177,7 +178,6 @@ func (e *Engine) generateAgenticTurn(
 }
 
 // rejectWithoutToolSupport fails a task whose routed provider cannot call tools.
-// The legacy command path would report success without any tool work (B-080).
 func (e *Engine) rejectWithoutToolSupport(ctx context.Context, task models.Task, provider string) {
 	correlation.Logger(ctx).Error("agentic profile's routed provider cannot call tools; failing the task",
 		"task_id", task.ID, "provider", provider)
