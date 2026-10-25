@@ -147,10 +147,9 @@ type AgentProfile struct {
 	SystemPrompt sql.NullString
 	Role         string
 	MaxTokens    int
-	// AgenticMode enables agentic worker behavior (tool round-tripping). Requires
-	// Provider to name a tool-capable backend (openai or anthropic today). When
-	// Provider is empty or unsupported, the worker logs a warning and falls back
-	// to legacy single-shot JSON command execution.
+	// AgenticMode is kept for the API and the startup check. Every task runs the
+	// agentic loop (tool round-tripping), so Provider must name a tool-capable
+	// backend (openai or anthropic today). The API refuses false.
 	AgenticMode bool
 	// InstructionsPath overrides the default project instructions file path
 	// (e.g., ".agentd/AGENTS.md"). When empty, the loader uses the config default.

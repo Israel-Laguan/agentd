@@ -62,13 +62,13 @@ Outer retry/healing/handoff must continue to wrap the **whole** inner loop as on
 
 ## Agentic mode flag
 
-The **`AgenticMode`** boolean field on the `AgentProfile` entity is still stored and checked against the provider. It no longer picks a worker path:
+The **`AgenticMode`** boolean field on the `AgentProfile` entity is checked against the provider. The API accepts only `true`, and it no longer picks a worker path:
 
 ```go
 type AgentProfile struct {
     // ...
-    // AgenticMode is refused for a provider without tool calling. Every
-    // task runs the inner loop via processAgentic, whatever the flag says.
+    // The API accepts only true. A provider without tool calling is refused.
+    // Every task runs the inner loop via processAgentic.
     AgenticMode bool
 }
 ```
@@ -77,7 +77,7 @@ type AgentProfile struct {
 
 | `AgenticMode` | Provider | Behavior |
 | --------------- | ---------- | ---------- |
-| `false` | any | Stored, but not used to choose a path: every task still runs the inner loop. The legacy single-shot JSON mode was removed in T-055b. New profiles default to `true` |
+| `false` | any | Refused by the API with HTTP 400. Rows stored with `false` before this change are upgraded to `true` at startup (see [init-startup.md](init-startup.md)) |
 | `true` | `openai` (incl. openai-compatible e.g. LiteLLM/Portkey/OpenRouter) | Agentic mode: inner loop with tool calling; shell via `bash` tool only |
 | `true` | `anthropic` (native) | **Single one tool turn only.** Multi-turn tool round-trip is broken (see [provider-tool-calling.md](provider-tool-calling.md)). For a working agentic loop on Anthropic-family models, use the managed proxy path (`adapter: openai`) instead. |
 | `true` | other (native, `SupportsChatTools: false`) | Rejected: the profile cannot be created or patched with it, and a task on it fails |

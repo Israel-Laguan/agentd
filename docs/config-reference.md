@@ -150,7 +150,7 @@ gateway:
 
 ## Agentic
 
-Enabled per agent profile via `AgentProfile.agentic_mode`. Keys marked **not implemented** are parsed and ignored (B-065); `config.reference.yaml` carries the same marker and a test fails when the two drift.
+Every agent profile runs the agentic loop; the API refuses `agentic_mode: false` (see [api-testing.md](api-testing.md)). Keys marked **not implemented** are parsed and ignored (B-065); `config.reference.yaml` carries the same marker and a test fails when the two drift.
 
 | Key | Notes |
 | --- | --- |

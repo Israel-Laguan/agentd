@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -98,15 +99,14 @@ func (h AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		id = uuid.NewString()
 	}
-	// New profiles are agentic unless the request says otherwise.
-	agentic := true
-	if req.AgenticMode != nil {
-		agentic = *req.AgenticMode
+	if req.AgenticMode != nil && !*req.AgenticMode {
+		httpx.WriteMappedError(w, errAgenticOff)
+		return
 	}
 	profile := models.AgentProfile{
 		ID: id, Name: req.Name, Provider: req.Provider, Model: req.Model,
 		Temperature: req.Temperature, Role: req.Role, MaxTokens: req.MaxTokens,
-		AgenticMode: agentic, CapabilityRouteIntent: strings.TrimSpace(req.CapabilityRouteIntent),
+		AgenticMode: true, CapabilityRouteIntent: strings.TrimSpace(req.CapabilityRouteIntent),
 		AllowedTools: req.AllowedTools, WorkspaceReadonly: req.WorkspaceReadonly,
 	}
 	if req.SystemPrompt != "" {
@@ -126,6 +126,10 @@ func (h AgentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	var req agentPatchRequest
 	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
+		return
+	}
+	if req.AgenticMode != nil && !*req.AgenticMode {
+		httpx.WriteMappedError(w, errAgenticOff)
 		return
 	}
 	patch := services.AgentPatch{
@@ -151,6 +155,10 @@ func (h AgentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteSuccess(w, http.StatusOK, map[string]string{"id": r.PathValue("id"), "status": "deleted"}, nil)
 }
+
+// errAgenticOff is the API's answer to agentic_mode false. Every profile runs
+// the agentic tool loop, so no profile may opt out of it.
+var errAgenticOff = fmt.Errorf("%w: agentic_mode false is not supported; every profile runs the agentic tool loop", models.ErrAgentProfileInvalid)
 
 func toAgentResponse(p models.AgentProfile) agentResponse {
 	out := agentResponse{

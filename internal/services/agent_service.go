@@ -192,19 +192,19 @@ func (s *AgentService) validateProviderExists(provider string) error {
 	return &models.ProviderNotConfiguredError{Provider: provider, Available: names}
 }
 
-// validateToolSupport refuses an agentic profile whose provider cannot call
-// tools. Its tasks would otherwise fail at dispatch. Non-agentic profiles are
-// not checked, and neither is a lister that cannot report tool support. An empty
-// provider is the gateway cascade, which passes when any backend supports tools.
+// validateToolSupport refuses a profile whose provider cannot call tools. Every
+// profile runs the agentic loop, so its tasks would otherwise fail at dispatch.
+// Neither is a lister that cannot report tool support. An empty provider is the
+// gateway cascade, which passes when any backend supports tools.
 func (s *AgentService) validateToolSupport(p models.AgentProfile) error {
 	checker, ok := s.Lister.(toolCapableLister)
-	if !p.AgenticMode || !ok || checker.ProviderSupportsChatTools(p.Provider) {
+	if !ok || checker.ProviderSupportsChatTools(p.Provider) {
 		return nil
 	}
 	if p.Provider == "" {
-		return fmt.Errorf("%w (no backend in the gateway cascade supports tools); set agentic_mode to false or configure a tool-capable provider", models.ErrAgentProfileNoToolSupport)
+		return fmt.Errorf("%w (no backend in the gateway cascade supports tools); configure a tool-capable provider", models.ErrAgentProfileNoToolSupport)
 	}
-	return fmt.Errorf("%w (%q); pick a tool-capable provider or set agentic_mode to false", models.ErrAgentProfileNoToolSupport, p.Provider)
+	return fmt.Errorf("%w (%q); pick a tool-capable provider", models.ErrAgentProfileNoToolSupport, p.Provider)
 }
 
 func validateProviderModelPair(provider, model string) error {

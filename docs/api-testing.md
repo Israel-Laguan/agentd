@@ -261,13 +261,13 @@ List all agent profiles.
       "system_prompt": "Suggest one safe shell command...",
       "role": "CODE_GEN",
       "max_tokens": 1024,
-      "agentic_mode": false
+      "agentic_mode": true
     }
   ]
 }
 ```
 
-`agentic_mode` (boolean, default `true`): a profile whose provider cannot call tools is rejected with HTTP 400 (`agentic profile's provider cannot call tools`) on create and patch, and a task already on such a profile fails. Every task runs the inner agentic worker loop with tool round-tripping; the worker has no legacy single-shot path.
+`agentic_mode` (boolean, default `true`). The API accepts only `true`: `false` is refused with HTTP 400 (`agentic_mode false is not supported`), because every task runs the inner agentic worker loop with tool round-tripping. A profile whose provider cannot call tools is also rejected with HTTP 400 (`agentic profile's provider cannot call tools`) on create and patch, and a task already on such a profile fails.
 
 `allowed_tools` (string array, default empty) limits the profile to the named tools. A call to any other tool is vetoed at dispatch, delegation included. Empty means no allowlist. `workspace_readonly` (boolean, default `false`) is stored now; nothing enforces it yet.
 
@@ -285,11 +285,11 @@ Get a specific agent profile.
 
 ### POST /api/v1/agents
 
-Create an agent profile. Optional `agentic_mode` (boolean, default `true`), `allowed_tools` and `workspace_readonly`. Omit `provider` and `model` (or set both to empty strings) to delegate routing to `gateway.order` and `gateway.role_models`, matching the built-in seeded profiles from `agentd init`.
+Create an agent profile. Optional `agentic_mode` (boolean, default `true`; `false` is refused with HTTP 400), `allowed_tools` and `workspace_readonly`. Omit `provider` and `model` (or set both to empty strings) to delegate routing to `gateway.order` and `gateway.role_models`, matching the built-in seeded profiles from `agentd init`.
 
 ### PATCH /api/v1/agents/{id}
 
-Sparse update. Set `agentic_mode` to `true` or `false` for that profile. Setting it to `true` on a provider that cannot call tools is rejected. `allowed_tools` and `workspace_readonly` can also be patched.
+Sparse update. `agentic_mode` set to `false` is refused with HTTP 400, as on create. Setting it to `true` on a provider that cannot call tools is rejected. `allowed_tools` and `workspace_readonly` can also be patched.
 
 ---
 

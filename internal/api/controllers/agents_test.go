@@ -246,9 +246,7 @@ func TestAgentHandler_PatchAgenticMode(t *testing.T) {
 	disableReq.SetPathValue("id", "test-agent")
 	disableRec := httptest.NewRecorder()
 	h.Patch(disableRec, disableReq)
-	if disableRec.Code != http.StatusOK {
-		t.Fatalf("Patch disable code = %d body = %s", disableRec.Code, disableRec.Body.String())
-	}
+	assertAgentValidationFailed(t, disableRec, "agentic_mode false")
 	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/test-agent", nil)
 	getReq.SetPathValue("id", "test-agent")
 	getRec := httptest.NewRecorder()
@@ -264,8 +262,8 @@ func TestAgentHandler_PatchAgenticMode(t *testing.T) {
 	if err := json.Unmarshal(getRec.Body.Bytes(), &getResp); err != nil {
 		t.Fatal(err)
 	}
-	if getResp.Data.AgenticMode {
-		t.Fatal("expected agentic_mode false after disable patch")
+	if !getResp.Data.AgenticMode {
+		t.Fatal("expected agentic_mode to stay true after the refused disable patch")
 	}
 }
 
@@ -427,26 +425,22 @@ func TestAgentHandler_CreateDefaultsToAgentic(t *testing.T) {
 	}
 }
 
-// An explicit agentic_mode false is still honoured on create.
-func TestAgentHandler_CreateExplicitFalseStaysLegacy(t *testing.T) {
+// The API refuses agentic_mode false: every profile runs the agentic loop, and
+// a refused profile is not stored.
+func TestAgentHandler_CreateExplicitFalseIsRefused(t *testing.T) {
 	h := agentTestHandler()
 	body := `{"id":"explicit-legacy","name":"Explicit Legacy","provider":"openai","model":"gpt-4","agentic_mode":false}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("Create code = %d body = %s", rec.Code, rec.Body.String())
-	}
-	var resp struct {
-		Data struct {
-			AgenticMode bool `json:"agentic_mode"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode create response: %v", err)
-	}
-	if resp.Data.AgenticMode {
-		t.Fatalf("agentic_mode = true for an explicit false; body = %s", rec.Body.String())
+	assertAgentValidationFailed(t, rec, "agentic_mode false")
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/explicit-legacy", nil)
+	getReq.SetPathValue("id", "explicit-legacy")
+	getRec := httptest.NewRecorder()
+	h.Get(getRec, getReq)
+	if getRec.Code != http.StatusNotFound {
+		t.Fatalf("refused profile was stored: Get code = %d body = %s", getRec.Code, getRec.Body.String())
 	}
 }
