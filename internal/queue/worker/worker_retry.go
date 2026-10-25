@@ -76,6 +76,28 @@ func (w *Worker) commit(ctx context.Context, task models.Task, result sandbox.Re
 	_ = w.commitSucceeded(ctx, task, result, err)
 }
 
+func (w *Worker) CommitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
+	if profile != nil && profile.RequireReview {
+		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
+			w.Emit(ctx, task, "ERROR", err.Error())
+			w.FailHard(ctx, task, err)
+			return
+		} else if done {
+			return
+		}
+		w.createReviewHandoff(ctx, task, content)
+		return
+	}
+	if w.interceptTieredNeedsContext(ctx, task, content) {
+		return
+	}
+	result := sandbox.Result{
+		Success: true,
+		Stdout:  content,
+	}
+	w.commit(ctx, task, result, nil)
+}
+
 // commitSucceeded persists a successful sandbox result and reports whether the
 // task result was written. Callers that must gate side effects on persistence
 // (e.g. HITL consumption markers) should use this instead of commit.

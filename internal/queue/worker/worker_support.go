@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,10 +12,8 @@ import (
 	"sync"
 	"time"
 
-	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
 )
 
@@ -78,18 +75,6 @@ func (w *Worker) validateProjectWorkspace(project models.Project) error {
 		return fmt.Errorf("%w: refusing to execute at workspace root for project %s", models.ErrSandboxViolation, project.ID)
 	}
 	return nil
-}
-
-func (w *Worker) payload(task models.Task, project models.Project, command string) sandbox.Payload {
-	return sandbox.Payload{
-		TaskID:        task.ID,
-		ProjectID:     task.ProjectID,
-		WorkspacePath: project.WorkspacePath,
-		Intent:        task.Title + "\n" + task.Description,
-		Command:       command,
-		EnvVars:       agenttools.BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv),
-		WallTimeout:   w.sandboxWallTimeout,
-	}
 }
 
 func (w *Worker) recoverPanic(ctx context.Context, task models.Task) {
@@ -219,15 +204,6 @@ func (w *Worker) loadContext(
 	}
 	profile, err := w.store.GetAgentProfile(ctx, task.AgentID)
 	return project, profile, err
-}
-
-func (w *Worker) isPromptHang(result sandbox.Result, err error) bool {
-	return result.TimedOut && errors.Is(err, models.ErrExecutionTimeout) && safety.DetectPrompt(result.Stdout, result.Stderr).Detected
-}
-
-func (w *Worker) isPermissionFailure(result sandbox.Result, err error) bool {
-	failed := err != nil || !result.Success
-	return failed && safety.DetectPermission(result.Stdout, result.Stderr).Detected
 }
 
 func (w *Worker) commitText(ctx context.Context, task models.Task, content string) {

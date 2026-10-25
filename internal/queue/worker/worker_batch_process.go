@@ -61,11 +61,7 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 		return
 	}
 
-	if profile.AgenticMode {
-		w.processBatchAgentic(ctx, runnable, *project, *profile)
-		return
-	}
-	w.processBatchLegacy(ctx, runnable, *project, *profile)
+	w.processBatchAgentic(ctx, runnable, *project, *profile)
 }
 
 func (w *Worker) prepareBatchRunnable(
@@ -142,75 +138,4 @@ func (w *Worker) processBatchAgentic(
 		p := profile
 		w.CommitTextWithProfile(ctx, task, slot.Content, &p)
 	}
-}
-
-func (w *Worker) processBatchLegacy(
-	ctx context.Context,
-	tasks []models.Task,
-	project models.Project,
-	profile models.AgentProfile,
-) {
-	release, ok := w.gateBatchProvider(ctx, tasks, profile.Provider)
-	if !ok {
-		return
-	}
-	defer release()
-	resp, err := w.runBatchLegacyGateway(ctx, tasks, project, profile)
-	if err != nil {
-		for _, task := range tasks {
-			w.HandleGatewayError(ctx, task, err)
-		}
-		return
-	}
-	bySlot := make(map[int]batchLegacySlot, len(resp.Results))
-	for _, r := range resp.Results {
-		bySlot[r.Slot] = r
-	}
-	for i, task := range tasks {
-		slot, ok := bySlot[i]
-		if !ok {
-			w.processRunningTask(ctx, task, project, profile)
-			continue
-		}
-		if validateBatchLegacySlot(slot) != nil {
-			w.processRunningTask(ctx, task, project, profile)
-			continue
-		}
-		w.applyBatchLegacySlot(ctx, task, project, profile, slot)
-	}
-}
-
-func (w *Worker) applyBatchLegacySlot(
-	ctx context.Context,
-	task models.Task,
-	project models.Project,
-	profile models.AgentProfile,
-	slot batchLegacySlot,
-) {
-	if slot.TooComplex {
-		w.applyBreakdown(ctx, task, slot.Subtasks, false)
-		return
-	}
-	execCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	w.RegisterCancel(task.ID, cancel)
-	defer w.DeregisterCancel(task.ID)
-	result, runErr := w.executeRecorded(execCtx, task, project, slot.Command)
-	if w.isPromptHang(result, runErr) {
-		w.handlePromptRecovery(ctx, task, project, slot.Command, result)
-		return
-	}
-	if w.isPrivilegeBlock(result, runErr) {
-		w.recoverLegacyPrivilege(ctx, task, project, profile, slot.Command, &legacyTaskAudit{})
-		return
-	}
-	if w.isPermissionFailure(result, runErr) {
-		w.handlePermissionFailure(ctx, task, slot.Command, "The sandbox reported a permission failure; no non-privileged recovery was attempted.")
-		return
-	}
-	if profile.RequireReview && runErr == nil && result.Success {
-		w.createReviewHandoff(ctx, task, result.Stdout)
-		return
-	}
-	w.commit(ctx, task, result, runErr)
 }

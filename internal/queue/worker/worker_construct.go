@@ -59,7 +59,7 @@ type WorkerOptions struct {
 	ToolFailureStreak          int
 	TokenUsageHook             func(int)
 	// TokenStore, when set, persists per-call token usage to the task row in the
-	// database on every LLM call (agentic and legacy), independently of TokenUsageHook.
+	// database on every LLM call, independently of TokenUsageHook.
 	TokenStore TokenUsageStore
 	// DisableTokenRecording, when true, makes RecordTaskTokenUsage skip the TokenStore
 	// calls. Intended for tests that use real stores but minimal schemas or that
@@ -77,7 +77,6 @@ type WorkerOptions struct {
 	ProviderBreakers      *safety.ProviderBreakers
 	HealingDisabled       bool
 	MaxHealingTasks       int
-	Legacy                config.LegacyConfig
 	Split                 config.SplitConfig
 }
 
@@ -205,9 +204,6 @@ func newWorkerCore(
 		maxHealingTasks:         opts.MaxHealingTasks,
 		splitMaxDepth:           opts.Split.MaxDepth,
 		splitMaxSubtasks:        opts.Split.MaxSubtasks,
-		legacyPreflightScore:    opts.Legacy.PreflightScore,
-		legacyRejectScore:       opts.Legacy.RejectScore,
-		legacyMaxDescriptionLen: opts.Legacy.MaxDescriptionLen,
 	}
 }
 

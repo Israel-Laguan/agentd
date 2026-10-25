@@ -125,7 +125,6 @@ internal/queue/worker/worker_permission.go containsSudoToken
 internal/queue/worker/worker_permission.go safeCommandFence
 internal/queue/worker/worker_retry.go (*Worker).commit
 internal/queue/worker/worker_support.go NewCancelRegistry
-internal/queue/worker/worker_support.go (*Worker).isPromptHang
 internal/queue/worker/worker_support.go (*Worker).commitText
 internal/queue/worker/worker_support.go (*Worker).providerSupportsAgentic
 internal/queue/worker/worker_support.go (*Worker).SetSandbox
@@ -184,8 +183,6 @@ internal/queue/worker/instructions.go (*SystemPromptBuilder).WithProject
 internal/queue/worker/instructions.go (*SystemPromptBuilder).WithTask
 internal/queue/worker/instructions.go (*SystemPromptBuilder).WithUserPreferences
 internal/queue/worker/phase_splitter.go (*Worker).shouldPlan
-internal/queue/worker/worker_permission.go (*Worker).isPrivilegeBlock
-internal/queue/worker/worker_support.go (*Worker).isPermissionFailure
 internal/queue/worker/worker_support.go (*Worker).handleIterationExceeded
 internal/queue/worker/worker_tools.go (*Worker).DispatchTool
 internal/queue/worker/worker_tools.go (*Worker).dispatchToolWithProject

@@ -49,9 +49,9 @@ Outer retry/healing/handoff must continue to wrap the **whole** inner loop as on
 
 ## Two LLM contracts
 
-### Current (default worker): structured JSON, one shot
+### Current (default worker): agentic tool-calling
 
-- Messages are built in [`worker_legacy.go`](../internal/queue/worker/worker_legacy.go) (`workerMessages`) from `AgentProfile` and the task.
+- Messages are built via `AssembleAgenticSystemPrompt` from `AgentProfile` and the task; the worker enters `processAgentic` and drives the agentic tool-calling loop.
 - The worker calls the gateway with JSON mode and decodes a **`workerResponse`**: `command`, or `too_complex` with `subtasks`, via `GenerateJSON` in [`worker.go`](../internal/queue/worker/worker.go).
 - Exactly **one** LLM generation per attempt drives **one** sandbox execution for the shell command path.
 
@@ -169,7 +169,6 @@ These support the outer system and **wrap** the inner agentic loop:
 | [`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go) | `AIRequest`, `AIResponse`, `PromptMessage`, truncation and budget interfaces. |
 | [`internal/gateway/providers/openai.go`](../internal/gateway/providers/openai.go) | OpenAI HTTP request/response shapes. |
 | [`internal/queue/worker/worker.go`](../internal/queue/worker/worker.go) | `Process`, gateway calls, sandbox orchestration. |
-| [`internal/queue/worker/worker_legacy.go`](../internal/queue/worker/worker_legacy.go) | `workerResponse`, `workerMessages`, legacy command/routing. |
 | [`internal/queue/worker/worker_support.go`](../internal/queue/worker/worker_support.go) | Sandbox env, heartbeat, and tool result parsing. |
 | [`internal/queue/worker/worker_addons.go`](../internal/queue/worker/worker_addons.go) | Result/failure/prompt payload formatting. |
 | [`internal/queue/worker/worker_events.go`](../internal/queue/worker/worker_events.go) | Structured tool-call and tool-result event payloads. |

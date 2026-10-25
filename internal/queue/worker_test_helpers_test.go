@@ -182,14 +182,6 @@ func newWorkerStore() *workerStore {
 	}
 }
 
-// newLegacyWorkerStore keeps the legacy command engine for the prompt and
-// breakdown scenarios that PR 05 of S18 deletes or rewrites.
-func newLegacyWorkerStore() *workerStore {
-	store := newWorkerStore()
-	store.profile.AgenticMode = false
-	return store
-}
-
 func (s *workerStore) MarkTaskRunning(_ context.Context, _ string, _ time.Time, pid int) (*models.Task, error) {
 	s.task.State = models.TaskStateRunning
 	s.task.UpdatedAt = s.task.UpdatedAt.Add(time.Second)

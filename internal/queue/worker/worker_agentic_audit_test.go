@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -69,4 +71,24 @@ func TestAgenticAttemptAuditsFailWhenLoopDoesNotPass(t *testing.T) {
 	if len(got) != 2 || got[0] != "task_start" || got[1] != "task_fail" {
 		t.Fatalf("task audit records = %v, want [task_start task_fail]", got)
 	}
+}
+
+func readAuditRecords(t *testing.T, path string) []map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read audit file: %v", err)
+	}
+	var records []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("unmarshal audit line %q: %v", line, err)
+		}
+		records = append(records, rec)
+	}
+	return records
 }

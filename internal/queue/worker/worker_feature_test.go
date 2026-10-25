@@ -31,7 +31,6 @@ type workerScenario struct {
 	store          *workerTestStore
 	gateway        *workerTestGateway
 	sandbox        *workerTestSandbox
-	legacyCalled   bool
 	agenticCalled  bool
 	warningsLogged []string
 	maxIterations  int
@@ -85,7 +84,6 @@ func initializeWorkerScenario(sc *godog.ScenarioContext) {
 		state.sandbox = &workerTestSandbox{
 			result: sandbox.Result{Success: true, ExitCode: 0, Stdout: "test output"},
 		}
-		state.legacyCalled = false
 		state.agenticCalled = false
 		state.warningsLogged = nil
 		state.maxIterations = 10
@@ -98,20 +96,12 @@ func initializeWorkerScenario(sc *godog.ScenarioContext) {
 
 func registerWorkerSteps(sc *godog.ScenarioContext, state *workerScenario) {
 	// Given steps for agentic mode toggle
-	sc.Step(`^agentic mode is disabled$`, state.agenticModeDisabled)
-	sc.Step(`^agentic mode is enabled$`, state.agenticModeEnabled)
 	sc.Step(`^the provider is "([^"]*)"$`, state.providerIs)
-	sc.Step(`^the worker has a task to process$`, state.workerHasTask)
 
 	// When steps
-	sc.Step(`^the worker processes the task$`, state.workerProcessesTask)
 	sc.Step(`^the worker processes a task$`, state.workerProcessesTask)
 
 	// Then steps for agentic mode toggle
-	sc.Step(`^the worker should use the legacy JSON command path$`, state.useLegacyPath)
-	sc.Step(`^the worker should use the agentic loop with tools$`, state.useAgenticLoop)
-	sc.Step(`^the worker should fail the task for lack of tool support$`, state.failsForToolSupport)
-	sc.Step(`^the gateway should receive no requests$`, state.gatewayReceivesNoRequests)
 
 	// Given steps for agentic mode loop
 	sc.Step(`^the worker is configured with agentic mode enabled$`, state.agenticModeEnabled)
@@ -132,11 +122,6 @@ func registerWorkerSteps(sc *godog.ScenarioContext, state *workerScenario) {
 	sc.Step(`^the worker shall commit a failure result$`, state.verifyFailureResult)
 }
 
-func (s *workerScenario) agenticModeDisabled(context.Context) error {
-	s.store.profile.AgenticMode = false
-	return nil
-}
-
 func (s *workerScenario) agenticModeEnabled(context.Context) error {
 	s.store.profile.AgenticMode = true
 	return nil
@@ -145,10 +130,6 @@ func (s *workerScenario) agenticModeEnabled(context.Context) error {
 func (s *workerScenario) providerIs(_ context.Context, provider string) error {
 	// Use lowercase for consistent comparison with agenticProviders
 	s.store.profile.Provider = strings.ToLower(provider)
-	return nil
-}
-
-func (s *workerScenario) workerHasTask(context.Context) error {
 	return nil
 }
 
@@ -172,57 +153,6 @@ func (s *workerScenario) workerProcessesTask(ctx context.Context) error {
 	)
 	w.Process(ctx, s.store.task)
 	s.logHandler = handler
-	return nil
-}
-
-func (s *workerScenario) useLegacyPath(context.Context) error {
-	// Legacy path uses GenerateJSON which generates 1 request
-	// and executes a single sandbox command
-	if len(s.gateway.requests) != 1 {
-		return fmt.Errorf("expected 1 gateway request for legacy path, got %d", len(s.gateway.requests))
-	}
-	// Legacy path should NOT include tools in the first request
-	if len(s.gateway.requests[0].Tools) > 0 {
-		return fmt.Errorf("legacy path should not include tools")
-	}
-	// Legacy path should execute one sandbox command
-	if len(s.sandbox.commands) != 1 {
-		return fmt.Errorf("expected 1 sandbox command for legacy path, got %d", len(s.sandbox.commands))
-	}
-	return nil
-}
-
-func (s *workerScenario) useAgenticLoop(context.Context) error {
-	// Agentic path makes multiple requests with tools
-	// First request should have tools
-	if len(s.gateway.requests) == 0 {
-		return fmt.Errorf("expected at least 1 gateway request for agentic path, got 0")
-	}
-	if len(s.gateway.requests[0].Tools) == 0 {
-		return fmt.Errorf("agentic path should include tools in first request")
-	}
-	return nil
-}
-
-// failsForToolSupport checks that a provider without tool support fails the
-// task with the tool-support error, and does not fall back to the legacy path.
-func (s *workerScenario) failsForToolSupport(context.Context) error {
-	if s.store.task.State != models.TaskStateFailed {
-		return fmt.Errorf("task state = %s, want FAILED", s.store.task.State)
-	}
-	if s.store.result == nil || !strings.Contains(s.store.result.Payload, "cannot call tools") {
-		return fmt.Errorf("task result = %#v, want the tool-support error", s.store.result)
-	}
-	if len(s.sandbox.commands) != 0 {
-		return fmt.Errorf("expected no sandbox command, got %d", len(s.sandbox.commands))
-	}
-	return nil
-}
-
-func (s *workerScenario) gatewayReceivesNoRequests(context.Context) error {
-	if n := len(s.gateway.requests); n != 0 {
-		return fmt.Errorf("gateway received %d requests, want none", n)
-	}
 	return nil
 }
 

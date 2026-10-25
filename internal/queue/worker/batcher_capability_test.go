@@ -35,15 +35,15 @@ func imageTask() models.Task {
 }
 
 // B-061: with no capability registry, a router-matched task can never be routed
-// (TryExternalCapabilityRoute falls through), so it must stay batchable.
-func TestIsTaskBatchable_RouterMatchWithoutRegistryStaysBatchable(t *testing.T) {
+// (TryExternalCapabilityRoute falls through), so it is not held back for one.
+func TestWouldCapabilityRoute_WithoutRegistryFallsThrough(t *testing.T) {
 	t.Parallel()
 	w := capabilityBatchWorker(nil)
 	if w.capabilityRouter == nil {
 		t.Fatal("capability router not built from config")
 	}
-	if !w.isTaskBatchable(context.Background(), imageTask()) {
-		t.Fatal("isTaskBatchable = false, want true: no registry, so the task cannot be routed")
+	if w.wouldCapabilityRoute(imageTask(), models.AgentProfile{ID: "ag1", Provider: "openai", Model: "gpt-4"}) {
+		t.Fatal("wouldCapabilityRoute = true, want false: no registry, so the task cannot be routed")
 	}
 }
 
@@ -58,12 +58,12 @@ func TestIsTaskBatchable_RouterMatchWithAdapterIsNotBatchable(t *testing.T) {
 }
 
 // A registry without the mapped adapter also falls through in
-// TryExternalCapabilityRoute ("adapter not registered"), so the task stays batchable.
-func TestIsTaskBatchable_RouterMatchWithoutMappedAdapterStaysBatchable(t *testing.T) {
+// TryExternalCapabilityRoute ("adapter not registered").
+func TestWouldCapabilityRoute_WithoutMappedAdapterFallsThrough(t *testing.T) {
 	t.Parallel()
 	w := capabilityBatchWorker(capabilities.NewRegistry())
-	if !w.isTaskBatchable(context.Background(), imageTask()) {
-		t.Fatal("isTaskBatchable = false, want true: the mapped adapter is not registered, so the task cannot be routed")
+	if w.wouldCapabilityRoute(imageTask(), models.AgentProfile{ID: "ag1", Provider: "openai", Model: "gpt-4"}) {
+		t.Fatal("wouldCapabilityRoute = true, want false: the mapped adapter is not registered, so the task cannot be routed")
 	}
 }
 

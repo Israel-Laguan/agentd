@@ -91,9 +91,6 @@ type Worker struct {
 	maxHealingTasks         int
 	splitMaxDepth           int
 	splitMaxSubtasks        int
-	legacyPreflightScore    int
-	legacyRejectScore       int
-	legacyMaxDescriptionLen int
 }
 
 type MemoryRetriever interface {
@@ -130,8 +127,8 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 	w.Emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
 }
 
-// Process handles task execution: legacy (GenerateJSON), agentic (tool calling),
-// tiered dispatch, and review finalization. Model routing runs once per path.
+// Process handles task execution: agentic (tool calling), tiered dispatch, and
+// review finalization. Model routing runs once per path.
 func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
 	slog.DebugContext(ctx, "worker: processing task",
@@ -195,18 +192,13 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 	if w.dispatchTieredStep(ctx, task, project, profile) {
 		return
 	}
-	if profile.AgenticMode {
-		if w.tryRenderHostReport(ctx, task, project) {
-			return
-		}
-		slog.DebugContext(ctx, "worker: entering agentic loop", "task_id", task.ID)
-		if result, ok := w.processAgentic(ctx, task, project, profile); ok {
-			w.handleLoopResult(ctx, task, result)
-		}
+	if w.tryRenderHostReport(ctx, task, project) {
 		return
 	}
-	slog.DebugContext(ctx, "worker: running legacy task", "task_id", task.ID)
-	w.RunLegacyTask(ctx, task, project, profile, false)
+	slog.DebugContext(ctx, "worker: entering agentic loop", "task_id", task.ID)
+	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
+		w.handleLoopResult(ctx, task, result)
+	}
 }
 
 func (w *Worker) tryTieredOrigin(ctx context.Context, task models.Task) bool {
@@ -272,12 +264,12 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		Capabilities: w.capabilities,
 	}, w)
 	w.attempts.begin(task.ID)
-	audit := w.beginLegacyTaskAudit(task, project, profile.Provider)
+	audit := w.beginTaskAudit(task, project, profile.Provider)
 	result, ok := engine.Process(ctx, task, project, profile)
 	succeeded := ok && result.IsTerminalSuccess()
 	audit.failed = !succeeded
 	audit.reviewHandoff = succeeded && profile.RequireReview
-	w.finishLegacyTaskAudit(task, project, profile.Provider, audit)
+	w.finishTaskAudit(task, project, profile.Provider, audit)
 	w.attempts.finish(task.ID, succeeded)
 	return result, ok
 }

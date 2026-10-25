@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -259,22 +258,7 @@ func (g *batchTrackingGateway) Generate(_ context.Context, req gateway.AIRequest
 		return gateway.AIResponse{Content: g.batchJSON(req)}, nil
 	}
 	g.singleCalls++
-	if g.isLegacyRequest(req) {
-		return gateway.AIResponse{Content: `{"command":"echo ok"}`}, nil
-	}
 	return gateway.AIResponse{Content: "single fallback summary"}, nil
-}
-
-func (g *batchTrackingGateway) isLegacyRequest(req gateway.AIRequest) bool {
-	for _, m := range req.Messages {
-		if m.Role == "system" && strings.Contains(m.Content, batchLegacySystemSuffix) {
-			return true
-		}
-		if m.Role == "system" && strings.Contains(m.Content, legacyJSONCommandSystemSentinel) {
-			return true
-		}
-	}
-	return false
 }
 
 func (g *batchTrackingGateway) batchJSON(req gateway.AIRequest) string {
@@ -287,18 +271,6 @@ func (g *batchTrackingGateway) batchJSON(req gateway.AIRequest) string {
 	}
 	if slotCount == 0 {
 		slotCount = 1
-	}
-
-	if g.isLegacyRequest(req) {
-		var results []batchLegacySlot
-		for i := 0; i < slotCount; i++ {
-			if g.omitSlot != nil && *g.omitSlot == i {
-				continue
-			}
-			results = append(results, batchLegacySlot{Slot: i, Command: "echo ok"})
-		}
-		b, _ := json.Marshal(batchLegacyResponse{Results: results})
-		return string(b)
 	}
 
 	var results []batchTextSlot
