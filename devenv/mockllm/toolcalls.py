@@ -14,8 +14,8 @@ When a request that offers tools carries the tag:
   configured `tool_calls` (all in one assistant turn);
 - once any tool result is there, it answers with a plain final message, which
   ends the agentic loop;
-- once a human has answered (the `--- Clarifications ---` block is in the
-  conversation), it answers with the final message and does not replay the
+- once a human has answered (the `--- Clarifications ---` block is in the conversation),
+  it answers with the final message and does not replay the
   calls. A resumed run starts fresh, so a replay would ask the human again.
 
 Requests without `tools` (intake, planning, summaries) never match.
@@ -101,7 +101,9 @@ def agentic_command_completion(body: dict, command: str) -> dict:
 def answered_by_human(body: dict) -> bool:
     """Whether a human's answer is in the conversation (the clarifications block)."""
     return any(
-        isinstance(msg.get("content"), str) and CLARIFICATIONS_HEADER in msg["content"]
+        msg.get("role") == "user"
+        and isinstance(msg.get("content"), str)
+        and CLARIFICATIONS_HEADER in msg["content"]
         for msg in body.get("messages", [])
     )
 
