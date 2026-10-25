@@ -173,7 +173,7 @@ func (e *Engine) finishAgenticTurnNoTools(
 	turnID string, turnIndex int, budgetGuard *agentruntime.BudgetGuard, ctxBudgetGuard *agentruntime.ContextBudgetGuard,
 	cm *agentcontext.ContextManager, messages *[]gateway.PromptMessage, respecAttempts *int,
 	checkpointer *wsession.SessionCheckpointer, sessionRecoveryGen *int, sessionRecoveryUsed *bool,
-	sessionRecoveryNeedsPlanInject *bool,
+	sessionRecoveryNeedsPlanInject *bool, toolsOffered bool,
 ) (continueLoop bool, result agentruntime.LoopResult, report bool, rewindTo int, err error) {
 	content, rewind := e.applyAgenticNoToolsPlanContent(
 		ctx, task, content, workPlan, turnID, messages, respecAttempts,
@@ -190,6 +190,9 @@ func (e *Engine) finishAgenticTurnNoTools(
 		return false, agentruntime.LoopResult{}, false, rewindNone, stallErr
 	}
 	if stop := e.unverifiedFinish(turnIndex, budgetGuard, *messages); stop != nil {
+		return false, *stop, true, rewindNone, nil
+	}
+	if stop := e.unevidencedFinish(task, toolsOffered && workPlan == nil, turnIndex, budgetGuard, *messages); stop != nil {
 		return false, *stop, true, rewindNone, nil
 	}
 	if stop := e.unmetCriteriaFinish(task, project, turnIndex, budgetGuard, *messages); stop != nil {

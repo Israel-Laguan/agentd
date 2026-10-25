@@ -8,6 +8,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
+	"agentd/internal/testutil"
 )
 
 // B-082: the builtin agent reported COMPLETED after its own verification had
@@ -99,5 +100,26 @@ func TestAgenticLoop_ToolErrorStringStillContinuesToFinalResponse(t *testing.T) 
 	}
 	if recorded.Status != LoopToolFailure || recorded.Meta.ErrorCode != agenttools.ToolErrorCodeUnverifiedCommand {
 		t.Fatalf("loop result = %s code %q, want tool_failure with %q", recorded.Status, recorded.Meta.ErrorCode, agenttools.ToolErrorCodeUnverifiedCommand)
+	}
+}
+
+// B-082's original red test: a text-only finish on a task that must change the
+// workspace, with no shell command and no file change in the run, is not
+// COMPLETED. The run has tools to produce that evidence, so it goes to a human.
+func TestAgenticTextOnlyFinishWithoutEvidenceIsNotCompleted(t *testing.T) {
+	t.Parallel()
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		{Content: "Done. The feature is complete."},
+	}}
+	sb := &scriptedSandbox{}
+	w, _, task := runAgenticDraft(t, gw, sb, models.DraftTask{
+		Title: "Inspect host", Description: testutil.AgenticTestTaskDescription(), RequiresWorkspaceChange: true,
+	}, nil)
+	got, err := w.store.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State == models.TaskStateCompleted {
+		t.Fatalf("state = %s, want not COMPLETED: nothing ran and no file changed", got.State)
 	}
 }

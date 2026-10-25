@@ -103,6 +103,7 @@ func (e *Engine) handleAgenticToolCalls(
 		})
 
 		e.noteBashOutcome(call, tr)
+		e.evidence.note(call, tr)
 		if stop := e.toolLoopStop(call, tr, contextContent, toolTracker, turnIndex, budgetGuard, messages); stop != nil {
 			return true, *stop, true
 		}

@@ -300,7 +300,7 @@ func TestFinishAgenticTurnNoTools_RespecFailurePreservesMessages(t *testing.T) {
 		0, agentruntime.NewBudgetGuard(nil, task.ID), agentruntime.NewContextBudgetGuard(60000, 0), cm,
 		&messages,
 		&respecAttempts,
-		nil, nil, nil, nil,
+		nil, nil, nil, nil, false,
 	)
 	if err != nil {
 		t.Fatalf("finishAgenticTurnNoTools: %v", err)

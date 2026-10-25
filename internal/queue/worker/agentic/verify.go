@@ -80,3 +80,45 @@ func (e *Engine) unverifiedFinish(turnIndex int, budgetGuard *agentruntime.Budge
 	meta.ErrorCode = agenttools.ToolErrorCodeUnverifiedCommand
 	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
 }
+
+// runEvidence is what a task run did to the workspace (PR 11): shell commands
+// that passed and files written. A text-only finish is COMPLETED only with some
+// of it, so a model cannot finish a workspace change by describing it.
+type runEvidence struct {
+	passedCommands int
+	filesWritten   int
+}
+
+// note records a tool result that changed the workspace or passed a check.
+func (r *runEvidence) note(call gateway.ToolCall, tr agenttools.ToolResult) {
+	if tr.Status != agenttools.ToolStatusSuccess {
+		return
+	}
+	switch call.Function.Name {
+	case agenttools.ToolNameBash:
+		r.passedCommands++
+	case agenttools.ToolNameWrite:
+		r.filesWritten++
+	}
+}
+
+// any reports whether the run produced evidence of work.
+func (r runEvidence) any() bool {
+	return r.passedCommands > 0 || r.filesWritten > 0
+}
+
+// unevidencedFinish stops a text-only finish that has no evidence behind it: no
+// command passed and no file was written in this run. It only applies to a task
+// that must change the workspace and a run that was offered tools, since a run
+// with no tools cannot produce evidence. Tiered steps, batch slots, review
+// handoff and planning runs are not marked, so they finish on text as before.
+// The task goes to a human, like an unverified finish.
+func (e *Engine) unevidencedFinish(task models.Task, toolsOffered bool, turnIndex int, budgetGuard *agentruntime.BudgetGuard, messages []gateway.PromptMessage) *agentruntime.LoopResult {
+	if !task.RequiresWorkspaceChange || !toolsOffered || e.evidence.any() {
+		return nil
+	}
+	reason := "unverified: the run finished without a passing command or a file change"
+	meta := agentruntime.BuildLoopMeta(turnIndex, budgetGuard.Usage(), agentcontext.TotalChars(messages), 0, reason, "", "")
+	meta.ErrorCode = agenttools.ToolErrorCodeUnverified
+	return &agentruntime.LoopResult{Status: agentruntime.LoopToolFailure, Meta: meta}
+}
