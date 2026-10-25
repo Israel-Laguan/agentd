@@ -49,9 +49,9 @@ Outer retry/healing/handoff must continue to wrap the **whole** inner loop as on
 
 ## Two LLM contracts
 
-### Current (default worker): structured JSON, one shot
+### Current (default worker): agentic tool-calling
 
-- Messages are built from `AgentProfile` and the task (the JSON-command builder, `workerMessages` in `worker_legacy.go`, was removed with the legacy engine).
+- Messages are built via `AssembleAgenticSystemPrompt` from `AgentProfile` and the task; the worker enters `processAgentic` and drives the agentic tool-calling loop.
 - The worker calls the gateway with JSON mode and decodes a **`workerResponse`**: `command`, or `too_complex` with `subtasks`, via `GenerateJSON` in [`worker.go`](../internal/queue/worker/worker.go).
 - Exactly **one** LLM generation per attempt drives **one** sandbox execution for the shell command path.
 

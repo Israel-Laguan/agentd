@@ -264,12 +264,12 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		Capabilities: w.capabilities,
 	}, w)
 	w.attempts.begin(task.ID)
-	audit := w.beginLegacyTaskAudit(task, project, profile.Provider)
+	audit := w.beginTaskAudit(task, project, profile.Provider)
 	result, ok := engine.Process(ctx, task, project, profile)
 	succeeded := ok && result.IsTerminalSuccess()
 	audit.failed = !succeeded
 	audit.reviewHandoff = succeeded && profile.RequireReview
-	w.finishLegacyTaskAudit(task, project, profile.Provider, audit)
+	w.finishTaskAudit(task, project, profile.Provider, audit)
 	w.attempts.finish(task.ID, succeeded)
 	return result, ok
 }

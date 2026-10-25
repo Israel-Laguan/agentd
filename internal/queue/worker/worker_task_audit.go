@@ -5,17 +5,14 @@ import (
 	"agentd/internal/models"
 )
 
-type legacyTaskAudit struct {
-	command       string
-	exitCode      int
-	tokenUsage    int
+type taskAudit struct {
 	failed        bool
 	reviewHandoff bool
 }
 
-func (w *Worker) beginLegacyTaskAudit(task models.Task, project models.Project, provider string) *legacyTaskAudit {
+func (w *Worker) beginTaskAudit(task models.Task, project models.Project, provider string) *taskAudit {
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
-		return &legacyTaskAudit{}
+		return &taskAudit{}
 	}
 	w.auditLogger.RecordTaskEvent(agentruntime.TaskAuditRecord{
 		RecordType: agentruntime.RecordTypeTaskStart,
@@ -23,10 +20,10 @@ func (w *Worker) beginLegacyTaskAudit(task models.Task, project models.Project, 
 		ProjectID:  project.ID,
 		Provider:   provider,
 	})
-	return &legacyTaskAudit{}
+	return &taskAudit{}
 }
 
-func (w *Worker) finishLegacyTaskAudit(task models.Task, project models.Project, provider string, audit *legacyTaskAudit) {
+func (w *Worker) finishTaskAudit(task models.Task, project models.Project, provider string, audit *taskAudit) {
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
 		return
 	}
@@ -42,8 +39,5 @@ func (w *Worker) finishLegacyTaskAudit(task models.Task, project models.Project,
 		TaskID:     task.ID,
 		ProjectID:  project.ID,
 		Provider:   provider,
-		Command:    audit.command,
-		ExitCode:   audit.exitCode,
-		TokenUsage: audit.tokenUsage,
 	})
 }

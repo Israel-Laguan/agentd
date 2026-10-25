@@ -153,7 +153,10 @@ func (w *Worker) isTaskBatchable(ctx context.Context, task models.Task) bool {
 	if w.wouldCapabilityRoute(task, *profile) {
 		return false
 	}
-	return !w.requiresAgenticTools(ctx, task, *project, *profile)
+	if profile.AgenticMode {
+		return !w.requiresAgenticTools(ctx, task, *project, *profile)
+	}
+	return true
 }
 
 func (w *Worker) wouldCapabilityRoute(task models.Task, profile models.AgentProfile) bool {
