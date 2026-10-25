@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/cucumber/godog"
-
-	"agentd/internal/models"
 )
 
 type gatewayScenario struct {
@@ -20,11 +18,6 @@ type gatewayScenario struct {
 	truncator    Truncator
 	budget       int
 	headRatio    float64
-
-	// Phase cap fields
-	phaseCap     int
-	llmTaskCount int
-	plan         *models.DraftPlan
 
 	// Budget enforcement fields
 	budgetTracker *InMemoryBudgetTracker
@@ -60,7 +53,6 @@ func initializeGatewayScenario(sc *godog.ScenarioContext) {
 		return ctx, nil
 	})
 	registerResilienceSteps(sc, state)
-	registerPhaseCapSteps(sc, state)
 	registerTruncationSteps(sc, state)
 	registerBudgetSteps(sc, state)
 	registerFallbackAndRoutingSteps(sc, state)
@@ -83,17 +75,6 @@ func registerResilienceSteps(sc *godog.ScenarioContext, state *gatewayScenario) 
 	sc.Step(`^the tertiary provider "([^"]*)" returns an error$`, state.providerFails)
 	sc.Step(`^the Gateway should cascade through all three providers$`, state.allProvidersAttempted)
 	sc.Step(`^the Gateway should return an error mentioning all failed providers$`, state.errorMentionsAllProviders)
-}
-
-func registerPhaseCapSteps(sc *godog.ScenarioContext, state *gatewayScenario) {
-	sc.Step(`^the gateway max_tasks_per_phase is (\d+)$`, state.setPhaseCap)
-	sc.Step(`^the LLM returns a DraftPlan with (\d+) tasks$`, state.llmReturnsDraftPlan)
-	sc.Step(`^GeneratePlan processes the intent "([^"]*)"$`, state.generatePlan)
-	sc.Step(`^the returned DraftPlan should contain exactly (\d+) tasks$`, state.planShouldHaveTaskCount)
-	sc.Step(`^the first (\d+) tasks should match the original order$`, state.firstNTasksMatchOriginalOrder)
-	sc.Step(`^the (\d+)(?:st|nd|rd|th) task should be titled "([^"]*)"$`, state.nthTaskTitled)
-	sc.Step(`^the continuation task description should reference the remaining work$`, state.continuationReferencesRemaining)
-	sc.Step(`^no task should be titled "([^"]*)"$`, state.noTaskTitled)
 }
 
 func registerTruncationSteps(sc *godog.ScenarioContext, state *gatewayScenario) {

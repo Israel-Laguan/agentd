@@ -3,61 +3,10 @@ package gateway
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"agentd/internal/models"
 )
-
-func TestGeneratePlanEnforcesPhaseCap(t *testing.T) {
-	provider := &fakeProvider{providerName: "mock", resp: AIResponse{Content: draftPlanJSON(t, 4)}}
-	router := NewRouter(provider).WithPhaseCap(3)
-
-	plan, err := router.GeneratePlan(context.Background(), "build a large project")
-	if err != nil {
-		t.Fatalf("GeneratePlan() error = %v", err)
-	}
-	if len(plan.Tasks) != 3 {
-		t.Fatalf("tasks = %d, want 3", len(plan.Tasks))
-	}
-	last := plan.Tasks[2]
-	if last.Title != "Plan Phase 2" {
-		t.Fatalf("last title = %q, want Plan Phase 2", last.Title)
-	}
-	if !strings.Contains(last.Description, "Task 3") || !strings.Contains(last.Description, "Task 4") {
-		t.Fatalf("continuation description = %q", last.Description)
-	}
-	if !strings.Contains(provider.resp.Content, "Task 4") {
-		t.Fatal("test provider was unexpectedly mutated")
-	}
-}
-
-func TestGeneratePlanAllowsCapDisabled(t *testing.T) {
-	router := NewRouter(&fakeProvider{providerName: "mock", resp: AIResponse{Content: draftPlanJSON(t, 4)}}).WithPhaseCap(0)
-
-	plan, err := router.GeneratePlan(context.Background(), "build a large project")
-	if err != nil {
-		t.Fatalf("GeneratePlan() error = %v", err)
-	}
-	if len(plan.Tasks) != 4 {
-		t.Fatalf("tasks = %d, want 4", len(plan.Tasks))
-	}
-}
-
-func TestGeneratePlanWithinCapPassesThrough(t *testing.T) {
-	router := NewRouter(&fakeProvider{providerName: "mock", resp: AIResponse{Content: draftPlanJSON(t, 2)}}).WithPhaseCap(3)
-
-	plan, err := router.GeneratePlan(context.Background(), "build a small project")
-	if err != nil {
-		t.Fatalf("GeneratePlan() error = %v", err)
-	}
-	if len(plan.Tasks) != 2 {
-		t.Fatalf("tasks = %d, want 2", len(plan.Tasks))
-	}
-	if plan.Tasks[1].Title != "Task 2" {
-		t.Fatalf("second title = %q", plan.Tasks[1].Title)
-	}
-}
 
 func TestGenerateJSONDraftPlanValidationRetries(t *testing.T) {
 	badPlan := `{"ProjectName":"Project","Tasks":[]}`

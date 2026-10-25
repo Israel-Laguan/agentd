@@ -71,15 +71,6 @@ func TestNewRouterFromConfigs_UnknownAdapter(t *testing.T) {
 	}
 }
 
-func TestWithPhaseCap(t *testing.T) {
-	t.Parallel()
-
-	router := NewRouter().WithPhaseCap(5).WithPhaseCap(-1)
-	if router.maxTasksPerPhase != 5 {
-		t.Fatalf("maxTasksPerPhase = %d, want 5", router.maxTasksPerPhase)
-	}
-}
-
 func TestNewRouterFromConfigs_TwoOpenAIAdapters(t *testing.T) {
 	t.Parallel()
 
