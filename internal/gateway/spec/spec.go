@@ -246,7 +246,4 @@ type EmbedResponse struct {
 type AIGateway interface {
 	Generate(ctx context.Context, req AIRequest) (AIResponse, error)
 	Embed(ctx context.Context, req EmbedRequest) (EmbedResponse, error)
-	GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error)
-	AnalyzeScope(ctx context.Context, userIntent string) (*ScopeAnalysis, error)
-	ClassifyIntent(ctx context.Context, userIntent string) (*IntentAnalysis, error)
 }
