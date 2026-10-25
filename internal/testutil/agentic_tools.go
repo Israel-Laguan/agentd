@@ -34,8 +34,8 @@ func ReadToolCall(id, path string) spec.ToolCall {
 
 // ProviderSupportsChatTools is the answer a test gateway gives for
 // ProviderSupportsChatTools: any named provider can call tools. Fakes that
-// exercise the agentic loop delegate to it so their fixtures are not dropped
-// to the legacy path.
+// exercise the agentic loop delegate to it so their fixtures are not
+// refused for lack of tool support.
 func ProviderSupportsChatTools(provider string) bool {
 	return strings.TrimSpace(provider) != ""
 }
