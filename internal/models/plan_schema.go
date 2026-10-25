@@ -18,7 +18,8 @@ const draftPlanSchemaHint = `The JSON object must have exactly this shape:
       "description": string (what the worker must do),
       "assignee": "SYSTEM" (agentd runs it) or "HUMAN" (a person must do it),
       "depends_on": [string] (optional, ref_id values of earlier tasks),
-      "success_criteria": [string] (optional)
+      "success_criteria": [string] (optional),
+      "requires_workspace_change": boolean (optional, true when the task must create or change files or run commands in the workspace)
     }
   ]
 }

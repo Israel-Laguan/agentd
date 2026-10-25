@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"testing"
 )
 
@@ -41,5 +42,5 @@ func TestMigrateToV22_AddsMixColumnsToExistingRows(t *testing.T) {
 	if mix != "" || by != "" {
 		t.Fatalf("defaults = %q, %q, want empty", mix, by)
 	}
-	assertSchemaVersion(t, db, ctx, "25")
+	assertSchemaVersion(t, db, ctx, strconv.Itoa(currentSchemaVersion))
 }

@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"testing"
 )
 
@@ -56,7 +57,7 @@ func TestMigrateToV21_CreatesAICallsOnAnUpgrade(t *testing.T) {
 	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("second Run() error = %v", err)
 	}
-	assertSchemaVersion(t, db, ctx, "25")
+	assertSchemaVersion(t, db, ctx, strconv.Itoa(currentSchemaVersion))
 }
 
 func assertAICallsShape(t *testing.T, db *sql.DB, extra ...string) {
