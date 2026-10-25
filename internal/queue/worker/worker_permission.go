@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	agenthooks "agentd/internal/agent/hooks"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -54,11 +55,25 @@ func (w *Worker) AgenticPrivilegeBlock(call gateway.ToolCall, result agenttools.
 // permissionFailure classifies a failed tool result's output as a permission
 // failure.
 func permissionFailure(result agenttools.ToolResult) safety.PermissionDetection {
+	if isDenylistSudoVeto(result) {
+		return safety.PermissionDetection{Detected: true, Blocked: true, Pattern: "denylist sudo"}
+	}
 	errorOutput := ""
 	if result.Error != nil {
 		errorOutput = result.Error.Message
 	}
 	return safety.DetectPermission(result.Content, errorOutput)
+}
+
+// isDenylistSudoVeto reports whether the denylist refused a sudo command. The
+// denylist runs before the sandbox, so its veto is the sudo refusal the sandbox
+// would otherwise make (J19).
+func isDenylistSudoVeto(result agenttools.ToolResult) bool {
+	if result.Status != agenttools.ToolStatusVetoed {
+		return false
+	}
+	reason := agenthooks.DenylistSudoReason
+	return result.Content == reason || (result.Error != nil && result.Error.Message == reason)
 }
 
 func (w *Worker) requestPermissionAlternative(

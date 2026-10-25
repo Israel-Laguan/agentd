@@ -13,7 +13,10 @@ When a request that offers tools carries the tag:
 - with no tool result in the conversation yet, the mock answers with the
   configured `tool_calls` (all in one assistant turn);
 - once any tool result is there, it answers with a plain final message, which
-  ends the agentic loop.
+  ends the agentic loop;
+- once a human has answered (the `--- Clarifications ---` block is in the conversation),
+  it answers with the final message and does not replay the
+  calls. A resumed run starts fresh, so a replay would ask the human again.
 
 Requests without `tools` (intake, planning, summaries) never match.
 
@@ -29,6 +32,8 @@ import re
 
 TOOL_CALLS_TAG_RE = re.compile(r"@tool_calls=([A-Za-z0-9_=-]+)")
 FINAL_MESSAGE = "tool-call scenario complete"
+# The header elicitor.go writes above a human's answers in the task description.
+CLARIFICATIONS_HEADER = "--- Clarifications ---"
 
 
 def encode_tool_calls(calls: list) -> str:
@@ -93,26 +98,46 @@ def agentic_command_completion(body: dict, command: str) -> dict:
     return tool_calls_completion(body, [{"name": "bash", "arguments": {"command": command}}], final)
 
 
+def answered_by_human(body: dict) -> bool:
+    """Whether a human's answer is in the conversation (the clarifications block)."""
+    return any(
+        msg.get("role") == "user"
+        and isinstance(msg.get("content"), str)
+        and CLARIFICATIONS_HEADER in msg["content"]
+        for msg in body.get("messages", [])
+    )
+
+
 def tool_calls_completion(body: dict, calls: list, final: str = FINAL_MESSAGE) -> dict:
     """An OpenAI chat completion that asks for `calls`, or ends with a final
     message once a tool result is in the conversation."""
     if has_tool_result(body):
-        message = {"role": "assistant", "content": final}
-        finish = "stop"
-    else:
-        message = {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [
-                {
-                    "id": f"call_mock_{index}",
-                    "type": "function",
-                    "function": {"name": call["name"], "arguments": json.dumps(call.get("arguments", {}))},
-                }
-                for index, call in enumerate(calls)
-            ],
-        }
-        finish = "tool_calls"
+        return _completion(body, {"role": "assistant", "content": final}, "stop")
+    message = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": f"call_mock_{index}",
+                "type": "function",
+                "function": {"name": call["name"], "arguments": json.dumps(call.get("arguments", {}))},
+            }
+            for index, call in enumerate(calls)
+        ],
+    }
+    return _completion(body, message, "tool_calls")
+
+
+def scripted_completion(body: dict, calls: list) -> dict:
+    """The reply to a request whose task scripts `calls`: the calls on the first
+    turn, then a final message. A human's answer already in the conversation
+    ends the run at once, since the resumed run must not ask again."""
+    if has_tool_result(body) or answered_by_human(body):
+        return _completion(body, {"role": "assistant", "content": FINAL_MESSAGE}, "stop")
+    return tool_calls_completion(body, calls)
+
+
+def _completion(body: dict, message: dict, finish: str) -> dict:
     return {
         "id": "chatcmpl-mock-toolcalls",
         "object": "chat.completion",

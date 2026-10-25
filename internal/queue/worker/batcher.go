@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 
+	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/config"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
@@ -182,7 +183,14 @@ func (w *Worker) requiresAgenticTools(
 	toolExec := w.newAgenticTaskToolExecutor(project, task)
 	tools, index := w.agenticTools(ctx, toolExec)
 	tools, _ = w.FilterAgenticTools(tools, index, task, profile)
-	return len(tools) > 0
+	// A batch has no loop to suspend, so ask_human alone does not take a task
+	// out of the batch path.
+	for _, tool := range tools {
+		if tool.Name != agenttools.ToolNameAskHuman {
+			return true
+		}
+	}
+	return false
 }
 
 // GroupClaimed is the dispatch entry point for batch grouping.

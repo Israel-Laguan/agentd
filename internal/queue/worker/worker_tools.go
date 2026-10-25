@@ -132,6 +132,8 @@ func (w *Worker) runToolBody(ctx context.Context, sessionID, projectID string, c
 	case agenttools.ToolNameDelegateParallel:
 		raw := w.executeDelegateParallel(ctx, call, toolExecutor, scopedCapabilities, callEnv)
 		return agenttools.ClassifyDelegateRawResult(call.ID, raw, time.Since(start).Milliseconds())
+	case agenttools.ToolNameAskHuman:
+		return w.runAskHumanTool(ctx, sessionID, call, start)
 	default:
 		raw := executeCapabilityTool(ctx, call, toolToAdapter, w.capabilities, scopedCapabilities, callEnv)
 		return agenttools.ClassifyCapabilityRawResult(call.ID, raw, time.Since(start).Milliseconds())

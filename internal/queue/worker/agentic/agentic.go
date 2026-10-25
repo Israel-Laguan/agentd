@@ -24,8 +24,9 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	// prepareAgenticRun builds messages/tools before routing; session start and
 	// pre-task elicitation run after the tool-support check, so a provider without
 	// tools fails before either.
-	messages, tools, toolToAdapter, _, profile, taskToolExecutor, taskHooks, taskCaps :=
-		e.prepareAgenticRun(ctx, task, project, profile)
+	baseProfile := profile
+	messages, tools, toolToAdapter, allTools, allToolToAdapter, profile, taskToolExecutor, taskHooks, taskCaps :=
+		e.prepareAgenticRun(ctx, task, project, baseProfile)
 
 	if result, ok, err := e.host.TryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); err != nil {
 		return agentruntime.LoopResult{}, false
@@ -47,23 +48,17 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		return agentruntime.LoopResult{}, false
 	}
 
-	task, blocked, err := e.host.RunPreTaskElicitation(cancelCtx, task, project)
-	if err != nil {
-		e.host.FailHard(cancelCtx, task, err)
+	described := task.Description
+	task, ok := e.runPreTaskElicitation(ctx, cancelCtx, task, project, taskToolExecutor)
+	if !ok {
 		return agentruntime.LoopResult{}, false
 	}
-	if blocked {
-		correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation blocked",
-			"task_id", task.ID,
-		)
-		return agentruntime.LoopResult{}, false
+	if task.Description != described {
+		// The human's answer extends the description: the prompt, the tools the
+		// task classifies to, and the routing all follow the clarified task.
+		messages = e.buildAgenticMessages(cancelCtx, task, project, baseProfile)
+		tools, toolToAdapter, profile = e.selectAgenticTools(task, baseProfile, messages, allTools, allToolToAdapter)
 	}
-	correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation complete",
-		"task_id", task.ID,
-	)
-	// Consumed clarification answers extend the description, so the evidence
-	// guard checks commands against the clarified task.
-	taskToolExecutor.WithIntent(task.Title + "\n" + task.Description)
 
 	guards := e.newAgenticLoopGuards(cancelCtx, task)
 	checkpointer := wsession.NewSessionCheckpointer(task.ID)

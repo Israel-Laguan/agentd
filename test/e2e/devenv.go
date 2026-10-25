@@ -91,6 +91,23 @@ func (m *DevenvManager) WaitForReady(ctx context.Context, timeout time.Duration)
 	return harness.WaitForHealthy(ctx, timeout)
 }
 
+// Exec runs args inside this profile's agentd container and returns its stdout.
+func (m *DevenvManager) Exec(ctx context.Context, args ...string) (string, error) {
+	svc, ok := profileService[m.profile]
+	if !ok {
+		return "", fmt.Errorf("no known agentd service for profile %q", m.profile)
+	}
+	execArgs := append([]string{"compose", "-f", m.composePath, "--profile", m.profile, "exec", "-T", svc.service}, args...)
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "podman", execArgs...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("exec %s: %w (stderr: %s)", svc.service, err, stderr.String())
+	}
+	return stdout.String(), nil
+}
+
 // KillAgentd SIGKILLs this profile's agentd container (an unclean crash: no
 // graceful shutdown, no deferred cleanup) without removing it, so its data
 // volume — and therefore its SQLite board — survives for RestartAgentd.

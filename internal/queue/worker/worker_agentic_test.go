@@ -98,8 +98,8 @@ func TestAgenticToolsIncludesExecutorAndCapabilityTools(t *testing.T) {
 	executor := agenttools.NewToolExecutor(nil, "", nil, 0)
 
 	tools, _ := w.agenticTools(context.Background(), executor)
-	if len(tools) != 6 {
-		t.Fatalf("expected 6 tools total (3 executor + 2 delegate + 1 capability), got %d", len(tools))
+	if len(tools) != 7 {
+		t.Fatalf("expected 7 tools total (3 executor + 2 delegate + ask_human + 1 capability), got %d", len(tools))
 	}
 	if !containsTool(tools, "bash") {
 		t.Fatal("expected bash tool from executor")
@@ -109,6 +109,9 @@ func TestAgenticToolsIncludesExecutorAndCapabilityTools(t *testing.T) {
 	}
 	if !containsTool(tools, "delegate_parallel") {
 		t.Fatal("expected delegate_parallel tool")
+	}
+	if !containsTool(tools, agenttools.ToolNameAskHuman) {
+		t.Fatal("expected ask_human tool")
 	}
 }
 
@@ -124,9 +127,12 @@ func TestProcessAgentic_CallsGatewayWithTools(t *testing.T) {
 	// Test with no capabilities registry
 	tools, toolToAdapter := w.agenticTools(context.Background(), executor)
 
-	// Should have 5 tools (bash, read, write, delegate, delegate_parallel)
-	if len(tools) != 5 {
-		t.Fatalf("expected 5 tools when no capabilities, got %d", len(tools))
+	// Should have 6 tools (bash, read, write, delegate, delegate_parallel, ask_human)
+	if len(tools) != 6 {
+		t.Fatalf("expected 6 tools when no capabilities, got %d", len(tools))
+	}
+	if !containsTool(tools, agenttools.ToolNameAskHuman) {
+		t.Fatal("expected ask_human tool when no capabilities")
 	}
 
 	// No toolToAdapter when no capabilities

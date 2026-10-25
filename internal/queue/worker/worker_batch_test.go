@@ -160,3 +160,20 @@ func TestProcessBatch_GatewayError_RequeuesAllTasks(t *testing.T) {
 		}
 	}
 }
+
+// A batch request offers no tools and cannot suspend, so its system prompt must
+// not tell the model to call ask_human.
+func TestBuildBatchRequest_OmitsAskHumanGuidance(t *testing.T) {
+	t.Parallel()
+	store := &batchTestStore{
+		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp/ws"},
+		profile: models.AgentProfile{ID: "ag1", Provider: "openai", Model: "gpt-4", AgenticMode: true},
+	}
+	w := NewWorker(store, &batchTrackingGateway{}, nil, nil, nil, WorkerOptions{})
+	req := w.buildBatchRequest(context.Background(), summarizeTasks(2), store.project, store.profile)
+	for _, m := range req.Messages {
+		if strings.Contains(m.Content, "ask_human") {
+			t.Fatalf("batch %s message mentions ask_human:\n%s", m.Role, m.Content)
+		}
+	}
+}

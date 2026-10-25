@@ -107,6 +107,19 @@ func (w *Worker) RequestClarificationFromAgent(
 	return nil
 }
 
+// AskHuman blocks the task for a human answer to the agent's question (the
+// ask_human builtin). The question is recorded on the task first, so the run
+// that resumes after the answer sees it, as an elicitation's questions are
+// (see tryConsumeElicitationAnswers). A failed record aborts the handoff so the
+// clarification subtask is never created against an unrecorded question.
+func (w *Worker) AskHuman(ctx context.Context, task models.Task, question string, options []string) error {
+	if err := recordElicitationQuestions(ctx, w.store, task.ID, []ElicitationQuestion{{Question: question, Options: options}}); err != nil {
+		slog.Warn("failed to record ask_human question", "task_id", task.ID, "error", err)
+		return fmt.Errorf("record ask_human question: %w", err)
+	}
+	return w.RequestClarificationFromAgent(ctx, task, question, options, "")
+}
+
 const elicitationEmptyAnswerFallback = "(no comment provided — subtask marked complete without written answer)"
 
 const (

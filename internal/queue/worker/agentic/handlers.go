@@ -125,6 +125,11 @@ func (e *Engine) runAgenticCall(
 		return agenttools.NonRetryableErrorResult(call.ID, feedback, "", 0), false, false
 	}
 	tr, suspended = dispatch(call)
+	// ask_human runs through dispatch like any tool, so hooks can veto it; a
+	// successful call blocked the task for a human, and the loop stops.
+	if call.Function.Name == agenttools.ToolNameAskHuman && tr.Status == agenttools.ToolStatusSuccess {
+		return tr, true, false
+	}
 	tr, handedOff = e.recoverBlockedCall(ctx, task, profile, call, tr, dispatch)
 	if !handedOff && isBashFailure(call, tr) {
 		e.host.RecordAttemptFailure(task, call, tr)
