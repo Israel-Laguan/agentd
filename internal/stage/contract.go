@@ -22,7 +22,7 @@ type Contract struct {
 func NewContract[T any]() Contract {
 	var zero T
 	c := Contract{}
-	if h, ok := any(zero).(interface{ SchemaHint() string }); ok {
+	if h, ok := any(&zero).(interface{ SchemaHint() string }); ok {
 		c.hint = h.SchemaHint()
 	}
 	_ = zero

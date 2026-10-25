@@ -201,9 +201,11 @@ func (s ScopeAnalysis) Validate() error {
 	if !s.SingleScope && len(s.Scopes) == 0 {
 		return fmt.Errorf("missing scopes for multi-scope classification")
 	}
-	for _, sc := range s.Scopes {
-		if sc.ID == "" || sc.Label == "" {
-			return fmt.Errorf("multi-scope entries require an id and label")
+	if !s.SingleScope {
+		for _, sc := range s.Scopes {
+			if sc.ID == "" || sc.Label == "" {
+				return fmt.Errorf("multi-scope entries require an id and label")
+			}
 		}
 	}
 	return nil
