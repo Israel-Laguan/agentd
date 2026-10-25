@@ -16,18 +16,16 @@ import (
 )
 
 const defaultMaxMessageChars = 12000
-const defaultMaxTasksPerPhase = 7
 
 // Router cascades across providers and applies truncation and budgets.
 type Router struct {
-	providers        []providers.Backend
-	providerModels   map[string][]string
-	maxMessageChars  int
-	truncator        spec.Truncator
-	maxTasksPerPhase int
-	budget           spec.BudgetTracker
-	roleRoutes       map[spec.Role]spec.RoleTarget
-	recorder         spec.Recorder
+	providers       []providers.Backend
+	providerModels  map[string][]string
+	maxMessageChars int
+	truncator       spec.Truncator
+	budget          spec.BudgetTracker
+	roleRoutes      map[spec.Role]spec.RoleTarget
+	recorder        spec.Recorder
 }
 
 var _ spec.AIGateway = (*Router)(nil)
@@ -35,10 +33,9 @@ var _ spec.AIGateway = (*Router)(nil)
 // NewRouter builds a router from explicit provider backends (tests and advanced wiring).
 func NewRouter(providersList ...providers.Backend) *Router {
 	return &Router{
-		providers:        providersList,
-		maxMessageChars:  defaultMaxMessageChars,
-		truncator:        truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}},
-		maxTasksPerPhase: defaultMaxTasksPerPhase,
+		providers:       providersList,
+		maxMessageChars: defaultMaxMessageChars,
+		truncator:       truncation.StrategyTruncator{Strategy: truncation.HeadTailStrategy{HeadRatio: 0.5}},
 	}
 }
 
@@ -133,14 +130,6 @@ func (r *Router) WithTruncation(truncator spec.Truncator, maxMessageChars int) *
 	}
 	if maxMessageChars > 0 {
 		r.maxMessageChars = maxMessageChars
-	}
-	return r
-}
-
-// WithPhaseCap configures how many tasks may appear in a single generated plan segment.
-func (r *Router) WithPhaseCap(maxTasksPerPhase int) *Router {
-	if maxTasksPerPhase >= 0 {
-		r.maxTasksPerPhase = maxTasksPerPhase
 	}
 	return r
 }

@@ -8,13 +8,13 @@ import (
 	"agentd/internal/api"
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
-	"agentd/internal/gateway"
+	"agentd/internal/stage/intake"
 )
 
 func TestOutOfScopeIntentReturnsFeasibilityClarification(t *testing.T) {
 	store := newAPITestStore()
 	gw := newAPIGateway()
-	gw.intent = &gateway.IntentAnalysis{Intent: "out_of_scope", Reason: "non-software fantasy"}
+	gw.intent = &intake.IntentAnalysis{Intent: "out_of_scope", Reason: "non-software fantasy"}
 	handler := api.NewHandler(api.ServerDeps{Store: store, Gateway: gw, Bus: bus.NewInProcess(), Summarizer: frontdesk.NewStatusSummarizer(store)})
 
 	body := `{"messages":[{"role":"user","content":"Make me a million dollars overnight"}]}`

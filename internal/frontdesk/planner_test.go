@@ -10,6 +10,7 @@ import (
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/stage"
+	"agentd/internal/stage/intake"
 	"agentd/internal/testutil"
 )
 
@@ -17,7 +18,7 @@ func TestScopeClarification(t *testing.T) {
 	sc := ScopeClarification{
 		Kind:    "scope_clarification",
 		Message: "Multiple projects detected",
-		Scopes:  []gateway.ScopeOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}},
+		Scopes:  []intake.ScopeOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}},
 	}
 	if sc.Kind != "scope_clarification" {
 		t.Errorf("Kind = %v", sc.Kind)
@@ -93,7 +94,7 @@ func TestPlanner_PlanContent_statusReport(t *testing.T) {
 	store := testutil.NewFakeStore()
 	materializePlannerStore(t, store)
 	p := newTestPlanner(t, store, &mockGateway{
-		intent: &spec.IntentAnalysis{Intent: "status_check"},
+		intent: &intake.IntentAnalysis{Intent: "status_check"},
 	})
 
 	out, err := p.PlanContent(context.Background(), nil, "status?", nil)
@@ -113,7 +114,7 @@ func TestPlanner_PlanContent_statusReport(t *testing.T) {
 }
 
 func TestPlanner_PlanContent_planRequest_singleScope(t *testing.T) {
-	gw := &mockGateway{intent: &spec.IntentAnalysis{Intent: "plan_request"}}
+	gw := &mockGateway{intent: &intake.IntentAnalysis{Intent: "plan_request"}}
 	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
 
 	out, err := p.PlanContent(context.Background(), nil, "build api", nil)
@@ -134,10 +135,10 @@ func TestPlanner_PlanContent_planRequest_singleScope(t *testing.T) {
 
 func TestPlanner_PlanContent_planRequest_multiScope(t *testing.T) {
 	gw := &mockGateway{
-		intent: &spec.IntentAnalysis{Intent: "plan_request"},
-		scope: &spec.ScopeAnalysis{
+		intent: &intake.IntentAnalysis{Intent: "plan_request"},
+		scope: &intake.ScopeAnalysis{
 			SingleScope: false,
-			Scopes:      []gateway.ScopeOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}},
+			Scopes:      []intake.ScopeOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}},
 		},
 	}
 	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
@@ -182,7 +183,7 @@ func TestPlanner_PlanContent_approvedScope(t *testing.T) {
 
 func TestPlanner_PlanContent_outOfScope(t *testing.T) {
 	gw := &mockGateway{
-		intent: &spec.IntentAnalysis{Intent: "out_of_scope", Reason: "too vague"},
+		intent: &intake.IntentAnalysis{Intent: "out_of_scope", Reason: "too vague"},
 	}
 	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
 
@@ -203,7 +204,7 @@ func TestPlanner_PlanContent_outOfScope(t *testing.T) {
 }
 
 func TestPlanner_PlanContent_ambiguousIntent(t *testing.T) {
-	gw := &mockGateway{intent: &spec.IntentAnalysis{Intent: "greeting"}}
+	gw := &mockGateway{intent: &intake.IntentAnalysis{Intent: "greeting"}}
 	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
 
 	out, err := p.PlanContent(context.Background(), nil, "hi", nil)
@@ -244,7 +245,7 @@ func TestPlanner_ctxWithHouseRules(t *testing.T) {
 	if err := store.SetSetting(context.Background(), models.SettingKeyHouseRules, "be concise"); err != nil {
 		t.Fatalf("SetSetting: %v", err)
 	}
-	gw := &mockGateway{intent: &spec.IntentAnalysis{Intent: "plan_request"}}
+	gw := &mockGateway{intent: &intake.IntentAnalysis{Intent: "plan_request"}}
 	p := newTestPlanner(t, store, gw)
 	p.SettingsStore = store
 
@@ -299,10 +300,10 @@ func TestMarshalContent(t *testing.T) {
 }
 
 type mockGateway struct {
-	intent         *spec.IntentAnalysis
+	intent         *intake.IntentAnalysis
 	intentErr      error
 	intentCalls    int
-	scope          *spec.ScopeAnalysis
+	scope          *intake.ScopeAnalysis
 	scopeErr       error
 	analyzeCalls   int
 	plan           *models.DraftPlan
@@ -316,52 +317,40 @@ func (m *mockGateway) Generate(ctx context.Context, req gateway.AIRequest) (gate
 	return gateway.AIResponse{}, nil
 }
 
-func (m *mockGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
-	m.planCalls++
-	m.lastPlanIntent = intent
-	m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
-	if m.planErr != nil {
-		return nil, m.planErr
-	}
-	if m.plan != nil {
-		return m.plan, nil
-	}
-	return &models.DraftPlan{}, nil
-}
-
-func (m *mockGateway) AnalyzeScope(ctx context.Context, intent string) (*spec.ScopeAnalysis, error) {
-	m.analyzeCalls++
-	m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
-	if m.scopeErr != nil {
-		return nil, m.scopeErr
-	}
-	if m.scope != nil {
-		return m.scope, nil
-	}
-	return &spec.ScopeAnalysis{SingleScope: true}, nil
-}
-
-func (m *mockGateway) ClassifyIntent(_ context.Context, intent string) (*spec.IntentAnalysis, error) {
-	m.intentCalls++
-	if m.intentErr != nil {
-		return nil, m.intentErr
-	}
-	if m.intent != nil {
-		return m.intent, nil
-	}
-	return &spec.IntentAnalysis{Intent: "plan_request"}, nil
-}
-
-// Call answers a stage from the fake's methods above, by purpose.
+// Call answers a stage from the fake's fields, by purpose.
 func (m *mockGateway) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
 	intent := lastMessage(req)
 	switch req.Purpose {
 	case gateway.PurposeIntakeClassifyIntent:
-		return stageOutput(m.ClassifyIntent(ctx, intent))
+		m.intentCalls++
+		if m.intentErr != nil {
+			return stageOutput(nil, m.intentErr)
+		}
+		if m.intent != nil {
+			return stageOutput(m.intent, nil)
+		}
+		return stageOutput(&intake.IntentAnalysis{Intent: "plan_request"}, nil)
 	case gateway.PurposeIntakeAnalyzeScope:
-		return stageOutput(m.AnalyzeScope(ctx, intent))
+		m.analyzeCalls++
+		m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
+		if m.scopeErr != nil {
+			return stageOutput(nil, m.scopeErr)
+		}
+		if m.scope != nil {
+			return stageOutput(m.scope, nil)
+		}
+		return stageOutput(&intake.ScopeAnalysis{SingleScope: true}, nil)
 	}
-	return stageOutput(m.GeneratePlan(ctx, intent))
+	m.planCalls++
+	m.lastPlanIntent = intent
+	m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
+	if m.planErr != nil {
+		return stageOutput(nil, m.planErr)
+	}
+	if m.plan != nil {
+		return stageOutput(m.plan, nil)
+	}
+	return stageOutput(&models.DraftPlan{}, nil)
 }
 
 func (m *mockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {

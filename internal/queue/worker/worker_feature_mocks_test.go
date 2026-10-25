@@ -320,17 +320,6 @@ func (g *workerTestGateway) Generate(_ context.Context, req gateway.AIRequest) (
 	return resp, g.err
 }
 
-func (g *workerTestGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (g *workerTestGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (g *workerTestGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *workerTestGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

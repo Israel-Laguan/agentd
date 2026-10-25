@@ -208,17 +208,6 @@ func (g *memGateway) Generate(_ context.Context, req gateway.AIRequest) (gateway
 	return gateway.AIResponse{Content: g.response}, nil
 }
 
-func (g *memGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (g *memGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (g *memGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *memGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

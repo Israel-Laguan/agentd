@@ -10,12 +10,13 @@ import (
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
 	"agentd/internal/gateway"
+	"agentd/internal/stage/intake"
 )
 
 func TestChatCompletionStashesOversizedUserMessageAndReadsForPlanning(t *testing.T) {
 	store := newAPITestStore()
 	gw := newAPIGateway()
-	gw.intent = &gateway.IntentAnalysis{Intent: "plan_request", Reason: "large build request"}
+	gw.intent = &intake.IntentAnalysis{Intent: "plan_request", Reason: "large build request"}
 	input := strings.Repeat("a", 80) + strings.Repeat("b", 80)
 	stash := &frontdesk.FileStash{Dir: t.TempDir(), StashThreshold: 20}
 	handler := api.NewHandler(api.ServerDeps{
@@ -49,7 +50,7 @@ func TestChatCompletionStashesOversizedUserMessageAndReadsForPlanning(t *testing
 func TestChatCompletionAcceptsFileContentReferences(t *testing.T) {
 	store := newAPITestStore()
 	gw := newAPIGateway()
-	gw.intent = &gateway.IntentAnalysis{Intent: "plan_request", Reason: "file-backed request"}
+	gw.intent = &intake.IntentAnalysis{Intent: "plan_request", Reason: "file-backed request"}
 	stash := &frontdesk.FileStash{Dir: t.TempDir(), StashThreshold: 1000}
 	handler := api.NewHandler(api.ServerDeps{
 		Store: store, Gateway: gw, Bus: bus.NewInProcess(), Summarizer: frontdesk.NewStatusSummarizer(store),

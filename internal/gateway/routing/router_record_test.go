@@ -189,23 +189,15 @@ func TestEmbedAttemptsAreRecordedWithPurpose(t *testing.T) {
 
 const onePlan = `{"project_name":"p","description":"d","tasks":[{"title":"t","description":"d"}]}`
 
-func TestGeneratePlanTakesItsPurposeFromContext(t *testing.T) {
-	cases := []struct {
-		name string
-		ctx  context.Context
-		want spec.Purpose
-	}{
-		{"default is a chat plan", context.Background(), spec.PurposeIntakeDraftPlan},
-		{"next phase", spec.WithPurpose(context.Background(), spec.PurposeCreateNextPhase), spec.PurposeCreateNextPhase},
-	}
-	for _, tc := range cases {
+func TestRecordCarriesTheRequestPurpose(t *testing.T) {
+	for _, want := range []spec.Purpose{spec.PurposeIntakeDraftPlan, spec.PurposeCreateNextPhase} {
 		p := &scriptedProvider{name: "p", replies: []scriptedReply{{content: onePlan}}}
 		rec := &sliceRecorder{}
-		if _, err := NewRouter(p).WithRecorder(rec).GeneratePlan(tc.ctx, "build it"); err != nil {
-			t.Fatalf("%s: %v", tc.name, err)
+		if _, err := NewRouter(p).WithRecorder(rec).Generate(context.Background(), userReq(want, "build it")); err != nil {
+			t.Fatalf("%s: %v", want, err)
 		}
-		if len(rec.recs) != 1 || rec.recs[0].Purpose != tc.want {
-			t.Errorf("%s: records = %+v, want purpose %q", tc.name, rec.recs, tc.want)
+		if len(rec.recs) != 1 || rec.recs[0].Purpose != want {
+			t.Errorf("%s: records = %+v, want purpose %q", want, rec.recs, want)
 		}
 	}
 }

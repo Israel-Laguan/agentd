@@ -75,7 +75,7 @@ func (p Purpose) Normalize() Purpose {
 type purposeCtxKey struct{}
 
 // WithPurpose attaches a purpose to ctx for entry points that have no request
-// to put it on (GeneratePlan), so callers can say which plan they are asking for.
+// to put it on, so callers can say which plan they are asking for.
 func WithPurpose(ctx context.Context, p Purpose) context.Context {
 	if p == "" {
 		return ctx

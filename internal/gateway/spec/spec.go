@@ -2,7 +2,6 @@
 package spec
 
 import (
-	"fmt"
 	"context"
 	"encoding/json"
 	"errors"
@@ -191,43 +190,6 @@ type Truncator interface {
 	Apply(ctx context.Context, messages []PromptMessage, budget int) ([]PromptMessage, error)
 }
 
-type ScopeAnalysis struct {
-	SingleScope bool          `json:"single_scope"`
-	Confidence  float64       `json:"confidence"`
-	Scopes      []ScopeOption `json:"scopes"`
-	Reason      string        `json:"reason"`
-}
-func (s ScopeAnalysis) Validate() error {
-	if !s.SingleScope && len(s.Scopes) == 0 {
-		return fmt.Errorf("missing scopes for multi-scope classification")
-	}
-	if !s.SingleScope {
-		for _, sc := range s.Scopes {
-			if sc.ID == "" || sc.Label == "" {
-				return fmt.Errorf("multi-scope entries require an id and label")
-			}
-		}
-	}
-	return nil
-}
-
-type ScopeOption struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-}
-
-// IntentAnalysis is the result of intent classification by the Sales Rep agent.
-type IntentAnalysis struct {
-	Intent string `json:"intent"`
-	Reason string `json:"reason"`
-}
-func (i IntentAnalysis) Validate() error {
-	if i.Intent == "" {
-		return fmt.Errorf("missing intent")
-	}
-	return nil
-}
-
 // EmbedRequest is the provider-neutral input for embedding API calls.
 type EmbedRequest struct {
 	Input   []string `json:"input"`
@@ -246,7 +208,4 @@ type EmbedResponse struct {
 type AIGateway interface {
 	Generate(ctx context.Context, req AIRequest) (AIResponse, error)
 	Embed(ctx context.Context, req EmbedRequest) (EmbedResponse, error)
-	GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error)
-	AnalyzeScope(ctx context.Context, userIntent string) (*ScopeAnalysis, error)
-	ClassifyIntent(ctx context.Context, userIntent string) (*IntentAnalysis, error)
 }

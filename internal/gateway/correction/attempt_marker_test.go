@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 )
 
 type seqGateway struct {
@@ -21,16 +20,6 @@ func (g *seqGateway) Generate(_ context.Context, req spec.AIRequest) (spec.AIRes
 
 func (*seqGateway) Embed(context.Context, spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.EmbedResponse{}, nil
-}
-
-func (*seqGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) { return nil, nil }
-
-func (*seqGateway) AnalyzeScope(context.Context, string) (*spec.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (*seqGateway) ClassifyIntent(context.Context, string) (*spec.IntentAnalysis, error) {
-	return nil, nil
 }
 
 func TestCorrectionRetriesAreMarkedAsRepairs(t *testing.T) {

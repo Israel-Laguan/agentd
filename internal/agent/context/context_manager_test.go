@@ -7,7 +7,6 @@ import (
 
 	"agentd/internal/config"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 )
 
 type mockGateway struct{}
@@ -17,15 +16,6 @@ func (m *mockGateway) Generate(ctx context.Context, req spec.AIRequest) (spec.AI
 		return spec.AIResponse{Content: `{"decisions_made": ["test decision"], "facts_established": ["test fact"]}`}, nil
 	}
 	return spec.AIResponse{Content: "normal response"}, nil
-}
-func (m *mockGateway) GeneratePlan(ctx context.Context, userIntent string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (m *mockGateway) AnalyzeScope(ctx context.Context, userIntent string) (*spec.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (m *mockGateway) ClassifyIntent(ctx context.Context, userIntent string) (*spec.IntentAnalysis, error) {
-	return nil, nil
 }
 func (m *mockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.NoopEmbed(ctx, req)

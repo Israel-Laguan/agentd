@@ -15,9 +15,9 @@ import (
 
 // ScopeClarification is returned when multiple scopes are detected.
 type ScopeClarification struct {
-	Kind    string                `json:"kind"`
-	Message string                `json:"message"`
-	Scopes  []gateway.ScopeOption `json:"scopes"`
+	Kind    string               `json:"kind"`
+	Message string               `json:"message"`
+	Scopes  []intake.ScopeOption `json:"scopes"`
 }
 
 // IntentClarification is returned when the user intent is ambiguous.

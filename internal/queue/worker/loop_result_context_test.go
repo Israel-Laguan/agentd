@@ -10,7 +10,6 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 )
 
 // TestAgenticLoop_ContextWarningSummarize verifies preemptive summarization at the
@@ -69,17 +68,6 @@ func (g *summarizeTrackingGateway) Generate(ctx context.Context, req gateway.AIR
 	return gateway.AIResponse{Content: "ok"}, nil
 }
 
-func (g *summarizeTrackingGateway) GeneratePlan(ctx context.Context, s string) (*models.DraftPlan, error) {
-	return &models.DraftPlan{}, nil
-}
-
-func (g *summarizeTrackingGateway) AnalyzeScope(ctx context.Context, s string) (*spec.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (g *summarizeTrackingGateway) ClassifyIntent(ctx context.Context, s string) (*spec.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *summarizeTrackingGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.NoopEmbed(ctx, req)
 }

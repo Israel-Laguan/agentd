@@ -44,10 +44,13 @@ graph LR
     subgraph gw ["internal/gateway (LLM boundary)"]
         Interface["interface.go: AIGateway interface"]
         RouterImpl["router.go: Router implements AIGateway"]
+        Truncator["truncator.go: Truncator interface + strategies"]
+    end
+
+    subgraph intake ["internal/stage/intake (Frontdesk classifier)"]
         Intent["intent.go: ClassifyIntent"]
         Scope["scope.go: AnalyzeScope"]
-        Correction["correction.go: GeneratePlan + GenerateJSON"]
-        Truncator["truncator.go: Truncator interface + strategies"]
+        PlanGen["plan.go: Plan"]
     end
 
     subgraph svc ["internal/services (domain logic)"]
@@ -72,7 +75,7 @@ graph LR
     ChatCtrl -->|"Retriever"| RetrieverNode
     RouterImpl -.->|"implements"| Interface
     Summarizer -->|"KanbanStore"| Store
-    Correction -->|"models.DraftPlan"| Plan
+    PlanGen -->|"models.DraftPlan"| Plan
 ```
 
 ### Package responsibilities
@@ -80,7 +83,8 @@ graph LR
 | Package | Owns | Does NOT own |
 | --------- | ------ | ------------- |
 | `internal/api/controllers` | HTTP decode/encode, request routing, error mapping, response envelope formatting | LLM prompts, JSON retry logic, truncation strategies, board persistence |
-| `internal/gateway` | LLM prompt construction, provider fallback, JSON self-correction, truncation enforcement, intent/scope system prompts | HTTP transport, board reads/writes, file stashing |
+| `internal/gateway` | LLM prompt construction, provider fallback, JSON self-correction, truncation enforcement | HTTP transport, board reads/writes, file stashing, intent/scope system prompts |
+| `internal/stage/intake` | Intent/scope system prompts, plan generation, phase cap enforcement | HTTP transport, provider fallback, board persistence |
 | `internal/services` | Deterministic status aggregation, file stash I/O, plan materialization orchestration | LLM calls, HTTP routing |
 | `internal/models` | Shared domain types (`DraftPlan`, `DraftTask`, `KanbanStore` interface, `TaskState` enum) | Any behavior; pure data definitions |
 
@@ -111,9 +115,9 @@ chat := controllers.ChatHandler{
 | ------ | ------------- | --------- | ------- |
 | Chat controller | `ChatHandler` | `internal/api/controllers` | Holds `AIGateway`, `StatusSummarizer`, `FileStash`, `Truncator`, `Retriever` |
 | Gateway facade | `Router` | `internal/gateway/routing` (re-exported) | Implements `AIGateway` with provider fallback and truncation |
-| Intent classifier | `Router.ClassifyIntent` | `internal/gateway/routing` | Returns `IntentAnalysis{Intent, Reason}` |
-| Scope analyzer | `Router.AnalyzeScope` | `internal/gateway/routing` | Returns `ScopeAnalysis{SingleScope, Confidence, Scopes, Reason}` |
-| Plan generator | `Router.GeneratePlan` | `internal/gateway/routing` | Returns `*models.DraftPlan` via `GenerateJSON[DraftPlan]` |
+| Intent classifier | `intake.ClassifyIntent` | `internal/stage/intake` | Returns `IntentAnalysis{Intent, Reason}`; calls `AIGateway.Generate` through the model agent |
+| Scope analyzer | `intake.AnalyzeScope` | `internal/stage/intake` | Returns `ScopeAnalysis{SingleScope, Confidence, Scopes, Reason}` |
+| Plan generator | `intake.Plan` | `internal/stage/intake` | Returns `*models.DraftPlan`, trimmed to the phase cap |
 | JSON repair | `GenerateJSON[T]` | `internal/gateway/correction` (re-exported) | Generic function; retries with corrective prompts |
 | Status reporter | `StatusSummarizer` | `internal/services` | Deterministic; queries `KanbanStore` only, no LLM calls |
 | Plan model | `DraftPlan` / `DraftTask` | `internal/models` | Frontdesk output awaiting human approval |
@@ -130,7 +134,7 @@ Behavior is defined and verified through Gherkin BDD scenarios (run via Godog) a
 | File stash and truncation passthrough | [`chat_file_handling.feature`](../internal/api/features/chat_file_handling.feature) |
 | JSON self-correction | [`json_strictness_auto_correction.feature`](../internal/gateway/features/json_strictness_auto_correction.feature) |
 | Truncation policies | [`truncation_strategies.feature`](../internal/gateway/features/truncation_strategies.feature) |
-| Phase cap enforcement | [`plan_phase_cap.feature`](../internal/gateway/features/plan_phase_cap.feature) |
+| Phase cap enforcement | [`plan_phase_cap.feature`](../internal/stage/intake/features/plan_phase_cap.feature) |
 | Plan materialization and dependency validation | [`project_materialization.feature`](../internal/kanban/features/project_materialization.feature) |
 | Memory recall namespace isolation | [`recall_namespace.feature`](../internal/memory/features/recall_namespace.feature) |
 | Memory recall timeout fallback | [`recall_timeout.feature`](../internal/memory/features/recall_timeout.feature) |

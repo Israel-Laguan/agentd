@@ -13,7 +13,7 @@ import (
 	"agentd/internal/api"
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
-	"agentd/internal/gateway"
+	"agentd/internal/stage/intake"
 )
 
 // TestChatCompletionRoundTripsThroughOpenAITypes verifies the response
@@ -88,7 +88,7 @@ func TestChatCompletionEmitsToolCallsWhenRequested(t *testing.T) {
 func TestChatCompletionStatusReportToolCall(t *testing.T) {
 	store := newAPITestStore()
 	gw := newAPIGateway()
-	gw.intent = &gateway.IntentAnalysis{Intent: "status_check", Reason: "user asked for status"}
+	gw.intent = &intake.IntentAnalysis{Intent: "status_check", Reason: "user asked for status"}
 	handler := api.NewHandler(api.ServerDeps{
 		Store: store, Gateway: gw, Bus: bus.NewInProcess(),
 		Summarizer: frontdesk.NewStatusSummarizer(store),

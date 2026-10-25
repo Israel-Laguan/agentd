@@ -12,7 +12,6 @@ import (
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 )
 
 type subagentMockGateway struct {
@@ -40,18 +39,6 @@ func (m *subagentMockGateway) requestSnapshot() []gateway.AIRequest {
 	return append([]gateway.AIRequest(nil), m.requests...)
 }
 
-func (m *subagentMockGateway) GeneratePlan(_ context.Context, _ string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (m *subagentMockGateway) AnalyzeScope(_ context.Context, _ string) (*spec.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (m *subagentMockGateway) ClassifyIntent(_ context.Context, _ string) (*spec.IntentAnalysis, error) {
-	return nil, nil
-}
-
 func (m *subagentMockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.NoopEmbed(ctx, req)
 }
@@ -71,18 +58,6 @@ func (subagentTaskGateway) Generate(_ context.Context, req gateway.AIRequest) (g
 	default:
 		return gateway.AIResponse{Content: task}, nil
 	}
-}
-
-func (subagentTaskGateway) GeneratePlan(_ context.Context, _ string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (subagentTaskGateway) AnalyzeScope(_ context.Context, _ string) (*spec.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (subagentTaskGateway) ClassifyIntent(_ context.Context, _ string) (*spec.IntentAnalysis, error) {
-	return nil, nil
 }
 
 func (subagentTaskGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {

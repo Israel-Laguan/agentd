@@ -16,6 +16,7 @@ import (
 	"agentd/internal/frontdesk"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/stage/intake"
 )
 
 func TestUnifiedProjectResponses(t *testing.T) {
@@ -105,13 +106,13 @@ func decodeBody(t *testing.T, resp *httptest.ResponseRecorder) map[string]any {
 	return decoded
 }
 
-// Generate answers the intake purposes from the fake's methods, so the real
+// Generate answers the intake purposes from the fake's answer helpers, so the real
 // ModelAgent and contract run over them. Other purposes get an empty response.
 func (g *apiGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
-	return intakeResponse(ctx, req, g.ClassifyIntent, g.AnalyzeScope, g.GeneratePlan)
+	return intakeResponse(ctx, req, g.answerClassify, g.answerScope, g.answerPlan)
 }
 
-func (g *apiGateway) GeneratePlan(_ context.Context, intent string) (*models.DraftPlan, error) {
+func (g *apiGateway) answerPlan(_ context.Context, intent string) (*models.DraftPlan, error) {
 	g.planCalls++
 	g.lastPlanIntent = intent
 	if g.planErr != nil {
@@ -123,7 +124,7 @@ func (g *apiGateway) GeneratePlan(_ context.Context, intent string) (*models.Dra
 	return &models.DraftPlan{ProjectName: "Python scraper", Tasks: []models.DraftTask{{TempID: "a", Title: "Scrape site"}}}, nil
 }
 
-func (g *apiGateway) AnalyzeScope(_ context.Context, intent string) (*gateway.ScopeAnalysis, error) {
+func (g *apiGateway) answerScope(_ context.Context, intent string) (*intake.ScopeAnalysis, error) {
 	g.analyzeCalls++
 	g.lastAnalyzeIntent = intent
 	if g.scopeErr != nil {
@@ -132,15 +133,15 @@ func (g *apiGateway) AnalyzeScope(_ context.Context, intent string) (*gateway.Sc
 	if g.scope != nil {
 		return g.scope, nil
 	}
-	return &gateway.ScopeAnalysis{
+	return &intake.ScopeAnalysis{
 		SingleScope: true,
 		Confidence:  1,
-		Scopes:      []gateway.ScopeOption{{ID: "input", Label: "Input request"}},
+		Scopes:      []intake.ScopeOption{{ID: "input", Label: "Input request"}},
 		Reason:      "single request",
 	}, nil
 }
 
-func (g *apiGateway) ClassifyIntent(_ context.Context, intent string) (*gateway.IntentAnalysis, error) {
+func (g *apiGateway) answerClassify(_ context.Context, intent string) (*intake.IntentAnalysis, error) {
 	g.intentCalls++
 	g.lastClassifyIntent = intent
 	if g.intentErr != nil {
@@ -149,7 +150,7 @@ func (g *apiGateway) ClassifyIntent(_ context.Context, intent string) (*gateway.
 	if g.intent != nil {
 		return g.intent, nil
 	}
-	return &gateway.IntentAnalysis{
+	return &intake.IntentAnalysis{
 		Intent: "plan_request",
 		Reason: "default test behavior",
 	}, nil
@@ -160,10 +161,10 @@ func (g *apiGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.Embed
 }
 
 type apiGateway struct {
-	scope              *gateway.ScopeAnalysis
+	scope              *intake.ScopeAnalysis
 	scopeErr           error
 	analyzeCalls       int
-	intent             *gateway.IntentAnalysis
+	intent             *intake.IntentAnalysis
 	intentErr          error
 	intentCalls        int
 	lastClassifyIntent string

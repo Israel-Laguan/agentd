@@ -9,16 +9,16 @@ import (
 	"agentd/internal/api"
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
-	"agentd/internal/gateway"
+	"agentd/internal/stage/intake"
 )
 
 func TestChatCompletionReturnsScopeClarification(t *testing.T) {
 	store := newAPITestStore()
 	gw := newAPIGateway()
-	gw.scope = &gateway.ScopeAnalysis{
+	gw.scope = &intake.ScopeAnalysis{
 		SingleScope: false,
 		Confidence:  0.91,
-		Scopes: []gateway.ScopeOption{
+		Scopes: []intake.ScopeOption{
 			{ID: "backend-api", Label: "Backend API service"},
 			{ID: "frontend-ui", Label: "Frontend UI"},
 		},
@@ -76,10 +76,10 @@ func TestChatCompletionRejectsMultipleApprovedScopes(t *testing.T) {
 
 func TestChatCompletionSingleScopeAnalyzerGeneratesPlan(t *testing.T) {
 	gw := newAPIGateway()
-	gw.scope = &gateway.ScopeAnalysis{
+	gw.scope = &intake.ScopeAnalysis{
 		SingleScope: true,
 		Confidence:  0.88,
-		Scopes:      []gateway.ScopeOption{{ID: "python-scraper", Label: "Python scraper"}},
+		Scopes:      []intake.ScopeOption{{ID: "python-scraper", Label: "Python scraper"}},
 		Reason:      "cohesive request",
 	}
 	store := newAPITestStore()

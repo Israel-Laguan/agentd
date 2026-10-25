@@ -44,7 +44,6 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 	if err != nil {
 		return runtimeDeps{}, fmt.Errorf("build gateway router: %w", err)
 	}
-	gw = gw.WithPhaseCap(cfg.Gateway.MaxTasksPerPhase)
 	callWriter := attachCallRecorder(gw, store)
 	if routes := cfg.Gateway.RoleRoutes(); routes != nil {
 		gw = gw.WithRoleRouting(routes)

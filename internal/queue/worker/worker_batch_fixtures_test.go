@@ -295,28 +295,10 @@ func (g *batchFailingGateway) Generate(_ context.Context, req gateway.AIRequest)
 	return gateway.AIResponse{Content: "single fallback summary"}, nil
 }
 
-func (g *batchFailingGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (g *batchFailingGateway) AnalyzeScope(context.Context, string) (*spec.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (g *batchFailingGateway) ClassifyIntent(context.Context, string) (*spec.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *batchFailingGateway) Embed(context.Context, spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.EmbedResponse{}, nil
 }
 
-func (g *batchTrackingGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (g *batchTrackingGateway) AnalyzeScope(context.Context, string) (*spec.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (g *batchTrackingGateway) ClassifyIntent(context.Context, string) (*spec.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *batchTrackingGateway) Embed(context.Context, spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.EmbedResponse{}, nil
 }

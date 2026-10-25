@@ -8,13 +8,13 @@ import (
 	"agentd/internal/api"
 	"agentd/internal/bus"
 	"agentd/internal/frontdesk"
-	"agentd/internal/gateway"
+	"agentd/internal/stage/intake"
 )
 
 func TestStatusCheckReturnsReportAndSkipsPlanning(t *testing.T) {
 	store := newAPITestStore()
 	gw := newAPIGateway()
-	gw.intent = &gateway.IntentAnalysis{Intent: "status_check", Reason: "user asked for status"}
+	gw.intent = &intake.IntentAnalysis{Intent: "status_check", Reason: "user asked for status"}
 	handler := api.NewHandler(api.ServerDeps{Store: store, Gateway: gw, Bus: bus.NewInProcess(), Summarizer: frontdesk.NewStatusSummarizer(store)})
 
 	body := `{"messages":[{"role":"user","content":"What's the status of my projects?"}]}`
@@ -59,7 +59,7 @@ func TestPlanIntentFlowsThroughScopeAnalysis(t *testing.T) {
 func TestAmbiguousIntentReturnsClarification(t *testing.T) {
 	store := newAPITestStore()
 	gw := newAPIGateway()
-	gw.intent = &gateway.IntentAnalysis{Intent: "ambiguous", Reason: "greeting only"}
+	gw.intent = &intake.IntentAnalysis{Intent: "ambiguous", Reason: "greeting only"}
 	handler := api.NewHandler(api.ServerDeps{Store: store, Gateway: gw, Bus: bus.NewInProcess(), Summarizer: frontdesk.NewStatusSummarizer(store)})
 
 	body := `{"messages":[{"role":"user","content":"Hello"}]}`

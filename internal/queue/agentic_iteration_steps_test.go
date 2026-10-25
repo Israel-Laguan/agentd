@@ -75,17 +75,6 @@ func (g *iterationGateway) Generate(ctx context.Context, req gateway.AIRequest) 
 	return gateway.AIResponse{Content: g.content, TokenUsage: g.tokens}, g.err
 }
 
-func (g *iterationGateway) GeneratePlan(ctx context.Context, s string) (*models.DraftPlan, error) {
-	return &models.DraftPlan{}, nil
-}
-
-func (g *iterationGateway) AnalyzeScope(ctx context.Context, s string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (g *iterationGateway) ClassifyIntent(ctx context.Context, s string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *iterationGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

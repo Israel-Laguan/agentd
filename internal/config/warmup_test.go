@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"agentd/internal/gateway"
-	"agentd/internal/models"
 )
 
 type mockWarmupGateway struct {
@@ -24,18 +23,6 @@ func (m *mockWarmupGateway) Generate(ctx context.Context, req gateway.AIRequest)
 
 func (m *mockWarmupGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
-}
-
-func (m *mockWarmupGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (m *mockWarmupGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (m *mockWarmupGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
 }
 
 func TestWarmupLLM_HordeHeartbeatOK(t *testing.T) {

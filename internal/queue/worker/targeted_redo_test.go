@@ -219,15 +219,6 @@ func (g *redoCountGateway) Generate(_ context.Context, req gateway.AIRequest) (g
 	return gateway.AIResponse{Content: "ok"}, nil
 }
 
-func (g *redoCountGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (g *redoCountGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (g *redoCountGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *redoCountGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

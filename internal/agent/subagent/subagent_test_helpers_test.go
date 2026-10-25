@@ -8,7 +8,6 @@ import (
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
 
@@ -80,17 +79,6 @@ func (m *subagentMockGateway) requestSnapshot() []gateway.AIRequest {
 	return append([]gateway.AIRequest(nil), m.requests...)
 }
 
-func (m *subagentMockGateway) GeneratePlan(_ context.Context, _ string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (m *subagentMockGateway) AnalyzeScope(_ context.Context, _ string) (*spec.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (m *subagentMockGateway) ClassifyIntent(_ context.Context, _ string) (*spec.IntentAnalysis, error) {
-	return nil, nil
-}
 func (m *subagentMockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.NoopEmbed(ctx, req)
 }

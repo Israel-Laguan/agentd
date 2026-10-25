@@ -230,17 +230,6 @@ func (g *sequenceGateway) Generate(_ context.Context, req AIRequest) (AIResponse
 	return AIResponse{Content: value}, nil
 }
 
-func (g *sequenceGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (*sequenceGateway) AnalyzeScope(context.Context, string) (*ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (*sequenceGateway) ClassifyIntent(context.Context, string) (*IntentAnalysis, error) {
-	return nil, nil
-}
 func (*sequenceGateway) Embed(context.Context, EmbedRequest) (EmbedResponse, error) {
 	return EmbedResponse{}, nil
 }

@@ -72,20 +72,3 @@ func TestCallRecordCarriesTheRequestTaskID(t *testing.T) {
 		t.Errorf("records = %+v, want one record with TaskID task-7", rec.recs)
 	}
 }
-
-// T-057: GeneratePlan takes no request, so the plan call records the task its
-// caller put on ctx (intake replans, next-phase planning).
-func TestGeneratePlanRecordsTheContextTaskID(t *testing.T) {
-	t.Parallel()
-
-	p := &scriptedProvider{name: "p", replies: []scriptedReply{{content: `{"project_name":"P","tasks":[{"title":"a","description":"d","assignee":"SYSTEM"}]}`}}}
-	rec := &sliceRecorder{}
-	ctx := spec.WithTaskID(context.Background(), "task-9")
-
-	if _, err := NewRouter(p).WithRecorder(rec).GeneratePlan(ctx, "do it"); err != nil {
-		t.Fatal(err)
-	}
-	if len(rec.recs) != 1 || rec.recs[0].TaskID != "task-9" {
-		t.Errorf("records = %+v, want one record with TaskID task-9", rec.recs)
-	}
-}

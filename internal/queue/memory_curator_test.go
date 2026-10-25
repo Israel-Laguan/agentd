@@ -26,15 +26,6 @@ func (g *curatorTestGateway) Generate(_ context.Context, req gateway.AIRequest) 
 	return gateway.AIResponse{Content: "summary"}, nil
 }
 
-func (g *curatorTestGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-func (g *curatorTestGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return nil, nil
-}
-func (g *curatorTestGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *curatorTestGateway) Embed(ctx context.Context, req gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }

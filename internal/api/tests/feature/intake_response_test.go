@@ -6,15 +6,16 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/stage/intake"
 )
 
-// intakeResponse answers an intake purpose by calling the matching fake method
+// intakeResponse answers an intake purpose by calling the matching answer helper
 // and returning its result as JSON. The message the stage sends is the intent.
 func intakeResponse(
 	ctx context.Context,
 	req gateway.AIRequest,
-	classify func(context.Context, string) (*gateway.IntentAnalysis, error),
-	scope func(context.Context, string) (*gateway.ScopeAnalysis, error),
+	classify func(context.Context, string) (*intake.IntentAnalysis, error),
+	scope func(context.Context, string) (*intake.ScopeAnalysis, error),
 	plan func(context.Context, string) (*models.DraftPlan, error),
 ) (gateway.AIResponse, error) {
 	var intent string
