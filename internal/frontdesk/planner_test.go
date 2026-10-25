@@ -10,6 +10,7 @@ import (
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/stage"
+	"agentd/internal/stage/intake"
 	"agentd/internal/testutil"
 )
 
@@ -17,7 +18,7 @@ func TestScopeClarification(t *testing.T) {
 	sc := ScopeClarification{
 		Kind:    "scope_clarification",
 		Message: "Multiple projects detected",
-		Scopes:  []gateway.ScopeOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}},
+		Scopes:  []intake.ScopeOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}},
 	}
 	if sc.Kind != "scope_clarification" {
 		t.Errorf("Kind = %v", sc.Kind)
@@ -93,7 +94,7 @@ func TestPlanner_PlanContent_statusReport(t *testing.T) {
 	store := testutil.NewFakeStore()
 	materializePlannerStore(t, store)
 	p := newTestPlanner(t, store, &mockGateway{
-		intent: &spec.IntentAnalysis{Intent: "status_check"},
+		intent: &intake.IntentAnalysis{Intent: "status_check"},
 	})
 
 	out, err := p.PlanContent(context.Background(), nil, "status?", nil)
@@ -113,7 +114,7 @@ func TestPlanner_PlanContent_statusReport(t *testing.T) {
 }
 
 func TestPlanner_PlanContent_planRequest_singleScope(t *testing.T) {
-	gw := &mockGateway{intent: &spec.IntentAnalysis{Intent: "plan_request"}}
+	gw := &mockGateway{intent: &intake.IntentAnalysis{Intent: "plan_request"}}
 	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
 
 	out, err := p.PlanContent(context.Background(), nil, "build api", nil)
@@ -134,10 +135,10 @@ func TestPlanner_PlanContent_planRequest_singleScope(t *testing.T) {
 
 func TestPlanner_PlanContent_planRequest_multiScope(t *testing.T) {
 	gw := &mockGateway{
-		intent: &spec.IntentAnalysis{Intent: "plan_request"},
-		scope: &spec.ScopeAnalysis{
+		intent: &intake.IntentAnalysis{Intent: "plan_request"},
+		scope: &intake.ScopeAnalysis{
 			SingleScope: false,
-			Scopes:      []gateway.ScopeOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}},
+			Scopes:      []intake.ScopeOption{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}},
 		},
 	}
 	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
@@ -182,7 +183,7 @@ func TestPlanner_PlanContent_approvedScope(t *testing.T) {
 
 func TestPlanner_PlanContent_outOfScope(t *testing.T) {
 	gw := &mockGateway{
-		intent: &spec.IntentAnalysis{Intent: "out_of_scope", Reason: "too vague"},
+		intent: &intake.IntentAnalysis{Intent: "out_of_scope", Reason: "too vague"},
 	}
 	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
 
@@ -203,7 +204,7 @@ func TestPlanner_PlanContent_outOfScope(t *testing.T) {
 }
 
 func TestPlanner_PlanContent_ambiguousIntent(t *testing.T) {
-	gw := &mockGateway{intent: &spec.IntentAnalysis{Intent: "greeting"}}
+	gw := &mockGateway{intent: &intake.IntentAnalysis{Intent: "greeting"}}
 	p := newTestPlanner(t, testutil.NewFakeStore(), gw)
 
 	out, err := p.PlanContent(context.Background(), nil, "hi", nil)
@@ -244,7 +245,7 @@ func TestPlanner_ctxWithHouseRules(t *testing.T) {
 	if err := store.SetSetting(context.Background(), models.SettingKeyHouseRules, "be concise"); err != nil {
 		t.Fatalf("SetSetting: %v", err)
 	}
-	gw := &mockGateway{intent: &spec.IntentAnalysis{Intent: "plan_request"}}
+	gw := &mockGateway{intent: &intake.IntentAnalysis{Intent: "plan_request"}}
 	p := newTestPlanner(t, store, gw)
 	p.SettingsStore = store
 
@@ -299,10 +300,10 @@ func TestMarshalContent(t *testing.T) {
 }
 
 type mockGateway struct {
-	intent         *spec.IntentAnalysis
+	intent         *intake.IntentAnalysis
 	intentErr      error
 	intentCalls    int
-	scope          *spec.ScopeAnalysis
+	scope          *intake.ScopeAnalysis
 	scopeErr       error
 	analyzeCalls   int
 	plan           *models.DraftPlan
@@ -328,7 +329,7 @@ func (m *mockGateway) Call(ctx context.Context, req stage.StageRequest) (stage.S
 		if m.intent != nil {
 			return stageOutput(m.intent, nil)
 		}
-		return stageOutput(&spec.IntentAnalysis{Intent: "plan_request"}, nil)
+		return stageOutput(&intake.IntentAnalysis{Intent: "plan_request"}, nil)
 	case gateway.PurposeIntakeAnalyzeScope:
 		m.analyzeCalls++
 		m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
@@ -338,7 +339,7 @@ func (m *mockGateway) Call(ctx context.Context, req stage.StageRequest) (stage.S
 		if m.scope != nil {
 			return stageOutput(m.scope, nil)
 		}
-		return stageOutput(&spec.ScopeAnalysis{SingleScope: true}, nil)
+		return stageOutput(&intake.ScopeAnalysis{SingleScope: true}, nil)
 	}
 	m.planCalls++
 	m.lastPlanIntent = intent

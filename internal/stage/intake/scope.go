@@ -16,7 +16,7 @@ const scopeAnalyzerSystemPrompt = "You are the Frontdesk scope analyzer. Return 
 // AnalyzeScope asks agent whether userIntent is one scope or several. A
 // multi-scope answer with no scopes is rejected after the call, not by the
 // contract.
-func AnalyzeScope(ctx context.Context, agent stage.Agent, userIntent string) (*spec.ScopeAnalysis, error) {
+func AnalyzeScope(ctx context.Context, agent stage.Agent, userIntent string) (*ScopeAnalysis, error) {
 	res, err := agent.Call(ctx, stage.StageRequest{
 		Stage:   stage.StageIntake,
 		Purpose: spec.PurposeIntakeAnalyzeScope,
@@ -24,13 +24,13 @@ func AnalyzeScope(ctx context.Context, agent stage.Agent, userIntent string) (*s
 			{Role: "system", Content: scopeAnalyzerSystemPrompt},
 			{Role: "user", Content: userIntent},
 		},
-		Contract:    stage.NewContract[spec.ScopeAnalysis](),
+		Contract:    stage.NewContract[ScopeAnalysis](),
 		Temperature: 0.1,
 	})
 	if err != nil {
 		return nil, err
 	}
-	analysis, err := decode[spec.ScopeAnalysis](res)
+	analysis, err := decode[ScopeAnalysis](res)
 	if err != nil {
 		return nil, err
 	}

@@ -14,8 +14,8 @@ import (
 	"github.com/cucumber/godog"
 
 	"agentd/internal/bus"
-	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/stage/intake"
 )
 
 type apiScenario struct {
@@ -134,10 +134,10 @@ func (s *apiScenario) chatCompletion(_ context.Context, prompt string) error {
 }
 
 func (s *apiScenario) multiScopeChatCompletion(context.Context) error {
-	s.gateway.scope = &gateway.ScopeAnalysis{
+	s.gateway.scope = &intake.ScopeAnalysis{
 		SingleScope: false,
 		Confidence:  0.92,
-		Scopes: []gateway.ScopeOption{
+		Scopes: []intake.ScopeOption{
 			{ID: "backend-api", Label: "Backend API service"},
 			{ID: "frontend-ui", Label: "Frontend UI"},
 			{ID: "marketing-copy", Label: "Marketing copy"},
@@ -229,7 +229,7 @@ func (s *apiScenario) generatePlanNotCalled(context.Context) error {
 }
 
 func (s *apiScenario) statusCheckChatCompletion(context.Context) error {
-	s.gateway.intent = &gateway.IntentAnalysis{Intent: "status_check", Reason: "user asked for status"}
+	s.gateway.intent = &intake.IntentAnalysis{Intent: "status_check", Reason: "user asked for status"}
 	body := `{"messages":[{"role":"user","content":"What's the status of my projects?"}]}`
 	s.resp = request(s.handler(), http.MethodPost, "/v1/chat/completions", body)
 	s.body = decodeBodyT(s.resp)
@@ -237,7 +237,7 @@ func (s *apiScenario) statusCheckChatCompletion(context.Context) error {
 }
 
 func (s *apiScenario) hostInvestigationChatCompletion(_ context.Context, question string) error {
-	s.gateway.intent = &gateway.IntentAnalysis{Intent: "plan_request", Reason: "asks the agent to find something out"}
+	s.gateway.intent = &intake.IntentAnalysis{Intent: "plan_request", Reason: "asks the agent to find something out"}
 	body := fmt.Sprintf(`{"messages":[{"role":"user","content":%q}]}`, question)
 	s.resp = request(s.handler(), http.MethodPost, "/v1/chat/completions", body)
 	s.body = decodeBodyT(s.resp)
@@ -261,7 +261,7 @@ func (s *apiScenario) classifierReceived(_ context.Context, want string) error {
 }
 
 func (s *apiScenario) ambiguousChatCompletion(context.Context) error {
-	s.gateway.intent = &gateway.IntentAnalysis{Intent: "ambiguous", Reason: "greeting only"}
+	s.gateway.intent = &intake.IntentAnalysis{Intent: "ambiguous", Reason: "greeting only"}
 	body := `{"messages":[{"role":"user","content":"Hello"}]}`
 	s.resp = request(s.handler(), http.MethodPost, "/v1/chat/completions", body)
 	s.body = decodeBodyT(s.resp)

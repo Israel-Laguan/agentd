@@ -14,6 +14,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/kanban"
 	"agentd/internal/models"
+	"agentd/internal/stage/intake"
 )
 
 func TestSystemStatus(t *testing.T) {
@@ -415,8 +416,8 @@ func (s *testStore) SetSetting(context.Context, string, string) error         { 
 var _ models.KanbanStore = (*testStore)(nil)
 
 type testGateway struct {
-	scope  *gateway.ScopeAnalysis
-	intent *gateway.IntentAnalysis
+	scope  *intake.ScopeAnalysis
+	intent *intake.IntentAnalysis
 	plan   *models.DraftPlan
 }
 
@@ -435,23 +436,23 @@ func (g *testGateway) answerPlan(_ context.Context, intent string) (*models.Draf
 	return &models.DraftPlan{ProjectName: "Python scraper", Tasks: []models.DraftTask{{TempID: "a", Title: "Scrape site"}}}, nil
 }
 
-func (g *testGateway) answerScope(_ context.Context, intent string) (*gateway.ScopeAnalysis, error) {
+func (g *testGateway) answerScope(_ context.Context, intent string) (*intake.ScopeAnalysis, error) {
 	if g.scope != nil {
 		return g.scope, nil
 	}
-	return &gateway.ScopeAnalysis{
+	return &intake.ScopeAnalysis{
 		SingleScope: true,
 		Confidence:  1,
-		Scopes:      []gateway.ScopeOption{{ID: "input", Label: "Input request"}},
+		Scopes:      []intake.ScopeOption{{ID: "input", Label: "Input request"}},
 		Reason:      "single request",
 	}, nil
 }
 
-func (g *testGateway) answerClassify(_ context.Context, intent string) (*gateway.IntentAnalysis, error) {
+func (g *testGateway) answerClassify(_ context.Context, intent string) (*intake.IntentAnalysis, error) {
 	if g.intent != nil {
 		return g.intent, nil
 	}
-	return &gateway.IntentAnalysis{
+	return &intake.IntentAnalysis{
 		Intent: "plan_request",
 		Reason: "default test behavior",
 	}, nil

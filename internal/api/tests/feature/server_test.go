@@ -16,6 +16,7 @@ import (
 	"agentd/internal/frontdesk"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/stage/intake"
 )
 
 func TestUnifiedProjectResponses(t *testing.T) {
@@ -123,7 +124,7 @@ func (g *apiGateway) answerPlan(_ context.Context, intent string) (*models.Draft
 	return &models.DraftPlan{ProjectName: "Python scraper", Tasks: []models.DraftTask{{TempID: "a", Title: "Scrape site"}}}, nil
 }
 
-func (g *apiGateway) answerScope(_ context.Context, intent string) (*gateway.ScopeAnalysis, error) {
+func (g *apiGateway) answerScope(_ context.Context, intent string) (*intake.ScopeAnalysis, error) {
 	g.analyzeCalls++
 	g.lastAnalyzeIntent = intent
 	if g.scopeErr != nil {
@@ -132,15 +133,15 @@ func (g *apiGateway) answerScope(_ context.Context, intent string) (*gateway.Sco
 	if g.scope != nil {
 		return g.scope, nil
 	}
-	return &gateway.ScopeAnalysis{
+	return &intake.ScopeAnalysis{
 		SingleScope: true,
 		Confidence:  1,
-		Scopes:      []gateway.ScopeOption{{ID: "input", Label: "Input request"}},
+		Scopes:      []intake.ScopeOption{{ID: "input", Label: "Input request"}},
 		Reason:      "single request",
 	}, nil
 }
 
-func (g *apiGateway) answerClassify(_ context.Context, intent string) (*gateway.IntentAnalysis, error) {
+func (g *apiGateway) answerClassify(_ context.Context, intent string) (*intake.IntentAnalysis, error) {
 	g.intentCalls++
 	g.lastClassifyIntent = intent
 	if g.intentErr != nil {
@@ -149,7 +150,7 @@ func (g *apiGateway) answerClassify(_ context.Context, intent string) (*gateway.
 	if g.intent != nil {
 		return g.intent, nil
 	}
-	return &gateway.IntentAnalysis{
+	return &intake.IntentAnalysis{
 		Intent: "plan_request",
 		Reason: "default test behavior",
 	}, nil
@@ -160,10 +161,10 @@ func (g *apiGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.Embed
 }
 
 type apiGateway struct {
-	scope              *gateway.ScopeAnalysis
+	scope              *intake.ScopeAnalysis
 	scopeErr           error
 	analyzeCalls       int
-	intent             *gateway.IntentAnalysis
+	intent             *intake.IntentAnalysis
 	intentErr          error
 	intentCalls        int
 	lastClassifyIntent string

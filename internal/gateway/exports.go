@@ -25,9 +25,6 @@ type (
 	Provider           = spec.Provider
 	AIGateway          = spec.AIGateway
 	Truncator          = spec.Truncator
-	ScopeAnalysis      = spec.ScopeAnalysis
-	ScopeOption        = spec.ScopeOption
-	IntentAnalysis     = spec.IntentAnalysis
 	BudgetTracker      = spec.BudgetTracker
 	ToolDefinition     = spec.ToolDefinition
 	ToolCall           = spec.ToolCall

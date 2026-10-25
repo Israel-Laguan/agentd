@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"agentd/internal/gateway/spec"
+	"agentd/internal/stage/intake"
 	"agentd/internal/testutil"
 )
 
@@ -17,7 +17,7 @@ import (
 func TestPlanner_VagueRequestRefusalsAskTheSameQuestion(t *testing.T) {
 	messages := make([]string, 0, 2)
 	for _, intent := range []string{"out_of_scope", "unclear"} {
-		gw := &mockGateway{intent: &spec.IntentAnalysis{Intent: intent, Reason: "too vague"}}
+		gw := &mockGateway{intent: &intake.IntentAnalysis{Intent: intent, Reason: "too vague"}}
 		p := newTestPlanner(t, testutil.NewFakeStore(), gw)
 		out, err := p.PlanContent(context.Background(), nil, "make my app better", nil)
 		if err != nil {

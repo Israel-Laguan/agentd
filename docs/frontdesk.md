@@ -111,9 +111,9 @@ chat := controllers.ChatHandler{
 | ------ | ------------- | --------- | ------- |
 | Chat controller | `ChatHandler` | `internal/api/controllers` | Holds `AIGateway`, `StatusSummarizer`, `FileStash`, `Truncator`, `Retriever` |
 | Gateway facade | `Router` | `internal/gateway/routing` (re-exported) | Implements `AIGateway` with provider fallback and truncation |
-| Intent classifier | `Router.ClassifyIntent` | `internal/gateway/routing` | Returns `IntentAnalysis{Intent, Reason}` |
-| Scope analyzer | `Router.AnalyzeScope` | `internal/gateway/routing` | Returns `ScopeAnalysis{SingleScope, Confidence, Scopes, Reason}` |
-| Plan generator | `Router.GeneratePlan` | `internal/gateway/routing` | Returns `*models.DraftPlan` via `GenerateJSON[DraftPlan]` |
+| Intent classifier | `intake.ClassifyIntent` | `internal/stage/intake` | Returns `IntentAnalysis{Intent, Reason}`; calls `AIGateway.Generate` through the model agent |
+| Scope analyzer | `intake.AnalyzeScope` | `internal/stage/intake` | Returns `ScopeAnalysis{SingleScope, Confidence, Scopes, Reason}` |
+| Plan generator | `intake.Plan` | `internal/stage/intake` | Returns `*models.DraftPlan`, trimmed to the phase cap |
 | JSON repair | `GenerateJSON[T]` | `internal/gateway/correction` (re-exported) | Generic function; retries with corrective prompts |
 | Status reporter | `StatusSummarizer` | `internal/services` | Deterministic; queries `KanbanStore` only, no LLM calls |
 | Plan model | `DraftPlan` / `DraftTask` | `internal/models` | Frontdesk output awaiting human approval |

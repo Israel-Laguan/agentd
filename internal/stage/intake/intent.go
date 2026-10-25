@@ -30,7 +30,7 @@ var validIntents = map[string]bool{
 // ClassifyIntent asks agent to classify userIntent and maps an unknown intent
 // to "ambiguous". That check runs after the call and is not part of the
 // contract, so an unknown intent is never retried.
-func ClassifyIntent(ctx context.Context, agent stage.Agent, userIntent string) (*spec.IntentAnalysis, error) {
+func ClassifyIntent(ctx context.Context, agent stage.Agent, userIntent string) (*IntentAnalysis, error) {
 	res, err := agent.Call(ctx, stage.StageRequest{
 		Stage:   stage.StageIntake,
 		Purpose: spec.PurposeIntakeClassifyIntent,
@@ -38,13 +38,13 @@ func ClassifyIntent(ctx context.Context, agent stage.Agent, userIntent string) (
 			{Role: "system", Content: intentClassifierSystemPrompt},
 			{Role: "user", Content: userIntent},
 		},
-		Contract:    stage.NewContract[spec.IntentAnalysis](),
+		Contract:    stage.NewContract[IntentAnalysis](),
 		Temperature: 0.1,
 	})
 	if err != nil {
 		return nil, err
 	}
-	analysis, err := decode[spec.IntentAnalysis](res)
+	analysis, err := decode[IntentAnalysis](res)
 	if err != nil {
 		return nil, err
 	}
