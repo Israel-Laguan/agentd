@@ -3,6 +3,7 @@ package intake
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -83,9 +84,9 @@ func draftPlanJSON(n int) (string, error) {
 	plan := models.DraftPlan{ProjectName: "Project", Description: "Large project"}
 	for i := 1; i <= n; i++ {
 		plan.Tasks = append(plan.Tasks, models.DraftTask{
-			TempID:      "task-" + string(rune('0'+i)),
-			Title:       "Task " + string(rune('0'+i)),
-			Description: "Do task " + string(rune('0'+i)),
+			TempID:      "task-" + strconv.Itoa(i),
+			Title:       "Task " + strconv.Itoa(i),
+			Description: "Do task " + strconv.Itoa(i),
 		})
 	}
 	data, err := json.Marshal(plan)

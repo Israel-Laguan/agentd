@@ -44,10 +44,13 @@ graph LR
     subgraph gw ["internal/gateway (LLM boundary)"]
         Interface["interface.go: AIGateway interface"]
         RouterImpl["router.go: Router implements AIGateway"]
+        Truncator["truncator.go: Truncator interface + strategies"]
+    end
+
+    subgraph intake ["internal/stage/intake (Frontdesk classifier)"]
         Intent["intent.go: ClassifyIntent"]
         Scope["scope.go: AnalyzeScope"]
-        Correction["correction.go: GeneratePlan + GenerateJSON"]
-        Truncator["truncator.go: Truncator interface + strategies"]
+        PlanGen["plan.go: Plan (GeneratePlan + GenerateJSON)"]
     end
 
     subgraph svc ["internal/services (domain logic)"]

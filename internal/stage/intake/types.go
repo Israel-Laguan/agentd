@@ -31,7 +31,7 @@ type ScopeOption struct {
 	Label string `json:"label"`
 }
 
-// IntentAnalysis is the result of intent classification by the Sales Rep agent.
+// IntentAnalysis is the result of intent classification by the Frontdesk intent classifier.
 type IntentAnalysis struct {
 	Intent string `json:"intent"`
 	Reason string `json:"reason"`

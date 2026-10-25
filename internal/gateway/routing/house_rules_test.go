@@ -44,6 +44,7 @@ func TestRouterGenerateJSONInjectsHouseRules(t *testing.T) {
 	router := NewRouter(p)
 	ctx := WithHouseRules(context.Background(), "POSIX sh only.")
 	req := userReq(spec.PurposeIntakeClassifyIntent, "hello")
+	req.JSONMode = true
 	req.Messages = []spec.PromptMessage{{Role: "system", Content: "Classify."}, {Role: "user", Content: "hello"}}
 	if _, err := router.Generate(ctx, req); err != nil {
 		t.Fatalf("Generate: %v", err)
