@@ -10,6 +10,7 @@ import (
 	"agentd/internal/gateway/routing"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
+	"agentd/internal/stage"
 	"agentd/internal/testutil"
 )
 
@@ -63,7 +64,7 @@ func assertSchemaReachedModel(t *testing.T, prov *recordingProvider) {
 
 func TestPlanApprovedScope_SendsDraftPlanSchema(t *testing.T) {
 	prov := &recordingProvider{responses: []string{wrongShapePlan, validPlan}}
-	p := &Planner{Gateway: routing.NewRouter(prov)}
+	p := &Planner{Agent: stage.NewModelAgent(routing.NewRouter(prov))}
 	out, err := p.planApprovedScope(context.Background(), "what os and hardware have this machine", "", nil)
 	if err != nil {
 		t.Fatalf("planApprovedScope() error = %v", err)
@@ -88,7 +89,7 @@ func TestIntakeProcess_SendsDraftPlanSchema(t *testing.T) {
 		t.Fatalf("UpdateTaskState: %v", err)
 	}
 	prov := &recordingProvider{responses: []string{wrongShapePlan, validPlan}}
-	proc := NewIntakeProcessor(store, routing.NewRouter(prov), nil, nil, 0)
+	proc := NewIntakeProcessor(store, stage.NewModelAgent(routing.NewRouter(prov)), nil, nil, 0)
 	if err := proc.Process(ctx, models.CommentRef{TaskID: task.ID, CommentEventID: "c1", Body: "also check disks"}); err != nil {
 		t.Fatalf("Process() error = %v", err)
 	}

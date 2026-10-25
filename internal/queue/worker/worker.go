@@ -16,6 +16,7 @@ import (
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/safety"
 	"agentd/internal/sandbox"
+	"agentd/internal/stage"
 
 	agentcontext "agentd/internal/agent/context"
 	wfilecontext "agentd/internal/agent/filecontext"
@@ -33,9 +34,14 @@ const DefaultMaxRetries = 3
 type Worker struct {
 	// attempts keeps, per task, the first failing shell command of its agentic
 	// attempts (see worker_agentic_attempts.go).
-	attempts                attemptRecords
-	store                   models.KanbanStore
-	gateway                 gateway.AIGateway
+	attempts attemptRecords
+	store    models.KanbanStore
+	gateway  gateway.AIGateway
+	// intakeAgent runs the next-phase plan through the intake stage. It defaults
+	// to a ModelAgent over gateway.
+	intakeAgent stage.Agent
+	// maxTasksPerPhase caps the tasks in one next-phase plan.
+	maxTasksPerPhase        int
 	sandbox                 sandbox.Executor
 	breaker                 *safety.CircuitBreaker
 	providerBreakers        *safety.ProviderBreakers

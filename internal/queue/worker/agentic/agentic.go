@@ -21,9 +21,10 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	cancelCtx, cleanup := e.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
-	// prepareAgenticRun builds messages/tools before routing; session start and
-	// pre-task elicitation run after the tool-support check, so a provider without
-	// tools fails before either.
+	// prepareAgenticRun builds messages/tools before routing; the initial tool-support
+	// check fails a provider without tools before session start and elicitation.
+	// If elicitation changes the task, the re-routed provider is checked again
+	// after clarification.
 	baseProfile := profile
 	messages, tools, toolToAdapter, allTools, allToolToAdapter, profile, taskToolExecutor, taskHooks, taskCaps :=
 		e.prepareAgenticRun(ctx, task, project, baseProfile)
@@ -58,6 +59,10 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		// task classifies to, and the routing all follow the clarified task.
 		messages = e.buildAgenticMessages(cancelCtx, task, project, baseProfile)
 		tools, toolToAdapter, profile = e.selectAgenticTools(task, baseProfile, messages, allTools, allToolToAdapter)
+		if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
+			e.rejectWithoutToolSupport(cancelCtx, task, profile.Provider)
+			return agentruntime.LoopResult{}, false
+		}
 	}
 
 	guards := e.newAgenticLoopGuards(cancelCtx, task)

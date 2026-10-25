@@ -8,20 +8,30 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/stage"
+	"agentd/internal/stage/intake"
 )
 
 // IntakeProcessor converts unprocessed human comments into follow-up tasks
 // by generating a plan from the comment context.
 type IntakeProcessor struct {
 	store     models.KanbanStore
-	gateway   gateway.AIGateway
+	agent     stage.Agent
 	sink      models.EventSink
 	truncator gateway.Truncator
 	budget    int
+	// maxTasksPerPhase caps the follow-up tasks one comment may create.
+	maxTasksPerPhase int
 }
 
-func NewIntakeProcessor(store models.KanbanStore, gw gateway.AIGateway, sink models.EventSink, truncator gateway.Truncator, budget int) *IntakeProcessor {
-	return &IntakeProcessor{store: store, gateway: gw, sink: sink, truncator: truncator, budget: budget}
+func NewIntakeProcessor(store models.KanbanStore, agent stage.Agent, sink models.EventSink, truncator gateway.Truncator, budget int) *IntakeProcessor {
+	return &IntakeProcessor{store: store, agent: agent, sink: sink, truncator: truncator, budget: budget}
+}
+
+// WithPhaseCap sets the cap on the follow-up tasks one comment may create.
+func (p *IntakeProcessor) WithPhaseCap(maxTasksPerPhase int) *IntakeProcessor {
+	p.maxTasksPerPhase = maxTasksPerPhase
+	return p
 }
 
 func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) error {
@@ -37,14 +47,13 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 	slog.DebugContext(ctx, "intake: processing comment",
 		"task_id", ref.TaskID, "project_id", task.ProjectID)
 	ctx = gateway.WithHouseRules(ctx, models.LoadHouseRules(ctx, p.store))
-	ctx = gateway.WithPurpose(ctx, gateway.PurposeCreateReplanComment)
 	ctx = gateway.WithTaskID(ctx, ref.TaskID)
 	intent, err := p.commentIntent(ctx, ref)
 	if err != nil {
 		slog.WarnContext(ctx, "intake: failed to build intent", "task_id", ref.TaskID, "error", err)
 		return err
 	}
-	plan, planErr := p.gateway.GeneratePlan(ctx, intent)
+	plan, planErr := intake.Plan(ctx, p.agent, gateway.PurposeCreateReplanComment, p.maxTasksPerPhase, intent)
 	if planErr != nil {
 		slog.WarnContext(ctx, "intake: plan generation failed", "task_id", ref.TaskID, "error", planErr)
 		return planErr

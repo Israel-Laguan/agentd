@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -50,6 +51,9 @@ func (g *fakeGateway) Generate(_ context.Context, req gateway.AIRequest) (gatewa
 	if g.onRequest != nil {
 		g.onRequest()
 	}
+	if req.Purpose == gateway.PurposeCreateNextPhase {
+		return g.nextPhaseResponse(req)
+	}
 	if g.isElicitorRequest(req) {
 		return gateway.AIResponse{Content: `{"needs_clarification":false}`}, g.err
 	}
@@ -77,16 +81,35 @@ func (g *fakeGateway) Generate(_ context.Context, req gateway.AIRequest) (gatewa
 	return gateway.AIResponse{Content: content, ToolCalls: toolCalls}, g.err
 }
 
+// nextPhaseResponse answers the next-phase plan, which the worker now sends
+// through the intake stage as one Generate call. Caller holds g.mu.
+func (g *fakeGateway) nextPhaseResponse(req gateway.AIRequest) (gateway.AIResponse, error) {
+	plan, err := g.planLocked(req.Purpose, req.Messages[len(req.Messages)-1].Content)
+	if err != nil {
+		return gateway.AIResponse{}, err
+	}
+	raw, err := json.Marshal(plan)
+	if err != nil {
+		return gateway.AIResponse{}, err
+	}
+	return gateway.AIResponse{Content: string(raw)}, nil
+}
+
 func (g *fakeGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	return g.planLocked(gateway.PurposeFromContext(ctx), intent)
+}
+
+// planLocked records the plan call and returns the canned plan. Caller holds g.mu.
+func (g *fakeGateway) planLocked(purpose gateway.Purpose, intent string) (*models.DraftPlan, error) {
 	g.planCalls++
 	g.lastPlanIntent = intent
-	g.planPurpose = gateway.PurposeFromContext(ctx)
+	g.planPurpose = purpose
 	if g.plan != nil {
 		return g.plan, g.err
 	}
-	return &models.DraftPlan{Tasks: []models.DraftTask{{Title: "follow"}}}, g.err
+	return &models.DraftPlan{ProjectName: "Roadmap", Tasks: []models.DraftTask{{Title: "follow"}}}, g.err
 }
 
 func (*fakeGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {

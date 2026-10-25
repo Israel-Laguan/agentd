@@ -104,7 +104,7 @@ func TestWorkerPhasePlanningTaskAppendsNextPhase(t *testing.T) {
 		{BaseEntity: models.BaseEntity{ID: "done"}, Title: "Initial setup", State: models.TaskStateCompleted},
 		store.task,
 	}
-	gw := &fakeGateway{plan: &models.DraftPlan{Tasks: []models.DraftTask{{Title: "Build API"}, {Title: "Plan Phase 2"}}}}
+	gw := &fakeGateway{plan: &models.DraftPlan{ProjectName: "Roadmap", Tasks: []models.DraftTask{{Title: "Build API"}, {Title: "Plan Phase 2"}}}}
 	sb := &fakeSandbox{result: sandbox.Result{Success: true}}
 	sink := &recordingSink{}
 	worker := NewWorker(store, gw, sb, NewCircuitBreaker(), sink, WorkerOptions{})
@@ -114,8 +114,8 @@ func TestWorkerPhasePlanningTaskAppendsNextPhase(t *testing.T) {
 	if gw.planCalls != 1 {
 		t.Fatalf("GeneratePlan calls = %d, want 1", gw.planCalls)
 	}
-	if len(gw.requests) != 0 {
-		t.Fatalf("Generate requests = %d, want 0", len(gw.requests))
+	if len(gw.requests) != 1 || gw.requests[0].Purpose != gateway.PurposeCreateNextPhase {
+		t.Fatalf("Generate requests = %d, want the one next-phase intake call", len(gw.requests))
 	}
 	if len(sb.commands) != 0 {
 		t.Fatalf("sandbox commands = %#v, want none", sb.commands)

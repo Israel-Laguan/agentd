@@ -11,13 +11,12 @@ import (
 	"testing"
 )
 
-// wantSites pins SP-023's mapping: every place that builds an AIRequest or an
-// EmbedRequest outside the provider adapters, and the Purpose each one sends.
+// wantSites pins SP-023's mapping: every place that builds an AIRequest, an
+// EmbedRequest or a StageRequest outside the provider adapters, and the Purpose
+// each one sends. A site that forwards a Purpose passed in by its caller is
+// recorded as the forwarded identifier ("Purpose" for a field, "purpose" for a parameter).
 // A new site fails this test until it is added here with a purpose.
 var wantSites = map[string][]string{
-	"internal/gateway/routing/intent.go":                 {"PurposeIntakeClassifyIntent"},
-	"internal/gateway/routing/scope.go":                  {"PurposeIntakeAnalyzeScope"},
-	"internal/gateway/routing/router_plan.go":            {"planPurpose"},
 	"internal/gateway/truncation/truncator_summarize.go": {"PurposeHiddenTruncateSummary"},
 	"internal/agent/runtime/topic_guard.go":              {"PurposeOverheadTopicDrift"},
 	"internal/agent/context/context_summarize.go":        {"PurposeOverheadCompactContext"},
@@ -34,6 +33,10 @@ var wantSites = map[string][]string{
 	"internal/memory/librarian_summarize.go":             {"PurposeMaintExtractMemory", "PurposeMaintSummarizeLog", "PurposeMaintSummarizeLog"},
 	"internal/memory/dream.go":                           {"PurposeMaintMergeMemories"},
 	"internal/config/health_warmup.go":                   {"PurposeSystemWarmup"},
+	"internal/stage/intake/intent.go":                    {"PurposeIntakeClassifyIntent"},
+	"internal/stage/intake/plan.go":                      {"purpose"},
+	"internal/stage/intake/scope.go":                     {"PurposeIntakeAnalyzeScope"},
+	"internal/stage/model_agent.go":                      {"Purpose"},
 }
 
 func TestEveryCallSiteSendsItsPurpose(t *testing.T) {
@@ -91,7 +94,7 @@ func isRequestType(e ast.Expr) bool {
 	case *ast.SelectorExpr:
 		name = x.Sel.Name
 	}
-	return name == "AIRequest" || name == "EmbedRequest"
+	return name == "AIRequest" || name == "EmbedRequest" || name == "StageRequest"
 }
 
 // purposeOf returns the name used as the literal's Purpose ("" when missing or

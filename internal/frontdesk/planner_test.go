@@ -9,6 +9,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
+	"agentd/internal/stage"
 	"agentd/internal/testutil"
 )
 
@@ -58,7 +59,7 @@ func TestErrMultipleApprovedScopes(t *testing.T) {
 
 func TestPlanner_Defaults(t *testing.T) {
 	p := Planner{
-		Gateway:   nil,
+		Agent:     nil,
 		Budget:    12000,
 		Truncator: nil,
 	}
@@ -69,18 +70,18 @@ func TestPlanner_Defaults(t *testing.T) {
 
 func TestPlanner_CanCreateWithGateway(t *testing.T) {
 	p := Planner{
-		Gateway:   &mockGateway{},
+		Agent:     &mockGateway{},
 		Budget:    12000,
 		Truncator: nil,
 	}
-	if p.Gateway == nil {
-		t.Error("Gateway should not be nil")
+	if p.Agent == nil {
+		t.Error("Agent should not be nil")
 	}
 }
 
 func TestPlanner_PlanContent_MultipleScopesError(t *testing.T) {
 	p := Planner{
-		Gateway: &mockGateway{},
+		Agent: &mockGateway{},
 	}
 	_, err := p.PlanContent(context.Background(), []string{"a", "b"}, "test", nil)
 	if err != ErrMultipleApprovedScopes {
@@ -261,10 +262,10 @@ func newTestPlanner(t *testing.T, store models.KanbanStore, gw *mockGateway) Pla
 	return newTestPlannerWithGateway(t, store, gw)
 }
 
-func newTestPlannerWithGateway(t *testing.T, store models.KanbanStore, gw gateway.AIGateway) Planner {
+func newTestPlannerWithGateway(t *testing.T, store models.KanbanStore, agent stage.Agent) Planner {
 	t.Helper()
 	return Planner{
-		Gateway:    gw,
+		Agent:      agent,
 		Summarizer: NewStatusSummarizer(store),
 		Stash:      &FileStash{Dir: t.TempDir(), StashThreshold: 10_000},
 		Budget:     12_000,
@@ -349,6 +350,18 @@ func (m *mockGateway) ClassifyIntent(_ context.Context, intent string) (*spec.In
 		return m.intent, nil
 	}
 	return &spec.IntentAnalysis{Intent: "plan_request"}, nil
+}
+
+// Call answers a stage from the fake's methods above, by purpose.
+func (m *mockGateway) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
+	intent := lastMessage(req)
+	switch req.Purpose {
+	case gateway.PurposeIntakeClassifyIntent:
+		return stageOutput(m.ClassifyIntent(ctx, intent))
+	case gateway.PurposeIntakeAnalyzeScope:
+		return stageOutput(m.AnalyzeScope(ctx, intent))
+	}
+	return stageOutput(m.GeneratePlan(ctx, intent))
 }
 
 func (m *mockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {

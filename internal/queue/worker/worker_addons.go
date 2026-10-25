@@ -11,6 +11,7 @@ import (
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/sandbox"
+	"agentd/internal/stage/intake"
 )
 
 // === Payloads Logic ===
@@ -77,13 +78,9 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		return
 	}
 	intent := planning.BuildPhaseIntent(task, project, tasks)
-	plan, err := w.gateway.GeneratePlan(gateway.WithTaskID(gateway.WithPurpose(ctx, gateway.PurposeCreateNextPhase), task.ID), intent)
+	plan, err := intake.Plan(gateway.WithTaskID(ctx, task.ID), w.intakeAgent, gateway.PurposeCreateNextPhase, w.maxTasksPerPhase, intent)
 	if err != nil {
 		w.HandleGatewayError(ctx, task, err)
-		return
-	}
-	if plan == nil {
-		w.Emit(ctx, task, "ERROR", "gateway returned nil plan")
 		return
 	}
 	plan.Tasks = planning.RetitlePhaseContinuationTasks(plan.Tasks, planning.NextPhaseNumber(task.Title))

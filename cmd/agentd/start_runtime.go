@@ -19,6 +19,7 @@ import (
 	"agentd/internal/queue"
 	"agentd/internal/sandbox"
 	"agentd/internal/services"
+	"agentd/internal/stage"
 )
 
 // withLiveTaskNotifier makes the store announce every committed task row change
@@ -36,7 +37,11 @@ func buildStartRuntime(ctx context.Context, cfg config.Config, store models.Kanb
 	ledger := queue.NewRollingTokenLedger(cfg.Queue.RollingTokenWindow, cfg.Queue.RollingTokenLimit)
 	hydrateRollingLedger(ctx, store, ledger)
 	worker := buildWorker(store, deps, cfg, ledger)
-	intake := frontdesk.NewIntakeProcessor(store, deps.gateway, deps.emitter, cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), cfg.Gateway.Truncator.MaxInputChars)
+	maxTasks := cfg.Gateway.MaxTasksPerPhase
+	if maxTasks < 0 {
+		maxTasks = 0
+	}
+	intake := frontdesk.NewIntakeProcessor(store, stage.NewModelAgent(deps.gateway), deps.emitter, cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), cfg.Gateway.Truncator.MaxInputChars).WithPhaseCap(maxTasks)
 	daemon, err := buildDaemon(ctx, store, worker, intake, deps, cfg, startOpts, ledger)
 	if err != nil {
 		return nil, nil, err
@@ -63,7 +68,7 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 func buildWorkerOptions(store models.KanbanStore, deps runtimeDeps, cfg config.Config, userPrefsPath string, tokenHook func(int)) queue.WorkerOptions {
 	r := &memory.Retriever{Store: store, Cfg: cfg.Librarian}
 	ts, _ := store.(queue.TokenUsageStore)
-	return queue.WorkerOptions{ProjectsDir: cfg.ProjectsDir, Canceller: deps.canceller, Tuner: queue.NewParameterTuner(cfg.Healing), Retriever: r, HeartbeatInterval: cfg.Cron.Heartbeat, SandboxWallTimeout: cfg.Sandbox.WallTimeout, SandboxEnvAllowlist: cfg.Sandbox.EnvAllowlist, SandboxExtraEnv: cfg.Sandbox.ExtraEnv, SandboxScrubPatterns: cfg.Sandbox.ScrubPatterns, MaxToolIterations: cfg.Queue.MaxToolIterations, TokenBudget: cfg.Queue.TokenBudget, AgenticTruncatorMax: cfg.Queue.AgenticTruncatorMax, AgenticCharacterBudget: config.EffectiveAgenticCharacterBudget(cfg.Queue.AgenticCharacterBudget, cfg.Gateway.Truncator.MaxInputChars), AgenticContext: cfg.Queue.AgenticContext, ContextTruncation: cfg.Gateway.Truncation.StrategyImpl(), InstructionsProjectFile: cfg.Queue.Instructions.ProjectFile, InstructionsUserPrefsPath: userPrefsPath, SkillsProjectDir: cfg.Queue.Skills.ProjectDir, SkillsGlobalDir: cfg.Queue.Skills.GlobalDir, SkillsThreshold: cfg.Queue.Skills.Threshold, SkillsTopK: cfg.Queue.Skills.TopK, LegacyHandoffTimeout: cfg.Queue.HITL.LegacyHandoffTimeout, ToolTimeouts: cfg.Queue.ToolTimeouts, ToolRetries: cfg.Queue.ToolRetries, ExternalTools: cfg.Agentic.ExternalTools, ToolCredentials: cfg.Agentic.ToolCredentials, DisableCredentialDetection: cfg.Agentic.DisableCredentialDetection, Audit: config.AuditConfig{Enabled: cfg.Agentic.Audit.Enabled, Path: config.ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path)}, ContextWarningThreshold: cfg.Agentic.ContextWarningThreshold, ToolFailureStreak: cfg.Agentic.ToolFailureStreak, TokenUsageHook: tokenHook, TokenStore: ts, FileContext: cfg.Agentic.FileContext, FileContextCachePath: config.ResolveFileContextCachePath(cfg.HomeDir, cfg.Agentic.FileContext.CachePath), Planning: cfg.Agentic.Planning, Tiered: cfg.Tiered, TopicGuard: cfg.Agentic.TopicGuard, ModelRouting: cfg.Agentic.ModelRouting, ToolManifest: cfg.Agentic.ToolManifest, CapabilityRouting: cfg.Agentic.CapabilityRouting, Batching: cfg.Agentic.Batching, ProviderBreakers: deps.providerBreakers, HealingDisabled: !cfg.Healing.Enabled, MaxHealingTasks: cfg.Healing.MaxHealingTasks, Split: cfg.Queue.Split, Hooks: defaultToolHooks(cfg.ProjectsDir)}
+	return queue.WorkerOptions{ProjectsDir: cfg.ProjectsDir, MaxTasksPerPhase: cfg.Gateway.MaxTasksPerPhase, Canceller: deps.canceller, Tuner: queue.NewParameterTuner(cfg.Healing), Retriever: r, HeartbeatInterval: cfg.Cron.Heartbeat, SandboxWallTimeout: cfg.Sandbox.WallTimeout, SandboxEnvAllowlist: cfg.Sandbox.EnvAllowlist, SandboxExtraEnv: cfg.Sandbox.ExtraEnv, SandboxScrubPatterns: cfg.Sandbox.ScrubPatterns, MaxToolIterations: cfg.Queue.MaxToolIterations, TokenBudget: cfg.Queue.TokenBudget, AgenticTruncatorMax: cfg.Queue.AgenticTruncatorMax, AgenticCharacterBudget: config.EffectiveAgenticCharacterBudget(cfg.Queue.AgenticCharacterBudget, cfg.Gateway.Truncator.MaxInputChars), AgenticContext: cfg.Queue.AgenticContext, ContextTruncation: cfg.Gateway.Truncation.StrategyImpl(), InstructionsProjectFile: cfg.Queue.Instructions.ProjectFile, InstructionsUserPrefsPath: userPrefsPath, SkillsProjectDir: cfg.Queue.Skills.ProjectDir, SkillsGlobalDir: cfg.Queue.Skills.GlobalDir, SkillsThreshold: cfg.Queue.Skills.Threshold, SkillsTopK: cfg.Queue.Skills.TopK, LegacyHandoffTimeout: cfg.Queue.HITL.LegacyHandoffTimeout, ToolTimeouts: cfg.Queue.ToolTimeouts, ToolRetries: cfg.Queue.ToolRetries, ExternalTools: cfg.Agentic.ExternalTools, ToolCredentials: cfg.Agentic.ToolCredentials, DisableCredentialDetection: cfg.Agentic.DisableCredentialDetection, Audit: config.AuditConfig{Enabled: cfg.Agentic.Audit.Enabled, Path: config.ResolveAuditPath(cfg.HomeDir, cfg.Agentic.Audit.Path)}, ContextWarningThreshold: cfg.Agentic.ContextWarningThreshold, ToolFailureStreak: cfg.Agentic.ToolFailureStreak, TokenUsageHook: tokenHook, TokenStore: ts, FileContext: cfg.Agentic.FileContext, FileContextCachePath: config.ResolveFileContextCachePath(cfg.HomeDir, cfg.Agentic.FileContext.CachePath), Planning: cfg.Agentic.Planning, Tiered: cfg.Tiered, TopicGuard: cfg.Agentic.TopicGuard, ModelRouting: cfg.Agentic.ModelRouting, ToolManifest: cfg.Agentic.ToolManifest, CapabilityRouting: cfg.Agentic.CapabilityRouting, Batching: cfg.Agentic.Batching, ProviderBreakers: deps.providerBreakers, HealingDisabled: !cfg.Healing.Enabled, MaxHealingTasks: cfg.Healing.MaxHealingTasks, Split: cfg.Queue.Split, Hooks: defaultToolHooks(cfg.ProjectsDir)}
 }
 
 // defaultToolHooks is the guard chain every worker starts from. The denylist
@@ -181,7 +186,7 @@ func buildAPIServer(store models.KanbanStore, deps runtimeDeps, cfg config.Confi
 	if cfg.MCP.Enabled && (cfg.MCP.Transport == "http" || cfg.MCP.Transport == "both") {
 		mcpHandler = mcp.New(store).HTTPHandler()
 	}
-	return api.NewServer(api.ServerDeps{Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus, Project: deps.project, Tasks: tasks, System: system, AIUsage: aiUsage, Summarizer: summarizer, FileStash: stash, Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars, Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken, AllowedHosts: cfg.API.AllowedHosts, UIOrigin: cfg.API.UIOrigin, ProviderConfigs: providers, MCPHandler: mcpHandler, Scrubber: sandbox.NewScrubber(cfg.Sandbox.ScrubPatterns)}), nil
+	return api.NewServer(api.ServerDeps{Addr: cfg.API.Address, Store: store, Gateway: deps.gateway, Bus: deps.bus, Project: deps.project, Tasks: tasks, System: system, AIUsage: aiUsage, Summarizer: summarizer, FileStash: stash, Truncator: cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), Budget: cfg.Gateway.Truncator.MaxInputChars, Retriever: retriever, MaterializeToken: cfg.API.MaterializeToken, AllowedHosts: cfg.API.AllowedHosts, UIOrigin: cfg.API.UIOrigin, ProviderConfigs: providers, MCPHandler: mcpHandler, Scrubber: sandbox.NewScrubber(cfg.Sandbox.ScrubPatterns), MaxTasksPerPhase: cfg.Gateway.MaxTasksPerPhase}), nil
 }
 
 // newAIUsageService builds the report service, or nil when the store keeps no

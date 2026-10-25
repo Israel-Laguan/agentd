@@ -2,6 +2,7 @@
 package spec
 
 import (
+	"fmt"
 	"context"
 	"encoding/json"
 	"errors"
@@ -196,6 +197,19 @@ type ScopeAnalysis struct {
 	Scopes      []ScopeOption `json:"scopes"`
 	Reason      string        `json:"reason"`
 }
+func (s ScopeAnalysis) Validate() error {
+	if !s.SingleScope && len(s.Scopes) == 0 {
+		return fmt.Errorf("missing scopes for multi-scope classification")
+	}
+	if !s.SingleScope {
+		for _, sc := range s.Scopes {
+			if sc.ID == "" || sc.Label == "" {
+				return fmt.Errorf("multi-scope entries require an id and label")
+			}
+		}
+	}
+	return nil
+}
 
 type ScopeOption struct {
 	ID    string `json:"id"`
@@ -206,6 +220,12 @@ type ScopeOption struct {
 type IntentAnalysis struct {
 	Intent string `json:"intent"`
 	Reason string `json:"reason"`
+}
+func (i IntentAnalysis) Validate() error {
+	if i.Intent == "" {
+		return fmt.Errorf("missing intent")
+	}
+	return nil
 }
 
 // EmbedRequest is the provider-neutral input for embedding API calls.
