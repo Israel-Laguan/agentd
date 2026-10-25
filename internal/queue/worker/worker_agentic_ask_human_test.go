@@ -102,6 +102,47 @@ func TestAskHumanRecordsQuestionForResumedRun(t *testing.T) {
 	}
 }
 
+// The run that resumes after the human answers must show the model the answer.
+// Elicitation adds it to the description after the prompt is built, so the
+// prompt has to be rebuilt from the clarified task.
+func TestAgenticResumedRunPromptCarriesTheAnswer(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw := &sequenceGateway{responses: []gateway.AIResponse{
+		askHumanCall("c1", "Which output format?"), {Content: "Wrote the CSV report."},
+	}}
+	w, _, task, project, profile := agenticFixture(t, gw, &scriptedSandbox{}, models.DraftTask{Title: "Write the report", Description: testutil.AgenticTestTaskDescription()}, nil)
+	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
+		w.handleLoopResult(ctx, task, result)
+	}
+	children, err := w.store.ListChildTasks(ctx, task.ID)
+	if err != nil || len(children) != 1 {
+		t.Fatalf("children = %d (err %v), want one clarification subtask", len(children), err)
+	}
+	if err := w.store.AddComment(ctx, models.Comment{TaskID: children[0].ID, Author: models.CommentAuthorUser, Body: "CSV-ANSWER"}); err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+	if _, err := w.store.UpdateTaskState(ctx, children[0].ID, children[0].UpdatedAt, models.TaskStateCompleted); err != nil {
+		t.Fatalf("complete child: %v", err)
+	}
+	current, err := w.store.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+
+	w.processAgentic(ctx, *current, project, profile)
+
+	if len(gw.requests) < 2 {
+		t.Fatalf("gateway requests = %d, want the resumed run to call the model", len(gw.requests))
+	}
+	for _, msg := range gw.requests[1].Messages {
+		if msg.Section == gateway.SectionTask && strings.Contains(msg.Content, "CSV-ANSWER") {
+			return
+		}
+	}
+	t.Fatalf("resumed run's task message lacks the human's answer: %#v", gw.requests[1].Messages)
+}
+
 // A profile whose AllowedTools leave out ask_human never blocks the task on it:
 // the call goes to dispatch, whose allowlist veto refuses it.
 func TestAgenticAskHumanRefusedByAllowlist(t *testing.T) {
