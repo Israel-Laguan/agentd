@@ -79,10 +79,6 @@ func (h *noopHost) RecoverAgenticPrivilege(
 	return blockedResult, true
 }
 
-func (h *noopHost) AskHuman(_ context.Context, _ models.Task, _ string, _ []string) error {
-	return nil
-}
-
 func (h *noopHost) RunPreTaskElicitation(_ context.Context, task models.Task, _ models.Project) (models.Task, bool, error) {
 	return task, false, nil
 }

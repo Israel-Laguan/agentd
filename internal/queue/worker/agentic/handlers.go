@@ -90,15 +90,7 @@ func (e *Engine) handleAgenticToolCalls(
 		dispatch := func(c gateway.ToolCall) (agenttools.ToolResult, bool) {
 			return e.host.DispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, c, toolToAdapter, toolExecutor, taskHooks, taskCaps, providerName)
 		}
-		var tr agenttools.ToolResult
-		var suspended, handedOff bool
-		if isAskHumanCall(profile, call) {
-			current := task
-			current.UpdatedAt = taskUpdatedAt
-			tr, suspended = e.askHuman(ctx, current, call)
-		} else {
-			tr, suspended, handedOff = e.runAgenticCall(ctx, task, profile, call, dispatch)
-		}
+		tr, suspended, handedOff := e.runAgenticCall(ctx, task, profile, call, dispatch)
 		if handedOff {
 			return true, agentruntime.LoopResult{}, false
 		}
@@ -133,6 +125,9 @@ func (e *Engine) runAgenticCall(
 		return agenttools.NonRetryableErrorResult(call.ID, feedback, "", 0), false, false
 	}
 	tr, suspended = dispatch(call)
+	if isAskHumanBlock(call, tr) {
+		return tr, true, false
+	}
 	tr, handedOff = e.recoverBlockedCall(ctx, task, profile, call, tr, dispatch)
 	if !handedOff && isBashFailure(call, tr) {
 		e.host.RecordAttemptFailure(task, call, tr)

@@ -92,10 +92,6 @@ type Host interface {
 		allowAlternative bool,
 		dispatch func(gateway.ToolCall) (agenttools.ToolResult, bool),
 	) (agenttools.ToolResult, bool)
-	// AskHuman blocks the task for a human answer to question (the ask_human
-	// builtin). The block is optimistic on task.UpdatedAt, so the caller passes
-	// the version it last read.
-	AskHuman(ctx context.Context, task models.Task, question string, options []string) error
 	RunPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error)
 	Emit(ctx context.Context, task models.Task, kind, payload string)
 	AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage
