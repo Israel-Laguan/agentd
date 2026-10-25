@@ -56,7 +56,8 @@ func (e *Engine) selectAgenticTools(
 	allToolToAdapter map[string]string,
 ) ([]gateway.ToolDefinition, map[string]string, models.AgentProfile) {
 	tools, toolToAdapter := e.host.FilterAgenticTools(allTools, allToolToAdapter, task, profile)
-	return tools, toolToAdapter, e.host.ApplyModelRouting(task, profile, messages, allTools)
+	routed := e.host.ApplyModelRouting(task, profile, messages, allTools)
+	return tools, toolToAdapter, routed
 }
 
 // buildAgenticMessages is the prompt for task: the layered system prompt and the
