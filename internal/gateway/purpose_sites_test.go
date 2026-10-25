@@ -26,7 +26,6 @@ var wantSites = map[string][]string{
 	"internal/queue/worker/worker_permission.go":         {"PurposeExecPermissionAlt"},
 	"internal/queue/worker/targeted_redo.go":             {"PurposeExecRepairSection", "PurposeExecRespecTurn"},
 	"internal/queue/worker/phase_splitter.go":            {"PurposeExecWorkPlan"},
-	"internal/queue/worker/worker_legacy.go":             {"PurposeExecLegacyCommand"},
 	"internal/queue/worker/worker_batch.go":              {"PurposeExecBatch"},
 	"internal/queue/worker/task_runner.go":               {"PurposeExecSuggestCommand"},
 	"internal/queue/worker/agentic/handlers.go":          {"PurposeExecTurn"},
