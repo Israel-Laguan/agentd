@@ -130,7 +130,7 @@ Behavior is defined and verified through Gherkin BDD scenarios (run via Godog) a
 | File stash and truncation passthrough | [`chat_file_handling.feature`](../internal/api/features/chat_file_handling.feature) |
 | JSON self-correction | [`json_strictness_auto_correction.feature`](../internal/gateway/features/json_strictness_auto_correction.feature) |
 | Truncation policies | [`truncation_strategies.feature`](../internal/gateway/features/truncation_strategies.feature) |
-| Phase cap enforcement | [`plan_phase_cap.feature`](../internal/gateway/features/plan_phase_cap.feature) |
+| Phase cap enforcement | [`plan_phase_cap.feature`](../internal/stage/intake/features/plan_phase_cap.feature) |
 | Plan materialization and dependency validation | [`project_materialization.feature`](../internal/kanban/features/project_materialization.feature) |
 | Memory recall namespace isolation | [`recall_namespace.feature`](../internal/memory/features/recall_namespace.feature) |
 | Memory recall timeout fallback | [`recall_timeout.feature`](../internal/memory/features/recall_timeout.feature) |
