@@ -39,6 +39,8 @@ func AskHumanToolDefinition() gateway.ToolDefinition {
 }
 
 // ParseAskHumanArgs decodes an ask_human call and checks that it has a question.
+// Options are trimmed and blank ones dropped, so the human never sees an empty
+// choice.
 func ParseAskHumanArgs(raw string) (AskHumanArgs, error) {
 	var args AskHumanArgs
 	if err := json.Unmarshal([]byte(raw), &args); err != nil {
@@ -48,5 +50,16 @@ func ParseAskHumanArgs(raw string) (AskHumanArgs, error) {
 	if args.Question == "" {
 		return AskHumanArgs{}, errors.New("question is required")
 	}
+	args.Options = nonBlankOptions(args.Options)
 	return args, nil
+}
+
+func nonBlankOptions(options []string) []string {
+	var kept []string
+	for _, option := range options {
+		if option = strings.TrimSpace(option); option != "" {
+			kept = append(kept, option)
+		}
+	}
+	return kept
 }
