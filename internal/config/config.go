@@ -184,6 +184,9 @@ func readConfig(v *viper.Viper, configFile string) error {
 
 func hydrateConfig(cfg Config, v *viper.Viper, process, dotenv map[string]string) (Config, error) {
 	var err error
+	if err = checkRemovedKeys(v, process, dotenv); err != nil {
+		return Config{}, err
+	}
 	cfg.HomeDir = v.GetString("home")
 	cfg.DBPath = v.GetString("db_path")
 	cfg.ProjectsDir, err = normalizeConfiguredPath(v.GetString("projects_dir"))

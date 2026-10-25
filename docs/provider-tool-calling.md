@@ -118,7 +118,7 @@ gateway:
 OpenAI-compatible responses can include `tool_calls`; some templates and generic
 handlers may have partial behavior, and parallel calls are opt-in. Without a
 verified setup, leave `SupportsChatTools` at its `false` default — `AgenticMode:
-true` then falls back to the legacy JSON mode with a warning log (see the
+true` is refused on create and patch, and its tasks fail (see the
 AgenticMode Gate
 below). Use `tools/diag/llm-smoke.sh` (M16) to certify a given `llama-server` +
 model combination before enabling `chat_tools`/`probe_tools`.

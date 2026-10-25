@@ -146,7 +146,7 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 - Plan-then-execute and complexity threshold (`phase_splitter.go`, `AgenticPlanningConfig`)
 - Targeted redo after plan steps (`targeted_redo.go`)
 - Workforce profiles, DAG relations, HUMAN / healing handoffs
-- Agentic inner loop (opt-in) — stays subordinate; tiered steps may use legacy or agentic mode per profile
+- Agentic inner loop — stays subordinate; every tiered step runs it, since the legacy engine was removed (T-055b)
 - Tiered DAG splitter (`SplitIntoTieredDAG`, `internal/queue/worker/splitter.go`) — pure constructor from a gated parent task to `context → decision → execute → verify` children with `SPAWNED_BY`/`DEPENDS_ON` relations and step-kind profile stamps; persistence and dispatch wiring done in T-016
 
 ---
@@ -198,7 +198,7 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 1. **Threshold default:** `tiered.enabled` default `false`; when enabled, `tiered.complexity_threshold` default **`200`** (`EstimateTaskComplexity`). `0` disables splitting. Per-task Frontdesk override = later; v1 config-only.
 2. **Pack storage:** workspace file `context_pack.vN.json` + board pointer (path/version). No SQLite blob in v1.
 3. **Verify:** runs **decision-specified** checks only; classifies outcomes; does not invent tests.
-4. **Agentic mode:** allowed on **execute** (and escalate) profiles only; context/decision stay structured / tool-bounded as specified above.
+4. **Agentic mode:** every step runs the agentic loop, since the legacy engine was removed (T-055b). Each step's tool allowlist is `tieredStepToolAllowlists` in [`worker_tiered.go`](../internal/queue/worker/worker_tiered.go): context and decision read and run `bash` on a read-only workspace, execute and escalate may also write, and verify runs checks.
 
 See SP-002.
 

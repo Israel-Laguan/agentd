@@ -28,7 +28,6 @@ var notImplementedKeys = []string{
 	"agentic.review", "agentic.tool_rate_limits", "agentic.approval_gates", "agentic.skills",
 	"gateway.budget", "gateway.truncation.max_input_chars",
 	"mcp.http_addr", "librarian.preferences_top_k", "plugins",
-	"queue.legacy.preflight_score", "queue.legacy.reject_score", "queue.legacy.max_description_len",
 }
 
 func TestConfigReferenceKeysHaveConsumers(t *testing.T) {
@@ -44,7 +43,7 @@ func TestConfigReferenceKeysHaveConsumers(t *testing.T) {
 func TestConfigReferenceKeysRejectsUnreadLeaf(t *testing.T) {
 	root := repoRoot(t)
 	keys := referenceKeys(t, filepath.Join(root, "config.reference.yaml"))
-	bogusLeaves := []string{"healing.nope", "queue.legacy.nope", "gateway.openai.nope", "gateway.role_models.chat.nope"}
+	bogusLeaves := []string{"healing.nope", "queue.split.nope", "gateway.openai.nope", "gateway.role_models.chat.nope"}
 	for _, bogus := range bogusLeaves {
 		errs := keyGuardErrors(t, root, append(append([]string{}, keys...), bogus), notImplementedKeys)
 		if !strings.Contains(strings.Join(errs, "\n"), bogus) {

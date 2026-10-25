@@ -3,6 +3,7 @@ package services_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"agentd/internal/models"
@@ -52,14 +53,20 @@ func TestAgentServiceCreateRejectsAgenticProfileOnToolLessProvider(t *testing.T)
 	}
 }
 
-func TestAgentServiceCreateAllowsToolLessProviderWhenNotAgentic(t *testing.T) {
+// Every profile runs the agentic loop, so the tool check ignores the flag. The
+// message must not suggest agentic_mode false, which the API refuses.
+func TestAgentServiceCreateRejectsToolLessProviderWhenFlagFalse(t *testing.T) {
 	svc := services.NewAgentService(testutil.NewFakeStore(), nil)
 	svc.Lister = newToolLister()
 
-	if _, err := svc.Create(context.Background(), models.AgentProfile{
+	_, err := svc.Create(context.Background(), models.AgentProfile{
 		ID: "local", Name: "Local", Provider: "ollama", Model: "llama3", AgenticMode: false,
-	}); err != nil {
-		t.Fatalf("Create() error = %v, want nil for a non-agentic profile", err)
+	})
+	if !errors.Is(err, models.ErrAgentProfileNoToolSupport) {
+		t.Fatalf("Create() error = %v, want ErrAgentProfileNoToolSupport", err)
+	}
+	if strings.Contains(err.Error(), "agentic_mode") {
+		t.Fatalf("error %q suggests agentic_mode false, which is refused", err)
 	}
 }
 

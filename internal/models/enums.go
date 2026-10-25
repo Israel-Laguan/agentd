@@ -235,8 +235,6 @@ const (
 	// EventTypeTaskUpdated is broadcast only (never persisted): a task row
 	// changed outside a result or failure, so a live board should refetch it.
 	EventTypeTaskUpdated               EventType = "TASK_UPDATED"
-	EventTypeCommand                   EventType = "COMMAND"
-	EventTypeSandboxBackend            EventType = "SANDBOX_BACKEND"
 	EventTypeRecovery                  EventType = "RECOVERY"
 	EventTypeRebootRecovery            EventType = "REBOOT_RECOVERY"
 	EventTypeRecoveryWorkspaceReset    EventType = "RECOVERY_WORKSPACE_RESET"

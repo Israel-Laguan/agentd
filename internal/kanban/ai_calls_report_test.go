@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,5 +120,30 @@ func TestAIUsageReportEmptyTableAndBadQuery(t *testing.T) {
 	}
 	if _, err := store.AIUsageReport(context.Background(), models.AIUsageQuery{GroupBy: []string{"nope"}}); err == nil {
 		t.Fatal("unknown group_by accepted")
+	}
+}
+
+// Every purpose the deleted engines stored shows under one label, so an old
+// database's rows read the same way whichever purpose they were written with.
+func TestAIUsageReportLabelsEveryRemovedPurpose(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	removed := []models.AICall{
+		aiCall(day1, "exec.legacy_command", "m1", 30),
+		aiCall(day1, "legacy.contract_text", "m1", 10),
+		aiCall(day1, "legacy.contract_json", "m1", 20),
+	}
+	if err := store.InsertAICalls(context.Background(), append(removed, aiCall(day1, "exec.turn", "m1", 5))); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	rep := reportRows(t, store, models.AIUsageQuery{GroupBy: []string{models.AIDimPurpose}})
+	if row := rowFor(t, rep, "purpose", "legacy (removed)"); row.Calls != 3 || row.Tokens != 60 {
+		t.Fatalf("legacy row = %+v, want the three removed purposes together", row)
+	}
+	rowFor(t, rep, "purpose", "exec.turn")
+	for _, r := range rep.Rows {
+		if p := r.Group["purpose"]; strings.HasPrefix(p, "legacy.") || strings.HasPrefix(p, "exec.legacy") {
+			t.Fatalf("removed purpose %q shown raw: %+v", p, r)
+		}
 	}
 }

@@ -196,11 +196,11 @@ func (c *APIClient) SetAgentProviderModel(ctx context.Context, agentID, provider
 }
 
 // CreateAgent calls POST /api/v1/agents to add an agent profile and returns its
-// ID. A journey that needs agentic mode creates its own profile instead of
-// patching "default", so it cannot change how other journeys' tasks run.
-func (c *APIClient) CreateAgent(ctx context.Context, name, provider, model string, agentic bool) (string, error) {
+// ID. A journey that needs its own provider or model creates a profile instead
+// of patching "default", so it cannot change how other journeys' tasks run.
+func (c *APIClient) CreateAgent(ctx context.Context, name, provider, model string) (string, error) {
 	resp, err := c.Post(ctx, "/api/v1/agents", map[string]any{
-		"name": name, "provider": provider, "model": model, "agentic_mode": agentic,
+		"name": name, "provider": provider, "model": model,
 	})
 	if err != nil {
 		return "", err

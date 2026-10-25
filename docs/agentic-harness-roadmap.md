@@ -1,5 +1,7 @@
 # Agentic harness — implementation roadmap
 
+> **Historical.** The single-shot JSON worker that this plan kept as the default was removed in T-055b (S18). Where the text below describes that path as current, it describes the plan as written.
+
 Phased work to add an **opt-in inner agentic loop** (tool calling with accumulated messages inside `Worker.Process`) while keeping the **default** single-shot JSON worker unchanged until explicitly enabled.
 
 Canonical architecture and terminology: [docs/agentic-harness.md](agentic-harness.md).
@@ -127,7 +129,7 @@ Completed execution order (historical, all done): `13 → (14, 16, 19 in paralle
 
 ## Phase 6: Opt-in mode and inner loop orchestration
 
-**Goal**: (6a) Profile or config selects **agentic** vs **legacy** worker path (default legacy). (6b) In agentic mode, `Worker.Process` runs the LLM → tool → result loop using accumulated messages, registry, and guards from prior phases.
+**Goal**: (6a) Profile or config selects **agentic** vs **legacy** worker path (default legacy). _Superseded: the legacy path was removed in T-055b; every task runs the agentic loop._ (6b) In agentic mode, `Worker.Process` runs the LLM → tool → result loop using accumulated messages, registry, and guards from prior phases.
 
 **Depends on**: Phases 3–5.
 
@@ -144,7 +146,7 @@ Completed execution order (historical, all done): `13 → (14, 16, 19 in paralle
 | Task | Topic | Status |
 | --- | --- | --- |
 | 08 | Tool-call events and SSE observability | DONE (server side). `TOOL_CALL`/`TOOL_RESULT` events + scrubbed payloads + SSE mapping (`internal/api/sse/stream.go`). UI rendering is complete — see the [tool-event payload contract](sse-events.md#tool-event-payload-contract) and `web/`. |
-| 09 | Provider capabilities and fallback | DONE. `SupportsChatTools` + `capabilities.chat_tools` + legacy fallback (`internal/gateway/providers/provider.go`). |
+| 09 | Provider capabilities and fallback | DONE. `SupportsChatTools` + `capabilities.chat_tools` + the since-removed legacy fallback (`internal/gateway/providers/provider.go`). |
 | 10 | Context truncation for tool history | DONE. Agentic tool-pairwise-consistent truncation (`internal/gateway/truncation/truncation_agentic_*`). |
 | 11 | Agentic loop integration tests | DONE. Mock-gateway worker integration tests + godog features (`internal/queue/worker/worker_agentic_*_test.go`, `worker/features/`). |
 | 12 | Provider expansion follow-ups | RE-SCOPED → [Milestone 13](llm-connector-strategy.md) onward. Native tool formats are superseded by the proxy-based two-topology model. |
@@ -168,7 +170,7 @@ Until then, a project that must download dependencies at task time can run with 
 
 | Risk | Mitigation |
 | --- | --- |
-| Breaking default worker | Agentic mode off by default; legacy `workerResponse` path unchanged. |
+| Breaking default worker | Agentic mode off by default; legacy `workerResponse` path unchanged. Superseded: the legacy engine was removed in T-055b. |
 | Infinite tool chatter | Phase 5 caps, deadlines, budgets. |
 | Provider lacks tools | Phase 9 routing; until then, only enable agentic mode for OpenAI. |
 | Token explosion | Existing `BudgetTracker` across inner iterations; truncation task 10. |

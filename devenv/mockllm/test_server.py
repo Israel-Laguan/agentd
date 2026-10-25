@@ -363,6 +363,17 @@ class AgenticDefaultReplyTest(unittest.TestCase):
         del body["tools"]
         self.assertIn("command", json.loads(server.chat_completion(body)["choices"][0]["message"]["content"]))
 
+    def test_permission_alternative_gets_a_command(self):
+        # exec.permission_alt (worker_permission.go) asks in JSON mode with no
+        # tools and reads a non-privileged "command" back.
+        body = {"model": "agentd", "messages": [
+            {"role": "system", "content": "Return exactly one JSON object. Provide one safe non-privileged shell command that can complete the same objective, or set no_alternative=true with a brief reason."},
+            {"role": "user", "content": "Task:\nbuild a thing\n\nBlocked command:\nsudo id"},
+        ]}
+        content = json.loads(server.chat_completion(body, headers())["choices"][0]["message"]["content"])
+        self.assertTrue(content["command"].strip())
+        self.assertNotIn("sudo", content["command"])
+
 
 class ElicitorReplyTest(unittest.TestCase):
     """The pre-task elicitor reads needs_clarification from its reply. The mock

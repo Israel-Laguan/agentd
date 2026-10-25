@@ -382,8 +382,10 @@ def chat_completion(body: dict, headers=None) -> dict:
     if offers_tool(body, "bash"):
         # B-080: worker requests are agentic; the command runs through bash.
         return agentic_command_completion(body, command)
-    # Only JSON-mode callers that offer no tools reach this reply (the legacy
-    # engine, for a profile with agentic_mode off). It goes with that engine.
+    # The default for every request no branch above claims. Its readers that need
+    # this shape are exec.permission_alt (after a sudo refusal, JSON mode, no
+    # tools, asks for a non-privileged {"command"}) and exec.suggest_command
+    # (`agentd suggest`).
     return completion(body, {"command": command})
 
 

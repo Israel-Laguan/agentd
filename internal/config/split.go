@@ -6,8 +6,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// SplitConfig caps how far a task is broken into subtasks: by the healing
-// split, and by the legacy engine's too_complex reply until T-055b removes it.
+// SplitConfig caps how far a task is broken into subtasks by the healing split.
 type SplitConfig struct {
 	// MaxDepth is how many parent→child split generations are allowed before
 	// a HUMAN handoff (0 = no cap).

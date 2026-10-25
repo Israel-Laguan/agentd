@@ -13,12 +13,29 @@ var _ models.AICallStore = (*Store)(nil)
 // aiDimensionSQL maps a report dimension to its column expression. It is the
 // only text ever interpolated into the report query.
 var aiDimensionSQL = map[string]string{
-	models.AIDimPurpose: "purpose",
+	models.AIDimPurpose: purposeLabelSQL(),
 	models.AIDimStage:   "stage",
 	models.AIDimModel:   "model",
 	models.AIDimDay:     "substr(at, 1, 10)",
 	models.AIDimTask:    "task_id",
 	models.AIDimRequest: "correlation_id",
+}
+
+// removedPurposes are the purposes the deleted engines stored. Old rows keep
+// them, so the report shows all of them under removedLabel.
+var removedPurposes = []string{"exec.legacy_command", "legacy.contract_text", "legacy.contract_json"}
+
+const removedLabel = "legacy (removed)"
+
+// purposeLabelSQL labels the removed purposes and leaves every other purpose as
+// stored. The purposes are constants, so nothing user-supplied is interpolated.
+func purposeLabelSQL() string {
+	quoted := make([]string, len(removedPurposes))
+	for i, p := range removedPurposes {
+		quoted[i] = "'" + strings.ReplaceAll(p, "'", "''") + "'"
+
+	}
+	return "CASE WHEN purpose IN (" + strings.Join(quoted, ", ") + ") THEN '" + strings.ReplaceAll(removedLabel, "'", "''") + "' ELSE purpose END"
 }
 
 var aiAggregateColumns = aiBaseColumns + ", " + aiMixColumns()

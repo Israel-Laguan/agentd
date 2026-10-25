@@ -150,7 +150,7 @@ gateway:
 
 ## Agentic
 
-Enabled per agent profile via `AgentProfile.agentic_mode`. Keys marked **not implemented** are parsed and ignored (B-065); `config.reference.yaml` carries the same marker and a test fails when the two drift.
+Every agent profile runs the agentic loop; the API refuses `agentic_mode: false` (see [api-testing.md](api-testing.md)). Keys marked **not implemented** are parsed and ignored (B-065); `config.reference.yaml` carries the same marker and a test fails when the two drift.
 
 | Key | Notes |
 | --- | --- |
@@ -209,13 +209,12 @@ Cron schedules live in `<home>/agentd.crontab`.
 | `token_budget` | Worker-level per-task token cap; `0` = unlimited. `gateway.budget` (`tokens_per_task`) is not implemented (parsed and ignored); use this key. |
 | `agentic_character_budget` | `0` inherits `gateway.truncator.max_input_chars`. |
 | `hitl.legacy_handoff_timeout` | Prompt/permission/healing/provider handoffs. Approval, review, and clarification use the 30m approval path. |
-| `split.max_depth` | Max parent→child split generations before a HUMAN handoff, for the healing split and the legacy `too_complex` reply (`0` = no cap; default `2`). Replaces `legacy.max_breakdown_depth`. |
-| `split.max_subtasks` | Max subtasks from one split (`0` = no cap; default `5`). Replaces `legacy.max_subtasks_per_breakdown`. |
-| `legacy.preflight_score` | Not implemented (parsed and ignored). |
-| `legacy.reject_score` | Not implemented (parsed and ignored). |
-| `legacy.max_description_len` | Not implemented (parsed and ignored). |
+| `split.max_depth` | Max parent→child split generations before a HUMAN handoff, for the healing split (`0` = no cap; default `2`). Replaces the removed legacy `max_breakdown_depth` key. |
+| `split.max_subtasks` | Max subtasks from one split (`0` = no cap; default `5`). Replaces the removed legacy `max_subtasks_per_breakdown` key. |
 | `tool_timeouts` | Per-tool dispatch timeouts; `"default"` applies to unlisted tools. Go duration strings (`"30s"`, `"1m"`). |
 | `tool_retries` | Transient failures retried with exponential backoff + jitter; model never sees intermediate failures. Only listed tools are eligible. |
+
+Load refuses the removed legacy keys under `queue`: `legacy.max_breakdown_depth`, `legacy.max_subtasks_per_breakdown`, `legacy.preflight_score`, `legacy.reject_score` and `legacy.max_description_len`. The error names the replacement key, or says to delete the key when none exists. Viper alone would ignore them without a word.
 
 ## AI usage
 

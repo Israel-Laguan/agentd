@@ -73,7 +73,7 @@ task["id"], task["project_id"], task["state"]
 | Success-criteria check | A text-only finish is not COMPLETED while a success-criteria file it names is missing, empty, or no longer parses as Go. The task goes to a human. | [`worker_agentic_postcondition_test.go`](../internal/queue/worker/worker_agentic_postcondition_test.go) |
 | Retry dedupe | A retry that re-sends the command which failed first in the previous attempt is refused, and that failure goes back to the model. The command is not run again. | [`worker_agentic_retry_dedupe_test.go`](../internal/queue/worker/worker_agentic_retry_dedupe_test.go) |
 | Read-only workspace | A profile with `workspace_readonly` runs its bash with the workspace mounted read-only inside the jail, and its `write` tool is refused. The seeded `researcher` and the tiered `context` and `decision` steps use it. Without a jail the command is refused. | [`jail_readonly_test.go`](../internal/sandbox/jail_readonly_test.go) |
-| Worker self-breakdown | Workers can return `{too_complex: true, subtasks: [...]}`. The parent moves to `BLOCKED`, child tasks are created, and the parent returns to `READY` after all children complete; the worker then rolls it up to `COMPLETED` without re-prompting the model (`TASK_BREAKDOWN_ROLLUP`). | [`task_dependencies.feature`](../internal/kanban/features/task_dependencies.feature) |
+| Healing split breakdown | A task that keeps failing is split by the healing split stage (`create.split_task`). The parent moves to `BLOCKED`, child tasks are created, and the parent returns to `READY` after all children complete; the worker then rolls it up to `COMPLETED` without re-prompting the model (`TASK_BREAKDOWN_ROLLUP`). | [`self_healing.feature`](../internal/queue/features/self_healing.feature), [`worker_breakdown_rollup_test.go`](../internal/queue/worker/worker_breakdown_rollup_test.go) |
 
 ### Journey 3: System Resilience and Hardware
 
@@ -141,8 +141,8 @@ task["id"], task["project_id"], task["state"]
 | `PROFILE_UPGRADED` | System | A profile still in non-agentic mode was made agentic at startup. Written to the `_system` project. |
 | `SANDBOX_VIOLATION` | Sandbox | Command blocked before execution due to sandbox policy (e.g., `sudo`, path escape). |
 | `LOG_CHUNK` | Sandbox | Streaming stdout/stderr line emitted during command execution (after scrubber redaction). |
-| `COMMAND` | Worker | The shell command a legacy-mode worker executed for the task (scrubbed, bounded). Not emitted for commands the sandbox refused; those produce `SANDBOX_VIOLATION`. |
-| `SANDBOX_BACKEND` | Worker | The isolation that ran the command just before it: `bubblewrap` (jailed) or `filter-only`. One per executed command, right after its `COMMAND` event; not emitted for refused or unstarted commands. |
+| `COMMAND` | Worker | Historical: only an old database holds it, since the legacy engine was removed (T-055b). Tool calls are recorded as `TOOL_CALL` and `TOOL_RESULT`. |
+| `SANDBOX_BACKEND` | Worker | Historical: only an old database holds it, like `COMMAND`. |
 | `TASK_BREAKDOWN` | Worker | Oversized task split into child tasks; parent blocked. |
 | `TASK_BREAKDOWN_ROLLUP` | Worker | Resumed broken-down parent completed because all its breakdown subtasks completed; no LLM call. |
 | `LLM_OUTAGE_HANDOFF` | Daemon | HUMAN task created for AI provider outage diagnostics. |
@@ -153,7 +153,6 @@ task["id"], task["project_id"], task["state"]
 | `TUNE` | Worker | Model parameters changed for a retry attempt. |
 | `HEALING_SPLIT` | Worker | Repeated-failure task forced into the breakdown path. |
 | `HEALING_HANDOFF` | Worker | Self-healing exhausted; HUMAN review task created. |
-| `LEGACY_MODE_HANDOFF` | Worker | Legacy one-shot JSON path failed (invalid JSON, breakdown limits, or dispatch reject); HUMAN subtask instructs switching to agentic mode. |
 | `POISON_PILL_HANDOFF` | Worker | Task evicted after max retries; moved to FAILED_REQUIRES_HUMAN. The worker also comments on the task with the last error, the retry count and how to retry. |
 | `PROVIDER_EXHAUSTED_HANDOFF` | Worker | All configured AI providers exhausted; HUMAN review task created. |
 | `PHASE_PLANNING` | Worker | Phase-planning task completed; next batch of project tasks appended. |

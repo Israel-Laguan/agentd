@@ -61,8 +61,8 @@ graph LR
 
 ### Worker Process
 
-- **Today:** Task processing lives in [`internal/queue/worker/worker.go`](../internal/queue/worker/worker.go), while command execution is isolated by [`internal/sandbox/executor.go`](../internal/sandbox/executor.go). The worker attaches SQLite `house_rules` (same key as Frontdesk) into the LLM gateway context before action JSON is generated.
-- **Spec role:** A worker is an isolated task runner. It reads a task from the board, asks the LLM for a bounded action, executes in the workspace, streams logs, and commits task outcome through SQLite.
+- **Today:** Task processing lives in [`internal/queue/worker/worker.go`](../internal/queue/worker/worker.go), while command execution is isolated by [`internal/sandbox/executor.go`](../internal/sandbox/executor.go). The worker attaches SQLite `house_rules` (same key as Frontdesk) into the LLM gateway context before the LLM is called.
+- **Spec role:** A worker is an isolated task runner. It reads a task from the board, runs an agentic tool loop with the LLM, executes the tools in the workspace, streams logs, and commits task outcome through SQLite.
 
 ### Context Truncator
 
@@ -192,10 +192,12 @@ sequenceDiagram
     Daemon->>Worker: Spawn bounded worker
     Worker->>Board: Mark RUNNING with PID
     Worker->>FS: Read workspace
-    Worker->>Truncator: Action request
-    Truncator->>LLM: Budgeted prompt
-    LLM-->>Worker: Command JSON
-    Worker->>FS: Execute bash and write logs
+    loop Until final text, no tool_calls
+        Worker->>Truncator: Prompt with tool definitions
+        Truncator->>LLM: Budgeted prompt
+        LLM-->>Worker: Assistant message with tool_calls or final text
+        Worker->>FS: Run each tool call (bash, read, write) and write logs
+    end
     Worker->>Board: Append events
     Worker->>Board: Commit COMPLETED or FAILED
 ```
@@ -214,7 +216,7 @@ The execution cycle separates durable intent from active execution. SQLite recor
 
 - **Risk:** The worker tries to read too much code or log data, overflowing context.
 - **Mitigation:** The Context Truncator must reject or summarize excessive payloads, and the worker should split the task into smaller board tasks when needed.
-- **Status today:** Mitigated. The truncator in [`internal/gateway/truncation/truncator.go`](../internal/gateway/truncation/truncator.go) supports `middle_out`, `head_tail`, `summarize`, and `reject` policies with per-provider budgets. Workers split oversized tasks via `BlockTaskWithSubtasks` when the LLM returns `{too_complex: true}`.
+- **Status today:** Mitigated. The truncator in [`internal/gateway/truncation/truncator.go`](../internal/gateway/truncation/truncator.go) supports `middle_out`, `head_tail`, `summarize`, and `reject` policies with per-provider budgets. Workers split a task that keeps failing through the healing split stage, which blocks it with subtasks via `BlockTaskWithSubtasks`.
 
 - **Risk:** A worker gets caught in a retry loop, sending millions of tokens to a paid API (Danger A: Silent Wallet Drain).
 - **Mitigation:** The router enforces per-task token budgets via `BudgetTracker`. When accumulated usage reaches `gateway.budget.tokens_per_task`, further requests return `ErrBudgetExceeded` without contacting any provider.
