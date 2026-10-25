@@ -47,6 +47,7 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		return agentruntime.LoopResult{}, false
 	}
 
+	described := task.Description
 	task, blocked, err := e.host.RunPreTaskElicitation(cancelCtx, task, project)
 	if err != nil {
 		e.host.FailHard(cancelCtx, task, err)
@@ -62,8 +63,12 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		"task_id", task.ID,
 	)
 	// Consumed clarification answers extend the description, so the evidence
-	// guard checks commands against the clarified task.
+	// guard checks commands against the clarified task, and the prompt (built
+	// before elicitation) is rebuilt so the model sees the human's answer.
 	taskToolExecutor.WithIntent(task.Title + "\n" + task.Description)
+	if task.Description != described {
+		messages = e.buildAgenticMessages(cancelCtx, task, project, profile)
+	}
 
 	guards := e.newAgenticLoopGuards(cancelCtx, task)
 	checkpointer := wsession.NewSessionCheckpointer(task.ID)
