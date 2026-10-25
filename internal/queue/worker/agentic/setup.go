@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"agentd/internal/api/correlation"
+
 	agentcontext "agentd/internal/agent/context"
 	wfilecontext "agentd/internal/agent/filecontext"
 	agenthooks "agentd/internal/agent/hooks"
@@ -49,6 +51,36 @@ func (e *Engine) buildAgenticMessages(ctx context.Context, task models.Task, pro
 	messages := e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile)
 	messages, _ = e.host.PrependReviewRejectionFeedback(ctx, task, messages)
 	return e.host.PrependSandboxViolationFeedback(ctx, task, messages)
+}
+
+// runPreTaskElicitation runs pre-task elicitation and reports whether the run
+// goes on. Consumed clarification answers extend the description, so the
+// evidence guard checks commands against the clarified task, and the prompt
+// (built before elicitation) is rebuilt so the model sees the human's answer.
+func (e *Engine) runPreTaskElicitation(
+	ctx, cancelCtx context.Context,
+	task models.Task,
+	project models.Project,
+	profile models.AgentProfile,
+	messages *[]gateway.PromptMessage,
+	taskToolExecutor *agenttools.ToolExecutor,
+) (models.Task, bool) {
+	described := task.Description
+	task, blocked, err := e.host.RunPreTaskElicitation(cancelCtx, task, project)
+	if err != nil {
+		e.host.FailHard(cancelCtx, task, err)
+		return task, false
+	}
+	if blocked {
+		correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation blocked", "task_id", task.ID)
+		return task, false
+	}
+	correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation complete", "task_id", task.ID)
+	taskToolExecutor.WithIntent(task.Title + "\n" + task.Description)
+	if task.Description != described {
+		*messages = e.buildAgenticMessages(cancelCtx, task, project, profile)
+	}
+	return task, true
 }
 
 func (e *Engine) setupAgenticCancel(ctx context.Context, taskID string) (context.Context, func()) {
