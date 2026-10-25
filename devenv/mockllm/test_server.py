@@ -426,6 +426,19 @@ class ToolCallScenarioTest(unittest.TestCase):
         self.assertEqual(choice["message"]["content"], toolcalls.FINAL_MESSAGE)
         self.assertNotIn("tool_calls", choice["message"])
 
+    def test_answered_run_ends_without_replaying_the_calls(self):
+        # A resumed run starts fresh with the human's answer in the task
+        # description; the scripted calls must not run again.
+        body = self._body()
+        body["messages"][1]["content"] += "\n\n--- Clarifications ---\n\nQuestions:\n1. Which format?\n\nAnswer: CSV"
+        choice = server.chat_completion(body)["choices"][0]
+        self.assertEqual(choice["finish_reason"], "stop")
+        self.assertEqual(choice["message"]["content"], toolcalls.FINAL_MESSAGE)
+        self.assertNotIn("tool_calls", choice["message"])
+
+    def test_unanswered_run_still_gets_the_calls(self):
+        self.assertEqual(server.chat_completion(self._body())["choices"][0]["finish_reason"], "tool_calls")
+
     def test_request_without_tools_keeps_the_default_reply(self):
         reply = server.chat_completion(self._body(tools=False))
         self.assertIn("command", json.loads(reply["choices"][0]["message"]["content"]))
