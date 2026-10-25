@@ -1,6 +1,6 @@
 # E2E Journey Suite (S07)
 
-Status: **implemented** (22 tests, J01-J20, green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01).  
+Status: **implemented** (24 tests, J01-J22, green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01).  
 Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in git)
 
 ---
@@ -34,7 +34,7 @@ Rationale:
 
 | Profile | When | agentd service | port | config changes |
 | --- | --- | --- | --- | --- |
-| default | J01-J06, J13-J15, J17, J19-J20, J22 (standard) | agentd | 8765 | none, except `mcp.enabled: true` in `devenv/agentd/config.yaml` for J15 — the product default is off, so the `/mcp` route is not registered without it — and `sandbox.scrub_patterns: ["E2E-SCRUB-[0-9]{6}"]` for J17, which matches only J17's token, and a small `queue.agentic_context` for J20 (only agentic tasks read it) |
+| default | J01-J06, J13-J15, J17, J19-J22 (standard) | agentd | 8765 | none, except `mcp.enabled: true` in `devenv/agentd/config.yaml` for J15 — the product default is off, so the `/mcp` route is not registered without it — and `sandbox.scrub_patterns: ["E2E-SCRUB-[0-9]{6}"]` for J17, which matches only J17's token, and a small `queue.agentic_context` for J20 (only agentic tasks read it) |
 | healing | J07 (connector failure → handoff) | agentd-healing | 8766 | `healing.enabled: true`, `outage_handoff_enabled: true` |
 | faults | J09 part A (cascade to a live secondary) | agentd-faults | 8767 | `gateway.order: [dead, secondary]` |
 | breaker | J09 parts B and C (every provider down → breaker trips; provider returns → breaker closes by itself) | agentd-brk | 8770 | `gateway.order: [dead, dead2, flaky]`, `breaker.open_timeout: 10s`, `healing.enabled: true`, `outage_handoff_enabled: true` |
@@ -121,7 +121,8 @@ path. Python unit tests for the dispatch live in
 | **J18** | Curator curates each task once | 1. Materialize a single-task project on agentd-disk; 2. Wait for COMPLETED; 3. Wait until the task's only event is one `EVENTS_PURGED` marker; 4. Wait out three more curator passes (20s); 5. Assert the only event is still that same marker | One purge marker, same event ID, nothing re-archived | disk (retention 0, curator `@every 5s`) | Count alone would not catch B-066: a re-curation purges again and can leave one fresh marker, so the journey pins the marker's ID | P1 | B-066 |
 | **J19** | Agentic denylist refuses `sudo` | 1. Create an agentic agent profile (`litellm`/`agentd`); 2. Materialize a task on it whose description carries `@tool_calls=` scripting `bash` with `sudo id`; 3. Wait for COMPLETED; 4. Read TOOL_RESULT events, the tool use report and the mock capture. The denylist vetoes sudo before the sandbox sees it, which is a privilege block: the alternative request (mock default command) runs (the J19 gap, T-058) | Two TOOL_RESULTs: first `bash`, exit code -1, names sudo, no `uid=` output (the denylist refusal); then `bash` exit 0 running the non-privileged alternative (`executed via litellm proxy`). The next request carries the alternative's output | default | The mock answers the first agentic turn with the scripted call and the next with a final message (`devenv/mockllm/toolcalls.py`, T-053). The journey owns its profile, so no other journey turns agentic | P1 | T-053 |
 | **J20** | Oversized tool result is cut, not lost | 1. As J19, scripting `bash` that prints `HEAD-MARK`, ~56 KB of filler, `TAIL-MARK`; 2. Wait for COMPLETED; 3. Read the mock capture | The task completes; the request after the call carries the result cut below its raw size, with `HEAD-MARK`, `TAIL-MARK` and the `【...】` marker (default `gateway.truncation.strategy` head_tail) | default + `queue.agentic_context` 3000/5000/2000 | Found B-079: the gateway-side agentic truncator dropped the call and its result together, so the agent looped to the iteration limit. The small `agentic_context` is needed: with product defaults (60000) the gateway's head-only agentic cut (12000) runs first and the configured strategy never applies | P1 | T-053, B-079 |
-| **J22** | `agentd report ai` inside the container | 1. As J19 with `uname -a` scripted; 2. Wait for COMPLETED and the ai-usage report row for `exec.turn`; 3. `podman compose exec agentd agentd report ai --group-by purpose --task <id>` | The CLI prints a `PURPOSE` table with an `exec.turn` row whose CALLS equals the API's calls | default | Uses `DevenvManager.Exec`. The report helpers already cover J20/J21 (`group_by`) | P2 | T-058 |
+| **J21** | A repeated read is counted | 1. As J19, scripting `bash` (`echo hello > notes.txt`) then `read notes.txt` twice; 2. Wait for COMPLETED; 3. Read the task's tool use report | Two reads, one repeated read of `notes.txt` with 2 reads, and non-zero re-read bytes | default | The baseline for later "don't re-read files" work; nothing deduplicates yet | P2 | T-044 |
+| **J22** | `agentd report ai` inside the container | 1. As J19 with `uname -a` scripted; 2. Wait for COMPLETED and the ai-usage report row for `exec.turn`; 3. `podman compose exec agentd agentd report ai --group-by purpose --task <id>` | The CLI prints a `PURPOSE` table with an `exec.turn` row whose CALLS equals the API's calls | default | Uses `DevenvManager.Exec`; `execTurnRow` supplies the API comparison | P2 | T-058 |
 
 ---
 
