@@ -316,52 +316,40 @@ func (m *mockGateway) Generate(ctx context.Context, req gateway.AIRequest) (gate
 	return gateway.AIResponse{}, nil
 }
 
-func (m *mockGateway) GeneratePlan(ctx context.Context, intent string) (*models.DraftPlan, error) {
-	m.planCalls++
-	m.lastPlanIntent = intent
-	m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
-	if m.planErr != nil {
-		return nil, m.planErr
-	}
-	if m.plan != nil {
-		return m.plan, nil
-	}
-	return &models.DraftPlan{}, nil
-}
-
-func (m *mockGateway) AnalyzeScope(ctx context.Context, intent string) (*spec.ScopeAnalysis, error) {
-	m.analyzeCalls++
-	m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
-	if m.scopeErr != nil {
-		return nil, m.scopeErr
-	}
-	if m.scope != nil {
-		return m.scope, nil
-	}
-	return &spec.ScopeAnalysis{SingleScope: true}, nil
-}
-
-func (m *mockGateway) ClassifyIntent(_ context.Context, intent string) (*spec.IntentAnalysis, error) {
-	m.intentCalls++
-	if m.intentErr != nil {
-		return nil, m.intentErr
-	}
-	if m.intent != nil {
-		return m.intent, nil
-	}
-	return &spec.IntentAnalysis{Intent: "plan_request"}, nil
-}
-
-// Call answers a stage from the fake's methods above, by purpose.
+// Call answers a stage from the fake's fields, by purpose.
 func (m *mockGateway) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
 	intent := lastMessage(req)
 	switch req.Purpose {
 	case gateway.PurposeIntakeClassifyIntent:
-		return stageOutput(m.ClassifyIntent(ctx, intent))
+		m.intentCalls++
+		if m.intentErr != nil {
+			return stageOutput(nil, m.intentErr)
+		}
+		if m.intent != nil {
+			return stageOutput(m.intent, nil)
+		}
+		return stageOutput(&spec.IntentAnalysis{Intent: "plan_request"}, nil)
 	case gateway.PurposeIntakeAnalyzeScope:
-		return stageOutput(m.AnalyzeScope(ctx, intent))
+		m.analyzeCalls++
+		m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
+		if m.scopeErr != nil {
+			return stageOutput(nil, m.scopeErr)
+		}
+		if m.scope != nil {
+			return stageOutput(m.scope, nil)
+		}
+		return stageOutput(&spec.ScopeAnalysis{SingleScope: true}, nil)
 	}
-	return stageOutput(m.GeneratePlan(ctx, intent))
+	m.planCalls++
+	m.lastPlanIntent = intent
+	m.lastHouseRules = gateway.HouseRulesFromContext(ctx)
+	if m.planErr != nil {
+		return stageOutput(nil, m.planErr)
+	}
+	if m.plan != nil {
+		return stageOutput(m.plan, nil)
+	}
+	return stageOutput(&models.DraftPlan{}, nil)
 }
 
 func (m *mockGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {

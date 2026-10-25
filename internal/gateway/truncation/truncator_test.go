@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 )
 
 func TestStrategyTruncatorPolicies(t *testing.T) {
@@ -77,17 +76,6 @@ func (g *summaryGateway) Generate(_ context.Context, req spec.AIRequest) (spec.A
 	return spec.AIResponse{Content: g.content}, nil
 }
 
-func (g *summaryGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, nil
-}
-
-func (g *summaryGateway) AnalyzeScope(context.Context, string) (*spec.ScopeAnalysis, error) {
-	return nil, nil
-}
-
-func (g *summaryGateway) ClassifyIntent(context.Context, string) (*spec.IntentAnalysis, error) {
-	return nil, nil
-}
 func (g *summaryGateway) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.NoopEmbed(ctx, req)
 }

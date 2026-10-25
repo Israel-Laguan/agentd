@@ -8,7 +8,7 @@ import (
 	"agentd/internal/models"
 )
 
-// intakeResponse answers an intake purpose by calling the matching fake method
+// intakeResponse answers an intake purpose by calling the matching answer helper
 // and returning its result as JSON. The message the stage sends is the intent.
 func intakeResponse(
 	ctx context.Context,

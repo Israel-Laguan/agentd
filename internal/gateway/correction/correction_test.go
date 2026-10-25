@@ -35,17 +35,6 @@ func (g *seqFakeGW) Generate(_ context.Context, _ spec.AIRequest) (spec.AIRespon
 	return resp, s.err
 }
 
-func (g *seqFakeGW) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return nil, errors.New("not used")
-}
-
-func (g *seqFakeGW) AnalyzeScope(context.Context, string) (*spec.ScopeAnalysis, error) {
-	return nil, errors.New("not used")
-}
-
-func (g *seqFakeGW) ClassifyIntent(context.Context, string) (*spec.IntentAnalysis, error) {
-	return nil, errors.New("not used")
-}
 func (g *seqFakeGW) Embed(ctx context.Context, req spec.EmbedRequest) (spec.EmbedResponse, error) {
 	return spec.NoopEmbed(ctx, req)
 }

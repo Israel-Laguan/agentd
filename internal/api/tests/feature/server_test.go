@@ -105,13 +105,13 @@ func decodeBody(t *testing.T, resp *httptest.ResponseRecorder) map[string]any {
 	return decoded
 }
 
-// Generate answers the intake purposes from the fake's methods, so the real
+// Generate answers the intake purposes from the fake's answer helpers, so the real
 // ModelAgent and contract run over them. Other purposes get an empty response.
 func (g *apiGateway) Generate(ctx context.Context, req gateway.AIRequest) (gateway.AIResponse, error) {
-	return intakeResponse(ctx, req, g.ClassifyIntent, g.AnalyzeScope, g.GeneratePlan)
+	return intakeResponse(ctx, req, g.answerClassify, g.answerScope, g.answerPlan)
 }
 
-func (g *apiGateway) GeneratePlan(_ context.Context, intent string) (*models.DraftPlan, error) {
+func (g *apiGateway) answerPlan(_ context.Context, intent string) (*models.DraftPlan, error) {
 	g.planCalls++
 	g.lastPlanIntent = intent
 	if g.planErr != nil {
@@ -123,7 +123,7 @@ func (g *apiGateway) GeneratePlan(_ context.Context, intent string) (*models.Dra
 	return &models.DraftPlan{ProjectName: "Python scraper", Tasks: []models.DraftTask{{TempID: "a", Title: "Scrape site"}}}, nil
 }
 
-func (g *apiGateway) AnalyzeScope(_ context.Context, intent string) (*gateway.ScopeAnalysis, error) {
+func (g *apiGateway) answerScope(_ context.Context, intent string) (*gateway.ScopeAnalysis, error) {
 	g.analyzeCalls++
 	g.lastAnalyzeIntent = intent
 	if g.scopeErr != nil {
@@ -140,7 +140,7 @@ func (g *apiGateway) AnalyzeScope(_ context.Context, intent string) (*gateway.Sc
 	}, nil
 }
 
-func (g *apiGateway) ClassifyIntent(_ context.Context, intent string) (*gateway.IntentAnalysis, error) {
+func (g *apiGateway) answerClassify(_ context.Context, intent string) (*gateway.IntentAnalysis, error) {
 	g.intentCalls++
 	g.lastClassifyIntent = intent
 	if g.intentErr != nil {

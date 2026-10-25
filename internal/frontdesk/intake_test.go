@@ -21,24 +21,12 @@ func (g *stubIntakeGateway) Generate(context.Context, gateway.AIRequest) (gatewa
 	return gateway.AIResponse{}, nil
 }
 
-func (g *stubIntakeGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	if g.planOut == nil && g.planErr == nil {
-		return &g.structDraft, nil
-	}
-	return g.planOut, g.planErr
-}
-
-func (g *stubIntakeGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return &gateway.ScopeAnalysis{}, nil
-}
-
-func (g *stubIntakeGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return &gateway.IntentAnalysis{}, nil
-}
-
 // Call answers the replan-comment stage with the fake's plan.
 func (g *stubIntakeGateway) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
-	return stageOutput(g.GeneratePlan(ctx, lastMessage(req)))
+	if g.planOut == nil && g.planErr == nil {
+		return stageOutput(&g.structDraft, nil)
+	}
+	return stageOutput(g.planOut, g.planErr)
 }
 
 func (g *stubIntakeGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
@@ -182,12 +170,6 @@ func (g *stubPlanOnlyGW) Call(ctx context.Context, req stage.StageRequest) (stag
 	g.purpose = req.Purpose
 	g.taskID = gateway.TaskIDFromContext(ctx)
 	return stageOutput(g.out, nil)
-}
-func (*stubPlanOnlyGW) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return &gateway.ScopeAnalysis{}, nil
-}
-func (*stubPlanOnlyGW) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return &gateway.IntentAnalysis{}, nil
 }
 func (*stubPlanOnlyGW) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil

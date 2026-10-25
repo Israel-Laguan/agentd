@@ -24,18 +24,6 @@ func (stubGateway) Generate(context.Context, gateway.AIRequest) (gateway.AIRespo
 	return gateway.AIResponse{}, nil
 }
 
-func (stubGateway) GeneratePlan(context.Context, string) (*models.DraftPlan, error) {
-	return &models.DraftPlan{}, nil
-}
-
-func (stubGateway) AnalyzeScope(context.Context, string) (*gateway.ScopeAnalysis, error) {
-	return &gateway.ScopeAnalysis{}, nil
-}
-
-func (stubGateway) ClassifyIntent(context.Context, string) (*gateway.IntentAnalysis, error) {
-	return &gateway.IntentAnalysis{}, nil
-}
-
 func (stubGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
