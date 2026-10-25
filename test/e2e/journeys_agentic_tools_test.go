@@ -16,7 +16,7 @@ import (
 func agenticTask(ctx context.Context, t *testing.T, client *APIClient, tag string, calls ...ScriptedToolCall) *Task {
 	t.Helper()
 
-	agentID, err := client.CreateAgent(ctx, UniqueProjectName(strings.ToLower(tag)), "litellm", "agentd", true)
+	agentID, err := client.CreateAgent(ctx, UniqueProjectName(strings.ToLower(tag)), "litellm", "agentd")
 	if err != nil {
 		t.Fatalf("%s [agent] %v", tag, err)
 	}
