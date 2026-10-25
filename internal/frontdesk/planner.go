@@ -144,7 +144,11 @@ func (p *Planner) planApprovedScope(ctx context.Context, intent, approvedScope s
 		}
 		planningIntent = withContents
 	}
-	plan, err := intake.Plan(ctx, p.Agent, gateway.PurposeIntakeDraftPlan, p.MaxTasksPerPhase, planningIntent)
+	maxTasks := p.MaxTasksPerPhase
+	if maxTasks == 0 {
+		maxTasks = 7
+	}
+	plan, err := intake.Plan(ctx, p.Agent, gateway.PurposeIntakeDraftPlan, maxTasks, planningIntent)
 	if err != nil {
 		return nil, err
 	}

@@ -34,8 +34,15 @@ func AnalyzeScope(ctx context.Context, agent stage.Agent, userIntent string) (*s
 	if err != nil {
 		return nil, err
 	}
-	if !analysis.SingleScope && len(analysis.Scopes) == 0 {
-		return nil, fmt.Errorf("%w: missing scopes for multi-scope classification", models.ErrInvalidJSONResponse)
+	if !analysis.SingleScope {
+		if len(analysis.Scopes) == 0 {
+			return nil, fmt.Errorf("%w: missing scopes for multi-scope classification", models.ErrInvalidJSONResponse)
+		}
+		for _, scope := range analysis.Scopes {
+			if scope.ID == "" || scope.Label == "" {
+				return nil, fmt.Errorf("%w: multi-scope entries require an id and label", models.ErrInvalidJSONResponse)
+			}
+		}
 	}
 	return analysis, nil
 }

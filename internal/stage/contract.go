@@ -3,6 +3,7 @@ package stage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/spec"
@@ -21,9 +22,10 @@ type Contract struct {
 func NewContract[T any]() Contract {
 	var zero T
 	c := Contract{}
-	if h, ok := any(&zero).(interface{ SchemaHint() string }); ok {
+	if h, ok := any(zero).(interface{ SchemaHint() string }); ok {
 		c.hint = h.SchemaHint()
 	}
+	_ = zero
 	c.decode = func(ctx context.Context, gw spec.AIGateway, req spec.AIRequest) (json.RawMessage, int, spec.UsageDetails, error) {
 		v, tokens, details, err := correction.GenerateJSONWithUsage[T](ctx, gw, req)
 		if err != nil {
@@ -38,5 +40,8 @@ func NewContract[T any]() Contract {
 // Decode runs req through gw and returns the validated JSON with the token
 // usage of every attempt, retries included.
 func (c Contract) Decode(ctx context.Context, gw spec.AIGateway, req spec.AIRequest) (json.RawMessage, int, spec.UsageDetails, error) {
+	if c.decode == nil {
+		return nil, 0, spec.UsageDetails{}, fmt.Errorf("stage: contract is zero value")
+	}
 	return c.decode(ctx, gw, req)
 }

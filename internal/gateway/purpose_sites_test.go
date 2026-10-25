@@ -14,7 +14,7 @@ import (
 // wantSites pins SP-023's mapping: every place that builds an AIRequest, an
 // EmbedRequest or a StageRequest outside the provider adapters, and the Purpose
 // each one sends. A site that forwards a Purpose passed in by its caller is
-// recorded as "Purpose"; its callers are pinned where they name the constant.
+// recorded as the forwarded identifier ("Purpose" for a field, "purpose" for a parameter).
 // A new site fails this test until it is added here with a purpose.
 var wantSites = map[string][]string{
 	"internal/gateway/truncation/truncator_summarize.go": {"PurposeHiddenTruncateSummary"},

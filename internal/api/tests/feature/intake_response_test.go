@@ -17,7 +17,10 @@ func intakeResponse(
 	scope func(context.Context, string) (*gateway.ScopeAnalysis, error),
 	plan func(context.Context, string) (*models.DraftPlan, error),
 ) (gateway.AIResponse, error) {
-	intent := req.Messages[len(req.Messages)-1].Content
+	var intent string
+	if n := len(req.Messages); n > 0 {
+		intent = req.Messages[n-1].Content
+	}
 	var (
 		v   any
 		err error

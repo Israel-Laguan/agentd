@@ -37,7 +37,11 @@ func buildStartRuntime(ctx context.Context, cfg config.Config, store models.Kanb
 	ledger := queue.NewRollingTokenLedger(cfg.Queue.RollingTokenWindow, cfg.Queue.RollingTokenLimit)
 	hydrateRollingLedger(ctx, store, ledger)
 	worker := buildWorker(store, deps, cfg, ledger)
-	intake := frontdesk.NewIntakeProcessor(store, stage.NewModelAgent(deps.gateway), deps.emitter, cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), cfg.Gateway.Truncator.MaxInputChars).WithPhaseCap(cfg.Gateway.MaxTasksPerPhase)
+	maxTasks := cfg.Gateway.MaxTasksPerPhase
+	if maxTasks < 0 {
+		maxTasks = 0
+	}
+	intake := frontdesk.NewIntakeProcessor(store, stage.NewModelAgent(deps.gateway), deps.emitter, cfg.Gateway.TruncatorImpl(deps.gateway, deps.breaker), cfg.Gateway.Truncator.MaxInputChars).WithPhaseCap(maxTasks)
 	daemon, err := buildDaemon(ctx, store, worker, intake, deps, cfg, startOpts, ledger)
 	if err != nil {
 		return nil, nil, err
