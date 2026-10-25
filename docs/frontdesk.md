@@ -50,7 +50,7 @@ graph LR
     subgraph intake ["internal/stage/intake (Frontdesk classifier)"]
         Intent["intent.go: ClassifyIntent"]
         Scope["scope.go: AnalyzeScope"]
-        PlanGen["plan.go: Plan (GeneratePlan + GenerateJSON)"]
+        PlanGen["plan.go: Plan"]
     end
 
     subgraph svc ["internal/services (domain logic)"]
@@ -75,7 +75,7 @@ graph LR
     ChatCtrl -->|"Retriever"| RetrieverNode
     RouterImpl -.->|"implements"| Interface
     Summarizer -->|"KanbanStore"| Store
-    Correction -->|"models.DraftPlan"| Plan
+    PlanGen -->|"models.DraftPlan"| Plan
 ```
 
 ### Package responsibilities
@@ -83,7 +83,8 @@ graph LR
 | Package | Owns | Does NOT own |
 | --------- | ------ | ------------- |
 | `internal/api/controllers` | HTTP decode/encode, request routing, error mapping, response envelope formatting | LLM prompts, JSON retry logic, truncation strategies, board persistence |
-| `internal/gateway` | LLM prompt construction, provider fallback, JSON self-correction, truncation enforcement, intent/scope system prompts | HTTP transport, board reads/writes, file stashing |
+| `internal/gateway` | LLM prompt construction, provider fallback, JSON self-correction, truncation enforcement | HTTP transport, board reads/writes, file stashing, intent/scope system prompts |
+| `internal/stage/intake` | Intent/scope system prompts, plan generation, phase cap enforcement | HTTP transport, provider fallback, board persistence |
 | `internal/services` | Deterministic status aggregation, file stash I/O, plan materialization orchestration | LLM calls, HTTP routing |
 | `internal/models` | Shared domain types (`DraftPlan`, `DraftTask`, `KanbanStore` interface, `TaskState` enum) | Any behavior; pure data definitions |
 
