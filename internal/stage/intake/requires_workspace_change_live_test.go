@@ -28,10 +28,9 @@ var liveFlagCases = []liveFlagCase{
 	{"Create a README.md that explains how to build and run the project.", true},
 	{"Fix the failing test in parser_test.go so it passes.", true},
 	{"what os and hardware have this machine", true},
-		{"Write a short summary of what this project does. Reply in text only. Do not create, modify, or delete any files.", false},
-		{"Write a short summary of what this project does. Reply in text only and do not change any files.", false},
-		{"What does this project do?", false},
-
+	{"Write a short summary of what this project does. Reply in text only. Do not create, modify, or delete any files.", false},
+	{"Write a short summary of what this project does. Reply in text only and do not change any files.", false},
+	{"What does this project do?", false},
 
 	{"Explain the trade-offs of using SQLite versus Postgres for a small app like this one.", false},
 }

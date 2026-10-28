@@ -299,4 +299,21 @@ Findings:
 - The B-085 plan half holds on this model: both vague requests got a question every time, and the "what os and hardware" regression guard was planned every time.
 - The flag is right in all six cases at 10/10. An earlier run scored the summary 9/10 and the SQLite-versus-Postgres explanation 0/10. The summary request was then reworded to "Do not create, modify, or delete any files"; the prompt itself did not change between the two runs, so the explanation case moving from 0/10 to 10/10 is not explained by a code change. Re-run before trusting the flag on read-only questions with other wording or models. The live test logs the tasks of every wrong run.
 - A flagged text-only task cannot finish on text alone: it goes to a human with `UNVERIFIED_COMPLETION` unless it runs a passing command or writes a file. A false flag costs a human handoff, not a wrong COMPLETED.
-- The test only checks that a question came back, not that it is specific.
+- The first run's vague-request test only checked that a question came back; the n = 30 run below also checks it is specific.
+
+### Re-run at n = 30 (2026-10-28)
+
+Same model and tests, `AGENTD_LIVE_RUNS=30`, after two changes: the plan prompt now tells the model that a request to explain, compare or discuss is one text task with `requires_workspace_change` false and no file or command, and the vague-request test counts a question as right only when it ends in `?` and is longer than 20 characters. Errors are all 429 (quota); every run that returned an answer was right.
+
+| Request | Expected | Right | Errors (429) |
+| --- | --- | --- | --- |
+| make my app better | question | 28/30 | 2 |
+| improve it | question | 25/30 | 5 |
+| what os and hardware have this machine | plan | 30/30 | 0 |
+| Add a `--verbose` flag to the CLI in `main.go` | plan | 30/30 | 0 |
+| Explain the trade-offs of SQLite versus Postgres for a small app | not flagged | 29/30 | 1 |
+
+- The explanation case is fixed by the prompt change, not by run variance: no wrong answer in 29 answered runs, against 0/10 before.
+- The specificity check removed no runs: every question codestral asked ended in `?` and was longer than 20 characters.
+- The flag test's two text-only summary cases also hit 429s; their scores were not recorded, and "What does this project do?" (no "do not change files" hint) was not reported. Re-run those three before relying on the flag for plain read-only questions.
+- **The prompt names the measured case.** The new rule's example is "explain the trade-offs of X versus Y", the same shape as the test request, so the 29/30 may overstate how well it generalizes. A held-out explain request with other wording would show it.
