@@ -51,8 +51,11 @@ type Task struct {
 	CachedTokenUsage     int          `json:"cached_token_usage"`
 	CacheWriteTokenUsage int          `json:"cache_write_token_usage"`
 	SuccessCriteria      []string     `json:"success_criteria"`
-	CriteriaMet          []string     `json:"criteria_met"`
-	DependsOn            []string     `json:"depends_on"`
+	// RequiresWorkspaceChange marks a task that must change the workspace, so a
+	// run of it cannot finish on text alone (B-082).
+	RequiresWorkspaceChange bool     `json:"requires_workspace_change"`
+	CriteriaMet             []string `json:"criteria_met"`
+	DependsOn               []string `json:"depends_on"`
 }
 
 // TaskResult is the durable outcome reported by a worker after running a task.

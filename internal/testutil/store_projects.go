@@ -32,14 +32,15 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 			state = models.TaskStatePending
 		}
 		task := models.Task{
-			BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-			ProjectID:       project.ID,
-			AgentID:         resolveTaskAgentID(draft.AgentID),
-			Title:           draft.Title,
-			Description:     draft.Description,
-			State:           state,
-			Assignee:        draft.Assignee,
-			SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
+			BaseEntity:              models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+			ProjectID:               project.ID,
+			AgentID:                 resolveTaskAgentID(draft.AgentID),
+			Title:                   draft.Title,
+			Description:             draft.Description,
+			State:                   state,
+			Assignee:                draft.Assignee,
+			SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+			RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 		}
 		if task.Assignee == "" {
 			task.Assignee = models.TaskAssigneeSystem
@@ -156,14 +157,15 @@ func (s *FakeKanbanStore) EnsureProjectTask(_ context.Context, projectID string,
 		}
 	}
 	task := models.Task{
-		BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-		ProjectID:       projectID,
-		AgentID:         resolveTaskAgentID(draft.AgentID),
-		Title:           draft.Title,
-		Description:     draft.Description,
-		Assignee:        draft.Assignee,
-		State:           models.TaskStateReady,
-		SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
+		BaseEntity:              models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+		ProjectID:               projectID,
+		AgentID:                 resolveTaskAgentID(draft.AgentID),
+		Title:                   draft.Title,
+		Description:             draft.Description,
+		Assignee:                draft.Assignee,
+		State:                   models.TaskStateReady,
+		SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+		RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 	}
 	s.tasks[task.ID] = task
 	return &task, true, nil

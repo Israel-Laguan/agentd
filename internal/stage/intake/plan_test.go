@@ -1,10 +1,13 @@
 package intake
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
+	"agentd/internal/stage"
 )
 
 func TestPhasePlanningPrompt(t *testing.T) {
@@ -68,5 +71,34 @@ func TestPhasePlanningPrompt_GuidesHostFactPlans(t *testing.T) {
 				t.Fatalf("phasePlanningPrompt(%d) missing %q:\n%s", max, want, got)
 			}
 		}
+	}
+}
+
+// B-085 / PR 11: the planner marks each task that must change the workspace,
+// so the worker can hold a text-only finish of that task to evidence.
+func TestPlanningPromptAsksForRequiresWorkspaceChange(t *testing.T) {
+	t.Parallel()
+	got := phasePlanningPrompt(0)
+	for _, want := range []string{
+		"Set requires_workspace_change to true on every task that must create or change a file, or run a command, in the project workspace.",
+		"Set it to false, or leave it out, on a task that only reasons or writes text",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("planning prompt missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestPlanCarriesRequiresWorkspaceChange(t *testing.T) {
+	t.Parallel()
+	gw := &fakeGateway{replies: []string{
+		`{"project_name":"p","tasks":[{"title":"Write the file","description":"create main.go","assignee":"SYSTEM","requires_workspace_change":true},{"title":"Summarize","description":"s","assignee":"SYSTEM"}]}`,
+	}}
+	plan, err := Plan(context.Background(), stage.NewModelAgent(gw), spec.PurposeIntakeDraftPlan, 0, "add a file")
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if !plan.Tasks[0].RequiresWorkspaceChange || plan.Tasks[1].RequiresWorkspaceChange {
+		t.Fatalf("tasks = %+v, want only the first marked", plan.Tasks)
 	}
 }

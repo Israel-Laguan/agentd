@@ -70,7 +70,7 @@ func (e *Engine) processAgenticIteration(
 		return e.finishAgenticTurnNoTools(
 			ctx, task, project, profile, resp.Content, workPlan, goalTracker,
 			turnID, turnIndex, budgetGuard, ctxBudgetGuard, cm, messages, respecAttempts,
-			checkpointer, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject,
+			checkpointer, sessionRecoveryGen, sessionRecoveryUsed, sessionRecoveryNeedsPlanInject, len(tools) > 0,
 		)
 	}
 	log.DebugContext(ctx, "agentic: tool dispatch start",

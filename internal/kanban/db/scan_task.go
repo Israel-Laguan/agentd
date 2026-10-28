@@ -24,6 +24,7 @@ type taskScanValues struct {
 	osPID           sql.NullInt64
 	successCriteria string
 	criteriaMet     string
+	requiresChange  bool
 }
 
 func scanTaskValues(row Scanner, values *taskScanValues) error {
@@ -31,7 +32,7 @@ func scanTaskValues(row Scanner, values *taskScanValues) error {
 	err := row.Scan(
 		&t.ID, &t.ProjectID, &t.AgentID, &t.Title, &t.Description, &values.state, &values.assignee,
 		&values.osPID, &values.startedAt, &values.completedAt, &values.lastHeartbeat, &t.RetryCount, &t.TokenUsage, &t.CachedTokenUsage, &t.CacheWriteTokenUsage,
-		&values.successCriteria, &values.criteriaMet, &values.createdAt, &values.updatedAt,
+		&values.successCriteria, &values.criteriaMet, &values.requiresChange, &values.createdAt, &values.updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return models.ErrTaskNotFound
@@ -61,6 +62,7 @@ func (v *taskScanValues) apply() error {
 	if err := json.Unmarshal([]byte(v.criteriaMet), &v.task.CriteriaMet); err != nil {
 		return fmt.Errorf("decode criteria met: %w", err)
 	}
+	v.task.RequiresWorkspaceChange = v.requiresChange
 	return applyEntityTimes(v.task, v.createdAt, v.updatedAt)
 }
 

@@ -11,14 +11,16 @@ const draftPlanSchemaHint = `The JSON object must have exactly this shape:
   "description": string (optional),
   "source_path": string (optional, local source directory to copy into the workspace),
   "start_empty_workspace": boolean (optional, start with an empty workspace),
-  "tasks": [ (required, at least one)
+  "clarification_question": string (optional; when set, tasks may be empty and the question is asked instead of planning),
+  "tasks": [ (required, at least one, unless clarification_question is set)
     {
       "ref_id": string (optional, unique id other tasks can reference),
       "title": string (required),
       "description": string (what the worker must do),
       "assignee": "SYSTEM" (agentd runs it) or "HUMAN" (a person must do it),
       "depends_on": [string] (optional, ref_id values of earlier tasks),
-      "success_criteria": [string] (optional)
+      "success_criteria": [string] (optional),
+      "requires_workspace_change": boolean (optional, true when the task must create or change files or run commands in the workspace)
     }
   ]
 }

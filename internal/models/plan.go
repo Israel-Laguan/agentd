@@ -12,6 +12,9 @@ type DraftPlan struct {
 	ProjectName string      `json:"project_name"`
 	Description string      `json:"description,omitempty"`
 	Tasks       []DraftTask `json:"tasks"`
+	// ClarificationQuestion is set instead of tasks when the request names no
+	// target or outcome to plan. The planner returns it to the user (B-085).
+	ClarificationQuestion string `json:"clarification_question,omitempty"`
 	// SourcePath is an optional local filesystem path whose contents are
 	// copied into the project workspace before tasks become claimable.
 	// When set, the server performs an atomic copy so workers never run
@@ -85,6 +88,11 @@ func hostReadPath(text string) string {
 // that reads a file another task writes gains the depends_on edge the model
 // left out (see ensureFileDependencies).
 func (p *DraftPlan) Validate() error {
+	if strings.TrimSpace(p.ClarificationQuestion) != "" {
+		p.ClarificationQuestion = strings.TrimSpace(p.ClarificationQuestion)
+		p.Tasks = nil
+		return nil
+	}
 	if strings.TrimSpace(p.ProjectName) == "" {
 		return fmt.Errorf("project name is required")
 	}
@@ -134,6 +142,8 @@ type DraftTask struct {
 	AgentID         string   `json:"agent_id,omitempty"`
 	DependsOn       []string `json:"depends_on,omitempty"`
 	SuccessCriteria []string `json:"success_criteria,omitempty"`
+	// RequiresWorkspaceChange marks a task that must change the workspace.
+	RequiresWorkspaceChange bool `json:"requires_workspace_change,omitempty"`
 	// SplitChild marks a draft created by the split stage, so the store links
 	// it to its parent with a SPLIT relation instead of an ordinary BLOCKS
 	// dependency. It is never read from plan JSON.

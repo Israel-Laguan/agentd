@@ -18,8 +18,23 @@ const hostFactPlanningRule = "\nTasks run as shell commands inside the project w
 	"saving each output to a file, and finish with a task titled \"" + models.HostReportTaskTitle + "\" that builds report.md from those files; never state facts you did not collect. " +
 	"Name files with bare relative file names such as cpu_info.txt (never a /workspace or workspace/ prefix), and give every collecting task a ref_id and the report task a depends_on listing all of them, because tasks without depends_on run in parallel."
 
+// workspaceChangePlanningRule asks for the flag the worker's evidence gate reads
+// (PR 11): a task that changes the workspace cannot finish on text alone.
+const workspaceChangePlanningRule = "\nSet requires_workspace_change to true on every task that must create or change a file, or run a command, in the project workspace. " +
+	"Set it to false, or leave it out, on a task that only reasons or writes text, such as a summary or a review. " +
+	"A request that only asks for an answer in text, whether it is a question, an explanation, a comparison, pros and cons, a recommendation or an opinion, " +
+	"and does not ask to change the project, is one task with requires_workspace_change false: it creates no file, runs no command, " +
+	"and has no separate task that writes the answer to disk."
+
+// vagueRequestPlanningRule makes the plan step ask instead of planning discovery
+// for a request that names no target or outcome (B-085). A request that asks
+// for a concrete read-only answer, such as facts about this machine, is not vague.
+const vagueRequestPlanningRule = "\nIf the request names no target and no outcome, such as \"make my app better\" or \"improve it\", do not plan tasks that only explore the project to find out what to do. " +
+	"Set clarification_question to one specific question that asks what should change and how the user will know it is done, and leave tasks empty. " +
+	"A request for a concrete answer, such as facts about this machine, is not vague: plan it."
+
 func phasePlanningPrompt(maxTasksPerPhase int) string {
-	base := "Create an agentd DraftPlan. Output ONLY valid JSON.\n" + models.DraftPlan{}.SchemaHint() + hostFactPlanningRule
+	base := "Create an agentd DraftPlan. Output ONLY valid JSON.\n" + models.DraftPlan{}.SchemaHint() + hostFactPlanningRule + workspaceChangePlanningRule + vagueRequestPlanningRule
 	if maxTasksPerPhase <= 0 {
 		return base
 	}

@@ -58,6 +58,9 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 		slog.WarnContext(ctx, "intake: plan generation failed", "task_id", ref.TaskID, "error", planErr)
 		return planErr
 	}
+	if plan.ClarificationQuestion != "" {
+		return p.askBack(ctx, *task, ref, plan.ClarificationQuestion)
+	}
 	slog.DebugContext(ctx, "intake: plan generated",
 		"task_id", ref.TaskID, "task_count", len(plan.Tasks))
 	created, err := p.store.AppendTasksToProject(ctx, task.ProjectID, task.ID, plan.Tasks)
@@ -73,6 +76,22 @@ func (p *IntakeProcessor) Process(ctx context.Context, ref models.CommentRef) er
 	slog.DebugContext(ctx, "intake: comment processed",
 		"task_id", ref.TaskID, "follow_up_tasks", len(plan.Tasks))
 	return p.emit(ctx, *task, len(plan.Tasks))
+}
+
+// askBack answers a comment too vague to plan with the plan step's question
+// (B-085). The question is a FRONTDESK comment, which leaves the task where it
+// is, so a live task waits in IN_CONSIDERATION for the human's answer. The
+// comment is marked processed so intake does not ask again.
+func (p *IntakeProcessor) askBack(ctx context.Context, task models.Task, ref models.CommentRef, question string) error {
+	if err := p.store.AddComment(ctx, models.Comment{
+		TaskID: task.ID,
+		Author: models.CommentAuthorFrontdesk,
+		Body:   question,
+	}); err != nil {
+		return err
+	}
+	slog.DebugContext(ctx, "intake: asked for clarification", "task_id", task.ID)
+	return p.store.MarkCommentProcessed(ctx, task.ID, ref.CommentEventID)
 }
 
 // releaseParent decides what happens to the commented task once follow-ups

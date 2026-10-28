@@ -120,14 +120,15 @@ func (s *FakeKanbanStore) insertReadyTask(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	task := models.Task{
-		BaseEntity:      models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
-		ProjectID:       projectID,
-		AgentID:         "default",
-		Title:           draft.Title,
-		Description:     draft.Description,
-		Assignee:        draft.Assignee,
-		State:           models.TaskStateReady,
-		SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
+		BaseEntity:              models.BaseEntity{ID: s.nextID(), CreatedAt: now(), UpdatedAt: now()},
+		ProjectID:               projectID,
+		AgentID:                 "default",
+		Title:                   draft.Title,
+		Description:             draft.Description,
+		Assignee:                draft.Assignee,
+		State:                   models.TaskStateReady,
+		SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+		RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 	}
 	if task.Assignee == "" {
 		task.Assignee = models.TaskAssigneeSystem

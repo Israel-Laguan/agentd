@@ -214,13 +214,14 @@ func newTask(draft models.DraftTask, projectID, taskID string, now time.Time, wo
 		state = models.TaskStatePending
 	}
 	return models.Task{
-		BaseEntity:      models.BaseEntity{ID: taskID, CreatedAt: now, UpdatedAt: now},
-		ProjectID:       projectID,
-		AgentID:         resolveAgentID(draft.AgentID),
-		Title:           strings.TrimSpace(draft.Title),
-		Description:     strings.TrimSpace(draft.Description),
-		State:           state,
-		Assignee:        draft.Assignee,
-		SuccessCriteria: append([]string(nil), draft.SuccessCriteria...),
+		BaseEntity:              models.BaseEntity{ID: taskID, CreatedAt: now, UpdatedAt: now},
+		ProjectID:               projectID,
+		AgentID:                 resolveAgentID(draft.AgentID),
+		Title:                   strings.TrimSpace(draft.Title),
+		Description:             strings.TrimSpace(draft.Description),
+		State:                   state,
+		Assignee:                draft.Assignee,
+		SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+		RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 	}
 }
