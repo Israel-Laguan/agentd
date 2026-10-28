@@ -20,9 +20,9 @@ func TestPhasePlanningCallCarriesTheTaskID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
-	agent := &intakeRecorder{output: threeNextPhaseTasks}
+	agent := &stageRecorder{output: threeNextPhaseTasks}
 	w := NewWorker(store, nil, nil, nil, nil, WorkerOptions{})
-	w.intakeAgent = agent
+	w.stageAgent = agent
 
 	w.handlePhasePlanning(ctx, tasks[0], *project)
 

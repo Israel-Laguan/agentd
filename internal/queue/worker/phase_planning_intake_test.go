@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"agentd/internal/gateway"
@@ -11,26 +10,12 @@ import (
 	"agentd/internal/testutil"
 )
 
-// intakeRecorder is a stage.Agent that returns a canned plan and records each
-// request with the task ID it saw in ctx.
-type intakeRecorder struct {
-	output  string
-	reqs    []stage.StageRequest
-	taskIDs []string
-}
-
-func (a *intakeRecorder) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
-	a.reqs = append(a.reqs, req)
-	a.taskIDs = append(a.taskIDs, gateway.TaskIDFromContext(ctx))
-	return stage.StageResult{Outcome: stage.OutcomeCompleted, Output: json.RawMessage(a.output)}, nil
-}
-
 const threeNextPhaseTasks = `{"project_name":"P","tasks":[` +
 	`{"title":"a","description":"d","assignee":"SYSTEM"},` +
 	`{"title":"b","description":"d","assignee":"SYSTEM"},` +
 	`{"title":"c","description":"d","assignee":"SYSTEM"}]}`
 
-func TestPhasePlanningRunsTheIntakeStageWithItsPurposeAndCap(t *testing.T) {
+func TestPhasePlanningRunsTheTaskCreationStageWithItsPurposeAndCap(t *testing.T) {
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	project, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
@@ -40,9 +25,9 @@ func TestPhasePlanningRunsTheIntakeStageWithItsPurposeAndCap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
-	agent := &intakeRecorder{output: threeNextPhaseTasks}
+	agent := &stageRecorder{output: threeNextPhaseTasks}
 	w := NewWorker(store, nil, nil, nil, nil, WorkerOptions{MaxTasksPerPhase: 2})
-	w.intakeAgent = agent
+	w.stageAgent = agent
 
 	before, err := store.ListTasksByProject(ctx, project.ID)
 	if err != nil {

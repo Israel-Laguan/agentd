@@ -164,7 +164,7 @@ func newWorkerCore(
 ) *Worker {
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
-		intakeAgent: stage.NewModelAgent(gw), maxTasksPerPhase: opts.MaxTasksPerPhase,
+		stageAgent: stage.NewModelAgent(gw), maxTasksPerPhase: opts.MaxTasksPerPhase,
 		projectsDir:      opts.ProjectsDir,
 		providerBreakers: opts.ProviderBreakers,
 		canceller:        opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,

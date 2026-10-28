@@ -37,9 +37,9 @@ type Worker struct {
 	attempts attemptRecords
 	store    models.KanbanStore
 	gateway  gateway.AIGateway
-	// intakeAgent runs the next-phase plan through the intake stage. It defaults
-	// to a ModelAgent over gateway.
-	intakeAgent stage.Agent
+	// stageAgent runs the task-creation stages (healing split, elicitor, work
+	// plan, next-phase plan). It defaults to a ModelAgent over gateway.
+	stageAgent stage.Agent
 	// maxTasksPerPhase caps the tasks in one next-phase plan.
 	maxTasksPerPhase        int
 	sandbox                 sandbox.Executor
@@ -111,6 +111,15 @@ type TokenUsageStore interface {
 type PluginMounter interface {
 	MountProject(workspacePath string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
 	MountSession(names []string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
+}
+
+// taskCreationAgent is the agent the task-creation stages call. A Worker built
+// without NewWorker falls back to a ModelAgent over its gateway.
+func (w *Worker) taskCreationAgent() stage.Agent {
+	if w.stageAgent != nil {
+		return w.stageAgent
+	}
+	return stage.NewModelAgent(w.gateway)
 }
 
 func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails) {

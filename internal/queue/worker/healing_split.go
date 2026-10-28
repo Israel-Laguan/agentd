@@ -2,11 +2,13 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
+	"agentd/internal/stage"
 )
 
 // handleHealingSplit breaks a task that keeps failing into subtasks, or hands
@@ -41,21 +43,25 @@ func (w *Worker) splitTask(ctx context.Context, task models.Task, project models
 	messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
 	messages = w.PrependSandboxViolationFeedback(ctx, task, messages)
 	profile = w.ApplyModelRouting(task, profile, messages, nil)
-	req := gateway.AIRequest{
+	res, err := w.taskCreationAgent().Call(gateway.WithTaskID(ctx, task.ID), stage.StageRequest{
+		Stage:       stage.StageTaskCreation,
 		Purpose:     gateway.PurposeCreateSplitTask,
-		Messages:    messages,
+		Context:     messages,
+		Contract:    stage.NewContract[planning.SplitResult](),
 		Temperature: profile.Temperature,
-		AgentID:     task.AgentID,
 		Role:        gateway.RoleWorker,
-		TaskID:      task.ID,
+		AgentID:     task.AgentID,
 		Provider:    profile.Provider,
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,
-	}
-	result, tokens, details, err := gateway.GenerateJSONWithUsage[planning.SplitResult](ctx, w.gateway, req)
-	w.RecordTaskTokenUsage(ctx, task, tokens, details)
+	})
+	w.RecordTaskTokenUsage(ctx, task, res.TokenUsage, res.UsageDetails)
 	if err != nil {
 		return planning.SplitResult{}, err
+	}
+	var result planning.SplitResult
+	if err := json.Unmarshal(res.Output, &result); err != nil {
+		return planning.SplitResult{}, fmt.Errorf("%w: %v", models.ErrInvalidJSONResponse, err)
 	}
 	w.RecordProviderSuccess(ctx, task)
 	return result, nil
