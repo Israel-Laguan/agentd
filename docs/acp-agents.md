@@ -317,3 +317,19 @@ Same model and tests, `AGENTD_LIVE_RUNS=30`, after two changes: the plan prompt 
 - The specificity check removed no runs: every question codestral asked ended in `?` and was longer than 20 characters.
 - The flag test's two text-only summary cases also hit 429s; their scores were not recorded, and "What does this project do?" (no "do not change files" hint) was not reported. Re-run those three before relying on the flag for plain read-only questions.
 - **The prompt names the measured case.** The new rule's example is "explain the trade-offs of X versus Y", the same shape as the test request, so the 29/30 may overstate how well it generalizes. A held-out explain request with other wording would show it.
+
+### Re-run at n = 20 with an 8 s delay (2026-10-28)
+
+`codestral-latest`, 20 runs per case, 8 s between calls. **0 errors**: the 429s in the earlier runs were the provider's requests-per-minute limit, not the prompt. `AGENTD_LIVE_DELAY=8s` now does this in both live tests.
+
+| Request | Expected | Right |
+| --- | --- | --- |
+| `--verbose` flag, README, failing test, host facts (four cases) | flagged | 20/20 each |
+| Summary, "Do not create, modify, or delete any files" | not flagged | 20/20 |
+| Summary, "do not change any files" (original wording) | not flagged | 20/20 |
+| What does this project do? | not flagged | 18/20 |
+| Explain the trade-offs of SQLite versus Postgres | not flagged | 20/20 |
+| What are the pros and cons of SQLite vs Postgres? | not flagged | **16/20** |
+
+- The explain rule fit its own example (20/20) better than a reworded request (16/20). The rule was rewritten afterwards to name kinds of request (a question, an explanation, a comparison, pros and cons, a recommendation, an opinion) instead of quoting one; **that version is not measured yet.**
+- A false flag on a read-only question is cheap: the task needs one passing command or a written file, and a read such as `cat README.md` passes. The same fact makes the gate weak for a real change: any passing command counts as evidence, not only one that shows the change worked.

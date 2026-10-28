@@ -32,14 +32,15 @@ var liveFlagCases = []liveFlagCase{
 	{"Write a short summary of what this project does. Reply in text only and do not change any files.", false},
 	{"What does this project do?", false},
 
-		{"Explain the trade-offs of using SQLite versus Postgres for a small app like this one.", false},
-		{"What are the pros and cons of SQLite vs Postgres?", false},
-
+	{"Explain the trade-offs of using SQLite versus Postgres for a small app like this one.", false},
+	{"What are the pros and cons of SQLite vs Postgres?", false},
 }
 
 // TestLiveRequiresWorkspaceChangeFlag measures how often the intake plan prompt
 // sets requires_workspace_change correctly on a real provider (PR 11, B-085).
 // It runs only on demand: go test -tags live -run TestLiveRequiresWorkspaceChangeFlag -v ./internal/stage/intake/
+// AGENTD_LIVE_DELAY (a Go duration such as 8s) waits before each call; on
+// codestral 8s kept every run under the rate limit, where no delay got 429s.
 // It needs the key in the env var named by AGENTD_LIVE_API_KEY_ENV (default
 // OPENROUTER_API_KEY). AGENTD_LIVE_BASE_URL and AGENTD_LIVE_MODEL override the
 // endpoint and model, and AGENTD_LIVE_RUNS sets the runs per case (default 10).
@@ -90,6 +91,7 @@ func TestLiveRequiresWorkspaceChangeFlag(t *testing.T) {
 	for _, c := range liveFlagCases {
 		right, errs := 0, 0
 		for i := range runs {
+			liveDelay()
 			plan, err := Plan(context.Background(), agent, spec.PurposeIntakeDraftPlan, 0, c.request)
 			if err != nil {
 				errs++
@@ -168,6 +170,7 @@ func TestLiveVagueRequestAsksAQuestion(t *testing.T) {
 	for _, c := range liveVagueCases {
 		right, errs := 0, 0
 		for i := range runs {
+			liveDelay()
 			plan, err := Plan(context.Background(), agent, spec.PurposeIntakeDraftPlan, 0, c.request)
 			if err != nil {
 				errs++
@@ -191,5 +194,13 @@ func TestLiveVagueRequestAsksAQuestion(t *testing.T) {
 		if errs > 0 {
 			t.Errorf("%d of %d runs errored; the measurement is not valid", errs, runs)
 		}
+	}
+}
+
+// liveDelay waits AGENTD_LIVE_DELAY before a live call, to stay under a
+// provider's requests-per-minute limit.
+func liveDelay() {
+	if d, err := time.ParseDuration(os.Getenv("AGENTD_LIVE_DELAY")); err == nil && d > 0 {
+		time.Sleep(d)
 	}
 }
