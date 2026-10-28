@@ -115,7 +115,7 @@ internal/queue/safety/semaphore.go (*Semaphore).InUse
 internal/queue/safety/semaphore.go (*Semaphore).Capacity
 internal/queue/safety/semaphore.go (*Semaphore).Available
 internal/queue/scheduler.go (*Scheduler).Enabled
-internal/queue/worker/agentic/verify.go (runEvidence).any
+internal/queue/worker/agentic/verify.go (*runEvidence).any
 internal/queue/worker/batcher.go NewTaskBatcher
 internal/queue/worker/elicitor.go NewElicitor
 internal/queue/worker/hooks_approval.go NewBlockingApprovalHandler
