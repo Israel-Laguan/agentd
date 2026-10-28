@@ -153,9 +153,17 @@ func (p *Planner) planApprovedScope(ctx context.Context, intent, approvedScope s
 		return nil, err
 	}
 	if plan.ClarificationQuestion != "" {
-		return json.Marshal(IntentClarification{Kind: "intent_clarification", Message: plan.ClarificationQuestion})
+		b, err := json.Marshal(IntentClarification{Kind: "intent_clarification", Message: plan.ClarificationQuestion})
+		if err != nil {
+			return nil, err
+		}
+		return b, nil
 	}
-	return json.Marshal(plan)
+	b, err := json.Marshal(plan)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 func (p *Planner) ctxWithHouseRules(ctx context.Context) context.Context {

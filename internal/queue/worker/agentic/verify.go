@@ -103,7 +103,7 @@ func (r *runEvidence) note(call gateway.ToolCall, tr agenttools.ToolResult) {
 }
 
 // any reports whether the run produced evidence of work.
-func (r runEvidence) any() bool {
+func (r *runEvidence) any() bool {
 	return r.passedCommands > 0 || r.filesWritten > 0
 }
 

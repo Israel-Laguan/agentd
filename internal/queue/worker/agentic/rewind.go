@@ -192,7 +192,7 @@ func (e *Engine) finishAgenticTurnNoTools(
 	if stop := e.unverifiedFinish(turnIndex, budgetGuard, *messages); stop != nil {
 		return false, *stop, true, rewindNone, nil
 	}
-	if stop := e.unevidencedFinish(task, toolsOffered && workPlan == nil, turnIndex, budgetGuard, *messages); stop != nil {
+	if stop := e.unevidencedFinish(task, toolsOffered, turnIndex, budgetGuard, *messages); stop != nil {
 		return false, *stop, true, rewindNone, nil
 	}
 	if stop := e.unmetCriteriaFinish(task, project, turnIndex, budgetGuard, *messages); stop != nil {
