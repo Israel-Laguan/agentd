@@ -32,7 +32,9 @@ var liveFlagCases = []liveFlagCase{
 	{"Write a short summary of what this project does. Reply in text only and do not change any files.", false},
 	{"What does this project do?", false},
 
-	{"Explain the trade-offs of using SQLite versus Postgres for a small app like this one.", false},
+		{"Explain the trade-offs of using SQLite versus Postgres for a small app like this one.", false},
+		{"What are the pros and cons of SQLite vs Postgres?", false},
+
 }
 
 // TestLiveRequiresWorkspaceChangeFlag measures how often the intake plan prompt
