@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/sandbox"
+	"agentd/internal/stage"
 	"agentd/internal/stage/intake"
 )
 
@@ -71,6 +73,9 @@ func (w *Worker) handleTaskBreakdown(ctx context.Context, task models.Task, subt
 	w.Emit(ctx, task, "TASK_BREAKDOWN", fmt.Sprintf("created %d subtasks", len(drafts)))
 }
 
+// errPhasePlanAsked marks a next-phase plan that answered with a question.
+var errPhasePlanAsked = errors.New("next-phase plan asked a question instead of planning")
+
 func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, project models.Project) {
 	tasks, err := w.store.ListTasksByProject(ctx, project.ID)
 	if err != nil {
@@ -78,9 +83,15 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		return
 	}
 	intent := planning.BuildPhaseIntent(task, project, tasks)
-	plan, err := intake.Plan(gateway.WithTaskID(ctx, task.ID), w.taskCreationAgent(), gateway.PurposeCreateNextPhase, w.maxTasksPerPhase, intent)
+	plan, err := intake.PlanInStage(gateway.WithTaskID(ctx, task.ID), w.taskCreationAgent(), stage.StageTaskCreation, gateway.PurposeCreateNextPhase, w.maxTasksPerPhase, intent)
 	if err != nil {
 		w.HandleGatewayError(ctx, task, err)
+		return
+	}
+	if plan.ClarificationQuestion != "" {
+		// The intent is machine-built, so nobody can answer. Retry the task with
+		// the question kept in the failure payload instead of planning 0 tasks.
+		w.HandleGatewayError(ctx, task, fmt.Errorf("%w: %s", errPhasePlanAsked, plan.ClarificationQuestion))
 		return
 	}
 	plan.Tasks = planning.RetitlePhaseContinuationTasks(plan.Tasks, planning.NextPhaseNumber(task.Title))

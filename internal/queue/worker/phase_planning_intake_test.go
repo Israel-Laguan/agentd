@@ -43,8 +43,8 @@ func TestPhasePlanningRunsTheTaskCreationStageWithItsPurposeAndCap(t *testing.T)
 		t.Fatalf("intake calls = %d, want 1", len(agent.reqs))
 	}
 	req := agent.reqs[0]
-	if req.Stage != stage.StageIntake || req.Purpose != gateway.PurposeCreateNextPhase {
-		t.Fatalf("call = stage %q purpose %q, want intake and next phase", req.Stage, req.Purpose)
+	if req.Stage != stage.StageTaskCreation || req.Purpose != gateway.PurposeCreateNextPhase {
+		t.Fatalf("call = stage %q purpose %q, want task creation and next phase", req.Stage, req.Purpose)
 	}
 	if agent.taskIDs[0] != tasks[0].ID {
 		t.Fatalf("plan TaskID = %q, want %q", agent.taskIDs[0], tasks[0].ID)

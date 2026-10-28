@@ -48,9 +48,18 @@ func phasePlanningPrompt(maxTasksPerPhase int) string {
 // Plan asks agent for a DraftPlan for userIntent, tagged with purpose, and
 // trims it to maxTasksPerPhase. Callers that create tasks from a purpose other
 // than a chat intake pass that purpose explicitly.
+//
+// The plan may carry a ClarificationQuestion and no tasks (B-085); every caller
+// must check it.
 func Plan(ctx context.Context, agent stage.Agent, purpose spec.Purpose, maxTasksPerPhase int, userIntent string) (*models.DraftPlan, error) {
+	return PlanInStage(ctx, agent, stage.StageIntake, purpose, maxTasksPerPhase, userIntent)
+}
+
+// PlanInStage is Plan for a caller whose call belongs to another stage: the
+// next-phase plan is task creation, but it uses the same prompt and contract.
+func PlanInStage(ctx context.Context, agent stage.Agent, st stage.Stage, purpose spec.Purpose, maxTasksPerPhase int, userIntent string) (*models.DraftPlan, error) {
 	res, err := agent.Call(ctx, stage.StageRequest{
-		Stage:   stage.StageIntake,
+		Stage:   st,
 		Purpose: purpose,
 		Context: []spec.PromptMessage{
 			{Role: "system", Content: phasePlanningPrompt(maxTasksPerPhase)},
