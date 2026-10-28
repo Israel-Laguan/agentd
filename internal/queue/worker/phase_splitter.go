@@ -11,9 +11,9 @@ import (
 	agentcontext "agentd/internal/agent/context"
 	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
-	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
+	"agentd/internal/stage"
 )
 
 // EstimateTaskComplexity scores how complex a task is for planning purposes.
@@ -105,68 +105,50 @@ Rules:
 - output_format defaults to "text" when omitted
 - keep the plan minimal and actionable`
 
-func (w *Worker) buildPlanRequest(task models.Task, planContext string) gateway.AIRequest {
-	return gateway.AIRequest{
+// buildPlanRequest is the work plan's one stage call. The contract carries the
+// corrective retries, so a bad reply is repaired inside the call.
+func (w *Worker) buildPlanRequest(task models.Task, planContext string) stage.StageRequest {
+	return stage.StageRequest{
+		Stage:   stage.StageTaskCreation,
 		Purpose: gateway.PurposeExecWorkPlan,
-		Messages: []spec.PromptMessage{
+		Context: []spec.PromptMessage{
 			{Role: "system", Content: planSystemPrompt},
 			{Role: "user", Content: planContext},
 		},
-		JSONMode:  true,
-		AgentID:   task.AgentID,
+		Contract:  stage.NewContract[agentcontext.Plan](),
 		Role:      gateway.RoleMemory,
-		TaskID:    task.ID,
+		AgentID:   task.AgentID,
 		MaxTokens: planPhaseTokenReserve,
 	}
 }
 
+// GeneratePlan asks the work-plan stage for a plan. The budget guard is charged
+// with what the call cost, a failed call included, but the tokens are not
+// persisted as task usage.
 func (w *Worker) GeneratePlan(
 	ctx context.Context, task models.Task, project models.Project,
 	budgetGuard *agentruntime.BudgetGuard,
 ) (*agentcontext.Plan, error) {
-	planContext := w.buildPlanContext(task, project)
-	req := w.buildPlanRequest(task, planContext)
-	req.JSONMode = true
-	for attempt := 0; attempt < correction.MaxJSONAttempts; attempt++ {
-		if attempt > 0 {
-			req.Attempt = gateway.AttemptJSONRepair
-		}
-		if budgetGuard != nil {
-			if err := budgetGuard.BeforeCall(); err != nil {
-				return nil, err
-			}
-		}
-		resp, err := w.gateway.Generate(ctx, req)
-		if err != nil {
-			slog.Warn("agentic plan generation failed; continuing without plan",
-				"task_id", task.ID, "error", err)
+	req := w.buildPlanRequest(task, w.buildPlanContext(task, project))
+	if budgetGuard != nil {
+		if err := budgetGuard.BeforeCall(); err != nil {
 			return nil, err
 		}
-		if budgetGuard != nil {
-			budgetGuard.AfterCall(resp.TokenUsage)
-		}
-		var plan agentcontext.Plan
-		if err := json.Unmarshal([]byte(resp.Content), &plan); err != nil {
-			if attempt == correction.MaxJSONAttempts-1 {
-				slog.Warn("agentic plan generation failed; continuing without plan",
-					"task_id", task.ID, "error", err)
-				return nil, err
-			}
-			req.Messages = append(req.Messages, correction.PromptAfterInvalidJSON(err))
-			continue
-		}
-		if err := plan.Validate(); err != nil {
-			if attempt == correction.MaxJSONAttempts-1 {
-				slog.Warn("agentic plan validation failed; continuing without plan",
-					"task_id", task.ID, "error", err)
-				return nil, err
-			}
-			req.Messages = append(req.Messages, correction.PromptAfterInvalidJSON(err))
-			continue
-		}
-		return &plan, nil
 	}
-	return nil, models.ErrInvalidJSONResponse
+	res, err := w.taskCreationAgent().Call(gateway.WithTaskID(ctx, task.ID), req)
+	if budgetGuard != nil {
+		budgetGuard.AfterCall(res.TokenUsage)
+	}
+	if err != nil {
+		slog.Warn("agentic plan generation failed; continuing without plan",
+			"task_id", task.ID, "error", err)
+		return nil, err
+	}
+	var plan agentcontext.Plan
+	if err := json.Unmarshal(res.Output, &plan); err != nil {
+		return nil, fmt.Errorf("%w: %v", models.ErrInvalidJSONResponse, err)
+	}
+	return &plan, nil
 }
 
 func (w *Worker) InjectPlan(messages []gateway.PromptMessage, plan *agentcontext.Plan) []gateway.PromptMessage {
