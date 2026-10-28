@@ -11,6 +11,7 @@ import (
 	agentcontext "agentd/internal/agent/context"
 	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/stage"
@@ -134,9 +135,10 @@ func (w *Worker) GeneratePlan(
 		if err := budgetGuard.BeforeCall(); err != nil {
 			return nil, err
 		}
+		ctx = correction.WithAttemptBudget(ctx, budgetGuard)
 	}
 	res, err := w.taskCreationAgent().Call(gateway.WithTaskID(ctx, task.ID), req)
-	if budgetGuard != nil {
+	if budgetGuard != nil && !correction.AttemptBudgetCharged(ctx) {
 		budgetGuard.AfterCall(res.TokenUsage)
 	}
 	if err != nil {

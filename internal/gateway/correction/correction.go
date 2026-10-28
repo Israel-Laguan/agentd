@@ -10,6 +10,31 @@ import (
 	"agentd/internal/models"
 )
 
+type attemptBudgetKey struct{}
+
+type attemptBudgetState struct {
+	budget AttemptBudget
+	used   bool
+	first  bool
+}
+
+// AttemptBudget is the per-call budget contract used while correcting JSON.
+type AttemptBudget interface {
+	BeforeCall() error
+	AfterCall(int)
+}
+
+// WithAttemptBudget makes each provider attempt in the correction loop budget-aware.
+func WithAttemptBudget(ctx context.Context, budget AttemptBudget) context.Context {
+	return context.WithValue(ctx, attemptBudgetKey{}, &attemptBudgetState{budget: budget, first: true})
+}
+
+// AttemptBudgetCharged reports whether provider attempts charged the context budget.
+func AttemptBudgetCharged(ctx context.Context) bool {
+	state, _ := ctx.Value(attemptBudgetKey{}).(*attemptBudgetState)
+	return state != nil && state.used
+}
+
 // MaxJSONAttempts is the retry budget for JSON repair flows.
 const MaxJSONAttempts = 3
 
@@ -29,12 +54,25 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 	var details spec.UsageDetails
 	var lastRaw string
 	for attempt := 0; attempt < MaxJSONAttempts; attempt++ {
+		if state, _ := ctx.Value(attemptBudgetKey{}).(*attemptBudgetState); state != nil {
+			if !state.first {
+				if err := state.budget.BeforeCall(); err != nil {
+					return zero, totalUsage, details, err
+				}
+			} else {
+				state.first = false
+			}
+		}
 		if attempt > 0 {
 			req.Attempt = spec.AttemptJSONRepair
 		}
 		resp, err := gw.Generate(ctx, req)
 		if err != nil {
 			return zero, totalUsage, details, err
+		}
+		if state, _ := ctx.Value(attemptBudgetKey{}).(*attemptBudgetState); state != nil {
+			state.budget.AfterCall(resp.TokenUsage)
+			state.used = true
 		}
 		totalUsage += resp.TokenUsage
 		// Model names only this response's model, never a rejected earlier one.

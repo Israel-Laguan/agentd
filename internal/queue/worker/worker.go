@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -113,15 +114,23 @@ type PluginMounter interface {
 	MountSession(names []string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
 }
 
+var errNoTaskCreationAgent = errors.New("worker: no task-creation agent or gateway configured")
+
+type unavailableAgent struct{}
+
+func (unavailableAgent) Call(context.Context, stage.StageRequest) (stage.StageResult, error) {
+	return stage.StageResult{}, errNoTaskCreationAgent
+}
+
 // taskCreationAgent is the agent the task-creation stages call. A Worker built
 // without NewWorker falls back to a ModelAgent over its gateway; with neither
-// it returns nil, which the elicitor treats as "nothing to ask".
+// it returns an agent whose Call reports an error.
 func (w *Worker) taskCreationAgent() stage.Agent {
 	if w.stageAgent != nil {
 		return w.stageAgent
 	}
 	if w.gateway == nil {
-		return nil
+		return unavailableAgent{}
 	}
 	return stage.NewModelAgent(w.gateway)
 }
