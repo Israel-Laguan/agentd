@@ -87,9 +87,7 @@ type Worker struct {
 	messageEditor           *agentcontext.MessageEditor
 	checkpointStore         wsession.CheckpointStore
 	topicGuard              *agentruntime.TopicGuard
-	modelRouter             *agentruntime.ModelRouter
 	toolManifest            *agenttools.ToolManifest
-	capabilityRouter        *agentruntime.CapabilityRouter
 	batcher                 *TaskBatcher
 	healingEnabled          bool
 	maxHealingTasks         int
@@ -254,7 +252,6 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		ToolFailureStreak:       w.toolFailureStreak, TruncatorMax: w.truncatorMax,
 		CharacterBudget: w.characterBudget, PlanningCfg: w.planningCfg,
 		MessageEditor: w.messageEditor, CheckpointStore: w.checkpointStore,
-		TopicGuard: w.topicGuard, ModelRouter: w.modelRouter,
 		Capabilities: w.capabilities,
 	}, w)
 	w.attempts.begin(task.ID)

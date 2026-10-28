@@ -31,6 +31,16 @@ func TestLoad_RemovedKeyFailsAndNamesReplacement(t *testing.T) {
 		want []string
 	}{
 		{
+			name: "capability routing has no replacement",
+			body: "agentic:\n  capability_routing:\n    enabled: true\n",
+			want: []string{"agentic.capability_routing", "no replacement"},
+		},
+		{
+			name: "model routing has no replacement",
+			body: "agentic:\n  model_routing:\n    enabled: true\n",
+			want: []string{"agentic.model_routing", "no replacement"},
+		},
+		{
 			name: "breakdown depth names split.max_depth",
 			body: "queue:\n  legacy:\n    max_breakdown_depth: 3\n",
 			want: []string{"queue.legacy.max_breakdown_depth", "queue.split.max_depth"},

@@ -36,8 +36,7 @@ func coalesceName(actual, defaultName string) string {
 	return defaultName
 }
 
-// standardRoutingTestConfigs returns providers commonly used in worker_routing_test.go,
-// including model-router tier targets (openai, anthropic, ollama).
+// standardRoutingTestConfigs returns providers commonly used in worker_routing_test.go.
 func standardRoutingTestConfigs() []spec.ProviderConfig {
 	return []spec.ProviderConfig{
 		toolCapableConfig("openai", "openai"),

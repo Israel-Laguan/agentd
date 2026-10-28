@@ -195,23 +195,11 @@ task["id"], task["project_id"], task["state"]
 | `queue.task_deadline` | `10m` | Wall-clock timeout per dispatched worker task (the Reaper). |
 | `queue.queued_reconcile_after` | `10m` | Minimum age of a QUEUED claim before orphan recovery resets it to READY. Independent of `task_deadline`. Set to `0` to disable. |
 | `queue.poll_max_interval` | `10s` | Adaptive backoff ceiling when no tasks are available. |
-| `agentic.model_routing.enabled` | `false` | When true, override each task's agent profile provider/model via English keyword scoring (cheap/mid/high); non-English tasks may score as cheap. |
-| `agentic.model_routing.context_token_threshold` | `150000` | Estimated context tokens above which the high tier is forced regardless of score. Token estimates for routing use the full agentic tool registry (before per-task manifest filtering); only the turn loop receives manifest-filtered tools. |
-| `agentic.model_routing.cheap.provider` | `""` | Provider for the cheap tier. |
-| `agentic.model_routing.cheap.model` | `""` | Model for the cheap tier. |
-| `agentic.model_routing.mid.provider` | `""` | Provider for the mid tier. |
-| `agentic.model_routing.mid.model` | `""` | Model for the mid tier. |
-| `agentic.model_routing.high.provider` | `""` | Provider for the high tier. |
-| `agentic.model_routing.high.model` | `""` | Model for the high tier. |
 | `agentic.audit.enabled` | `false` | Enable structured JSONL audit logging (separate from SSE events). Records: `tool_dispatch`, `turn_snapshot`, `history_edit`; tool args stored as SHA-256 hash only. |
 | `agentic.audit.path` | `audit.jsonl` | Audit file path; relative paths resolve under agentd home (`ResolveAuditPath`). |
-| `agentic.tool_manifest.enabled` | `false` | When true, filter gateway tool definitions by classified task type before the agentic turn loop. Does not affect `agentic.model_routing` token estimates (routing still counts the full tool registry). |
+| `agentic.tool_manifest.enabled` | `false` | When true, filter gateway tool definitions by classified task type before the agentic turn loop. |
 | `agentic.tool_manifest.min_confidence` | `0.35` | Minimum classifier confidence (0.0–1.0) to apply a manifest mapping; below threshold falls back to full agent tools. |
 | `agentic.tool_manifest.mappings` | _(built-in defaults)_ | Map task type names (`summarize`, `code_gen`, `doc_qa`, `web_research`, `full_agent`) to tool names. Empty slice means no tools; `*` or omitted/nil mapping means all tools. In YAML, quote the wildcard: `code_gen: ["*"]` (unquoted `*` in `[*]` is alias syntax, not a literal string). |
-| `agentic.capability_routing.enabled` | `false` | When true, classify task intent and route matching tasks to a configured external adapter, bypassing the agentic LLM turn loop. Runs after `agentic.model_routing`. |
-| `agentic.capability_routing.min_confidence` | `0.35` | Minimum classifier confidence (0.0–1.0) to apply a capability mapping; below threshold continues with the normal agentic loop. |
-| `agentic.capability_routing.mappings` | _(none)_ | Map intent names (`generate_image`, `real_time_search`, `browse_url`, `spreadsheet_ops`) to adapter registry names (`capabilities.Registry.Register` name). |
-| `agentic.capability_routing.tools` | _(intent name)_ | Optional per-intent tool name override passed to `CallTool`; when omitted, the intent name is used. |
 | `sandbox.backend` | `auto` | Execution isolation: `auto` (bubblewrap where the binary and unprivileged user namespaces exist, filter-only elsewhere), `bubblewrap` (required: when the jail is unusable every command is refused and its task fails with the reason; the startup log is ERROR), or `filter-only` (lexical filter plus admission checks only). The bubblewrap jail has no network (B-086): a command reaches neither the host's loopback (the daemon's API) nor the internet, only a private loopback of its own. Dependency downloads (`go mod download`, `npm install`, `pip install`) fail inside it, so give the workspace vendored dependencies or a warm cache. |
 | `sandbox.inactivity_timeout` | `60s` | Max silence on both stdout and stderr before sandbox timeout triggers; output on either stream resets it. |
 | `sandbox.wall_timeout` | `10m` | Max wall-clock execution time for each sandbox command payload. |

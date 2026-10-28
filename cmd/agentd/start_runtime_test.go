@@ -53,31 +53,6 @@ var agenticConfigCases = []struct {
 			}
 		},
 	},
-	{
-		name: "capability_routing",
-		set: func(cfg *config.Config) {
-			cfg.Agentic.CapabilityRouting = config.CapabilityRoutingConfig{
-				Enabled:       true,
-				MinConfidence: 0.7,
-				Mappings:      map[string]string{"generate_image": "dalle"},
-				Tools:         map[string]string{"generate_image": "generate"},
-			}
-		},
-		check: func(t *testing.T, opts queue.WorkerOptions) {
-			if !opts.CapabilityRouting.Enabled {
-				t.Fatal("WorkerOptions.CapabilityRouting.Enabled = false, want true")
-			}
-			if opts.CapabilityRouting.MinConfidence != 0.7 {
-				t.Fatalf("WorkerOptions.CapabilityRouting.MinConfidence = %v, want 0.7", opts.CapabilityRouting.MinConfidence)
-			}
-			if got := opts.CapabilityRouting.Mappings["generate_image"]; got != "dalle" {
-				t.Fatalf("WorkerOptions.CapabilityRouting.Mappings[generate_image] = %q, want dalle", got)
-			}
-			if got := opts.CapabilityRouting.Tools["generate_image"]; got != "generate" {
-				t.Fatalf("WorkerOptions.CapabilityRouting.Tools[generate_image] = %q, want generate", got)
-			}
-		},
-	},
 }
 
 func TestBuildWorkerOptions_PassesAgenticConfig(t *testing.T) {

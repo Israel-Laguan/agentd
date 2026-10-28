@@ -3,15 +3,11 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"log/slog"
 	"strings"
 
-	agentruntime "agentd/internal/agent/runtime"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
-	"agentd/internal/models"
 	"agentd/internal/toolenv"
 )
 
@@ -93,104 +89,4 @@ func resolveCapabilityInRegistry(ctx context.Context, toolName, adapterHint stri
 		return registry, adapterName
 	}
 	return nil, ""
-}
-
-func encodeCapabilityResult(out any) (string, error) {
-	if s, ok := out.(string); ok {
-		return s, nil
-	}
-	encoded, err := json.Marshal(out)
-	if err != nil {
-		return "", fmt.Errorf("capability result encode: %w", err)
-	}
-	return string(encoded), nil
-}
-
-func (w *Worker) commitCapabilityRouteResult(
-	ctx context.Context,
-	task models.Task,
-	profile models.AgentProfile,
-	messages *[]gateway.PromptMessage,
-	text string,
-) agentruntime.LoopResult {
-	if w.messageEditor != nil {
-		w.messageEditor.Commit(messages, gateway.PromptMessage{
-			Role:    "assistant",
-			Content: text,
-		})
-	} else if messages != nil {
-		*messages = append(*messages, gateway.PromptMessage{
-			Role:    "assistant",
-			Content: text,
-		})
-	}
-	w.CommitTextWithProfile(ctx, task, text, &profile)
-	return agentruntime.LoopResult{Status: agentruntime.LoopSuccessfulCompletion}
-}
-
-// warnCapabilityRoutingUnavailable says once, at startup, that an enabled
-// capability router has no adapter registry, so matching tasks take the normal
-// path (B-061).
-func (w *Worker) warnCapabilityRoutingUnavailable() {
-	if w.capabilityRouter == nil || w.capabilities != nil {
-		return
-	}
-	slog.Warn("capability routing is enabled but no capability adapters are available; matching tasks use the normal path")
-}
-
-func (w *Worker) TryExternalCapabilityRoute(
-	ctx context.Context,
-	task models.Task,
-	project models.Project,
-	profile models.AgentProfile,
-	messages *[]gateway.PromptMessage,
-) (agentruntime.LoopResult, bool, error) {
-	_ = project
-	if w.capabilityRouter == nil {
-		return agentruntime.LoopResult{}, false, nil
-	}
-
-	decision, ok := w.capabilityRouter.Route(task, profile)
-	if !ok {
-		return agentruntime.LoopResult{}, false, nil
-	}
-
-	if w.capabilities == nil {
-		slog.Warn("capability routing: no capability registry; falling through to agentic loop",
-			"task_id", task.ID,
-			"intent", decision.Intent,
-			"adapter", decision.Adapter,
-		)
-		return agentruntime.LoopResult{}, false, nil
-	}
-
-	if _, found := w.capabilities.GetAdapter(decision.Adapter); !found {
-		slog.Warn("capability routing: adapter not registered; falling through to agentic loop",
-			"task_id", task.ID,
-			"intent", decision.Intent,
-			"adapter", decision.Adapter,
-		)
-		return agentruntime.LoopResult{}, false, nil
-	}
-
-	allowed := agenttools.ProfileAllowlist(profile.AllowedTools)
-	if !agenttools.AllowsTool(allowed, decision.Tool) {
-		routeErr := fmt.Errorf("capability routing: tool %q is outside the profile's allowed_tools", decision.Tool)
-		w.FailHard(ctx, task, routeErr)
-		return agentruntime.LoopResult{}, false, routeErr
-	}
-	out, err := w.capabilities.CallTool(ctx, decision.Adapter, decision.Tool, decision.Args)
-	if err != nil {
-		routeErr := fmt.Errorf("capability routing: %s/%s: %w", decision.Adapter, decision.Tool, err)
-		w.FailHard(ctx, task, routeErr)
-		return agentruntime.LoopResult{}, false, routeErr
-	}
-
-	text, err := encodeCapabilityResult(out)
-	if err != nil {
-		w.FailHard(ctx, task, err)
-		return agentruntime.LoopResult{}, false, err
-	}
-
-	return w.commitCapabilityRouteResult(ctx, task, profile, messages, text), true, nil
 }

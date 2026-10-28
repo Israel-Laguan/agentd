@@ -18,6 +18,8 @@ type removedKey struct {
 // removedKeys is the one table of keys that Load refuses. A PR that removes a
 // key adds it here, so the error names what replaces it.
 var removedKeys = []removedKey{
+	{Key: "agentic.capability_routing"},
+	{Key: "agentic.model_routing"},
 	{Key: "queue.legacy.max_breakdown_depth", Replacement: "queue.split.max_depth"},
 	{Key: "queue.legacy.max_subtasks_per_breakdown", Replacement: "queue.split.max_subtasks"},
 	{Key: "queue.legacy.preflight_score"},

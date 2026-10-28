@@ -45,17 +45,16 @@ func NewAgentService(store models.KanbanStore, bus AgentBus) *AgentService {
 // AgentPatch is a sparse update payload. Nil fields are left untouched on
 // the existing profile.
 type AgentPatch struct {
-	Name                  *string
-	Provider              *string
-	Model                 *string
-	Temperature           *float64
-	SystemPrompt          *string
-	Role                  *string
-	MaxTokens             *int
-	AgenticMode           *bool
-	CapabilityRouteIntent *string
-	AllowedTools          *[]string
-	WorkspaceReadonly     *bool
+	Name              *string
+	Provider          *string
+	Model             *string
+	Temperature       *float64
+	SystemPrompt      *string
+	Role              *string
+	MaxTokens         *int
+	AgenticMode       *bool
+	AllowedTools      *[]string
+	WorkspaceReadonly *bool
 }
 
 // List returns all known agent profiles.
@@ -158,7 +157,6 @@ func validateForCreate(p *models.AgentProfile) error {
 	p.Provider = strings.TrimSpace(p.Provider)
 	p.Model = strings.TrimSpace(p.Model)
 	p.Role = strings.TrimSpace(p.Role)
-	p.CapabilityRouteIntent = strings.TrimSpace(p.CapabilityRouteIntent)
 	cleaned, err := cleanAllowedTools(p.AllowedTools)
 	if err != nil {
 		return err
@@ -239,9 +237,6 @@ func applyPatch(profile *models.AgentProfile, patch AgentPatch) error {
 	}
 	if patch.AgenticMode != nil {
 		profile.AgenticMode = *patch.AgenticMode
-	}
-	if patch.CapabilityRouteIntent != nil {
-		profile.CapabilityRouteIntent = strings.TrimSpace(*patch.CapabilityRouteIntent)
 	}
 	if patch.AllowedTools != nil {
 		cleaned, err := cleanAllowedTools(*patch.AllowedTools)

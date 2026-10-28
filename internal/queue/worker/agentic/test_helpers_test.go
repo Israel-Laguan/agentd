@@ -105,10 +105,6 @@ func (h *noopHost) PrependSandboxViolationFeedback(_ context.Context, _ models.T
 	return messages
 }
 
-func (h *noopHost) ApplyModelRouting(_ models.Task, profile models.AgentProfile, _ []gateway.PromptMessage, _ []gateway.ToolDefinition) models.AgentProfile {
-	return profile
-}
-
 func (h *noopHost) ApplyTuning(req gateway.AIRequest, _ models.Task, _ models.AgentProfile, _ int) gateway.AIRequest {
 	return req
 }
@@ -147,10 +143,6 @@ func (h *noopHost) GenerateRespecifiedUserTurn(_ context.Context, _ models.Task,
 
 func (h *noopHost) RunSessionStart(_ context.Context, _ models.Task, _ models.Project, _ *agenthooks.HookChain) error {
 	return nil
-}
-
-func (h *noopHost) TryExternalCapabilityRoute(_ context.Context, _ models.Task, _ models.Project, _ models.AgentProfile, _ *[]gateway.PromptMessage) (agentruntime.LoopResult, bool, error) {
-	return agentruntime.LoopResult{}, false, nil
 }
 
 func (h *noopHost) RecordTurnSnapshot(_, _, _, _ string, _, _ int, _ []string, _ float64) {}

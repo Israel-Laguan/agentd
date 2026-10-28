@@ -46,8 +46,7 @@ func (e *Engine) prepareAgenticRun(
 
 // selectAgenticTools filters the full tool set for task and routes its model.
 // Routing sizes the context by the full set, as the filter only narrows what is
-// offered. profile is the unrouted one, so a rerun does not route from a prior
-// route.
+// offered.
 func (e *Engine) selectAgenticTools(
 	task models.Task,
 	profile models.AgentProfile,
@@ -56,8 +55,7 @@ func (e *Engine) selectAgenticTools(
 	allToolToAdapter map[string]string,
 ) ([]gateway.ToolDefinition, map[string]string, models.AgentProfile) {
 	tools, toolToAdapter := e.host.FilterAgenticTools(allTools, allToolToAdapter, task, profile)
-	routed := e.host.ApplyModelRouting(task, profile, messages, allTools)
-	return tools, toolToAdapter, routed
+	return tools, toolToAdapter, profile
 }
 
 // buildAgenticMessages is the prompt for task: the layered system prompt and the

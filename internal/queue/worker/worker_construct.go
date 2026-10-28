@@ -69,17 +69,15 @@ type WorkerOptions struct {
 	FileContextCachePath  string
 	Planning              config.AgenticPlanningConfig
 	// MaxTasksPerPhase caps the tasks in one next-phase plan (gateway.max_tasks_per_phase).
-	MaxTasksPerPhase  int
-	Tiered            config.TieredConfig
-	TopicGuard        config.TopicGuardConfig
-	ModelRouting      config.ModelRoutingConfig
-	ToolManifest      config.ToolManifestConfig
-	CapabilityRouting config.CapabilityRoutingConfig
-	Batching          config.BatchingConfig
-	ProviderBreakers  *safety.ProviderBreakers
-	HealingDisabled   bool
-	MaxHealingTasks   int
-	Split             config.SplitConfig
+	MaxTasksPerPhase int
+	Tiered           config.TieredConfig
+	TopicGuard       config.TopicGuardConfig
+	ToolManifest     config.ToolManifestConfig
+	Batching         config.BatchingConfig
+	ProviderBreakers *safety.ProviderBreakers
+	HealingDisabled  bool
+	MaxHealingTasks  int
+	Split            config.SplitConfig
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -231,10 +229,7 @@ func NewWorker(
 	w := newWorkerCore(store, gw, sb, breaker, sink, opts, scrubber, budgetTracker, toolExecutor, hooks)
 	w.topicGuard = agentruntime.NewTopicGuard(gw, opts.TopicGuard)
 	w.messageEditor = agentcontext.NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
-	w.modelRouter = agentruntime.NewModelRouter(opts.ModelRouting)
 	w.toolManifest = agenttools.NewToolManifest(opts.ToolManifest)
-	w.capabilityRouter = agentruntime.NewCapabilityRouter(opts.CapabilityRouting)
-	w.warnCapabilityRoutingUnavailable()
 	w.batcher = NewTaskBatcher(opts.Batching, w)
 	w.setupFileContext(opts)
 	w.setupOptionalLoaders(opts)

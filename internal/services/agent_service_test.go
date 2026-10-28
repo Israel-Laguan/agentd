@@ -157,64 +157,6 @@ func TestAgentServicePatchAgenticMode(t *testing.T) {
 	}
 }
 
-func TestAgentServiceCreateCapabilityRouteIntent(t *testing.T) {
-	store := testutil.NewFakeStore()
-	svc := services.NewAgentService(store, nil)
-
-	result, err := svc.Create(context.Background(), models.AgentProfile{
-		ID: "intent1", Name: "Agent", Provider: "openai", Model: "gpt-4",
-		CapabilityRouteIntent: "  generate_image  ",
-	})
-	if err != nil {
-		t.Fatalf("Create with intent: %v", err)
-	}
-	if result.Profile.CapabilityRouteIntent != "generate_image" {
-		t.Fatalf("CapabilityRouteIntent = %q, want generate_image", result.Profile.CapabilityRouteIntent)
-	}
-
-	result, err = svc.Create(context.Background(), models.AgentProfile{
-		ID: "intent2", Name: "Agent2", Provider: "openai", Model: "gpt-4",
-		CapabilityRouteIntent: "   ",
-	})
-	if err != nil {
-		t.Fatalf("Create with whitespace intent: %v", err)
-	}
-	if result.Profile.CapabilityRouteIntent != "" {
-		t.Fatalf("CapabilityRouteIntent = %q, want empty after whitespace-only", result.Profile.CapabilityRouteIntent)
-	}
-}
-
-func TestAgentServicePatchCapabilityRouteIntent(t *testing.T) {
-	store := testutil.NewFakeStore()
-	svc := services.NewAgentService(store, nil)
-
-	intent := "generate_image"
-	_, err := svc.Patch(context.Background(), "default", services.AgentPatch{CapabilityRouteIntent: &intent})
-	if err != nil {
-		t.Fatalf("Patch set intent: %v", err)
-	}
-	got, err := store.GetAgentProfile(context.Background(), "default")
-	if err != nil {
-		t.Fatalf("GetAgentProfile: %v", err)
-	}
-	if got.CapabilityRouteIntent != "generate_image" {
-		t.Fatalf("CapabilityRouteIntent = %q, want generate_image", got.CapabilityRouteIntent)
-	}
-
-	clear := ""
-	_, err = svc.Patch(context.Background(), "default", services.AgentPatch{CapabilityRouteIntent: &clear})
-	if err != nil {
-		t.Fatalf("Patch clear intent: %v", err)
-	}
-	got, err = store.GetAgentProfile(context.Background(), "default")
-	if err != nil {
-		t.Fatalf("GetAgentProfile after clear: %v", err)
-	}
-	if got.CapabilityRouteIntent != "" {
-		t.Fatalf("CapabilityRouteIntent = %q, want empty after clear", got.CapabilityRouteIntent)
-	}
-}
-
 func TestAgentServiceDeleteProtectedAndBus(t *testing.T) {
 	store := testutil.NewFakeStore()
 	bus := &recordingAgentBus{}

@@ -18,18 +18,6 @@ type ToolManifestConfig struct {
 	Mappings map[string][]string
 }
 
-const DefaultCapabilityRoutingMinConfidence = 0.35
-
-// CapabilityRoutingConfig maps classified task intents to external capability adapters.
-type CapabilityRoutingConfig struct {
-	Enabled       bool
-	MinConfidence float64
-	// Mappings maps intent names (generate_image, real_time_search, ...) to adapter registry names.
-	Mappings map[string]string
-	// Tools maps intent names to tool names; when omitted for an intent, the intent name is used.
-	Tools map[string]string
-}
-
 func loadToolManifestConfig(v *viper.Viper) ToolManifestConfig {
 	tmEnabled := v.GetBool("agentic.tool_manifest.enabled")
 	tmMin := v.GetFloat64("agentic.tool_manifest.min_confidence")
@@ -70,28 +58,6 @@ func loadToolManifestConfig(v *viper.Viper) ToolManifestConfig {
 		Enabled:       tmEnabled,
 		MinConfidence: tmMin,
 		Mappings:      tmMappings,
-	}
-}
-
-func loadCapabilityRoutingConfig(v *viper.Viper) CapabilityRoutingConfig {
-	crEnabled := v.GetBool("agentic.capability_routing.enabled")
-	crMin := v.GetFloat64("agentic.capability_routing.min_confidence")
-	if crMin < 0 {
-		crMin = 0
-	}
-	if crMin > 1 {
-		crMin = 1
-	}
-	if crMin == 0 && !v.IsSet("agentic.capability_routing.min_confidence") {
-		crMin = DefaultCapabilityRoutingMinConfidence
-	}
-	crMappings := loadStringStringMap(v, "agentic.capability_routing.mappings")
-	crTools := loadStringStringMap(v, "agentic.capability_routing.tools")
-	return CapabilityRoutingConfig{
-		Enabled:       crEnabled,
-		MinConfidence: crMin,
-		Mappings:      crMappings,
-		Tools:         crTools,
 	}
 }
 

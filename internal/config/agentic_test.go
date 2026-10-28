@@ -52,17 +52,6 @@ func assertAgenticPlanningDefaults(t *testing.T, cfg AgenticConfig) {
 	}
 }
 
-func assertAgenticModelRoutingDefaults(t *testing.T, cfg AgenticConfig) {
-	t.Helper()
-	if cfg.ModelRouting.Enabled {
-		t.Fatal("ModelRouting.Enabled should default to false")
-	}
-	if cfg.ModelRouting.ContextTokenThreshold != DefaultModelRoutingContextTokens {
-		t.Fatalf("ModelRouting.ContextTokenThreshold = %d, want %d",
-			cfg.ModelRouting.ContextTokenThreshold, DefaultModelRoutingContextTokens)
-	}
-}
-
 func assertAgenticToolManifestDefaults(t *testing.T, cfg AgenticConfig) {
 	t.Helper()
 	if cfg.ToolManifest.Enabled {
@@ -71,17 +60,6 @@ func assertAgenticToolManifestDefaults(t *testing.T, cfg AgenticConfig) {
 	if cfg.ToolManifest.MinConfidence != DefaultToolManifestMinConfidence {
 		t.Fatalf("ToolManifest.MinConfidence = %v, want %v",
 			cfg.ToolManifest.MinConfidence, DefaultToolManifestMinConfidence)
-	}
-}
-
-func assertAgenticCapabilityRoutingDefaults(t *testing.T, cfg AgenticConfig) {
-	t.Helper()
-	if cfg.CapabilityRouting.Enabled {
-		t.Fatal("CapabilityRouting.Enabled should default to false")
-	}
-	if cfg.CapabilityRouting.MinConfidence != DefaultCapabilityRoutingMinConfidence {
-		t.Fatalf("CapabilityRouting.MinConfidence = %v, want %v",
-			cfg.CapabilityRouting.MinConfidence, DefaultCapabilityRoutingMinConfidence)
 	}
 }
 
@@ -103,9 +81,7 @@ func TestAgenticDefaults_Viper(t *testing.T) {
 	assertAgenticCoreDefaults(t, cfg)
 	assertAgenticTopicGuardDefaults(t, cfg)
 	assertAgenticPlanningDefaults(t, cfg)
-	assertAgenticModelRoutingDefaults(t, cfg)
 	assertAgenticToolManifestDefaults(t, cfg)
-	assertAgenticCapabilityRoutingDefaults(t, cfg)
 	assertAgenticBatchingDefaults(t, cfg)
 }
 
@@ -156,35 +132,6 @@ func TestLoadAgenticConfig_BatchingMaxClampedToUpperBound(t *testing.T) {
 	}
 }
 
-func TestLoadAgenticConfig_CapabilityRoutingOverride(t *testing.T) {
-	t.Parallel()
-	v := viper.New()
-	setAgenticDefaults(v)
-	v.Set("agentic.capability_routing.enabled", true)
-	v.Set("agentic.capability_routing.min_confidence", 0.5)
-	v.Set("agentic.capability_routing.mappings", map[string]interface{}{
-		"generate_image": "stability_api",
-		"browse_url":     "browser_api",
-	})
-	v.Set("agentic.capability_routing.tools", map[string]interface{}{
-		"generate_image": "generate",
-	})
-
-	cfg := mustLoadAgenticConfig(t, v)
-	if !cfg.CapabilityRouting.Enabled {
-		t.Fatal("CapabilityRouting.Enabled = false, want true")
-	}
-	if cfg.CapabilityRouting.MinConfidence != 0.5 {
-		t.Fatalf("MinConfidence = %v, want 0.5", cfg.CapabilityRouting.MinConfidence)
-	}
-	if cfg.CapabilityRouting.Mappings["generate_image"] != "stability_api" {
-		t.Fatalf("mappings = %v", cfg.CapabilityRouting.Mappings)
-	}
-	if cfg.CapabilityRouting.Tools["generate_image"] != "generate" {
-		t.Fatalf("tools = %v", cfg.CapabilityRouting.Tools)
-	}
-}
-
 func TestLoadAgenticConfig_ToolManifestOverride(t *testing.T) {
 	t.Parallel()
 	v := viper.New()
@@ -212,37 +159,6 @@ func TestLoadAgenticConfig_ToolManifestOverride(t *testing.T) {
 	}
 	if cfg.ToolManifest.Mappings["doc_qa"][0] != "read" {
 		t.Fatalf("doc_qa mapping = %v, want [read]", cfg.ToolManifest.Mappings["doc_qa"])
-	}
-}
-
-func TestLoadAgenticConfig_ModelRoutingOverride(t *testing.T) {
-	t.Parallel()
-	v := viper.New()
-	setAgenticDefaults(v)
-	v.Set("agentic.model_routing.enabled", true)
-	v.Set("agentic.model_routing.context_token_threshold", 200000)
-	v.Set("agentic.model_routing.cheap.provider", "anthropic")
-	v.Set("agentic.model_routing.cheap.model", "claude-haiku")
-	v.Set("agentic.model_routing.mid.provider", "anthropic")
-	v.Set("agentic.model_routing.mid.model", "claude-sonnet")
-	v.Set("agentic.model_routing.high.provider", "anthropic")
-	v.Set("agentic.model_routing.high.model", "claude-opus")
-
-	cfg := mustLoadAgenticConfig(t, v)
-	if !cfg.ModelRouting.Enabled {
-		t.Fatal("ModelRouting.Enabled = false, want true")
-	}
-	if cfg.ModelRouting.ContextTokenThreshold != 200000 {
-		t.Fatalf("ContextTokenThreshold = %d, want 200000", cfg.ModelRouting.ContextTokenThreshold)
-	}
-	if cfg.ModelRouting.Cheap.Provider != "anthropic" || cfg.ModelRouting.Cheap.Model != "claude-haiku" {
-		t.Fatalf("Cheap = %+v, want anthropic/claude-haiku", cfg.ModelRouting.Cheap)
-	}
-	if cfg.ModelRouting.Mid.Model != "claude-sonnet" {
-		t.Fatalf("Mid = %+v", cfg.ModelRouting.Mid)
-	}
-	if cfg.ModelRouting.High.Model != "claude-opus" {
-		t.Fatalf("High = %+v", cfg.ModelRouting.High)
 	}
 }
 
