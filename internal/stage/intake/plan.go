@@ -58,8 +58,14 @@ func Plan(ctx context.Context, agent stage.Agent, purpose spec.Purpose, maxTasks
 // PlanInStage is Plan for a caller whose call belongs to another stage: the
 // next-phase plan is task creation, but it uses the same prompt and contract.
 func PlanInStage(ctx context.Context, agent stage.Agent, st stage.Stage, purpose spec.Purpose, maxTasksPerPhase int, userIntent string) (*models.DraftPlan, error) {
-	plan, _, err := PlanInStageWithResult(ctx, agent, st, purpose, maxTasksPerPhase, userIntent)
-	return plan, err
+	plan, result, err := PlanInStageWithResult(ctx, agent, st, purpose, maxTasksPerPhase, userIntent)
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil || result.Output == nil {
+		return nil, nil
+	}
+	return plan, nil
 }
 
 // PlanInStageWithResult returns the stage result so callers can account for its

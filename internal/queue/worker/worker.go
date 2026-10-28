@@ -29,12 +29,9 @@ import (
 	"agentd/internal/queue/worker/agentic"
 )
 
-// DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
 
 type Worker struct {
-	// attempts keeps, per task, the first failing shell command of its agentic
-	// attempts (see worker_agentic_attempts.go).
 	attempts attemptRecords
 	store    models.KanbanStore
 	gateway  gateway.AIGateway
@@ -118,13 +115,15 @@ var errNoTaskCreationAgent = errors.New("worker: no task-creation agent or gatew
 
 type unavailableAgent struct{}
 
-func (unavailableAgent) Call(context.Context, stage.StageRequest) (stage.StageResult, error) {
-	return stage.StageResult{}, errNoTaskCreationAgent
+func (unavailableAgent) Call(ctx context.Context, _ stage.StageRequest) (stage.StageResult, error) {
+	ctxErr := ctx.Err()
+	result := stage.StageResult{}
+	if ctxErr != nil {
+		return result, errors.Join(errNoTaskCreationAgent, ctxErr)
+	}
+	return result, errNoTaskCreationAgent
 }
 
-// taskCreationAgent is the agent the task-creation stages call. A Worker built
-// without NewWorker falls back to a ModelAgent over its gateway; with neither
-// it returns an agent whose Call reports an error.
 func (w *Worker) taskCreationAgent() stage.Agent {
 	if w.stageAgent != nil {
 		return w.stageAgent
@@ -155,8 +154,6 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 	w.Emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
 }
 
-// Process handles task execution: agentic (tool calling), tiered dispatch, and
-// review finalization. Model routing runs once per path.
 func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
 	slog.DebugContext(ctx, "worker: processing task",
