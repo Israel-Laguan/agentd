@@ -102,3 +102,35 @@ func TestPlanCarriesRequiresWorkspaceChange(t *testing.T) {
 		t.Fatalf("tasks = %+v, want only the first marked", plan.Tasks)
 	}
 }
+
+func TestPlanInStageSendsTheCallersStage(t *testing.T) {
+	t.Parallel()
+	gw := &fakeGateway{replies: []string{`{"project_name":"p","tasks":[{"title":"t","description":"d","assignee":"SYSTEM"}]}`}}
+	if _, err := PlanInStage(context.Background(), stage.NewModelAgent(gw), stage.StageTaskCreation, spec.PurposeCreateNextPhase, 0, "go on"); err != nil {
+		t.Fatal(err)
+	}
+	if len(gw.seen) != 1 || gw.seen[0].Purpose != spec.PurposeCreateNextPhase {
+		t.Fatalf("gateway calls = %+v, want one next-phase call", gw.seen)
+	}
+}
+
+type stageSpy struct{ stages []stage.Stage }
+
+func (s *stageSpy) Call(_ context.Context, req stage.StageRequest) (stage.StageResult, error) {
+	s.stages = append(s.stages, req.Stage)
+	return stage.StageResult{Output: []byte(`{"project_name":"p","tasks":[{"title":"t","description":"d","assignee":"SYSTEM"}]}`)}, nil
+}
+
+func TestPlanStagesAreIntakeUnlessTheCallerSaysOtherwise(t *testing.T) {
+	t.Parallel()
+	spy := &stageSpy{}
+	if _, err := Plan(context.Background(), spy, spec.PurposeIntakeDraftPlan, 0, "x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PlanInStage(context.Background(), spy, stage.StageTaskCreation, spec.PurposeCreateNextPhase, 0, "x"); err != nil {
+		t.Fatal(err)
+	}
+	if len(spy.stages) != 2 || spy.stages[0] != stage.StageIntake || spy.stages[1] != stage.StageTaskCreation {
+		t.Fatalf("stages = %v, want [intake task_creation]", spy.stages)
+	}
+}

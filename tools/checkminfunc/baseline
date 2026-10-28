@@ -117,7 +117,7 @@ internal/queue/safety/semaphore.go (*Semaphore).Available
 internal/queue/scheduler.go (*Scheduler).Enabled
 internal/queue/worker/agentic/verify.go (*runEvidence).any
 internal/queue/worker/batcher.go NewTaskBatcher
-internal/queue/worker/elicitor.go NewElicitor
+internal/queue/worker/elicitor.go NewElicitorOn
 internal/queue/worker/hooks_approval.go NewBlockingApprovalHandler
 internal/queue/worker/hooks_approval.go truncateApprovalArgs
 internal/queue/worker/instructions.go (*UserPreferences).IsEmpty
@@ -145,6 +145,7 @@ internal/services/project_service.go NewProjectService
 internal/services/system_service.go NewSystemService
 internal/services/system_service.go (*SystemService).Snapshot
 internal/services/task_service.go NewTaskService
+internal/stage/intake/plan.go Plan
 internal/stage/model_agent.go NewModelAgent
 test/e2e/client.go (*APIClient).SystemStatus
 test/e2e/client.go (*APIClient).ResetBreaker

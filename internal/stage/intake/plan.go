@@ -48,9 +48,31 @@ func phasePlanningPrompt(maxTasksPerPhase int) string {
 // Plan asks agent for a DraftPlan for userIntent, tagged with purpose, and
 // trims it to maxTasksPerPhase. Callers that create tasks from a purpose other
 // than a chat intake pass that purpose explicitly.
+//
+// The plan may carry a ClarificationQuestion and no tasks (B-085); every caller
+// must check it.
 func Plan(ctx context.Context, agent stage.Agent, purpose spec.Purpose, maxTasksPerPhase int, userIntent string) (*models.DraftPlan, error) {
+	return PlanInStage(ctx, agent, stage.StageIntake, purpose, maxTasksPerPhase, userIntent)
+}
+
+// PlanInStage is Plan for a caller whose call belongs to another stage: the
+// next-phase plan is task creation, but it uses the same prompt and contract.
+func PlanInStage(ctx context.Context, agent stage.Agent, st stage.Stage, purpose spec.Purpose, maxTasksPerPhase int, userIntent string) (*models.DraftPlan, error) {
+	plan, result, err := PlanInStageWithResult(ctx, agent, st, purpose, maxTasksPerPhase, userIntent)
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil || result.Output == nil {
+		return nil, nil
+	}
+	return plan, nil
+}
+
+// PlanInStageWithResult returns the stage result so callers can account for its
+// usage even when decoding or provider validation fails.
+func PlanInStageWithResult(ctx context.Context, agent stage.Agent, st stage.Stage, purpose spec.Purpose, maxTasksPerPhase int, userIntent string) (*models.DraftPlan, stage.StageResult, error) {
 	res, err := agent.Call(ctx, stage.StageRequest{
-		Stage:   stage.StageIntake,
+		Stage:   st,
 		Purpose: purpose,
 		Context: []spec.PromptMessage{
 			{Role: "system", Content: phasePlanningPrompt(maxTasksPerPhase)},
@@ -60,14 +82,14 @@ func Plan(ctx context.Context, agent stage.Agent, purpose spec.Purpose, maxTasks
 		Temperature: 0.2,
 	})
 	if err != nil {
-		return nil, err
+		return nil, res, err
 	}
 	plan, err := decode[models.DraftPlan](res)
 	if err != nil {
-		return nil, err
+		return nil, res, err
 	}
 	trimmed := correction.EnforcePhaseCap(*plan, maxTasksPerPhase)
-	return &trimmed, nil
+	return &trimmed, res, nil
 }
 
 // decode reads the validated output of a stage into T.

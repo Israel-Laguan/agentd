@@ -54,6 +54,13 @@ type StageRequest struct {
 	// Temperature is the sampling temperature for this call. Each stage keeps
 	// the value its prompt was tuned with.
 	Temperature float64
+	// The fields below pick the model. Each stage keeps the tier it runs at
+	// today; Role is RoleChat when empty.
+	Role      spec.Role
+	AgentID   string
+	Provider  string
+	Model     string
+	MaxTokens int
 }
 
 // Validate reports a request that is missing what every call needs.
@@ -70,7 +77,9 @@ func (r StageRequest) Validate() error {
 }
 
 // StageResult is what a stage returned. Output is the validated JSON, which
-// the caller unmarshals into its own type.
+// the caller unmarshals into its own type. TokenUsage and UsageDetails count
+// every attempt and are set when Call fails too, so a caller that records
+// tokens records what a failed call cost. The agent itself records nothing.
 type StageResult struct {
 	Outcome      Outcome
 	Output       json.RawMessage

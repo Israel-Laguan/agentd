@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -28,18 +29,15 @@ import (
 	"agentd/internal/queue/worker/agentic"
 )
 
-// DefaultMaxRetries is the baseline retry budget before eviction.
 const DefaultMaxRetries = 3
 
 type Worker struct {
-	// attempts keeps, per task, the first failing shell command of its agentic
-	// attempts (see worker_agentic_attempts.go).
 	attempts attemptRecords
 	store    models.KanbanStore
 	gateway  gateway.AIGateway
-	// intakeAgent runs the next-phase plan through the intake stage. It defaults
-	// to a ModelAgent over gateway.
-	intakeAgent stage.Agent
+	// stageAgent runs the task-creation stages (healing split, elicitor, work
+	// plan, next-phase plan). It defaults to a ModelAgent over gateway.
+	stageAgent stage.Agent
 	// maxTasksPerPhase caps the tasks in one next-phase plan.
 	maxTasksPerPhase        int
 	sandbox                 sandbox.Executor
@@ -113,6 +111,29 @@ type PluginMounter interface {
 	MountSession(names []string, chain *agenthooks.HookChain, registry *capabilities.Registry) error
 }
 
+var errNoTaskCreationAgent = errors.New("worker: no task-creation agent or gateway configured")
+
+type unavailableAgent struct{}
+
+func (unavailableAgent) Call(ctx context.Context, _ stage.StageRequest) (stage.StageResult, error) {
+	ctxErr := ctx.Err()
+	result := stage.StageResult{}
+	if ctxErr != nil {
+		return result, errors.Join(errNoTaskCreationAgent, ctxErr)
+	}
+	return result, errNoTaskCreationAgent
+}
+
+func (w *Worker) taskCreationAgent() stage.Agent {
+	if w.stageAgent != nil {
+		return w.stageAgent
+	}
+	if w.gateway == nil {
+		return unavailableAgent{}
+	}
+	return stage.NewModelAgent(w.gateway)
+}
+
 func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails) {
 	if tokens <= 0 {
 		return
@@ -133,8 +154,6 @@ func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tok
 	w.Emit(ctx, task, string(models.EventTypeTokenUsage), string(payload))
 }
 
-// Process handles task execution: agentic (tool calling), tiered dispatch, and
-// review finalization. Model routing runs once per path.
 func (w *Worker) Process(ctx context.Context, task models.Task) {
 	defer w.recoverPanic(ctx, task)
 	slog.DebugContext(ctx, "worker: processing task",

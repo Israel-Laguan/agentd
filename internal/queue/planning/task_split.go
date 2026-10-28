@@ -9,9 +9,8 @@ import (
 )
 
 // The split stage breaks a task that keeps failing into smaller subtasks. This
-// file holds its context and its contract; the worker makes the one model call
-// and applies the result, so the stage can move behind a single stage call
-// (T-041) without changing shape.
+// file holds its context and its contract; the worker makes the one stage call
+// (stage.StageTaskCreation) and applies the result.
 
 const splitInstruction = "This task has failed several times as one unit. Break it into smaller subtasks " +
 	"that can each be run and checked on their own, listed in the order they should run. " +
