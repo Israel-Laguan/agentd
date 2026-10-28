@@ -76,12 +76,12 @@ func TestLiveRequiresWorkspaceChangeFlag(t *testing.T) {
 		baseURL = "https://openrouter.ai/api/v1"
 	}
 	gw, err := routing.NewRouterFromConfigs([]spec.ProviderConfig{{
-		Name:      "live",
-		Adapter:   "openai",
-		BaseURL:   baseURL,
-		APIKeyEnv: keyEnv,
-		Model:     model,
-		Timeout:   5 * time.Minute,
+		Name:    "live",
+		Adapter: "openai",
+		BaseURL: baseURL,
+		APIKey:  key,
+		Model:   model,
+		Timeout: 5 * time.Minute,
 	}})
 	if err != nil {
 		t.Fatalf("router: %v", err)
@@ -161,7 +161,7 @@ func TestLiveVagueRequestAsksAQuestion(t *testing.T) {
 	}
 	gw, err := routing.NewRouterFromConfigs([]spec.ProviderConfig{{
 		Name: "live", Adapter: "openai", BaseURL: baseURL,
-		APIKeyEnv: keyEnv, Model: model, Timeout: 5 * time.Minute,
+		APIKey: key, Model: model, Timeout: 5 * time.Minute,
 	}})
 	if err != nil {
 		t.Fatalf("router: %v", err)
