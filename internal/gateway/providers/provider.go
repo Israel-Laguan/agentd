@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -165,6 +166,9 @@ func warnUnknownOptions(adapter string, known []string, opts map[string]any) {
 // When Adapter is empty it defaults to Name, preserving backward compatibility for
 // entries that identify both vendor and wire protocol with a single name.
 func AppendFromConfig(backends []Backend, cfg spec.ProviderConfig) ([]Backend, error) {
+	if strings.TrimSpace(cfg.APIKey) == "" && strings.TrimSpace(cfg.APIKeyEnv) != "" {
+		cfg.APIKey = os.Getenv(cfg.APIKeyEnv)
+	}
 	cfg = canonicalAdapter(cfg)
 	adapter := cfg.Adapter
 	switch spec.Provider(adapter) {
