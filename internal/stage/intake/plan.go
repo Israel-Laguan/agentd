@@ -23,8 +23,15 @@ const hostFactPlanningRule = "\nTasks run as shell commands inside the project w
 const workspaceChangePlanningRule = "\nSet requires_workspace_change to true on every task that must create or change a file, or run a command, in the project workspace. " +
 	"Set it to false, or leave it out, on a task that only reasons or writes text, such as a summary or a review."
 
+// vagueRequestPlanningRule makes the plan step ask instead of planning discovery
+// for a request that names no target or outcome (B-085). A request that asks
+// for a concrete read-only answer, such as facts about this machine, is not vague.
+const vagueRequestPlanningRule = "\nIf the request names no target and no outcome, such as \"make my app better\" or \"improve it\", do not plan tasks that only explore the project to find out what to do. " +
+	"Set clarification_question to one specific question that asks what should change and how the user will know it is done, and leave tasks empty. " +
+	"A request for a concrete answer, such as facts about this machine, is not vague: plan it."
+
 func phasePlanningPrompt(maxTasksPerPhase int) string {
-	base := "Create an agentd DraftPlan. Output ONLY valid JSON.\n" + models.DraftPlan{}.SchemaHint() + hostFactPlanningRule + workspaceChangePlanningRule
+	base := "Create an agentd DraftPlan. Output ONLY valid JSON.\n" + models.DraftPlan{}.SchemaHint() + hostFactPlanningRule + workspaceChangePlanningRule + vagueRequestPlanningRule
 	if maxTasksPerPhase <= 0 {
 		return base
 	}

@@ -152,6 +152,9 @@ func (p *Planner) planApprovedScope(ctx context.Context, intent, approvedScope s
 	if err != nil {
 		return nil, err
 	}
+	if plan.ClarificationQuestion != "" {
+		return json.Marshal(IntentClarification{Kind: "intent_clarification", Message: plan.ClarificationQuestion})
+	}
 	return json.Marshal(plan)
 }
 
