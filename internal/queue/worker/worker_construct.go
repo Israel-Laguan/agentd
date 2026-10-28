@@ -20,7 +20,6 @@ import (
 	wsession "agentd/internal/agent/session"
 	wskills "agentd/internal/agent/skills"
 	agenttools "agentd/internal/agent/tools"
-	"agentd/internal/stage"
 )
 
 type WorkerOptions struct {
@@ -164,7 +163,7 @@ func newWorkerCore(
 ) *Worker {
 	return &Worker{
 		store: store, gateway: gw, sandbox: sb, breaker: breaker, sink: sink,
-		stageAgent: stage.NewModelAgent(gw), maxTasksPerPhase: opts.MaxTasksPerPhase,
+		maxTasksPerPhase: opts.MaxTasksPerPhase,
 		projectsDir:      opts.ProjectsDir,
 		providerBreakers: opts.ProviderBreakers,
 		canceller:        opts.Canceller, tuner: opts.Tuner, retriever: opts.Retriever,

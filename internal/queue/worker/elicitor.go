@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/stage"
 )
 
 const (
@@ -56,35 +58,46 @@ type ElicitationAnalysis struct {
 
 // Elicitor runs a cheap-model pass to detect task ambiguity before agentic execution.
 type Elicitor struct {
-	gateway gateway.AIGateway
+	agent stage.Agent
 }
 
-// NewElicitor returns an elicitor backed by the worker gateway.
+// NewElicitor returns an elicitor that calls a ModelAgent over gw.
 func NewElicitor(gw gateway.AIGateway) *Elicitor {
-	return &Elicitor{gateway: gw}
+	if gw == nil {
+		return &Elicitor{}
+	}
+	return NewElicitorOn(stage.NewModelAgent(gw))
+}
+
+// NewElicitorOn returns an elicitor that calls agent.
+func NewElicitorOn(agent stage.Agent) *Elicitor {
+	return &Elicitor{agent: agent}
 }
 
 // Analyze calls the memory-tier model to detect ambiguities in the task description.
 func (e *Elicitor) Analyze(ctx context.Context, task models.Task, project models.Project, fileContext string) (*ElicitationAnalysis, error) {
-	if e == nil || e.gateway == nil {
+	if e == nil || e.agent == nil {
 		return &ElicitationAnalysis{NeedsClarification: false}, nil
 	}
 	userContent := buildElicitationUserContent(task, project, fileContext)
-	req := gateway.AIRequest{
+	res, err := e.agent.Call(gateway.WithTaskID(ctx, task.ID), stage.StageRequest{
+		Stage:   stage.StageTaskCreation,
 		Purpose: gateway.PurposeCreateElicit,
-		Messages: []gateway.PromptMessage{
+		Context: []gateway.PromptMessage{
 			{Role: "system", Content: elicitorSystemPrompt},
 			{Role: "user", Content: userContent},
 		},
+		Contract:    stage.NewContract[ElicitationAnalysis](),
 		Temperature: 0.1,
-		JSONMode:    true,
 		Role:        gateway.RoleMemory,
-		TaskID:      task.ID,
 		AgentID:     task.AgentID,
-	}
-	analysis, err := gateway.GenerateJSON[ElicitationAnalysis](ctx, e.gateway, req)
+	})
 	if err != nil {
 		return nil, err
+	}
+	var analysis ElicitationAnalysis
+	if err := json.Unmarshal(res.Output, &analysis); err != nil {
+		return nil, fmt.Errorf("%w: %v", models.ErrInvalidJSONResponse, err)
 	}
 	if analysis.NeedsClarification {
 		analysis.Questions = normalizeElicitationQuestions(analysis.Questions)

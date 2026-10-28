@@ -75,7 +75,7 @@ func (w *Worker) RunPreTaskElicitation(ctx context.Context, task models.Task, pr
 		return task, false, nil
 	}
 
-	elicitor := NewElicitor(w.gateway)
+	elicitor := NewElicitorOn(w.taskCreationAgent())
 	analysis, err := elicitor.Analyze(ctx, task, project, w.buildElicitationFileContext(task, project))
 	if err != nil {
 		slog.Warn("pre-task elicitation failed; continuing without clarification", "task_id", task.ID, "error", err)

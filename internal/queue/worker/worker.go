@@ -114,10 +114,14 @@ type PluginMounter interface {
 }
 
 // taskCreationAgent is the agent the task-creation stages call. A Worker built
-// without NewWorker falls back to a ModelAgent over its gateway.
+// without NewWorker falls back to a ModelAgent over its gateway; with neither
+// it returns nil, which the elicitor treats as "nothing to ask".
 func (w *Worker) taskCreationAgent() stage.Agent {
 	if w.stageAgent != nil {
 		return w.stageAgent
+	}
+	if w.gateway == nil {
+		return nil
 	}
 	return stage.NewModelAgent(w.gateway)
 }
