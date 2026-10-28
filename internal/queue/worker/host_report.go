@@ -25,6 +25,7 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 	if !ok || w.validateProjectWorkspace(project) != nil {
 		return false
 	}
+
 	report, ok, err := hostreport.WriteReport(project.WorkspacePath, target)
 	if err != nil {
 		var missing *hostreport.MissingFactsError
@@ -44,6 +45,7 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 			w.handleAgentFailure(ctx, task, err.Error())
 			return true
 		}
+
 	}
 	w.commit(ctx, task, sandbox.Result{Success: true, Stdout: report}, nil)
 	return true

@@ -13,6 +13,7 @@ import (
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/queue/worker/agentic"
 	"agentd/internal/sandbox"
 )
 
@@ -231,11 +232,10 @@ func TestIngestHumanCorrections_DeduplicatesProcessedComments(t *testing.T) {
 			},
 		},
 	}
-	w := &Worker{store: store}
+	_ = store
 	cm := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
-
-	w.ingestHumanCorrections(context.Background(), "task-1", cm)
-	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+	(&agentic.Engine{}).IngestHumanCorrections(context.Background(), store, "task-1", cm)
+	(&agentic.Engine{}).IngestHumanCorrections(context.Background(), store, "task-1", cm)
 
 	corrections := cm.Corrections()
 	if len(corrections) != 1 {
@@ -268,13 +268,13 @@ func TestIngestHumanCorrections_ReprocessesEditedComment(t *testing.T) {
 			},
 		},
 	}
-	w := &Worker{store: store}
+	_ = store
 	cm := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
+	(&agentic.Engine{}).IngestHumanCorrections(context.Background(), store, "task-1", cm)
 
-	w.ingestHumanCorrections(context.Background(), "task-1", cm)
 	store.comments[0].Body = "[CORRECT] was: older; is: newer"
 	store.comments[0].UpdatedAt = second
-	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+	(&agentic.Engine{}).IngestHumanCorrections(context.Background(), store, "task-1", cm)
 
 	corrections := cm.Corrections()
 	if len(corrections) != 2 {
@@ -293,10 +293,9 @@ func TestIngestHumanCorrections_MapsReviewerSource(t *testing.T) {
 			},
 		},
 	}
-	w := &Worker{store: store}
+	_ = store
 	cm := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
-
-	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+	(&agentic.Engine{}).IngestHumanCorrections(context.Background(), store, "task-1", cm)
 
 	corrections := cm.Corrections()
 	if len(corrections) != 1 {
@@ -324,10 +323,9 @@ func TestIngestHumanCorrections_SkipsUnknownAuthors(t *testing.T) {
 			},
 		},
 	}
-	w := &Worker{store: store}
+	_ = store
 	cm := agentcontext.NewContextManager(config.AgenticContextConfig{}, nil, "agent", "task-1")
-
-	w.ingestHumanCorrections(context.Background(), "task-1", cm)
+	(&agentic.Engine{}).IngestHumanCorrections(context.Background(), store, "task-1", cm)
 
 	if got := len(cm.Corrections()); got != 0 {
 		t.Fatalf("expected unknown authors to be skipped, got %d corrections", got)

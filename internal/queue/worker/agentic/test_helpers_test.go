@@ -30,6 +30,10 @@ func (h *noopHost) RecordProviderSuccess(_ context.Context, _ models.Task) {}
 func (h *noopHost) RecordTaskTokenUsage(_ context.Context, _ models.Task, _ int, _ gateway.UsageDetails) {
 }
 
+func (h *noopHost) UpdateCriteriaMet(_ context.Context, _ string, _ []string) error {
+	return nil
+}
+
 func (h *noopHost) CommitTextWithProfile(_ context.Context, _ models.Task, _ string, _ *models.AgentProfile) {
 }
 

@@ -19,7 +19,7 @@ import (
 )
 
 type Config struct {
-	Store                   models.KanbanStore
+	Store                   TaskReadStore
 	Gateway                 gateway.AIGateway
 	Sandbox                 sandbox.Executor
 	SandboxEnvAllowlist     []string
@@ -43,6 +43,11 @@ type Config struct {
 	Capabilities            *capabilities.Registry
 }
 
+type TaskReadStore interface {
+	GetTask(ctx context.Context, taskID string) (*models.Task, error)
+	ListCommentsSince(ctx context.Context, taskID string, since time.Time) ([]models.Comment, error)
+}
+
 // PromptHang is a bash call that stopped at an interactive prompt.
 type PromptHang struct {
 	// Command is the command as the model sent it; a repeat of it hands off.
@@ -64,6 +69,7 @@ type Host interface {
 	// circuit the provider has not recovered from.
 	RecordProviderSuccess(ctx context.Context, task models.Task)
 	RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails)
+	UpdateCriteriaMet(ctx context.Context, taskID string, met []string) error
 	CommitTextWithProfile(ctx context.Context, task models.Task, text string, profile *models.AgentProfile)
 	DispatchToolWithHooks(
 		ctx context.Context,

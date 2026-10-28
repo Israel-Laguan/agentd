@@ -134,6 +134,16 @@ func (w *Worker) taskCreationAgent() stage.Agent {
 	return stage.NewModelAgent(w.gateway)
 }
 
+func (w *Worker) UpdateCriteriaMet(ctx context.Context, taskID string, met []string) error {
+	if w.store == nil {
+		return errors.New("worker: criteria store unavailable")
+	}
+	if taskID == "" {
+		return errors.New("worker: criteria task ID is empty")
+	}
+	return w.store.UpdateCriteriaMet(ctx, taskID, met)
+}
+
 func (w *Worker) RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails) {
 	if tokens <= 0 {
 		return
@@ -183,47 +193,6 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	stopHeartbeat := w.startHeartbeat(ctx, task.ID)
 	defer stopHeartbeat()
 	w.dispatchProcess(ctx, task, *project, *profile)
-}
-
-func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
-	if profile.RequireReview {
-		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
-			w.FailHard(ctx, task, err)
-			return
-		} else if done {
-			return
-		}
-	}
-	if handled, err := w.tryRollUpBreakdown(ctx, task); err != nil {
-		w.Emit(ctx, task, "BREAKDOWN_ROLLUP_ERROR", err.Error())
-		w.requeue(ctx, task, err.Error())
-		return
-	} else if handled {
-		return
-	}
-	if planning.IsPhasePlanningTask(task.Title) {
-		slog.DebugContext(ctx, "worker: handling phase planning", "task_id", task.ID)
-		w.handlePhasePlanning(ctx, task, project)
-		return
-	}
-	if w.tryTieredOrigin(ctx, task) {
-		return
-	}
-	release, ok := w.gateProvider(ctx, task, profile.Provider)
-	if !ok {
-		return
-	}
-	defer release()
-	if w.dispatchTieredStep(ctx, task, project, profile) {
-		return
-	}
-	if w.tryRenderHostReport(ctx, task, project) {
-		return
-	}
-	slog.DebugContext(ctx, "worker: entering agentic loop", "task_id", task.ID)
-	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
-		w.handleLoopResult(ctx, task, result)
-	}
 }
 
 func (w *Worker) tryTieredOrigin(ctx context.Context, task models.Task) bool {

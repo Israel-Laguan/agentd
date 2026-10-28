@@ -161,7 +161,11 @@ func (e *Engine) newAgenticContextManager(task models.Task) (*agentcontext.Conte
 	cm.SetTruncationStrategy(e.config.ContextTruncation)
 
 	goal := agentcontext.GoalFromTask(task)
-	goalTracker := agentcontext.NewGoalTracker(task.ID, task.ProjectID, agentcontext.WithCriteriaStore(e.config.Store))
+	goalTracker := agentcontext.NewGoalTracker(
+		task.ID,
+		task.ProjectID,
+		agentcontext.WithCriteriaStore(e.host),
+	)
 	if goal != nil {
 		goalTracker.SetGoal(*goal)
 		cm.SetGoalTracker(goalTracker)
