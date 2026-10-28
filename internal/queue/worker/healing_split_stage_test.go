@@ -54,3 +54,29 @@ func TestHealingSplitRecordsTokensOfAFailedCall(t *testing.T) {
 		t.Fatalf("recorded tokens = %d, want 42: a failed split still cost them", got)
 	}
 }
+
+// The split contract has no flag, so the children take the parent's: a flagged
+// task that is split keeps the evidence gate on the work.
+func TestHealingSplitChildrenInheritRequiresWorkspaceChange(t *testing.T) {
+	t.Parallel()
+	for _, flagged := range []bool{true, false} {
+		store := healingSplitStore("task-split-flag")
+		store.task.RequiresWorkspaceChange = flagged
+		agent := &stageRecorder{output: `{"subtasks":[{"title":"a","description":"1"},{"title":"b","description":"2"}]}`}
+		w := NewWorker(store, nil, &routingTestSandbox{}, nil, &legacyHandoffSink{}, legacyCapOptions())
+		w.stageAgent = agent
+
+		w.handleHealingSplit(context.Background(), store.task, store.project, store.profile)
+
+		store.mu.Lock()
+		if len(store.subtasks) != 2 {
+			t.Fatalf("flagged=%v: subtasks = %d, want 2", flagged, len(store.subtasks))
+		}
+		for _, d := range store.subtasks {
+			if d.RequiresWorkspaceChange != flagged {
+				t.Errorf("parent flagged=%v: child %q flagged=%v", flagged, d.Title, d.RequiresWorkspaceChange)
+			}
+		}
+		store.mu.Unlock()
+	}
+}
