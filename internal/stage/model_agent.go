@@ -32,16 +32,24 @@ func (a ModelAgent) Call(ctx context.Context, req StageRequest) (StageResult, er
 	if req.Access != AccessNone {
 		return StageResult{}, ErrModelAgentAccess
 	}
+	role := req.Role
+	if role == "" {
+		role = spec.RoleChat
+	}
 	aiReq := spec.AIRequest{
 		Purpose:     req.Purpose,
 		TaskID:      spec.TaskIDFromContext(ctx),
 		Messages:    req.Context,
 		Temperature: req.Temperature,
-		Role:        spec.RoleChat,
+		Role:        role,
+		AgentID:     req.AgentID,
+		Provider:    req.Provider,
+		Model:       req.Model,
+		MaxTokens:   req.MaxTokens,
 	}
 	output, tokens, details, err := req.Contract.Decode(ctx, a.gateway, aiReq)
 	if err != nil {
-		return StageResult{}, err
+		return StageResult{TokenUsage: tokens, UsageDetails: details}, err
 	}
 	return StageResult{
 		Outcome:      OutcomeCompleted,

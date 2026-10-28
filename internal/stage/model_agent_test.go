@@ -97,3 +97,46 @@ func TestModelAgentRejectsInvalidRequestWithoutCalling(t *testing.T) {
 		t.Fatalf("gateway calls = %d, want 0", len(gw.seen))
 	}
 }
+
+func TestModelAgentForwardsRoutingFields(t *testing.T) {
+	t.Parallel()
+	gw := &scriptedGateway{replies: []string{`{"name":"agentd"}`}}
+	req := validRequest()
+	req.Role = spec.RoleMemory
+	req.AgentID = "agent-1"
+	req.Provider = "prov"
+	req.Model = "mod"
+	req.MaxTokens = 2000
+	if _, err := NewModelAgent(gw).Call(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	got := gw.seen[0]
+	if got.Role != spec.RoleMemory || got.AgentID != "agent-1" || got.Provider != "prov" || got.Model != "mod" || got.MaxTokens != 2000 {
+		t.Errorf("request = role %q agent %q provider %q model %q max %d, want the stage's own values",
+			got.Role, got.AgentID, got.Provider, got.Model, got.MaxTokens)
+	}
+}
+
+func TestModelAgentReturnsTokensOfAFailedCall(t *testing.T) {
+	t.Parallel()
+	gw := &usageGateway{replies: []string{`nope`, `nope`, `nope`}}
+	res, err := NewModelAgent(gw).Call(context.Background(), validRequest())
+	if err == nil {
+		t.Fatal("want an error after three invalid replies")
+	}
+	if res.TokenUsage != 30 {
+		t.Errorf("token usage = %d, want 30: the caller records what every attempt cost", res.TokenUsage)
+	}
+}
+
+// usageGateway reports 10 tokens per reply.
+type usageGateway struct {
+	spec.AIGateway
+	replies []string
+	calls   int
+}
+
+func (g *usageGateway) Generate(context.Context, spec.AIRequest) (spec.AIResponse, error) {
+	g.calls++
+	return spec.AIResponse{Content: g.replies[g.calls-1], TokenUsage: 10}, nil
+}
