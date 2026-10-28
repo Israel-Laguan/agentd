@@ -22,9 +22,9 @@ const hostFactPlanningRule = "\nTasks run as shell commands inside the project w
 // (PR 11): a task that changes the workspace cannot finish on text alone.
 const workspaceChangePlanningRule = "\nSet requires_workspace_change to true on every task that must create or change a file, or run a command, in the project workspace. " +
 	"Set it to false, or leave it out, on a task that only reasons or writes text, such as a summary or a review. " +
-	"If the request only asks to explain, compare, or discuss in text (for example \"explain the trade-offs of X versus Y\"), " +
-	"produce a single task titled to write that explanation and set requires_workspace_change to false; do not create files, " +
-	"do not run commands, and do not add a separate task that writes the result to disk."
+	"A request that only asks for an answer in text, whether it is a question, an explanation, a comparison, pros and cons, a recommendation or an opinion, " +
+	"and does not ask to change the project, is one task with requires_workspace_change false: it creates no file, runs no command, " +
+	"and has no separate task that writes the answer to disk."
 
 // vagueRequestPlanningRule makes the plan step ask instead of planning discovery
 // for a request that names no target or outcome (B-085). A request that asks
