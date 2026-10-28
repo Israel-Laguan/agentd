@@ -27,7 +27,7 @@ var liveFlagCases = []liveFlagCase{
 	{"Create a README.md that explains how to build and run the project.", true},
 	{"Fix the failing test in parser_test.go so it passes.", true},
 	{"what os and hardware have this machine", true},
-		{"Write a short summary of what this project does. Reply in text only. Do not create, modify, or delete any files.", false},
+	{"Write a short summary of what this project does. Reply in text only. Do not create, modify, or delete any files.", false},
 
 	{"Explain the trade-offs of using SQLite versus Postgres for a small app like this one.", false},
 }
@@ -38,6 +38,12 @@ var liveFlagCases = []liveFlagCase{
 // It needs the key in the env var named by AGENTD_LIVE_API_KEY_ENV (default
 // OPENROUTER_API_KEY). AGENTD_LIVE_BASE_URL and AGENTD_LIVE_MODEL override the
 // endpoint and model, and AGENTD_LIVE_RUNS sets the runs per case (default 10).
+//
+// The build tag keeps it out of make test, make check and CI: it costs real
+// calls and its score depends on the model. It is the proof that the intake
+// prompt works against a real key, not a regression gate. Measured with
+// codestral-latest (Mistral); OpenRouter's free models answered 429 (quota) on
+// most runs, so use a model with its own quota (see docs/acp-agents.md).
 func TestLiveRequiresWorkspaceChangeFlag(t *testing.T) {
 	keyEnv := os.Getenv("AGENTD_LIVE_API_KEY_ENV")
 	if keyEnv == "" {

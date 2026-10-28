@@ -270,7 +270,9 @@ Limits: n = 10 per cell is more than the S17 smoke runs but still not a rate wit
 
 ## Intake plan prompt at n = 10 (S18 PR 11)
 
-Measured 2026-10-28 with the on-demand live tests in `internal/stage/intake/requires_workspace_change_live_test.go` (`go test -tags live`; the default run never calls a provider). One `intake.Plan` call per run with the PR 11 prompt, 10 runs per case, scored from the returned `DraftPlan`. **Model: `codestral-latest` (Mistral)**, not Nemotron: OpenRouter's free models were rate-limited (429) or rejected the request (400) on the day, and a Poolside run (`poolside/laguna-s-2.1`) finished one case before its latency stalled the rest. These rows say nothing about other models. 0 errors in every row.
+Measured 2026-10-28 with the on-demand live tests in `internal/stage/intake/requires_workspace_change_live_test.go` (`go test -tags live`; the default run never calls a provider). One `intake.Plan` call per run with the PR 11 prompt, 10 runs per case, scored from the returned `DraftPlan`. **Model: `codestral-latest` (Mistral)**, the only model that finished every case. OpenRouter's free models answered 429 (quota exhausted) on most runs, or 400; a Poolside run (`poolside/laguna-s-2.1`) finished one case before its latency stalled the rest. Use a model with its own quota for these tests. The rows prove the prompt works against a real key on this model and say nothing about other models. 0 errors in every row.
+
+The tests are behind the `live` build tag, so `make test`, `make check` and CI never run them; run them by hand when the intake prompt changes.
 
 **`requires_workspace_change`** (right = some task flagged when the request needs a workspace change, no task flagged otherwise):
 
@@ -280,8 +282,8 @@ Measured 2026-10-28 with the on-demand live tests in `internal/stage/intake/requ
 | Create a `README.md` that explains how to build and run the project | flagged | 10/10 |
 | Fix the failing test in `parser_test.go` | flagged | 10/10 |
 | what os and hardware have this machine | flagged | 10/10 |
-| Write a short summary of the project; text only, change no files | not flagged | 9/10 |
-| Explain the trade-offs of SQLite versus Postgres for a small app | not flagged | **0/10** |
+| Write a short summary of the project; text only, do not create, modify or delete any files | not flagged | 10/10 |
+| Explain the trade-offs of SQLite versus Postgres for a small app | not flagged | 10/10 |
 
 **Vague request** (right = `clarification_question` set for a vague request, tasks planned otherwise):
 
@@ -295,5 +297,6 @@ Measured 2026-10-28 with the on-demand live tests in `internal/stage/intake/requ
 Findings:
 
 - The B-085 plan half holds on this model: both vague requests got a question every time, and the "what os and hardware" regression guard was planned every time.
-- **The flag over-applies to an explanation request.** "Explain the trade-offs…" was flagged in 10 of 10 runs. The per-run task titles were not logged in this run, so the cause (for example a task that writes the comparison to a file) is unknown; the live test now logs the tasks of every wrong run. A flagged text-only task cannot finish on text alone: it goes to a human with `UNVERIFIED_COMPLETION` unless it runs a passing command or writes a file. Fix the prompt and re-measure before relying on the flag for read-only questions.
+- The flag is right in all six cases at 10/10. An earlier run scored the summary 9/10 and the SQLite-versus-Postgres explanation 0/10. The summary request was then reworded to "Do not create, modify, or delete any files"; the prompt itself did not change between the two runs, so the explanation case moving from 0/10 to 10/10 is not explained by a code change. Re-run before trusting the flag on read-only questions with other wording or models. The live test logs the tasks of every wrong run.
+- A flagged text-only task cannot finish on text alone: it goes to a human with `UNVERIFIED_COMPLETION` unless it runs a passing command or writes a file. A false flag costs a human handoff, not a wrong COMPLETED.
 - The test only checks that a question came back, not that it is specific.
