@@ -46,6 +46,7 @@ func (a ModelAgent) Call(ctx context.Context, req StageRequest) (StageResult, er
 		Provider:    req.Provider,
 		Model:       req.Model,
 		MaxTokens:   req.MaxTokens,
+		Attrs:       req.Attrs,
 	}
 	output, tokens, details, err := req.Contract.Decode(ctx, a.gateway, aiReq)
 	if err != nil {

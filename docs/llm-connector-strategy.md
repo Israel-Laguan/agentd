@@ -73,7 +73,7 @@ billing) instead varies by deployment and is a distraction from the agent contra
 | Provider rate limits (RPM) | Delegate | agentd keeps its concurrency semaphore |
 | Load balancing / upstream retries | Delegate | LiteLLM router; agentd cascade stays 1-attempt/candidate |
 | Cascade fallback + circuit breaker | Keep | `router_cascade.go`, `queue/safety/breaker.go` |
-| Role routing (chat/worker/memory) | Keep & harden | `router.go` `WithRoleRouting`, `role_models` |
+| Purpose routing (`agents:` / `stages:`) | Keep & harden | `internal/gateway/route`, `router.go` `WithPurposeRouting` |
 | Agentic tool-history truncation (pairwise consistency) | Keep & harden | Crown jewel (`gateway/truncation/`) |
 | Legacy JSON mode + repair | Keep & harden | `routing/router.go` + `correction/` |
 | House rules / intent / scope / plan workflows | Keep | Agent behaviors |

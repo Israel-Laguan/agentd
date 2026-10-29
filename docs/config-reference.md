@@ -125,9 +125,31 @@ Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First 
 - **max_input_chars**: `0` inherits `gateway.truncator.max_input_chars`.
 - **warmup_enabled**: set `false` or use `agentd start --skip-llm-warmup` to skip billable startup probe.
 
-### Role models
+### Routing: agents and stages
 
-`gateway.role_models` (chat / worker / memory) wires specialized model routing via `WithRoleRouting`. Empty `provider` uses the default cascade order. Built-in agent profiles from `agentd init` also use empty `provider`/`model` so workers delegate to `gateway.order` unless you PATCH explicit values; see [init-startup.md](init-startup.md). Non-tool providers in the memory role still get JSON fallback when tools are sent.
+`agents:` names the model targets a route can send a call to. `stages:` keys a route by purpose (the names in `internal/gateway/spec/purpose.go`, such as `create.elicit` or `exec.work_plan`) and gives it a `default` agent and an ordered list of `rules`. The first rule whose `when` holds picks its `use` agent. With no matching rule, the `default` applies. With neither, the call takes the gateway cascade (`gateway.order`), exactly as it did before routing existed, so a config with neither section changes nothing.
+
+```yaml
+agents:
+  quick: { provider: gemini, model: gemini-2.5-flash }   # level defaults to L1
+  local: { provider: ollama, model: llama3:8b }
+stages:
+  create.elicit:
+    default: quick
+  exec.work_plan:
+    default: local
+    rules:
+      - when: { requires_workspace_change: true }
+        use: quick
+```
+
+- An agent has a `provider` (required), an optional `model`, and a `level` (`L1`, the default, or `L3`). A purpose declares the minimum level it needs; a route to an agent below that level fails at load. Only L1 purposes can be routed today, because L3 agents arrive with T-042.
+- `when` keys: `requires_workspace_change` (`true` or `false`), which matches tasks that must change the workspace. A rule needs a condition and a `use`.
+- An explicit `AgentID` on a task or a tier step is a pin. It wins over every rule and injects no provider or model. The seeded `default` profile is not a pin, so tasks on it follow their stage's route.
+- Every decision logs one `routing decision` line with the purpose, the required level, the rule that matched and the agent chosen.
+- Unknown agents, unknown keys, bad rules and routes below a purpose's level all fail at config load.
+
+`gateway.role_models` was removed. Setting it fails at load and names `stages` and `agents` as its replacement. Built-in agent profiles from `agentd init` still use empty `provider`/`model`, so their calls take the cascade unless a stage route or a manual PATCH sets explicit values; see [init-startup.md](init-startup.md). Non-tool providers that a route selects still get JSON fallback when tools are sent.
 
 ### Truncation
 

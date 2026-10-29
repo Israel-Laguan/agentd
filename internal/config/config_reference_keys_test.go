@@ -43,7 +43,7 @@ func TestConfigReferenceKeysHaveConsumers(t *testing.T) {
 func TestConfigReferenceKeysRejectsUnreadLeaf(t *testing.T) {
 	root := repoRoot(t)
 	keys := referenceKeys(t, filepath.Join(root, "config.reference.yaml"))
-	bogusLeaves := []string{"healing.nope", "queue.split.nope", "gateway.openai.nope", "gateway.role_models.chat.nope"}
+	bogusLeaves := []string{"healing.nope", "queue.split.nope", "gateway.openai.nope", "gateway.truncator.nope"}
 	for _, bogus := range bogusLeaves {
 		errs := keyGuardErrors(t, root, append(append([]string{}, keys...), bogus), notImplementedKeys)
 		if !strings.Contains(strings.Join(errs, "\n"), bogus) {

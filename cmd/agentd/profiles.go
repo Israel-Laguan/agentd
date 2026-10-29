@@ -194,7 +194,7 @@ func defaultAgentProfiles() []models.AgentProfile {
 // ErrAgentProfileNotFound, so all five ship with the defaults.
 //
 // Provider/model are left empty on purpose: profile lookup falls back to the
-// gateway.role_models cascade. Note that today every agentic call (all five
+// gateway cascade (gateway.order). Note that today every agentic call (all five
 // tiered steps included) is dispatched with the same gateway.RoleWorker
 // route (internal/queue/worker/agentic/handlers.go) — there is no per-step
 // routing that automatically assigns a small/mid/strong model per tier.

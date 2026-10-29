@@ -3,6 +3,7 @@ package routing
 import (
 	"testing"
 
+	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 )
 
@@ -25,7 +26,7 @@ func TestRouterKnownModels(t *testing.T) {
 	}
 }
 
-func TestRouterKnownModelsRoleRoutes(t *testing.T) {
+func TestRouterKnownModelsIncludeRoutedAgents(t *testing.T) {
 	t.Parallel()
 
 	router, err := NewRouterFromConfigs([]spec.ProviderConfig{
@@ -34,8 +35,10 @@ func TestRouterKnownModelsRoleRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRouterFromConfigs: %v", err)
 	}
-	router = router.WithRoleRouting(map[spec.Role]spec.RoleTarget{
-		spec.RoleWorker: {Provider: "openai", Model: "gpt-4.1"},
+	router = router.WithPurposeRouting(route.Table{
+		Agents: map[string]route.Agent{
+			"worker": {Provider: "openai", Model: "gpt-4.1", Level: spec.LevelL1},
+		},
 	})
 	got := router.KnownModels("openai")
 	if len(got) != 2 {

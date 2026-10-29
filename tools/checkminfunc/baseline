@@ -8,7 +8,6 @@ internal/agent/filecontext/file_converter.go NewFileConverter
 internal/agent/runtime/audit.go NewAuditLogger
 internal/agent/runtime/audit.go (*AuditLogger).Enabled
 internal/agent/runtime/audit_schema.go NewFileAuditSink
-internal/agent/runtime/capability_intent.go NewIntentClassifier
 internal/agent/runtime/guards.go (*IterationGuard).IsExceeded
 internal/agent/runtime/guards.go (*IterationGuard).ShouldInjectFinalMessage
 internal/agent/runtime/guards.go (*IterationGuard).ResetAllowFinal
@@ -17,8 +16,6 @@ internal/agent/runtime/guards.go (*DeadlineGuard).Remaining
 internal/agent/runtime/guards.go (*DeadlineGuard).Deadline
 internal/agent/runtime/guards.go (*ContextBudgetGuard).TotalBudget
 internal/agent/runtime/loop_result.go (LoopResult).IsTerminalSuccess
-internal/agent/runtime/model_router.go tierConfigured
-internal/agent/runtime/model_router.go TotalToolChars
 internal/agent/runtime/runner.go NewTurnLoopRunner
 internal/agent/runtime/topic_guard.go NewTopicGuard
 internal/agent/skills/skills.go (*Skill).IsEmpty
@@ -69,6 +66,8 @@ internal/gateway/providers/provider.go (common).MaxInputChars
 internal/gateway/providers/provider.go (common).Capabilities
 internal/gateway/providers/provider.go (common).url
 internal/gateway/providers/provider.go capabilitiesFromConfig
+internal/gateway/route/table.go IsPin
+internal/gateway/route/table.go (Match).matches
 internal/gateway/routing/router_cascade.go (errTruncation).Error
 internal/gateway/routing/router_cascade.go (errTruncation).Unwrap
 internal/gateway/spec/embed_stub.go NoopEmbed
@@ -160,12 +159,12 @@ tools/checkminfunc/baseline.go violationKey
 cmd/agentd/io.go writeLine
 cmd/agentd/io.go writeFormat
 internal/agent/runtime/audit_schema.go HashArgs
-internal/agent/runtime/model_router.go EstimateContextTokens
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).withMaxDelegationDepth
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithExternalTools
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithReadOnlyWorkspace
 internal/api/httpx/trust.go FromTrustedOrigin
 internal/capabilities/registry.go (*Registry).GetTools
+internal/config/routing.go stringValue
 internal/config/split.go setSplitDefaults
 internal/frontdesk/intake.go (*IntakeProcessor).WithPhaseCap
 internal/gateway/correction/correction.go GenerateJSON
@@ -182,6 +181,7 @@ internal/queue/worker/agentic/handlers.go (*Engine).applyAgenticTruncation
 internal/queue/worker/agentic/rewind.go resetAgenticStateForTopicDrift
 internal/queue/worker/agentic/setup.go (*Engine).newAgenticContextManagerOnly
 internal/queue/worker/batcher.go (*TaskBatcher).singletonBatch
+internal/queue/worker/elicitor.go (*Elicitor).WithHuman
 internal/queue/worker/instructions.go (*SystemPromptBuilder).WithGlobal
 internal/queue/worker/instructions.go (*SystemPromptBuilder).WithProject
 internal/queue/worker/instructions.go (*SystemPromptBuilder).WithTask

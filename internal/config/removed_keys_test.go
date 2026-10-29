@@ -146,3 +146,17 @@ func TestLoad_ReplacementKeyLoads(t *testing.T) {
 		t.Fatalf("Queue.Split.MaxDepth = %d, want 4", cfg.Queue.Split.MaxDepth)
 	}
 }
+
+// gateway.role_models was replaced by the stages: and agents: sections. Its
+// removal must name them, not fail silently.
+func TestLoad_RemovedRoleModelsNamesRoutingReplacement(t *testing.T) {
+	_, err := loadConfigBody(t, "gateway:\n  role_models:\n    chat: { provider: openai }\n")
+	if err == nil {
+		t.Fatal("Load() accepted gateway.role_models, want an error")
+	}
+	for _, sub := range []string{"gateway.role_models", "stages", "agents"} {
+		if !strings.Contains(err.Error(), sub) {
+			t.Errorf("error %q does not mention %q", err, sub)
+		}
+	}
+}

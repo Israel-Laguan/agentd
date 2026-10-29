@@ -32,12 +32,6 @@ const (
 	RoleMemory Role = "memory"
 )
 
-// RoleTarget maps a Role to a preferred provider and model override.
-type RoleTarget struct {
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-}
-
 // FunctionParameters describes the parameters for a tool function in JSON Schema format.
 type FunctionParameters struct {
 	Type       string         `json:"type"`
@@ -103,10 +97,13 @@ type AIRequest struct {
 	// TruncatedBy names the layers above the router that shortened the input
 	// (for example "agentic_head"); it only labels the call record.
 	TruncatedBy string `json:"-"`
-	// ProviderFromRole is set when applyRoleRouting injects Provider from
-	// gateway.role_models. Role-selected providers keep cascade-style tool
-	// fallback (JSON mode) instead of the explicit-provider error path.
-	ProviderFromRole bool `json:"-"`
+	// Attrs are the task facts the routing rules match. Empty when the call has
+	// no task.
+	Attrs TaskAttrs `json:"-"`
+	// ProviderRouted is set when routing injected Provider from a stage route.
+	// Routed providers keep cascade-style tool fallback (JSON mode) instead of
+	// the explicit-provider error path.
+	ProviderRouted bool `json:"-"`
 	// SkipTruncation is used by internal middleware calls, such as summarization,
 	// to avoid recursively applying the truncator to its own request.
 	SkipTruncation bool `json:"-"`
