@@ -16,6 +16,7 @@ type stageRecorder struct {
 	output  string
 	err     error
 	tokens  int
+	outcome stage.Outcome
 	reqs    []stage.StageRequest
 	taskIDs []string
 }
@@ -25,6 +26,10 @@ func (a *stageRecorder) Call(ctx context.Context, req stage.StageRequest) (stage
 	defer a.mu.Unlock()
 	a.reqs = append(a.reqs, req)
 	a.taskIDs = append(a.taskIDs, gateway.TaskIDFromContext(ctx))
-	res := stage.StageResult{Outcome: stage.OutcomeCompleted, Output: json.RawMessage(a.output), TokenUsage: a.tokens}
+	outcome := a.outcome
+	if outcome == "" {
+		outcome = stage.OutcomeCompleted
+	}
+	res := stage.StageResult{Outcome: outcome, Output: json.RawMessage(a.output), TokenUsage: a.tokens}
 	return res, a.err
 }

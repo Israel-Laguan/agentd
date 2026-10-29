@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentd/internal/models"
+	"agentd/internal/stage"
 )
 
 func (w *Worker) buildElicitationFileContext(task models.Task, project models.Project) string {
@@ -75,8 +76,12 @@ func (w *Worker) RunPreTaskElicitation(ctx context.Context, task models.Task, pr
 		return task, false, nil
 	}
 
-	elicitor := NewElicitorOn(w.taskCreationAgent())
+	elicitor := NewElicitorOn(w.taskCreationAgent()).WithHuman(w.AskHuman)
 	analysis, err := elicitor.Analyze(ctx, task, project, w.buildElicitationFileContext(task, project))
+	if errors.Is(err, stage.ErrNeedsHuman) {
+		// The question is with a person and the task is blocked on it.
+		return task, true, nil
+	}
 	if err != nil {
 		slog.Warn("pre-task elicitation failed; continuing without clarification", "task_id", task.ID, "error", err)
 		return task, false, nil

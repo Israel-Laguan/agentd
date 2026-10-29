@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/stage"
 )
@@ -58,7 +59,8 @@ type ElicitationAnalysis struct {
 
 // Elicitor runs a cheap-model pass to detect task ambiguity before agentic execution.
 type Elicitor struct {
-	agent stage.Agent
+	agent    stage.Agent
+	askHuman HumanAsker
 }
 
 // NewElicitor returns an elicitor that calls a ModelAgent over gw.
@@ -72,6 +74,12 @@ func NewElicitor(gw gateway.AIGateway) *Elicitor {
 // NewElicitorOn returns an elicitor that calls agent.
 func NewElicitorOn(agent stage.Agent) *Elicitor {
 	return &Elicitor{agent: agent}
+}
+
+// WithHuman sets where a NeedsHuman outcome is handed to a person.
+func (e *Elicitor) WithHuman(ask HumanAsker) *Elicitor {
+	e.askHuman = ask
+	return e
 }
 
 // Analyze calls the memory-tier model to detect ambiguities in the task description.
@@ -91,9 +99,13 @@ func (e *Elicitor) Analyze(ctx context.Context, task models.Task, project models
 		Temperature: 0.1,
 		Role:        gateway.RoleMemory,
 		AgentID:     task.AgentID,
+		Attrs:       spec.TaskAttrs{RequiresWorkspaceChange: task.RequiresWorkspaceChange},
 	})
 	if err != nil {
 		return nil, err
+	}
+	if res.Outcome == stage.OutcomeNeedsHuman {
+		return nil, handOffNeedsHuman(ctx, e.askHuman, task, gateway.PurposeCreateElicit)
 	}
 	var analysis ElicitationAnalysis
 	if err := json.Unmarshal(res.Output, &analysis); err != nil {
