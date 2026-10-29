@@ -193,11 +193,20 @@ func (w *Worker) Process(ctx context.Context, task models.Task) {
 	w.dispatchProcess(ctx, task, *project, *profile)
 }
 
-func (w *Worker) tryTieredOrigin(ctx context.Context, task models.Task) bool {
+func (w *Worker) tryTieredOrigin(ctx context.Context, task models.Task, steps []models.Task, stepsKnown bool, stepsErr error) bool {
 	if w.isTieredStep(task) {
 		return false
 	}
-	if w.tryResolveTieredOrigin(ctx, task) {
+	if stepsErr != nil {
+		slog.Error("tiered: failed to list origin steps", "task_id", task.ID, "error", stepsErr)
+		w.requeue(ctx, task, stepsErr.Error())
+		return true
+	}
+	if stepsKnown {
+		if w.tryResolveTieredOriginSteps(ctx, task, steps) {
+			return true
+		}
+	} else if w.tryResolveTieredOrigin(ctx, task) {
 		return true
 	}
 	if !w.ShouldRunTiered(task) {

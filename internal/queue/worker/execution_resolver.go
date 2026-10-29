@@ -22,7 +22,10 @@ const (
 )
 
 type executionResolution struct {
-	kind executionAgent
+	kind             executionAgent
+	tieredSteps      []models.Task
+	tieredStepsKnown bool
+	tieredStepsErr   error
 }
 
 func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
@@ -50,7 +53,7 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 		w.handlePhasePlanning(ctx, task, project)
 		return
 	case executionAgentTieredOrigin:
-		if w.tryTieredOrigin(ctx, task) {
+		if w.tryTieredOrigin(ctx, task, resolved.tieredSteps, resolved.tieredStepsKnown, resolved.tieredStepsErr) {
 			return
 		}
 	}
@@ -84,11 +87,15 @@ func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, pr
 	if w.isTieredStep(task) {
 		return executionResolution{kind: executionAgentTieredStep}
 	}
-	if steps, err := w.tieredStepChildren(ctx, task); err == nil && len(steps) > 0 {
-		return executionResolution{kind: executionAgentTieredOrigin}
+	steps, err := w.tieredStepChildren(ctx, task)
+	if err != nil {
+		return executionResolution{kind: executionAgentTieredOrigin, tieredStepsErr: err}
+	}
+	if len(steps) > 0 {
+		return executionResolution{kind: executionAgentTieredOrigin, tieredSteps: steps, tieredStepsKnown: true}
 	}
 	if w.ShouldRunTiered(task) {
-		return executionResolution{kind: executionAgentTieredOrigin}
+		return executionResolution{kind: executionAgentTieredOrigin, tieredStepsKnown: true}
 	}
 	if _, ok := hostreport.ReportTarget(task.Title, task.Description); ok {
 		return executionResolution{kind: executionAgentHostReport}

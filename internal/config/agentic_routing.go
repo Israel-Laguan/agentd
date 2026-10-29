@@ -61,40 +61,7 @@ func loadToolManifestConfig(v *viper.Viper) ToolManifestConfig {
 	}
 }
 
-func loadStringStringMap(v *viper.Viper, key string) map[string]string {
-	if !v.IsSet(key) {
-		return nil
-	}
-	raw := v.Get(key)
-	if raw == nil {
-		return nil
-	}
-	switch m := raw.(type) {
-	case string:
-		var out map[string]string
-		if err := json.Unmarshal([]byte(m), &out); err != nil {
-			slog.Warn("invalid JSON for config key", "key", key, "err", err)
-			return nil
-		}
-		return out
-	case map[string]interface{}:
-		out := make(map[string]string, len(m))
-		for k, val := range m {
-			if s, ok := val.(string); ok {
-				out[k] = s
-			}
-		}
-		return out
-	case map[string]string:
-		cp := make(map[string]string, len(m))
-		for k, val := range m {
-			cp[k] = val
-		}
-		return cp
-	default:
-		return nil
-	}
-}
+
 
 // interfaceToStringSlice normalizes a viper-unmarshaled value (from yaml/json etc)
 // into []string for ToolManifest mappings. Supports []string, []interface{}, and nil.
