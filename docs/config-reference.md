@@ -143,7 +143,7 @@ stages:
         use: quick
 ```
 
-- An agent has a `provider` (required), an optional `model`, and a `level` (`L1`, the default, or `L3`). A purpose declares the minimum level it needs; a route to an agent below that level fails at load. Both L1 and L3 purposes can be routed when the selected agent meets the purpose minimum.
+- An agent has a `provider` (required), an optional `model`, and a `level` (`L1`, the default, or `L3`). A purpose declares the minimum level it needs; a route to an agent below that level fails at load. A route to an L3 purpose, such as `exec.turn`, with an L3 agent passes load validation. L3 agent execution arrives with T-042.
 - `when` keys: `requires_workspace_change` (`true` or `false`), which matches tasks that must change the workspace. A rule needs a condition and a `use`.
 - An explicit `AgentID` on a task or a tier step is a pin. It wins over every rule and injects no provider or model. The seeded `default` profile is not a pin, so tasks on it follow their stage's route.
 - Every decision logs one `routing decision` line with the purpose, the required level, the rule that matched and the agent chosen.

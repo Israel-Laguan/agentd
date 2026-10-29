@@ -26,7 +26,7 @@ func handOffNeedsHuman(ctx context.Context, ask HumanAsker, task models.Task, pu
 		// task is not actually blocked on a human answer. Keep this distinct
 		// from stage.ErrNeedsHuman so callers retry or fail it instead of
 		// waiting for an answer that was never recorded.
-		return fmt.Errorf("hand off %s: %w", purpose, err)
+		return fmt.Errorf("%w: hand off %s: %w", stage.ErrHumanHandoffFailed, purpose, err)
 	}
 	return fmt.Errorf("%w: %s", stage.ErrNeedsHuman, purpose)
 }

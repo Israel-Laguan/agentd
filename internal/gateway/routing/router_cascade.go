@@ -31,8 +31,7 @@ func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq s
 	req := baseReq
 	// A routed agent model belongs to the routed provider only; do not hand it
 	// to a cascade fallback that may not support that model name.
-	if req.ProviderRouted && strings.TrimSpace(req.Model) != "" &&
-		!strings.EqualFold(strings.TrimSpace(req.Provider), string(p.Name())) {
+	if baseReq.ModelRouted && !strings.EqualFold(strings.TrimSpace(baseReq.Provider), string(p.Name())) {
 		req.Model = ""
 	}
 	if hasRequestedTools && !p.Capabilities().SupportsChatTools {

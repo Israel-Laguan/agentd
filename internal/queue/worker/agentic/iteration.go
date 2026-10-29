@@ -260,6 +260,10 @@ func (e *Engine) injectWorkPlanIfNeeded(
 		// The task is blocked on the plan's question; it must not run without a plan.
 		return messages, nil, false
 	}
+	if errors.Is(planErr, stage.ErrHumanHandoffFailed) {
+		e.host.FailHard(ctx, task, planErr)
+		return messages, nil, false
+	}
 	if planErr != nil {
 		slog.Warn("failed to generate work plan; continuing without plan", "task_id", task.ID, "error", planErr)
 		return messages, nil, true

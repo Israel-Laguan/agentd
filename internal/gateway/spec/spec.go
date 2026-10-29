@@ -104,6 +104,8 @@ type AIRequest struct {
 	// Routed providers keep cascade-style tool fallback (JSON mode) instead of
 	// the explicit-provider error path.
 	ProviderRouted bool `json:"-"`
+	// ModelRouted is set when routing injected Model from a stage route.
+	ModelRouted bool `json:"-"`
 	// SkipTruncation is used by internal middleware calls, such as summarization,
 	// to avoid recursively applying the truncator to its own request.
 	SkipTruncation bool `json:"-"`

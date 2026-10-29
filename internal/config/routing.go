@@ -119,6 +119,9 @@ func collectStageLeaves(m map[string]any, prefix string, out map[string]map[stri
 			if !isMap {
 				return fmt.Errorf("stages.%s must be a map", purpose)
 			}
+			if _, dup := out[purpose]; dup {
+				return fmt.Errorf("stages.%s is defined twice (dotted and nested forms)", purpose)
+			}
 			out[purpose] = sub
 			continue
 		}
@@ -130,6 +133,9 @@ func collectStageLeaves(m map[string]any, prefix string, out map[string]map[stri
 }
 
 func isStageLeaf(m map[string]any) bool {
+	if len(m) == 0 {
+		return true
+	}
 	if _, ok := m["default"]; ok {
 		return true
 	}

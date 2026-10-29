@@ -82,6 +82,9 @@ func (w *Worker) RunPreTaskElicitation(ctx context.Context, task models.Task, pr
 		// The question is with a person and the task is blocked on it.
 		return task, true, nil
 	}
+	if errors.Is(err, stage.ErrHumanHandoffFailed) {
+		return task, false, err
+	}
 	if err != nil {
 		slog.Warn("pre-task elicitation failed; continuing without clarification", "task_id", task.ID, "error", err)
 		return task, false, nil

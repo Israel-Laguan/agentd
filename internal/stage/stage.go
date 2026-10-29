@@ -94,6 +94,11 @@ type StageResult struct {
 // on the task rather than continuing without the stage's answer.
 var ErrNeedsHuman = errors.New("stage: needs a human decision")
 
+// ErrHumanHandoffFailed is returned when a NeedsHuman result could not be
+// recorded for a person. It does not match ErrNeedsHuman, so callers treat
+// the task as failed instead of blocked.
+var ErrHumanHandoffFailed = errors.New("stage: human handoff failed")
+
 // Agent runs a stage. A ModelAgent is one gateway call; other kinds may use
 // tools and the workspace.
 type Agent interface {
