@@ -12,9 +12,6 @@ import (
 // like a manifest that classifies by description, and routes from what it is given.
 type selectHost struct {
 	noopHost
-	routedFrom   models.AgentProfile
-	routedTools  int
-	routedByTask string
 }
 
 func (h *selectHost) FilterAgenticTools(tools []gateway.ToolDefinition, index map[string]string, task models.Task, _ models.AgentProfile) ([]gateway.ToolDefinition, map[string]string) {

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -35,30 +36,32 @@ type agentResponse struct {
 }
 
 type agentCreateRequest struct {
-	ID                string   `json:"id,omitempty"`
-	Name              string   `json:"name"`
-	Provider          string   `json:"provider"`
-	Model             string   `json:"model"`
-	Temperature       float64  `json:"temperature,omitempty"`
-	SystemPrompt      string   `json:"system_prompt,omitempty"`
-	Role              string   `json:"role,omitempty"`
-	MaxTokens         int      `json:"max_tokens,omitempty"`
-	AgenticMode       *bool    `json:"agentic_mode,omitempty"`
-	AllowedTools      []string `json:"allowed_tools,omitempty"`
-	WorkspaceReadonly bool     `json:"workspace_readonly,omitempty"`
+	ID                    string          `json:"id,omitempty"`
+	Name                  string          `json:"name"`
+	Provider              string          `json:"provider"`
+	Model                 string          `json:"model"`
+	Temperature           float64         `json:"temperature,omitempty"`
+	SystemPrompt          string          `json:"system_prompt,omitempty"`
+	Role                  string          `json:"role,omitempty"`
+	MaxTokens             int             `json:"max_tokens,omitempty"`
+	AgenticMode           *bool           `json:"agentic_mode,omitempty"`
+	AllowedTools          []string        `json:"allowed_tools,omitempty"`
+	WorkspaceReadonly     bool            `json:"workspace_readonly,omitempty"`
+	CapabilityRouteIntent json.RawMessage `json:"capability_route_intent,omitempty"`
 }
 
 type agentPatchRequest struct {
-	Name              *string   `json:"name,omitempty"`
-	Provider          *string   `json:"provider,omitempty"`
-	Model             *string   `json:"model,omitempty"`
-	Temperature       *float64  `json:"temperature,omitempty"`
-	SystemPrompt      *string   `json:"system_prompt,omitempty"`
-	Role              *string   `json:"role,omitempty"`
-	MaxTokens         *int      `json:"max_tokens,omitempty"`
-	AgenticMode       *bool     `json:"agentic_mode,omitempty"`
-	AllowedTools      *[]string `json:"allowed_tools,omitempty"`
-	WorkspaceReadonly *bool     `json:"workspace_readonly,omitempty"`
+	Name                  *string         `json:"name,omitempty"`
+	Provider              *string         `json:"provider,omitempty"`
+	Model                 *string         `json:"model,omitempty"`
+	Temperature           *float64        `json:"temperature,omitempty"`
+	SystemPrompt          *string         `json:"system_prompt,omitempty"`
+	Role                  *string         `json:"role,omitempty"`
+	MaxTokens             *int            `json:"max_tokens,omitempty"`
+	AgenticMode           *bool           `json:"agentic_mode,omitempty"`
+	AllowedTools          *[]string       `json:"allowed_tools,omitempty"`
+	WorkspaceReadonly     *bool           `json:"workspace_readonly,omitempty"`
+	CapabilityRouteIntent json.RawMessage `json:"capability_route_intent,omitempty"`
 }
 
 // List handles GET /api/v1/agents.
@@ -92,6 +95,10 @@ func (h AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
 		return
 	}
+	if req.CapabilityRouteIntent != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "capability_route_intent was removed")
+		return
+	}
 	id := strings.TrimSpace(req.ID)
 	if id == "" {
 		id = uuid.NewString()
@@ -122,6 +129,10 @@ func (h AgentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	var req agentPatchRequest
 	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
+		return
+	}
+	if req.CapabilityRouteIntent != nil {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "capability_route_intent was removed")
 		return
 	}
 	if req.AgenticMode != nil && !*req.AgenticMode {

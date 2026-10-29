@@ -13,13 +13,14 @@ import (
 type removedKey struct {
 	Key         string
 	Replacement string
+	Nested      bool
 }
 
 // removedKeys is the one table of keys that Load refuses. A PR that removes a
 // key adds it here, so the error names what replaces it.
 var removedKeys = []removedKey{
-	{Key: "agentic.capability_routing"},
-	{Key: "agentic.model_routing"},
+	{Key: "agentic.capability_routing", Nested: true},
+	{Key: "agentic.model_routing", Nested: true},
 	{Key: "queue.legacy.max_breakdown_depth", Replacement: "queue.split.max_depth"},
 	{Key: "queue.legacy.max_subtasks_per_breakdown", Replacement: "queue.split.max_subtasks"},
 	{Key: "queue.legacy.preflight_score"},
@@ -38,14 +39,26 @@ func checkRemovedKeys(v *viper.Viper, process, dotenv map[string]string) error {
 		envName := envPrefix + "_" + strings.ToUpper(strings.ReplaceAll(r.Key, ".", "_"))
 		_, inProcess := process[envName]
 		_, inDotEnv := dotenv[envName]
-		if v.IsSet(r.Key) || inProcess || inDotEnv {
+		inNestedProcess := r.Nested && hasEnvPrefix(process, envName+"_")
+		inNestedDotEnv := r.Nested && hasEnvPrefix(dotenv, envName+"_")
+		if v.IsSet(r.Key) || inProcess || inDotEnv || inNestedProcess || inNestedDotEnv {
 			problems = append(problems, r.problem())
 		}
 	}
+
 	if len(problems) == 0 {
 		return nil
 	}
 	return fmt.Errorf("%w: removed config key: %s", ErrConfigRead, strings.Join(problems, "; "))
+}
+
+func hasEnvPrefix(values map[string]string, prefix string) bool {
+	for name := range values {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r removedKey) problem() string {

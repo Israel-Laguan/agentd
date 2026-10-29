@@ -32,6 +32,7 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 		done, err := w.tryFinalizeApprovedReview(ctx, task)
 		if err != nil {
 			w.FailHard(ctx, task, err)
+			return
 		}
 		if done {
 			return
@@ -82,6 +83,9 @@ func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, pr
 	}
 	if w.isTieredStep(task) {
 		return executionResolution{kind: executionAgentTieredStep}
+	}
+	if steps, err := w.tieredStepChildren(ctx, task); err == nil && len(steps) > 0 {
+		return executionResolution{kind: executionAgentTieredOrigin}
 	}
 	if w.ShouldRunTiered(task) {
 		return executionResolution{kind: executionAgentTieredOrigin}

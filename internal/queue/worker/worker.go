@@ -252,7 +252,7 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 		ToolFailureStreak:       w.toolFailureStreak, TruncatorMax: w.truncatorMax,
 		CharacterBudget: w.characterBudget, PlanningCfg: w.planningCfg,
 		MessageEditor: w.messageEditor, CheckpointStore: w.checkpointStore,
-		Capabilities: w.capabilities,
+		Capabilities: w.capabilities, TopicGuard: w.topicGuard,
 	}, w)
 	w.attempts.begin(task.ID)
 	audit := w.beginTaskAudit(task, project, profile.Provider)

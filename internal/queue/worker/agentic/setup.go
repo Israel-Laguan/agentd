@@ -44,9 +44,8 @@ func (e *Engine) prepareAgenticRun(
 	return messages, tools, toolToAdapter, allTools, allToolToAdapter, routedProfile, taskToolExecutor, taskHooks, taskCaps
 }
 
-// selectAgenticTools filters the full tool set for task and routes its model.
-// Routing sizes the context by the full set, as the filter only narrows what is
-// offered.
+// selectAgenticTools filters the full tool set for the task without changing
+// the configured profile or model.
 func (e *Engine) selectAgenticTools(
 	task models.Task,
 	profile models.AgentProfile,
@@ -54,7 +53,9 @@ func (e *Engine) selectAgenticTools(
 	allTools []gateway.ToolDefinition,
 	allToolToAdapter map[string]string,
 ) ([]gateway.ToolDefinition, map[string]string, models.AgentProfile) {
-	tools, toolToAdapter := e.host.FilterAgenticTools(allTools, allToolToAdapter, task, profile)
+	filteredTools, filteredMap := e.host.FilterAgenticTools(allTools, allToolToAdapter, task, profile)
+	tools := filteredTools
+	toolToAdapter := filteredMap
 	return tools, toolToAdapter, profile
 }
 

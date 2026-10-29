@@ -23,7 +23,7 @@ func (e *Engine) prepareAgenticIteration(
 ) (contextExhausted bool, err error) {
 	const commentPollInterval = 5 * time.Second
 	if cm.ShouldPollComments(commentPollInterval) {
-		e.ingestHumanCorrections(ctx, task.ID, cm)
+		e.ingestHumanCorrections(ctx, e.config.Store, task.ID, cm)
 	}
 
 	// The iteration-limit message goes in before the context is prepared, so

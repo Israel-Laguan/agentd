@@ -95,6 +95,21 @@ func TestLoad_RemovedKeyFromEnvFails(t *testing.T) {
 	}
 }
 
+func TestLoad_RemovedRoutingNestedEnvFails(t *testing.T) {
+	for _, name := range []string{
+		"AGENTD_AGENTIC_MODEL_ROUTING_ENABLED",
+		"AGENTD_AGENTIC_CAPABILITY_ROUTING_ENABLED",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "true")
+			_, err := loadConfigBody(t, "")
+			if err == nil {
+				t.Fatalf("Load() accepted removed nested env %s", name)
+			}
+		})
+	}
+}
+
 // Viper treats an empty env var as unset, so an empty AGENTD_* setting is
 // caught only by the process environment itself.
 func TestLoad_EmptyRemovedEnvFails(t *testing.T) {

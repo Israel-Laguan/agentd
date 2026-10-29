@@ -9,12 +9,12 @@ import (
 	"agentd/internal/models"
 )
 
-func (e *Engine) ingestHumanCorrections(ctx context.Context, taskID string, cm *agentcontext.ContextManager) {
+func (e *Engine) ingestHumanCorrections(ctx context.Context, store TaskReadStore, taskID string, cm *agentcontext.ContextManager) {
 	if cm == nil {
 		return
 	}
 
-	comments, err := e.config.Store.ListCommentsSince(ctx, taskID, cm.CommentHighWater())
+	comments, err := store.ListCommentsSince(ctx, taskID, cm.CommentHighWater())
 	if err != nil {
 		slog.Warn("failed to list task comments for corrections", "task_id", taskID, "error", err)
 		return
@@ -38,8 +38,7 @@ func (e *Engine) IngestHumanCorrections(ctx context.Context, store TaskReadStore
 	if cm == nil || store == nil {
 		return
 	}
-	e.config.Store = store
-	e.ingestHumanCorrections(ctx, taskID, cm)
+	e.ingestHumanCorrections(ctx, store, taskID, cm)
 }
 
 func correctionSourceForCommentAuthor(author models.CommentAuthor) (agentcontext.CorrectionSource, bool) {
