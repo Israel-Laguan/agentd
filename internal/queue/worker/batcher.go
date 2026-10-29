@@ -151,27 +151,10 @@ func (w *Worker) isTaskBatchable(ctx context.Context, task models.Task) bool {
 	if profile.RequireReview {
 		return false
 	}
-	if w.wouldCapabilityRoute(task, *profile) {
-		return false
-	}
 	if profile.AgenticMode {
 		return !w.requiresAgenticTools(ctx, task, *project, *profile)
 	}
 	return true
-}
-
-func (w *Worker) wouldCapabilityRoute(task models.Task, profile models.AgentProfile) bool {
-	// Mirror TryExternalCapabilityRoute: without a registry, or without the
-	// mapped adapter in it, the task falls through and stays batchable (B-061).
-	if w.capabilityRouter == nil || w.capabilities == nil {
-		return false
-	}
-	decision, ok := w.capabilityRouter.Route(task, profile)
-	if !ok {
-		return false
-	}
-	_, found := w.capabilities.GetAdapter(decision.Adapter)
-	return found
 }
 
 func (w *Worker) requiresAgenticTools(

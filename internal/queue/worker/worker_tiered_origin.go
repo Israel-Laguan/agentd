@@ -29,6 +29,10 @@ func (w *Worker) tryResolveTieredOrigin(ctx context.Context, task models.Task) b
 		slog.Error("tiered: failed to list origin steps", "task_id", task.ID, "error", err)
 		return false
 	}
+	return w.tryResolveTieredOriginSteps(ctx, task, steps)
+}
+
+func (w *Worker) tryResolveTieredOriginSteps(ctx context.Context, task models.Task, steps []models.Task) bool {
 	if len(steps) == 0 {
 		return false
 	}

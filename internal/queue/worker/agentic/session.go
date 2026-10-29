@@ -60,7 +60,7 @@ func (sm *SessionManager) AdvanceTopic(topic string) {
 // PollNewHumanInput returns the latest human/frontdesk comment since the last topic check.
 func (sm *SessionManager) PollNewHumanInput(
 	ctx context.Context,
-	store models.KanbanStore,
+	store TaskReadStore,
 	taskID string,
 ) (body string, ok bool) {
 	if sm == nil || store == nil {

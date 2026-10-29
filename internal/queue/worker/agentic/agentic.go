@@ -29,11 +29,6 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	messages, tools, toolToAdapter, allTools, allToolToAdapter, profile, taskToolExecutor, taskHooks, taskCaps :=
 		e.prepareAgenticRun(ctx, task, project, baseProfile)
 
-	if result, ok, err := e.host.TryExternalCapabilityRoute(cancelCtx, task, project, profile, &messages); err != nil {
-		return agentruntime.LoopResult{}, false
-	} else if ok {
-		return result, true
-	}
 	if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
 		e.rejectWithoutToolSupport(cancelCtx, task, profile.Provider)
 		return agentruntime.LoopResult{}, false

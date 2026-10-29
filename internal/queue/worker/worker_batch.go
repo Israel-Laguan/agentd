@@ -40,8 +40,6 @@ func (w *Worker) buildBatchRequest(
 ) gateway.AIRequest {
 	system := strings.Replace(w.buildSystemPromptContent(tasks[0], project, profile), askHumanGuidance+"\n", "", 1) +
 		"\n\n" + batchTextSystemSuffix
-	profile = w.ApplyModelRouting(tasks[0], profile, nil, nil)
-
 	req := gateway.AIRequest{
 		Purpose: gateway.PurposeExecBatch,
 		Messages: []gateway.PromptMessage{

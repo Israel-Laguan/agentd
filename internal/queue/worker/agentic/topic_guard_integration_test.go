@@ -122,9 +122,6 @@ func (h *topicDriftHost) HandleGatewayError(ctx context.Context, task models.Tas
 func (h *topicDriftHost) RunPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error) {
 	return task, false, nil
 }
-func (h *topicDriftHost) ApplyModelRouting(task models.Task, profile models.AgentProfile, messages []gateway.PromptMessage, tools []gateway.ToolDefinition) models.AgentProfile {
-	return profile
-}
 func (h *topicDriftHost) ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest {
 	return req
 }
@@ -150,15 +147,6 @@ func (h *topicDriftHost) GenerateRespecifiedUserTurn(
 }
 func (h *topicDriftHost) RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error {
 	return nil
-}
-func (h *topicDriftHost) TryExternalCapabilityRoute(
-	ctx context.Context,
-	task models.Task,
-	project models.Project,
-	profile models.AgentProfile,
-	messages *[]gateway.PromptMessage,
-) (agentruntime.LoopResult, bool, error) {
-	return agentruntime.LoopResult{}, false, nil
 }
 func (h *topicDriftHost) RecordLoopResult(result agentruntime.LoopResult) {}
 func (h *topicDriftHost) HandleGoalStalled(ctx context.Context, task models.Task, gt *agentcontext.GoalTracker) error {

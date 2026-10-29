@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"agentd/internal/gateway"
 	"agentd/internal/memory"
@@ -12,7 +11,6 @@ import (
 
 	agentcontext "agentd/internal/agent/context"
 	agenthooks "agentd/internal/agent/hooks"
-	agentruntime "agentd/internal/agent/runtime"
 	wskills "agentd/internal/agent/skills"
 )
 
@@ -43,31 +41,6 @@ func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, project
 		messages = append(messages, gateway.PromptMessage{Role: "system", Content: prefs, Section: gateway.SectionMemories})
 	}
 	return messages
-}
-
-// applyModelRouting selects provider/model from complexity routing when enabled.
-func (w *Worker) ApplyModelRouting(
-	task models.Task,
-	profile models.AgentProfile,
-	messages []gateway.PromptMessage,
-	tools []gateway.ToolDefinition,
-) models.AgentProfile {
-	if w.modelRouter == nil {
-		return profile
-	}
-	contextTokens := agentruntime.EstimateContextTokens(messages, tools)
-	provider, model, ok := w.modelRouter.Route(task, contextTokens)
-	if !ok {
-		return profile
-	}
-	provider = strings.TrimSpace(provider)
-	model = strings.TrimSpace(model)
-	if provider == "" || model == "" {
-		return profile
-	}
-	profile.Provider = provider
-	profile.Model = model
-	return profile
 }
 
 // askHumanGuidance tells the agentic model when to call ask_human. A batch

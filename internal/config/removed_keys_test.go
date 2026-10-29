@@ -31,6 +31,16 @@ func TestLoad_RemovedKeyFailsAndNamesReplacement(t *testing.T) {
 		want []string
 	}{
 		{
+			name: "capability routing has no replacement",
+			body: "agentic:\n  capability_routing:\n    enabled: true\n",
+			want: []string{"agentic.capability_routing", "no replacement"},
+		},
+		{
+			name: "model routing has no replacement",
+			body: "agentic:\n  model_routing:\n    enabled: true\n",
+			want: []string{"agentic.model_routing", "no replacement"},
+		},
+		{
 			name: "breakdown depth names split.max_depth",
 			body: "queue:\n  legacy:\n    max_breakdown_depth: 3\n",
 			want: []string{"queue.legacy.max_breakdown_depth", "queue.split.max_depth"},
@@ -82,6 +92,21 @@ func TestLoad_RemovedKeyFromEnvFails(t *testing.T) {
 	_, err := loadConfigBody(t, "")
 	if err == nil || !strings.Contains(err.Error(), "queue.legacy.reject_score") {
 		t.Fatalf("Load() error = %v, want the removed env key named", err)
+	}
+}
+
+func TestLoad_RemovedRoutingNestedEnvFails(t *testing.T) {
+	for _, name := range []string{
+		"AGENTD_AGENTIC_MODEL_ROUTING_ENABLED",
+		"AGENTD_AGENTIC_CAPABILITY_ROUTING_ENABLED",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "true")
+			_, err := loadConfigBody(t, "")
+			if err == nil {
+				t.Fatalf("Load() accepted removed nested env %s", name)
+			}
+		})
 	}
 }
 

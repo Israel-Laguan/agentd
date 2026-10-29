@@ -3,7 +3,6 @@ package agentic
 import (
 	"context"
 	"log/slog"
-	"strings"
 	"time"
 
 	"agentd/internal/api/correlation"
@@ -24,7 +23,7 @@ func (e *Engine) prepareAgenticIteration(
 ) (contextExhausted bool, err error) {
 	const commentPollInterval = 5 * time.Second
 	if cm.ShouldPollComments(commentPollInterval) {
-		e.ingestHumanCorrections(ctx, task.ID, cm)
+		e.ingestHumanCorrections(ctx, e.config.Store, task.ID, cm)
 	}
 
 	// The iteration-limit message goes in before the context is prepared, so
@@ -238,42 +237,6 @@ func (e *Engine) buildAgenticRequest(
 		SkipTruncation: true,
 	}
 	return e.host.ApplyTuning(req, task, profile, sessionRecoveryGen)
-}
-
-func (e *Engine) ingestHumanCorrections(ctx context.Context, taskID string, cm *agentcontext.ContextManager) {
-	if cm == nil {
-		return
-	}
-	comments, err := e.config.Store.ListCommentsSince(ctx, taskID, cm.CommentHighWater())
-	if err != nil {
-		slog.Warn("failed to list task comments for corrections", "task_id", taskID, "error", err)
-		return
-	}
-	defer cm.AdvanceCommentHighWater(comments)
-	for _, c := range comments {
-		source, ok := correctionSourceForCommentAuthor(c.Author)
-		if !ok {
-			continue
-		}
-		if !cm.MarkCommentCorrectionSeen(c) {
-			continue
-		}
-		if rec := agentcontext.ParseCorrectionComment(c.Body, source); rec != nil {
-			cm.InjectCorrection(*rec)
-		}
-	}
-}
-
-func correctionSourceForCommentAuthor(author models.CommentAuthor) (agentcontext.CorrectionSource, bool) {
-	switch author {
-	case models.CommentAuthorUser, models.CommentAuthorFrontdesk:
-		return agentcontext.CorrectionSourceHuman, true
-	default:
-		if strings.EqualFold(string(author), string(agentcontext.CorrectionSourceReviewer)) {
-			return agentcontext.CorrectionSourceReviewer, true
-		}
-		return "", false
-	}
 }
 
 func appendAssistantMessage(messages *[]gateway.PromptMessage, resp gateway.AIResponse) {

@@ -9,36 +9,20 @@ import (
 // AgenticConfig holds agent-loop settings documented under the top-level
 // agentic: key in config.reference.yaml.
 const (
-	DefaultContextWarningThreshold   = 0.85
-	DefaultToolFailureStreak         = 3
-	DefaultFileContextTopK           = 5
-	DefaultFileContextCachePath      = "file-cache"
-	DefaultFileContextEmbedModel     = "text-embedding-3-small"
-	DefaultPlanningMaxRedoPasses     = 3
-	DefaultPlanContextMaxChars       = 4000
-	DefaultTopicGuardSensitivity     = 0.5
-	DefaultModelRoutingContextTokens = 150000
+	DefaultContextWarningThreshold = 0.85
+	DefaultToolFailureStreak       = 3
+	DefaultFileContextTopK         = 5
+	DefaultFileContextCachePath    = "file-cache"
+	DefaultFileContextEmbedModel   = "text-embedding-3-small"
+	DefaultPlanningMaxRedoPasses   = 3
+	DefaultPlanContextMaxChars     = 4000
+	DefaultTopicGuardSensitivity   = 0.5
 )
 
 // TopicGuardConfig controls topic drift detection in the agentic loop.
 type TopicGuardConfig struct {
 	Enabled     bool
 	Sensitivity float64 // 0–1; higher = more willing to declare drift
-}
-
-// ModelTierTarget maps a complexity tier to a provider and model.
-type ModelTierTarget struct {
-	Provider string
-	Model    string
-}
-
-// ModelRoutingConfig controls keyword-based complexity routing to model tiers.
-type ModelRoutingConfig struct {
-	Enabled               bool
-	ContextTokenThreshold int
-	Cheap                 ModelTierTarget
-	Mid                   ModelTierTarget
-	High                  ModelTierTarget
 }
 
 // AgenticPlanningConfig controls two-phase plan→execute and targeted section redo.
@@ -75,12 +59,8 @@ type AgenticConfig struct {
 	Planning AgenticPlanningConfig
 	// TopicGuard configures session topic drift detection.
 	TopicGuard TopicGuardConfig
-	// ModelRouting maps task complexity to provider/model tiers.
-	ModelRouting ModelRoutingConfig
 	// ToolManifest filters gateway tool definitions by classified task type.
 	ToolManifest ToolManifestConfig
-	// CapabilityRouting bypasses the agentic LLM loop for tasks mapped to external adapters.
-	CapabilityRouting CapabilityRoutingConfig
 	// Batching consolidates independent tool-free tasks into a single LLM call.
 	Batching BatchingConfig
 	// Scheduler configures recurring and deferred task dispatch.
@@ -116,12 +96,8 @@ func setAgenticDefaults(v *viper.Viper) {
 	v.SetDefault("agentic.planning.plan_context_max_chars", DefaultPlanContextMaxChars)
 	v.SetDefault("agentic.topic_guard.enabled", true)
 	v.SetDefault("agentic.topic_guard.sensitivity", DefaultTopicGuardSensitivity)
-	v.SetDefault("agentic.model_routing.enabled", false)
-	v.SetDefault("agentic.model_routing.context_token_threshold", DefaultModelRoutingContextTokens)
 	v.SetDefault("agentic.tool_manifest.enabled", false)
 	v.SetDefault("agentic.tool_manifest.min_confidence", DefaultToolManifestMinConfidence)
-	v.SetDefault("agentic.capability_routing.enabled", false)
-	v.SetDefault("agentic.capability_routing.min_confidence", DefaultCapabilityRoutingMinConfidence)
 	v.SetDefault("agentic.batching.enabled", false)
 	v.SetDefault("agentic.batching.max_batch_size", DefaultBatchingMaxBatchSize)
 	setSchedulerDefaults(v)
@@ -139,8 +115,6 @@ func loadAgenticConfig(v *viper.Viper) (AgenticConfig, error) {
 
 	batching := loadBatchingConfig(v)
 	tm := loadToolManifestConfig(v)
-	cr := loadCapabilityRoutingConfig(v)
-
 	return AgenticConfig{
 		ContextWarningThreshold:    threshold,
 		ToolFailureStreak:          v.GetInt("agentic.tool_failure_streak"),
@@ -151,37 +125,13 @@ func loadAgenticConfig(v *viper.Viper) (AgenticConfig, error) {
 			Enabled: v.GetBool("agentic.audit.enabled"),
 			Path:    v.GetString("agentic.audit.path"),
 		},
-		FileContext:       loadFileContextConfig(v),
-		Planning:          loadAgenticPlanningConfig(v),
-		TopicGuard:        loadTopicGuardConfig(v),
-		ModelRouting:      loadModelRoutingConfig(v),
-		ToolManifest:      tm,
-		CapabilityRouting: cr,
-		Batching:          batching,
-		Scheduler:         scheduler,
+		FileContext:  loadFileContextConfig(v),
+		Planning:     loadAgenticPlanningConfig(v),
+		TopicGuard:   loadTopicGuardConfig(v),
+		ToolManifest: tm,
+		Batching:     batching,
+		Scheduler:    scheduler,
 	}, nil
-}
-
-func loadModelRoutingConfig(v *viper.Viper) ModelRoutingConfig {
-	threshold := v.GetInt("agentic.model_routing.context_token_threshold")
-	if threshold <= 0 {
-		threshold = DefaultModelRoutingContextTokens
-	}
-	return ModelRoutingConfig{
-		Enabled:               v.GetBool("agentic.model_routing.enabled"),
-		ContextTokenThreshold: threshold,
-		Cheap:                 loadModelTierTarget(v, "cheap"),
-		Mid:                   loadModelTierTarget(v, "mid"),
-		High:                  loadModelTierTarget(v, "high"),
-	}
-}
-
-func loadModelTierTarget(v *viper.Viper, tier string) ModelTierTarget {
-	prefix := "agentic.model_routing." + tier
-	return ModelTierTarget{
-		Provider: v.GetString(prefix + ".provider"),
-		Model:    v.GetString(prefix + ".model"),
-	}
 }
 
 func loadTopicGuardConfig(v *viper.Viper) TopicGuardConfig {

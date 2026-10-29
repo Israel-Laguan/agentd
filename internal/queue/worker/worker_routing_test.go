@@ -5,11 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	agentruntime "agentd/internal/agent/runtime"
-	agenttools "agentd/internal/agent/tools"
-	"agentd/internal/capabilities"
-	"agentd/internal/config"
-	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/testutil"
@@ -180,85 +175,4 @@ func TestRoutingDecision_AgenticUnsupportedProvider_ShortTask_FailsWithoutModelC
 		t.Fatal("expected a rejection, not BLOCKED from agentic elicitation")
 	}
 	assertRejectedWithoutModelCall(t, store, gw, sb, "ollama")
-}
-
-// TestRoutingDecision_ModelRoutingToUnsupportedProvider_Rejects verifies that when model
-// routing selects a provider without tool support, the task is rejected, not run legacy.
-func TestRoutingDecision_ModelRoutingToUnsupportedProvider_Rejects(t *testing.T) {
-	t.Parallel()
-
-	profile := models.AgentProfile{
-		ID:          "agent-1",
-		Provider:    "anthropic",
-		Model:       "claude-3",
-		AgenticMode: true,
-	}
-	w, store, gw, sb := newRoutingTest(profile)
-	w.modelRouter = agentruntime.NewModelRouter(config.ModelRoutingConfig{
-		Enabled:               true,
-		ContextTokenThreshold: 150000,
-		Cheap:                 config.ModelTierTarget{Provider: "ollama", Model: "llama3"},
-		Mid:                   config.ModelTierTarget{Provider: "anthropic", Model: "claude-sonnet"},
-		High:                  config.ModelTierTarget{Provider: "anthropic", Model: "claude-opus"},
-	})
-	store.task.Description = testutil.AgenticTestTaskDescription()
-
-	w.Process(context.Background(), store.task)
-
-	assertRejectedWithoutModelCall(t, store, gw, sb, "ollama (routed)")
-}
-
-// TestProcessAgentic_ManifestFilterDoesNotShrinkRoutingEstimate verifies the full
-// Process → processAgentic path: model routing token estimates use the pre-filter
-// tool registry while gateway turn requests use manifest-filtered tools.
-func TestProcessAgentic_ManifestFilterDoesNotShrinkRoutingEstimate(t *testing.T) {
-	t.Parallel()
-
-	profile := models.AgentProfile{
-		ID:          "agent-1",
-		Provider:    "openai",
-		Model:       "gpt-4",
-		AgenticMode: true,
-	}
-	w, store, gw, _ := newRoutingTest(profile)
-	registry := capabilities.NewRegistry()
-	registry.Register("routing_bulk", fakeCapabilityCallAdapter{
-		name: "routing_bulk",
-		tools: []gateway.ToolDefinition{{
-			Name:        "routing_bulk",
-			Description: strings.Repeat("x", 600001),
-			Parameters:  &gateway.FunctionParameters{Type: "object"},
-		}},
-	})
-	w.modelRouter = agentruntime.NewModelRouter(testModelRoutingConfig())
-	w.toolManifest = agenttools.NewToolManifest(config.ToolManifestConfig{
-		Enabled:       true,
-		MinConfidence: 0.35,
-	})
-	w.capabilities = registry
-
-	store.profile.ToolManifestType = agenttools.TaskTypeSummarize
-	store.task.Description = testutil.AgenticTestTaskDescription()
-
-	w.Process(context.Background(), store.task)
-
-	var req gateway.AIRequest
-	var found bool
-	for _, r := range gw.requests {
-		if !r.JSONMode {
-			req = r
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected agentic turn request among %d gateway calls", len(gw.requests))
-	}
-	if req.Provider != "anthropic" || req.Model != "claude-opus" {
-		t.Fatalf("routed request = %s/%s, want anthropic/claude-opus (full tools exceed threshold)", req.Provider, req.Model)
-	}
-	// The summarize mapping keeps no task tools; ask_human is the one tool left.
-	if len(req.Tools) != 1 || req.Tools[0].Name != "ask_human" {
-		t.Fatalf("expected manifest-filtered tools to keep only ask_human in turn request, got %d: %v", len(req.Tools), toolNamesFromDefinitions(req.Tools))
-	}
 }

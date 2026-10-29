@@ -34,7 +34,7 @@ const (
 //
 // OutcomeNeedsHuman means the stage cannot finish without a person. It is
 // meant to land in Worker.AskHuman (hitl_tasks.go), which records the question
-// and blocks the task. PR 11 wires that path, so no second suspend path exists.
+// and blocks the task. Not yet wired; see T-041.
 type Outcome string
 
 const (

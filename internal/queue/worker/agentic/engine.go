@@ -19,7 +19,7 @@ import (
 )
 
 type Config struct {
-	Store                   models.KanbanStore
+	Store                   TaskReadStore
 	Gateway                 gateway.AIGateway
 	Sandbox                 sandbox.Executor
 	SandboxEnvAllowlist     []string
@@ -39,8 +39,12 @@ type Config struct {
 	MessageEditor           *agentcontext.MessageEditor
 	CheckpointStore         wsession.CheckpointStore
 	TopicGuard              *agentruntime.TopicGuard
-	ModelRouter             *agentruntime.ModelRouter
 	Capabilities            *capabilities.Registry
+}
+
+type TaskReadStore interface {
+	GetTask(ctx context.Context, taskID string) (*models.Task, error)
+	ListCommentsSince(ctx context.Context, taskID string, since time.Time) ([]models.Comment, error)
 }
 
 // PromptHang is a bash call that stopped at an interactive prompt.
@@ -64,6 +68,7 @@ type Host interface {
 	// circuit the provider has not recovered from.
 	RecordProviderSuccess(ctx context.Context, task models.Task)
 	RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails)
+	UpdateCriteriaMet(ctx context.Context, taskID string, met []string) error
 	CommitTextWithProfile(ctx context.Context, task models.Task, text string, profile *models.AgentProfile)
 	DispatchToolWithHooks(
 		ctx context.Context,
@@ -106,7 +111,6 @@ type Host interface {
 	// PrependSandboxViolationFeedback tells the model which earlier commands the
 	// sandbox refused, so a retry does not repeat them.
 	PrependSandboxViolationFeedback(ctx context.Context, task models.Task, messages []gateway.PromptMessage) []gateway.PromptMessage
-	ApplyModelRouting(task models.Task, profile models.AgentProfile, messages []gateway.PromptMessage, tools []gateway.ToolDefinition) models.AgentProfile
 	ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest
 	MountAgenticHooks(project models.Project, profile models.AgentProfile) (*agenthooks.HookChain, *capabilities.Registry)
 	AgenticToolsWithExtras(ctx context.Context, executor *agenttools.ToolExecutor, caps *capabilities.Registry) ([]gateway.ToolDefinition, map[string]string)
@@ -139,13 +143,6 @@ type Host interface {
 	// parent early (T-055b gap 2). Open subtasks wrap
 	// models.ErrBreakdownIncomplete; any other error is a failed read.
 	VerifyBreakdownComplete(ctx context.Context, task models.Task) error
-	TryExternalCapabilityRoute(
-		ctx context.Context,
-		task models.Task,
-		project models.Project,
-		profile models.AgentProfile,
-		messages *[]gateway.PromptMessage,
-	) (agentruntime.LoopResult, bool, error)
 	RecordTurnSnapshot(
 		sessionID, projectID, provider, turnID string,
 		messageCount, tokenCount int,

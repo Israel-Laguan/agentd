@@ -42,7 +42,6 @@ func (w *Worker) splitTask(ctx context.Context, task models.Task, project models
 	messages = w.appendMemoryLessons(ctx, task.Title+" "+task.Description, task.ProjectID, project.UserID, messages)
 	messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
 	messages = w.PrependSandboxViolationFeedback(ctx, task, messages)
-	profile = w.ApplyModelRouting(task, profile, messages, nil)
 	res, err := w.taskCreationAgent().Call(gateway.WithTaskID(ctx, task.ID), stage.StageRequest{
 		Stage:       stage.StageTaskCreation,
 		Purpose:     gateway.PurposeCreateSplitTask,

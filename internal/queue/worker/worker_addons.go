@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 
-	agentcontext "agentd/internal/agent/context"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
@@ -111,42 +109,4 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		return
 	}
 	w.Emit(ctx, task, "PHASE_PLANNING", fmt.Sprintf("created %d phase tasks", len(created)))
-}
-
-// === Corrections Logic ===
-
-func (w *Worker) ingestHumanCorrections(ctx context.Context, taskID string, cm *agentcontext.ContextManager) {
-	if cm == nil {
-		return
-	}
-	comments, err := w.store.ListCommentsSince(ctx, taskID, cm.CommentHighWater())
-	if err != nil {
-		slog.Warn("failed to list task comments for corrections", "task_id", taskID, "error", err)
-		return
-	}
-	defer cm.AdvanceCommentHighWater(comments)
-	for _, c := range comments {
-		source, ok := correctionSourceForCommentAuthor(c.Author)
-		if !ok {
-			continue
-		}
-		if !cm.MarkCommentCorrectionSeen(c) {
-			continue
-		}
-		if rec := agentcontext.ParseCorrectionComment(c.Body, source); rec != nil {
-			cm.InjectCorrection(*rec)
-		}
-	}
-}
-
-func correctionSourceForCommentAuthor(author models.CommentAuthor) (agentcontext.CorrectionSource, bool) {
-	switch author {
-	case models.CommentAuthorUser, models.CommentAuthorFrontdesk:
-		return agentcontext.CorrectionSourceHuman, true
-	default:
-		if strings.EqualFold(string(author), string(agentcontext.CorrectionSourceReviewer)) {
-			return agentcontext.CorrectionSourceReviewer, true
-		}
-		return "", false
-	}
 }

@@ -101,6 +101,28 @@ func TestAgentHandler_Create(t *testing.T) {
 	}
 }
 
+func TestAgentHandler_CreateRejectsCapabilityRouteIntent(t *testing.T) {
+	for name, value := range map[string]string{
+		"object": `{"kind":"route"}`,
+		"null":   `null`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := agentTestHandler()
+			body := `{"id":"route-agent","name":"Route Agent","provider":"openai","model":"gpt-4","capability_route_intent":` + value + `}`
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			h.Create(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), "capability_route_intent was removed") {
+				t.Fatalf("body = %s, want removed-field message", rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestAgentHandler_List(t *testing.T) {
 	h := agentTestHandler()
 	seedAgent(t, h)
@@ -170,6 +192,27 @@ func TestAgentHandler_Patch(t *testing.T) {
 	}
 	if getResp.Data.Name != "Updated Agent" {
 		t.Fatalf("expected updated name %q, got %q", "Updated Agent", getResp.Data.Name)
+	}
+}
+
+func TestAgentHandler_PatchRejectsCapabilityRouteIntent(t *testing.T) {
+	for _, body := range []string{
+		`{"capability_route_intent":"fast"}`,
+		`{"capability_route_intent":null}`,
+	} {
+		h := agentTestHandler()
+		seedAgent(t, h)
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/test-agent", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.SetPathValue("id", "test-agent")
+		rec := httptest.NewRecorder()
+		h.Patch(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("Patch code = %d body = %s", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "capability_route_intent was removed") {
+			t.Fatalf("Patch body = %s, want capability_route_intent removal message", rec.Body.String())
+		}
 	}
 }
 
