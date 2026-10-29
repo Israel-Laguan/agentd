@@ -49,15 +49,36 @@ func parseAgents(raw any) (map[string]route.Agent, error) {
 		if err := onlyKeys(entry, "agents."+name, "provider", "model", "level"); err != nil {
 			return nil, err
 		}
-		provider := stringValue(entry["provider"])
+		provider := ""
+		if raw, ok := entry["provider"]; ok {
+			text, isString := raw.(string)
+			if !isString {
+				return nil, fmt.Errorf("agents.%s: provider must be a string", name)
+			}
+			provider = strings.TrimSpace(text)
+		}
 		if provider == "" {
 			return nil, fmt.Errorf("agents.%s: provider is required", name)
 		}
-		level := spec.Level(stringValue(entry["level"]))
-		if level == "" {
-			level = defaultAgentLevel
+		model := ""
+		if raw, ok := entry["model"]; ok {
+			text, isString := raw.(string)
+			if !isString {
+				return nil, fmt.Errorf("agents.%s: model must be a string", name)
+			}
+			model = strings.TrimSpace(text)
 		}
-		out[name] = route.Agent{Provider: provider, Model: stringValue(entry["model"]), Level: level}
+		level := defaultAgentLevel
+		if raw, ok := entry["level"]; ok {
+			text, isString := raw.(string)
+			if !isString {
+				return nil, fmt.Errorf("agents.%s: level must be a string", name)
+			}
+			if parsed := spec.Level(strings.TrimSpace(text)); parsed != "" {
+				level = parsed
+			}
+		}
+		out[name] = route.Agent{Provider: provider, Model: model, Level: level}
 	}
 	return out, nil
 }
@@ -128,7 +149,14 @@ func parseStageRoute(purpose string, leaf map[string]any) (route.StageRoute, err
 	if err := onlyKeys(leaf, where, "default", "rules"); err != nil {
 		return route.StageRoute{}, err
 	}
-	sr := route.StageRoute{Default: stringValue(leaf["default"])}
+	sr := route.StageRoute{}
+	if raw, ok := leaf["default"]; ok {
+		text, isString := raw.(string)
+		if !isString {
+			return route.StageRoute{}, fmt.Errorf("%s.default must be a string", where)
+		}
+		sr.Default = strings.TrimSpace(text)
+	}
 	rules, err := parseRules(where, leaf["rules"])
 	if err != nil {
 		return route.StageRoute{}, err
@@ -159,7 +187,15 @@ func parseRules(where string, raw any) ([]route.Rule, error) {
 		if err != nil {
 			return nil, err
 		}
-		rules = append(rules, route.Rule{Match: match, Use: stringValue(entry["use"])})
+		use := ""
+		if raw, ok := entry["use"]; ok {
+			text, isString := raw.(string)
+			if !isString {
+				return nil, fmt.Errorf("%s: use must be a string", at)
+			}
+			use = strings.TrimSpace(text)
+		}
+		rules = append(rules, route.Rule{Match: match, Use: use})
 	}
 	return rules, nil
 }
@@ -204,9 +240,4 @@ func containsString(list []string, s string) bool {
 		}
 	}
 	return false
-}
-
-func stringValue(v any) string {
-	s, _ := v.(string)
-	return strings.TrimSpace(s)
 }

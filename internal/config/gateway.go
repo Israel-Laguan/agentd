@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -120,6 +121,22 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 	}
 	if cfg.Routing, err = loadRouteTable(v); err != nil {
 		return GatewayConfig{}, err
+	}
+	// Routed agents must name a provider that actually exists in the gateway
+	// config; otherwise the stage route is silently ignored and the cascade
+	// runs instead.
+	byName, err := cfg.gatewayProvidersByName()
+	if err != nil {
+		return GatewayConfig{}, err
+	}
+	known := make(map[string]struct{}, len(byName))
+	for name := range byName {
+		known[strings.ToLower(name)] = struct{}{}
+	}
+	for name, agent := range cfg.Routing.Agents {
+		if _, ok := known[strings.ToLower(agent.Provider)]; !ok {
+			return GatewayConfig{}, fmt.Errorf("agents.%s: provider %q is not configured", name, agent.Provider)
+		}
 	}
 	return cfg, nil
 }

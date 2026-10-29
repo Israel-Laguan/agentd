@@ -81,7 +81,7 @@ func TestPurposeRoutingRuleRunsOnlyWhenItsConditionHolds(t *testing.T) {
 	}
 
 	withChange := base
-	withChange.Attrs = spec.TaskAttrs{RequiresWorkspaceChange: true}
+	withChange.Attrs = spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(true)}
 	resp, err = router.Generate(context.Background(), withChange)
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)

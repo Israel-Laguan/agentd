@@ -2,6 +2,7 @@ package stage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"agentd/internal/gateway/spec"
@@ -52,8 +53,18 @@ func (a ModelAgent) Call(ctx context.Context, req StageRequest) (StageResult, er
 	if err != nil {
 		return StageResult{TokenUsage: tokens, UsageDetails: details}, err
 	}
+	outcome := OutcomeCompleted
+	// A decoded response may mark itself as needing a human decision even though
+	// the model call itself succeeded; map that marker to OutcomeNeedsHuman so
+	// callers can hand it to a person.
+	var marker struct {
+		NeedsHuman bool `json:"needs_human"`
+	}
+	if json.Unmarshal(output, &marker) == nil && marker.NeedsHuman {
+		outcome = OutcomeNeedsHuman
+	}
 	return StageResult{
-		Outcome:      OutcomeCompleted,
+		Outcome:      outcome,
 		Output:       output,
 		TokenUsage:   tokens,
 		UsageDetails: details,

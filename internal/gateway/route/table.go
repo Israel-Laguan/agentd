@@ -106,7 +106,13 @@ func (d Decision) choose(t Table, name, rule string) Decision {
 }
 
 func (m Match) matches(attrs spec.TaskAttrs) bool {
-	return m.RequiresWorkspaceChange == nil || *m.RequiresWorkspaceChange == attrs.RequiresWorkspaceChange
+	if m.RequiresWorkspaceChange == nil {
+		return true
+	}
+	if attrs.RequiresWorkspaceChange == nil {
+		return false
+	}
+	return *m.RequiresWorkspaceChange == *attrs.RequiresWorkspaceChange
 }
 
 // levelRank orders the levels an agent can provide. Only L1 and L3 are agent

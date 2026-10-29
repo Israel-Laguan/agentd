@@ -214,7 +214,7 @@ func (r *Router) routeRequest(req spec.AIRequest) spec.AIRequest {
 		req.Provider = d.Provider
 		req.ProviderRouted = true
 	}
-	if req.Model == "" && strings.EqualFold(strings.TrimSpace(req.Provider), d.Provider) {
+	if strings.TrimSpace(req.Model) == "" && strings.EqualFold(strings.TrimSpace(req.Provider), d.Provider) {
 		req.Model = d.Model
 	}
 	return req

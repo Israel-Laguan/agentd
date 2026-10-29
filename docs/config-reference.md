@@ -143,13 +143,13 @@ stages:
         use: quick
 ```
 
-- An agent has a `provider` (required), an optional `model`, and a `level` (`L1`, the default, or `L3`). A purpose declares the minimum level it needs; a route to an agent below that level fails at load. Only L1 purposes can be routed today, because L3 agents arrive with T-042.
+- An agent has a `provider` (required), an optional `model`, and a `level` (`L1`, the default, or `L3`). A purpose declares the minimum level it needs; a route to an agent below that level fails at load. Both L1 and L3 purposes can be routed when the selected agent meets the purpose minimum.
 - `when` keys: `requires_workspace_change` (`true` or `false`), which matches tasks that must change the workspace. A rule needs a condition and a `use`.
 - An explicit `AgentID` on a task or a tier step is a pin. It wins over every rule and injects no provider or model. The seeded `default` profile is not a pin, so tasks on it follow their stage's route.
 - Every decision logs one `routing decision` line with the purpose, the required level, the rule that matched and the agent chosen.
 - Unknown agents, unknown keys, bad rules and routes below a purpose's level all fail at config load.
 
-`gateway.role_models` was removed. Setting it fails at load and names `stages` and `agents` as its replacement. Built-in agent profiles from `agentd init` still use empty `provider`/`model`, so their calls take the cascade unless a stage route or a manual PATCH sets explicit values; see [init-startup.md](init-startup.md). Non-tool providers that a route selects still get JSON fallback when tools are sent.
+`gateway.role_models` was removed. Setting it fails at load and names `stages` and `agents` as its replacement. Built-in agent profiles from `agentd init` still use empty `provider`/`model`, so their calls take the cascade unless a stage route or a manual PATCH sets explicit values; see [init-startup.md](init-startup.md). A routed non-tool provider is skipped when another candidate supports tools; it gets JSON fallback only when no candidate supports tools.
 
 ### Truncation
 

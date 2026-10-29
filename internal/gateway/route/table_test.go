@@ -50,7 +50,7 @@ func TestResolve_RuleOrderFirstMatchWins(t *testing.T) {
 			},
 		},
 	}
-	d := table.Resolve(spec.PurposeCreateElicit, "", spec.TaskAttrs{RequiresWorkspaceChange: true})
+	d := table.Resolve(spec.PurposeCreateElicit, "", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(true)})
 	if d.Agent != "first" || d.Rule != "rules[0]" {
 		t.Fatalf("Resolve() = agent %q rule %q, want agent first rule rules[0]", d.Agent, d.Rule)
 	}
@@ -61,17 +61,17 @@ func TestResolve_RuleOrderFirstMatchWins(t *testing.T) {
 
 func TestResolve_RuleSkippedWhenConditionFails(t *testing.T) {
 	d := testTable().Resolve(spec.PurposeExecWorkPlan, "", spec.TaskAttrs{})
-	if d.Agent != "quick" || d.Rule != "rules[0]" {
-		t.Fatalf("Resolve() = agent %q rule %q, want quick rules[0]", d.Agent, d.Rule)
+	if d.Agent != "big" || d.Rule != RuleDefault {
+		t.Fatalf("Resolve() = agent %q rule %q, want big default", d.Agent, d.Rule)
 	}
-	d = testTable().Resolve(spec.PurposeExecWorkPlan, "", spec.TaskAttrs{RequiresWorkspaceChange: true})
+	d = testTable().Resolve(spec.PurposeExecWorkPlan, "", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(true)})
 	if d.Agent != "big" || d.Rule != "rules[1]" {
 		t.Fatalf("Resolve() = agent %q rule %q, want big rules[1]", d.Agent, d.Rule)
 	}
 }
 
 func TestResolve_FallsBackToStageDefault(t *testing.T) {
-	d := testTable().Resolve(spec.PurposeCreateElicit, "", spec.TaskAttrs{RequiresWorkspaceChange: true})
+	d := testTable().Resolve(spec.PurposeCreateElicit, "", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(true)})
 	if d.Agent != "quick" || d.Rule != RuleDefault {
 		t.Fatalf("Resolve() = agent %q rule %q, want quick default", d.Agent, d.Rule)
 	}
@@ -97,7 +97,7 @@ func TestResolve_EmptyTableLeavesEveryPurposeOnCascade(t *testing.T) {
 }
 
 func TestResolve_ExplicitAgentIDIsAPin(t *testing.T) {
-	d := testTable().Resolve(spec.PurposeExecWorkPlan, "tier-context", spec.TaskAttrs{RequiresWorkspaceChange: true})
+	d := testTable().Resolve(spec.PurposeExecWorkPlan, "tier-context", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(true)})
 	if d.Agent != "tier-context" || d.Rule != RulePin {
 		t.Fatalf("Resolve() = agent %q rule %q, want tier-context pin", d.Agent, d.Rule)
 	}

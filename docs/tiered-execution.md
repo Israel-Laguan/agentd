@@ -103,7 +103,7 @@ If the pack is wrong, pay once to rebuild it on purpose. That is measurable.
 
 Routing is by purpose now: a `stages:` route (see [config-reference.md](config-reference.md#routing-agents-and-stages)) picks the agent for a call from its purpose and the task's attributes. The `gateway.role_models` table this section once described was removed.
 
-| Step kind | Suggested role key (new or mapped) | Profile template |
+| Step kind | Purpose / stage guidance | Profile template |
 | --- | --- | --- |
 | context | `context` (or `memory`-class cheap) | `tier-context` |
 | decision | `decision` | `tier-decision` |

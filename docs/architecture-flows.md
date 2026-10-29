@@ -30,7 +30,7 @@ sequenceDiagram
     Worker->>Board: Claim and re-execute with new profile
 ```
 
-The manager's loop closes the gap between worker failure and human reaction. The cockpit listens on `GET /api/v1/events/stream` (optionally narrowed by `?task_id=` or `?project_id=`); when a `task_failed` named event arrives, the operator can `PATCH` the responsible `AgentProfile` (e.g., switch provider, raise `max_tokens`, edit `system_prompt`), `POST /assign` to a different agent, `POST /split` to break the work into subtasks, or `POST /retry` to send the task back to `READY`. Worker dispatch then forwards the (possibly new) `profile.Provider`, `profile.Model`, `profile.MaxTokens`, and `profile.Temperature` into `gateway.AIRequest`, where the router precedence is explicit profile values > the `stages:` route for the call's purpose > the gateway cascade.
+The manager's loop closes the gap between worker failure and human reaction. The cockpit listens on `GET /api/v1/events/stream` (optionally narrowed by `?task_id=` or `?project_id=`); when a `task_failed` named event arrives, the operator can `PATCH` the responsible `AgentProfile` (e.g., switch provider, raise `max_tokens`, edit `system_prompt`), `POST /assign` to a different agent, `POST /split` to break the work into subtasks, or `POST /retry` to send the task back to `READY`. Worker dispatch then forwards the (possibly new) `profile.Provider`, `profile.Model`, `profile.MaxTokens`, and `profile.Temperature` into `gateway.AIRequest`, where an explicit task `AgentID` pins the profile and prevents `stages:` from overriding it; otherwise, router precedence is explicit profile provider/model values > the `stages:` route for the call's purpose > the gateway cascade.
 
 ## Flow 6. Memory Recall
 

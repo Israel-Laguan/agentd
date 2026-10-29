@@ -28,6 +28,9 @@ func (w *Worker) processTieredContextStep(ctx context.Context, task models.Task,
 	}
 	result, ok := w.processAgentic(ctx, task, project, profile)
 	if !ok {
+		if w.taskBlockedOnHuman(ctx, task) {
+			return
+		}
 		// The engine exits without a LoopResult when it handed off, suspended,
 		// or failed the tool-support check. No ContextPack can be parsed here,
 		// so record the failure (or surface the conflict if the step was

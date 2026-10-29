@@ -285,7 +285,7 @@ Get a specific agent profile.
 
 ### POST /api/v1/agents
 
-Create an agent profile. Optional `agentic_mode` (boolean, default `true`; `false` is refused with HTTP 400), `allowed_tools` and `workspace_readonly`. Omit `provider` and `model` (or set both to empty strings) to delegate routing to `gateway.order` and any `stages:` route for the call's purpose, matching the built-in seeded profiles from `agentd init`.
+Create an agent profile. Optional `agentic_mode` (boolean, default `true`; `false` is refused with HTTP 400), `allowed_tools` and `workspace_readonly`. Omit `provider` and `model` (or set both to empty strings) to delegate routing to `gateway.order`; custom profiles become an `AgentID` pin before stage resolution, while the seeded `default` profile follows any `stages:` route, matching the built-in seeded profiles from `agentd init`.
 
 ### PATCH /api/v1/agents/{id}
 

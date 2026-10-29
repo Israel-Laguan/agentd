@@ -37,7 +37,7 @@ var tieredStepOrder = []TieredStepKind{
 
 // tieredStepProfile maps each step kind to the agent profile that resolves
 // its provider/model. A profile that leaves provider/model empty takes the
-// gateway cascade, or a stages: route for its purpose; there is no separate
+// gateway cascade; its explicit AgentID prevents a stages: route from applying; there is no separate
 // tiered.models.<kind> override.
 var tieredStepProfile = map[TieredStepKind]string{
 	TieredStepContext:  "tier-context",

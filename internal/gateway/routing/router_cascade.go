@@ -29,6 +29,12 @@ func (e errTruncation) Unwrap() error { return e.err }
 //     and continue cascading.
 func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq spec.AIRequest, hasRequestedTools bool, selectedHasToolSupport bool, cascade bool) (spec.AIResponse, bool, error) {
 	req := baseReq
+	// A routed agent model belongs to the routed provider only; do not hand it
+	// to a cascade fallback that may not support that model name.
+	if req.ProviderRouted && strings.TrimSpace(req.Model) != "" &&
+		!strings.EqualFold(strings.TrimSpace(req.Provider), string(p.Name())) {
+		req.Model = ""
+	}
 	if hasRequestedTools && !p.Capabilities().SupportsChatTools {
 		if selectedHasToolSupport {
 			return spec.AIResponse{}, false, nil
