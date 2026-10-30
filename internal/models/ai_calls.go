@@ -10,12 +10,13 @@ import (
 
 // AICall is one persisted provider attempt (a gateway CallRecord). It holds
 // sizes, counts, tokens and timing only, never prompt or response bodies.
+// RoutedAgent is the agent the router chose; it is stored in the role column.
 type AICall struct {
 	At               time.Time
 	Kind             string
 	Purpose          string
 	Stage            string
-	Role             string
+	RoutedAgent      string
 	TaskID           string
 	AgentID          string
 	CorrelationID    string

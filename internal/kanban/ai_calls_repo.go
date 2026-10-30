@@ -40,7 +40,7 @@ func (s *Store) InsertAICalls(ctx context.Context, calls []models.AICall) error 
 
 func aiCallArgs(c models.AICall) []any {
 	return []any{
-		formatTime(c.At), c.Kind, c.Purpose, c.Stage, c.Role, c.TaskID, c.AgentID, c.CorrelationID,
+		formatTime(c.At), c.Kind, c.Purpose, c.Stage, c.RoutedAgent, c.TaskID, c.AgentID, c.CorrelationID,
 		c.Provider, c.Model, c.Attempt, boolToInt(c.Cascade), c.Outcome, boolToInt(c.Truncated),
 		c.MessageCount, c.ToolCount, c.InputChars, c.OutputChars, c.Tokens, c.CachedTokens,
 		c.CacheWriteTokens, c.LatencyMS, c.ContextMix, c.TruncatedBy,

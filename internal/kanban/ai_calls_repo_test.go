@@ -23,7 +23,7 @@ func TestInsertAICallsStoresEveryColumn(t *testing.T) {
 	ctx := context.Background()
 	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 	in := models.AICall{
-		At: at, Kind: "generate", Purpose: "exec.turn", Stage: "exec", Role: "worker", TaskID: "t1",
+		At: at, Kind: "generate", Purpose: "exec.turn", Stage: "exec", RoutedAgent: "quick", TaskID: "t1",
 		AgentID: "a1", CorrelationID: "req-1", Provider: "openai", Model: "m", Attempt: "json_repair",
 		Cascade: true, Outcome: "invalid_json", Truncated: true, MessageCount: 3, ToolCount: 2,
 		InputChars: 400, OutputChars: 50, Tokens: 120, CachedTokens: 30, CacheWriteTokens: 5, LatencyMS: 250,
@@ -38,7 +38,7 @@ func TestInsertAICallsStoresEveryColumn(t *testing.T) {
 	err := store.db.QueryRowContext(ctx, `SELECT at, kind, purpose, stage, role, task_id, agent_id, correlation_id,
 		provider, model, attempt, cascade, outcome, truncated, message_count, tool_count, input_chars,
 		output_chars, tokens, cached_tokens, cache_write_tokens, latency_ms, context_mix, truncated_by FROM ai_calls`).Scan(
-		&atStr, &got.Kind, &got.Purpose, &got.Stage, &got.Role, &got.TaskID, &got.AgentID, &got.CorrelationID,
+		&atStr, &got.Kind, &got.Purpose, &got.Stage, &got.RoutedAgent, &got.TaskID, &got.AgentID, &got.CorrelationID,
 		&got.Provider, &got.Model, &got.Attempt, &cascade, &got.Outcome, &truncated, &got.MessageCount,
 		&got.ToolCount, &got.InputChars, &got.OutputChars, &got.Tokens, &got.CachedTokens, &got.CacheWriteTokens, &got.LatencyMS,
 		&got.ContextMix, &got.TruncatedBy)
