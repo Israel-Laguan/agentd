@@ -261,14 +261,15 @@ gateway:
       adapter: openai
       base_url: "http://127.0.0.1:8080/v1"
       model: "qwen3.8-flash-next"
-      api_key: "dummy"  # Strata does not require an API key, but agentd needs one for health checks
+      api_key: "dummy"  # Strata does not require a key; agentd treats a configured key as the provider being available
   order: [strata]
 ```
 
-**Note:** Strata with Qwen3 (and some other models) currently does **not** support the
-OpenAI `response_format` parameter that agentd requires for structured outputs. This
-means agentd cannot use Strata for its internal planning and classification workflows.
-For direct chat completions, Strata works as expected. See
+**Note:** with Strata and Qwen3, agentd's structured-output calls have failed with
+`finish_reason=length`. The cause is not confirmed: the output budget is the first suspect,
+and `response_format` support the other
+([B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md)).
+Plain chat completions work. See
 [docs/openai-compatible-providers.md](openai-compatible-providers.md) for details.
 
 ## Troubleshooting

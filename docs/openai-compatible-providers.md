@@ -106,20 +106,22 @@ gateway:
     - name: strata
       adapter: openai
       base_url: "http://127.0.0.1:8080/v1"
-      api_key: "dummy"  # Strata does not require an API key, but agentd needs one for health checks
+      api_key: "dummy"  # Strata does not require a key; agentd treats a configured key as the provider being available
       model: "qwen3.8-flash-next"
   order: [strata]
 ```
 
-**Note:** Strata with Qwen3 (and some other models) currently does **not** support the
-OpenAI `response_format` parameter that agentd requires for structured outputs. This
-means agentd cannot use Strata for its internal planning and classification workflows.
-Strata works fine for direct chat completions without structured output requirements.
-See [B-087](https://github.com/StrataScratch/strata/issues) for tracking.
+**Note:** with Strata and Qwen3, agentd's structured-output calls (intake, planning,
+classification) have failed with `structured output was incomplete (finish_reason=length)`.
+The cause is not confirmed. The error points to the output budget: agentd sends no
+`max_tokens` on intake calls, so Strata's default applies. That `response_format` itself is
+unsupported is the other possibility. Plain chat completions work. See
+[B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md) for the
+symptoms, reproduction and what to check first.
 
-For models that do support `response_format`, Strata works as a standard OpenAI-compatible
-provider. No API key is required (use a dummy value like `"dummy"` to pass agentd's health
-check).
+Strata needs no API key. Set a dummy value such as `"dummy"`: for an `adapter: openai`
+provider, agentd treats a configured key as the provider being available. It does not probe
+the endpoint, so this says nothing about whether Strata is reachable.
 
 ## Cascade Fallback
 
