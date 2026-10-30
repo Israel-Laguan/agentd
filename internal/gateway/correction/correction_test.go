@@ -224,3 +224,22 @@ func TestGenerateJSONWithUsageDropsRejectedAnswerModel(t *testing.T) {
 		t.Fatalf("details.Model = %q, want empty: the accepted answer reported no model", details.Model)
 	}
 }
+
+type emptyHintPayload struct {
+	N int `json:"n"`
+}
+
+func (emptyHintPayload) SchemaHint() string { return "" }
+
+// An empty hint adds nothing to the corrective message, not even a newline.
+func TestGenerateJSONCorrectionOmitsEmptySchemaHint(t *testing.T) {
+	var seen []spec.AIRequest
+	gw := &recordingGW{seen: &seen, steps: []string{`not-json`, `{"n":1}`}}
+	if _, err := correction.GenerateJSON[emptyHintPayload](context.Background(), gw, spec.AIRequest{}); err != nil {
+		t.Fatalf("GenerateJSON: %v", err)
+	}
+	last := seen[1].Messages[len(seen[1].Messages)-1].Content
+	if strings.HasSuffix(last, "\n") {
+		t.Fatalf("correction message = %q, want no trailing newline", last)
+	}
+}

@@ -25,6 +25,7 @@ func purposeTestTable() route.Table {
 				Default: "",
 				Rules: []route.Rule{
 					{Match: route.Match{RequiresWorkspaceChange: boolPtr(true)}, Use: "quick"},
+					{Match: route.Match{RequiresWorkspaceChange: boolPtr(false)}, Use: "quick"},
 				},
 			},
 		},
@@ -252,5 +253,24 @@ func TestPurposeRoutingLogsOneEventPerDecision(t *testing.T) {
 		if !strings.Contains(routing[0], want) {
 			t.Fatalf("routing event %q is missing %q", routing[0], want)
 		}
+	}
+}
+
+// An explicit false is a value, not "unset": it reaches its own rule through the
+// router. If false were dropped before Resolve, the call would take the cascade.
+func TestPurposeRoutingFalseAttributeReachesItsRule(t *testing.T) {
+	openai, gemini := purposeProviders()
+	router := NewRouter(openai, gemini).WithPurposeRouting(purposeTestTable())
+
+	resp, err := router.Generate(context.Background(), spec.AIRequest{
+		Purpose:  spec.PurposeExecWorkPlan,
+		Attrs:    spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(false)},
+		Messages: []spec.PromptMessage{{Role: "user", Content: "test"}},
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if resp.ProviderUsed != "gemini" {
+		t.Fatalf("false task ProviderUsed = %q, want gemini from the rule", resp.ProviderUsed)
 	}
 }
