@@ -30,7 +30,7 @@ import (
 // OpenAI-compatible server. It replaces the former docker compose scenario
 // (agentd -> litellm -> mock LLM) and checks two things only the wire shows:
 // a broken-down parent is rolled up instead of re-decomposed on resume, and
-// send_task_metadata puts the right task_id/agent_id/role on every request.
+// send_task_metadata puts the right task_id/agent_id on every request, and no role.
 
 const planMarker = "AGENT_PLAN"
 

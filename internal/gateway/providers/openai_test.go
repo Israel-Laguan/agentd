@@ -272,8 +272,8 @@ func TestOpenAIUsage_DeepSeekHitBeatsOpenAICachedWhenLarger(t *testing.T) {
 }
 
 // TestOpenAI_SendTaskMetadata_Enabled verifies that when options.send_task_metadata
-// is true and the request carries TaskID/AgentID/Role, those fields appear in the
-// request body under metadata.
+// is true and the request carries TaskID/AgentID/RoutedAgent, those fields appear
+// in the request body under metadata.
 func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
@@ -326,7 +326,7 @@ func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 
 // TestOpenAI_SendTaskMetadata_Disabled verifies that metadata is absent when
 // options.send_task_metadata is false (or missing) even if the request carries
-// TaskID/AgentID/Role.
+// TaskID/AgentID/RoutedAgent.
 func TestOpenAI_SendTaskMetadata_Disabled(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex

@@ -32,9 +32,9 @@ const (
 
 // Outcome is how a stage ended.
 //
-// OutcomeNeedsHuman means the stage cannot finish without a person. It is
-// meant to land in Worker.AskHuman (hitl_tasks.go), which records the question
-// and blocks the task. Not yet wired; see T-041.
+// OutcomeNeedsHuman means the stage cannot finish without a person. The
+// worker hands it to Worker.AskHuman (hitl_tasks.go), which records the
+// question and blocks the task.
 type Outcome string
 
 const (
@@ -54,8 +54,8 @@ type StageRequest struct {
 	// Temperature is the sampling temperature for this call. Each stage keeps
 	// the value its prompt was tuned with.
 	Temperature float64
-	// The fields below pick the model. Each stage keeps the tier it runs at
-	// today.
+	// The fields below pin an agent, provider or model. Left empty, the
+	// purpose's route picks them.
 	AgentID   string
 	Provider  string
 	Model     string

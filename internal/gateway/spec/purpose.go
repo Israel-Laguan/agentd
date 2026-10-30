@@ -7,7 +7,7 @@ import (
 
 // Purpose says why agentd makes a model call. It is a closed set (SP-023,
 // approved 2026-10-19) in the form "<stage>.<name>"; the stage is the prefix.
-// Role stays a model-tier routing hint: it is not a purpose.
+// The router picks the agent for a call from its purpose.
 type Purpose string
 
 // PurposeUnlabelled is reserved: the router assigns it to a call that arrives

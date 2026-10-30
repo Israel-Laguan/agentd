@@ -208,7 +208,7 @@ func TestShouldSkipElicitation_LongNarrativeDoesNotSkip(t *testing.T) {
 	}
 }
 
-func TestElicitor_AnalyzeUsesRoleMemory(t *testing.T) {
+func TestElicitor_AnalyzeUsesCreateElicitPurpose(t *testing.T) {
 	t.Parallel()
 	gw := &elicitationSequenceGateway{elicitationJSON: sampleElicitationJSON()}
 	elicitor := NewElicitor(gw)
