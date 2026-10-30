@@ -154,7 +154,7 @@ func (r *Router) WithPurposeRouting(table route.Table) *Router {
 
 // Generate implements spec.AIGateway.
 func (r *Router) Generate(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
-	req = r.routeRequest(req)
+	req = r.routeRequest(ctx, req)
 	if req.JSONMode {
 		return r.generateJSON(ctx, req)
 	}
@@ -203,13 +203,13 @@ func (r *Router) recordBudget(taskID string, usage int) {
 // the cascade changes nothing. A rule or stage default fills in the provider the
 // caller left empty; the provider is tried first and the cascade still follows
 // on failure. The model comes with the provider it belongs to.
-func (r *Router) routeRequest(req spec.AIRequest) spec.AIRequest {
+func (r *Router) routeRequest(ctx context.Context, req spec.AIRequest) spec.AIRequest {
 	d := r.routes.Resolve(req.Purpose, req.AgentID, req.Attrs)
 	level := slog.LevelInfo
 	if d.Rule == route.RuleCascade {
 		level = slog.LevelDebug
 	}
-	slog.Log(context.Background(), level, "routing decision", "purpose", d.Purpose, "required_level", d.Required,
+	slog.Log(ctx, level, "routing decision", "purpose", d.Purpose, "required_level", d.Required,
 		"rule", d.Rule, "agent", d.Agent, "task_id", req.TaskID)
 	req.RoutedAgent = d.Agent
 	if d.Rule == route.RulePin || d.Agent == "" {

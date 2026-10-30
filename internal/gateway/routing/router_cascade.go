@@ -144,7 +144,7 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 	var providerErrs []error
 	log := correlation.Logger(ctx)
 	log.DebugContext(ctx, "router cascade starting",
-		"provider", req.Provider, "model", req.Model, "routed_agent", req.RoutedAgent,
+		"provider", req.Provider, "model", req.Model, "agent", req.RoutedAgent,
 		"json_mode", req.JSONMode, "tools_requested", hasRequestedTools,
 		"candidates", len(candidates), "matched_provider", matchedProvider,
 		"selected_has_tool_support", selectedHasToolSupport,
