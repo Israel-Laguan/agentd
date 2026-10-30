@@ -137,7 +137,7 @@ type schemaHinter interface{ SchemaHint() string }
 func promptAfterInvalid[T any](err error) spec.PromptMessage {
 	msg := PromptAfterInvalidJSON(err)
 	var zero T
-	if h, ok := any(zero).(schemaHinter); ok {
+	if h, ok := any(zero).(schemaHinter); ok && h.SchemaHint() != "" {
 		msg.Content += "\n" + h.SchemaHint()
 	}
 	return msg
