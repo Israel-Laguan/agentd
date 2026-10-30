@@ -1,4 +1,4 @@
-# B-087: Structured output (response_format) fails with Strata + Qwen3
+# B-087: Structured output fails with Strata + Qwen3 (output budget or response_format)
 
 | Field | Value |
 | --- | --- |
@@ -6,6 +6,7 @@
 | Status | backlog |
 | Priority | P2 |
 | Sprint | S19-extract-agent-kit |
+| Severity | major |
 | Links | internal/gateway/correction/correction.go (GenerateJSONWithUsage sets JSONMode=true), internal/gateway/providers/openai.go, Strata inference server |
 
 ## Symptoms
@@ -28,7 +29,12 @@ The Strata server with Qwen3.8-flash-next returns HTTP 502 Bad Gateway with:
 {"error": {"type": "structured_output_failed", "code": "structured_output_failed", "message": "structured output was incomplete (finish_reason=length); increase the output budget"}}
 ```
 
-This indicates the Qwen3 model on Strata does not properly support the OpenAI `response_format` parameter, which agentd requires for all structured outputs (DraftPlan, classification results, etc.).
+**Hypothesis, not yet confirmed:** the error itself says the output budget ran out (`finish_reason=length`), not that `response_format` is unsupported. Two facts point the same way:
+
+- agentd sends no `max_tokens` on the intake calls. Their stage requests leave `MaxTokens` at 0, and the OpenAI adapter omits the field (`omitempty`), so Strata's server-side default budget applies.
+- Qwen3 models can spend output tokens on reasoning before the JSON, which a small default budget would cut off.
+
+Verify the budget first: repeat the structured request with `response_format` and a large `max_tokens`. Only if that still fails is `response_format` itself unsupported.
 
 ## Reproduction
 
@@ -53,7 +59,7 @@ This indicates the Qwen3 model on Strata does not properly support the OpenAI `r
    openai: request failed, status=502, error="LLM provider unreachable: status 502"
    ```
 
-5. Verify direct request to Strata works without `response_format`:
+5. Verify a direct request to Strata works without `response_format` (note this changes two things at once: no `response_format` and an explicit `max_tokens`, so it does not isolate the cause; add a run with `"response_format": {"type": "json_object"}` and a large `max_tokens`):
    ```bash
    curl -X POST http://192.168.1.234:8080/v1/chat/completions \
      -H "Content-Type: application/json" \
@@ -69,7 +75,9 @@ This indicates the Qwen3 model on Strata does not properly support the OpenAI `r
 
 ## Suggested fix
 
-Options:
+First confirm the cause (see Cause). If it is the output budget, the fix is to send a `max_tokens` large enough for structured calls (per stage, or a provider default), not to drop `response_format`.
+
+If `response_format` is really unsupported, options:
 
 1. **Make JSON mode optional per-provider**: Add a provider config option to disable structured output mode, allowing regular chat completions without `response_format`. This would require changes to the contract system.
 
@@ -83,7 +91,7 @@ Option 1 is the most flexible but requires the most changes. Option 2 might work
 
 ## Workaround
 
-Use a different OpenAI-compatible provider that properly supports `response_format: {"type": "json_object"}`, such as:
+Not yet verified: raise Strata's default output budget, if it has one. Otherwise use a different OpenAI-compatible provider that supports `response_format: {"type": "json_object"}`, such as:
 - LiteLLM
 - vLLM
 - Ollama (with supported models)
@@ -94,6 +102,6 @@ Or use the Strata endpoint directly without going through agentd's planning syst
 ## Notes
 
 - Tested with Strata 0.6 (BaseHTTP/0.6 Python/3.13.5) and Qwen3.8-flash-next
-- The Strata server does support the `/v1/models` endpoint, which is used for health checks
-- The issue is specific to the `response_format` parameter, not general connectivity
+- agentd's health check for an `adapter: openai` provider with an API key only checks that a key is configured (`tryAPIKeyHealth` in `internal/config/health.go`). It does not probe `/v1/models`, so passing it says nothing about connectivity. Only `health: llamacpp` probes `/v1/models`.
+- The issue is specific to structured-output requests, not general connectivity
 - Other models on Strata may work if they support structured output
