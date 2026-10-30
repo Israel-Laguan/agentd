@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway/spec"
@@ -36,11 +37,20 @@ func handOffNeedsHuman(ctx context.Context, ask HumanAsker, task models.Task, pu
 // needsHumanQuestion reads the question and options a marked reply carries
 // ({"needs_human": true, "question": "...", "options": [...]}). It decodes them
 // as the ask_human builtin does, so the question and options are trimmed and
-// blank options dropped. A reply without a question gets a generic one that
+// blank options dropped. Malformed options cost only the options: the question
+// is still read on its own. A reply without a question gets a generic one that
 // names the purpose.
 func needsHumanQuestion(purpose spec.Purpose, output json.RawMessage) (string, []string) {
 	if args, err := agenttools.ParseAskHumanArgs(string(output)); err == nil {
 		return args.Question, args.Options
+	}
+	var partial struct {
+		Question string `json:"question"`
+	}
+	if json.Unmarshal(output, &partial) == nil {
+		if question := strings.TrimSpace(partial.Question); question != "" {
+			return question, nil
+		}
 	}
 	return fmt.Sprintf("The %s step cannot finish without a decision. What should it do?", purpose), nil
 }
