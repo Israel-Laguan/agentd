@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -82,9 +83,8 @@ func TestInsertReadyTaskAndRecordDispatchMissingScheduleRollsBack(t *testing.T) 
 	}
 }
 
-// Two ticks that both read the entry as unfired race to dispatch it. The
-// dispatch claims the entry, so the loser creates no task: a one-shot fires
-// once in all, and a cron entry once per slot.
+// A dispatch claims its entry: a one-shot fires once in all, and a cron entry
+// once per slot, never for a slot older than the last one it fired.
 func TestInsertReadyTaskAndRecordDispatchClaimsTheEntry(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
@@ -117,6 +117,7 @@ func TestInsertReadyTaskAndRecordDispatchClaimsTheEntry(t *testing.T) {
 		{"hourly", slot, true},
 		{"hourly", slot, false},
 		{"hourly", slot.Add(time.Hour), true},
+		{"hourly", slot, false}, // an older slot after a newer one
 	}
 	for i, s := range steps {
 		err := dispatch(s.id, s.at)
@@ -133,5 +134,55 @@ func TestInsertReadyTaskAndRecordDispatchClaimsTheEntry(t *testing.T) {
 	}
 	if len(tasks.Data) != 3 {
 		t.Fatalf("tasks = %d, want 3 (one-shot once, cron twice)", len(tasks.Data))
+	}
+}
+
+// Ticks that both read a one-shot as unfired dispatch it at once. Exactly one
+// claims it; the others get ErrScheduleAlreadyFired and create no task.
+func TestConcurrentDispatchesClaimAOneShotOnce(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	project, err := store.EnsureSystemProject(ctx)
+	if err != nil {
+		t.Fatalf("EnsureSystemProject: %v", err)
+	}
+	once := time.Date(2026, 5, 21, 9, 0, 0, 0, time.UTC)
+	if err := store.UpsertScheduledTask(ctx, models.ScheduledTask{
+		ID: "once", RunAfter: &once, Kind: models.ScheduledTaskKindDispatch, Enabled: true,
+	}); err != nil {
+		t.Fatalf("UpsertScheduledTask: %v", err)
+	}
+	slot := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
+	const ticks = 8
+	start := make(chan struct{})
+	errs := make(chan error, ticks)
+	var wg sync.WaitGroup
+	for range ticks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := store.InsertReadyTaskAndRecordDispatch(ctx, project.ID, models.DraftTask{Title: "once"}, "once", slot)
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	claimed := 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			claimed++
+		case !errors.Is(err, models.ErrScheduleAlreadyFired):
+			t.Fatalf("dispatch: %v, want a claim or ErrScheduleAlreadyFired", err)
+		}
+	}
+	tasks, err := store.ListTasks(ctx, models.TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if claimed != 1 || len(tasks.Data) != 1 {
+		t.Fatalf("claims = %d, tasks = %d, want 1 and 1", claimed, len(tasks.Data))
 	}
 }

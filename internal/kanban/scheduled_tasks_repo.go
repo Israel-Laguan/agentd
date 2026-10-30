@@ -262,12 +262,13 @@ func scheduledBoolToInt(b bool) int {
 
 // claimScheduledTask records the dispatch in the same transaction as the task.
 // It claims the entry: a one-shot only if it never fired, a cron entry only if
-// it has not fired for this slot. Two ticks that both read the entry as
+// its last fire is older than this slot (formatTime is fixed-width, so the
+// string order is chronological). Two ticks that both read the entry as
 // unfired cannot both dispatch it; the loser gets ErrScheduleAlreadyFired.
 func claimScheduledTask(ctx context.Context, tx sqlExecutor, id string, slot, now time.Time) error {
 	res, err := tx.ExecContext(ctx, `
 		UPDATE scheduled_tasks SET last_fired_at = ?, updated_at = ?
-		WHERE id = ? AND (COALESCE(last_fired_at, '') = '' OR (cron_expr != '' AND last_fired_at != ?))`,
+		WHERE id = ? AND (COALESCE(last_fired_at, '') = '' OR (cron_expr != '' AND last_fired_at < ?))`,
 		formatTime(slot), formatTime(now), id, formatTime(slot))
 	if err != nil {
 		return fmt.Errorf("update scheduled task last_fired %q: %w", id, err)

@@ -140,7 +140,7 @@ func (s *FakeKanbanStore) insertReadyTask(
 			return nil, fmt.Errorf("scheduled task %q not found", scheduleID)
 		}
 		if fired := entry.LastFiredAt; fired != nil && !fired.IsZero() &&
-			(strings.TrimSpace(entry.CronExpr) == "" || fired.Equal(slot)) {
+			(strings.TrimSpace(entry.CronExpr) == "" || !fired.Before(slot)) {
 			return nil, fmt.Errorf("scheduled task %q: %w", scheduleID, models.ErrScheduleAlreadyFired)
 		}
 		entry = cloneScheduledTask(entry)
