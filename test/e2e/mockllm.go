@@ -42,7 +42,7 @@ func NewMockLLMClient(baseURL string) *MockLLMClient {
 // capturedRequest is one recorded chat-completions request. The shape mirrors
 // the OpenAI wire format agentd's openai adapter posts
 // (internal/gateway/providers/openai.go), with agentd's metadata extension
-// (task_id / agent_id / role) either inline or re-added by litellm's
+// (task_id / agent_id / agent) either inline or re-added by litellm's
 // correlation hook.
 type capturedRequest struct {
 	Model    string `json:"model"`
