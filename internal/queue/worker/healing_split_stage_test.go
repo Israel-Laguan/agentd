@@ -27,8 +27,8 @@ func TestHealingSplitMakesOneTaskCreationCall(t *testing.T) {
 	if req.Stage != stage.StageTaskCreation || req.Purpose != gateway.PurposeCreateSplitTask {
 		t.Errorf("call = stage %q purpose %q, want task creation and split task", req.Stage, req.Purpose)
 	}
-	if req.Role != gateway.RoleWorker || req.AgentID != "agent-1" {
-		t.Errorf("role %q agent %q, want worker and the task's agent", req.Role, req.AgentID)
+	if req.AgentID != "agent-1" {
+		t.Errorf("agent %q, want the task's agent", req.AgentID)
 	}
 	if req.Temperature != 0.4 || req.MaxTokens != 900 || req.Provider != "ollama" || req.Model != "llama3" {
 		t.Errorf("temperature %v max %d model %s/%s, want the profile's", req.Temperature, req.MaxTokens, req.Provider, req.Model)

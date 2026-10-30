@@ -111,8 +111,8 @@ ok2
 	if len(gw.requests) < 2 {
 		t.Fatalf("expected plan + execute calls, got %d", len(gw.requests))
 	}
-	if !gw.requests[0].JSONMode || gw.requests[0].Role != gateway.RoleMemory {
-		t.Fatalf("first request = JSONMode:%v role:%s, want JSON memory", gw.requests[0].JSONMode, gw.requests[0].Role)
+	if !gw.requests[0].JSONMode || gw.requests[0].Purpose != gateway.PurposeExecWorkPlan {
+		t.Fatalf("first request = JSONMode:%v purpose:%s, want JSON exec.work_plan", gw.requests[0].JSONMode, gw.requests[0].Purpose)
 	}
 	foundPlan := false
 	for _, m := range gw.requests[1].Messages {
@@ -197,8 +197,8 @@ func TestAgenticPlanning_SimpleTaskSkipsPlanning(t *testing.T) {
 	if gw.requests[0].JSONMode {
 		t.Fatal("simple task should not start with plan JSON call")
 	}
-	if gw.requests[0].Role != gateway.RoleWorker {
-		t.Fatalf("first role = %s, want worker", gw.requests[0].Role)
+	if gw.requests[0].Purpose != gateway.PurposeExecTurn {
+		t.Fatalf("first purpose = %s, want exec.turn", gw.requests[0].Purpose)
 	}
 }
 

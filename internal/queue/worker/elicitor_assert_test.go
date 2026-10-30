@@ -41,7 +41,7 @@ func assertElicitationGatewayCalls(t *testing.T, gw *elicitationSequenceGateway)
 		t.Fatalf("elicitation calls = %d, want 1", gw.elicitationCalls)
 	}
 	if !gw.isElicitorRequest(gw.requests[0]) {
-		t.Fatalf("first request is not elicitor: role=%s", gw.requests[0].Role)
+		t.Fatalf("first request is not elicitor: purpose=%s", gw.requests[0].Purpose)
 	}
 }
 

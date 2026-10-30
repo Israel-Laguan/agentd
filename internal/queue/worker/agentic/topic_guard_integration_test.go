@@ -54,7 +54,7 @@ type driftThenSequenceGateway struct {
 }
 
 func isTopicGuardRequest(req gateway.AIRequest) bool {
-	if req.Role == gateway.RoleMemory {
+	if req.Purpose == gateway.PurposeOverheadTopicDrift {
 		return true
 	}
 	for _, m := range req.Messages {

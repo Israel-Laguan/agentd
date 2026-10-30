@@ -61,8 +61,8 @@ func TestModelAgentForwardsRequestFields(t *testing.T) {
 	if got.Temperature != 0.2 {
 		t.Errorf("temperature = %v, want 0.2", got.Temperature)
 	}
-	if got.Role != spec.RoleChat || !got.JSONMode {
-		t.Errorf("role = %q json_mode = %v, want chat and JSON mode", got.Role, got.JSONMode)
+	if !got.JSONMode {
+		t.Errorf("json_mode = %v, want JSON mode", got.JSONMode)
 	}
 	if !reflect.DeepEqual(got.Messages, req.Context) {
 		t.Errorf("messages = %+v, want %+v", got.Messages, req.Context)
@@ -102,7 +102,6 @@ func TestModelAgentForwardsRoutingFields(t *testing.T) {
 	t.Parallel()
 	gw := &scriptedGateway{replies: []string{`{"name":"agentd"}`}}
 	req := validRequest()
-	req.Role = spec.RoleMemory
 	req.AgentID = "agent-1"
 	req.Provider = "prov"
 	req.Model = "mod"
@@ -111,9 +110,9 @@ func TestModelAgentForwardsRoutingFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := gw.seen[0]
-	if got.Role != spec.RoleMemory || got.AgentID != "agent-1" || got.Provider != "prov" || got.Model != "mod" || got.MaxTokens != 2000 {
-		t.Errorf("request = role %q agent %q provider %q model %q max %d, want the stage's own values",
-			got.Role, got.AgentID, got.Provider, got.Model, got.MaxTokens)
+	if got.AgentID != "agent-1" || got.Provider != "prov" || got.Model != "mod" || got.MaxTokens != 2000 {
+		t.Errorf("request = agent %q provider %q model %q max %d, want the stage's own values",
+			got.AgentID, got.Provider, got.Model, got.MaxTokens)
 	}
 }
 

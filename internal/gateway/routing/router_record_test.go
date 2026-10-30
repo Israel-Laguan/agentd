@@ -56,7 +56,7 @@ func (s *sliceRecorder) Record(r spec.CallRecord) {
 
 func userReq(p spec.Purpose, content string) spec.AIRequest {
 	return spec.AIRequest{
-		Purpose: p, TaskID: "t1", AgentID: "a1", Role: spec.RoleWorker,
+		Purpose: p, TaskID: "t1", AgentID: "a1",
 		Messages: []spec.PromptMessage{{Role: "user", Content: content}},
 	}
 }

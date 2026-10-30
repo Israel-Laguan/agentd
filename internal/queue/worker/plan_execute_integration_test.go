@@ -216,7 +216,10 @@ func verifyPlanRequests(t *testing.T, byTitle map[string]models.Task, parent mod
 		if task.ID == parent.ID {
 			parentRequests++
 		}
-		want := map[string]string{"task_id": task.ID, "agent_id": "default", "role": string(spec.RoleWorker)}
+		want := map[string]string{"task_id": task.ID, "agent_id": "default"}
+		if _, has := req.Metadata["role"]; has {
+			t.Errorf("request %d (%q): metadata has role, want it retired (metadata=%v)", i, req.Title, req.Metadata)
+		}
 		for key, value := range want {
 			if req.Metadata[key] != value {
 				t.Errorf("request %d (%q): metadata[%s] = %q, want %q (metadata=%v)", i, req.Title, key, req.Metadata[key], value, req.Metadata)
