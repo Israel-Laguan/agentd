@@ -30,33 +30,32 @@ flowchart TD
 
 ## Code Boundaries
 
-The Frontdesk spans three Go packages. Each package owns one concern and communicates with the others through interfaces, never through direct struct access.
+The Frontdesk spans several Go packages. Each package owns one concern and communicates with the others through interfaces, never through direct struct access.
 
 ```mermaid
 graph LR
     subgraph api ["internal/api (HTTP boundary)"]
-        Server["server.go: route registration"]
+        Server["server/server.go: route registration"]
         ChatCtrl["controllers/chat.go: ChatHandler"]
-        PlanCtrl["controllers/chat_planning.go: planContent branching"]
-        IntentCtrl["controllers/chat_intent.go: prepareIntent + file refs"]
     end
 
-    subgraph gw ["internal/gateway (LLM boundary)"]
-        Interface["interface.go: AIGateway interface"]
-        RouterImpl["router.go: Router implements AIGateway"]
-        Truncator["truncator.go: Truncator interface + strategies"]
+    subgraph fd ["internal/frontdesk (intake orchestration)"]
+        Planner["planner.go: Planner.PlanContent"]
+        PrepIntent["intent.go: PrepareIntent + file refs"]
+        Summarizer["status.go: StatusSummarizer"]
+        Stash["files.go: FileStash"]
     end
 
-    subgraph intake ["internal/stage/intake (Frontdesk classifier)"]
+    subgraph intake ["internal/stage/intake (intake stages)"]
         Intent["intent.go: ClassifyIntent"]
         Scope["scope.go: AnalyzeScope"]
         PlanGen["plan.go: Plan"]
     end
 
-    subgraph svc ["internal/services (domain logic)"]
-        Summarizer["status_summarizer.go: StatusSummarizer"]
-        Stash["file_stash.go: FileStash"]
-        ProjectSvc["project_service.go: ProjectService"]
+    subgraph gw ["internal/gateway (LLM boundary)"]
+        Interface["spec/spec.go: AIGateway + Truncator interfaces"]
+        RouterImpl["routing/router.go: Router implements AIGateway"]
+        Truncator["truncation/truncator.go: truncation strategies"]
     end
 
     subgraph mem ["internal/memory (memory context)"]
@@ -68,11 +67,16 @@ graph LR
         Store["interfaces.go: KanbanStore interface"]
     end
 
-    ChatCtrl -->|"AIGateway"| Interface
-    ChatCtrl -->|"StatusSummarizer"| Summarizer
-    ChatCtrl -->|"FileStash"| Stash
-    ChatCtrl -->|"Truncator"| Truncator
+    ChatCtrl -->|"Planner"| Planner
     ChatCtrl -->|"Retriever"| RetrieverNode
+    Planner --> PrepIntent
+    Planner -->|"stage.Agent"| Intent
+    Planner -->|"stage.Agent"| Scope
+    Planner -->|"stage.Agent"| PlanGen
+    Planner -->|"StatusSummarizer"| Summarizer
+    Planner -->|"FileStash"| Stash
+    Planner -->|"Truncator"| Truncator
+    Intent -->|"AIGateway"| Interface
     RouterImpl -.->|"implements"| Interface
     Summarizer -->|"KanbanStore"| Store
     PlanGen -->|"models.DraftPlan"| Plan
@@ -83,20 +87,21 @@ graph LR
 | Package | Owns | Does NOT own |
 | --------- | ------ | ------------- |
 | `internal/api/controllers` | HTTP decode/encode, request routing, error mapping, response envelope formatting | LLM prompts, JSON retry logic, truncation strategies, board persistence |
+| `internal/frontdesk` | The intake decision tree (`Planner.PlanContent`), intent preparation and file refs, deterministic status aggregation, file stash I/O | HTTP transport, prompts, provider fallback |
 | `internal/gateway` | LLM prompt construction, provider fallback, JSON self-correction, truncation enforcement | HTTP transport, board reads/writes, file stashing, intent/scope system prompts |
 | `internal/stage/intake` | Intent/scope system prompts, plan generation, phase cap enforcement | HTTP transport, provider fallback, board persistence |
-| `internal/services` | Deterministic status aggregation, file stash I/O, plan materialization orchestration | LLM calls, HTTP routing |
+| `internal/services` | Plan materialization orchestration (`ProjectService`) | LLM calls, HTTP routing |
 | `internal/models` | Shared domain types (`DraftPlan`, `DraftTask`, `KanbanStore` interface, `TaskState` enum) | Any behavior; pure data definitions |
 
 ### Interface seams
 
 The Frontdesk's testability comes from two interface boundaries:
 
-1. **`gateway.AIGateway`** ([`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go), re-exported from [`internal/gateway/exports.go`](../internal/gateway/exports.go)) -- the `ChatHandler` depends on this interface, not on `Router` directly. Tests inject `apiGateway` with scripted returns and call counters.
+1. **`gateway.AIGateway`** ([`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go), re-exported from [`internal/gateway/exports.go`](../internal/gateway/exports.go)) -- the intake stages reach it through `stage.NewModelAgent`, not through `Router` directly. Tests inject `apiGateway` with scripted returns and call counters.
 
 2. **`models.KanbanStore`** ([`internal/models/interfaces.go`](../internal/models/interfaces.go)) -- `StatusSummarizer` and `ProjectService` depend on this interface. Tests inject `apiStore` (minimal in-memory state) or `FakeKanbanStore` (full fake in `internal/testutil/`).
 
-The `Truncator` interface ([`internal/gateway/truncation/truncator.go`](../internal/gateway/truncation/truncator.go), re-exported from `gateway`) is a third seam used by file-handling tests, injected via `ServerDeps.Truncator`.
+The `Truncator` interface ([`internal/gateway/truncation/truncator.go`](../internal/gateway/truncation/truncator.go), re-exported from `gateway`) is a third seam used by file-handling tests, injected into the `Planner` via `ServerDeps.Truncator`.
 
 ### Wiring
 
@@ -104,8 +109,13 @@ All dependencies are assembled in [`cmd/agentd/wiring.go`](../cmd/agentd/wiring.
 
 ```go
 chat := controllers.ChatHandler{
-    Gateway: deps.Gateway, Summarizer: deps.Summarizer, FileStash: deps.FileStash,
-    Truncator: deps.Truncator, TruncationBudget: deps.Budget,
+    Planner: &frontdesk.Planner{
+        Agent: stage.NewModelAgent(deps.Gateway), Summarizer: deps.Summarizer,
+        MaxTasksPerPhase: deps.MaxTasksPerPhase,
+        SettingsStore:    deps.Store,
+        Stash:            deps.FileStash, Truncator: deps.Truncator, Budget: deps.Budget,
+    },
+    Retriever: deps.Retriever,
 }
 ```
 
@@ -113,13 +123,14 @@ chat := controllers.ChatHandler{
 
 | Role | Actual Type | Package | Notes |
 | ------ | ------------- | --------- | ------- |
-| Chat controller | `ChatHandler` | `internal/api/controllers` | Holds `AIGateway`, `StatusSummarizer`, `FileStash`, `Truncator`, `Retriever` |
+| Chat controller | `ChatHandler` | `internal/api/controllers` | Holds the `Planner` and the `Retriever` |
+| Intake orchestrator | `Planner` | `internal/frontdesk` | Holds the intake `stage.Agent`, `StatusSummarizer`, `FileStash`, `Truncator` |
 | Gateway facade | `Router` | `internal/gateway/routing` (re-exported) | Implements `AIGateway` with provider fallback and truncation |
 | Intent classifier | `intake.ClassifyIntent` | `internal/stage/intake` | Returns `IntentAnalysis{Intent, Reason}`; calls `AIGateway.Generate` through the model agent |
 | Scope analyzer | `intake.AnalyzeScope` | `internal/stage/intake` | Returns `ScopeAnalysis{SingleScope, Confidence, Scopes, Reason}` |
 | Plan generator | `intake.Plan` | `internal/stage/intake` | Returns `*models.DraftPlan`, trimmed to the phase cap |
 | JSON repair | `GenerateJSON[T]` | `internal/gateway/correction` (re-exported) | Generic function; retries with corrective prompts |
-| Status reporter | `StatusSummarizer` | `internal/services` | Deterministic; queries `KanbanStore` only, no LLM calls |
+| Status reporter | `StatusSummarizer` | `internal/frontdesk` | Deterministic; queries `KanbanStore` only, no LLM calls |
 | Plan model | `DraftPlan` / `DraftTask` | `internal/models` | Frontdesk output awaiting human approval |
 
 ## Specifications

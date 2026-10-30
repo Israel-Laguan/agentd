@@ -80,13 +80,14 @@ gateway:
       model: "your-model-name"
   order: [openai, vllm]
   openai:
-    base_url: "https://api.openai.com/v1"
-    api_key_env: OPENAI_API_KEY
+    base_url: "https://api.openai.com/v1"   # key from OPENAI_API_KEY
 ```
 
 Legacy flat keys (`gateway.openai.*`, `gateway.anthropic.*`, etc.) are still supported and produce
 an implicit entry with `name` matching the vendor (e.g. `name: openai, adapter: openai`). Existing
-deployments require no config changes.
+deployments require no config changes. A flat slot reads `api_key` or the vendor's environment
+variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`); `api_key_env` works only on
+`providers` entries.
 
 All fields per entry:
 

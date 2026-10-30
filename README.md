@@ -136,7 +136,7 @@ agentd init --home /custom/dir # Use custom home directory
 agentd -v init                 # Initialize with verbose logging
 ```
 
-`init` creates directories (`projects/`, `uploads/`, `archives/`), initializes the SQLite database, writes `agentd.crontab`, and seeds the `default`, `researcher`, and `qa` agent profiles with empty `provider` / `model` (tasks follow `gateway.order`). Re-running `init` **preserves** any operator PATCH to those profiles; use `--reset-profiles` to force defaults.
+`init` creates directories (`projects/`, `uploads/`, `archives/`), initializes the SQLite database, writes `agentd.crontab`, and seeds the `default`, `researcher`, `qa` and five `tier-*` agent profiles with empty `provider` / `model` (tasks follow `gateway.order`). Re-running `init` **preserves** any operator PATCH to those profiles; use `--reset-profiles` to force defaults.
 
 Init prints hints for cascade routing, optional `PATCH /api/v1/agents/<id>` to pin provider/model, and (when Gemini is configured) `agentd start --skip-llm-warmup`. See [First Run](#first-run) and [`docs/init-startup.md`](docs/init-startup.md) for the full init/start flow and error surfaces.
 
