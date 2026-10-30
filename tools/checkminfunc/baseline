@@ -59,7 +59,6 @@ internal/frontdesk/status.go NewStatusSummarizer
 internal/frontdesk/status.go (*StatusSummarizer).Summarize
 internal/gateway/correction/correction.go WrapInvalidJSONError
 internal/gateway/exports.go GenerateJSON
-internal/gateway/exports.go GenerateJSONWithUsage
 internal/gateway/providers/llamacpp.go probeToolsEnabled
 internal/gateway/providers/provider.go (common).Name
 internal/gateway/providers/provider.go (common).MaxInputChars
