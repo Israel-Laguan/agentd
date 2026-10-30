@@ -17,7 +17,6 @@ const TruncationMarker = truncation.TruncationMarker
 // Wire types (spec).
 type (
 	PromptMessage      = spec.PromptMessage
-	Role               = spec.Role
 	AIRequest          = spec.AIRequest
 	AIResponse         = spec.AIResponse
 	ProviderConfig     = spec.ProviderConfig
@@ -32,13 +31,6 @@ type (
 	UsageDetails       = spec.UsageDetails
 	EmbedRequest       = spec.EmbedRequest
 	EmbedResponse      = spec.EmbedResponse
-)
-
-// Role constants.
-const (
-	RoleChat   = spec.RoleChat
-	RoleWorker = spec.RoleWorker
-	RoleMemory = spec.RoleMemory
 )
 
 // Provider constants.

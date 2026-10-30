@@ -22,16 +22,6 @@ type PromptMessage struct {
 	Section Section `json:"-"`
 }
 
-// Role classifies the caller so the gateway can route to the optimal
-// provider/model combination (Flow 6.3: Specialized Model Routing).
-type Role string
-
-const (
-	RoleChat   Role = "chat"
-	RoleWorker Role = "worker"
-	RoleMemory Role = "memory"
-)
-
 // FunctionParameters describes the parameters for a tool function in JSON Schema format.
 type FunctionParameters struct {
 	Type       string         `json:"type"`
@@ -86,7 +76,6 @@ type AIRequest struct {
 	AgentID     string           `json:"agent_id"`
 	Provider    string           `json:"provider,omitempty"`
 	Model       string           `json:"model,omitempty"`
-	Role        Role             `json:"role,omitempty"`
 	// RoutedAgent is the agent the router chose for this call: the pin on a pin,
 	// the rule or default's agent otherwise, empty on the cascade. It is set by
 	// the router and recorded in ai_calls.role.
