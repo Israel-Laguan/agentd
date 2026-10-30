@@ -95,6 +95,32 @@ gateway:
 
 Add `POOLSIDE_API_KEY=<key>` to `.env`.
 
+### Strata
+
+[Strata](https://github.com/StrataScratch/strata) is a local inference server with a web UI
+that exposes an OpenAI-compatible API. It supports loading Qwen, Llama, and other models.
+
+```yaml
+gateway:
+  providers:
+    - name: strata
+      adapter: openai
+      base_url: "http://127.0.0.1:8080/v1"
+      api_key: "dummy"  # Strata does not require an API key, but agentd needs one for health checks
+      model: "qwen3.8-flash-next"
+  order: [strata]
+```
+
+**Note:** Strata with Qwen3 (and some other models) currently does **not** support the
+OpenAI `response_format` parameter that agentd requires for structured outputs. This
+means agentd cannot use Strata for its internal planning and classification workflows.
+Strata works fine for direct chat completions without structured output requirements.
+See [B-087](https://github.com/StrataScratch/strata/issues) for tracking.
+
+For models that do support `response_format`, Strata works as a standard OpenAI-compatible
+provider. No API key is required (use a dummy value like `"dummy"` to pass agentd's health
+check).
+
 ## Cascade Fallback
 
 List multiple providers in `order` for automatic fallback:
