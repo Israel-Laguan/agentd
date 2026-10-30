@@ -120,7 +120,7 @@ func (w *Worker) buildPlanRequest(task models.Task, planContext string) stage.St
 		Role:      gateway.RoleMemory,
 		AgentID:   task.AgentID,
 		MaxTokens: planPhaseTokenReserve,
-		Attrs:     spec.TaskAttrs{RequiresWorkspaceChange: workerBoolPtr(task.RequiresWorkspaceChange)},
+		Attrs:     spec.AttrsForTask(task.RequiresWorkspaceChange),
 	}
 }
 

@@ -68,6 +68,10 @@ func TestResolve_RuleSkippedWhenConditionFails(t *testing.T) {
 	if d.Agent != "big" || d.Rule != "rules[1]" {
 		t.Fatalf("Resolve() = agent %q rule %q, want big rules[1]", d.Agent, d.Rule)
 	}
+	d = testTable().Resolve(spec.PurposeExecWorkPlan, "", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(false)})
+	if d.Agent != "quick" || d.Rule != "rules[0]" {
+		t.Fatalf("Resolve() = agent %q rule %q, want quick rules[0]", d.Agent, d.Rule)
+	}
 }
 
 func TestResolve_FallsBackToStageDefault(t *testing.T) {

@@ -149,7 +149,7 @@ stages:
 - Every decision logs one `routing decision` line with the purpose, the required level, the rule that matched and the agent chosen.
 - Unknown agents, unknown keys, bad rules and routes below a purpose's level all fail at config load.
 
-`gateway.role_models` was removed. Setting it fails at load and names `stages` and `agents` as its replacement. Built-in agent profiles from `agentd init` still use empty `provider`/`model`, so their calls take the cascade unless a stage route or a manual PATCH sets explicit values; see [init-startup.md](init-startup.md). A routed non-tool provider is skipped when another candidate supports tools; it gets JSON fallback only when no candidate supports tools.
+`gateway.role_models` was removed. Setting it fails at load and names `stages` and `agents` as its replacement. The seeded `default` profile uses empty `provider`/`model` and follows stage routes. The other built-in profiles from `agentd init` (such as the `tier-*` step profiles) are `AgentID` pins: with empty `provider`/`model` they take the gateway cascade, and a manual PATCH can give them explicit values, but no stage route applies to them. See [init-startup.md](init-startup.md). A routed non-tool provider is skipped when another candidate supports tools; it gets JSON fallback only when no candidate supports tools.
 
 ### Truncation
 

@@ -59,7 +59,7 @@ func (w *Worker) splitTask(ctx context.Context, task models.Task, project models
 		Provider:    profile.Provider,
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,
-		Attrs:       spec.TaskAttrs{RequiresWorkspaceChange: workerBoolPtr(task.RequiresWorkspaceChange)},
+		Attrs:       spec.AttrsForTask(task.RequiresWorkspaceChange),
 	})
 	w.RecordTaskTokenUsage(ctx, task, res.TokenUsage, res.UsageDetails)
 	if err != nil {

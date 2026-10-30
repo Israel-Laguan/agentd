@@ -6,4 +6,6 @@ import "agentd/internal/gateway/spec"
 var (
 	WithTaskID        = spec.WithTaskID
 	TaskIDFromContext = spec.TaskIDFromContext
+	// AttrsForTask builds a task-backed call's routing attributes.
+	AttrsForTask = spec.AttrsForTask
 )

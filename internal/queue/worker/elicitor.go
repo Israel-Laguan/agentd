@@ -99,7 +99,7 @@ func (e *Elicitor) Analyze(ctx context.Context, task models.Task, project models
 		Temperature: 0.1,
 		Role:        gateway.RoleMemory,
 		AgentID:     task.AgentID,
-		Attrs:       spec.TaskAttrs{RequiresWorkspaceChange: workerBoolPtr(task.RequiresWorkspaceChange)},
+		Attrs:       spec.AttrsForTask(task.RequiresWorkspaceChange),
 	})
 	if err != nil {
 		return nil, err

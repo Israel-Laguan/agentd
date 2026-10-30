@@ -9,3 +9,8 @@ type TaskAttrs struct {
 	RequiresWorkspaceChange *bool
 }
 
+// AttrsForTask returns the routing attributes of a call made for one task.
+// Every task-backed request sets them, so a rule can match any purpose.
+func AttrsForTask(requiresWorkspaceChange bool) TaskAttrs {
+	return TaskAttrs{RequiresWorkspaceChange: &requiresWorkspaceChange}
+}
