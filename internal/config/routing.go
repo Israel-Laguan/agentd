@@ -46,6 +46,9 @@ func parseAgents(raw any) (map[string]route.Agent, error) {
 		if !ok {
 			return nil, fmt.Errorf("agents.%s must be a map", name)
 		}
+		if _, removed := entry["level"]; removed {
+			return nil, fmt.Errorf("agents.%s: level was removed; every config agent is a single L1 model call, so delete it", name)
+		}
 		if err := onlyKeys(entry, "agents."+name, "provider", "model"); err != nil {
 			return nil, err
 		}

@@ -94,14 +94,14 @@ var routingLoadErrorCases = []struct {
 		want: "purpose has no routable level",
 	},
 	{
-		name: "level is not a key",
+		name: "level was removed",
 		body: "agents:\n  quick: { provider: gemini, level: L2 }\nstages:\n  create.elicit:\n    default: quick\n",
-		want: `unknown key "level"`,
+		want: "level was removed",
 	},
 	{
 		name: "an agent cannot claim L3 by writing it",
 		body: "agents:\n  big: { provider: openai, level: L3 }\nstages:\n  exec.turn:\n    default: big\n",
-		want: `unknown key "level"`,
+		want: "level was removed",
 	},
 	{
 		name: "a model agent routed to exec.turn",
