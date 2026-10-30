@@ -96,7 +96,7 @@ func (s *FakeKanbanStore) ScheduleDeferredRequeue(_ context.Context, taskID stri
 }
 
 func (s *FakeKanbanStore) InsertReadyTask(_ context.Context, projectID string, draft models.DraftTask) (*models.Task, error) {
-	return s.insertReadyTask(projectID, draft, "", time.Time{}, false)
+	return s.insertReadyTask(projectID, draft, "", time.Time{})
 }
 
 func (s *FakeKanbanStore) InsertReadyTaskAndRecordDispatch(
@@ -105,9 +105,8 @@ func (s *FakeKanbanStore) InsertReadyTaskAndRecordDispatch(
 	draft models.DraftTask,
 	scheduleID string,
 	slot time.Time,
-	deleteEntry bool,
 ) (*models.Task, error) {
-	return s.insertReadyTask(projectID, draft, scheduleID, slot, deleteEntry)
+	return s.insertReadyTask(projectID, draft, scheduleID, slot)
 }
 
 func (s *FakeKanbanStore) insertReadyTask(
@@ -115,7 +114,6 @@ func (s *FakeKanbanStore) insertReadyTask(
 	draft models.DraftTask,
 	scheduleID string,
 	slot time.Time,
-	deleteEntry bool,
 ) (*models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -144,11 +142,7 @@ func (s *FakeKanbanStore) insertReadyTask(
 		entry = cloneScheduledTask(entry)
 		entry.LastFiredAt = &slot
 		entry.UpdatedAt = now()
-		if deleteEntry {
-			delete(s.scheduled, scheduleID)
-		} else {
-			s.scheduled[scheduleID] = entry
-		}
+		s.scheduled[scheduleID] = entry
 	}
 	s.tasks[task.ID] = task
 	return &task, nil

@@ -65,7 +65,7 @@ func TestInsertReadyTaskAndRecordDispatchMissingScheduleRollsBack(t *testing.T) 
 	slot := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
 	_, err = store.InsertReadyTaskAndRecordDispatch(ctx, project.ID, models.DraftTask{
 		Title: "Orphan dispatch",
-	}, "missing-schedule", slot, false)
+	}, "missing-schedule", slot)
 	if err == nil {
 		t.Fatal("InsertReadyTaskAndRecordDispatch: want error")
 	}

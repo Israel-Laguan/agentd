@@ -190,7 +190,7 @@ Every agent profile runs the agentic loop; the API refuses `agentic_mode: false`
 | `file_context` | Smart file context for `read` (convert → cache → embed → select). Requires `pdftotext` (poppler) on PATH; embeddings use first OpenAI-compatible provider. |
 | `planning` | Plan→execute mode; `complexity_threshold` `0` disables (e.g. `500` enables). |
 | `tool_manifest` | Filter tools by classified task type. Quote wildcard: `code_gen: ["*"]` (unquoted `*` is YAML alias syntax). |
-| `scheduler` | Cron/deferred dispatch, checked every `tick_interval` (default `1m`); task fields: `id`, `cron_expr`, `run_after`, `task_type`, `context_fn`, `context_args`, `output_target`, `title`, `description_template`, `project_id`. A task runs in its `project_id`, else `scheduler.project_id`; with neither, config load fails when the scheduler is enabled (B-076): `_system` is not an executable workspace. |
+| `scheduler` | Cron/deferred dispatch, checked every `tick_interval` (default `1m`); task fields: `id`, `cron_expr`, `run_after`, `task_type`, `context_fn`, `context_args`, `output_target`, `title`, `description_template`, `project_id`. A task runs in its `project_id`, else `scheduler.project_id`; with neither, config load fails when the scheduler is enabled (B-076): `_system` is not an executable workspace. A `run_after` task without `cron_expr` runs once, and a restart does not run it again (B-088). |
 | `batching` | Batch independent tool-free tasks in one LLM call (same project + agent). |
 
 ## Healing

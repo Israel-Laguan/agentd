@@ -137,3 +137,30 @@ func TestNewSchedulerFromConfigRequiresScheduledStore(t *testing.T) {
 		t.Fatalf("NewSchedulerFromConfig() err = %v, want ScheduledTaskStore error", err)
 	}
 }
+
+// B-088: a configured one-shot fires once. A restart bootstraps the config
+// again; that must not bring the entry back as never fired.
+func TestConfiguredOneShotDoesNotFireAgainAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	project, err := store.EnsureSystemProject(ctx)
+	if err != nil {
+		t.Fatalf("EnsureSystemProject: %v", err)
+	}
+	cfg := config.SchedulerConfig{Tasks: []config.SchedulerTaskConfig{{
+		ID: "once", RunAfter: "2020-01-01T00:00:00Z", Title: "Once", ContextFn: "static", ProjectID: project.ID,
+	}}}
+	slot := time.Date(2026, 5, 21, 14, 0, 0, 0, time.UTC)
+	for boot := 1; boot <= 2; boot++ {
+		s := NewScheduler(store, nil, SchedulerOptions{Enabled: true})
+		if err := s.BootstrapFromConfig(ctx, cfg); err != nil {
+			t.Fatalf("boot %d: BootstrapFromConfig: %v", boot, err)
+		}
+		if err := s.Tick(ctx, slot.Add(time.Duration(boot)*time.Minute)); err != nil {
+			t.Fatalf("boot %d: Tick: %v", boot, err)
+		}
+	}
+	if got := len(store.Tasks()); got != 1 {
+		t.Fatalf("tasks after a restart = %d, want 1: the one-shot fired again", got)
+	}
+}
