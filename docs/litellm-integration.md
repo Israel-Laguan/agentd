@@ -10,11 +10,12 @@ With `options.send_task_metadata: true` on an `openai`-adapter provider, every
 request agentd sends carries a `metadata` map:
 
 ```json
-"metadata": { "task_id": "<task uuid>", "agent_id": "default", "role": "worker" }
+"metadata": { "task_id": "<task uuid>", "agent_id": "default", "agent": "quick" }
 ```
 
 Each key is set only when non-empty. The top-level `user` field is never set.
-Worker requests always carry all three keys.
+`agent` is the agent the router chose for the call (the profile on a pin, a
+`stages:` agent otherwise); a call on the gateway cascade has none.
 
 **LiteLLM keeps this metadata and does not forward it.** LiteLLM treats
 `metadata` as its own field for spend logs and tags, and that is what the
@@ -49,7 +50,7 @@ strict OpenAI-compatible endpoints reject unknown request parameters.
 from litellm.integrations.custom_logger import CustomLogger
 
 FORWARD_KEY = "agentd_metadata"
-FIELDS = ("task_id", "agent_id", "role")
+FIELDS = ("task_id", "agent_id", "agent")
 
 
 class AgentdCorrelation(CustomLogger):
@@ -76,7 +77,7 @@ In a container, mount the hook beside the config
 (`/app/config.yaml` and `/app/agentd_correlation.py`). If the config lists the
 callback but the file is missing, LiteLLM exits on startup with
 `ModuleNotFoundError: No module named 'agentd_correlation'`. The upstream then
-receives `"agentd_metadata": {"task_id": …, "agent_id": …, "role": …}`.
+receives `"agentd_metadata": {"task_id": …, "agent_id": …, "agent": …}`.
 
 The dev stack uses exactly this: [`devenv/litellm/`](../devenv/litellm/), wired in
 [`devenv/compose.yaml`](../devenv/compose.yaml). Its mock backend,

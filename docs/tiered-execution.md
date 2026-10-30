@@ -105,11 +105,11 @@ Routing is by purpose now: a `stages:` route (see [config-reference.md](config-r
 
 | Step kind | Purpose / stage guidance | Profile template |
 | --- | --- | --- |
-| context | `context` (or `memory`-class cheap) | `tier-context` |
+| context | `context` (cheap model) | `tier-context` |
 | decision | `decision` | `tier-decision` |
-| execute | `worker` / `execute` | `tier-execute` |
+| execute | `execute` | `tier-execute` |
 | verify | `verify` | `tier-verify` |
-| escalate | `escalate` or strong `worker` | `tier-escalate` |
+| escalate | `escalate` (strong model) | `tier-escalate` |
 
 **As implemented (M3):** there is no `tiered.models.<kind>` config key — `internal/config.TieredConfig` / `loadTieredConfig` never read one, and there is no tier-per-role table either. Step-kind differentiation instead comes from dedicated **AgentProfile** rows named after the step's profile template (`tier-context`, `tier-decision`, `tier-execute`, `tier-verify`, plus `tier-escalate` for the one-off strong-model escalation step added in T-020). `SplitIntoTieredDAG` (`internal/queue/worker/splitter.go`) stamps each child task's `AgentID` with its profile name; profile lookup resolves the actual provider/model, falling back to the gateway cascade when a profile leaves provider/model blank. A `tier-*` profile is a pin, so a `stages:` route does not override it. Seeding/configuring the `tier-*` profiles themselves is a separate concern from the splitter.
 

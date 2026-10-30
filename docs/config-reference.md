@@ -146,10 +146,10 @@ stages:
 - An agent has a `provider` (required), and an optional `model`. Every config agent is a single model call (level `L1`); `level` is not a key, so a config cannot make a model claim L3. A purpose declares the minimum level it needs; a route to an agent below that level fails at load, so `exec.turn` and `overhead.subagent_turn` cannot be routed to a config agent. L3 agents arrive with T-042.
 - `when` keys: `requires_workspace_change` (`true` or `false`), which matches tasks that must change the workspace. A rule needs a condition and a `use`.
 - An explicit `AgentID` on a task or a tier step is a pin. It wins over every rule and injects no provider or model. The seeded `default` profile is not a pin, so tasks on it follow their stage's route.
-- Every decision logs one `routing decision` line with the purpose, the required level, the rule that matched and the agent chosen.
+- Every decision logs one `routing decision` line with the purpose, the required level, the rule that matched and the agent chosen: at Info, or at Debug when the call takes the cascade.
 - Unknown agents, unknown keys, bad rules and routes below a purpose's level all fail at config load.
 
-`gateway.role_models` was removed. Setting it fails at load and names `stages` and `agents` as its replacement. The seeded `default` profile uses empty `provider`/`model` and follows stage routes. The other built-in profiles from `agentd init` (such as the `tier-*` step profiles) are `AgentID` pins: with empty `provider`/`model` they take the gateway cascade, and a manual PATCH can give them explicit values, but no stage route applies to them. See [init-startup.md](init-startup.md). A routed non-tool provider is skipped when another candidate supports tools; it gets JSON fallback only when no candidate supports tools.
+`gateway.role_models` was removed. Setting it fails at load and names `stages` and `agents` as its replacement. `agentic.capability_routing` and `agentic.model_routing` were removed too, and also fail at load. The seeded `default` profile uses empty `provider`/`model` and follows stage routes. The other built-in profiles from `agentd init` (such as the `tier-*` step profiles) are `AgentID` pins: with empty `provider`/`model` they take the gateway cascade, and a manual PATCH can give them explicit values, but no stage route applies to them. See [init-startup.md](init-startup.md). A routed non-tool provider is skipped when another candidate supports tools; it gets JSON fallback only when no candidate supports tools.
 
 ### Truncation
 

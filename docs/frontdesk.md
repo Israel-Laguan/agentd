@@ -22,8 +22,8 @@ flowchart TD
     ScopeCheck -->|"true"| PlanApproved
     ScopeCheck -->|"false"| ScopeClarification["Return scope_clarification"]
 
-    PlanApproved --> GeneratePlan["GeneratePlan via LLM"]
-    GeneratePlan --> ReturnPlan["Return DraftPlan in chat.completion"]
+    PlanApproved --> IntakePlan["intake.Plan via LLM"]
+    IntakePlan --> ReturnPlan["Return DraftPlan in chat.completion"]
 
     StatusReport --> ReturnStatus["Return status_report in chat.completion"]
 ```

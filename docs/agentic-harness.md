@@ -104,8 +104,8 @@ The inner loop runs shell commands through the same hardened [`BashExecutor`](..
 
 **Rules:**
 
-1. The inner tool loop is the only execution path. If model routing selects a provider without tool round-tripping, the task fails with `agentic profile's provider cannot call tools`; there is no fallback to a single-shot command (see [provider-tool-calling.md](provider-tool-calling.md)).
-2. When both model routing and the per-task tool manifest are enabled, routing token estimates use the **full** tool registry (`routingTools`); [`filterAgenticTools`](../internal/queue/worker/worker_tools.go) runs afterward and only affects tools sent in turn-loop gateway requests. This prevents manifest-reduced tool lists from understating context size and routing to a cheaper tier than `context_token_threshold` intends.
+1. The inner tool loop is the only execution path. If the resolved provider cannot round-trip tool calls, the task fails with `agentic profile's provider cannot call tools`; there is no fallback to a single-shot command (see [provider-tool-calling.md](provider-tool-calling.md)).
+2. The per-task tool manifest is applied by [`FilterAgenticTools`](../internal/queue/worker/worker_tools.go) and only affects the tools sent in turn-loop gateway requests. Routing does not depend on it: the agent is picked by purpose (see [config-reference.md](config-reference.md#routing-agents-and-stages)).
 3. Each `bash` tool invocation is a separate sandbox execution (subject to hooks, timeouts, and scrubbing).
 4. Non-empty final assistant text without further `tool_calls` ends the loop; it is stored as the task result payload, not executed as a shell command.
 5. A finish is not COMPLETED when a text-only finish follows a failed shell command, when a success-criteria file it names is missing, empty or does not parse, or when breakdown subtasks are still open. Those finishes are stopped instead (see [`verify.go`](../internal/queue/worker/agentic/verify.go)).

@@ -140,10 +140,10 @@ provider switches to a tested proxy with an explicit contract.
 
 `SupportsChatTools` controls two independent gates:
 
-**Path A — Router (frontdesk / single-shot tool calls):** When a client sends `tools` on
+**Path A — Router (frontdesk tool calls):** When a client sends `tools` on
 `POST /v1/chat/completions`, the router checks `ProviderSupportsChatTools` to decide whether
 to forward tool definitions to the provider. This is the only gate for the Frontdesk planning
-flow and for single-shot worker requests.
+flow.
 
 **Path B — Worker (agentic inner loop):** When `AgentProfile.AgenticMode: true`, the worker
 calls `providerSupportsAgentic` in
@@ -166,7 +166,7 @@ carry an agentic profile. The API rejects such a profile on create and patch, an
 
 See [`docs/agentic-harness.md`](agentic-harness.md) for the full agentic inner loop
 specification, sandbox model, and the behavior table that maps `AgenticMode` × provider to
-the resulting execution path.
+what the API and the worker do with it.
 
 ## Sources
 
