@@ -33,5 +33,3 @@ healing:
 # Tiered execution configuration for J12.
 tiered:
   enabled: true
-  small_model: "gpt-3.5-turbo"
-  full_model: "gpt-4"
