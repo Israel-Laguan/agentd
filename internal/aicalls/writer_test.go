@@ -121,11 +121,13 @@ func TestWriterMapsTheRecordAndCountsFailedInserts(t *testing.T) {
 	w := NewWriter(sink, Options{Buffer: 8, BatchSize: 8, Interval: time.Hour})
 	r := rec(5)
 	r.Cascade, r.Truncated, r.CachedTokens, r.CacheWrite, r.TaskID, r.CorrelationID = true, true, 3, 2, "t1", "req"
+	r.RoutedAgent = "quick"
 	w.Record(r)
 	closeWriter(t, w)
 	got := sink.batches[0][0]
 	if got.Purpose != "exec.turn" || got.Stage != "exec" || got.LatencyMS != 1500 || !got.Cascade || !got.Truncated ||
-		got.CachedTokens != 3 || got.CacheWriteTokens != 2 || got.TaskID != "t1" || got.CorrelationID != "req" || got.Attempt != "first" {
+		got.CachedTokens != 3 || got.CacheWriteTokens != 2 || got.TaskID != "t1" || got.CorrelationID != "req" || got.Attempt != "first" ||
+		got.RoutedAgent != "quick" {
 		t.Fatalf("mapped = %+v", got)
 	}
 
