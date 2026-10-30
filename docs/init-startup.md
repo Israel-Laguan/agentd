@@ -15,7 +15,7 @@ This note captures the startup path validated during the bootstrap work and the 
 2. Ensure the runtime directories exist.
 3. Write the default cron file if one is not already present.
 4. Open the SQLite database and apply migrations.
-5. Seed the built-in agent profiles (`default`, `researcher`, `qa`) with empty `provider` and `model` so tasks cascade through `gateway.order`. Existing profiles are left unchanged on repeat init, except that one still in non-agentic mode is upgraded (see below); use `agentd init --reset-profiles` to force defaults or to clear stale rows that still pin `openai` / `anthropic` from older installs.
+5. Seed the built-in agent profiles (`default`, `researcher`, `qa`, and the `tier-*` step profiles) with empty `provider` and `model` so tasks cascade through `gateway.order`. Existing profiles are left unchanged on repeat init, except that one still in non-agentic mode is upgraded (see below); use `agentd init --reset-profiles` to force defaults or to clear stale rows that still pin `openai` / `anthropic` from older installs.
 
 Init prints a short hint listing seeded profiles, the first detected LLM provider (offline key check), how to **PATCH** `/api/v1/agents/<id>` after `agentd start` to pin `provider` / `model`, and `--reset-profiles`. When `gemini` is in `gateway.order` or detected from keys, the hint also mentions `agentd start --skip-llm-warmup`.
 

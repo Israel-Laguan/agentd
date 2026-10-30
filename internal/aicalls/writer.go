@@ -163,7 +163,7 @@ func (w *Writer) flush(batch []models.AICall) []models.AICall {
 
 func toAICall(r spec.CallRecord) models.AICall {
 	return models.AICall{
-		At: r.At, Kind: string(r.Kind), Purpose: string(r.Purpose), Stage: r.Stage, Role: string(r.Role),
+		At: r.At, Kind: string(r.Kind), Purpose: string(r.Purpose), Stage: r.Stage, RoutedAgent: r.RoutedAgent,
 		TaskID: r.TaskID, AgentID: r.AgentID, CorrelationID: r.CorrelationID, Provider: r.Provider,
 		Model: r.Model, Attempt: string(r.Attempt), Cascade: r.Cascade, Outcome: string(r.Outcome),
 		Truncated: r.Truncated, MessageCount: r.MessageCount, ToolCount: r.ToolCount,

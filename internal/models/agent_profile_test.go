@@ -4,8 +4,8 @@ import (
 	"testing"
 )
 
-// TestAgentProfile_DefaultAgenticModeIsFalse verifies that the default value
-// of AgenticMode is false (Requirements 2.1, 2.2)
+// TestAgentProfile_DefaultAgenticModeIsFalse pins the zero value. Stored rows
+// with false are upgraded at startup and the API refuses false.
 func TestAgentProfile_DefaultAgenticModeIsFalse(t *testing.T) {
 	// Zero value of AgentProfile should have AgenticMode as false
 	var profile AgentProfile

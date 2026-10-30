@@ -130,7 +130,7 @@ func TestSeededProfilesCoverTieredSteps(t *testing.T) {
 // profiles ship with empty Provider/Model. It does NOT verify that distinct
 // small/mid/strong models are actually applied per tier at runtime — today
 // every agentic call, tiered steps included, is dispatched through the same
-// gateway.RoleWorker route (see internal/queue/worker/agentic/handlers.go),
+// exec.turn route (see internal/queue/worker/agentic/handlers.go),
 // so there is no automatic per-step model routing. An operator who wants the
 // documented cost tiers enforced must PATCH Provider/Model onto each
 // tier-* profile explicitly.

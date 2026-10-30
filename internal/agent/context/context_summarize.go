@@ -40,7 +40,6 @@ func (cm *ContextManager) generateSummary(ctx context.Context, turns []Turn) (Tu
 		JSONMode:  true,
 		AgentID:   cm.agentID,
 		TaskID:    cm.taskID,
-		Role:      gateway.RoleMemory,
 		MaxTokens: 2000,
 	}
 	return gateway.GenerateJSON[TurnSummary](ctx, cm.gateway, req)

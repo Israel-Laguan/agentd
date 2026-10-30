@@ -56,7 +56,7 @@ func (s *sliceRecorder) Record(r spec.CallRecord) {
 
 func userReq(p spec.Purpose, content string) spec.AIRequest {
 	return spec.AIRequest{
-		Purpose: p, TaskID: "t1", AgentID: "a1", Role: spec.RoleWorker,
+		Purpose: p, TaskID: "t1", AgentID: "a1",
 		Messages: []spec.PromptMessage{{Role: "user", Content: content}},
 	}
 }
@@ -219,5 +219,37 @@ func assertAttempt(t *testing.T, b spec.CallRecord) {
 	}
 	if b.Purpose != spec.PurposeExecTurn || b.Stage != "exec" || b.TaskID != "t1" || b.AgentID != "a1" {
 		t.Errorf("attribution wrong: %+v", b)
+	}
+}
+
+// The record carries the agent the router chose: the rule or default's agent on a
+// routed call, the profile on a pin, and nothing on the cascade.
+func TestRecordCarriesTheResolvedAgent(t *testing.T) {
+	cases := []struct {
+		name    string
+		purpose spec.Purpose
+		agentID string
+		want    string
+	}{
+		{"routed to an agent", spec.PurposeCreateElicit, "default", "quick"},
+		{"pinned to a profile", spec.PurposeCreateElicit, "tier-fast", "tier-fast"},
+		{"cascade", spec.PurposeExecWorkPlan, "default", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			openai, gemini := purposeProviders()
+			rec := &sliceRecorder{}
+			router := NewRouter(openai, gemini).WithPurposeRouting(purposeTestTable()).WithRecorder(rec)
+			_, err := router.Generate(context.Background(), spec.AIRequest{
+				Purpose: tc.purpose, AgentID: tc.agentID, TaskID: "t1",
+				Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rec.recs) != 1 || rec.recs[0].RoutedAgent != tc.want {
+				t.Fatalf("records = %+v, want one with RoutedAgent %q", rec.recs, tc.want)
+			}
+		})
 	}
 }

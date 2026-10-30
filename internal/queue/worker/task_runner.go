@@ -87,7 +87,6 @@ func (r *TaskRunner) commandSuggestion(
 		Temperature: profile.Temperature,
 		JSONMode:    true,
 		AgentID:     task.AgentID,
-		Role:        gateway.RoleWorker,
 		TaskID:      task.ID,
 		Attrs:       gateway.AttrsForTask(task.RequiresWorkspaceChange),
 	}

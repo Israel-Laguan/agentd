@@ -36,8 +36,8 @@ func TestWorkPlanMakesOneTaskCreationCall(t *testing.T) {
 	if req.Stage != stage.StageTaskCreation || req.Purpose != gateway.PurposeExecWorkPlan {
 		t.Errorf("call = stage %q purpose %q, want task creation and work plan", req.Stage, req.Purpose)
 	}
-	if req.Role != gateway.RoleMemory || req.MaxTokens != planPhaseTokenReserve || req.AgentID != "agent-1" {
-		t.Errorf("role %q max %d agent %q, want memory, %d and the task's agent", req.Role, req.MaxTokens, req.AgentID, planPhaseTokenReserve)
+	if req.MaxTokens != planPhaseTokenReserve || req.AgentID != "agent-1" {
+		t.Errorf("max %d agent %q, want %d and the task's agent", req.MaxTokens, req.AgentID, planPhaseTokenReserve)
 	}
 	if agent.taskIDs[0] != "t-plan" {
 		t.Errorf("task id in ctx = %q, want t-plan", agent.taskIDs[0])

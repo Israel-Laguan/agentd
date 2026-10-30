@@ -80,13 +80,14 @@ gateway:
       model: "your-model-name"
   order: [openai, vllm]
   openai:
-    base_url: "https://api.openai.com/v1"
-    api_key_env: OPENAI_API_KEY
+    base_url: "https://api.openai.com/v1"   # key from OPENAI_API_KEY
 ```
 
 Legacy flat keys (`gateway.openai.*`, `gateway.anthropic.*`, etc.) are still supported and produce
 an implicit entry with `name` matching the vendor (e.g. `name: openai, adapter: openai`). Existing
-deployments require no config changes.
+deployments require no config changes. A flat slot reads `api_key` or the vendor's environment
+variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`); `api_key_env` works only on
+`providers` entries.
 
 All fields per entry:
 
@@ -131,7 +132,7 @@ Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First 
 
 ```yaml
 agents:
-  quick: { provider: gemini, model: gemini-2.5-flash }   # level defaults to L1
+  quick: { provider: gemini, model: gemini-2.5-flash }   # every config agent is L1
   local: { provider: ollama, model: llama3:8b }
 stages:
   create.elicit:
@@ -143,13 +144,13 @@ stages:
         use: quick
 ```
 
-- An agent has a `provider` (required), an optional `model`, and a `level` (`L1`, the default, or `L3`). A purpose declares the minimum level it needs; a route to an agent below that level fails at load. A route to an L3 purpose, such as `exec.turn`, with an L3 agent passes load validation. L3 agent execution arrives with T-042.
+- An agent has a `provider` (required), and an optional `model`. Every config agent is a single model call (level `L1`); `level` was removed and fails at load, so a config cannot make a model claim L3. A purpose declares the minimum level it needs; a route to an agent below that level fails at load, so `exec.turn` and `overhead.subagent_turn` cannot be routed to a config agent. L3 agents arrive with T-042.
 - `when` keys: `requires_workspace_change` (`true` or `false`), which matches tasks that must change the workspace. A rule needs a condition and a `use`.
 - An explicit `AgentID` on a task or a tier step is a pin. It wins over every rule and injects no provider or model. The seeded `default` profile is not a pin, so tasks on it follow their stage's route.
-- Every decision logs one `routing decision` line with the purpose, the required level, the rule that matched and the agent chosen.
+- Every decision logs one `routing decision` line with the purpose, the required level, the rule that matched and the agent chosen: at Info, or at Debug when the call takes the cascade.
 - Unknown agents, unknown keys, bad rules and routes below a purpose's level all fail at config load.
 
-`gateway.role_models` was removed. Setting it fails at load and names `stages` and `agents` as its replacement. The seeded `default` profile uses empty `provider`/`model` and follows stage routes. The other built-in profiles from `agentd init` (such as the `tier-*` step profiles) are `AgentID` pins: with empty `provider`/`model` they take the gateway cascade, and a manual PATCH can give them explicit values, but no stage route applies to them. See [init-startup.md](init-startup.md). A routed non-tool provider is skipped when another candidate supports tools; it gets JSON fallback only when no candidate supports tools.
+`gateway.role_models` was removed. Setting it fails at load and names `stages` and `agents` as its replacement. `agentic.capability_routing` and `agentic.model_routing` were removed too, and also fail at load. The seeded `default` profile uses empty `provider`/`model` and follows stage routes. The other built-in profiles from `agentd init` (such as the `tier-*` step profiles) are `AgentID` pins: with empty `provider`/`model` they take the gateway cascade, and a manual PATCH can give them explicit values, but no stage route applies to them. See [init-startup.md](init-startup.md). A routed non-tool provider is skipped when another candidate supports tools; it gets JSON fallback only when no candidate supports tools.
 
 ### Truncation
 
@@ -189,7 +190,7 @@ Every agent profile runs the agentic loop; the API refuses `agentic_mode: false`
 | `file_context` | Smart file context for `read` (convert → cache → embed → select). Requires `pdftotext` (poppler) on PATH; embeddings use first OpenAI-compatible provider. |
 | `planning` | Plan→execute mode; `complexity_threshold` `0` disables (e.g. `500` enables). |
 | `tool_manifest` | Filter tools by classified task type. Quote wildcard: `code_gen: ["*"]` (unquoted `*` is YAML alias syntax). |
-| `scheduler` | Cron/deferred dispatch, checked every `tick_interval` (default `1m`); task fields: `id`, `cron_expr`, `run_after`, `task_type`, `context_fn`, `context_args`, `output_target`, `title`, `description_template`, `project_id`. A task runs in its `project_id`, else `scheduler.project_id`; with neither, config load fails when the scheduler is enabled (B-076): `_system` is not an executable workspace. |
+| `scheduler` | Cron/deferred dispatch, checked every `tick_interval` (default `1m`); task fields: `id`, `cron_expr`, `run_after`, `task_type`, `context_fn`, `context_args`, `output_target`, `title`, `description_template`, `project_id`. A task runs in its `project_id`, else `scheduler.project_id`; with neither, config load fails when the scheduler is enabled (B-076): `_system` is not an executable workspace. A `run_after` task without `cron_expr` runs once, and a restart does not run it again (B-088). |
 | `batching` | Batch independent tool-free tasks in one LLM call (same project + agent). |
 
 ## Healing

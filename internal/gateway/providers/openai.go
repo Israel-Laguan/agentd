@@ -90,7 +90,7 @@ func (o *OpenAI) Generate(ctx context.Context, req spec.AIRequest) (spec.AIRespo
 	return resp, nil
 }
 
-// buildMetadata collects task/agent/role identifiers into the metadata map
+// buildMetadata collects task, agent and routed-agent identifiers into the metadata map
 // sent to OpenAI-compatible providers when send_task_metadata is enabled.
 // It returns nil when none of the fields are present.
 func (o *OpenAI) buildMetadata(req spec.AIRequest) map[string]string {
@@ -101,8 +101,8 @@ func (o *OpenAI) buildMetadata(req spec.AIRequest) map[string]string {
 	if req.AgentID != "" {
 		md["agent_id"] = req.AgentID
 	}
-	if req.Role != "" {
-		md["role"] = string(req.Role)
+	if req.RoutedAgent != "" {
+		md["agent"] = req.RoutedAgent
 	}
 	if len(md) == 0 {
 		return nil

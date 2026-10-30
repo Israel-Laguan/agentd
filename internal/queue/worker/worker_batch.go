@@ -49,7 +49,6 @@ func (w *Worker) buildBatchRequest(
 		Temperature: profile.Temperature,
 		JSONMode:    true,
 		AgentID:     profile.ID,
-		Role:        gateway.RoleWorker,
 		TaskID:      tasks[0].ID,
 		Provider:    profile.Provider,
 		Model:       profile.Model,

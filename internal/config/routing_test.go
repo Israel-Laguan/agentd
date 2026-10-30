@@ -13,7 +13,7 @@ func TestLoad_RoutingValidSectionsLoad(t *testing.T) {
 	cfg, err := loadConfigBody(t, `
 agents:
   quick: { provider: gemini, model: flash-lite }
-  big: { provider: openai, model: gpt-4o, level: L3 }
+  big: { provider: openai, model: gpt-4o }
 stages:
   create.elicit:
     default: quick
@@ -29,8 +29,8 @@ stages:
 	if got := cfg.Gateway.Routing.Agents["quick"]; got.Provider != "gemini" || got.Model != "flash-lite" || got.Level != spec.LevelL1 {
 		t.Fatalf("agent quick = %+v, want gemini/flash-lite at the default level L1", got)
 	}
-	if got := cfg.Gateway.Routing.Agents["big"].Level; got != spec.LevelL3 {
-		t.Fatalf("agent big level = %q, want L3", got)
+	if got := cfg.Gateway.Routing.Agents["big"].Level; got != spec.LevelL1 {
+		t.Fatalf("agent big level = %q, want L1: every config agent is a model call", got)
 	}
 	if got := cfg.Gateway.Routing.Stages[spec.PurposeCreateElicit].Default; got != "quick" {
 		t.Fatalf("create.elicit default = %q, want quick", got)
@@ -94,9 +94,19 @@ var routingLoadErrorCases = []struct {
 		want: "purpose has no routable level",
 	},
 	{
-		name: "unknown agent level",
+		name: "level was removed",
 		body: "agents:\n  quick: { provider: gemini, level: L2 }\nstages:\n  create.elicit:\n    default: quick\n",
-		want: `level "L2" is not an agent level`,
+		want: "level was removed",
+	},
+	{
+		name: "an agent cannot claim L3 by writing it",
+		body: "agents:\n  big: { provider: openai, level: L3 }\nstages:\n  exec.turn:\n    default: big\n",
+		want: "level was removed",
+	},
+	{
+		name: "a model agent routed to exec.turn",
+		body: "agents:\n  big: { provider: openai }\nstages:\n  exec.turn:\n    default: big\n",
+		want: "below the purpose minimum L3",
 	},
 	{
 		name: "misspelt stage key",

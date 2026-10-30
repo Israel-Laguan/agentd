@@ -331,7 +331,7 @@ def chat_completion(body: dict, headers=None) -> dict:
     if metadata or body.get("user"):
         sys.stderr.write(
             f"[mockllm] correlation task_id={task_id} agent_id={metadata.get('agent_id')} "
-            f"role={metadata.get('role')}\n"
+            f"agent={metadata.get('agent')}\n"
         )
     else:
         sys.stderr.write(f"[mockllm] no correlation; request keys={sorted(body)}\n")

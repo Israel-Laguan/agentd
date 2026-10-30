@@ -54,7 +54,6 @@ func (w *Worker) splitTask(ctx context.Context, task models.Task, project models
 		Context:     messages,
 		Contract:    stage.NewContract[planning.SplitResult](),
 		Temperature: profile.Temperature,
-		Role:        gateway.RoleWorker,
 		AgentID:     task.AgentID,
 		Provider:    profile.Provider,
 		Model:       profile.Model,

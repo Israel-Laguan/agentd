@@ -34,9 +34,9 @@ func newRoutingTest(profile models.AgentProfile) (*Worker, *routingTestStore, *r
 		cfgs = []spec.ProviderConfig{toolCapableConfig("synth-openai", "openai")}
 	}
 	if len(cfgs) > 0 {
-		r, err := buildTestCapabilityRouter(cfgs...)
+		r, err := buildTestRouter(cfgs...)
 		if err != nil {
-			panic("buildTestCapabilityRouter: " + err.Error())
+			panic("buildTestRouter: " + err.Error())
 		}
 		gw.router = r
 	}
@@ -46,7 +46,7 @@ func newRoutingTest(profile models.AgentProfile) (*Worker, *routingTestStore, *r
 }
 
 // TestRoutingDecision_AgenticModeTrue_ProviderSupported verifies by calling Process
-// that when AgenticMode is true and provider supports agentic mode, the agentic path is taken.
+// that an agentic profile on a tool-capable provider runs the inner loop.
 // Validates: Requirements 1, 3, 6.2
 func TestRoutingDecision_AgenticModeTrue_ProviderSupported(t *testing.T) {
 	t.Parallel()

@@ -180,12 +180,18 @@ func (s *Scheduler) fireDispatch(ctx context.Context, entry models.ScheduledTask
 	}
 	title = fmt.Sprintf("%s [%s]", title, slot.Format("2006-01-02 15:04"))
 	description := buildScheduledDescription(entry, contextBody)
-	oneShot := entry.RunAfter != nil && strings.TrimSpace(entry.CronExpr) == ""
+	// A fired one-shot keeps its row: last_fired_at is what stops it firing
+	// again, and the next boot's config bootstrap would re-create a deleted
+	// row as never fired (B-088).
 	task, err := s.store.InsertReadyTaskAndRecordDispatch(ctx, projectID, models.DraftTask{
 		Title:       title,
 		Description: description,
 		Assignee:    models.TaskAssigneeSystem,
-	}, entry.ID, slot, oneShot)
+	}, entry.ID, slot)
+	if errors.Is(err, models.ErrScheduleAlreadyFired) {
+		slog.Debug("scheduled task already dispatched by another tick", "id", entry.ID, "slot", slot)
+		return nil
+	}
 	if err != nil {
 		return err
 	}

@@ -192,8 +192,8 @@ func (s *routingTestStore) ListUnprocessedHumanComments(context.Context) ([]mode
 }
 func (s *routingTestStore) MarkCommentProcessed(context.Context, string, string) error { return nil }
 
-// routingTestGateway records requests so tests can inspect whether the agentic
-// or legacy path was taken. ProviderSupportsChatTools delegates to router when set.
+// routingTestGateway records requests so tests can inspect them.
+// ProviderSupportsChatTools delegates to router when set.
 type routingTestGateway struct {
 	requests []gateway.AIRequest
 	router   *gateway.Router

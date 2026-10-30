@@ -208,6 +208,14 @@ tiered:
     max_mid_fix: 2
     max_escalate: 1
     max_re_gather: 2
+agents: # purpose routing; see docs/config-reference.md#routing-agents-and-stages
+  quick: { provider: openai, model: "gpt-4o-mini" } # every config agent is L1; unused until a stage routes to it
+# stages: # unrouted purposes take the gateway.order cascade
+#   create.elicit:
+#     default: quick
+#     rules:
+#       - when: { requires_workspace_change: false }
+#         use: quick
 mcp:
   enabled: false
   transport: stdio     # "stdio" (Claude Code/Cline), "http" (Streamable HTTP at /mcp), or "both"

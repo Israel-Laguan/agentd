@@ -39,7 +39,7 @@ func (r *Router) emit(ctx context.Context, rec spec.CallRecord) {
 // attemptRecord builds the record for one provider.Generate attempt.
 func attemptRecord(p providers.Backend, req spec.AIRequest, inputBefore int, started time.Time, resp spec.AIResponse, err error, cascade bool) spec.CallRecord {
 	rec := spec.CallRecord{
-		At: started, Kind: spec.KindGenerate, Purpose: req.Purpose, Role: req.Role,
+		At: started, Kind: spec.KindGenerate, Purpose: req.Purpose, RoutedAgent: req.RoutedAgent,
 		TaskID: req.TaskID, AgentID: req.AgentID, Provider: string(p.Name()), Model: req.Model,
 		Attempt: req.Attempt, Cascade: cascade, Outcome: spec.OutcomeFailed,
 		MessageCount: len(req.Messages), ToolCount: len(req.Tools),

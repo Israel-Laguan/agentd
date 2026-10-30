@@ -95,13 +95,11 @@ func initializeWorkerScenario(sc *godog.ScenarioContext) {
 }
 
 func registerWorkerSteps(sc *godog.ScenarioContext, state *workerScenario) {
-	// Given steps for agentic mode toggle
+	// Given steps
 	sc.Step(`^the provider is "([^"]*)"$`, state.providerIs)
 
 	// When steps
 	sc.Step(`^the worker processes a task$`, state.workerProcessesTask)
-
-	// Then steps for agentic mode toggle
 
 	// Given steps for agentic mode loop
 	sc.Step(`^the worker is configured with agentic mode enabled$`, state.agenticModeEnabled)

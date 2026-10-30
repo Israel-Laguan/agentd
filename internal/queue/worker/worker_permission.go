@@ -98,7 +98,6 @@ func (w *Worker) requestPermissionAlternative(
 		Temperature: profile.Temperature,
 		JSONMode:    true,
 		AgentID:     task.AgentID,
-		Role:        gateway.RoleWorker,
 		TaskID:      task.ID,
 		Attrs:       gateway.AttrsForTask(task.RequiresWorkspaceChange),
 		Provider:    profile.Provider,

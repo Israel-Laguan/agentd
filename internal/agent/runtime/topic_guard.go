@@ -52,7 +52,6 @@ func (tg *TopicGuard) DetectDrift(
 			{Role: "system", Content: "You classify whether two messages are about completely different topics. Reply with exactly YES or NO."},
 			{Role: "user", Content: prompt},
 		},
-		Role:      gateway.RoleMemory,
 		MaxTokens: topicGuardMaxTokens,
 	}
 	resp, err := tg.gateway.Generate(ctx, req)

@@ -17,7 +17,6 @@ const TruncationMarker = truncation.TruncationMarker
 // Wire types (spec).
 type (
 	PromptMessage      = spec.PromptMessage
-	Role               = spec.Role
 	AIRequest          = spec.AIRequest
 	AIResponse         = spec.AIResponse
 	ProviderConfig     = spec.ProviderConfig
@@ -32,13 +31,6 @@ type (
 	UsageDetails       = spec.UsageDetails
 	EmbedRequest       = spec.EmbedRequest
 	EmbedResponse      = spec.EmbedResponse
-)
-
-// Role constants.
-const (
-	RoleChat   = spec.RoleChat
-	RoleWorker = spec.RoleWorker
-	RoleMemory = spec.RoleMemory
 )
 
 // Provider constants.
@@ -132,12 +124,6 @@ func RunToolProbes(ctx context.Context, gw AIGateway) {
 // GenerateJSON re-exports generic JSON repair.
 func GenerateJSON[T any](ctx context.Context, gw AIGateway, req AIRequest) (T, error) {
 	return correction.GenerateJSON[T](ctx, gw, req)
-}
-
-// GenerateJSONWithUsage re-exports generic JSON repair with cumulative token
-// usage (total tokens + cumulative prompt-cache usage details) across retries.
-func GenerateJSONWithUsage[T any](ctx context.Context, gw AIGateway, req AIRequest) (T, int, UsageDetails, error) {
-	return correction.GenerateJSONWithUsage[T](ctx, gw, req)
 }
 
 // Validatable types implementing semantic validation after JSON parse.

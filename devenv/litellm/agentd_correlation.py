@@ -1,6 +1,6 @@
 """LiteLLM pre-call hook: expose agentd's task correlation to the upstream.
 
-agentd (gateway option send_task_metadata) sends task_id/agent_id/role in the
+agentd (gateway option send_task_metadata) sends task_id/agent_id/agent in the
 request's `metadata` map. LiteLLM treats `metadata` as its own logging/spend
 field and does not forward it upstream (it also drops `user` and client `x-`
 headers), so mockllm never sees which task a request belongs to.
@@ -15,7 +15,7 @@ Registered in config.yaml under litellm_settings.callbacks.
 from litellm.integrations.custom_logger import CustomLogger
 
 FORWARD_KEY = "agentd_metadata"
-FIELDS = ("task_id", "agent_id", "role")
+FIELDS = ("task_id", "agent_id", "agent")
 
 
 class AgentdCorrelation(CustomLogger):

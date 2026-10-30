@@ -1,0 +1,44 @@
+# agentd configuration for the scheduler profile (J23).
+# Tests that a one-shot scheduled task runs exactly once.
+
+home: /home/agentd-sched
+db_path: /home/agentd-sched/global.db
+projects_dir: /home/agentd-sched/projects
+uploads_dir: /home/agentd-sched/uploads
+
+api:
+  address: "0.0.0.0:8772"
+
+gateway:
+  order: [litellm]
+  providers:
+    - name: litellm
+      adapter: openai
+      base_url: "http://litellm:4000/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "agentd"
+      capabilities:
+        chat_tools: true
+      options:
+        send_task_metadata: true
+  warmup_enabled: false
+
+queue:
+  token_budget: 50000
+
+healing:
+  enabled: false
+  outage_handoff_enabled: false
+
+# The scheduler boots disabled. An enabled scheduler whose task resolves to no
+# project fails config load (B-076), and project IDs are generated. J23 creates
+# the project, writes AGENTD_AGENTIC_SCHEDULER_ENABLED and
+# AGENTD_AGENTIC_SCHEDULER_PROJECT_ID to <home>/.env, and restarts the daemon.
+agentic:
+  scheduler:
+    enabled: false
+    tick_interval: 2s
+    tasks:
+      - id: j23-once
+        run_after: "2020-01-01T00:00:00Z"
+        title: "J23 scheduled once"

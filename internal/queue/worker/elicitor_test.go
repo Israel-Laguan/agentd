@@ -42,7 +42,7 @@ type elicitationSequenceGateway struct {
 }
 
 func (g *elicitationSequenceGateway) isElicitorRequest(req gateway.AIRequest) bool {
-	if !req.JSONMode || req.Role != gateway.RoleMemory {
+	if !req.JSONMode || req.Purpose != gateway.PurposeCreateElicit {
 		return false
 	}
 	for _, m := range req.Messages {
@@ -208,7 +208,7 @@ func TestShouldSkipElicitation_LongNarrativeDoesNotSkip(t *testing.T) {
 	}
 }
 
-func TestElicitor_AnalyzeUsesRoleMemory(t *testing.T) {
+func TestElicitor_AnalyzeUsesCreateElicitPurpose(t *testing.T) {
 	t.Parallel()
 	gw := &elicitationSequenceGateway{elicitationJSON: sampleElicitationJSON()}
 	elicitor := NewElicitor(gw)
@@ -225,8 +225,8 @@ func TestElicitor_AnalyzeUsesRoleMemory(t *testing.T) {
 	if gw.elicitationCalls != 1 {
 		t.Fatalf("elicitation calls = %d, want 1", gw.elicitationCalls)
 	}
-	if gw.requests[0].Role != gateway.RoleMemory || !gw.requests[0].JSONMode {
-		t.Fatalf("request role=%q json=%v, want memory+json", gw.requests[0].Role, gw.requests[0].JSONMode)
+	if gw.requests[0].Purpose != gateway.PurposeCreateElicit || !gw.requests[0].JSONMode {
+		t.Fatalf("request purpose=%q json=%v, want create.elicit+json", gw.requests[0].Purpose, gw.requests[0].JSONMode)
 	}
 }
 

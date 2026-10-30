@@ -101,15 +101,15 @@ If the pack is wrong, pay once to rebuild it on purpose. That is measurable.
 
 ## Model / role routing
 
-Routing is by purpose now: a `stages:` route (see [config-reference.md](config-reference.md#routing-agents-and-stages)) picks the agent for a call from its purpose and the task's attributes. The `gateway.role_models` table this section once described was removed.
+Each step runs on its `tier-*` profile, which is a pin: no `stages:` route (see [config-reference.md](config-reference.md#routing-agents-and-stages)) applies to it. The model is the profile's own provider/model, or the gateway cascade when they are blank. The `gateway.role_models` table this section once described was removed.
 
-| Step kind | Purpose / stage guidance | Profile template |
+| Step kind | Model guidance (set on the profile) | Profile |
 | --- | --- | --- |
-| context | `context` (or `memory`-class cheap) | `tier-context` |
-| decision | `decision` | `tier-decision` |
-| execute | `worker` / `execute` | `tier-execute` |
-| verify | `verify` | `tier-verify` |
-| escalate | `escalate` or strong `worker` | `tier-escalate` |
+| context | small | `tier-context` |
+| decision | mid | `tier-decision` |
+| execute | small | `tier-execute` |
+| verify | mid | `tier-verify` |
+| escalate | strong | `tier-escalate` |
 
 **As implemented (M3):** there is no `tiered.models.<kind>` config key — `internal/config.TieredConfig` / `loadTieredConfig` never read one, and there is no tier-per-role table either. Step-kind differentiation instead comes from dedicated **AgentProfile** rows named after the step's profile template (`tier-context`, `tier-decision`, `tier-execute`, `tier-verify`, plus `tier-escalate` for the one-off strong-model escalation step added in T-020). `SplitIntoTieredDAG` (`internal/queue/worker/splitter.go`) stamps each child task's `AgentID` with its profile name; profile lookup resolves the actual provider/model, falling back to the gateway cascade when a profile leaves provider/model blank. A `tier-*` profile is a pin, so a `stages:` route does not override it. Seeding/configuring the `tier-*` profiles themselves is a separate concern from the splitter.
 

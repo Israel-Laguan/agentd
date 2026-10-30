@@ -45,8 +45,8 @@ func TestElicitorMakesOneTaskCreationCall(t *testing.T) {
 	if req.Stage != stage.StageTaskCreation || req.Purpose != gateway.PurposeCreateElicit {
 		t.Errorf("call = stage %q purpose %q, want task creation and elicit", req.Stage, req.Purpose)
 	}
-	if req.Role != gateway.RoleMemory || req.Temperature != 0.1 {
-		t.Errorf("role %q temperature %v, want memory and 0.1", req.Role, req.Temperature)
+	if req.Temperature != 0.1 {
+		t.Errorf("temperature %v, want 0.1", req.Temperature)
 	}
 	if agent.taskIDs[0] != task.ID {
 		t.Errorf("task id in ctx = %q, want %q", agent.taskIDs[0], task.ID)

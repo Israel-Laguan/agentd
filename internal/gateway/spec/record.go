@@ -36,7 +36,7 @@ type CallRecord struct {
 	Kind          CallKind      `json:"kind"`
 	Purpose       Purpose       `json:"purpose"`
 	Stage         string        `json:"stage"`
-	Role          Role          `json:"role,omitempty"`
+	RoutedAgent   string        `json:"routed_agent,omitempty"`
 	TaskID        string        `json:"task_id,omitempty"`
 	AgentID       string        `json:"agent_id,omitempty"`
 	CorrelationID string        `json:"correlation_id,omitempty"`

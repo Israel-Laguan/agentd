@@ -19,7 +19,7 @@ type ReportsHandler struct {
 
 // AIUsageReport handles GET /api/v1/reports/ai-usage.
 // Query params (all optional):
-//   - group_by: comma list of purpose, stage, model, day, task, request (default purpose)
+//   - group_by: comma list of purpose, stage, model, day, task, request, agent (default purpose)
 //   - from, to: YYYY-MM-DD or RFC3339; from is inclusive, to is exclusive, and a
 //     date-only to includes that whole day
 //   - task_id, request (the chat request's correlation ID), purpose, stage, model: exact filters

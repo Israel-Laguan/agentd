@@ -117,7 +117,6 @@ func (w *Worker) buildPlanRequest(task models.Task, planContext string) stage.St
 			{Role: "user", Content: planContext},
 		},
 		Contract:  stage.NewContract[agentcontext.Plan](),
-		Role:      gateway.RoleMemory,
 		AgentID:   task.AgentID,
 		MaxTokens: planPhaseTokenReserve,
 		Attrs:     spec.AttrsForTask(task.RequiresWorkspaceChange),

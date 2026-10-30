@@ -272,8 +272,8 @@ func TestOpenAIUsage_DeepSeekHitBeatsOpenAICachedWhenLarger(t *testing.T) {
 }
 
 // TestOpenAI_SendTaskMetadata_Enabled verifies that when options.send_task_metadata
-// is true and the request carries TaskID/AgentID/Role, those fields appear in the
-// request body under metadata.
+// is true and the request carries TaskID/AgentID/RoutedAgent, those fields appear
+// in the request body under metadata.
 func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
@@ -293,10 +293,10 @@ func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 		Options: map[string]any{"send_task_metadata": true},
 	}, srv.Client())
 	_, err := o.Generate(context.Background(), spec.AIRequest{
-		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
-		TaskID:   "task-1",
-		AgentID:  "agent-2",
-		Role:     spec.RoleWorker,
+		Messages:    []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		TaskID:      "task-1",
+		AgentID:     "agent-2",
+		RoutedAgent: "quick",
 	})
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
@@ -313,8 +313,11 @@ func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 	if meta["agent_id"] != "agent-2" {
 		t.Errorf("metadata.agent_id = %v, want agent-2", meta["agent_id"])
 	}
-	if meta["role"] != "worker" {
-		t.Errorf("metadata.role = %v, want worker", meta["role"])
+	if meta["agent"] != "quick" {
+		t.Errorf("metadata.agent = %v, want quick", meta["agent"])
+	}
+	if _, has := meta["role"]; has {
+		t.Errorf("metadata.role = %v, want it gone: Role is retired", meta["role"])
 	}
 	if _, has := gotBody["user"]; has {
 		t.Errorf("user should be absent (we use metadata for correlation); body=%#v", gotBody)
@@ -323,7 +326,7 @@ func TestOpenAI_SendTaskMetadata_Enabled(t *testing.T) {
 
 // TestOpenAI_SendTaskMetadata_Disabled verifies that metadata is absent when
 // options.send_task_metadata is false (or missing) even if the request carries
-// TaskID/AgentID/Role.
+// TaskID/AgentID/RoutedAgent.
 func TestOpenAI_SendTaskMetadata_Disabled(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
@@ -343,10 +346,10 @@ func TestOpenAI_SendTaskMetadata_Disabled(t *testing.T) {
 		Options: map[string]any{"send_task_metadata": false},
 	}, srv.Client())
 	_, err := o.Generate(context.Background(), spec.AIRequest{
-		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
-		TaskID:   "task-1",
-		AgentID:  "agent-2",
-		Role:     spec.RoleWorker,
+		Messages:    []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		TaskID:      "task-1",
+		AgentID:     "agent-2",
+		RoutedAgent: "quick",
 	})
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
@@ -397,10 +400,10 @@ func TestOpenAI_SendTaskMetadata_NoTaskID(t *testing.T) {
 	}
 }
 
-// TestOpenAI_SendTaskMetadata_RoleOnly verifies that metadata is sent when the
-// option is enabled and the request carries only Role context (no TaskID /
-// AgentID). This covers the regression where role-only requests were dropped.
-func TestOpenAI_SendTaskMetadata_RoleOnly(t *testing.T) {
+// TestOpenAI_SendTaskMetadata_RoutedAgentOnly verifies that metadata is sent when the
+// option is enabled and the request carries only a routed agent (no TaskID /
+// AgentID). This covers the regression where agent-only requests were dropped.
+func TestOpenAI_SendTaskMetadata_RoutedAgentOnly(t *testing.T) {
 	t.Parallel()
 	var mu sync.Mutex
 	var gotBody map[string]any
@@ -419,8 +422,8 @@ func TestOpenAI_SendTaskMetadata_RoleOnly(t *testing.T) {
 		Options: map[string]any{"send_task_metadata": true},
 	}, srv.Client())
 	_, err := o.Generate(context.Background(), spec.AIRequest{
-		Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
-		Role:     spec.RoleWorker,
+		Messages:    []spec.PromptMessage{{Role: "user", Content: "hi"}},
+		RoutedAgent: "quick",
 	})
 	if err != nil {
 		t.Fatalf("Generate error: %v", err)
@@ -429,13 +432,16 @@ func TestOpenAI_SendTaskMetadata_RoleOnly(t *testing.T) {
 	defer mu.Unlock()
 	meta, ok := gotBody["metadata"].(map[string]any)
 	if !ok {
-		t.Fatalf("metadata = %v, want map (role-only request must emit metadata)", gotBody["metadata"])
+		t.Fatalf("metadata = %v, want map (agent-only request must emit metadata)", gotBody["metadata"])
 	}
-	if meta["role"] != "worker" {
-		t.Errorf("metadata.role = %v, want worker", meta["role"])
+	if meta["agent"] != "quick" {
+		t.Errorf("metadata.agent = %v, want quick", meta["agent"])
+	}
+	if _, has := meta["role"]; has {
+		t.Errorf("metadata.role = %v, want it gone: Role is retired", meta["role"])
 	}
 	if _, has := gotBody["user"]; has {
-		t.Errorf("user present for role-only; body = %#v", gotBody)
+		t.Errorf("user present for agent-only; body = %#v", gotBody)
 	}
 }
 

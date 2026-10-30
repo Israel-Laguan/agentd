@@ -29,7 +29,7 @@ gateway:
       capabilities:
         chat_tools: true
       options:
-        # M18: propagate task_id/agent_id/role to litellm for spend correlation.
+        # M18: propagate task_id/agent_id/agent to litellm for spend correlation.
         send_task_metadata: true
   warmup_enabled: false
 

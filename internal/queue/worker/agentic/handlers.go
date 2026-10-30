@@ -229,7 +229,6 @@ func (e *Engine) buildAgenticRequest(
 		Temperature:    profile.Temperature,
 		Tools:          tools,
 		AgentID:        task.AgentID,
-		Role:           gateway.RoleWorker,
 		TaskID:         task.ID,
 		Attrs:          gateway.AttrsForTask(task.RequiresWorkspaceChange),
 		Provider:       profile.Provider,

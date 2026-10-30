@@ -60,7 +60,7 @@ func routingConfigsForProfile(provider string) []spec.ProviderConfig {
 	return cfgs
 }
 
-func buildTestCapabilityRouter(cfgs ...spec.ProviderConfig) (*gateway.Router, error) {
+func buildTestRouter(cfgs ...spec.ProviderConfig) (*gateway.Router, error) {
 	if len(cfgs) == 0 {
 		return nil, nil
 	}

@@ -97,7 +97,6 @@ func (e *Elicitor) Analyze(ctx context.Context, task models.Task, project models
 		},
 		Contract:    stage.NewContract[ElicitationAnalysis](),
 		Temperature: 0.1,
-		Role:        gateway.RoleMemory,
 		AgentID:     task.AgentID,
 		Attrs:       spec.AttrsForTask(task.RequiresWorkspaceChange),
 	})

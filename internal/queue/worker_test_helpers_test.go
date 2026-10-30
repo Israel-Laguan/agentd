@@ -33,7 +33,7 @@ type fakeGateway struct {
 }
 
 func (g *fakeGateway) isElicitorRequest(req gateway.AIRequest) bool {
-	if !req.JSONMode || req.Role != gateway.RoleMemory {
+	if !req.JSONMode || req.Purpose != gateway.PurposeCreateElicit {
 		return false
 	}
 	for _, m := range req.Messages {

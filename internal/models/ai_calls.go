@@ -10,12 +10,13 @@ import (
 
 // AICall is one persisted provider attempt (a gateway CallRecord). It holds
 // sizes, counts, tokens and timing only, never prompt or response bodies.
+// RoutedAgent is the agent the router chose; it is stored in the role column.
 type AICall struct {
 	At               time.Time
 	Kind             string
 	Purpose          string
 	Stage            string
-	Role             string
+	RoutedAgent      string
 	TaskID           string
 	AgentID          string
 	CorrelationID    string
@@ -49,13 +50,14 @@ const (
 	AIDimDay     = "day"
 	AIDimTask    = "task"
 	AIDimRequest = "request" // chat request: the correlation ID
+	AIDimAgent   = "agent"   // the agent the router chose; empty on the cascade
 )
 
 // AIUsageDimensions lists every valid GroupBy name.
 func AIUsageDimensions() []string {
 	return []string{
 		AIDimPurpose, AIDimStage, AIDimModel,
-		AIDimDay, AIDimTask, AIDimRequest,
+		AIDimDay, AIDimTask, AIDimRequest, AIDimAgent,
 	}
 }
 

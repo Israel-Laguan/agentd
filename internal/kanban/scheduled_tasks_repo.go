@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -116,7 +117,7 @@ func (s *Store) ScheduleDeferredRequeue(ctx context.Context, taskID string, runA
 }
 
 func (s *Store) InsertReadyTask(ctx context.Context, projectID string, draft models.DraftTask) (*models.Task, error) {
-	return s.insertReadyTaskInTx(ctx, projectID, draft, "", time.Time{}, false)
+	return s.insertReadyTaskInTx(ctx, projectID, draft, "", time.Time{})
 }
 
 func (s *Store) InsertReadyTaskAndRecordDispatch(
@@ -125,9 +126,8 @@ func (s *Store) InsertReadyTaskAndRecordDispatch(
 	draft models.DraftTask,
 	scheduleID string,
 	slot time.Time,
-	deleteEntry bool,
 ) (*models.Task, error) {
-	return s.insertReadyTaskInTx(ctx, projectID, draft, scheduleID, slot, deleteEntry)
+	return s.insertReadyTaskInTx(ctx, projectID, draft, scheduleID, slot)
 }
 
 func (s *Store) insertReadyTaskInTx(
@@ -136,7 +136,6 @@ func (s *Store) insertReadyTaskInTx(
 	draft models.DraftTask,
 	scheduleID string,
 	slot time.Time,
-	deleteEntry bool,
 ) (*models.Task, error) {
 	return retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
@@ -163,23 +162,8 @@ func (s *Store) insertReadyTaskInTx(
 			return nil, err
 		}
 		if scheduleID != "" {
-			res, err := tx.ExecContext(ctx, `
-				UPDATE scheduled_tasks SET last_fired_at = ?, updated_at = ? WHERE id = ?`,
-				formatTime(slot), formatTime(now), scheduleID)
-			if err != nil {
-				return nil, fmt.Errorf("update scheduled task last_fired %q: %w", scheduleID, err)
-			}
-			if err := requireRowsAffected(res, 1, fmt.Errorf("scheduled task %q not found", scheduleID)); err != nil {
-				return nil, fmt.Errorf("update scheduled task last_fired %q: %w", scheduleID, err)
-			}
-			if deleteEntry {
-				delRes, err := tx.ExecContext(ctx, `DELETE FROM scheduled_tasks WHERE id = ?`, scheduleID)
-				if err != nil {
-					return nil, fmt.Errorf("delete scheduled task %q: %w", scheduleID, err)
-				}
-				if err := requireRowsAffected(delRes, 1, fmt.Errorf("scheduled task %q not found", scheduleID)); err != nil {
-					return nil, fmt.Errorf("delete scheduled task %q: %w", scheduleID, err)
-				}
+			if err := claimScheduledTask(ctx, tx, scheduleID, slot, now); err != nil {
+				return nil, err
 			}
 		}
 		return &task, commitTx(tx, "insert ready task")
@@ -274,4 +258,31 @@ func scheduledBoolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// claimScheduledTask records the dispatch in the same transaction as the task.
+// It claims the entry: a one-shot only if it never fired, a cron entry only if
+// its last fire is older than this slot (formatTime is fixed-width, so the
+// string order is chronological). Two ticks that both read the entry as
+// unfired cannot both dispatch it; the loser gets ErrScheduleAlreadyFired.
+func claimScheduledTask(ctx context.Context, tx sqlExecutor, id string, slot, now time.Time) error {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE scheduled_tasks SET last_fired_at = ?, updated_at = ?
+		WHERE id = ? AND (COALESCE(last_fired_at, '') = '' OR (cron_expr != '' AND last_fired_at < ?))`,
+		formatTime(slot), formatTime(now), id, formatTime(slot))
+	if err != nil {
+		return fmt.Errorf("update scheduled task last_fired %q: %w", id, err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 1 {
+		return err
+	}
+	var exists int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM scheduled_tasks WHERE id = ?`, id).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("update scheduled task last_fired %q: scheduled task %q not found", id, id)
+	}
+	if err != nil {
+		return fmt.Errorf("update scheduled task last_fired %q: %w", id, err)
+	}
+	return fmt.Errorf("scheduled task %q: %w", id, models.ErrScheduleAlreadyFired)
 }
