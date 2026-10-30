@@ -68,7 +68,7 @@ func newReportAICommand(opts *rootOptions) *cobra.Command {
 	}
 	fl := cmd.Flags()
 	fl.StringVar(&f.apiURL, "api-url", "", "daemon API base URL (default: from config or http://127.0.0.1:8765)")
-	fl.StringVar(&f.groupBy, "group-by", "", "comma list of purpose, stage, model, day, task, request (default purpose)")
+	fl.StringVar(&f.groupBy, "group-by", "", "comma list of purpose, stage, model, day, task, request, agent (default purpose)")
 	fl.StringVar(&f.from, "from", "", "start, YYYY-MM-DD or RFC3339 (inclusive)")
 	fl.StringVar(&f.to, "to", "", "end, YYYY-MM-DD (that whole day) or RFC3339 (exclusive)")
 	fl.StringVar(&f.task, "task", "", "only this task ID")

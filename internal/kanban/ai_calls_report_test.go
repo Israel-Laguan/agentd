@@ -20,6 +20,7 @@ func seedReport(t *testing.T, store *Store) {
 	cascade.Cascade, cascade.Outcome, cascade.TaskID, cascade.CorrelationID = true, "failed", "t1", "req-1"
 	first := aiCall(day1, "exec.turn", "m1", 50)
 	first.TaskID, first.CorrelationID = "t1", "req-1"
+	repair.RoutedAgent, first.RoutedAgent = "quick", "quick"
 	other := aiCall(day2, "intake.classify_intent", "m1", 10)
 	other.CorrelationID, other.LatencyMS = "req-2", 40
 	if err := store.InsertAICalls(context.Background(), []models.AICall{repair, cascade, first, other}); err != nil {
@@ -70,7 +71,7 @@ func TestAIUsageReportGroupsByPurposeWithRates(t *testing.T) {
 	}
 }
 
-func TestAIUsageReportGroupsByStageModelDayTaskAndRequest(t *testing.T) {
+func TestAIUsageReportGroupsByEveryDimension(t *testing.T) {
 	t.Parallel()
 	store := newTestStore(t)
 	seedReport(t, store)
@@ -83,6 +84,7 @@ func TestAIUsageReportGroupsByStageModelDayTaskAndRequest(t *testing.T) {
 		{models.AIDimDay, "2026-10-18", 350},
 		{models.AIDimTask, "t1", 350},
 		{models.AIDimRequest, "req-2", 10},
+		{models.AIDimAgent, "quick", 250},
 	}
 	for _, c := range cases {
 		rep := reportRows(t, store, models.AIUsageQuery{GroupBy: []string{c.dim}})

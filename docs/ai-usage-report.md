@@ -97,7 +97,8 @@ dropped-record count:
 | `FAILED` | Attempts whose outcome is `failed` |
 
 Dimensions for `--group-by` (comma list, default `purpose`): `purpose`, `stage`,
-`model`, `day` (UTC date), `task`, `request`. Filters: `--from` (inclusive),
+`model`, `day` (UTC date), `task`, `request`, `agent` (the agent the router
+chose, from the `role` column; `-` on the cascade). Filters: `--from` (inclusive),
 `--to` (exclusive; a bare date includes that whole day), `--task`, `--request`,
 `--purpose`, `--stage`, `--model`. Dates are `YYYY-MM-DD` or RFC3339.
 
@@ -106,6 +107,7 @@ The questions the report is built to answer:
 - **Per chat request:** `--group-by request`, or `--request <id> --group-by purpose`.
 - **Per task:** `--group-by task`, or `--task <id> --group-by purpose`.
 - **Per day:** `--group-by day`, or `day,purpose` for the split.
+- **Per routed agent:** `--group-by agent,purpose` shows what each `stages:` agent answers and how often it fails.
 
 "Per chat" means per chat request: one `POST /v1/chat/completions` gets one
 correlation ID, and every call made while serving it (intent, scope, draft

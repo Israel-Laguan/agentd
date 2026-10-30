@@ -50,13 +50,14 @@ const (
 	AIDimDay     = "day"
 	AIDimTask    = "task"
 	AIDimRequest = "request" // chat request: the correlation ID
+	AIDimAgent   = "agent"   // the agent the router chose; empty on the cascade
 )
 
 // AIUsageDimensions lists every valid GroupBy name.
 func AIUsageDimensions() []string {
 	return []string{
 		AIDimPurpose, AIDimStage, AIDimModel,
-		AIDimDay, AIDimTask, AIDimRequest,
+		AIDimDay, AIDimTask, AIDimRequest, AIDimAgent,
 	}
 }
 

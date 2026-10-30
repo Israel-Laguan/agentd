@@ -19,6 +19,7 @@ var aiDimensionSQL = map[string]string{
 	models.AIDimDay:     "substr(at, 1, 10)",
 	models.AIDimTask:    "task_id",
 	models.AIDimRequest: "correlation_id",
+	models.AIDimAgent:   "role",
 }
 
 // removedPurposes are the purposes the deleted engines stored. Old rows keep
