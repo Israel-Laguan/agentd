@@ -18,7 +18,7 @@ waits for the database.
 | `at`, `latency_ms` | When the attempt started and how long it took |
 | `kind` | `generate` or `embed` |
 | `purpose`, `stage` | Why the call was made (see below); the stage is the part before the dot |
-| `role`, `agent_id`, `task_id` | Model-tier hint, the agent profile, and the task when the call belongs to one |
+| `role`, `agent_id`, `task_id` | The agent the router chose (the profile ID on a pin, empty on the cascade; the column keeps its old name), the agent profile, and the task when the call belongs to one |
 | `correlation_id` | The chat request's ID (see "Per chat") |
 | `provider`, `model` | Who answered; the model the provider reported |
 | `attempt` | `first`, or `json_repair` for a retry made to fix an invalid JSON answer |
