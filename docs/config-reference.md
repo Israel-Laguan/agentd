@@ -131,7 +131,7 @@ Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First 
 
 ```yaml
 agents:
-  quick: { provider: gemini, model: gemini-2.5-flash }   # level defaults to L1
+  quick: { provider: gemini, model: gemini-2.5-flash }   # every config agent is L1
   local: { provider: ollama, model: llama3:8b }
 stages:
   create.elicit:
@@ -143,7 +143,7 @@ stages:
         use: quick
 ```
 
-- An agent has a `provider` (required), an optional `model`, and a `level` (`L1`, the default, or `L3`). A purpose declares the minimum level it needs; a route to an agent below that level fails at load. A route to an L3 purpose, such as `exec.turn`, with an L3 agent passes load validation. L3 agent execution arrives with T-042.
+- An agent has a `provider` (required), and an optional `model`. Every config agent is a single model call (level `L1`); `level` is not a key, so a config cannot make a model claim L3. A purpose declares the minimum level it needs; a route to an agent below that level fails at load, so `exec.turn` and `overhead.subagent_turn` cannot be routed to a config agent. L3 agents arrive with T-042.
 - `when` keys: `requires_workspace_change` (`true` or `false`), which matches tasks that must change the workspace. A rule needs a condition and a `use`.
 - An explicit `AgentID` on a task or a tier step is a pin. It wins over every rule and injects no provider or model. The seeded `default` profile is not a pin, so tasks on it follow their stage's route.
 - Every decision logs one `routing decision` line with the purpose, the required level, the rule that matched and the agent chosen.

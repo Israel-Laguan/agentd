@@ -10,8 +10,8 @@ import (
 	"agentd/internal/gateway/spec"
 )
 
-// defaultAgentLevel is the level an agent provides when its entry names none:
-// a single model call.
+// defaultAgentLevel is the level of every config agent: a single model call. An
+// entry cannot set it, so a config cannot make a plain model claim L3.
 const defaultAgentLevel = spec.LevelL1
 
 // loadRouteTable reads and validates the agents: and stages: sections. A config
@@ -46,7 +46,7 @@ func parseAgents(raw any) (map[string]route.Agent, error) {
 		if !ok {
 			return nil, fmt.Errorf("agents.%s must be a map", name)
 		}
-		if err := onlyKeys(entry, "agents."+name, "provider", "model", "level"); err != nil {
+		if err := onlyKeys(entry, "agents."+name, "provider", "model"); err != nil {
 			return nil, err
 		}
 		provider := ""
@@ -68,17 +68,7 @@ func parseAgents(raw any) (map[string]route.Agent, error) {
 			}
 			model = strings.TrimSpace(text)
 		}
-		level := defaultAgentLevel
-		if raw, ok := entry["level"]; ok {
-			text, isString := raw.(string)
-			if !isString {
-				return nil, fmt.Errorf("agents.%s: level must be a string", name)
-			}
-			if parsed := spec.Level(strings.TrimSpace(text)); parsed != "" {
-				level = parsed
-			}
-		}
-		out[name] = route.Agent{Provider: provider, Model: model, Level: level}
+		out[name] = route.Agent{Provider: provider, Model: model, Level: defaultAgentLevel}
 	}
 	return out, nil
 }
