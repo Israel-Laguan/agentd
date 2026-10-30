@@ -3,6 +3,7 @@ package kanban
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -419,8 +420,10 @@ func TestBlockTaskWithSubtasksAndCommentsRollsBackWhenCommentInsertFails(t *test
 		{BaseEntity: models.BaseEntity{ID: "dup-comment"}, TaskID: parent.ID, Author: models.CommentAuthorWorkerAgent, Body: "first"},
 		{BaseEntity: models.BaseEntity{ID: "dup-comment"}, TaskID: parent.ID, Author: models.CommentAuthorWorkerAgent, Body: "second"},
 	})
-	if err == nil {
-		t.Fatal("BlockTaskWithSubtasksAndComments() error = nil, want a comment insert error")
+	// The failure must come from the second comment insert, after the earlier
+	// writes; any earlier error would leave the rollback assertions vacuous.
+	if err == nil || !strings.Contains(err.Error(), "add comment event") {
+		t.Fatalf("BlockTaskWithSubtasksAndComments() error = %v, want the comment insert error", err)
 	}
 	after, err := store.GetTask(ctx, parent.ID)
 	if err != nil {
