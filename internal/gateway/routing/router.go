@@ -205,8 +205,13 @@ func (r *Router) recordBudget(taskID string, usage int) {
 // on failure. The model comes with the provider it belongs to.
 func (r *Router) routeRequest(req spec.AIRequest) spec.AIRequest {
 	d := r.routes.Resolve(req.Purpose, req.AgentID, req.Attrs)
-	slog.Info("routing decision", "purpose", d.Purpose, "required_level", d.Required,
+	level := slog.LevelInfo
+	if d.Rule == route.RuleCascade {
+		level = slog.LevelDebug
+	}
+	slog.Log(context.Background(), level, "routing decision", "purpose", d.Purpose, "required_level", d.Required,
 		"rule", d.Rule, "agent", d.Agent, "task_id", req.TaskID)
+	req.RoutedAgent = d.Agent
 	if d.Rule == route.RulePin || d.Agent == "" {
 		return req
 	}

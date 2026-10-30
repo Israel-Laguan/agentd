@@ -87,7 +87,11 @@ type AIRequest struct {
 	Provider    string           `json:"provider,omitempty"`
 	Model       string           `json:"model,omitempty"`
 	Role        Role             `json:"role,omitempty"`
-	TaskID      string           `json:"task_id,omitempty"`
+	// RoutedAgent is the agent the router chose for this call: the pin on a pin,
+	// the rule or default's agent otherwise, empty on the cascade. It is set by
+	// the router and recorded in ai_calls.role.
+	RoutedAgent string `json:"-"`
+	TaskID      string `json:"task_id,omitempty"`
 	// Purpose says why this call is made (SP-023 taxonomy). Empty is recorded
 	// as PurposeUnlabelled.
 	Purpose Purpose `json:"-"`
