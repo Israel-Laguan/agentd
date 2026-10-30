@@ -1,6 +1,6 @@
 # E2E Journey Suite (S07)
 
-Status: **implemented** (24 tests, J01-J22, green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01).  
+Status: **implemented** (24 tests, J01-J22, green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01). J23 (the scheduler, T-058) was added on 2026-10-30.  
 Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in git)
 
 ---
@@ -41,6 +41,7 @@ Rationale:
 | disk | J10 (disk threshold), J18 (curator once) | agentd-disk | 8768 | `disk.free_threshold_percent: 100`, `librarian.retention_hours: 0`, `archive_grace_days: 0`, crontab `@every 5s disk-watchdog` and `@every 5s memory-curator`. J10's HUMAN task never completes, so the curator leaves it alone |
 | tiered | J12 (tiered execution) | agentd-tiered | 8769 | `tiered.enabled: true` |
 | provider | J16 (siblings wait for a provider breaker's probe) | agentd-prb | 8771 | `gateway.order: [quota]`, `breaker.open_timeout: 10s`, `healing.enabled: true`, `outage_handoff_enabled: true` |
+| scheduler | J23 (one-shot scheduled task) | agentd-sched | 8772 | `agentic.scheduler` with `tick_interval: 2s` and one `run_after` entry, disabled at boot; J23 enables it through `<home>/.env` |
 
 Implementation: devenv/compose.yaml lists all variants; test setup calls `podman compose up -d <profile>` for the needed service, after `make dev-build` has produced the `agentd:local` image those services reference.
 
@@ -123,6 +124,7 @@ path. Python unit tests for the dispatch live in
 | **J20** | Oversized tool result is cut, not lost | 1. As J19, scripting `bash` that prints `HEAD-MARK`, ~56 KB of filler, `TAIL-MARK`; 2. Wait for COMPLETED; 3. Read the mock capture | The task completes; the request after the call carries the result cut below its raw size, with `HEAD-MARK`, `TAIL-MARK` and the `【...】` marker (default `gateway.truncation.strategy` head_tail) | default + `queue.agentic_context` 3000/5000/2000 | Found B-079: the gateway-side agentic truncator dropped the call and its result together, so the agent looped to the iteration limit. The small `agentic_context` is needed: with product defaults (60000) the gateway's head-only agentic cut (12000) runs first and the configured strategy never applies | P1 | T-053, B-079 |
 | **J21** | A repeated read is counted | 1. As J19, scripting `bash` (`echo hello > notes.txt`) then `read notes.txt` twice; 2. Wait for COMPLETED; 3. Read the task's tool use report | Two reads, one repeated read of `notes.txt` with 2 reads, and non-zero re-read bytes | default | The baseline for later "don't re-read files" work; nothing deduplicates yet | P2 | T-044 |
 | **J22** | `agentd report ai` inside the container | 1. As J19 with `uname -a` scripted; 2. Wait for COMPLETED and the ai-usage report row for `exec.turn`; 3. `podman compose exec agentd agentd report ai --group-by purpose --task <id>` | The CLI prints a `PURPOSE` table with an `exec.turn` row whose CALLS equals the API's calls | default | Uses `DevenvManager.Exec`; `execTurnRow` supplies the API comparison | P2 | T-058 |
+| **J23** | A one-shot scheduled task runs exactly once | 1. Materialize a project on agentd-sched; 2. Write `AGENTD_AGENTIC_SCHEDULER_ENABLED=true` and `AGENTD_AGENTIC_SCHEDULER_PROJECT_ID=<id>` to `<home>/.env`; 3. Restart the daemon; 4. Wait for the `J23 scheduled once` task to reach COMPLETED; 5. Restart again and wait 15 s (several 2 s ticks) | One scheduled task in the project, COMPLETED; no second one after the restart | scheduler (`tick_interval: 2s`, one `run_after` entry, scheduler off at boot) | The scheduler boots disabled because an enabled scheduler whose task has no project fails config load (B-076) and project IDs are generated | P2 | T-058, B-076 |
 
 ---
 
@@ -182,7 +184,8 @@ invocation cannot build it, and every profile must be named in one invocation
 ```sh
 podman compose -f "$PWD/devenv/compose.yaml" \
   --profile default --profile healing --profile faults \
-  --profile breaker --profile disk --profile tiered --profile provider up -d
+  --profile breaker --profile disk --profile tiered --profile provider \
+  --profile scheduler up -d
 ```
 
 ---

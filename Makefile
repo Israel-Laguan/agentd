@@ -121,7 +121,7 @@ COMPOSE := $(CURDIR)/devenv/compose.yaml
 # single non-default profile alone fails with KeyError: 'litellm'.
 COMPOSE_PROFILES := --profile default --profile healing --profile faults \
                      --profile breaker --profile disk --profile tiered \
-                     --profile provider
+                     --profile provider --profile scheduler
 
 # The UI smoke (web/e2e) needs the default profile only: agentd + litellm +
 # mockllm + web. Nothing in the UI tier touches the other variants, and
