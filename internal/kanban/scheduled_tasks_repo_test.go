@@ -2,6 +2,7 @@ package kanban
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -78,5 +79,59 @@ func TestInsertReadyTaskAndRecordDispatchMissingScheduleRollsBack(t *testing.T) 
 	}
 	if len(tasks.Data) != 0 {
 		t.Fatalf("tasks = %d, want 0 (tx rolled back)", len(tasks.Data))
+	}
+}
+
+// Two ticks that both read the entry as unfired race to dispatch it. The
+// dispatch claims the entry, so the loser creates no task: a one-shot fires
+// once in all, and a cron entry once per slot.
+func TestInsertReadyTaskAndRecordDispatchClaimsTheEntry(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	project, err := store.EnsureSystemProject(ctx)
+	if err != nil {
+		t.Fatalf("EnsureSystemProject: %v", err)
+	}
+	once := time.Date(2026, 5, 21, 9, 0, 0, 0, time.UTC)
+	for _, e := range []models.ScheduledTask{
+		{ID: "once", RunAfter: &once, Kind: models.ScheduledTaskKindDispatch, Enabled: true},
+		{ID: "hourly", CronExpr: "0 * * * *", Kind: models.ScheduledTaskKindDispatch, Enabled: true},
+	} {
+		if err := store.UpsertScheduledTask(ctx, e); err != nil {
+			t.Fatalf("UpsertScheduledTask %s: %v", e.ID, err)
+		}
+	}
+	slot := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
+	dispatch := func(id string, at time.Time) error {
+		_, err := store.InsertReadyTaskAndRecordDispatch(ctx, project.ID, models.DraftTask{Title: id}, id, at)
+		return err
+	}
+	steps := []struct {
+		id      string
+		at      time.Time
+		claimed bool
+	}{
+		{"once", slot, true},
+		{"once", slot, false},
+		{"once", slot.Add(time.Minute), false},
+		{"hourly", slot, true},
+		{"hourly", slot, false},
+		{"hourly", slot.Add(time.Hour), true},
+	}
+	for i, s := range steps {
+		err := dispatch(s.id, s.at)
+		if s.claimed && err != nil {
+			t.Fatalf("step %d (%s at %s): %v, want a claim", i, s.id, s.at, err)
+		}
+		if !s.claimed && !errors.Is(err, models.ErrScheduleAlreadyFired) {
+			t.Fatalf("step %d (%s at %s): err = %v, want ErrScheduleAlreadyFired", i, s.id, s.at, err)
+		}
+	}
+	tasks, err := store.ListTasks(ctx, models.TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if len(tasks.Data) != 3 {
+		t.Fatalf("tasks = %d, want 3 (one-shot once, cron twice)", len(tasks.Data))
 	}
 }

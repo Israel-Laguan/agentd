@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -161,14 +162,8 @@ func (s *Store) insertReadyTaskInTx(
 			return nil, err
 		}
 		if scheduleID != "" {
-			res, err := tx.ExecContext(ctx, `
-				UPDATE scheduled_tasks SET last_fired_at = ?, updated_at = ? WHERE id = ?`,
-				formatTime(slot), formatTime(now), scheduleID)
-			if err != nil {
-				return nil, fmt.Errorf("update scheduled task last_fired %q: %w", scheduleID, err)
-			}
-			if err := requireRowsAffected(res, 1, fmt.Errorf("scheduled task %q not found", scheduleID)); err != nil {
-				return nil, fmt.Errorf("update scheduled task last_fired %q: %w", scheduleID, err)
+			if err := claimScheduledTask(ctx, tx, scheduleID, slot, now); err != nil {
+				return nil, err
 			}
 		}
 		return &task, commitTx(tx, "insert ready task")
@@ -263,4 +258,30 @@ func scheduledBoolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// claimScheduledTask records the dispatch in the same transaction as the task.
+// It claims the entry: a one-shot only if it never fired, a cron entry only if
+// it has not fired for this slot. Two ticks that both read the entry as
+// unfired cannot both dispatch it; the loser gets ErrScheduleAlreadyFired.
+func claimScheduledTask(ctx context.Context, tx sqlExecutor, id string, slot, now time.Time) error {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE scheduled_tasks SET last_fired_at = ?, updated_at = ?
+		WHERE id = ? AND (COALESCE(last_fired_at, '') = '' OR (cron_expr != '' AND last_fired_at != ?))`,
+		formatTime(slot), formatTime(now), id, formatTime(slot))
+	if err != nil {
+		return fmt.Errorf("update scheduled task last_fired %q: %w", id, err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 1 {
+		return err
+	}
+	var exists int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM scheduled_tasks WHERE id = ?`, id).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("update scheduled task last_fired %q: scheduled task %q not found", id, id)
+	}
+	if err != nil {
+		return fmt.Errorf("update scheduled task last_fired %q: %w", id, err)
+	}
+	return fmt.Errorf("scheduled task %q: %w", id, models.ErrScheduleAlreadyFired)
 }

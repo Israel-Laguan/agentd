@@ -188,6 +188,10 @@ func (s *Scheduler) fireDispatch(ctx context.Context, entry models.ScheduledTask
 		Description: description,
 		Assignee:    models.TaskAssigneeSystem,
 	}, entry.ID, slot)
+	if errors.Is(err, models.ErrScheduleAlreadyFired) {
+		slog.Debug("scheduled task already dispatched by another tick", "id", entry.ID, "slot", slot)
+		return nil
+	}
 	if err != nil {
 		return err
 	}
