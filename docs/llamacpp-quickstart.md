@@ -250,6 +250,27 @@ gateway:
   order: [openai, vllm]
 ```
 
+### Strata
+
+[Strata](https://github.com/StrataScratch/strata) is a local inference server with a web UI.
+
+```yaml
+gateway:
+  providers:
+    - name: strata
+      adapter: openai
+      base_url: "http://127.0.0.1:8080/v1"
+      model: "qwen3.8-flash-next"
+      api_key: "dummy"  # Strata does not require an API key, but agentd needs one for health checks
+  order: [strata]
+```
+
+**Note:** Strata with Qwen3 (and some other models) currently does **not** support the
+OpenAI `response_format` parameter that agentd requires for structured outputs. This
+means agentd cannot use Strata for its internal planning and classification workflows.
+For direct chat completions, Strata works as expected. See
+[docs/openai-compatible-providers.md](openai-compatible-providers.md) for details.
+
 ## Troubleshooting
 
 ### "No LLM providers available"
