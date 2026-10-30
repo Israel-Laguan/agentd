@@ -3,9 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | **RESOLVED** - Cause was mock engine, not Strata or model limitation |
+| Status | done (cause was the mock engine, not Strata or the model) |
 | Priority | P2 |
 | Sprint | S19-extract-agent-kit |
+| Severity | minor |
 | Links | internal/gateway/correction/correction.go, internal/gateway/providers/openai.go, Strata inference server |
 
 ## Symptoms (Original Report)
@@ -28,6 +29,7 @@ After switching to the real model (qwen3.8-flash-next-iq3_s) with valid API key:
 ```bash
 curl http://192.168.1.234:8080/v1/chat/completions \
   -H "Authorization: Bearer <real-key>" \
+  -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"What is 2+2?"}],"response_format":{"type":"json_object"}}'
 
 # Returns: {"answer":4} with HTTP 200
@@ -55,12 +57,12 @@ Agentd successfully:
 ### ✅ Strata supports response_format
 - `json_object` - Verified working
 - `json_schema` - Accepted (not fully tested)
-- **Constraint**: Do NOT send `tools` + `response_format` together (Strata returns 400)
+- **Constraint**: Do NOT send `tools` + `response_format` together (Strata returns 400). agentd's OpenAI adapter already omits `response_format` when tools are present.
 
 ### ⚠️ Model-specific considerations
 - Model reasons before answering (returns `reasoning_content`)
 - Ensure `max_tokens` is sufficient for reasoning + JSON answer
-- Invalid JSON → Strata returns 502 with `structured_output_failed` (retryable)
+- Invalid JSON → Strata returns 502 with `structured_output_failed`. agentd treats a 5xx as an unreachable provider (`ErrLLMUnreachable`): the router tries the next provider in `gateway.order` and the failure counts toward the breaker. It is not a JSON correction retry.
 - Streaming with JSON format: content arrives only after full validation
 
 ## Strata Configuration for agentd

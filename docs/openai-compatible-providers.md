@@ -106,22 +106,27 @@ gateway:
     - name: strata
       adapter: openai
       base_url: "http://127.0.0.1:8080/v1"
-      api_key: "dummy"  # Strata does not require a key; agentd treats a configured key as the provider being available
-      model: "qwen3.8-flash-next"
+      api_key: "<strata-key>"  # from `strata launch --show-key`; the real engine checks it
+      model: "qwen3.8-flash-next-iq3_s"
   order: [strata]
 ```
 
-**Note:** with Strata and Qwen3, agentd's structured-output calls (intake, planning,
-classification) have failed with `structured output was incomplete (finish_reason=length)`.
-The cause is not confirmed. The error points to the output budget: agentd sends no
-`max_tokens` on intake calls, so Strata's default applies. That `response_format` itself is
-unsupported is the other possibility. Plain chat completions work. See
-[B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md) for the
-symptoms, reproduction and what to check first.
+Strata supports `response_format: json_object`, so agentd's structured-output calls work
+with a real model loaded. Things to know:
 
-Strata needs no API key. Set a dummy value such as `"dummy"`: for an `adapter: openai`
-provider, agentd treats a configured key as the provider being available. It does not probe
-the endpoint, so this says nothing about whether Strata is reachable.
+- **Use the real engine and its key.** A server started with `--engine mock` answers every
+  request with fixed text, so every structured call fails; that was the whole of
+  [B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md). The real
+  engine checks the key: get it with `strata launch --show-key`. For an `adapter: openai`
+  provider agentd only checks that a key is configured; it does not probe the endpoint, so
+  passing that check says nothing about whether Strata is reachable or the key is right.
+- **Leave room for reasoning.** Qwen3 reasons before it answers, and the reasoning counts
+  against the output budget.
+- **A failed structured answer is a 502** (`structured_output_failed`). agentd treats it as
+  an unreachable provider: the router tries the next provider in `gateway.order`, and the
+  failure counts toward the breaker. It is not a JSON correction retry.
+- **`tools` and `response_format` together are refused** (HTTP 400). agentd's OpenAI adapter
+  already drops `response_format` when a request carries tools.
 
 ## Cascade Fallback
 

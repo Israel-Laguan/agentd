@@ -260,16 +260,14 @@ gateway:
     - name: strata
       adapter: openai
       base_url: "http://127.0.0.1:8080/v1"
-      model: "qwen3.8-flash-next"
-      api_key: "dummy"  # Strata does not require a key; agentd treats a configured key as the provider being available
+      model: "qwen3.8-flash-next-iq3_s"
+      api_key: "<strata-key>"  # from `strata launch --show-key`; the real engine checks it
   order: [strata]
 ```
 
-**Note:** with Strata and Qwen3, agentd's structured-output calls have failed with
-`finish_reason=length`. The cause is not confirmed: the output budget is the first suspect,
-and `response_format` support the other
-([B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md)).
-Plain chat completions work. See
+**Note:** structured output works with a real model loaded. A server started with
+`--engine mock` fails every structured call
+([B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md)). See
 [docs/openai-compatible-providers.md](openai-compatible-providers.md) for details.
 
 ## Troubleshooting
