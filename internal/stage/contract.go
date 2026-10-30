@@ -27,14 +27,67 @@ func NewContract[T any]() Contract {
 	}
 	_ = zero
 	c.decode = func(ctx context.Context, gw spec.AIGateway, req spec.AIRequest) (json.RawMessage, int, spec.UsageDetails, error) {
-		v, tokens, details, err := correction.GenerateJSONWithUsage[T](ctx, gw, req)
+		v, tokens, details, err := correction.GenerateJSONWithUsage[marked[T]](ctx, gw, req)
 		if err != nil {
 			return nil, tokens, details, err
 		}
-		raw, err := json.Marshal(v)
+		if v.needsHuman {
+			return v.raw, tokens, details, nil
+		}
+		raw, err := json.Marshal(v.value)
 		return raw, tokens, details, err
 	}
 	return c
+}
+
+// marked decodes T and also reads the needs_human marker, which T does not
+// declare. Without it the typed decode and re-marshal would drop the marker, so
+// a stage could never ask for a person. A marked reply is a request for a human,
+// not an answer: it skips T's validation and is passed on exactly as sent.
+type marked[T any] struct {
+	value      T
+	needsHuman bool
+	raw        json.RawMessage
+}
+
+func (m *marked[T]) UnmarshalJSON(b []byte) error {
+	var marker struct {
+		NeedsHuman bool `json:"needs_human"`
+	}
+	// A reply that is not a JSON object carries no marker; T decides if it is valid.
+	if json.Unmarshal(b, &marker) == nil && marker.NeedsHuman {
+		m.needsHuman = true
+		m.raw = append(json.RawMessage(nil), b...)
+		return nil
+	}
+	return json.Unmarshal(b, &m.value)
+}
+
+// Validate runs T's validation unless the reply asked for a person.
+func (m *marked[T]) Validate() error {
+	if m.needsHuman {
+		return nil
+	}
+	if v, ok := any(m.value).(spec.Validatable); ok {
+		return v.Validate()
+	}
+	if v, ok := any(&m.value).(spec.Validatable); ok {
+		return v.Validate()
+	}
+	return nil
+}
+
+// SchemaHint repeats T's hint, so corrective retries still show the model the
+// shape it must return.
+func (marked[T]) SchemaHint() string {
+	var zero T
+	if h, ok := any(zero).(interface{ SchemaHint() string }); ok {
+		return h.SchemaHint()
+	}
+	if h, ok := any(&zero).(interface{ SchemaHint() string }); ok {
+		return h.SchemaHint()
+	}
+	return ""
 }
 
 // Decode runs req through gw and returns the validated JSON with the token

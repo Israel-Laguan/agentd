@@ -24,9 +24,6 @@ type gatewayScenario struct {
 	budgetTaskID  string
 	callsBefore   int
 
-	// Role routing fields
-	roleRoutes map[Role]RoleTarget
-
 	// Schema validation fields
 	schemaGW          *sequenceGateway
 	schemaResult      *validatableStruct
@@ -122,13 +119,6 @@ func registerFallbackAndRoutingSteps(sc *godog.ScenarioContext, state *gatewaySc
 	sc.Step(`^the response should indicate ProviderUsed: "([^"]*)"$`, state.providerUsed)
 	sc.Step(`^the error should wrap ErrLLMUnreachable$`, state.errorWrapsUnreachable)
 	sc.Step(`^the error should mention all four provider names$`, state.errorMentionsFourProviders)
-
-	// Specialized model routing steps
-	sc.Step(`^role routes map (\w+) to provider "([^"]*)" with model "([^"]*)"$`, state.setRoleRoute)
-	sc.Step(`^three providers "([^"]*)", "([^"]*)", "([^"]*)" are configured$`, state.threeProvidersConfigured)
-	sc.Step(`^two providers "([^"]*)", "([^"]*)" are configured$`, state.twoProvidersConfigured)
-	sc.Step(`^a request with role "([^"]*)" is sent$`, state.sendRequestWithRole)
-	sc.Step(`^a request with role "([^"]*)" and explicit provider "([^"]*)" is sent$`, state.sendRequestWithRoleAndProvider)
 }
 
 func registerSchemaAndCancellationSteps(sc *godog.ScenarioContext, state *gatewayScenario) {

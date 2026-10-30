@@ -174,6 +174,8 @@ func (w *Worker) processTieredStep(ctx context.Context, task models.Task, projec
 		if result.IsTerminalSuccess() {
 			w.reconcileBlockedDependents(ctx, task.ID)
 		}
+	} else if w.taskBlockedOnHuman(ctx, task) {
+		return
 	}
 }
 

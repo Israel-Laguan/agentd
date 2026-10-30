@@ -100,6 +100,7 @@ func (w *Worker) requestPermissionAlternative(
 		AgentID:     task.AgentID,
 		Role:        gateway.RoleWorker,
 		TaskID:      task.ID,
+		Attrs:       gateway.AttrsForTask(task.RequiresWorkspaceChange),
 		Provider:    profile.Provider,
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,

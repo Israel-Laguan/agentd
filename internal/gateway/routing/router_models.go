@@ -3,6 +3,7 @@ package routing
 import (
 	"strings"
 
+	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 )
 
@@ -39,13 +40,15 @@ func appendUniqueModel(models []string, model string) []string {
 	return append(models, model)
 }
 
-func mergeRoleRouteModels(models map[string][]string, routes map[spec.Role]spec.RoleTarget) {
-	for _, target := range routes {
-		provider := strings.TrimSpace(target.Provider)
+// mergeAgentModels records each routed agent's model as a known model of its
+// provider, so the hints cover the models the routes can actually send to.
+func mergeAgentModels(models map[string][]string, agents map[string]route.Agent) {
+	for _, agent := range agents {
+		provider := strings.TrimSpace(agent.Provider)
 		if provider == "" {
 			continue
 		}
-		models[provider] = appendUniqueModel(models[provider], target.Model)
+		models[provider] = appendUniqueModel(models[provider], agent.Model)
 	}
 }
 

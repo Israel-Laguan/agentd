@@ -11,7 +11,7 @@ import (
 
 // TestWorkerForwardsAgentProfileOverrides ensures that profile.Provider /
 // Model / MaxTokens are surfaced on the AIRequest so the gateway router
-// can honor per-agent LLM choices instead of falling back to role routing
+// can honor per-agent LLM choices instead of falling back to a stage route
 // or the first configured provider.
 func TestWorkerForwardsAgentProfileOverrides(t *testing.T) {
 	store := newWorkerStore()

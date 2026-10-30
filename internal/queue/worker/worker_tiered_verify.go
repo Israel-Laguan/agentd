@@ -34,6 +34,9 @@ type CheckResult struct {
 func (w *Worker) processTieredVerifyStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, parentTask models.Task) {
 	result, ok := w.processAgentic(ctx, task, project, profile)
 	if !ok {
+		if w.taskBlockedOnHuman(ctx, task) {
+			return
+		}
 		w.failTieredStep(ctx, task, "tiered verify step produced no VerifyResult")
 		w.failTieredDependents(ctx, task, parentTask)
 		return
@@ -130,6 +133,9 @@ func (vr VerifyResult) Valid() bool {
 func (w *Worker) processTieredEscalateStep(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, parentTask models.Task) {
 	result, ok := w.processAgentic(ctx, task, project, profile)
 	if !ok {
+		if w.taskBlockedOnHuman(ctx, task) {
+			return
+		}
 		w.failTieredStep(ctx, task, "tiered escalate step produced no result")
 		if err := w.transitionTaskState(ctx, parentTask.ID, models.TaskStateFailedRequiresHuman); err != nil {
 			slog.Error("tiered escalate: failed to hand off origin after no-result", "task_id", parentTask.ID, "error", err)

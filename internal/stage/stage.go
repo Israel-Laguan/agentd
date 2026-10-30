@@ -61,6 +61,8 @@ type StageRequest struct {
 	Provider  string
 	Model     string
 	MaxTokens int
+	// Attrs are the task facts routing rules match. Zero for a call with no task.
+	Attrs spec.TaskAttrs
 }
 
 // Validate reports a request that is missing what every call needs.
@@ -86,6 +88,16 @@ type StageResult struct {
 	TokenUsage   int
 	UsageDetails spec.UsageDetails
 }
+
+// ErrNeedsHuman is returned by a caller that handed a NeedsHuman stage result to
+// a person. The task is blocked on that question, so the caller stops its work
+// on the task rather than continuing without the stage's answer.
+var ErrNeedsHuman = errors.New("stage: needs a human decision")
+
+// ErrHumanHandoffFailed is returned when a NeedsHuman result could not be
+// recorded for a person. It does not match ErrNeedsHuman, so callers treat
+// the task as failed instead of blocked.
+var ErrHumanHandoffFailed = errors.New("stage: human handoff failed")
 
 // Agent runs a stage. A ModelAgent is one gateway call; other kinds may use
 // tools and the workspace.

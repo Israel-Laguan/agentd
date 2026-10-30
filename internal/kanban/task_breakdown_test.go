@@ -3,6 +3,7 @@ package kanban
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -403,4 +404,47 @@ func seedTestTask(t *testing.T, store *Store, title string, state models.TaskSta
 		t.Fatalf("insert task: %v", err)
 	}
 	return task
+}
+
+// The other rollback tests fail before any write. Here the second comment
+// collides on events.id after the block, the subtask and the first comment are
+// written, so the whole transaction must be undone.
+func TestBlockTaskWithSubtasksAndCommentsRollsBackWhenCommentInsertFails(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	parent := seedTestTask(t, store, "parent-comment-insert-fails", models.TaskStateRunning)
+
+	_, _, err := store.BlockTaskWithSubtasksAndComments(ctx, parent.ID, parent.UpdatedAt, []models.DraftTask{{
+		Title: "child",
+	}}, []models.Comment{
+		{BaseEntity: models.BaseEntity{ID: "dup-comment"}, TaskID: parent.ID, Author: models.CommentAuthorWorkerAgent, Body: "first"},
+		{BaseEntity: models.BaseEntity{ID: "dup-comment"}, TaskID: parent.ID, Author: models.CommentAuthorWorkerAgent, Body: "second"},
+	})
+	// The failure must come from the second comment insert, after the earlier
+	// writes; any earlier error would leave the rollback assertions vacuous.
+	if err == nil || !strings.Contains(err.Error(), "add comment event") {
+		t.Fatalf("BlockTaskWithSubtasksAndComments() error = %v, want the comment insert error", err)
+	}
+	after, err := store.GetTask(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if after.State != models.TaskStateRunning || !after.UpdatedAt.Equal(parent.UpdatedAt) {
+		t.Fatalf("parent = state %s updated_at %s; want RUNNING %s", after.State, after.UpdatedAt, parent.UpdatedAt)
+	}
+	children, err := store.ListChildTasks(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListChildTasks: %v", err)
+	}
+	if len(children) != 0 {
+		t.Fatalf("children = %d, want 0", len(children))
+	}
+	comments, err := store.ListComments(ctx, parent.ID)
+	if err != nil {
+		t.Fatalf("ListComments: %v", err)
+	}
+	if len(comments) != 0 {
+		t.Fatalf("comments = %d, want 0", len(comments))
+	}
+	assertRelationCount(t, store, parent.ID, 0)
 }

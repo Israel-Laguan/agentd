@@ -62,7 +62,10 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 
 	guards := e.newAgenticLoopGuards(cancelCtx, task)
 	checkpointer := wsession.NewSessionCheckpointer(task.ID)
-	messages, workPlan := e.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, guards.budget, checkpointer)
+	messages, workPlan, planned := e.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, guards.budget, checkpointer)
+	if !planned {
+		return agentruntime.LoopResult{}, false
+	}
 	sessionMgr := NewSessionManager(task.ID, extractAnchorUserContent(messages), e.config.CheckpointStore)
 
 	return e.runAgenticTurnLoop(agenticTurnLoopInput{

@@ -92,8 +92,14 @@ func PlanInStageWithResult(ctx context.Context, agent stage.Agent, st stage.Stag
 	return &trimmed, res, nil
 }
 
-// decode reads the validated output of a stage into T.
+// decode reads the validated output of a stage into T. A reply that asks for a
+// person is not an answer: it is reported as stage.ErrNeedsHuman, never decoded
+// into an empty T. Intake has no task to block, so its callers report the error
+// as they report any other intake failure.
 func decode[T any](res stage.StageResult) (*T, error) {
+	if res.Outcome == stage.OutcomeNeedsHuman {
+		return nil, fmt.Errorf("%w: intake reply asked for a person", stage.ErrNeedsHuman)
+	}
 	var v T
 	if err := json.Unmarshal(res.Output, &v); err != nil {
 		return nil, fmt.Errorf("%w: %v", models.ErrInvalidJSONResponse, err)

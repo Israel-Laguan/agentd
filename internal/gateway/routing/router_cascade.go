@@ -29,6 +29,11 @@ func (e errTruncation) Unwrap() error { return e.err }
 //     and continue cascading.
 func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq spec.AIRequest, hasRequestedTools bool, selectedHasToolSupport bool, cascade bool) (spec.AIResponse, bool, error) {
 	req := baseReq
+	// A routed agent model belongs to the routed provider only; do not hand it
+	// to a cascade fallback that may not support that model name.
+	if baseReq.ModelRouted && !strings.EqualFold(strings.TrimSpace(baseReq.Provider), string(p.Name())) {
+		req.Model = ""
+	}
 	if hasRequestedTools && !p.Capabilities().SupportsChatTools {
 		if selectedHasToolSupport {
 			return spec.AIResponse{}, false, nil
@@ -63,9 +68,9 @@ func appendCandidate(candidates []providers.Backend, p providers.Backend, select
 	return append(candidates, p)
 }
 
-// selectRoleRoutedCandidates prefers the role-assigned provider but allows cascade
-// fallback through gateway.order on failure.
-func (r *Router) selectRoleRoutedCandidates(requestedProvider string) (candidates []providers.Backend, matchedProvider bool, selectedHasToolSupport bool) {
+// selectRoutedCandidates prefers the routed provider but allows cascade fallback
+// through gateway.order on failure.
+func (r *Router) selectRoutedCandidates(requestedProvider string) (candidates []providers.Backend, matchedProvider bool, selectedHasToolSupport bool) {
 	for _, p := range r.providers {
 		if strings.EqualFold(requestedProvider, string(p.Name())) {
 			matchedProvider = true
@@ -86,7 +91,7 @@ func (r *Router) selectDefaultCandidates(req spec.AIRequest, requestedProvider s
 			continue
 		}
 		matchedProvider = true
-		if requestedProvider != "" && !req.ProviderFromRole && hasRequestedTools && !p.Capabilities().SupportsChatTools {
+		if requestedProvider != "" && !req.ProviderRouted && hasRequestedTools && !p.Capabilities().SupportsChatTools {
 			continue
 		}
 		candidates = appendCandidate(candidates, p, &selectedHasToolSupport)
@@ -96,8 +101,8 @@ func (r *Router) selectDefaultCandidates(req spec.AIRequest, requestedProvider s
 
 func (r *Router) selectCandidateProviders(req spec.AIRequest) (candidates []providers.Backend, matchedProvider bool, selectedHasToolSupport bool) {
 	requestedProvider := strings.TrimSpace(req.Provider)
-	if req.ProviderFromRole && requestedProvider != "" {
-		return r.selectRoleRoutedCandidates(requestedProvider)
+	if req.ProviderRouted && requestedProvider != "" {
+		return r.selectRoutedCandidates(requestedProvider)
 	}
 	return r.selectDefaultCandidates(req, requestedProvider, len(req.Tools) > 0)
 }
@@ -105,7 +110,7 @@ func (r *Router) selectCandidateProviders(req spec.AIRequest) (candidates []prov
 func decideTerminalError(req spec.AIRequest, matchedProvider, selectedHasToolSupport bool, providerErrs []error) error {
 	requestedProvider := strings.TrimSpace(req.Provider)
 	hasRequestedTools := len(req.Tools) > 0
-	if requestedProvider != "" && !req.ProviderFromRole && matchedProvider && hasRequestedTools && !selectedHasToolSupport {
+	if requestedProvider != "" && !req.ProviderRouted && matchedProvider && hasRequestedTools && !selectedHasToolSupport {
 		return fmt.Errorf("provider %q does not support tools, use a different provider or disable agentic mode", requestedProvider)
 	}
 	if requestedProvider != "" && len(providerErrs) == 0 {
@@ -134,7 +139,6 @@ func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIR
 	}
 	req.Provider = strings.TrimSpace(req.Provider)
 	req.Model = strings.TrimSpace(req.Model)
-	req = r.applyRoleRouting(req)
 	candidates, matchedProvider, selectedHasToolSupport := r.selectCandidateProviders(req)
 	hasRequestedTools := len(req.Tools) > 0
 	var providerErrs []error

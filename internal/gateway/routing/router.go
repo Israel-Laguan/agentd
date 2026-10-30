@@ -11,6 +11,7 @@ import (
 
 	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/providers"
+	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/gateway/truncation"
 )
@@ -24,7 +25,7 @@ type Router struct {
 	maxMessageChars int
 	truncator       spec.Truncator
 	budget          spec.BudgetTracker
-	roleRoutes      map[spec.Role]spec.RoleTarget
+	routes          route.Table
 	recorder        spec.Recorder
 }
 
@@ -55,7 +56,7 @@ func (r *Router) ProviderNames() []string {
 }
 
 // KnownModels returns gateway-configured model hints for a provider name (config default
-// and role_models entries). Empty when the provider is unknown or no models are configured.
+// and routed agents' models). Empty when the provider is unknown or no models are configured.
 func (r *Router) KnownModels(provider string) []string {
 	if r == nil {
 		return nil
@@ -140,18 +141,20 @@ func (r *Router) WithBudget(tracker spec.BudgetTracker) *Router {
 	return r
 }
 
-// WithRoleRouting maps logical roles to preferred provider/model pairs.
-func (r *Router) WithRoleRouting(routes map[spec.Role]spec.RoleTarget) *Router {
-	r.roleRoutes = routes
+// WithPurposeRouting sets the validated agents and stages table that picks the
+// agent for each call. An empty table leaves every call on the cascade.
+func (r *Router) WithPurposeRouting(table route.Table) *Router {
+	r.routes = table
 	if r.providerModels == nil {
 		r.providerModels = make(map[string][]string)
 	}
-	mergeRoleRouteModels(r.providerModels, routes)
+	mergeAgentModels(r.providerModels, table.Agents)
 	return r
 }
 
 // Generate implements spec.AIGateway.
 func (r *Router) Generate(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {
+	req = r.routeRequest(req)
 	if req.JSONMode {
 		return r.generateJSON(ctx, req)
 	}
@@ -196,20 +199,24 @@ func (r *Router) recordBudget(taskID string, usage int) {
 	}
 }
 
-func (r *Router) applyRoleRouting(req spec.AIRequest) spec.AIRequest {
-	if r.roleRoutes == nil || req.Role == "" {
+// routeRequest makes the one routing decision for a call and logs it. A pin or
+// the cascade changes nothing. A rule or stage default fills in the provider the
+// caller left empty; the provider is tried first and the cascade still follows
+// on failure. The model comes with the provider it belongs to.
+func (r *Router) routeRequest(req spec.AIRequest) spec.AIRequest {
+	d := r.routes.Resolve(req.Purpose, req.AgentID, req.Attrs)
+	slog.Info("routing decision", "purpose", d.Purpose, "required_level", d.Required,
+		"rule", d.Rule, "agent", d.Agent, "task_id", req.TaskID)
+	if d.Rule == route.RulePin || d.Agent == "" {
 		return req
 	}
-	target, ok := r.roleRoutes[req.Role]
-	if !ok {
-		return req
+	if strings.TrimSpace(req.Provider) == "" {
+		req.Provider = d.Provider
+		req.ProviderRouted = true
 	}
-	if req.Provider == "" && target.Provider != "" {
-		req.Provider = target.Provider
-		req.ProviderFromRole = true
-	}
-	if req.Model == "" && target.Model != "" {
-		req.Model = target.Model
+	if strings.TrimSpace(req.Model) == "" && strings.EqualFold(strings.TrimSpace(req.Provider), d.Provider) {
+		req.Model = d.Model
+		req.ModelRouted = true
 	}
 	return req
 }

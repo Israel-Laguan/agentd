@@ -45,6 +45,7 @@ func (w *Worker) buildTurnRespecRequest(
 		AgentID: task.AgentID,
 		Role:    gateway.RoleMemory,
 		TaskID:  task.ID,
+		Attrs:   gateway.AttrsForTask(task.RequiresWorkspaceChange),
 	}
 }
 
@@ -117,6 +118,7 @@ func (w *Worker) buildRedoRequest(
 		AgentID: task.AgentID,
 		Role:    gateway.RoleMemory,
 		TaskID:  task.ID,
+		Attrs:   gateway.AttrsForTask(task.RequiresWorkspaceChange),
 	}
 }
 

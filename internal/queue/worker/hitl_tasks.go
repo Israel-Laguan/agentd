@@ -68,6 +68,15 @@ func (w *Worker) RequestClarificationFromAgent(
 	options []string,
 	contextSummary string,
 ) error {
+	return w.requestClarification(ctx, task, question, options, contextSummary, nil)
+}
+
+// requestClarification blocks task on a clarification subtask. extra comments
+// are written in the same transaction, so they exist only if the block does.
+func (w *Worker) requestClarification(
+	ctx context.Context, task models.Task, question string, options []string,
+	contextSummary string, extra []models.Comment,
+) error {
 	if strings.TrimSpace(question) == "" {
 		err := fmt.Errorf("clarification question cannot be empty")
 		w.Emit(ctx, task, "ERROR", err.Error())
@@ -94,7 +103,7 @@ func (w *Worker) RequestClarificationFromAgent(
 		Title:       models.HITLSubtaskTitleClarification + truncate(question, 80),
 		Description: description,
 		Assignee:    models.TaskAssigneeHuman,
-	}}, []models.Comment{hitlExpiryComment(time.Now().Add(DefaultApprovalTimeout))})
+	}}, append(extra, hitlExpiryComment(time.Now().Add(DefaultApprovalTimeout))))
 	if err != nil {
 		w.Emit(ctx, task, "ERROR", fmt.Sprintf("clarification request failed: %v", err))
 		return fmt.Errorf("create clarification subtask: %w", err)
@@ -108,16 +117,14 @@ func (w *Worker) RequestClarificationFromAgent(
 }
 
 // AskHuman blocks the task for a human answer to the agent's question (the
-// ask_human builtin). The question is recorded on the task first, so the run
-// that resumes after the answer sees it, as an elicitation's questions are
-// (see tryConsumeElicitationAnswers). A failed record aborts the handoff so the
-// clarification subtask is never created against an unrecorded question.
+// ask_human builtin). The question is recorded on the task, so the run that
+// resumes after the answer sees it, as an elicitation's questions are (see
+// tryConsumeElicitationAnswers). It is written in the same transaction that
+// blocks the task and creates the clarification subtask: a failed handoff
+// leaves neither an unasked question nor a subtask without its question.
 func (w *Worker) AskHuman(ctx context.Context, task models.Task, question string, options []string) error {
-	if err := recordElicitationQuestions(ctx, w.store, task.ID, []ElicitationQuestion{{Question: question, Options: options}}); err != nil {
-		slog.Warn("failed to record ask_human question", "task_id", task.ID, "error", err)
-		return fmt.Errorf("record ask_human question: %w", err)
-	}
-	return w.RequestClarificationFromAgent(ctx, task, question, options, "")
+	questions := []ElicitationQuestion{{Question: question, Options: options}}
+	return w.requestClarification(ctx, task, question, options, "", []models.Comment{elicitationQuestionsComment(task.ID, questions)})
 }
 
 const elicitationEmptyAnswerFallback = "(no comment provided — subtask marked complete without written answer)"

@@ -50,16 +50,6 @@ gateway:
     timeout: "5m"
   budget: # not implemented: parsed and ignored; use queue.token_budget
     tokens_per_task: 50000
-  role_models:
-    chat:
-      provider: ""
-      model: ""
-    worker:
-      provider: ""
-      model: ""
-    memory:
-      provider: ""
-      model: ""
   truncator:
     policy: "head_tail"
     max_input_chars: 12000

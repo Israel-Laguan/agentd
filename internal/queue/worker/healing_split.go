@@ -3,9 +3,11 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 	"agentd/internal/stage"
@@ -16,6 +18,10 @@ import (
 func (w *Worker) handleHealingSplit(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
 	w.Emit(ctx, task, "HEALING_SPLIT", fmt.Sprintf("attempt=%d step=%s", task.RetryCount, planning.HealingStepSplitTask))
 	result, err := w.splitTask(ctx, task, project, profile)
+	if errors.Is(err, stage.ErrNeedsHuman) {
+		// The split stage's question is with a person; the task is blocked on it.
+		return
+	}
 	if err != nil {
 		w.createHealingHandoff(ctx, task, planning.HealingAction{
 			Type:     planning.HealingActionHuman,
@@ -53,10 +59,14 @@ func (w *Worker) splitTask(ctx context.Context, task models.Task, project models
 		Provider:    profile.Provider,
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,
+		Attrs:       spec.AttrsForTask(task.RequiresWorkspaceChange),
 	})
 	w.RecordTaskTokenUsage(ctx, task, res.TokenUsage, res.UsageDetails)
 	if err != nil {
 		return planning.SplitResult{}, err
+	}
+	if res.Outcome == stage.OutcomeNeedsHuman {
+		return planning.SplitResult{}, handOffNeedsHuman(ctx, w.AskHuman, task, gateway.PurposeCreateSplitTask, res.Output)
 	}
 	var result planning.SplitResult
 	if err := json.Unmarshal(res.Output, &result); err != nil {

@@ -120,6 +120,7 @@ func (w *Worker) buildPlanRequest(task models.Task, planContext string) stage.St
 		Role:      gateway.RoleMemory,
 		AgentID:   task.AgentID,
 		MaxTokens: planPhaseTokenReserve,
+		Attrs:     spec.AttrsForTask(task.RequiresWorkspaceChange),
 	}
 }
 
@@ -145,6 +146,9 @@ func (w *Worker) GeneratePlan(
 		slog.Warn("agentic plan generation failed; continuing without plan",
 			"task_id", task.ID, "error", err)
 		return nil, err
+	}
+	if res.Outcome == stage.OutcomeNeedsHuman {
+		return nil, handOffNeedsHuman(ctx, w.AskHuman, task, gateway.PurposeExecWorkPlan, res.Output)
 	}
 	var plan agentcontext.Plan
 	if err := json.Unmarshal(res.Output, &plan); err != nil {

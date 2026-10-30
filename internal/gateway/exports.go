@@ -18,7 +18,6 @@ const TruncationMarker = truncation.TruncationMarker
 type (
 	PromptMessage      = spec.PromptMessage
 	Role               = spec.Role
-	RoleTarget         = spec.RoleTarget
 	AIRequest          = spec.AIRequest
 	AIResponse         = spec.AIResponse
 	ProviderConfig     = spec.ProviderConfig

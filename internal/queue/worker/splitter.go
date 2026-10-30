@@ -36,9 +36,9 @@ var tieredStepOrder = []TieredStepKind{
 }
 
 // tieredStepProfile maps each step kind to the agent profile that resolves
-// its provider/model. Per-role gateway.role_models defaults still apply
-// when a profile leaves provider/model empty; there is no separate
-// tiered.models.<kind> override.
+// its provider/model. These profiles are AgentID pins, so a stages: route does
+// not apply to them. A profile that leaves provider/model empty takes the
+// gateway cascade; there is no separate tiered.models.<kind> override.
 var tieredStepProfile = map[TieredStepKind]string{
 	TieredStepContext:  "tier-context",
 	TieredStepDecision: "tier-decision",

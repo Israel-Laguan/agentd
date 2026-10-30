@@ -138,7 +138,7 @@ func TestTieredProfilesLeaveRoutingToGateway(t *testing.T) {
 	t.Parallel()
 	for _, p := range tieredAgentProfiles() {
 		if p.Provider != "" || p.Model != "" {
-			t.Errorf("profile %q pins provider/model (%q/%q); expected empty so gateway.role_models/manual PATCH decides routing",
+			t.Errorf("profile %q pins provider/model (%q/%q); expected empty so the gateway cascade/manual PATCH decides routing",
 				p.ID, p.Provider, p.Model)
 		}
 	}

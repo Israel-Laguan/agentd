@@ -250,6 +250,26 @@ gateway:
   order: [openai, vllm]
 ```
 
+### Strata
+
+[Strata](https://github.com/StrataScratch/strata) is a local inference server with a web UI.
+
+```yaml
+gateway:
+  providers:
+    - name: strata
+      adapter: openai
+      base_url: "http://127.0.0.1:8080/v1"
+      model: "qwen3.8-flash-next-iq3_s"
+      api_key: "<strata-key>"  # from `strata launch --show-key`; the real engine checks it
+  order: [strata]
+```
+
+**Note:** structured output works with a real model loaded. A server started with
+`--engine mock` fails every structured call
+([B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md)). See
+[docs/openai-compatible-providers.md](openai-compatible-providers.md) for details.
+
 ## Troubleshooting
 
 ### "No LLM providers available"

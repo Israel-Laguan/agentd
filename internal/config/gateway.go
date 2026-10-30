@@ -2,23 +2,14 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
 
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/route"
 )
-
-type RoleModelConfig struct {
-	Provider string `mapstructure:"provider"`
-	Model    string `mapstructure:"model"`
-}
-
-type RoleModelsConfig struct {
-	Chat   RoleModelConfig `mapstructure:"chat"`
-	Worker RoleModelConfig `mapstructure:"worker"`
-	Memory RoleModelConfig `mapstructure:"memory"`
-}
 
 type GatewayConfig struct {
 	Order            []string
@@ -30,11 +21,13 @@ type GatewayConfig struct {
 	LlamaCpp         gateway.ProviderConfig
 	Horde            gateway.ProviderConfig
 	Gemini           gateway.ProviderConfig
-	RoleModels       RoleModelsConfig
 	Truncation       TruncationConfig
 	Truncator        TruncatorConfig
 	MaxTasksPerPhase int
 	MCPServers       []CapabilityManifest `json:"-"`
+	// Routing is the validated agents: and stages: sections. It picks the agent
+	// for each call; an empty table leaves every call on the cascade.
+	Routing route.Table `json:"-"`
 }
 
 type TruncationConfig struct {
@@ -121,37 +114,31 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 			MaxInputChars: v.GetInt("gateway.truncator.max_input_chars"),
 		},
 		MaxTasksPerPhase: v.GetInt("gateway.max_tasks_per_phase"),
-		RoleModels:       loadRoleModels(v),
 		MCPServers:       mcpServers,
 	}
 	if _, err := cfg.ProviderConfigs(); err != nil {
 		return GatewayConfig{}, fmt.Errorf("gateway providers: %w", err)
 	}
-	return cfg, nil
-}
-
-func loadRoleModels(v *viper.Viper) RoleModelsConfig {
-	var models RoleModelsConfig
-	_ = v.UnmarshalKey("gateway.role_models", &models)
-	return models
-}
-
-// RoleRoutes returns non-empty role→provider/model overrides for the gateway router.
-func (c GatewayConfig) RoleRoutes() map[gateway.Role]gateway.RoleTarget {
-	routes := make(map[gateway.Role]gateway.RoleTarget)
-	addRoleRoute := func(role gateway.Role, m RoleModelConfig) {
-		if m.Provider == "" && m.Model == "" {
-			return
+	if cfg.Routing, err = loadRouteTable(v); err != nil {
+		return GatewayConfig{}, err
+	}
+	// Routed agents must name a provider that actually exists in the gateway
+	// config; otherwise the stage route is silently ignored and the cascade
+	// runs instead.
+	byName, err := cfg.gatewayProvidersByName()
+	if err != nil {
+		return GatewayConfig{}, err
+	}
+	known := make(map[string]struct{}, len(byName))
+	for name := range byName {
+		known[strings.ToLower(name)] = struct{}{}
+	}
+	for name, agent := range cfg.Routing.Agents {
+		if _, ok := known[strings.ToLower(agent.Provider)]; !ok {
+			return GatewayConfig{}, fmt.Errorf("agents.%s: provider %q is not configured", name, agent.Provider)
 		}
-		routes[role] = gateway.RoleTarget{Provider: m.Provider, Model: m.Model}
 	}
-	addRoleRoute(gateway.RoleChat, c.RoleModels.Chat)
-	addRoleRoute(gateway.RoleWorker, c.RoleModels.Worker)
-	addRoleRoute(gateway.RoleMemory, c.RoleModels.Memory)
-	if len(routes) == 0 {
-		return nil
-	}
-	return routes
+	return cfg, nil
 }
 
 func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {

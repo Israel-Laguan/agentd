@@ -45,9 +45,7 @@ func newRuntimeDeps(cfg config.Config, store models.KanbanStore) (runtimeDeps, e
 		return runtimeDeps{}, fmt.Errorf("build gateway router: %w", err)
 	}
 	callWriter := attachCallRecorder(gw, store)
-	if routes := cfg.Gateway.RoleRoutes(); routes != nil {
-		gw = gw.WithRoleRouting(routes)
-	}
+	gw = gw.WithPurposeRouting(cfg.Gateway.Routing)
 	gw.WithTruncation(cfg.Gateway.TruncatorImpl(gw, breaker), cfg.Gateway.Truncator.MaxInputChars)
 	ctx := context.Background()
 	gateway.RunToolProbes(ctx, gw)

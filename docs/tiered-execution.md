@@ -101,9 +101,9 @@ If the pack is wrong, pay once to rebuild it on purpose. That is measurable.
 
 ## Model / role routing
 
-Today the gateway already routes by role (`RoleChat`, `RoleWorker`, `RoleMemory`) via `gateway.role_models`. Tiered execution extends that idea:
+Routing is by purpose now: a `stages:` route (see [config-reference.md](config-reference.md#routing-agents-and-stages)) picks the agent for a call from its purpose and the task's attributes. The `gateway.role_models` table this section once described was removed.
 
-| Step kind | Suggested role key (new or mapped) | Profile template |
+| Step kind | Purpose / stage guidance | Profile template |
 | --- | --- | --- |
 | context | `context` (or `memory`-class cheap) | `tier-context` |
 | decision | `decision` | `tier-decision` |
@@ -111,7 +111,7 @@ Today the gateway already routes by role (`RoleChat`, `RoleWorker`, `RoleMemory`
 | verify | `verify` | `tier-verify` |
 | escalate | `escalate` or strong `worker` | `tier-escalate` |
 
-**As implemented (M3):** there is no `tiered.models.<kind>` config key — `internal/config.TieredConfig` / `loadTieredConfig` never read one, and `gateway.role_models` (`RoleModelsConfig`) is a flat one-model-per-role map (`chat` / `worker` / `memory`), not a set of tiers within a role. Step-kind differentiation instead comes from dedicated **AgentProfile** rows named after the step's profile template (`tier-context`, `tier-decision`, `tier-execute`, `tier-verify`, plus `tier-escalate` for the one-off strong-model escalation step added in T-020). `SplitIntoTieredDAG` (`internal/queue/worker/splitter.go`) stamps each child task's `AgentID` with its profile name; profile lookup resolves the actual provider/model, falling back to the matching `gateway.role_models` entry when a profile leaves provider/model blank — the same fallback relationship documented in `config.reference.yaml`. Seeding/configuring the `tier-*` profiles themselves is a separate concern from the splitter.
+**As implemented (M3):** there is no `tiered.models.<kind>` config key — `internal/config.TieredConfig` / `loadTieredConfig` never read one, and there is no tier-per-role table either. Step-kind differentiation instead comes from dedicated **AgentProfile** rows named after the step's profile template (`tier-context`, `tier-decision`, `tier-execute`, `tier-verify`, plus `tier-escalate` for the one-off strong-model escalation step added in T-020). `SplitIntoTieredDAG` (`internal/queue/worker/splitter.go`) stamps each child task's `AgentID` with its profile name; profile lookup resolves the actual provider/model, falling back to the gateway cascade when a profile leaves provider/model blank. A `tier-*` profile is a pin, so a `stages:` route does not override it. Seeding/configuring the `tier-*` profiles themselves is a separate concern from the splitter.
 
 ---
 
@@ -142,7 +142,7 @@ Multi-model routing alone is not the story. **Complexity gate + sealed pack + DA
 
 ## Building blocks already in tree
 
-- Role → provider/model routing (`internal/gateway`, `role_models`)
+- Purpose → agent routing (`internal/gateway/route`, `agents:` / `stages:`)
 - Plan-then-execute and complexity threshold (`phase_splitter.go`, `AgenticPlanningConfig`)
 - Targeted redo after plan steps (`targeted_redo.go`)
 - Workforce profiles, DAG relations, HUMAN / healing handoffs

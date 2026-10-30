@@ -21,6 +21,7 @@ type removedKey struct {
 var removedKeys = []removedKey{
 	{Key: "agentic.capability_routing", Nested: true},
 	{Key: "agentic.model_routing", Nested: true},
+	{Key: "gateway.role_models", Replacement: "stages (routes keyed by purpose) and agents", Nested: true},
 	{Key: "queue.legacy.max_breakdown_depth", Replacement: "queue.split.max_depth"},
 	{Key: "queue.legacy.max_subtasks_per_breakdown", Replacement: "queue.split.max_subtasks"},
 	{Key: "queue.legacy.preflight_score"},

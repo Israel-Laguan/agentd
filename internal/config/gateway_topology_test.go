@@ -27,49 +27,24 @@ func TestGatewayConfig_ConnectorTopology(t *testing.T) {
 	ollama := topologyProvider("ollama", "llama3:8b")
 	configs := []gateway.ProviderConfig{litellm, openai, ollama}
 
-	// No role routes: all roles fall back to first provider in order (litellm).
+	// The cascade starts at the first provider in order.
 	got := GatewayConfig{Order: []string{"litellm", "openai", "ollama"}}.ConnectorTopology(configs)
-	want := "chat=managed(litellm/poolside/laguna-m.1) worker=managed(litellm/poolside/laguna-m.1) memory=managed(litellm/poolside/laguna-m.1)"
+	want := "cascade=managed(litellm/poolside/laguna-m.1)"
 	if got != want {
-		t.Errorf("no routes: got %q, want %q", got, want)
-	}
-
-	// With role routes: each role maps to its explicit provider/model.
-	got = GatewayConfig{
-		Order: []string{"litellm", "openai", "ollama"},
-		RoleModels: RoleModelsConfig{
-			Chat:   RoleModelConfig{Provider: "openai", Model: "gpt-4o"},
-			Worker: RoleModelConfig{Provider: "litellm"},
-			Memory: RoleModelConfig{Provider: "ollama"},
-		},
-	}.ConnectorTopology(configs)
-	want = "chat=direct(openai/gpt-4o) worker=managed(litellm/poolside/laguna-m.1) memory=direct(ollama/llama3:8b)"
-	if got != want {
-		t.Errorf("with routes: got %q, want %q", got, want)
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
 func TestGatewayConfig_ConnectorTopology_ManagedProxiesAndEmpty(t *testing.T) {
 	t.Parallel()
 	portkey := topologyProvider("portkey", "")
-	openrouter := topologyProvider("openrouter", "")
 
-	// Portkey recognized as managed, openrouter too; un-routed memory falls back
-	// to the first provider in order (portkey).
-	got := GatewayConfig{
-		Order: []string{"portkey", "openrouter"},
-		RoleModels: RoleModelsConfig{
-			Chat:   RoleModelConfig{Provider: "portkey"},
-			Worker: RoleModelConfig{Provider: "openrouter"},
-		},
-	}.ConnectorTopology([]gateway.ProviderConfig{portkey, openrouter})
-	want := "chat=managed(portkey/) worker=managed(openrouter/) memory=managed(portkey/)"
-	if got != want {
-		t.Errorf("managed proxies: got %q, want %q", got, want)
+	if got := (GatewayConfig{Order: []string{"portkey"}}).ConnectorTopology([]gateway.ProviderConfig{portkey}); got != "cascade=managed(portkey/)" {
+		t.Errorf("managed proxy: got %q", got)
 	}
 
 	// Empty provider list: safe fallback with empty strings.
-	if got := (GatewayConfig{}).ConnectorTopology(nil); got != "chat=direct(/) worker=direct(/) memory=direct(/)" {
+	if got := (GatewayConfig{}).ConnectorTopology(nil); got != "cascade=direct(/)" {
 		t.Errorf("empty configs: got %q", got)
 	}
 }

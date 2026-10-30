@@ -43,6 +43,9 @@ func (w *Worker) processTieredDecisionStep(ctx context.Context, task models.Task
 	}
 	result, ok := w.processAgentic(ctx, task, project, profile)
 	if !ok {
+		if w.taskBlockedOnHuman(ctx, task) {
+			return
+		}
 		w.failTieredStep(ctx, task, "tiered decision step produced no LoopResult")
 		w.failTieredDependents(ctx, task, parentTask)
 		return

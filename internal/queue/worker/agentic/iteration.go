@@ -15,6 +15,7 @@ import (
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
+	"agentd/internal/stage"
 )
 
 var (
@@ -245,9 +246,9 @@ func (e *Engine) injectWorkPlanIfNeeded(
 	ctx context.Context, task models.Task, project models.Project,
 	messages []gateway.PromptMessage, budgetGuard *agentruntime.BudgetGuard,
 	checkpointer *wsession.SessionCheckpointer,
-) ([]gateway.PromptMessage, *agentcontext.Plan) {
+) ([]gateway.PromptMessage, *agentcontext.Plan, bool) {
 	if !e.host.ShouldPlanWithBudget(task, budgetGuard) {
-		return messages, nil
+		return messages, nil, true
 	}
 	if checkpointer != nil {
 		if err := checkpointer.Checkpoint(wsession.PrePlanCheckpointLabel, messages); err != nil {
@@ -255,14 +256,22 @@ func (e *Engine) injectWorkPlanIfNeeded(
 		}
 	}
 	workPlan, planErr := e.host.GeneratePlan(ctx, task, project, budgetGuard)
+	if errors.Is(planErr, stage.ErrNeedsHuman) {
+		// The task is blocked on the plan's question; it must not run without a plan.
+		return messages, nil, false
+	}
+	if errors.Is(planErr, stage.ErrHumanHandoffFailed) {
+		e.host.FailHard(ctx, task, planErr)
+		return messages, nil, false
+	}
 	if planErr != nil {
 		slog.Warn("failed to generate work plan; continuing without plan", "task_id", task.ID, "error", planErr)
-		return messages, nil
+		return messages, nil, true
 	}
 	if workPlan != nil {
 		messages = e.host.InjectPlan(messages, workPlan)
 	}
-	return messages, workPlan
+	return messages, workPlan, true
 }
 
 func toolNamesFromDefinitions(tools []gateway.ToolDefinition) []string {

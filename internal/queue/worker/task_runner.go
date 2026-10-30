@@ -89,6 +89,7 @@ func (r *TaskRunner) commandSuggestion(
 		AgentID:     task.AgentID,
 		Role:        gateway.RoleWorker,
 		TaskID:      task.ID,
+		Attrs:       gateway.AttrsForTask(task.RequiresWorkspaceChange),
 	}
 	return gateway.GenerateJSON[suggestedCommand](ctx, r.gateway, req)
 }

@@ -95,6 +95,39 @@ gateway:
 
 Add `POOLSIDE_API_KEY=<key>` to `.env`.
 
+### Strata
+
+[Strata](https://github.com/StrataScratch/strata) is a local inference server with a web UI
+that exposes an OpenAI-compatible API. It supports loading Qwen, Llama, and other models.
+
+```yaml
+gateway:
+  providers:
+    - name: strata
+      adapter: openai
+      base_url: "http://127.0.0.1:8080/v1"
+      api_key: "<strata-key>"  # from `strata launch --show-key`; the real engine checks it
+      model: "qwen3.8-flash-next-iq3_s"
+  order: [strata]
+```
+
+Strata supports `response_format: json_object`, so agentd's structured-output calls work
+with a real model loaded. Things to know:
+
+- **Use the real engine and its key.** A server started with `--engine mock` answers every
+  request with fixed text, so every structured call fails; that was the whole of
+  [B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md). The real
+  engine checks the key: get it with `strata launch --show-key`. For an `adapter: openai`
+  provider agentd only checks that a key is configured; it does not probe the endpoint, so
+  passing that check says nothing about whether Strata is reachable or the key is right.
+- **Leave room for reasoning.** Qwen3 reasons before it answers, and the reasoning counts
+  against the output budget.
+- **A failed structured answer is a 502** (`structured_output_failed`). agentd treats it as
+  an unreachable provider: the router tries the next provider in `gateway.order`, and the
+  failure counts toward the breaker. It is not a JSON correction retry.
+- **`tools` and `response_format` together are refused** (HTTP 400). agentd's OpenAI adapter
+  already drops `response_format` when a request carries tools.
+
 ## Cascade Fallback
 
 List multiple providers in `order` for automatic fallback:
