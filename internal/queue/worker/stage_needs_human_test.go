@@ -131,6 +131,7 @@ func TestNeedsHumanHandsOffTheStagesOwnQuestion(t *testing.T) {
 		wantOptions                []string
 	}{
 		{"own question", `{"needs_human":true,"question":"Which repo?","options":["api","web"]}`, "Which repo?", []string{"api", "web"}},
+		{"padded and blank options", `{"needs_human":true,"question":"  Which repo? ","options":[" api ","  ",""]}`, "Which repo?", []string{"api"}},
 		{"no question", `{"needs_human":true}`, "The create.elicit step cannot finish without a decision. What should it do?", nil},
 	}
 	for _, tc := range cases {
