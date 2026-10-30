@@ -66,7 +66,7 @@ func (w *Worker) splitTask(ctx context.Context, task models.Task, project models
 		return planning.SplitResult{}, err
 	}
 	if res.Outcome == stage.OutcomeNeedsHuman {
-		return planning.SplitResult{}, handOffNeedsHuman(ctx, w.AskHuman, task, gateway.PurposeCreateSplitTask)
+		return planning.SplitResult{}, handOffNeedsHuman(ctx, w.AskHuman, task, gateway.PurposeCreateSplitTask, res.Output)
 	}
 	var result planning.SplitResult
 	if err := json.Unmarshal(res.Output, &result); err != nil {

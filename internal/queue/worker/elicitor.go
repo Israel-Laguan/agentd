@@ -105,7 +105,7 @@ func (e *Elicitor) Analyze(ctx context.Context, task models.Task, project models
 		return nil, err
 	}
 	if res.Outcome == stage.OutcomeNeedsHuman {
-		return nil, handOffNeedsHuman(ctx, e.askHuman, task, gateway.PurposeCreateElicit)
+		return nil, handOffNeedsHuman(ctx, e.askHuman, task, gateway.PurposeCreateElicit, res.Output)
 	}
 	var analysis ElicitationAnalysis
 	if err := json.Unmarshal(res.Output, &analysis); err != nil {

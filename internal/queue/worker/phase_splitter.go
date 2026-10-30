@@ -148,7 +148,7 @@ func (w *Worker) GeneratePlan(
 		return nil, err
 	}
 	if res.Outcome == stage.OutcomeNeedsHuman {
-		return nil, handOffNeedsHuman(ctx, w.AskHuman, task, gateway.PurposeExecWorkPlan)
+		return nil, handOffNeedsHuman(ctx, w.AskHuman, task, gateway.PurposeExecWorkPlan, res.Output)
 	}
 	var plan agentcontext.Plan
 	if err := json.Unmarshal(res.Output, &plan); err != nil {

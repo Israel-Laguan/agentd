@@ -121,3 +121,34 @@ func TestWorkPlanNeedsHumanStopsTheRun(t *testing.T) {
 		t.Fatalf("clarification subtasks = %d, want 1", clarifications)
 	}
 }
+
+// A marked reply that names its question and options hands those to the person;
+// one without a question falls back to the generic question for the purpose.
+func TestNeedsHumanHandsOffTheStagesOwnQuestion(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, output, wantQuestion string
+		wantOptions                []string
+	}{
+		{"own question", `{"needs_human":true,"question":"Which repo?","options":["api","web"]}`, "Which repo?", []string{"api", "web"}},
+		{"no question", `{"needs_human":true}`, "The create.elicit step cannot finish without a decision. What should it do?", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotQ string
+			var gotOpts []string
+			e := NewElicitorOn(&stageRecorder{outcome: stage.OutcomeNeedsHuman, output: tc.output}).WithHuman(
+				func(_ context.Context, _ models.Task, q string, opts []string) error {
+					gotQ, gotOpts = q, opts
+					return nil
+				})
+			_, err := e.Analyze(context.Background(), models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, models.Project{}, "")
+			if !errors.Is(err, stage.ErrNeedsHuman) {
+				t.Fatalf("Analyze() error = %v, want ErrNeedsHuman", err)
+			}
+			if gotQ != tc.wantQuestion || strings.Join(gotOpts, ",") != strings.Join(tc.wantOptions, ",") {
+				t.Fatalf("asked %q %v, want %q %v", gotQ, gotOpts, tc.wantQuestion, tc.wantOptions)
+			}
+		})
+	}
+}

@@ -10,7 +10,9 @@ type TaskAttrs struct {
 }
 
 // AttrsForTask returns the routing attributes of a call made for one task.
-// Every task-backed request sets them, so a rule can match any purpose.
+// Every single-task request sets them, so a rule can match its purpose. A
+// batch call covers several tasks and carries none, so rules that condition on
+// an attribute never match it.
 func AttrsForTask(requiresWorkspaceChange bool) TaskAttrs {
 	return TaskAttrs{RequiresWorkspaceChange: &requiresWorkspaceChange}
 }
