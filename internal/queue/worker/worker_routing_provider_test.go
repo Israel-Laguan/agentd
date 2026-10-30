@@ -137,9 +137,9 @@ func TestProviderSupportsAgentic_EmptyProviderUsesCascade(t *testing.T) {
 	}
 }
 
-// TestProviderSupportsAgentic_OllamaRemainsLegacy is the intentional-false regression
-// guard: Ollama must continue to fall back to legacy one-shot JSON.
-func TestProviderSupportsAgentic_OllamaRemainsLegacy(t *testing.T) {
+// TestProviderSupportsAgentic_OllamaIsRefused is the intentional-false regression
+// guard: Ollama cannot call tools, so an agentic profile on it is refused.
+func TestProviderSupportsAgentic_OllamaIsRefused(t *testing.T) {
 	t.Parallel()
 
 	w := newWorkerWithProviders(t, noToolConfig("synth-ollama"))

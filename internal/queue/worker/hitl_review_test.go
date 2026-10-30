@@ -11,16 +11,15 @@ import (
 	"agentd/internal/testutil"
 )
 
-// setupReviewProfile enables RequireReview on the default profile. agentic picks
-// the engine: the legacy-only assertions in this file keep the legacy engine.
-func setupReviewProfile(t *testing.T, store models.KanbanStore, ctx context.Context, provider string, agentic bool) {
+// setupReviewProfile enables RequireReview on the default profile.
+func setupReviewProfile(t *testing.T, store models.KanbanStore, ctx context.Context, provider string) {
 	t.Helper()
 	profile, err := store.GetAgentProfile(ctx, "default")
 	if err != nil {
 		t.Fatalf("get profile: %v", err)
 	}
 	profile.RequireReview = true
-	profile.AgenticMode = agentic
+	profile.AgenticMode = true
 	if provider != "" {
 		profile.Provider = provider
 	}
@@ -121,7 +120,7 @@ func TestProcess_RequireReview_FinalizesApprovedReview(t *testing.T) {
 	t.Parallel()
 	store := testutil.NewFakeStore()
 	ctx := context.Background()
-	setupReviewProfile(t, store, ctx, "", true)
+	setupReviewProfile(t, store, ctx, "")
 	gw := &routingTestGateway{}
 	sb := &routingTestSandbox{}
 	w := NewWorker(store, gw, sb, nil, nil, WorkerOptions{MaxToolIterations: 5})

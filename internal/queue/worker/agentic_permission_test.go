@@ -13,8 +13,8 @@ import (
 )
 
 // A failed command whose output says "Permission denied" hands the task to a
-// human on the agentic path, as the legacy path does. No non-privileged
-// alternative is requested: the model is not asked to find one.
+// human. No non-privileged alternative is requested: the model is not asked to
+// find one.
 func TestAgenticPermissionDeniedHandsOffWithoutAlternative(t *testing.T) {
 	t.Parallel()
 	gw := &sequenceGateway{responses: []gateway.AIResponse{

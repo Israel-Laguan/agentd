@@ -27,7 +27,7 @@ func TestSeededDefaultProfileIsAgentic(t *testing.T) {
 		t.Fatalf("GetAgentProfile(default): %v", err)
 	}
 	if !got.AgenticMode {
-		t.Fatal("default profile has agentic_mode off; a task on it would run the legacy command path and report COMPLETED without changing anything")
+		t.Fatal("default profile has agentic_mode off, which the API refuses and startup upgrades")
 	}
 }
 

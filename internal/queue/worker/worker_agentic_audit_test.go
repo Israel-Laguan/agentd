@@ -37,7 +37,7 @@ func auditTypesFor(t *testing.T, path, taskID string) []string {
 }
 
 // An agentic attempt writes a task_start on entry and a task_complete when its
-// loop ends in success, as the legacy path does.
+// loop ends in success.
 func TestAgenticAttemptAuditsStartAndComplete(t *testing.T) {
 	t.Parallel()
 	gw := &sequenceGateway{responses: []gateway.AIResponse{{Content: "Done."}}}

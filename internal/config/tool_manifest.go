@@ -61,8 +61,6 @@ func loadToolManifestConfig(v *viper.Viper) ToolManifestConfig {
 	}
 }
 
-
-
 // interfaceToStringSlice normalizes a viper-unmarshaled value (from yaml/json etc)
 // into []string for ToolManifest mappings. Supports []string, []interface{}, and nil.
 func interfaceToStringSlice(v interface{}) []string {
