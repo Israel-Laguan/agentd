@@ -195,8 +195,8 @@ func defaultAgentProfiles() []models.AgentProfile {
 //
 // Provider/model are left empty on purpose: profile lookup falls back to the
 // gateway cascade (gateway.order). Note that today every agentic call (all five
-// tiered steps included) is dispatched with the same gateway.RoleWorker
-// route (internal/queue/worker/agentic/handlers.go) — there is no per-step
+// tiered steps included) is dispatched through the same route
+// (internal/queue/worker/agentic/handlers.go) — there is no per-step
 // routing that automatically assigns a small/mid/strong model per tier.
 // Seeding these profiles here only guarantees the steps resolve; an operator
 // who wants the documented cheap/mid/strong cost tiers enforced at runtime

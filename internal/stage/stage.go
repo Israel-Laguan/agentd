@@ -55,8 +55,7 @@ type StageRequest struct {
 	// the value its prompt was tuned with.
 	Temperature float64
 	// The fields below pick the model. Each stage keeps the tier it runs at
-	// today; Role is RoleChat when empty.
-	Role      spec.Role
+	// today.
 	AgentID   string
 	Provider  string
 	Model     string

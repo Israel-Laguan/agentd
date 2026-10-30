@@ -75,7 +75,6 @@ func (d *SubagentDelegate) runSubagentStep(
 		Provider:    provider,
 		Model:       model,
 		MaxTokens:   maxTokens,
-		Role:        gateway.RoleWorker,
 		TaskID:      gateway.TaskIDFromContext(ctx),
 	}
 	resp, err := d.gateway.Generate(ctx, req)
