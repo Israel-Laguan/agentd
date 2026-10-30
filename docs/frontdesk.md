@@ -101,7 +101,7 @@ The Frontdesk's testability comes from two interface boundaries:
 
 2. **`models.KanbanStore`** ([`internal/models/interfaces.go`](../internal/models/interfaces.go)) -- `StatusSummarizer` and `ProjectService` depend on this interface. Tests inject `apiStore` (minimal in-memory state) or `FakeKanbanStore` (full fake in `internal/testutil/`).
 
-The `Truncator` interface ([`internal/gateway/truncation/truncator.go`](../internal/gateway/truncation/truncator.go), re-exported from `gateway`) is a third seam used by file-handling tests, injected into the `Planner` via `ServerDeps.Truncator`.
+The `Truncator` interface ([`internal/gateway/spec/spec.go`](../internal/gateway/spec/spec.go), re-exported from `gateway`; strategies in [`internal/gateway/truncation/truncator.go`](../internal/gateway/truncation/truncator.go)) is a third seam used by file-handling tests, injected into the `Planner` via `ServerDeps.Truncator`.
 
 ### Wiring
 

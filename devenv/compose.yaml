@@ -13,6 +13,7 @@ name: agentd
 #   agentd-brk     - variant (port 8770) - breaker profile (all providers dead)
 #   agentd-tiered  - variant (port 8769) - tiered profile
 #   agentd-prb     - variant (port 8771) - provider breaker profile (J16)
+#   agentd-sched   - variant (port 8772) - scheduler profile (J23)
 #   web     - Next.js frontend (port 3000) - default profile
 #
 # Usage:
@@ -36,6 +37,7 @@ name: agentd
 #   disk    - disk space watchdog (J10)
 #   tiered  - tiered execution (J12)
 #   provider- one provider whose model the mock can 429 (J16)
+#   scheduler - one-shot scheduled task runs exactly once (J23)
 #
 # Troubleshooting:
 #   - Healthchecks use CMD-SHELL (string form) so they survive the alias/quote
@@ -68,6 +70,7 @@ services:
       - disk
       - tiered
       - provider
+      - scheduler
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)\""]
       interval: 2s
@@ -85,6 +88,7 @@ services:
       - faults
       - disk
       - tiered
+      - scheduler
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
       # Pre-call hook registered in config.yaml (litellm_settings.callbacks).
