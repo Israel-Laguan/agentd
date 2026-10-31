@@ -49,6 +49,12 @@ func runAgenticDraft(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, dr
 // runs the attempts, so a test can run several on the same worker.
 func agenticFixture(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, draft models.DraftTask, prep func(workspace string)) (*Worker, *mockEventSink, models.Task, models.Project, models.AgentProfile) {
 	t.Helper()
+	return agenticFixtureWith(t, gw, sb, draft, prep, WorkerOptions{MaxToolIterations: 5})
+}
+
+// agenticFixtureWith is agenticFixture for a worker built with opts.
+func agenticFixtureWith(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, draft models.DraftTask, prep func(workspace string), opts WorkerOptions) (*Worker, *mockEventSink, models.Task, models.Project, models.AgentProfile) {
+	t.Helper()
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	store.SetProjectsDir(t.TempDir())
@@ -72,7 +78,7 @@ func agenticFixture(t *testing.T, gw gateway.AIGateway, sb sandbox.Executor, dra
 		t.Fatalf("MarkTaskRunning: %v", err)
 	}
 	sink := &mockEventSink{}
-	w := NewWorker(store, gw, sb, nil, sink, WorkerOptions{MaxToolIterations: 5})
+	w := NewWorker(store, gw, sb, nil, sink, opts)
 	return w, sink, *running, *proj, profile
 }
 
