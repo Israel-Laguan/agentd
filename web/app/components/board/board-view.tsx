@@ -75,7 +75,7 @@ export function BoardView({
       </div>
 
       <DndContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-10 gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
+        <div data-testid="board-columns" className="grid grid-cols-[minmax(240px,1fr)] sm:grid-cols-[repeat(2,minmax(240px,1fr))] lg:grid-cols-[repeat(10,minmax(240px,1fr))] gap-4 h-full content-start overflow-x-auto min-w-full pb-10">
           {[
             TaskStatus.PENDING,
             TaskStatus.READY,
