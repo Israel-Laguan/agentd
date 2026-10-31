@@ -73,6 +73,15 @@ describe("splitHandoffCommand", () => {
     expect(splitHandoffCommand(description).command).toBe('sh -c "echo a\\b"');
   });
 
+  it("reads a detector name that contains spaces", () => {
+    const description =
+      'Intro\n\npattern=Permission denied command="cat /etc/shadow" exit=1 duration=1ms\ncat: Permission denied\n';
+    expect(splitHandoffCommand(description)).toEqual({
+      text: "Intro",
+      command: "cat /etc/shadow",
+    });
+  });
+
   it("reads a payload that starts the description", () => {
     expect(splitHandoffCommand('pattern=privilege command="id" exit=1 duration=1ms\nout')).toEqual({
       text: "",

@@ -24,6 +24,7 @@ describe('SidebarItem', () => {
     render(<SidebarItem icon={MockIcon} label="Workforce Board" collapsed />);
     expect(screen.queryByText('Workforce Board')).not.toBeInTheDocument();
     const button = screen.getByRole('button', { name: 'Workforce Board' });
+    expect(button).toHaveAttribute('aria-label', 'Workforce Board');
     expect(button).toHaveAttribute('title', 'Workforce Board');
     expect(screen.getByTestId('mock-icon')).toBeInTheDocument();
   });

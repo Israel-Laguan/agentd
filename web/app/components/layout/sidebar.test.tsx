@@ -1,9 +1,19 @@
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Sidebar, SIDEBAR_COLLAPSED_KEY } from './sidebar';
+import type * as SidebarModule from './sidebar';
 
 const workforce = { active_workers: 2, max_workers: 4, queue_length: 0 };
+
+let Sidebar: typeof SidebarModule.Sidebar;
+let SIDEBAR_COLLAPSED_KEY: typeof SidebarModule.SIDEBAR_COLLAPSED_KEY;
+
+// The collapsed flag keeps a module-level fallback for blocked storage, so each
+// test imports a fresh copy instead of inheriting the previous test's state.
+beforeEach(async () => {
+  vi.resetModules();
+  ({ Sidebar, SIDEBAR_COLLAPSED_KEY } = await import('./sidebar'));
+});
 
 const renderSidebar = () =>
   render(<Sidebar activeTab="board" setActiveTab={vi.fn()} workforce={workforce} />);
@@ -56,6 +66,24 @@ describe('Sidebar', () => {
 
     expect(await screen.findByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
     expect(container.querySelector('aside')).toHaveClass('w-16');
+  });
+
+  it('keeps using the latest value when writes fail but reads still work', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    const { container } = renderSidebar();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+    expect(container.querySelector('aside')).toHaveClass('w-16');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+    expect(container.querySelector('aside')).toHaveClass('w-60');
+
+    // Once a write succeeds, storage is authoritative again.
+    setItem.mockRestore();
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe('true');
   });
 
   it('still toggles when storage is blocked', async () => {

@@ -118,13 +118,26 @@ func TestEnforcePhaseCap(t *testing.T) {
 		t.Fatalf("under cap: %d", len(out.Tasks))
 	}
 
+	// A cap of 1 still has to keep an executable task, so it behaves like the
+	// smallest usable cap of 2 instead of emitting a continuation-only plan.
 	out = enforcePhaseCap(plan, 1)
-	if len(out.Tasks) != 1 || !strings.Contains(out.Tasks[0].Title, "Phase") {
+	if len(out.Tasks) != 2 || out.Tasks[0].Title != "a" || out.Tasks[1].Title != "Plan Phase 2" {
 		t.Fatalf("cap=1: %#v", out.Tasks)
 	}
+	assertDeferred(t, out.Tasks[1], "b", "c", "d")
 
 	out = enforcePhaseCap(plan, 2)
-	if len(out.Tasks) != 2 {
-		t.Fatalf("cap=2 len=%d", len(out.Tasks))
+	if len(out.Tasks) != 2 || out.Tasks[0].Title != "a" || out.Tasks[1].Title != "Plan Phase 2" {
+		t.Fatalf("cap=2: %#v", out.Tasks)
+	}
+	assertDeferred(t, out.Tasks[1], "b", "c", "d")
+}
+
+func assertDeferred(t *testing.T, task models.DraftTask, titles ...string) {
+	t.Helper()
+	for _, title := range titles {
+		if !strings.Contains(task.Description, "- "+title) {
+			t.Errorf("continuation description missing %q: %q", title, task.Description)
+		}
 	}
 }

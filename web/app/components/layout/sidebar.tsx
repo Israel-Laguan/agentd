@@ -19,8 +19,14 @@ interface SidebarProps {
 // still works for this page, it just is not remembered.
 const collapsedListeners = new Set<() => void>();
 let collapsedFallback = false;
+let collapsedPersistFailed = false;
 
 const readCollapsed = () => {
+    // A failed write still leaves getItem working (quota-exceeded, read-only
+    // storage), so prefer the value the operator just set until a write sticks.
+    if (collapsedPersistFailed) {
+        return collapsedFallback;
+    }
     try {
         return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
     } catch {
@@ -32,8 +38,11 @@ const writeCollapsed = (value: boolean) => {
     collapsedFallback = value;
     try {
         window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(value));
+        collapsedPersistFailed = false;
     } catch {
-        // Not persisted; collapsedFallback holds it.
+        // Not persisted; readCollapsed serves collapsedFallback until a write
+        // succeeds, rather than the older value storage still returns.
+        collapsedPersistFailed = true;
     }
     collapsedListeners.forEach((listener) => listener());
 };

@@ -47,10 +47,15 @@ linters:
             - "!$test"
           allow:
             - $gostd
-            - agentd/internal/gateway
+            # Exact roots and slash subtrees: a bare prefix would also admit
+            # siblings such as internal/gatewayextra.
+            - agentd/internal/gateway$
+            - agentd/internal/gateway/
             # Still imported; drop each once T-045 cuts it.
-            - agentd/internal/models
-            - agentd/internal/api/correlation
+            - agentd/internal/models$
+            - agentd/internal/models/
+            - agentd/internal/api/correlation$
+            - agentd/internal/api/correlation/
         queue-test-isolation:
           files:
             - "**/internal/queue/**_test.go"

@@ -13,9 +13,12 @@ func enforcePhaseCap(plan models.DraftPlan, maxTasksPerPhase int) models.DraftPl
 	if maxTasksPerPhase <= 0 || len(plan.Tasks) <= maxTasksPerPhase {
 		return plan
 	}
-	if maxTasksPerPhase == 1 {
-		plan.Tasks = []models.DraftTask{phaseContinuationTask(2, plan.Tasks)}
-		return plan
+	// A cap of 1 cannot hold both an executable task and its continuation.
+	// Keeping only the continuation would make the next phase plan nothing but
+	// another continuation, forever, so the floor is 2. Config rejects a
+	// positive cap below 2 as well; this keeps a direct caller from looping.
+	if maxTasksPerPhase < 2 {
+		maxTasksPerPhase = 2
 	}
 	remaining := append([]models.DraftTask(nil), plan.Tasks[maxTasksPerPhase-1:]...)
 	plan.Tasks = append([]models.DraftTask(nil), plan.Tasks[:maxTasksPerPhase-1]...)

@@ -82,11 +82,26 @@ func TestJ23_ScheduledTaskRunsExactlyOnce(t *testing.T) {
 func j23Reset(ctx context.Context, t *testing.T, devenv *DevenvManager, harness *Harness) {
 	t.Helper()
 	home := profileService["scheduler"].home
-	script := fmt.Sprintf("rm -f %s/.env %s/global.db %s/global.db-wal %s/global.db-shm", home, home, home, home)
-	if _, err := devenv.Exec(ctx, "sh", "-c", script); err != nil {
+	// Stop before unlinking: deleting a live SQLite database races the daemon's
+	// open connections and WAL. ResetHome reuses the stopped service's volume
+	// through a one-shot container, then the daemon starts on the fresh board.
+	if err := devenv.StopAgentd(ctx); err != nil {
+		t.Fatalf("J23 [reset] stop the daemon: %v", err)
+	}
+	if err := devenv.ResetHome(ctx,
+		home+"/.env",
+		home+"/global.db",
+		home+"/global.db-wal",
+		home+"/global.db-shm",
+	); err != nil {
 		t.Fatalf("J23 [reset] clear the board: %v", err)
 	}
-	j23Restart(ctx, t, devenv, harness, "reset")
+	if err := devenv.RestartAgentd(ctx); err != nil {
+		t.Fatalf("J23 [reset] restart the daemon: %v", err)
+	}
+	if err := harness.WaitForHealthy(ctx, 60*time.Second); err != nil {
+		t.Fatalf("J23 [reset] daemon not healthy after reset: %v", err)
+	}
 }
 
 // j23Restart kills and restarts the scheduler profile's daemon; its volume, the

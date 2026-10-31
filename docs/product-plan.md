@@ -206,7 +206,7 @@ Default mapping matches how people already work: plan with strong (already outsi
 
 ### Why this can be unique
 
-Most harnesses either (a) one model for the whole session, or (b) route by agent persona without **sealed handoffs**. agentd can make each step a board task with profile + purpose routing (a `stages:` route per purpose, such as `exec.turn`) and durable artifacts. That is governance again: the board owns the pipeline, not the transcript.
+Most harnesses either (a) one model for the whole session, or (b) route by agent persona without **sealed handoffs**. agentd can make each step a board task with profile + purpose routing (a `stages:` route per purpose, such as `exec.work_plan`) and durable artifacts. That is governance again: the board owns the pipeline, not the transcript.
 
 You already have building blocks:
 

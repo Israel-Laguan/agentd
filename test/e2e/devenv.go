@@ -5,6 +5,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -107,6 +108,36 @@ func (m *DevenvManager) Exec(ctx context.Context, args ...string) (string, error
 		return "", fmt.Errorf("exec %s: %w (stderr: %s)", svc.service, err, stderr.String())
 	}
 	return stdout.String(), nil
+}
+
+// StopAgentd gracefully stops this profile's agentd container, leaving its data
+// volume in place. Use it before touching files inside the volume: unlinking a
+// live SQLite database races the daemon's open connections and WAL.
+func (m *DevenvManager) StopAgentd(ctx context.Context) error {
+	return m.serviceCmd(ctx, "stop")
+}
+
+// ResetHome removes paths under this profile's home from its data volume. The
+// agentd container must be stopped first. A one-shot container reuses the same
+// service image and volume, so the cleanup reaches the volume even though
+// there is no host bind mount for it.
+func (m *DevenvManager) ResetHome(ctx context.Context, paths ...string) error {
+	svc, ok := profileService[m.profile]
+	if !ok {
+		return fmt.Errorf("no known agentd service for profile %q", m.profile)
+	}
+	if len(paths) == 0 {
+		return errors.New("ResetHome needs at least one path")
+	}
+	args := append([]string{
+		"compose", "-f", m.composePath, "--profile", m.profile,
+		"run", "--rm", "--no-deps", "-T", "--entrypoint", "rm", svc.service, "-f",
+	}, paths...)
+	cmd := exec.CommandContext(ctx, "podman", args...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("reset %s home: %w (output: %s)", svc.service, err, string(output))
+	}
+	return nil
 }
 
 // KillAgentd SIGKILLs this profile's agentd container (an unclean crash: no

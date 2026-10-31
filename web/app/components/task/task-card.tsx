@@ -20,7 +20,7 @@ import { CSS } from "@dnd-kit/utilities";
 // A privileged-command handoff ends with the daemon's detection payload:
 // pattern=<p> command=<Go %q string> exit=<n> duration=<d>, then the command's
 // output (internal/queue/worker/worker_addons.go detectionPayload).
-const HANDOFF_PAYLOAD = /(?:^|\n)pattern=\S+ command="((?:[^"\\]|\\.)*)"/;
+const HANDOFF_PAYLOAD = /(?:^|\n)pattern=[^\n]*? command="((?:[^"\\]|\\.)*)"/;
 
 // splitHandoffCommand returns the description's text before a handoff payload
 // and the payload's command, unquoted. The output after it is left to the task
