@@ -163,7 +163,7 @@ func (e *Engine) recoverBlockedCall(
 func (e *Engine) recoverPromptHang(ctx context.Context, task models.Task, hang PromptHang, tr agenttools.ToolResult) (agenttools.ToolResult, bool) {
 	e.host.Emit(ctx, task, "PROMPT_DETECTED", hang.Payload)
 	if e.hungCommands[hang.Command] {
-		e.settle(Result{Kind: ResultPromptHandoff, Task: task, Payload: hang.Payload})
+		e.result = Result{Kind: ResultPromptHandoff, Task: task, Payload: hang.Payload}
 		return tr, true
 	}
 	if e.hungCommands == nil {
@@ -197,7 +197,7 @@ func (e *Engine) continueAgenticAfterTools(
 	stalled, stallErr := e.handleGoalProgress(ctx, task, goalTracker, resp.Content)
 	if stalled || stallErr != nil {
 		if stallErr != nil {
-			e.settle(Result{Kind: ResultGatewayError, Task: task, Err: stallErr})
+			e.result = Result{Kind: ResultGatewayError, Task: task, Err: stallErr}
 		}
 		return false, agentruntime.LoopResult{}, false, stallErr
 	}

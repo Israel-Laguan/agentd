@@ -79,7 +79,7 @@ func (e *Engine) runPreTaskElicitation(
 ) (models.Task, bool) {
 	task, blocked, err := e.host.RunPreTaskElicitation(cancelCtx, task, project)
 	if err != nil {
-		e.settle(Result{Kind: ResultFailed, Task: task, Err: err})
+		e.result = Result{Kind: ResultFailed, Task: task, Err: err}
 		return task, false
 	}
 	if blocked {
@@ -163,7 +163,7 @@ func (e *Engine) newAgenticContextManager(task models.Task) (*agentcontext.Conte
 	goalTracker := agentcontext.NewGoalTracker(
 		task.ID,
 		task.ProjectID,
-		agentcontext.WithCriteriaStore(e.host),
+		agentcontext.WithCriteriaStore(criteriaWriter(e.config.CriteriaMet)),
 	)
 	if goal != nil {
 		goalTracker.SetGoal(*goal)

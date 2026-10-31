@@ -1,6 +1,10 @@
 package agentic
 
-import "agentd/internal/models"
+import (
+	"context"
+
+	"agentd/internal/models"
+)
 
 // ResultKind is how a task attempt ended when the engine decided it.
 type ResultKind int
@@ -31,8 +35,14 @@ type Result struct {
 	Profile models.AgentProfile
 }
 
-// settle records the terminal result of this run. Every settling path ends the
-// loop, so the last one is the only one.
-func (e *Engine) settle(r Result) {
-	e.result = r
+// criteriaWriter adapts Config.CriteriaMet to the goal tracker's updater.
+type criteriaWriter func(ctx context.Context, taskID string, met []string) error
+
+// UpdateCriteriaMet implements agentcontext.CriteriaUpdater. A nil callback
+// drops the progress.
+func (f criteriaWriter) UpdateCriteriaMet(ctx context.Context, taskID string, met []string) error {
+	if f == nil {
+		return nil
+	}
+	return f(ctx, taskID, met)
 }

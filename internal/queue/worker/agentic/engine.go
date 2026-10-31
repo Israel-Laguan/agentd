@@ -40,6 +40,9 @@ type Config struct {
 	CheckpointStore         wsession.CheckpointStore
 	TopicGuard              *agentruntime.TopicGuard
 	Capabilities            *capabilities.Registry
+	// CriteriaMet saves the success criteria a turn met. It reports progress
+	// only; the terminal outcome goes through Result.
+	CriteriaMet func(ctx context.Context, taskID string, met []string) error
 }
 
 type TaskReadStore interface {
@@ -57,19 +60,17 @@ type PromptHang struct {
 	Feedback string
 }
 
+// Host is what the engine calls into. A task's terminal outcome is not written
+// through Host: the engine settles on a Result and the worker applies it (T-041).
 type Host interface {
-	FailHard(ctx context.Context, task models.Task, err error)
 	RegisterCancel(taskID string, cancel context.CancelFunc)
 	DeregisterCancel(taskID string)
-	HandleGatewayError(ctx context.Context, task models.Task, err error)
 	// RecordProviderSuccess closes the task's provider breaker. The engine calls
 	// it only after a turn's LLM request actually succeeded, so a turn that ends
 	// locally (tool failure, budget exhaustion, break-up) never closes an OPEN
 	// circuit the provider has not recovered from.
 	RecordProviderSuccess(ctx context.Context, task models.Task)
 	RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails)
-	UpdateCriteriaMet(ctx context.Context, taskID string, met []string) error
-	CommitTextWithProfile(ctx context.Context, task models.Task, text string, profile *models.AgentProfile)
 	DispatchToolWithHooks(
 		ctx context.Context,
 		sessionID, projectID, turnID string,
@@ -84,9 +85,6 @@ type Host interface {
 	// AgenticPromptHang reports a bash call that timed out with an interactive
 	// prompt in its output.
 	AgenticPromptHang(call gateway.ToolCall, result agenttools.ToolResult) (PromptHang, bool)
-	// HandlePromptHandoff blocks the task for a human after a command hung at a
-	// prompt a second time (PROMPT_HANDOFF).
-	HandlePromptHandoff(ctx context.Context, task models.Task, payload string)
 	AgenticPrivilegeBlock(call gateway.ToolCall, result agenttools.ToolResult) (string, bool)
 	RecoverAgenticPrivilege(
 		ctx context.Context,
@@ -167,6 +165,7 @@ type Engine struct {
 	// and files written. A text-only finish needs some of it to be COMPLETED.
 	evidence runEvidence
 	// result is the terminal outcome this run settled on, if any (see Result).
+	// Every settling path ends the loop, so the last write is the only one.
 	result Result
 	// hungCommands holds the commands that already stopped at a prompt in this
 	// run; a repeat of one hands the task to a human. Created on first use.

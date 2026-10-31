@@ -41,7 +41,7 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	)
 
 	if err := e.host.RunSessionStart(cancelCtx, task, project, taskHooks); err != nil {
-		e.settle(Result{Kind: ResultFailed, Task: task, Err: err})
+		e.result = Result{Kind: ResultFailed, Task: task, Err: err}
 		return agentruntime.LoopResult{}, e.result, false
 	}
 
@@ -148,7 +148,7 @@ func (e *Engine) generateAgenticTurn(
 	truncated, err := e.applyAgenticTruncation(ctx, req.Messages)
 	noteCut(ctx, "agentic_head", before, agentcontext.TotalChars(truncated))
 	if err != nil {
-		e.settle(Result{Kind: ResultGatewayError, Task: task, Err: err})
+		e.result = Result{Kind: ResultGatewayError, Task: task, Err: err}
 		return gateway.AIResponse{}, nil, err
 	}
 	req.Messages = truncated
@@ -170,7 +170,7 @@ func (e *Engine) generateAgenticTurn(
 			}
 			return gateway.AIResponse{}, &r, nil
 		}
-		e.settle(Result{Kind: ResultGatewayError, Task: task, Err: err})
+		e.result = Result{Kind: ResultGatewayError, Task: task, Err: err}
 		return gateway.AIResponse{}, nil, err
 	}
 	e.host.RecordProviderSuccess(ctx, task)
@@ -181,5 +181,5 @@ func (e *Engine) generateAgenticTurn(
 func (e *Engine) rejectWithoutToolSupport(ctx context.Context, task models.Task, provider string) {
 	correlation.Logger(ctx).Error("agentic profile's routed provider cannot call tools; failing the task",
 		"task_id", task.ID, "provider", provider)
-	e.settle(Result{Kind: ResultFailed, Task: task, Err: fmt.Errorf("%w (%q)", models.ErrAgentProfileNoToolSupport, provider)})
+	e.result = Result{Kind: ResultFailed, Task: task, Err: fmt.Errorf("%w (%q)", models.ErrAgentProfileNoToolSupport, provider)}
 }

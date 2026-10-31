@@ -122,7 +122,7 @@ func (e *Engine) guardAgenticIteration(
 	sessionMgr *SessionManager, turnID string, turnIndex int,
 ) (*agentruntime.LoopResult, error) {
 	if err := deadlineGuard.BeforeIteration(); err != nil {
-		e.settle(Result{Kind: ResultGatewayError, Task: task, Err: err})
+		e.result = Result{Kind: ResultGatewayError, Task: task, Err: err}
 		return nil, err
 	}
 	if stop, err := e.guardIterationAndBudget(
@@ -159,7 +159,7 @@ func (e *Engine) guardIterationAndBudget(
 	}
 	contextExhausted, err := e.prepareAgenticIteration(ctx, messages, iterationGuard, cm, ctxBudgetGuard, task)
 	if err != nil {
-		e.settle(Result{Kind: ResultGatewayError, Task: task, Err: err})
+		e.result = Result{Kind: ResultGatewayError, Task: task, Err: err}
 		return nil, err
 	}
 	if contextExhausted {
@@ -238,7 +238,7 @@ func (e *Engine) guardBudgetBeforeCall(
 		}
 		return &r, err
 	}
-	e.settle(Result{Kind: ResultGatewayError, Task: task, Err: err})
+	e.result = Result{Kind: ResultGatewayError, Task: task, Err: err}
 	return nil, err
 }
 
@@ -261,7 +261,7 @@ func (e *Engine) injectWorkPlanIfNeeded(
 		return messages, nil, false
 	}
 	if errors.Is(planErr, stage.ErrHumanHandoffFailed) {
-		e.settle(Result{Kind: ResultFailed, Task: task, Err: planErr})
+		e.result = Result{Kind: ResultFailed, Task: task, Err: planErr}
 		return messages, nil, false
 	}
 	if planErr != nil {
