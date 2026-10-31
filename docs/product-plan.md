@@ -206,11 +206,11 @@ Default mapping matches how people already work: plan with strong (already outsi
 
 ### Why this can be unique
 
-Most harnesses either (a) one model for the whole session, or (b) route by agent persona without **sealed handoffs**. agentd can make each step a board task with profile + role routing (`RoleWorker` / new roles like `context` / `decision` / `verify`) and durable artifacts. That is governance again: the board owns the pipeline, not the transcript.
+Most harnesses either (a) one model for the whole session, or (b) route by agent persona without **sealed handoffs**. agentd can make each step a board task with profile + purpose routing (a `stages:` route per purpose, such as `exec.turn`) and durable artifacts. That is governance again: the board owns the pipeline, not the transcript.
 
 You already have building blocks:
 
-- Gateway **role → provider/model** routing (`RoleChat`, `RoleWorker`, `RoleMemory`)
+- Gateway **purpose → agent** routing (`agents:` and `stages:`; it replaced role routing in S18, see [config-reference.md](config-reference.md#routing-agents-and-stages))
 - Agentic **plan phase** then execute (`phase_splitter.go`)
 - Workforce **profiles** and DAG (`DEPENDS_ON` / `SPAWNED_BY`)
 - Failure → **HUMAN** / healing paths
