@@ -166,6 +166,8 @@ type Engine struct {
 	// evidence counts what this run did to the workspace: commands that passed
 	// and files written. A text-only finish needs some of it to be COMPLETED.
 	evidence runEvidence
+	// result is the terminal outcome this run settled on, if any (see Result).
+	result Result
 	// hungCommands holds the commands that already stopped at a prompt in this
 	// run; a repeat of one hands the task to a human. Created on first use.
 	hungCommands map[string]bool

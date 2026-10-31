@@ -79,7 +79,7 @@ func (e *Engine) runPreTaskElicitation(
 ) (models.Task, bool) {
 	task, blocked, err := e.host.RunPreTaskElicitation(cancelCtx, task, project)
 	if err != nil {
-		e.host.FailHard(cancelCtx, task, err)
+		e.settle(Result{Kind: ResultFailed, Task: task, Err: err})
 		return task, false
 	}
 	if blocked {

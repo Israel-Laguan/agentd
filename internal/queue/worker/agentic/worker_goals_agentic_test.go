@@ -74,8 +74,8 @@ func TestProcessAgenticIteration_NoToolCallsUpdatesGoalProgress(t *testing.T) {
 	if !report || result.Status != agentruntime.LoopSuccessfulCompletion {
 		t.Fatalf("result = %+v report = %v, want successful completion", result, report)
 	}
-	if !strings.Contains(committedText, "final response") {
-		t.Fatalf("committed text = %q, want final response", committedText)
+	if e.result.Kind != ResultCompleted || !strings.Contains(e.result.Text, "final response") {
+		t.Fatalf("result = kind %v text %q, want completed with final response", e.result.Kind, e.result.Text)
 	}
 	goal := goalTracker.Goal()
 	if len(goal.CompletedCriteria) != 1 || goal.CompletedCriteria[0] != "a" {

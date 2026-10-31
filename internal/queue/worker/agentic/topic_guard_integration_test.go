@@ -309,8 +309,8 @@ func assertTopicDriftTurnLoopContinuesAfterRewind(
 			t.Fatal("assistant history from before drift should be cleared after rewind")
 		}
 	}
-	if *f.committed == "" {
-		t.Fatal("expected committed text after loop completion")
+	if f.e.result.Kind != ResultCompleted {
+		t.Fatal("expected a completed result after loop completion")
 	}
 }
 

@@ -152,8 +152,8 @@ func TestAgenticLoop_CorrelationIDConsistentAcrossLifecycle(t *testing.T) {
 	if result.Status != agentruntime.LoopSuccessfulCompletion {
 		t.Fatalf("result status = %v, want successful completion; logs=%s", result.Status, logs)
 	}
-	if host.committed == "" {
-		t.Fatal("expected committed terminal text")
+	if e.result.Kind != ResultCompleted || e.result.Text == "" {
+		t.Fatal("expected a completed result with the terminal text")
 	}
 
 	assertLifecycleCorrelationIDs(t, logs, wantID)

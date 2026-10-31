@@ -265,11 +265,28 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	}, w)
 	w.attempts.begin(task.ID)
 	audit := w.beginTaskAudit(task, project, profile.Provider)
-	result, ok := engine.Process(ctx, task, project, profile)
+	result, outcome, ok := engine.Process(ctx, task, project, profile)
+	w.applyAgenticResult(ctx, outcome)
 	succeeded := ok && result.IsTerminalSuccess()
 	audit.failed = !succeeded
 	audit.reviewHandoff = succeeded && profile.RequireReview
 	w.finishTaskAudit(task, project, profile.Provider, audit)
 	w.attempts.finish(task.ID, succeeded)
 	return result, ok
+}
+
+// applyAgenticResult writes the terminal result the engine settled on to the
+// board. The engine only decides the outcome (T-041: only the core writes the
+// board).
+func (w *Worker) applyAgenticResult(ctx context.Context, r agentic.Result) {
+	switch r.Kind {
+	case agentic.ResultFailed:
+		w.FailHard(ctx, r.Task, r.Err)
+	case agentic.ResultGatewayError:
+		w.HandleGatewayError(ctx, r.Task, r.Err)
+	case agentic.ResultCompleted:
+		w.CommitTextWithProfile(ctx, r.Task, r.Text, &r.Profile)
+	case agentic.ResultPromptHandoff:
+		w.HandlePromptHandoff(ctx, r.Task, r.Payload)
+	}
 }
