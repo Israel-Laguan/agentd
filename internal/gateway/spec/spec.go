@@ -42,7 +42,7 @@ type ToolDefinition struct {
 	Name        string              `json:"name"`
 	Description string              `json:"description"`
 	Parameters  *FunctionParameters `json:"parameters"`
-	Cacheable   bool                `json:"cacheable,omitempty"`
+	Cacheable   bool                `json:"-"`
 }
 
 func (t ToolDefinition) MarshalJSON() ([]byte, error) {
