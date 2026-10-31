@@ -20,12 +20,17 @@ import { CSS } from "@dnd-kit/utilities";
 // A privileged-command handoff ends with the daemon's detection payload:
 // pattern=<p> command=<Go %q string> exit=<n> duration=<d>, then the command's
 // output (internal/queue/worker/worker_addons.go detectionPayload).
-const HANDOFF_PAYLOAD = /(?:^|\n)pattern=[^\n]*? command="((?:[^"\\]|\\.)*)"/;
+const HANDOFF_PAYLOAD = /(?:^|\n)pattern=[^\n]*? command="((?:[^"\\]|\\.)*)" exit=-?\d+ duration=\S+/;
 
 // splitHandoffCommand returns the description's text before a handoff payload
 // and the payload's command, unquoted. The output after it is left to the task
-// drawer. A description without a payload comes back unchanged.
-export function splitHandoffCommand(description: string): { text: string; command?: string } {
+// drawer; hasMore says there is such text. A description without the complete
+// payload (the daemon always writes exit and duration) comes back unchanged.
+export function splitHandoffCommand(description: string): {
+  text: string;
+  command?: string;
+  hasMore?: boolean;
+} {
   const match = HANDOFF_PAYLOAD.exec(description);
   if (!match) return { text: description };
   let command = match[1];
@@ -35,7 +40,11 @@ export function splitHandoffCommand(description: string): { text: string; comman
   } catch {
     // An escape JSON lacks (\x, \U): show the command as Go wrote it.
   }
-  return { text: description.slice(0, match.index).trim(), command };
+  return {
+    text: description.slice(0, match.index).trim(),
+    command,
+    hasMore: description.slice(match.index + match[0].length).trim().length > 0,
+  };
 }
 
 interface TaskCardProps {
@@ -78,7 +87,7 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
   };
 
   const StatusIcon = Icons[task.state as TaskStatus] || AlertCircle;
-  const { text, command } = splitHandoffCommand(task.description ?? "");
+  const { text, command, hasMore } = splitHandoffCommand(task.description ?? "");
   const {
     attributes,
     listeners,
@@ -144,6 +153,11 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
         <code title={command} className="block mb-2 truncate bg-bg/80 px-1 py-0.5 rounded font-mono text-[10px] text-text">
           {command}
         </code>
+      )}
+      {hasMore && (
+        <p className="mb-2 text-[10px] italic text-text-dim/70">
+          More details in the task drawer
+        </p>
       )}
       <div className="flex items-center gap-2">
         {(task.token_usage ?? 0) > 0 && (

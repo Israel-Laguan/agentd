@@ -240,7 +240,7 @@ If the pack is wrong, you pay once to rebuild it on purpose. That is cheaper and
 ### Implementation sketch (when we build it)
 
 1. Spec landed: [tiered-execution.md](tiered-execution.md) (ContextPack, step kinds, allowlists, escalation, complexity gate).
-2. Extend role routing (or profile templates) for `context` / `decision` / `execute` / `verify`.
+2. Extend the `tier-*` profile templates for `context` / `decision` / `execute` / `verify`.
 3. Materialize or phase-split complex READY tasks into DAG children with `DEPENDS_ON`.
 4. Worker modes: context-only / decision-only / execute-bounded / verify.
 5. Metrics: tokens per step kind, re-gather rate, escalate-to-human rate, wall time vs single-model baseline.

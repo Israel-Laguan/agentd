@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type * as SidebarModule from './sidebar';
 
@@ -65,6 +65,18 @@ describe('Sidebar', () => {
     const { container } = renderSidebar();
 
     expect(await screen.findByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
+    expect(container.querySelector('aside')).toHaveClass('w-16');
+  });
+
+  it('follows collapse changes made in another tab', () => {
+    const { container } = renderSidebar();
+    expect(container.querySelector('aside')).toHaveClass('w-60');
+
+    act(() => {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'true');
+      window.dispatchEvent(new StorageEvent('storage', { key: SIDEBAR_COLLAPSED_KEY, newValue: 'true' }));
+    });
+
     expect(container.querySelector('aside')).toHaveClass('w-16');
   });
 

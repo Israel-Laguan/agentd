@@ -21,6 +21,12 @@ type boardWriteHost struct {
 	sessionStartErr error
 	failedWith      []error
 	gatewayErrs     []error
+	commits         int
+}
+
+func (h *boardWriteHost) CommitTextWithProfile(ctx context.Context, task models.Task, text string, profile *models.AgentProfile) {
+	h.commits++
+	h.topicDriftHost.CommitTextWithProfile(ctx, task, text, profile)
 }
 
 func (h *boardWriteHost) RunSessionStart(context.Context, models.Task, models.Project, *agenthooks.HookChain) error {
@@ -127,6 +133,9 @@ func TestProcessCommitsTheFinalText(t *testing.T) {
 	}
 	if *host.committed != "done" {
 		t.Fatalf("committed text = %q, want %q", *host.committed, "done")
+	}
+	if host.commits != 1 {
+		t.Fatalf("CommitTextWithProfile calls = %d, want 1", host.commits)
 	}
 	if len(host.failedWith) != 0 || len(host.gatewayErrs) != 0 {
 		t.Fatalf("a finished run also failed: failed=%v gateway errors=%v", host.failedWith, host.gatewayErrs)

@@ -19,14 +19,16 @@ export interface SeededProject {
 export async function seedProject(
   request: APIRequestContext,
   name: string,
-  taskTitle: string
+  taskTitle: string,
+  taskDescription = "list the workspace",
+  assignee: "SYSTEM" | "HUMAN" = "SYSTEM"
 ): Promise<SeededProject> {
   const res = await request.post(`${API}/api/v1/projects/materialize`, {
     data: {
       project_name: name,
       description: "seeded by a Playwright flow",
       start_empty_workspace: true,
-      tasks: [{ title: taskTitle, description: "list the workspace", temp_id: "t1" }],
+      tasks: [{ title: taskTitle, description: taskDescription, assignee, temp_id: "t1" }],
     },
   });
   expect(res.ok(), `materialize: ${res.status()} ${await res.text()}`).toBeTruthy();

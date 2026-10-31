@@ -3,6 +3,7 @@ package frontdesk
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -81,6 +82,33 @@ func TestPlannerCapsPlanToMaxTasksPerPhase(t *testing.T) {
 	}
 	if len(plan.Tasks) != 2 || plan.Tasks[1].Title != "Plan Phase 2" {
 		t.Fatalf("tasks = %+v, want two tasks ending in Plan Phase 2", plan.Tasks)
+	}
+}
+
+func TestPlannerKeepsZeroCapUncapped(t *testing.T) {
+	t.Parallel()
+	agent := newStageAgent()
+	var tasks []string
+	for i := 0; i < 9; i++ {
+		tasks = append(tasks, fmt.Sprintf(`{"title":"t%d","description":"d","assignee":"SYSTEM"}`, i))
+	}
+	agent.outputs[gateway.PurposeIntakeDraftPlan] = `{"project_name":"p","tasks":[` + strings.Join(tasks, ",") + `]}`
+
+	p := &Planner{Agent: agent} // Zero disables the cap; do not fall back to the default 7.
+	raw, err := p.PlanContent(context.Background(), nil, "big build", nil)
+	if err != nil {
+		t.Fatalf("PlanContent() error = %v", err)
+	}
+	var plan models.DraftPlan
+	if err := json.Unmarshal(raw, &plan); err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Tasks) != 9 {
+		t.Fatalf("tasks = %d, want all 9 unclamped", len(plan.Tasks))
+	}
+	last := agent.calls[len(agent.calls)-1]
+	if strings.Contains(last.Context[0].Content, "Emit at most") {
+		t.Fatalf("planning prompt capped a zero MaxTasksPerPhase: %q", last.Context[0].Content)
 	}
 }
 

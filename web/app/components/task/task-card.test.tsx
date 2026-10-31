@@ -32,11 +32,11 @@ describe("TaskCard", () => {
     expect(screen.getByText("BLOCKED")).toBeInTheDocument();
   });
 
-  it("puts the Human action badge on its own line, not beside the description", () => {
+  it("renders the Human action badge before the description", () => {
     renderCard("Run the command locally");
     const badge = screen.getByText("Human action");
     const description = screen.getByText("Run the command locally");
-    expect(badge.parentElement).not.toContainElement(description);
+    expect(badge.parentElement?.nextElementSibling).toBe(description);
   });
 
   it("clamps the description to three lines", () => {
@@ -49,9 +49,17 @@ describe("TaskCard", () => {
     const command = screen.getByText("sudo dmidecode --string system-serial-number");
     expect(command.tagName).toBe("CODE");
     expect(command).toHaveAttribute("title", "sudo dmidecode --string system-serial-number");
+    expect(command).toHaveClass("truncate");
+    expect(screen.getByText("More details in the task drawer")).toBeInTheDocument();
     expect(screen.getByText(/requires host privileges/)).toBeInTheDocument();
     expect(screen.queryByText(/Permission denied/)).not.toBeInTheDocument();
     expect(screen.queryByText(/pattern=privilege/)).not.toBeInTheDocument();
+  });
+
+  it("hides the drawer hint when the payload has no trailing text", () => {
+    renderCard('Intro\n\npattern=privilege command="id" exit=0 duration=3ms');
+    expect(screen.getByText("id")).toBeInTheDocument();
+    expect(screen.queryByText("More details in the task drawer")).not.toBeInTheDocument();
   });
 
   it("shows no code line for a description without a command", () => {
@@ -65,6 +73,7 @@ describe("splitHandoffCommand", () => {
     expect(splitHandoffCommand(handoffDescription)).toEqual({
       text: "The worker detected a command that requires host privileges. Run it in your own terminal.",
       command: "sudo dmidecode --string system-serial-number",
+      hasMore: true,
     });
   });
 
@@ -79,6 +88,7 @@ describe("splitHandoffCommand", () => {
     expect(splitHandoffCommand(description)).toEqual({
       text: "Intro",
       command: "cat /etc/shadow",
+      hasMore: true,
     });
   });
 
@@ -86,6 +96,7 @@ describe("splitHandoffCommand", () => {
     expect(splitHandoffCommand('pattern=privilege command="id" exit=1 duration=1ms\nout')).toEqual({
       text: "",
       command: "id",
+      hasMore: true,
     });
   });
 
@@ -93,7 +104,12 @@ describe("splitHandoffCommand", () => {
     expect(splitHandoffCommand("Run the command locally")).toEqual({ text: "Run the command locally" });
   });
 
+  it("leaves a payload-like quote without exit and duration as text", () => {
+    const description = 'Intro\n\npattern=privilege command="id"';
+    expect(splitHandoffCommand(description)).toEqual({ text: description });
+  });
+
   it("keeps the raw command when its quoting is not JSON-compatible", () => {
-    expect(splitHandoffCommand('x\npattern=p command="a\\x00b" exit=1').command).toBe("a\\x00b");
+    expect(splitHandoffCommand('x\npattern=p command="a\\x00b" exit=1 duration=1ms').command).toBe("a\\x00b");
   });
 });
