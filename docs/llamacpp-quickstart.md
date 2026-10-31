@@ -266,8 +266,7 @@ gateway:
 ```
 
 **Note:** structured output works with a real model loaded. A server started with
-`--engine mock` fails every structured call
-([B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md)). See
+`--engine mock` fails every structured call (B-087). See
 [docs/openai-compatible-providers.md](openai-compatible-providers.md) for details.
 
 ## Troubleshooting

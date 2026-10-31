@@ -116,7 +116,7 @@ with a real model loaded. Things to know:
 
 - **Use the real engine and its key.** A server started with `--engine mock` answers every
   request with fixed text, so every structured call fails; that was the whole of
-  [B-087](../tasks/backlog/bugs/B-087-structured-output-fails-with-strata-qwen3.md). The real
+  B-087. The real
   engine checks the key: get it with `strata launch --show-key`. For an `adapter: openai`
   provider agentd only checks that a key is configured; it does not probe the endpoint, so
   passing that check says nothing about whether Strata is reachable or the key is right.
