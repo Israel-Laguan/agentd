@@ -18,7 +18,7 @@ linters:
       rules:
         no-outward-model-deps:
           files:
-            - "**/internal/models/**/*.go"
+            - "**/internal/models/*.go"
           deny:
             - pkg: "agentd/internal/api"
               desc: "models layer must stay inward and not depend on api"
@@ -38,6 +38,24 @@ linters:
               desc: "models layer must stay inward and not depend on queue"
             - pkg: "agentd/internal/sandbox"
               desc: "models layer must stay inward and not depend on sandbox"
+        # The gateway is the first agent-kit cut (T-045): its non-test code may
+        # import only the standard library and itself.
+        gateway-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/gateway/**"
+            - "!$test"
+          allow:
+            - $gostd
+            # Exact roots and slash subtrees: a bare prefix would also admit
+            # siblings such as internal/gatewayextra.
+            - agentd/internal/gateway$
+            - agentd/internal/gateway/
+            # Still imported; drop each once T-045 cuts it.
+            - agentd/internal/models$
+            - agentd/internal/models/
+            - agentd/internal/api/correlation$
+            - agentd/internal/api/correlation/
         queue-test-isolation:
           files:
             - "**/internal/queue/**_test.go"

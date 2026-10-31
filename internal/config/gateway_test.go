@@ -5,8 +5,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
+
 	"agentd/internal/gateway"
 )
+
+func TestLoadGatewayConfig_RejectsPhaseCapBelowTwo(t *testing.T) {
+	for _, cap := range []int{-1, 1} {
+		v := viper.New()
+		setGatewayDefaults(v)
+		v.Set("gateway.max_tasks_per_phase", cap)
+		_, err := loadGatewayConfig(v, map[string]string{}, map[string]string{})
+		if err == nil || !strings.Contains(err.Error(), "max_tasks_per_phase") {
+			t.Fatalf("cap=%d: error = %v, want max_tasks_per_phase rejection", cap, err)
+		}
+	}
+}
 
 func TestGatewayConfig_Defaults(t *testing.T) {
 	cfg := GatewayConfig{

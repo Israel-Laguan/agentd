@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/stage"
@@ -88,7 +87,7 @@ func PlanInStageWithResult(ctx context.Context, agent stage.Agent, st stage.Stag
 	if err != nil {
 		return nil, res, err
 	}
-	trimmed := correction.EnforcePhaseCap(*plan, maxTasksPerPhase)
+	trimmed := enforcePhaseCap(*plan, maxTasksPerPhase)
 	return &trimmed, res, nil
 }
 

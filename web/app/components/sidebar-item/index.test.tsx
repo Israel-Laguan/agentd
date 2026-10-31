@@ -20,6 +20,20 @@ describe('SidebarItem', () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
+  it('shows the icon alone when collapsed, named by aria-label and a tooltip', () => {
+    render(<SidebarItem icon={MockIcon} label="Workforce Board" collapsed />);
+    expect(screen.queryByText('Workforce Board')).not.toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'Workforce Board' });
+    expect(button).toHaveAttribute('aria-label', 'Workforce Board');
+    expect(button).toHaveAttribute('title', 'Workforce Board');
+    expect(screen.getByTestId('mock-icon')).toBeInTheDocument();
+  });
+
+  it('has no tooltip when expanded', () => {
+    render(<SidebarItem icon={MockIcon} label="Board" />);
+    expect(screen.getByRole('button', { name: 'Board' })).not.toHaveAttribute('title');
+  });
+
   it('applies active styles when active', () => {
     render(<SidebarItem icon={MockIcon} label="Active Tab" active />);
     const button = screen.getByRole('button', { name: 'Active Tab' });

@@ -116,6 +116,9 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 		MaxTasksPerPhase: v.GetInt("gateway.max_tasks_per_phase"),
 		MCPServers:       mcpServers,
 	}
+	if err := cfg.validateMaxTasksPerPhase(); err != nil {
+		return GatewayConfig{}, err
+	}
 	if _, err := cfg.ProviderConfigs(); err != nil {
 		return GatewayConfig{}, fmt.Errorf("gateway providers: %w", err)
 	}
@@ -139,6 +142,16 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 		}
 	}
 	return cfg, nil
+}
+
+// validateMaxTasksPerPhase rejects caps that cannot hold both an executable
+// task and its continuation: a cap of 1 would replace a multi-task plan with a
+// continuation-only plan that repeats forever. 0 disables the cap.
+func (c GatewayConfig) validateMaxTasksPerPhase() error {
+	if c.MaxTasksPerPhase != 0 && c.MaxTasksPerPhase < 2 {
+		return fmt.Errorf("gateway.max_tasks_per_phase must be 0 (disabled) or at least 2, got %d", c.MaxTasksPerPhase)
+	}
+	return nil
 }
 
 func (c GatewayConfig) ProviderConfigs() ([]gateway.ProviderConfig, error) {

@@ -101,3 +101,43 @@ func mustDraftPlanJSON(t *testing.T, n int) string {
 	}
 	return raw
 }
+
+func TestEnforcePhaseCap(t *testing.T) {
+	tasks := []models.DraftTask{
+		{Title: "a"}, {Title: "b"}, {Title: "c"}, {Title: "d"},
+	}
+	plan := models.DraftPlan{Tasks: tasks}
+
+	out := enforcePhaseCap(plan, 0)
+	if len(out.Tasks) != 4 {
+		t.Fatalf("max<=0 should not trim, got %d", len(out.Tasks))
+	}
+
+	out = enforcePhaseCap(plan, 10)
+	if len(out.Tasks) != 4 {
+		t.Fatalf("under cap: %d", len(out.Tasks))
+	}
+
+	// A cap of 1 still has to keep an executable task, so it behaves like the
+	// smallest usable cap of 2 instead of emitting a continuation-only plan.
+	out = enforcePhaseCap(plan, 1)
+	if len(out.Tasks) != 2 || out.Tasks[0].Title != "a" || out.Tasks[1].Title != "Plan Phase 2" {
+		t.Fatalf("cap=1: %#v", out.Tasks)
+	}
+	assertDeferred(t, out.Tasks[1], "b", "c", "d")
+
+	out = enforcePhaseCap(plan, 2)
+	if len(out.Tasks) != 2 || out.Tasks[0].Title != "a" || out.Tasks[1].Title != "Plan Phase 2" {
+		t.Fatalf("cap=2: %#v", out.Tasks)
+	}
+	assertDeferred(t, out.Tasks[1], "b", "c", "d")
+}
+
+func assertDeferred(t *testing.T, task models.DraftTask, titles ...string) {
+	t.Helper()
+	for _, title := range titles {
+		if !strings.Contains(task.Description, "- "+title) {
+			t.Errorf("continuation description missing %q: %q", title, task.Description)
+		}
+	}
+}

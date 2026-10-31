@@ -206,11 +206,11 @@ Default mapping matches how people already work: plan with strong (already outsi
 
 ### Why this can be unique
 
-Most harnesses either (a) one model for the whole session, or (b) route by agent persona without **sealed handoffs**. agentd can make each step a board task with profile + role routing (`RoleWorker` / new roles like `context` / `decision` / `verify`) and durable artifacts. That is governance again: the board owns the pipeline, not the transcript.
+Most harnesses either (a) one model for the whole session, or (b) route by agent persona without **sealed handoffs**. agentd can make each step a board task with profile + purpose routing (a `stages:` route per purpose, such as `exec.work_plan`) and durable artifacts. That is governance again: the board owns the pipeline, not the transcript.
 
 You already have building blocks:
 
-- Gateway **role → provider/model** routing (`RoleChat`, `RoleWorker`, `RoleMemory`)
+- Gateway **purpose → agent** routing (`agents:` and `stages:`; it replaced role routing in S18, see [config-reference.md](config-reference.md#routing-agents-and-stages))
 - Agentic **plan phase** then execute (`phase_splitter.go`)
 - Workforce **profiles** and DAG (`DEPENDS_ON` / `SPAWNED_BY`)
 - Failure → **HUMAN** / healing paths
@@ -240,7 +240,7 @@ If the pack is wrong, you pay once to rebuild it on purpose. That is cheaper and
 ### Implementation sketch (when we build it)
 
 1. Spec landed: [tiered-execution.md](tiered-execution.md) (ContextPack, step kinds, allowlists, escalation, complexity gate).
-2. Extend role routing (or profile templates) for `context` / `decision` / `execute` / `verify`.
+2. Extend the `tier-*` profile templates for `context` / `decision` / `execute` / `verify`.
 3. Materialize or phase-split complex READY tasks into DAG children with `DEPENDS_ON`.
 4. Worker modes: context-only / decision-only / execute-bounded / verify.
 5. Metrics: tokens per step kind, re-gather rate, escalate-to-human rate, wall time vs single-model baseline.

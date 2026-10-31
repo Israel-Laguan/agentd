@@ -174,7 +174,7 @@ The intake flow turns vague human intent into approved board work. The Frontdesk
 
 - **Risk:** A large project produces too many tasks and the model cuts off the JSON mid-array.
 - **Mitigation:** Frontdesk should cap each phase to a small task count and include a final follow-up planning task when more work remains.
-- **Status today:** Mitigated. `gateway.max_tasks_per_phase` (default 7) caps plan output, and `EnforcePhaseCap` in [`internal/gateway/correction/correction.go`](../internal/gateway/correction/correction.go) deterministically trims oversized plans with a `Plan Phase N` continuation task.
+- **Status today:** Mitigated. `gateway.max_tasks_per_phase` (default 7) caps plan output, and `enforcePhaseCap` in [`internal/stage/intake/phase_cap.go`](../internal/stage/intake/phase_cap.go) deterministically trims oversized plans with a `Plan Phase N` continuation task.
 
 ### Flow 2. Execution Cycle
 
