@@ -101,3 +101,30 @@ func mustDraftPlanJSON(t *testing.T, n int) string {
 	}
 	return raw
 }
+
+func TestEnforcePhaseCap(t *testing.T) {
+	tasks := []models.DraftTask{
+		{Title: "a"}, {Title: "b"}, {Title: "c"}, {Title: "d"},
+	}
+	plan := models.DraftPlan{Tasks: tasks}
+
+	out := enforcePhaseCap(plan, 0)
+	if len(out.Tasks) != 4 {
+		t.Fatalf("max<=0 should not trim, got %d", len(out.Tasks))
+	}
+
+	out = enforcePhaseCap(plan, 10)
+	if len(out.Tasks) != 4 {
+		t.Fatalf("under cap: %d", len(out.Tasks))
+	}
+
+	out = enforcePhaseCap(plan, 1)
+	if len(out.Tasks) != 1 || !strings.Contains(out.Tasks[0].Title, "Phase") {
+		t.Fatalf("cap=1: %#v", out.Tasks)
+	}
+
+	out = enforcePhaseCap(plan, 2)
+	if len(out.Tasks) != 2 {
+		t.Fatalf("cap=2 len=%d", len(out.Tasks))
+	}
+}

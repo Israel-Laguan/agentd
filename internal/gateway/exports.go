@@ -134,6 +134,3 @@ type BreakerChecker = spec.BreakerChecker
 
 // MiddleOut re-exports truncation.MiddleOut for stable imports.
 var MiddleOut = truncation.MiddleOut
-
-// EnforcePhaseCap re-exports correction.EnforcePhaseCap for stable imports.
-var EnforcePhaseCap = correction.EnforcePhaseCap
