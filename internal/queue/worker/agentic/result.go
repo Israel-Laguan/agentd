@@ -2,7 +2,9 @@ package agentic
 
 import (
 	"context"
+	"fmt"
 
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
 
@@ -33,6 +35,16 @@ type Result struct {
 	Payload string
 	// Profile is the profile the final text was produced under (review routing).
 	Profile models.AgentProfile
+}
+
+// CheckChatTools reports the terminal result for a provider that cannot call
+// tools, and whether that refusal applies.
+func CheckChatTools(gw gateway.AIGateway, task models.Task, provider string) (Result, bool) {
+	if gateway.ProviderSupportsChatTools(gw, provider) {
+		return Result{}, false
+	}
+	err := fmt.Errorf("%w (%q)", models.ErrAgentProfileNoToolSupport, provider)
+	return Result{Kind: ResultFailed, Task: task, Err: err}, true
 }
 
 // criteriaWriter adapts Config.CriteriaMet to the goal tracker's updater.

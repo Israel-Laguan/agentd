@@ -22,12 +22,11 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	cancelCtx, cleanup := e.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
-	// prepareAgenticRun builds messages/tools before routing; the initial tool-support
-	// check fails a provider without tools before session start and elicitation.
-	// If elicitation changes the task, the re-routed provider is checked again
-	// after clarification.
+	// prepareAgenticRun builds messages/tools before routing; the tool-support
+	// check fails a provider without tools before session start. The worker has
+	// already run pre-task elicitation, so task is the clarified task.
 	baseProfile := profile
-	messages, tools, toolToAdapter, allTools, allToolToAdapter, profile, taskToolExecutor, taskHooks, taskCaps :=
+	messages, tools, toolToAdapter, _, _, profile, taskToolExecutor, taskHooks, taskCaps :=
 		e.prepareAgenticRun(ctx, task, project, baseProfile)
 
 	if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
@@ -43,22 +42,6 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 	if err := e.host.RunSessionStart(cancelCtx, task, project, taskHooks); err != nil {
 		e.result = Result{Kind: ResultFailed, Task: task, Err: err}
 		return agentruntime.LoopResult{}, e.result, false
-	}
-
-	described := task.Description
-	task, ok := e.runPreTaskElicitation(ctx, cancelCtx, task, project, taskToolExecutor)
-	if !ok {
-		return agentruntime.LoopResult{}, e.result, false
-	}
-	if task.Description != described {
-		// The human's answer extends the description: the prompt, the tools the
-		// task classifies to, and the routing all follow the clarified task.
-		messages = e.buildAgenticMessages(cancelCtx, task, project, baseProfile)
-		tools, toolToAdapter, profile = e.selectAgenticTools(task, baseProfile, messages, allTools, allToolToAdapter)
-		if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
-			e.rejectWithoutToolSupport(cancelCtx, task, profile.Provider)
-			return agentruntime.LoopResult{}, e.result, false
-		}
 	}
 
 	guards := e.newAgenticLoopGuards(cancelCtx, task)

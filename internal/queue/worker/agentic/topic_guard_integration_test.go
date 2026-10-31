@@ -119,9 +119,6 @@ func (h *topicDriftHost) FailHard(ctx context.Context, task models.Task, err err
 func (h *topicDriftHost) RegisterCancel(taskID string, cancel context.CancelFunc)             {}
 func (h *topicDriftHost) DeregisterCancel(taskID string)                                      {}
 func (h *topicDriftHost) HandleGatewayError(ctx context.Context, task models.Task, err error) {}
-func (h *topicDriftHost) RunPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error) {
-	return task, false, nil
-}
 func (h *topicDriftHost) ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest {
 	return req
 }
