@@ -109,7 +109,6 @@ type Host interface {
 	// sandbox refused, so a retry does not repeat them.
 	PrependSandboxViolationFeedback(ctx context.Context, task models.Task, messages []gateway.PromptMessage) []gateway.PromptMessage
 	ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest
-	MountAgenticHooks(project models.Project, profile models.AgentProfile) (*agenthooks.HookChain, *capabilities.Registry)
 	AgenticToolsWithExtras(ctx context.Context, executor *agenttools.ToolExecutor, caps *capabilities.Registry) ([]gateway.ToolDefinition, map[string]string)
 	FilterAgenticTools(tools []gateway.ToolDefinition, toolToAdapter map[string]string, task models.Task, profile models.AgentProfile) ([]gateway.ToolDefinition, map[string]string)
 	GeneratePlan(ctx context.Context, task models.Task, project models.Project, budget *agentruntime.BudgetGuard) (*agentcontext.Plan, error)
@@ -125,7 +124,6 @@ type Host interface {
 		cm *agentcontext.ContextManager,
 		budget *agentruntime.BudgetGuard,
 	) (string, error)
-	RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error
 	// RecordAttemptFailure remembers the first failing shell command of this
 	// attempt for the next attempt to check (B-043).
 	RecordAttemptFailure(task models.Task, call gateway.ToolCall, result agenttools.ToolResult)

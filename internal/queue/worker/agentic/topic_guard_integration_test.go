@@ -247,7 +247,7 @@ func buildTopicDriftAgenticTurnLoopInput(
 		agenttools.BuildSandboxEnv(nil, nil),
 		0,
 	)
-	taskHooks, taskCaps := e.host.MountAgenticHooks(project, profile)
+	taskHooks, taskCaps := agenthooks.NewHookChain(), (*capabilities.Registry)(nil)
 	tools, toolToAdapter := e.host.AgenticToolsWithExtras(context.Background(), taskToolExecutor, taskCaps)
 	return agenticTurnLoopInput{
 		ctx:              context.Background(),

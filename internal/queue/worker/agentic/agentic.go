@@ -7,8 +7,10 @@ import (
 	"agentd/internal/api/correlation"
 
 	agentcontext "agentd/internal/agent/context"
+	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
+	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
@@ -18,29 +20,23 @@ import (
 // Returns (loop, result, true) when the loop stopped with a typed LoopResult
 // variant. Returns (_, result, false) when the run ended with a terminal result,
 // or was suspended for a human; the worker applies result to the board.
-func (e *Engine) Process(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (agentruntime.LoopResult, Result, bool) {
+//
+// The worker has already checked tool support, mounted taskHooks and taskCaps,
+// run session start, and run pre-task elicitation, so task is the clarified task.
+func (e *Engine) Process(
+	ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile,
+	taskHooks *agenthooks.HookChain, taskCaps *capabilities.Registry,
+) (agentruntime.LoopResult, Result, bool) {
 	cancelCtx, cleanup := e.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
-	// prepareAgenticRun builds messages/tools before routing; the tool-support
-	// check fails a provider without tools before session start. The worker has
-	// already run pre-task elicitation, so task is the clarified task.
+	// prepareAgenticRun builds messages and tools for the clarified task.
 	baseProfile := profile
-	messages, tools, toolToAdapter, _, _, profile, taskToolExecutor, taskHooks, taskCaps :=
-		e.prepareAgenticRun(ctx, task, project, baseProfile)
+	messages, tools, toolToAdapter, _, _, profile, taskToolExecutor :=
+		e.prepareAgenticRun(ctx, task, project, baseProfile, taskCaps)
 
 	if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
 		e.rejectWithoutToolSupport(cancelCtx, task, profile.Provider)
-		return agentruntime.LoopResult{}, e.result, false
-	}
-
-	correlation.Logger(ctx).DebugContext(ctx, "agentic: session start",
-		"task_id", task.ID, "project_id", project.ID, "agent_id", task.AgentID,
-		"provider", profile.Provider, "model", profile.Model,
-	)
-
-	if err := e.host.RunSessionStart(cancelCtx, task, project, taskHooks); err != nil {
-		e.result = Result{Kind: ResultFailed, Task: task, Err: err}
 		return agentruntime.LoopResult{}, e.result, false
 	}
 

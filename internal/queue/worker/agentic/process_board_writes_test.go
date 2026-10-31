@@ -18,19 +18,14 @@ import (
 // boardWriteHost records the Host methods that change the board.
 type boardWriteHost struct {
 	*topicDriftHost
-	sessionStartErr error
-	failedWith      []error
-	gatewayErrs     []error
-	commits         int
+	failedWith  []error
+	gatewayErrs []error
+	commits     int
 }
 
 func (h *boardWriteHost) CommitTextWithProfile(ctx context.Context, task models.Task, text string, profile *models.AgentProfile) {
 	h.commits++
 	h.topicDriftHost.CommitTextWithProfile(ctx, task, text, profile)
-}
-
-func (h *boardWriteHost) RunSessionStart(context.Context, models.Task, models.Project, *agenthooks.HookChain) error {
-	return h.sessionStartErr
 }
 
 func (h *boardWriteHost) FailHard(_ context.Context, _ models.Task, err error) {
@@ -69,33 +64,12 @@ func runProcessForBoardWrites(t *testing.T, host *boardWriteHost, gw *scriptedGa
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-1"}, ProjectID: "project-1", AgentID: "agent-1", Title: "t"}
 	project := models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: t.TempDir()}
 	profile := models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
-	_, res, ok := e.Process(context.Background(), task, project, profile)
+	_, res, ok := e.Process(context.Background(), task, project, profile, agenthooks.NewHookChain(), nil)
 	return res, ok
 }
 
 func newBoardWriteHost() *boardWriteHost {
 	return &boardWriteHost{topicDriftHost: &topicDriftHost{noopHost: &noopHost{}, committed: new(string)}}
-}
-
-func TestProcessFailsHardWhenSessionStartFails(t *testing.T) {
-	hookErr := errors.New("credential check failed")
-	host := newBoardWriteHost()
-	host.sessionStartErr = hookErr
-	gw := &scriptedGateway{tools: true}
-
-	res, ok := runProcessForBoardWrites(t, host, gw)
-	if ok {
-		t.Fatal("Process reported a LoopResult after the session-start hooks failed")
-	}
-	if res.Kind != ResultFailed || !errors.Is(res.Err, hookErr) {
-		t.Fatalf("result = kind %v err %v, want a failure with the hook error", res.Kind, res.Err)
-	}
-	if len(host.failedWith) != 0 {
-		t.Fatalf("FailHard calls = %v, want none: the engine must not write the board", host.failedWith)
-	}
-	if gw.calls != 0 || *host.committed != "" {
-		t.Fatalf("the task ran after a failed session start: model calls=%d committed=%q", gw.calls, *host.committed)
-	}
 }
 
 func TestProcessFailsHardWithoutChatToolSupport(t *testing.T) {

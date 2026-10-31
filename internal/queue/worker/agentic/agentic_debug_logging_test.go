@@ -12,8 +12,10 @@ import (
 	"agentd/internal/api/correlation"
 
 	agentcontext "agentd/internal/agent/context"
+	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	agenttools "agentd/internal/agent/tools"
+	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -86,7 +88,7 @@ func buildDebugLoggingTurnLoopInput(t *testing.T, ctx context.Context, e *Engine
 	taskToolExecutor := agenttools.NewToolExecutor(
 		e.config.Sandbox, project.WorkspacePath, agenttools.BuildSandboxEnv(nil, nil), 0,
 	)
-	taskHooks, taskCaps := e.host.MountAgenticHooks(project, profile)
+	taskHooks, taskCaps := agenthooks.NewHookChain(), (*capabilities.Registry)(nil)
 	tools, toolToAdapter := e.host.AgenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 	return agenticTurnLoopInput{
 		ctx: ctx, task: task, project: project, profile: profile,

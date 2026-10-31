@@ -6,7 +6,6 @@ import (
 
 	agentcontext "agentd/internal/agent/context"
 	wfilecontext "agentd/internal/agent/filecontext"
-	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
@@ -20,6 +19,7 @@ func (e *Engine) prepareAgenticRun(
 	task models.Task,
 	project models.Project,
 	profile models.AgentProfile,
+	taskCaps *capabilities.Registry,
 ) (
 	messages []gateway.PromptMessage,
 	tools []gateway.ToolDefinition,
@@ -28,18 +28,15 @@ func (e *Engine) prepareAgenticRun(
 	allToolToAdapter map[string]string,
 	routedProfile models.AgentProfile,
 	taskToolExecutor *agenttools.ToolExecutor,
-	taskHooks *agenthooks.HookChain,
-	taskCaps *capabilities.Registry,
 ) {
 	taskToolExecutor = e.newAgenticTaskToolExecutor(project, task).
 		WithAllowedTools(profile.AllowedTools).
 		WithReadOnlyWorkspace(profile.WorkspaceReadonly).
 		WithIntent(task.Title + "\n" + task.Description)
-	taskHooks, taskCaps = e.host.MountAgenticHooks(project, profile)
 	messages = e.buildAgenticMessages(ctx, task, project, profile)
 	allTools, allToolToAdapter = e.host.AgenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 	tools, toolToAdapter, routedProfile = e.selectAgenticTools(task, profile, messages, allTools, allToolToAdapter)
-	return messages, tools, toolToAdapter, allTools, allToolToAdapter, routedProfile, taskToolExecutor, taskHooks, taskCaps
+	return messages, tools, toolToAdapter, allTools, allToolToAdapter, routedProfile, taskToolExecutor
 }
 
 // selectAgenticTools filters the full tool set for the task without changing

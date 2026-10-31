@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	agentcontext "agentd/internal/agent/context"
+	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -58,7 +59,7 @@ func runProcessWithPlanErr(t *testing.T, planErr error) (*planErrHost, *toolCapa
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-1"}, ProjectID: "project-1", AgentID: "agent-1", Title: "t"}
 	project := models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: t.TempDir()}
 	profile := models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
-	_, res, ok := e.Process(context.Background(), task, project, profile)
+	_, res, ok := e.Process(context.Background(), task, project, profile, agenthooks.NewHookChain(), nil)
 	return host, gw, res, ok
 }
 

@@ -52,18 +52,6 @@ func (w *Worker) reblockTaskForPendingHITL(ctx context.Context, task models.Task
 	return task, fmt.Errorf("re-block task for pending HITL: %w", err)
 }
 
-// runAgenticElicitation runs pre-task elicitation before the engine starts. The
-// run stays cancellable while it waits, as it was inside the engine.
-func (w *Worker) runAgenticElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error) {
-	cancelCtx, cancel := context.WithCancel(ctx)
-	w.RegisterCancel(task.ID, cancel)
-	defer func() {
-		cancel()
-		w.DeregisterCancel(task.ID)
-	}()
-	return w.RunPreTaskElicitation(cancelCtx, task, project)
-}
-
 // runPreTaskElicitation consumes prior answers, skips well-specified tasks, or blocks for human input.
 func (w *Worker) RunPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error) {
 	if enriched, ok, err := w.tryConsumeElicitationAnswers(ctx, task); err != nil {
