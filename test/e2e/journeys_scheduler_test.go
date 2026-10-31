@@ -39,6 +39,7 @@ func TestJ23_ScheduledTaskRunsExactlyOnce(t *testing.T) {
 	}
 	client := NewAPIClient(schedulerBaseURL, harness.client)
 	devenv := NewDevenvManager(composePath, "scheduler")
+	j23Reset(ctx, t, devenv, harness)
 
 	projectID := materializePlan(ctx, t, client, "J23", DraftPlan{
 		ProjectName:         UniqueProjectName("j23"),
@@ -72,6 +73,20 @@ func TestJ23_ScheduledTaskRunsExactlyOnce(t *testing.T) {
 			len(matches), window, task.ID, matches)
 	}
 	t.Logf("J23: scheduled task %s ran to COMPLETED once; no re-fire after a restart", task.ID)
+}
+
+// j23Reset starts the journey from an empty board and no .env. A fired one-shot
+// keeps its row and last_fired_at (B-088), so on a volume reused from an
+// earlier run j23-once would never fire again. The .env goes too: it names the
+// earlier run's project, which the empty board does not have.
+func j23Reset(ctx context.Context, t *testing.T, devenv *DevenvManager, harness *Harness) {
+	t.Helper()
+	home := profileService["scheduler"].home
+	script := fmt.Sprintf("rm -f %s/.env %s/global.db %s/global.db-wal %s/global.db-shm", home, home, home, home)
+	if _, err := devenv.Exec(ctx, "sh", "-c", script); err != nil {
+		t.Fatalf("J23 [reset] clear the board: %v", err)
+	}
+	j23Restart(ctx, t, devenv, harness, "reset")
 }
 
 // j23Restart kills and restarts the scheduler profile's daemon; its volume, the
