@@ -17,6 +17,27 @@ import {
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
+// A privileged-command handoff ends with the daemon's detection payload:
+// pattern=<p> command=<Go %q string> exit=<n> duration=<d>, then the command's
+// output (internal/queue/worker/worker_addons.go detectionPayload).
+const HANDOFF_PAYLOAD = /(?:^|\n)pattern=\S+ command="((?:[^"\\]|\\.)*)"/;
+
+// splitHandoffCommand returns the description's text before a handoff payload
+// and the payload's command, unquoted. The output after it is left to the task
+// drawer. A description without a payload comes back unchanged.
+export function splitHandoffCommand(description: string): { text: string; command?: string } {
+  const match = HANDOFF_PAYLOAD.exec(description);
+  if (!match) return { text: description };
+  let command = match[1];
+  try {
+    // Go's %q escapes match JSON's for quotes, backslashes and common controls.
+    command = JSON.parse(`"${match[1]}"`);
+  } catch {
+    // An escape JSON lacks (\x, \U): show the command as Go wrote it.
+  }
+  return { text: description.slice(0, match.index).trim(), command };
+}
+
 interface TaskCardProps {
   task: {
     id: string;
@@ -57,6 +78,7 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
   };
 
   const StatusIcon = Icons[task.state as TaskStatus] || AlertCircle;
+  const { text, command } = splitHandoffCommand(task.description ?? "");
   const {
     attributes,
     listeners,
@@ -107,15 +129,22 @@ export const TaskCard = ({ task, onClick }: TaskCardProps) => {
           {task.state}
         </div>
       </div>
-      <div className="flex items-center gap-2 mb-2">
-        {task.assignee === "HUMAN" && (
+      {task.assignee === "HUMAN" && (
+        <div className="mb-2">
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-purple-500/20 bg-purple-500/10 text-purple-400">
             <User size={10} />
             Human action
           </span>
-        )}
-        <p className="text-[11px] text-text-dim leading-relaxed">{task.description}</p>
-      </div>
+        </div>
+      )}
+      {text && (
+        <p className="mb-2 text-[11px] text-text-dim leading-relaxed line-clamp-3 break-words whitespace-pre-line">{text}</p>
+      )}
+      {command && (
+        <code title={command} className="block mb-2 truncate bg-bg/80 px-1 py-0.5 rounded font-mono text-[10px] text-text">
+          {command}
+        </code>
+      )}
       <div className="flex items-center gap-2">
         {(task.token_usage ?? 0) > 0 && (
           <span className="text-[9px] font-mono text-text-dim shrink-0" title="Tokens used">
