@@ -8,30 +8,35 @@ import (
 
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
-	"agentd/internal/gateway/truncation"
 )
 
-// noteReadCall remembers the path of a read call as the engine dispatches it.
+// fileRead is what a successful read call read: its path and the content it
+// returned.
+type fileRead struct{ path, content string }
+
+// noteReadCall remembers a successful read call as the engine dispatches it.
 // The cut can shorten the call's arguments in later requests, so the request
 // cannot be the source (B-089).
-func (e *Engine) noteReadCall(call gateway.ToolCall) {
+func (e *Engine) noteReadCall(call gateway.ToolCall, content string) {
 	if call.Function.Name != agenttools.ToolNameRead {
 		return
 	}
-	if e.readPaths == nil {
-		e.readPaths = map[string]string{}
+	if e.reads == nil {
+		e.reads = map[string]fileRead{}
 	}
-	e.readPaths[call.ID] = toolPath(call.Function.Arguments)
+	e.reads[call.ID] = fileRead{path: toolPath(call.Function.Arguments), content: content}
 }
 
-// noteCutReads records the paths the model was shown cut. The latest read of a
-// path in the request decides it. A path with no read in the request keeps its
-// state, because the cut can drop that read from the window (B-089).
+// noteCutReads records the paths the model was shown cut. A read is whole only
+// while its message holds all the content it returned, so file text that looks
+// like a cut marker is no cut. The latest read of a path in the request decides
+// it. A path with no read in the request keeps its state, because the cut can
+// drop that read from the window (B-089).
 func (e *Engine) noteCutReads(messages []gateway.PromptMessage) {
 	latestCut := map[string]bool{} // path -> the latest read of it was cut
 	for _, m := range messages {
-		if p := e.readPaths[m.ToolCallID]; m.Role == "tool" && p != "" {
-			latestCut[p] = strings.Contains(m.Content, truncation.TruncationMarker)
+		if r := e.reads[m.ToolCallID]; m.Role == "tool" && r.path != "" {
+			latestCut[r.path] = !strings.Contains(m.Content, r.content)
 		}
 	}
 	for p, cut := range latestCut {

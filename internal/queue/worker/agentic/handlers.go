@@ -129,7 +129,7 @@ func (e *Engine) runAgenticCall(
 	}
 	tr, suspended = dispatch(call)
 	if call.Function.Name == agenttools.ToolNameRead && tr.Status == agenttools.ToolStatusSuccess {
-		e.noteReadCall(call)
+		e.noteReadCall(call, tr.Content)
 	}
 	// ask_human runs through dispatch like any tool, so hooks can veto it; a
 	// successful call blocked the task for a human, and the loop stops.
