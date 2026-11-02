@@ -269,7 +269,7 @@ List all agent profiles.
 
 `agentic_mode` (boolean, default `true`). The API accepts only `true`: `false` is refused with HTTP 400 (`agentic_mode false is not supported`), because every task runs the inner agentic worker loop with tool round-tripping. A profile whose provider cannot call tools is also rejected with HTTP 400 (`agentic profile's provider cannot call tools`) on create and patch, and a task already on such a profile fails.
 
-`allowed_tools` (string array, default empty) limits the profile to the named tools. A call to any other tool is vetoed at dispatch, delegation included. Empty means no allowlist. `workspace_readonly` (boolean, default `false`) is stored now; nothing enforces it yet.
+`allowed_tools` (string array, default empty) limits the profile to the named tools. A call to any other tool is vetoed at dispatch, delegation included. Empty means no allowlist. `gated_tools` (string array, default empty) names the tools whose calls wait for a human: the call is paused, the task goes to `BLOCKED`, and a `HUMAN` subtask asks for approval. Completing the subtask approves the call; failing it rejects the call, and the reason in its comment reaches the model. If no one decides within `agentic.approval_gates.timeout`, the task fails (`FAILED_REQUIRES_HUMAN`). The tools in `agentic.approval_gates.tools` are gated as well when `agentic.approval_gates.enabled` is true. `workspace_readonly` (boolean, default `false`) is stored now; nothing enforces it yet.
 
 **Test Coverage**: `internal/api/tests/feature/api_http_test.go` (`TestAgentsList`)
 
@@ -285,11 +285,11 @@ Get a specific agent profile.
 
 ### POST /api/v1/agents
 
-Create an agent profile. Optional `agentic_mode` (boolean, default `true`; `false` is refused with HTTP 400), `allowed_tools` and `workspace_readonly`. Omit `provider` and `model` (or set both to empty strings) to delegate routing to `gateway.order`. Only the seeded `default` profile follows a matching `stages:` route; other profile IDs bypass `stages:` routes and use the gateway cascade, even when provider and model are empty, matching the built-in seeded profiles from `agentd init`.
+Create an agent profile. Optional `agentic_mode` (boolean, default `true`; `false` is refused with HTTP 400), `allowed_tools`, `gated_tools` and `workspace_readonly`. A blank name in `allowed_tools` or `gated_tools` is refused with HTTP 400. Omit `provider` and `model` (or set both to empty strings) to delegate routing to `gateway.order`. Only the seeded `default` profile follows a matching `stages:` route; other profile IDs bypass `stages:` routes and use the gateway cascade, even when provider and model are empty, matching the built-in seeded profiles from `agentd init`.
 
 ### PATCH /api/v1/agents/{id}
 
-Sparse update. `agentic_mode` set to `false` is refused with HTTP 400, as on create. Setting it to `true` on a provider that cannot call tools is rejected. `allowed_tools` and `workspace_readonly` can also be patched.
+Sparse update. `agentic_mode` set to `false` is refused with HTTP 400, as on create. Setting it to `true` on a provider that cannot call tools is rejected. `allowed_tools`, `gated_tools` and `workspace_readonly` can also be patched; an empty list clears the list.
 
 ---
 
