@@ -195,6 +195,9 @@ task["id"], task["project_id"], task["state"]
 | `queue.task_deadline` | `10m` | Wall-clock timeout per dispatched worker task (the Reaper). |
 | `queue.queued_reconcile_after` | `10m` | Minimum age of a QUEUED claim before orphan recovery resets it to READY. Independent of `task_deadline`. Set to `0` to disable. |
 | `queue.poll_max_interval` | `10s` | Adaptive backoff ceiling when no tasks are available. |
+| `agentic.approval_gates.enabled` | `false` | Gate the tools in `agentic.approval_gates.tools` on every profile. A profile's `gated_tools` gate whatever this says. |
+| `agentic.approval_gates.tools` | `[]` | Tool names whose calls wait for a HUMAN approval subtask before they run. |
+| `agentic.approval_gates.timeout` | `30m` | How long the human has to decide; then the task moves to `FAILED_REQUIRES_HUMAN`. |
 | `agentic.audit.enabled` | `false` | Enable structured JSONL audit logging (separate from SSE events). Records: `tool_dispatch`, `turn_snapshot`, `history_edit`; tool args stored as SHA-256 hash only. |
 | `agentic.audit.path` | `audit.jsonl` | Audit file path; relative paths resolve under agentd home (`ResolveAuditPath`). |
 | `agentic.tool_manifest.enabled` | `false` | When true, filter gateway tool definitions by classified task type before the agentic turn loop. |

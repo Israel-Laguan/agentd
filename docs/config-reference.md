@@ -181,7 +181,7 @@ Every agent profile runs the agentic loop; the API refuses `agentic_mode: false`
 | `tool_failure_streak` | Consecutive errors on the same tool before `LoopToolFailure`; `0` = fatal-only. Separately, and not configurable, the same tool call (name and arguments) returning the same result 3 times in one task run stops the loop with `NO_PROGRESS` and moves the task to `FAILED_REQUIRES_HUMAN` without a retry (B-081). |
 | `topic_guard` | Drift detection; opens a fresh in-task session when human input is unrelated. `sensitivity` 0–1 (default `0.5`). |
 | `tool_credentials` | Map tool name → env var (injected per call, never in args). See [`reference.md`](reference.md). |
-| `approval_gates` | **Not implemented.** Planned: high-stakes tools require human approval via HUMAN subtask before execution. Nothing sets `AgentProfile.GatedTools` yet. |
+| `approval_gates` | A call to a gated tool waits for a human: the task goes to `BLOCKED` with a HUMAN approval subtask, and the call runs once the subtask is completed (failing it rejects the call). A profile's `gated_tools` (agents API) always gate. `enabled: true` gates `tools` on every profile as well; `enabled: false` turns off only that global list. `timeout` (default `30m`) is how long the human has; then the task moves to `FAILED_REQUIRES_HUMAN`. |
 | `tool_rate_limits` | **Not implemented.** Planned: per-session PreToolUse call caps. The unused rate-limit hook was removed; a future implementation starts from the call seam (S18). |
 | `audit` | JSONL log of tool dispatches, turn snapshots, history edits; args stored as SHA-256 hash. |
 | `external_tools` | Wrap in `<external_content>`; empty = all non-builtin; list limits scope. |
@@ -229,7 +229,7 @@ Cron schedules live in `<home>/agentd.crontab`.
 | `queued_reconcile_after` | Min age before resetting stale `QUEUED` claims; independent of `task_deadline`. |
 | `token_budget` | Worker-level per-task token cap; `0` = unlimited. `gateway.budget` (`tokens_per_task`) is not implemented (parsed and ignored); use this key. |
 | `agentic_character_budget` | `0` inherits `gateway.truncator.max_input_chars`. |
-| `hitl.legacy_handoff_timeout` | Prompt/permission/healing/provider handoffs. Approval, review, and clarification use the 30m approval path. |
+| `hitl.legacy_handoff_timeout` | Prompt/permission/healing/provider handoffs. Tool approval uses `agentic.approval_gates.timeout`; review and clarification use a fixed 30m. |
 | `split.max_depth` | Max parent→child split generations before a HUMAN handoff, for the healing split (`0` = no cap; default `2`). Replaces the removed legacy `max_breakdown_depth` key. |
 | `split.max_subtasks` | Max subtasks from one split (`0` = no cap; default `5`). Replaces the removed legacy `max_subtasks_per_breakdown` key. |
 | `tool_timeouts` | Per-tool dispatch timeouts; `"default"` applies to unlisted tools. Go duration strings (`"30s"`, `"1m"`). |
