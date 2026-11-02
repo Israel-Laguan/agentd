@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -48,7 +49,8 @@ func buildWorkerHooks(
 
 // MountAgenticHooks loads project-scoped and session-scoped plugins (when a
 // PluginMounter is configured), adds the AllowedTools veto, and registers
-// ApprovalGateHook for any GatedTools in the profile. It returns a task-local
+// ApprovalGateHook for the profile's GatedTools plus, when
+// agentic.approval_gates is enabled, its tools (see gatedTools). It returns a task-local
 // HookChain and capabilities Registry that augment worker-level globals. It only
 // registers into the returned values; it does not mutate worker-global state.
 // Returns nil, nil when there is no mounter, allowlist or gated tools.
@@ -87,15 +89,24 @@ func (w *Worker) MountAgenticHooks(
 
 	taskHooks = withAllowlistHook(taskHooks, profile)
 
-	if len(profile.GatedTools) > 0 {
+	if gated := w.gatedTools(profile); len(gated) > 0 {
 		if taskHooks == nil {
 			taskHooks = agenthooks.NewHookChain()
 		}
 		handler := NewBlockingApprovalHandler(w.store)
-		taskHooks.RegisterPre(ApprovalGateHook(profile.GatedTools, handler))
+		taskHooks.RegisterPre(ApprovalGateHook(gated, handler, w.approvalGates.Timeout))
 	}
 
 	return taskHooks, taskCaps
+}
+
+// gatedTools is the profile's gated_tools plus, when agentic.approval_gates is
+// enabled, its tools.
+func (w *Worker) gatedTools(profile models.AgentProfile) []string {
+	if !w.approvalGates.Enabled {
+		return profile.GatedTools
+	}
+	return append(slices.Clone(profile.GatedTools), w.approvalGates.Tools...)
 }
 
 // RunSessionStart runs the worker's SessionStart hooks (e.g. credential

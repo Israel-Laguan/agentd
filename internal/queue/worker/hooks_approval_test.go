@@ -33,7 +33,7 @@ func (s *stubApprovalHandler) RequestApproval(_ context.Context, req ApprovalReq
 func TestApprovalGateHook_AllowsUngatedTool(t *testing.T) {
 	t.Parallel()
 	handler := &stubApprovalHandler{approved: true}
-	hook := ApprovalGateHook([]string{"deploy"}, handler)
+	hook := ApprovalGateHook([]string{"deploy"}, handler, 0)
 
 	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "bash", Args: `{"command":"ls"}`, Timestamp: time.Now()})
 	if err != nil {
@@ -50,7 +50,7 @@ func TestApprovalGateHook_AllowsUngatedTool(t *testing.T) {
 func TestApprovalGateHook_SuspendsGatedTool(t *testing.T) {
 	t.Parallel()
 	handler := &stubApprovalHandler{approved: false}
-	hook := ApprovalGateHook([]string{"deploy", "write_config"}, handler)
+	hook := ApprovalGateHook([]string{"deploy", "write_config"}, handler, 0)
 
 	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "deploy",
@@ -81,7 +81,7 @@ func TestApprovalGateHook_SuspendsGatedTool(t *testing.T) {
 func TestApprovalGateHook_AllowsWhenApproved(t *testing.T) {
 	t.Parallel()
 	handler := &stubApprovalHandler{approved: true}
-	hook := ApprovalGateHook([]string{"deploy"}, handler)
+	hook := ApprovalGateHook([]string{"deploy"}, handler, 0)
 
 	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "deploy",
@@ -100,7 +100,7 @@ func TestApprovalGateHook_AllowsWhenApproved(t *testing.T) {
 func TestApprovalGateHook_BlocksGatedTool_Rejected(t *testing.T) {
 	t.Parallel()
 	handler := &stubApprovalHandler{approved: false, reason: "too risky"}
-	hook := ApprovalGateHook([]string{"deploy"}, handler)
+	hook := ApprovalGateHook([]string{"deploy"}, handler, 0)
 
 	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "deploy",
@@ -125,7 +125,7 @@ func TestApprovalGateHook_BlocksGatedTool_Rejected(t *testing.T) {
 func TestApprovalGateHook_SuspendedNoReason(t *testing.T) {
 	t.Parallel()
 	handler := &stubApprovalHandler{approved: false, reason: ""}
-	hook := ApprovalGateHook([]string{"deploy"}, handler)
+	hook := ApprovalGateHook([]string{"deploy"}, handler, 0)
 
 	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "deploy",
@@ -147,7 +147,7 @@ func TestApprovalGateHook_SuspendedNoReason(t *testing.T) {
 func TestApprovalGateHook_HandlerError(t *testing.T) {
 	t.Parallel()
 	handler := &stubApprovalHandler{err: errors.New("network failure")}
-	hook := ApprovalGateHook([]string{"deploy"}, handler)
+	hook := ApprovalGateHook([]string{"deploy"}, handler, 0)
 
 	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "deploy",
@@ -168,7 +168,7 @@ func TestApprovalGateHook_HandlerError(t *testing.T) {
 
 func TestApprovalGateHook_NilHandler(t *testing.T) {
 	t.Parallel()
-	hook := ApprovalGateHook([]string{"deploy"}, nil)
+	hook := ApprovalGateHook([]string{"deploy"}, nil, 0)
 
 	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:  "deploy",
@@ -190,7 +190,7 @@ func TestApprovalGateHook_NilHandler(t *testing.T) {
 func TestApprovalGateHook_EmptyGatedList(t *testing.T) {
 	t.Parallel()
 	handler := &stubApprovalHandler{approved: true}
-	hook := ApprovalGateHook(nil, handler)
+	hook := ApprovalGateHook(nil, handler, 0)
 
 	verdict, err := hook.Fn(agenthooks.HookContext{ToolName: "deploy", Timestamp: time.Now()})
 	if err != nil {
@@ -206,7 +206,7 @@ func TestApprovalGateHook_EmptyGatedList(t *testing.T) {
 
 func TestApprovalGateHook_HookName(t *testing.T) {
 	t.Parallel()
-	hook := ApprovalGateHook(nil, nil)
+	hook := ApprovalGateHook(nil, nil, 0)
 	if hook.Name != "approval-gate" {
 		t.Fatalf("hook.Name = %q, want %q", hook.Name, "approval-gate")
 	}

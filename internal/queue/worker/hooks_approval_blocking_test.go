@@ -270,7 +270,7 @@ func TestBlockingApprovalHandler_SuspendsViaHook(t *testing.T) {
 	}
 	parent := tasks[0]
 	handler := NewBlockingApprovalHandler(store)
-	hook := ApprovalGateHook([]string{"deploy"}, handler)
+	hook := ApprovalGateHook([]string{"deploy"}, handler, 0)
 
 	verdict, err := hook.Fn(agenthooks.HookContext{
 		ToolName:      "deploy",

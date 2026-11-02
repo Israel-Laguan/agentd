@@ -55,6 +55,7 @@ type WorkerOptions struct {
 	ToolCredentials            map[string]string
 	DisableCredentialDetection bool
 	Audit                      config.AuditConfig
+	ApprovalGates              config.ApprovalGatesConfig
 	ContextWarningThreshold    float64
 	ToolFailureStreak          int
 	TokenUsageHook             func(int)
@@ -192,6 +193,7 @@ func newWorkerCore(
 		legacyHandoffTimeout:    opts.LegacyHandoffTimeout,
 		externalTools:           agenthooks.ExternalToolsSet(opts.ExternalTools),
 		auditLogger:             newAuditLogger(opts.Audit),
+		approvalGates:           opts.ApprovalGates,
 		contextWarningThreshold: opts.ContextWarningThreshold,
 		toolFailureStreak:       opts.ToolFailureStreak,
 		tokenUsageHook:          opts.TokenUsageHook,

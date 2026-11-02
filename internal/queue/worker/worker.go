@@ -74,6 +74,7 @@ type Worker struct {
 	legacyHandoffTimeout    time.Duration
 	externalTools           map[string]struct{}
 	auditLogger             *agentruntime.AuditLogger
+	approvalGates           config.ApprovalGatesConfig
 	contextWarningThreshold float64
 	toolFailureStreak       int
 	tokenUsageHook          func(int)

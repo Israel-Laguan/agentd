@@ -40,3 +40,45 @@ func TestOpenAppliesBusyTimeoutToEveryConnection(t *testing.T) {
 		_ = c.Close()
 	}
 }
+
+// Opens that upgrade one database at once, as the daemon and a CLI command can
+// during an upgrade, must all succeed. Each saw the v28 column missing and
+// added it, and every open but the first failed on a duplicate column.
+func TestConcurrentOpensUpgradeOneDatabase(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.db")
+	for round := 0; round < 3; round++ {
+		d, err := Open(path, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Back to v27: the column v28 adds is gone.
+		for _, stmt := range []string{`ALTER TABLE agent_profiles DROP COLUMN gated_tools`,
+			`UPDATE settings SET value = '27' WHERE key = 'schema_version'`} {
+			if _, err := d.Exec(stmt); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_ = d.Close()
+
+		const opens = 8
+		start := make(chan struct{})
+		errs := make(chan error, opens)
+		for i := 0; i < opens; i++ {
+			go func() {
+				<-start
+				d, err := Open(path, dir)
+				if err == nil {
+					_ = d.Close()
+				}
+				errs <- err
+			}()
+		}
+		close(start)
+		for i := 0; i < opens; i++ {
+			if err := <-errs; err != nil {
+				t.Fatalf("round %d: concurrent open: %v", round, err)
+			}
+		}
+	}
+}

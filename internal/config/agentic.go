@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -53,6 +54,9 @@ type AgenticConfig struct {
 	DisableCredentialDetection bool
 	// Audit configures structured JSONL audit logging for tool dispatches.
 	Audit AuditConfig
+	// ApprovalGates gates tools on every profile, on top of each profile's
+	// gated_tools.
+	ApprovalGates ApprovalGatesConfig
 	// FileContext configures smart file preprocessing for the read tool.
 	FileContext FileContextConfig
 	// Planning configures plan→execute splitting and targeted redo.
@@ -73,6 +77,16 @@ type FileContextConfig struct {
 	TopK           int
 	CachePath      string
 	EmbeddingModel string
+}
+
+// ApprovalGatesConfig is agentic.approval_gates. When Enabled, a call to one of
+// Tools waits for a HUMAN approval on every profile, as a profile's gated_tools
+// do whatever Enabled says. Timeout is how long the human has before the task
+// fails; 0 keeps the worker's default.
+type ApprovalGatesConfig struct {
+	Enabled bool
+	Tools   []string
+	Timeout time.Duration
 }
 
 // AuditConfig controls the structured audit log file separate from the SSE event stream.
@@ -124,6 +138,11 @@ func loadAgenticConfig(v *viper.Viper) (AgenticConfig, error) {
 		Audit: AuditConfig{
 			Enabled: v.GetBool("agentic.audit.enabled"),
 			Path:    v.GetString("agentic.audit.path"),
+		},
+		ApprovalGates: ApprovalGatesConfig{
+			Enabled: v.GetBool("agentic.approval_gates.enabled"),
+			Tools:   v.GetStringSlice("agentic.approval_gates.tools"),
+			Timeout: v.GetDuration("agentic.approval_gates.timeout"),
 		},
 		FileContext:  loadFileContextConfig(v),
 		Planning:     loadAgenticPlanningConfig(v),

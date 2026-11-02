@@ -31,6 +31,7 @@ type agentResponse struct {
 	MaxTokens         int      `json:"max_tokens"`
 	AgenticMode       bool     `json:"agentic_mode"`
 	AllowedTools      []string `json:"allowed_tools"`
+	GatedTools        []string `json:"gated_tools"`
 	WorkspaceReadonly bool     `json:"workspace_readonly"`
 	UpdatedAt         string   `json:"updated_at"`
 }
@@ -46,6 +47,7 @@ type agentCreateRequest struct {
 	MaxTokens             int             `json:"max_tokens,omitempty"`
 	AgenticMode           *bool           `json:"agentic_mode,omitempty"`
 	AllowedTools          []string        `json:"allowed_tools,omitempty"`
+	GatedTools            []string        `json:"gated_tools,omitempty"`
 	WorkspaceReadonly     bool            `json:"workspace_readonly,omitempty"`
 	CapabilityRouteIntent json.RawMessage `json:"capability_route_intent,omitempty"`
 }
@@ -60,6 +62,7 @@ type agentPatchRequest struct {
 	MaxTokens             *int            `json:"max_tokens,omitempty"`
 	AgenticMode           *bool           `json:"agentic_mode,omitempty"`
 	AllowedTools          *[]string       `json:"allowed_tools,omitempty"`
+	GatedTools            *[]string       `json:"gated_tools,omitempty"`
 	WorkspaceReadonly     *bool           `json:"workspace_readonly,omitempty"`
 	CapabilityRouteIntent json.RawMessage `json:"capability_route_intent,omitempty"`
 }
@@ -110,7 +113,7 @@ func (h AgentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	profile := models.AgentProfile{
 		ID: id, Name: req.Name, Provider: req.Provider, Model: req.Model,
 		Temperature: req.Temperature, Role: req.Role, MaxTokens: req.MaxTokens,
-		AgenticMode: true, AllowedTools: req.AllowedTools, WorkspaceReadonly: req.WorkspaceReadonly,
+		AgenticMode: true, AllowedTools: req.AllowedTools, GatedTools: req.GatedTools, WorkspaceReadonly: req.WorkspaceReadonly,
 	}
 	if req.SystemPrompt != "" {
 		profile.SystemPrompt.Valid = true
@@ -143,7 +146,7 @@ func (h AgentHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		Name: req.Name, Provider: req.Provider, Model: req.Model,
 		Temperature: req.Temperature, SystemPrompt: req.SystemPrompt,
 		Role: req.Role, MaxTokens: req.MaxTokens, AgenticMode: req.AgenticMode,
-		AllowedTools: req.AllowedTools, WorkspaceReadonly: req.WorkspaceReadonly,
+		AllowedTools: req.AllowedTools, GatedTools: req.GatedTools, WorkspaceReadonly: req.WorkspaceReadonly,
 	}
 	result, err := h.Service.Patch(r.Context(), r.PathValue("id"), patch)
 	if err != nil {
@@ -171,7 +174,7 @@ func toAgentResponse(p models.AgentProfile) agentResponse {
 		ID: p.ID, Name: p.Name, Provider: p.Provider, Model: p.Model,
 		Temperature: p.Temperature, Role: p.Role, MaxTokens: p.MaxTokens,
 		AgenticMode:  p.AgenticMode,
-		AllowedTools: p.AllowedTools, WorkspaceReadonly: p.WorkspaceReadonly,
+		AllowedTools: p.AllowedTools, GatedTools: p.GatedTools, WorkspaceReadonly: p.WorkspaceReadonly,
 		UpdatedAt: p.UpdatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
 	}
 	if p.SystemPrompt.Valid {
