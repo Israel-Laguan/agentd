@@ -42,8 +42,12 @@ func (p *Proxy) Serve(ln net.Listener) error {
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	target := r.Host
+	if r.Method != http.MethodConnect {
+		refuse(w, r.Method, target, "only CONNECT is proxied")
+		return
+	}
 	listed := slices.IndexFunc(p.Allow, func(allowed string) bool { return strings.EqualFold(allowed, target) })
-	if r.Method != http.MethodConnect || listed < 0 {
+	if listed < 0 {
 		refuse(w, r.Method, target, "not on the egress allowlist")
 		return
 	}
@@ -110,12 +114,16 @@ func refuseLoopback(_, address string, _ syscall.RawConn) error {
 }
 
 // splice copies both ways until each side has finished sending, passing a
-// half-close through so request-then-EOF protocols still work.
+// half-close through so request-then-EOF protocols still work. A failed copy
+// (a reset) closes both connections, so the other direction cannot hang on a
+// peer that never closes.
 func splice(a, b net.Conn) {
 	done := make(chan struct{}, 2)
 	half := func(dst, src net.Conn) {
-		_, _ = io.Copy(dst, src)
-		if closer, ok := dst.(interface{ CloseWrite() error }); ok {
+		if _, err := io.Copy(dst, src); err != nil {
+			_ = dst.Close()
+			_ = src.Close()
+		} else if closer, ok := dst.(interface{ CloseWrite() error }); ok {
 			_ = closer.CloseWrite()
 		}
 		done <- struct{}{}

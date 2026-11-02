@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestProxyTunnelsAllowedConnect(t *testing.T) {
@@ -31,13 +32,7 @@ func TestProxyTunnelsAllowedConnect(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("CONNECT status = %d, want 200", status)
 	}
-	if _, err := io.WriteString(conn, "ping"); err != nil {
-		t.Fatal(err)
-	}
-	got := make([]byte, 4)
-	if _, err := io.ReadFull(reply, got); err != nil || string(got) != "ping" {
-		t.Fatalf("tunnel echoed %q, err = %v; want ping", got, err)
-	}
+	roundTrip(t, conn, reply)
 }
 
 func TestProxyRefusesUnlistedHost(t *testing.T) {
@@ -55,15 +50,37 @@ func TestProxyRefusesUnlistedHost(t *testing.T) {
 	}
 }
 
+// Only CONNECT is proxied: a plain-HTTP request to a listed host is refused,
+// and the log says why.
+func TestProxyRefusesPlainHTTPToListedHost(t *testing.T) {
+	logs := captureLogs(t)
+	conn, err := net.Dial("unix", serve(t, &Proxy{Allow: []string{"api.example:443"}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	if _, err := io.WriteString(conn, "GET http://api.example:443/ HTTP/1.1\r\nHost: api.example:443\r\n\r\n"); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden || !strings.Contains(logs.String(), "only CONNECT") {
+		t.Fatalf("GET status = %d, log = %q; want 403 and the method as the reason", resp.StatusCode, logs.String())
+	}
+}
+
 // The daemon's board API and MCP server listen on the host's loopback, so
 // the proxy must never reach it, even when the list names it: a literal
-// address, or a name that resolves there.
+// address, a name that resolves there, or an unspecified address.
 func TestProxyRefusesHostLoopbackEvenWhenListed(t *testing.T) {
 	_, port, err := net.SplitHostPort(listenEcho(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, target := range []string{"127.0.0.1:" + port, "localhost:" + port, "[::ffff:127.0.0.1]:" + port} {
+	for _, target := range []string{"127.0.0.1:" + port, "localhost:" + port, "[::ffff:127.0.0.1]:" + port, "0.0.0.0:" + port, "[::]:" + port} {
 		t.Run(target, func(t *testing.T) {
 			logs := captureLogs(t)
 			_, _, status := connect(t, serve(t, &Proxy{Allow: []string{target}}), target)
@@ -111,6 +128,22 @@ func connect(t *testing.T, socket, target string) (net.Conn, *bufio.Reader, int)
 		_ = resp.Body.Close()
 	}
 	return conn, reply, resp.StatusCode
+}
+
+// roundTrip sends ping on conn and expects it echoed back through reply,
+// failing rather than hanging when nothing answers.
+func roundTrip(t *testing.T, conn net.Conn, reply io.Reader) {
+	t.Helper()
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(conn, "ping"); err != nil {
+		t.Fatal(err)
+	}
+	got := make([]byte, 4)
+	if _, err := io.ReadFull(reply, got); err != nil || string(got) != "ping" {
+		t.Fatalf("round trip = %q, err = %v; want ping", got, err)
+	}
 }
 
 // listenEcho starts a TCP echo server on the host loopback.
