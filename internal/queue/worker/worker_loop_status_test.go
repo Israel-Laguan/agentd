@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,12 +14,16 @@ import (
 // versionCheckingStore enforces the optimistic lock the real store applies to
 // IncrementRetryCount and UpdateTaskState. testutil.FakeKanbanStore ignores the
 // expected version on those writes, which would let the regression test below
-// pass even when handleLoopResult keeps using the stale task.
+// pass even when handleLoopResult keeps using the stale task. The mutex makes
+// the check-then-write sequence atomic for callers of the wrapper.
 type versionCheckingStore struct {
 	*testutil.FakeKanbanStore
+	mu sync.Mutex
 }
 
 func (s *versionCheckingStore) IncrementRetryCount(ctx context.Context, id string, expectedUpdatedAt time.Time) (*models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err := s.checkVersion(ctx, id, expectedUpdatedAt); err != nil {
 		return nil, err
 	}
@@ -26,6 +31,8 @@ func (s *versionCheckingStore) IncrementRetryCount(ctx context.Context, id strin
 }
 
 func (s *versionCheckingStore) UpdateTaskState(ctx context.Context, id string, expectedUpdatedAt time.Time, next models.TaskState) (*models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err := s.checkVersion(ctx, id, expectedUpdatedAt); err != nil {
 		return nil, err
 	}
@@ -33,7 +40,7 @@ func (s *versionCheckingStore) UpdateTaskState(ctx context.Context, id string, e
 }
 
 func (s *versionCheckingStore) checkVersion(ctx context.Context, id string, expectedUpdatedAt time.Time) error {
-	current, err := s.FakeKanbanStore.GetTask(ctx, id)
+	current, err := s.GetTask(ctx, id)
 	if err != nil {
 		return err
 	}
