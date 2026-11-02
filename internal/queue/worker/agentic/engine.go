@@ -60,8 +60,9 @@ type PromptHang struct {
 	Feedback string
 }
 
-// Host is what the engine calls into. A task's terminal outcome is not written
-// through Host: the engine settles on a Result and the worker applies it (T-041).
+// Host is what the engine calls into. Most terminal outcomes go through Result
+// and the worker applies them (T-041); HandleGoalStalled still blocks the task
+// directly.
 type Host interface {
 	RegisterCancel(taskID string, cancel context.CancelFunc)
 	DeregisterCancel(taskID string)

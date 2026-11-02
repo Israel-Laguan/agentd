@@ -201,6 +201,8 @@ func (e *Engine) finishAgenticTurnNoTools(
 	if stop := e.openBreakdownFinish(ctx, task, turnIndex, budgetGuard, *messages); stop != nil {
 		return false, *stop, true, rewindNone, nil
 	}
+	// The worker commits this text when it applies ResultCompleted; the engine
+	// only settles on the outcome.
 	e.result = Result{Kind: ResultCompleted, Task: task, Text: content, Profile: profile}
 	r := agentruntime.LoopResult{
 		Status: agentruntime.LoopSuccessfulCompletion,

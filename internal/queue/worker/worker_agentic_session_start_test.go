@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"agentd/internal/models"
@@ -26,6 +27,19 @@ func TestAgenticMissingCredentialFailsBeforeClarification(t *testing.T) {
 	}
 	if got.State != models.TaskStateFailed {
 		t.Fatalf("state = %s, want FAILED: the missing credential must stop the task", got.State)
+	}
+	events, err := w.store.ListEventsByTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("ListEventsByTask: %v", err)
+	}
+	var resultPayload string
+	for _, event := range events {
+		if event.Type == models.EventTypeResult {
+			resultPayload = event.Payload
+		}
+	}
+	if !strings.Contains(resultPayload, "missing credentials") || !strings.Contains(resultPayload, envKey) {
+		t.Fatalf("failure payload = %q, want it to name the missing credential %s", resultPayload, envKey)
 	}
 	children, err := w.store.ListChildTasks(ctx, task.ID)
 	if err != nil {

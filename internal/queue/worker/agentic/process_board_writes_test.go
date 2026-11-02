@@ -72,7 +72,7 @@ func newBoardWriteHost() *boardWriteHost {
 	return &boardWriteHost{topicDriftHost: &topicDriftHost{noopHost: &noopHost{}, committed: new(string)}}
 }
 
-func TestProcessFailsHardWithoutChatToolSupport(t *testing.T) {
+func TestProcessReturnsFailedResultWithoutChatToolSupport(t *testing.T) {
 	host := newBoardWriteHost()
 	gw := &scriptedGateway{tools: false}
 
@@ -91,7 +91,7 @@ func TestProcessFailsHardWithoutChatToolSupport(t *testing.T) {
 	}
 }
 
-func TestProcessHandsAGatewayErrorToTheHost(t *testing.T) {
+func TestProcessReturnsGatewayErrorResult(t *testing.T) {
 	host := newBoardWriteHost()
 	gw := &scriptedGateway{tools: true, err: models.ErrLLMUnreachable}
 
@@ -110,7 +110,7 @@ func TestProcessHandsAGatewayErrorToTheHost(t *testing.T) {
 	}
 }
 
-func TestProcessCommitsTheFinalText(t *testing.T) {
+func TestProcessReturnsCompletedResult(t *testing.T) {
 	host := newBoardWriteHost()
 	gw := &scriptedGateway{tools: true}
 

@@ -19,6 +19,44 @@ func unknownLoopResult() LoopResult {
 	}
 }
 
+// Pre-task clarification can bump the task's version before the loop runs, so a
+// loop failure must be recorded against the current row instead of leaving the
+// task stuck in RUNNING on a stale optimistic lock.
+func TestHandleLoopResult_RefreshesVersionBumpedByElicitation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
+		ProjectName: "p",
+		Tasks:       []models.DraftTask{{Title: "parent", Description: "d"}},
+	})
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	running, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	// The clarification answer extends the description after the caller read
+	// the task, bumping the version it still holds.
+	if _, err := store.UpdateTaskDescription(ctx, running.ID, running.UpdatedAt, running.Description+"\nanswer"); err != nil {
+		t.Fatalf("update description: %v", err)
+	}
+	w := NewWorker(store, nil, nil, nil, &mockEventSink{}, WorkerOptions{MaxRetries: 2})
+	w.handleLoopResult(ctx, *running, LoopResult{
+		Status: LoopBudgetExhausted,
+		Meta:   LoopMeta{LastError: "budget"},
+	})
+
+	updated, err := store.GetTask(ctx, running.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if updated.State != models.TaskStateReady {
+		t.Fatalf("state = %v, want READY: the failure must use the current task version", updated.State)
+	}
+}
+
 func TestHandleLoopResult_UnknownStatus_FallsThroughFailure(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

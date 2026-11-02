@@ -14,7 +14,7 @@ func (w *Worker) runAgenticAttempt(
 	ctx context.Context, engine *agentic.Engine, task models.Task, project models.Project, profile models.AgentProfile,
 ) (LoopResult, bool) {
 	// The attempt stays cancellable through every step, as it was inside the engine.
-	ctx, done := w.registerRunCancel(ctx, task.ID)
+	ctx, cancel, done := w.registerRunCancel(ctx, task.ID)
 	defer done()
 
 	// A provider that cannot call tools fails before any model call, so
@@ -39,16 +39,21 @@ func (w *Worker) runAgenticAttempt(
 		return LoopResult{}, false
 	}
 	result, outcome, ok := engine.Process(ctx, clarified, project, profile, taskHooks, taskCaps)
+	// Process registers its own cancel for the run and deregisters it on
+	// return, replacing the one above. Re-register ours so a cancel during the
+	// terminal board write still reaches this attempt.
+	w.RegisterCancel(task.ID, cancel)
 	w.applyAgenticResult(ctx, outcome)
+	w.DeregisterCancel(task.ID)
 	return result, ok
 }
 
 // registerRunCancel makes a task run cancellable by its task ID until done is
 // called.
-func (w *Worker) registerRunCancel(ctx context.Context, taskID string) (context.Context, func()) {
+func (w *Worker) registerRunCancel(ctx context.Context, taskID string) (context.Context, context.CancelFunc, func()) {
 	cancelCtx, cancel := context.WithCancel(ctx)
 	w.RegisterCancel(taskID, cancel)
-	return cancelCtx, func() {
+	return cancelCtx, cancel, func() {
 		cancel()
 		w.DeregisterCancel(taskID)
 	}

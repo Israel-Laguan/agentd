@@ -35,9 +35,17 @@ func (w *Worker) RecordLoopResult(result LoopResult) {
 // handleLoopResult maps a typed loop outcome to existing store side effects.
 // Full recovery strategies (summarize-and-continue, decomposition) are Tasks 23/27/28.
 func (w *Worker) handleLoopResult(ctx context.Context, task models.Task, result LoopResult) {
+	// Pre-task clarification can extend the description and bump the task's
+	// version before the loop runs. Re-read it so the optimistic-locked writes
+	// below do not conflict and leave the task stuck in RUNNING.
+	if fresh, err := w.store.GetTask(ctx, task.ID); err != nil {
+		slog.Warn("failed to refresh task version for loop result", "task_id", task.ID, "error", err)
+	} else if fresh != nil {
+		task = *fresh
+	}
 	switch result.Status {
 	case LoopSuccessfulCompletion:
-		// commitTextWithProfile already ran inside the loop.
+		// applyAgenticResult already committed the text from ResultCompleted.
 	case LoopBudgetExhausted:
 		payload := result.Meta.LastError
 		if payload == "" {
