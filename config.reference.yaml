@@ -67,10 +67,10 @@ agentic:
   tool_rate_limits: # not implemented: no hook enforces these limits
     bash: 50
     default: 100
-  approval_gates: # not implemented: AgentProfile.GatedTools is never set
+  approval_gates: # a profile's gated_tools always gate; enabled adds these tools on every profile
     enabled: false
     tools: []
-    timeout: "30m"
+    timeout: "30m" # then the task fails (FAILED_REQUIRES_HUMAN)
   audit:
     enabled: false
     path: "audit.jsonl"

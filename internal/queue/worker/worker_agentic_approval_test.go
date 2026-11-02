@@ -59,7 +59,7 @@ func setupApprovalResumeFixture(t *testing.T) (
 	parent := tasks[0]
 	handler := NewBlockingApprovalHandler(store)
 	taskHooks := agenthooks.NewHookChain()
-	taskHooks.RegisterPre(ApprovalGateHook([]string{"deploy"}, handler))
+	taskHooks.RegisterPre(ApprovalGateHook([]string{"deploy"}, handler, 0))
 	ex := agenttools.NewToolExecutor(nil, t.TempDir(), nil, 0)
 	resp := gateway.AIResponse{ToolCalls: []gateway.ToolCall{{
 		ID: "call-1", Function: gateway.ToolCallFunction{Name: "deploy", Arguments: `{}`},

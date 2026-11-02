@@ -25,7 +25,7 @@ import (
 // entry covers its sub-keys. Remove an entry in the change that wires its
 // feature to a consumer.
 var notImplementedKeys = []string{
-	"agentic.review", "agentic.tool_rate_limits", "agentic.approval_gates", "agentic.skills",
+	"agentic.review", "agentic.tool_rate_limits", "agentic.skills",
 	"gateway.budget", "gateway.truncation.max_input_chars",
 	"mcp.http_addr", "librarian.preferences_top_k", "plugins",
 }

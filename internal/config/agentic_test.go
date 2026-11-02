@@ -3,6 +3,7 @@ package config
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -271,5 +272,21 @@ func TestLoadAgenticConfig_Empty(t *testing.T) {
 	}
 	if cfg.Audit.Enabled {
 		t.Fatal("Audit.Enabled = true, want false by default")
+	}
+}
+
+func TestLoadAgenticConfig_ApprovalGates(t *testing.T) {
+	t.Parallel()
+	v := viper.New()
+	setAgenticDefaults(v)
+	if gates := mustLoadAgenticConfig(t, v).ApprovalGates; gates.Enabled || len(gates.Tools) != 0 || gates.Timeout != 0 {
+		t.Fatalf("default approval_gates = %+v, want off with no tools and no timeout", gates)
+	}
+	v.Set("agentic.approval_gates.enabled", true)
+	v.Set("agentic.approval_gates.tools", []string{"deploy", "bash"})
+	v.Set("agentic.approval_gates.timeout", "2h")
+	gates := mustLoadAgenticConfig(t, v).ApprovalGates
+	if !gates.Enabled || len(gates.Tools) != 2 || gates.Tools[0] != "deploy" || gates.Tools[1] != "bash" || gates.Timeout != 2*time.Hour {
+		t.Fatalf("approval_gates = %+v, want enabled, [deploy bash], 2h", gates)
 	}
 }

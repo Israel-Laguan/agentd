@@ -38,7 +38,8 @@ type ApprovalHandler interface {
 const DefaultApprovalTimeout = 30 * time.Minute
 
 // ApprovalGateHook returns a PreHook that intercepts gated tools and
-// routes them through ApprovalHandler. HookContext.ExecCtx must be set
+// routes them through ApprovalHandler, with timeout as the human's deadline
+// (DefaultApprovalTimeout when 0). HookContext.ExecCtx must be set
 // (dispatchToolWithHooks does this) so approval I/O respects cancellation.
 //
 // Three outcomes:
@@ -50,7 +51,10 @@ const DefaultApprovalTimeout = 30 * time.Minute
 //     a HUMAN approval subtask; the parent is BLOCKED and the loop stops
 //     until a human marks the subtask COMPLETED or FAILED (parent unblocks
 //     to READY when all children are terminal).
-func ApprovalGateHook(gatedTools []string, handler ApprovalHandler) agenthooks.PreHook {
+func ApprovalGateHook(gatedTools []string, handler ApprovalHandler, timeout time.Duration) agenthooks.PreHook {
+	if timeout <= 0 {
+		timeout = DefaultApprovalTimeout
+	}
 	toolSet := make(map[string]struct{}, len(gatedTools))
 	for _, t := range gatedTools {
 		toolSet[strings.TrimSpace(t)] = struct{}{}
@@ -60,12 +64,12 @@ func ApprovalGateHook(gatedTools []string, handler ApprovalHandler) agenthooks.P
 		Name:   "approval-gate",
 		Policy: agenthooks.FailClosed,
 		Fn: func(ctx agenthooks.HookContext) (agenthooks.HookVerdict, error) {
-			return evalApprovalGate(ctx, toolSet, handler)
+			return evalApprovalGate(ctx, toolSet, handler, timeout)
 		},
 	}
 }
 
-func evalApprovalGate(ctx agenthooks.HookContext, toolSet map[string]struct{}, handler ApprovalHandler) (agenthooks.HookVerdict, error) {
+func evalApprovalGate(ctx agenthooks.HookContext, toolSet map[string]struct{}, handler ApprovalHandler, timeout time.Duration) (agenthooks.HookVerdict, error) {
 	if len(toolSet) == 0 {
 		return agenthooks.HookVerdict{}, nil
 	}
@@ -77,7 +81,7 @@ func evalApprovalGate(ctx agenthooks.HookContext, toolSet map[string]struct{}, h
 		ToolName:      ctx.ToolName,
 		Arguments:     ctx.Args,
 		Rationale:     fmt.Sprintf("Tool %q requires human approval before execution.", ctx.ToolName),
-		Timeout:       DefaultApprovalTimeout,
+		Timeout:       timeout,
 		TaskID:        ctx.SessionID,
 		TaskUpdatedAt: ctx.TaskUpdatedAt,
 		RequestedAt:   ctx.Timestamp,
