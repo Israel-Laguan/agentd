@@ -1,6 +1,9 @@
 package spec
 
-import "context"
+import (
+	"context"
+	"slices"
+)
 
 type sentCtxKey struct{}
 
@@ -16,9 +19,15 @@ func WithSentMessages(ctx context.Context, see func([]PromptMessage)) context.Co
 }
 
 // SeeSentMessages hands messages to the function WithSentMessages attached to
-// ctx, if any.
+// ctx, if any. It hands a copy, so the callback cannot change what is sent.
 func SeeSentMessages(ctx context.Context, messages []PromptMessage) {
-	if see, ok := ctx.Value(sentCtxKey{}).(func([]PromptMessage)); ok {
-		see(messages)
+	see, ok := ctx.Value(sentCtxKey{}).(func([]PromptMessage))
+	if !ok {
+		return
 	}
+	sent := slices.Clone(messages)
+	for i := range sent {
+		sent[i].ToolCalls = slices.Clone(sent[i].ToolCalls)
+	}
+	see(sent)
 }
