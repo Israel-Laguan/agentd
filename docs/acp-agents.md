@@ -199,7 +199,7 @@ Network, with a CONNECT allowlist:
 
 ### Findings that change the plan
 
-- **Go.** The jail works for both agents; the blocker for T-042 is not the jail but network policy: the profile as measured was `--share-net`, which let the agent reach the host's loopback and the internet. B-086 removed that, so the jail now has no network. An external agent still needs a way to reach its model: a host-side allowlist proxy (the setup above), or a podman network that does the same. That proxy is not in agentd yet.
+- **Go.** The jail works for both agents; the blocker for T-042 is not the jail but network policy: the profile as measured was `--share-net`, which let the agent reach the host's loopback and the internet. B-086 removed that, so the jail now has no network. An external agent still needs a way to reach its model: a host-side allowlist proxy (the setup above), or a podman network that does the same. agentd now has the proxy: see [How the jail reaches the network](#how-the-jail-reaches-the-network).
 - **The MCP server must be reachable from inside the jail.** With the network unshared, `127.0.0.1:<port>` is the jail's own loopback. agentd's MCP server on the host needs a forwarded socket (opencode, http) or a stdio command inside the jail (cline). Cline's server is spawned from its own settings file inside the jail, so that file's content is part of the jail setup.
 - **Credentials enter the jail.** The agent home needs a login: an `auth.json` copy (opencode) or a `providers.json` with the OAuth tokens (cline). Copy only the one provider, as done here. Cline refreshes the token and rewrites that file inside the jail, so a copy may diverge from the original if the provider rotates refresh tokens; I saw identical tokens after one run, so rotation was not observed.
 - **Cline's config is `--config <dir>`**, with `data/settings/providers.json` under it. `--data-dir` is ignored in ACP mode, and a `--config` dir without `data/` fails with "Authentication required".
@@ -211,9 +211,42 @@ Network, with a CONNECT allowlist:
 
 **Go**, conditional on network isolation. Both agents start, authenticate, reach their model through an allowlist proxy, finish every task they could finish outside, ask instead of guessing in the ambiguous case (3 of 3 each), and could not read or write host paths. The jail does not change what the agents get wrong: workspaces still need a check beyond `go test`.
 
-**No-go for the profile as measured.** `--share-net` gave the agent the host's loopback and the internet, so it could not be called a jail for an external agent. B-086 fixed that: the current `jailArgv()` profile isolates the network. It does not yet provide the allowlist proxy and the forwarded MCP socket an external agent needs to reach its model and agentd, so external agents cannot run in the jail until T-042 adds them.
+**No-go for the profile as measured.** `--share-net` gave the agent the host's loopback and the internet, so it could not be called a jail for an external agent. B-086 fixed that: the current `jailArgv()` profile isolates the network. The allowlist proxy and the forwarded MCP socket an external agent needs are now a jail option ([How the jail reaches the network](#how-the-jail-reaches-the-network)); the ACP driver and the presets (T-042) still have to use them.
 
 Not covered: podman (jail B), more than 3 runs per cell, agents other than these two, hostile prompts beyond the one probe, and a check of whether an agent behaves differently outside the jail.
+
+### How the jail reaches the network
+
+Now in agentd (S19 PR 04). SP-025's rig was scratch scripts, lost with their session, so this records the mechanism. It is a jail option, `sandbox.Egress` on `BashExecutor`. Without it the builtin profile has no network, and `TestJailArgvWithoutEgressIsUnchanged` pins its argv byte for byte.
+
+```mermaid
+flowchart LR
+  subgraph jail[jail: own loopback only]
+    agent[agent] -- "HTTPS_PROXY 127.0.0.1:3128" --> fwd[agentd jail-forward]
+    agent -- "MCP 127.0.0.1:3129" --> fwd
+  end
+  fwd -- /run/agentd/egress.sock --> proxy[egress.Proxy on the host]
+  fwd -- /run/agentd/mcp.sock --> mcp[agentd MCP server]
+  proxy -- "CONNECT, listed host:port only" --> model[model host]
+```
+
+| Piece | Where | What it does |
+| --- | --- | --- |
+| Proxy | host, `internal/sandbox/egress.Proxy`, one unix socket per run | Answers HTTP CONNECT. Tunnels a `host:port` on its list; answers 403 and logs `egress: request refused` for anything else. After name resolution it refuses the host's loopback and unspecified addresses, even when listed |
+| Forwarder | in the jail, `agentd jail-forward ADDR=SOCKET...` (hidden subcommand, standard library only) | Listens on the jail's own loopback and copies each connection to its unix socket. Prints `ready ADDR...` once bound, and exits when its parent shell does |
+| Sockets | bound read-write at `/run/agentd/egress.sock` and `/run/agentd/mcp.sock` | The proxy's socket, and the MCP server's. `MCPSocket` is empty for an agent that runs its MCP server over stdio (cline) |
+| agentd binary | `/run/agentd/agentd`, read-only | Runs the forwarder |
+| Agent home, agent executable | the same paths as on the host, after the `/tmp` tmpfs | The home is writable and becomes `HOME`; the executable is read-only |
+
+Launch order: the jail's bash starts `jail-forward` through a process substitution, reads its ready line, then runs the agent command, so the agent never starts before its network path exists. If the forwarder cannot bind, the command exits 125 before the agent starts.
+
+Environment, set after the allowlisted host variables so a host proxy setting cannot win: `HTTPS_PROXY` and `HTTP_PROXY` are `http://127.0.0.1:3128`, `NO_PROXY` is `127.0.0.1,localhost` (the MCP port, `sandbox.JailMCPAddr`, must not go through the proxy), and `NODE_USE_ENV_PROXY=1`.
+
+The allowlist is a parameter (`Proxy.Allow`), not a config key: each preset passes its own hosts (PR 08). Registry and download hosts for a cold start stay off the list; pre-seed the agent home instead.
+
+An egress command needs the jail. With `sandbox.backend: filter-only`, or `auto` without a usable bwrap, it is refused with `ErrSandboxUnavailable`, never run with the host's network.
+
+Tests: `internal/sandbox/egress` (proxy and forwarder), `TestJailArgvWithEgress`, and `TestBubblewrapEgressReachesOnlyListedHosts` (a jailed curl through both, skipped without bwrap), next to B-086's `TestBubblewrapRefusesHostLoopback`.
 
 ## Reliability at n = 10 (SP-026)
 
