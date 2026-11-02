@@ -80,6 +80,11 @@ type AIRequest struct {
 	// by a pin, the rule or default's agent otherwise, empty on the cascade. It
 	// is set by the router and recorded in ai_calls.role.
 	RoutedAgent string `json:"-"`
+	// RoutedLevel and RoutedRule are the purpose's required level and the rule
+	// the router matched (its condition, default, pin or cascade). They label the
+	// call record, so a report can group by them.
+	RoutedLevel Level  `json:"-"`
+	RoutedRule  string `json:"-"`
 	TaskID      string `json:"task_id,omitempty"`
 	// Purpose says why this call is made (SP-023 taxonomy). Empty is recorded
 	// as PurposeUnlabelled.

@@ -12,11 +12,15 @@ import (
 // sizes, counts, tokens and timing only, never prompt or response bodies.
 // RoutedAgent is the agent the router chose; it is stored in the role column.
 type AICall struct {
-	At               time.Time
-	Kind             string
-	Purpose          string
-	Stage            string
-	RoutedAgent      string
+	At          time.Time
+	Kind        string
+	Purpose     string
+	Stage       string
+	RoutedAgent string
+	// RoutedLevel is the purpose's required level and RoutedRule the rule the
+	// router matched; both are empty on rows written before schema v27.
+	RoutedLevel      string
+	RoutedRule       string
 	TaskID           string
 	AgentID          string
 	CorrelationID    string
@@ -51,13 +55,15 @@ const (
 	AIDimTask    = "task"
 	AIDimRequest = "request" // chat request: the correlation ID
 	AIDimAgent   = "agent"   // the agent the router chose; empty on the cascade
+	AIDimLevel   = "level"   // the purpose's required level (L1, L3, code, ...)
+	AIDimRule    = "rule"    // the rule the router matched: its condition, default, pin or cascade
 )
 
 // AIUsageDimensions lists every valid GroupBy name.
 func AIUsageDimensions() []string {
 	return []string{
 		AIDimPurpose, AIDimStage, AIDimModel,
-		AIDimDay, AIDimTask, AIDimRequest, AIDimAgent,
+		AIDimDay, AIDimTask, AIDimRequest, AIDimAgent, AIDimLevel, AIDimRule,
 	}
 }
 

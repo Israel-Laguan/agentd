@@ -40,6 +40,7 @@ func (r *Router) emit(ctx context.Context, rec spec.CallRecord) {
 func attemptRecord(p providers.Backend, req spec.AIRequest, inputBefore int, started time.Time, resp spec.AIResponse, err error, cascade bool) spec.CallRecord {
 	rec := spec.CallRecord{
 		At: started, Kind: spec.KindGenerate, Purpose: req.Purpose, RoutedAgent: req.RoutedAgent,
+		RoutedLevel: req.RoutedLevel, RoutedRule: req.RoutedRule,
 		TaskID: req.TaskID, AgentID: req.AgentID, Provider: string(p.Name()), Model: req.Model,
 		Attempt: req.Attempt, Cascade: cascade, Outcome: spec.OutcomeFailed,
 		MessageCount: len(req.Messages), ToolCount: len(req.Tools),
@@ -81,7 +82,7 @@ func embedRecord(p providers.Backend, req spec.EmbedRequest, started time.Time, 
 	rec := spec.CallRecord{
 		At: started, Kind: spec.KindEmbed, Purpose: req.Purpose, Provider: string(p.Name()),
 		Model: req.Model, Attempt: spec.AttemptFirst, Cascade: cascade, Outcome: spec.OutcomeOK,
-		Latency: time.Since(started),
+		Latency: time.Since(started), RoutedLevel: req.Purpose.MinLevel(),
 	}
 	for _, in := range req.Input {
 		rec.InputChars += len(in)

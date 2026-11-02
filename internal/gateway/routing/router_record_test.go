@@ -9,6 +9,7 @@ import (
 
 	"agentd/internal/api/correlation"
 	"agentd/internal/gateway/providers"
+	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/gateway/truncation"
 )
@@ -178,7 +179,8 @@ func TestEmbedAttemptsAreRecordedWithPurpose(t *testing.T) {
 		t.Fatalf("got %d embed records, want 2", len(rec.recs))
 	}
 	for _, got := range rec.recs {
-		if got.Kind != spec.KindEmbed || got.Purpose != spec.PurposeOverheadEmbedFiles || got.InputChars != 5 {
+		if got.Kind != spec.KindEmbed || got.Purpose != spec.PurposeOverheadEmbedFiles || got.InputChars != 5 ||
+			got.RoutedLevel != spec.PurposeOverheadEmbedFiles.MinLevel() {
 			t.Errorf("record = %+v", got)
 		}
 	}
@@ -249,6 +251,44 @@ func TestRecordCarriesTheResolvedAgent(t *testing.T) {
 			}
 			if len(rec.recs) != 1 || rec.recs[0].RoutedAgent != tc.want {
 				t.Fatalf("records = %+v, want one with RoutedAgent %q", rec.recs, tc.want)
+			}
+		})
+	}
+}
+
+// The record carries the whole routing decision: the purpose's required level
+// and the rule that matched (its condition, default, pin or cascade).
+func TestRecordCarriesTheRoutingDecision(t *testing.T) {
+	cases := []struct {
+		name     string
+		purpose  spec.Purpose
+		agentID  string
+		attrs    spec.TaskAttrs
+		wantRule string
+	}{
+		{"rule", spec.PurposeExecWorkPlan, "default", spec.AttrsForTask(true), "requires_workspace_change=true"},
+		{"default", spec.PurposeCreateElicit, "default", spec.TaskAttrs{}, route.RuleDefault},
+		{"pin", spec.PurposeCreateElicit, "tier-fast", spec.TaskAttrs{}, route.RulePin},
+		{"cascade", spec.PurposeExecTurn, "default", spec.TaskAttrs{}, route.RuleCascade},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			openai, gemini := purposeProviders()
+			rec := &sliceRecorder{}
+			router := NewRouter(openai, gemini).WithPurposeRouting(purposeTestTable()).WithRecorder(rec)
+			_, err := router.Generate(context.Background(), spec.AIRequest{
+				Purpose: tc.purpose, AgentID: tc.agentID, TaskID: "t1", Attrs: tc.attrs,
+				Messages: []spec.PromptMessage{{Role: "user", Content: "hi"}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rec.recs) != 1 {
+				t.Fatalf("records = %+v, want one", rec.recs)
+			}
+			got := rec.recs[0]
+			if got.RoutedLevel != tc.purpose.MinLevel() || got.RoutedRule != tc.wantRule {
+				t.Fatalf("level, rule = %q, %q; want %q, %q", got.RoutedLevel, got.RoutedRule, tc.purpose.MinLevel(), tc.wantRule)
 			}
 		})
 	}

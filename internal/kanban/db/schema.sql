@@ -130,7 +130,9 @@ CREATE TABLE IF NOT EXISTS ai_calls (
     cache_write_tokens INTEGER NOT NULL DEFAULT 0 CHECK (cache_write_tokens >= 0),
     latency_ms INTEGER NOT NULL DEFAULT 0 CHECK (latency_ms >= 0),
     context_mix TEXT NOT NULL DEFAULT '',
-    truncated_by TEXT NOT NULL DEFAULT ''
+    truncated_by TEXT NOT NULL DEFAULT '',
+    required_level TEXT NOT NULL DEFAULT '',
+    route_rule TEXT NOT NULL DEFAULT ''
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS tool_calls (

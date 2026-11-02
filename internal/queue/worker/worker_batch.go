@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 )
@@ -53,9 +54,24 @@ func (w *Worker) buildBatchRequest(
 		Provider:    profile.Provider,
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,
+		Attrs:       spec.TaskAttrs{RequiresWorkspaceChange: batchRequiresWorkspaceChange(tasks)},
 	}
 	req = w.ApplyTuning(req, tasks[0], profile, 0)
 	return req
+}
+
+// batchRequiresWorkspaceChange is the requires_workspace_change fact of a
+// batch: the value its tasks share, or unset when they differ. A mixed batch
+// then matches no rule that conditions on the fact and takes the stage default,
+// rather than a rule that is wrong for some of its tasks.
+func batchRequiresWorkspaceChange(tasks []models.Task) *bool {
+	value := tasks[0].RequiresWorkspaceChange
+	for _, t := range tasks[1:] {
+		if t.RequiresWorkspaceChange != value {
+			return nil
+		}
+	}
+	return &value
 }
 
 func countBatchSlots(userContent string) int {

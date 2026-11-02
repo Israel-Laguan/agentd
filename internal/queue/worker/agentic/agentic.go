@@ -131,6 +131,7 @@ func (e *Engine) generateAgenticTurn(
 		return gateway.AIResponse{}, nil, err
 	}
 	req.Messages = truncated
+	e.cutReads.Note(req.Messages)
 	req.TruncatedBy = cutsFrom(ctx)
 	correlation.Logger(ctx).DebugContext(ctx, "agentic: llm call start",
 		"task_id", task.ID, "turn_index", turnIndex,

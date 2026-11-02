@@ -44,9 +44,10 @@ func (d *SubagentDelegate) Delegate(
 	}
 	toolsCalled := make(map[string]struct{})
 	var filesModified []string
+	var cutReads agenttools.CutReads
 
 	for i := 0; i < maxIter; i++ {
-		done := d.runSubagentStep(ctx, i, maxIter, &messages, tools, provider, model, temperature, maxTokens, result, toolsCalled, &filesModified, def, toolExec)
+		done := d.runSubagentStep(ctx, i, maxIter, &messages, tools, provider, model, temperature, maxTokens, result, toolsCalled, &filesModified, def, toolExec, &cutReads)
 		if done {
 			break
 		}
@@ -64,9 +65,11 @@ func (d *SubagentDelegate) runSubagentStep(
 	messages *[]gateway.PromptMessage, tools []gateway.ToolDefinition,
 	provider, model string, temperature float64, maxTokens int,
 	result *SubagentResult, toolsCalled map[string]struct{}, filesModified *[]string,
-	def SubagentDefinition, toolExec *agenttools.ToolExecutor,
+	def SubagentDefinition, toolExec *agenttools.ToolExecutor, cutReads *agenttools.CutReads,
 ) bool {
 	requestMessages := enforceSubagentContextBudget(*messages, def.ContextBudget, d.truncation)
+	// The router can cut further to its provider's budget; it shows Note what it sends.
+	cutReads.Note(requestMessages)
 	req := gateway.AIRequest{
 		Purpose:     gateway.PurposeSubagentTurn,
 		Messages:    requestMessages,
@@ -77,7 +80,7 @@ func (d *SubagentDelegate) runSubagentStep(
 		MaxTokens:   maxTokens,
 		TaskID:      gateway.TaskIDFromContext(ctx),
 	}
-	resp, err := d.gateway.Generate(ctx, req)
+	resp, err := d.gateway.Generate(gateway.WithSentMessages(ctx, cutReads.Note), req)
 	if err != nil {
 		result.Status = SubagentStatusFailure
 		result.Error = fmt.Sprintf("gateway error: %v", err)
@@ -96,8 +99,8 @@ func (d *SubagentDelegate) runSubagentStep(
 	}
 	for _, call := range resp.ToolCalls {
 		toolsCalled[call.Function.Name] = struct{}{}
-		callResult := d.executeTool(ctx, call, def, toolExec)
-		if call.Function.Name == agenttools.ToolNameWrite {
+		callResult, refused := d.runTool(ctx, call, def, toolExec, cutReads)
+		if call.Function.Name == agenttools.ToolNameWrite && !refused {
 			if path := extractWritePath(call.Function.Arguments); path != "" {
 				*filesModified = append(*filesModified, path)
 			}
@@ -119,6 +122,22 @@ func (d *SubagentDelegate) runSubagentStep(
 	}
 	result.Iterations = i + 1
 	return false
+}
+
+// runTool runs one tool call of the subagent. A whole-file write to a file
+// whose read the budget cut would save the cut copy, so it is refused without
+// running (B-089).
+func (d *SubagentDelegate) runTool(
+	ctx context.Context, call gateway.ToolCall, def SubagentDefinition,
+	toolExec *agenttools.ToolExecutor, cutReads *agenttools.CutReads,
+) (result string, refused bool) {
+	path := toolExec.FilePath(call)
+	if feedback, refused := cutReads.WriteRefusal(call, path); refused {
+		return agenttools.JSONErrorf("%s", feedback), true
+	}
+	result = d.executeTool(ctx, call, def, toolExec)
+	cutReads.NoteRead(call, path, agenttools.ClassifyBuiltinToolResult(call.ID, call.Function.Name, result, 0))
+	return result, false
 }
 
 // failSandboxUnavailable ends the child when a bash call was refused by an
