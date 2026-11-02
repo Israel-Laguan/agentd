@@ -49,35 +49,64 @@ func writeCall(id, path, content string) gateway.ToolCall {
 	return gateway.ToolCall{ID: id, Type: "function", Function: gateway.ToolCallFunction{Name: "write", Arguments: string(argsJSON)}}
 }
 
-// cutReadWorkspace is a workspace holding tabwriter.go with content, and a
-// dispatch that runs every call on it, recording the call IDs it ran.
-func cutReadWorkspace(t *testing.T, content string) (string, *[]string, func(gateway.ToolCall) (agenttools.ToolResult, bool)) {
+// cutReadWorkspace is a workspace holding tabwriter.go, and an engine whose
+// calls run on it. dispatched records the IDs of the calls that ran.
+type cutReadWorkspace struct {
+	e          *Engine
+	gw         *writeBackGateway
+	dir        string
+	ex         *agenttools.ToolExecutor
+	dispatched []string
+}
+
+// newCutReadWorkspace answers every model turn with a whole-file write to path.
+func newCutReadWorkspace(t *testing.T, content, path string) *cutReadWorkspace {
 	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "tabwriter.go"), []byte(content), 0o644); err != nil {
+	gw := &writeBackGateway{call: writeCall("w", path, "short")}
+	w := &cutReadWorkspace{
+		e:   &Engine{config: Config{Gateway: gw, TruncatorMax: 30, CharacterBudget: 300}, host: &noopHost{}},
+		gw:  gw,
+		dir: t.TempDir(),
+	}
+	w.ex = agenttools.NewToolExecutor(nil, w.dir, nil, 0)
+	w.writeFile(t, "tabwriter.go", content)
+	return w
+}
+
+func (w *cutReadWorkspace) writeFile(t *testing.T, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(w.dir, name), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ex := agenttools.NewToolExecutor(nil, dir, nil, 0)
-	var dispatched []string
-	return dir, &dispatched, func(c gateway.ToolCall) (agenttools.ToolResult, bool) {
-		dispatched = append(dispatched, c.ID)
-		return agenttools.ClassifyBuiltinToolResult(c.ID, c.Function.Name, ex.Execute(context.Background(), c), 0), false
-	}
 }
 
-// readTurn is the conversation after the model read a file: the read call and
-// the content it returned.
-func readTurn(id, path, content string) []gateway.PromptMessage {
+func (w *cutReadWorkspace) run(c gateway.ToolCall) agenttools.ToolResult {
+	dispatch := func(c gateway.ToolCall) (agenttools.ToolResult, bool) {
+		w.dispatched = append(w.dispatched, c.ID)
+		return agenttools.ClassifyBuiltinToolResult(c.ID, c.Function.Name, w.ex.Execute(context.Background(), c), 0), false
+	}
+	tr, _, _ := w.e.runAgenticCall(context.Background(), models.Task{}, models.AgentProfile{}, c, w.ex, dispatch)
+	return tr
+}
+
+// read runs a read call and returns the conversation after it: the call and the
+// content it returned.
+func (w *cutReadWorkspace) read(id, path string) []gateway.PromptMessage {
+	tr := w.run(readCall(id, path))
 	return []gateway.PromptMessage{
 		{Role: "assistant", Content: "c", ToolCalls: []gateway.ToolCall{readCall(id, path)}},
-		{Role: "tool", ToolCallID: id, Content: content},
+		{Role: "tool", ToolCallID: id, Content: tr.ForContext()},
 	}
 }
 
-func generateWriteBack(t *testing.T, e *Engine, msgs []gateway.PromptMessage) gateway.ToolCall {
+// generate runs a model turn over msgs and returns the write it answers with.
+func (w *cutReadWorkspace) generate(t *testing.T, msgs ...[]gateway.PromptMessage) gateway.ToolCall {
 	t.Helper()
-	msgs = append([]gateway.PromptMessage{{Role: "system", Content: "s"}, {Role: "user", Content: "task"}}, msgs...)
-	resp, stop, err := e.generateAgenticTurn(context.Background(), models.Task{}, models.AgentProfile{}, &msgs, nil,
+	all := []gateway.PromptMessage{{Role: "system", Content: "s"}, {Role: "user", Content: "task"}}
+	for _, m := range msgs {
+		all = append(all, m...)
+	}
+	resp, stop, err := w.e.generateAgenticTurn(context.Background(), models.Task{}, models.AgentProfile{}, &all, nil,
 		agentruntime.NewBudgetGuard(nil, ""), agentruntime.NewContextBudgetGuard(1000, 0.8), 0, 0)
 	if err != nil || stop != nil {
 		t.Fatalf("generateAgenticTurn: stop=%v err=%v", stop, err)
@@ -85,93 +114,94 @@ func generateWriteBack(t *testing.T, e *Engine, msgs []gateway.PromptMessage) ga
 	return resp.ToolCalls[0]
 }
 
+// wrote reports whether the last call that ran was the model's write, and it
+// passed.
+func (w *cutReadWorkspace) wrote(tr agenttools.ToolResult) bool {
+	return w.dispatched[len(w.dispatched)-1] == "w" && tr.Status == agenttools.ToolStatusSuccess
+}
+
 // B-089: the budget cut the read the model saw, so a whole-file write would
 // replace the file with that cut copy and delete the rest. The write is refused
 // and never reaches the executor.
 func TestWriteToAFileWhoseReadWasCutIsRefused(t *testing.T) {
-	gw := &writeBackGateway{call: writeCall("w1", "tabwriter.go", "short")}
-	e := &Engine{config: Config{Gateway: gw, TruncatorMax: 30, CharacterBudget: 300}, host: &noopHost{}}
 	long := strings.Repeat("x", 5000)
-	_, dispatched, dispatch := cutReadWorkspace(t, long)
-	ctx := context.Background()
-	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("1", "tabwriter.go"), dispatch)
-	write := generateWriteBack(t, e, readTurn("1", "tabwriter.go", long))
-	if toolContent(gw.seen, "1") == long {
+	w := newCutReadWorkspace(t, long, "tabwriter.go")
+	write := w.generate(t, w.read("1", "tabwriter.go"))
+	if toolContent(w.gw.seen, "1") == long {
 		t.Fatal("the model's request carries the whole read; the test would prove nothing")
 	}
-	tr, _, _ := e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, write, dispatch)
-	if len(*dispatched) != 1 || tr.Status == agenttools.ToolStatusSuccess {
-		t.Fatalf("dispatched = %v, status = %v; want the write refused before it runs", *dispatched, tr.Status)
+	if tr := w.run(write); w.wrote(tr) {
+		t.Fatalf("dispatched = %v; want the write refused before it runs", w.dispatched)
 	}
 }
 
 // Once the model has read the file again and was shown all of it, a write to it
 // is allowed: the latest read decides.
 func TestWriteAfterAnUncutReadIsAllowed(t *testing.T) {
-	gw := &writeBackGateway{call: writeCall("w2", "tabwriter.go", "short")}
-	e := &Engine{config: Config{Gateway: gw, TruncatorMax: 30, CharacterBudget: 300}, host: &noopHost{}}
 	long := strings.Repeat("x", 5000)
-	dir, dispatched, dispatch := cutReadWorkspace(t, long)
-	ctx := context.Background()
-	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("1", "tabwriter.go"), dispatch)
-	e.noteCutReads([]gateway.PromptMessage{{Role: "tool", ToolCallID: "1", Content: "cut"}})
-	if !e.cutReads["tabwriter.go"] {
-		t.Fatal("the first read was not marked cut; the test would not exercise clearing")
+	w := newCutReadWorkspace(t, long, "tabwriter.go")
+	first := w.read("1", "tabwriter.go")
+	if tr := w.run(w.generate(t, first)); w.wrote(tr) {
+		t.Fatal("the first read was not taken as cut; the test would not exercise clearing")
 	}
 	// The model shortened the file with a shell command, then read all of it.
-	if err := os.WriteFile(filepath.Join(dir, "tabwriter.go"), []byte("package tabwriter"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("2", "./tabwriter.go"), dispatch)
-	write := generateWriteBack(t, e, append(readTurn("1", "tabwriter.go", long), readTurn("2", "./tabwriter.go", "package tabwriter")...))
-	tr, _, _ := e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, write, dispatch)
-	if last := (*dispatched)[len(*dispatched)-1]; last != "w2" || tr.Status != agenttools.ToolStatusSuccess {
-		t.Fatalf("dispatched = %v, status = %v; want the write to run after a whole read", *dispatched, tr.Status)
+	w.writeFile(t, "tabwriter.go", "package tabwriter")
+	write := w.generate(t, first, w.read("2", "./tabwriter.go"))
+	if tr := w.run(write); !w.wrote(tr) {
+		t.Fatalf("dispatched = %v, status = %v; want the write to run after a whole read", w.dispatched, tr.Status)
 	}
 }
 
 // A file whose own text holds the cut marker was shown whole: the write is
 // allowed. Only the cut decides, not the text it leaves.
 func TestWriteToAFileHoldingTheCutMarkerIsAllowed(t *testing.T) {
-	gw := &writeBackGateway{call: writeCall("w3", "marker.go", "short")}
-	e := &Engine{config: Config{Gateway: gw, TruncatorMax: 30, CharacterBudget: 300}, host: &noopHost{}}
 	content := "const m = \"" + truncation.TruncationMarker + "\""
-	dir, dispatched, dispatch := cutReadWorkspace(t, "")
-	if err := os.WriteFile(filepath.Join(dir, "marker.go"), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("1", "marker.go"), dispatch)
-	write := generateWriteBack(t, e, readTurn("1", "marker.go", content))
-	if toolContent(gw.seen, "1") != content {
+	w := newCutReadWorkspace(t, content, "tabwriter.go")
+	write := w.generate(t, w.read("1", "tabwriter.go"))
+	if toolContent(w.gw.seen, "1") != content {
 		t.Fatal("the model's request cut the read; the test would prove nothing")
 	}
-	tr, _, _ := e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, write, dispatch)
-	if last := (*dispatched)[len(*dispatched)-1]; last != "w3" || tr.Status != agenttools.ToolStatusSuccess {
-		t.Fatalf("dispatched = %v, status = %v; want the write to run", *dispatched, tr.Status)
+	if tr := w.run(write); !w.wrote(tr) {
+		t.Fatalf("dispatched = %v, status = %v; want the write to run", w.dispatched, tr.Status)
 	}
 }
 
 // A reread that fails shows the model none of the file, so the cut mark stays
 // and the write is still refused.
 func TestWriteAfterAFailedRereadIsRefused(t *testing.T) {
-	gw := &writeBackGateway{call: writeCall("w4", "tabwriter.go", "short")}
-	e := &Engine{config: Config{Gateway: gw, TruncatorMax: 30, CharacterBudget: 300}, host: &noopHost{}}
-	long := strings.Repeat("x", 5000)
-	dir, dispatched, dispatch := cutReadWorkspace(t, long)
-	ctx := context.Background()
-	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("1", "tabwriter.go"), dispatch)
-	e.noteCutReads([]gateway.PromptMessage{{Role: "tool", ToolCallID: "1", Content: "cut"}})
-	if err := os.Chmod(filepath.Join(dir, "tabwriter.go"), 0); err != nil {
+	w := newCutReadWorkspace(t, strings.Repeat("x", 5000), "tabwriter.go")
+	w.generate(t, w.read("1", "tabwriter.go"))
+	if err := os.Chmod(filepath.Join(w.dir, "tabwriter.go"), 0); err != nil {
 		t.Fatal(err)
 	}
-	reread, _, _ := e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("2", "tabwriter.go"), dispatch)
-	if reread.Status == agenttools.ToolStatusSuccess {
-		t.Skip("the reread did not fail (running as root?); the test would prove nothing")
+	reread := w.read("2", "tabwriter.go")
+	if w.dispatched[len(w.dispatched)-1] != "2" || !strings.Contains(reread[1].Content, "denied") {
+		t.Skipf("the reread did not fail (%q; running as root?); the test would prove nothing", reread[1].Content)
 	}
-	write := generateWriteBack(t, e, readTurn("2", "tabwriter.go", reread.ForContext()))
-	tr, _, _ := e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, write, dispatch)
-	if last := (*dispatched)[len(*dispatched)-1]; last == "w4" || tr.Status == agenttools.ToolStatusSuccess {
-		t.Fatalf("dispatched = %v, status = %v; want the write refused after a failed reread", *dispatched, tr.Status)
+	if tr := w.run(w.generate(t, reread)); w.wrote(tr) {
+		t.Fatalf("dispatched = %v; want the write refused after a failed reread", w.dispatched)
+	}
+}
+
+// A file has many names: a symlink to it, or the path the symlink names. A read
+// cut under one name refuses a write under another, since both reach one file.
+func TestWriteThroughAnotherNameOfACutFileIsRefused(t *testing.T) {
+	for _, tc := range []struct{ read, write string }{
+		{read: "link.go", write: "tabwriter.go"},
+		{read: "tabwriter.go", write: "link.go"},
+		{read: "dir/tabwriter.go", write: "./tabwriter.go"},
+	} {
+		t.Run(tc.read+" then "+tc.write, func(t *testing.T) {
+			w := newCutReadWorkspace(t, strings.Repeat("x", 5000), tc.write)
+			if err := os.Symlink("tabwriter.go", filepath.Join(w.dir, "link.go")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(".", filepath.Join(w.dir, "dir")); err != nil {
+				t.Fatal(err)
+			}
+			if tr := w.run(w.generate(t, w.read("1", tc.read))); w.wrote(tr) {
+				t.Fatalf("dispatched = %v; want the write refused", w.dispatched)
+			}
+		})
 	}
 }

@@ -89,7 +89,7 @@ func (e *Engine) handleAgenticToolCalls(
 		dispatch := func(c gateway.ToolCall) (agenttools.ToolResult, bool) {
 			return e.host.DispatchToolWithHooks(ctx, task.ID, task.ProjectID, turnID, taskUpdatedAt, c, toolToAdapter, toolExecutor, taskHooks, taskCaps, providerName)
 		}
-		tr, suspended, handedOff := e.runAgenticCall(ctx, task, profile, call, dispatch)
+		tr, suspended, handedOff := e.runAgenticCall(ctx, task, profile, call, toolExecutor, dispatch)
 		if handedOff {
 			return true, agentruntime.LoopResult{}, false
 		}
@@ -119,18 +119,17 @@ func (e *Engine) handleAgenticToolCalls(
 // is recovered. handedOff reports that the task went to a human.
 func (e *Engine) runAgenticCall(
 	ctx context.Context, task models.Task, profile models.AgentProfile, call gateway.ToolCall,
-	dispatch func(gateway.ToolCall) (agenttools.ToolResult, bool),
+	toolExecutor *agenttools.ToolExecutor, dispatch func(gateway.ToolCall) (agenttools.ToolResult, bool),
 ) (tr agenttools.ToolResult, suspended, handedOff bool) {
 	if feedback, repeated := e.host.RepeatedAttemptFailure(task, call); repeated {
 		return agenttools.NonRetryableErrorResult(call.ID, feedback, "", 0), false, false
 	}
-	if feedback, refused := e.cutWriteRefusal(call); refused {
+	path := toolExecutor.FilePath(call)
+	if feedback, refused := e.cutReads.WriteRefusal(call, path); refused {
 		return agenttools.NonRetryableErrorResult(call.ID, feedback, "", 0), false, false
 	}
 	tr, suspended = dispatch(call)
-	if call.Function.Name == agenttools.ToolNameRead && tr.Status == agenttools.ToolStatusSuccess {
-		e.noteReadCall(call, tr.Content)
-	}
+	e.cutReads.NoteRead(call, path, tr)
 	// ask_human runs through dispatch like any tool, so hooks can veto it; a
 	// successful call blocked the task for a human, and the loop stops.
 	if call.Function.Name == agenttools.ToolNameAskHuman && tr.Status == agenttools.ToolStatusSuccess {
