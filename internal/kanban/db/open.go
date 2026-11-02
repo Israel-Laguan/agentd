@@ -24,6 +24,11 @@ const schemaFile = "schema.sql"
 // Open opens a SQLite database, applies operational pragmas, and runs schema
 // migrations. The caller owns the returned database handle.
 func Open(path string, projectsDir string) (*sql.DB, error) {
+	unlock, err := lockSetup(path)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	db, err := sql.Open("sqlite", connectionDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite db: %w", err)
@@ -35,6 +40,41 @@ func Open(path string, projectsDir string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// lockSetup serializes Open's schema setup between handles and processes on one
+// database: two that both see a column missing both add it, and the second
+// fails. It holds a write lock on the side database path+".lock". The schema
+// setup itself cannot take the lock, because migrations run their own
+// transactions and PRAGMA foreign_keys, which SQLite ignores inside one. The OS
+// drops the lock when the process dies. The holder's setup is capped at 10s, so
+// the 30s wait covers it.
+// shortcut: file: URIs are not locked (tests' in-memory databases); lock them
+// too if production ever opens one.
+func lockSetup(path string) (func(), error) {
+	if path == ":memory:" || strings.HasPrefix(path, "file:") {
+		return func() {}, nil
+	}
+	lock, err := sql.Open("sqlite", path+".lock?_pragma="+url.QueryEscape("busy_timeout(30000)"))
+	if err != nil {
+		return nil, fmt.Errorf("open schema setup lock: %w", err)
+	}
+	ctx := context.Background()
+	conn, err := lock.Conn(ctx)
+	if err == nil {
+		if _, err = conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+			_ = conn.Close()
+		}
+	}
+	if err != nil {
+		_ = lock.Close()
+		return nil, fmt.Errorf("take schema setup lock: %w", err)
+	}
+	return func() {
+		_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		_ = conn.Close()
+		_ = lock.Close()
+	}, nil
 }
 
 // connectionPragmas are applied by the driver to every pooled connection.

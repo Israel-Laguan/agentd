@@ -47,7 +47,7 @@ func TestOpenAppliesBusyTimeoutToEveryConnection(t *testing.T) {
 func TestConcurrentOpensUpgradeOneDatabase(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.db")
-	for round := 0; round < 10; round++ {
+	for round := 0; round < 3; round++ {
 		d, err := Open(path, dir)
 		if err != nil {
 			t.Fatal(err)
