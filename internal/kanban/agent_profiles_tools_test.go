@@ -43,13 +43,12 @@ func TestAgentProfileRoundTripsToolListsAndWorkspaceReadonly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	for _, p := range list {
-		if p.ID != "researcher" {
-			continue
-		}
-		if !slices.Equal(p.AllowedTools, want.AllowedTools) || !slices.Equal(p.GatedTools, want.GatedTools) || !p.WorkspaceReadonly {
-			t.Fatalf("listed researcher = %+v, want the stored tool lists and read-only flag", p)
-		}
+	i := slices.IndexFunc(list, func(p models.AgentProfile) bool { return p.ID == "researcher" })
+	if i < 0 {
+		t.Fatal("researcher missing from ListAgentProfiles")
+	}
+	if p := list[i]; !slices.Equal(p.AllowedTools, want.AllowedTools) || !slices.Equal(p.GatedTools, want.GatedTools) || !p.WorkspaceReadonly {
+		t.Fatalf("listed researcher = %+v, want the stored tool lists and read-only flag", p)
 	}
 }
 
