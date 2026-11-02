@@ -159,7 +159,7 @@ Since B-086 the bubblewrap jail unshares the network: a jailed `bash` call reach
 
 | Option | Shape | Trade-off | Status |
 | --- | --- | --- | --- |
-| Egress allowlist proxy | `--unshare-net`, plus a config key such as `sandbox.egress_allow: [host:port, ...]` enforced by a CONNECT proxy in the daemon, reached through a unix socket bound into the jail (a small forwarder inside the jail gives tools the TCP `HTTPS_PROXY` they expect) | The intended end state, and the same mechanism T-042 needs to jail external ACP agents (measured in [acp-agents.md](acp-agents.md#inside-the-jail-sp-025)). Build it once and share it | Not started; build with T-042 |
+| Egress allowlist proxy | `--unshare-net`, plus a host:port list enforced by a CONNECT proxy in the daemon, reached through a unix socket bound into the jail (a small forwarder inside the jail gives tools the TCP `HTTPS_PROXY` they expect) | The intended end state, and the same mechanism T-042 needs to jail external ACP agents (measured in [acp-agents.md](acp-agents.md#inside-the-jail-sp-025)). Build it once and share it | Built for external agents (S19 PR 04, [how it works](acp-agents.md#how-the-jail-reaches-the-network)); the list is per agent preset, not a sandbox key. Builtin commands still have no egress |
 | Coarse network switch | `sandbox.network: none \| host`, default `none` | Cheap, but `host` reopens the whole hole, the host's loopback included, not only package registries. Only worth it as a stopgap if the proxy slips | Not planned |
 
 Until then, a project that must download dependencies at task time can run with `sandbox.backend: filter-only`, which drops the jail entirely.

@@ -12,6 +12,7 @@ import (
 
 	"agentd/internal/bus"
 	"agentd/internal/models"
+	"agentd/internal/sandbox/egress"
 	"agentd/internal/testutil"
 )
 
@@ -112,6 +113,15 @@ func assertEventCount(t *testing.T, store *testutil.FakeKanbanStore, want int) {
 	}
 }
 
+// TestMain doubles as agentd's jail-forward: an egress jail test binds this
+// binary into the jail as the forwarder (see TestBubblewrapEgressReachesOnlyListedHosts).
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "jail-forward" {
+		if err := egress.Forward(context.Background(), os.Stdout, os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	os.Exit(m.Run())
 }

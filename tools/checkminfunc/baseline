@@ -191,6 +191,9 @@ internal/queue/worker/phase_splitter.go (*Worker).shouldPlan
 internal/queue/worker/worker_support.go (*Worker).handleIterationExceeded
 internal/queue/worker/worker_tools.go (*Worker).DispatchTool
 internal/queue/worker/worker_tools.go (*Worker).dispatchToolWithProject
+internal/sandbox/egress/proxy.go (*Proxy).Serve
+internal/sandbox/egress/proxy.go refuse
+internal/sandbox/jail_options.go (*Egress).bridges
 internal/services/project_service.go (*ProjectService).WithSourcePolicy
 test/e2e/client.go (*APIClient).WorkspaceReady
 test/e2e/client.go (*APIClient).RetryTask

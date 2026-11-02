@@ -3,13 +3,18 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"agentd/internal/sandbox/egress"
 )
 
 // B-086: the jail shared the host network namespace, so a jailed command
@@ -38,6 +43,56 @@ func TestBubblewrapRefusesHostLoopback(t *testing.T) {
 	}
 	if IsSandboxViolation(err) {
 		t.Fatalf("Execute() = %v; want the jail to refuse the connect, not the lexical filter", err)
+	}
+}
+
+// T-042: an external agent's only way out of the jail is the allowlist proxy,
+// reached through jail-forward on the jail's own loopback. A jailed curl gets
+// a listed host's reply and a 403 for anything else. The proxy routes the
+// listed name to a local server; the real dialer refuses loopback.
+func TestBubblewrapEgressReachesOnlyListedHosts(t *testing.T) {
+	requireJail(t)
+	if _, err := osexec.LookPath("curl"); err != nil {
+		t.Skip("curl unavailable")
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "egress ok")
+	}))
+	t.Cleanup(upstream.Close)
+	dir := t.TempDir()
+	socket := filepath.Join(dir, "egress.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	proxy := &egress.Proxy{Allow: []string{"api.example:443"}, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		var dialer net.Dialer
+		return dialer.DialContext(ctx, network, upstream.Listener.Addr().String())
+	}}
+	go func() { _ = proxy.Serve(listener) }()
+	home := filepath.Join(dir, "home")
+	if err := os.Mkdir(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	exec, workspace := testExecutor(t, nil)
+	exec.Egress = &Egress{Forwarder: os.Args[0], ProxySocket: socket, Home: home}
+	// The lexical filter refuses a literal $HOME; printenv reads the same value.
+	curl := "curl -sS --max-time 10 --proxytunnel " // the proxy comes from the jail's http_proxy
+	result, err := exec.Execute(context.Background(), testPayload(workspace, curl+`http://api.example:443/ && h=$(printenv HOME) && touch "$h/state"`))
+	if err != nil || !result.Success || !strings.Contains(result.Stdout, "egress ok") {
+		t.Fatalf("listed host: err = %v, success = %v, stdout = %q, stderr = %q", err, result.Success, result.Stdout, result.Stderr)
+	}
+	if _, err := os.Stat(filepath.Join(home, "state")); err != nil {
+		t.Fatalf("the agent home is not the jail's writable HOME: %v", err)
+	}
+	result, err = exec.Execute(context.Background(), testPayload(workspace, curl+"http://blocked.example:443/"))
+	if err == nil && result.Success {
+		t.Fatalf("unlisted host reached: stdout = %q", result.Stdout)
+	}
+	if !strings.Contains(result.Stderr, "403") {
+		t.Fatalf("unlisted host: stderr = %q, want the proxy's 403", result.Stderr)
 	}
 }
 
