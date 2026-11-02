@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     disable_topic_drift INTEGER NOT NULL DEFAULT 0,
     capability_route_intent TEXT,
     allowed_tools TEXT NOT NULL DEFAULT '[]',
+    gated_tools TEXT NOT NULL DEFAULT '[]',
     workspace_readonly INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     CHECK (max_tokens >= 0),

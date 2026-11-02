@@ -8,9 +8,9 @@ import (
 	"agentd/internal/models"
 )
 
-// AllowedTools and WorkspaceReadonly must survive a round trip through the
-// store, on both the single-profile and the list read paths.
-func TestAgentProfileRoundTripsAllowedToolsAndWorkspaceReadonly(t *testing.T) {
+// AllowedTools, GatedTools and WorkspaceReadonly must survive a round trip
+// through the store, on both the single-profile and the list read paths.
+func TestAgentProfileRoundTripsToolListsAndWorkspaceReadonly(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 
@@ -18,6 +18,7 @@ func TestAgentProfileRoundTripsAllowedToolsAndWorkspaceReadonly(t *testing.T) {
 		ID: "researcher", Name: "Researcher", Provider: "openai", Model: "gpt-4o-mini",
 		Role: "RESEARCH", AgenticMode: true,
 		AllowedTools:      []string{"read", "bash"},
+		GatedTools:        []string{"bash"},
 		WorkspaceReadonly: true,
 	}
 	if err := store.UpsertAgentProfile(ctx, want); err != nil {
@@ -31,6 +32,9 @@ func TestAgentProfileRoundTripsAllowedToolsAndWorkspaceReadonly(t *testing.T) {
 	if !slices.Equal(got.AllowedTools, want.AllowedTools) {
 		t.Fatalf("AllowedTools = %v, want %v", got.AllowedTools, want.AllowedTools)
 	}
+	if !slices.Equal(got.GatedTools, want.GatedTools) {
+		t.Fatalf("GatedTools = %v, want %v", got.GatedTools, want.GatedTools)
+	}
 	if !got.WorkspaceReadonly {
 		t.Fatal("WorkspaceReadonly = false, want true")
 	}
@@ -43,8 +47,8 @@ func TestAgentProfileRoundTripsAllowedToolsAndWorkspaceReadonly(t *testing.T) {
 		if p.ID != "researcher" {
 			continue
 		}
-		if !slices.Equal(p.AllowedTools, want.AllowedTools) || !p.WorkspaceReadonly {
-			t.Fatalf("listed researcher = %+v, want the stored allowlist and read-only flag", p)
+		if !slices.Equal(p.AllowedTools, want.AllowedTools) || !slices.Equal(p.GatedTools, want.GatedTools) || !p.WorkspaceReadonly {
+			t.Fatalf("listed researcher = %+v, want the stored tool lists and read-only flag", p)
 		}
 	}
 }
@@ -63,7 +67,7 @@ func TestAgentProfileWithoutAllowlistReadsBackUnrestricted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get plain: %v", err)
 	}
-	if len(got.AllowedTools) != 0 || got.WorkspaceReadonly {
-		t.Fatalf("AllowedTools = %v, WorkspaceReadonly = %t; want no allowlist and writable", got.AllowedTools, got.WorkspaceReadonly)
+	if len(got.AllowedTools) != 0 || len(got.GatedTools) != 0 || got.WorkspaceReadonly {
+		t.Fatalf("AllowedTools = %v, GatedTools = %v, WorkspaceReadonly = %t; want no lists and writable", got.AllowedTools, got.GatedTools, got.WorkspaceReadonly)
 	}
 }
