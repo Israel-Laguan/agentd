@@ -45,4 +45,8 @@ func TestCutReadsKeepsOnlyTheLatestReadOfAFile(t *testing.T) {
 	if _, refused := c.WriteRefusal(write, "/ws/a.go"); !refused {
 		t.Fatal("the latest read, cut, does not refuse the write: it is not kept under its call ID")
 	}
+	c.Note([]gateway.PromptMessage{{Role: "tool", ToolCallID: "3", Content: strings.Repeat("x", 1<<20)}})
+	if _, refused := c.WriteRefusal(write, "/ws/a.go"); refused {
+		t.Fatal("the latest read, whole, refuses the write")
+	}
 }
