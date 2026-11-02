@@ -80,7 +80,7 @@ func probeJailHost() jailProbeResult {
 	defer func() { _ = os.RemoveAll(dir) }()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	argv := jailArgv(path, dir, false, nil, nil, "true")
+	argv := jailArgv(path, dir, false, nil, nil, nil, "true")
 	probe := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	if err := probe.Run(); err != nil {
 		return jailProbeResult{path: path}
@@ -104,8 +104,8 @@ func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool,
 	status := probeJail()
 	switch resolveBackend(e.Backend) {
 	case BackendFilterOnly:
-		if payload.ReadOnlyWorkspace {
-			return "", false, readOnlyWithoutJail(workspace, payload, "sandbox.backend=filter-only does not jail commands")
+		if what := e.jailOnly(payload); what != "" {
+			return "", false, refuseUnjailed(workspace, payload, what, "sandbox.backend=filter-only does not jail commands")
 		}
 		return "", false, nil
 	case BackendBubblewrap:
@@ -121,21 +121,11 @@ func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool,
 			slog.Warn("sandbox: bubblewrap user namespaces unavailable; running filter-only (not a jail)",
 				"workspace", workspace, "task_id", payload.TaskID, "bwrap", status.path)
 		}
-		if payload.ReadOnlyWorkspace && !status.usable() {
-			return "", false, readOnlyWithoutJail(workspace, payload, unavailableReason(status))
+		if what := e.jailOnly(payload); what != "" && !status.usable() {
+			return "", false, refuseUnjailed(workspace, payload, what, unavailableReason(status))
 		}
 		return status.path, status.usable(), nil
 	}
-}
-
-// readOnlyWithoutJail refuses a read-only workspace when no jail can enforce it.
-// Plain bash could write anywhere in the workspace, and a pattern filter cannot
-// stop every writing command, so the command is refused rather than run.
-func readOnlyWithoutJail(workspace string, payload Payload, reason string) error {
-	slog.Error("sandbox: read-only workspace needs the jail; command refused",
-		"workspace", workspace, "task_id", payload.TaskID, "reason", reason)
-	return fmt.Errorf("%w: a read-only workspace needs the bubblewrap jail, and %s; command refused",
-		models.ErrSandboxUnavailable, reason)
 }
 
 // BackendStartupLine is the one line the daemon logs at start: the backend that
@@ -193,8 +183,9 @@ func unavailableReason(status jailProbeResult) string {
 // own private loopback, never the host's (the daemon's board API listens
 // there) or the internet. Model calls run in the daemon, not the jail, so no
 // agentic command needs the network; dependency downloads (go mod download,
-// npm install) need a vendored tree or a warm cache until an egress allowlist
-// exists (see docs/agentic-harness-roadmap.md). Mounts that can
+// npm install) need a vendored tree or a warm cache. Only an external agent
+// gets a way out: egress adds the bridge described on Egress, and nil egress
+// leaves this profile byte-for-byte as it is. Mounts that can
 // be absent on some hosts (/lib64 on some arm64 distros, dbus/systemd on
 // hosts without them, any single /etc file) use --ro-bind-try so a missing
 // path degrades instead of failing the exec before bash starts. Mounts apply
@@ -205,7 +196,7 @@ func unavailableReason(status jailProbeResult) string {
 // bound read-only after the /tmp tmpfs, for the same reason as the workspace.
 // A read-only workspace (readOnly) is bound read-only as well, and HOME moves to
 // a directory on that tmpfs, since the workspace can no longer hold it.
-func jailArgv(bwrap, workspace string, readOnly bool, env, toolchains []string, shell string) []string {
+func jailArgv(bwrap, workspace string, readOnly bool, env, toolchains []string, egress *Egress, shell string) []string {
 	argv := []string{bwrap,
 		"--unshare-all", "--die-with-parent",
 		"--ro-bind", "/usr", "/usr",
@@ -236,15 +227,19 @@ func jailArgv(bwrap, workspace string, readOnly bool, env, toolchains []string, 
 	} else {
 		argv = append(argv, "--bind", workspace, workspace)
 	}
+	argv = append(argv, egress.binds()...)
+	if egress != nil && egress.Home != "" {
+		home = egress.Home
+	}
 	argv = append(argv,
 		"--chdir", workspace,
 		"--clearenv",
 	)
-	for _, pair := range jailEnv(env, home, toolchainPathEntries(toolchains)) {
+	for _, pair := range append(jailEnv(env, home, toolchainPathEntries(toolchains)), egress.env()...) {
 		key, value, _ := strings.Cut(pair, "=")
 		argv = append(argv, "--setenv", key, value)
 	}
-	return append(argv, "bash", "-c", shell)
+	return append(argv, "bash", "-c", egress.launch(shell))
 }
 
 // jailEnv rebuilds the payload environment for the jail. Host PATH and HOME

@@ -132,7 +132,7 @@ func TestReadOnlyPayloadRefusedWithoutJail(t *testing.T) {
 func TestJailArgvMountsReadOnlyWorkspaceReadOnly(t *testing.T) {
 	t.Parallel()
 	ws := "/tmp/ws/p"
-	argv := jailArgv("/usr/bin/bwrap", ws, true, []string{"CI=true"}, nil, "echo hi")
+	argv := jailArgv("/usr/bin/bwrap", ws, true, []string{"CI=true"}, nil, nil, "echo hi")
 	if !containsSequence(argv, []string{"--ro-bind", ws, ws}) {
 		t.Fatalf("argv = %v, want the workspace bound read-only", argv)
 	}

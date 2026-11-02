@@ -35,6 +35,9 @@ type BashExecutor struct {
 	// jail at the same path; each one's bin directory (or the directory
 	// itself when it has none) goes first on the jail's PATH (B-081).
 	ToolchainPaths []string
+	// Egress, when set, gives the jail its allowlisted network path; nil
+	// keeps the builtin profile with no network.
+	Egress *Egress
 }
 
 var _ Executor = (*BashExecutor)(nil)
@@ -101,7 +104,7 @@ func (e *BashExecutor) startCommand(execCtx context.Context, workspace string, p
 		return nil, "", err
 	}
 	if jailed {
-		argv := jailArgv(path, workspace, payload.ReadOnlyWorkspace, env, e.ToolchainPaths, shell)
+		argv := jailArgv(path, workspace, payload.ReadOnlyWorkspace, env, e.ToolchainPaths, e.Egress, shell)
 		name, args = argv[0], argv[1:]
 		env = nil
 		backend = BackendBubblewrap
