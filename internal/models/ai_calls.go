@@ -56,7 +56,7 @@ const (
 	AIDimRequest = "request" // chat request: the correlation ID
 	AIDimAgent   = "agent"   // the agent the router chose; empty on the cascade
 	AIDimLevel   = "level"   // the purpose's required level (L1, L3, code, ...)
-	AIDimRule    = "rule"    // the rule the router matched: rules[i], default, pin or cascade
+	AIDimRule    = "rule"    // the rule the router matched: its condition, default, pin or cascade
 )
 
 // AIUsageDimensions lists every valid GroupBy name.

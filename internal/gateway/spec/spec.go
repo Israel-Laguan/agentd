@@ -81,7 +81,7 @@ type AIRequest struct {
 	// is set by the router and recorded in ai_calls.role.
 	RoutedAgent string `json:"-"`
 	// RoutedLevel and RoutedRule are the purpose's required level and the rule
-	// the router matched (rules[i], default, pin or cascade). They label the
+	// the router matched (its condition, default, pin or cascade). They label the
 	// call record, so a report can group by them.
 	RoutedLevel Level  `json:"-"`
 	RoutedRule  string `json:"-"`

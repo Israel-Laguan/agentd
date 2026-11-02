@@ -19,7 +19,7 @@ waits for the database.
 | `kind` | `generate` or `embed` |
 | `purpose`, `stage` | Why the call was made (see below); the stage is the part before the dot |
 | `role`, `agent_id`, `task_id` | The agent the router chose (the profile ID on a pin, empty on the cascade; the column keeps its old name), the agent profile, and the task when the call belongs to one |
-| `required_level`, `route_rule` | The purpose's required level (`L1`, `L3`, `code`, ...) and the routing rule that matched: `rules[i]` for the i-th rule of the stage, `default`, `pin`, or `cascade`. Empty on rows written before schema v27 |
+| `required_level`, `route_rule` | The purpose's required level (`L1`, `L3`, `code`, ...) and the routing rule that matched: a rule's condition as its `when:` writes it (for example `requires_workspace_change=true`), `default`, `pin`, or `cascade`. Empty on rows written before schema v27 |
 | `correlation_id` | The chat request's ID (see "Per chat") |
 | `provider`, `model` | Who answered; the model the provider reported |
 | `attempt` | `first`, or `json_repair` for a retry made to fix an invalid JSON answer |

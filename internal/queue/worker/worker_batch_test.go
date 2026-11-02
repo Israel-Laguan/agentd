@@ -205,8 +205,8 @@ func TestBuildBatchRequest_CarriesRoutingAttrs(t *testing.T) {
 		flagged []bool
 		rule    string
 	}{
-		{"no task flagged", []bool{false, false, false}, "rules[1]"},
-		{"every task flagged", []bool{true, true, true}, "rules[0]"},
+		{"no task flagged", []bool{false, false, false}, "requires_workspace_change=false"},
+		{"every task flagged", []bool{true, true, true}, "requires_workspace_change=true"},
 		{"mixed batch", []bool{false, true, false}, route.RuleDefault},
 	}
 	for _, tc := range cases {

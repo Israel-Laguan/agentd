@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 
 	"agentd/internal/gateway/spec"
 )
@@ -17,7 +18,8 @@ import (
 // kanban store's default agent ID.
 const DefaultAgentID = "default"
 
-// Decision rules. A rule's name is "rules[i]" for the i-th rule of its stage.
+// Decision rules. A matching rule is named by its condition instead, for example
+// requires_workspace_change=true (see Match.name).
 const (
 	RulePin     = "pin"
 	RuleDefault = "default"
@@ -88,9 +90,9 @@ func (t Table) Resolve(purpose spec.Purpose, agentID string, attrs spec.TaskAttr
 	if !ok {
 		return d
 	}
-	for i, r := range sr.Rules {
+	for _, r := range sr.Rules {
 		if r.Match.matches(attrs) {
-			return d.choose(t, r.Use, fmt.Sprintf("rules[%d]", i))
+			return d.choose(t, r.Use, r.Match.name())
 		}
 	}
 	if sr.Default != "" {
@@ -113,6 +115,17 @@ func (m Match) matches(attrs spec.TaskAttrs) bool {
 		return false
 	}
 	return *m.RequiresWorkspaceChange == *attrs.RequiresWorkspaceChange
+}
+
+// name labels a rule by its condition, as the config's when: writes it. The
+// first matching rule of a stage wins, so no two rules that can fire share a
+// condition: unlike an index, the name stays the rule's when rules are
+// inserted or reordered.
+func (m Match) name() string {
+	if m.RequiresWorkspaceChange == nil {
+		return "always" // only an unvalidated table has a rule with no condition
+	}
+	return "requires_workspace_change=" + strconv.FormatBool(*m.RequiresWorkspaceChange)
 }
 
 // levelRank orders the levels an agent can provide. Only L1 and L3 are agent

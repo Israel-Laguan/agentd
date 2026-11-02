@@ -51,8 +51,8 @@ func TestResolve_RuleOrderFirstMatchWins(t *testing.T) {
 		},
 	}
 	d := table.Resolve(spec.PurposeCreateElicit, "", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(true)})
-	if d.Agent != "first" || d.Rule != "rules[0]" {
-		t.Fatalf("Resolve() = agent %q rule %q, want agent first rule rules[0]", d.Agent, d.Rule)
+	if d.Agent != "first" || d.Rule != "requires_workspace_change=true" {
+		t.Fatalf("Resolve() = agent %q rule %q, want agent first rule requires_workspace_change=true", d.Agent, d.Rule)
 	}
 	if d.Provider != "a" || d.Model != "m1" {
 		t.Fatalf("Resolve() provider/model = %q/%q, want a/m1", d.Provider, d.Model)
@@ -65,12 +65,27 @@ func TestResolve_RuleSkippedWhenConditionFails(t *testing.T) {
 		t.Fatalf("Resolve() = agent %q rule %q, want big default", d.Agent, d.Rule)
 	}
 	d = testTable().Resolve(spec.PurposeExecWorkPlan, "", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(true)})
-	if d.Agent != "big" || d.Rule != "rules[1]" {
-		t.Fatalf("Resolve() = agent %q rule %q, want big rules[1]", d.Agent, d.Rule)
+	if d.Agent != "big" || d.Rule != "requires_workspace_change=true" {
+		t.Fatalf("Resolve() = agent %q rule %q, want big requires_workspace_change=true", d.Agent, d.Rule)
 	}
 	d = testTable().Resolve(spec.PurposeExecWorkPlan, "", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(false)})
-	if d.Agent != "quick" || d.Rule != "rules[0]" {
-		t.Fatalf("Resolve() = agent %q rule %q, want quick rules[0]", d.Agent, d.Rule)
+	if d.Agent != "quick" || d.Rule != "requires_workspace_change=false" {
+		t.Fatalf("Resolve() = agent %q rule %q, want quick requires_workspace_change=false", d.Agent, d.Rule)
+	}
+}
+
+// A rule is named by its condition, so a config edit that inserts or reorders
+// rules leaves the name of the rule that fires as it was, and the call records
+// written before the edit group with those written after it.
+func TestResolve_RuleNameSurvivesReordering(t *testing.T) {
+	flagged := spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(true)}
+	table := testTable()
+	before := table.Resolve(spec.PurposeExecWorkPlan, "", flagged).Rule
+	sr := table.Stages[spec.PurposeExecWorkPlan]
+	sr.Rules = []Rule{sr.Rules[1], sr.Rules[0]}
+	table.Stages[spec.PurposeExecWorkPlan] = sr
+	if after := table.Resolve(spec.PurposeExecWorkPlan, "", flagged).Rule; after != before {
+		t.Fatalf("rule = %q after reordering, want %q as before", after, before)
 	}
 }
 

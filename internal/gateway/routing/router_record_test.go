@@ -257,7 +257,7 @@ func TestRecordCarriesTheResolvedAgent(t *testing.T) {
 }
 
 // The record carries the whole routing decision: the purpose's required level
-// and the rule that matched (rules[i], default, pin or cascade).
+// and the rule that matched (its condition, default, pin or cascade).
 func TestRecordCarriesTheRoutingDecision(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -266,7 +266,7 @@ func TestRecordCarriesTheRoutingDecision(t *testing.T) {
 		attrs    spec.TaskAttrs
 		wantRule string
 	}{
-		{"rule", spec.PurposeExecWorkPlan, "default", spec.AttrsForTask(true), "rules[0]"},
+		{"rule", spec.PurposeExecWorkPlan, "default", spec.AttrsForTask(true), "requires_workspace_change=true"},
 		{"default", spec.PurposeCreateElicit, "default", spec.TaskAttrs{}, route.RuleDefault},
 		{"pin", spec.PurposeCreateElicit, "tier-fast", spec.TaskAttrs{}, route.RulePin},
 		{"cascade", spec.PurposeExecTurn, "default", spec.TaskAttrs{}, route.RuleCascade},
