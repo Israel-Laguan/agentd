@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"agentd/internal/config"
+	"agentd/internal/gateway/route"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 )
 
@@ -175,5 +177,46 @@ func TestBuildBatchRequest_OmitsAskHumanGuidance(t *testing.T) {
 		if strings.Contains(m.Content, "ask_human") {
 			t.Fatalf("batch %s message mentions ask_human:\n%s", m.Role, m.Content)
 		}
+	}
+}
+
+// A batch carries its tasks' routing attributes, so a stage rule on exec.batch
+// that requires a workspace change routes a batch holding a flagged task.
+func TestBuildBatchRequest_CarriesRoutingAttrs(t *testing.T) {
+	t.Parallel()
+	store := &batchTestStore{
+		project: models.Project{BaseEntity: models.BaseEntity{ID: "p1"}, WorkspacePath: "/tmp/ws"},
+		profile: models.AgentProfile{ID: route.DefaultAgentID, Provider: "openai", Model: "gpt-4"},
+	}
+	w := NewWorker(store, &batchTrackingGateway{}, nil, nil, nil, WorkerOptions{
+		ToolManifest: config.ToolManifestConfig{Enabled: true, MinConfidence: 0.35},
+	})
+	needsChange := true
+	table := route.Table{
+		Agents: map[string]route.Agent{"quick": {Provider: "gemini", Model: "flash", Level: spec.LevelL1}},
+		Stages: map[spec.Purpose]route.StageRoute{spec.PurposeExecBatch: {Rules: []route.Rule{
+			{Match: route.Match{RequiresWorkspaceChange: &needsChange}, Use: "quick"},
+		}}},
+	}
+	cases := []struct {
+		name    string
+		flagged []bool
+		want    bool
+	}{
+		{"no task flagged", []bool{false, false, false}, false},
+		{"one task flagged", []bool{false, true, false}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := summarizeTasks(len(tc.flagged))
+			for i := range tasks {
+				tasks[i].RequiresWorkspaceChange = tc.flagged[i]
+			}
+			req := w.buildBatchRequest(context.Background(), tasks, store.project, store.profile)
+			d := table.Resolve(req.Purpose, req.AgentID, req.Attrs)
+			if matched := d.Rule == "rules[0]"; matched != tc.want {
+				t.Fatalf("rule = %q, want the requires_workspace_change rule: %v", d.Rule, tc.want)
+			}
+		})
 	}
 }
