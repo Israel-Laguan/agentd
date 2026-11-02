@@ -16,7 +16,7 @@ Implement deferred and on-demand tool loading (`load_tools`), inspired by Claudi
 
 Instead of defining full JSON schemas for every available tool (LSP, MCP, browser, search, tasks) in every request:
 1. Provide a minimal core tool set in the initial prompt prefix, with deferred tools listed concisely as one-line summaries in the system prompt.
-2. Allow workers to load tool definitions dynamically when needed (or automatically when invoked), appending them to the active session.
+2. Allow workers to load tool definitions dynamically when needed (or automatically when invoked), injecting them as message content rather than the `tools` parameter to preserve the cached prefix.
 3. Keep prompt prefixes small and cache-friendly across multi-turn interactions.
 
 ## Done when
