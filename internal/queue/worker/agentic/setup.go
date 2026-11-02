@@ -4,11 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"agentd/internal/api/correlation"
-
 	agentcontext "agentd/internal/agent/context"
 	wfilecontext "agentd/internal/agent/filecontext"
-	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
@@ -22,6 +19,7 @@ func (e *Engine) prepareAgenticRun(
 	task models.Task,
 	project models.Project,
 	profile models.AgentProfile,
+	taskCaps *capabilities.Registry,
 ) (
 	messages []gateway.PromptMessage,
 	tools []gateway.ToolDefinition,
@@ -30,18 +28,15 @@ func (e *Engine) prepareAgenticRun(
 	allToolToAdapter map[string]string,
 	routedProfile models.AgentProfile,
 	taskToolExecutor *agenttools.ToolExecutor,
-	taskHooks *agenthooks.HookChain,
-	taskCaps *capabilities.Registry,
 ) {
 	taskToolExecutor = e.newAgenticTaskToolExecutor(project, task).
 		WithAllowedTools(profile.AllowedTools).
 		WithReadOnlyWorkspace(profile.WorkspaceReadonly).
 		WithIntent(task.Title + "\n" + task.Description)
-	taskHooks, taskCaps = e.host.MountAgenticHooks(project, profile)
 	messages = e.buildAgenticMessages(ctx, task, project, profile)
 	allTools, allToolToAdapter = e.host.AgenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 	tools, toolToAdapter, routedProfile = e.selectAgenticTools(task, profile, messages, allTools, allToolToAdapter)
-	return messages, tools, toolToAdapter, allTools, allToolToAdapter, routedProfile, taskToolExecutor, taskHooks, taskCaps
+	return messages, tools, toolToAdapter, allTools, allToolToAdapter, routedProfile, taskToolExecutor
 }
 
 // selectAgenticTools filters the full tool set for the task without changing
@@ -65,30 +60,6 @@ func (e *Engine) buildAgenticMessages(ctx context.Context, task models.Task, pro
 	messages := e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile)
 	messages, _ = e.host.PrependReviewRejectionFeedback(ctx, task, messages)
 	return e.host.PrependSandboxViolationFeedback(ctx, task, messages)
-}
-
-// runPreTaskElicitation runs pre-task elicitation and reports whether the run
-// goes on. Consumed clarification answers extend the description, so the
-// evidence guard checks commands against the clarified task; the caller rebuilds
-// what was derived from the description before elicitation.
-func (e *Engine) runPreTaskElicitation(
-	ctx, cancelCtx context.Context,
-	task models.Task,
-	project models.Project,
-	taskToolExecutor *agenttools.ToolExecutor,
-) (models.Task, bool) {
-	task, blocked, err := e.host.RunPreTaskElicitation(cancelCtx, task, project)
-	if err != nil {
-		e.host.FailHard(cancelCtx, task, err)
-		return task, false
-	}
-	if blocked {
-		correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation blocked", "task_id", task.ID)
-		return task, false
-	}
-	correlation.Logger(ctx).DebugContext(ctx, "agentic: pre-task elicitation complete", "task_id", task.ID)
-	taskToolExecutor.WithIntent(task.Title + "\n" + task.Description)
-	return task, true
 }
 
 func (e *Engine) setupAgenticCancel(ctx context.Context, taskID string) (context.Context, func()) {
@@ -163,7 +134,7 @@ func (e *Engine) newAgenticContextManager(task models.Task) (*agentcontext.Conte
 	goalTracker := agentcontext.NewGoalTracker(
 		task.ID,
 		task.ProjectID,
-		agentcontext.WithCriteriaStore(e.host),
+		agentcontext.WithCriteriaStore(criteriaWriter(e.config.CriteriaMet)),
 	)
 	if goal != nil {
 		goalTracker.SetGoal(*goal)

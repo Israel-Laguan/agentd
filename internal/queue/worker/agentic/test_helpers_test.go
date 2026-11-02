@@ -83,10 +83,6 @@ func (h *noopHost) RecoverAgenticPrivilege(
 	return blockedResult, true
 }
 
-func (h *noopHost) RunPreTaskElicitation(_ context.Context, task models.Task, _ models.Project) (models.Task, bool, error) {
-	return task, false, nil
-}
-
 func (h *noopHost) Emit(_ context.Context, _ models.Task, _, _ string) {}
 
 func (h *noopHost) AssembleAgenticSystemPrompt(_ context.Context, _ models.Task, _ models.Project, _ models.AgentProfile) []gateway.PromptMessage {

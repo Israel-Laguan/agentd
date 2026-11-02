@@ -185,7 +185,7 @@ func (e *Engine) finishAgenticTurnNoTools(
 	stalled, stallErr := e.handleGoalProgress(ctx, task, goalTracker, content)
 	if stalled || stallErr != nil {
 		if stallErr != nil {
-			e.host.HandleGatewayError(ctx, task, stallErr)
+			e.result = Result{Kind: ResultGatewayError, Task: task, Err: stallErr}
 		}
 		return false, agentruntime.LoopResult{}, false, rewindNone, stallErr
 	}
@@ -201,7 +201,9 @@ func (e *Engine) finishAgenticTurnNoTools(
 	if stop := e.openBreakdownFinish(ctx, task, turnIndex, budgetGuard, *messages); stop != nil {
 		return false, *stop, true, rewindNone, nil
 	}
-	e.host.CommitTextWithProfile(ctx, task, content, &profile)
+	// The worker commits this text when it applies ResultCompleted; the engine
+	// only settles on the outcome.
+	e.result = Result{Kind: ResultCompleted, Task: task, Text: content, Profile: profile}
 	r := agentruntime.LoopResult{
 		Status: agentruntime.LoopSuccessfulCompletion,
 		Meta: agentruntime.BuildLoopMeta(

@@ -7,68 +7,48 @@ import (
 	"agentd/internal/api/correlation"
 
 	agentcontext "agentd/internal/agent/context"
+	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	wsession "agentd/internal/agent/session"
+	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
 )
 
 // Process runs the inner agentic loop for a single task attempt.
 //
-// Returns (result, true) when the loop stopped with a typed LoopResult variant.
-// Returns (_, false) when exit was handled via handoff/suspend or failHard paths.
-func (e *Engine) Process(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) (agentruntime.LoopResult, bool) {
+// Returns (loop, result, true) when the loop stopped with a typed LoopResult
+// variant. Returns (_, result, false) when the run ended with a terminal result,
+// or was suspended for a human; the worker applies result to the board.
+//
+// The worker has already checked tool support, mounted taskHooks and taskCaps,
+// run session start, and run pre-task elicitation, so task is the clarified task.
+func (e *Engine) Process(
+	ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile,
+	taskHooks *agenthooks.HookChain, taskCaps *capabilities.Registry,
+) (agentruntime.LoopResult, Result, bool) {
 	cancelCtx, cleanup := e.setupAgenticCancel(ctx, task.ID)
 	defer cleanup()
 
-	// prepareAgenticRun builds messages/tools before routing; the initial tool-support
-	// check fails a provider without tools before session start and elicitation.
-	// If elicitation changes the task, the re-routed provider is checked again
-	// after clarification.
+	// prepareAgenticRun builds messages and tools for the clarified task.
 	baseProfile := profile
-	messages, tools, toolToAdapter, allTools, allToolToAdapter, profile, taskToolExecutor, taskHooks, taskCaps :=
-		e.prepareAgenticRun(ctx, task, project, baseProfile)
+	messages, tools, toolToAdapter, _, _, profile, taskToolExecutor :=
+		e.prepareAgenticRun(ctx, task, project, baseProfile, taskCaps)
 
 	if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
 		e.rejectWithoutToolSupport(cancelCtx, task, profile.Provider)
-		return agentruntime.LoopResult{}, false
-	}
-
-	correlation.Logger(ctx).DebugContext(ctx, "agentic: session start",
-		"task_id", task.ID, "project_id", project.ID, "agent_id", task.AgentID,
-		"provider", profile.Provider, "model", profile.Model,
-	)
-
-	if err := e.host.RunSessionStart(cancelCtx, task, project, taskHooks); err != nil {
-		e.host.FailHard(cancelCtx, task, err)
-		return agentruntime.LoopResult{}, false
-	}
-
-	described := task.Description
-	task, ok := e.runPreTaskElicitation(ctx, cancelCtx, task, project, taskToolExecutor)
-	if !ok {
-		return agentruntime.LoopResult{}, false
-	}
-	if task.Description != described {
-		// The human's answer extends the description: the prompt, the tools the
-		// task classifies to, and the routing all follow the clarified task.
-		messages = e.buildAgenticMessages(cancelCtx, task, project, baseProfile)
-		tools, toolToAdapter, profile = e.selectAgenticTools(task, baseProfile, messages, allTools, allToolToAdapter)
-		if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
-			e.rejectWithoutToolSupport(cancelCtx, task, profile.Provider)
-			return agentruntime.LoopResult{}, false
-		}
+		return agentruntime.LoopResult{}, e.result, false
 	}
 
 	guards := e.newAgenticLoopGuards(cancelCtx, task)
 	checkpointer := wsession.NewSessionCheckpointer(task.ID)
 	messages, workPlan, planned := e.injectWorkPlanIfNeeded(cancelCtx, task, project, messages, guards.budget, checkpointer)
 	if !planned {
-		return agentruntime.LoopResult{}, false
+		return agentruntime.LoopResult{}, e.result, false
 	}
 	sessionMgr := NewSessionManager(task.ID, extractAnchorUserContent(messages), e.config.CheckpointStore)
 
-	return e.runAgenticTurnLoop(agenticTurnLoopInput{
+	loop, ok := e.runAgenticTurnLoop(agenticTurnLoopInput{
 		ctx: cancelCtx, task: task, project: project, profile: profile, messages: &messages,
 		tools: tools, toolToAdapter: toolToAdapter, taskToolExecutor: taskToolExecutor,
 		iterationGuard: guards.iteration, budgetGuard: guards.budget, deadlineGuard: guards.deadline,
@@ -76,6 +56,7 @@ func (e *Engine) Process(ctx context.Context, task models.Task, project models.P
 		taskHooks: taskHooks, taskCaps: taskCaps, toolTracker: guards.toolFails, workPlan: workPlan,
 		sessionMgr: sessionMgr, checkpointer: checkpointer,
 	})
+	return loop, e.result, ok
 }
 
 // runAgenticTurnLoop drives the inner agentic turn loop until completion, stagnation, or error.
@@ -146,7 +127,7 @@ func (e *Engine) generateAgenticTurn(
 	truncated, err := e.applyAgenticTruncation(ctx, req.Messages)
 	noteCut(ctx, "agentic_head", before, agentcontext.TotalChars(truncated))
 	if err != nil {
-		e.host.HandleGatewayError(ctx, task, err)
+		e.result = Result{Kind: ResultGatewayError, Task: task, Err: err}
 		return gateway.AIResponse{}, nil, err
 	}
 	req.Messages = truncated
@@ -168,7 +149,7 @@ func (e *Engine) generateAgenticTurn(
 			}
 			return gateway.AIResponse{}, &r, nil
 		}
-		e.host.HandleGatewayError(ctx, task, err)
+		e.result = Result{Kind: ResultGatewayError, Task: task, Err: err}
 		return gateway.AIResponse{}, nil, err
 	}
 	e.host.RecordProviderSuccess(ctx, task)
@@ -179,5 +160,5 @@ func (e *Engine) generateAgenticTurn(
 func (e *Engine) rejectWithoutToolSupport(ctx context.Context, task models.Task, provider string) {
 	correlation.Logger(ctx).Error("agentic profile's routed provider cannot call tools; failing the task",
 		"task_id", task.ID, "provider", provider)
-	e.host.FailHard(ctx, task, fmt.Errorf("%w (%q)", models.ErrAgentProfileNoToolSupport, provider))
+	e.result = Result{Kind: ResultFailed, Task: task, Err: fmt.Errorf("%w (%q)", models.ErrAgentProfileNoToolSupport, provider)}
 }

@@ -2,10 +2,12 @@ package agentic
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	agentcontext "agentd/internal/agent/context"
+	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
@@ -49,7 +51,7 @@ func (h *planErrHost) FailHard(_ context.Context, _ models.Task, err error) {
 
 func (h *planErrHost) RecordLoopResult(agentruntime.LoopResult) { h.recorded++ }
 
-func runProcessWithPlanErr(t *testing.T, planErr error) (*planErrHost, *toolCapableGateway, bool) {
+func runProcessWithPlanErr(t *testing.T, planErr error) (*planErrHost, *toolCapableGateway, Result, bool) {
 	t.Helper()
 	gw := &toolCapableGateway{}
 	host := &planErrHost{topicDriftHost: &topicDriftHost{noopHost: &noopHost{}, committed: new(string)}, planErr: planErr}
@@ -57,12 +59,15 @@ func runProcessWithPlanErr(t *testing.T, planErr error) (*planErrHost, *toolCapa
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "task-1"}, ProjectID: "project-1", AgentID: "agent-1", Title: "t"}
 	project := models.Project{BaseEntity: models.BaseEntity{ID: "project-1"}, WorkspacePath: t.TempDir()}
 	profile := models.AgentProfile{ID: "agent-1", Provider: "openai", Model: "gpt-4", AgenticMode: true}
-	_, ok := e.Process(context.Background(), task, project, profile)
-	return host, gw, ok
+	_, res, ok := e.Process(context.Background(), task, project, profile, agenthooks.NewHookChain(), nil)
+	return host, gw, res, ok
 }
 
 func TestProcessStopsWithoutTurnLoopWhenWorkPlanNeedsHuman(t *testing.T) {
-	host, gw, ok := runProcessWithPlanErr(t, fmt.Errorf("%w: exec.work_plan", stage.ErrNeedsHuman))
+	host, gw, res, ok := runProcessWithPlanErr(t, fmt.Errorf("%w: exec.work_plan", stage.ErrNeedsHuman))
+	if res.Kind != ResultNone {
+		t.Fatalf("result kind = %v for a task blocked on a human, want none", res.Kind)
+	}
 	if ok {
 		t.Fatal("Process reported a result; the task is blocked on a human")
 	}
@@ -75,11 +80,14 @@ func TestProcessStopsWithoutTurnLoopWhenWorkPlanNeedsHuman(t *testing.T) {
 }
 
 func TestProcessFailsHardWhenWorkPlanHandoffFails(t *testing.T) {
-	host, gw, ok := runProcessWithPlanErr(t, fmt.Errorf("%w: exec.work_plan", stage.ErrHumanHandoffFailed))
+	host, gw, res, ok := runProcessWithPlanErr(t, fmt.Errorf("%w: exec.work_plan", stage.ErrHumanHandoffFailed))
 	if ok || gw.generateCalls != 0 {
 		t.Fatalf("turn loop ran after a failed handoff: ok=%v calls=%d", ok, gw.generateCalls)
 	}
-	if len(host.failedWith) != 1 {
-		t.Fatalf("FailHard calls = %d, want 1", len(host.failedWith))
+	if res.Kind != ResultFailed || !errors.Is(res.Err, stage.ErrHumanHandoffFailed) {
+		t.Fatalf("result = kind %v err %v, want a failure with ErrHumanHandoffFailed", res.Kind, res.Err)
+	}
+	if len(host.failedWith) != 0 {
+		t.Fatalf("the engine wrote the board: FailHard calls = %v", host.failedWith)
 	}
 }

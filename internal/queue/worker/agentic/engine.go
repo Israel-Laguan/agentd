@@ -40,6 +40,9 @@ type Config struct {
 	CheckpointStore         wsession.CheckpointStore
 	TopicGuard              *agentruntime.TopicGuard
 	Capabilities            *capabilities.Registry
+	// CriteriaMet saves the success criteria a turn met. It reports progress
+	// only; the terminal outcome goes through Result.
+	CriteriaMet func(ctx context.Context, taskID string, met []string) error
 }
 
 type TaskReadStore interface {
@@ -57,19 +60,18 @@ type PromptHang struct {
 	Feedback string
 }
 
+// Host is what the engine calls into. Most terminal outcomes go through Result
+// and the worker applies them (T-041); HandleGoalStalled still blocks the task
+// directly.
 type Host interface {
-	FailHard(ctx context.Context, task models.Task, err error)
 	RegisterCancel(taskID string, cancel context.CancelFunc)
 	DeregisterCancel(taskID string)
-	HandleGatewayError(ctx context.Context, task models.Task, err error)
 	// RecordProviderSuccess closes the task's provider breaker. The engine calls
 	// it only after a turn's LLM request actually succeeded, so a turn that ends
 	// locally (tool failure, budget exhaustion, break-up) never closes an OPEN
 	// circuit the provider has not recovered from.
 	RecordProviderSuccess(ctx context.Context, task models.Task)
 	RecordTaskTokenUsage(ctx context.Context, task models.Task, tokens int, details spec.UsageDetails)
-	UpdateCriteriaMet(ctx context.Context, taskID string, met []string) error
-	CommitTextWithProfile(ctx context.Context, task models.Task, text string, profile *models.AgentProfile)
 	DispatchToolWithHooks(
 		ctx context.Context,
 		sessionID, projectID, turnID string,
@@ -84,9 +86,6 @@ type Host interface {
 	// AgenticPromptHang reports a bash call that timed out with an interactive
 	// prompt in its output.
 	AgenticPromptHang(call gateway.ToolCall, result agenttools.ToolResult) (PromptHang, bool)
-	// HandlePromptHandoff blocks the task for a human after a command hung at a
-	// prompt a second time (PROMPT_HANDOFF).
-	HandlePromptHandoff(ctx context.Context, task models.Task, payload string)
 	AgenticPrivilegeBlock(call gateway.ToolCall, result agenttools.ToolResult) (string, bool)
 	RecoverAgenticPrivilege(
 		ctx context.Context,
@@ -97,7 +96,6 @@ type Host interface {
 		allowAlternative bool,
 		dispatch func(gateway.ToolCall) (agenttools.ToolResult, bool),
 	) (agenttools.ToolResult, bool)
-	RunPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error)
 	Emit(ctx context.Context, task models.Task, kind, payload string)
 	AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage
 	AssembleAgenticSystemPromptWithUserContent(
@@ -112,7 +110,6 @@ type Host interface {
 	// sandbox refused, so a retry does not repeat them.
 	PrependSandboxViolationFeedback(ctx context.Context, task models.Task, messages []gateway.PromptMessage) []gateway.PromptMessage
 	ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest
-	MountAgenticHooks(project models.Project, profile models.AgentProfile) (*agenthooks.HookChain, *capabilities.Registry)
 	AgenticToolsWithExtras(ctx context.Context, executor *agenttools.ToolExecutor, caps *capabilities.Registry) ([]gateway.ToolDefinition, map[string]string)
 	FilterAgenticTools(tools []gateway.ToolDefinition, toolToAdapter map[string]string, task models.Task, profile models.AgentProfile) ([]gateway.ToolDefinition, map[string]string)
 	GeneratePlan(ctx context.Context, task models.Task, project models.Project, budget *agentruntime.BudgetGuard) (*agentcontext.Plan, error)
@@ -128,7 +125,6 @@ type Host interface {
 		cm *agentcontext.ContextManager,
 		budget *agentruntime.BudgetGuard,
 	) (string, error)
-	RunSessionStart(ctx context.Context, task models.Task, project models.Project, taskHooks *agenthooks.HookChain) error
 	// RecordAttemptFailure remembers the first failing shell command of this
 	// attempt for the next attempt to check (B-043).
 	RecordAttemptFailure(task models.Task, call gateway.ToolCall, result agenttools.ToolResult)
@@ -166,6 +162,9 @@ type Engine struct {
 	// evidence counts what this run did to the workspace: commands that passed
 	// and files written. A text-only finish needs some of it to be COMPLETED.
 	evidence runEvidence
+	// result is the terminal outcome this run settled on, if any (see Result).
+	// Every settling path ends the loop, so the last write is the only one.
+	result Result
 	// hungCommands holds the commands that already stopped at a prompt in this
 	// run; a repeat of one hands the task to a human. Created on first use.
 	hungCommands map[string]bool

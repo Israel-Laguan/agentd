@@ -119,9 +119,6 @@ func (h *topicDriftHost) FailHard(ctx context.Context, task models.Task, err err
 func (h *topicDriftHost) RegisterCancel(taskID string, cancel context.CancelFunc)             {}
 func (h *topicDriftHost) DeregisterCancel(taskID string)                                      {}
 func (h *topicDriftHost) HandleGatewayError(ctx context.Context, task models.Task, err error) {}
-func (h *topicDriftHost) RunPreTaskElicitation(ctx context.Context, task models.Task, project models.Project) (models.Task, bool, error) {
-	return task, false, nil
-}
 func (h *topicDriftHost) ApplyTuning(req gateway.AIRequest, task models.Task, profile models.AgentProfile, sessionRecoveryGen int) gateway.AIRequest {
 	return req
 }
@@ -250,7 +247,7 @@ func buildTopicDriftAgenticTurnLoopInput(
 		agenttools.BuildSandboxEnv(nil, nil),
 		0,
 	)
-	taskHooks, taskCaps := e.host.MountAgenticHooks(project, profile)
+	taskHooks, taskCaps := agenthooks.NewHookChain(), (*capabilities.Registry)(nil)
 	tools, toolToAdapter := e.host.AgenticToolsWithExtras(context.Background(), taskToolExecutor, taskCaps)
 	return agenticTurnLoopInput{
 		ctx:              context.Background(),
@@ -309,8 +306,8 @@ func assertTopicDriftTurnLoopContinuesAfterRewind(
 			t.Fatal("assistant history from before drift should be cleared after rewind")
 		}
 	}
-	if *f.committed == "" {
-		t.Fatal("expected committed text after loop completion")
+	if f.e.result.Kind != ResultCompleted || f.e.result.Text == "" {
+		t.Fatal("expected a completed result with text after loop completion")
 	}
 }
 
