@@ -4,10 +4,44 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"agentd/internal/models"
 	"agentd/internal/testutil"
 )
+
+// versionCheckingStore enforces the optimistic lock the real store applies to
+// IncrementRetryCount and UpdateTaskState. testutil.FakeKanbanStore ignores the
+// expected version on those writes, which would let the regression test below
+// pass even when handleLoopResult keeps using the stale task.
+type versionCheckingStore struct {
+	*testutil.FakeKanbanStore
+}
+
+func (s *versionCheckingStore) IncrementRetryCount(ctx context.Context, id string, expectedUpdatedAt time.Time) (*models.Task, error) {
+	if err := s.checkVersion(ctx, id, expectedUpdatedAt); err != nil {
+		return nil, err
+	}
+	return s.FakeKanbanStore.IncrementRetryCount(ctx, id, expectedUpdatedAt)
+}
+
+func (s *versionCheckingStore) UpdateTaskState(ctx context.Context, id string, expectedUpdatedAt time.Time, next models.TaskState) (*models.Task, error) {
+	if err := s.checkVersion(ctx, id, expectedUpdatedAt); err != nil {
+		return nil, err
+	}
+	return s.FakeKanbanStore.UpdateTaskState(ctx, id, expectedUpdatedAt, next)
+}
+
+func (s *versionCheckingStore) checkVersion(ctx context.Context, id string, expectedUpdatedAt time.Time) error {
+	current, err := s.FakeKanbanStore.GetTask(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !current.UpdatedAt.Equal(expectedUpdatedAt) {
+		return models.ErrStateConflict
+	}
+	return nil
+}
 
 func unknownLoopResult() LoopResult {
 	return LoopResult{
@@ -25,7 +59,7 @@ func unknownLoopResult() LoopResult {
 func TestHandleLoopResult_RefreshesVersionBumpedByElicitation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	store := testutil.NewFakeStore()
+	store := &versionCheckingStore{FakeKanbanStore: testutil.NewFakeStore()}
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{
 		ProjectName: "p",
 		Tasks:       []models.DraftTask{{Title: "parent", Description: "d"}},
