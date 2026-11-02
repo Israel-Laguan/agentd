@@ -173,7 +173,7 @@ func TestAIUsageReportGroupsByLevelAndRule(t *testing.T) {
 	if got := rowFor(t, rep, models.AIDimLevel, "L3"); got.Group[models.AIDimRule] != "default" || got.Tokens != 60 {
 		t.Errorf("L3 row = %+v, want rule default and 60 tokens", got)
 	}
-	if got := rowFor(t, rep, models.AIDimRule, ""); got.Tokens != 5 {
-		t.Errorf("empty rule row = %+v, want the pre-v27 row with 5 tokens", got)
+	if got := rowFor(t, rep, models.AIDimRule, ""); got.Group[models.AIDimLevel] != "" || got.Tokens != 5 {
+		t.Errorf("empty rule row = %+v, want the pre-v27 row with empty level and 5 tokens", got)
 	}
 }

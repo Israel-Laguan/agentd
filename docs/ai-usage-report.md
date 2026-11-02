@@ -111,7 +111,7 @@ The questions the report is built to answer:
 - **Per task:** `--group-by task`, or `--task <id> --group-by purpose`.
 - **Per day:** `--group-by day`, or `day,purpose` for the split.
 - **Per routed agent:** `--group-by agent,purpose` shows what each `stages:` agent answers and how often it fails.
-- **Per routing rule:** `--group-by level,rule` shows which `stages:` rules fire and what they cost. Rows from before schema v27 have no rule and group under `-`.
+- **Per routing rule:** `--group-by level,rule` shows which `stages:` rules fire and what they cost. Rows from before schema v27 have empty level and rule values; the table output displays them as `-`.
 
 "Per chat" means per chat request: one `POST /v1/chat/completions` gets one
 correlation ID, and every call made while serving it (intent, scope, draft

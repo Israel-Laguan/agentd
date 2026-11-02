@@ -213,6 +213,22 @@ func TestBuildBatchRequest_CarriesRoutingAttrs(t *testing.T) {
 				tasks[i].RequiresWorkspaceChange = tc.flagged[i]
 			}
 			req := w.buildBatchRequest(context.Background(), tasks, store.project, store.profile)
+			// Verify the attribute value directly: an unflagged batch carries explicit false
+			attrValue := req.Attrs.RequiresWorkspaceChange
+			if attrValue == nil {
+				t.Fatalf("attribute is nil, want it to be set for batch routing")
+			}
+			// For all-unflagged batch, attribute should be false; for any-flagged batch, true
+			expectedAttr := false
+			for _, flagged := range tc.flagged {
+				if flagged {
+					expectedAttr = true
+					break
+				}
+			}
+			if *attrValue != expectedAttr {
+				t.Fatalf("attribute = %v, want %v for flagged=%v", *attrValue, expectedAttr, tc.flagged)
+			}
 			d := table.Resolve(req.Purpose, req.AgentID, req.Attrs)
 			if matched := d.Rule == "rules[0]"; matched != tc.want {
 				t.Fatalf("rule = %q, want the requires_workspace_change rule: %v", d.Rule, tc.want)

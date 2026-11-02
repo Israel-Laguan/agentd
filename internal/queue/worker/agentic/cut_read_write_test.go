@@ -2,6 +2,7 @@ package agentic
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -35,11 +36,15 @@ func toolContent(msgs []gateway.PromptMessage, callID string) string {
 }
 
 func readCall(id, path string) gateway.ToolCall {
-	return gateway.ToolCall{ID: id, Type: "function", Function: gateway.ToolCallFunction{Name: "read", Arguments: `{"path":"` + path + `"}`}}
+	args := map[string]string{"path": path}
+	argsJSON, _ := json.Marshal(args)
+	return gateway.ToolCall{ID: id, Type: "function", Function: gateway.ToolCallFunction{Name: "read", Arguments: string(argsJSON)}}
 }
 
 func writeCall(id, path, content string) gateway.ToolCall {
-	return gateway.ToolCall{ID: id, Type: "function", Function: gateway.ToolCallFunction{Name: "write", Arguments: `{"path":"` + path + `","content":"` + content + `"}`}}
+	args := map[string]string{"path": path, "content": content}
+	argsJSON, _ := json.Marshal(args)
+	return gateway.ToolCall{ID: id, Type: "function", Function: gateway.ToolCallFunction{Name: "write", Arguments: string(argsJSON)}}
 }
 
 // B-089: the budget cut the read the model saw, so a whole-file write would
@@ -93,6 +98,14 @@ func TestWriteAfterAnUncutReadIsAllowed(t *testing.T) {
 	}
 	ctx := context.Background()
 	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("1", "tabwriter.go"), dispatch)
+	// Set the cut mark for the first read so the test exercises clearing behavior
+	e.noteCutReads([]gateway.PromptMessage{
+		{Role: "assistant", ToolCalls: []gateway.ToolCall{readCall("1", "tabwriter.go")}},
+		{Role: "tool", ToolCallID: "1", Content: truncation.TruncationMarker},
+	})
+	if !e.cutReads["tabwriter.go"] {
+		t.Fatal("the first read was not marked cut; the test would not exercise clearing")
+	}
 	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("2", "./tabwriter.go"), dispatch)
 	resp, stop, err := e.generateAgenticTurn(ctx, models.Task{}, models.AgentProfile{}, &msgs, nil,
 		agentruntime.NewBudgetGuard(nil, ""), agentruntime.NewContextBudgetGuard(1000, 0.8), 0, 0)
