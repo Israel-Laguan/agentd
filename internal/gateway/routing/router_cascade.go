@@ -52,6 +52,7 @@ func (r *Router) tryProvider(ctx context.Context, p providers.Backend, baseReq s
 		}
 		req.Messages = messages
 	}
+	spec.SeeSentMessages(ctx, req.Messages)
 	started := time.Now()
 	resp, err := p.Generate(ctx, req)
 	r.emit(ctx, attemptRecord(p, req, inputBefore, started, resp, err, cascade))

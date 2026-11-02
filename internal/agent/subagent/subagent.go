@@ -68,6 +68,7 @@ func (d *SubagentDelegate) runSubagentStep(
 	def SubagentDefinition, toolExec *agenttools.ToolExecutor, cutReads *agenttools.CutReads,
 ) bool {
 	requestMessages := enforceSubagentContextBudget(*messages, def.ContextBudget, d.truncation)
+	// The router can cut further to its provider's budget; it shows Note what it sends.
 	cutReads.Note(requestMessages)
 	req := gateway.AIRequest{
 		Purpose:     gateway.PurposeSubagentTurn,
@@ -79,7 +80,7 @@ func (d *SubagentDelegate) runSubagentStep(
 		MaxTokens:   maxTokens,
 		TaskID:      gateway.TaskIDFromContext(ctx),
 	}
-	resp, err := d.gateway.Generate(ctx, req)
+	resp, err := d.gateway.Generate(gateway.WithSentMessages(ctx, cutReads.Note), req)
 	if err != nil {
 		result.Status = SubagentStatusFailure
 		result.Error = fmt.Sprintf("gateway error: %v", err)
