@@ -279,6 +279,8 @@ func TestLoadAgenticConfig_ApprovalGates(t *testing.T) {
 	t.Parallel()
 	v := viper.New()
 	setAgenticDefaults(v)
+	// An unset timeout loads as 0, which the worker reads as DefaultApprovalTimeout
+	// (TestApprovalGatesTimeoutSetsTheApprovalDeadline).
 	if gates := mustLoadAgenticConfig(t, v).ApprovalGates; gates.Enabled || len(gates.Tools) != 0 || gates.Timeout != 0 {
 		t.Fatalf("default approval_gates = %+v, want off with no tools and no timeout", gates)
 	}

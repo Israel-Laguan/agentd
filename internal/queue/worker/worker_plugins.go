@@ -49,7 +49,8 @@ func buildWorkerHooks(
 
 // MountAgenticHooks loads project-scoped and session-scoped plugins (when a
 // PluginMounter is configured), adds the AllowedTools veto, and registers
-// ApprovalGateHook for any GatedTools in the profile. It returns a task-local
+// ApprovalGateHook for the profile's GatedTools plus, when
+// agentic.approval_gates is enabled, its tools (see gatedTools). It returns a task-local
 // HookChain and capabilities Registry that augment worker-level globals. It only
 // registers into the returned values; it does not mutate worker-global state.
 // Returns nil, nil when there is no mounter, allowlist or gated tools.
