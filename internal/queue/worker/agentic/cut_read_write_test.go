@@ -151,3 +151,27 @@ func TestWriteToAFileHoldingTheCutMarkerIsAllowed(t *testing.T) {
 		t.Fatalf("dispatched = %v, status = %v; want the write to run", *dispatched, tr.Status)
 	}
 }
+
+// A reread that fails shows the model none of the file, so the cut mark stays
+// and the write is still refused.
+func TestWriteAfterAFailedRereadIsRefused(t *testing.T) {
+	gw := &writeBackGateway{call: writeCall("w4", "tabwriter.go", "short")}
+	e := &Engine{config: Config{Gateway: gw, TruncatorMax: 30, CharacterBudget: 300}, host: &noopHost{}}
+	long := strings.Repeat("x", 5000)
+	dir, dispatched, dispatch := cutReadWorkspace(t, long)
+	ctx := context.Background()
+	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("1", "tabwriter.go"), dispatch)
+	e.noteCutReads([]gateway.PromptMessage{{Role: "tool", ToolCallID: "1", Content: "cut"}})
+	if err := os.Chmod(filepath.Join(dir, "tabwriter.go"), 0); err != nil {
+		t.Fatal(err)
+	}
+	reread, _, _ := e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("2", "tabwriter.go"), dispatch)
+	if reread.Status == agenttools.ToolStatusSuccess {
+		t.Skip("the reread did not fail (running as root?); the test would prove nothing")
+	}
+	write := generateWriteBack(t, e, readTurn("2", "tabwriter.go", reread.ForContext()))
+	tr, _, _ := e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, write, dispatch)
+	if last := (*dispatched)[len(*dispatched)-1]; last == "w4" || tr.Status == agenttools.ToolStatusSuccess {
+		t.Fatalf("dispatched = %v, status = %v; want the write refused after a failed reread", *dispatched, tr.Status)
+	}
+}
