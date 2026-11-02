@@ -51,8 +51,14 @@ func Forward(ctx context.Context, ready io.Writer, pairs []string) error {
 func forwardEach(ln net.Listener, socket string) {
 	for {
 		client, err := ln.Accept()
-		if err != nil {
+		if errors.Is(err, net.ErrClosed) {
 			return
+		}
+		if err != nil {
+			// A transient error (EMFILE) must not leave the port dead after ready.
+			slog.Warn("jail-forward: accept failed; retrying", "error", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
 		go func() {
 			upstream, err := net.Dial("unix", socket)

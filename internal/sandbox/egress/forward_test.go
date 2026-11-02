@@ -3,6 +3,7 @@ package egress
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -46,13 +48,7 @@ func TestForwardCopiesToUnixSocketAndExitsWithParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := io.WriteString(conn, "ping"); err != nil {
-		t.Fatal(err)
-	}
-	got := make([]byte, 4)
-	if _, err := io.ReadFull(conn, got); err != nil || string(got) != "ping" {
-		t.Fatalf("round trip = %q, err = %v; want ping", got, err)
-	}
+	roundTrip(t, conn, conn)
 	_ = conn.Close()
 
 	exitParent()
@@ -66,12 +62,52 @@ func TestForwardCopiesToUnixSocketAndExitsWithParent(t *testing.T) {
 	}
 }
 
+// A transient Accept error (EMFILE under a file limit) must not leave the
+// port dead after the ready line: the next connection is still forwarded.
+func TestForwardSurvivesATransientAcceptError(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "mcp.sock")
+	upstream, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = upstream.Close() })
+	go echo(upstream)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go forwardEach(&flakyListener{Listener: ln}, socket)
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	roundTrip(t, conn, conn)
+}
+
+// flakyListener fails its first Accept the way a process at its file limit does.
+type flakyListener struct {
+	net.Listener
+	failed atomic.Bool
+}
+
+func (l *flakyListener) Accept() (net.Conn, error) {
+	if l.failed.CompareAndSwap(false, true) {
+		return nil, errors.New("accept tcp: too many open files")
+	}
+	return l.Listener.Accept()
+}
+
 // startUnderShell starts the forwarder the way the jail's launcher does: in
-// the background of a shell, which lives until exitParent is called. It
-// returns the forwarder's stdout.
+// the background of a shell, which lives until exitParent is called. The
+// shell closes its own copy of the pipe, so the forwarder is its only writer
+// and a forwarder that fails before its ready line ends the read at once.
+// It returns the forwarder's stdout.
 func startUnderShell(t *testing.T, pair string) (forwarder *bufio.Reader, exitParent func()) {
 	t.Helper()
-	shell := exec.Command("bash", "-c", `"$0" jail-forward "$1" & read -r _`, os.Args[0], pair)
+	shell := exec.Command("bash", "-c", `"$0" jail-forward "$1" & exec >&-; read -r _`, os.Args[0], pair)
 	stdin, err := shell.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
