@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -124,6 +125,40 @@ func TestUseJailDecisionMatrix(t *testing.T) {
 					t.Fatalf("useJail() = %v, err = %v, want %v", ok, err, tt.want)
 				}
 			})
+		})
+	}
+}
+
+// B-086 guard: without egress the argv is byte-for-byte the builtin profile,
+// captured from main at f81ed8bc before the egress option existed.
+func TestJailArgvWithoutEgressIsUnchanged(t *testing.T) {
+	profile := `"/usr/bin/bwrap" "--unshare-all" "--die-with-parent" "--ro-bind" "/usr" "/usr" "--ro-bind" "/lib" "/lib" ` +
+		`"--ro-bind-try" "/lib64" "/lib64" "--ro-bind" "/bin" "/bin" "--ro-bind" "/sbin" "/sbin" "--ro-bind" "/sys" "/sys" ` +
+		`"--ro-bind-try" "/run/dbus/system_bus_socket" "/run/dbus/system_bus_socket" ` +
+		`"--ro-bind-try" "/run/systemd/system" "/run/systemd/system" "--ro-bind-try" "/etc/resolv.conf" "/etc/resolv.conf" ` +
+		`"--ro-bind-try" "/etc/hosts" "/etc/hosts" "--ro-bind-try" "/etc/nsswitch.conf" "/etc/nsswitch.conf" ` +
+		`"--ro-bind-try" "/etc/ssl/certs" "/etc/ssl/certs" "--ro-bind-try" "/etc/os-release" "/etc/os-release" ` +
+		`"--ro-bind-try" "/etc/passwd" "/etc/passwd" "--proc" "/proc" "--dev" "/dev" "--tmpfs" "/tmp" `
+	tests := []struct {
+		name string
+		got  []string
+		want string
+	}{
+		{"writable workspace",
+			jailArgv("/usr/bin/bwrap", "/tmp/ws/p", false, []string{"CI=true", "HOME=/home/u"}, nil, "echo hi"),
+			"[" + profile + `"--bind" "/tmp/ws/p" "/tmp/ws/p" "--chdir" "/tmp/ws/p" "--clearenv" ` +
+				`"--setenv" "CI" "true" "--setenv" "HOME" "/tmp/ws/p" "--setenv" "PATH" "/usr/bin:/bin" "bash" "-c" "echo hi"]`},
+		{"read-only workspace with a toolchain",
+			jailArgv("/usr/bin/bwrap", "/tmp/ws/p", true, []string{"LANG=C"}, []string{"/opt/go"}, "go test ./..."),
+			"[" + profile + `"--ro-bind" "/opt/go" "/opt/go" "--dir" "/tmp/home" "--ro-bind" "/tmp/ws/p" "/tmp/ws/p" ` +
+				`"--chdir" "/tmp/ws/p" "--clearenv" "--setenv" "LANG" "C" "--setenv" "PATH" "/opt/go:/usr/bin:/bin" ` +
+				`"--setenv" "HOME" "/tmp/home" "bash" "-c" "go test ./..."]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fmt.Sprintf("%q", tt.got); got != tt.want {
+				t.Fatalf("argv changed without egress:\n got %s\nwant %s", got, tt.want)
+			}
 		})
 	}
 }
