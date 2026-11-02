@@ -55,9 +55,10 @@ func ApprovalGateHook(gatedTools []string, handler ApprovalHandler, timeout time
 	if timeout <= 0 {
 		timeout = DefaultApprovalTimeout
 	}
+	// Names match ignoring case: a gate written "BASH" must not let "bash" run.
 	toolSet := make(map[string]struct{}, len(gatedTools))
 	for _, t := range gatedTools {
-		toolSet[strings.TrimSpace(t)] = struct{}{}
+		toolSet[strings.ToLower(strings.TrimSpace(t))] = struct{}{}
 	}
 
 	return agenthooks.PreHook{
@@ -73,7 +74,7 @@ func evalApprovalGate(ctx agenthooks.HookContext, toolSet map[string]struct{}, h
 	if len(toolSet) == 0 {
 		return agenthooks.HookVerdict{}, nil
 	}
-	if _, gated := toolSet[ctx.ToolName]; !gated {
+	if _, gated := toolSet[strings.ToLower(ctx.ToolName)]; !gated {
 		return agenthooks.HookVerdict{}, nil
 	}
 

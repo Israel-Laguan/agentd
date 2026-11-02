@@ -61,22 +61,36 @@ func TestApprovalGatesToolsGateNothingWhenDisabled(t *testing.T) {
 	}
 }
 
+// A gate name matches ignoring case, so a gate written "BASH" still stops bash.
+func TestGatedToolNameMatchesIgnoringCase(t *testing.T) {
+	t.Parallel()
+	suspended, calls, _, _ := gatedBash(t, config.ApprovalGatesConfig{}, models.AgentProfile{GatedTools: []string{"BASH"}})
+	if !suspended || calls != 0 {
+		t.Fatalf("suspended = %t, sandbox calls = %d; want BASH to gate bash", suspended, calls)
+	}
+}
+
 // agentic.approval_gates.timeout sets the approval's deadline, after which the
-// HITL reconciler fails the task.
+// HITL reconciler fails the task. Left unset, the deadline is
+// DefaultApprovalTimeout, never an open-ended wait.
 func TestApprovalGatesTimeoutSetsTheApprovalDeadline(t *testing.T) {
 	t.Parallel()
-	before := time.Now()
-	_, _, store, task := gatedBash(t, config.ApprovalGatesConfig{Timeout: 2 * time.Hour}, models.AgentProfile{GatedTools: []string{"bash"}})
-	comments, err := store.ListComments(context.Background(), task.ID)
-	if err != nil {
-		t.Fatalf("ListComments: %v", err)
-	}
-	expiresAt, ok := parseHITLExpiry(comments)
-	if !ok {
-		t.Fatal("no approval deadline recorded")
-	}
-	// The deadline is stored to the second.
-	if expiresAt.Before(before.Add(2*time.Hour).Truncate(time.Second)) || expiresAt.After(time.Now().Add(2*time.Hour)) {
-		t.Fatalf("deadline = %v, want 2h after the call (%v)", expiresAt, before)
+	for _, tc := range []struct {
+		timeout, want time.Duration
+	}{{2 * time.Hour, 2 * time.Hour}, {0, DefaultApprovalTimeout}} {
+		before := time.Now()
+		_, _, store, task := gatedBash(t, config.ApprovalGatesConfig{Timeout: tc.timeout}, models.AgentProfile{GatedTools: []string{"bash"}})
+		comments, err := store.ListComments(context.Background(), task.ID)
+		if err != nil {
+			t.Fatalf("ListComments: %v", err)
+		}
+		expiresAt, ok := parseHITLExpiry(comments)
+		if !ok {
+			t.Fatalf("timeout %v: no approval deadline recorded", tc.timeout)
+		}
+		// The deadline is stored to the second.
+		if expiresAt.Before(before.Add(tc.want).Truncate(time.Second)) || expiresAt.After(time.Now().Add(tc.want)) {
+			t.Fatalf("timeout %v: deadline = %v, want %v after the call (%v)", tc.timeout, expiresAt, tc.want, before)
+		}
 	}
 }
