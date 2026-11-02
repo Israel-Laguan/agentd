@@ -114,10 +114,15 @@ func (w *cutReadWorkspace) generate(t *testing.T, msgs ...[]gateway.PromptMessag
 	return resp.ToolCalls[0]
 }
 
-// wrote reports whether the last call that ran was the model's write, and it
-// passed.
+// ranWrite reports whether the model's write reached the executor, whatever
+// came of it.
+func (w *cutReadWorkspace) ranWrite() bool {
+	return w.dispatched[len(w.dispatched)-1] == "w"
+}
+
+// wrote reports whether the model's write ran and passed.
 func (w *cutReadWorkspace) wrote(tr agenttools.ToolResult) bool {
-	return w.dispatched[len(w.dispatched)-1] == "w" && tr.Status == agenttools.ToolStatusSuccess
+	return w.ranWrite() && tr.Status == agenttools.ToolStatusSuccess
 }
 
 // B-089: the budget cut the read the model saw, so a whole-file write would
@@ -130,7 +135,7 @@ func TestWriteToAFileWhoseReadWasCutIsRefused(t *testing.T) {
 	if toolContent(w.gw.seen, "1") == long {
 		t.Fatal("the model's request carries the whole read; the test would prove nothing")
 	}
-	if tr := w.run(write); w.wrote(tr) {
+	if w.run(write); w.ranWrite() {
 		t.Fatalf("dispatched = %v; want the write refused before it runs", w.dispatched)
 	}
 }
@@ -141,7 +146,7 @@ func TestWriteAfterAnUncutReadIsAllowed(t *testing.T) {
 	long := strings.Repeat("x", 5000)
 	w := newCutReadWorkspace(t, long, "tabwriter.go")
 	first := w.read("1", "tabwriter.go")
-	if tr := w.run(w.generate(t, first)); w.wrote(tr) {
+	if w.run(w.generate(t, first)); w.ranWrite() {
 		t.Fatal("the first read was not taken as cut; the test would not exercise clearing")
 	}
 	// The model shortened the file with a shell command, then read all of it.
@@ -178,7 +183,7 @@ func TestWriteAfterAFailedRereadIsRefused(t *testing.T) {
 	if !strings.Contains(reread[1].Content, "too large") {
 		t.Fatalf("reread = %q, want it to fail; the test would prove nothing", reread[1].Content)
 	}
-	if tr := w.run(w.generate(t, reread)); w.wrote(tr) {
+	if w.run(w.generate(t, reread)); w.ranWrite() {
 		t.Fatalf("dispatched = %v; want the write refused after a failed reread", w.dispatched)
 	}
 }
@@ -199,7 +204,7 @@ func TestWriteThroughAnotherNameOfACutFileIsRefused(t *testing.T) {
 			if err := os.Symlink(".", filepath.Join(w.dir, "dir")); err != nil {
 				t.Fatal(err)
 			}
-			if tr := w.run(w.generate(t, w.read("1", tc.read))); w.wrote(tr) {
+			if w.run(w.generate(t, w.read("1", tc.read))); w.ranWrite() {
 				t.Fatalf("dispatched = %v; want the write refused", w.dispatched)
 			}
 		})
