@@ -121,6 +121,12 @@ func TestProcessReturnsCompletedResult(t *testing.T) {
 	if res.Kind != ResultCompleted || res.Text != "done" {
 		t.Fatalf("result = kind %v text %q, want a completion with %q", res.Kind, res.Text, "done")
 	}
+	if res.Task.ID != "task-1" {
+		t.Fatalf("result task ID = %q, want %q", res.Task.ID, "task-1")
+	}
+	if res.Profile.ID != "agent-1" {
+		t.Fatalf("result profile ID = %q, want %q", res.Profile.ID, "agent-1")
+	}
 	if host.commits != 0 || *host.committed != "" {
 		t.Fatalf("the engine committed the text itself: calls=%d committed=%q", host.commits, *host.committed)
 	}
