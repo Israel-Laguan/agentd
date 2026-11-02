@@ -35,13 +35,14 @@ func TestCutReadsKeepsOnlyTheLatestReadOfAFile(t *testing.T) {
 	if len(c.reads) != 1 {
 		t.Fatalf("holds %d reads of /ws/a.go, want only the latest", len(c.reads))
 	}
-	// The older reads are passed over: only the latest, whole, decides the file.
+	// An older read is passed over; the latest read, read "3", decides the file.
 	write := gateway.ToolCall{ID: "w", Function: gateway.ToolCallFunction{Name: toolNameWrite}}
-	c.Note([]gateway.PromptMessage{
-		{Role: "tool", ToolCallID: "1", Content: "cut"},
-		{Role: "tool", ToolCallID: "3", Content: strings.Repeat("x", 1<<20)},
-	})
+	c.Note([]gateway.PromptMessage{{Role: "tool", ToolCallID: "1", Content: "cut"}})
 	if _, refused := c.WriteRefusal(write, "/ws/a.go"); refused {
-		t.Fatal("a whole latest read refuses the write")
+		t.Fatal("an older cut read refuses the write")
+	}
+	c.Note([]gateway.PromptMessage{{Role: "tool", ToolCallID: "3", Content: "cut"}})
+	if _, refused := c.WriteRefusal(write, "/ws/a.go"); !refused {
+		t.Fatal("the latest read, cut, does not refuse the write: it is not kept under its call ID")
 	}
 }
