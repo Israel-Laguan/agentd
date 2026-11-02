@@ -30,7 +30,13 @@ func (c *CutReads) NoteRead(call gateway.ToolCall, path string, tr ToolResult) {
 		return
 	}
 	if c.reads == nil {
-		c.reads, c.latest = map[string]fileRead{}, map[string]string{}
+		c.reads, c.latest, c.cut = map[string]fileRead{}, map[string]string{}, map[string]bool{}
+	}
+	// A provider reused the call ID of another file's read. Messages can be told
+	// apart only by call ID, so that file counts as cut until it is read again.
+	if r, ok := c.reads[call.ID]; ok && r.path != path {
+		delete(c.latest, r.path)
+		c.cut[r.path] = true
 	}
 	delete(c.reads, c.latest[path])
 	c.reads[call.ID] = fileRead{path: path, content: tr.Content}
@@ -53,9 +59,6 @@ func (c *CutReads) Note(messages []gateway.PromptMessage) {
 		if !cut {
 			delete(c.cut, p)
 			continue
-		}
-		if c.cut == nil {
-			c.cut = map[string]bool{}
 		}
 		c.cut[p] = true
 	}

@@ -50,3 +50,34 @@ func TestCutReadsKeepsOnlyTheLatestReadOfAFile(t *testing.T) {
 		t.Fatal("the latest read, whole, refuses the write")
 	}
 }
+
+// A provider can reuse a call ID for a read of another file. The earlier file's
+// read can then no longer be told apart in a request, so it counts as cut until
+// it is read again, rather than keep a mark nothing can update.
+func TestCutReadsAReusedCallIDLeavesTheEarlierFileCut(t *testing.T) {
+	read := func(id string) gateway.ToolCall {
+		return gateway.ToolCall{ID: id, Function: gateway.ToolCallFunction{Name: toolNameRead}}
+	}
+	write := gateway.ToolCall{ID: "w", Function: gateway.ToolCallFunction{Name: toolNameWrite}}
+	var c CutReads
+	refused := func(path string) bool {
+		_, refused := c.WriteRefusal(write, path)
+		return refused
+	}
+	c.NoteRead(read("1"), "/ws/a.go", SuccessResult("1", "package a", 0))
+	c.Note([]gateway.PromptMessage{{Role: "tool", ToolCallID: "1", Content: "package a"}})
+	c.NoteRead(read("1"), "/ws/b.go", SuccessResult("1", "package b", 0))
+	if !refused("/ws/a.go") {
+		t.Fatal("a.go, whose read shares its call ID with b.go's, does not refuse a whole-file write")
+	}
+	c.Note([]gateway.PromptMessage{{Role: "tool", ToolCallID: "1", Content: "package b"}})
+	if refused("/ws/b.go") {
+		t.Fatal("b.go, read whole under the reused ID, refuses the write")
+	}
+	// Reading a.go again under a fresh ID clears it and leaves b.go's read be.
+	c.NoteRead(read("2"), "/ws/a.go", SuccessResult("2", "package a", 0))
+	c.Note([]gateway.PromptMessage{{Role: "tool", ToolCallID: "2", Content: "package a"}, {Role: "tool", ToolCallID: "1", Content: "pack"}})
+	if refused("/ws/a.go") || !refused("/ws/b.go") {
+		t.Fatalf("refused a.go = %v, b.go = %v; want a.go cleared by its reread and b.go's cut read seen", refused("/ws/a.go"), refused("/ws/b.go"))
+	}
+}
