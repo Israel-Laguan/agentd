@@ -171,12 +171,12 @@ func TestWriteToAFileHoldingTheCutMarkerIsAllowed(t *testing.T) {
 func TestWriteAfterAFailedRereadIsRefused(t *testing.T) {
 	w := newCutReadWorkspace(t, strings.Repeat("x", 5000), "tabwriter.go")
 	w.generate(t, w.read("1", "tabwriter.go"))
-	if err := os.Chmod(filepath.Join(w.dir, "tabwriter.go"), 0); err != nil {
-		t.Fatal(err)
-	}
+	// The file stays where it is, so the write still names it; only the reread
+	// fails, as it does for any user, root included.
+	w.ex.SetMaxReadBytes(100)
 	reread := w.read("2", "tabwriter.go")
-	if w.dispatched[len(w.dispatched)-1] != "2" || !strings.Contains(reread[1].Content, "denied") {
-		t.Skipf("the reread did not fail (%q; running as root?); the test would prove nothing", reread[1].Content)
+	if !strings.Contains(reread[1].Content, "too large") {
+		t.Fatalf("reread = %q, want it to fail; the test would prove nothing", reread[1].Content)
 	}
 	if tr := w.run(w.generate(t, reread)); w.wrote(tr) {
 		t.Fatalf("dispatched = %v; want the write refused after a failed reread", w.dispatched)
