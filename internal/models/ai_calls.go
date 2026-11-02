@@ -12,11 +12,15 @@ import (
 // sizes, counts, tokens and timing only, never prompt or response bodies.
 // RoutedAgent is the agent the router chose; it is stored in the role column.
 type AICall struct {
-	At               time.Time
-	Kind             string
-	Purpose          string
-	Stage            string
-	RoutedAgent      string
+	At          time.Time
+	Kind        string
+	Purpose     string
+	Stage       string
+	RoutedAgent string
+	// RoutedLevel is the purpose's required level and RoutedRule the rule the
+	// router matched; both are empty on rows written before schema v27.
+	RoutedLevel      string
+	RoutedRule       string
 	TaskID           string
 	AgentID          string
 	CorrelationID    string

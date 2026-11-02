@@ -31,8 +31,8 @@ func TestMigrationAddsAllowedToolsAndWorkspaceReadonly(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "26" {
-		t.Fatalf("schema version = %q, want 26", version)
+	if version != "27" {
+		t.Fatalf("schema version = %q, want 27", version)
 	}
 
 	for _, col := range []string{"allowed_tools", "workspace_readonly"} {

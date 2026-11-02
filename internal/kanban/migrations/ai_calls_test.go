@@ -53,7 +53,7 @@ func TestMigrateToV21_CreatesAICallsOnAnUpgrade(t *testing.T) {
 	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	assertAICallsShape(t, db, "context_mix", "truncated_by")
+	assertAICallsShape(t, db, "context_mix", "truncated_by", "required_level", "route_rule")
 	if err := Run(ctx, db, t.TempDir()); err != nil {
 		t.Fatalf("second Run() error = %v", err)
 	}

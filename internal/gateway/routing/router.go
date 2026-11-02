@@ -211,7 +211,7 @@ func (r *Router) routeRequest(ctx context.Context, req spec.AIRequest) spec.AIRe
 	}
 	slog.Log(ctx, level, "routing decision", "purpose", d.Purpose, "required_level", d.Required,
 		"rule", d.Rule, "agent", d.Agent, "task_id", req.TaskID)
-	req.RoutedAgent = d.Agent
+	req.RoutedAgent, req.RoutedLevel, req.RoutedRule = d.Agent, d.Required, d.Rule
 	if d.Rule == route.RulePin || d.Agent == "" {
 		return req
 	}

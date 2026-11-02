@@ -37,6 +37,8 @@ type CallRecord struct {
 	Purpose       Purpose       `json:"purpose"`
 	Stage         string        `json:"stage"`
 	RoutedAgent   string        `json:"routed_agent,omitempty"`
+	RoutedLevel   Level         `json:"required_level,omitempty"`
+	RoutedRule    string        `json:"route_rule,omitempty"`
 	TaskID        string        `json:"task_id,omitempty"`
 	AgentID       string        `json:"agent_id,omitempty"`
 	CorrelationID string        `json:"correlation_id,omitempty"`
