@@ -240,7 +240,7 @@ flowchart LR
 
 Launch order: the jail's bash starts `jail-forward` through a process substitution, reads its ready line, then runs the agent command, so the agent never starts before its network path exists. If the forwarder cannot bind, the command exits 125 before the agent starts.
 
-Environment, set after the allowlisted host variables so a host proxy setting cannot win: `HTTPS_PROXY` and `HTTP_PROXY` are `http://127.0.0.1:3128`, `NO_PROXY` is `127.0.0.1,localhost` (the MCP port, `sandbox.JailMCPAddr`, must not go through the proxy), and `NODE_USE_ENV_PROXY=1`.
+Environment, set after the allowlisted host variables so a host proxy setting cannot win: `HTTPS_PROXY` and `HTTP_PROXY` are `http://127.0.0.1:3128`, `NO_PROXY` is `127.0.0.1,localhost` (the MCP port, `sandbox.JailMCPAddr`, must not go through the proxy), the same three in lowercase (curl prefers lowercase names and reads only `http_proxy` for `http://` URLs), and `NODE_USE_ENV_PROXY=1`.
 
 The allowlist is a parameter (`Proxy.Allow`), not a config key: each preset passes its own hosts (PR 08). Registry and download hosts for a cold start stay off the list; pre-seed the agent home instead.
 

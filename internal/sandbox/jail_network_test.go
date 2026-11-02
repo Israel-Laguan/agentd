@@ -79,7 +79,7 @@ func TestBubblewrapEgressReachesOnlyListedHosts(t *testing.T) {
 	exec, workspace := testExecutor(t, nil)
 	exec.Egress = &Egress{Forwarder: os.Args[0], ProxySocket: socket, Home: home}
 	// The lexical filter refuses a literal $HOME; printenv reads the same value.
-	curl := `curl -sS --max-time 10 --proxytunnel --proxy "$HTTPS_PROXY" `
+	curl := "curl -sS --max-time 10 --proxytunnel " // the proxy comes from the jail's http_proxy
 	result, err := exec.Execute(context.Background(), testPayload(workspace, curl+`http://api.example:443/ && h=$(printenv HOME) && touch "$h/state"`))
 	if err != nil || !result.Success || !strings.Contains(result.Stdout, "egress ok") {
 		t.Fatalf("listed host: err = %v, success = %v, stdout = %q, stderr = %q", err, result.Success, result.Stdout, result.Stderr)

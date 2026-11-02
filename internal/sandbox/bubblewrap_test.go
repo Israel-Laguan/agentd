@@ -174,7 +174,8 @@ func TestJailArgvWithEgress(t *testing.T) {
 		Forwarder: "/opt/agentd/agentd", ProxySocket: "/tmp/run/egress.sock", MCPSocket: "/tmp/run/mcp.sock",
 		Home: "/tmp/run/home", Executable: "/opt/opencode/bin/opencode",
 	}
-	argv := jailArgv("/usr/bin/bwrap", "/tmp/ws/p", false, []string{"CI=true", "HTTPS_PROXY=http://host:8080"}, nil, egress, "opencode acp")
+	host := []string{"CI=true", "HTTPS_PROXY=http://host:8080", "https_proxy=http://host:8080"}
+	argv := jailArgv("/usr/bin/bwrap", "/tmp/ws/p", false, host, nil, egress, "opencode acp")
 	flat := strings.Join(argv, " ")
 	for _, want := range []string{
 		"--unshare-all",
@@ -186,6 +187,8 @@ func TestJailArgvWithEgress(t *testing.T) {
 		"--setenv HOME /tmp/run/home",
 		"--setenv HTTP_PROXY http://127.0.0.1:3128",
 		"--setenv NO_PROXY 127.0.0.1,localhost",
+		"--setenv http_proxy http://127.0.0.1:3128",
+		"--setenv no_proxy 127.0.0.1,localhost",
 		"--setenv NODE_USE_ENV_PROXY 1",
 		"/run/agentd/agentd jail-forward 127.0.0.1:3128=/run/agentd/egress.sock 127.0.0.1:3129=/run/agentd/mcp.sock",
 	} {
@@ -196,11 +199,14 @@ func TestJailArgvWithEgress(t *testing.T) {
 	if strings.Contains(flat, "--share-net") || strings.Contains(flat, "--setenv HOME /tmp/ws/p") {
 		t.Fatalf("argv shares the network or keeps the workspace as HOME:\n%s", flat)
 	}
-	if last := strings.LastIndex(flat, "--setenv HTTPS_PROXY "); !strings.HasPrefix(flat[last:], "--setenv HTTPS_PROXY http://127.0.0.1:3128") {
-		t.Fatalf("the host HTTPS_PROXY wins over the jail's:\n%s", flat)
+	for _, name := range []string{"HTTPS_PROXY", "https_proxy"} {
+		last := strings.LastIndex(flat, "--setenv "+name+" ")
+		if !strings.HasPrefix(flat[last:], "--setenv "+name+" http://127.0.0.1:3128") {
+			t.Fatalf("the host %s wins over the jail's:\n%s", name, flat)
+		}
 	}
-	if strings.Index(flat, "--tmpfs /tmp") > strings.Index(flat, "--bind /tmp/run/home") {
-		t.Fatalf("the /tmp tmpfs would hide an agent home under /tmp:\n%s", flat)
+	if tmpfs, home := strings.Index(flat, "--tmpfs /tmp"), strings.Index(flat, "--bind /tmp/run/home"); tmpfs < 0 || tmpfs > home {
+		t.Fatalf("the /tmp tmpfs is missing or would hide an agent home under /tmp:\n%s", flat)
 	}
 	if shell := argv[len(argv)-1]; !strings.HasSuffix(shell, "\nopencode acp") {
 		t.Fatalf("the agent command must run after the forwarder is ready, got %q", shell)

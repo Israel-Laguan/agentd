@@ -97,7 +97,9 @@ var probeJail = func() jailProbeResult { return probeJailOnce() }
 // useJail decides whether this execution runs under bubblewrap. Auto falls back
 // to filter-only: quiet when the binary is absent entirely (platforms without
 // bubblewrap must not log-scare on every task), and warned when bwrap is present
-// but unprivileged user namespaces are not. An explicit bubblewrap is a
+// but unprivileged user namespaces are not. A read-only workspace or egress never
+// falls back: only the jail can enforce them, so under auto or filter-only
+// without a usable jail they are refused. An explicit bubblewrap is a
 // requirement: an unusable jail returns ErrSandboxUnavailable, so the command is
 // refused before any shell starts and the error names the reason.
 func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool, error) {
@@ -117,12 +119,12 @@ func (e *BashExecutor) useJail(workspace string, payload Payload) (string, bool,
 		}
 		return status.path, true, nil
 	default:
+		if what := e.jailOnly(payload); what != "" && !status.usable() {
+			return "", false, refuseUnjailed(workspace, payload, what, unavailableReason(status))
+		}
 		if status.path != "" && !status.userNS {
 			slog.Warn("sandbox: bubblewrap user namespaces unavailable; running filter-only (not a jail)",
 				"workspace", workspace, "task_id", payload.TaskID, "bwrap", status.path)
-		}
-		if what := e.jailOnly(payload); what != "" && !status.usable() {
-			return "", false, refuseUnjailed(workspace, payload, what, unavailableReason(status))
 		}
 		return status.path, status.usable(), nil
 	}

@@ -77,14 +77,19 @@ func (g *Egress) binds() []string {
 
 // env points proxy-aware clients (Go, curl, Node with NODE_USE_ENV_PROXY) at
 // the forwarded proxy. It follows jailEnv, so a host proxy variable passed
-// through the allowlist cannot win; NO_PROXY keeps the jail's loopback, where
-// the MCP port is, off the proxy.
+// through the allowlist cannot win, in either spelling: curl prefers the
+// lowercase names and reads only http_proxy for http URLs. NO_PROXY keeps the
+// jail's loopback, where the MCP port is, off the proxy.
 func (g *Egress) env() []string {
 	if g == nil || g.ProxySocket == "" {
 		return nil
 	}
-	proxy := "http://" + jailProxyAddr
-	return []string{"HTTPS_PROXY=" + proxy, "HTTP_PROXY=" + proxy, "NO_PROXY=127.0.0.1,localhost", "NODE_USE_ENV_PROXY=1"}
+	proxy, local := "http://"+jailProxyAddr, "127.0.0.1,localhost"
+	return []string{
+		"HTTPS_PROXY=" + proxy, "HTTP_PROXY=" + proxy, "NO_PROXY=" + local,
+		"https_proxy=" + proxy, "http_proxy=" + proxy, "no_proxy=" + local,
+		"NODE_USE_ENV_PROXY=1",
+	}
 }
 
 // launch starts jail-forward as the shell's child, waits for its ready line,

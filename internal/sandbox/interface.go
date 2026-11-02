@@ -17,10 +17,10 @@ type ResourceLimits struct {
 }
 
 // Egress is the jail option for an external agent (T-042, SP-025). The
-// network stays unshared; the only way out is two host unix sockets bound
-// into the jail, which `agentd jail-forward` exposes on the jail's own
-// loopback before the command starts: an egress.Proxy that allows only the
-// agent's model hosts, and agentd's MCP server. A nil Egress is the builtin
+// network stays unshared; the only way out is host unix sockets bound into
+// the jail, which `agentd jail-forward` exposes on the jail's own loopback
+// before the command starts: an egress.Proxy that allows only the agent's
+// model hosts, and, when set, agentd's MCP server. A nil Egress is the builtin
 // profile, with no network at all (B-086).
 type Egress struct {
 	// Forwarder is the agentd binary, bound read-only to run jail-forward.
