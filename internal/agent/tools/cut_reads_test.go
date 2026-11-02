@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"strings"
 	"testing"
 
 	"agentd/internal/gateway"
@@ -20,5 +21,27 @@ func TestCutReadsANoteBeforeAWholeReadIsNoCut(t *testing.T) {
 	c.Note([]gateway.PromptMessage{{Role: "tool", ToolCallID: "1", Content: "[2 tool exchanges collapsed] package a"}})
 	if _, refused := c.WriteRefusal(write, "/ws/a.go"); refused {
 		t.Fatal("a whole read with a note in front of it refuses the write")
+	}
+}
+
+// Only a file's latest read decides it, so a reread lets the older read's
+// content go: rereading a large file does not grow what the tracker holds.
+func TestCutReadsKeepsOnlyTheLatestReadOfAFile(t *testing.T) {
+	var c CutReads
+	for _, id := range []string{"1", "2", "3"} {
+		read := gateway.ToolCall{ID: id, Function: gateway.ToolCallFunction{Name: toolNameRead}}
+		c.NoteRead(read, "/ws/a.go", SuccessResult(id, strings.Repeat("x", 1<<20), 0))
+	}
+	if len(c.reads) != 1 {
+		t.Fatalf("holds %d reads of /ws/a.go, want only the latest", len(c.reads))
+	}
+	// The older reads are passed over: only the latest, whole, decides the file.
+	write := gateway.ToolCall{ID: "w", Function: gateway.ToolCallFunction{Name: toolNameWrite}}
+	c.Note([]gateway.PromptMessage{
+		{Role: "tool", ToolCallID: "1", Content: "cut"},
+		{Role: "tool", ToolCallID: "3", Content: strings.Repeat("x", 1<<20)},
+	})
+	if _, refused := c.WriteRefusal(write, "/ws/a.go"); refused {
+		t.Fatal("a whole latest read refuses the write")
 	}
 }
