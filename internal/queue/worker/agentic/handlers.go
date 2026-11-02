@@ -127,8 +127,10 @@ func (e *Engine) runAgenticCall(
 	if feedback, refused := e.cutWriteRefusal(call); refused {
 		return agenttools.NonRetryableErrorResult(call.ID, feedback, "", 0), false, false
 	}
-	e.noteReadCall(call)
 	tr, suspended = dispatch(call)
+	if call.Function.Name == agenttools.ToolNameRead && tr.Status == agenttools.ToolStatusSuccess {
+		e.noteReadCall(call)
+	}
 	// ask_human runs through dispatch like any tool, so hooks can veto it; a
 	// successful call blocked the task for a human, and the loop stops.
 	if call.Function.Name == agenttools.ToolNameAskHuman && tr.Status == agenttools.ToolStatusSuccess {

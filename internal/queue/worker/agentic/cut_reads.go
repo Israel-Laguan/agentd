@@ -3,7 +3,7 @@ package agentic
 import (
 	"encoding/json"
 	"fmt"
-	"path"
+	"path/filepath"
 	"strings"
 
 	agenttools "agentd/internal/agent/tools"
@@ -69,5 +69,5 @@ func toolPath(argsJSON string) string {
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil || args.Path == "" {
 		return ""
 	}
-	return path.Clean(args.Path)
+	return filepath.Clean(args.Path)
 }
