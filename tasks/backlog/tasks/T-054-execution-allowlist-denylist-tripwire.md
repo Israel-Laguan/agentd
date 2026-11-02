@@ -16,15 +16,17 @@ Harden sandboxed command execution with a strict dual-tier security model: an al
 
 Key architectural boundaries:
 1. Safe commands (read-only inspection such as `ls`, `cat`, `head`, `tail`, `wc`, standard test runners/builds without side-effect piping or destructive redirections) execute without extra friction.
-2. Hard denylist tripwire: low-level normalized substring inspection (stripping quotes, escapes, backticks, collapsing whitespace) catching destructive commands (`rm -rf /`, `mkfs`, `dd if=`, device redirection, dangerous permissions) and refusing them outright.
-3. Neither hooks nor relaxed execution policies can override or relax the hard denylist tripwire.
+2. Advisory denylist tripwire: low-level normalized substring inspection (stripping quotes, escapes, backticks, collapsing whitespace) catching obvious destructive commands (`rm -rf /`, `mkfs`, `dd if=`, device redirection, dangerous permissions) and refusing them outright.
+3. Hard boundary clarification: string tripwires are defense-in-depth and advisory only (since shell variable expansion, aliases, and command substitutions can evade text normalization); true isolation and security enforcement must rely on sandbox boundaries (e.g. bubblewrap jail) or parsed restricted command execution.
+4. Neither hooks nor relaxed execution policies can override or relax the tripwire denylist.
 
 ## Done when
 
-- [ ] Command evaluator enforces fast-path allowlist and tripwire denylist with string normalization.
-- [ ] Known destructive patterns are blocked unconditionally regardless of flags or execution modes.
+- [ ] Command evaluator enforces fast-path allowlist and advisory tripwire denylist with string normalization.
+- [ ] Known destructive patterns are blocked by the tripwire regardless of flags or execution modes.
+- [ ] Sandbox isolation is reinforced as the hard security boundary for evasion attacks (e.g., variable expansion, subshells).
 - [ ] Security rules and tripwires are documented in `GUARDRAILS.md`.
-- [ ] Unit tests test various bypass attempts (quotes, backticks, whitespaces, chaining) against the denylist tripwire.
+- [ ] Unit tests verify denylist tripwire behavior, including bypass attempts and expansion boundaries.
 
 ## Notes
 

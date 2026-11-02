@@ -14,13 +14,13 @@
 
 Enforce sticky, non-droppable golden goals and automated verification gates before task completion, inspired by Claudinio Code.
 
-Tasks or user requirements designated as `<goal>…</goal>` cannot be dropped or closed by the worker without passing verified automated quality checks (e.g., test suite / quality check pass). If a worker attempts to finish with an open golden goal or failing verification gate, the run is rejected and looped back to the worker up to a configurable maximum cycle/stall limit, or escalated to a `HUMAN` review state.
+Tasks or user requirements designated as `<goal>…</goal>` cannot be dropped or closed by the worker without passing verified automated quality checks (e.g., test suite / quality check pass). If a worker attempts to finish with an open golden goal or failing verification gate, the run is rejected and looped back to the worker up to a configurable maximum cycle/stall limit, or escalated to a `FAILED_REQUIRES_HUMAN` review state.
 
 ## Done when
 
 - [ ] Support marking specific task criteria or goals as "golden" / mandatory.
-- [ ] Worker completion guard enforces that golden goals have passing quality checks before transitioning out of IN_PROGRESS.
-- [ ] Configurable maximum retry cycles and stall detection for unresolved golden goals before escalating to HUMAN.
+- [ ] Worker completion guard enforces that golden goals have passing quality checks before transitioning out of `RUNNING`.
+- [ ] Configurable maximum retry cycles and stall detection for unresolved golden goals before escalating to `FAILED_REQUIRES_HUMAN`.
 - [ ] Unit and integration tests verify that workers cannot prematurely close tasks when verification gates fail.
 
 ## Notes

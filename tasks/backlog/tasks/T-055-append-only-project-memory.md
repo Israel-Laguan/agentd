@@ -16,16 +16,16 @@ Provide a dedicated, append-only, size-bounded project memory file (e.g. `.agent
 
 Rather than relying solely on automated log archival and summarization:
 1. Provide an explicit mechanism for workers to record concise lessons (e.g. conventions, traps, costly discoveries) as one-line items.
-2. Maintain strict harness-level write protection: normal file editing tools (`edit_file`) cannot modify or overwrite the memory file directly; only the harness `remember` flow can append entries.
+2. Maintain strict harness-level write protection: normal file editing tools (`edit_file`) as well as shell/bash execution paths cannot modify, redirect to, or overwrite the memory file directly; only the harness `remember` flow can append entries.
 3. Enforce an upper size cap (e.g., ~4,000 characters) by dropping the oldest entries whole when full, never rewording or summarizing them.
 4. Inject relevant memory entries into worker session prompts cleanly without bloating cached prompt prefixes.
 
 ## Done when
 
 - [ ] Project memory file format and storage location established.
-- [ ] Explicit append operation implemented with file-editing write guards preventing unauthorized modification.
+- [ ] Explicit append operation implemented with file-editing (`edit_file`) and shell tool write guards preventing unauthorized modification.
 - [ ] Oldest-entry pruning triggers when the size cap is reached.
-- [ ] Unit tests verify write protection, capacity bounds, and session prompt injection.
+- [ ] Unit tests verify write protection across tools, capacity bounds, and session prompt injection.
 
 ## Notes
 
