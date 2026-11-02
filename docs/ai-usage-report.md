@@ -19,6 +19,7 @@ waits for the database.
 | `kind` | `generate` or `embed` |
 | `purpose`, `stage` | Why the call was made (see below); the stage is the part before the dot |
 | `role`, `agent_id`, `task_id` | The agent the router chose (the profile ID on a pin, empty on the cascade; the column keeps its old name), the agent profile, and the task when the call belongs to one |
+| `required_level`, `route_rule` | The purpose's required level (`L1`, `L3`, `code`, ...) and the routing rule that matched: `rules[i]` for the i-th rule of the stage, `default`, `pin`, or `cascade`. Empty on rows written before schema v27 |
 | `correlation_id` | The chat request's ID (see "Per chat") |
 | `provider`, `model` | Who answered; the model the provider reported |
 | `attempt` | `first`, or `json_repair` for a retry made to fix an invalid JSON answer |
@@ -80,6 +81,7 @@ still takes the stored name.
 agentd report ai                                  # by purpose, all time
 agentd report ai --group-by stage,model --from 2026-10-18
 agentd report ai --group-by task --stage exec     # tokens per task
+agentd report ai --group-by purpose,level         # tokens per purpose and required level
 agentd report ai --group-by purpose --request <correlation-id> --json
 ```
 
@@ -98,7 +100,8 @@ dropped-record count:
 
 Dimensions for `--group-by` (comma list, default `purpose`): `purpose`, `stage`,
 `model`, `day` (UTC date), `task`, `request`, `agent` (the agent the router
-chose, from the `role` column; `-` on the cascade). Filters: `--from` (inclusive),
+chose, from the `role` column; `-` on the cascade), `level` (the required level,
+from `required_level`), and `rule` (the matched rule, from `route_rule`). Filters: `--from` (inclusive),
 `--to` (exclusive; a bare date includes that whole day), `--task`, `--request`,
 `--purpose`, `--stage`, `--model`. Dates are `YYYY-MM-DD` or RFC3339.
 
@@ -108,6 +111,7 @@ The questions the report is built to answer:
 - **Per task:** `--group-by task`, or `--task <id> --group-by purpose`.
 - **Per day:** `--group-by day`, or `day,purpose` for the split.
 - **Per routed agent:** `--group-by agent,purpose` shows what each `stages:` agent answers and how often it fails.
+- **Per routing rule:** `--group-by level,rule` shows which `stages:` rules fire and what they cost. Rows from before schema v27 have no rule and group under `-`.
 
 "Per chat" means per chat request: one `POST /v1/chat/completions` gets one
 correlation ID, and every call made while serving it (intent, scope, draft

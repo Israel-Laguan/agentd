@@ -149,3 +149,31 @@ func TestAIUsageReportLabelsEveryRemovedPurpose(t *testing.T) {
 		}
 	}
 }
+
+// The routing decision is stored and grouped: a call routed by a rule shows its
+// level and rule, and a row written before schema v27 groups under empty values.
+func TestAIUsageReportGroupsByLevelAndRule(t *testing.T) {
+	t.Parallel()
+	store := newTestStore(t)
+	ruled := aiCall(day1, "exec.work_plan", "m1", 40)
+	ruled.RoutedLevel, ruled.RoutedRule = "L1", "rules[0]"
+	dflt := aiCall(day1, "create.elicit", "m1", 60)
+	dflt.RoutedLevel, dflt.RoutedRule = "L3", "default"
+	old := aiCall(day1, "exec.turn", "m1", 5)
+	if err := store.InsertAICalls(context.Background(), []models.AICall{ruled, dflt, old}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	rep := reportRows(t, store, models.AIUsageQuery{GroupBy: []string{models.AIDimLevel, models.AIDimRule}})
+	if len(rep.Rows) != 3 {
+		t.Fatalf("rows = %+v, want 3 (one per level and rule)", rep.Rows)
+	}
+	if got := rowFor(t, rep, models.AIDimRule, "rules[0]"); got.Group[models.AIDimLevel] != "L1" || got.Tokens != 40 {
+		t.Errorf("rules[0] row = %+v, want level L1 and 40 tokens", got)
+	}
+	if got := rowFor(t, rep, models.AIDimLevel, "L3"); got.Group[models.AIDimRule] != "default" || got.Tokens != 60 {
+		t.Errorf("L3 row = %+v, want rule default and 60 tokens", got)
+	}
+	if got := rowFor(t, rep, models.AIDimRule, ""); got.Tokens != 5 {
+		t.Errorf("empty rule row = %+v, want the pre-v27 row with 5 tokens", got)
+	}
+}
