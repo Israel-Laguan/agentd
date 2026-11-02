@@ -171,6 +171,7 @@ type workerStore struct {
 	drafts     []models.DraftTask
 	tasks      []models.Task
 	heartbeats int
+	hbMu       sync.Mutex // guards task.LastHeartbeat and heartbeats against the heartbeat goroutine
 }
 
 func (s *workerStore) ClearProjectStartedEmpty(context.Context, string) error { return nil }
@@ -202,6 +203,8 @@ func (s *workerStore) MarkTaskRunning(_ context.Context, _ string, _ time.Time, 
 }
 
 func (s *workerStore) UpdateTaskHeartbeat(context.Context, string) error {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
 	s.heartbeats++
 	now := time.Now().UTC()
 	s.task.LastHeartbeat = &now
@@ -282,9 +285,14 @@ func (s *workerStore) GetProject(context.Context, string) (*models.Project, erro
 func (s *workerStore) GetAgentProfile(context.Context, string) (*models.AgentProfile, error) {
 	return &s.profile, nil
 }
-func (s *workerStore) GetTask(context.Context, string) (*models.Task, error) { return &s.task, nil }
-func (s *workerStore) Close() error                                          { return nil }
-func (s *workerStore) AppendEvent(context.Context, models.Event) error       { return nil }
+func (s *workerStore) GetTask(context.Context, string) (*models.Task, error) {
+	s.hbMu.Lock()
+	defer s.hbMu.Unlock()
+	t := s.task
+	return &t, nil
+}
+func (s *workerStore) Close() error                                    { return nil }
+func (s *workerStore) AppendEvent(context.Context, models.Event) error { return nil }
 func (s *workerStore) ListEventsByTask(context.Context, string) ([]models.Event, error) {
 	return nil, nil
 }
