@@ -180,8 +180,9 @@ func TestBuildBatchRequest_OmitsAskHumanGuidance(t *testing.T) {
 	}
 }
 
-// A batch carries its tasks' routing attributes, so a stage rule on exec.batch
-// that requires a workspace change routes a batch holding a flagged task.
+// A batch carries the routing attributes its tasks share, so a stage rule on
+// exec.batch routes it as it would route each task. A mixed batch leaves the
+// attribute unset and takes the stage default: neither rule fits all its tasks.
 func TestBuildBatchRequest_CarriesRoutingAttrs(t *testing.T) {
 	t.Parallel()
 	store := &batchTestStore{
@@ -191,20 +192,22 @@ func TestBuildBatchRequest_CarriesRoutingAttrs(t *testing.T) {
 	w := NewWorker(store, &batchTrackingGateway{}, nil, nil, nil, WorkerOptions{
 		ToolManifest: config.ToolManifestConfig{Enabled: true, MinConfidence: 0.35},
 	})
-	needsChange := true
+	yes, no := true, false
 	table := route.Table{
 		Agents: map[string]route.Agent{"quick": {Provider: "gemini", Model: "flash", Level: spec.LevelL1}},
-		Stages: map[spec.Purpose]route.StageRoute{spec.PurposeExecBatch: {Rules: []route.Rule{
-			{Match: route.Match{RequiresWorkspaceChange: &needsChange}, Use: "quick"},
+		Stages: map[spec.Purpose]route.StageRoute{spec.PurposeExecBatch: {Default: "quick", Rules: []route.Rule{
+			{Match: route.Match{RequiresWorkspaceChange: &yes}, Use: "quick"},
+			{Match: route.Match{RequiresWorkspaceChange: &no}, Use: "quick"},
 		}}},
 	}
 	cases := []struct {
 		name    string
 		flagged []bool
-		want    bool
+		rule    string
 	}{
-		{"no task flagged", []bool{false, false, false}, false},
-		{"one task flagged", []bool{false, true, false}, true},
+		{"no task flagged", []bool{false, false, false}, "rules[1]"},
+		{"every task flagged", []bool{true, true, true}, "rules[0]"},
+		{"mixed batch", []bool{false, true, false}, route.RuleDefault},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -213,25 +216,8 @@ func TestBuildBatchRequest_CarriesRoutingAttrs(t *testing.T) {
 				tasks[i].RequiresWorkspaceChange = tc.flagged[i]
 			}
 			req := w.buildBatchRequest(context.Background(), tasks, store.project, store.profile)
-			// Verify the attribute value directly: an unflagged batch carries explicit false
-			attrValue := req.Attrs.RequiresWorkspaceChange
-			if attrValue == nil {
-				t.Fatalf("attribute is nil, want it to be set for batch routing")
-			}
-			// For all-unflagged batch, attribute should be false; for any-flagged batch, true
-			expectedAttr := false
-			for _, flagged := range tc.flagged {
-				if flagged {
-					expectedAttr = true
-					break
-				}
-			}
-			if *attrValue != expectedAttr {
-				t.Fatalf("attribute = %v, want %v for flagged=%v", *attrValue, expectedAttr, tc.flagged)
-			}
-			d := table.Resolve(req.Purpose, req.AgentID, req.Attrs)
-			if matched := d.Rule == "rules[0]"; matched != tc.want {
-				t.Fatalf("rule = %q, want the requires_workspace_change rule: %v", d.Rule, tc.want)
+			if d := table.Resolve(req.Purpose, req.AgentID, req.Attrs); d.Rule != tc.rule {
+				t.Fatalf("rule = %q, want %q for flagged = %v", d.Rule, tc.rule, tc.flagged)
 			}
 		})
 	}
