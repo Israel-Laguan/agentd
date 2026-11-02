@@ -179,7 +179,8 @@ func TestEmbedAttemptsAreRecordedWithPurpose(t *testing.T) {
 		t.Fatalf("got %d embed records, want 2", len(rec.recs))
 	}
 	for _, got := range rec.recs {
-		if got.Kind != spec.KindEmbed || got.Purpose != spec.PurposeOverheadEmbedFiles || got.InputChars != 5 {
+		if got.Kind != spec.KindEmbed || got.Purpose != spec.PurposeOverheadEmbedFiles || got.InputChars != 5 ||
+			got.RoutedLevel != spec.PurposeOverheadEmbedFiles.MinLevel() {
 			t.Errorf("record = %+v", got)
 		}
 	}
