@@ -46,6 +46,7 @@ func newRootCommand() *cobra.Command {
 	rootCmd.AddCommand(newProjectCommand(opts))
 	rootCmd.AddCommand(newSuggestCommand(opts))
 	rootCmd.AddCommand(newAskCommand(opts))
+	rootCmd.AddCommand(newJailForwardCommand())
 
 	return rootCmd
 }
