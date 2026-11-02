@@ -168,6 +168,12 @@ type Engine struct {
 	// hungCommands holds the commands that already stopped at a prompt in this
 	// run; a repeat of one hands the task to a human. Created on first use.
 	hungCommands map[string]bool
+	// cutReads holds the paths whose latest read the model was shown cut to the
+	// budget; a whole-file write to one would save the cut copy (B-089). readPaths
+	// maps each read call ID seen in this run to its path. Both are created on
+	// first use.
+	cutReads  map[string]bool
+	readPaths map[string]string
 }
 
 func NewEngine(cfg Config, host Host) *Engine {

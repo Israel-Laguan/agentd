@@ -53,7 +53,14 @@ func TestWriteToAFileWhoseReadWasCutIsRefused(t *testing.T) {
 		{Role: "assistant", Content: "c", ToolCalls: []gateway.ToolCall{readCall("1", "tabwriter.go")}},
 		{Role: "tool", ToolCallID: "1", Content: strings.Repeat("x", 5000)},
 	}
-	resp, stop, err := e.generateAgenticTurn(context.Background(), models.Task{}, models.AgentProfile{}, &msgs, nil,
+	var dispatched []string
+	dispatch := func(c gateway.ToolCall) (agenttools.ToolResult, bool) {
+		dispatched = append(dispatched, c.ID)
+		return agenttools.ToolResult{Status: agenttools.ToolStatusSuccess}, false
+	}
+	ctx := context.Background()
+	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("1", "tabwriter.go"), dispatch)
+	resp, stop, err := e.generateAgenticTurn(ctx, models.Task{}, models.AgentProfile{}, &msgs, nil,
 		agentruntime.NewBudgetGuard(nil, ""), agentruntime.NewContextBudgetGuard(1000, 0.8), 0, 0)
 	if err != nil || stop != nil {
 		t.Fatalf("generateAgenticTurn: stop=%v err=%v", stop, err)
@@ -61,13 +68,39 @@ func TestWriteToAFileWhoseReadWasCutIsRefused(t *testing.T) {
 	if !strings.Contains(toolContent(gw.seen, "1"), truncation.TruncationMarker) {
 		t.Fatal("the model's request does not carry the cut read; the test would prove nothing")
 	}
+	tr, _, _ := e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, resp.ToolCalls[0], dispatch)
+	if len(dispatched) != 1 || tr.Status == agenttools.ToolStatusSuccess {
+		t.Fatalf("dispatched = %v, status = %v; want the write refused before it runs", dispatched, tr.Status)
+	}
+}
+
+// Once the model has read the file again and was shown all of it, a write to it
+// is allowed: the latest read decides.
+func TestWriteAfterAnUncutReadIsAllowed(t *testing.T) {
+	gw := &writeBackGateway{call: writeCall("w2", "tabwriter.go", "short")}
+	e := &Engine{config: Config{Gateway: gw, TruncatorMax: 30, CharacterBudget: 300}, host: &noopHost{}}
+	msgs := []gateway.PromptMessage{
+		{Role: "system", Content: "s"}, {Role: "user", Content: "task"},
+		{Role: "assistant", Content: "c", ToolCalls: []gateway.ToolCall{readCall("1", "tabwriter.go")}},
+		{Role: "tool", ToolCallID: "1", Content: strings.Repeat("x", 5000)},
+		{Role: "assistant", Content: "again", ToolCalls: []gateway.ToolCall{readCall("2", "./tabwriter.go")}},
+		{Role: "tool", ToolCallID: "2", Content: "package tabwriter"},
+	}
 	var dispatched []string
 	dispatch := func(c gateway.ToolCall) (agenttools.ToolResult, bool) {
 		dispatched = append(dispatched, c.ID)
 		return agenttools.ToolResult{Status: agenttools.ToolStatusSuccess}, false
 	}
-	tr, _, _ := e.runAgenticCall(context.Background(), models.Task{}, models.AgentProfile{}, resp.ToolCalls[0], dispatch)
-	if len(dispatched) != 0 || tr.Status == agenttools.ToolStatusSuccess {
-		t.Fatalf("write dispatched = %v, status = %v; want refused before it runs", dispatched, tr.Status)
+	ctx := context.Background()
+	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("1", "tabwriter.go"), dispatch)
+	e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, readCall("2", "./tabwriter.go"), dispatch)
+	resp, stop, err := e.generateAgenticTurn(ctx, models.Task{}, models.AgentProfile{}, &msgs, nil,
+		agentruntime.NewBudgetGuard(nil, ""), agentruntime.NewContextBudgetGuard(1000, 0.8), 0, 0)
+	if err != nil || stop != nil {
+		t.Fatalf("generateAgenticTurn: stop=%v err=%v", stop, err)
+	}
+	tr, _, _ := e.runAgenticCall(ctx, models.Task{}, models.AgentProfile{}, resp.ToolCalls[0], dispatch)
+	if dispatched[len(dispatched)-1] != "w2" || tr.Status != agenttools.ToolStatusSuccess {
+		t.Fatalf("dispatched = %v, status = %v; want the write to run after a whole read", dispatched, tr.Status)
 	}
 }
