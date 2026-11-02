@@ -53,9 +53,22 @@ func (w *Worker) buildBatchRequest(
 		Provider:    profile.Provider,
 		Model:       profile.Model,
 		MaxTokens:   profile.MaxTokens,
+		Attrs:       gateway.AttrsForTask(batchRequiresWorkspaceChange(tasks)),
 	}
 	req = w.ApplyTuning(req, tasks[0], profile, 0)
 	return req
+}
+
+// batchRequiresWorkspaceChange: a batch routes as a workspace change if any of
+// its tasks needs one. shortcut: a mixed batch routes up for every task, batch
+// only tasks with equal attributes if a rule must be exact.
+func batchRequiresWorkspaceChange(tasks []models.Task) bool {
+	for _, t := range tasks {
+		if t.RequiresWorkspaceChange {
+			return true
+		}
+	}
+	return false
 }
 
 func countBatchSlots(userContent string) int {
