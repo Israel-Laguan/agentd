@@ -13,8 +13,10 @@ import (
 // the egress jail with the workspace bound, stdin and stdout left unset for the
 // ACP driver's pipes. It lives until ctx ends. It needs Egress, so an agent
 // never runs on the host, whose network and loopback B-086 closed: with no
-// egress, or no usable jail, it returns ErrSandboxUnavailable.
-func (e *BashExecutor) AgentCommand(ctx context.Context, workspacePath string, argv []string) (*exec.Cmd, error) {
+// egress, or no usable jail, it returns ErrSandboxUnavailable. A readOnly
+// workspace is bound read-only, which confines the agent's own tools in a
+// read-only stage; the process then serves only read-only sessions.
+func (e *BashExecutor) AgentCommand(ctx context.Context, workspacePath string, argv []string, readOnly bool) (*exec.Cmd, error) {
 	if e.Egress == nil {
 		return nil, fmt.Errorf("%w: an agent runs only in the egress jail, and none is configured", models.ErrSandboxUnavailable)
 	}
@@ -30,7 +32,7 @@ func (e *BashExecutor) AgentCommand(ctx context.Context, workspacePath string, a
 		quoted[i] = "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
 	}
 	// shortcut: no ulimit wrapper (withResourceLimits); agents need Node's memory. Add limits per preset if one runs away.
-	cmd, _, err := e.startCommand(ctx, workspace, Payload{WorkspacePath: workspacePath}, strings.Join(quoted, " "))
+	cmd, _, err := e.startCommand(ctx, workspace, Payload{WorkspacePath: workspacePath, ReadOnlyWorkspace: readOnly}, strings.Join(quoted, " "))
 	if err != nil {
 		return nil, err
 	}
