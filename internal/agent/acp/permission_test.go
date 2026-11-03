@@ -120,12 +120,12 @@ func TestRefusalNeverPicksRejectAlways(t *testing.T) {
 // the tool's other verbs alone.
 func TestPackageInstallSkipsOptionsBeforeTheVerb(t *testing.T) {
 	t.Parallel()
-	for _, command := range []string{"npm --silent install left-pad", "npm --prefix /tmp install left-pad", "apt-get -y install curl", "pip --quiet install requests"} {
+	for _, command := range []string{"npm --silent install left-pad", "npm --prefix /tmp install left-pad", "apt-get -y install curl", "pip --quiet install requests", "python3 -m pip install requests"} {
 		if !packageInstall.MatchString(command) {
 			t.Errorf("%q: not seen as a package install", command)
 		}
 	}
-	for _, command := range []string{"go -C sub test ./...", "npm run build", "go vet ./...", "npm --version"} {
+	for _, command := range []string{"go -C sub test ./...", "npm run build", "go vet ./...", "npm --version", "python -m pip list"} {
 		if packageInstall.MatchString(command) {
 			t.Errorf("%q: seen as a package install", command)
 		}

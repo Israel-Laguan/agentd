@@ -60,7 +60,7 @@ var toolForKind = map[acpsdk.ToolKind]string{
 // too; that errs on the closed side.
 var packageInstall = regexp.MustCompile(`(?i)\b(?:npx|pnpx|bunx|uvx|pipx)\b` +
 	`|\b(?:npm|pnpm|yarn|bun)` + options + `\s+(?:i|install|add|ci|dlx|exec|x)\b` +
-	`|\b(?:pip3?|uv\s+pip|poetry|gem)` + options + `\s+(?:install|add)\b|\bpython3?\s+-m\s+pip\b|\buv` + options + `\s+(?:add|tool)\b` +
+	`|\b(?:pip3?|uv\s+pip|python3?\s+-m\s+pip|poetry|gem)` + options + `\s+(?:install|add)\b|\buv` + options + `\s+(?:add|tool)\b` +
 	`|\bgo` + options + `\s+(?:install|get)\b|\bcargo` + options + `\s+(?:install|add)\b` +
 	`|\b(?:apt|apt-get|dnf|yum|apk|brew|pacman|zypper)` + options + `\s+(?:install|add|-S)\b`)
 
