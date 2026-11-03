@@ -29,12 +29,23 @@ type Server struct {
 	mcpServer *mcp.Server
 	store     models.KanbanStore
 	board     models.KanbanBoardContract
+	// project scopes the board reads to one project; empty on the
+	// daemon-wide server, which sees the whole board.
+	project string
 }
 
 // New creates a new MCP board-export server backed by the given store.
 // The store must also implement KanbanBoardContract for list/filter operations.
 func New(store models.KanbanStore) *Server {
-	s := &Server{store: store}
+	s := newServer(store, "")
+	s.registerReadTools()
+	s.registerWriteTools()
+	return s
+}
+
+// newServer returns a server with no tools, its board reads scoped to project.
+func newServer(store models.KanbanStore, project string) *Server {
+	s := &Server{store: store, project: project}
 	if bc, ok := store.(models.KanbanBoardContract); ok {
 		s.board = bc
 	}
@@ -45,8 +56,6 @@ func New(store models.KanbanStore) *Server {
 		},
 		nil,
 	)
-	s.registerReadTools()
-	s.registerWriteTools()
 	return s
 }
 
