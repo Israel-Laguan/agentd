@@ -4,6 +4,23 @@
 # Format: <path> <FuncName> or <path> (Type).MethodName
 #
 internal/sandbox/platform_windows.go configureProcess
+internal/agent/acp/client.go (*client).ReadTextFile
+internal/agent/acp/client.go (*client).WriteTextFile
+internal/agent/acp/client.go (*client).CreateTerminal
+internal/agent/acp/client.go (*client).KillTerminal
+internal/agent/acp/client.go (*client).TerminalOutput
+internal/agent/acp/client.go (*client).ReleaseTerminal
+internal/agent/acp/client.go (*client).WaitForTerminalExit
+internal/agent/acp/driver.go NewDriver
+internal/agent/acp/fakeagent/fakeagent.go (*agent).Initialize
+internal/agent/acp/fakeagent/fakeagent.go (*agent).say
+internal/agent/acp/fakeagent/fakeagent.go (*agent).Cancel
+internal/agent/acp/fakeagent/fakeagent.go (*agent).Logout
+internal/agent/acp/fakeagent/fakeagent.go (*agent).CloseSession
+internal/agent/acp/fakeagent/fakeagent.go (*agent).ListSessions
+internal/agent/acp/fakeagent/fakeagent.go (*agent).ResumeSession
+internal/agent/acp/fakeagent/fakeagent.go (*agent).SetSessionConfigOption
+internal/agent/acp/fakeagent/fakeagent.go (*agent).SetSessionMode
 internal/agent/filecontext/file_converter.go NewFileConverter
 internal/agent/runtime/audit.go NewAuditLogger
 internal/agent/runtime/audit.go (*AuditLogger).Enabled
@@ -159,6 +176,8 @@ test/e2e/project.go (*statusError).Error
 tools/checkminfunc/baseline.go violationKey
 cmd/agentd/io.go writeLine
 cmd/agentd/io.go writeFormat
+internal/agent/acp/driver.go (*process).kill
+internal/agent/acp/fakeagent/fakeagent.go (*agent).NewSession
 internal/agent/runtime/audit_schema.go HashArgs
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).withMaxDelegationDepth
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithExternalTools
