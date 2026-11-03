@@ -19,6 +19,10 @@ type client struct {
 
 var _ acpsdk.Client = (*client)(nil)
 
+// maxText caps the streamed message a call keeps: the SDK bounds one line,
+// not a turn, and agentd reads a call's outcome elsewhere (report_outcome).
+const maxText = 1 << 20
+
 // session is one Call's state. ctx is the call's, cancelled to stop the turn.
 type session struct {
 	ctx    context.Context
@@ -82,7 +86,9 @@ func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) 
 	}
 	if chunk := n.Update.AgentMessageChunk; chunk != nil && chunk.Content.Text != nil {
 		s.mu.Lock()
-		s.text.WriteString(chunk.Content.Text.Text)
+		text := chunk.Content.Text.Text
+		text = text[:min(len(text), maxText-s.text.Len())]
+		s.text.WriteString(text)
 		s.mu.Unlock()
 	}
 	if s.req.OnUpdate != nil {
@@ -107,6 +113,9 @@ func (c *client) RequestPermission(_ context.Context, p acpsdk.RequestPermission
 			"suspend", v.Suspend, "reason", v.Reason)
 		s.mu.Lock()
 		s.refused = v.Reason
+		if s.refused == "" {
+			s.refused = "a permission check refused a call"
+		}
 		s.mu.Unlock()
 	}
 	if v.Suspend {

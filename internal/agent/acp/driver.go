@@ -38,20 +38,23 @@ var ErrPermissionRefused = errors.New("acp: turn ended on a refused permission")
 // and cline's empty balance as "Insufficient balance" (docs/acp-agents.md).
 var quotaError = regexp.MustCompile(`(?i)\b429\b|rate[ _-]?limit|too many requests|quota|insufficient (?:balance|credits)`)
 
-// Config is how to start one agent.
+// Config is how to start one agent for one workspace.
 type Config struct {
-	// Command returns the agent process, not started, living as long as ctx.
-	// In agentd it is sandbox.BashExecutor.AgentCommand, so the agent runs in
-	// the egress jail, which binds the workspace every Request.Cwd names.
-	Command func(ctx context.Context) (*exec.Cmd, error)
+	// Cwd is the workspace: the process starts for it and every session opens
+	// in it. A warm process is jailed to the workspace it started for, so a
+	// Driver never serves another.
+	Cwd string
+	// Command returns the agent process for cwd, not started, living as long
+	// as ctx. In agentd it is sandbox.BashExecutor.AgentCommand, so the agent
+	// runs in the egress jail with cwd bound.
+	Command func(ctx context.Context, cwd string) (*exec.Cmd, error)
 	// AuthMethod, when set, is the method id sent to authenticate after
 	// initialize. opencode and cline sign in outside ACP and leave it empty.
 	AuthMethod string
 }
 
-// Request is one call: a new session in Cwd and one prompt turn.
+// Request is one call: a new session in the driver's Cwd and one prompt turn.
 type Request struct {
-	Cwd string
 	// Prompt is plain text: cline accepts no resource blocks.
 	Prompt string
 	// MCPServers go to session/new.
@@ -95,7 +98,7 @@ func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
 	if servers == nil {
 		servers = []acpsdk.McpServer{}
 	}
-	created, err := p.conn.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: req.Cwd, McpServers: servers})
+	created, err := p.conn.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: d.cfg.Cwd, McpServers: servers})
 	if err != nil {
 		return Result{}, p.fail(ctx, "session/new", err)
 	}
@@ -143,7 +146,7 @@ func (d *Driver) process(ctx context.Context) (*process, error) {
 		d.proc.kill()
 		d.proc = nil
 	}
-	p, err := start(d.cfg.Command)
+	p, err := start(d.cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -164,12 +167,12 @@ type process struct {
 	waitErr error
 }
 
-func start(command func(context.Context) (*exec.Cmd, error)) (*process, error) {
-	if command == nil {
+func start(cfg Config) (*process, error) {
+	if cfg.Command == nil {
 		return nil, errors.New("acp: no agent command configured")
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	p, err := spawn(ctx, command)
+	p, err := spawn(ctx, cfg)
 	if err != nil {
 		stop()
 		return nil, err
@@ -178,8 +181,8 @@ func start(command func(context.Context) (*exec.Cmd, error)) (*process, error) {
 	return p, nil
 }
 
-func spawn(ctx context.Context, command func(context.Context) (*exec.Cmd, error)) (*process, error) {
-	cmd, err := command(ctx)
+func spawn(ctx context.Context, cfg Config) (*process, error) {
+	cmd, err := cfg.Command(ctx, cfg.Cwd)
 	if err != nil {
 		return nil, fmt.Errorf("acp: agent command: %w", err)
 	}

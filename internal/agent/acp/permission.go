@@ -18,7 +18,9 @@ type Permission struct {
 	Kind string
 	// Tool is agentd's tool for the kind (agent/tools names): bash, read or write.
 	Tool string
-	// Args is the agent's raw input, as JSON.
+	// Args is the call's input as JSON: for bash, the builtin bash tool's
+	// {"command": ...}, so hooks that read a bash command read this one;
+	// otherwise the agent's raw input.
 	Args string
 	// Command is what a bash call runs, as read from the raw input.
 	Command string
@@ -50,12 +52,20 @@ var toolForKind = map[acpsdk.ToolKind]string{
 }
 
 // packageInstall matches a command that fetches a package to install or run:
-// npx-style runners, and the install verbs of the usual package managers.
+// npx-style runners, and the install verbs of the usual package managers,
+// after any options (`npm --prefix x install`). It is a tripwire for an agent
+// that installs in the open, as cline did (SP-022), not a shell parser: a
+// quoted or built-up command passes it, and finds no registry on the egress
+// allowlist. Text that only names an install (`echo 'npm install'`) is refused
+// too; that errs on the closed side.
 var packageInstall = regexp.MustCompile(`(?i)\b(?:npx|pnpx|bunx|uvx|pipx)\b` +
-	`|\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|add|ci|dlx|exec|x)\b` +
-	`|\b(?:pip3?|uv\s+pip|poetry|gem)\s+(?:install|add)\b|\bpython3?\s+-m\s+pip\b|\buv\s+(?:add|tool)\b` +
-	`|\bgo\s+(?:install|get)\b|\bcargo\s+(?:install|add)\b` +
-	`|\b(?:apt|apt-get|dnf|yum|apk|brew|pacman|zypper)\s+(?:install|add|-S)\b`)
+	`|\b(?:npm|pnpm|yarn|bun)` + options + `\s+(?:i|install|add|ci|dlx|exec|x)\b` +
+	`|\b(?:pip3?|uv\s+pip|poetry|gem)` + options + `\s+(?:install|add)\b|\bpython3?\s+-m\s+pip\b|\buv` + options + `\s+(?:add|tool)\b` +
+	`|\bgo` + options + `\s+(?:install|get)\b|\bcargo` + options + `\s+(?:install|add)\b` +
+	`|\b(?:apt|apt-get|dnf|yum|apk|brew|pacman|zypper)` + options + `\s+(?:install|add|-S)\b`)
+
+// options skips a tool's options, each with an optional value, before its verb.
+const options = `(?:\s+[-+]\S*(?:\s+[^-\s]\S*)?)*`
 
 func newPermission(call acpsdk.ToolCallUpdate) Permission {
 	p := Permission{ToolCallID: string(call.ToolCallId)}
@@ -71,6 +81,8 @@ func newPermission(call acpsdk.ToolCallUpdate) Permission {
 	}
 	if p.Tool == "bash" {
 		p.Command = commandOf(call.RawInput)
+		args, _ := json.Marshal(map[string]string{"command": p.Command})
+		p.Args = string(args)
 	}
 	return p
 }
@@ -132,19 +144,18 @@ func decide(ctx context.Context, permit Permitter, p Permission) Verdict {
 	return v
 }
 
-// outcome selects allow_once for an allowed call, never allow_always, which
-// would let the agent skip every later check; otherwise a reject option. With
-// no option of those kinds the request is cancelled, which also refuses it.
+// outcome selects allow_once for an allowed call and reject_once for a refused
+// one, never an always option: allow_always would let the agent skip every
+// later check, and reject_always refuse a later call the hooks would allow.
+// With no such option the request is cancelled, which also refuses it.
 func outcome(options []acpsdk.PermissionOption, allow bool) acpsdk.RequestPermissionOutcome {
-	kinds := []acpsdk.PermissionOptionKind{acpsdk.PermissionOptionKindRejectOnce, acpsdk.PermissionOptionKindRejectAlways}
+	kind := acpsdk.PermissionOptionKindRejectOnce
 	if allow {
-		kinds = []acpsdk.PermissionOptionKind{acpsdk.PermissionOptionKindAllowOnce}
+		kind = acpsdk.PermissionOptionKindAllowOnce
 	}
-	for _, kind := range kinds {
-		for _, option := range options {
-			if option.Kind == kind {
-				return acpsdk.RequestPermissionOutcome{Selected: &acpsdk.RequestPermissionOutcomeSelected{OptionId: option.OptionId}}
-			}
+	for _, option := range options {
+		if option.Kind == kind {
+			return acpsdk.RequestPermissionOutcome{Selected: &acpsdk.RequestPermissionOutcomeSelected{OptionId: option.OptionId}}
 		}
 	}
 	return acpsdk.RequestPermissionOutcome{Cancelled: &acpsdk.RequestPermissionOutcomeCancelled{}}

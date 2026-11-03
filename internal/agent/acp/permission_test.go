@@ -56,6 +56,17 @@ func TestPermissionApprovedByTheHooksAllowsOnce(t *testing.T) {
 	}
 }
 
+// The hooks read a bash call's command from {"command": ...}, the builtin bash
+// tool's input, so a cline string or list reaches them in that shape.
+func TestBashArgsTakeTheBuiltinShape(t *testing.T) {
+	t.Parallel()
+	hooks := &recorder{verdict: Verdict{Allow: true}}
+	_, err := call(t, fakeDriver(t, Config{}), Request{Permit: hooks.permit}, askStep(acpsdk.ToolKindExecute, []any{"go vet ./...", "go test ./..."}))
+	if seen := hooks.calls(); err != nil || len(seen) != 1 || seen[0].Args != `{"command":"go vet ./...\ngo test ./..."}` {
+		t.Fatalf("err = %v, hooks saw %+v; want Args as {\"command\": ...}", err, seen)
+	}
+}
+
 func TestPermissionDeniedByTheHooksRejects(t *testing.T) {
 	t.Parallel()
 	hooks := &recorder{verdict: Verdict{Reason: "tool \"write\" is not in this profile's allowed_tools"}}
@@ -81,9 +92,43 @@ func TestTurnEndedAfterARefusalFails(t *testing.T) {
 	if !errors.Is(err, ErrPermissionRefused) || !strings.Contains(err.Error(), "allowed_tools") || r.StopReason != acpsdk.StopReasonCancelled {
 		t.Fatalf("err = %v, stop = %q; want ErrPermissionRefused naming the hook's reason, and the stop reason kept", err, r.StopReason)
 	}
+	silent := &recorder{verdict: Verdict{}}
+	_, err = call(t, d, Request{Permit: silent.permit}, askStep(acpsdk.ToolKindExecute, goTest), fakeagent.Step{Stop: acpsdk.StopReasonCancelled})
+	if !errors.Is(err, ErrPermissionRefused) {
+		t.Fatalf("refusal with no reason: err = %v; want ErrPermissionRefused", err)
+	}
 	_, err = call(t, d, Request{}, fakeagent.Step{Stop: acpsdk.StopReasonCancelled})
 	if err == nil || errors.Is(err, ErrPermissionRefused) {
 		t.Fatalf("agent cancelled with no refusal: err = %v; want a plain failure", err)
+	}
+}
+
+// reject_always could let the agent refuse a later call itself, one the hooks
+// would allow, so a refusal without reject_once cancels the request.
+func TestRefusalNeverPicksRejectAlways(t *testing.T) {
+	t.Parallel()
+	options := []acpsdk.PermissionOption{
+		{OptionId: "always", Kind: acpsdk.PermissionOptionKindAllowAlways},
+		{OptionId: "never", Kind: acpsdk.PermissionOptionKindRejectAlways},
+	}
+	if got := outcome(options, false); got.Cancelled == nil {
+		t.Fatalf("outcome = %+v; want the request cancelled", got)
+	}
+}
+
+// The tripwire looks for an install verb after the tool's options, and leaves
+// the tool's other verbs alone.
+func TestPackageInstallSkipsOptionsBeforeTheVerb(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{"npm --silent install left-pad", "npm --prefix /tmp install left-pad", "apt-get -y install curl", "pip --quiet install requests"} {
+		if !packageInstall.MatchString(command) {
+			t.Errorf("%q: not seen as a package install", command)
+		}
+	}
+	for _, command := range []string{"go -C sub test ./...", "npm run build", "go vet ./...", "npm --version"} {
+		if packageInstall.MatchString(command) {
+			t.Errorf("%q: seen as a package install", command)
+		}
 	}
 }
 
@@ -144,7 +189,9 @@ func TestSuspendingVerdictStopsTheCall(t *testing.T) {
 
 func TestPermitterErrorRejects(t *testing.T) {
 	t.Parallel()
-	failing := func(context.Context, Permission) (Verdict, error) { return Verdict{Allow: true}, errors.New("store down") }
+	failing := func(context.Context, Permission) (Verdict, error) {
+		return Verdict{Allow: true}, errors.New("store down")
+	}
 	r, err := call(t, fakeDriver(t, Config{}), Request{Permit: failing}, askStep(acpsdk.ToolKindExecute, goTest))
 	if err != nil || r.Text != "permission: reject_once" {
 		t.Fatalf("err = %v, text = %q; want a failed check to reject", err, r.Text)

@@ -48,7 +48,7 @@ type Step struct {
 	Stop acp.StopReason `json:"stop,omitempty"`
 	// Error fails the prompt with this message.
 	Error string `json:"error,omitempty"`
-	// Exit ends the process with this code, mid-prompt.
+	// Exit, when not zero, ends the process with this code, mid-prompt.
 	Exit int `json:"exit,omitempty"`
 }
 
@@ -87,12 +87,14 @@ type agent struct {
 	protocol int
 	sessions atomic.Int64
 	cancels  atomic.Int64
+	calls    atomic.Int64
 }
 
 var _ acp.Agent = (*agent)(nil)
 
 func (a *agent) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {
-	return acp.InitializeResponse{ProtocolVersion: acp.ProtocolVersion(a.protocol), AuthMethods: []acp.AuthMethod{}}, nil
+	methods := []acp.AuthMethod{{Agent: &acp.AuthMethodAgent{Id: AuthMethod, Name: "Token"}}}
+	return acp.InitializeResponse{ProtocolVersion: acp.ProtocolVersion(a.protocol), AuthMethods: methods}, nil
 }
 
 func (a *agent) Authenticate(_ context.Context, p acp.AuthenticateRequest) (acp.AuthenticateResponse, error) {
@@ -111,7 +113,7 @@ func (a *agent) NewSession(context.Context, acp.NewSessionRequest) (acp.NewSessi
 
 func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResponse, error) {
 	var steps []Step
-	if len(p.Prompt) != 1 || p.Prompt[0].Text == nil || json.Unmarshal([]byte(p.Prompt[0].Text.Text), &steps) != nil {
+	if len(p.Prompt) != 1 || p.Prompt[0].Text == nil || json.Unmarshal([]byte(p.Prompt[0].Text.Text), &steps) != nil || steps == nil {
 		steps = []Step{{Message: "ok"}}
 	}
 	for _, step := range steps {
@@ -152,7 +154,7 @@ func (a *agent) say(ctx context.Context, session acp.SessionId, text string) err
 func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) error {
 	resp, err := a.conn.RequestPermission(ctx, acp.RequestPermissionRequest{
 		SessionId: session,
-		ToolCall:  acp.ToolCallUpdate{ToolCallId: "call-1", Kind: acp.Ptr(p.Kind), Title: acp.Ptr(p.Title), RawInput: p.RawInput},
+		ToolCall:  acp.ToolCallUpdate{ToolCallId: acp.ToolCallId(fmt.Sprintf("call-%d", a.calls.Add(1))), Kind: acp.Ptr(p.Kind), Title: acp.Ptr(p.Title), RawInput: p.RawInput},
 		Options: []acp.PermissionOption{
 			{OptionId: "allow_always", Name: "Allow always", Kind: acp.PermissionOptionKindAllowAlways},
 			{OptionId: "allow_once", Name: "Allow once", Kind: acp.PermissionOptionKindAllowOnce},

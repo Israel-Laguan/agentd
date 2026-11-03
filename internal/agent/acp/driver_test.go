@@ -29,8 +29,11 @@ func TestMain(m *testing.M) {
 
 func fakeDriver(t *testing.T, cfg Config, args ...string) *Driver {
 	t.Helper()
-	cfg.Command = func(ctx context.Context) (*exec.Cmd, error) {
+	cfg.Command = func(ctx context.Context, _ string) (*exec.Cmd, error) {
 		return exec.CommandContext(ctx, os.Args[0], append([]string{fakeagent.Arg}, args...)...), nil
+	}
+	if cfg.Cwd == "" {
+		cfg.Cwd = t.TempDir()
 	}
 	d := NewDriver(cfg)
 	t.Cleanup(func() { _ = d.Close() })
@@ -41,11 +44,34 @@ func call(t *testing.T, d *Driver, req Request, steps ...fakeagent.Step) (Result
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if req.Cwd == "" {
-		req.Cwd = t.TempDir()
-	}
 	req.Prompt = fakeagent.Script(steps...)
 	return d.Call(ctx, req)
+}
+
+// The process starts for the driver's workspace, the one every session opens
+// in, so the jail binds the workspace the agent works in.
+func TestTheAgentStartsForTheDriversWorkspace(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var started string
+	d := NewDriver(Config{Cwd: dir, Command: func(ctx context.Context, cwd string) (*exec.Cmd, error) {
+		started = cwd
+		return exec.CommandContext(ctx, os.Args[0], fakeagent.Arg), nil
+	}})
+	t.Cleanup(func() { _ = d.Close() })
+	if _, err := call(t, d, Request{}); err != nil || started != dir {
+		t.Fatalf("err = %v, started for %q; want %q", err, started, dir)
+	}
+}
+
+// An agent that streams without end cannot grow the call's text past maxText.
+func TestStreamedTextIsCapped(t *testing.T) {
+	t.Parallel()
+	chunk := strings.Repeat("a", maxText/2+1)
+	r, err := call(t, fakeDriver(t, Config{}), Request{}, fakeagent.Step{Message: chunk}, fakeagent.Step{Message: chunk})
+	if err != nil || len(r.Text) != maxText {
+		t.Fatalf("err = %v, text is %d bytes; want %d", err, len(r.Text), maxText)
+	}
 }
 
 // pid is the agent process a fake session ran in ("sess-<pid>-<n>").
@@ -124,7 +150,7 @@ func TestCancelMidPromptReachesTheAgentAndKeepsTheProcess(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// Cancel once the agent is working, so the cancel lands mid-prompt.
-	req := Request{Cwd: t.TempDir(), OnUpdate: func(u acpsdk.SessionUpdate) {
+	req := Request{OnUpdate: func(u acpsdk.SessionUpdate) {
 		if u.AgentMessageChunk != nil {
 			cancel()
 		}
