@@ -125,11 +125,14 @@ func commandOf(raw any) string {
 // Permitter: an unknown kind, or a bash call whose command it cannot read,
 // would run under a name no hook gates. Package installs are refused outright,
 // since an approve-all client ran `npx -y <unknown package>` (docs/acp-agents.md).
-// With no Permitter every call is refused.
-func decide(ctx context.Context, permit Permitter, p Permission) Verdict {
+// A read-only session refuses every write. With no Permitter every call is
+// refused.
+func decide(ctx context.Context, permit Permitter, p Permission, readOnly bool) Verdict {
 	switch {
 	case p.Tool == "":
 		return Verdict{Reason: fmt.Sprintf("tool kind %q is not one agentd can check", p.Kind)}
+	case readOnly && p.Tool == "write":
+		return Verdict{Reason: "the session is read-only"}
 	case p.Tool == "bash" && p.Command == "":
 		return Verdict{Reason: "the command is unknown"}
 	case p.Tool == "bash" && packageInstall.MatchString(p.Command):
