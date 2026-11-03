@@ -3,6 +3,7 @@ module agentd
 go 1.26.2
 
 require (
+	github.com/coder/acp-go-sdk v0.13.5
 	github.com/cucumber/godog v0.15.1
 	github.com/gofrs/flock v0.13.0
 	github.com/google/uuid v1.6.0

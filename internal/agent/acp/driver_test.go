@@ -1,0 +1,175 @@
+package acp
+
+import (
+	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"strings"
+	"testing"
+	"time"
+
+	"agentd/internal/agent/acp/fakeagent"
+	"agentd/internal/models"
+
+	acpsdk "github.com/coder/acp-go-sdk"
+)
+
+// TestMain doubles as the fake agent: `<test binary> fake-acp-agent ...`
+// serves it on stdio, so the driver spawns a real process.
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == fakeagent.Arg {
+		if err := fakeagent.Serve(os.Args[2:], os.Stdin, os.Stdout); err != nil {
+			os.Exit(2)
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+func fakeDriver(t *testing.T, cfg Config, args ...string) *Driver {
+	t.Helper()
+	cfg.Command = func(ctx context.Context) (*exec.Cmd, error) {
+		return exec.CommandContext(ctx, os.Args[0], append([]string{fakeagent.Arg}, args...)...), nil
+	}
+	d := NewDriver(cfg)
+	t.Cleanup(func() { _ = d.Close() })
+	return d
+}
+
+func call(t *testing.T, d *Driver, req Request, steps ...fakeagent.Step) (Result, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if req.Cwd == "" {
+		req.Cwd = t.TempDir()
+	}
+	req.Prompt = fakeagent.Script(steps...)
+	return d.Call(ctx, req)
+}
+
+// pid is the agent process a fake session ran in ("sess-<pid>-<n>").
+func pid(t *testing.T, r Result) string {
+	t.Helper()
+	parts := strings.Split(r.SessionID, "-")
+	if len(parts) != 3 {
+		t.Fatalf("session id %q is not the fake's", r.SessionID)
+	}
+	return parts[1]
+}
+
+func TestCallEndsWithTheFinalMessage(t *testing.T) {
+	t.Parallel()
+	d := fakeDriver(t, Config{})
+	r, err := call(t, d, Request{}, fakeagent.Step{Message: "hello "}, fakeagent.Step{Message: "world"})
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if r.Text != "hello world" || r.StopReason != acpsdk.StopReasonEndTurn {
+		t.Fatalf("text = %q, stop = %q; want the streamed message and end_turn", r.Text, r.StopReason)
+	}
+}
+
+func TestWarmProcessServesOneSessionPerCall(t *testing.T) {
+	t.Parallel()
+	d := fakeDriver(t, Config{})
+	first, err := call(t, d, Request{}, fakeagent.Step{Message: "one"})
+	if err != nil {
+		t.Fatalf("first Call: %v", err)
+	}
+	second, err := call(t, d, Request{}, fakeagent.Step{Message: "two"})
+	if err != nil {
+		t.Fatalf("second Call: %v", err)
+	}
+	if first.SessionID == second.SessionID || pid(t, first) != pid(t, second) {
+		t.Fatalf("sessions %q and %q; want two sessions in one process", first.SessionID, second.SessionID)
+	}
+}
+
+func TestAgentDeathFailsTheCallAndTheNextCallStartsANewProcess(t *testing.T) {
+	t.Parallel()
+	d := fakeDriver(t, Config{})
+	before, err := call(t, d, Request{}, fakeagent.Step{Message: "up"})
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	_, err = call(t, d, Request{}, fakeagent.Step{Exit: 3})
+	if err == nil || !strings.Contains(err.Error(), "agent process exited") {
+		t.Fatalf("Call on a dying agent: err = %v; want the exit named", err)
+	}
+	after, err := call(t, d, Request{}, fakeagent.Step{Message: "back"})
+	if err != nil {
+		t.Fatalf("Call after the death: %v", err)
+	}
+	if after.Text != "back" || pid(t, after) == pid(t, before) {
+		t.Fatalf("after the death: text = %q, session %q (before %q); want a new process", after.Text, after.SessionID, before.SessionID)
+	}
+}
+
+func TestProtocolVersionMismatchFailsAtInitialize(t *testing.T) {
+	t.Parallel()
+	d := fakeDriver(t, Config{}, "-protocol", "2")
+	_, err := call(t, d, Request{}, fakeagent.Step{Message: "never"})
+	if !errors.Is(err, ErrProtocolVersion) {
+		t.Fatalf("err = %v; want ErrProtocolVersion", err)
+	}
+	if !strings.Contains(err.Error(), "initialize") || !strings.Contains(err.Error(), "version 2") || !strings.Contains(err.Error(), "pins 1") {
+		t.Fatalf("err = %q; want initialize, the agent's version and the pinned one named", err)
+	}
+}
+
+func TestCancelMidPromptReachesTheAgentAndKeepsTheProcess(t *testing.T) {
+	t.Parallel()
+	d := fakeDriver(t, Config{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Cancel once the agent is working, so the cancel lands mid-prompt.
+	req := Request{Cwd: t.TempDir(), OnUpdate: func(u acpsdk.SessionUpdate) {
+		if u.AgentMessageChunk != nil {
+			cancel()
+		}
+	}}
+	req.Prompt = fakeagent.Script(fakeagent.Step{Message: "working"}, fakeagent.Step{WaitCancel: true})
+	before, err := d.Call(ctx, req)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Call: err = %v; want context.Canceled", err)
+	}
+	var after Result
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if after, err = call(t, d, Request{}, fakeagent.Step{Cancels: true}); err != nil || after.Text == "cancels: 1" {
+			break
+		}
+	}
+	if err != nil || after.Text != "cancels: 1" || pid(t, after) != pid(t, before) {
+		t.Fatalf("after cancel: err = %v, text = %q, session %q (before %q); want the agent to have seen one cancel in the same process",
+			err, after.Text, after.SessionID, before.SessionID)
+	}
+}
+
+// An agent's quota or rate-limit failure is the gateway's: errors.Is
+// ErrLLMQuotaExceeded sends it down the breaker and defer path.
+func TestQuotaErrorsMapToTheBreakerPath(t *testing.T) {
+	t.Parallel()
+	d := fakeDriver(t, Config{})
+	for _, msg := range []string{"429 Too Many Requests", "Rate limit reached for model", "Insufficient balance"} {
+		_, err := call(t, d, Request{}, fakeagent.Step{Error: msg})
+		if !errors.Is(err, models.ErrLLMQuotaExceeded) {
+			t.Errorf("agent error %q: err = %v; want ErrLLMQuotaExceeded", msg, err)
+		}
+	}
+	_, err := call(t, d, Request{}, fakeagent.Step{Error: "tool crashed"})
+	if err == nil || errors.Is(err, models.ErrLLMQuotaExceeded) {
+		t.Fatalf("other agent error: err = %v; want a plain failure", err)
+	}
+}
+
+func TestAuthenticateUsesTheConfiguredMethod(t *testing.T) {
+	t.Parallel()
+	if _, err := call(t, fakeDriver(t, Config{AuthMethod: fakeagent.AuthMethod}), Request{}, fakeagent.Step{Message: "in"}); err != nil {
+		t.Fatalf("known method: %v", err)
+	}
+	_, err := call(t, fakeDriver(t, Config{AuthMethod: "browser"}), Request{}, fakeagent.Step{Message: "in"})
+	if err == nil || !strings.Contains(err.Error(), "authenticate") {
+		t.Fatalf("unknown method: err = %v; want authenticate to fail the call", err)
+	}
+}
