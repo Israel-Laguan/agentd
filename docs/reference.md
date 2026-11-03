@@ -215,7 +215,7 @@ task["id"], task["project_id"], task["state"]
 | `sandbox.limits.address_space_bytes` | `2147483648` | Requested virtual memory cap applied via Unix `ulimit -Sv` guard. |
 | `sandbox.limits.cpu_seconds` | `600` | Requested CPU-time cap applied via Unix `ulimit -t` guard. |
 | `sandbox.limits.open_files` | `1024` | Requested open-file-descriptor cap applied via Unix `ulimit -n` guard. |
-| `sandbox.limits.processes` | `256` | Requested process-count cap applied via Unix `ulimit -u` guard. |
+| `sandbox.limits.processes` | `256` | Requested process-count cap applied via Unix `ulimit -u` guard. The `sandbox.limits` caps apply to bash commands, not to an external ACP agent's process, which runs in the jail with no ulimit (`AgentCommand`). |
 | `heartbeat.stale_after` | `2m` | Maximum age of a running task heartbeat before reset. |
 | `librarian.retention_hours` | `24` | Age threshold before completed task logs are eligible for curation. |
 | `librarian.archive_grace_days` | `30` | Days to retain archives after memory ingestion. |
