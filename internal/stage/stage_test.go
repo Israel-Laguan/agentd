@@ -78,7 +78,7 @@ func TestWorkspaceAccessZeroValueIsNone(t *testing.T) {
 
 func TestContractSchemaHintComesFromTarget(t *testing.T) {
 	t.Parallel()
-	if got, want := NewContract[fakeTarget]().hint, (fakeTarget{}).SchemaHint(); got != want {
+	if got, want := NewContract[fakeTarget]().Hint, (fakeTarget{}).SchemaHint(); got != want {
 		t.Fatalf("hint = %q, want %q", got, want)
 	}
 }

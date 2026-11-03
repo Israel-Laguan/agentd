@@ -205,3 +205,51 @@ func TestAuthenticateUsesTheConfiguredMethod(t *testing.T) {
 		t.Fatalf("unknown method: err = %v; want authenticate to fail the call", err)
 	}
 }
+
+// A read-only session refuses every write before the hooks, which would allow
+// it; a command still reaches them, and the read-only jail confines it.
+func TestReadOnlySessionRefusesWrites(t *testing.T) {
+	t.Parallel()
+	var asked []string
+	permit := func(_ context.Context, p Permission) (Verdict, error) {
+		asked = append(asked, p.Tool)
+		return Verdict{Allow: true}, nil
+	}
+	r, err := call(t, fakeDriver(t, Config{}), Request{ReadOnly: true, Permit: permit},
+		fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindEdit, RawInput: map[string]any{"path": "a.go"}}},
+		fakeagent.Step{Message: " "},
+		fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindExecute, RawInput: map[string]any{"command": "ls"}}})
+	if err != nil || r.Text != "permission: reject_once permission: allow_once" || strings.Join(asked, ",") != "bash" {
+		t.Fatalf("err = %v, text = %q, hooks asked for %v; want the edit refused before the hooks and ls allowed", err, r.Text, asked)
+	}
+}
+
+// Evidence counts the tool calls that completed and changed the workspace or
+// ran a command, the B-082 gate's passed commands and written files.
+func TestCompletedWorkIsEvidence(t *testing.T) {
+	t.Parallel()
+	r, err := call(t, fakeDriver(t, Config{}), Request{},
+		fakeagent.Step{Did: acpsdk.ToolKindEdit}, fakeagent.Step{Did: acpsdk.ToolKindExecute},
+		fakeagent.Step{Did: acpsdk.ToolKindRead}, fakeagent.Step{Did: acpsdk.ToolKindSearch})
+	if err != nil || r.Evidence != 2 {
+		t.Fatalf("err = %v, evidence = %d; want the edit and the command", err, r.Evidence)
+	}
+}
+
+// Followup prompts again in the same session until it has nothing to say.
+func TestFollowupPromptsAgainInTheSameSession(t *testing.T) {
+	t.Parallel()
+	prompts := 0
+	followup := func() string {
+		prompts++
+		if prompts > 1 {
+			return ""
+		}
+		return "repair"
+	}
+	r, err := call(t, fakeDriver(t, Config{}), Request{Followup: followup},
+		fakeagent.Step{Message: "one "}, fakeagent.Step{Next: []fakeagent.Step{{Message: "two"}}})
+	if err != nil || r.Text != "one two" || prompts != 2 {
+		t.Fatalf("err = %v, text = %q, followup called %d times; want two turns of one session", err, r.Text, prompts)
+	}
+}

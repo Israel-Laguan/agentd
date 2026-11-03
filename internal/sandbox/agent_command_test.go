@@ -19,7 +19,7 @@ func TestAgentCommandPipesStdioThroughTheJail(t *testing.T) {
 	exec, workspace := testExecutor(t, nil)
 	home := t.TempDir()
 	exec.Egress = &Egress{Home: home}
-	cmd, err := exec.AgentCommand(context.Background(), workspace, []string{"bash", "-c", `read -r line; echo "$line in $HOME at $PWD"`})
+	cmd, err := exec.AgentCommand(context.Background(), workspace, []string{"bash", "-c", `read -r line; echo "$line in $HOME at $PWD"`}, false)
 	if err != nil {
 		t.Fatalf("AgentCommand: %v", err)
 	}
@@ -36,6 +36,23 @@ func TestAgentCommandPipesStdioThroughTheJail(t *testing.T) {
 	}
 }
 
+// A read-only stage's agent cannot write the workspace with its own tools.
+func TestAgentCommandBindsAReadOnlyWorkspace(t *testing.T) {
+	requireJail(t)
+	exec, workspace := testExecutor(t, nil)
+	exec.Egress = &Egress{Home: t.TempDir()}
+	cmd, err := exec.AgentCommand(context.Background(), workspace, []string{"bash", "-c", "touch written"}, true)
+	if err != nil {
+		t.Fatalf("AgentCommand: %v", err)
+	}
+	if err := cmd.Run(); err == nil {
+		t.Fatal("the agent wrote in a read-only workspace")
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "written")); !os.IsNotExist(err) {
+		t.Fatalf("stat written: %v; want no file", err)
+	}
+}
+
 // The agent never runs on the host: B-086 closed the host network and
 // loopback, so with no usable jail, or no egress, the command is refused.
 func TestAgentCommandIsRefusedOutsideTheJail(t *testing.T) {
@@ -43,11 +60,11 @@ func TestAgentCommandIsRefusedOutsideTheJail(t *testing.T) {
 	exec, workspace := testExecutor(t, nil)
 	exec.Backend = BackendFilterOnly
 	exec.Egress = &Egress{}
-	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}); !errors.Is(err, models.ErrSandboxUnavailable) {
+	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}, false); !errors.Is(err, models.ErrSandboxUnavailable) {
 		t.Fatalf("filter-only: err = %v; want ErrSandboxUnavailable", err)
 	}
 	exec.Backend, exec.Egress = BackendBubblewrap, nil
-	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}); !errors.Is(err, models.ErrSandboxUnavailable) {
+	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}, false); !errors.Is(err, models.ErrSandboxUnavailable) {
 		t.Fatalf("no egress: err = %v; want ErrSandboxUnavailable", err)
 	}
 }
@@ -61,7 +78,7 @@ func TestAgentCommandRefusesAnEscapingSymlink(t *testing.T) {
 	if err := os.Symlink(t.TempDir(), filepath.Join(workspace, "outside")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}); !errors.Is(err, models.ErrSandboxViolation) {
+	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}, false); !errors.Is(err, models.ErrSandboxViolation) {
 		t.Fatalf("err = %v; want ErrSandboxViolation", err)
 	}
 }
