@@ -43,6 +43,9 @@ type Step struct {
 	WaitCancel bool `json:"wait_cancel,omitempty"`
 	// Cancels streams "cancels: N", the prompts this process saw cancelled.
 	Cancels bool `json:"cancels,omitempty"`
+	// Stop ends the turn with this stop reason, the way opencode ends one
+	// cancelled after a rejected permission.
+	Stop acp.StopReason `json:"stop,omitempty"`
 	// Error fails the prompt with this message.
 	Error string `json:"error,omitempty"`
 	// Exit ends the process with this code, mid-prompt.
@@ -124,6 +127,8 @@ func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.
 	switch {
 	case step.Exit != 0:
 		os.Exit(step.Exit)
+	case step.Stop != "":
+		return step.Stop, nil
 	case step.Error != "":
 		return "", errors.New(step.Error)
 	case step.WaitCancel:

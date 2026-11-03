@@ -3,6 +3,7 @@ package acp
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -67,6 +68,30 @@ func TestPermissionDeniedByTheHooksRejects(t *testing.T) {
 	}
 	if seen := hooks.calls(); len(seen) != 1 || seen[0].Tool != "write" {
 		t.Fatalf("hooks saw %+v; want one write call", seen)
+	}
+}
+
+// opencode answers a rejected permission by ending the turn cancelled, with no
+// error (live, v2.2.5). That turn did not do its work, so the call fails.
+func TestTurnEndedAfterARefusalFails(t *testing.T) {
+	t.Parallel()
+	d := fakeDriver(t, Config{})
+	hooks := &recorder{verdict: Verdict{Reason: "tool \"bash\" is not in this profile's allowed_tools"}}
+	r, err := call(t, d, Request{Permit: hooks.permit}, askStep(acpsdk.ToolKindExecute, goTest), fakeagent.Step{Stop: acpsdk.StopReasonCancelled})
+	if !errors.Is(err, ErrPermissionRefused) || !strings.Contains(err.Error(), "allowed_tools") || r.StopReason != acpsdk.StopReasonCancelled {
+		t.Fatalf("err = %v, stop = %q; want ErrPermissionRefused naming the hook's reason, and the stop reason kept", err, r.StopReason)
+	}
+	_, err = call(t, d, Request{}, fakeagent.Step{Stop: acpsdk.StopReasonCancelled})
+	if err == nil || errors.Is(err, ErrPermissionRefused) {
+		t.Fatalf("agent cancelled with no refusal: err = %v; want a plain failure", err)
+	}
+}
+
+// opencode's bash reads cmd when command is missing.
+func TestCmdIsTheCommandWhenCommandIsMissing(t *testing.T) {
+	t.Parallel()
+	if got := commandOf(map[string]any{"cmd": "go test ./..."}); got != "go test ./..." {
+		t.Fatalf("commandOf = %q; want the cmd value", got)
 	}
 }
 
