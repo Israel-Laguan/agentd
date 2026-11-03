@@ -133,6 +133,17 @@ Errors hit while measuring them, with the fix for each:
 - **Test servers must not use a port that a running agentd uses.** The dev daemon on 8765 once answered a probe's MCP calls and explored the real board.
 - **A permission client that approves everything will approve `npx -y <unknown package>`.** Deny package installs and unknown commands.
 
+## The driver
+
+Now in agentd (S19 PR 05), as `internal/agent/acp`, on `github.com/coder/acp-go-sdk` v0.13.5. Nothing routes a stage to it yet (PR 07).
+
+- **Process:** `Config.Command` builds the agent process; in agentd that is `sandbox.BashExecutor.AgentCommand`, which runs it in the egress jail and refuses it without one. The driver runs `initialize` pinned to protocol version 1 and fails on any other answer, then `authenticate` when the preset names a method.
+- **Sessions:** one `session/new` per call, on a process kept warm between calls. A call cancelled mid-prompt sends `session/cancel` and keeps the process. A call on a process that died fails, and the next call starts a new one.
+- **Client capabilities:** none. `fs/*` and `terminal/*` answer "method not found".
+- **Permissions:** an ACP tool kind maps onto agentd's tool (`execute` is `bash`, `read` and `search` are `read`, `edit`, `delete` and `move` are `write`), and the task's hooks answer it: the AllowedTools veto, then the approval gate, whose HUMAN subtask stops the call (`worker.ACPPermitter`). Before any hook, the driver refuses package installs (`npx`, `npm install`, `pip install`, `go get` and the like), a command it cannot read from the raw input, and any other kind, which includes cline's MCP tools (kind `other`). An allowed call gets `allow_once`, never `allow_always`, which would let the agent skip later checks.
+- **Errors:** an agent error whose text names a 429, a rate limit, a quota or an insufficient balance wraps `ErrLLMQuotaExceeded`, so it takes the gateway's breaker and defer path.
+- **Tests** run a fake agent built on the SDK's agent side (`internal/agent/acp/fakeagent`), scripted through its prompt. No test starts opencode or cline.
+
 ## Inside the jail (SP-025)
 
 Measured 2026-10-21 with a throwaway client and launcher (scratch scripts, not in the repo). The agent process ran under bubblewrap with the same mount profile as `jailArgv()` (read-only `/usr /lib /lib64 /bin /sbin /sys` and the `/etc` files, tmpfs `/tmp`, `--clearenv`, workspace bound writable) plus the Go toolchain through `sandbox.toolchain_paths`. Same models as above (Nemotron 3 Ultra, free), same word-counter project and the same three execution prompts. **3 runs per cell is a smoke result, not a rate** (SP-026 does n ≥ 10). Workspaces were checked by hand on the host: `go test`, `go vet`, and a behavior test of my own (`CountLines` on `""`, `"one"`, `"one\n"`, `"a\nb"`, `"a\nb\n"`, `"\n"`, `"\n\n"`; `CountChars` on ASCII; the built CLI's `-l`, `-c` and default output). Podman (jail B) was **not run**: bubblewrap reached both models, so the fallback was not needed.
