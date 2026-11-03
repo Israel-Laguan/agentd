@@ -22,6 +22,9 @@ func (e *BashExecutor) AgentCommand(ctx context.Context, workspacePath string, a
 	if err != nil {
 		return nil, err
 	}
+	if err := refuseEscapingSymlinks(workspace); err != nil {
+		return nil, err
+	}
 	quoted := make([]string, len(argv))
 	for i, arg := range argv {
 		quoted[i] = "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"

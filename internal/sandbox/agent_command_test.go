@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,6 +26,9 @@ func TestAgentCommandPipesStdioThroughTheJail(t *testing.T) {
 	if filepath.Base(cmd.Path) != "bwrap" {
 		t.Fatalf("agent runs %q; want it under bwrap", cmd.Path)
 	}
+	if cmd.Stdin != nil {
+		t.Fatal("cmd.Stdin is set; the ACP driver's StdinPipe needs it nil")
+	}
 	cmd.Stdin = strings.NewReader("ping\n")
 	out, err := cmd.Output()
 	if want := "ping in " + home + " at " + workspace; err != nil || strings.TrimSpace(string(out)) != want {
@@ -45,5 +49,19 @@ func TestAgentCommandIsRefusedOutsideTheJail(t *testing.T) {
 	exec.Backend, exec.Egress = BackendBubblewrap, nil
 	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}); !errors.Is(err, models.ErrSandboxUnavailable) {
 		t.Fatalf("no egress: err = %v; want ErrSandboxUnavailable", err)
+	}
+}
+
+// A workspace symlink that points outside it is refused before the agent
+// starts, as it is before a bash command runs (B-042).
+func TestAgentCommandRefusesAnEscapingSymlink(t *testing.T) {
+	t.Parallel()
+	exec, workspace := testExecutor(t, nil)
+	exec.Egress = &Egress{}
+	if err := os.Symlink(t.TempDir(), filepath.Join(workspace, "outside")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}); !errors.Is(err, models.ErrSandboxViolation) {
+		t.Fatalf("err = %v; want ErrSandboxViolation", err)
 	}
 }
