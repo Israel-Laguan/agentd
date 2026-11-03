@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/models"
@@ -71,6 +72,11 @@ func TestStreamedTextIsCapped(t *testing.T) {
 	r, err := call(t, fakeDriver(t, Config{}), Request{}, fakeagent.Step{Message: chunk}, fakeagent.Step{Message: chunk})
 	if err != nil || len(r.Text) != maxText {
 		t.Fatalf("err = %v, text is %d bytes; want %d", err, len(r.Text), maxText)
+	}
+	// The cap falls inside a two-byte rune, which is dropped, not cut.
+	r, err = call(t, fakeDriver(t, Config{}), Request{}, fakeagent.Step{Message: "a" + strings.Repeat("é", maxText/2)})
+	if err != nil || !utf8.ValidString(r.Text) || len(r.Text) != maxText-1 {
+		t.Fatalf("err = %v, text is %d bytes, valid UTF-8 %v; want %d valid bytes", err, len(r.Text), utf8.ValidString(r.Text), maxText-1)
 	}
 }
 

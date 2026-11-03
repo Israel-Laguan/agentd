@@ -87,7 +87,8 @@ func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) 
 	if chunk := n.Update.AgentMessageChunk; chunk != nil && chunk.Content.Text != nil {
 		s.mu.Lock()
 		text := chunk.Content.Text.Text
-		text = text[:min(len(text), maxText-s.text.Len())]
+		// The JSON-decoded chunk is valid UTF-8, so this drops only a rune the cap cut.
+		text = strings.ToValidUTF8(text[:min(len(text), maxText-s.text.Len())], "")
 		s.text.WriteString(text)
 		s.mu.Unlock()
 	}
