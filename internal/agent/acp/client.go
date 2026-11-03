@@ -28,6 +28,8 @@ type session struct {
 	mu      sync.Mutex
 	text    strings.Builder
 	suspend string
+	// refused is the reason of the last permission agentd refused.
+	refused string
 }
 
 func (c *client) open(ctx context.Context, id acpsdk.SessionId, req Request) *session {
@@ -67,6 +69,12 @@ func (s *session) suspended() string {
 	return s.suspend
 }
 
+func (s *session) refusal() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.refused
+}
+
 func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) error {
 	s := c.session(n.SessionId)
 	if s == nil {
@@ -97,6 +105,9 @@ func (c *client) RequestPermission(_ context.Context, p acpsdk.RequestPermission
 		// No command: it may carry a secret, and this log line is not scrubbed.
 		slog.Info("acp: permission refused", "session", p.SessionId, "kind", perm.Kind, "tool", perm.Tool,
 			"suspend", v.Suspend, "reason", v.Reason)
+		s.mu.Lock()
+		s.refused = v.Reason
+		s.mu.Unlock()
 	}
 	if v.Suspend {
 		s.mu.Lock()

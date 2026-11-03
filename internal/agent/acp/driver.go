@@ -28,6 +28,11 @@ var ErrProtocolVersion = errors.New("acp: protocol version mismatch")
 // human: the call stopped, and a later call asks again once the human decided.
 var ErrSuspended = errors.New("acp: call suspended for human approval")
 
+// ErrPermissionRefused is returned when the agent ended its turn cancelled
+// after agentd refused one of its permissions, as opencode does: the turn
+// stopped short of its work, though the agent reported no error.
+var ErrPermissionRefused = errors.New("acp: turn ended on a refused permission")
+
 // quotaError matches the agent errors that mean its provider refused for quota
 // or rate. An agent reports a provider's 429 only as text in a JSON-RPC error,
 // and cline's empty balance as "Insufficient balance" (docs/acp-agents.md).
@@ -104,6 +109,13 @@ func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
 	}
 	if err != nil {
 		return result, p.fail(ctx, "session/prompt", err)
+	}
+	// agentd's own cancel returned ctx's error above, so the agent stopped itself.
+	if turn.StopReason == acpsdk.StopReasonCancelled {
+		if reason := s.refusal(); reason != "" {
+			return result, fmt.Errorf("%w: %s", ErrPermissionRefused, reason)
+		}
+		return result, errors.New("acp: the agent cancelled its turn")
 	}
 	return result, nil
 }

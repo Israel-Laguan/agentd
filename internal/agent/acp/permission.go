@@ -77,7 +77,8 @@ func newPermission(call acpsdk.ToolCallUpdate) Permission {
 
 // commandOf reads the command from an execute call's raw input, in the shapes
 // cline's run_commands takes: a string, a list, or an object with command or
-// commands, where an item is a string or {executable, args}.
+// commands, where an item is a string or {executable, args}. opencode sends
+// command, and its bash falls back to cmd.
 func commandOf(raw any) string {
 	switch v := raw.(type) {
 	case string:
@@ -99,10 +100,11 @@ func commandOf(raw any) string {
 			}
 			return strings.TrimSpace(strings.Join(words, " "))
 		}
-		if command, ok := v["command"]; ok {
-			return commandOf(command)
+		for _, key := range []string{"command", "cmd", "commands"} {
+			if command, ok := v[key]; ok {
+				return commandOf(command)
+			}
 		}
-		return commandOf(v["commands"])
 	}
 	return ""
 }
