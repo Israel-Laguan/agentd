@@ -49,7 +49,7 @@ The client advertised `fs.readTextFile`, `fs.writeTextFile` and `terminal`, appr
 ## What this means for agentd
 
 - **Neither agent sends file or shell I/O through agentd.** Both read, write and run commands themselves even when the client offers `fs` and `terminal`. agentd cannot deduplicate their file reads or jail their commands through ACP. A jail has to wrap the whole agent process (bubblewrap or podman, with network access to the model); SP-025 below tested it. Tool counts and repeated reads for these agents can only come from their `tool_call` updates.
-- **Only cline can be gated.** Cline asks permission before editing, so agentd's hooks and human approval can sit on that request. opencode, with its default settings, never asks.
+- **Only cline can be gated.** Cline asks permission before editing, so agentd's hooks and human approval can sit on that request. opencode, with its default settings, never asks. Out of date for opencode 2.2.5, which asks when its config says so: see [opencode 2.2.5 over the driver](#opencode-225-over-the-driver).
 - **opencode met the outcome contract with nothing extra.** It called `report_outcome` every time, from the server passed in `session/new`.
 - **cline meets it only through its own config and a prompt that names the tool** (details in the next section).
 - **Usage is self-reported or missing.** opencode reports its own token counts; cline reports none. Neither can be compared exactly with what agentd measures at its gateway ([`ai-usage-report.md`](ai-usage-report.md)), and a cline run would need another usage source.
@@ -141,8 +141,16 @@ Now in agentd (S19 PR 05), as `internal/agent/acp`, on `github.com/coder/acp-go-
 - **Sessions:** one `session/new` per call, on a process kept warm between calls. A call cancelled mid-prompt sends `session/cancel` and keeps the process. A call on a process that died fails, and the next call starts a new one.
 - **Client capabilities:** none. `fs/*` and `terminal/*` answer "method not found".
 - **Permissions:** an ACP tool kind maps onto agentd's tool (`execute` is `bash`, `read` and `search` are `read`, `edit`, `delete` and `move` are `write`), and the task's hooks answer it: the AllowedTools veto, then the approval gate, whose HUMAN subtask stops the call (`worker.ACPPermitter`). Before any hook, the driver refuses package installs (`npx`, `npm install`, `pip install`, `go get` and the like), a command it cannot read from the raw input, and any other kind, which includes cline's MCP tools (kind `other`). An allowed call gets `allow_once`, never `allow_always`, which would let the agent skip later checks.
-- **Errors:** an agent error whose text names a 429, a rate limit, a quota or an insufficient balance wraps `ErrLLMQuotaExceeded`, so it takes the gateway's breaker and defer path.
+- **Errors:** an agent error whose text names a 429, a rate limit, a quota or an insufficient balance wraps `ErrLLMQuotaExceeded`, so it takes the gateway's breaker and defer path. A turn the agent ends `cancelled` on its own fails too: with `ErrPermissionRefused` and the hook's reason when agentd refused a permission in it (opencode ends a turn that way after a reject), otherwise with a plain error.
 - **Tests** run a fake agent built on the SDK's agent side (`internal/agent/acp/fakeagent`), scripted through its prompt. No test starts opencode or cline.
+
+### opencode 2.2.5 over the driver
+
+Measured 2026-11-03 with a throwaway live test (`-tags live`, not in the repo): opencode 2.2.5 on the host, not in the jail, driven by `acp.Driver` with a recording permitter. One trivial task per run, 3 runs per cell, 24 calls, all on `opencode/deepseek-v4.1-flash-free`. A smoke result.
+
+- **Config:** `OPENCODE_CONFIG_CONTENT` sets the model (`{"model": "..."}`) and the permission rules, so no `session/set_config_option` call is needed. An unknown model id is not refused: `session/new` silently picks another model, so a preset has to check `configOptions.model.currentValue`. The 1.19.0 free id above (`opencode/nemotron-3-ultra-free`) is gone.
+- **Permissions:** with the default config, no requests (as with 1.19.0). With `{"permission": {"bash": "ask", "edit": "ask"}}` every shell call asks as kind `execute` (raw input `command`, `cwd`) and every write as `edit` (`path`, `content`). Reads don't ask. `{"*": "ask"}` also asks for reads (kind `read`). The options are `once`, `always` and `reject`. `once` asks again on the next call. A reject fails the tool call, and the turn ends `cancelled` with no error. `npx` was refused before the hooks in 3 of 3 runs.
+- **Advertised:** protocol version 1, MCP over http only (no sse), session modes `build` and `plan` as a config option, usage in every prompt result. Auth is `opencode-login`, outside ACP.
 
 ## Inside the jail (SP-025)
 
