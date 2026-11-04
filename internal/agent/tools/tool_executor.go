@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/sandbox"
 
 	wfilecontext "agentd/internal/agent/filecontext"
@@ -55,6 +56,9 @@ type ToolExecutor struct {
 	// evidence guard reads it (see sandbox.Payload.Intent), and it carries
 	// through to subagents like readOnlyWorkspace.
 	intent string
+	// attrs are the task's routing attributes, which the subagents it
+	// delegates to carry on their turns.
+	attrs spec.TaskAttrs
 	// taskID and projectID tag shell commands, so the sandbox's LOG_CHUNK
 	// events are stored under the task they ran for (set by ForTask).
 	taskID, projectID string
@@ -116,6 +120,23 @@ func (t *ToolExecutor) WithIntent(intent string) *ToolExecutor {
 	}
 	t.intent = intent
 	return t
+}
+
+// WithAttrs sets the task's routing attributes.
+func (t *ToolExecutor) WithAttrs(attrs spec.TaskAttrs) *ToolExecutor {
+	if t == nil {
+		return t
+	}
+	t.attrs = attrs
+	return t
+}
+
+// Attrs returns the attributes set by WithAttrs.
+func (t *ToolExecutor) Attrs() spec.TaskAttrs {
+	if t == nil {
+		return spec.TaskAttrs{}
+	}
+	return t.attrs
 }
 
 // Intent returns the task text set by WithIntent.
