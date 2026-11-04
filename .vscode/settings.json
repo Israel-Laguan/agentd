@@ -1,6 +1,30 @@
 {
   "files.watcherExclude": {
-    "**/target": true
+    "**/target": true,
+    "**/.gocache": true,
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.kilo": true,
+    "**/bin": true,
+    "**/.pytest_cache": true,
+    "**/__pycache__": true,
+    "**/.agentd": true,
+    "**/devenv/**/.pytest_cache": true,
+    "**/.claude/worktrees": true
+  },
+  "search.exclude": {
+    "**/.git": true,
+    "**/.gocache": true,
+    "**/node_modules": true,
+    "**/.next": true,
+    "**/.kilo": true,
+    "**/bin": true,
+    "**/.pytest_cache": true,
+    "**/__pycache__": true
+  },
+  "files.exclude": {
+    "**/.gocache": true,
+    "**/bin/agentd": true
   },
   "problemMatchers": {
     "$golangci-lint": {
