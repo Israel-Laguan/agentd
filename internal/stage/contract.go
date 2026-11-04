@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/spec"
@@ -13,19 +14,16 @@ import (
 // correction.GenerateJSONWithUsage mechanism, so decoding, Validate() and the
 // corrective retries are the ones every JSON call already uses.
 type Contract struct {
-	hint   string
+	// Hint is T's SchemaHint, or empty.
+	Hint   string
 	decode func(context.Context, spec.AIGateway, spec.AIRequest) (json.RawMessage, int, spec.UsageDetails, error)
+	check  func(json.RawMessage) (json.RawMessage, error)
 }
 
 // NewContract builds the Contract for T. T needs Validate() and may provide
 // SchemaHint(), which corrective retries repeat back to the model.
 func NewContract[T any]() Contract {
-	var zero T
-	c := Contract{}
-	if h, ok := any(&zero).(interface{ SchemaHint() string }); ok {
-		c.hint = h.SchemaHint()
-	}
-	_ = zero
+	c := Contract{Hint: schemaHint[T]()}
 	c.decode = func(ctx context.Context, gw spec.AIGateway, req spec.AIRequest) (json.RawMessage, int, spec.UsageDetails, error) {
 		v, tokens, details, err := correction.GenerateJSONWithUsage[marked[T]](ctx, gw, req)
 		if err != nil {
@@ -37,7 +35,47 @@ func NewContract[T any]() Contract {
 		raw, err := json.Marshal(v.value)
 		return raw, tokens, details, err
 	}
+	c.check = func(raw json.RawMessage) (json.RawMessage, error) {
+		var v marked[T]
+		if err := json.Unmarshal(raw, &v); err != nil {
+			return nil, err
+		}
+		if v.needsHuman {
+			return nil, fmt.Errorf("stage: needs_human is not a valid completed result")
+		}
+		if err := v.Validate(); err != nil {
+			return nil, err
+		}
+		return json.Marshal(v.value)
+	}
 	return c
+}
+
+// schemaHint resolves T's SchemaHint, including when T is a pointer type: a
+// nil pointer cannot be called safely, so a non-nil value of the element type
+// stands in for it.
+func schemaHint[T any]() string {
+	var zero T
+	value := any(zero)
+	if v := reflect.ValueOf(value); v.IsValid() && v.Kind() == reflect.Pointer && v.IsNil() {
+		value = reflect.New(v.Type().Elem()).Interface()
+	}
+	if h, ok := value.(interface{ SchemaHint() string }); ok {
+		return h.SchemaHint()
+	}
+	if h, ok := any(&zero).(interface{ SchemaHint() string }); ok {
+		return h.SchemaHint()
+	}
+	return ""
+}
+
+// Check decodes raw as T and runs T's validation, the check Decode makes of a
+// model's reply, for a result an agent hands over itself (report_outcome).
+func (c Contract) Check(raw json.RawMessage) (json.RawMessage, error) {
+	if c.check == nil {
+		return nil, fmt.Errorf("stage: contract is zero value")
+	}
+	return c.check(raw)
 }
 
 // marked decodes T and also reads the needs_human marker, which T does not
@@ -80,12 +118,9 @@ func (m *marked[T]) Validate() error {
 // SchemaHint repeats T's hint, so corrective retries still show the model the
 // shape it must return.
 func (marked[T]) SchemaHint() string {
-	var zero T
-	if h, ok := any(zero).(interface{ SchemaHint() string }); ok {
-		return h.SchemaHint()
-	}
-	if h, ok := any(&zero).(interface{ SchemaHint() string }); ok {
-		return h.SchemaHint()
+	hint := schemaHint[T]()
+	if hint != "" {
+		return hint
 	}
 	return ""
 }

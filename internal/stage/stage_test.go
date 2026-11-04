@@ -22,6 +22,12 @@ func (t *fakeTarget) Validate() error {
 	return nil
 }
 
+type pointerTarget struct {
+	Name string `json:"name"`
+}
+
+func (p *pointerTarget) SchemaHint() string { _ = p.Name; return `{"name": string}` }
+
 // scriptedGateway answers Generate from replies in order; other AIGateway
 // methods are never called on this path, so the embedded nil interface is safe.
 type scriptedGateway struct {
@@ -78,8 +84,11 @@ func TestWorkspaceAccessZeroValueIsNone(t *testing.T) {
 
 func TestContractSchemaHintComesFromTarget(t *testing.T) {
 	t.Parallel()
-	if got, want := NewContract[fakeTarget]().hint, (fakeTarget{}).SchemaHint(); got != want {
+	if got, want := NewContract[fakeTarget]().Hint, (fakeTarget{}).SchemaHint(); got != want {
 		t.Fatalf("hint = %q, want %q", got, want)
+	}
+	if got, want := NewContract[*pointerTarget]().Hint, (&pointerTarget{}).SchemaHint(); got != want {
+		t.Fatalf("pointer target hint = %q, want %q", got, want)
 	}
 }
 

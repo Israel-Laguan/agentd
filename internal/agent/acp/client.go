@@ -1,6 +1,7 @@
 package acp
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"strings"
@@ -25,6 +26,7 @@ const maxText = 1 << 20
 
 // session is one Call's state. ctx is the call's, cancelled to stop the turn.
 type session struct {
+	id     acpsdk.SessionId
 	ctx    context.Context
 	cancel context.CancelFunc
 	req    Request
@@ -34,10 +36,28 @@ type session struct {
 	suspend string
 	// refused is the reason of the last permission agentd refused.
 	refused string
+	// calls are the tool calls, by their latest kind and status: ACP lets a
+	// later update replace either, so evidence uses both as last reported.
+	calls map[acpsdk.ToolCallId]toolCall
+}
+
+type toolCall struct {
+	kind   acpsdk.ToolKind
+	status acpsdk.ToolCallStatus
+}
+
+// evidenceKinds are the tool kinds whose completed call is evidence of work:
+// a write, or a command, the builtin gate's file written and command passed.
+// shortcut: a completed command is not known to have passed (ACP reports no exit code); diff the workspace (PR 08's seed check) if an agent misreports.
+var evidenceKinds = map[acpsdk.ToolKind]bool{
+	acpsdk.ToolKindExecute: true,
+	acpsdk.ToolKindEdit:    true,
+	acpsdk.ToolKindDelete:  true,
+	acpsdk.ToolKindMove:    true,
 }
 
 func (c *client) open(ctx context.Context, id acpsdk.SessionId, req Request) *session {
-	s := &session{req: req}
+	s := &session{id: id, req: req, calls: map[acpsdk.ToolCallId]toolCall{}}
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -79,6 +99,46 @@ func (s *session) refusal() string {
 	return s.refused
 }
 
+func (s *session) evidence() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for _, call := range s.calls {
+		if call.status == acpsdk.ToolCallStatusCompleted && evidenceKinds[call.kind] {
+			n++
+		}
+	}
+	return n
+}
+
+// noteToolCall records a tool call's latest kind and status. ACP lets either
+// change in a later update, so a call counts as evidence only when both its
+// latest values qualify.
+func (s *session) noteToolCall(id acpsdk.ToolCallId, kind *acpsdk.ToolKind, status *acpsdk.ToolCallStatus) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	call := s.calls[id]
+	if kind != nil && *kind != "" {
+		call.kind = *kind
+	}
+	if status != nil {
+		call.status = *status
+	}
+	s.calls[id] = call
+}
+
+// addUsage sums the turns' counts.
+func addUsage(total, turn *acpsdk.Usage) *acpsdk.Usage {
+	if total == nil || turn == nil {
+		return cmp.Or(turn, total)
+	}
+	sum := *total
+	sum.InputTokens += turn.InputTokens
+	sum.OutputTokens += turn.OutputTokens
+	sum.TotalTokens += turn.TotalTokens
+	return &sum
+}
+
 func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) error {
 	s := c.session(n.SessionId)
 	if s == nil {
@@ -91,6 +151,12 @@ func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) 
 		text = strings.ToValidUTF8(text[:min(len(text), maxText-s.text.Len())], "")
 		s.text.WriteString(text)
 		s.mu.Unlock()
+	}
+	if call := n.Update.ToolCall; call != nil {
+		s.noteToolCall(call.ToolCallId, &call.Kind, &call.Status)
+	}
+	if call := n.Update.ToolCallUpdate; call != nil {
+		s.noteToolCall(call.ToolCallId, call.Kind, call.Status)
 	}
 	if s.req.OnUpdate != nil {
 		s.req.OnUpdate(n.Update)
@@ -107,7 +173,7 @@ func (c *client) RequestPermission(_ context.Context, p acpsdk.RequestPermission
 		return acpsdk.RequestPermissionResponse{Outcome: acpsdk.RequestPermissionOutcome{Cancelled: &acpsdk.RequestPermissionOutcomeCancelled{}}}, nil
 	}
 	perm := newPermission(p.ToolCall)
-	v := decide(s.ctx, s.req.Permit, perm)
+	v := decide(s.ctx, s.req.Permit, perm, s.req.ReadOnly, s.req.NoWorkspace)
 	if !v.Allow || v.Suspend {
 		// No command: it may carry a secret, and this log line is not scrubbed.
 		slog.Info("acp: permission refused", "session", p.SessionId, "kind", perm.Kind, "tool", perm.Tool,

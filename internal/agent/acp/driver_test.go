@@ -205,3 +205,102 @@ func TestAuthenticateUsesTheConfiguredMethod(t *testing.T) {
 		t.Fatalf("unknown method: err = %v; want authenticate to fail the call", err)
 	}
 }
+
+// A read-only session refuses every write before the hooks, which would allow
+// it; a command still reaches them, and the read-only jail confines it.
+func TestReadOnlySessionRefusesWrites(t *testing.T) {
+	t.Parallel()
+	var asked []string
+	permit := func(_ context.Context, p Permission) (Verdict, error) {
+		asked = append(asked, p.Tool)
+		return Verdict{Allow: true}, nil
+	}
+	r, err := call(t, fakeDriver(t, Config{ReadOnly: true}), Request{ReadOnly: true, Permit: permit},
+		fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindEdit, RawInput: map[string]any{"path": "a.go"}}},
+		fakeagent.Step{Message: " "},
+		fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindExecute, RawInput: map[string]any{"command": "ls"}}})
+	if err != nil || r.Text != "permission: reject_once permission: allow_once" || strings.Join(asked, ",") != "bash" {
+		t.Fatalf("err = %v, text = %q, hooks asked for %v; want the edit refused before the hooks and ls allowed", err, r.Text, asked)
+	}
+}
+
+// A no-workspace session refuses every permission before the hooks, including
+// reads and commands, which a read-only session still allows.
+func TestNoWorkspaceSessionRefusesEveryPermission(t *testing.T) {
+	t.Parallel()
+	var asked []string
+	permit := func(_ context.Context, p Permission) (Verdict, error) {
+		asked = append(asked, p.Tool)
+		return Verdict{Allow: true}, nil
+	}
+	r, err := call(t, fakeDriver(t, Config{ReadOnly: true}), Request{ReadOnly: true, NoWorkspace: true, Permit: permit},
+		fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindRead, RawInput: map[string]any{"path": "a.go"}}},
+		fakeagent.Step{Message: " "},
+		fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindExecute, RawInput: map[string]any{"command": "ls"}}})
+	if err != nil || r.Text != "permission: reject_once permission: reject_once" || len(asked) != 0 {
+		t.Fatalf("err = %v, text = %q, hooks asked for %v; want every call refused before the hooks", err, r.Text, asked)
+	}
+}
+
+// The process mount is fixed at startup, so a call cannot switch access level.
+func TestCallRefusesAnAccessLevelTheProcessDidNotStartWith(t *testing.T) {
+	t.Parallel()
+	if _, err := call(t, fakeDriver(t, Config{}), Request{ReadOnly: true}); !errors.Is(err, ErrAccessMismatch) {
+		t.Fatalf("read-only call on a writable process: err = %v; want ErrAccessMismatch", err)
+	}
+	if _, err := call(t, fakeDriver(t, Config{ReadOnly: true}), Request{}); !errors.Is(err, ErrAccessMismatch) {
+		t.Fatalf("writable call on a read-only process: err = %v; want ErrAccessMismatch", err)
+	}
+}
+
+// ACP may change a call's kind after it started or completed, so evidence
+// counts the latest kind and status, not the first kind reported.
+func TestEvidenceUsesTheLatestToolKind(t *testing.T) {
+	t.Parallel()
+	s := &session{calls: map[acpsdk.ToolCallId]toolCall{}}
+	other := acpsdk.ToolKindOther
+	edit := acpsdk.ToolKindEdit
+	completed := acpsdk.ToolCallStatusCompleted
+	s.noteToolCall("call-1", &other, &completed)
+	if got := s.evidence(); got != 0 {
+		t.Fatalf("evidence = %d before the kind change; want 0", got)
+	}
+	s.noteToolCall("call-1", &edit, nil)
+	if got := s.evidence(); got != 1 {
+		t.Fatalf("evidence = %d after the kind changed to edit; want 1", got)
+	}
+	s.noteToolCall("call-1", nil, &completed)
+	if got := s.evidence(); got != 1 {
+		t.Fatalf("evidence = %d after a kind-less completed update; want 1", got)
+	}
+}
+
+// Evidence counts the tool calls that completed and changed the workspace or
+// ran a command, the B-082 gate's passed commands and written files.
+func TestCompletedWorkIsEvidence(t *testing.T) {
+	t.Parallel()
+	r, err := call(t, fakeDriver(t, Config{}), Request{},
+		fakeagent.Step{Did: acpsdk.ToolKindEdit}, fakeagent.Step{Did: acpsdk.ToolKindExecute},
+		fakeagent.Step{Did: acpsdk.ToolKindRead}, fakeagent.Step{Did: acpsdk.ToolKindSearch})
+	if err != nil || r.Evidence != 2 {
+		t.Fatalf("err = %v, evidence = %d; want the edit and the command", err, r.Evidence)
+	}
+}
+
+// Followup prompts again in the same session until it has nothing to say.
+func TestFollowupPromptsAgainInTheSameSession(t *testing.T) {
+	t.Parallel()
+	prompts := 0
+	followup := func() string {
+		prompts++
+		if prompts > 1 {
+			return ""
+		}
+		return "repair"
+	}
+	r, err := call(t, fakeDriver(t, Config{}), Request{Followup: followup},
+		fakeagent.Step{Message: "one "}, fakeagent.Step{Next: []fakeagent.Step{{Message: "two"}}})
+	if err != nil || r.Text != "one two" || prompts != 2 {
+		t.Fatalf("err = %v, text = %q, followup called %d times; want two turns of one session", err, r.Text, prompts)
+	}
+}

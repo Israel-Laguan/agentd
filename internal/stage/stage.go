@@ -98,6 +98,12 @@ var ErrNeedsHuman = errors.New("stage: needs a human decision")
 // the task as failed instead of blocked.
 var ErrHumanHandoffFailed = errors.New("stage: human handoff failed")
 
+// ErrUnverifiedCompletion is returned when an agent reported Completed on a
+// task that must change the workspace, with no evidence of work behind it:
+// UNVERIFIED_COMPLETION, the builtin's B-082 gate. The task goes to a human,
+// never to COMPLETED.
+var ErrUnverifiedCompletion = errors.New("stage: UNVERIFIED_COMPLETION: completed without a workspace change or a command")
+
 // Agent runs a stage. A ModelAgent is one gateway call; other kinds may use
 // tools and the workspace.
 type Agent interface {

@@ -36,6 +36,9 @@ func (s *Server) registerListTasks() {
 		// hard-coded a silent 100-task cap (B-005); routing both through
 		// ListTasks makes the two consistent and the cap explicit/pageable.
 		filter := models.TaskFilter{}
+		if s.project != "" {
+			in.ProjectID = s.project
+		}
 		if in.ProjectID != "" {
 			filter.ProjectID = &in.ProjectID
 		}
@@ -71,7 +74,7 @@ func (s *Server) registerGetTask() {
 	}
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "board.get_task", Description: "Get a single task with full details including recent events."}, func(ctx context.Context, _ *mcp.CallToolRequest, in input) (*mcp.CallToolResult, any, error) {
 		slog.DebugContext(ctx, "mcp: board.get_task", "task_id", in.TaskID)
-		task, err := s.store.GetTask(ctx, in.TaskID)
+		task, err := s.scopedTask(ctx, in.TaskID)
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -85,7 +88,7 @@ func (s *Server) registerGetTask() {
 func (s *Server) registerListProjects() {
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "board.list_projects", Description: "List all projects on the board."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 		slog.DebugContext(ctx, "mcp: board.list_projects")
-		projects, err := s.store.ListProjects(ctx)
+		projects, err := s.listProjects(ctx)
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -103,6 +106,9 @@ func (s *Server) registerGetProject() {
 	}
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "board.get_project", Description: "Get a single project with its details."}, func(ctx context.Context, _ *mcp.CallToolRequest, in input) (*mcp.CallToolResult, any, error) {
 		slog.DebugContext(ctx, "mcp: board.get_project", "project_id", in.ProjectID)
+		if s.project != "" && in.ProjectID != s.project {
+			return errorResult(fmt.Errorf("project %s not found", in.ProjectID)), nil, nil
+		}
 		project, err := s.store.GetProject(ctx, in.ProjectID)
 		if err != nil {
 			return errorResult(err), nil, nil
@@ -118,6 +124,9 @@ func (s *Server) registerListComments() {
 	}
 	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: "board.list_comments", Description: "List comments on a task."}, func(ctx context.Context, _ *mcp.CallToolRequest, in input) (*mcp.CallToolResult, any, error) {
 		slog.DebugContext(ctx, "mcp: board.list_comments", "task_id", in.TaskID)
+		if _, err := s.scopedTask(ctx, in.TaskID); err != nil {
+			return errorResult(err), nil, nil
+		}
 		comments, err := s.store.ListComments(ctx, in.TaskID)
 		if err != nil {
 			return errorResult(err), nil, nil
@@ -128,4 +137,28 @@ func (s *Server) registerListComments() {
 		}
 		return textResult(out), out, nil
 	})
+}
+
+// scopedTask reads a task, and reports one outside a session's project as not
+// found.
+func (s *Server) scopedTask(ctx context.Context, taskID string) (*models.Task, error) {
+	task, err := s.store.GetTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if s.project != "" && task.ProjectID != s.project {
+		return nil, fmt.Errorf("task %s not found", taskID)
+	}
+	return task, nil
+}
+
+func (s *Server) listProjects(ctx context.Context) ([]models.Project, error) {
+	if s.project == "" {
+		return s.store.ListProjects(ctx)
+	}
+	project, err := s.store.GetProject(ctx, s.project)
+	if err != nil {
+		return nil, err
+	}
+	return []models.Project{*project}, nil
 }

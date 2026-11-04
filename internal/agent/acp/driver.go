@@ -33,9 +33,10 @@ var ErrSuspended = errors.New("acp: call suspended for human approval")
 // stopped short of its work, though the agent reported no error.
 var ErrPermissionRefused = errors.New("acp: turn ended on a refused permission")
 
-// quotaError matches the agent errors that mean its provider refused for quota
-// or rate. An agent reports a provider's 429 only as text in a JSON-RPC error,
-// and cline's empty balance as "Insufficient balance" (docs/acp-agents.md).
+// ErrAccessMismatch names a call that asks for a different workspace access level than the process started with.
+var ErrAccessMismatch = errors.New("acp: driver workspace access does not match the request")
+
+// quotaError matches quota and rate errors the agent reports as text.
 var quotaError = regexp.MustCompile(`(?i)\b429\b|rate[ _-]?limit|too many requests|quota|insufficient (?:balance|credits)`)
 
 // Config is how to start one agent for one workspace.
@@ -44,6 +45,7 @@ type Config struct {
 	// in it. A warm process is jailed to the workspace it started for, so a
 	// Driver never serves another.
 	Cwd string
+	ReadOnly bool // the workspace access Command binds; the other level is refused.
 	// Command returns the agent process for cwd, not started, living as long
 	// as ctx. In agentd it is sandbox.BashExecutor.AgentCommand, so the agent
 	// runs in the egress jail with cwd bound.
@@ -53,7 +55,7 @@ type Config struct {
 	AuthMethod string
 }
 
-// Request is one call: a new session in the driver's Cwd and one prompt turn.
+// Request is one call: a new session and one or more prompt turns.
 type Request struct {
 	// Prompt is plain text: cline accepts no resource blocks.
 	Prompt string
@@ -63,15 +65,26 @@ type Request struct {
 	Permit Permitter
 	// OnUpdate, when set, sees every session/update of the turn in order.
 	OnUpdate func(acpsdk.SessionUpdate)
+	// ReadOnly refuses every write the agent asks permission for, before the
+	// Permitter. The agent's own writes are the jail's to confine.
+	ReadOnly bool
+	NoWorkspace bool // refuse all workspace permissions (AccessNone).
+	// Followup, when set, is asked after each turn that ended well: a prompt
+	// it returns is another turn in the session, "" ends the call. It must stop.
+	Followup func() string
 }
 
-// Result is how the turn ended. Text is the agent's streamed message. Usage
-// is the agent's own count, when it reports one (opencode does, cline not).
+// Result is how the call ended. Text is the agent's streamed message, over
+// every turn. Usage is the agent's own count, summed over the turns, when it
+// reports one (opencode does, cline not). Evidence counts the tool calls that
+// completed and changed the workspace or ran a command, as the agent reported
+// them.
 type Result struct {
 	SessionID  string
 	Text       string
 	StopReason acpsdk.StopReason
 	Usage      *acpsdk.Usage
+	Evidence   int
 }
 
 // Driver keeps one agent process warm and opens a session on it per Call.
@@ -90,6 +103,9 @@ func NewDriver(cfg Config) *Driver {
 // Call runs req in a new session. A ctx cancelled mid-prompt sends
 // session/cancel and returns ctx's error; the process stays warm.
 func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
+	if req.ReadOnly != d.cfg.ReadOnly {
+		return Result{}, fmt.Errorf("%w: driver=%t request=%t", ErrAccessMismatch, d.cfg.ReadOnly, req.ReadOnly)
+	}
 	p, err := d.process(ctx)
 	if err != nil {
 		return Result{}, err
@@ -105,22 +121,40 @@ func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
 	// shortcut: sessions are never closed (session/close is optional and cline lacks it); close them if a warm agent's memory grows.
 	s := p.client.open(ctx, created.SessionId, req)
 	defer p.client.close(created.SessionId)
-	turn, err := p.conn.Prompt(s.ctx, acpsdk.PromptRequest{SessionId: created.SessionId, Prompt: []acpsdk.ContentBlock{acpsdk.TextBlock(req.Prompt)}})
-	result := Result{SessionID: string(created.SessionId), Text: s.message(), StopReason: turn.StopReason, Usage: turn.Usage}
+	result := Result{SessionID: string(created.SessionId)}
+	for prompt := req.Prompt; ; {
+		err := p.turn(ctx, s, prompt, &result)
+		if err != nil || req.Followup == nil || result.StopReason != acpsdk.StopReasonEndTurn {
+			return result, err
+		}
+		if prompt = req.Followup(); prompt == "" {
+			return result, nil
+		}
+	}
+}
+
+// turn sends one prompt in s and adds how it ended to result.
+func (p *process) turn(ctx context.Context, s *session, prompt string, result *Result) error {
+	s.mu.Lock()
+	s.refused = ""
+	s.mu.Unlock()
+	turn, err := p.conn.Prompt(s.ctx, acpsdk.PromptRequest{SessionId: s.id, Prompt: []acpsdk.ContentBlock{acpsdk.TextBlock(prompt)}})
+	result.Text, result.Evidence, result.StopReason = s.message(), s.evidence(), turn.StopReason
+	result.Usage = addUsage(result.Usage, turn.Usage)
 	if reason := s.suspended(); reason != "" {
-		return result, fmt.Errorf("%w: %s", ErrSuspended, reason)
+		return fmt.Errorf("%w: %s", ErrSuspended, reason)
 	}
 	if err != nil {
-		return result, p.fail(ctx, "session/prompt", err)
+		return p.fail(ctx, "session/prompt", err)
 	}
 	// agentd's own cancel returned ctx's error above, so the agent stopped itself.
 	if turn.StopReason == acpsdk.StopReasonCancelled {
 		if reason := s.refusal(); reason != "" {
-			return result, fmt.Errorf("%w: %s", ErrPermissionRefused, reason)
+			return fmt.Errorf("%w: %s", ErrPermissionRefused, reason)
 		}
-		return result, errors.New("acp: the agent cancelled its turn")
+		return errors.New("acp: the agent cancelled its turn")
 	}
-	return result, nil
+	return nil
 }
 
 // Close stops the agent process.
