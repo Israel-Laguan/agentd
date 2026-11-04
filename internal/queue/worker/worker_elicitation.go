@@ -76,7 +76,7 @@ func (w *Worker) RunPreTaskElicitation(ctx context.Context, task models.Task, pr
 		return task, false, nil
 	}
 
-	elicitor := NewElicitorOn(w.taskCreationAgent()).WithHuman(w.AskHuman)
+	elicitor := NewElicitorOn(w.taskCreationAgent(task, project)).WithHuman(w.AskHuman)
 	analysis, err := elicitor.Analyze(ctx, task, project, w.buildElicitationFileContext(task, project))
 	if errors.Is(err, stage.ErrNeedsHuman) {
 		// The question is with a person and the task is blocked on it.

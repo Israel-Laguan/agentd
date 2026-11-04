@@ -7,6 +7,7 @@ import (
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
@@ -79,6 +80,12 @@ type WorkerOptions struct {
 	HealingDisabled  bool
 	MaxHealingTasks  int
 	Split            config.SplitConfig
+	// Routes is the agents: and stages: table. The worker resolves it where it
+	// picks a stage agent, so a route can name an acp agent.
+	Routes route.Table
+	// ACP runs the stages routed to acp agents. Nil until PR 08 wires the
+	// presets; until then no config can name one.
+	ACP *ACPRuntime
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
@@ -229,6 +236,7 @@ func NewWorker(
 	hooks := buildWorkerHooks(opts, toolExecutor, sink, scrubber, store)
 
 	w := newWorkerCore(store, gw, sb, breaker, sink, opts, scrubber, budgetTracker, toolExecutor, hooks)
+	w.routes, w.acp = opts.Routes, opts.ACP
 	w.topicGuard = agentruntime.NewTopicGuard(gw, opts.TopicGuard)
 	w.messageEditor = agentcontext.NewMessageEditor(w.checkpointStore, w.auditLogger, nil)
 	w.toolManifest = agenttools.NewToolManifest(opts.ToolManifest)

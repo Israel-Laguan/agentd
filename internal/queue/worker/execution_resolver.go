@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	"agentd/internal/gateway"
+	"agentd/internal/gateway/route"
 	"agentd/internal/models"
 	"agentd/internal/queue/hostreport"
 	"agentd/internal/queue/planning"
@@ -19,6 +21,7 @@ const (
 	executionAgentTieredStep    executionAgent = "builtin-tiered"
 	executionAgentHostReport    executionAgent = "builtin-host-report"
 	executionAgentAgentic       executionAgent = "builtin-agentic"
+	executionAgentACP           executionAgent = "acp"
 )
 
 type executionResolution struct {
@@ -26,6 +29,9 @@ type executionResolution struct {
 	tieredSteps      []models.Task
 	tieredStepsKnown bool
 	tieredStepsErr   error
+	// route and agent are the exec.turn decision and its acp agent (executionAgentACP).
+	route route.Decision
+	agent route.Agent
 }
 
 func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
@@ -56,6 +62,9 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 		if w.tryTieredOrigin(ctx, task, resolved.tieredSteps, resolved.tieredStepsKnown, resolved.tieredStepsErr) {
 			return
 		}
+	case executionAgentACP:
+		w.runACPExecution(ctx, task, project, profile, resolved)
+		return
 	}
 	release, ok := w.gateProvider(ctx, task, profile.Provider)
 	if !ok {
@@ -93,6 +102,10 @@ func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, pr
 	}
 	if len(steps) > 0 {
 		return executionResolution{kind: executionAgentTieredOrigin, tieredSteps: steps, tieredStepsKnown: true}
+	}
+	// An external agent runs the task whole: no tiered split, no host-report shortcut.
+	if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
+		return executionResolution{kind: executionAgentACP, route: d, agent: a}
 	}
 	if w.ShouldRunTiered(task) {
 		return executionResolution{kind: executionAgentTieredOrigin, tieredStepsKnown: true}

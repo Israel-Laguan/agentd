@@ -1,0 +1,208 @@
+package worker
+
+import (
+	"context"
+	"net/http/httptest"
+	"os/exec"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"agentd/internal/agent/acp"
+	"agentd/internal/agent/acp/fakeagent"
+	agenthooks "agentd/internal/agent/hooks"
+	"agentd/internal/gateway"
+	"agentd/internal/gateway/route"
+	"agentd/internal/gateway/spec"
+	agentmcp "agentd/internal/mcp"
+	"agentd/internal/models"
+	"agentd/internal/stage"
+	"agentd/internal/testutil"
+)
+
+type recordSink struct {
+	mu   sync.Mutex
+	recs []spec.CallRecord
+}
+
+func (s *recordSink) Record(r spec.CallRecord) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.recs = append(s.recs, r)
+}
+
+func (s *recordSink) all() []spec.CallRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]spec.CallRecord(nil), s.recs...)
+}
+
+// acpRoutes sends exec.turn to the fake acp agent coder, and a flagged task's
+// create.split_task to it with the level raised to L3; quick, a model agent,
+// takes the rest of create.split_task.
+func acpRoutes() route.Table {
+	flagged := true
+	return route.Table{
+		Agents: map[string]route.Agent{
+			"quick": {Kind: route.KindModel, Provider: "fake", Level: spec.LevelL1},
+			"coder": {Kind: route.KindACP, Preset: "fake", Level: spec.LevelL3},
+		},
+		Stages: map[spec.Purpose]route.StageRoute{
+			spec.PurposeExecTurn: {Default: "coder"},
+			spec.PurposeCreateSplitTask: {Default: "quick", Rules: []route.Rule{
+				{Match: route.Match{RequiresWorkspaceChange: &flagged}, Use: "coder", MinLevel: spec.LevelL3},
+			}},
+		},
+	}
+}
+
+// acpRuntime runs the registered fake preset unjailed and records its calls.
+func acpRuntime(t *testing.T) (*ACPRuntime, *recordSink) {
+	t.Helper()
+	sessions := &agentmcp.SessionMux{}
+	srv := httptest.NewServer(sessions)
+	t.Cleanup(srv.Close)
+	sink := &recordSink{}
+	return &ACPRuntime{
+		Command: func(ctx context.Context, _ string, argv []string, _ bool) (*exec.Cmd, error) {
+			return exec.CommandContext(ctx, argv[0], argv[1:]...), nil
+		},
+		Sessions: sessions, MCPURL: srv.URL, Recorder: sink,
+	}, sink
+}
+
+// acpFixture is a task in a store with a worker on acpRoutes; title is the
+// task's title, which leads the exec.turn context pack the fake reads its
+// script from.
+func acpFixture(t *testing.T, title string, flagged bool) (*Worker, *testutil.FakeKanbanStore, models.Task, models.Project, models.AgentProfile, *recordSink) {
+	t.Helper()
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	store.SetProjectsDir(t.TempDir())
+	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{ProjectName: "acp", Description: "d",
+		Tasks: []models.DraftTask{{Title: title, Description: "do the thing", RequiresWorkspaceChange: flagged}}})
+	if err != nil {
+		t.Fatalf("MaterializePlan: %v", err)
+	}
+	running, err := store.MarkTaskRunning(ctx, tasks[0].ID, tasks[0].UpdatedAt, 1)
+	if err != nil {
+		t.Fatalf("MarkTaskRunning: %v", err)
+	}
+	project, err := store.GetProject(ctx, running.ProjectID)
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	profile, err := store.GetAgentProfile(ctx, running.AgentID)
+	if err != nil {
+		t.Fatalf("GetAgentProfile: %v", err)
+	}
+	rt, sink := acpRuntime(t)
+	w := NewWorker(store, nil, &routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{Routes: acpRoutes(), ACP: rt})
+	return w, store, *running, *project, *profile, sink
+}
+
+func TestResolveExecutionAgentPicksTheACPAgentAnExecTurnRouteNames(t *testing.T) {
+	t.Parallel()
+	w, _, task, project, profile, _ := acpFixture(t, "work", false)
+	got := w.resolveExecutionAgent(context.Background(), task, project, profile)
+	if got.kind != executionAgentACP || got.route.Agent != "coder" || got.agent.Preset != "fake" || got.route.Required != spec.LevelL3 {
+		t.Fatalf("resolution = %+v, want the acp agent coder at L3", got)
+	}
+	// With no acp agent configured, the task stays on the builtin loop.
+	w.routes = route.Table{}
+	if got := w.resolveExecutionAgent(context.Background(), task, project, profile); got.kind != executionAgentAgentic {
+		t.Fatalf("resolution with no routes = %q, want %q", got.kind, executionAgentAgentic)
+	}
+}
+
+func TestACPExecutionCompletesTheTaskWithTheReportedSummary(t *testing.T) {
+	t.Parallel()
+	script := fakeagent.Script(report(map[string]any{"summary": "added the endpoint and ran go test"}))
+	w, store, task, project, profile, sink := acpFixture(t, script, false)
+	w.dispatchProcess(context.Background(), task, project, profile)
+
+	got, err := store.GetTask(context.Background(), task.ID)
+	if err != nil || got.State != models.TaskStateCompleted {
+		t.Fatalf("task = %+v, %v; want COMPLETED", got, err)
+	}
+	recs := sink.all()
+	if len(recs) != 1 || recs[0].Purpose != spec.PurposeExecTurn || recs[0].RoutedAgent != "coder" || recs[0].Provider != route.KindACP || recs[0].Outcome != spec.OutcomeOK {
+		t.Fatalf("records = %+v, want one ok exec.turn record for coder", recs)
+	}
+}
+
+// B-082: a flagged task's completion with no evidence of work goes to a human.
+func TestACPExecutionUnverifiedCompletionFailsToAHuman(t *testing.T) {
+	t.Parallel()
+	script := fakeagent.Script(report(map[string]any{"summary": "done"}))
+	w, store, task, project, profile, _ := acpFixture(t, script, true)
+	w.dispatchProcess(context.Background(), task, project, profile)
+
+	got, err := store.GetTask(context.Background(), task.ID)
+	if err != nil || got.State != models.TaskStateFailedRequiresHuman {
+		t.Fatalf("task = %+v, %v; want FAILED_REQUIRES_HUMAN", got, err)
+	}
+}
+
+// The raise-level rule: a flagged task's create.split_task runs on the L3 acp
+// agent, and its record carries the rule and the raised level; an unflagged
+// one stays on the model agent at L1.
+func TestRaisedLevelSendsAFlaggedSplitToTheACPAgent(t *testing.T) {
+	t.Parallel()
+	w, _, task, project, _, sink := acpFixture(t, "split me", true)
+	model := &stageRecorder{output: `{"name":"model"}`}
+	w.stageAgent = model
+	ctx, cancel := context.WithTimeout(gateway.WithTaskID(context.Background(), task.ID), 30*time.Second)
+	defer cancel()
+	split := func(flagged bool) stage.StageRequest {
+		return stage.StageRequest{
+			Stage: stage.StageTaskCreation, Purpose: gateway.PurposeCreateSplitTask,
+			Context:  []spec.PromptMessage{{Role: "user", Content: fakeagent.Script(validReport)}},
+			Contract: stage.NewContract[acpOut](), AgentID: task.AgentID, Attrs: gateway.AttrsForTask(flagged),
+		}
+	}
+
+	res, err := w.taskCreationAgent(task, project).Call(ctx, split(true))
+	if err != nil || string(res.Output) != `{"name":"x"}` {
+		t.Fatalf("flagged split = %s, %v; want the acp agent's report", res.Output, err)
+	}
+	recs := sink.all()
+	if len(recs) != 1 || recs[0].Purpose != spec.PurposeCreateSplitTask || recs[0].RoutedAgent != "coder" ||
+		recs[0].RoutedLevel != spec.LevelL3 || recs[0].RoutedRule != "requires_workspace_change=true" || recs[0].Model != "fake" {
+		t.Fatalf("records = %+v, want coder at the raised L3 by its rule", recs)
+	}
+
+	if _, err := w.taskCreationAgent(task, project).Call(ctx, split(false)); err != nil {
+		t.Fatalf("unflagged split: %v", err)
+	}
+	if len(model.reqs) != 1 || len(sink.all()) != 1 {
+		t.Fatalf("model calls = %d, acp records = %d; want the unflagged split on the model agent only", len(model.reqs), len(sink.all()))
+	}
+}
+
+func TestACPRouteWithNoRuntimeFails(t *testing.T) {
+	t.Parallel()
+	w, _, task, project, _, _ := acpFixture(t, "split me", true)
+	w.acp = nil
+	_, err := w.taskCreationAgent(task, project).Call(context.Background(), stage.StageRequest{
+		Stage: stage.StageTaskCreation, Purpose: gateway.PurposeCreateSplitTask,
+		Contract: stage.NewContract[acpOut](), Attrs: gateway.AttrsForTask(true),
+	})
+	if err == nil || !strings.Contains(err.Error(), "no ACP runtime") {
+		t.Fatalf("err = %v, want the missing runtime named", err)
+	}
+}
+
+// The PR 05 review: an ACP permission passes the worker-global chain (the
+// denylist) as well as the task's, as a builtin tool call does.
+func TestACPPermitterRunsTheWorkerGlobalChain(t *testing.T) {
+	t.Parallel()
+	global := agenthooks.NewHookChain()
+	global.RegisterPre(agenthooks.DenylistHook(t.TempDir()))
+	permit := ACPPermitter(models.Task{ProjectID: "p1"}, nil, global)
+	v, err := permit(context.Background(), acp.Permission{ToolCallID: "c1", Tool: "bash", Args: `{"command":"sudo rm -rf /"}`, Command: "sudo rm -rf /"})
+	if err != nil || v.Allow {
+		t.Fatalf("verdict = %+v, %v; want the denylist to refuse it", v, err)
+	}
+}

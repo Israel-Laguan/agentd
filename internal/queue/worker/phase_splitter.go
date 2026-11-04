@@ -137,7 +137,7 @@ func (w *Worker) GeneratePlan(
 		}
 		ctx = correction.WithAttemptBudget(ctx, budgetGuard)
 	}
-	res, err := w.taskCreationAgent().Call(gateway.WithTaskID(ctx, task.ID), req)
+	res, err := w.taskCreationAgent(task, project).Call(gateway.WithTaskID(ctx, task.ID), req)
 	if budgetGuard != nil && !correction.AttemptBudgetCharged(ctx) {
 		budgetGuard.AfterCall(res.TokenUsage)
 	}
