@@ -191,7 +191,7 @@ No write tool is offered. The rules around the report:
 - **No outcome:** a session that ends with neither tool gets one repair prompt in the same session. If it still reports nothing, the call fails with `mcp.ErrNoOutcome`.
 - **Completed is checked:** on a task flagged `requires_workspace_change`, in a stage that may write, a `completed` report needs at least one tool call that completed and edited, deleted or moved a file, or ran a command, as the agent reported it in `session/update`. Without one the call fails with `stage.ErrUnverifiedCompletion` (`UNVERIFIED_COMPLETION`), the builtin's B-082 gate; task-level routing to a human is deferred to PR 07.
 - **Read-only stages:** the driver refuses every write permission before the hooks, and `AgentCommand(..., readOnly)` binds the workspace read-only for the agent's own tools.
-- **No workspace access:** a stage with `AccessNone` has every permission refused, including reads and commands; the driver's process must have started with that access level.
+- **No workspace access:** a stage with `AccessNone` refuses every workspace permission request, including reads and commands. In the current ACP driver this uses the read-only process configuration; it is not a separate process access level.
 
 Transport plan: Streamable HTTP. `mcp.SessionMux` can serve each session at its own random path; production wiring to a listener on `sandbox.Egress.MCPSocket` is deferred until the ACP agent is connected (PR 07). The agent will reach it at `http://127.0.0.1:3129/mcp/<id>` through the forwarder. A stdio command for cline is not built: cline reads its MCP servers once per process from its settings file, so a per-session path does not reach it (S19 PR 08).
 

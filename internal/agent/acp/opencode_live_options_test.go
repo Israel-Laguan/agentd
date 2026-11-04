@@ -122,11 +122,17 @@ func selectedCells(ids, taskIDs []string) ([]liveCell, error) {
 		byID[cell.ID] = cell
 	}
 	var cells []liveCell
+	seen := map[string]bool{}
 	for _, id := range ids {
-		cell, ok := byID[strings.ToUpper(strings.TrimSpace(id))]
+		key := strings.ToUpper(strings.TrimSpace(id))
+		cell, ok := byID[key]
 		if !ok {
 			return nil, fmt.Errorf("unknown cell %q (want A,B,C,D,E)", id)
 		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		cells = append(cells, cell)
 	}
 	if len(cells) == 0 {

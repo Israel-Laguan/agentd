@@ -20,7 +20,7 @@ func logRun(t *testing.T, rec *liveRun) {
 		time.Duration(rec.WallMS)*time.Millisecond)
 	for _, p := range rec.Permissions {
 		t.Logf("  permission %d id=%s kind=%s title=%q rawInput=%s locations=%s options=%v outcome=%s option=%s permitter=%t refused=%t",
-			p.Index, p.RequestID, p.Kind, p.Title, jsonInline(p.RawInput), jsonInline(p.Locations),
+			p.Index+1, p.RequestID, p.Kind, p.Title, jsonInline(p.RawInput), jsonInline(p.Locations),
 			p.Options, p.Outcome, p.SelectedOption, p.PermitterCalled, p.DriverRefused)
 	}
 	for _, c := range rec.PermitterCalls {

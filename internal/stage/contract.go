@@ -118,12 +118,9 @@ func (m *marked[T]) Validate() error {
 // SchemaHint repeats T's hint, so corrective retries still show the model the
 // shape it must return.
 func (marked[T]) SchemaHint() string {
-	var zero T
-	if h, ok := any(zero).(interface{ SchemaHint() string }); ok {
-		return h.SchemaHint()
-	}
-	if h, ok := any(&zero).(interface{ SchemaHint() string }); ok {
-		return h.SchemaHint()
+	hint := schemaHint[T]()
+	if hint != "" {
+		return hint
 	}
 	return ""
 }

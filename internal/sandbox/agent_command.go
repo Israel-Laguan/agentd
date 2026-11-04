@@ -45,9 +45,10 @@ func (e *BashExecutor) AgentCommand(ctx context.Context, workspacePath string, a
 	return cmd, nil
 }
 
-// refuseEgressHomeInsideReadOnlyWorkspace refuses a home that resolves inside
-// the workspace. Egress binds its home after the workspace, so a home under a
-// read-only workspace would override that mount and make it writable again.
+// refuseEgressHomeInsideReadOnlyWorkspace refuses a home that overlaps the
+// workspace. Egress binds its home after the workspace, so a home under or
+// containing a read-only workspace would override that mount and make it
+// writable again.
 func refuseEgressHomeInsideReadOnlyWorkspace(workspace string, egress *Egress, readOnly bool) error {
 	if !readOnly || egress == nil || egress.Home == "" {
 		return nil
@@ -62,6 +63,13 @@ func refuseEgressHomeInsideReadOnlyWorkspace(workspace string, egress *Egress, r
 	}
 	if rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))) {
 		return fmt.Errorf("%w: egress home %s is inside the read-only workspace %s", models.ErrSandboxViolation, home, workspace)
+	}
+	up, err := filepath.Rel(home, workspace)
+	if err != nil {
+		return fmt.Errorf("compare read-only workspace with egress home: %w", err)
+	}
+	if up != ".." && !strings.HasPrefix(up, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("%w: egress home %s contains the read-only workspace %s", models.ErrSandboxViolation, home, workspace)
 	}
 	return nil
 }

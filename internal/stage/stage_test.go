@@ -26,7 +26,7 @@ type pointerTarget struct {
 	Name string `json:"name"`
 }
 
-func (*pointerTarget) SchemaHint() string { return `{"name": string}` }
+func (p *pointerTarget) SchemaHint() string { _ = p.Name; return `{"name": string}` }
 
 // scriptedGateway answers Generate from replies in order; other AIGateway
 // methods are never called on this path, so the embedded nil interface is safe.

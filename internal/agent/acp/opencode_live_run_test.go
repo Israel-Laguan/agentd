@@ -23,6 +23,9 @@ func runLiveTask(t *testing.T, batch *liveBatch, pre *livePreflight, cell liveCe
 			rec = runLiveAttempt(t, opts, pre, cell, task, run, attempt)
 			rec.Retries = attempt - 1
 			batch.add(rec)
+			if rec.ActualModel != "" && !isFreeModel(rec.ActualModel) {
+				break
+			}
 			if rec.Quota && attempt <= opts.quotaRetries {
 				t.Logf("%s/%s run %d attempt %d: quota error; waiting %s before retrying", cell.ID, task.Name, run, attempt, probeQuotaWait)
 				time.Sleep(probeQuotaWait)

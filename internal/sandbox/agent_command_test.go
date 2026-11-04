@@ -90,6 +90,16 @@ func TestAgentCommandRefusesAnEgressHomeInsideAReadOnlyWorkspace(t *testing.T) {
 	}
 }
 
+// A home that contains the workspace is writable at the workspace path too.
+func TestAgentCommandRefusesAnEgressHomeContainingAReadOnlyWorkspace(t *testing.T) {
+	t.Parallel()
+	exec, workspace := testExecutor(t, nil)
+	exec.Egress = &Egress{Home: filepath.Dir(workspace)}
+	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}, true); !errors.Is(err, models.ErrSandboxViolation) {
+		t.Fatalf("err = %v; want ErrSandboxViolation", err)
+	}
+}
+
 // The agent never runs on the host: B-086 closed the host network and
 // loopback, so with no usable jail, or no egress, the command is refused.
 func TestAgentCommandIsRefusedOutsideTheJail(t *testing.T) {
