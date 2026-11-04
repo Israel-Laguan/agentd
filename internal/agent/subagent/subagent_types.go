@@ -162,6 +162,14 @@ func (d *SubagentDelegate) WithReadOnlyWorkspace(readOnly bool) *SubagentDelegat
 
 // WithIntent checks every subagent's shell commands against the delegating
 // task's text, as the delegating executor does (B-046).
+func (d *SubagentDelegate) WithIntent(intent string) *SubagentDelegate {
+	if d == nil {
+		return d
+	}
+	d.intent = intent
+	return d
+}
+
 // WithAttrs sets the delegating task's routing attributes, which every turn of
 // the delegation tree carries, so a rule on overhead.subagent_turn can match.
 func (d *SubagentDelegate) WithAttrs(attrs spec.TaskAttrs) *SubagentDelegate {
@@ -169,14 +177,6 @@ func (d *SubagentDelegate) WithAttrs(attrs spec.TaskAttrs) *SubagentDelegate {
 		return d
 	}
 	d.attrs = attrs
-	return d
-}
-
-func (d *SubagentDelegate) WithIntent(intent string) *SubagentDelegate {
-	if d == nil {
-		return d
-	}
-	d.intent = intent
 	return d
 }
 

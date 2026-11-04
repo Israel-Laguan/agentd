@@ -84,6 +84,10 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 }
 
 func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {
+	// Review-required tasks stay on the builtin path: the approved-draft
+	// finalization flow (executionAgentReview) is not yet designed for an ACP
+	// run, and routing them to ACP here would re-run the agent before the
+	// draft is finalized.
 	if profile.RequireReview {
 		return executionResolution{kind: executionAgentReview}
 	}

@@ -48,7 +48,7 @@ func TestSubagentTurnsCarryTheDelegatingTasksAttrs(t *testing.T) {
 			t.Errorf("model call %d: Attrs = %+v, want requires_workspace_change=true", i, req.Attrs)
 		}
 	}
-	if child := delegate.child(); child.attrs.RequiresWorkspaceChange == nil {
+	if child := delegate.child(); child.attrs.RequiresWorkspaceChange == nil || !*child.attrs.RequiresWorkspaceChange {
 		t.Error("a nested delegation dropped the attributes")
 	}
 }

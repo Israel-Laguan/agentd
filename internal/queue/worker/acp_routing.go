@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"time"
 
 	"agentd/internal/agent/acp"
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 	agentmcp "agentd/internal/mcp"
@@ -53,6 +56,12 @@ type routedStageAgent struct {
 }
 
 func (r routedStageAgent) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
+	if req.AgentID == "" {
+		req.AgentID = r.task.AgentID
+	}
+	if req.Attrs.RequiresWorkspaceChange == nil {
+		req.Attrs = gateway.AttrsForTask(r.task.RequiresWorkspaceChange)
+	}
 	d, a, ok := r.w.acpRoute(req.Purpose, req.AgentID, req.Attrs)
 	if !ok {
 		return r.model.Call(ctx, req)
@@ -70,6 +79,15 @@ func (r routedStageAgent) Call(ctx context.Context, req stage.StageRequest) (sta
 // ones (the denylist), as a builtin tool call does.
 // shortcut: every call cold-starts the agent; keep a warm driver per task if the start-up cost shows.
 func (w *Worker) callACP(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, d route.Decision, a route.Agent, req stage.StageRequest) (stage.StageResult, error) {
+	slog.InfoContext(ctx, "routing decision", "purpose", d.Purpose, "required_level", d.Required,
+		"rule", d.Rule, "agent", d.Agent, "task_id", task.ID)
+	cudgetCharged := correction.AttemptBudgetCharged(ctx)
+	budgetGuard := agentruntime.NewBudgetGuard(w.budgetTracker, task.ID)
+	if !cudgetCharged {
+		if err := budgetGuard.BeforeCall(); err != nil {
+			return stage.StageResult{}, err
+		}
+	}
 	if w.acp == nil {
 		return stage.StageResult{}, errNoACPRuntime
 	}
@@ -88,6 +106,9 @@ func (w *Worker) callACP(ctx context.Context, task models.Task, project models.P
 	})
 	defer func() { _ = driver.Close() }()
 	taskHooks, _ := w.MountAgenticHooks(project, profile)
+	if err := w.RunSessionStart(ctx, task, project, taskHooks); err != nil {
+		return stage.StageResult{}, err
+	}
 	agent := ACPAgent{
 		Driver: driver, Store: w.store, ProjectID: project.ID,
 		Sessions: w.acp.Sessions, MCPURL: w.acp.MCPURL,
@@ -95,6 +116,9 @@ func (w *Worker) callACP(ctx context.Context, task models.Task, project models.P
 	}
 	started := time.Now()
 	res, err := agent.Call(ctx, req)
+	if !cudgetCharged {
+		budgetGuard.AfterCall(res.TokenUsage)
+	}
 	w.recordACP(task, d, a, started, res, err)
 	return res, err
 }
@@ -140,8 +164,18 @@ func (e acpExecution) Validate() error {
 // human (B-082), and any other error takes the gateway error path (breaker,
 // defer or retry).
 func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, resolved executionResolution) {
+	audit := w.beginTaskAudit(task, project, route.KindACP)
+	succeeded := false
+	defer func() {
+		audit.failed = !succeeded
+		w.finishTaskAudit(task, project, route.KindACP, audit)
+	}()
 	access := stage.AccessWrite
 	if profile.WorkspaceReadonly {
+		if task.RequiresWorkspaceChange {
+			w.failTerminal(ctx, task, stage.ErrUnverifiedCompletion, models.TaskStateFailedRequiresHuman)
+			return
+		}
 		access = stage.AccessReadOnly
 	}
 	ctx = gateway.WithTaskID(ctx, task.ID)
@@ -165,11 +199,12 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 		w.HandleGatewayError(ctx, task, err)
 	case res.Outcome == stage.OutcomeNeedsHuman:
 		if err := handOffNeedsHuman(ctx, w.AskHuman, task, gateway.PurposeExecTurn, res.Output); !errors.Is(err, stage.ErrNeedsHuman) {
-			w.handleAgentFailure(ctx, task, err.Error())
+			w.FailHard(ctx, task, err)
 		}
 	default:
 		var out acpExecution
 		_ = json.Unmarshal(res.Output, &out) // the contract has validated it
+		succeeded = true
 		w.CommitTextWithProfile(ctx, task, out.Summary, &profile)
 	}
 }

@@ -134,7 +134,7 @@ Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First 
 agents:
   quick: { provider: gemini, model: gemini-2.5-flash }   # kind: model (the default), L1
   local: { provider: ollama, model: llama3:8b }
-  coder: { kind: acp, preset: opencode }                  # L3; no preset exists until S19 PR 08
+  # coder: { kind: acp, preset: opencode }              # L3; no preset exists until S19 PR 08
 stages:
   create.elicit:
     default: quick
@@ -143,14 +143,14 @@ stages:
     rules:
       - when: { requires_workspace_change: true }
         use: quick
-  exec.turn:
-    default: coder
+  # exec.turn:
+  #   default: coder
   create.split_task:
     default: quick
-    rules:
-      - when: { requires_workspace_change: true }   # touches code: needs L3
-        min_level: L3
-        use: coder
+    # rules:
+    #   - when: { requires_workspace_change: true }   # touches code: needs L3
+    #     min_level: L3
+    #     use: coder
 ```
 
 - An agent's `kind` sets its level; `level` was removed and fails at load, so a config cannot make a model claim L3.
