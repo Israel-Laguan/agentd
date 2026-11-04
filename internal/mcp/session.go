@@ -51,6 +51,9 @@ type Session struct {
 
 // NewSession returns the server for one session.
 func NewSession(store models.KanbanStore, cfg SessionConfig) *Session {
+	if cfg.ProjectID == "" {
+		panic("mcp: NewSession requires a non-empty ProjectID (fail-closed board scope)")
+	}
 	s := &Session{Server: newServer(store, cfg.ProjectID), cfg: cfg}
 	s.registerReadTools()
 	s.registerReportOutcome()

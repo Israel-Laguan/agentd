@@ -192,7 +192,7 @@ No write tool is offered. The rules around the report:
 - **Completed is checked:** on a task flagged `requires_workspace_change`, in a stage that may write, a `completed` report needs at least one tool call that completed and edited, deleted or moved a file, or ran a command, as the agent reported it in `session/update`. Without one the call fails with `stage.ErrUnverifiedCompletion` (`UNVERIFIED_COMPLETION`), the builtin's B-082 gate, and the task goes to a human, not to COMPLETED.
 - **Read-only stages:** the driver refuses every write permission before the hooks, and `AgentCommand(..., readOnly)` binds the workspace read-only for the agent's own tools.
 
-Transport: Streamable HTTP. `mcp.SessionMux` serves each session at its own random path, so one listener on the run's MCP socket (`sandbox.Egress.MCPSocket`) serves every session of a warm agent, and the agent reaches it at `http://127.0.0.1:3129/mcp/<id>` through the forwarder. A stdio command for cline is not built: cline reads its MCP servers once per process from its settings file, so a per-session path does not reach it (S19 PR 08).
+Transport plan: Streamable HTTP. `mcp.SessionMux` can serve each session at its own random path; production wiring to a listener on `sandbox.Egress.MCPSocket` is deferred until the ACP agent is connected (PR 07). The agent will reach it at `http://127.0.0.1:3129/mcp/<id>` through the forwarder. A stdio command for cline is not built: cline reads its MCP servers once per process from its settings file, so a per-session path does not reach it (S19 PR 08).
 
 ## Debug logging
 

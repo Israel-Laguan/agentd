@@ -118,7 +118,7 @@ func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
 	result := Result{SessionID: string(created.SessionId)}
 	for prompt := req.Prompt; ; {
 		err := p.turn(ctx, s, prompt, &result)
-		if err != nil || req.Followup == nil {
+		if err != nil || req.Followup == nil || result.StopReason != acpsdk.StopReasonEndTurn {
 			return result, err
 		}
 		if prompt = req.Followup(); prompt == "" {
@@ -129,6 +129,9 @@ func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
 
 // turn sends one prompt in s and adds how it ended to result.
 func (p *process) turn(ctx context.Context, s *session, prompt string, result *Result) error {
+	s.mu.Lock()
+	s.refused = ""
+	s.mu.Unlock()
 	turn, err := p.conn.Prompt(s.ctx, acpsdk.PromptRequest{SessionId: s.id, Prompt: []acpsdk.ContentBlock{acpsdk.TextBlock(prompt)}})
 	result.Text, result.Evidence, result.StopReason = s.message(), s.evidence(), turn.StopReason
 	result.Usage = addUsage(result.Usage, turn.Usage)

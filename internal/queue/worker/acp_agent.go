@@ -81,7 +81,7 @@ func (a ACPAgent) Call(ctx context.Context, req stage.StageRequest) (stage.Stage
 	}
 	flagged := req.Attrs.RequiresWorkspaceChange != nil && *req.Attrs.RequiresWorkspaceChange
 	// As the builtin's gate, only a run that could write is held to it.
-	if res.Outcome == stage.OutcomeCompleted && flagged && req.Access == stage.AccessWrite && run.Evidence == 0 {
+	if res.Outcome == stage.OutcomeCompleted && flagged && run.Evidence == 0 {
 		return stage.StageResult{Output: res.Output, TokenUsage: tokens}, stage.ErrUnverifiedCompletion
 	}
 	return res, nil

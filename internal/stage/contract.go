@@ -41,8 +41,11 @@ func NewContract[T any]() Contract {
 	}
 	c.check = func(raw json.RawMessage) (json.RawMessage, error) {
 		var v marked[T]
-		if err := json.Unmarshal(raw, &v.value); err != nil {
+		if err := json.Unmarshal(raw, &v); err != nil {
 			return nil, err
+		}
+		if v.needsHuman {
+			return nil, fmt.Errorf("stage: needs_human is not a valid completed result")
 		}
 		if err := v.Validate(); err != nil {
 			return nil, err
