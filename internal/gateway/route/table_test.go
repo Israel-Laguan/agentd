@@ -200,3 +200,58 @@ func assertInvalid(t *testing.T, table Table, want string) {
 		t.Fatalf("Validate() = %v, want it to contain %q", err, want)
 	}
 }
+
+// raisedTable routes create.split_task to quick, and a flagged task to the acp
+// agent coder with the level raised to L3.
+func raisedTable() Table {
+	table := testTable()
+	table.Agents["coder"] = Agent{Kind: KindACP, Preset: "fake", Level: spec.LevelL3}
+	rule := workspaceRule("coder", true)
+	rule.MinLevel = spec.LevelL3
+	table.Stages[spec.PurposeCreateSplitTask] = StageRoute{Default: "quick", Rules: []Rule{rule}}
+	return table
+}
+
+func TestResolve_MinLevelRaisesTheLevelForAFlaggedTask(t *testing.T) {
+	table := raisedTable()
+	if err := table.Validate(); err != nil {
+		t.Fatalf("Validate() = %v", err)
+	}
+	d := table.Resolve(spec.PurposeCreateSplitTask, "", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(true)})
+	if d.Agent != "coder" || d.Required != spec.LevelL3 || d.Rule != "requires_workspace_change=true" {
+		t.Fatalf("flagged Resolve() = %+v, want coder at L3 by its rule", d)
+	}
+	d = table.Resolve(spec.PurposeCreateSplitTask, "", spec.TaskAttrs{RequiresWorkspaceChange: boolPtr(false)})
+	if d.Agent != "quick" || d.Required != spec.LevelL1 || d.Rule != RuleDefault {
+		t.Fatalf("unflagged Resolve() = %+v, want the default at L1", d)
+	}
+}
+
+func TestValidate_MinLevelRules(t *testing.T) {
+	cases := map[string]struct {
+		purpose spec.Purpose
+		rule    Rule
+		want    string
+	}{
+		"lowers the purpose minimum": {spec.PurposeExecTurn, Rule{Match: Match{RequiresWorkspaceChange: boolPtr(true)}, Use: "coder", MinLevel: spec.LevelL1}, "would lower the purpose minimum L3"},
+		"not an agent level":         {spec.PurposeCreateSplitTask, Rule{Match: Match{RequiresWorkspaceChange: boolPtr(true)}, Use: "coder", MinLevel: "L2"}, `min_level "L2"`},
+		"agent below the rule":       {spec.PurposeCreateSplitTask, Rule{Match: Match{RequiresWorkspaceChange: boolPtr(true)}, Use: "quick", MinLevel: spec.LevelL3}, "below the rule minimum L3"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			table := raisedTable()
+			table.Stages[tc.purpose] = StageRoute{Default: "coder", Rules: []Rule{tc.rule}}
+			assertInvalid(t, table, tc.want)
+		})
+	}
+}
+
+func TestValidate_ACPAgentKinds(t *testing.T) {
+	table := raisedTable()
+	table.Stages[spec.PurposeExecTurn] = StageRoute{Default: "coder"}
+	if err := table.Validate(); err != nil {
+		t.Fatalf("an acp agent on exec.turn: Validate() = %v, want nil", err)
+	}
+	table.Stages[spec.PurposeOverheadCompactContext] = StageRoute{Default: "coder"}
+	assertInvalid(t, table, "only a model agent can serve")
+}

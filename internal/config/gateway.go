@@ -137,7 +137,8 @@ func loadGatewayConfig(v *viper.Viper, process, dotenv map[string]string) (Gatew
 		known[strings.ToLower(name)] = struct{}{}
 	}
 	for name, agent := range cfg.Routing.Agents {
-		if _, ok := known[strings.ToLower(agent.Provider)]; !ok {
+		// An acp agent runs above the gateway, on its preset.
+		if _, ok := known[strings.ToLower(agent.Provider)]; !ok && agent.Kind != route.KindACP {
 			return GatewayConfig{}, fmt.Errorf("agents.%s: provider %q is not configured", name, agent.Provider)
 		}
 	}
