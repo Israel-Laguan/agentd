@@ -41,15 +41,52 @@ func TestAgentCommandBindsAReadOnlyWorkspace(t *testing.T) {
 	requireJail(t)
 	exec, workspace := testExecutor(t, nil)
 	exec.Egress = &Egress{Home: t.TempDir()}
-	cmd, err := exec.AgentCommand(context.Background(), workspace, []string{"bash", "-c", "touch written"}, true)
+	cmd, err := exec.AgentCommand(context.Background(), workspace, []string{"bash", "-c", "echo started && touch written"}, true)
 	if err != nil {
 		t.Fatalf("AgentCommand: %v", err)
 	}
+	var stdout strings.Builder
+	cmd.Stdout = &stdout
 	if err := cmd.Run(); err == nil {
 		t.Fatal("the agent wrote in a read-only workspace")
 	}
+	if !strings.Contains(stdout.String(), "started") {
+		t.Fatalf("the agent did not start: stdout = %q", stdout.String())
+	}
 	if _, err := os.Stat(filepath.Join(workspace, "written")); !os.IsNotExist(err) {
 		t.Fatalf("stat written: %v; want no file", err)
+	}
+}
+
+// A read-write stage's agent can write the workspace with its own tools.
+func TestAgentCommandBindsAWritableWorkspace(t *testing.T) {
+	requireJail(t)
+	exec, workspace := testExecutor(t, nil)
+	exec.Egress = &Egress{Home: t.TempDir()}
+	cmd, err := exec.AgentCommand(context.Background(), workspace, []string{"bash", "-c", "touch written"}, false)
+	if err != nil {
+		t.Fatalf("AgentCommand: %v", err)
+	}
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("the agent could not write a writable workspace: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "written")); err != nil {
+		t.Fatalf("stat written: %v; want the file", err)
+	}
+}
+
+// Egress binds its home after the workspace, so a home inside a read-only
+// workspace would make it writable again.
+func TestAgentCommandRefusesAnEgressHomeInsideAReadOnlyWorkspace(t *testing.T) {
+	t.Parallel()
+	exec, workspace := testExecutor(t, nil)
+	home := filepath.Join(workspace, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	exec.Egress = &Egress{Home: home}
+	if _, err := exec.AgentCommand(context.Background(), workspace, []string{"opencode", "acp"}, true); !errors.Is(err, models.ErrSandboxViolation) {
+		t.Fatalf("err = %v; want ErrSandboxViolation", err)
 	}
 }
 

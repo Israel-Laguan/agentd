@@ -181,16 +181,17 @@ An ACP agent never gets the daemon-wide server above. Each stage call (`worker.A
 
 | Tool | What it does |
 | --- | --- |
-| `report_outcome` | `outcome` (`completed` or `failed`), `summary`, and `result`, which must satisfy the stage's contract (`stage.Contract.Check`). An invalid report comes back to the agent as a tool error with the contract's shape, and nothing is recorded. A later report replaces an earlier one |
-| `ask_human` | The builtin's arguments. The stage returns `needs_human` with the question and options in its output, which `handOffNeedsHuman` gives to a person. It is final: a `report_outcome` after it is refused |
+| `report_outcome` | `outcome` (`completed` or `failed`), `summary`, and `result`, which must satisfy the stage's contract (`stage.Contract.Check`). An invalid report comes back to the agent as a tool error; contracts with a schema hint include that hint, and nothing is recorded. A later report replaces an earlier one |
+| `ask_human` | The builtin's arguments. The stage returns `needs_human` with the question and options in its output, which `handOffNeedsHuman` handles once the stage is wired (PR 07). It is final: a second question or a `report_outcome` after it is refused |
 | `get_context` | The context pack agentd built, the same text the prompt carries |
 | `board.list_tasks`, `board.get_task`, `board.list_projects`, `board.get_project`, `board.list_comments` | The read tools above, limited to the task's project. A task or project of another one is not found |
 
 No write tool is offered. The rules around the report:
 
 - **No outcome:** a session that ends with neither tool gets one repair prompt in the same session. If it still reports nothing, the call fails with `mcp.ErrNoOutcome`.
-- **Completed is checked:** on a task flagged `requires_workspace_change`, in a stage that may write, a `completed` report needs at least one tool call that completed and edited, deleted or moved a file, or ran a command, as the agent reported it in `session/update`. Without one the call fails with `stage.ErrUnverifiedCompletion` (`UNVERIFIED_COMPLETION`), the builtin's B-082 gate, and the task goes to a human, not to COMPLETED.
+- **Completed is checked:** on a task flagged `requires_workspace_change`, in a stage that may write, a `completed` report needs at least one tool call that completed and edited, deleted or moved a file, or ran a command, as the agent reported it in `session/update`. Without one the call fails with `stage.ErrUnverifiedCompletion` (`UNVERIFIED_COMPLETION`), the builtin's B-082 gate; task-level routing to a human is deferred to PR 07.
 - **Read-only stages:** the driver refuses every write permission before the hooks, and `AgentCommand(..., readOnly)` binds the workspace read-only for the agent's own tools.
+- **No workspace access:** a stage with `AccessNone` has every permission refused, including reads and commands; the driver's process must have started with that access level.
 
 Transport plan: Streamable HTTP. `mcp.SessionMux` can serve each session at its own random path; production wiring to a listener on `sandbox.Egress.MCPSocket` is deferred until the ACP agent is connected (PR 07). The agent will reach it at `http://127.0.0.1:3129/mcp/<id>` through the forwarder. A stdio command for cline is not built: cline reads its MCP servers once per process from its settings file, so a per-session path does not reach it (S19 PR 08).
 

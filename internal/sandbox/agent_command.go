@@ -3,7 +3,9 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"agentd/internal/models"
@@ -27,6 +29,9 @@ func (e *BashExecutor) AgentCommand(ctx context.Context, workspacePath string, a
 	if err := refuseEscapingSymlinks(workspace); err != nil {
 		return nil, err
 	}
+	if err := refuseEgressHomeInsideReadOnlyWorkspace(workspace, e.Egress, readOnly); err != nil {
+		return nil, err
+	}
 	quoted := make([]string, len(argv))
 	for i, arg := range argv {
 		quoted[i] = "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
@@ -38,4 +43,25 @@ func (e *BashExecutor) AgentCommand(ctx context.Context, workspacePath string, a
 	}
 	cmd.Stdin = nil
 	return cmd, nil
+}
+
+// refuseEgressHomeInsideReadOnlyWorkspace refuses a home that resolves inside
+// the workspace. Egress binds its home after the workspace, so a home under a
+// read-only workspace would override that mount and make it writable again.
+func refuseEgressHomeInsideReadOnlyWorkspace(workspace string, egress *Egress, readOnly bool) error {
+	if !readOnly || egress == nil || egress.Home == "" {
+		return nil
+	}
+	home, err := filepath.EvalSymlinks(egress.Home)
+	if err != nil {
+		return fmt.Errorf("resolve egress home: %w", err)
+	}
+	rel, err := filepath.Rel(workspace, home)
+	if err != nil {
+		return fmt.Errorf("compare egress home with workspace: %w", err)
+	}
+	if rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))) {
+		return fmt.Errorf("%w: egress home %s is inside the read-only workspace %s", models.ErrSandboxViolation, home, workspace)
+	}
+	return nil
 }

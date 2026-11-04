@@ -125,10 +125,12 @@ func commandOf(raw any) string {
 // Permitter: an unknown kind, or a bash call whose command it cannot read,
 // would run under a name no hook gates. Package installs are refused outright,
 // since an approve-all client ran `npx -y <unknown package>` (docs/acp-agents.md).
-// A read-only session refuses every write. With no Permitter every call is
-// refused.
-func decide(ctx context.Context, permit Permitter, p Permission, readOnly bool) Verdict {
+// A read-only session refuses every write, and a no-workspace session refuses
+// every call. With no Permitter every call is refused.
+func decide(ctx context.Context, permit Permitter, p Permission, readOnly, noWorkspace bool) Verdict {
 	switch {
+	case noWorkspace:
+		return Verdict{Reason: "the stage has no workspace access"}
 	case p.Tool == "":
 		return Verdict{Reason: fmt.Sprintf("tool kind %q is not one agentd can check", p.Kind)}
 	case readOnly && p.Tool == "write":

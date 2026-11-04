@@ -44,7 +44,8 @@ var _ stage.Agent = ACPAgent{}
 
 // Call sends the context pack as the prompt and returns what the agent
 // reported. A session that ends with no outcome gets one repair prompt, then
-// fails with ErrNoOutcome. Only AccessWrite lets the agent write.
+// fails with ErrNoOutcome. Only AccessWrite lets the agent write; AccessNone
+// refuses every workspace permission.
 func (a ACPAgent) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
 	if err := req.Validate(); err != nil {
 		return stage.StageResult{}, err
@@ -55,10 +56,11 @@ func (a ACPAgent) Call(ctx context.Context, req stage.StageRequest) (stage.Stage
 	defer remove()
 	repaired := false
 	run, err := a.Driver.Call(ctx, acp.Request{
-		Prompt:     pack + "\n\n" + outcomePrompt,
-		MCPServers: []acpsdk.McpServer{{Http: &acpsdk.McpServerHttpInline{Name: "agentd", Type: "http", Url: a.MCPURL + path, Headers: []acpsdk.HttpHeader{}}}},
-		Permit:     a.Permit,
-		ReadOnly:   req.Access != stage.AccessWrite,
+		Prompt:      pack + "\n\n" + outcomePrompt,
+		MCPServers:  []acpsdk.McpServer{{Http: &acpsdk.McpServerHttpInline{Name: "agentd", Type: "http", Url: a.MCPURL + path, Headers: []acpsdk.HttpHeader{}}}},
+		Permit:      a.Permit,
+		ReadOnly:    req.Access != stage.AccessWrite,
+		NoWorkspace: req.Access == stage.AccessNone,
 		Followup: func() string {
 			if _, err := session.Result(); repaired || !errors.Is(err, agentmcp.ErrNoOutcome) {
 				return ""
@@ -81,7 +83,7 @@ func (a ACPAgent) Call(ctx context.Context, req stage.StageRequest) (stage.Stage
 	}
 	flagged := req.Attrs.RequiresWorkspaceChange != nil && *req.Attrs.RequiresWorkspaceChange
 	// As the builtin's gate, only a run that could write is held to it.
-	if res.Outcome == stage.OutcomeCompleted && flagged && run.Evidence == 0 {
+	if res.Outcome == stage.OutcomeCompleted && flagged && req.Access == stage.AccessWrite && run.Evidence == 0 {
 		return stage.StageResult{Output: res.Output, TokenUsage: tokens}, stage.ErrUnverifiedCompletion
 	}
 	return res, nil

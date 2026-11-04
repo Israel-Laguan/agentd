@@ -169,6 +169,9 @@ func TestAskHumanIsNeedsHumanWithTheQuestionAndIsFinal(t *testing.T) {
 	if _, isErr := callTool(t, cs, "report_outcome", map[string]any{"outcome": "completed", "summary": "guessed", "result": map[string]any{"name": "x"}}); !isErr {
 		t.Error("report_outcome after ask_human was accepted; want it refused")
 	}
+	if _, isErr := callTool(t, cs, "ask_human", map[string]any{"question": "Which encoding?"}); !isErr {
+		t.Error("a second ask_human was accepted; want it refused")
+	}
 	res, err := s.Result()
 	if err != nil || res.Outcome != stage.OutcomeNeedsHuman {
 		t.Fatalf("Result = %q, %v; want needs_human", res.Outcome, err)

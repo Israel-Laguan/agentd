@@ -146,6 +146,10 @@ func (s *Session) registerAskHuman() {
 			return errorResult(err), nil, nil
 		}
 		s.mu.Lock()
+		if s.asked {
+			s.mu.Unlock()
+			return errorResult(errors.New("a question is already with a human; end your turn")), nil, nil
+		}
 		s.result, s.failed, s.asked = &stage.StageResult{Outcome: stage.OutcomeNeedsHuman, Output: output}, false, true
 		s.mu.Unlock()
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "The question was sent to a human. End your turn now; the task waits for the answer."}}}, nil, nil

@@ -44,16 +44,27 @@ func (o acpOut) Validate() error {
 	return nil
 }
 
-// fakeACPAgent runs the PR 05 fake agent (TestMain) behind an ACPAgent, with
-// its session servers on a local listener.
+// fakeACPAgent runs the PR 05 fake agent (TestMain) behind an ACPAgent for a
+// writable stage, which most tests use.
 func fakeACPAgent(t *testing.T, permit acp.Permitter) ACPAgent {
+	t.Helper()
+	return fakeACPAgentFor(t, permit, stage.AccessWrite)
+}
+
+// fakeACPAgentFor runs the fake agent behind a driver started for access, so a
+// test can exercise read-only and no-workspace stages without a mismatch.
+func fakeACPAgentFor(t *testing.T, permit acp.Permitter, access stage.WorkspaceAccess) ACPAgent {
 	t.Helper()
 	sessions := &agentmcp.SessionMux{}
 	srv := httptest.NewServer(sessions)
 	t.Cleanup(srv.Close)
-	d := acp.NewDriver(acp.Config{Cwd: t.TempDir(), Command: func(ctx context.Context, _ string) (*exec.Cmd, error) {
-		return exec.CommandContext(ctx, os.Args[0], fakeagent.Arg), nil
-	}})
+	d := acp.NewDriver(acp.Config{
+		Cwd:      t.TempDir(),
+		ReadOnly: access != stage.AccessWrite,
+		Command: func(ctx context.Context, _ string) (*exec.Cmd, error) {
+			return exec.CommandContext(ctx, os.Args[0], fakeagent.Arg), nil
+		},
+	})
 	t.Cleanup(func() { _ = d.Close() })
 	return ACPAgent{Driver: d, Store: testutil.NewFakeStore(), ProjectID: "p1", Sessions: sessions, MCPURL: srv.URL, Permit: permit}
 }
@@ -145,21 +156,44 @@ func TestACPAgentUnevidencedCompletionOfAFlaggedTaskIsUnverified(t *testing.T) {
 	if res, err := runACPStage(t, a, stage.AccessWrite, false, validReport); err != nil || res.Outcome != stage.OutcomeCompleted {
 		t.Fatalf("unflagged: result = %q, %v; want completed", res.Outcome, err)
 	}
+	if res, err := runACPStage(t, fakeACPAgentFor(t, nil, stage.AccessReadOnly), stage.AccessReadOnly, true, validReport); err != nil || res.Outcome != stage.OutcomeCompleted {
+		t.Fatalf("read-only flagged: result = %q, %v; want completed without evidence", res.Outcome, err)
+	}
 }
 
 // A read-only stage's session refuses writes before the task's hooks.
 func TestACPAgentReadOnlyStageRefusesWrites(t *testing.T) {
 	t.Parallel()
 	var asked []string
-	a := fakeACPAgent(t, func(_ context.Context, p acp.Permission) (acp.Verdict, error) {
+	permit := func(_ context.Context, p acp.Permission) (acp.Verdict, error) {
 		asked = append(asked, p.Tool)
 		return acp.Verdict{Allow: true}, nil
-	})
+	}
 	edit := fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindEdit, RawInput: map[string]any{"path": "a.go"}}}
-	if _, err := runACPStage(t, a, stage.AccessReadOnly, false, edit, validReport); err != nil || len(asked) != 0 {
+	if _, err := runACPStage(t, fakeACPAgentFor(t, permit, stage.AccessReadOnly), stage.AccessReadOnly, false, edit, validReport); err != nil || len(asked) != 0 {
 		t.Fatalf("read-only: err = %v, hooks asked for %v; want the edit refused before them", err, asked)
 	}
-	if _, err := runACPStage(t, a, stage.AccessWrite, false, edit, validReport); err != nil || strings.Join(asked, ",") != "write" {
+	if _, err := runACPStage(t, fakeACPAgent(t, permit), stage.AccessWrite, false, edit, validReport); err != nil || strings.Join(asked, ",") != "write" {
 		t.Fatalf("write: err = %v, hooks asked for %v; want the edit checked by them", err, asked)
+	}
+}
+
+// A stage with no workspace access refuses every permission, including reads
+// and commands, before the task's hooks.
+func TestACPAgentAccessNoneRefusesEveryPermission(t *testing.T) {
+	t.Parallel()
+	var asked []string
+	permit := func(_ context.Context, p acp.Permission) (acp.Verdict, error) {
+		asked = append(asked, p.Tool)
+		return acp.Verdict{Allow: true}, nil
+	}
+	a := fakeACPAgentFor(t, permit, stage.AccessNone)
+	read := fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindRead, RawInput: map[string]any{"path": "a.go"}}}
+	run := fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindExecute, RawInput: map[string]any{"command": "ls"}}}
+	if res, err := runACPStage(t, a, stage.AccessNone, false, read, run, validReport); err != nil || res.Outcome != stage.OutcomeCompleted {
+		t.Fatalf("result = %q, %v; want completed", res.Outcome, err)
+	}
+	if len(asked) != 0 {
+		t.Fatalf("hooks asked for %v; want no permission to reach them", asked)
 	}
 }
