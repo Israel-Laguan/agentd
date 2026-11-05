@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -124,34 +123,26 @@ func writeHomeJSON(home, rel string, v any) error {
 	return writeHomeFile(home, rel, data)
 }
 
-// seed copies rel from the user's home into the run's home, when present.
+// seed copies rel from the user's home into the run's home, when present,
+// with its mode: rg must stay executable.
 func seed(userHome, home, rel string) error {
 	if userHome == "" {
 		return nil
 	}
-	src, err := os.Open(filepath.Join(userHome, rel))
-	if os.IsNotExist(err) {
+	src := filepath.Join(userHome, rel)
+	info, err := os.Stat(src)
+	switch {
+	case os.IsNotExist(err):
 		return nil
+	case err != nil:
+		return err
+	}
+	data, err := os.ReadFile(src)
+	if err == nil {
+		err = writeHomeFile(home, rel, data)
 	}
 	if err != nil {
 		return err
 	}
-	defer func() { _ = src.Close() }()
-	info, err := src.Stat()
-	if err != nil {
-		return err
-	}
-	dst := filepath.Join(home, rel)
-	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-		return err
-	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, src); err != nil {
-		_ = out.Close()
-		return err
-	}
-	return out.Close()
+	return os.Chmod(filepath.Join(home, rel), info.Mode().Perm())
 }
