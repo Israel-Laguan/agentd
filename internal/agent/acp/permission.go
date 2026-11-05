@@ -18,9 +18,9 @@ type Permission struct {
 	Kind string
 	// Tool is agentd's tool for the kind (agent/tools names): bash, read or write.
 	Tool string
-	// Args is the call's input as JSON: for bash, the builtin bash tool's
-	// {"command": ...}, so hooks that read a bash command read this one;
-	// otherwise the agent's raw input.
+	// Args is the call's input as JSON in the builtin tool's shape, so the
+	// hooks read it as they read a builtin call: {"command": ...} for bash,
+	// {path} for read, {path, content} for write.
 	Args string
 	// Command is what a bash call runs, as read from the raw input.
 	Command string
@@ -79,12 +79,41 @@ func newPermission(call acpsdk.ToolCallUpdate) Permission {
 	if raw, err := json.Marshal(call.RawInput); err == nil && call.RawInput != nil {
 		p.Args = string(raw)
 	}
-	if p.Tool == "bash" {
+	switch p.Tool {
+	case "bash":
 		p.Command = commandOf(call.RawInput)
 		args, _ := json.Marshal(map[string]string{"command": p.Command})
 		p.Args = string(args)
+	case "read", "write":
+		p.Args = fileArgs(p.Tool, call.RawInput)
 	}
 	return p
+}
+
+// fileArgs is a read or write call's input in agentd's shape, {path} or
+// {path, content}, which the hooks check. Agents name them their own way:
+// opencode's edit sends filePath, oldString and newString. With no path the
+// key is left out, so the schema check refuses the call.
+func fileArgs(tool string, raw any) string {
+	in, _ := raw.(map[string]any)
+	args := map[string]string{}
+	if path := firstString(in, "path", "filePath", "file_path"); path != "" {
+		args["path"] = path
+	}
+	if tool == "write" {
+		args["content"] = firstString(in, "content", "newString", "new_string")
+	}
+	out, _ := json.Marshal(args)
+	return string(out)
+}
+
+func firstString(in map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if s, ok := in[key].(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 // commandOf reads the command from an execute call's raw input, in the shapes

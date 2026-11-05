@@ -67,6 +67,21 @@ func TestBashArgsTakeTheBuiltinShape(t *testing.T) {
 	}
 }
 
+// The hooks check agentd's read and write inputs, {path} and {path, content}.
+// opencode's edit sends filePath, oldString and newString (live smoke,
+// 2026-11-05), which the schema check refused as a write without content.
+func TestFileArgsTakeTheBuiltinShape(t *testing.T) {
+	t.Parallel()
+	hooks := &recorder{verdict: Verdict{Allow: true}}
+	_, err := call(t, fakeDriver(t, Config{}), Request{Permit: hooks.permit},
+		askStep(acpsdk.ToolKindEdit, map[string]any{"filePath": "main.go", "oldString": "a", "newString": "b"}),
+		askStep(acpsdk.ToolKindRead, map[string]any{"path": "go.mod"}))
+	seen := hooks.calls()
+	if err != nil || len(seen) != 2 || seen[0].Args != `{"content":"b","path":"main.go"}` || seen[1].Args != `{"path":"go.mod"}` {
+		t.Fatalf("err = %v, hooks saw %+v; want agentd's write and read shapes", err, seen)
+	}
+}
+
 func TestPermissionDeniedByTheHooksRejects(t *testing.T) {
 	t.Parallel()
 	hooks := &recorder{verdict: Verdict{Reason: "tool \"write\" is not in this profile's allowed_tools"}}
