@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"agentd/agentkit/llm"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 )
 
 type attemptBudgetKey struct{}
@@ -142,7 +142,7 @@ func GenerateJSONWithUsage[T any](ctx context.Context, gw spec.AIGateway, req sp
 		}
 		return out, totalUsage, details, nil
 	}
-	return zero, totalUsage, details, models.ErrInvalidJSONResponse
+	return zero, totalUsage, details, llm.ErrInvalidJSONResponse
 }
 
 // PromptAfterInvalidJSON builds the corrective user message for invalid JSON.
@@ -168,7 +168,7 @@ func promptAfterInvalid[T any](err error) spec.PromptMessage {
 
 // WrapInvalidJSONError wraps a parse/validation error with optional raw model output.
 func WrapInvalidJSONError(err error, raw string) error {
-	return fmt.Errorf("%w: %v; raw response: %s", models.ErrInvalidJSONResponse, err, SummarizeRaw(raw))
+	return fmt.Errorf("%w: %v; raw response: %s", llm.ErrInvalidJSONResponse, err, SummarizeRaw(raw))
 }
 
 // SummarizeRaw trims raw provider output for error messages.

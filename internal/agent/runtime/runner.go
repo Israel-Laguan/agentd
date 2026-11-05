@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"agentd/internal/api/correlation"
+	"agentd/agentkit/correlation"
 )
 
 const (

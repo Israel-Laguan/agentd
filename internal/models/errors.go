@@ -1,6 +1,7 @@
 package models
 
 import (
+	"agentd/agentkit/llm"
 	"errors"
 	"fmt"
 	"strings"
@@ -28,11 +29,11 @@ const (
 var (
 	ErrCircularDependency        = errors.New("circular task dependency")
 	ErrInvalidDraftPlan          = errors.New("invalid draft plan")
-	ErrInvalidJSONResponse       = errors.New("invalid JSON response")
+	ErrInvalidJSONResponse       = llm.ErrInvalidJSONResponse
 	ErrInvalidStateTransition    = errors.New("invalid task state transition")
 	ErrExecutionTimeout          = errors.New("execution timed out")
-	ErrLLMQuotaExceeded          = errors.New("LLM provider quota exceeded")
-	ErrLLMUnreachable            = errors.New("LLM provider unreachable")
+	ErrLLMQuotaExceeded          = llm.ErrLLMQuotaExceeded
+	ErrLLMUnreachable            = llm.ErrLLMUnreachable
 	ErrOptimisticLock            = errors.New("optimistic lock conflict")
 	ErrProjectNotFound           = errors.New("project not found")
 	ErrProviderNotFound          = errors.New("provider not found")
@@ -45,7 +46,7 @@ var (
 	ErrTaskNotFound              = errors.New("task not found")
 	ErrScheduleAlreadyFired      = errors.New("scheduled task already fired for this slot")
 	ErrHumanHandoffInvalid       = errors.New("invalid human handoff")
-	ErrBudgetExceeded            = errors.New("task token budget exceeded")
+	ErrBudgetExceeded            = llm.ErrBudgetExceeded
 	ErrAgentProfileNotFound      = errors.New("agent profile not found")
 	ErrAgentProfileInvalid       = errors.New("invalid agent profile")
 	ErrAgentProfileProtected     = errors.New("agent profile is protected")

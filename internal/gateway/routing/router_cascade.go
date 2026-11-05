@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"agentd/internal/api/correlation"
+	"agentd/agentkit/correlation"
+	"agentd/agentkit/llm"
 	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 )
 
 // errTruncation is a wrapper to distinguish truncation errors from provider errors
@@ -118,7 +118,7 @@ func decideTerminalError(req spec.AIRequest, matchedProvider, selectedHasToolSup
 		return fmt.Errorf("LLM provider %q is not configured", requestedProvider)
 	}
 	if len(providerErrs) == 0 {
-		return fmt.Errorf("%w: all providers skipped (tool mismatch or empty cascade)", models.ErrLLMUnreachable)
+		return fmt.Errorf("%w: all providers skipped (tool mismatch or empty cascade)", llm.ErrLLMUnreachable)
 	}
 	// Both sentinels have to survive into the chain, not just their text. A
 	// provider answering 429 has to stay recognisable as ErrLLMQuotaExceeded,
@@ -128,7 +128,7 @@ func decideTerminalError(req spec.AIRequest, matchedProvider, selectedHasToolSup
 	// the text, so no per-provider breaker could ever open (B-016). Two %w verbs
 	// render exactly the same message and preserve both errors: the wrapped join
 	// is itself a tree, so errors.Is reaches every provider error under it.
-	return fmt.Errorf("%w: %w", models.ErrLLMUnreachable, errors.Join(providerErrs...))
+	return fmt.Errorf("%w: %w", llm.ErrLLMUnreachable, errors.Join(providerErrs...))
 }
 
 func (r *Router) generateOnce(ctx context.Context, req spec.AIRequest) (spec.AIResponse, error) {

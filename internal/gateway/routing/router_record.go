@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"agentd/internal/api/correlation"
+	"agentd/agentkit/correlation"
 	"agentd/internal/gateway/providers"
 	"agentd/internal/gateway/spec"
 )
