@@ -87,8 +87,8 @@ One more live session (needs the owner's go-ahead for each run and a free model 
 **Decision rule, proposed before the runs:**
 
 - **Move** if the builtin matches the best ACP agent on the workspace checks (clear tasks) and keeps its token advantage (SP-022: at most half the tokens).
-- **Delete** if it loses or breaks code where an ACP agent does not, or if an ACP agent passes the checks on every clear task **and the builtin does not**.
-- **Move takes precedence** when both agents pass every clear-task check and the builtin keeps its token advantage — both rules above would fire, and the tie goes to Move.
+- **Delete** if it loses or breaks code where an ACP agent does not, or if an ACP agent passes the checks on every clear task.
+- **Move takes precedence** when both agents pass every clear-task check and the builtin uses at most half the tokens — both rules above would fire, and the tie goes to Move.
 - Anything else: keep it where it is, out of the kit, and do not spend a PR on it.
 
 ### If it moves: an L3 `stage.Agent` in the kit
