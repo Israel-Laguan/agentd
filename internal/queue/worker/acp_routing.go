@@ -55,6 +55,8 @@ type routedStageAgent struct {
 	project models.Project
 }
 
+// Call runs one stage on the routed agent: the acp agent the route names, or
+// the model agent.
 func (r routedStageAgent) Call(ctx context.Context, req stage.StageRequest) (stage.StageResult, error) {
 	if req.AgentID == "" {
 		req.AgentID = r.task.AgentID
@@ -125,6 +127,8 @@ func (w *Worker) callACP(ctx context.Context, task models.Task, project models.P
 	return res, err
 }
 
+// recordACP writes one ai_calls record for the call, as the gateway writes for
+// a model call.
 func (w *Worker) recordACP(task models.Task, d route.Decision, a route.Agent, started time.Time, res stage.StageResult, err error) {
 	if w.acp.Recorder == nil {
 		return
@@ -147,12 +151,14 @@ type acpExecution struct {
 	Summary string `json:"summary"`
 }
 
+// SchemaHint describes the acp execution contract's expected output.
 func (acpExecution) SchemaHint() string {
 	const intro = "A JSON object whose summary is committed as the task's result: "
 	const shape = `{"summary": "what you changed and how you checked it"}`
 	return intro + shape
 }
 
+// Validate checks the acp execution's reported summary.
 func (e acpExecution) Validate() error {
 	if strings.TrimSpace(e.Summary) == "" {
 		return errors.New("summary is required")
@@ -168,6 +174,9 @@ func (e acpExecution) Validate() error {
 func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, resolved executionResolution) {
 	audit := w.beginTaskAudit(task, project, route.KindACP)
 	succeeded := false
+	ctx, cancel, done := w.registerRunCancel(ctx, task.ID)
+	defer cancel()
+	defer done()
 	defer func() {
 		audit.failed = !succeeded && !audit.suspended
 		w.finishTaskAudit(task, project, route.KindACP, audit)
@@ -181,6 +190,13 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 		access = stage.AccessReadOnly
 	}
 	ctx = gateway.WithTaskID(ctx, task.ID)
+	// A resumed task answers a blocked clarification with a HUMAN subtask;
+	// consume the answer before the ACP prompt so it leads the context again.
+	if enriched, ok, err := w.tryConsumeElicitationAnswers(ctx, task); err != nil {
+		w.Emit(ctx, task, "ERROR", err.Error())
+	} else if ok {
+		task = enriched
+	}
 	res, err := w.callACP(ctx, task, project, profile, resolved.route, resolved.agent, stage.StageRequest{
 		Stage:   stage.StageExecution,
 		Purpose: gateway.PurposeExecTurn,
@@ -204,10 +220,12 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	case res.Outcome == stage.OutcomeNeedsHuman:
 		if err := handOffNeedsHuman(ctx, w.AskHuman, task, gateway.PurposeExecTurn, res.Output); !errors.Is(err, stage.ErrNeedsHuman) {
 			w.FailHard(ctx, task, err)
+		} else {
+			audit.suspended = true
 		}
 	default:
 		var out acpExecution
 		_ = json.Unmarshal(res.Output, &out) // the contract has validated it
-		succeeded = w.tryCommitTextWithProfile(ctx, task, out.Summary, &profile)
+		succeeded = w.CommitTextWithProfile(ctx, task, out.Summary, &profile)
 	}
 }

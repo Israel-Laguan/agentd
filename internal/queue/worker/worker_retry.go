@@ -79,20 +79,16 @@ func (w *Worker) handleLoopResult(ctx context.Context, task models.Task, result 
 		w.handleAgentFailure(ctx, task, strings.Join(parts, " "))
 	}
 }
+
+// commit persists a successful sandbox result as the task's result.
 func (w *Worker) commit(ctx context.Context, task models.Task, result sandbox.Result, err error) {
 	_ = w.commitSucceeded(ctx, task, result, err)
 }
 
 // CommitTextWithProfile persists content as the task's result, routing it
-// through the review and tiered handoffs first.
+// through the review and tiered handoffs first, and reports whether the
+// content reached the board (or a human handoff).
 func (w *Worker) CommitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) bool {
-	return w.tryCommitTextWithProfile(ctx, task, content, profile)
-}
-
-// tryCommitTextWithProfile is CommitTextWithProfile reporting whether the
-// content reached the board (or a human handoff). A caller that audits the
-// attempt must record a completion only when this returns true.
-func (w *Worker) tryCommitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) bool {
 	if profile != nil && profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
 			w.Emit(ctx, task, "ERROR", err.Error())

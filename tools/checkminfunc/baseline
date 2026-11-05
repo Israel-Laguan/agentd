@@ -140,7 +140,6 @@ internal/queue/worker/instructions.go NewSystemPromptBuilder
 internal/queue/worker/worker_permission.go containsSudoToken
 internal/queue/worker/worker_permission.go safeCommandFence
 internal/queue/worker/worker_retry.go (*Worker).commit
-internal/queue/worker/worker_retry.go (*Worker).CommitTextWithProfile
 internal/queue/worker/worker_support.go NewCancelRegistry
 internal/queue/worker/worker_support.go (*Worker).commitText
 internal/queue/worker/worker_support.go (*Worker).providerSupportsAgentic

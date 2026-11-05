@@ -8,7 +8,6 @@ import (
 
 // scriptFromPrompt finds the test script in a prompt: the whole prompt, or one
 // line of a context pack, which agentd prefixes with its own messages.
-// See parseScriptLine in script.go for the strict line matching.
 func scriptFromPrompt(text string) []Step {
 	var steps []Step
 	if json.NewDecoder(strings.NewReader(text)).Decode(&steps) == nil && steps != nil {

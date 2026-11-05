@@ -142,6 +142,7 @@ func (a *agent) NewSession(_ context.Context, p acp.NewSessionRequest) (acp.NewS
 	return acp.NewSessionResponse{SessionId: id}, nil
 }
 
+// Prompt runs the scripted steps, or the next scripted prompt for the session.
 func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResponse, error) {
 	var steps []Step
 	if len(p.Prompt) == 1 && p.Prompt[0].Text != nil {
