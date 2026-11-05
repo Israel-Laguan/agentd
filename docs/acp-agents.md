@@ -191,6 +191,23 @@ Limits:
 - **Cline may refresh its token** into the run's copy, which is removed with the run. If cline rotates refresh tokens, your own `providers.json` would hold a used one. Not observed in SP-025.
 - **Cold start is per call:** every call starts a new agent process and copies the login and seed files (about 11 MB for opencode).
 - **The daemon's MCP socket** lives in `$TMPDIR/agentd-mcp-*` until the daemon exits, and the directory is not removed.
+- **A run killed before it closes** (the daemon or the process killed) leaves its directory, login copy included, in `$TMPDIR` (owner-only).
+
+### Live smoke (2026-11-05)
+
+`TestLiveACPPresetsAgainstTheBuiltinAgent` (`-tags live`, `internal/queue/worker`): the SP-025 tasks through the worker's execution seam, the agent in its egress jail, each workspace checked on the host (`go test`, a `CountLines` behavior test, seed functions, files changed). One run per cell, so a smoke result, not a rate.
+
+| Agent | Task | State | `go test` | Behavior | Files changed |
+| --- | --- | --- | --- | --- | --- |
+| cline, `nvidia/nemotron-3-ultra-550b-a55b:free` | small | COMPLETED (2 runs) | pass | **fail**: `len(strings.Split(text, "\n"))`, so `""` is 1 line and a trailing newline adds one; its own test pins that | `main.go`, `main_test.go` |
+| | multi-file | COMPLETED | pass | **fail** (same `CountLines`) | `count.go`, `count_test.go`, `main.go`, and a built `wc` binary |
+| | ambiguous | BLOCKED: asked a human | n/a | n/a | none |
+| opencode | all | not measured: the account's free tier was used up (`Free usage limit reached`) on `deepseek-v4.1-flash-free` and on `glm-5.3-flash-free` after one run of 17,552 tokens | | | |
+| builtin agent | all | not run: no codestral key in the environment | | | |
+
+Before these runs passed, the smoke found and fixed (each with a unit test): cline's login copy failing its schema, cline's model (`CLINE_MODEL`), file arguments in agentd's shape (opencode's edit, cline's multi-file reads and searches), cline asking for agentd's own MCP tools as kind `other`, opencode's free-tier error as a quota error, and `report_outcome` taking a result sent as a JSON string. No permission was refused for agentd's MCP tools, and no cline hub daemon was left on the host.
+
+**Still open for SP-024:** opencode and the builtin agent on the same tasks, and more than one run per cell.
 
 ## Inside the jail (SP-025)
 
