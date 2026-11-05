@@ -24,6 +24,7 @@ var Presets = map[string]Preset{
 		Binary:      clineBinary,
 		Credentials: ".cline/data/settings/providers.json",
 		Allow:       []string{"api.cline.bot:443", "data.cline.bot:443"},
+		ModelOption: true,
 		NoUsage:     true,
 		Home:        clineHome,
 	},
@@ -75,40 +76,36 @@ const clineProvider = "cline"
 const clineRules = "# agentd\n\nNever guess a detail the task does not give you. If neither the task nor the workspace answers it, " +
 	"call the ask_human tool from the agentd MCP server and end your turn without changing any file.\n"
 
-// clineHome writes cline's config dir: the one provider's login with the
-// model, agentd's MCP server (cline ignores session/new's), and the rules.
+// clineHome writes cline's config dir: the user's providers file cut to the
+// one provider, agentd's MCP server (cline ignores session/new's), and the
+// rules. The file's other fields stay as written: cline drops a file that
+// fails its schema and then sees no login. The model is CLINE_MODEL, since
+// the session ignores the file's (it ran cline's paid default).
 // Cline's hub daemon starts inside the jail and dies with its PID namespace.
 // shortcut: cline may refresh its token into the run's copy, which is then dropped; write it back if a rotated token ever breaks the user's login.
 func clineHome(l Launch) ([]string, error) {
 	if l.MCPURL == "" {
 		return nil, fmt.Errorf("acp: cline needs agentd's MCP url for its settings file")
 	}
-	var file struct {
-		Version   json.RawMessage                       `json:"version"`
-		Providers map[string]map[string]json.RawMessage `json:"providers"`
-	}
+	var file map[string]json.RawMessage
 	if err := readLogin(l.Credentials, &file); err != nil {
 		return nil, err
 	}
-	login, ok := file.Providers[clineProvider]
+	var providers map[string]json.RawMessage
+	_ = json.Unmarshal(file["providers"], &providers) // a missing or odd field leaves no login
+	login, ok := providers[clineProvider]
 	if !ok {
 		return nil, fmt.Errorf("acp: %s has no login for provider %q", l.Credentials, clineProvider)
 	}
-	var settings map[string]json.RawMessage
-	if err := json.Unmarshal(login["settings"], &settings); err != nil {
-		return nil, fmt.Errorf("acp: %s: provider %q has no settings", l.Credentials, clineProvider)
-	}
-	// Cline's default model is paid; the configured one replaces it.
-	settings["model"], _ = json.Marshal(l.Model)
-	login["settings"], _ = json.Marshal(settings)
+	file["providers"], _ = json.Marshal(map[string]json.RawMessage{clineProvider: login})
+	file["lastUsedProvider"], _ = json.Marshal(clineProvider)
 	config := filepath.Join(l.Home, ".cline")
 	mcp := filepath.Join(config, "data/settings/cline_mcp_settings.json")
 	writes := []struct {
 		rel string
 		v   any
 	}{
-		{".cline/data/settings/providers.json", map[string]any{"version": file.Version, "lastUsedProvider": clineProvider,
-			"modes": []any{}, "providers": map[string]any{clineProvider: login}}},
+		{".cline/data/settings/providers.json", file},
 		// agentd's session tools (internal/mcp): they ask no permission, since
 		// the driver refuses cline's MCP tools (kind other).
 		{".cline/data/settings/cline_mcp_settings.json", map[string]any{"mcpServers": map[string]any{"agentd": map[string]any{
@@ -123,7 +120,7 @@ func clineHome(l Launch) ([]string, error) {
 	if err := writeHomeFile(l.Home, ".cline/rules/agentd.md", []byte(clineRules)); err != nil {
 		return nil, err
 	}
-	return []string{"env", "CLINE_MCP_SETTINGS_PATH=" + mcp, "CLINE_NO_AUTO_UPDATE=1",
+	return []string{"env", "CLINE_MCP_SETTINGS_PATH=" + mcp, "CLINE_MODEL=" + l.Model, "CLINE_NO_AUTO_UPDATE=1",
 		l.Executable, "--acp", "--config", config}, nil
 }
 

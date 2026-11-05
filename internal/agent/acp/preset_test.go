@@ -123,7 +123,7 @@ func TestClinePresetWritesItsSettingsRulesAndOneProviderIntoTheHome(t *testing.T
 	t.Parallel()
 	home := t.TempDir()
 	creds := filepath.Join(t.TempDir(), "providers.json")
-	writeFile(t, creds, `{"version": 1, "lastUsedProvider": "openrouter", "providers": {
+	writeFile(t, creds, `{"version": 1, "lastUsedProvider": "openrouter", "modes": {}, "providers": {
 		"cline": {"settings": {"provider": "cline", "model": "paid/default", "auth": {"accessToken": "CL-TOKEN"}}, "tokenSource": "oauth"},
 		"openrouter": {"settings": {"provider": "openrouter", "auth": {"apiKey": "OR-KEY"}}}}}`)
 
@@ -135,10 +135,10 @@ func TestClinePresetWritesItsSettingsRulesAndOneProviderIntoTheHome(t *testing.T
 	config := filepath.Join(home, ".cline")
 	settings := filepath.Join(config, "data/settings/cline_mcp_settings.json")
 	if !slices.Equal(argv[len(argv)-4:], []string{"/opt/cline/bin/.cline", "--acp", "--config", config}) ||
-		envOf(argv)["CLINE_MCP_SETTINGS_PATH"] != settings {
+		envOf(argv)["CLINE_MCP_SETTINGS_PATH"] != settings || envOf(argv)["CLINE_MODEL"] != "vendor/free-model:free" {
 		t.Fatalf("argv = %q", argv)
 	}
-	if !slices.Equal(p.Allow, []string{"api.cline.bot:443", "data.cline.bot:443"}) || p.ModelOption || !p.NoUsage {
+	if !slices.Equal(p.Allow, []string{"api.cline.bot:443", "data.cline.bot:443"}) || !p.ModelOption || !p.NoUsage {
 		t.Fatalf("preset = %+v", p)
 	}
 	got := files(t, home)
@@ -151,9 +151,9 @@ func TestClinePresetWritesItsSettingsRulesAndOneProviderIntoTheHome(t *testing.T
 	if len(byName) != 1 || providers["lastUsedProvider"] != "cline" {
 		t.Fatalf("providers.json keeps %v, last used %v; want only cline", keys(byName), providers["lastUsedProvider"])
 	}
-	model := byName["cline"].(map[string]any)["settings"].(map[string]any)["model"]
-	if model != "vendor/free-model:free" {
-		t.Fatalf("model = %v; the configured free model must replace the paid default", model)
+	// Fields cline's schema checks stay as the user's file has them.
+	if modes, ok := providers["modes"].(map[string]any); !ok || len(modes) != 0 || providers["version"] != float64(1) {
+		t.Fatalf("providers.json modes %v, version %v; want the user's", providers["modes"], providers["version"])
 	}
 	server := readJSON(t, settings)["mcpServers"].(map[string]any)["agentd"].(map[string]any)
 	if server["type"] != "streamableHttp" || server["url"] != "http://127.0.0.1:3129/mcp/abc" {
