@@ -90,12 +90,14 @@ func TestEveryPathOfAMultiFileReadPassesTheHooks(t *testing.T) {
 	hooks := &recorder{verdict: Verdict{Allow: true}}
 	_, err := call(t, fakeDriver(t, Config{}), Request{Permit: hooks.permit},
 		askStep(acpsdk.ToolKindRead, map[string]any{"files": []any{map[string]any{"path": "/ws/a.go", "start_line": 1}, "/ws/b.go"}}),
-		askStep(acpsdk.ToolKindRead, []any{"/ws/c.go"}))
+		askStep(acpsdk.ToolKindRead, []any{"/ws/c.go"}),
+		// cline's search_codebase names no path: it searches the workspace.
+		askStep(acpsdk.ToolKindSearch, map[string]any{"queries": []any{"CountWords"}}))
 	var args []string
 	for _, p := range hooks.calls() {
 		args = append(args, p.Args)
 	}
-	want := []string{`{"path":"/ws/a.go"}`, `{"path":"/ws/b.go"}`, `{"path":"/ws/c.go"}`}
+	want := []string{`{"path":"/ws/a.go"}`, `{"path":"/ws/b.go"}`, `{"path":"/ws/c.go"}`, `{"path":"."}`}
 	if err != nil || !slices.Equal(args, want) {
 		t.Fatalf("err = %v, hooks saw %q; want %q", err, args, want)
 	}

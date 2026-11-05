@@ -89,15 +89,19 @@ func newPermission(call acpsdk.ToolCallUpdate) Permission {
 
 // newPermissions is call as the hooks check it: one Permission per file a
 // read or write names (cline's read_files takes several), any other call as
-// one. A call with no path is one Permission without it, which the schema
-// check refuses.
+// one. A search with no path reads the workspace; any other call with no
+// path is one Permission without it, which the schema check refuses.
 func newPermissions(call acpsdk.ToolCallUpdate) []Permission {
 	p := newPermission(call)
 	if p.Tool != "read" && p.Tool != "write" {
 		return []Permission{p}
 	}
 	paths := pathsOf(call.RawInput)
-	if len(paths) == 0 {
+	switch {
+	case len(paths) > 0:
+	case p.Kind == string(acpsdk.ToolKindSearch):
+		paths = []string{"."} // a search that names no path searches the workspace
+	default:
 		paths = []string{""}
 	}
 	in, _ := call.RawInput.(map[string]any)
