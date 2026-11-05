@@ -49,7 +49,7 @@ var liveFlagCases = []liveFlagCase{
 // calls and its score depends on the model. It is the proof that the intake
 // prompt works against a real key, not a regression gate. Measured with
 // codestral-latest (Mistral); OpenRouter's free models answered 429 (quota) on
-// most runs, so use a model with its own quota (see docs/acp-agents.md).
+// most runs, so use a model with its own quota (see docs/testing/intake-plan-prompt.md).
 func TestLiveRequiresWorkspaceChangeFlag(t *testing.T) {
 	keyEnv := os.Getenv("AGENTD_LIVE_API_KEY_ENV")
 	if keyEnv == "" {
