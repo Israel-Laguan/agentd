@@ -129,7 +129,7 @@ func TestBubblewrapGoTestRunsWithoutNetwork(t *testing.T) {
 		"go.mod": "module jailprobe\n\ngo 1.21\n",
 		"probe_test.go": "package jailprobe\n\nimport (\n\t\"net\"\n\t\"testing\"\n)\n\n" +
 			"func TestLoopback(t *testing.T) {\n\tl, err := net.Listen(\"tcp\", \"127.0.0.1:0\")\n" +
-			"\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\tgo func() { c, _ := l.Accept(); _ = c.Close() }()\n" +
+			"\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\tgo func() {\n\t\tif c, err := l.Accept(); err == nil {\n\t\t\t_ = c.Close()\n\t\t}\n\t}()\n" +
 			"\tc, err := net.Dial(\"tcp\", l.Addr().String())\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n" +
 			"\t_ = c.Close()\n\t_ = l.Close()\n}\n",
 	}
