@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"agentd/internal/api/correlation"
+	"agentd/agentkit/correlation"
+	"agentd/agentkit/llm"
 	"agentd/internal/gateway/spec"
-	"agentd/internal/models"
 )
 
 // AI Horde is an opt-in provider with queue semantics: requests are submitted
@@ -120,7 +120,7 @@ func (h *Horde) submit(ctx context.Context, body hordeSubmitRequest) (string, er
 		return "", fmt.Errorf("decode horde async response: %w", err)
 	}
 	if decoded.ID == "" {
-		return "", fmt.Errorf("%w: horde did not return a request id", models.ErrLLMUnreachable)
+		return "", fmt.Errorf("%w: horde did not return a request id", llm.ErrLLMUnreachable)
 	}
 	return decoded.ID, nil
 }
@@ -135,14 +135,14 @@ func (h *Horde) poll(ctx context.Context, requestID, defaultModel string) (spec.
 			return spec.AIResponse{}, err
 		}
 		if status.Faulted {
-			return spec.AIResponse{}, fmt.Errorf("%w: horde request faulted", models.ErrLLMUnreachable)
+			return spec.AIResponse{}, fmt.Errorf("%w: horde request faulted", llm.ErrLLMUnreachable)
 		}
 		if !status.IsPossible {
-			return spec.AIResponse{}, fmt.Errorf("%w: horde request is not possible with current workers", models.ErrLLMUnreachable)
+			return spec.AIResponse{}, fmt.Errorf("%w: horde request is not possible with current workers", llm.ErrLLMUnreachable)
 		}
 		if status.Done {
 			if len(status.Generations) == 0 {
-				return spec.AIResponse{}, fmt.Errorf("%w: horde request completed without generations", models.ErrLLMUnreachable)
+				return spec.AIResponse{}, fmt.Errorf("%w: horde request completed without generations", llm.ErrLLMUnreachable)
 			}
 			generation := status.Generations[0]
 			model := generation.Model
@@ -158,7 +158,7 @@ func (h *Horde) poll(ctx context.Context, requestID, defaultModel string) (spec.
 
 		select {
 		case <-ctx.Done():
-			return spec.AIResponse{}, fmt.Errorf("%w: horde generation timed out: %v", models.ErrLLMUnreachable, ctx.Err())
+			return spec.AIResponse{}, fmt.Errorf("%w: horde generation timed out: %v", llm.ErrLLMUnreachable, ctx.Err())
 		case <-ticker.C:
 		}
 	}
@@ -198,9 +198,9 @@ func (h *Horde) doJSON(ctx context.Context, method, url string, body any) ([]byt
 	resp, err := h.client.Do(req)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.Canceled) {
-			return nil, fmt.Errorf("%w: horde request canceled: %v", models.ErrLLMUnreachable, ctx.Err())
+			return nil, fmt.Errorf("%w: horde request canceled: %v", llm.ErrLLMUnreachable, ctx.Err())
 		}
-		return nil, fmt.Errorf("%w: send horde request: %v", models.ErrLLMUnreachable, err)
+		return nil, fmt.Errorf("%w: send horde request: %v", llm.ErrLLMUnreachable, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	data, readErr := io.ReadAll(resp.Body)
@@ -208,10 +208,10 @@ func (h *Horde) doJSON(ctx context.Context, method, url string, body any) ([]byt
 		return nil, fmt.Errorf("read horde response: %w", readErr)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, models.ErrLLMQuotaExceeded
+		return nil, llm.ErrLLMQuotaExceeded
 	}
 	if resp.StatusCode >= http.StatusInternalServerError {
-		return nil, fmt.Errorf("%w: horde status %d", models.ErrLLMUnreachable, resp.StatusCode)
+		return nil, fmt.Errorf("%w: horde status %d", llm.ErrLLMUnreachable, resp.StatusCode)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("horde rejected request: status %d", resp.StatusCode)

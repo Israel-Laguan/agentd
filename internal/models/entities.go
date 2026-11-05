@@ -1,6 +1,7 @@
 package models
 
 import (
+	"agentd/agentkit/llm"
 	"database/sql"
 	"time"
 )
@@ -126,19 +127,8 @@ type TokenUsagePayload struct {
 	Model            string `json:"model,omitempty"`
 }
 
-// UsageDetails carries prompt-cache token fields surfaced by providers that
-// support automatic prompt caching. These are observability-only fields: the
-// daemon does no hit-rate math on them. CachedTokens counts prompt-cache reads;
-// CacheWriteTokens counts prompt-cache writes. Many providers omit these fields
-// entirely, in which case both stay zero.
-type UsageDetails struct {
-	CachedTokens     int `json:"cached_tokens,omitempty"`
-	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
-	// Model is the model that answered, as the provider reported it, which can
-	// differ from the one requested when a proxy falls back (SP-021). It is
-	// recorded in TOKEN_USAGE events, not persisted with the cache counters.
-	Model string `json:"model,omitempty"`
-}
+// UsageDetails lives in agentkit/llm so the gateway needs no models import.
+type UsageDetails = llm.UsageDetails
 
 // AgentProfile configures a concrete model/provider pair.
 type AgentProfile struct {

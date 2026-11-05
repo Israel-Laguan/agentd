@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"agentd/internal/api/correlation"
+	"agentd/agentkit/correlation"
 	"agentd/internal/gateway/spec"
 )
 

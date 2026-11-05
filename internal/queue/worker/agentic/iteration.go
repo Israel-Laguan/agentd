@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"agentd/internal/api/correlation"
+	"agentd/agentkit/correlation"
 
 	"agentd/internal/agent/acp"
 	agentcontext "agentd/internal/agent/context"

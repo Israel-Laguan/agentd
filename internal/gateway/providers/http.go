@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"agentd/internal/models"
+	"agentd/agentkit/llm"
 )
 
 func postJSON(ctx context.Context, client *http.Client, url string, body any, apiKey string) ([]byte, int, error) {
@@ -27,7 +27,7 @@ func postJSON(ctx context.Context, client *http.Client, url string, body any, ap
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: send request: %v", models.ErrLLMUnreachable, err)
+		return nil, 0, fmt.Errorf("%w: send request: %v", llm.ErrLLMUnreachable, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	data, readErr := io.ReadAll(resp.Body)
@@ -35,10 +35,10 @@ func postJSON(ctx context.Context, client *http.Client, url string, body any, ap
 		return nil, resp.StatusCode, fmt.Errorf("read response: %w", readErr)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return data, resp.StatusCode, models.ErrLLMQuotaExceeded
+		return data, resp.StatusCode, llm.ErrLLMQuotaExceeded
 	}
 	if resp.StatusCode >= http.StatusInternalServerError {
-		return data, resp.StatusCode, fmt.Errorf("%w: status %d", models.ErrLLMUnreachable, resp.StatusCode)
+		return data, resp.StatusCode, fmt.Errorf("%w: status %d", llm.ErrLLMUnreachable, resp.StatusCode)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return data, resp.StatusCode, fmt.Errorf("provider rejected request: status %d", resp.StatusCode)
@@ -61,7 +61,7 @@ func postJSONWithHeaders(ctx context.Context, client *http.Client, url string, b
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: send request: %v", models.ErrLLMUnreachable, err)
+		return nil, 0, fmt.Errorf("%w: send request: %v", llm.ErrLLMUnreachable, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	data, readErr := io.ReadAll(resp.Body)
@@ -69,10 +69,10 @@ func postJSONWithHeaders(ctx context.Context, client *http.Client, url string, b
 		return nil, resp.StatusCode, fmt.Errorf("read response: %w", readErr)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return data, resp.StatusCode, models.ErrLLMQuotaExceeded
+		return data, resp.StatusCode, llm.ErrLLMQuotaExceeded
 	}
 	if resp.StatusCode >= http.StatusInternalServerError {
-		return data, resp.StatusCode, fmt.Errorf("%w: status %d", models.ErrLLMUnreachable, resp.StatusCode)
+		return data, resp.StatusCode, fmt.Errorf("%w: status %d", llm.ErrLLMUnreachable, resp.StatusCode)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return data, resp.StatusCode, fmt.Errorf("provider rejected request: status %d", resp.StatusCode)

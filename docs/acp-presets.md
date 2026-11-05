@@ -43,7 +43,7 @@ Limits:
 
 ## Live smoke (2026-11-05)
 
-`TestLiveACPPresetsAgainstTheBuiltinAgent` (`-tags live`, `internal/queue/worker`): the SP-025 tasks through the worker's execution seam, the agent in its egress jail, each workspace checked on the host (`go test`, a `CountLines` behavior test, seed functions, files changed). One run per cell, so a smoke result, not a rate.
+`TestLiveACPPresetsAgainstTheBuiltinAgent` (`-tags live`, `internal/queue/worker`): the SP-025 tasks through the worker's execution seam, the agent in its egress jail, each workspace checked on the host (`go test`, a `CountLines` behavior test, seed functions, files changed). One run per cell except cline/small, which recorded 2 runs (retries, if any, are not separated from first attempts), so a smoke result, not a rate.
 
 | Agent | Task | State | `go test` | Behavior | Files changed |
 | --- | --- | --- | --- | --- | --- |
@@ -57,4 +57,4 @@ Limits:
 
 The two seams differ before the agent runs: the builtin path runs the pre-task elicitation, which is skipped only for a description over 200 characters with success criteria or constraints, and an `acp` route skips it. The small task's description is 152 characters with no criteria, so only the builtin was asked to decide whether to clarify. Tasks from intake usually carry success criteria.
 
-**Still open for SP-024:** opencode on the same tasks (after its free tier resets), tasks with success criteria so both seams start alike, and more than one run per cell.
+**Still open for SP-024:** opencode on the same tasks (after its free tier resets), tasks with success criteria so both seams start alike, and n ≥ 3 first-attempt runs per cell (retries excluded, reported separately).

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"agentd/internal/models"
+	"agentd/agentkit/llm"
 )
 
 // InMemoryBudgetTracker is a concurrency-safe, in-memory implementation
@@ -31,7 +31,7 @@ func (b *InMemoryBudgetTracker) Reserve(taskID string) error {
 	defer b.mu.Unlock()
 	if b.usage[taskID] >= b.cap {
 		return fmt.Errorf("%w: task %s used %d of %d allowed tokens",
-			models.ErrBudgetExceeded, taskID, b.usage[taskID], b.cap)
+			llm.ErrBudgetExceeded, taskID, b.usage[taskID], b.cap)
 	}
 	return nil
 }

@@ -20,7 +20,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"agentd/internal/api/correlation"
+	"agentd/agentkit/correlation"
 	"agentd/internal/api/httpx"
 	"agentd/internal/frontdesk"
 	"agentd/internal/gateway"

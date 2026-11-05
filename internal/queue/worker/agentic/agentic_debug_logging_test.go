@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"agentd/internal/api/correlation"
+	"agentd/agentkit/correlation"
 
 	agentcontext "agentd/internal/agent/context"
 	agenthooks "agentd/internal/agent/hooks"

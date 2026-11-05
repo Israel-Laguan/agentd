@@ -39,7 +39,7 @@ linters:
             - pkg: "agentd/internal/sandbox"
               desc: "models layer must stay inward and not depend on sandbox"
         # The gateway is the first agent-kit cut (T-045): its non-test code may
-        # import only the standard library and itself.
+        # import only the standard library, itself and the kit's leaves.
         gateway-boundary:
           list-mode: strict
           files:
@@ -51,11 +51,18 @@ linters:
             # siblings such as internal/gatewayextra.
             - agentd/internal/gateway$
             - agentd/internal/gateway/
-            # Still imported; drop each once T-045 cuts it.
-            - agentd/internal/models$
-            - agentd/internal/models/
-            - agentd/internal/api/correlation$
-            - agentd/internal/api/correlation/
+            - agentd/agentkit$
+            - agentd/agentkit/
+        # The kit must never reach back into agentd (T-045, SP-024).
+        agentkit-boundary:
+          list-mode: strict
+          files:
+            - "**/agentkit/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - agentd/agentkit$
+            - agentd/agentkit/
         queue-test-isolation:
           files:
             - "**/internal/queue/**_test.go"
