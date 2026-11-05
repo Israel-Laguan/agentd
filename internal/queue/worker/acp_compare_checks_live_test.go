@@ -124,6 +124,7 @@ type liveResult struct {
 	// cannot check, such as agentd's own MCP tools.
 	refusedOther int64
 	latency      time.Duration
+	events       []string // the worker's last events, for a failed run
 }
 
 // pass is the host's verdict: an ambiguous task must leave the source files

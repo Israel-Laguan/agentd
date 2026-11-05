@@ -15,6 +15,7 @@ package worker
 //	AGENTD_LIVE_TASKS=small,multi,ambiguous
 //	AGENTD_LIVE_RUNS=3                     runs per task
 //	AGENTD_LIVE_DELAY=8s                   pause between runs (provider rate limits)
+//	AGENTD_LIVE_OUT=/some/dir              keep each agent's stderr there (the jail discards it)
 
 import (
 	"context"
@@ -75,12 +76,13 @@ func TestLiveACPPresetsAgainstTheBuiltinAgent(t *testing.T) {
 					Agents: map[string]route.Agent{"coder": {Kind: route.KindACP, Preset: p, Model: model, Level: spec.LevelL3}},
 					Stages: map[spec.Purpose]route.StageRoute{spec.PurposeExecTurn: {Default: "coder"}},
 				}
-				results = append(results, liveRun(t, p, task, i, refused, func(store models.KanbanStore, ex *sandbox.BashExecutor) *Worker {
+				results = append(results, liveRun(t, p, task, i, refused, func(store models.KanbanStore, ex *sandbox.BashExecutor, sink models.EventSink) *Worker {
 					rt, err := NewACPRuntime(routes, ex, os.Args[0], nil)
 					if err != nil {
 						t.Fatal(err)
 					}
-					return NewWorker(store, nil, ex, nil, &mockEventSink{}, WorkerOptions{Routes: routes, ACP: rt})
+					keepStderr(t, rt, fmt.Sprintf("%s-%s-%d", p, task.name, i+1))
+					return NewWorker(store, nil, ex, nil, sink, WorkerOptions{Routes: routes, ACP: rt})
 				}))
 				time.Sleep(delay)
 			}
@@ -95,7 +97,7 @@ func TestLiveACPPresetsAgainstTheBuiltinAgent(t *testing.T) {
 
 // liveBuiltin builds the builtin agent's worker with the daemon's default
 // budgets: B-089 is fixed (PR 02), so the default agentic budget is measured.
-func liveBuiltin(t *testing.T) func(models.KanbanStore, *sandbox.BashExecutor) *Worker {
+func liveBuiltin(t *testing.T) func(models.KanbanStore, *sandbox.BashExecutor, models.EventSink) *Worker {
 	keyEnv := envDefault("AGENTD_LIVE_API_KEY_ENV", "MISTRAL_API_KEY")
 	key := os.Getenv(keyEnv)
 	if key == "" {
@@ -112,8 +114,8 @@ func liveBuiltin(t *testing.T) func(models.KanbanStore, *sandbox.BashExecutor) *
 		t.Fatal(err)
 	}
 	gw.WithTruncation(cfg.Gateway.TruncatorImpl(gw, nil), cfg.Gateway.Truncator.MaxInputChars)
-	return func(store models.KanbanStore, ex *sandbox.BashExecutor) *Worker {
-		return NewWorker(store, gw, ex, nil, &mockEventSink{}, WorkerOptions{
+	return func(store models.KanbanStore, ex *sandbox.BashExecutor, sink models.EventSink) *Worker {
+		return NewWorker(store, gw, ex, nil, sink, WorkerOptions{
 			MaxToolIterations: cfg.Queue.MaxToolIterations, AgenticTruncatorMax: cfg.Queue.AgenticTruncatorMax,
 			AgenticCharacterBudget: config.EffectiveAgenticCharacterBudget(cfg.Queue.AgenticCharacterBudget, cfg.Gateway.Truncator.MaxInputChars),
 			AgenticContext:         cfg.Queue.AgenticContext, ContextTruncation: cfg.Gateway.Truncation.StrategyImpl(),
@@ -123,7 +125,7 @@ func liveBuiltin(t *testing.T) func(models.KanbanStore, *sandbox.BashExecutor) *
 
 // liveRun seeds a workspace, runs task on the worker side builds, and checks
 // the workspace on the host.
-func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.Int64, build func(models.KanbanStore, *sandbox.BashExecutor) *Worker) liveResult {
+func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.Int64, build func(models.KanbanStore, *sandbox.BashExecutor, models.EventSink) *Worker) liveResult {
 	t.Helper()
 	store, running, project, profile := acpTask(t, task.title, task.description, !task.ambiguous)
 	if side == "builtin" {
@@ -143,7 +145,8 @@ func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.In
 	started := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	build(store, ex).dispatchProcess(ctx, running, project, profile)
+	sink := &mockEventSink{}
+	build(store, ex, sink).dispatchProcess(ctx, running, project, profile)
 	got, err := store.GetTask(context.Background(), running.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -151,6 +154,9 @@ func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.In
 	r := checkWorkspace(t, project.WorkspacePath, task)
 	r.side, r.task, r.run, r.state, r.latency = side, task.name, i+1, got.State, time.Since(started)
 	r.refusedOther = refused.Load() - before
+	for _, ev := range sink.events[max(0, len(sink.events)-3):] {
+		r.events = append(r.events, string(ev.Type)+": "+truncate(ev.Payload, 300))
+	}
 	want := models.TaskStateCompleted
 	if task.ambiguous {
 		want = models.TaskStateBlocked // NeedsHuman: the question is with a human
@@ -162,12 +168,41 @@ func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.In
 	return r
 }
 
+// keepStderr writes the agent's stderr to AGENTD_LIVE_OUT/<name>.stderr: the
+// daemon discards it, and a failed start says nothing else.
+func keepStderr(t *testing.T, rt *ACPRuntime, name string) {
+	dir := os.Getenv("AGENTD_LIVE_OUT")
+	if dir == "" {
+		return
+	}
+	start := rt.Start
+	rt.Start = func(allow []string, executable string) (ACPRun, error) {
+		run, err := start(allow, executable)
+		command := run.Command
+		run.Command = func(ctx context.Context, cwd string, argv []string, readOnly bool) (*exec.Cmd, error) {
+			cmd, err := command(ctx, cwd, argv, readOnly)
+			if err == nil {
+				f, ferr := os.Create(filepath.Join(dir, name+".stderr"))
+				if ferr != nil {
+					t.Fatal(ferr)
+				}
+				t.Cleanup(func() { _ = f.Close() })
+				cmd.Stderr = f
+			}
+			return cmd, err
+		}
+		return run, err
+	}
+}
+
 // countRefusals counts the driver's refusals of a tool kind it cannot check:
 // that is how a permission request for agentd's own MCP tools would end.
 func countRefusals(t *testing.T) *atomic.Int64 {
 	n := &atomic.Int64{}
 	prev := slog.Default()
-	slog.SetDefault(slog.New(refusalCounter{Handler: prev.Handler(), n: n}))
+	// Not prev.Handler(): slog's default handler writes through package log,
+	// which SetDefault points back at slog, and that deadlocks.
+	slog.SetDefault(slog.New(refusalCounter{Handler: slog.NewTextHandler(os.Stderr, nil), n: n}))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	return n
 }
