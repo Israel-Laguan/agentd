@@ -117,6 +117,7 @@ type liveResult struct {
 	state      models.TaskState
 	goTest     bool     // go test ./... passes in the workspace
 	behavior   bool     // the host's own test of the asked behavior passes
+	wrong      []string // how the behavior test failed
 	lost       []string // seed functions no longer defined anywhere
 	changed    []string // seed files changed, and files added
 	ambiguous  bool
@@ -164,15 +165,28 @@ func checkWorkspace(t *testing.T, dir string, task liveTask) liveResult {
 		copyDir := t.TempDir()
 		_ = exec.Command("cp", "-a", dir+"/.", copyDir).Run()
 		writeLive(t, filepath.Join(copyDir, "zz_agentd_check_test.go"), "package main\n\nimport \"testing\"\n\nfunc TestAgentdCheck(t *testing.T) {"+task.check+"\n}\n")
-		r.behavior = goTest(copyDir, "-run", "TestAgentdCheck", ".")
+		r.behavior, r.wrong = goTestOutput(copyDir, "-run", "TestAgentdCheck", ".")
 	}
 	return r
 }
 
 func goTest(dir string, args ...string) bool {
+	ok, _ := goTestOutput(dir, args...)
+	return ok
+}
+
+// goTestOutput also returns the failure lines (Errorf output and build errors).
+func goTestOutput(dir string, args ...string) (bool, []string) {
 	cmd := exec.Command("go", append([]string{"test", "-count=1"}, args...)...)
 	cmd.Dir = dir
-	return cmd.Run() == nil
+	out, err := cmd.CombinedOutput()
+	var wrong []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); strings.Contains(line, "_test.go:") || strings.Contains(line, ".go:") && !strings.HasPrefix(line, "ok") {
+			wrong = append(wrong, line)
+		}
+	}
+	return err == nil, wrong
 }
 
 // funcs are the top-level functions a Go file defines.
