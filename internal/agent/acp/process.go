@@ -78,6 +78,8 @@ func (p *process) dead() bool {
 }
 
 func (p *process) kill() {
-	p.stop()
+	if p.stop != nil {
+		p.stop()
+	}
 	<-p.exited
 }
