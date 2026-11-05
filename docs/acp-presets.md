@@ -53,5 +53,4 @@ Limits:
 | opencode | all | not measured: the account's free tier was used up (`Free usage limit reached`) on `deepseek-v4.1-flash-free` and on `glm-5.3-flash-free` after one run of 17,552 tokens | | | |
 | builtin agent | all | not run: no codestral key in the environment | | | |
 
-
 **Still open for SP-024:** opencode and the builtin agent on the same tasks, and more than one run per cell.
