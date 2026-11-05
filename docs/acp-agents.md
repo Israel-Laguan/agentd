@@ -76,8 +76,6 @@ Cline names the tool `agentd__report_outcome` (server and tool joined by `__`); 
 ## Not measured yet
 
 - Real agentd stages (intake, task creation, execution) compared across a single model call, agentd's builtin agent and each external agent.
-- Running the agent process inside the jail: measured in [Inside the jail (SP-025)](#inside-the-jail-sp-025).
-- Whether a cline system prompt or rules file, rather than the task prompt, makes the outcome call reliable.
 - agy, which has MCP but no ACP.
 
 ## Stage × method comparison
@@ -152,62 +150,7 @@ Measured 2026-11-03 with a throwaway live test (`-tags live`, not in the repo): 
 - **Permissions:** with the default config, no requests (as with 1.19.0). With `{"permission": {"bash": "ask", "edit": "ask"}}` every shell call asks as kind `execute` (raw input `command`, `cwd`) and every write as `edit` (`path`, `content`). Reads don't ask. `{"*": "ask"}` also asks for reads (kind `read`). The options are `once`, `always` and `reject`. `once` asks again on the next call. A reject fails the tool call, and the turn ends `cancelled` with no error. `npx` was refused before the hooks in 3 of 3 runs.
 - **Advertised:** protocol version 1, MCP over http only (no sse), session modes `build` and `plan` as a config option, usage in every prompt result. Auth is `opencode-login`, outside ACP.
 
-## Running an external agent
-
-Now in agentd (S19 PR 08). Name an `acp` agent and route a stage to it ([config-reference.md](config-reference.md#routing-agents-and-stages)):
-
-```yaml
-agents:
-  coder: { kind: acp, preset: opencode, model: "opencode/deepseek-v4.1-flash-free" }
-stages:
-  exec.turn:
-    default: coder
-```
-
-Install the agent and sign in once, outside agentd (`opencode auth login`, or cline's own sign-in). agentd only reads that login: each run copies one provider's entry from it. The `model` is required, because a preset's default may be paid.
-
-Each call:
-
-1. finds the binary: `executable`, or the preset's command on `PATH`;
-2. creates an owner-only `$TMPDIR/agentd-acp-*` holding the run's home and an egress proxy socket that allows only the preset's hosts (`sandbox.BashExecutor.StartEgressRun`);
-3. writes the home and starts the agent in the jail, bound to the task's workspace. No bubblewrap, no run: the agent never gets the host's network;
-4. removes the directory, login copy included, once the agent has exited.
-
-| | opencode | cline |
-| --- | --- | --- |
-| Runs | `opencode acp` | the compiled `bin/.cline --acp --config $HOME/.cline`, not the Node wrapper |
-| Egress | `opencode.ai:443` | `api.cline.bot:443`, `data.cline.bot:443` |
-| Login copied | the model's provider (the part before `/`) from `auth.json` | `providers.json` cut to the `cline` provider; its other fields stay as written, or cline fails its schema and sees no login |
-| Also in the home | `models.json` and `rg` from your `~/.cache/opencode`, so the catalog fetch (disabled) and the ripgrep download need no host | `cline_mcp_settings.json` (`CLINE_MCP_SETTINGS_PATH`) and `rules/agentd.md`, the SP-026 rules file |
-| agentd's MCP server | http, from `session/new` | http, from the settings file. cline's ACP mode asks before every tool and ignores the file's `autoApprove`; the driver allows the tools of the server it attached (`agentd__*`, kind `other`) with no hook, and refuses any other `other` |
-| Permissions | `OPENCODE_CONFIG_CONTENT` sets `bash` and `edit` to `ask` | cline asks on its own |
-| Model | in `OPENCODE_CONFIG_CONTENT` | `CLINE_MODEL`: the session ignores the file's model and runs cline's paid default |
-| Model check | `session/new` must report `model` as `configOptions.model`, or the call fails with `ErrModelMismatch` before any prompt. An unknown id is swapped silently (`opencode/deepseek-v4-flash-free` became `opencode/big-pickle`) | the same |
-| Usage | its own counts | none: zero tokens, model `cline (no usage reported)` in `ai_calls` |
-| Hub daemon | none | starts in the jail and dies with its PID namespace |
-
-Limits:
-
-- **Cline may refresh its token** into the run's copy, which is removed with the run. If cline rotates refresh tokens, your own `providers.json` would hold a used one. Not observed in SP-025.
-- **Cold start is per call:** every call starts a new agent process and copies the login and seed files (about 11 MB for opencode).
-- **The daemon's MCP socket** lives in `$TMPDIR/agentd-mcp-*` until the daemon exits, and the directory is not removed.
-- **A run killed before it closes** (the daemon or the process killed) leaves its directory, login copy included, in `$TMPDIR` (owner-only).
-
-### Live smoke (2026-11-05)
-
-`TestLiveACPPresetsAgainstTheBuiltinAgent` (`-tags live`, `internal/queue/worker`): the SP-025 tasks through the worker's execution seam, the agent in its egress jail, each workspace checked on the host (`go test`, a `CountLines` behavior test, seed functions, files changed). One run per cell, so a smoke result, not a rate.
-
-| Agent | Task | State | `go test` | Behavior | Files changed |
-| --- | --- | --- | --- | --- | --- |
-| cline, `nvidia/nemotron-3-ultra-550b-a55b:free` | small | COMPLETED (2 runs) | pass | **fail**: `len(strings.Split(text, "\n"))`, so `""` is 1 line and a trailing newline adds one; its own test pins that | `main.go`, `main_test.go` |
-| | multi-file | COMPLETED | pass | **fail** (same `CountLines`) | `count.go`, `count_test.go`, `main.go`, and a built `wc` binary |
-| | ambiguous | BLOCKED: asked a human | n/a | n/a | none |
-| opencode | all | not measured: the account's free tier was used up (`Free usage limit reached`) on `deepseek-v4.1-flash-free` and on `glm-5.3-flash-free` after one run of 17,552 tokens | | | |
-| builtin agent | all | not run: no codestral key in the environment | | | |
-
-Before these runs passed, the smoke found and fixed (each with a unit test): cline's login copy failing its schema, cline's model (`CLINE_MODEL`), file arguments in agentd's shape (opencode's edit, cline's multi-file reads and searches), cline asking for agentd's own MCP tools as kind `other`, opencode's free-tier error as a quota error, and `report_outcome` taking a result sent as a JSON string. No permission was refused for agentd's MCP tools, and no cline hub daemon was left on the host.
-
-**Still open for SP-024:** opencode and the builtin agent on the same tasks, and more than one run per cell.
+How agentd now runs opencode and cline, and the live smoke of that setup: [acp-presets.md](acp-presets.md).
 
 ## Inside the jail (SP-025)
 
@@ -377,7 +320,71 @@ So `report_outcome` alone cannot tell a fabricated dependency from real work. A 
 
 Limits: n = 10 per cell is more than the S17 smoke runs but still not a rate with a tight interval; one free model; one task family; the rules file was only tested on the ambiguous task. The disk-full incident that lost 25 cline runs during the matrix is recorded in the SP-026 ticket; the reruns are what the table uses.
 
-The intake plan prompt's live results (S18 PR 11) are in [testing/intake-plan-prompt.md](testing/intake-plan-prompt.md).
+## Intake plan prompt at n = 10 (S18 PR 11)
+
+Measured 2026-10-28 with the on-demand live tests in `internal/stage/intake/requires_workspace_change_live_test.go` (`go test -tags live`; the default run never calls a provider). One `intake.Plan` call per run with the PR 11 prompt, 10 runs per case, scored from the returned `DraftPlan`. **Model: `codestral-latest` (Mistral)**, the only model that finished every case. OpenRouter's free models answered 429 (quota exhausted) on most runs, or 400; a Poolside run (`poolside/laguna-s-2.1`) finished one case before its latency stalled the rest. Use a model with its own quota for these tests. The rows prove the prompt works against a real key on this model and say nothing about other models. 0 errors in every row.
+
+The tests are behind the `live` build tag, so `make test`, `make check` and CI never run them; run them by hand when the intake prompt changes.
+
+**`requires_workspace_change`** (right = some task flagged when the request needs a workspace change, no task flagged otherwise):
+
+| Request | Expected | Right |
+| --- | --- | --- |
+| Add a `--verbose` flag to the CLI in `main.go` | flagged | 10/10 |
+| Create a `README.md` that explains how to build and run the project | flagged | 10/10 |
+| Fix the failing test in `parser_test.go` | flagged | 10/10 |
+| what os and hardware have this machine | flagged | 10/10 |
+| Write a short summary of the project; text only, do not create, modify or delete any files | not flagged | 10/10 |
+| Explain the trade-offs of SQLite versus Postgres for a small app | not flagged | 10/10 |
+
+**Vague request** (right = `clarification_question` set for a vague request, tasks planned otherwise):
+
+| Request | Expected | Right |
+| --- | --- | --- |
+| make my app better | question | 10/10 |
+| improve it | question | 10/10 |
+| what os and hardware have this machine | plan | 10/10 |
+| Add a `--verbose` flag to the CLI in `main.go` | plan | 10/10 |
+
+Findings:
+
+- The B-085 plan half holds on this model: both vague requests got a question every time, and the "what os and hardware" regression guard was planned every time.
+- The flag is right in all six cases at 10/10. An earlier run scored the summary 9/10 and the SQLite-versus-Postgres explanation 0/10. The summary request was then reworded to "Do not create, modify, or delete any files"; the prompt itself did not change between the two runs, so the explanation case moving from 0/10 to 10/10 is not explained by a code change. Re-run before trusting the flag on read-only questions with other wording or models. The live test logs the tasks of every wrong run.
+- A flagged text-only task cannot finish on text alone: it goes to a human with `UNVERIFIED_COMPLETION` unless it runs a passing command or writes a file. A false flag costs a human handoff, not a wrong COMPLETED.
+- The first run's vague-request test only checked that a question came back; the n = 30 run below also checks it is specific.
+
+### Re-run at n = 30 (2026-10-28)
+
+Same model and tests, `AGENTD_LIVE_RUNS=30`, after two changes: the plan prompt now tells the model that a request to explain, compare or discuss is one text task with `requires_workspace_change` false and no file or command, and the vague-request test counts a question as right only when it ends in `?` and is longer than 20 characters. Errors are all 429 (quota); every run that returned an answer was right.
+
+| Request | Expected | Right | Errors (429) |
+| --- | --- | --- | --- |
+| make my app better | question | 28/30 | 2 |
+| improve it | question | 25/30 | 5 |
+| what os and hardware have this machine | plan | 30/30 | 0 |
+| Add a `--verbose` flag to the CLI in `main.go` | plan | 30/30 | 0 |
+| Explain the trade-offs of SQLite versus Postgres for a small app | not flagged | 29/30 | 1 |
+
+- The explanation case is fixed by the prompt change, not by run variance: no wrong answer in 29 answered runs, against 0/10 before.
+- The specificity check removed no runs: every question codestral asked ended in `?` and was longer than 20 characters.
+- The flag test's two text-only summary cases also hit 429s; their scores were not recorded, and "What does this project do?" (no "do not change files" hint) was not reported. Re-run those three before relying on the flag for plain read-only questions.
+- **The prompt names the measured case.** The new rule's example is "explain the trade-offs of X versus Y", the same shape as the test request, so the 29/30 may overstate how well it generalizes. A held-out explain request with other wording would show it.
+
+### Re-run at n = 20 with an 8 s delay (2026-10-28)
+
+`codestral-latest`, 20 runs per case, 8 s between calls. **0 errors**: the 429s in the earlier runs were the provider's requests-per-minute limit, not the prompt. `AGENTD_LIVE_DELAY=8s` now does this in both live tests.
+
+| Request | Expected | Right |
+| --- | --- | --- |
+| `--verbose` flag, README, failing test, host facts (four cases) | flagged | 20/20 each |
+| Summary, "Do not create, modify, or delete any files" | not flagged | 20/20 |
+| Summary, "do not change any files" (original wording) | not flagged | 20/20 |
+| What does this project do? | not flagged | 18/20 |
+| Explain the trade-offs of SQLite versus Postgres | not flagged | 20/20 |
+| What are the pros and cons of SQLite vs Postgres? | not flagged | **16/20** |
+
+- The explain rule fit its own example (20/20) better than a reworded request (16/20). The rule was rewritten afterwards to name kinds of request (a question, an explanation, a comparison, pros and cons, a recommendation, an opinion) instead of quoting one; **that version is not measured yet.**
+- A false flag on a read-only question is cheap: the task needs one passing command or a written file, and a read such as `cat README.md` passes. The same fact makes the gate weak for a real change: any passing command counts as evidence, not only one that shows the change worked.
 
 ## Repeated file reads in the builtin agent (SP-027)
 
