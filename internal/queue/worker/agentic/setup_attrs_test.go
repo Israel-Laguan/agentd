@@ -15,12 +15,12 @@ func TestPrepareAgenticRunCarriesTaskAttrs(t *testing.T) {
 	e := &Engine{host: &noopHost{}}
 	for _, flagged := range []bool{true, false} {
 		task := models.Task{
-			BaseEntity:               models.BaseEntity{ID: "t1"},
-			ProjectID:                "p1",
-			AgentID:                  "a1",
-			Title:                    "title",
-			Description:              "description",
-			RequiresWorkspaceChange:  flagged,
+			BaseEntity:              models.BaseEntity{ID: "t1"},
+			ProjectID:               "p1",
+			AgentID:                 "a1",
+			Title:                   "title",
+			Description:             "description",
+			RequiresWorkspaceChange: flagged,
 		}
 		project := models.Project{BaseEntity: models.BaseEntity{ID: "p1"}}
 		_, _, _, _, _, _, exec := e.prepareAgenticRun(context.Background(), task, project, models.AgentProfile{}, nil)

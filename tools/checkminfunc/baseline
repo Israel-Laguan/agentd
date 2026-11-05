@@ -12,7 +12,6 @@ internal/agent/acp/client.go (*client).TerminalOutput
 internal/agent/acp/client.go (*client).ReleaseTerminal
 internal/agent/acp/client.go (*client).WaitForTerminalExit
 internal/agent/acp/driver.go NewDriver
-internal/agent/acp/fakeagent/fakeagent.go (*agent).Initialize
 internal/agent/acp/fakeagent/fakeagent.go (*agent).say
 internal/agent/acp/fakeagent/fakeagent.go (*agent).Cancel
 internal/agent/acp/fakeagent/fakeagent.go (*agent).Logout
@@ -141,6 +140,7 @@ internal/queue/worker/instructions.go NewSystemPromptBuilder
 internal/queue/worker/worker_permission.go containsSudoToken
 internal/queue/worker/worker_permission.go safeCommandFence
 internal/queue/worker/worker_retry.go (*Worker).commit
+internal/queue/worker/worker_retry.go (*Worker).CommitTextWithProfile
 internal/queue/worker/worker_support.go NewCancelRegistry
 internal/queue/worker/worker_support.go (*Worker).commitText
 internal/queue/worker/worker_support.go (*Worker).providerSupportsAgentic
@@ -177,7 +177,7 @@ tools/checkminfunc/baseline.go violationKey
 cmd/agentd/io.go writeLine
 cmd/agentd/io.go writeFormat
 internal/agent/acp/driver.go (*process).kill
-internal/agent/acp/fakeagent/fakeagent.go (*agent).NewSession
+internal/agent/acp/fakeagent/fakeagent.go (*agent).Initialize
 internal/agent/runtime/audit_schema.go HashArgs
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).withMaxDelegationDepth
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithExternalTools
@@ -186,6 +186,7 @@ internal/api/httpx/trust.go FromTrustedOrigin
 internal/capabilities/registry.go (*Registry).GetTools
 internal/config/split.go setSplitDefaults
 internal/frontdesk/intake.go (*IntakeProcessor).WithPhaseCap
+internal/gateway/correction/correction.go HasAttemptBudget
 internal/gateway/correction/correction.go GenerateJSON
 internal/gateway/routing/house_rules.go HouseRulesFromContext
 internal/gateway/routing/router.go (*Router).WithBudget

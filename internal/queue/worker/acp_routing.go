@@ -169,7 +169,7 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	audit := w.beginTaskAudit(task, project, route.KindACP)
 	succeeded := false
 	defer func() {
-		audit.failed = !succeeded
+		audit.failed = !succeeded && !audit.suspended
 		w.finishTaskAudit(task, project, route.KindACP, audit)
 	}()
 	access := stage.AccessWrite
@@ -195,6 +195,8 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	switch {
 	case errors.Is(err, acp.ErrSuspended):
 		// An approval gate blocked the task on a human; it runs again once answered.
+		audit.suspended = true
+		return
 	case errors.Is(err, stage.ErrUnverifiedCompletion):
 		w.failTerminal(ctx, task, err, models.TaskStateFailedRequiresHuman)
 	case err != nil:

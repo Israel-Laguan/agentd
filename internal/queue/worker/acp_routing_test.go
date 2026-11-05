@@ -289,6 +289,31 @@ func TestACPExecutionAuditsFailWhenTheResultCannotBePersisted(t *testing.T) {
 	}
 }
 
+// A blocked permission (approval gate) suspends the ACP call: the task is
+// audited [task_start task_suspended], not task_fail or task_complete, and
+// stays BLOCKED so it can return to READY once the human answers.
+func TestACPExecutionAuditsSuspendedWhenPermissionIsBlocked(t *testing.T) {
+	t.Parallel()
+	script := fakeagent.Script(fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindEdit, Title: "edit"}})
+	w, store, task, project, profile, _, _ := acpFixture(t, script, false)
+	profile.GatedTools = []string{"write"}
+	path := withAuditFile(t, w)
+
+	w.dispatchProcess(context.Background(), task, project, profile)
+
+	got := auditTypesFor(t, path, task.ID)
+	if len(got) != 2 || got[0] != "task_start" || got[1] != "task_suspended" {
+		t.Fatalf("task audit records = %v, want [task_start task_suspended]", got)
+	}
+	updated, err := store.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if updated.State != models.TaskStateBlocked {
+		t.Fatalf("task state = %s, want BLOCKED", updated.State)
+	}
+}
+
 // exec.work_plan can route to an ACP agent. The response is charged to the
 // caller's attempt budget once: ACP never runs the correction loop, so the call
 // must not also charge its own guard and GeneratePlan's fallback.

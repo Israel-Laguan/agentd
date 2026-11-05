@@ -8,6 +8,7 @@ import (
 type taskAudit struct {
 	failed        bool
 	reviewHandoff bool
+	suspended     bool
 }
 
 func (w *Worker) beginTaskAudit(task models.Task, project models.Project, provider string) *taskAudit {
@@ -29,6 +30,8 @@ func (w *Worker) finishTaskAudit(task models.Task, project models.Project, provi
 	}
 	recType := agentruntime.RecordTypeTaskComplete
 	switch {
+	case audit.suspended:
+		recType = agentruntime.RecordTypeTaskSuspended
 	case audit.failed:
 		recType = agentruntime.RecordTypeTaskFail
 	case audit.reviewHandoff:

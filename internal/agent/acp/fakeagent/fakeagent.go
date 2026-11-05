@@ -168,26 +168,6 @@ func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn, Usage: usage}, nil
 }
 
-// scriptFromPrompt finds the test script in a prompt: the whole prompt, or one
-// line of a context pack, which agentd prefixes with its own messages.
-func scriptFromPrompt(text string) []Step {
-	var steps []Step
-	if json.NewDecoder(strings.NewReader(text)).Decode(&steps) == nil && steps != nil {
-		return steps
-	}
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "[") {
-			continue
-		}
-		var candidate []Step
-		if json.Unmarshal([]byte(line), &candidate) == nil && candidate != nil {
-			return candidate
-		}
-	}
-	return nil
-}
-
 // run does one step. A non-empty stop reason or an error ends the turn.
 func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.StopReason, error) {
 	switch {
@@ -213,6 +193,9 @@ func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.
 		a.mu.Lock()
 		a.next[session] = step.Next
 		a.mu.Unlock()
+		return "", nil
+	}
+	if step.Message == "" {
 		return "", nil
 	}
 	return "", a.say(ctx, session, step.Message)
