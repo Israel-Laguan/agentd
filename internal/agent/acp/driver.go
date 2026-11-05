@@ -91,14 +91,14 @@ type Result struct {
 // Driver keeps one agent process warm and opens a session on it per Call.
 // Calls may run concurrently; a process that died is replaced on the next one.
 type Driver struct {
-	cfg  Config
-	mu   sync.Mutex
-	proc *process
+	cfg   Config
+	mu    sync.Mutex
+	procs map[string]*process
 }
 
 // NewDriver returns a Driver that starts its agent on the first Call.
 func NewDriver(cfg Config) *Driver {
-	return &Driver{cfg: cfg}
+	return &Driver{cfg: cfg, procs: map[string]*process{}}
 }
 
 // Call runs req in a new session. A ctx cancelled mid-prompt sends
@@ -175,9 +175,11 @@ func (p *process) turn(ctx context.Context, s *session, prompt string, result *R
 func (d *Driver) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.proc != nil {
-		d.proc.kill()
-		d.proc = nil
+	for k, p := range d.procs {
+		if p != nil {
+			p.kill()
+		}
+		delete(d.procs, k)
 	}
 	return nil
 }
@@ -189,17 +191,15 @@ func (d *Driver) Close() error {
 func (d *Driver) process(ctx context.Context, servers []acpsdk.McpServer) (*process, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.proc != nil && !d.proc.dead() {
-		if !d.cfg.MCPFromHome || d.proc.mcpURL == agentdURL(servers) {
-			return d.proc, nil
-		}
-		d.proc.kill()
-		d.proc = nil
+	key := ""
+	if d.cfg.MCPFromHome {
+		key = agentdURL(servers)
 	}
-	if d.proc != nil {
-		d.proc.kill()
-		d.proc = nil
+	if p, ok := d.procs[key]; ok && p != nil && !p.dead() {
+		return p, nil
 	}
+	// drop dead entry
+	delete(d.procs, key)
 	p, err := start(d.cfg, servers)
 	if err != nil {
 		return nil, err
@@ -209,7 +209,7 @@ func (d *Driver) process(ctx context.Context, servers []acpsdk.McpServer) (*proc
 		p.kill()
 		return nil, err
 	}
-	d.proc = p
+	d.procs[key] = p
 	return p, nil
 }
 

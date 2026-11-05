@@ -237,7 +237,7 @@ func decide(ctx context.Context, permit Permitter, p Permission, readOnly, noWor
 // server__tool by the agents that send them as kind other; the server is
 // agentd's own, so the tool names read agentd__<tool>. The driver lets its own
 // through without a hook, and refuses any other kind other call.
-var agentdSessionTools = []string{"report_outcome", "get_context", "ask_human"}
+var agentdSessionTools = []string{"report_outcome", "get_context", "ask_human", "board.list_tasks", "board.get_task", "board.list_projects", "board.get_project", "board.list_comments"}
 
 // ownTool reports whether p calls one of agentd's own session tools, which the
 // driver allows without a hook: they touch only agentd's session. The names
