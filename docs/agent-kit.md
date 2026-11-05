@@ -11,7 +11,7 @@ go list -f '{{.ImportPath}}: {{join .Imports " "}}' ./internal/agent/... ./inter
   | tr ' ' '\n' | grep '^agentd/internal' | sort | uniq -c | sort -rn
 ```
 
-**Gateway.** 118 files (67 tests), 4,493 non-test lines. Non-test code still imports `internal/models` from 5 packages (`gateway`, `correction`, `providers`, `routing`, `spec`) and `internal/api/correlation` from 2 (`providers`, `routing`). Nothing else. **285 files outside `internal/gateway` import it or a subpackage**, up from 269 on 2026-10-31 (PRs 02–08 added callers). A path move cannot fit in one PR.
+**Gateway** (before PR 10 cut it). 118 files (67 tests), 4,493 non-test lines. Non-test code still imports `internal/models` from 5 packages (`gateway`, `correction`, `providers`, `routing`, `spec`) and `internal/api/correlation` from 2 (`providers`, `routing`). Nothing else. **285 files outside `internal/gateway` import it or a subpackage**, up from 269 on 2026-10-31 (PRs 02–08 added callers). A path move cannot fit in one PR.
 
 **Agent packages** (non-test lines; importers are files outside `internal/agent/`):
 
@@ -123,8 +123,8 @@ Decided part. Step sizes were set on 2026-10-31 and still hold, apart from the i
 
 | Step | PR | What | Size (e) |
 | --- | --- | --- | --- |
-| 1 | PR 10 | **The errors leaf.** New `agentkit/llm` holds `ErrLLMUnreachable`, `ErrLLMQuotaExceeded`, `ErrInvalidJSONResponse`, `ErrBudgetExceeded` and `UsageDetails`; `models` aliases them, so the 69 files using `models.Err*` do not change | ~10 files, ~100 lines |
-| 2 | PR 10 | **The correlation move** (15 importers). Drop `models` and `api/correlation` from the `gateway-boundary` allow list; add an `agentkit-boundary` rule (`agentkit/**` imports only the stdlib and itself). **The gateway is cut, in place** | ~30 files, ~200 lines with step 1 |
+| 1 | PR 10, done | **The errors leaf.** New `agentkit/llm` holds `ErrLLMUnreachable`, `ErrLLMQuotaExceeded`, `ErrInvalidJSONResponse`, `ErrBudgetExceeded` and `UsageDetails`; `models` aliases them, so the 69 files using `models.Err*` do not change | ~10 files, ~100 lines |
+| 2 | PR 10, done | **The correlation move** (15 importers). Drop `models` and `api/correlation` from the `gateway-boundary` allow list; add an `agentkit-boundary` rule (`agentkit/**` imports only the stdlib and itself). **The gateway is cut, in place** | ~30 files, ~200 lines with step 1 |
 | 3 | S20 | Move `gateway/spec` (12 files), with a facade | ~14 files |
 | 4 | S20 | Move `truncation`, `providers`, `routing`, `correction`, `route`; split `truncation` from the rest if over ~95 files | ~75–80 files |
 | 5 | S20 | Move the gateway root; `internal/gateway` becomes a pure facade | ~30 files |
@@ -136,7 +136,7 @@ Decided part. Step sizes were set on 2026-10-31 and still hold, apart from the i
 | 11 | S20 | Move the `ContextPack` type; optional kit record type for `aicalls` | ~20 files |
 | 12+ | after the loop call | The L-steps or D-steps above | not sized |
 
-About 13–15 PRs for the decided kit. Steps 1–2 are PR 10; nothing in them depends on the loop.
+About 13–15 PRs for the decided kit. Steps 1–2 are PR 10 and are done: the gateway's non-test code imports only the standard library, itself and `agentkit`, and the `gateway-boundary` and `agentkit-boundary` depguard rules hold it. Nothing in them depends on the loop.
 
 ## Public API
 
