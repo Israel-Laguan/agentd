@@ -207,8 +207,15 @@ baseline for deciding whether that is worth building.
 - **Retention.** `ai_calls` and `tool_calls` keep every row unless
   `ai_usage.retention_days` is set (see [config-reference.md](config-reference.md#ai-usage)).
   Pruning removes rows older than the cut; the totals then cover only the kept window.
-- **Gateway calls only.** Usage by external CLI agents (SP-022) will be
-  self-reported and will not match gateway-measured numbers exactly.
+- **External agents report their own usage.** A call routed to an `acp` agent
+  writes one record once the agent starts: with provider `acp` and the preset as
+  the model, via the worker's ACP runtime. A call that fails before the agent
+  starts (jail start, driver setup, session-start hook, unknown preset) writes
+  none. opencode's tokens are its own count and will not match gateway-measured
+  numbers exactly. cline reports none: its records have zero tokens and the
+  model `cline (no usage reported)`, so a zero there means unknown, not free.
+  The exception to "a failed attempt has no model": a failed attempt whose agent
+  started is recorded with the preset as the model.
 - **Provider-reported tokens.** A provider that omits usage records 0, and
   embedding calls carry no tokens. A failed attempt has no model.
 

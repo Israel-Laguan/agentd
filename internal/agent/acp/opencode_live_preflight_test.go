@@ -52,7 +52,7 @@ func preflightCell(parent context.Context, opts liveOptions, cell liveCell) *liv
 		return pre
 	}
 
-	p, err := start(Config{Cwd: workspace, Command: opts.command(workspace, string(cfgJSON), logs)})
+	p, err := start(Config{Cwd: workspace, Command: opts.command(workspace, string(cfgJSON), logs)}, nil)
 	if err != nil {
 		pre.Error = "start: " + err.Error()
 		return pre

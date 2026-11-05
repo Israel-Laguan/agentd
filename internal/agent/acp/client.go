@@ -172,8 +172,12 @@ func (c *client) RequestPermission(_ context.Context, p acpsdk.RequestPermission
 	if s == nil {
 		return acpsdk.RequestPermissionResponse{Outcome: acpsdk.RequestPermissionOutcome{Cancelled: &acpsdk.RequestPermissionOutcomeCancelled{}}}, nil
 	}
-	perm := newPermission(p.ToolCall)
-	v := decide(s.ctx, s.req.Permit, perm, s.req.ReadOnly, s.req.NoWorkspace)
+	perms := newPermissions(p.ToolCall)
+	perm := perms[0]
+	v := Verdict{Allow: true}
+	if !ownTool(perm, s.req.MCPServers) {
+		v = decideAll(s.ctx, s.req.Permit, perms, s.req.ReadOnly, s.req.NoWorkspace)
+	}
 	if !v.Allow || v.Suspend {
 		// No command: it may carry a secret, and this log line is not scrubbed.
 		slog.Info("acp: permission refused", "session", p.SessionId, "kind", perm.Kind, "tool", perm.Tool,

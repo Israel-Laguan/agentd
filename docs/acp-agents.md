@@ -76,8 +76,6 @@ Cline names the tool `agentd__report_outcome` (server and tool joined by `__`); 
 ## Not measured yet
 
 - Real agentd stages (intake, task creation, execution) compared across a single model call, agentd's builtin agent and each external agent.
-- Running the agent process inside the jail: measured in [Inside the jail (SP-025)](#inside-the-jail-sp-025).
-- Whether a cline system prompt or rules file, rather than the task prompt, makes the outcome call reliable.
 - agy, which has MCP but no ACP.
 
 ## Stage × method comparison
@@ -140,8 +138,8 @@ Now in agentd (S19 PR 05), as `internal/agent/acp`, on `github.com/coder/acp-go-
 - **Process:** `Config.Command` builds the agent process; in agentd that is `sandbox.BashExecutor.AgentCommand`, which runs it in the egress jail and refuses it without one. The driver runs `initialize` pinned to protocol version 1 and fails on any other answer, then `authenticate` when the preset names a method.
 - **Sessions:** one `session/new` per call, on a process kept warm between calls. A driver serves one workspace: the jail binds it when the process starts, and every session opens in it. A call cancelled mid-prompt sends `session/cancel` and keeps the process. A call on a process that died fails, and the next call starts a new one.
 - **Client capabilities:** none. `fs/*` and `terminal/*` answer "method not found".
-- **Permissions:** an ACP tool kind maps onto agentd's tool (`execute` is `bash`, `read` and `search` are `read`, `edit`, `delete` and `move` are `write`), and the task's hooks answer it: the AllowedTools veto, then the approval gate, whose HUMAN subtask stops the call (`worker.ACPPermitter`). Before any hook, the driver refuses package installs (`npx`, `npm install`, `pip install`, `go get` and the like), a command it cannot read from the raw input, and any other kind, which includes cline's MCP tools (kind `other`). An allowed call gets `allow_once`, never `allow_always`, which would let the agent skip later checks.
-- **Errors:** an agent error whose text names a 429, a rate limit, a quota or an insufficient balance wraps `ErrLLMQuotaExceeded`, so it takes the gateway's breaker and defer path. A turn the agent ends `cancelled` on its own fails too: with `ErrPermissionRefused` and the hook's reason when agentd refused a permission in it (opencode ends a turn that way after a reject), otherwise with a plain error.
+- **Permissions:** an ACP tool kind maps onto agentd's tool (`execute` is `bash`, `read` and `search` are `read`, `edit`, `delete` and `move` are `write`), and the task's hooks answer it, with its input in the builtin tool's shape (`{command}`, `{path}`, `{path, content}`; opencode's edit sends `filePath`, `oldString`, `newString`): the AllowedTools veto, then the approval gate, whose HUMAN subtask stops the call (`worker.ACPPermitter`). Before any hook, the driver refuses package installs (`npx`, `npm install`, `pip install`, `go get` and the like), a command it cannot read from the raw input, and any other kind, except the tools of the MCP server the call attached (cline asks for `agentd__report_outcome` as kind `other`), which are allowed with no hook. An allowed call gets `allow_once`, never `allow_always`, which would let the agent skip later checks.
+- **Errors:** an agent error whose text names a 429, a rate limit, a quota, a usage limit (opencode's free tier) or an insufficient balance wraps `ErrLLMQuotaExceeded`, so it takes the gateway's breaker and defer path. A turn the agent ends `cancelled` on its own fails too: with `ErrPermissionRefused` and the hook's reason when agentd refused a permission in it (opencode ends a turn that way after a reject), otherwise with a plain error.
 - **Tests** run a fake agent built on the SDK's agent side (`internal/agent/acp/fakeagent`), scripted through its prompt. No test starts opencode or cline.
 
 ### opencode 2.2.5 over the driver
@@ -151,6 +149,8 @@ Measured 2026-11-03 with a throwaway live test (`-tags live`, not in the repo): 
 - **Config:** `OPENCODE_CONFIG_CONTENT` sets the model (`{"model": "..."}`) and the permission rules, so no `session/set_config_option` call is needed. An unknown model id is not refused: `session/new` silently picks another model, so a preset has to check `configOptions.model.currentValue`. The 1.19.0 free id above (`opencode/nemotron-3-ultra-free`) is gone.
 - **Permissions:** with the default config, no requests (as with 1.19.0). With `{"permission": {"bash": "ask", "edit": "ask"}}` every shell call asks as kind `execute` (raw input `command`, `cwd`) and every write as `edit` (`path`, `content`). Reads don't ask. `{"*": "ask"}` also asks for reads (kind `read`). The options are `once`, `always` and `reject`. `once` asks again on the next call. A reject fails the tool call, and the turn ends `cancelled` with no error. `npx` was refused before the hooks in 3 of 3 runs.
 - **Advertised:** protocol version 1, MCP over http only (no sse), session modes `build` and `plan` as a config option, usage in every prompt result. Auth is `opencode-login`, outside ACP.
+
+How agentd now runs opencode and cline, and the live smoke of that setup: [acp-presets.md](acp-presets.md).
 
 ## Inside the jail (SP-025)
 
@@ -261,7 +261,7 @@ Launch order: the jail's bash starts `jail-forward` through a process substituti
 
 Environment, set after the allowlisted host variables so a host proxy setting cannot win: `HTTPS_PROXY` and `HTTP_PROXY` are `http://127.0.0.1:3128`, `NO_PROXY` is `127.0.0.1,localhost` (the MCP port, `sandbox.JailMCPAddr`, must not go through the proxy), the same three in lowercase (curl prefers lowercase names and reads only `http_proxy` for `http://` URLs), and `NODE_USE_ENV_PROXY=1`.
 
-The allowlist is a parameter (`Proxy.Allow`), not a config key: each preset passes its own hosts (PR 08). Registry and download hosts for a cold start stay off the list; pre-seed the agent home instead.
+The allowlist is a parameter (`Proxy.Allow`), not a config key: each preset passes its own hosts (`acp.Presets`). Registry and download hosts for a cold start stay off the list; the preset seeds the agent home instead.
 
 An egress command needs the jail. With `sandbox.backend: filter-only`, or `auto` without a usable bwrap, it is refused with `ErrSandboxUnavailable`, never run with the host's network.
 

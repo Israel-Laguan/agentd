@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"agentd/internal/bus"
 	"agentd/internal/config"
 	"agentd/internal/frontdesk"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/kanban"
 	"agentd/internal/mcp"
 	"agentd/internal/memory"
@@ -36,7 +38,10 @@ func withLiveTaskNotifier(store *kanban.Store, eventBus bus.Bus) *kanban.Store {
 func buildStartRuntime(ctx context.Context, cfg config.Config, store models.KanbanStore, deps runtimeDeps, startOpts *startOptions) (*queue.Daemon, *http.Server, error) {
 	ledger := queue.NewRollingTokenLedger(cfg.Queue.RollingTokenWindow, cfg.Queue.RollingTokenLimit)
 	hydrateRollingLedger(ctx, store, ledger)
-	worker := buildWorker(store, deps, cfg, ledger)
+	worker, err := buildWorker(store, deps, cfg, ledger)
+	if err != nil {
+		return nil, nil, err
+	}
 	maxTasks := cfg.Gateway.MaxTasksPerPhase
 	if maxTasks < 0 {
 		maxTasks = 0
@@ -53,7 +58,7 @@ func buildStartRuntime(ctx context.Context, cfg config.Config, store models.Kanb
 	return daemon, server, nil
 }
 
-func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, ledger *queue.RollingTokenLedger) *queue.Worker {
+func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, ledger *queue.RollingTokenLedger) (*queue.Worker, error) {
 	path := ""
 	if cfg.Queue.Instructions.UserPreferencesFile != "" {
 		path = filepath.Join(cfg.HomeDir, cfg.Queue.Instructions.UserPreferencesFile)
@@ -62,7 +67,26 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 	if ledger != nil && ledger.Enabled() {
 		hook = func(tokens int) { ledger.LogCall(tokens) }
 	}
-	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, buildWorkerOptions(store, deps, cfg, path, hook))
+	opts := buildWorkerOptions(store, deps, cfg, path, hook)
+	var recorder spec.Recorder
+	if deps.aiCalls != nil { // a nil *Writer in the interface would not read as nil
+		recorder = deps.aiCalls
+	}
+	var acp *queue.ACPRuntime
+	if queue.HasACPAgent(cfg.Gateway.Routing) {
+		// The jail-forward binary is only wanted by an acp agent: resolve it
+		// when the routes name one, not on every startup.
+		forwarder, err := os.Executable()
+		if err != nil {
+			return nil, fmt.Errorf("the agentd binary for jail-forward: %w", err)
+		}
+		acp, err = queue.NewACPRuntime(cfg.Gateway.Routing, deps.sandbox, forwarder, recorder)
+		if err != nil {
+			return nil, err
+		}
+	}
+	opts.ACP = acp
+	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, opts), nil
 }
 
 func buildWorkerOptions(store models.KanbanStore, deps runtimeDeps, cfg config.Config, userPrefsPath string, tokenHook func(int)) queue.WorkerOptions {

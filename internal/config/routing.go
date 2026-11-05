@@ -9,6 +9,7 @@ import (
 	"agentd/internal/agent/acp"
 	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
+	"agentd/internal/paths"
 )
 
 // loadRouteTable reads and validates the agents: and stages: sections. A config
@@ -81,19 +82,47 @@ func parseAgent(where string, entry map[string]any) (route.Agent, error) {
 		a.Model, err = optionalString(where, entry, "model")
 		return a, err
 	case route.KindACP:
-		a.Level = spec.LevelL3
-		if err := onlyKeys(entry, where, "kind", "preset"); err != nil {
-			return route.Agent{}, err
-		}
-		if a.Preset, err = optionalString(where, entry, "preset"); err != nil {
-			return route.Agent{}, err
-		}
-		if _, ok := acp.Presets[a.Preset]; !ok {
-			return route.Agent{}, fmt.Errorf("%s: unknown preset %q", where, a.Preset)
-		}
-		return a, nil
+		return parseACPAgent(where, entry, a)
 	}
 	return route.Agent{}, fmt.Errorf("%s: unknown kind %q (want %s or %s)", where, kind, route.KindModel, route.KindACP)
+}
+
+// parseACPAgent reads an acp agent: its preset, the model it must run, and
+// where the user's binary and login are when not in the preset's defaults.
+func parseACPAgent(where string, entry map[string]any, a route.Agent) (route.Agent, error) {
+	a.Level = spec.LevelL3
+	if err := onlyKeys(entry, where, "kind", "preset", "model", "executable", "credentials"); err != nil {
+		return route.Agent{}, err
+	}
+	var err error
+	for key, field := range map[string]*string{"preset": &a.Preset, "model": &a.Model, "executable": &a.Executable, "credentials": &a.Credentials} {
+		if *field, err = optionalString(where, entry, key); err != nil {
+			return route.Agent{}, err
+		}
+	}
+	preset, ok := acp.Presets[a.Preset]
+	if !ok {
+		return route.Agent{}, fmt.Errorf("%s: unknown preset %q", where, a.Preset)
+	}
+	// A preset's own default model may be paid (cline) or not the one wanted.
+	if a.Model == "" {
+		return route.Agent{}, fmt.Errorf("%s: model is required for an acp agent; name a free one", where)
+	}
+	if preset.ModelCheck != nil {
+		// The preset's model shape is validated here, so a mistake is reported
+		// once at load, not when each call starts.
+		if err := preset.ModelCheck(a.Model); err != nil {
+			return route.Agent{}, fmt.Errorf("%s: %w", where, err)
+		}
+	}
+	if a.Executable != "" && !strings.Contains(a.Executable, "/") {
+		// Preset.Executable resolves a bare name against the daemon's cwd, which
+		// is not the agent's; leave executable unset for the preset's command on
+		// PATH, which Exec looks up.
+		return route.Agent{}, fmt.Errorf("%s: executable %q is a bare name, not a path; give its path, or leave executable unset to use the preset's command on PATH", where, a.Executable)
+	}
+	a.Executable, a.Credentials = paths.ExpandTildePrefix(a.Executable), paths.ExpandTildePrefix(a.Credentials)
+	return a, nil
 }
 
 func optionalString(where string, entry map[string]any, key string) (string, error) {
@@ -253,22 +282,3 @@ func parseMatch(at string, raw any) (route.Match, error) {
 	return m, nil
 }
 
-// onlyKeys rejects a key the section does not define, so a misspelt key cannot
-// be silently ignored (viper ignores unknown keys).
-func onlyKeys(m map[string]any, where string, allowed ...string) error {
-	for key := range m {
-		if !containsString(allowed, key) {
-			return fmt.Errorf("%s: unknown key %q", where, key)
-		}
-	}
-	return nil
-}
-
-func containsString(list []string, s string) bool {
-	for _, item := range list {
-		if item == s {
-			return true
-		}
-	}
-	return false
-}

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"reflect"
 	"strings"
+
+	acp "github.com/coder/acp-go-sdk"
 )
 
 // scriptFromPrompt finds the test script in a prompt: the whole prompt, or one
@@ -40,4 +42,18 @@ func parseScriptLine(line string) ([]Step, bool) {
 		}
 	}
 	return steps, true
+}
+
+// modelOptions reports model as session/new's "model" config option, as
+// opencode does; none when model is empty.
+func modelOptions(model string) []acp.SessionConfigOption {
+	if model == "" {
+		return nil
+	}
+	return []acp.SessionConfigOption{{Select: &acp.SessionConfigOptionSelect{
+		Id: "model", Name: "Model", Type: "select", CurrentValue: acp.SessionConfigValueId(model),
+		Options: acp.SessionConfigSelectOptions{Ungrouped: &acp.SessionConfigSelectOptionsUngrouped{
+			{Name: model, Value: acp.SessionConfigValueId(model)},
+		}},
+	}}}
 }

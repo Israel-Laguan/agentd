@@ -102,6 +102,11 @@ func (s *Session) registerReportOutcome() {
 		case in.Result == nil:
 			return s.reportError(errors.New("result is required when completed")), nil, nil
 		}
+		// cline on a free model sent the result JSON-encoded as a string
+		// (live smoke, 2026-11-05): a string holding an object or array is that.
+		if text, ok := in.Result.(string); ok && json.Valid([]byte(text)) && strings.ContainsAny(strings.TrimSpace(text)[:1], "{[") {
+			in.Result = json.RawMessage(text)
+		}
 		raw, err := json.Marshal(in.Result)
 		if err == nil {
 			raw, err = s.cfg.Contract.Check(raw)

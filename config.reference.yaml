@@ -210,7 +210,8 @@ tiered:
     max_re_gather: 2
 agents: # purpose routing; see docs/config-reference.md#routing-agents-and-stages
   quick: { provider: openai, model: "gpt-4o-mini" } # kind: model (L1); unused until a stage routes to it
-  # coder: { kind: acp, preset: opencode } # L3 external agent; no preset exists until S19 PR 08
+  # coder: { kind: acp, preset: opencode, model: "opencode/deepseek-v4.1-flash-free" } # L3 external agent; model required
+  # coder-cline: { kind: acp, preset: cline, model: "nvidia/nemotron-3-ultra-550b-a55b:free" } # L3 external agent; model required; executable and credentials optional (~/ ok)
 # stages: # unrouted purposes take the gateway.order cascade
 #   create.elicit:
 #     default: quick

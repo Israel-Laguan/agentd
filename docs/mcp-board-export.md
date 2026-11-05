@@ -193,7 +193,7 @@ No write tool is offered. The rules around the report:
 - **Read-only stages:** the driver refuses every write permission before the hooks, and `AgentCommand(..., readOnly)` binds the workspace read-only for the agent's own tools.
 - **No workspace access:** a stage with `AccessNone` refuses every workspace permission request, including reads and commands. In the current ACP driver this uses the read-only process configuration; it is not a separate process access level.
 
-Transport plan: Streamable HTTP. `mcp.SessionMux` can serve each session at its own random path; production wiring to a listener on `sandbox.Egress.MCPSocket` is deferred until the ACP agent is connected (PR 07). The agent will reach it at `http://127.0.0.1:3129/mcp/<id>` through the forwarder. A stdio command for cline is not built: cline reads its MCP servers once per process from its settings file, so a per-session path does not reach it (S19 PR 08).
+Transport: Streamable HTTP. `mcp.SessionMux` serves each session at its own random path, on one unix socket the daemon opens when a config names an `acp` agent; each run's jail binds it as `sandbox.Egress.MCPSocket`. The agent reaches it at `http://127.0.0.1:3129/mcp/<id>` through the forwarder: opencode from `session/new`, cline from its settings file, which agentd writes for each run (one session per process), since cline ignores `session/new`'s servers. No stdio command is built.
 
 ## Debug logging
 

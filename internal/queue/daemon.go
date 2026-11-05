@@ -180,7 +180,12 @@ func (d *Daemon) Start(ctx context.Context) error {
 	return nil
 }
 
-func (d *Daemon) Stop() error { return nil }
+func (d *Daemon) Stop() error {
+	if d.worker != nil {
+		return d.worker.Close()
+	}
+	return nil
+}
 
 func normalizeDaemonOptions(opts DaemonOptions) DaemonOptions {
 	normalizeWorkerOptions(&opts)

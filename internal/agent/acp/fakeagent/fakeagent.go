@@ -88,14 +88,16 @@ func Script(steps ...Step) string {
 }
 
 // Serve runs the agent on in and out until the client disconnects. With
-// "-protocol N" it answers initialize with protocol version N.
+// "-protocol N" it answers initialize with protocol version N, and with
+// "-model M" session/new reports M as its "model" config option.
 func Serve(args []string, in io.Reader, out io.Writer) error {
 	flags := flag.NewFlagSet(Arg, flag.ContinueOnError)
 	protocol := flags.Int("protocol", acp.ProtocolVersionNumber, "protocol version initialize answers with")
+	model := flags.String("model", "", "the model session/new reports")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	a := &agent{protocol: *protocol, mcp: map[acp.SessionId]string{}, next: map[acp.SessionId][]Step{}}
+	a := &agent{protocol: *protocol, model: *model, mcp: map[acp.SessionId]string{}, next: map[acp.SessionId][]Step{}}
 	a.conn = acp.NewAgentSideConnection(a, out, in)
 	<-a.conn.Done()
 	return nil
@@ -104,6 +106,7 @@ func Serve(args []string, in io.Reader, out io.Writer) error {
 type agent struct {
 	conn     *acp.AgentSideConnection
 	protocol int
+	model    string
 	sessions atomic.Int64
 	cancels  atomic.Int64
 	calls    atomic.Int64
@@ -139,7 +142,7 @@ func (a *agent) NewSession(_ context.Context, p acp.NewSessionRequest) (acp.NewS
 			a.mu.Unlock()
 		}
 	}
-	return acp.NewSessionResponse{SessionId: id}, nil
+	return acp.NewSessionResponse{SessionId: id, ConfigOptions: modelOptions(a.model)}, nil
 }
 
 // Prompt runs the scripted steps, or the next scripted prompt for the session.

@@ -18,9 +18,9 @@ type Permission struct {
 	Kind string
 	// Tool is agentd's tool for the kind (agent/tools names): bash, read or write.
 	Tool string
-	// Args is the call's input as JSON: for bash, the builtin bash tool's
-	// {"command": ...}, so hooks that read a bash command read this one;
-	// otherwise the agent's raw input.
+	// Args is the call's input as JSON in the builtin tool's shape, so the
+	// hooks read it as they read a builtin call: {"command": ...} for bash,
+	// {path} for read, {path, content} for write.
 	Args string
 	// Command is what a bash call runs, as read from the raw input.
 	Command string
@@ -87,6 +87,90 @@ func newPermission(call acpsdk.ToolCallUpdate) Permission {
 	return p
 }
 
+// newPermissions is call as the hooks check it: one Permission per file a
+// read or write names (cline's read_files takes several), any other call as
+// one. A search with no path reads the workspace; any other call with no
+// path is one Permission without it, which the schema check refuses.
+func newPermissions(call acpsdk.ToolCallUpdate) []Permission {
+	p := newPermission(call)
+	if p.Tool != "read" && p.Tool != "write" {
+		return []Permission{p}
+	}
+	paths := pathsOf(call.RawInput)
+	switch {
+	case len(paths) > 0:
+	case p.Kind == string(acpsdk.ToolKindSearch):
+		paths = []string{"."} // a search that names no path searches the workspace
+	default:
+		paths = []string{""}
+	}
+	in, _ := call.RawInput.(map[string]any)
+	perms := make([]Permission, len(paths))
+	for i, path := range paths {
+		perms[i] = p
+		perms[i].Args = fileArgs(p.Tool, path, in)
+	}
+	return perms
+}
+
+// fileArgs is one file of a read or write in agentd's shape, {path} or
+// {path, content}. Agents name them their own way: opencode's edit sends
+// filePath, oldString and newString.
+func fileArgs(tool, path string, in map[string]any) string {
+	args := map[string]string{}
+	if path != "" {
+		args["path"] = path
+	}
+	if tool == "write" {
+		// A write without content is malformed and must reach the schema check,
+		// which refuses it; an alias that was absent is not written as "".
+		if content, ok := in["content"].(string); ok {
+			args["content"] = content
+		} else if content, ok := in["newString"].(string); ok {
+			args["content"] = content
+		} else if content, ok := in["new_string"].(string); ok {
+			args["content"] = content
+		}
+	}
+	out, _ := json.Marshal(args)
+	return string(out)
+}
+
+// pathsOf reads the files a call names: a path string, a list of them or of
+// {path} entries, cline's {files}, {file_paths} or {paths}, or one entry
+// whose path is path, filePath or file_path.
+func pathsOf(raw any) []string {
+	switch v := raw.(type) {
+	case string:
+		return []string{v}
+	case []any:
+		var paths []string
+		for _, item := range v {
+			paths = append(paths, pathsOf(item)...)
+		}
+		return paths
+	case map[string]any:
+		for _, key := range []string{"files", "file_paths", "paths"} {
+			if list, ok := v[key]; ok {
+				return pathsOf(list)
+			}
+		}
+		if path := firstString(v, "path", "filePath", "file_path"); path != "" {
+			return []string{path}
+		}
+	}
+	return nil
+}
+
+func firstString(in map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if s, ok := in[key].(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
 // commandOf reads the command from an execute call's raw input, in the shapes
 // cline's run_commands takes: a string, a list, or an object with command or
 // commands, where an item is a string or {executable, args}. opencode sends
@@ -145,6 +229,46 @@ func decide(ctx context.Context, permit Permitter, p Permission, readOnly, noWor
 	v, err := permit(ctx, p)
 	if err != nil {
 		return Verdict{Reason: "permission check failed: " + err.Error()}
+	}
+	return v
+}
+
+// agentdSessionTools are the MCP tools agentd attaches to a session, named
+// server__tool by the agents that send them as kind other; the server is
+// agentd's own, so the tool names read agentd__<tool>. The driver lets its own
+// through without a hook, and refuses any other kind other call. The board.*
+// entries are project-scoped read-only tools (tasks, projects, comments).
+var agentdSessionTools = []string{"report_outcome", "get_context", "ask_human", "board.list_tasks", "board.get_task", "board.list_projects", "board.get_project", "board.list_comments"}
+
+// ownTool reports whether p calls one of agentd's own session tools, which the
+// driver allows without a hook: the session tools touch only agentd's session,
+// and the board.* tools are project-scoped reads. The names must match exactly,
+// never a prefix, so an agent that names an unmapped kind with a title of its
+// own cannot ride the bypass.
+func ownTool(p Permission, servers []acpsdk.McpServer) bool {
+	if p.Tool != "" {
+		return false
+	}
+	for _, s := range servers {
+		if s.Http == nil || s.Http.Name != "agentd" {
+			continue
+		}
+		for _, t := range agentdSessionTools {
+			if p.Title == s.Http.Name+"__"+t {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// decideAll answers every part of one request; the first refusal answers it.
+func decideAll(ctx context.Context, permit Permitter, perms []Permission, readOnly, noWorkspace bool) Verdict {
+	var v Verdict
+	for _, p := range perms {
+		if v = decide(ctx, permit, p, readOnly, noWorkspace); !v.Allow || v.Suspend {
+			return v
+		}
 	}
 	return v
 }

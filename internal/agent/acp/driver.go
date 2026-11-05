@@ -11,11 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"sync"
-	"time"
-
-	"agentd/internal/models"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 )
@@ -36,9 +32,6 @@ var ErrPermissionRefused = errors.New("acp: turn ended on a refused permission")
 // ErrAccessMismatch names a call that asks for a different workspace access level than the process started with.
 var ErrAccessMismatch = errors.New("acp: driver workspace access does not match the request")
 
-// quotaError matches quota and rate errors the agent reports as text.
-var quotaError = regexp.MustCompile(`(?i)\b429\b|rate[ _-]?limit|too many requests|quota|insufficient (?:balance|credits)`)
-
 // Config is how to start one agent for one workspace.
 type Config struct {
 	// Cwd is the workspace: the process starts for it and every session opens
@@ -48,11 +41,19 @@ type Config struct {
 	ReadOnly bool // the workspace access Command binds; the other level is refused.
 	// Command returns the agent process for cwd, not started, living as long
 	// as ctx. In agentd it is sandbox.BashExecutor.AgentCommand, so the agent
-	// runs in the egress jail with cwd bound.
-	Command func(ctx context.Context, cwd string) (*exec.Cmd, error)
+	// runs in the egress jail with cwd bound. servers are the first call's MCP
+	// servers, for an agent that reads them from its own config (cline).
+	Command func(ctx context.Context, cwd string, servers []acpsdk.McpServer) (*exec.Cmd, error)
 	// AuthMethod, when set, is the method id sent to authenticate after
 	// initialize. opencode and cline sign in outside ACP and leave it empty.
 	AuthMethod string
+	// Model, when set, is the model session/new must report as its "model"
+	// config option; a session on any other fails with ErrModelMismatch.
+	Model string
+	// MCPFromHome, when true, means the agent reads agentd's MCP url from its
+	// own config, so a warm process must restart when the url changes; false
+	// means session/new serves the url, which a warm process already does.
+	MCPFromHome bool
 }
 
 // Request is one call: a new session and one or more prompt turns.
@@ -90,14 +91,14 @@ type Result struct {
 // Driver keeps one agent process warm and opens a session on it per Call.
 // Calls may run concurrently; a process that died is replaced on the next one.
 type Driver struct {
-	cfg  Config
-	mu   sync.Mutex
-	proc *process
+	cfg   Config
+	mu    sync.Mutex
+	procs map[string]*process
 }
 
 // NewDriver returns a Driver that starts its agent on the first Call.
 func NewDriver(cfg Config) *Driver {
-	return &Driver{cfg: cfg}
+	return &Driver{cfg: cfg, procs: map[string]*process{}}
 }
 
 // Call runs req in a new session. A ctx cancelled mid-prompt sends
@@ -106,17 +107,20 @@ func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
 	if req.ReadOnly != d.cfg.ReadOnly {
 		return Result{}, fmt.Errorf("%w: driver=%t request=%t", ErrAccessMismatch, d.cfg.ReadOnly, req.ReadOnly)
 	}
-	p, err := d.process(ctx)
-	if err != nil {
-		return Result{}, err
-	}
 	servers := req.MCPServers
 	if servers == nil {
 		servers = []acpsdk.McpServer{}
 	}
+	p, err := d.process(ctx, servers)
+	if err != nil {
+		return Result{}, err
+	}
 	created, err := p.conn.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: d.cfg.Cwd, McpServers: servers})
 	if err != nil {
 		return Result{}, p.fail(ctx, "session/new", err)
+	}
+	if got := modelOption(created.ConfigOptions); d.cfg.Model != "" && got != d.cfg.Model {
+		return Result{}, fmt.Errorf("%w: configured %q, the agent reports %q", ErrModelMismatch, d.cfg.Model, got)
 	}
 	// shortcut: sessions are never closed (session/close is optional and cline lacks it); close them if a warm agent's memory grows.
 	s := p.client.open(ctx, created.SessionId, req)
@@ -133,80 +137,79 @@ func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
 	}
 }
 
-// turn sends one prompt in s and adds how it ended to result.
-func (p *process) turn(ctx context.Context, s *session, prompt string, result *Result) error {
-	s.mu.Lock()
-	s.refused = ""
-	s.mu.Unlock()
-	turn, err := p.conn.Prompt(s.ctx, acpsdk.PromptRequest{SessionId: s.id, Prompt: []acpsdk.ContentBlock{acpsdk.TextBlock(prompt)}})
-	result.Text, result.Evidence, result.StopReason = s.message(), s.evidence(), turn.StopReason
-	result.Usage = addUsage(result.Usage, turn.Usage)
-	if reason := s.suspended(); reason != "" {
-		return fmt.Errorf("%w: %s", ErrSuspended, reason)
-	}
-	if err != nil {
-		return p.fail(ctx, "session/prompt", err)
-	}
-	// agentd's own cancel returned ctx's error above, so the agent stopped itself.
-	if turn.StopReason == acpsdk.StopReasonCancelled {
-		if reason := s.refusal(); reason != "" {
-			return fmt.Errorf("%w: %s", ErrPermissionRefused, reason)
+// modelOption is the current value of the session's "model" config option, or "".
+func modelOption(options []acpsdk.SessionConfigOption) string {
+	for _, o := range options {
+		if o.Select != nil && o.Select.Id == "model" {
+			return string(o.Select.CurrentValue)
 		}
-		return errors.New("acp: the agent cancelled its turn")
 	}
-	return nil
+	return ""
 }
 
 // Close stops the agent process.
 func (d *Driver) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.proc != nil {
-		d.proc.kill()
-		d.proc = nil
+	for k, p := range d.procs {
+		if p != nil {
+			p.kill()
+		}
+		delete(d.procs, k)
 	}
 	return nil
 }
 
-// process returns the warm process, starting and initializing one when there
-// is none or the last one died.
-func (d *Driver) process(ctx context.Context) (*process, error) {
+// process returns the warm process, starting and initializing one for servers
+// when there is none or the last one died. An agent that reads its MCP url from
+// its own config gets a new process when the url changes, so it does not hold
+// the first call's session endpoint.
+func (d *Driver) process(ctx context.Context, servers []acpsdk.McpServer) (*process, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.proc != nil && !d.proc.dead() {
-		return d.proc, nil
+	key := ""
+	if d.cfg.MCPFromHome {
+		key = agentdURL(servers)
 	}
-	if d.proc != nil {
-		d.proc.kill()
-		d.proc = nil
+	if p, ok := d.procs[key]; ok && p != nil && !p.dead() {
+		return p, nil
 	}
-	p, err := start(d.cfg)
+	// drop dead entry, killing the orphaned process first: dead() can report
+	// death via conn.Done() before exited closes.
+	if p, ok := d.procs[key]; ok && p != nil {
+		p.kill()
+	}
+	delete(d.procs, key)
+	// evict idle (or dead) entries for other MCP urls so per-session processes
+	// do not accumulate; keep any with active sessions.
+	for k, op := range d.procs {
+		if k == key || op == nil {
+			continue
+		}
+		if op.dead() || op.idle() {
+			op.kill()
+			delete(d.procs, k)
+		}
+	}
+	p, err := start(d.cfg, servers)
 	if err != nil {
 		return nil, err
 	}
+	p.mcpURL = agentdURL(servers)
 	if err := p.handshake(ctx, d.cfg.AuthMethod); err != nil {
 		p.kill()
 		return nil, err
 	}
-	d.proc = p
+	d.procs[key] = p
 	return p, nil
 }
 
-type process struct {
-	conn   *acpsdk.ClientSideConnection
-	client *client
-	stop   context.CancelFunc
-	exited chan struct{}
-	// waitErr is cmd.Wait's result, set before exited closes.
-	waitErr error
-}
-
-func start(cfg Config) (*process, error) {
+func start(cfg Config, servers []acpsdk.McpServer) (*process, error) {
 	if cfg.Command == nil {
 		return nil, errors.New("acp: no agent command configured")
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	p, err := spawn(ctx, cfg)
+	p, err := spawn(ctx, cfg, servers)
 	if err != nil {
 		stop()
 		return nil, err
@@ -215,8 +218,8 @@ func start(cfg Config) (*process, error) {
 	return p, nil
 }
 
-func spawn(ctx context.Context, cfg Config) (*process, error) {
-	cmd, err := cfg.Command(ctx, cfg.Cwd)
+func spawn(ctx context.Context, cfg Config, servers []acpsdk.McpServer) (*process, error) {
+	cmd, err := cfg.Command(ctx, cfg.Cwd, servers)
 	if err != nil {
 		return nil, fmt.Errorf("acp: agent command: %w", err)
 	}
@@ -244,57 +247,4 @@ func spawn(ctx context.Context, cfg Config) (*process, error) {
 
 // handshake runs initialize, pinned to the SDK's protocol version, then
 // authenticate when a method is configured.
-func (p *process) handshake(ctx context.Context, authMethod string) error {
-	resp, err := p.conn.Initialize(ctx, acpsdk.InitializeRequest{ProtocolVersion: acpsdk.ProtocolVersionNumber})
-	if err != nil {
-		return p.fail(ctx, "initialize", err)
-	}
-	if resp.ProtocolVersion != acpsdk.ProtocolVersionNumber {
-		return fmt.Errorf("%w at initialize: the agent speaks version %d, agentd pins %d",
-			ErrProtocolVersion, resp.ProtocolVersion, acpsdk.ProtocolVersionNumber)
-	}
-	if authMethod == "" {
-		return nil
-	}
-	if _, err := p.conn.Authenticate(ctx, acpsdk.AuthenticateRequest{MethodId: authMethod}); err != nil {
-		return p.fail(ctx, "authenticate", err)
-	}
-	return nil
-}
 
-func (p *process) dead() bool {
-	select {
-	case <-p.conn.Done():
-		return true
-	case <-p.exited:
-		return true
-	default:
-		return false
-	}
-}
-
-func (p *process) kill() {
-	p.stop()
-	<-p.exited
-}
-
-// fail names why op failed: the caller cancelled, the process died, the
-// agent's provider refused for quota or rate (the breaker and defer path, the
-// same as a gateway 429), or the agent's own error.
-func (p *process) fail(ctx context.Context, op string, err error) error {
-	if ctx.Err() != nil {
-		return fmt.Errorf("acp: %s: %w", op, ctx.Err())
-	}
-	if p.dead() {
-		select {
-		case <-p.exited:
-			return fmt.Errorf("acp: agent process exited during %s: %v", op, p.waitErr)
-		case <-time.After(time.Second):
-			return fmt.Errorf("acp: agent process exited during %s: %w", op, err)
-		}
-	}
-	if quotaError.MatchString(err.Error()) {
-		return fmt.Errorf("%w: acp agent: %s: %v", models.ErrLLMQuotaExceeded, op, err)
-	}
-	return fmt.Errorf("acp: %s: %w", op, err)
-}
