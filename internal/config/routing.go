@@ -100,12 +100,26 @@ func parseACPAgent(where string, entry map[string]any, a route.Agent) (route.Age
 			return route.Agent{}, err
 		}
 	}
-	if _, ok := acp.Presets[a.Preset]; !ok {
+	preset, ok := acp.Presets[a.Preset]
+	if !ok {
 		return route.Agent{}, fmt.Errorf("%s: unknown preset %q", where, a.Preset)
 	}
 	// A preset's own default model may be paid (cline) or not the one wanted.
 	if a.Model == "" {
 		return route.Agent{}, fmt.Errorf("%s: model is required for an acp agent; name a free one", where)
+	}
+	if preset.ModelCheck != nil {
+		// The preset's model shape is validated here, so a mistake is reported
+		// once at load, not when each call starts.
+		if err := preset.ModelCheck(a.Model); err != nil {
+			return route.Agent{}, fmt.Errorf("%s: %w", where, err)
+		}
+	}
+	if a.Executable != "" && !strings.Contains(a.Executable, "/") {
+		// Preset.Executable resolves a bare name against the daemon's cwd, which
+		// is not the agent's; leave executable unset for the preset's command on
+		// PATH, which Exec looks up.
+		return route.Agent{}, fmt.Errorf("%s: executable %q is a bare name, not a path; give its path, or leave executable unset to use the preset's command on PATH", where, a.Executable)
 	}
 	a.Executable, a.Credentials = paths.ExpandTildePrefix(a.Executable), paths.ExpandTildePrefix(a.Credentials)
 	return a, nil

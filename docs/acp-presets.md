@@ -25,7 +25,7 @@ Each call:
 | --- | --- | --- |
 | Runs | `opencode acp` | the compiled `bin/.cline --acp --config $HOME/.cline`, not the Node wrapper |
 | Egress | `opencode.ai:443` | `api.cline.bot:443`, `data.cline.bot:443` |
-| Login copied | the model's provider (the part before `/`) from `auth.json` | `providers.json` cut to the `cline` provider; its other fields stay as written, or cline fails its schema and sees no login |
+| Login copied | the model's provider (the part before `/`) from `auth.json` | `providers.json` cut to the `cline` provider and `lastUsedProvider` set to it; its other fields stay as written, or cline fails its schema and sees no login |
 | Also in the home | `models.json` and `rg` from your `~/.cache/opencode`, so the catalog fetch (disabled) and the ripgrep download need no host | `cline_mcp_settings.json` (`CLINE_MCP_SETTINGS_PATH`) and `rules/agentd.md`, the SP-026 rules file |
 | agentd's MCP server | http, from `session/new` | http, from the settings file. cline's ACP mode asks before every tool and ignores the file's `autoApprove`; the driver allows the tools of the server it attached (`agentd__*`, kind `other`) with no hook, and refuses any other `other` |
 | Permissions | `OPENCODE_CONFIG_CONTENT` sets `bash` and `edit` to `ask` | cline asks on its own |
@@ -38,7 +38,7 @@ Limits:
 
 - **Cline may refresh its token** into the run's copy, which is removed with the run. If cline rotates refresh tokens, your own `providers.json` would hold a used one. Not observed in SP-025.
 - **Cold start is per call:** every call starts a new agent process and copies the login and seed files (about 11 MB for opencode).
-- **The daemon's MCP socket** lives in `$TMPDIR/agentd-mcp-*` until the daemon exits, and the directory is not removed.
+- **The daemon's MCP socket** lives in `$TMPDIR/agentd-mcp-*` until the daemon shuts the ACP runtime down, and the cleanup removes the directory with it.
 - **A run killed before it closes** (the daemon or the process killed) leaves its directory, login copy included, in `$TMPDIR` (owner-only).
 
 ## Live smoke (2026-11-05)

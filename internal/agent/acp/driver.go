@@ -50,6 +50,10 @@ type Config struct {
 	// Model, when set, is the model session/new must report as its "model"
 	// config option; a session on any other fails with ErrModelMismatch.
 	Model string
+	// MCPFromHome, when true, means the agent reads agentd's MCP url from its
+	// own config, so a warm process must restart when the url changes; false
+	// means session/new serves the url, which a warm process already does.
+	MCPFromHome bool
 }
 
 // Request is one call: a new session and one or more prompt turns.
@@ -179,12 +183,18 @@ func (d *Driver) Close() error {
 }
 
 // process returns the warm process, starting and initializing one for servers
-// when there is none or the last one died.
+// when there is none or the last one died. An agent that reads its MCP url from
+// its own config gets a new process when the url changes, so it does not hold
+// the first call's session endpoint.
 func (d *Driver) process(ctx context.Context, servers []acpsdk.McpServer) (*process, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.proc != nil && !d.proc.dead() {
-		return d.proc, nil
+		if !d.cfg.MCPFromHome || d.proc.mcpURL == agentdURL(servers) {
+			return d.proc, nil
+		}
+		d.proc.kill()
+		d.proc = nil
 	}
 	if d.proc != nil {
 		d.proc.kill()
@@ -194,6 +204,7 @@ func (d *Driver) process(ctx context.Context, servers []acpsdk.McpServer) (*proc
 	if err != nil {
 		return nil, err
 	}
+	p.mcpURL = agentdURL(servers)
 	if err := p.handshake(ctx, d.cfg.AuthMethod); err != nil {
 		p.kill()
 		return nil, err
@@ -209,6 +220,9 @@ type process struct {
 	exited chan struct{}
 	// waitErr is cmd.Wait's result, set before exited closes.
 	waitErr error
+	// mcpURL is the agentd MCP url this process runs with; the driver restarts
+	// a process that reads it from its own config when the url changes.
+	mcpURL string
 }
 
 func start(cfg Config, servers []acpsdk.McpServer) (*process, error) {

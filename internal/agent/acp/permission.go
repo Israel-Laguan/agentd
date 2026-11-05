@@ -122,7 +122,15 @@ func fileArgs(tool, path string, in map[string]any) string {
 		args["path"] = path
 	}
 	if tool == "write" {
-		args["content"] = firstString(in, "content", "newString", "new_string")
+		// A write without content is malformed and must reach the schema check,
+		// which refuses it; an alias that was absent is not written as "".
+		if content, ok := in["content"].(string); ok {
+			args["content"] = content
+		} else if content, ok := in["newString"].(string); ok {
+			args["content"] = content
+		} else if content, ok := in["new_string"].(string); ok {
+			args["content"] = content
+		}
 	}
 	out, _ := json.Marshal(args)
 	return string(out)
@@ -225,17 +233,28 @@ func decide(ctx context.Context, permit Permitter, p Permission, readOnly, noWor
 	return v
 }
 
-// ownTool reports whether p calls a tool of an MCP server the request
-// attached, which is agentd's own. cline asks before every tool, its MCP
-// tools as kind other titled server__tool, from the tool's name, not the
-// model. They touch only agentd's session, so no hook gates them.
+// agentdSessionTools are the MCP tools agentd attaches to a session, named
+// server__tool by the agents that send them as kind other; the server is
+// agentd's own, so the tool names read agentd__<tool>. The driver lets its own
+// through without a hook, and refuses any other kind other call.
+var agentdSessionTools = []string{"report_outcome", "get_context", "ask_human"}
+
+// ownTool reports whether p calls one of agentd's own session tools, which the
+// driver allows without a hook: they touch only agentd's session. The names
+// must match exactly, never a prefix, so an agent that names an unmapped kind
+// with a title of its own cannot ride the bypass.
 func ownTool(p Permission, servers []acpsdk.McpServer) bool {
 	if p.Tool != "" {
 		return false
 	}
 	for _, s := range servers {
-		if s.Http != nil && strings.HasPrefix(p.Title, s.Http.Name+"__") {
-			return true
+		if s.Http == nil || s.Http.Name != "agentd" {
+			continue
+		}
+		for _, t := range agentdSessionTools {
+			if p.Title == s.Http.Name+"__"+t {
+				return true
+			}
 		}
 	}
 	return false

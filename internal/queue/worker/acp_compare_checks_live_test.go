@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
@@ -83,12 +84,24 @@ var allLiveTasks = []liveTask{
 		description: "Change the CLI output to the format the client asked for last week."},
 }
 
-func liveTasks(names []string) []liveTask {
+func liveTasks(t *testing.T, names []string) []liveTask {
+	t.Helper()
 	var out []liveTask
+	known := make(map[string]bool, len(allLiveTasks))
 	for _, task := range allLiveTasks {
+		known[task.name] = true
 		if slices.Contains(names, task.name) {
 			out = append(out, task)
 		}
+	}
+	var unknown []string
+	for _, name := range names {
+		if !known[name] {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		t.Fatalf("AGENTD_LIVE_TASKS names unknown task(s): %s", strings.Join(unknown, ", "))
 	}
 	return out
 }
@@ -139,19 +152,30 @@ func checkWorkspace(t *testing.T, dir string, task liveTask) liveResult {
 	r := liveResult{ambiguous: task.ambiguous}
 	r.goTest, _ = goTest(dir, "./...")
 	defined := map[string]bool{}
-	entries, _ := os.ReadDir(dir)
-	for _, e := range entries {
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if e.IsDir() || err != nil {
-			continue
+	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		if seed, ok := liveSeed[e.Name()]; !ok || !bytes.Equal(data, []byte(seed)) {
-			r.changed = append(r.changed, e.Name())
+		if d.IsDir() {
+			return nil
 		}
-		for _, fn := range funcs(e.Name(), data) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		if seed, ok := liveSeed[rel]; !ok || !bytes.Equal(data, []byte(seed)) {
+			r.changed = append(r.changed, rel)
+		}
+		for _, fn := range funcs(rel, data) {
 			defined[fn] = true
 		}
-	}
+		return nil
+	})
+
 	for _, name := range slices.Sorted(maps.Keys(liveSeed)) {
 		for _, fn := range funcs(name, []byte(liveSeed[name])) {
 			if !defined[fn] {
@@ -161,7 +185,9 @@ func checkWorkspace(t *testing.T, dir string, task liveTask) liveResult {
 	}
 	if task.check != "" {
 		copyDir := t.TempDir()
-		_ = exec.Command("cp", "-a", dir+"/.", copyDir).Run()
+		if err := exec.Command("cp", "-a", dir+"/.", copyDir).Run(); err != nil {
+			t.Fatalf("cp -a %s: %v", dir, err)
+		}
 		writeLive(t, filepath.Join(copyDir, "zz_agentd_check_test.go"), "package main\n\nimport \"testing\"\n\nfunc TestAgentdCheck(t *testing.T) {"+task.check+"\n}\n")
 		r.behavior, r.wrong = goTest(copyDir, "-run", "TestAgentdCheck", ".")
 	}
@@ -169,7 +195,8 @@ func checkWorkspace(t *testing.T, dir string, task liveTask) liveResult {
 }
 
 // goTest runs go test in dir, and returns its failure lines (test errors and
-// build errors).
+// build errors). It trusts the host to run the code under test: this is the
+// live check's own behavior verification, outside the jail the agent ran in.
 func goTest(dir string, args ...string) (bool, []string) {
 	cmd := exec.Command("go", append([]string{"test", "-count=1"}, args...)...)
 	cmd.Dir = dir

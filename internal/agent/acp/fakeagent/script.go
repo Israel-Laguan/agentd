@@ -51,7 +51,9 @@ func modelOptions(model string) []acp.SessionConfigOption {
 		return nil
 	}
 	return []acp.SessionConfigOption{{Select: &acp.SessionConfigOptionSelect{
-		Id: "model", Name: "Model", CurrentValue: acp.SessionConfigValueId(model),
-		Options: acp.SessionConfigSelectOptions{Ungrouped: &acp.SessionConfigSelectOptionsUngrouped{}},
+		Id: "model", Name: "Model", Type: "select", CurrentValue: acp.SessionConfigValueId(model),
+		Options: acp.SessionConfigSelectOptions{Ungrouped: &acp.SessionConfigSelectOptionsUngrouped{
+			{Name: model, Value: acp.SessionConfigValueId(model)},
+		}},
 	}}}
 }

@@ -174,6 +174,16 @@ var routingLoadErrorCases = []struct {
 		want: `unknown key "provider"`,
 	},
 	{
+		name: "acp agent names an opencode model without its provider",
+		body: "agents:\n  coder: { kind: acp, preset: opencode, model: deepseek-v4.1-flash-free }\nstages:\n  exec.turn:\n    default: coder\n",
+		want: `must be provider/model`,
+	},
+	{
+		name: "acp agent names a bare executable",
+		body: "agents:\n  coder: { kind: acp, preset: fake, model: free, executable: cline }\nstages:\n  exec.turn:\n    default: coder\n",
+		want: "bare name, not a path",
+	},
+	{
 		name: "acp agent on a gateway call",
 		body: "agents:\n  coder: { kind: acp, preset: fake, model: free }\nstages:\n  maint.summarize_log:\n    default: coder\n",
 		want: "only a model agent can serve",

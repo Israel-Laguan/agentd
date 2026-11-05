@@ -112,11 +112,11 @@ func TestOwnMCPToolsAreAllowedAndOthersRefused(t *testing.T) {
 	ask := func(title string) fakeagent.Step {
 		return fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindOther, Title: title, RawInput: map[string]any{}}}
 	}
-	r, err := call(t, fakeDriver(t, Config{}), Request{MCPServers: own, NoWorkspace: true}, ask("agentd__report_outcome: {}"))
+	r, err := call(t, fakeDriver(t, Config{}), Request{MCPServers: own, NoWorkspace: true}, ask("agentd__report_outcome"))
 	if err != nil || r.Text != "permission: allow_once" {
 		t.Fatalf("agentd's own tool: %q, %v; want it allowed once", r.Text, err)
 	}
-	r, err = call(t, fakeDriver(t, Config{}), Request{MCPServers: own}, ask("composio__search_tools: {}"))
+	r, err = call(t, fakeDriver(t, Config{}), Request{MCPServers: own}, ask("composio__search_tools"))
 	if err != nil || r.Text != "permission: reject_once" {
 		t.Fatalf("another server's tool: %q, %v; want it rejected", r.Text, err)
 	}

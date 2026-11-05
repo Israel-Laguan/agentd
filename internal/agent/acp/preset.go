@@ -32,6 +32,15 @@ type Preset struct {
 	ModelOption bool
 	// NoUsage: the agent reports no token usage (cline).
 	NoUsage bool
+	// ModelCheck validates the model an acp agent names before any run; nil
+	// accepts any. opencode requires the provider/model shape its login and
+	// egress allowlist are named by.
+	ModelCheck func(model string) error
+	// MCPFromHome: the agent reads agentd's MCP url from its own config (the
+	// run's home) rather than from session/new, so a warm process must restart
+	// when the url changes (cline). False means session/new serves it, which a
+	// warm process already does.
+	MCPFromHome bool
 	// Home writes the run's home and returns the argv run in the jail. The jail
 	// clears the environment, so the argv sets the agent's own variables.
 	Home func(Launch) ([]string, error)
@@ -69,7 +78,7 @@ func (p Preset) Executable(configured string) (string, error) {
 // Config is the driver config for one run of p in cwd. The process starts
 // with start, once Home has written the run's home for the session's MCP server.
 func (p Preset) Config(l Launch, cwd string, readOnly bool, start func(ctx context.Context, cwd string, argv []string, readOnly bool) (*exec.Cmd, error)) Config {
-	cfg := Config{Cwd: cwd, ReadOnly: readOnly, AuthMethod: p.AuthMethod}
+	cfg := Config{Cwd: cwd, ReadOnly: readOnly, AuthMethod: p.AuthMethod, MCPFromHome: p.MCPFromHome}
 	if p.ModelOption {
 		cfg.Model = l.Model
 	}
@@ -124,18 +133,23 @@ func writeHomeJSON(home, rel string, v any) error {
 }
 
 // seed copies rel from the user's home into the run's home, when present,
-// with its mode: rg must stay executable.
+// with its mode: rg must stay executable. It takes no symlink, so a cache path
+// that is one cannot copy a host secret into the agent-readable jail home.
 func seed(userHome, home, rel string) error {
 	if userHome == "" {
 		return nil
 	}
 	src := filepath.Join(userHome, rel)
-	info, err := os.Stat(src)
+	info, err := os.Lstat(src)
 	switch {
 	case os.IsNotExist(err):
 		return nil
 	case err != nil:
 		return err
+	case info.Mode()&os.ModeSymlink != 0:
+		return fmt.Errorf("acp: seed %s: %s is a symlink", rel, src)
+	case !info.Mode().IsRegular():
+		return fmt.Errorf("acp: seed %s: %s is not a regular file", rel, src)
 	}
 	data, err := os.ReadFile(src)
 	if err == nil {

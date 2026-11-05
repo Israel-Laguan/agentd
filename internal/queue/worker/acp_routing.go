@@ -34,6 +34,18 @@ type ACPRuntime struct {
 	// Recorder gets one ai_calls record per call, as the gateway writes for a
 	// model call. Nil records nothing.
 	Recorder spec.Recorder
+	cleanup  func() // ends the MCP server and removes its socket directory; nil when it owns none
+}
+
+// Close is the runtime's cleanup handle: it ends the MCP server and removes its
+// socket directory, so a shutdown leaves nothing behind in TMPDIR. A runtime
+// built by hand (tests) owns no server and Close is a no-op.
+func (r *ACPRuntime) Close() error {
+	if r.cleanup == nil {
+		return nil
+	}
+	r.cleanup()
+	return nil
 }
 
 // ACPRun is one agent run's jail: a fresh home, and the command that runs the
@@ -160,6 +172,16 @@ func (w *Worker) acpDriver(preset acp.Preset, a route.Agent, cwd string, readOnl
 	launch := acp.Launch{Home: run.Home, Executable: exe, Model: a.Model, Credentials: creds, UserHome: home}
 	driver := acp.NewDriver(preset.Config(launch, cwd, readOnly, run.Command))
 	return driver, func() { _ = driver.Close(); run.Close() }, nil
+}
+
+// Close ends the ACP runtime's MCP server and removes its socket directory,
+// when the worker has an acp agent; a worker with no acp agent has none and
+// Close is a no-op.
+func (w *Worker) Close() error {
+	if w.acp == nil {
+		return nil
+	}
+	return w.acp.Close()
 }
 
 // recordACP writes one ai_calls record for the call, as the gateway writes for

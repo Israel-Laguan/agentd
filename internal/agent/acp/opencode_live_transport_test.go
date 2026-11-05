@@ -12,10 +12,12 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	acpsdk "github.com/coder/acp-go-sdk"
 )
 
-func (o liveOptions) command(workspace, configJSON string, logs liveLogs) func(context.Context, string) (*exec.Cmd, error) {
-	return func(ctx context.Context, _ string) (*exec.Cmd, error) {
+func (o liveOptions) command(workspace, configJSON string, logs liveLogs) func(context.Context, string, []acpsdk.McpServer) (*exec.Cmd, error) {
+	return func(ctx context.Context, _ string, _ []acpsdk.McpServer) (*exec.Cmd, error) {
 		script := fmt.Sprintf(
 			"umask 077\nset -o pipefail\ntee -a %s | %s -oL %s acp 2>>%s | %s -oL tee -a %s\n",
 			shq(logs.In), shq(o.stdbuf), shq(o.opencode), shq(logs.Err), shq(o.stdbuf), shq(logs.Out),

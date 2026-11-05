@@ -48,6 +48,15 @@ func TestLiveACPPresetsAgainstTheBuiltinAgent(t *testing.T) {
 	if _, err := exec.LookPath("bwrap"); err != nil {
 		t.Skip("bubblewrap is required: an agent runs only in the jail")
 	}
+	if builtin {
+		keyEnv := envDefault("AGENTD_LIVE_API_KEY_ENV", "MISTRAL_API_KEY")
+		if os.Getenv(keyEnv) == "" {
+			t.Fatalf("AGENTD_LIVE_BUILTIN=1 needs %s", keyEnv)
+		}
+	}
+	if _, err := exec.LookPath("pgrep"); err != nil {
+		t.Skip("pgrep is required: the cline hub daemon leak check needs it")
+	}
 	daemons := clineHubDaemons()
 	// The hub daemon starts inside the jail and must die with its PID namespace.
 	defer func() {
@@ -59,9 +68,12 @@ func TestLiveACPPresetsAgainstTheBuiltinAgent(t *testing.T) {
 	if _, err := fmt.Sscan(os.Getenv("AGENTD_LIVE_RUNS"), &runs); err != nil {
 		runs = 3
 	}
-	delay, _ := time.ParseDuration(os.Getenv("AGENTD_LIVE_DELAY"))
+	delay, err := time.ParseDuration(envDefault("AGENTD_LIVE_DELAY", "0"))
+	if err != nil {
+		t.Fatalf("AGENTD_LIVE_DELAY=%q is not a duration: %v", os.Getenv("AGENTD_LIVE_DELAY"), err)
+	}
 	var results []liveResult
-	for _, task := range liveTasks(liveList("AGENTD_LIVE_TASKS", "small,multi,ambiguous")) {
+	for _, task := range liveTasks(t, liveList("AGENTD_LIVE_TASKS", "small,multi,ambiguous")) {
 		for i := range runs {
 			for _, p := range presets {
 				model := os.Getenv("AGENTD_LIVE_MODEL_" + strings.ToUpper(p))
@@ -95,9 +107,6 @@ func TestLiveACPPresetsAgainstTheBuiltinAgent(t *testing.T) {
 func liveBuiltin(t *testing.T) func(models.KanbanStore, *sandbox.BashExecutor, models.EventSink) *Worker {
 	keyEnv := envDefault("AGENTD_LIVE_API_KEY_ENV", "MISTRAL_API_KEY")
 	key := os.Getenv(keyEnv)
-	if key == "" {
-		t.Fatalf("AGENTD_LIVE_BUILTIN=1 needs %s", keyEnv)
-	}
 	cfg, err := config.Load(config.LoadOptions{HomeOverride: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -162,9 +171,13 @@ func liveRun(t *testing.T, side string, task liveTask, i int, build func(models.
 }
 
 // clineHubDaemons counts cline hub daemons on the host. The bracket keeps
-// pgrep from matching its own command line (docs/acp-agents.md pitfalls).
+// pgrep from matching its own command line (docs/acp-agents.md pitfalls); pgrep
+// exits 1 when nothing matches, so an error here means no daemon was found.
 func clineHubDaemons() int {
-	out, _ := exec.Command("pgrep", "-f", "cline-hub-daemo[n]").Output()
+	out, err := exec.Command("pgrep", "-f", "cline-hub-daemo[n]").Output()
+	if err != nil {
+		return 0
+	}
 	return len(strings.Fields(string(out)))
 }
 

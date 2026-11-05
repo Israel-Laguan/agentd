@@ -25,16 +25,19 @@ func (p *process) fail(ctx context.Context, op string, err error) error {
 	if ctx.Err() != nil {
 		return fmt.Errorf("acp: %s: %w", op, ctx.Err())
 	}
+	// The quota check names the agent's error before the dead-process branch:
+	// a quota error from an agent that exits right after reporting it is still
+	// a quota error, not a plain process exit.
+	if quotaError.MatchString(err.Error()) {
+		return fmt.Errorf("%w: acp agent: %s: %v", models.ErrLLMQuotaExceeded, op, err)
+	}
 	if p.dead() {
 		select {
 		case <-p.exited:
-			return fmt.Errorf("acp: agent process exited during %s: %v", op, p.waitErr)
+			return fmt.Errorf("acp: agent process exited during %s: %v (%v)", op, p.waitErr, err)
 		case <-time.After(time.Second):
 			return fmt.Errorf("acp: agent process exited during %s: %w", op, err)
 		}
-	}
-	if quotaError.MatchString(err.Error()) {
-		return fmt.Errorf("%w: acp agent: %s: %v", models.ErrLLMQuotaExceeded, op, err)
 	}
 	return fmt.Errorf("acp: %s: %w", op, err)
 }

@@ -19,7 +19,7 @@ import (
 // and starts a run's egress on a copy of sb. forwarder is the agentd binary
 // the jail runs jail-forward from. Nil when no agent is kind acp.
 func NewACPRuntime(routes route.Table, sb sandbox.Executor, forwarder string, recorder spec.Recorder) (*ACPRuntime, error) {
-	if !hasACPAgent(routes) {
+	if !HasACPAgent(routes) {
 		return nil, nil
 	}
 	bash, ok := sb.(*sandbox.BashExecutor)
@@ -33,11 +33,15 @@ func NewACPRuntime(routes route.Table, sb sandbox.Executor, forwarder string, re
 	socket := filepath.Join(dir, "mcp.sock")
 	ln, err := net.Listen("unix", socket)
 	if err != nil {
+		// Remove the directory the failed bind left behind, as StartEgressRun does.
+		_ = os.RemoveAll(dir)
 		return nil, fmt.Errorf("acp: MCP socket: %w", err)
 	}
 	sessions := &agentmcp.SessionMux{}
-	// shortcut: the socket serves until the process exits and its directory stays in TMPDIR; close it on shutdown if leftovers pile up.
-	go func() { _ = (&http.Server{Handler: sessions, ReadHeaderTimeout: 10 * time.Second}).Serve(ln) }()
+	server := &http.Server{Handler: sessions, ReadHeaderTimeout: 10 * time.Second}
+	// shortcut: the socket serves until the daemon shuts the runtime down, and
+	// the cleanup handle removes the directory with it.
+	go func() { _ = server.Serve(ln) }()
 	return &ACPRuntime{
 		Start: func(allow []string, executable string) (ACPRun, error) {
 			run, err := bash.StartEgressRun(allow, socket, forwarder, executable)
@@ -47,10 +51,16 @@ func NewACPRuntime(routes route.Table, sb sandbox.Executor, forwarder string, re
 			return ACPRun{Home: run.Home, Command: run.Executor.AgentCommand, Close: run.Close}, nil
 		},
 		Sessions: sessions, MCPURL: "http://" + sandbox.JailMCPAddr, Recorder: recorder,
+		cleanup: func() {
+			_ = server.Close()
+			_ = os.RemoveAll(dir)
+		},
 	}, nil
 }
 
-func hasACPAgent(routes route.Table) bool {
+// HasACPAgent reports whether the routes name an acp agent, so a caller that
+// wires or tears down the runtime can decide before touching it.
+func HasACPAgent(routes route.Table) bool {
 	for _, a := range routes.Agents {
 		if a.Kind == route.KindACP {
 			return true

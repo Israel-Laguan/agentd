@@ -190,7 +190,10 @@ func TestClinePresetNeedsTheSessionsMCPURL(t *testing.T) {
 // the compiled binary next to it.
 func TestClineExecutableIsTheCompiledBinaryNextToTheWrapper(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(t.TempDir()) // resolve the tempdir: it may be a symlink (macOS)
+	if err != nil {
+		t.Fatal(err)
+	}
 	writeFile(t, filepath.Join(dir, "pkg/bin/cline"), "#!/bin/sh\n")
 	writeFile(t, filepath.Join(dir, "pkg/bin/.cline"), "")
 	if err := os.Symlink(filepath.Join(dir, "pkg/bin/cline"), filepath.Join(dir, "cline")); err != nil {

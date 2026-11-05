@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 )
 
 // A run gets its own home and egress on a copy of the executor.
@@ -36,11 +37,14 @@ func TestStartEgressRunRefusesUnlistedHostsAndCleansUp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer run.Close()
 	socket := run.Executor.Egress.ProxySocket
 	conn, err := net.Dial("unix", socket)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A stalled proxy must fail the test, not hang it.
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	_, _ = fmt.Fprint(conn, "CONNECT other.test:443 HTTP/1.1\r\nHost: other.test:443\r\n\r\n")
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	if err != nil {

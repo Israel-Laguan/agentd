@@ -17,6 +17,7 @@ var Presets = map[string]Preset{
 		Credentials: ".local/share/opencode/auth.json",
 		Allow:       []string{"opencode.ai:443"},
 		ModelOption: true,
+		ModelCheck:  opencodeModelCheck,
 		Home:        opencodeHome,
 	},
 	"cline": {
@@ -28,6 +29,20 @@ var Presets = map[string]Preset{
 		NoUsage:     true,
 		Home:        clineHome,
 	},
+}
+
+// opencodeProvider is the one login provider the opencode preset runs: its
+// models and the egress allowlist (opencode.ai:443) are its own.
+const opencodeProvider = "opencode"
+
+// opencodeModelCheck requires the model shape an opencode agent names: the
+// provider its login and egress allowlist are named by, then the model id; a
+// bare model would only fail when the run starts.
+func opencodeModelCheck(model string) error {
+	if _, _, ok := strings.Cut(model, "/"); !ok {
+		return fmt.Errorf("acp: opencode model %q must be provider/model", model)
+	}
+	return nil
 }
 
 // opencodeSeed is what a cold opencode home downloads at start: the model
@@ -43,6 +58,11 @@ func opencodeHome(l Launch) ([]string, error) {
 	provider, _, ok := strings.Cut(l.Model, "/")
 	if !ok {
 		return nil, fmt.Errorf("acp: opencode model %q names no provider (provider/model)", l.Model)
+	}
+	if provider != opencodeProvider {
+		// The egress allowlist holds the opencode provider's host only, so a
+		// model from another provider would be refused at egress; name its own.
+		return nil, fmt.Errorf("acp: opencode runs %q only; model %q names provider %q", opencodeProvider, l.Model, provider)
 	}
 	var logins map[string]json.RawMessage
 	if err := readLogin(l.Credentials, &logins); err != nil {

@@ -72,13 +72,18 @@ func buildWorker(store models.KanbanStore, deps runtimeDeps, cfg config.Config, 
 	if deps.aiCalls != nil { // a nil *Writer in the interface would not read as nil
 		recorder = deps.aiCalls
 	}
-	forwarder, err := os.Executable()
-	if err != nil {
-		return nil, fmt.Errorf("the agentd binary for jail-forward: %w", err)
-	}
-	acp, err := queue.NewACPRuntime(cfg.Gateway.Routing, deps.sandbox, forwarder, recorder)
-	if err != nil {
-		return nil, err
+	var acp *queue.ACPRuntime
+	if queue.HasACPAgent(cfg.Gateway.Routing) {
+		// The jail-forward binary is only wanted by an acp agent: resolve it
+		// when the routes name one, not on every startup.
+		forwarder, err := os.Executable()
+		if err != nil {
+			return nil, fmt.Errorf("the agentd binary for jail-forward: %w", err)
+		}
+		acp, err = queue.NewACPRuntime(cfg.Gateway.Routing, deps.sandbox, forwarder, recorder)
+		if err != nil {
+			return nil, err
+		}
 	}
 	opts.ACP = acp
 	return queue.NewWorker(store, deps.gateway, deps.sandbox, deps.breaker, deps.emitter, opts), nil

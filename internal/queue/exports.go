@@ -36,6 +36,7 @@ type ACPRun = qw.ACPRun
 
 var NewWorker = qw.NewWorker
 var NewACPRuntime = qw.NewACPRuntime
+var HasACPAgent = qw.HasACPAgent
 
 // EnsureAuditFile creates the audit file at path and writes a daemon_start marker.
 // Call at daemon startup when agentic.audit.enabled is true.
