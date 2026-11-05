@@ -147,30 +147,6 @@ func modelOption(options []acpsdk.SessionConfigOption) string {
 	return ""
 }
 
-// turn sends one prompt in s and adds how it ended to result.
-func (p *process) turn(ctx context.Context, s *session, prompt string, result *Result) error {
-	s.mu.Lock()
-	s.refused = ""
-	s.mu.Unlock()
-	turn, err := p.conn.Prompt(s.ctx, acpsdk.PromptRequest{SessionId: s.id, Prompt: []acpsdk.ContentBlock{acpsdk.TextBlock(prompt)}})
-	result.Text, result.Evidence, result.StopReason = s.message(), s.evidence(), turn.StopReason
-	result.Usage = addUsage(result.Usage, turn.Usage)
-	if reason := s.suspended(); reason != "" {
-		return fmt.Errorf("%w: %s", ErrSuspended, reason)
-	}
-	if err != nil {
-		return p.fail(ctx, "session/prompt", err)
-	}
-	// agentd's own cancel returned ctx's error above, so the agent stopped itself.
-	if turn.StopReason == acpsdk.StopReasonCancelled {
-		if reason := s.refusal(); reason != "" {
-			return fmt.Errorf("%w: %s", ErrPermissionRefused, reason)
-		}
-		return errors.New("acp: the agent cancelled its turn")
-	}
-	return nil
-}
-
 // Close stops the agent process.
 func (d *Driver) Close() error {
 	d.mu.Lock()
@@ -198,8 +174,23 @@ func (d *Driver) process(ctx context.Context, servers []acpsdk.McpServer) (*proc
 	if p, ok := d.procs[key]; ok && p != nil && !p.dead() {
 		return p, nil
 	}
-	// drop dead entry
+	// drop dead entry, killing the orphaned process first: dead() can report
+	// death via conn.Done() before exited closes.
+	if p, ok := d.procs[key]; ok && p != nil {
+		p.kill()
+	}
 	delete(d.procs, key)
+	// evict idle (or dead) entries for other MCP urls so per-session processes
+	// do not accumulate; keep any with active sessions.
+	for k, op := range d.procs {
+		if k == key || op == nil {
+			continue
+		}
+		if op.dead() || op.idle() {
+			op.kill()
+			delete(d.procs, k)
+		}
+	}
 	p, err := start(d.cfg, servers)
 	if err != nil {
 		return nil, err
@@ -211,18 +202,6 @@ func (d *Driver) process(ctx context.Context, servers []acpsdk.McpServer) (*proc
 	}
 	d.procs[key] = p
 	return p, nil
-}
-
-type process struct {
-	conn   *acpsdk.ClientSideConnection
-	client *client
-	stop   context.CancelFunc
-	exited chan struct{}
-	// waitErr is cmd.Wait's result, set before exited closes.
-	waitErr error
-	// mcpURL is the agentd MCP url this process runs with; the driver restarts
-	// a process that reads it from its own config when the url changes.
-	mcpURL string
 }
 
 func start(cfg Config, servers []acpsdk.McpServer) (*process, error) {
@@ -268,36 +247,4 @@ func spawn(ctx context.Context, cfg Config, servers []acpsdk.McpServer) (*proces
 
 // handshake runs initialize, pinned to the SDK's protocol version, then
 // authenticate when a method is configured.
-func (p *process) handshake(ctx context.Context, authMethod string) error {
-	resp, err := p.conn.Initialize(ctx, acpsdk.InitializeRequest{ProtocolVersion: acpsdk.ProtocolVersionNumber})
-	if err != nil {
-		return p.fail(ctx, "initialize", err)
-	}
-	if resp.ProtocolVersion != acpsdk.ProtocolVersionNumber {
-		return fmt.Errorf("%w at initialize: the agent speaks version %d, agentd pins %d",
-			ErrProtocolVersion, resp.ProtocolVersion, acpsdk.ProtocolVersionNumber)
-	}
-	if authMethod == "" {
-		return nil
-	}
-	if _, err := p.conn.Authenticate(ctx, acpsdk.AuthenticateRequest{MethodId: authMethod}); err != nil {
-		return p.fail(ctx, "authenticate", err)
-	}
-	return nil
-}
 
-func (p *process) dead() bool {
-	select {
-	case <-p.conn.Done():
-		return true
-	case <-p.exited:
-		return true
-	default:
-		return false
-	}
-}
-
-func (p *process) kill() {
-	p.stop()
-	<-p.exited
-}

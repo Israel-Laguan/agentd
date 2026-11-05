@@ -236,13 +236,15 @@ func decide(ctx context.Context, permit Permitter, p Permission, readOnly, noWor
 // agentdSessionTools are the MCP tools agentd attaches to a session, named
 // server__tool by the agents that send them as kind other; the server is
 // agentd's own, so the tool names read agentd__<tool>. The driver lets its own
-// through without a hook, and refuses any other kind other call.
+// through without a hook, and refuses any other kind other call. The board.*
+// entries are project-scoped read-only tools (tasks, projects, comments).
 var agentdSessionTools = []string{"report_outcome", "get_context", "ask_human", "board.list_tasks", "board.get_task", "board.list_projects", "board.get_project", "board.list_comments"}
 
 // ownTool reports whether p calls one of agentd's own session tools, which the
-// driver allows without a hook: they touch only agentd's session. The names
-// must match exactly, never a prefix, so an agent that names an unmapped kind
-// with a title of its own cannot ride the bypass.
+// driver allows without a hook: the session tools touch only agentd's session,
+// and the board.* tools are project-scoped reads. The names must match exactly,
+// never a prefix, so an agent that names an unmapped kind with a title of its
+// own cannot ride the bypass.
 func ownTool(p Permission, servers []acpsdk.McpServer) bool {
 	if p.Tool != "" {
 		return false
