@@ -142,14 +142,7 @@ func (a *agent) NewSession(_ context.Context, p acp.NewSessionRequest) (acp.NewS
 			a.mu.Unlock()
 		}
 	}
-	resp := acp.NewSessionResponse{SessionId: id}
-	if a.model != "" {
-		resp.ConfigOptions = []acp.SessionConfigOption{{Select: &acp.SessionConfigOptionSelect{
-			Id: "model", Name: "Model", CurrentValue: acp.SessionConfigValueId(a.model),
-			Options: acp.SessionConfigSelectOptions{Ungrouped: &acp.SessionConfigSelectOptionsUngrouped{}},
-		}}}
-	}
-	return resp, nil
+	return acp.NewSessionResponse{SessionId: id, ConfigOptions: modelOptions(a.model)}, nil
 }
 
 // Prompt runs the scripted steps, or the next scripted prompt for the session.

@@ -11,11 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"sync"
-	"time"
-
-	"agentd/internal/models"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 )
@@ -33,16 +29,8 @@ var ErrSuspended = errors.New("acp: call suspended for human approval")
 // stopped short of its work, though the agent reported no error.
 var ErrPermissionRefused = errors.New("acp: turn ended on a refused permission")
 
-// ErrModelMismatch is returned when session/new reports a model other than
-// the configured one: an unknown id is not refused, the agent silently picks
-// another (opencode 2.2.5), which may be paid.
-var ErrModelMismatch = errors.New("acp: the session runs another model")
-
 // ErrAccessMismatch names a call that asks for a different workspace access level than the process started with.
 var ErrAccessMismatch = errors.New("acp: driver workspace access does not match the request")
-
-// quotaError matches quota and rate errors the agent reports as text.
-var quotaError = regexp.MustCompile(`(?i)\b429\b|rate[ _-]?limit|too many requests|quota|insufficient (?:balance|credits)`)
 
 // Config is how to start one agent for one workspace.
 type Config struct {
@@ -298,25 +286,4 @@ func (p *process) dead() bool {
 func (p *process) kill() {
 	p.stop()
 	<-p.exited
-}
-
-// fail names why op failed: the caller cancelled, the process died, the
-// agent's provider refused for quota or rate (the breaker and defer path, the
-// same as a gateway 429), or the agent's own error.
-func (p *process) fail(ctx context.Context, op string, err error) error {
-	if ctx.Err() != nil {
-		return fmt.Errorf("acp: %s: %w", op, ctx.Err())
-	}
-	if p.dead() {
-		select {
-		case <-p.exited:
-			return fmt.Errorf("acp: agent process exited during %s: %v", op, p.waitErr)
-		case <-time.After(time.Second):
-			return fmt.Errorf("acp: agent process exited during %s: %w", op, err)
-		}
-	}
-	if quotaError.MatchString(err.Error()) {
-		return fmt.Errorf("%w: acp agent: %s: %v", models.ErrLLMQuotaExceeded, op, err)
-	}
-	return fmt.Errorf("acp: %s: %w", op, err)
 }
