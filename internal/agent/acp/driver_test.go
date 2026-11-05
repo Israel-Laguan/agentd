@@ -30,7 +30,7 @@ func TestMain(m *testing.M) {
 
 func fakeDriver(t *testing.T, cfg Config, args ...string) *Driver {
 	t.Helper()
-	cfg.Command = func(ctx context.Context, _ string) (*exec.Cmd, error) {
+	cfg.Command = func(ctx context.Context, _ string, _ []acpsdk.McpServer) (*exec.Cmd, error) {
 		return exec.CommandContext(ctx, os.Args[0], append([]string{fakeagent.Arg}, args...)...), nil
 	}
 	if cfg.Cwd == "" {
@@ -55,7 +55,7 @@ func TestTheAgentStartsForTheDriversWorkspace(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var started string
-	d := NewDriver(Config{Cwd: dir, Command: func(ctx context.Context, cwd string) (*exec.Cmd, error) {
+	d := NewDriver(Config{Cwd: dir, Command: func(ctx context.Context, cwd string, _ []acpsdk.McpServer) (*exec.Cmd, error) {
 		started = cwd
 		return exec.CommandContext(ctx, os.Args[0], fakeagent.Arg), nil
 	}})
@@ -192,6 +192,21 @@ func TestQuotaErrorsMapToTheBreakerPath(t *testing.T) {
 	_, err := call(t, d, Request{}, fakeagent.Step{Error: "tool crashed"})
 	if err == nil || errors.Is(err, models.ErrLLMQuotaExceeded) {
 		t.Fatalf("other agent error: err = %v; want a plain failure", err)
+	}
+}
+
+// An unknown model id is not refused: session/new silently picks another
+// (opencode 2.2.5), so a session on any other model fails before its prompt.
+func TestASessionOnAnotherModelFailsClosed(t *testing.T) {
+	t.Parallel()
+	if _, err := call(t, fakeDriver(t, Config{Model: "free"}, "-model", "free"), Request{}); err != nil {
+		t.Fatalf("matching model: %v", err)
+	}
+	for _, args := range [][]string{{"-model", "paid"}, nil} {
+		_, err := call(t, fakeDriver(t, Config{Model: "free"}, args...), Request{}, fakeagent.Step{Message: "spent"})
+		if !errors.Is(err, ErrModelMismatch) {
+			t.Fatalf("agent %q: err = %v; want ErrModelMismatch", args, err)
+		}
 	}
 }
 

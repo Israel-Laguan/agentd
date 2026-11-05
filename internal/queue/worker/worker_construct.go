@@ -83,8 +83,7 @@ type WorkerOptions struct {
 	// Routes is the agents: and stages: table. The worker resolves it where it
 	// picks a stage agent, so a route can name an acp agent.
 	Routes route.Table
-	// ACP runs the stages routed to acp agents. Nil until PR 08 wires the
-	// presets; until then no config can name one.
+	// ACP runs the stages routed to acp agents; nil when no agent is kind acp.
 	ACP *ACPRuntime
 }
 

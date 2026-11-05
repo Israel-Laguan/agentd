@@ -33,6 +33,11 @@ var ErrSuspended = errors.New("acp: call suspended for human approval")
 // stopped short of its work, though the agent reported no error.
 var ErrPermissionRefused = errors.New("acp: turn ended on a refused permission")
 
+// ErrModelMismatch is returned when session/new reports a model other than
+// the configured one: an unknown id is not refused, the agent silently picks
+// another (opencode 2.2.5), which may be paid.
+var ErrModelMismatch = errors.New("acp: the session runs another model")
+
 // ErrAccessMismatch names a call that asks for a different workspace access level than the process started with.
 var ErrAccessMismatch = errors.New("acp: driver workspace access does not match the request")
 
@@ -48,11 +53,15 @@ type Config struct {
 	ReadOnly bool // the workspace access Command binds; the other level is refused.
 	// Command returns the agent process for cwd, not started, living as long
 	// as ctx. In agentd it is sandbox.BashExecutor.AgentCommand, so the agent
-	// runs in the egress jail with cwd bound.
-	Command func(ctx context.Context, cwd string) (*exec.Cmd, error)
+	// runs in the egress jail with cwd bound. servers are the first call's MCP
+	// servers, for an agent that reads them from its own config (cline).
+	Command func(ctx context.Context, cwd string, servers []acpsdk.McpServer) (*exec.Cmd, error)
 	// AuthMethod, when set, is the method id sent to authenticate after
 	// initialize. opencode and cline sign in outside ACP and leave it empty.
 	AuthMethod string
+	// Model, when set, is the model session/new must report as its "model"
+	// config option; a session on any other fails with ErrModelMismatch.
+	Model string
 }
 
 // Request is one call: a new session and one or more prompt turns.
@@ -106,17 +115,20 @@ func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
 	if req.ReadOnly != d.cfg.ReadOnly {
 		return Result{}, fmt.Errorf("%w: driver=%t request=%t", ErrAccessMismatch, d.cfg.ReadOnly, req.ReadOnly)
 	}
-	p, err := d.process(ctx)
-	if err != nil {
-		return Result{}, err
-	}
 	servers := req.MCPServers
 	if servers == nil {
 		servers = []acpsdk.McpServer{}
 	}
+	p, err := d.process(ctx, servers)
+	if err != nil {
+		return Result{}, err
+	}
 	created, err := p.conn.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: d.cfg.Cwd, McpServers: servers})
 	if err != nil {
 		return Result{}, p.fail(ctx, "session/new", err)
+	}
+	if got := modelOption(created.ConfigOptions); d.cfg.Model != "" && got != d.cfg.Model {
+		return Result{}, fmt.Errorf("%w: configured %q, the agent reports %q", ErrModelMismatch, d.cfg.Model, got)
 	}
 	// shortcut: sessions are never closed (session/close is optional and cline lacks it); close them if a warm agent's memory grows.
 	s := p.client.open(ctx, created.SessionId, req)
@@ -131,6 +143,16 @@ func (d *Driver) Call(ctx context.Context, req Request) (Result, error) {
 			return result, nil
 		}
 	}
+}
+
+// modelOption is the current value of the session's "model" config option, or "".
+func modelOption(options []acpsdk.SessionConfigOption) string {
+	for _, o := range options {
+		if o.Select != nil && o.Select.Id == "model" {
+			return string(o.Select.CurrentValue)
+		}
+	}
+	return ""
 }
 
 // turn sends one prompt in s and adds how it ended to result.
@@ -168,9 +190,9 @@ func (d *Driver) Close() error {
 	return nil
 }
 
-// process returns the warm process, starting and initializing one when there
-// is none or the last one died.
-func (d *Driver) process(ctx context.Context) (*process, error) {
+// process returns the warm process, starting and initializing one for servers
+// when there is none or the last one died.
+func (d *Driver) process(ctx context.Context, servers []acpsdk.McpServer) (*process, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.proc != nil && !d.proc.dead() {
@@ -180,7 +202,7 @@ func (d *Driver) process(ctx context.Context) (*process, error) {
 		d.proc.kill()
 		d.proc = nil
 	}
-	p, err := start(d.cfg)
+	p, err := start(d.cfg, servers)
 	if err != nil {
 		return nil, err
 	}
@@ -201,12 +223,12 @@ type process struct {
 	waitErr error
 }
 
-func start(cfg Config) (*process, error) {
+func start(cfg Config, servers []acpsdk.McpServer) (*process, error) {
 	if cfg.Command == nil {
 		return nil, errors.New("acp: no agent command configured")
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	p, err := spawn(ctx, cfg)
+	p, err := spawn(ctx, cfg, servers)
 	if err != nil {
 		stop()
 		return nil, err
@@ -215,8 +237,8 @@ func start(cfg Config) (*process, error) {
 	return p, nil
 }
 
-func spawn(ctx context.Context, cfg Config) (*process, error) {
-	cmd, err := cfg.Command(ctx, cfg.Cwd)
+func spawn(ctx context.Context, cfg Config, servers []acpsdk.McpServer) (*process, error) {
+	cmd, err := cfg.Command(ctx, cfg.Cwd, servers)
 	if err != nil {
 		return nil, fmt.Errorf("acp: agent command: %w", err)
 	}

@@ -42,6 +42,10 @@ type Agent struct {
 	Model    string
 	Preset   string
 	Level    spec.Level
+	// Executable and Credentials override an acp preset's binary on PATH and
+	// the user's login file it copies from.
+	Executable  string
+	Credentials string
 }
 
 // Match is a rule's condition. Every condition that is set must hold. A nil

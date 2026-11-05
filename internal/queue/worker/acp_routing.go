@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,9 +25,9 @@ import (
 
 // ACPRuntime is what the worker needs to run a stage on an acp agent (T-042).
 type ACPRuntime struct {
-	// Command returns a preset's process for one workspace, not started. In
-	// agentd it is sandbox.BashExecutor.AgentCommand, so the agent runs jailed.
-	Command func(ctx context.Context, cwd string, argv []string, readOnly bool) (*exec.Cmd, error)
+	// Start prepares one run's jail for the agent at executable, which may
+	// reach only allow. In agentd it is sandbox.BashExecutor.StartEgressRun.
+	Start func(allow []string, executable string) (ACPRun, error)
 	// Sessions serves each session's MCP server, which the agent reaches at MCPURL.
 	Sessions *agentmcp.SessionMux
 	MCPURL   string
@@ -33,6 +35,19 @@ type ACPRuntime struct {
 	// model call. Nil records nothing.
 	Recorder spec.Recorder
 }
+
+// ACPRun is one agent run's jail: a fresh home, and the command that runs the
+// agent in it (sandbox.BashExecutor.AgentCommand on the run's egress).
+type ACPRun struct {
+	Home    string
+	Command func(ctx context.Context, cwd string, argv []string, readOnly bool) (*exec.Cmd, error)
+	// Close ends the run's egress and removes Home, once the agent exited.
+	Close func()
+}
+
+// noUsageMarker ends the model of a record whose agent reports no usage, so
+// its zero tokens read as unknown, not free.
+const noUsageMarker = " (no usage reported)"
 
 // errNoACPRuntime is a route to an acp agent on a worker with no ACP runtime.
 var errNoACPRuntime = errors.New("worker: the route names an acp agent, but no ACP runtime is wired")
@@ -99,16 +114,11 @@ func (w *Worker) callACP(ctx context.Context, task models.Task, project models.P
 	if !ok {
 		return stage.StageResult{}, fmt.Errorf("worker: acp agent %q: unknown preset %q", d.Agent, a.Preset)
 	}
-	readOnly := req.Access != stage.AccessWrite
-	driver := acp.NewDriver(acp.Config{
-		Cwd:        project.WorkspacePath,
-		ReadOnly:   readOnly,
-		AuthMethod: preset.AuthMethod,
-		Command: func(ctx context.Context, cwd string) (*exec.Cmd, error) {
-			return w.acp.Command(ctx, cwd, preset.Argv, readOnly)
-		},
-	})
-	defer func() { _ = driver.Close() }()
+	driver, stop, err := w.acpDriver(preset, a, project.WorkspacePath, req.Access != stage.AccessWrite)
+	if err != nil {
+		return stage.StageResult{}, fmt.Errorf("worker: acp agent %q: %w", d.Agent, err)
+	}
+	defer stop()
 	taskHooks, _ := w.MountAgenticHooks(project, profile)
 	if err := w.RunSessionStart(ctx, task, project, taskHooks); err != nil {
 		return stage.StageResult{}, err
@@ -123,13 +133,38 @@ func (w *Worker) callACP(ctx context.Context, task models.Task, project models.P
 	if !correction.ChargeAttemptBudget(ctx, res.TokenUsage) {
 		budgetGuard.AfterCall(res.TokenUsage)
 	}
-	w.recordACP(task, d, a, started, res, err)
+	model := a.Preset
+	if preset.NoUsage {
+		model += noUsageMarker
+	}
+	w.recordACP(task, d, model, started, res, err)
 	return res, err
+}
+
+// acpDriver starts one run's jail for a and returns its driver. stop closes
+// the driver, which waits for the agent to exit, then the run.
+func (w *Worker) acpDriver(preset acp.Preset, a route.Agent, cwd string, readOnly bool) (*acp.Driver, func(), error) {
+	exe, err := preset.Executable(a.Executable)
+	if err != nil {
+		return nil, nil, err
+	}
+	run, err := w.acp.Start(preset.Allow, exe)
+	if err != nil {
+		return nil, nil, err
+	}
+	home, _ := os.UserHomeDir() // empty: no seed, and a relative login path that fails to read
+	creds := a.Credentials
+	if creds == "" {
+		creds = filepath.Join(home, preset.Credentials)
+	}
+	launch := acp.Launch{Home: run.Home, Executable: exe, Model: a.Model, Credentials: creds, UserHome: home}
+	driver := acp.NewDriver(preset.Config(launch, cwd, readOnly, run.Command))
+	return driver, func() { _ = driver.Close(); run.Close() }, nil
 }
 
 // recordACP writes one ai_calls record for the call, as the gateway writes for
 // a model call.
-func (w *Worker) recordACP(task models.Task, d route.Decision, a route.Agent, started time.Time, res stage.StageResult, err error) {
+func (w *Worker) recordACP(task models.Task, d route.Decision, model string, started time.Time, res stage.StageResult, err error) {
 	if w.acp.Recorder == nil {
 		return
 	}
@@ -140,7 +175,7 @@ func (w *Worker) recordACP(task models.Task, d route.Decision, a route.Agent, st
 	w.acp.Recorder.Record(spec.CallRecord{
 		At: started, Kind: spec.KindGenerate, Purpose: d.Purpose, Stage: d.Purpose.Stage(),
 		RoutedAgent: d.Agent, RoutedLevel: d.Required, RoutedRule: d.Rule,
-		TaskID: task.ID, AgentID: task.AgentID, Provider: route.KindACP, Model: a.Preset,
+		TaskID: task.ID, AgentID: task.AgentID, Provider: route.KindACP, Model: model,
 		Attempt: spec.AttemptFirst, Outcome: outcome, OutputChars: len(res.Output),
 		Tokens: res.TokenUsage, Latency: time.Since(started),
 	})

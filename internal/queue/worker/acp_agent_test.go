@@ -14,6 +14,7 @@ import (
 	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/gateway/spec"
 	agentmcp "agentd/internal/mcp"
+	"agentd/internal/sandbox/egress"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
 
@@ -22,16 +23,26 @@ import (
 
 // TestMain doubles as the fake ACP agent: `<test binary> fake-acp-agent`
 // serves it on stdio, so ACPAgent drives a real process. It also registers the
-// fake as preset "fake".
+// fake as preset "fake", and again as "quiet", which reports no usage. As
+// `<test binary> jail-forward` it is agentd's forwarder in a live run's jail.
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "jail-forward" {
+		if err := egress.Forward(context.Background(), os.Stdout, os.Args[2:]); err != nil {
+			os.Exit(2)
+		}
+		os.Exit(0)
+	}
 	if len(os.Args) > 1 && os.Args[1] == fakeagent.Arg {
 		if err := fakeagent.Serve(os.Args[2:], os.Stdin, os.Stdout); err != nil {
 			os.Exit(2)
 		}
 		os.Exit(0)
 	}
-	// The preset a route's kind: acp names; no real one exists until PR 08.
-	acp.Presets["fake"] = acp.Preset{Argv: []string{os.Args[0], fakeagent.Arg}}
+	fake := acp.Preset{Command: os.Args[0], Allow: []string{"model.test:443"},
+		Home: func(acp.Launch) ([]string, error) { return []string{os.Args[0], fakeagent.Arg}, nil }}
+	acp.Presets["fake"] = fake
+	fake.NoUsage = true
+	acp.Presets["quiet"] = fake
 	os.Exit(m.Run())
 }
 
@@ -64,7 +75,7 @@ func fakeACPAgentFor(t *testing.T, permit acp.Permitter, access stage.WorkspaceA
 	d := acp.NewDriver(acp.Config{
 		Cwd:      t.TempDir(),
 		ReadOnly: access != stage.AccessWrite,
-		Command: func(ctx context.Context, _ string) (*exec.Cmd, error) {
+		Command: func(ctx context.Context, _ string, _ []acpsdk.McpServer) (*exec.Cmd, error) {
 			return exec.CommandContext(ctx, os.Args[0], fakeagent.Arg), nil
 		},
 	})

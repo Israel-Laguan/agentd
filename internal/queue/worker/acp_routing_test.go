@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -60,10 +61,13 @@ func acpRoutes() route.Table {
 	}
 }
 
-// acpRuntime runs the registered fake preset unjailed and records its calls.
+// acpReadOnlyLog records each run's workspace access, and the runs started
+// and closed.
 type acpReadOnlyLog struct {
-	mu   sync.Mutex
-	args []bool
+	mu     sync.Mutex
+	args   []bool
+	starts []string
+	closes int
 }
 
 func (l *acpReadOnlyLog) record(v bool) {
@@ -78,6 +82,13 @@ func (l *acpReadOnlyLog) all() []bool {
 	return append([]bool(nil), l.args...)
 }
 
+func (l *acpReadOnlyLog) runs() ([]string, int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]string(nil), l.starts...), l.closes
+}
+
+// acpRuntime runs the registered fake preset unjailed and records its calls.
 func acpRuntime(t *testing.T) (*ACPRuntime, *recordSink, *acpReadOnlyLog) {
 	t.Helper()
 	sessions := &agentmcp.SessionMux{}
@@ -86,9 +97,18 @@ func acpRuntime(t *testing.T) (*ACPRuntime, *recordSink, *acpReadOnlyLog) {
 	sink := &recordSink{}
 	log := &acpReadOnlyLog{}
 	return &ACPRuntime{
-		Command: func(ctx context.Context, _ string, argv []string, readOnly bool) (*exec.Cmd, error) {
-			log.record(readOnly)
-			return exec.CommandContext(ctx, argv[0], argv[1:]...), nil
+		Start: func(allow []string, executable string) (ACPRun, error) {
+			log.mu.Lock()
+			log.starts = append(log.starts, strings.Join(allow, ",")+" "+executable)
+			log.mu.Unlock()
+			return ACPRun{
+				Home: t.TempDir(),
+				Command: func(ctx context.Context, _ string, argv []string, readOnly bool) (*exec.Cmd, error) {
+					log.record(readOnly)
+					return exec.CommandContext(ctx, argv[0], argv[1:]...), nil
+				},
+				Close: func() { log.mu.Lock(); log.closes++; log.mu.Unlock() },
+			}, nil
 		},
 		Sessions: sessions, MCPURL: srv.URL, Recorder: sink,
 	}, sink, log
@@ -99,11 +119,21 @@ func acpRuntime(t *testing.T) (*ACPRuntime, *recordSink, *acpReadOnlyLog) {
 // script from.
 func acpFixture(t *testing.T, title string, flagged bool) (*Worker, *testutil.FakeKanbanStore, models.Task, models.Project, models.AgentProfile, *recordSink, *acpReadOnlyLog) {
 	t.Helper()
+	store, running, project, profile := acpTask(t, title, "do the thing", flagged)
+	rt, sink, roLog := acpRuntime(t)
+	w := NewWorker(store, nil, &routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{Routes: acpRoutes(), ACP: rt})
+	return w, store, running, project, profile, sink, roLog
+}
+
+// acpTask is one RUNNING task in a fresh store whose projects live in a
+// temporary directory, with its project and profile.
+func acpTask(t *testing.T, title, description string, flagged bool) (*testutil.FakeKanbanStore, models.Task, models.Project, models.AgentProfile) {
+	t.Helper()
 	ctx := context.Background()
 	store := testutil.NewFakeStore()
 	store.SetProjectsDir(t.TempDir())
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{ProjectName: "acp", Description: "d",
-		Tasks: []models.DraftTask{{Title: title, Description: "do the thing", RequiresWorkspaceChange: flagged}}})
+		Tasks: []models.DraftTask{{Title: title, Description: description, RequiresWorkspaceChange: flagged}}})
 	if err != nil {
 		t.Fatalf("MaterializePlan: %v", err)
 	}
@@ -119,9 +149,7 @@ func acpFixture(t *testing.T, title string, flagged bool) (*Worker, *testutil.Fa
 	if err != nil {
 		t.Fatalf("GetAgentProfile: %v", err)
 	}
-	rt, sink, roLog := acpRuntime(t)
-	w := NewWorker(store, nil, &routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{Routes: acpRoutes(), ACP: rt})
-	return w, store, *running, *project, *profile, sink, roLog
+	return store, *running, *project, *profile
 }
 
 func TestResolveExecutionAgentPicksTheACPAgentAnExecTurnRouteNames(t *testing.T) {
@@ -167,6 +195,25 @@ func TestACPExecutionCompletesTheTaskWithTheReportedSummary(t *testing.T) {
 	}
 	if got := roLog.all(); len(got) != 1 || got[0] {
 		t.Fatalf("acp Command readOnly args = %v, want [false] for a writable exec.turn", got)
+	}
+	// One run in the jail, for the preset's hosts and binary, closed after the call.
+	if starts, closes := roLog.runs(); len(starts) != 1 || starts[0] != "model.test:443 "+os.Args[0] || closes != 1 {
+		t.Fatalf("runs = %q, closed %d; want one run on the preset's allowlist and executable, closed once", starts, closes)
+	}
+}
+
+// Cline reports no usage: its call is recorded with zero tokens and a marker,
+// not with numbers agentd made up.
+func TestACPCallOfAnAgentWithNoUsageIsMarkedInItsRecord(t *testing.T) {
+	t.Parallel()
+	script := fakeagent.Script(report(map[string]any{"summary": "done"}))
+	w, _, task, project, profile, sink, _ := acpFixture(t, script, false)
+	coder := w.routes.Agents["coder"]
+	coder.Preset = "quiet"
+	w.routes.Agents["coder"] = coder
+	w.dispatchProcess(context.Background(), task, project, profile)
+	if recs := sink.all(); len(recs) != 1 || recs[0].Tokens != 0 || recs[0].Model != "quiet (no usage reported)" {
+		t.Fatalf("records = %+v, want one zero-token record marked as unreported", recs)
 	}
 }
 

@@ -6,11 +6,12 @@ import (
 
 	"agentd/internal/agent/acp"
 	"agentd/internal/gateway/spec"
+	"agentd/internal/paths"
 )
 
-// No real preset exists until PR 08; the tests register one for kind: acp.
+// The tests register a preset for kind: acp that no install can lack.
 func init() {
-	acp.Presets["fake"] = acp.Preset{Argv: []string{"fake-acp-agent"}}
+	acp.Presets["fake"] = acp.Preset{}
 }
 
 // The agents: and stages: sections are validated at load. Each bad config
@@ -51,7 +52,7 @@ func TestLoad_RoutingACPKindIsL3AndRaisesALevel(t *testing.T) {
 	cfg, err := loadConfigBody(t, `
 agents:
   quick: { kind: model, provider: gemini }
-  coder: { kind: acp, preset: fake }
+  coder: { kind: acp, preset: fake, model: free, executable: /opt/agent, credentials: ~/agent/auth.json }
 stages:
   exec.turn:
     default: coder
@@ -65,8 +66,11 @@ stages:
 	if err != nil {
 		t.Fatalf("Load() = %v, want nil", err)
 	}
-	if got := cfg.Gateway.Routing.Agents["coder"]; got.Kind != "acp" || got.Preset != "fake" || got.Level != spec.LevelL3 {
-		t.Fatalf("agent coder = %+v, want an acp agent on preset fake at L3", got)
+	if got := cfg.Gateway.Routing.Agents["coder"]; got.Kind != "acp" || got.Preset != "fake" || got.Level != spec.LevelL3 || got.Model != "free" {
+		t.Fatalf("agent coder = %+v, want an acp agent on preset fake at L3 with model free", got)
+	}
+	if got := cfg.Gateway.Routing.Agents["coder"]; got.Executable != "/opt/agent" || got.Credentials != paths.ExpandTildePrefix("~/agent/auth.json") {
+		t.Fatalf("agent coder = %+v, want its executable and the expanded credentials path", got)
 	}
 	if got := cfg.Gateway.Routing.Agents["quick"]; got.Kind != "model" || got.Level != spec.LevelL1 {
 		t.Fatalf("agent quick = %+v, want a model agent at L1", got)
@@ -155,8 +159,14 @@ var routingLoadErrorCases = []struct {
 	},
 	{
 		name: "acp agent with an unknown preset",
-		body: "agents:\n  coder: { kind: acp, preset: opencode }\nstages:\n  exec.turn:\n    default: coder\n",
-		want: `unknown preset "opencode"`,
+		body: "agents:\n  coder: { kind: acp, preset: aider, model: free }\nstages:\n  exec.turn:\n    default: coder\n",
+		want: `unknown preset "aider"`,
+	},
+	{
+		// Every preset's default model is paid or unknown, and opencode swaps an unknown id silently.
+		name: "acp agent with no model",
+		body: "agents:\n  coder: { kind: acp, preset: fake }\nstages:\n  exec.turn:\n    default: coder\n",
+		want: "model is required",
 	},
 	{
 		name: "acp agent names a provider",
@@ -165,12 +175,12 @@ var routingLoadErrorCases = []struct {
 	},
 	{
 		name: "acp agent on a gateway call",
-		body: "agents:\n  coder: { kind: acp, preset: fake }\nstages:\n  maint.summarize_log:\n    default: coder\n",
+		body: "agents:\n  coder: { kind: acp, preset: fake, model: free }\nstages:\n  maint.summarize_log:\n    default: coder\n",
 		want: "only a model agent can serve",
 	},
 	{
 		name: "rule that lowers the level",
-		body: "agents:\n  coder: { kind: acp, preset: fake }\nstages:\n  exec.turn:\n    default: coder\n    rules:\n      - when: { requires_workspace_change: false }\n        min_level: L1\n        use: coder\n",
+		body: "agents:\n  coder: { kind: acp, preset: fake, model: free }\nstages:\n  exec.turn:\n    default: coder\n    rules:\n      - when: { requires_workspace_change: false }\n        min_level: L1\n        use: coder\n",
 		want: "would lower the purpose minimum L3",
 	},
 	{
