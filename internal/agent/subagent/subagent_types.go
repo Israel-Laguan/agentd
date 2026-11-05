@@ -7,6 +7,7 @@ import (
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/capabilities"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/sandbox"
 )
 
@@ -87,6 +88,7 @@ type SubagentDelegate struct {
 	// intent is the delegating task's text, which the sandbox's host-fact
 	// evidence guard checks every subagent's shell commands against.
 	intent string
+	attrs  spec.TaskAttrs
 }
 
 // NewSubagentDelegate constructs a delegate at the given depth.
@@ -168,6 +170,16 @@ func (d *SubagentDelegate) WithIntent(intent string) *SubagentDelegate {
 	return d
 }
 
+// WithAttrs sets the delegating task's routing attributes, which every turn of
+// the delegation tree carries, so a rule on overhead.subagent_turn can match.
+func (d *SubagentDelegate) WithAttrs(attrs spec.TaskAttrs) *SubagentDelegate {
+	if d == nil {
+		return d
+	}
+	d.attrs = attrs
+	return d
+}
+
 func (d *SubagentDelegate) profileAllows(name string) bool {
 	if len(d.allowedTools) == 0 {
 		return true
@@ -207,6 +219,7 @@ func (d *SubagentDelegate) child() *SubagentDelegate {
 		WithAllowedTools(d.allowedTools).
 		WithReadOnlyWorkspace(d.readOnlyWorkspace).
 		WithIntent(d.intent).
+		WithAttrs(d.attrs).
 		WithCallEnv(d.callEnv).
 		WithTruncationStrategy(d.truncation)
 }

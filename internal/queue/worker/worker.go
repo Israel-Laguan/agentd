@@ -12,6 +12,7 @@ import (
 	"agentd/internal/capabilities"
 	"agentd/internal/config"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
@@ -38,6 +39,10 @@ type Worker struct {
 	// stageAgent runs the task-creation stages (healing split, elicitor, work
 	// plan, next-phase plan). It defaults to a ModelAgent over gateway.
 	stageAgent stage.Agent
+	// routes picks the stage agent: a purpose routed to an acp agent runs on
+	// acp, through the ACP runtime, instead of the model agent or builtin loop.
+	routes route.Table
+	acp    *ACPRuntime
 	// maxTasksPerPhase caps the tasks in one next-phase plan.
 	maxTasksPerPhase        int
 	sandbox                 sandbox.Executor
@@ -123,14 +128,17 @@ func (unavailableAgent) Call(ctx context.Context, _ stage.StageRequest) (stage.S
 	return result, errNoTaskCreationAgent
 }
 
-func (w *Worker) taskCreationAgent() stage.Agent {
-	if w.stageAgent != nil {
-		return w.stageAgent
+// taskCreationAgent returns the agent for task's task-creation stages. Each
+// call goes to the acp agent its purpose routes to, if any, else to the model.
+func (w *Worker) taskCreationAgent(task models.Task, project models.Project) stage.Agent {
+	var model stage.Agent = unavailableAgent{}
+	switch {
+	case w.stageAgent != nil:
+		model = w.stageAgent
+	case w.gateway != nil:
+		model = stage.NewModelAgent(w.gateway)
 	}
-	if w.gateway == nil {
-		return unavailableAgent{}
-	}
-	return stage.NewModelAgent(w.gateway)
+	return routedStageAgent{w: w, model: model, task: task, project: project}
 }
 
 func (w *Worker) UpdateCriteriaMet(ctx context.Context, taskID string, met []string) error {

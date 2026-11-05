@@ -32,7 +32,8 @@ func (e *Engine) prepareAgenticRun(
 	taskToolExecutor = e.newAgenticTaskToolExecutor(project, task).
 		WithAllowedTools(profile.AllowedTools).
 		WithReadOnlyWorkspace(profile.WorkspaceReadonly).
-		WithIntent(task.Title + "\n" + task.Description)
+		WithIntent(task.Title + "\n" + task.Description).
+		WithAttrs(gateway.AttrsForTask(task.RequiresWorkspaceChange))
 	messages = e.buildAgenticMessages(ctx, task, project, profile)
 	allTools, allToolToAdapter = e.host.AgenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 	tools, toolToAdapter, routedProfile = e.selectAgenticTools(task, profile, messages, allTools, allToolToAdapter)

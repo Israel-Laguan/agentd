@@ -26,11 +26,21 @@ const (
 	RuleCascade = "cascade"
 )
 
+// Agent kinds. The kind fixes the level: a model agent is one gateway call
+// (L1); an acp agent is an external agent driven over ACP (L3), which replaces
+// the whole stage agent above the gateway.
+const (
+	KindModel = "model"
+	KindACP   = "acp"
+)
+
 // Agent is a routing target: the provider and model a rule or a stage default
-// sends a call to, and the level the agent provides.
+// sends a call to, or the preset of an acp agent, and the level it provides.
 type Agent struct {
+	Kind     string
 	Provider string
 	Model    string
+	Preset   string
 	Level    spec.Level
 }
 
@@ -41,9 +51,12 @@ type Match struct {
 }
 
 // Rule sends a call to agent Use when Match holds. Rules are tried in order.
+// MinLevel, when set, raises the level a matching call needs (T-043: a task
+// that changes code needs L3); it can never lower the purpose's minimum.
 type Rule struct {
-	Match Match
-	Use   string
+	Match    Match
+	Use      string
+	MinLevel spec.Level
 }
 
 // StageRoute is the route for one purpose: the agent it uses by default and the
@@ -92,6 +105,9 @@ func (t Table) Resolve(purpose spec.Purpose, agentID string, attrs spec.TaskAttr
 	}
 	for _, r := range sr.Rules {
 		if r.Match.matches(attrs) {
+			if levelRank[r.MinLevel] > levelRank[d.Required] {
+				d.Required = r.MinLevel
+			}
 			return d.choose(t, r.Use, r.Match.name())
 		}
 	}
@@ -132,6 +148,18 @@ func (m Match) name() string {
 // levels; the others are purpose-only markers.
 var levelRank = map[spec.Level]int{spec.LevelL1: 1, spec.LevelL3: 3}
 
+// stageAgentPurposes are the purposes whose stage agent the worker picks per
+// call (Worker.taskCreationAgent, resolveExecutionAgent), the only ones an acp
+// agent can run. Every other purpose is a gateway call, which only a model
+// agent can serve.
+var stageAgentPurposes = map[spec.Purpose]bool{
+	spec.PurposeCreateElicit:    true,
+	spec.PurposeCreateSplitTask: true,
+	spec.PurposeCreateNextPhase: true,
+	spec.PurposeExecWorkPlan:    true,
+	spec.PurposeExecTurn:        true,
+}
+
 // Validate checks the table at config load, so a bad table fails at startup and
 // never at dispatch. It reports every problem it finds.
 func (t Table) Validate() error {
@@ -156,30 +184,50 @@ func (t Table) validateStage(purpose spec.Purpose, sr StageRoute) []error {
 		return []error{fmt.Errorf("stages.%s: no default and no rules", purpose)}
 	}
 	var errs []error
-	check := func(where, name string) {
+	check := func(where, name string, need spec.Level, minimum string) {
 		a, ok := t.Agents[name]
 		switch {
 		case !ok:
 			errs = append(errs, fmt.Errorf("stages.%s.%s: unknown agent %q", purpose, where, name))
-		case levelRank[a.Level] < levelRank[minLevel]:
-			errs = append(errs, fmt.Errorf("stages.%s.%s: agent %q is level %s, below the purpose minimum %s", purpose, where, name, a.Level, minLevel))
+		case levelRank[a.Level] < levelRank[need]:
+			errs = append(errs, fmt.Errorf("stages.%s.%s: agent %q is level %s, below the %s minimum %s", purpose, where, name, a.Level, minimum, need))
+		case a.Kind == KindACP && !stageAgentPurposes[purpose]:
+			errs = append(errs, fmt.Errorf("stages.%s.%s: agent %q is an acp agent, and %s is a gateway call only a model agent can serve", purpose, where, name, purpose))
 		}
 	}
 	if sr.Default != "" {
-		check("default", sr.Default)
+		check("default", sr.Default, minLevel, "purpose")
 	}
 	for i, r := range sr.Rules {
 		where := fmt.Sprintf("rules[%d]", i)
 		if r.Match.RequiresWorkspaceChange == nil {
 			errs = append(errs, fmt.Errorf("stages.%s.%s: rule has no condition", purpose, where))
 		}
+		need, minimum, err := ruleLevel(minLevel, r.MinLevel)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("stages.%s.%s: %w", purpose, where, err))
+		}
 		if r.Use == "" {
 			errs = append(errs, fmt.Errorf("stages.%s.%s: rule has no use", purpose, where))
 			continue
 		}
-		check(where, r.Use)
+		check(where, r.Use, need, minimum)
 	}
 	return errs
+}
+
+// ruleLevel is the level a rule's use agent must provide, and which minimum it
+// is: the rule's min_level when it raises the purpose's, else the purpose's.
+func ruleLevel(purposeMin, ruleMin spec.Level) (spec.Level, string, error) {
+	switch {
+	case ruleMin == "":
+		return purposeMin, "purpose", nil
+	case levelRank[ruleMin] == 0:
+		return purposeMin, "purpose", fmt.Errorf("min_level %q is not an agent level (want L1 or L3)", ruleMin)
+	case levelRank[ruleMin] < levelRank[purposeMin]:
+		return purposeMin, "purpose", fmt.Errorf("min_level %s would lower the purpose minimum %s", ruleMin, purposeMin)
+	}
+	return ruleMin, "rule", nil
 }
 
 func sortedKeys(m map[string]Agent) []string {

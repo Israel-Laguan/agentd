@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"agentd/internal/agent/acp"
 	agentcontext "agentd/internal/agent/context"
 	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
@@ -76,6 +77,22 @@ func TestProcessStopsWithoutTurnLoopWhenWorkPlanNeedsHuman(t *testing.T) {
 	}
 	if len(host.failedWith) != 0 {
 		t.Fatalf("FailHard called for a blocked task: %v", host.failedWith)
+	}
+}
+
+func TestProcessStopsWithoutTurnLoopWhenWorkPlanIsSuspended(t *testing.T) {
+	host, gw, res, ok := runProcessWithPlanErr(t, fmt.Errorf("%w: exec.work_plan", acp.ErrSuspended))
+	if res.Kind != ResultNone {
+		t.Fatalf("result kind = %v for a task suspended for approval, want none", res.Kind)
+	}
+	if ok {
+		t.Fatal("Process reported a result; the task is suspended for approval")
+	}
+	if gw.generateCalls != 0 || host.recorded != 0 {
+		t.Fatalf("turn loop ran: model calls=%d recorded=%d", gw.generateCalls, host.recorded)
+	}
+	if len(host.failedWith) != 0 {
+		t.Fatalf("FailHard called for a suspended task: %v", host.failedWith)
 	}
 }
 

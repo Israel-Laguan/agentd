@@ -157,7 +157,7 @@ func formatCriteria(criteria []string) string {
 // createReviewHandoff blocks the task with a HUMAN subtask so a human
 // can review the agent's draft output before the task is marked
 // complete. Review feedback re-enters the loop as task-level context.
-func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draftOutput string) {
+func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draftOutput string) bool {
 	if fresh, err := w.store.GetTask(ctx, task.ID); err != nil {
 		slog.Warn("failed to refresh task version for review handoff", "task_id", task.ID, "error", err)
 	} else if fresh != nil {
@@ -165,7 +165,7 @@ func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draf
 	}
 	if err := persistDraftReviewComment(ctx, w.store, task.ID, draftOutput); err != nil {
 		w.Emit(ctx, task, "ERROR", err.Error())
-		return
+		return false
 	}
 	if strings.TrimSpace(draftOutput) != "" {
 		markPendingReviewRejectionConsumed(ctx, w.store, task.ID)
@@ -184,11 +184,12 @@ func (w *Worker) createReviewHandoff(ctx context.Context, task models.Task, draf
 	}})
 	if err != nil {
 		w.Emit(ctx, task, "ERROR", err.Error())
-		return
+		return false
 	}
 	if err := recordHITLExpiry(ctx, w.store, task.ID, time.Now().Add(DefaultApprovalTimeout)); err != nil {
 		w.Emit(ctx, task, "ERROR", err.Error())
-		return
+		return true // the handoff exists; only its expiry bookkeeping failed
 	}
 	w.Emit(ctx, task, "REVIEW_HANDOFF", truncate(draftOutput, 1000))
+	return true
 }

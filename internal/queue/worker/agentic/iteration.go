@@ -7,6 +7,7 @@ import (
 
 	"agentd/internal/api/correlation"
 
+	"agentd/internal/agent/acp"
 	agentcontext "agentd/internal/agent/context"
 	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
@@ -256,7 +257,7 @@ func (e *Engine) injectWorkPlanIfNeeded(
 		}
 	}
 	workPlan, planErr := e.host.GeneratePlan(ctx, task, project, budgetGuard)
-	if errors.Is(planErr, stage.ErrNeedsHuman) {
+	if errors.Is(planErr, stage.ErrNeedsHuman) || errors.Is(planErr, acp.ErrSuspended) {
 		// The task is blocked on the plan's question; it must not run without a plan.
 		return messages, nil, false
 	}

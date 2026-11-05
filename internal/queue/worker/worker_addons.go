@@ -83,7 +83,7 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		return
 	}
 	intent := planning.BuildPhaseIntent(task, project, tasks)
-	plan, result, err := intake.PlanInStageWithResult(gateway.WithTaskID(ctx, task.ID), w.taskCreationAgent(), stage.StageTaskCreation, gateway.PurposeCreateNextPhase, w.maxTasksPerPhase, intent)
+	plan, result, err := intake.PlanInStageWithResult(gateway.WithTaskID(ctx, task.ID), w.taskCreationAgent(task, project), stage.StageTaskCreation, gateway.PurposeCreateNextPhase, w.maxTasksPerPhase, intent)
 	w.RecordTaskTokenUsage(ctx, task, result.TokenUsage, result.UsageDetails)
 	if err != nil {
 		w.HandleGatewayError(ctx, task, err)

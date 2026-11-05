@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"agentd/internal/agent/acp"
 	"agentd/internal/models"
 	"agentd/internal/stage"
 )
@@ -76,9 +77,9 @@ func (w *Worker) RunPreTaskElicitation(ctx context.Context, task models.Task, pr
 		return task, false, nil
 	}
 
-	elicitor := NewElicitorOn(w.taskCreationAgent()).WithHuman(w.AskHuman)
+	elicitor := NewElicitorOn(w.taskCreationAgent(task, project)).WithHuman(w.AskHuman)
 	analysis, err := elicitor.Analyze(ctx, task, project, w.buildElicitationFileContext(task, project))
-	if errors.Is(err, stage.ErrNeedsHuman) {
+	if errors.Is(err, stage.ErrNeedsHuman) || errors.Is(err, acp.ErrSuspended) {
 		// The question is with a person and the task is blocked on it.
 		return task, true, nil
 	}

@@ -21,7 +21,8 @@ import (
 )
 
 // TestMain doubles as the fake ACP agent: `<test binary> fake-acp-agent`
-// serves it on stdio, so ACPAgent drives a real process.
+// serves it on stdio, so ACPAgent drives a real process. It also registers the
+// fake as preset "fake".
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == fakeagent.Arg {
 		if err := fakeagent.Serve(os.Args[2:], os.Stdin, os.Stdout); err != nil {
@@ -29,6 +30,8 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	// The preset a route's kind: acp names; no real one exists until PR 08.
+	acp.Presets["fake"] = acp.Preset{Argv: []string{os.Args[0], fakeagent.Arg}}
 	os.Exit(m.Run())
 }
 

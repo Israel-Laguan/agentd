@@ -44,7 +44,7 @@ type Config struct {
 	// Cwd is the workspace: the process starts for it and every session opens
 	// in it. A warm process is jailed to the workspace it started for, so a
 	// Driver never serves another.
-	Cwd string
+	Cwd      string
 	ReadOnly bool // the workspace access Command binds; the other level is refused.
 	// Command returns the agent process for cwd, not started, living as long
 	// as ctx. In agentd it is sandbox.BashExecutor.AgentCommand, so the agent
@@ -67,7 +67,7 @@ type Request struct {
 	OnUpdate func(acpsdk.SessionUpdate)
 	// ReadOnly refuses every write the agent asks permission for, before the
 	// Permitter. The agent's own writes are the jail's to confine.
-	ReadOnly bool
+	ReadOnly    bool
 	NoWorkspace bool // refuse all workspace permissions (AccessNone).
 	// Followup, when set, is asked after each turn that ended well: a prompt
 	// it returns is another turn in the session, "" ends the call. It must stop.

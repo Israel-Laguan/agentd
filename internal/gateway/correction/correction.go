@@ -40,6 +40,29 @@ func AttemptBudgetCharged(ctx context.Context) bool {
 	return state.used
 }
 
+// HasAttemptBudget reports whether ctx carries a per-call budget. Its caller
+// has already reserved the call with BeforeCall (see WithAttemptBudget).
+func HasAttemptBudget(ctx context.Context) bool {
+	state, _ := ctx.Value(attemptBudgetKey{}).(*attemptBudgetState)
+	return state != nil && state.budget != nil
+}
+
+// ChargeAttemptBudget charges tokens to the context's per-call budget once and
+// marks it used. The correction loop charges its own provider attempts; a stage
+// that does not run the loop (an ACP call) uses this so its caller does not
+// charge the same response again. It reports whether ctx carried a budget.
+func ChargeAttemptBudget(ctx context.Context, tokens int) bool {
+	state, _ := ctx.Value(attemptBudgetKey{}).(*attemptBudgetState)
+	if state == nil || state.budget == nil {
+		return false
+	}
+	if !state.used {
+		state.budget.AfterCall(tokens)
+		state.used = true
+	}
+	return true
+}
+
 func accumulateUsage(details *spec.UsageDetails, usage *spec.UsageDetails) {
 	details.Model = ""
 	if usage == nil {

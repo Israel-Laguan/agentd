@@ -11,14 +11,15 @@ import (
 )
 
 const (
-	RecordTypeToolDispatch = "tool_dispatch"
-	RecordTypeTurnSnapshot = "turn_snapshot"
-	RecordTypeHistoryEdit  = "history_edit"
-	RecordTypeTaskStart    = "task_start"
-	RecordTypeTaskComplete = "task_complete"
-	RecordTypeTaskFail     = "task_fail"
-	RecordTypeTaskReview   = "task_review"
-	RecordTypeDaemonStart  = "daemon_start"
+	RecordTypeToolDispatch  = "tool_dispatch"
+	RecordTypeTurnSnapshot  = "turn_snapshot"
+	RecordTypeHistoryEdit   = "history_edit"
+	RecordTypeTaskStart     = "task_start"
+	RecordTypeTaskComplete  = "task_complete"
+	RecordTypeTaskFail      = "task_fail"
+	RecordTypeTaskReview    = "task_review"
+	RecordTypeTaskSuspended = "task_suspended"
+	RecordTypeDaemonStart   = "daemon_start"
 )
 
 // AuditRecord is a structured audit entry for a single tool dispatch.

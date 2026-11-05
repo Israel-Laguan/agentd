@@ -6,13 +6,10 @@ import (
 
 	"github.com/spf13/viper"
 
+	"agentd/internal/agent/acp"
 	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 )
-
-// defaultAgentLevel is the level of every config agent: a single model call. An
-// entry cannot set it, so a config cannot make a plain model claim L3.
-const defaultAgentLevel = spec.LevelL1
 
 // loadRouteTable reads and validates the agents: and stages: sections. A config
 // with neither section yields an empty table, so every call keeps the cascade.
@@ -47,33 +44,68 @@ func parseAgents(raw any) (map[string]route.Agent, error) {
 			return nil, fmt.Errorf("agents.%s must be a map", name)
 		}
 		if _, removed := entry["level"]; removed {
-			return nil, fmt.Errorf("agents.%s: level was removed; every config agent is a single L1 model call, so delete it", name)
+			return nil, fmt.Errorf("agents.%s: level was removed; the kind sets it (model is L1, acp is L3), so delete it", name)
 		}
-		if err := onlyKeys(entry, "agents."+name, "provider", "model"); err != nil {
+		agent, err := parseAgent("agents."+name, entry)
+		if err != nil {
 			return nil, err
 		}
-		provider := ""
-		if raw, ok := entry["provider"]; ok {
-			text, isString := raw.(string)
-			if !isString {
-				return nil, fmt.Errorf("agents.%s: provider must be a string", name)
-			}
-			provider = strings.TrimSpace(text)
-		}
-		if provider == "" {
-			return nil, fmt.Errorf("agents.%s: provider is required", name)
-		}
-		model := ""
-		if raw, ok := entry["model"]; ok {
-			text, isString := raw.(string)
-			if !isString {
-				return nil, fmt.Errorf("agents.%s: model must be a string", name)
-			}
-			model = strings.TrimSpace(text)
-		}
-		out[name] = route.Agent{Provider: provider, Model: model, Level: defaultAgentLevel}
+		out[name] = agent
 	}
 	return out, nil
+}
+
+// parseAgent reads one entry. The kind fixes the level, so a config cannot make
+// a plain model claim L3: a model agent names a provider, an acp agent a preset.
+func parseAgent(where string, entry map[string]any) (route.Agent, error) {
+	kind, err := optionalString(where, entry, "kind")
+	if err != nil {
+		return route.Agent{}, err
+	}
+	if kind == "" {
+		kind = route.KindModel
+	}
+	a := route.Agent{Kind: kind}
+	switch kind {
+	case route.KindModel:
+		a.Level = spec.LevelL1
+		if err := onlyKeys(entry, where, "kind", "provider", "model"); err != nil {
+			return route.Agent{}, err
+		}
+		if a.Provider, err = optionalString(where, entry, "provider"); err != nil {
+			return route.Agent{}, err
+		}
+		if a.Provider == "" {
+			return route.Agent{}, fmt.Errorf("%s: provider is required", where)
+		}
+		a.Model, err = optionalString(where, entry, "model")
+		return a, err
+	case route.KindACP:
+		a.Level = spec.LevelL3
+		if err := onlyKeys(entry, where, "kind", "preset"); err != nil {
+			return route.Agent{}, err
+		}
+		if a.Preset, err = optionalString(where, entry, "preset"); err != nil {
+			return route.Agent{}, err
+		}
+		if _, ok := acp.Presets[a.Preset]; !ok {
+			return route.Agent{}, fmt.Errorf("%s: unknown preset %q", where, a.Preset)
+		}
+		return a, nil
+	}
+	return route.Agent{}, fmt.Errorf("%s: unknown kind %q (want %s or %s)", where, kind, route.KindModel, route.KindACP)
+}
+
+func optionalString(where string, entry map[string]any, key string) (string, error) {
+	raw, ok := entry[key]
+	if !ok {
+		return "", nil
+	}
+	text, isString := raw.(string)
+	if !isString {
+		return "", fmt.Errorf("%s: %s must be a string", where, key)
+	}
+	return strings.TrimSpace(text), nil
 }
 
 // parseStages flattens the stage map first. Viper can keep a dotted purpose such
@@ -179,22 +211,22 @@ func parseRules(where string, raw any) ([]route.Rule, error) {
 			return nil, fmt.Errorf("%s.rules[%d] must be a map", where, i)
 		}
 		at := fmt.Sprintf("%s.rules[%d]", where, i)
-		if err := onlyKeys(entry, at, "when", "use"); err != nil {
+		if err := onlyKeys(entry, at, "when", "use", "min_level"); err != nil {
 			return nil, err
 		}
 		match, err := parseMatch(at, entry["when"])
 		if err != nil {
 			return nil, err
 		}
-		use := ""
-		if raw, ok := entry["use"]; ok {
-			text, isString := raw.(string)
-			if !isString {
-				return nil, fmt.Errorf("%s: use must be a string", at)
-			}
-			use = strings.TrimSpace(text)
+		use, err := optionalString(at, entry, "use")
+		if err != nil {
+			return nil, err
 		}
-		rules = append(rules, route.Rule{Match: match, Use: use})
+		minLevel, err := optionalString(at, entry, "min_level")
+		if err != nil {
+			return nil, err
+		}
+		rules = append(rules, route.Rule{Match: match, Use: use, MinLevel: spec.Level(minLevel)})
 	}
 	return rules, nil
 }

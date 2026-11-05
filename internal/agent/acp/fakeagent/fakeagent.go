@@ -58,6 +58,8 @@ type Step struct {
 	Tool *Tool `json:"tool,omitempty"`
 	// Did reports a tool call of this kind that ran and completed.
 	Did acp.ToolKind `json:"did,omitempty"`
+	// Usage reports this turn's token counts, as an agent's PromptResponse does.
+	Usage *acp.Usage `json:"usage,omitempty"`
 	// Next is what the session's next prompt that is not a script runs, as
 	// an agent answers agentd's own follow-up.
 	Next []Step `json:"next,omitempty"`
@@ -140,9 +142,13 @@ func (a *agent) NewSession(_ context.Context, p acp.NewSessionRequest) (acp.NewS
 	return acp.NewSessionResponse{SessionId: id}, nil
 }
 
+// Prompt runs the scripted steps, or the next scripted prompt for the session.
 func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResponse, error) {
 	var steps []Step
-	if len(p.Prompt) != 1 || p.Prompt[0].Text == nil || json.NewDecoder(strings.NewReader(p.Prompt[0].Text.Text)).Decode(&steps) != nil || steps == nil {
+	if len(p.Prompt) == 1 && p.Prompt[0].Text != nil {
+		steps = scriptFromPrompt(p.Prompt[0].Text.Text)
+	}
+	if steps == nil {
 		a.mu.Lock()
 		steps = a.next[p.SessionId]
 		delete(a.next, p.SessionId)
@@ -151,12 +157,16 @@ func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if steps == nil {
 		steps = []Step{{Message: "ok"}}
 	}
+	var usage *acp.Usage
 	for _, step := range steps {
+		if step.Usage != nil {
+			usage = step.Usage
+		}
 		if stop, err := a.run(ctx, p.SessionId, step); stop != "" || err != nil {
-			return acp.PromptResponse{StopReason: stop}, err
+			return acp.PromptResponse{StopReason: stop, Usage: usage}, err
 		}
 	}
-	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn}, nil
+	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn, Usage: usage}, nil
 }
 
 // run does one step. A non-empty stop reason or an error ends the turn.
@@ -184,6 +194,9 @@ func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.
 		a.mu.Lock()
 		a.next[session] = step.Next
 		a.mu.Unlock()
+		return "", nil
+	}
+	if step.Message == "" {
 		return "", nil
 	}
 	return "", a.say(ctx, session, step.Message)

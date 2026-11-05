@@ -4,8 +4,14 @@ import (
 	"strings"
 	"testing"
 
+	"agentd/internal/agent/acp"
 	"agentd/internal/gateway/spec"
 )
+
+// No real preset exists until PR 08; the tests register one for kind: acp.
+func init() {
+	acp.Presets["fake"] = acp.Preset{Argv: []string{"fake-acp-agent"}}
+}
 
 // The agents: and stages: sections are validated at load. Each bad config
 // below must fail Load and name the problem.
@@ -38,6 +44,35 @@ stages:
 	rules := cfg.Gateway.Routing.Stages[spec.PurposeExecWorkPlan].Rules
 	if len(rules) != 1 || rules[0].Use != "quick" || rules[0].Match.RequiresWorkspaceChange == nil || !*rules[0].Match.RequiresWorkspaceChange {
 		t.Fatalf("exec.work_plan rules = %+v, want one rule on requires_workspace_change", rules)
+	}
+}
+
+func TestLoad_RoutingACPKindIsL3AndRaisesALevel(t *testing.T) {
+	cfg, err := loadConfigBody(t, `
+agents:
+  quick: { kind: model, provider: gemini }
+  coder: { kind: acp, preset: fake }
+stages:
+  exec.turn:
+    default: coder
+  create.split_task:
+    default: quick
+    rules:
+      - when: { requires_workspace_change: true }
+        min_level: L3
+        use: coder
+`)
+	if err != nil {
+		t.Fatalf("Load() = %v, want nil", err)
+	}
+	if got := cfg.Gateway.Routing.Agents["coder"]; got.Kind != "acp" || got.Preset != "fake" || got.Level != spec.LevelL3 {
+		t.Fatalf("agent coder = %+v, want an acp agent on preset fake at L3", got)
+	}
+	if got := cfg.Gateway.Routing.Agents["quick"]; got.Kind != "model" || got.Level != spec.LevelL1 {
+		t.Fatalf("agent quick = %+v, want a model agent at L1", got)
+	}
+	if rules := cfg.Gateway.Routing.Stages[spec.PurposeCreateSplitTask].Rules; len(rules) != 1 || rules[0].MinLevel != spec.LevelL3 {
+		t.Fatalf("create.split_task rules = %+v, want one rule raising to L3", rules)
 	}
 }
 
@@ -107,6 +142,36 @@ var routingLoadErrorCases = []struct {
 		name: "a model agent routed to exec.turn",
 		body: "agents:\n  big: { provider: openai }\nstages:\n  exec.turn:\n    default: big\n",
 		want: "below the purpose minimum L3",
+	},
+	{
+		name: "kind model routed to exec.turn names the minimum",
+		body: "agents:\n  big: { kind: model, provider: openai }\nstages:\n  exec.turn:\n    default: big\n",
+		want: "below the purpose minimum L3",
+	},
+	{
+		name: "unknown kind",
+		body: "agents:\n  big: { kind: cli, provider: openai }\nstages:\n  create.elicit:\n    default: big\n",
+		want: `unknown kind "cli"`,
+	},
+	{
+		name: "acp agent with an unknown preset",
+		body: "agents:\n  coder: { kind: acp, preset: opencode }\nstages:\n  exec.turn:\n    default: coder\n",
+		want: `unknown preset "opencode"`,
+	},
+	{
+		name: "acp agent names a provider",
+		body: "agents:\n  coder: { kind: acp, preset: fake, provider: openai }\nstages:\n  exec.turn:\n    default: coder\n",
+		want: `unknown key "provider"`,
+	},
+	{
+		name: "acp agent on a gateway call",
+		body: "agents:\n  coder: { kind: acp, preset: fake }\nstages:\n  maint.summarize_log:\n    default: coder\n",
+		want: "only a model agent can serve",
+	},
+	{
+		name: "rule that lowers the level",
+		body: "agents:\n  coder: { kind: acp, preset: fake }\nstages:\n  exec.turn:\n    default: coder\n    rules:\n      - when: { requires_workspace_change: false }\n        min_level: L1\n        use: coder\n",
+		want: "would lower the purpose minimum L3",
 	},
 	{
 		name: "misspelt stage key",
