@@ -2,7 +2,7 @@
 
 What belongs in a library that agentd's controller imports, what gets deleted, and what has to be cut first. Result of spike SP-024 (S19), built on the S17 keep/outsource map and the T-042 runs in [acp-agents.md](acp-agents.md) and [acp-presets.md](acp-presets.md). The kit is **in-repo first** (`agentkit/`, T-045); a separate module or repo is gated by the criteria at the end.
 
-**Status (2026-11-05):** decided for the gateway, the stage seam, context building and the leaf packages. **The builtin loop is undecided**: the one comparison that exists is one run per cell, with opencode missing. Its cuts are planned both ways below, with the run that would settle it.
+**Status (2026-11-05):** decided for the gateway, the stage seam, context building and the leaf packages. **The builtin loop is undecided**: the one comparison that exists is one run per cell, plus one extra run for cline on the small task, with opencode missing. Its cuts are planned both ways below, with the run that would settle it.
 
 ## Starting data (re-measured 2026-11-05, `35dcec02`)
 
@@ -61,7 +61,7 @@ Two facts that the first table missed, because it only looked outside `agent/`:
 - **Cost.** SP-022: the loop finished clear tasks at 9,000–23,000 tokens, against 23,000+ for opencode. The loop's `ModelAgent` stays either way (it is L1, not the loop).
 - **Reliability, SP-022 (3 runs per cell):** on the ambiguous task the loop reported COMPLETED with nothing done in 2 of 3; on the small task one of 3 wrote a failing test and reported success. The builtin's sandbox could not see the Go toolchain in those runs.
 - **Data loss, SP-027 / B-089.** On the default 12,000-char budget the cut deleted code in 5 of 12 workspaces, 2 of them COMPLETED. **Fixed** (S19 PR 02): a whole-file `write` to a file whose latest read was cut is refused. The kit inherits that fix if `tools` moves.
-- **The live smoke, S19 PR 08 (one run per cell, [acp-presets.md](acp-presets.md#live-smoke-2026-11-05)):**
+- **The live smoke, S19 PR 08 (one run per cell except cline/small, which recorded 2 runs, [acp-presets.md](acp-presets.md#live-smoke-2026-11-05)):**
 
   | | small | multi-file | ambiguous |
   | --- | --- | --- | --- |
@@ -71,7 +71,7 @@ Two facts that the first table missed, because it only looked outside `agent/`:
 
 ### Why it is not decided
 
-1. **n = 1 per cell, and opencode is missing.** The best ACP candidate (opencode: go, SP-022) has no run.
+1. **Sample too small, and opencode is missing.** The best ACP candidate (opencode: go, SP-022) has no run. The smoke above is n=1 per cell, except cline/small at n=2; retries, if any, are not separated from first attempts in the record.
 2. **The two seams do not start alike.** The builtin path runs pre-task elicitation (skipped only for a description over 200 characters with success criteria or constraints); an `acp` route skips it. The small task is 152 characters with no criteria, so only the builtin was asked to clarify, and it never wrote code.
 3. **Neither side is good.** The builtin left a broken workspace when it asked a human mid-change; cline passed its own tests with a wrong `CountLines`. A COMPLETED state is not evidence without a workspace check.
 
@@ -81,13 +81,14 @@ One more live session (needs the owner's go-ahead for each run and a free model 
 
 - opencode on the same three tasks, once its free tier resets;
 - **tasks with success criteria**, so both seams start alike;
-- **n ≥ 3 per cell**, the builtin with B-089 fixed and the Go toolchain bound into its jail;
+- **n ≥ 3 first-attempt runs per cell** (retries excluded from n, reported separately), the builtin with B-089 fixed and the Go toolchain bound into its jail;
 - the same host-side check on every workspace: each file against the seed (size, function list), `go test`, and the behavior test.
 
 **Decision rule, proposed before the runs:**
 
 - **Move** if the builtin matches the best ACP agent on the workspace checks (clear tasks) and keeps its token advantage (SP-022: at most half the tokens).
-- **Delete** if it loses or breaks code where an ACP agent does not, or if an ACP agent passes the checks on every clear task.
+- **Delete** if it loses or breaks code where an ACP agent does not, or if an ACP agent passes the checks on every clear task **and the builtin does not**.
+- **Move takes precedence** when both agents pass every clear-task check and the builtin keeps its token advantage — both rules above would fire, and the tie goes to Move.
 - Anything else: keep it where it is, out of the kit, and do not spend a PR on it.
 
 ### If it moves: an L3 `stage.Agent` in the kit

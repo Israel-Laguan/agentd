@@ -115,9 +115,9 @@ type Validatable interface {
 	Validate() error
 }
 
-// UsageDetails is a re-export alias to the definition in models (shared bottom
+// UsageDetails is a re-export alias to the definition in agentkit/llm (shared bottom
 // layer). This lets gateway code keep using spec.UsageDetails while persistence
-// (kanban) and queue interfaces can depend on models instead of gateway/spec.
+// (kanban) and queue interfaces can depend on agentkit/llm instead of gateway/spec.
 type UsageDetails = llm.UsageDetails
 
 // AIResponse is the provider-neutral output shape for model calls.
