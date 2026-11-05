@@ -196,7 +196,15 @@ func TestACPExecutionCompletesTheTaskWithTheReportedSummary(t *testing.T) {
 	if got := roLog.all(); len(got) != 1 || got[0] {
 		t.Fatalf("acp Command readOnly args = %v, want [false] for a writable exec.turn", got)
 	}
-	// One run in the jail, for the preset's hosts and binary, closed after the call.
+}
+
+// Each call is one run in the jail, for the preset's hosts and binary, closed
+// once the call ends.
+func TestACPCallIsOneJailedRunClosedAfterTheCall(t *testing.T) {
+	t.Parallel()
+	script := fakeagent.Script(report(map[string]any{"summary": "done"}))
+	w, _, task, project, profile, _, roLog := acpFixture(t, script, false)
+	w.dispatchProcess(context.Background(), task, project, profile)
 	if starts, closes := roLog.runs(); len(starts) != 1 || starts[0] != "model.test:443 "+os.Args[0] || closes != 1 {
 		t.Fatalf("runs = %q, closed %d; want one run on the preset's allowlist and executable, closed once", starts, closes)
 	}

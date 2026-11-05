@@ -51,6 +51,13 @@ func TestLiveACPPresetsAgainstTheBuiltinAgent(t *testing.T) {
 		t.Skip("bubblewrap is required: an agent runs only in the jail")
 	}
 	refused := countRefusals(t)
+	daemons := clineHubDaemons()
+	// The hub daemon starts inside the jail and must die with its PID namespace.
+	defer func() {
+		if left := clineHubDaemons(); left > daemons {
+			t.Errorf("%d cline hub daemons on the host after the runs, %d before", left, daemons)
+		}
+	}()
 	runs := 3
 	if _, err := fmt.Sscan(os.Getenv("AGENTD_LIVE_RUNS"), &runs); err != nil {
 		runs = 3
@@ -148,7 +155,8 @@ func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.In
 	if task.ambiguous {
 		want = models.TaskStateBlocked // NeedsHuman: the question is with a human
 	}
-	if r.state != want || !r.pass() {
+	// A refused kind the driver cannot check would be agentd's own MCP tool.
+	if r.state != want || !r.pass() || r.refusedOther != 0 {
 		t.Errorf("%s %s run %d: %+v", side, task.name, i+1, r)
 	}
 	return r
@@ -179,6 +187,13 @@ func (h refusalCounter) Handle(ctx context.Context, r slog.Record) error {
 		})
 	}
 	return h.Handler.Handle(ctx, r)
+}
+
+// clineHubDaemons counts cline hub daemons on the host. The bracket keeps
+// pgrep from matching its own command line (docs/acp-agents.md pitfalls).
+func clineHubDaemons() int {
+	out, _ := exec.Command("pgrep", "-f", "cline-hub-daemo[n]").Output()
+	return len(strings.Fields(string(out)))
 }
 
 func liveList(name, fallback string) []string {
