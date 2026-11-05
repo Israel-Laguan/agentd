@@ -51,6 +51,10 @@ Limits:
 | | multi-file | COMPLETED | pass | **fail** (same `CountLines`) | `count.go`, `count_test.go`, `main.go`, and a built `wc` binary |
 | | ambiguous | BLOCKED: asked a human | n/a | n/a | none |
 | opencode | all | not measured: the account's free tier was used up (`Free usage limit reached`) on `deepseek-v4.1-flash-free` and on `glm-5.3-flash-free` after one run of 17,552 tokens | | | |
-| builtin agent | all | not run: no codestral key in the environment | | | |
+| builtin agent, `codestral-latest`, default budgets (B-089 fixed) | small | BLOCKED: the pre-task elicitation asked what `CountLines("")` should return; no code written | pass (seed) | n/a | none |
+| | multi-file | BLOCKED: asked `ask_human` which file holds `CountWords`, mid-change | **fail** | **fail** | `CountWords` lost; `count.go` without its `strings` import, `count_test.go`, `main.go` |
+| | ambiguous | BLOCKED: asked a human | n/a | n/a | none |
 
-**Still open for SP-024:** opencode and the builtin agent on the same tasks, and more than one run per cell.
+The two seams differ before the agent runs: the builtin path runs the pre-task elicitation, which is skipped only for a description over 200 characters with success criteria or constraints, and an `acp` route skips it. The small task's description is 152 characters with no criteria, so only the builtin was asked to decide whether to clarify. Tasks from intake usually carry success criteria.
+
+**Still open for SP-024:** opencode on the same tasks (after its free tier resets), tasks with success criteria so both seams start alike, and more than one run per cell.
