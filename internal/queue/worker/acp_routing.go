@@ -193,7 +193,8 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	// A resumed task answers a blocked clarification with a HUMAN subtask;
 	// consume the answer before the ACP prompt so it leads the context again.
 	if enriched, ok, err := w.tryConsumeElicitationAnswers(ctx, task); err != nil {
-		w.Emit(ctx, task, "ERROR", err.Error())
+		w.FailHard(ctx, task, err)
+		return
 	} else if ok {
 		task = enriched
 	}
