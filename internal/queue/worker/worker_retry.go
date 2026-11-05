@@ -84,26 +84,33 @@ func (w *Worker) commit(ctx context.Context, task models.Task, result sandbox.Re
 	_ = w.commitSucceeded(ctx, task, result, err)
 }
 
+// CommitTextWithProfile persists content as the task's result, routing it
+// through the review and tiered handoffs first.
 func (w *Worker) CommitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) {
+	_ = w.tryCommitTextWithProfile(ctx, task, content, profile)
+}
+
+// tryCommitTextWithProfile is CommitTextWithProfile reporting whether the
+// content reached the board (or a human handoff). A caller that audits the
+// attempt must record a completion only when this returns true.
+func (w *Worker) tryCommitTextWithProfile(ctx context.Context, task models.Task, content string, profile *models.AgentProfile) bool {
 	if profile != nil && profile.RequireReview {
 		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
 			w.Emit(ctx, task, "ERROR", err.Error())
 			w.FailHard(ctx, task, err)
-			return
+			return false
 		} else if done {
-			return
+			return true
 		}
-		w.createReviewHandoff(ctx, task, content)
-		return
+		return w.createReviewHandoff(ctx, task, content)
 	}
 	if w.interceptTieredNeedsContext(ctx, task, content) {
-		return
+		return true
 	}
-	result := sandbox.Result{
+	return w.commitSucceeded(ctx, task, sandbox.Result{
 		Success: true,
 		Stdout:  content,
-	}
-	w.commit(ctx, task, result, nil)
+	}, nil)
 }
 
 // commitSucceeded persists a successful sandbox result and reports whether the

@@ -58,6 +58,8 @@ type Step struct {
 	Tool *Tool `json:"tool,omitempty"`
 	// Did reports a tool call of this kind that ran and completed.
 	Did acp.ToolKind `json:"did,omitempty"`
+	// Usage reports this turn's token counts, as an agent's PromptResponse does.
+	Usage *acp.Usage `json:"usage,omitempty"`
 	// Next is what the session's next prompt that is not a script runs, as
 	// an agent answers agentd's own follow-up.
 	Next []Step `json:"next,omitempty"`
@@ -142,7 +144,10 @@ func (a *agent) NewSession(_ context.Context, p acp.NewSessionRequest) (acp.NewS
 
 func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResponse, error) {
 	var steps []Step
-	if len(p.Prompt) != 1 || p.Prompt[0].Text == nil || json.NewDecoder(strings.NewReader(p.Prompt[0].Text.Text)).Decode(&steps) != nil || steps == nil {
+	if len(p.Prompt) == 1 && p.Prompt[0].Text != nil {
+		steps = scriptFromPrompt(p.Prompt[0].Text.Text)
+	}
+	if steps == nil {
 		a.mu.Lock()
 		steps = a.next[p.SessionId]
 		delete(a.next, p.SessionId)
@@ -151,12 +156,36 @@ func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	if steps == nil {
 		steps = []Step{{Message: "ok"}}
 	}
+	var usage *acp.Usage
 	for _, step := range steps {
+		if step.Usage != nil {
+			usage = step.Usage
+		}
 		if stop, err := a.run(ctx, p.SessionId, step); stop != "" || err != nil {
-			return acp.PromptResponse{StopReason: stop}, err
+			return acp.PromptResponse{StopReason: stop, Usage: usage}, err
 		}
 	}
-	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn}, nil
+	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn, Usage: usage}, nil
+}
+
+// scriptFromPrompt finds the test script in a prompt: the whole prompt, or one
+// line of a context pack, which agentd prefixes with its own messages.
+func scriptFromPrompt(text string) []Step {
+	var steps []Step
+	if json.NewDecoder(strings.NewReader(text)).Decode(&steps) == nil && steps != nil {
+		return steps
+	}
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "[") {
+			continue
+		}
+		var candidate []Step
+		if json.Unmarshal([]byte(line), &candidate) == nil && candidate != nil {
+			return candidate
+		}
+	}
+	return nil
 }
 
 // run does one step. A non-empty stop reason or an error ends the turn.

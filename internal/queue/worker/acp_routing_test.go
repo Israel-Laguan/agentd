@@ -12,6 +12,7 @@ import (
 	"agentd/internal/agent/acp"
 	"agentd/internal/agent/acp/fakeagent"
 	agenthooks "agentd/internal/agent/hooks"
+	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
@@ -19,6 +20,8 @@ import (
 	"agentd/internal/models"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
+
+	acpsdk "github.com/coder/acp-go-sdk"
 )
 
 type recordSink struct {
@@ -267,6 +270,49 @@ func TestACPExecutionAuditsStartAndComplete(t *testing.T) {
 	got := auditTypesFor(t, path, task.ID)
 	if len(got) != 2 || got[0] != "task_start" || got[1] != "task_complete" {
 		t.Fatalf("task audit records = %v, want [task_start task_complete]", got)
+	}
+}
+
+// A result that cannot be persisted must not be audited as task_complete.
+func TestACPExecutionAuditsFailWhenTheResultCannotBePersisted(t *testing.T) {
+	t.Parallel()
+	script := fakeagent.Script(report(map[string]any{"summary": "done"}))
+	w, store, task, project, profile, _, _ := acpFixture(t, script, false)
+	w.store = &failingResultStore{FakeKanbanStore: store}
+	path := withAuditFile(t, w)
+
+	w.dispatchProcess(context.Background(), task, project, profile)
+
+	got := auditTypesFor(t, path, task.ID)
+	if len(got) != 2 || got[0] != "task_start" || got[1] != "task_fail" {
+		t.Fatalf("task audit records = %v, want [task_start task_fail]", got)
+	}
+}
+
+// exec.work_plan can route to an ACP agent. The response is charged to the
+// caller's attempt budget once: ACP never runs the correction loop, so the call
+// must not also charge its own guard and GeneratePlan's fallback.
+func TestACPWorkPlanChargesTheBudgetOnce(t *testing.T) {
+	t.Parallel()
+	step := report(map[string]any{"steps": []any{map[string]any{
+		"id": "analyze", "action": "read the code",
+	}}})
+	step.Usage = &acpsdk.Usage{TotalTokens: 321}
+	w, _, task, project, _, _, _ := acpFixture(t, "plan the work", false)
+	task.Description = fakeagent.Script(step)
+	w.routes.Stages[spec.PurposeExecWorkPlan] = route.StageRoute{Default: "coder"}
+	tracker := gateway.NewBudgetTracker(10000)
+	guard := agentruntime.NewBudgetGuard(tracker, task.ID)
+
+	plan, err := w.GeneratePlan(context.Background(), task, project, guard)
+	if err != nil {
+		t.Fatalf("GeneratePlan: %v", err)
+	}
+	if len(plan.Steps) != 1 || plan.Steps[0].ID != "analyze" {
+		t.Fatalf("plan = %+v, want the one analyze step", plan)
+	}
+	if got := guard.Usage(); got != 321 {
+		t.Fatalf("budget usage = %d, want 321: the ACP response must be charged once", got)
 	}
 }
 
