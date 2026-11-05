@@ -15,17 +15,14 @@ package worker
 //	AGENTD_LIVE_TASKS=small,multi,ambiguous
 //	AGENTD_LIVE_RUNS=3                     runs per task
 //	AGENTD_LIVE_DELAY=8s                   pause between runs (provider rate limits)
-//	AGENTD_LIVE_OUT=/some/dir              keep each agent's stderr there (the jail discards it)
 
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,7 +48,6 @@ func TestLiveACPPresetsAgainstTheBuiltinAgent(t *testing.T) {
 	if _, err := exec.LookPath("bwrap"); err != nil {
 		t.Skip("bubblewrap is required: an agent runs only in the jail")
 	}
-	refused := countRefusals(t)
 	daemons := clineHubDaemons()
 	// The hub daemon starts inside the jail and must die with its PID namespace.
 	defer func() {
@@ -76,18 +72,17 @@ func TestLiveACPPresetsAgainstTheBuiltinAgent(t *testing.T) {
 					Agents: map[string]route.Agent{"coder": {Kind: route.KindACP, Preset: p, Model: model, Level: spec.LevelL3}},
 					Stages: map[spec.Purpose]route.StageRoute{spec.PurposeExecTurn: {Default: "coder"}},
 				}
-				results = append(results, liveRun(t, p, task, i, refused, func(store models.KanbanStore, ex *sandbox.BashExecutor, sink models.EventSink) *Worker {
+				results = append(results, liveRun(t, p, task, i, func(store models.KanbanStore, ex *sandbox.BashExecutor, sink models.EventSink) *Worker {
 					rt, err := NewACPRuntime(routes, ex, os.Args[0], nil)
 					if err != nil {
 						t.Fatal(err)
 					}
-					keepStderr(t, rt, fmt.Sprintf("%s-%s-%d", p, task.name, i+1))
 					return NewWorker(store, nil, ex, nil, sink, WorkerOptions{Routes: routes, ACP: rt})
 				}))
 				time.Sleep(delay)
 			}
 			if builtin {
-				results = append(results, liveRun(t, "builtin", task, i, refused, liveBuiltin(t)))
+				results = append(results, liveRun(t, "builtin", task, i, liveBuiltin(t)))
 				time.Sleep(delay)
 			}
 		}
@@ -124,8 +119,9 @@ func liveBuiltin(t *testing.T) func(models.KanbanStore, *sandbox.BashExecutor, m
 }
 
 // liveRun seeds a workspace, runs task on the worker side builds, and checks
-// the workspace on the host.
-func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.Int64, build func(models.KanbanStore, *sandbox.BashExecutor, models.EventSink) *Worker) liveResult {
+// the workspace on the host. A refused agentd MCP tool shows as a run with no
+// outcome: report_outcome is how the run ends.
+func liveRun(t *testing.T, side string, task liveTask, i int, build func(models.KanbanStore, *sandbox.BashExecutor, models.EventSink) *Worker) liveResult {
 	t.Helper()
 	store, running, project, profile := acpTask(t, task.title, task.description, !task.ambiguous)
 	if side == "builtin" {
@@ -141,7 +137,6 @@ func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.In
 	}
 	ex := &sandbox.BashExecutor{Root: filepath.Dir(project.WorkspacePath), Backend: "bubblewrap",
 		ToolchainPaths: []string{strings.TrimSpace(string(goroot))}}
-	before := refused.Load()
 	started := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
@@ -153,7 +148,6 @@ func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.In
 	}
 	r := checkWorkspace(t, project.WorkspacePath, task)
 	r.side, r.task, r.run, r.state, r.latency = side, task.name, i+1, got.State, time.Since(started)
-	r.refusedOther = refused.Load() - before
 	for _, ev := range sink.events[max(0, len(sink.events)-3):] {
 		r.events = append(r.events, string(ev.Type)+": "+truncate(ev.Payload, 300))
 	}
@@ -161,67 +155,10 @@ func liveRun(t *testing.T, side string, task liveTask, i int, refused *atomic.In
 	if task.ambiguous {
 		want = models.TaskStateBlocked // NeedsHuman: the question is with a human
 	}
-	// A refused kind the driver cannot check would be agentd's own MCP tool.
-	if r.state != want || !r.pass() || r.refusedOther != 0 {
+	if r.state != want || !r.pass() {
 		t.Errorf("%s %s run %d: %+v", side, task.name, i+1, r)
 	}
 	return r
-}
-
-// keepStderr writes the agent's stderr to AGENTD_LIVE_OUT/<name>.stderr: the
-// daemon discards it, and a failed start says nothing else.
-func keepStderr(t *testing.T, rt *ACPRuntime, name string) {
-	dir := os.Getenv("AGENTD_LIVE_OUT")
-	if dir == "" {
-		return
-	}
-	start := rt.Start
-	rt.Start = func(allow []string, executable string) (ACPRun, error) {
-		run, err := start(allow, executable)
-		command := run.Command
-		run.Command = func(ctx context.Context, cwd string, argv []string, readOnly bool) (*exec.Cmd, error) {
-			cmd, err := command(ctx, cwd, argv, readOnly)
-			if err == nil {
-				f, ferr := os.Create(filepath.Join(dir, name+".stderr"))
-				if ferr != nil {
-					t.Fatal(ferr)
-				}
-				t.Cleanup(func() { _ = f.Close() })
-				cmd.Stderr = f
-			}
-			return cmd, err
-		}
-		return run, err
-	}
-}
-
-// countRefusals counts the driver's refusals of a tool kind it cannot check:
-// that is how a permission request for agentd's own MCP tools would end.
-func countRefusals(t *testing.T) *atomic.Int64 {
-	n := &atomic.Int64{}
-	prev := slog.Default()
-	// Not prev.Handler(): slog's default handler writes through package log,
-	// which SetDefault points back at slog, and that deadlocks.
-	slog.SetDefault(slog.New(refusalCounter{Handler: slog.NewTextHandler(os.Stderr, nil), n: n}))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return n
-}
-
-type refusalCounter struct {
-	slog.Handler
-	n *atomic.Int64
-}
-
-func (h refusalCounter) Handle(ctx context.Context, r slog.Record) error {
-	if r.Message == "acp: permission refused" {
-		r.Attrs(func(a slog.Attr) bool {
-			if a.Key == "tool" && a.Value.String() == "" {
-				h.n.Add(1)
-			}
-			return true
-		})
-	}
-	return h.Handler.Handle(ctx, r)
 }
 
 // clineHubDaemons counts cline hub daemons on the host. The bracket keeps

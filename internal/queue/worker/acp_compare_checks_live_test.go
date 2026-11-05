@@ -121,11 +121,8 @@ type liveResult struct {
 	lost       []string // seed functions no longer defined anywhere
 	changed    []string // seed files changed, and files added
 	ambiguous  bool
-	// refusedOther counts permission requests refused as a kind the driver
-	// cannot check, such as agentd's own MCP tools.
-	refusedOther int64
-	latency      time.Duration
-	events       []string // the worker's last events, for a failed run
+	latency    time.Duration
+	events     []string // the worker's last events, for a failed run
 }
 
 // pass is the host's verdict: an ambiguous task must leave the source files
@@ -139,7 +136,8 @@ func (r liveResult) pass() bool {
 
 func checkWorkspace(t *testing.T, dir string, task liveTask) liveResult {
 	t.Helper()
-	r := liveResult{ambiguous: task.ambiguous, goTest: goTest(dir, "./...")}
+	r := liveResult{ambiguous: task.ambiguous}
+	r.goTest, _ = goTest(dir, "./...")
 	defined := map[string]bool{}
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
@@ -165,24 +163,20 @@ func checkWorkspace(t *testing.T, dir string, task liveTask) liveResult {
 		copyDir := t.TempDir()
 		_ = exec.Command("cp", "-a", dir+"/.", copyDir).Run()
 		writeLive(t, filepath.Join(copyDir, "zz_agentd_check_test.go"), "package main\n\nimport \"testing\"\n\nfunc TestAgentdCheck(t *testing.T) {"+task.check+"\n}\n")
-		r.behavior, r.wrong = goTestOutput(copyDir, "-run", "TestAgentdCheck", ".")
+		r.behavior, r.wrong = goTest(copyDir, "-run", "TestAgentdCheck", ".")
 	}
 	return r
 }
 
-func goTest(dir string, args ...string) bool {
-	ok, _ := goTestOutput(dir, args...)
-	return ok
-}
-
-// goTestOutput also returns the failure lines (Errorf output and build errors).
-func goTestOutput(dir string, args ...string) (bool, []string) {
+// goTest runs go test in dir, and returns its failure lines (test errors and
+// build errors).
+func goTest(dir string, args ...string) (bool, []string) {
 	cmd := exec.Command("go", append([]string{"test", "-count=1"}, args...)...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	var wrong []string
 	for _, line := range strings.Split(string(out), "\n") {
-		if line = strings.TrimSpace(line); strings.Contains(line, "_test.go:") || strings.Contains(line, ".go:") && !strings.HasPrefix(line, "ok") {
+		if line = strings.TrimSpace(line); strings.Contains(line, ".go:") {
 			wrong = append(wrong, line)
 		}
 	}
@@ -209,12 +203,11 @@ func funcs(name string, src []byte) []string {
 
 func liveTable(results []liveResult) string {
 	var b strings.Builder
-	b.WriteString("| Side | Task | Run | State | go test | Behavior | Seed functions lost | Files changed | MCP refusals | Latency | Pass |\n")
-	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+	b.WriteString("| Side | Task | Run | State | go test | Behavior | Seed functions lost | Files changed | Latency | Pass |\n")
+	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, r := range results {
-		fmt.Fprintf(&b, "| %s | %s | %d | %s | %t | %t | %s | %s | %d | %s | %t |\n", r.side, r.task, r.run, r.state,
-			r.goTest, r.behavior, strings.Join(r.lost, " "), strings.Join(r.changed, " "), r.refusedOther,
-			r.latency.Round(time.Second), r.pass())
+		fmt.Fprintf(&b, "| %s | %s | %d | %s | %t | %t | %s | %s | %s | %t |\n", r.side, r.task, r.run, r.state,
+			r.goTest, r.behavior, strings.Join(r.lost, " "), strings.Join(r.changed, " "), r.latency.Round(time.Second), r.pass())
 	}
 	return b.String()
 }
