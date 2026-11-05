@@ -119,41 +119,38 @@ func TestOpencodePresetRefusesAModelWhoseProviderHasNoLogin(t *testing.T) {
 	}
 }
 
-func TestClinePresetWritesItsSettingsRulesAndOneProviderIntoTheHome(t *testing.T) {
-	t.Parallel()
+// runClineHome runs the cline preset on a login file holding cline and another
+// provider, and returns the run's home and argv.
+func runClineHome(t *testing.T) (string, []string) {
+	t.Helper()
 	home := t.TempDir()
 	creds := filepath.Join(t.TempDir(), "providers.json")
 	writeFile(t, creds, `{"version": 1, "lastUsedProvider": "openrouter", "modes": {}, "providers": {
 		"cline": {"settings": {"provider": "cline", "model": "paid/default", "auth": {"accessToken": "CL-TOKEN"}}, "tokenSource": "oauth"},
 		"openrouter": {"settings": {"provider": "openrouter", "auth": {"apiKey": "OR-KEY"}}}}}`)
-
-	p := Presets["cline"]
-	argv, err := p.Home(Launch{Home: home, Executable: "/opt/cline/bin/.cline", Model: "vendor/free-model:free", Credentials: creds, MCPURL: "http://127.0.0.1:3129/mcp/abc"})
+	argv, err := Presets["cline"].Home(Launch{Home: home, Executable: "/opt/cline/bin/.cline", Model: "vendor/free-model:free", Credentials: creds, MCPURL: "http://127.0.0.1:3129/mcp/abc"})
 	if err != nil {
 		t.Fatal(err)
 	}
+	return home, argv
+}
+
+func TestClinePresetWritesItsSettingsAndRulesIntoTheHome(t *testing.T) {
+	t.Parallel()
+	home, argv := runClineHome(t)
 	config := filepath.Join(home, ".cline")
 	settings := filepath.Join(config, "data/settings/cline_mcp_settings.json")
 	if !slices.Equal(argv[len(argv)-4:], []string{"/opt/cline/bin/.cline", "--acp", "--config", config}) ||
 		envOf(argv)["CLINE_MCP_SETTINGS_PATH"] != settings || envOf(argv)["CLINE_MODEL"] != "vendor/free-model:free" {
 		t.Fatalf("argv = %q", argv)
 	}
-	if !slices.Equal(p.Allow, []string{"api.cline.bot:443", "data.cline.bot:443"}) || !p.ModelOption || !p.NoUsage {
+	if p := Presets["cline"]; !slices.Equal(p.Allow, []string{"api.cline.bot:443", "data.cline.bot:443"}) || !p.ModelOption || !p.NoUsage {
 		t.Fatalf("preset = %+v", p)
 	}
 	got := files(t, home)
 	want := []string{".cline/data/settings/cline_mcp_settings.json", ".cline/data/settings/providers.json", ".cline/rules/agentd.md"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("home files = %q, want %q", got, want)
-	}
-	providers := readJSON(t, filepath.Join(config, "data/settings/providers.json"))
-	byName, _ := providers["providers"].(map[string]any)
-	if len(byName) != 1 || providers["lastUsedProvider"] != "cline" {
-		t.Fatalf("providers.json keeps %v, last used %v; want only cline", keys(byName), providers["lastUsedProvider"])
-	}
-	// Fields cline's schema checks stay as the user's file has them.
-	if modes, ok := providers["modes"].(map[string]any); !ok || len(modes) != 0 || providers["version"] != float64(1) {
-		t.Fatalf("providers.json modes %v, version %v; want the user's", providers["modes"], providers["version"])
 	}
 	server := readJSON(t, settings)["mcpServers"].(map[string]any)["agentd"].(map[string]any)
 	if server["type"] != "streamableHttp" || server["url"] != "http://127.0.0.1:3129/mcp/abc" {
@@ -162,6 +159,21 @@ func TestClinePresetWritesItsSettingsRulesAndOneProviderIntoTheHome(t *testing.T
 	rules, err := os.ReadFile(filepath.Join(config, "rules/agentd.md"))
 	if err != nil || !strings.Contains(string(rules), "ask_human") {
 		t.Fatalf("rules = %q, %v", rules, err)
+	}
+}
+
+// The login copy holds cline alone, and keeps the fields cline's schema
+// checks as the user's file has them: a changed modes dropped the login.
+func TestClinePresetCopiesOnlyItsLoginInTheUsersSchema(t *testing.T) {
+	t.Parallel()
+	home, _ := runClineHome(t)
+	providers := readJSON(t, filepath.Join(home, ".cline/data/settings/providers.json"))
+	byName, _ := providers["providers"].(map[string]any)
+	if len(byName) != 1 || byName["cline"] == nil || providers["lastUsedProvider"] != "cline" {
+		t.Fatalf("providers.json keeps %v, last used %v; want only cline", keys(byName), providers["lastUsedProvider"])
+	}
+	if modes, ok := providers["modes"].(map[string]any); !ok || len(modes) != 0 || providers["version"] != float64(1) {
+		t.Fatalf("providers.json modes %v, version %v; want the user's", providers["modes"], providers["version"])
 	}
 }
 
