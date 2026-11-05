@@ -134,7 +134,7 @@ Gemini-only quick start (warmup skip, profile PATCH, healing): [README § First 
 agents:
   quick: { provider: gemini, model: gemini-2.5-flash }   # kind: model (the default), L1
   local: { provider: ollama, model: llama3:8b }
-  # coder: { kind: acp, preset: opencode }              # L3; no preset exists until S19 PR 08
+  # coder: { kind: acp, preset: opencode, model: "opencode/deepseek-v4.1-flash-free" }  # L3
 stages:
   create.elicit:
     default: quick
@@ -155,9 +155,9 @@ stages:
 
 - An agent's `kind` sets its level; `level` was removed and fails at load, so a config cannot make a model claim L3.
   - `model` (the default) is a single gateway call, level `L1`. It has a `provider` (required) and an optional `model`.
-  - `acp` is an external agent driven over ACP (T-042), level `L3`. It has a `preset` (required), and nothing else. An unknown preset fails at load. No preset exists until S19 PR 08, so until then no config can name an `acp` agent.
+  - `acp` is an external agent driven over ACP (T-042), level `L3`. It has a `preset` (`opencode` or `cline`) and a `model` (both required: a preset's default model may be paid, so name a free one). An unknown preset fails at load. `executable` (optional) is the agent binary; the default is the preset's command on `PATH` (`opencode`; for `cline`, the compiled `.cline` next to the Node wrapper). `credentials` (optional, `~/` expanded) is your own login file, which each run reads and copies only one provider from; the default is `~/.local/share/opencode/auth.json` or `~/.cline/data/settings/providers.json`. See [acp-agents.md](acp-agents.md#running-an-external-agent).
 - A purpose declares the minimum level it needs; a route to an agent below that level fails at load. `exec.turn` needs L3, so only an `acp` agent can take it. `overhead.subagent_turn` needs L3 too, but no `acp` agent can run it yet, so it cannot be routed.
-- An `acp` agent replaces the whole stage agent, so it can take only the purposes whose agent the worker picks: `create.elicit`, `create.split_task`, `create.next_phase`, `exec.work_plan` and `exec.turn`. Any other purpose is a gateway call, and routing it to an `acp` agent fails at load. A task routed to an `acp` agent on `exec.turn` runs on it whole (no tiered split). Each call starts the agent for the task's workspace, and its permission requests pass the task's hooks and the worker's denylist. The call is recorded in `ai_calls` with provider `acp` and the preset as the model.
+- An `acp` agent replaces the whole stage agent, so it can take only the purposes whose agent the worker picks: `create.elicit`, `create.split_task`, `create.next_phase`, `exec.work_plan` and `exec.turn`. Any other purpose is a gateway call, and routing it to an `acp` agent fails at load. A task routed to an `acp` agent on `exec.turn` runs on it whole (no tiered split). Each call starts the agent for the task's workspace, and its permission requests pass the task's hooks and the worker's denylist. The call is recorded in `ai_calls` with provider `acp` and the preset as the model; cline reports no usage, so its rows have zero tokens and the model `cline (no usage reported)`.
 - `when` keys: `requires_workspace_change` (`true` or `false`), which matches tasks that must change the workspace. A rule needs a condition and a `use`.
 - `min_level` (`L1` or `L3`) on a rule raises the level a matching call needs, so its `use` agent must provide it. It can only raise the purpose's minimum: a rule that would lower it fails at load. The raised level is the one logged and recorded in `ai_calls.required_level`.
 - An explicit `AgentID` on a task or a tier step is a pin. It wins over every rule and injects no provider or model. The seeded `default` profile is not a pin, so tasks on it follow their stage's route.

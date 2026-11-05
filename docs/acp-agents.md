@@ -152,6 +152,45 @@ Measured 2026-11-03 with a throwaway live test (`-tags live`, not in the repo): 
 - **Permissions:** with the default config, no requests (as with 1.19.0). With `{"permission": {"bash": "ask", "edit": "ask"}}` every shell call asks as kind `execute` (raw input `command`, `cwd`) and every write as `edit` (`path`, `content`). Reads don't ask. `{"*": "ask"}` also asks for reads (kind `read`). The options are `once`, `always` and `reject`. `once` asks again on the next call. A reject fails the tool call, and the turn ends `cancelled` with no error. `npx` was refused before the hooks in 3 of 3 runs.
 - **Advertised:** protocol version 1, MCP over http only (no sse), session modes `build` and `plan` as a config option, usage in every prompt result. Auth is `opencode-login`, outside ACP.
 
+## Running an external agent
+
+Now in agentd (S19 PR 08). Name an `acp` agent and route a stage to it ([config-reference.md](config-reference.md#routing-agents-and-stages)):
+
+```yaml
+agents:
+  coder: { kind: acp, preset: opencode, model: "opencode/deepseek-v4.1-flash-free" }
+stages:
+  exec.turn:
+    default: coder
+```
+
+Install the agent and sign in once, outside agentd (`opencode auth login`, or cline's own sign-in). agentd only reads that login: each run copies one provider's entry from it. The `model` is required, because a preset's default may be paid.
+
+Each call:
+
+1. finds the binary: `executable`, or the preset's command on `PATH`;
+2. creates an owner-only `$TMPDIR/agentd-acp-*` holding the run's home and an egress proxy socket that allows only the preset's hosts (`sandbox.BashExecutor.StartEgressRun`);
+3. writes the home and starts the agent in the jail, bound to the task's workspace. No bubblewrap, no run: the agent never gets the host's network;
+4. removes the directory, login copy included, once the agent has exited.
+
+| | opencode | cline |
+| --- | --- | --- |
+| Runs | `opencode acp` | the compiled `bin/.cline --acp --config $HOME/.cline`, not the Node wrapper |
+| Egress | `opencode.ai:443` | `api.cline.bot:443`, `data.cline.bot:443` |
+| Login copied | the model's provider (the part before `/`) from `auth.json` | the `cline` provider from `providers.json`, with its model replaced by `model` |
+| Also in the home | `models.json` and `rg` from your `~/.cache/opencode`, so the catalog fetch (disabled) and the ripgrep download need no host | `cline_mcp_settings.json` (`CLINE_MCP_SETTINGS_PATH`) and `rules/agentd.md`, the SP-026 rules file |
+| agentd's MCP server | http, from `session/new` | http, from the settings file, with its tools auto-approved (the driver refuses kind `other`) |
+| Permissions | `OPENCODE_CONFIG_CONTENT` sets `bash` and `edit` to `ask` | cline asks on its own |
+| Model check | `session/new` must report `model` as `configOptions.model`, or the call fails with `ErrModelMismatch` before any prompt | none: the SDK drops cline's model state |
+| Usage | its own counts | none: zero tokens, model `cline (no usage reported)` in `ai_calls` |
+| Hub daemon | none | starts in the jail and dies with its PID namespace |
+
+Limits:
+
+- **Cline may refresh its token** into the run's copy, which is removed with the run. If cline rotates refresh tokens, your own `providers.json` would hold a used one. Not observed in SP-025.
+- **Cold start is per call:** every call starts a new agent process and copies the login and seed files (about 11 MB for opencode).
+- **The daemon's MCP socket** lives in `$TMPDIR/agentd-mcp-*` until the daemon exits, and the directory is not removed.
+
 ## Inside the jail (SP-025)
 
 Measured 2026-10-21 with a throwaway client and launcher (scratch scripts, not in the repo). The agent process ran under bubblewrap with the same mount profile as `jailArgv()` (read-only `/usr /lib /lib64 /bin /sbin /sys` and the `/etc` files, tmpfs `/tmp`, `--clearenv`, workspace bound writable) plus the Go toolchain through `sandbox.toolchain_paths`. Same models as above (Nemotron 3 Ultra, free), same word-counter project and the same three execution prompts. **3 runs per cell is a smoke result, not a rate** (SP-026 does n ≥ 10). Workspaces were checked by hand on the host: `go test`, `go vet`, and a behavior test of my own (`CountLines` on `""`, `"one"`, `"one\n"`, `"a\nb"`, `"a\nb\n"`, `"\n"`, `"\n\n"`; `CountChars` on ASCII; the built CLI's `-l`, `-c` and default output). Podman (jail B) was **not run**: bubblewrap reached both models, so the fallback was not needed.
@@ -261,7 +300,7 @@ Launch order: the jail's bash starts `jail-forward` through a process substituti
 
 Environment, set after the allowlisted host variables so a host proxy setting cannot win: `HTTPS_PROXY` and `HTTP_PROXY` are `http://127.0.0.1:3128`, `NO_PROXY` is `127.0.0.1,localhost` (the MCP port, `sandbox.JailMCPAddr`, must not go through the proxy), the same three in lowercase (curl prefers lowercase names and reads only `http_proxy` for `http://` URLs), and `NODE_USE_ENV_PROXY=1`.
 
-The allowlist is a parameter (`Proxy.Allow`), not a config key: each preset passes its own hosts (PR 08). Registry and download hosts for a cold start stay off the list; pre-seed the agent home instead.
+The allowlist is a parameter (`Proxy.Allow`), not a config key: each preset passes its own hosts (`acp.Presets`). Registry and download hosts for a cold start stay off the list; the preset seeds the agent home instead.
 
 An egress command needs the jail. With `sandbox.backend: filter-only`, or `auto` without a usable bwrap, it is refused with `ErrSandboxUnavailable`, never run with the host's network.
 
