@@ -16,7 +16,7 @@ import (
 var ErrModelMismatch = errors.New("acp: the session runs another model")
 
 // quotaError matches quota and rate errors the agent reports as text.
-var quotaError = regexp.MustCompile(`(?i)\b429\b|rate[ _-]?limit|too many requests|quota|insufficient (?:balance|credits)`)
+var quotaError = regexp.MustCompile(`(?i)\b429\b|rate[ _-]?limit|too many requests|quota|insufficient (?:balance|credits)|usage limit`)
 
 // fail names why op failed: the caller cancelled, the process died, the
 // agent's provider refused for quota or rate (the breaker and defer path, the

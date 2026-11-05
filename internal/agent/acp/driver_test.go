@@ -183,7 +183,9 @@ func TestCancelMidPromptReachesTheAgentAndKeepsTheProcess(t *testing.T) {
 func TestQuotaErrorsMapToTheBreakerPath(t *testing.T) {
 	t.Parallel()
 	d := fakeDriver(t, Config{})
-	for _, msg := range []string{"429 Too Many Requests", "Rate limit reached for model", "Insufficient balance"} {
+	// The last is opencode 2.2.5's free tier, exhausted (live smoke, 2026-11-05).
+	for _, msg := range []string{"429 Too Many Requests", "Rate limit reached for model", "Insufficient balance",
+		"Internal error: Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models."} {
 		_, err := call(t, d, Request{}, fakeagent.Step{Error: msg})
 		if !errors.Is(err, models.ErrLLMQuotaExceeded) {
 			t.Errorf("agent error %q: err = %v; want ErrLLMQuotaExceeded", msg, err)
