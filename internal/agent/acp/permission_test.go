@@ -3,6 +3,7 @@ package acp
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -79,6 +80,43 @@ func TestFileArgsTakeTheBuiltinShape(t *testing.T) {
 	seen := hooks.calls()
 	if err != nil || len(seen) != 2 || seen[0].Args != `{"content":"b","path":"main.go"}` || seen[1].Args != `{"path":"go.mod"}` {
 		t.Fatalf("err = %v, hooks saw %+v; want agentd's write and read shapes", err, seen)
+	}
+}
+
+// cline's read_files names several files in one request, in several shapes;
+// each path is a read the hooks check, and one refusal refuses the request.
+func TestEveryPathOfAMultiFileReadPassesTheHooks(t *testing.T) {
+	t.Parallel()
+	hooks := &recorder{verdict: Verdict{Allow: true}}
+	_, err := call(t, fakeDriver(t, Config{}), Request{Permit: hooks.permit},
+		askStep(acpsdk.ToolKindRead, map[string]any{"files": []any{map[string]any{"path": "/ws/a.go", "start_line": 1}, "/ws/b.go"}}),
+		askStep(acpsdk.ToolKindRead, []any{"/ws/c.go"}))
+	var args []string
+	for _, p := range hooks.calls() {
+		args = append(args, p.Args)
+	}
+	want := []string{`{"path":"/ws/a.go"}`, `{"path":"/ws/b.go"}`, `{"path":"/ws/c.go"}`}
+	if err != nil || !slices.Equal(args, want) {
+		t.Fatalf("err = %v, hooks saw %q; want %q", err, args, want)
+	}
+}
+
+// cline asks before every tool, its MCP tools as kind other titled
+// server__tool (live smoke, 2026-11-05). agentd's own server's tools are
+// allowed with no hook, in a no-workspace session too; another server's are not.
+func TestOwnMCPToolsAreAllowedAndOthersRefused(t *testing.T) {
+	t.Parallel()
+	own := []acpsdk.McpServer{{Http: &acpsdk.McpServerHttpInline{Name: "agentd", Type: "http", Url: "http://x", Headers: []acpsdk.HttpHeader{}}}}
+	ask := func(title string) fakeagent.Step {
+		return fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindOther, Title: title, RawInput: map[string]any{}}}
+	}
+	r, err := call(t, fakeDriver(t, Config{}), Request{MCPServers: own, NoWorkspace: true}, ask("agentd__report_outcome: {}"))
+	if err != nil || r.Text != "permission: allow_once" {
+		t.Fatalf("agentd's own tool: %q, %v; want it allowed once", r.Text, err)
+	}
+	r, err = call(t, fakeDriver(t, Config{}), Request{MCPServers: own}, ask("composio__search_tools: {}"))
+	if err != nil || r.Text != "permission: reject_once" {
+		t.Fatalf("another server's tool: %q, %v; want it rejected", r.Text, err)
 	}
 }
 

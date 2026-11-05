@@ -79,25 +79,42 @@ func newPermission(call acpsdk.ToolCallUpdate) Permission {
 	if raw, err := json.Marshal(call.RawInput); err == nil && call.RawInput != nil {
 		p.Args = string(raw)
 	}
-	switch p.Tool {
-	case "bash":
+	if p.Tool == "bash" {
 		p.Command = commandOf(call.RawInput)
 		args, _ := json.Marshal(map[string]string{"command": p.Command})
 		p.Args = string(args)
-	case "read", "write":
-		p.Args = fileArgs(p.Tool, call.RawInput)
 	}
 	return p
 }
 
-// fileArgs is a read or write call's input in agentd's shape, {path} or
-// {path, content}, which the hooks check. Agents name them their own way:
-// opencode's edit sends filePath, oldString and newString. With no path the
-// key is left out, so the schema check refuses the call.
-func fileArgs(tool string, raw any) string {
-	in, _ := raw.(map[string]any)
+// newPermissions is call as the hooks check it: one Permission per file a
+// read or write names (cline's read_files takes several), any other call as
+// one. A call with no path is one Permission without it, which the schema
+// check refuses.
+func newPermissions(call acpsdk.ToolCallUpdate) []Permission {
+	p := newPermission(call)
+	if p.Tool != "read" && p.Tool != "write" {
+		return []Permission{p}
+	}
+	paths := pathsOf(call.RawInput)
+	if len(paths) == 0 {
+		paths = []string{""}
+	}
+	in, _ := call.RawInput.(map[string]any)
+	perms := make([]Permission, len(paths))
+	for i, path := range paths {
+		perms[i] = p
+		perms[i].Args = fileArgs(p.Tool, path, in)
+	}
+	return perms
+}
+
+// fileArgs is one file of a read or write in agentd's shape, {path} or
+// {path, content}. Agents name them their own way: opencode's edit sends
+// filePath, oldString and newString.
+func fileArgs(tool, path string, in map[string]any) string {
 	args := map[string]string{}
-	if path := firstString(in, "path", "filePath", "file_path"); path != "" {
+	if path != "" {
 		args["path"] = path
 	}
 	if tool == "write" {
@@ -105,6 +122,32 @@ func fileArgs(tool string, raw any) string {
 	}
 	out, _ := json.Marshal(args)
 	return string(out)
+}
+
+// pathsOf reads the files a call names: a path string, a list of them or of
+// {path} entries, cline's {files}, {file_paths} or {paths}, or one entry
+// whose path is path, filePath or file_path.
+func pathsOf(raw any) []string {
+	switch v := raw.(type) {
+	case string:
+		return []string{v}
+	case []any:
+		var paths []string
+		for _, item := range v {
+			paths = append(paths, pathsOf(item)...)
+		}
+		return paths
+	case map[string]any:
+		for _, key := range []string{"files", "file_paths", "paths"} {
+			if list, ok := v[key]; ok {
+				return pathsOf(list)
+			}
+		}
+		if path := firstString(v, "path", "filePath", "file_path"); path != "" {
+			return []string{path}
+		}
+	}
+	return nil
 }
 
 func firstString(in map[string]any, keys ...string) string {
@@ -174,6 +217,33 @@ func decide(ctx context.Context, permit Permitter, p Permission, readOnly, noWor
 	v, err := permit(ctx, p)
 	if err != nil {
 		return Verdict{Reason: "permission check failed: " + err.Error()}
+	}
+	return v
+}
+
+// ownTool reports whether p calls a tool of an MCP server the request
+// attached, which is agentd's own. cline asks before every tool, its MCP
+// tools as kind other titled server__tool, from the tool's name, not the
+// model. They touch only agentd's session, so no hook gates them.
+func ownTool(p Permission, servers []acpsdk.McpServer) bool {
+	if p.Tool != "" {
+		return false
+	}
+	for _, s := range servers {
+		if s.Http != nil && strings.HasPrefix(p.Title, s.Http.Name+"__") {
+			return true
+		}
+	}
+	return false
+}
+
+// decideAll answers every part of one request; the first refusal answers it.
+func decideAll(ctx context.Context, permit Permitter, perms []Permission, readOnly, noWorkspace bool) Verdict {
+	var v Verdict
+	for _, p := range perms {
+		if v = decide(ctx, permit, p, readOnly, noWorkspace); !v.Allow || v.Suspend {
+			return v
+		}
 	}
 	return v
 }

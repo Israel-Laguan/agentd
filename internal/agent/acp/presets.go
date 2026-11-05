@@ -106,11 +106,10 @@ func clineHome(l Launch) ([]string, error) {
 		v   any
 	}{
 		{".cline/data/settings/providers.json", file},
-		// agentd's session tools (internal/mcp): they ask no permission, since
-		// the driver refuses cline's MCP tools (kind other).
+		// No autoApprove: cline's ACP mode asks before every tool regardless,
+		// and the driver allows agentd's own (ownTool).
 		{".cline/data/settings/cline_mcp_settings.json", map[string]any{"mcpServers": map[string]any{"agentd": map[string]any{
-			"type": "streamableHttp", "url": l.MCPURL, "disabled": false,
-			"autoApprove": []string{"report_outcome", "ask_human", "get_context"}}}}},
+			"type": "streamableHttp", "url": l.MCPURL, "disabled": false}}}},
 	}
 	for _, w := range writes {
 		if err := writeHomeJSON(l.Home, w.rel, w.v); err != nil {
