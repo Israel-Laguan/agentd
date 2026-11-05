@@ -70,8 +70,7 @@ func gitRun(t *testing.T, dir, base, head, labels string) (int, string) {
 	}
 	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(abs)))
 	script := filepath.Join(repoRoot, "tools", "ci", "pr_size.sh")
-	t.Logf("gitRun: dir=%q base=%q head=%q labels=%q script=%s", dir, base, head, labels, script)
-	cmd := exec.Command("bash", "-x", script, base, head, labels)
+	cmd := exec.Command("bash", script, base, head, labels)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "PR_GIT=1", "BASE_SHA="+base, "HEAD_SHA="+head)
 	var out bytes.Buffer
@@ -86,7 +85,6 @@ func gitRun(t *testing.T, dir, base, head, labels string) (int, string) {
 			t.Fatal(err)
 		}
 	}
-	t.Logf("gitRun: script exit=%d full output:\n%s", code, out.String())
 	return code, out.String()
 }
 
