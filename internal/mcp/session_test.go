@@ -131,6 +131,20 @@ func TestReportOutcomeWithAValidResultIsTheStageResult(t *testing.T) {
 
 // An invalid result goes back to the agent with the contract's shape, so it
 // can report again; nothing is recorded.
+// cline on a free model sent the result JSON-encoded as a string (live smoke,
+// 2026-11-05); a string holding a JSON object is that object.
+func TestReportOutcomeTakesAResultSentAsAJSONString(t *testing.T) {
+	t.Parallel()
+	session, cs := newTestSession(t, testutil.NewFakeStore(), "p1")
+	if text, isErr := callTool(t, cs, "report_outcome", map[string]any{"outcome": "completed", "summary": "done", "result": `{"name": "x"}`}); isErr {
+		t.Fatalf("report_outcome: %s", text)
+	}
+	res, err := session.Result()
+	if err != nil || string(res.Output) != `{"name":"x"}` {
+		t.Fatalf("Result = %s, %v", res.Output, err)
+	}
+}
+
 func TestReportOutcomeWithAnInvalidResultIsASchemaErrorToTheAgent(t *testing.T) {
 	t.Parallel()
 	s, cs := newTestSession(t, testutil.NewFakeStore(), "p1")
