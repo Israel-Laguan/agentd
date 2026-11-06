@@ -14,6 +14,7 @@ name: agentd
 #   agentd-tiered  - variant (port 8769) - tiered profile
 #   agentd-prb     - variant (port 8771) - provider breaker profile (J16)
 #   agentd-sched   - variant (port 8772) - scheduler profile (J23)
+#   agentd-acp     - variant (port 8773) - acp profile (J24): exec.turn on the fake acp agent, in the jail
 #   web     - Next.js frontend (port 3000) - default profile
 #
 # Usage:
@@ -38,6 +39,7 @@ name: agentd
 #   tiered  - tiered execution (J12)
 #   provider- one provider whose model the mock can 429 (J16)
 #   scheduler - one-shot scheduled task runs exactly once (J23)
+#   acp     - a task runs on an acp agent in the bubblewrap jail (J24)
 #
 # Troubleshooting:
 #   - Healthchecks use CMD-SHELL (string form) so they survive the alias/quote
@@ -71,6 +73,7 @@ services:
       - tiered
       - provider
       - scheduler
+      - acp
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/models').status==200 else 1)\""]
       interval: 2s
@@ -249,6 +252,35 @@ services:
       timeout: 3s
       retries: 30
 
+  agentd-acp:
+    image: ${AGENTD_IMAGE:-agentd:local}
+    entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
+    ports:
+      - "127.0.0.1:8773:8773"
+    profiles:
+      - acp
+    environment:
+      LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
+      AGENTD_API_ADDRESS: "0.0.0.0:8773"
+    # The acp agent runs in the bubblewrap jail. Rootless podman masks parts of
+    # /proc, so bubblewrap cannot mount a fresh /proc without unmask=ALL
+    # (probed 2026-11-06 on podman 5.4.2). It loosens the container's /proc
+    # masking: fine for devenv, not a production default.
+    security_opt:
+      - unmask=ALL
+    volumes:
+      - agentd-data-acp:/home/agentd-acp
+      - ./agentd/config.acp.yaml:/etc/agentd/config.yaml:ro
+    # config.acp.yaml points at mockllm directly, as the provider profile does.
+    depends_on:
+      mockllm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8773/api/v1/system/status"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
   agentd-sched:
     image: ${AGENTD_IMAGE:-agentd:local}
     entrypoint: ["sh", "-c", "agentd --config /etc/agentd/config.yaml init && exec agentd --config /etc/agentd/config.yaml start --skip-llm-warmup -v"]
@@ -340,3 +372,4 @@ volumes:
   agentd-data-prb:
   agentd-data-tiered:
   agentd-data-sched:
+  agentd-data-acp:

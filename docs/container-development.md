@@ -41,6 +41,10 @@ tests have been reworked to use `sh`.
 # Runtime image (produces /usr/local/bin/agentd inside the image)
 podman build -t agentd .
 
+# Devenv image (make dev-build): agentd built with -tags fakeacp, plus bubblewrap,
+# so the acp profile runs a scripted fake ACP agent in the jail (J24)
+podman build --target dev -t agentd:local .
+
 # Verify the binary
 podman run --rm agentd --version   # or: agentd --help
 ```

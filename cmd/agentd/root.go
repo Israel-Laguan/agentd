@@ -9,6 +9,10 @@ import (
 	"agentd/internal/config"
 )
 
+// extraCommands are added by build-tagged files, such as the devenv build's
+// fake ACP agent (fake_acp_agent.go).
+var extraCommands []func() *cobra.Command
+
 type rootOptions struct {
 	home       string
 	configFile string
@@ -47,6 +51,9 @@ func newRootCommand() *cobra.Command {
 	rootCmd.AddCommand(newSuggestCommand(opts))
 	rootCmd.AddCommand(newAskCommand(opts))
 	rootCmd.AddCommand(newJailForwardCommand())
+	for _, extra := range extraCommands {
+		rootCmd.AddCommand(extra())
+	}
 
 	return rootCmd
 }

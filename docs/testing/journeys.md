@@ -1,6 +1,6 @@
 # E2E Journey Suite (S07)
 
-Status: **implemented** (25 tests, J01-J23; J01-J22 green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01). J23 (the scheduler, T-058) was added on 2026-10-30, and since 2026-10-31 it clears its profile's board first, so it also passes on repeated runs without `make dev-clean`.  
+Status: **implemented** (26 tests, J01-J24; J01-J22 green on repeated `make test-e2e` (the target already passes `-count=1`); S07 closed 2026-10-01). J23 (the scheduler, T-058) was added on 2026-10-30, and since 2026-10-31 it clears its profile's board first, so it also passes on repeated runs without `make dev-clean`.  
 Output of: `SP-008-e2e-journey-inventory.md` (sprint-local spike, not tracked in git)
 
 ---
@@ -42,6 +42,7 @@ Rationale:
 | tiered | J12 (tiered execution) | agentd-tiered | 8769 | `tiered.enabled: true` |
 | provider | J16 (siblings wait for a provider breaker's probe) | agentd-prb | 8771 | `gateway.order: [quota]`, `breaker.open_timeout: 10s`, `healing.enabled: true`, `outage_handoff_enabled: true` |
 | scheduler | J23 (one-shot scheduled task) | agentd-sched | 8772 | `agentic.scheduler` with `tick_interval: 2s` and one `run_after` entry, disabled at boot; J23 enables it through `<home>/.env` |
+| acp | J24 (a task on an acp agent, in the jail) | agentd-acp | 8773 | `exec.turn` routed to `kind: acp, preset: fake`; `sandbox.backend: bubblewrap`. The image is the Dockerfile's `dev` stage (agentd built with `-tags fakeacp`, plus bubblewrap) and the service runs with `security_opt: [unmask=ALL]`, or bubblewrap cannot mount `/proc` |
 
 Implementation: devenv/compose.yaml lists all variants; test setup calls `podman compose up -d <profile>` for the needed service, after `make dev-build` has produced the `agentd:local` image those services reference.
 
@@ -125,6 +126,7 @@ path. Python unit tests for the dispatch live in
 | **J21** | A repeated read is counted | 1. As J19, scripting `bash` (`echo hello > notes.txt`) then `read notes.txt` twice; 2. Wait for COMPLETED; 3. Read the task's tool use report | Two reads, one repeated read of `notes.txt` with 2 reads, and non-zero re-read bytes | default | The baseline for later "don't re-read files" work; nothing deduplicates yet | P2 | T-044 |
 | **J22** | `agentd report ai` inside the container | 1. As J19 with `uname -a` scripted; 2. Wait for COMPLETED and the ai-usage report row for `exec.turn`; 3. `podman compose exec agentd agentd report ai --group-by purpose --task <id>` | The CLI prints a `PURPOSE` table with an `exec.turn` row whose CALLS equals the API's calls | default | Uses `DevenvManager.Exec`; `execTurnRow` supplies the API comparison | P2 | T-058 |
 | **J23** | A one-shot scheduled task runs exactly once | 0. Delete agentd-sched's board and `.env`, then restart (a fired one-shot keeps `last_fired_at`, so a reused volume would never fire it again); 1. Materialize a project on agentd-sched; 2. Write `AGENTD_AGENTIC_SCHEDULER_ENABLED=true` and `AGENTD_AGENTIC_SCHEDULER_PROJECT_ID=<id>` to `<home>/.env`; 3. Restart the daemon; 4. Wait for the `J23 scheduled once` task to reach COMPLETED; 5. Restart again and wait 15 s (several 2 s ticks) | One scheduled task in the project, COMPLETED; no second one after the restart | scheduler (`tick_interval: 2s`, one `run_after` entry, scheduler off at boot) | The scheduler boots disabled because an enabled scheduler whose task has no project fails config load (B-076) and project IDs are generated | P2 | T-058, B-076 |
+| **J24** | A task runs on an acp agent in the bubblewrap jail | 1. Materialize a single-task project on agentd-acp whose description is a fake-agent script: one completed edit, then `report_outcome` completed with a summary; 2. Wait for COMPLETED; 3. `GET /api/v1/tasks/{id}/events` | The task is COMPLETED and a `RESULT` event carries the agent's summary. An acp agent is refused without a usable jail, so COMPLETED also proves the jail ran | acp (`exec.turn` on the fake preset, `sandbox.backend: bubblewrap`) | The fake agent is agentd's hidden `fake-acp-agent` subcommand, only in the `-tags fakeacp` build; no model runs the task | P1 | T-069 |
 
 ---
 

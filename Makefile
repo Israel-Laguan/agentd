@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: print-pkg build test test-integration test-e2e test-ui test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-up-ui dev-down dev-clean dev-logs
+.PHONY: print-pkg build test test-integration test-fakeacp test-e2e test-ui test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-up-ui dev-down dev-clean dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -33,7 +33,7 @@ endif
 
 # A scoped run (PKG set by the caller, or RUN set) skips the fixed
 # integration suite below; plain make test and make check keep it.
-TEST_DEPS := test-integration
+TEST_DEPS := test-integration test-fakeacp
 ifneq ($(origin PKG),file)
 TEST_DEPS :=
 endif
@@ -49,6 +49,11 @@ test: $(TEST_DEPS)
 # //go:build integration. Run them here so make test, make check and CI cover them.
 test-integration:
 	$(GO_ENV) $(GO) test -race -tags integration ./internal/queue -run 'CurateMemories|CuratorDelay|MemoryRecallProvider'
+
+# The devenv image builds agentd with -tags fakeacp (Dockerfile dev stage, T-069).
+# Test the tagged files here so make test, make check and CI compile and cover them.
+test-fakeacp:
+	$(GO_ENV) $(GO) test -race -tags fakeacp ./internal/agent/acp ./cmd/agentd -run 'Fake'
 
 # E2E tests against live devenv stack. Starts devenv if not already running
 # (or reuses it). dev-up brings up every profile, not just `default`, because
@@ -121,7 +126,7 @@ COMPOSE := $(CURDIR)/devenv/compose.yaml
 # single non-default profile alone fails with KeyError: 'litellm'.
 COMPOSE_PROFILES := --profile default --profile healing --profile faults \
                      --profile breaker --profile disk --profile tiered \
-                     --profile provider --profile scheduler
+                     --profile provider --profile scheduler --profile acp
 
 # The UI smoke (web/e2e) needs the default profile only: agentd + litellm +
 # mockllm + web. Nothing in the UI tier touches the other variants, and
@@ -144,7 +149,7 @@ DEV_HEALTH_WAIT ?= 180
 export AGENTD_IMAGE ?= agentd:local
 
 dev-build:
-	podman build -t $(AGENTD_IMAGE) .
+	podman build --target dev -t $(AGENTD_IMAGE) .
 
 # The agentd containers must be recreated to pick up the freshly built
 # agentd:local: podman-compose compares the service image by tag, so a plain

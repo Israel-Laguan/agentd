@@ -1,5 +1,7 @@
 # The agent-kit boundary (SP-024)
 
+> **Superseded (owner, 2026-11-05).** agentd keeps no agent kit: it drives external agents only, the gateway stays in the core as the L1 path, and the builtin harness moves out to a repository of its own. The plan is [harness-extraction.md](harness-extraction.md). This page is kept as the record of SP-024's analysis.
+
 What belongs in a library that agentd's controller imports, what gets deleted, and what has to be cut first. Result of spike SP-024 (S19), built on the S17 keep/outsource map and the T-042 runs in [acp-agents.md](acp-agents.md) and [acp-presets.md](acp-presets.md). The kit is **in-repo first** (`agentkit/`, T-045); a separate module or repo is gated by the criteria at the end.
 
 **Status (2026-11-05):** decided for the gateway, the stage seam, context building and the leaf packages. **The builtin loop is undecided**: the one comparison that exists is one run per cell, plus one extra run for cline on the small task, with opencode missing. Its cuts are planned both ways below, with the run that would settle it.
@@ -11,16 +13,16 @@ go list -f '{{.ImportPath}}: {{join .Imports " "}}' ./internal/agent/... ./inter
   | tr ' ' '\n' | grep '^agentd/internal' | sort | uniq -c | sort -rn
 ```
 
-**Gateway** (before PR 10 cut it). 118 files (67 tests), 4,493 non-test lines. Non-test code still imports `internal/models` from 5 packages (`gateway`, `correction`, `providers`, `routing`, `spec`) and `internal/api/correlation` from 2 (`providers`, `routing`). Nothing else. **285 files outside `internal/gateway` import it or a subpackage**, up from 269 on 2026-10-31 (PRs 02–08 added callers). A path move cannot fit in one PR.
+**Gateway** (before PR 10 cut it). 118 files (67 tests), 4,246 non-test lines (re-counted 2026-11-05; the earlier 4,493 does not reproduce at this commit). Non-test code still imports `internal/models` from 5 packages (`gateway`, `correction`, `providers`, `routing`, `spec`) and `internal/api/correlation` from 2 (`providers`, `routing`). Nothing else. **285 files outside `internal/gateway` import it or a subpackage**, up from 269 on 2026-10-31 (PRs 02–08 added callers). A path move cannot fit in one PR.
 
 **Agent packages** (non-test lines; importers are files outside `internal/agent/`):
 
 | Package | Files / lines | Importers | agentd imports (besides the gateway) |
 | --- | --- | --- | --- |
 | `agent/context` | 13 / 2,153 | 36 | `config`, `models`, **`agent/runtime`, `agent/session`** |
-| `agent/filecontext` | 5 / 618 | 6 | `paths` |
+| `agent/filecontext` | 5 / 618 | 6 | `paths`, and third-party `github.com/gofrs/flock` (the strict `agentkit-boundary` rejects it until allowed) |
 | `agent/hooks` | 9 / 1,076 | 55 | `models`, `sandbox`, `toolenv`, **`agent/tools`, `agent/session`** |
-| `agent/runtime` | 7 / 1,007 | 39 | `config`, `models`, `api/correlation`, `agent/hooks`, `agent/tools` |
+| `agent/runtime` | 7 / 1,007 | 39 | `config`, `models`, `agentkit/correlation` (moved by PR 10), `agent/hooks`, `agent/tools` |
 | `agent/session` | 2 / 286 | 15 | none |
 | `agent/skills` | 2 / 376 | 5 | `markdown`, `paths` |
 | `agent/subagent` | 4 / 961 | 3 | `capabilities`, `markdown`, `sandbox`, `agent/context`, `agent/hooks`, `agent/tools` |
@@ -50,7 +52,7 @@ Two facts that the first table missed, because it only looked outside `agent/`:
 | `agent/session` checkpoints, `agent/context/message_editor.go` | **follow the loop** | Used only by the rewind. `secret_store.go` stays with hooks |
 | `agent/subagent` | **follows the loop** (owner, 2026-11-05) | Only the loop calls it (3 importers, all `queue/worker`), and it imports `context`, `hooks` and `tools`. No measured stage used it. It is live: `delegate` and `delegate_parallel` are in every agentic turn's tool list |
 | `agent/skills` | **follows the loop** | Skills reach only the builtin system prompt (`enrichBuilderMatchedSkills`). Nothing in `acp*.go` or `contextpack*.go` mentions them. The S17 reason ("not implemented under `agentic`") was wrong: the unimplemented key is `agentic.skills`; skills are read from `queue.skills`. Deleting them is a behaviour change for anyone with a skills directory |
-| `capabilities`, `toolenv`, `markdown` | **follow the loop** | `capabilities` is imported by `subagent`, `tools`, `capabilities/plugin` and the worker. `markdown` is used only by `skills` and `subagent` |
+| `capabilities`, `toolenv`, `markdown` | **follow the loop** | `capabilities` is imported by `subagent`, `tools`, `agentic` and `capabilities/plugin`, but **nothing imports `capabilities/plugin` or `capabilities/mcp`** (903 non-test lines; plugins are "not implemented", B-063), so they are unreachable from `cmd/agentd`; they go with the loop call. `markdown` is used only by `skills` and `subagent` |
 
 **No read cache, no "trust your writes" prompt.** SP-027: repeated reads were 17.5% of `exec.turn` input, but each read is billed once, because the cut drops it right after. The model re-reads because the cut also dropped its own write. That is a context-cut question (T-059), not a kit feature.
 
@@ -111,7 +113,7 @@ The loop's own cuts, after steps 1–11. None has been sized on a built branch.
 | --- | --- | --- |
 | D1 | **Config.** `agentic_mode`, the `queue.agentic_*` keys and `queue.skills` become load-time "removed key" errors (the S18 PR 07 mechanism), with a docs note | The deprecation is the user-visible part |
 | D2 | **Delete `subagent` and `skills`** | The builtin agent's tool list shrinks (`delegate`, `delegate_parallel`); B-057 is dropped |
-| D3 | **Delete the loop:** `queue/worker/agentic`, `runtime`, `session` checkpoints, `message_editor.go`, the engine wiring in `worker.go` | 71 files outside these packages import them, 42 of them tests |
+| D3 | **Delete the loop:** `queue/worker/agentic`, `runtime`, `session` checkpoints, `message_editor.go`, the engine wiring in `worker.go` | 25 files outside these three packages import them (10 tests); 73 (43 tests) if `tools` goes too. The earlier "71 / 42" does not reproduce |
 | D4 | **Cut `tools`.** `hooks` needs `ToolResult`, `ToolStatus` and the tool-name constants; keep those in `hooks` and delete the rest. `sandbox` stays | |
 
 **Cost to name before deciding:** with the loop gone, `exec.turn` needs an external agent on the host's `PATH`. There is no fallback for a user without one, and the tests that drive the loop have to move to the fake ACP agent or go.
@@ -119,6 +121,8 @@ The loop's own cuts, after steps 1–11. None has been sized on a built branch.
 ## Dependency cut plan
 
 Decided part. Step sizes were set on 2026-10-31 and still hold, apart from the importer counts above.
+
+**Audit, 2026-11-05 (`main` at `439236b9`).** `agentkit/` holds 89 non-test lines (2 packages), 1.2% of the 7,532 lines the decided kit will hold; the gateway, stage root, `ContextPack` and `paths` already pass the boundary in place (61.8% of the lines, 74.1% with `stage` and `filecontext`). Stage importer counts: 30 outside `internal/stage/`, 42 with `stage/intake`. Not classified above: `agent/acp` (1,577 lines, third-party ACP and MCP SDKs) and `internal/mcp` (556 lines, imports `tools`, `models`, `stage`). Gateway tests: 19 files import `internal/models`. **Schedule (owner kept the move plan):** steps 3–6 and the loop call are S20 (PR plan in the S20 sprint folder); steps 7–11 carry to S21.
 
 **Moves keep an alias facade at the old path** (type aliases, `const`s, `var X = new.X`, a wrapper for `GenerateJSON[T]`), so importers can switch over in any batch. Every move PR also re-keys `tools/checkminfunc/baseline`, updates `purpose_sites_test.go` and the depguard globs. The size limit is 100 files and 2,000 changed lines per PR; T-045 caps its own at 1,000.
 
@@ -130,11 +134,11 @@ Decided part. Step sizes were set on 2026-10-31 and still hold, apart from the i
 | 4 | S20 | Move `truncation`, `providers`, `routing`, `correction`, `route`; split `truncation` from the rest if over ~95 files | ~75–80 files |
 | 5 | S20 | Move the gateway root; `internal/gateway` becomes a pure facade | ~30 files |
 | 6 | S20 | Migrate the **285 importers** in four batches by directory; the last one deletes the facades | 4 PRs, each under 95 files |
-| 7 | S20 | Move the stage seam to `agentkit/stage` (42 importers, was 24) | ~30 files |
-| 8 | S20 | Context building: `config.AgenticContextConfig` and `TopicGuardConfig` become kit `Options`; `models.Task`/`Comment` become a `TaskInput`. **New: relocate `message_editor.go` first (L1 above)** | ~15 files, ~400 lines |
-| 9 | S20 | Move `agent/context` (36 importers); facade, or split by importer directory | ~65 files, or 2 PRs |
-| 10 | S20 | Move `paths` (11 importers) and `agent/filecontext` (6) | ~30 files |
-| 11 | S20 | Move the `ContextPack` type; optional kit record type for `aicalls` | ~20 files |
+| 7 | S21 | Move the stage seam to `agentkit/stage` (42 importers, was 24) | ~30 files |
+| 8 | S21 | Context building: `config.AgenticContextConfig` and `DefaultMaxToolIterations` become kit `Options` (`TopicGuardConfig` is used by `runtime`, not `context`: it belongs to L5); `models.Task`/`Comment` become a `TaskInput`. **New: relocate `message_editor.go` first (L1 above)** | ~15 files, ~400 lines |
+| 9 | S21 | Move `agent/context` (36 importers); facade, or split by importer directory | ~65 files, or 2 PRs |
+| 10 | S21 | Move `paths` (11 importers) and `agent/filecontext` (6) | ~30 files |
+| 11 | S21 | Move the `ContextPack` type; optional kit record type for `aicalls` | ~20 files |
 | 12+ | after the loop call | The L-steps or D-steps above | not sized |
 
 About 13–15 PRs for the decided kit. Steps 1–2 are PR 10 and are done: the gateway's non-test code imports only the standard library, itself and `agentkit`, and the `gateway-boundary` and `agentkit-boundary` depguard rules hold it. Nothing in them depends on the loop.
