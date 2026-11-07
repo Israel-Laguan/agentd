@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | backlog (planned in agentd, never executed; moved out with the harness on 2026-11-05) |
+| Status | backlog (planned in agentd, never executed; augmented into the harness-extraction plan on 2026-11-05 (builtin loop removal itself is the pending extraction, T-071/T-072)) |
 | Priority | P3 |
 | Sprint | — (agentd S15 fixed the batching side; real routing deferred) |
 | Links | agentd S15 B-061, `queue/worker/worker_tools_capability.go`, `capabilities`, B-063 (rest) |

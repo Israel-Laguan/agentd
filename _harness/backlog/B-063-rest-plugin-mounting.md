@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | backlog (planned in agentd, never executed; moved out with the harness on 2026-11-05) |
+| Status | backlog (planned in agentd, never executed; augmented into the harness-extraction plan on 2026-11-05 (builtin loop removal itself is the pending extraction, T-071/T-072)) |
 | Priority | P3 |
 | Sprint | — (agentd S15 deferred the full feature) |
 | Links | agentd S15 B-063, `capabilities/plugin` (`mounter.go`, `loader.go`, `shell_hook.go`), `queue/worker/worker_plugins.go`, B-061 (rest) |
