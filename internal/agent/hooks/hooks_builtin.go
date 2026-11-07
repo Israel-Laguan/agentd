@@ -56,7 +56,7 @@ func DenylistHookFor(rootFor func(projectID string) string) PreHook {
 		Name:   "denylist",
 		Policy: FailClosed,
 		Fn: func(ctx HookContext) (HookVerdict, error) {
-			if ctx.ToolName == toolNameBash {
+			if ctx.ToolName == ToolNameBash {
 				if v := checkDangerousCommand(ctx.Args); v.Veto {
 					return v, nil
 				}

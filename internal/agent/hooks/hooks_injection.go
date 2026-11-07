@@ -10,11 +10,11 @@ import (
 // whose output is trusted. Results from these tools are never wrapped
 // in external-content markers.
 var builtinToolNames = map[string]struct{}{
-	toolNameBash:             {},
-	toolNameRead:             {},
-	toolNameWrite:            {},
-	toolNameDelegate:         {},
-	toolNameDelegateParallel: {},
+	ToolNameBash:             {},
+	ToolNameRead:             {},
+	ToolNameWrite:            {},
+	ToolNameDelegate:         {},
+	ToolNameDelegateParallel: {},
 }
 
 // externalContentInstruction is the system prompt amendment that tells

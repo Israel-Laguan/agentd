@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"agentd/internal/agent/hooks"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/sandbox"
@@ -13,11 +14,11 @@ import (
 )
 
 const (
-	toolNameBash             = "bash"
-	toolNameRead             = "read"
-	toolNameWrite            = "write"
-	toolNameDelegate         = "delegate"
-	toolNameDelegateParallel = "delegate_parallel"
+	toolNameBash             = hooks.ToolNameBash
+	toolNameRead             = hooks.ToolNameRead
+	toolNameWrite            = hooks.ToolNameWrite
+	toolNameDelegate         = hooks.ToolNameDelegate
+	toolNameDelegateParallel = hooks.ToolNameDelegateParallel
 	toolNameAskHuman         = "ask_human"
 
 	defaultMaxToolReadFileBytes = 10 << 20 // 10 MiB
@@ -172,17 +173,6 @@ func (t *ToolExecutor) Execute(ctx context.Context, call gateway.ToolCall, extra
 	default:
 		return JSONErrorf("unknown tool: %s", call.Function.Name)
 	}
-}
-
-// SchemaRegistryFromDefinitions builds a tool-name → parameters map for SchemaValidationHook.
-func SchemaRegistryFromDefinitions(defs []gateway.ToolDefinition) map[string]*gateway.FunctionParameters {
-	registry := make(map[string]*gateway.FunctionParameters, len(defs))
-	for _, def := range defs {
-		if def.Parameters != nil {
-			registry[def.Name] = def.Parameters
-		}
-	}
-	return registry
 }
 
 func (t *ToolExecutor) Definitions() []gateway.ToolDefinition {

@@ -86,7 +86,6 @@ linters:
             - "**/internal/paths/**"
             - "**/internal/queue/*.go"
             - "!**/internal/agent/hooks/hooks_secrets.go"
-            - "!**/internal/agent/hooks/tool_aliases.go"
             - "!**/internal/mcp/session.go"
             - "!**/internal/queue/agentic_iteration_steps_test.go"
             - "!**/internal/queue/exports.go"
