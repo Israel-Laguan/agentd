@@ -397,12 +397,14 @@ func TestACPExecutionCommandPolicyRunsBeforeTheGate(t *testing.T) {
 		if got := auditTypesFor(t, path, task.ID); len(got) != 2 || got[1] != wantAudit || len(children) != wantChildren {
 			t.Errorf("%q: task audit records = %v, subtasks = %d; want [task_start %s]", command, got, len(children), wantAudit)
 		}
-		// The denied command must have been refused, not allowed: a policy
-		// bypass that lets it run would leave the same audit trail. The
-		// fake agent continues after any permission answer, so the
-		// audit alone cannot tell a deny from an allow; assert the
-		// permitter verdict the driver used, on a fresh task so the
-		// approval gate is not consumed by the dispatch above.
+		// The denied and allowed dispatches share the same task_complete
+		// audit: the fake streams "permission: reject_once" or
+		// "permission: allow_once" back and then reports, and
+		// ACPAgent discards Driver.Result.Text, so the audit alone
+		// cannot tell a deny from an allow. Assert the same ACPPermitter
+		// verdict the driver used, on a fresh task so the approval gate
+		// is not consumed by the dispatch above. The verdict table is
+		// covered exhaustively in acp_permission_test.go.
 		w2, _, task2, project2, profile2, _, _ := acpFixture(t, "plan-"+command, false)
 		profile2.GatedTools = []string{"bash"}
 		taskHooks, _ := w2.MountAgenticHooks(project2, profile2)

@@ -42,15 +42,21 @@ const shellMetachars = "`$;&|<>(){}\\\n\r"
 // files or execute programs. An allowlisted command carrying one goes to the
 // approval gate instead of skipping it. The match is on the option text before
 // any =value, so --output=notes.txt hits --output. Options that only list or
-// print matches stay allowed (grep -o, --files-with-matches, rg --files-with).
+// print matches stay allowed (grep -o, --files-with-matches, rg --files-with,
+// git --format).
 var writeExecOptions = []string{
-	"--output", "--exec", "--exec-batch", "--pre", "--pre-glob", "--passthru", "--pager", "--tui", "--pager-cmd", "--replace", "--in-place", "--edit", "--extcmd", "--open", "--execute", "--allow-unsafe", "--load", "--template", "--format", "--trace", "--watch",
+	"--output", "--exec", "--exec-batch", "--pre", "--pre-glob", "--passthru", "--pager", "--tui", "--pager-cmd", "--replace", "--in-place", "--edit", "--extcmd", "--open", "--execute", "--allow-unsafe", "--load", "--template", "--trace", "--watch",
 }
 
 // dangerousGitConfig marks a git -c / git --config option, which can name a
 // pager, editor, hook or other executable. Only git subcommands in the allowlist
 // reach this check; a plain -c on go or npm is their own flag.
 var dangerousGitConfig = []string{"-c", "--config"}
+
+// goWriteExecOptions are short write/exec flags for go build/test/vet: -o
+// writes the binary, -exec names a test runner. Kept per-command so grep -o
+// (only-matching, read-only) stays allowed.
+var goWriteExecOptions = []string{"-o", "--output", "-exec", "--exec"}
 
 // EvaluateToolCall is the command policy for one tool call: a bash call is
 // judged by its command, any other tool is CommandAsk. reason is set on a deny.
@@ -95,25 +101,83 @@ func allowedCommand(command string) bool {
 	if strings.ContainsAny(command, shellMetachars) {
 		return false
 	}
-	words := strings.Fields(command)
+	words, ok := shellWords(command)
+	if !ok {
+		return false
+	}
 	for _, prefix := range allowedCommands {
 		if len(words) >= len(prefix) && slices.Equal(words[:len(prefix)], prefix) {
-			return !hasWriteOrExecOption(command, isGitPrefix(prefix))
+			return !hasWriteOrExecOption(words, prefix)
 		}
 	}
 	return false
 }
 
-func isGitPrefix(prefix []string) bool { return len(prefix) > 0 && prefix[0] == "git" }
+// shellWords parses command into shell words, honouring single and double
+// quotes and backslash escapes. ok is false on unbalanced quoting: the caller
+// then sends the command to approval instead of trying to judge its options.
+func shellWords(command string) (words []string, ok bool) {
+	var cur strings.Builder
+	inQuote, quote, escaped := false, rune(0), false
+	for _, r := range command {
+		switch {
+		case escaped:
+			cur.WriteRune(r)
+			escaped = false
+		case r == '\\':
+			if inQuote {
+				cur.WriteRune(r)
+			} else {
+				escaped = true
+			}
+		case isQuote(r):
+			inQuote, quote = toggleQuote(inQuote, quote, r)
+		case inQuote:
+			cur.WriteRune(r)
+		default:
+			if r == ' ' || r == '\t' || r == '\n' {
+				if cur.Len() > 0 {
+					words = append(words, cur.String())
+					cur.Reset()
+				}
+			} else {
+				cur.WriteRune(r)
+			}
+		}
+	}
+	if inQuote || escaped {
+		return nil, false
+	}
+	if cur.Len() > 0 {
+		words = append(words, cur.String())
+	}
+	return words, true
+}
 
-// hasWriteOrExecOption reports whether command carries an option that writes
-// files or executes a program. The option text is matched before any =value,
-// so --output=notes.txt hits --output. -o is only read-only (grep -o) for the
-// allowlisted commands, so it is not listed. git -c / --config is checked
-// separately: it can name a pager, editor or hook.
-func hasWriteOrExecOption(command string, isGit bool) bool {
-	words := strings.Fields(command)
-	for _, w := range words[1:] {
+func isQuote(r rune) bool { return r == '\'' || r == '"' }
+
+func toggleQuote(inQuote bool, quote, r rune) (bool, rune) {
+	if inQuote && r == quote {
+		return false, quote
+	}
+	if !inQuote {
+		return true, r
+	}
+	return inQuote, quote
+}
+
+// hasWriteOrExecOption reports whether words carry an option that writes
+// files or executes a program. It judges the allowlisted prefix so
+// command-specific flags stay precise: go -o/-exec, git -c/--config, and the
+// generic writeExecOptions for the rest. The option text is matched before
+// any =value, so --output=notes.txt hits --output.
+func hasWriteOrExecOption(words []string, prefix []string) bool {
+	if len(words) <= len(prefix) {
+		return false
+	}
+	isGit := prefix[0] == "git"
+	isGo := prefix[0] == "go"
+	for _, w := range words[len(prefix):] {
 		opt := w
 		if i := strings.Index(w, "="); i != -1 {
 			opt = w[:i]
@@ -122,6 +186,9 @@ func hasWriteOrExecOption(command string, isGit bool) bool {
 			return true
 		}
 		if isGit && slices.Contains(dangerousGitConfig, opt) {
+			return true
+		}
+		if isGo && slices.Contains(goWriteExecOptions, opt) {
 			return true
 		}
 	}
