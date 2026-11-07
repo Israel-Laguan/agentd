@@ -12,11 +12,11 @@ import (
 
 // Task type categories for tool manifest filtering.
 const (
-	TaskTypeSummarize    = "summarize"
-	TaskTypeCodeGen      = "code_gen"
-	TaskTypeDocQA        = "doc_qa"
-	TaskTypeWebResearch  = "web_research"
-	TaskTypeFullAgent    = "full_agent"
+	TaskTypeSummarize    = models.TaskTypeSummarize
+	TaskTypeCodeGen      = models.TaskTypeCodeGen
+	TaskTypeDocQA        = models.TaskTypeDocQA
+	TaskTypeWebResearch  = models.TaskTypeWebResearch
+	TaskTypeFullAgent    = models.TaskTypeFullAgent
 	toolManifestWildcard = "*"
 )
 

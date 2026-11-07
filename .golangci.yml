@@ -87,8 +87,6 @@ linters:
             - "**/internal/queue/*.go"
             - "!**/internal/queue/agentic_iteration_steps_test.go"
             - "!**/internal/queue/exports.go"
-            - "!**/internal/queue/scheduler.go"
-            - "!**/internal/queue/scheduler_context_test.go"
           # Exact roots and slash subtrees, so a sibling such as
           # agent/toolsextra is not caught.
           deny:
