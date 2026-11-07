@@ -3,8 +3,8 @@
 package queue
 
 import (
+	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
-	wsession "agentd/internal/agent/session"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/recovery"
@@ -47,7 +47,7 @@ func ValidateToolCredentials(toolCredentials map[string]string) error {
 	if len(toolCredentials) == 0 {
 		return nil
 	}
-	return wsession.NewEnvSecretStore(toolCredentials).Validate()
+	return agenthooks.NewEnvSecretStore(toolCredentials).Validate()
 }
 
 const DefaultWorkerMaxRetries = qw.DefaultMaxRetries
