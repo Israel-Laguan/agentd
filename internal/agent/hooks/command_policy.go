@@ -130,21 +130,30 @@ func shellWords(command string) (words []string, ok bool) {
 			} else {
 				escaped = true
 			}
-		case isQuote(r):
+		case r == '\'' || r == '"':
 			inQuote, quote = toggleQuote(inQuote, quote, r)
 		case inQuote:
 			cur.WriteRune(r)
 		default:
-			if r == ' ' || r == '\t' || r == '\n' {
-				if cur.Len() > 0 {
-					words = append(words, cur.String())
-					cur.Reset()
-				}
-			} else {
-				cur.WriteRune(r)
-			}
+			words = pushWord(words, &cur, r)
 		}
 	}
+	return finishWords(words, &cur, inQuote, escaped)
+}
+
+func pushWord(words []string, cur *strings.Builder, r rune) []string {
+	if r == ' ' || r == '\t' || r == '\n' {
+		if cur.Len() > 0 {
+			words = append(words, cur.String())
+			cur.Reset()
+		}
+	} else {
+		cur.WriteRune(r)
+	}
+	return words
+}
+
+func finishWords(words []string, cur *strings.Builder, inQuote, escaped bool) ([]string, bool) {
 	if inQuote || escaped {
 		return nil, false
 	}
@@ -153,8 +162,6 @@ func shellWords(command string) (words []string, ok bool) {
 	}
 	return words, true
 }
-
-func isQuote(r rune) bool { return r == '\'' || r == '"' }
 
 func toggleQuote(inQuote bool, quote, r rune) (bool, rune) {
 	if inQuote && r == quote {
