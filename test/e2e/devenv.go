@@ -27,6 +27,7 @@ var profileService = map[string]struct {
 	"tiered":    {"agentd-tiered", "/home/agentd-tiered"},
 	"provider":  {"agentd-prb", "/home/agentd-prb"},
 	"scheduler": {"agentd-sched", "/home/agentd-sched"},
+	"acp":       {"agentd-acp", "/home/agentd-acp"},
 }
 
 // DevenvManager manages the devenv stack via podman-compose.

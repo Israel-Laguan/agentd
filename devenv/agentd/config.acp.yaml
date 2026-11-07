@@ -1,0 +1,28 @@
+# agentd-acp (profile acp, J24): exec.turn runs on an acp agent, in the
+# bubblewrap jail inside the container (T-069). The agent is the devenv build's
+# scripted fake (Dockerfile dev stage, -tags fakeacp), so a task needs no model;
+# mockllm only answers the daemon's own L1 calls.
+home: /home/agentd-acp
+db_path: /home/agentd-acp/global.db
+projects_dir: /home/agentd-acp/projects
+uploads_dir: /home/agentd-acp/uploads
+api:
+  address: "0.0.0.0:8773"
+gateway:
+  order: [mock]
+  providers:
+    - name: mock
+      adapter: openai
+      base_url: "http://mockllm:8000/v1"
+      api_key_env: LITELLM_API_KEY
+      model: "acp-l1"
+  warmup_enabled: false
+# An acp agent runs only in the jail: required, so an unusable one fails loudly
+# instead of falling back to filter-only.
+sandbox:
+  backend: bubblewrap
+agents:
+  fake: { kind: acp, preset: fake, model: "fake" }
+stages:
+  exec.turn:
+    default: fake
