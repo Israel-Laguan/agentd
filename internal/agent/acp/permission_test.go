@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"agentd/internal/agent/acp/fakeagent"
+	"agentd/internal/stage"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 )
@@ -239,6 +240,10 @@ func TestSuspendingVerdictStopsTheCall(t *testing.T) {
 		askStep(acpsdk.ToolKindExecute, goTest), fakeagent.Step{WaitCancel: true})
 	if !errors.Is(err, ErrSuspended) {
 		t.Fatalf("err = %v; want ErrSuspended", err)
+	}
+	// The loop and the worker match the core's sentinel, not acp's alias.
+	if !errors.Is(err, stage.ErrSuspended) {
+		t.Fatalf("err = %v; want stage.ErrSuspended", err)
 	}
 }
 
