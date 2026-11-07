@@ -1,6 +1,6 @@
 # Harness backlog: planned in agentd, never executed
 
-Bugs and tasks that agentd planned for its builtin agent harness and never ran. agentd moved the harness out on 2026-11-05 (owner decision: external agents only; agentd's `docs/harness-extraction.md`). These files go with the harness to its own repository, which can add them to its backlog. agentd tracks none of them.
+Bugs and tasks that agentd planned for its builtin agent harness and never ran. On 2026-11-05 (owner decision: external agents only; agentd's `docs/harness-extraction.md`) agentd decided to extract the harness; the extraction itself is a pending plan (T-071/T-072), so the builtin loop still runs in agentd today and can execute a task whenever no ACP route matches. These files go with the harness when it moves to its own repository, which can add them to its backlog. agentd tracks none of them.
 
 IDs are agentd's, kept so each item can be traced to its history there. "(rest)" marks the part of an agentd ticket that was never done.
 

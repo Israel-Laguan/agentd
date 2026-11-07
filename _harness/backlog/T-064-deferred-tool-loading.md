@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | task |
-| Status | backlog (planned in agentd, never executed; augmented into the harness-extraction plan on 2026-11-05 (builtin loop removal itself is the pending extraction, T-071/T-072)) |
+| Status | backlog (planned in agentd, never executed; documented in the harness-extraction plan on 2026-11-05  — the builtin loop still runs in agentd, its removal is a pending T-071/T-072 step) |
 | Priority | P2 |
 | Sprint | — (agentd S20, not run) |
 | Parent | none |

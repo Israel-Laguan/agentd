@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Type | bug |
-| Status | backlog (planned in agentd, never executed; augmented into the harness-extraction plan on 2026-11-05 (builtin loop removal itself is the pending extraction, T-071/T-072)) |
+| Status | backlog (planned in agentd, never executed; documented in the harness-extraction plan on 2026-11-05  — the builtin loop still runs in agentd, its removal is a pending T-071/T-072 step) |
 | Priority | P2 |
 | Sprint | — (agentd: T-059 in S17, never scheduled) |
 | Links | agentd S19 B-089 (data-loss half fixed in agentd #176), SP-027, `queue/worker/agentic/cut_log.go`, `agent/tools/cut_reads.go`, `agent/context` |
