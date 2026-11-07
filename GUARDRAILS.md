@@ -12,6 +12,16 @@ Protocol: [guardrails.md](https://guardrails.md/#protocol)
 
 Subagents do not receive `delegate` or `delegate_parallel` unless those tool names are explicitly listed in the subagent’s allowed-tools configuration (parent workers in agentic mode always have them). Delegation from subagents is intentionally opt-in.
 
+## Command policy: allow, deny, ask
+
+Every bash command an agent runs, builtin or ACP, passes one evaluator before any hook or approval gate (`hooks.EvaluateToolCall`, T-062):
+
+- **Deny:** the command, normalised (quotes and escapes dropped, backticks read as separators, whitespace collapsed), matches a destructive pattern: `sudo`, `su -`, `rm` or `chmod 777` of `/` whatever the flags, `mkfs`, `dd if=`, a redirection onto a disk device, a fork bomb. It is refused outright; no hook, approval or relaxed mode lifts it.
+- **Allow:** one simple command (no `;`, `&`, `|`, redirection, `$`, backtick, parenthesis or escape) that starts with read-only inspection (`ls`, `cat`, `grep`, `git status`, `git diff` and the like) or a usual build or test command (`go test`, `make check`, `npm test`, `pytest`, `cargo test` and the like). It skips the approval gate. The list is fixed in `internal/agent/hooks/command_policy.go`.
+- **Ask:** everything else goes to the approval gate when bash is gated, and runs otherwise, as before.
+
+Limits: the denylist is a tripwire on text, not a boundary. Variable expansion (`x=/; rm -rf $x`), aliases, scripts and encoded payloads (`base64 -d | sh`) reach it as ask. An allowed build or test command still runs code the agent may have written: a Makefile target, a test, a git hook. The jail is the boundary; the policy only decides what needs a human first.
+
 ---
 
 ## SIGN #1: models layer boundary

@@ -65,6 +65,9 @@ type HookContext struct {
 	TokenCountBefore int
 	// TokenCountAfter is set by the dispatch layer after hooks complete.
 	TokenCountAfter int
+	// CommandPolicy is the command policy's verdict, set by the dispatch layer
+	// before any chain runs; the approval gate skips a CommandAllow call.
+	CommandPolicy CommandVerdict
 }
 
 // PreHook is evaluated before tool execution. Returning a veto verdict

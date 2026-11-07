@@ -93,6 +93,11 @@ type StageResult struct {
 // on the task rather than continuing without the stage's answer.
 var ErrNeedsHuman = errors.New("stage: needs a human decision")
 
+// ErrSuspended is returned when a call stopped on a permission a human must
+// decide (an approval gate's HITL subtask); a later call asks again once the
+// human decided. The ACP driver returns it as acp.ErrSuspended.
+var ErrSuspended = errors.New("acp: call suspended for human approval")
+
 // ErrHumanHandoffFailed is returned when a NeedsHuman result could not be
 // recorded for a person. It does not match ErrNeedsHuman, so callers treat
 // the task as failed instead of blocked.

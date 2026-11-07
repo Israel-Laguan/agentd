@@ -14,6 +14,15 @@ func (k ScheduledTaskKind) Valid() bool {
 	return k == ScheduledTaskKindDispatch || k == ScheduledTaskKindRequeue
 }
 
+// Task types a ScheduledTask names; the builtin's tool manifest filters tools by them.
+const (
+	TaskTypeSummarize   = "summarize"
+	TaskTypeCodeGen     = "code_gen"
+	TaskTypeDocQA       = "doc_qa"
+	TaskTypeWebResearch = "web_research"
+	TaskTypeFullAgent   = "full_agent"
+)
+
 // ScheduledTask is a persisted scheduler registry entry.
 type ScheduledTask struct {
 	ID                  string

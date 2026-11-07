@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"regexp"
 
-	wsession "agentd/internal/agent/session"
 	"agentd/internal/toolenv"
 )
 
@@ -71,7 +70,7 @@ func CredentialDetectionHook() PreHook {
 // The hook itself never vetoes; it is FailOpen because injection
 // failure should not block execution (the tool handler will fail with
 // a clear "missing credential" error from its own env lookup).
-func CredentialInjectionHook(store wsession.SecretStore) PreHook {
+func CredentialInjectionHook(store SecretStore) PreHook {
 	return PreHook{
 		Name:   "credential-injection",
 		Policy: FailOpen,
@@ -99,7 +98,7 @@ func CredentialInjectionHook(store wsession.SecretStore) PreHook {
 // validates all tool credentials are present at startup. Tools that
 // require credentials (as declared in config) fail early if the
 // backing environment variable is unset.
-func CredentialValidationSessionHook(store wsession.SecretStore) SessionStartHook {
+func CredentialValidationSessionHook(store SecretStore) SessionStartHook {
 	return SessionStartHook{
 		Name:   "credential-validation",
 		Policy: FailClosed,

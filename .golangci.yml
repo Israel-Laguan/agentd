@@ -63,6 +63,72 @@ linters:
             - $gostd
             - agentd/agentkit$
             - agentd/agentkit/
+        # The harness can only leave once the core imports none of it (T-066,
+        # docs/harness-extraction.md). Test files included. queue/worker joins
+        # the core in T-070.
+        core-no-harness:
+          files:
+            - "**/cmd/**"
+            - "**/internal/mcp/**"
+            - "**/internal/agent/hooks/**"
+            - "**/internal/agent/acp/**"
+            - "**/internal/api/**"
+            - "**/internal/bus/**"
+            - "**/internal/config/**"
+            - "**/internal/frontdesk/**"
+            - "**/internal/kanban/**"
+            - "**/internal/memory/**"
+            - "**/internal/models/**"
+            - "**/internal/sandbox/**"
+            - "**/internal/services/**"
+            - "**/internal/stage/**"
+            - "**/internal/aicalls/**"
+            - "**/internal/paths/**"
+            - "**/internal/gateway/**"
+            - "**/internal/agent/skills/**"
+            - "**/internal/markdown/**"
+            - "**/internal/toolenv/**"
+            - "**/internal/queue/*.go"
+            - "**/internal/queue/runaudit/**"
+            - "**/internal/queue/hostreport/**"
+            - "**/internal/queue/planning/**"
+            - "**/internal/queue/recovery/**"
+            - "**/internal/queue/safety/**"
+          # Exact roots and slash subtrees, so a sibling such as
+          # agent/toolsextra is not caught.
+          deny:
+            - pkg: "agentd/internal/queue/worker/agentic$"
+              desc: "the builtin agent loop is harness; the core must not import it"
+            - pkg: "agentd/internal/queue/worker/agentic/"
+              desc: "the builtin agent loop is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/runtime$"
+              desc: "agent/runtime is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/runtime/"
+              desc: "agent/runtime is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/tools$"
+              desc: "agent/tools is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/tools/"
+              desc: "agent/tools is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/session$"
+              desc: "agent/session is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/session/"
+              desc: "agent/session is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/context$"
+              desc: "agent/context is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/context/"
+              desc: "agent/context is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/filecontext$"
+              desc: "agent/filecontext is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/filecontext/"
+              desc: "agent/filecontext is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/subagent$"
+              desc: "agent/subagent is harness; the core must not import it"
+            - pkg: "agentd/internal/agent/subagent/"
+              desc: "agent/subagent is harness; the core must not import it"
+            - pkg: "agentd/internal/capabilities$"
+              desc: "capabilities is harness; the core must not import it"
+            - pkg: "agentd/internal/capabilities/"
+              desc: "capabilities is harness; the core must not import it"
         queue-test-isolation:
           files:
             - "**/internal/queue/**_test.go"

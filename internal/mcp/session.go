@@ -13,7 +13,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/models"
 	"agentd/internal/stage"
 )
@@ -139,10 +138,10 @@ func (s *Session) registerGetContext() {
 // seam's needs-human reply ({"needs_human": true, "question", "options"}),
 // which the caller hands to a person as it does a model's.
 func (s *Session) registerAskHuman() {
-	description := agenttools.AskHumanToolDefinition().Description
-	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: agenttools.ToolNameAskHuman, Description: description}, func(_ context.Context, _ *mcp.CallToolRequest, in agenttools.AskHumanArgs) (*mcp.CallToolResult, any, error) {
+	description := AskHumanToolDefinition().Description
+	mcp.AddTool(s.mcpServer, &mcp.Tool{Name: ToolNameAskHuman, Description: description}, func(_ context.Context, _ *mcp.CallToolRequest, in AskHumanArgs) (*mcp.CallToolResult, any, error) {
 		raw, _ := json.Marshal(in)
-		args, err := agenttools.ParseAskHumanArgs(string(raw))
+		args, err := ParseAskHumanArgs(string(raw))
 		if err != nil {
 			return errorResult(fmt.Errorf("invalid ask_human arguments: %w", err)), nil, nil
 		}

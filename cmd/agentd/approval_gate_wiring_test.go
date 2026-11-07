@@ -32,7 +32,7 @@ func (b bashCallBackend) Generate(_ context.Context, req spec.AIRequest) (spec.A
 	}
 	return spec.AIResponse{ProviderUsed: "fake", ModelUsed: "fake-model", ToolCalls: []spec.ToolCall{{
 		ID: "call_bash", Type: "function",
-		Function: spec.ToolCallFunction{Name: "bash", Arguments: `{"command":"ls"}`},
+		Function: spec.ToolCallFunction{Name: "bash", Arguments: `{"command":"touch notes.txt"}`},
 	}}}, nil
 }
 
@@ -54,7 +54,7 @@ func TestStoredGatedToolStopsForHumanApproval(t *testing.T) {
 	ctx := context.Background()
 	store := openUsageTestStore(t)
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{ProjectName: "gated",
-		Tasks: []models.DraftTask{{Title: "List files", Description: "List the files in the workspace."}}})
+		Tasks: []models.DraftTask{{Title: "Write notes", Description: "Write a notes file in the workspace."}}})
 	if err != nil {
 		t.Fatalf("MaterializePlan: %v", err)
 	}

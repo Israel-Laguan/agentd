@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	"agentd/internal/agent/acp"
 	agentcontext "agentd/internal/agent/context"
 	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
@@ -81,7 +80,7 @@ func TestProcessStopsWithoutTurnLoopWhenWorkPlanNeedsHuman(t *testing.T) {
 }
 
 func TestProcessStopsWithoutTurnLoopWhenWorkPlanIsSuspended(t *testing.T) {
-	host, gw, res, ok := runProcessWithPlanErr(t, fmt.Errorf("%w: exec.work_plan", acp.ErrSuspended))
+	host, gw, res, ok := runProcessWithPlanErr(t, fmt.Errorf("%w: exec.work_plan", stage.ErrSuspended))
 	if res.Kind != ResultNone {
 		t.Fatalf("result kind = %v for a task suspended for approval, want none", res.Kind)
 	}

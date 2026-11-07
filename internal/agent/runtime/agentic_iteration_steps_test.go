@@ -1,4 +1,4 @@
-package queue
+package runtime_test
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/models"
-	"agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
 )
 
@@ -35,9 +34,16 @@ type agenticIterationScenario struct {
 	gw            *iterationGateway
 	store         *iterationStore
 	sandbox       *iterationSandbox
-	workerOpts    worker.WorkerOptions
+	workerOpts    iterationOptions
 	budgetTracker *gateway.InMemoryBudgetTracker
 	budgetGuard   *agentruntime.BudgetGuard
+}
+
+// iterationOptions holds the worker settings the guards read.
+type iterationOptions struct {
+	MaxRetries        int
+	MaxToolIterations int
+	TokenBudget       int
 }
 
 type iterationGateway struct {
@@ -200,7 +206,7 @@ func registerAgenticIterationSteps(sc *godog.ScenarioContext, state *agenticIter
 }
 
 func (state *agenticIterationScenario) workerAgenticModeEnabled() error {
-	state.workerOpts = worker.WorkerOptions{
+	state.workerOpts = iterationOptions{
 		MaxRetries:        3,
 		MaxToolIterations: 10,
 		TokenBudget:       0,

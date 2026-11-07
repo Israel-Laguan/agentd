@@ -1,11 +1,10 @@
-package runtime
+package runaudit
 
 import (
 	"log/slog"
 	"time"
 
 	"agentd/internal/agent/hooks"
-	"agentd/internal/agent/tools"
 )
 
 // AuditLogger writes structured audit records when enabled.
@@ -25,7 +24,7 @@ func (l *AuditLogger) Enabled() bool {
 }
 
 // RecordToolDispatch writes a tool dispatch audit record.
-func (l *AuditLogger) RecordToolDispatch(ctx hooks.HookContext, tr tools.ToolResult, verdicts []string, tokenAfter int) {
+func (l *AuditLogger) RecordToolDispatch(ctx hooks.HookContext, tr hooks.ToolResult, verdicts []string, tokenAfter int) {
 	if !l.Enabled() {
 		return
 	}
@@ -113,12 +112,12 @@ func (l *AuditLogger) RecordTaskEvent(rec TaskAuditRecord) {
 	}
 }
 
-func auditResultStatus(ctx hooks.HookContext, tr tools.ToolResult) string {
+func auditResultStatus(ctx hooks.HookContext, tr hooks.ToolResult) string {
 	if ctx.ResultStatusSet {
 		return ctx.ResultStatus.String()
 	}
 	if tr.Status != 0 {
 		return tr.Status.String()
 	}
-	return tools.ToolStatusSuccess.String()
+	return hooks.ToolStatusSuccess.String()
 }

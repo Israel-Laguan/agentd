@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -13,12 +14,12 @@ import (
 	"agentd/internal/agent/acp"
 	"agentd/internal/agent/acp/fakeagent"
 	agenthooks "agentd/internal/agent/hooks"
-	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 	agentmcp "agentd/internal/mcp"
 	"agentd/internal/models"
+	"agentd/internal/queue/runaudit"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
 
@@ -369,6 +370,58 @@ func TestACPExecutionAuditsSuspendedWhenPermissionIsBlocked(t *testing.T) {
 	}
 }
 
+// On the fake ACP agent with bash gated (T-062): a denied command is refused
+// without asking a human, an allowed one runs unasked, and anything else
+// suspends the task for approval as before. The fake streams the permission
+// answer back, so the denied case must show "permission: reject_once" in its
+// message text; without a real refusal it would be indistinguishable from an
+// allow.
+func TestACPExecutionCommandPolicyRunsBeforeTheGate(t *testing.T) {
+	t.Parallel()
+	for command, want := range map[string]string{"rm -rf /": "reject_once", "go test ./...": "allow_once", "touch notes.txt": "suspended"} {
+		script := fakeagent.Script(fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindExecute, Title: "run", RawInput: map[string]any{"command": command}}},
+			report(map[string]any{"summary": "done"}))
+		w, store, task, project, profile, _, _ := acpFixture(t, script, false)
+		profile.GatedTools = []string{"bash"}
+		path := withAuditFile(t, w)
+
+		w.dispatchProcess(context.Background(), task, project, profile)
+
+		children, _ := store.ListChildTasks(context.Background(), task.ID)
+		wantAudit := "task_complete"
+		wantChildren := 0
+		if want == "suspended" {
+			wantAudit = "task_suspended"
+			wantChildren = 1
+		}
+		if got := auditTypesFor(t, path, task.ID); len(got) != 2 || got[1] != wantAudit || len(children) != wantChildren {
+			t.Errorf("%q: task audit records = %v, subtasks = %d; want [task_start %s]", command, got, len(children), wantAudit)
+		}
+		// The denied and allowed dispatches share the same task_complete
+		// audit: the fake streams "permission: reject_once" or
+		// "permission: allow_once" back and then reports, and
+		// ACPAgent discards Driver.Result.Text, so the audit alone
+		// cannot tell a deny from an allow. Assert the same ACPPermitter
+		// verdict the driver used, on a fresh task so the approval gate
+		// is not consumed by the dispatch above. The verdict table is
+		// covered exhaustively in acp_permission_test.go.
+		w2, _, task2, project2, profile2, _, _ := acpFixture(t, "plan-"+command, false)
+		profile2.GatedTools = []string{"bash"}
+		taskHooks, _ := w2.MountAgenticHooks(project2, profile2)
+		cmdArgs, _ := json.Marshal(map[string]string{"command": command})
+		v, _ := ACPPermitter(task2, taskHooks, w2.hooks)(context.Background(), acp.Permission{ToolCallID: "c1", Tool: "bash", Args: string(cmdArgs), Command: command})
+		if want == "reject_once" && (v.Allow || v.Suspend) {
+			t.Errorf("%q: permitter verdict = %+v; want a refusal for a denied command", command, v)
+		}
+		if want == "allow_once" && !v.Allow {
+			t.Errorf("%q: permitter verdict = %+v; want an allow for an allowed command", command, v)
+		}
+		if want == "suspended" && !v.Suspend {
+			t.Errorf("%q: permitter verdict = %+v; want a suspend for a gated command", command, v)
+		}
+	}
+}
+
 // exec.work_plan can route to an ACP agent. The response is charged to the
 // caller's attempt budget once: ACP never runs the correction loop, so the call
 // must not also charge its own guard and GeneratePlan's fallback.
@@ -382,7 +435,7 @@ func TestACPWorkPlanChargesTheBudgetOnce(t *testing.T) {
 	task.Description = fakeagent.Script(step)
 	w.routes.Stages[spec.PurposeExecWorkPlan] = route.StageRoute{Default: "coder"}
 	tracker := gateway.NewBudgetTracker(10000)
-	guard := agentruntime.NewBudgetGuard(tracker, task.ID)
+	guard := runaudit.NewBudgetGuard(tracker, task.ID)
 
 	plan, err := w.GeneratePlan(context.Background(), task, project, guard)
 	if err != nil {

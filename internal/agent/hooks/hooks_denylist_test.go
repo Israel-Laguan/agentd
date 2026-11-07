@@ -32,7 +32,7 @@ func TestDenylistHookFor_RefusesProjectIDsThatMoveTheRoot(t *testing.T) {
 // so the hook must give exactly DenylistSudoReason for a sudo command.
 func TestDenylistHookGivesTheSudoReasonWorkerReads(t *testing.T) {
 	t.Parallel()
-	verdict := checkDangerousCommand(`{"command":"sudo id"}`)
+	verdict, _ := DenylistHook(t.TempDir()).Fn(HookContext{ToolName: ToolNameBash, Args: `{"command":"sudo id"}`})
 	if !verdict.Veto || verdict.Reason != DenylistSudoReason {
 		t.Fatalf("verdict = %+v, want a veto with reason %q", verdict, DenylistSudoReason)
 	}

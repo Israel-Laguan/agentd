@@ -113,10 +113,8 @@ func TestAgenticPrivilegeAlternativeFailsTerminalWhenSandboxUnavailable(t *testi
 	gw := &sequenceGateway{responses: []gateway.AIResponse{
 		bashCall("c1", "sudo dmidecode -t memory"), {Content: `{"command":"free -h"}`}, {Content: "done"},
 	}}
-	sb := &scriptedSandbox{steps: []scriptedStep{
-		{result: sandbox.Result{ExitCode: -1, Stderr: "sudo command blocked"}},
-		{result: sandbox.Result{ExitCode: -1}, err: refusedWithoutJail()},
-	}}
+	// The command policy refuses sudo before the sandbox, so the jail sees only the alternative.
+	sb := &scriptedSandbox{steps: []scriptedStep{{result: sandbox.Result{ExitCode: -1}, err: refusedWithoutJail()}}}
 	w, _, task := runAgenticTask(t, gw, sb)
 	assertAgenticRefusedTerminal(t, w, task.ID)
 }

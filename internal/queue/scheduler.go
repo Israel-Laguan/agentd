@@ -11,7 +11,6 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/config"
 	"agentd/internal/models"
 )
@@ -245,15 +244,15 @@ func buildScheduledDescription(entry models.ScheduledTask, contextBody string) s
 
 func taskTypeKeywords(taskType string) string {
 	switch taskType {
-	case agenttools.TaskTypeSummarize:
+	case models.TaskTypeSummarize:
 		return "summarize summary recap"
-	case agenttools.TaskTypeCodeGen:
+	case models.TaskTypeCodeGen:
 		return "implement fix refactor code"
-	case agenttools.TaskTypeDocQA:
+	case models.TaskTypeDocQA:
 		return "explain document readme"
-	case agenttools.TaskTypeWebResearch:
+	case models.TaskTypeWebResearch:
 		return "search fetch web url"
-	case agenttools.TaskTypeFullAgent:
+	case models.TaskTypeFullAgent:
 		return "orchestrate multi-step deploy"
 	default:
 		return taskType

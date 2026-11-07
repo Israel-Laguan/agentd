@@ -77,6 +77,10 @@ func evalApprovalGate(ctx agenthooks.HookContext, toolSet map[string]struct{}, h
 	if _, gated := toolSet[strings.ToLower(ctx.ToolName)]; !gated {
 		return agenthooks.HookVerdict{}, nil
 	}
+	// Read-only inspection and build or test commands run unasked (T-062).
+	if ctx.CommandPolicy == agenthooks.CommandAllow {
+		return agenthooks.HookVerdict{}, nil
+	}
 
 	req := ApprovalRequest{
 		ToolName:      ctx.ToolName,

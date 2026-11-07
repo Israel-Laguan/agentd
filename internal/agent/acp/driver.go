@@ -14,6 +14,8 @@ import (
 	"sync"
 
 	acpsdk "github.com/coder/acp-go-sdk"
+
+	"agentd/internal/stage"
 )
 
 // ErrProtocolVersion is returned when the agent answers initialize with a
@@ -22,7 +24,8 @@ var ErrProtocolVersion = errors.New("acp: protocol version mismatch")
 
 // ErrSuspended is returned when a permission verdict blocked the task on a
 // human: the call stopped, and a later call asks again once the human decided.
-var ErrSuspended = errors.New("acp: call suspended for human approval")
+// The core owns the sentinel (stage), so callers match it without importing acp.
+var ErrSuspended = stage.ErrSuspended
 
 // ErrPermissionRefused is returned when the agent ended its turn cancelled
 // after agentd refused one of its permissions, as opencode does: the turn

@@ -3,13 +3,13 @@
 package queue
 
 import (
-	agentruntime "agentd/internal/agent/runtime"
-	wsession "agentd/internal/agent/session"
-	agenttools "agentd/internal/agent/tools"
+	agenthooks "agentd/internal/agent/hooks"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/recovery"
+	"agentd/internal/queue/runaudit"
 	"agentd/internal/queue/safety"
 	qw "agentd/internal/queue/worker"
+	"agentd/internal/sandbox"
 )
 
 type PIDProbe = safety.PIDProbe
@@ -40,14 +40,14 @@ var HasACPAgent = qw.HasACPAgent
 
 // EnsureAuditFile creates the audit file at path and writes a daemon_start marker.
 // Call at daemon startup when agentic.audit.enabled is true.
-var EnsureAuditFile = agentruntime.EnsureAuditFile
+var EnsureAuditFile = runaudit.EnsureAuditFile
 
 // ValidateToolCredentials checks that every mapped env var in toolCredentials is set.
 func ValidateToolCredentials(toolCredentials map[string]string) error {
 	if len(toolCredentials) == 0 {
 		return nil
 	}
-	return wsession.NewEnvSecretStore(toolCredentials).Validate()
+	return agenthooks.NewEnvSecretStore(toolCredentials).Validate()
 }
 
 const DefaultWorkerMaxRetries = qw.DefaultMaxRetries
@@ -76,7 +76,7 @@ const (
 	HealingStepHumanHandoff     = planning.HealingStepHumanHandoff
 )
 
-var BuildSandboxEnv = agenttools.BuildSandboxEnv
+var BuildSandboxEnv = sandbox.BuildSandboxEnv
 
 type CancelRegistry = qw.CancelRegistry
 
