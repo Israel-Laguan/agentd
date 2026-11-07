@@ -276,7 +276,7 @@ services:
       mockllm:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8773/api/v1/system/status"]
+      test: ["CMD-SHELL", "wget -q --tries=1 --timeout=2 -O /dev/null --server-response http://127.0.0.1:8773/api/v1/system/status 2>&1 | grep -q 'HTTP/.* 200'"]
       interval: 3s
       timeout: 3s
       retries: 30

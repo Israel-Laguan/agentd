@@ -53,7 +53,7 @@ test-integration:
 # The devenv image builds agentd with -tags fakeacp (Dockerfile dev stage, T-069).
 # Test the tagged files here so make test, make check and CI compile and cover them.
 test-fakeacp:
-	$(GO_ENV) $(GO) test -race -tags fakeacp ./internal/agent/acp ./cmd/agentd -run 'Fake'
+	$(GO_ENV) $(GO) test -race -tags fakeacp ./internal/agent/acp ./cmd/agentd -run '^TestFake.*|^TestProduction.*'
 
 # E2E tests against live devenv stack. Starts devenv if not already running
 # (or reuses it). dev-up brings up every profile, not just `default`, because

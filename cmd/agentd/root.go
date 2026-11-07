@@ -10,7 +10,11 @@ import (
 )
 
 // extraCommands are added by build-tagged files, such as the devenv build's
-// fake ACP agent (fake_acp_agent.go).
+// fake ACP agent (fake_acp_agent.go). The slice is initialized here so any
+// init() appended during package initialization is visible by the time
+// newRootCommand runs. It is populated only at init time and is never exposed
+// to external input, plugin loading, or configuration, so the loop below
+// executes a fixed, compile-time-known set of factories.
 var extraCommands []func() *cobra.Command
 
 type rootOptions struct {

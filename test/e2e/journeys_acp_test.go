@@ -61,9 +61,9 @@ func TestJ24_ACPAgentRunsTaskInJail(t *testing.T) {
 		t.Fatalf("J24 [events] %v", err)
 	}
 	for _, ev := range events {
-		if ev.Type == "RESULT" && strings.Contains(ev.Payload, summary) {
+		if ev.Type == "RESULT" && strings.Contains(ev.Payload, summary) && strings.Contains(ev.Payload, `"outcome":"completed"`) {
 			return
 		}
 	}
-	t.Fatalf("J24 [result] no RESULT event carries the agent's summary %q; events: %+v", summary, events)
+	t.Fatalf("J24 [result] no RESULT event carries a completed outcome with the agent's summary %q; events: %+v", summary, events)
 }
