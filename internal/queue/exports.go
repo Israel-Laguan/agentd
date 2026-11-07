@@ -5,11 +5,11 @@ package queue
 import (
 	agenthooks "agentd/internal/agent/hooks"
 	agentruntime "agentd/internal/agent/runtime"
-	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/recovery"
 	"agentd/internal/queue/safety"
 	qw "agentd/internal/queue/worker"
+	"agentd/internal/sandbox"
 )
 
 type PIDProbe = safety.PIDProbe
@@ -76,7 +76,7 @@ const (
 	HealingStepHumanHandoff     = planning.HealingStepHumanHandoff
 )
 
-var BuildSandboxEnv = agenttools.BuildSandboxEnv
+var BuildSandboxEnv = sandbox.BuildSandboxEnv
 
 type CancelRegistry = qw.CancelRegistry
 

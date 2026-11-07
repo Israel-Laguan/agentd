@@ -3,6 +3,7 @@ package tools
 import (
 	"agentd/internal/agent/hooks"
 	agentmcp "agentd/internal/mcp"
+	"agentd/internal/sandbox"
 )
 
 // Pieces the core uses live in core packages (T-066); these aliases keep the
@@ -35,4 +36,5 @@ type AskHumanArgs = agentmcp.AskHumanArgs
 var (
 	AskHumanToolDefinition = agentmcp.AskHumanToolDefinition
 	ParseAskHumanArgs      = agentmcp.ParseAskHumanArgs
+	BuildSandboxEnv        = sandbox.BuildSandboxEnv
 )
