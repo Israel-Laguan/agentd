@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -119,6 +120,21 @@ func TestWorkPlanNeedsHumanStopsTheRun(t *testing.T) {
 	}
 	if clarifications, _ := clarificationChildren(t, store, task.ID); clarifications != 1 {
 		t.Fatalf("clarification subtasks = %d, want 1", clarifications)
+	}
+}
+
+// GeneratePlan must preserve the suspension sentinel's identity: if it wrapped
+// stage.ErrSuspended without %w, the engine's errors.Is check would stop
+// matching and the run would continue without a plan.
+func TestWorkPlanSuspendedKeepsSentinel(t *testing.T) {
+	t.Parallel()
+	store, task, project, _ := needsHumanFixture(t)
+	w := NewWorker(store, nil, &routingTestSandbox{}, nil, &legacyHandoffSink{}, legacyCapOptions())
+	w.stageAgent = &stageRecorder{err: fmt.Errorf("%w: exec.work_plan", stage.ErrSuspended)}
+
+	_, err := w.GeneratePlan(context.Background(), task, project, nil)
+	if !errors.Is(err, stage.ErrSuspended) {
+		t.Fatalf("GeneratePlan() error = %v, want ErrSuspended", err)
 	}
 }
 

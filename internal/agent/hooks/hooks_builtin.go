@@ -22,11 +22,11 @@ var dangerousCommands = []struct {
 }{
 	{"sudo", commandRE(`sudo\b`)},
 	{"su -", commandRE(`su\s+-`)},
-	{"rm -rf /", commandRE(`rm(\s+-{1,2}[a-z-]+)*\s+/(\s|\*|$)`)},
-	{"chmod -R 777 /", commandRE(`chmod(\s+-{1,2}[a-z-]+)*\s+0?777(\s+-{1,2}[a-z-]+)*\s+/(\s|\*|$)`)},
+	{"rm -rf /", commandRE(`rm(\s+-{1,2}[a-z-]+(=[^\s]+)?)*\s+/\.?(\s|\*|$)`)},
+	{"chmod -R 777 /", commandRE(`chmod(\s+-{1,2}[a-z-]+(=[^\s]+)?)*\s+0?777(\s+-{1,2}[a-z-]+(=[^\s]+)?)*\s+/(\s|\*|$)`)},
 	{"mkfs", commandRE(`mkfs\b`)},
 	{"dd if=", commandRE(`dd\s+if=`)},
-	{"> /dev/<disk>", regexp.MustCompile(`>\s*/dev/(sd|hd|vd|xvd|nvme|mmcblk|disk)`)},
+	{"> /dev/<disk>", regexp.MustCompile(`>\s*/dev/(sd|hd|vd|xvd|nvme|mmcblk|disk|loop|md|dm-|mapper)`)},
 	{":(){:|:&};:", regexp.MustCompile(`:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:`)},
 }
 
@@ -36,7 +36,7 @@ const DenylistSudoReason = `command blocked: contains dangerous pattern "sudo"`
 
 func commandRE(pattern string) *regexp.Regexp {
 	const boundary = "(^|[\\s;&|()`])"
-	full := "(?i)" + boundary + pattern
+	full := "(?i)" + boundary + `(?:[^\s;&|()]*\/)?` + pattern
 	return regexp.MustCompile(full)
 }
 

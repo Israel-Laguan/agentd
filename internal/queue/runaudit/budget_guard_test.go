@@ -63,13 +63,16 @@ func TestBudgetGuard_AfterCall_ZeroTokens(t *testing.T) {
 
 func TestBudgetExceeded_ControlledError(t *testing.T) {
 	tracker := gateway.NewBudgetTracker(100)
-	tracker.Add("task-1", 100)
 	g := NewBudgetGuard(tracker, "task-1")
+	g.AfterCall(100)
 	err := g.BeforeCall()
 	if err == nil {
-		t.Fatal("expected error when budget exceeded")
+		t.Fatal("expected error when budget exceeded after charging usage")
 	}
 	if !g.IsBudgetExceeded(err) {
 		t.Fatal("expected ErrBudgetExceeded")
+	}
+	if g.Usage() != 100 {
+		t.Fatalf("expected usage 100 from AfterCall, got %d", g.Usage())
 	}
 }

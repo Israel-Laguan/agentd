@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -371,10 +372,13 @@ func TestACPExecutionAuditsSuspendedWhenPermissionIsBlocked(t *testing.T) {
 
 // On the fake ACP agent with bash gated (T-062): a denied command is refused
 // without asking a human, an allowed one runs unasked, and anything else
-// suspends the task for approval as before.
+// suspends the task for approval as before. The fake streams the permission
+// answer back, so the denied case must show "permission: reject_once" in its
+// message text; without a real refusal it would be indistinguishable from an
+// allow.
 func TestACPExecutionCommandPolicyRunsBeforeTheGate(t *testing.T) {
 	t.Parallel()
-	for command, want := range map[string]string{"rm -rf /": "task_complete", "go test ./...": "task_complete", "touch notes.txt": "task_suspended"} {
+	for command, want := range map[string]string{"rm -rf /": "reject_once", "go test ./...": "allow_once", "touch notes.txt": "suspended"} {
 		script := fakeagent.Script(fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindExecute, Title: "run", RawInput: map[string]any{"command": command}}},
 			report(map[string]any{"summary": "done"}))
 		w, store, task, project, profile, _, _ := acpFixture(t, script, false)
@@ -384,8 +388,34 @@ func TestACPExecutionCommandPolicyRunsBeforeTheGate(t *testing.T) {
 		w.dispatchProcess(context.Background(), task, project, profile)
 
 		children, _ := store.ListChildTasks(context.Background(), task.ID)
-		if got := auditTypesFor(t, path, task.ID); len(got) != 2 || got[1] != want || len(children) != map[string]int{"task_suspended": 1}[want] {
-			t.Errorf("%q: task audit records = %v, subtasks = %d; want [task_start %s]", command, got, len(children), want)
+		wantAudit := "task_complete"
+		wantChildren := 0
+		if want == "suspended" {
+			wantAudit = "task_suspended"
+			wantChildren = 1
+		}
+		if got := auditTypesFor(t, path, task.ID); len(got) != 2 || got[1] != wantAudit || len(children) != wantChildren {
+			t.Errorf("%q: task audit records = %v, subtasks = %d; want [task_start %s]", command, got, len(children), wantAudit)
+		}
+		// The denied command must have been refused, not allowed: a policy
+		// bypass that lets it run would leave the same audit trail. The
+		// fake agent continues after any permission answer, so the
+		// audit alone cannot tell a deny from an allow; assert the
+		// permitter verdict the driver used, on a fresh task so the
+		// approval gate is not consumed by the dispatch above.
+		w2, _, task2, project2, profile2, _, _ := acpFixture(t, "plan-"+command, false)
+		profile2.GatedTools = []string{"bash"}
+		taskHooks, _ := w2.MountAgenticHooks(project2, profile2)
+		cmdArgs, _ := json.Marshal(map[string]string{"command": command})
+		v, _ := ACPPermitter(task2, taskHooks, w2.hooks)(context.Background(), acp.Permission{ToolCallID: "c1", Tool: "bash", Args: string(cmdArgs), Command: command})
+		if want == "reject_once" && (v.Allow || v.Suspend) {
+			t.Errorf("%q: permitter verdict = %+v; want a refusal for a denied command", command, v)
+		}
+		if want == "allow_once" && !v.Allow {
+			t.Errorf("%q: permitter verdict = %+v; want an allow for an allowed command", command, v)
+		}
+		if want == "suspended" && !v.Suspend {
+			t.Errorf("%q: permitter verdict = %+v; want a suspend for a gated command", command, v)
 		}
 	}
 }
