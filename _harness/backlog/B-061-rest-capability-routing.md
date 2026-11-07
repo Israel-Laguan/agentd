@@ -10,7 +10,7 @@
 
 ## Symptoms
 
-The capability router loads and matches tasks, but `TryExternalCapabilityRoute` checks the worker-wide capability registry, which the daemon never sets, so it logs "no capability registry; falling through to agentic loop" and routes nothing. agentd S15 made batching ignore routes that can never fire; the routing itself was never built.
+The capability adapter loads and matches tasks, but nothing populates the worker's capability registry at daemon startup, so external capability routing never fires (historical harness source: `queue/worker/worker_tools_capability.go` checked `TryExternalCapabilityRoute` against an unset registry and logged "no capability registry; falling through to agentic loop"). agentd S15 made batching ignore routes that can never fire; the routing itself was never built.
 
 ## What is left
 

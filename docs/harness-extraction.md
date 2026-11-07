@@ -2,7 +2,7 @@
 
 agentd is a coordinator, not a harness. This page records that decision, what stays in agentd, what leaves, and the order in which it leaves. It replaces the kit plan in [agent-kit.md](agent-kit.md).
 
-**Decision (owner, 2026-11-05):** external agents only. agentd ships no bundled agent. The builtin tool loop and everything only it uses move to a `_harness/` folder, and in the last step to a repository of their own. That repository is "a harness written with ACP and MCP support, among other features, that was planned to work with agentd". Its tasks and improvements are not tracked in agentd, and it gets no maintenance. agentd drives ready-made agents (opencode, cline, or any agent that speaks ACP and MCP) as black boxes.
+**Decision (owner, 2026-11-05):** external agents only in production builds; the devenv/e2e build may include a tagged fake ACP agent for tests (a test-only scripted agent that speaks ACP, not the builtin tool loop). The builtin tool loop and everything only it uses move to a `_harness/` folder, and in the last step to a repository of their own. That repository is "a harness written with ACP and MCP support, among other features, that was planned to work with agentd". Its tasks and improvements are not tracked in agentd, and it gets no maintenance. agentd drives ready-made agents (opencode, cline, or any agent that speaks ACP and MCP) as black boxes.
 
 ## What agentd is
 
@@ -102,4 +102,4 @@ podman run --rm --network none --entrypoint sh localhost/agentd:local -c \
   'unshare -U -r true; unshare -U -r -m sh -c "mount -t tmpfs none /tmp"; unshare -U -r -n true; unshare -U -r -p -f --mount-proc true'
 ```
 
-User, mount and network namespaces work inside the container. Mounting `/proc` in a new PID namespace fails (`Operation not permitted`) and works with `--security-opt unmask=ALL`. The jail uses `--unshare-all` and `--proc /proc` (`sandbox/bubblewrap.go`), so it needs that option. Not run yet: bubblewrap itself in the container, podman-compose passing the option, and the GitHub runner (Go CI already needs `tools/ci/allow_bwrap_userns.sh` for AppArmor).
+User, mount and network namespaces work inside the container. Mounting `/proc` in a new PID namespace fails (`Operation not permitted`) and works with `--security-opt unmask=ALL`. The jail uses `--unshare-all` and `--proc /proc` (`sandbox/bubblewrap.go`), so it needs that option. The local rootless-Podman J24 run now verifies bubblewrap in the dev image and podman-compose passing the option (T-069); GitHub-runner compatibility remains unverified (Go CI already needs `tools/ci/allow_bwrap_userns.sh` for AppArmor).

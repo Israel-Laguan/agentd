@@ -12,7 +12,7 @@
 
 ## Goal
 
-Implement deferred and on-demand tool loading (`load_tools`), inspired by Claudinio Code's lean prompt architecture.
+Implement deferred and on-demand tool loading (`load_tools`), inspired by Claude Code's lean prompt architecture.
 
 Instead of defining full JSON schemas for every available tool (LSP, MCP, browser, search, tasks) in every request:
 
@@ -29,5 +29,5 @@ Instead of defining full JSON schemas for every available tool (LSP, MCP, browse
 
 ## Notes
 
-- Claudinio reference: Tools and skills arrive when they are needed. Core tools always sent; deferred tools listed in prompt as one-liners and loaded when needed. Cached prefix stays compact and only grows at its end.
+- Claude Code reference: Tools and skills arrive when they are needed. Core tools always sent; deferred tools listed in prompt as one-liners and loaded when needed. Cached prefix stays compact and only grows at its end.
 - Conditional (2026-11-02): only the builtin loop has a tool registry to defer; external ACP agents load their own tools. Build it only if S19 keeps the builtin loop (SP-024); otherwise drop it at sprint start.

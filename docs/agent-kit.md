@@ -1,6 +1,6 @@
 # The agent-kit boundary (SP-024)
 
-> **Superseded (owner, 2026-11-05).** agentd keeps no agent kit: it drives external agents only, the gateway stays in the core as the L1 path, and the builtin harness moves out to a repository of its own. The plan is [harness-extraction.md](harness-extraction.md). This page is kept as the record of SP-024's analysis.
+> **Superseded (owner, 2026-11-05).** agentd keeps no agent kit: it drives external agents only, the gateway stays in the core as the L1 path, and the builtin harness moves out to a repository of its own. The plan is [harness-extraction.md](harness-extraction.md). This page is kept as the historical record of SP-024's analysis; the status and plan below describe the superseded proposal, not the current architecture.
 
 What belongs in a library that agentd's controller imports, what gets deleted, and what has to be cut first. Result of spike SP-024 (S19), built on the S17 keep/outsource map and the T-042 runs in [acp-agents.md](acp-agents.md) and [acp-presets.md](acp-presets.md). The kit is **in-repo first** (`agentkit/`, T-045); a separate module or repo is gated by the criteria at the end.
 

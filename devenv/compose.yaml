@@ -262,6 +262,7 @@ services:
     environment:
       LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
       AGENTD_API_ADDRESS: "0.0.0.0:8773"
+      AGENTD_HOME: "/home/agentd-acp"
     # The acp agent runs in the bubblewrap jail. Rootless podman masks parts of
     # /proc, so bubblewrap cannot mount a fresh /proc without unmask=ALL
     # (probed 2026-11-06 on podman 5.4.2). It loosens the container's /proc

@@ -6,7 +6,7 @@
 | Status | backlog (planned in agentd, never executed; moved out with the harness on 2026-11-05) |
 | Priority | P3 |
 | Sprint | — (agentd S20, conditional, not run) |
-| Links | internal/agent/subagent/subagent_types.go (`delegate` tool schema, line 166; parallel form at line 195), internal/agent/subagent/subagent_loader.go (`subagent definition %q not found`), B-056 |
+| Links | `DelegateToolDefinition` / `DelegateParallelToolDefinition` in `internal/agent/subagent/subagent_types.go`, `subagent definition %q not found` in `internal/agent/subagent/subagent_loader.go` |
 
 ## Symptoms
 
@@ -14,7 +14,7 @@ Live run (2026-10-16): the model called `delegate` with `subagent: "bash"` twice
 
 ## Cause
 
-The `subagent` parameter's description in the `delegate` tool schema reads only "Name of the subagent definition to use (from .agentd/subagents/)" (line 166; the parallel-tasks form at line 195 says only "Name of the subagent definition to use"). Neither lists the names that exist, so the model has to guess.
+The `subagent` parameter's description in the `delegate` tool schema reads only "Name of the subagent definition to use (from .agentd/subagents/)" (`DelegateToolDefinition` in `internal/agent/subagent/subagent_types.go`; the parallel-tasks form in `DelegateParallelToolDefinition` says only "Name of the subagent definition to use"). Neither lists the names that exist, so the model has to guess.
 
 ## Suggested fix (not applied)
 
@@ -26,4 +26,4 @@ Either way the schema must be built from the subagent definitions actually loade
 ## Notes
 
 - Report only. No code change in this bug.
-- Found 2026-10-16 alongside B-056.
+- Found 2026-10-16 alongside an earlier unfiled subagent report (no separate backlog entry retained).
