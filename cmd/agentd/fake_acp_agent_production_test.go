@@ -14,7 +14,7 @@ func TestProductionBuildHasNoFakeACPAgentSubcommand(t *testing.T) {
 	// command on failure; a found hidden fake-agent command is the only
 	// production violation.
 	cmd, _, err := newRootCommand().Find([]string{fakeagent.Arg})
-	if err == nil && cmd != nil && cmd.Name() == fakeagent.Arg && cmd.Hidden {
-		t.Fatal("a build without -tags fakeacp serves the hidden fake agent subcommand")
+	if err == nil && cmd != nil && cmd.Name() == fakeagent.Arg {
+		t.Fatal("a build without -tags fakeacp serves the fake agent subcommand")
 	}
 }
