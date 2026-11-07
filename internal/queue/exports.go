@@ -4,9 +4,9 @@ package queue
 
 import (
 	agenthooks "agentd/internal/agent/hooks"
-	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/queue/planning"
 	"agentd/internal/queue/recovery"
+	"agentd/internal/queue/runaudit"
 	"agentd/internal/queue/safety"
 	qw "agentd/internal/queue/worker"
 	"agentd/internal/sandbox"
@@ -40,7 +40,7 @@ var HasACPAgent = qw.HasACPAgent
 
 // EnsureAuditFile creates the audit file at path and writes a daemon_start marker.
 // Call at daemon startup when agentic.audit.enabled is true.
-var EnsureAuditFile = agentruntime.EnsureAuditFile
+var EnsureAuditFile = runaudit.EnsureAuditFile
 
 // ValidateToolCredentials checks that every mapped env var in toolCredentials is set.
 func ValidateToolCredentials(toolCredentials map[string]string) error {

@@ -21,13 +21,13 @@ internal/agent/acp/fakeagent/fakeagent.go (*agent).ResumeSession
 internal/agent/acp/fakeagent/fakeagent.go (*agent).SetSessionConfigOption
 internal/agent/acp/fakeagent/fakeagent.go (*agent).SetSessionMode
 internal/agent/filecontext/file_converter.go NewFileConverter
-internal/agent/runtime/audit.go NewAuditLogger
-internal/agent/runtime/audit.go (*AuditLogger).Enabled
-internal/agent/runtime/audit_schema.go NewFileAuditSink
+internal/queue/runaudit/audit.go NewAuditLogger
+internal/queue/runaudit/audit.go (*AuditLogger).Enabled
+internal/queue/runaudit/audit_schema.go NewFileAuditSink
 internal/agent/runtime/guards.go (*IterationGuard).IsExceeded
 internal/agent/runtime/guards.go (*IterationGuard).ShouldInjectFinalMessage
 internal/agent/runtime/guards.go (*IterationGuard).ResetAllowFinal
-internal/agent/runtime/guards.go (*BudgetGuard).IsBudgetExceeded
+internal/queue/runaudit/budget_guard.go (*BudgetGuard).IsBudgetExceeded
 internal/agent/runtime/guards.go (*DeadlineGuard).Remaining
 internal/agent/runtime/guards.go (*DeadlineGuard).Deadline
 internal/agent/runtime/guards.go (*ContextBudgetGuard).TotalBudget
@@ -177,7 +177,7 @@ cmd/agentd/io.go writeLine
 cmd/agentd/io.go writeFormat
 internal/agent/acp/driver.go (*process).kill
 internal/agent/acp/fakeagent/fakeagent.go (*agent).Initialize
-internal/agent/runtime/audit_schema.go HashArgs
+internal/queue/runaudit/audit_schema.go HashArgs
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).withMaxDelegationDepth
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithExternalTools
 internal/agent/subagent/subagent_types.go (*SubagentDelegate).WithReadOnlyWorkspace

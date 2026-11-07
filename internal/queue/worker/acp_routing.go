@@ -13,13 +13,13 @@ import (
 	"time"
 
 	"agentd/internal/agent/acp"
-	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 	agentmcp "agentd/internal/mcp"
 	"agentd/internal/models"
+	"agentd/internal/queue/runaudit"
 	"agentd/internal/stage"
 )
 
@@ -110,7 +110,7 @@ func (r routedStageAgent) Call(ctx context.Context, req stage.StageRequest) (sta
 func (w *Worker) callACP(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, d route.Decision, a route.Agent, req stage.StageRequest) (stage.StageResult, error) {
 	slog.InfoContext(ctx, "routing decision", "purpose", d.Purpose, "required_level", d.Required,
 		"rule", d.Rule, "agent", d.Agent, "task_id", task.ID)
-	budgetGuard := agentruntime.NewBudgetGuard(w.budgetTracker, task.ID)
+	budgetGuard := runaudit.NewBudgetGuard(w.budgetTracker, task.ID)
 	// An attempt budget's caller has already reserved the call; an ACP call does
 	// not run the correction loop, so charging its own guard here would double
 	// count the response.

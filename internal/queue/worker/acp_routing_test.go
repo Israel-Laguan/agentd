@@ -13,12 +13,12 @@ import (
 	"agentd/internal/agent/acp"
 	"agentd/internal/agent/acp/fakeagent"
 	agenthooks "agentd/internal/agent/hooks"
-	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/route"
 	"agentd/internal/gateway/spec"
 	agentmcp "agentd/internal/mcp"
 	"agentd/internal/models"
+	"agentd/internal/queue/runaudit"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
 
@@ -382,7 +382,7 @@ func TestACPWorkPlanChargesTheBudgetOnce(t *testing.T) {
 	task.Description = fakeagent.Script(step)
 	w.routes.Stages[spec.PurposeExecWorkPlan] = route.StageRoute{Default: "coder"}
 	tracker := gateway.NewBudgetTracker(10000)
-	guard := agentruntime.NewBudgetGuard(tracker, task.ID)
+	guard := runaudit.NewBudgetGuard(tracker, task.ID)
 
 	plan, err := w.GeneratePlan(context.Background(), task, project, guard)
 	if err != nil {

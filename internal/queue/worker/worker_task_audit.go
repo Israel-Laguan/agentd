@@ -1,8 +1,8 @@
 package worker
 
 import (
-	agentruntime "agentd/internal/agent/runtime"
 	"agentd/internal/models"
+	"agentd/internal/queue/runaudit"
 )
 
 // taskAudit carries the outcome flags a task execution ends on: failed, a
@@ -18,8 +18,8 @@ func (w *Worker) beginTaskAudit(task models.Task, project models.Project, provid
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
 		return &taskAudit{}
 	}
-	w.auditLogger.RecordTaskEvent(agentruntime.TaskAuditRecord{
-		RecordType: agentruntime.RecordTypeTaskStart,
+	w.auditLogger.RecordTaskEvent(runaudit.TaskAuditRecord{
+		RecordType: runaudit.RecordTypeTaskStart,
 		TaskID:     task.ID,
 		ProjectID:  project.ID,
 		Provider:   provider,
@@ -33,16 +33,16 @@ func (w *Worker) finishTaskAudit(task models.Task, project models.Project, provi
 	if w.auditLogger == nil || !w.auditLogger.Enabled() {
 		return
 	}
-	recType := agentruntime.RecordTypeTaskComplete
+	recType := runaudit.RecordTypeTaskComplete
 	switch {
 	case audit.suspended:
-		recType = agentruntime.RecordTypeTaskSuspended
+		recType = runaudit.RecordTypeTaskSuspended
 	case audit.failed:
-		recType = agentruntime.RecordTypeTaskFail
+		recType = runaudit.RecordTypeTaskFail
 	case audit.reviewHandoff:
-		recType = agentruntime.RecordTypeTaskReview
+		recType = runaudit.RecordTypeTaskReview
 	}
-	w.auditLogger.RecordTaskEvent(agentruntime.TaskAuditRecord{
+	w.auditLogger.RecordTaskEvent(runaudit.TaskAuditRecord{
 		RecordType: recType,
 		TaskID:     task.ID,
 		ProjectID:  project.ID,

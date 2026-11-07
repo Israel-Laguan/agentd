@@ -1,4 +1,4 @@
-package runtime
+package runaudit
 
 import (
 	"encoding/json"
@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"agentd/internal/agent/hooks"
-	"agentd/internal/agent/tools"
 )
 
 func TestHashArgs_Deterministic(t *testing.T) {
@@ -99,7 +98,7 @@ func TestRecordToolDispatch_RawArgsNotInLog(t *testing.T) {
 		TurnID:    "sess-secret:1",
 		Timestamp: time.Now(),
 	}
-	logger.RecordToolDispatch(ctx, tools.SuccessResult("c1", "ok", 1), nil, 0)
+	logger.RecordToolDispatch(ctx, hooks.SuccessResult("c1", "ok", 1), nil, 0)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -131,7 +130,7 @@ func TestRecordToolDispatch_IncludesHookVerdicts(t *testing.T) {
 		Verdicts:  &verdicts,
 	}
 	_ = hc.RunPre(ctx)
-	logger.RecordToolDispatch(ctx, tools.VetoedResult("c1", "blocked"), verdicts, 0)
+	logger.RecordToolDispatch(ctx, hooks.VetoedResult("c1", "blocked"), verdicts, 0)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
