@@ -13,17 +13,20 @@ import (
 
 // dangerousCommands match risky commands at a command boundary (start of the
 // line or after whitespace, ;, &, |, parentheses or a backtick), so "sudo ls" is
-// refused but "grep pseudocode" and "rm -rf /tmp/build" are not. This is a
-// best-effort hint, not a security boundary.
+// refused but "grep pseudocode" and "rm -rf /tmp/build" are not. rm and chmod
+// of / match whatever flags come first, in any order. This is a best-effort
+// tripwire, not a security boundary.
 var dangerousCommands = []struct {
 	name string
 	re   *regexp.Regexp
 }{
 	{"sudo", commandRE(`sudo\b`)},
 	{"su -", commandRE(`su\s+-`)},
-	{"rm -rf /", commandRE(`rm\s+-[a-z]*(r[a-z]*f|f[a-z]*r)[a-z]*\s+/(\s|\*|$)`)},
+	{"rm -rf /", commandRE(`rm(\s+-{1,2}[a-z-]+)*\s+/(\s|\*|$)`)},
+	{"chmod -R 777 /", commandRE(`chmod(\s+-{1,2}[a-z-]+)*\s+0?777(\s+-{1,2}[a-z-]+)*\s+/(\s|\*|$)`)},
 	{"mkfs", commandRE(`mkfs\b`)},
 	{"dd if=", commandRE(`dd\s+if=`)},
+	{"> /dev/<disk>", regexp.MustCompile(`>\s*/dev/(sd|hd|vd|xvd|nvme|mmcblk|disk)`)},
 	{":(){:|:&};:", regexp.MustCompile(`:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:`)},
 }
 
@@ -37,8 +40,8 @@ func commandRE(pattern string) *regexp.Regexp {
 	return regexp.MustCompile(full)
 }
 
-// DenylistHook returns a PreHook that blocks dangerous commands for bash
-// and path-traversal attempts for file-system tools. The allowedRoot is
+// DenylistHook returns a PreHook that blocks the commands the command policy
+// denies (EvaluateToolCall) and path-traversal attempts for file-system tools. The allowedRoot is
 // resolved once at construction time and used to verify that any argument
 // whose key contains "path" stays within bounds.
 func DenylistHook(allowedRoot string) PreHook {
@@ -56,10 +59,8 @@ func DenylistHookFor(rootFor func(projectID string) string) PreHook {
 		Name:   "denylist",
 		Policy: FailClosed,
 		Fn: func(ctx HookContext) (HookVerdict, error) {
-			if ctx.ToolName == ToolNameBash {
-				if v := checkDangerousCommand(ctx.Args); v.Veto {
-					return v, nil
-				}
+			if verdict, reason := EvaluateToolCall(ctx.ToolName, ctx.Args); verdict == CommandDeny {
+				return HookVerdict{Veto: true, Reason: reason}, nil
 			}
 			if !plainProjectID(ctx.ProjectID) {
 				return HookVerdict{Veto: true, Reason: fmt.Sprintf("project id %q is not a single path element", ctx.ProjectID)}, nil
@@ -79,21 +80,6 @@ func plainProjectID(id string) bool {
 		return false
 	}
 	return !strings.ContainsAny(id, `/\`)
-}
-
-func checkDangerousCommand(argsJSON string) HookVerdict {
-	var args struct {
-		Command string `json:"command"`
-	}
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-		return HookVerdict{}
-	}
-	for _, d := range dangerousCommands {
-		if d.re.MatchString(args.Command) {
-			return HookVerdict{Veto: true, Reason: fmt.Sprintf("command blocked: contains dangerous pattern %q", d.name)}
-		}
-	}
-	return HookVerdict{}
 }
 
 func checkPathTraversal(argsJSON string, root string) HookVerdict {

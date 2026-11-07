@@ -26,14 +26,14 @@ func TestAgenticSudoBlockExecutesOneNonPrivilegedAlternative(t *testing.T) {
 		{Content: "Completed with non-privileged memory data."},
 	}}
 	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
-		"sudo dmidecode -t memory": {Success: false, ExitCode: -1, Stderr: "sudo command blocked"},
-		"free -h":                  {Success: true, ExitCode: 0, Stdout: "available without privileges"},
+		"free -h": {Success: true, ExitCode: 0, Stdout: "available without privileges"},
 	}}
 	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
 	w.Process(context.Background(), task)
 
-	if sb.executionCount != 2 {
-		t.Fatalf("sandbox executions = %d, want blocked original plus one alternative", sb.executionCount)
+	// The command policy refuses sudo before the sandbox (T-062).
+	if sb.executionCount != 1 {
+		t.Fatalf("sandbox executions = %d, want the one alternative", sb.executionCount)
 	}
 	if sb.lastCommand != "free -h" {
 		t.Fatalf("last command = %q, want non-privileged alternative", sb.lastCommand)
@@ -58,16 +58,15 @@ func TestAgenticSudoBlockWithoutAlternativeCreatesSafeHandoff(t *testing.T) {
 		}}},
 		{Content: `{"no_alternative":true,"reason":"API_KEY=sk-abcdefghijklmnopqrstuvwxyz requires host privilege"}`},
 	}}
-	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{
-		"sudo dmidecode -t memory": {Success: false, ExitCode: -1, Stderr: "sudo command blocked"},
-	}}
+	sb := &mockAgenticSandbox{results: map[string]sandbox.Result{}}
 	store, w, task := newAgenticIntegrationWorker(t, gw, sb, 10)
 	sink := &mockEventSink{}
 	w.sink = sink
 	w.Process(context.Background(), task)
 
-	if sb.executionCount != 1 {
-		t.Fatalf("sandbox executions = %d, want blocked original only", sb.executionCount)
+	// The command policy refuses sudo before the sandbox (T-062).
+	if sb.executionCount != 0 {
+		t.Fatalf("sandbox executions = %d, want none", sb.executionCount)
 	}
 	if gw.callCount != 2 {
 		t.Fatalf("gateway calls = %d, want one alternative request only", gw.callCount)

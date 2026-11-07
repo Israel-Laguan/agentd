@@ -162,7 +162,6 @@ func (w *Worker) DispatchToolWithHooks(
 	scopedCapabilities *capabilities.Registry,
 	providerName string,
 ) (agenttools.ToolResult, bool) {
-
 	var verdicts []string
 	hookCtx := agenthooks.HookContext{
 		ToolName:      call.Function.Name,
@@ -179,6 +178,15 @@ func (w *Worker) DispatchToolWithHooks(
 	}
 	if w.budgetTracker != nil && sessionID != "" {
 		hookCtx.TokenCountBefore = w.budgetTracker.Usage(sessionID)
+	}
+
+	// The command policy runs first: no plugin or approval gate lifts its deny (T-062).
+	policy, reason := agenthooks.EvaluateToolCall(call.Function.Name, call.Function.Arguments)
+	hookCtx.CommandPolicy = policy
+	if policy == agenthooks.CommandDeny {
+		tr := agenttools.VetoedResult(call.ID, reason)
+		tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
+		return tr, false
 	}
 
 	tr, suspended, callEnv, handled := w.applyTaskPreHooks(hookCtx, call, taskHooks)

@@ -100,8 +100,8 @@ The loop's own cuts, after steps 1–11. None has been sized on a built branch.
 | Step | What | Note |
 | --- | --- | --- |
 | L1 | **Move `message_editor.go` into `agent/runtime`.** Runtime then imports `context`, which no longer imports it | Do this before step 9, so `agent/context` is clean. Check for a cycle through `session` |
-| L2 | **Hook interface.** The kit takes `PreHook`, `PostHook`, `ToolCallEvent` and `ToolResultEvent`; agentd's denylist, credential and audit hooks implement it | `hooks` imports `tools` for names and result types; `tool_aliases.go` has to point the other way |
-| L3 | **`session` checkpoints** (`secret_store.go` stays) | 15 importers |
+| L2 | **Hook interface.** The kit takes `PreHook`, `PostHook`, `ToolCallEvent` and `ToolResultEvent`; agentd's denylist, credential and audit hooks implement it | Done in S20 PR 11 (T-066): names and result types live in `hooks`, and `tools` aliases them |
+| L3 | **`session` checkpoints** (the secret store moved to `hooks` in S20 PR 11) | 15 importers |
 | L4 | **`tools`:** `sandbox` becomes a kit `Executor` interface; `capabilities` becomes an interface; `config` becomes `Options`; `models` types become kit types | **72 importers**: move with an alias facade, then migrate in batches |
 | L5 | **`runtime`:** `config` → `Options`, `models.AgentProfile` → a kit profile, `ErrBudgetExceeded` from `agentkit/llm` | 39 importers |
 | L6 | **`agentic`** (12 files) moves with a kit `TaskInput` | |

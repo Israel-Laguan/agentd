@@ -369,6 +369,27 @@ func TestACPExecutionAuditsSuspendedWhenPermissionIsBlocked(t *testing.T) {
 	}
 }
 
+// On the fake ACP agent with bash gated (T-062): a denied command is refused
+// without asking a human, an allowed one runs unasked, and anything else
+// suspends the task for approval as before.
+func TestACPExecutionCommandPolicyRunsBeforeTheGate(t *testing.T) {
+	t.Parallel()
+	for command, want := range map[string]string{"rm -rf /": "task_complete", "go test ./...": "task_complete", "touch notes.txt": "task_suspended"} {
+		script := fakeagent.Script(fakeagent.Step{Permission: &fakeagent.Permission{Kind: acpsdk.ToolKindExecute, Title: "run", RawInput: map[string]any{"command": command}}},
+			report(map[string]any{"summary": "done"}))
+		w, store, task, project, profile, _, _ := acpFixture(t, script, false)
+		profile.GatedTools = []string{"bash"}
+		path := withAuditFile(t, w)
+
+		w.dispatchProcess(context.Background(), task, project, profile)
+
+		children, _ := store.ListChildTasks(context.Background(), task.ID)
+		if got := auditTypesFor(t, path, task.ID); len(got) != 2 || got[1] != want || len(children) != map[string]int{"task_suspended": 1}[want] {
+			t.Errorf("%q: task audit records = %v, subtasks = %d; want [task_start %s]", command, got, len(children), want)
+		}
+	}
+}
+
 // exec.work_plan can route to an ACP agent. The response is charged to the
 // caller's attempt budget once: ACP never runs the correction loop, so the call
 // must not also charge its own guard and GeneratePlan's fallback.
