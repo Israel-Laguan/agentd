@@ -8,6 +8,7 @@ import (
 	"agentd/internal/agent/hooks"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
+	agentmcp "agentd/internal/mcp"
 	"agentd/internal/sandbox"
 
 	wfilecontext "agentd/internal/agent/filecontext"
@@ -19,7 +20,7 @@ const (
 	toolNameWrite            = hooks.ToolNameWrite
 	toolNameDelegate         = hooks.ToolNameDelegate
 	toolNameDelegateParallel = hooks.ToolNameDelegateParallel
-	toolNameAskHuman         = "ask_human"
+	toolNameAskHuman         = agentmcp.ToolNameAskHuman
 
 	defaultMaxToolReadFileBytes = 10 << 20 // 10 MiB
 

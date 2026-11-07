@@ -85,7 +85,6 @@ linters:
             - "**/internal/aicalls/**"
             - "**/internal/paths/**"
             - "**/internal/queue/*.go"
-            - "!**/internal/mcp/session.go"
             - "!**/internal/queue/agentic_iteration_steps_test.go"
             - "!**/internal/queue/exports.go"
             - "!**/internal/queue/scheduler.go"

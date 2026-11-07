@@ -1,6 +1,9 @@
 package tools
 
-import "agentd/internal/agent/hooks"
+import (
+	"agentd/internal/agent/hooks"
+	agentmcp "agentd/internal/mcp"
+)
 
 // Pieces the core uses live in core packages (T-066); these aliases keep the
 // harness compiling unchanged until it leaves.
@@ -25,4 +28,11 @@ var (
 	VetoedResult                  = hooks.VetoedResult
 	FatalResult                   = hooks.FatalResult
 	SchemaRegistryFromDefinitions = hooks.SchemaRegistryFromDefinitions
+)
+
+type AskHumanArgs = agentmcp.AskHumanArgs
+
+var (
+	AskHumanToolDefinition = agentmcp.AskHumanToolDefinition
+	ParseAskHumanArgs      = agentmcp.ParseAskHumanArgs
 )

@@ -1,4 +1,4 @@
-package tools
+package mcp
 
 import (
 	"encoding/json"
@@ -7,6 +7,9 @@ import (
 
 	"agentd/internal/gateway"
 )
+
+// ToolNameAskHuman is the builtin every agent can call to ask a human.
+const ToolNameAskHuman = "ask_human"
 
 // AskHumanArgs are the arguments of an ask_human call.
 type AskHumanArgs struct {
