@@ -181,6 +181,13 @@ func (w *Worker) tryFinalizeApprovedReview(ctx context.Context, task models.Task
 	if err != nil {
 		return false, fmt.Errorf("refresh task for approved review commit: %w", err)
 	}
+	if !w.checkGoldenCriteria(ctx, *fresh) {
+		if err := markReviewUsed(ctx, w.store, task.ID, review.ID); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	ctx = context.WithValue(ctx, goldenCheckedKey{}, task.ID)
 	// A review-required tiered execute/verify step can produce the same
 	// NEEDS_CONTEXT sentinel as an unreviewed one. Route the approved draft
 	// through interception before committing: committing it as a success

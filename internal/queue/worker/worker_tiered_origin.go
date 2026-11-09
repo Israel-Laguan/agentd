@@ -189,6 +189,17 @@ func (w *Worker) resolveTieredOrigin(ctx context.Context, origin models.Task, su
 		slog.Error("tiered origin: failed to re-read before resolving", "task_id", origin.ID, "error", err)
 		return
 	}
+	if success && len(current.GoldenCriteria) != 0 {
+		// A pipeline can resolve its origin while it is BLOCKED or READY.
+		// Let normal dispatch claim it before checking, so a rejection can
+		// requeue it under the same state rules as any other attempt.
+		if current.State != models.TaskStateRunning {
+			return
+		}
+		if !w.checkGoldenCriteria(ctx, *current) {
+			return
+		}
+	}
 	if _, err := w.store.CompleteTieredOrigin(ctx, current.ID, current.UpdatedAt, models.TaskResult{
 		Success: success,
 		Payload: truncate(reason, 1000),

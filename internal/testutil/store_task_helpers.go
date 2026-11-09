@@ -69,6 +69,7 @@ func (s *FakeKanbanStore) newTaskFromDraft(projectID string, ts time.Time, d mod
 		State:                   models.TaskStateReady,
 		Assignee:                d.Assignee,
 		SuccessCriteria:         append([]string(nil), d.SuccessCriteria...),
+		GoldenCriteria:          append([]models.GoldenCriterion(nil), d.GoldenCriteria...),
 		RequiresWorkspaceChange: d.RequiresWorkspaceChange,
 	}
 }

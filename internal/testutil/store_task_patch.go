@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -35,5 +36,27 @@ func (s *FakeKanbanStore) UpdateTaskPatch(_ context.Context, id string, expected
 	if state != nil && (*state == models.TaskStateCompleted || *state == models.TaskStateFailed) {
 		s.unblockBlockedParentsLocked(id)
 	}
+	return &t, nil
+}
+
+func (s *FakeKanbanStore) UpdateTaskCriteria(_ context.Context, id string, expected time.Time, criteria []string, golden []models.GoldenCriterion) (*models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.tasks[id]
+	if !ok {
+		return nil, models.ErrTaskNotFound
+	}
+	if !t.UpdatedAt.Equal(expected) || t.State == models.TaskStateRunning {
+		return nil, models.ErrStateConflict
+	}
+	if err := models.ValidateGoldenCriteria(criteria, golden); err != nil {
+		return nil, fmt.Errorf("%w: %v", models.ErrInvalidDraftPlan, err)
+	}
+	t.SuccessCriteria = append([]string(nil), criteria...)
+	t.GoldenCriteria = append([]models.GoldenCriterion(nil), golden...)
+	t.CriteriaMet = nil
+	t.UpdatedAt = now()
+	s.tasks[id] = t
+	s.events = append(s.events, models.Event{BaseEntity: models.BaseEntity{CreatedAt: t.UpdatedAt}, ProjectID: t.ProjectID, TaskID: sql.NullString{String: id, Valid: true}, Type: "GOLDEN_CRITERIA_RESET"})
 	return &t, nil
 }

@@ -82,6 +82,10 @@ func (w *Worker) applyAgenticResult(ctx context.Context, project models.Project,
 // commitExecution applies coordinator checks to a completed execution before
 // handing its result to review or persisting it.
 func (w *Worker) commitExecution(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, text string) bool {
+	if !w.checkGoldenCriteria(ctx, task) {
+		return false
+	}
+	ctx = context.WithValue(ctx, goldenCheckedKey{}, task.ID)
 	if err := w.VerifyPostConditions(task, project); err != nil {
 		w.failTerminal(ctx, task, err, models.TaskStateFailedRequiresHuman)
 		return false

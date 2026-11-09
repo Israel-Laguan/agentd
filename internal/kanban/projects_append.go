@@ -75,6 +75,7 @@ func appendedTask(projectID string, draft models.DraftTask, nowTime time.Time) m
 		State:                   models.TaskStatePending,
 		Assignee:                assignee,
 		SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+		GoldenCriteria:          append([]models.GoldenCriterion(nil), draft.GoldenCriteria...),
 		RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 	}
 }

@@ -222,6 +222,7 @@ func newTask(draft models.DraftTask, projectID, taskID string, now time.Time, wo
 		State:                   state,
 		Assignee:                draft.Assignee,
 		SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+		GoldenCriteria:          append([]models.GoldenCriterion(nil), draft.GoldenCriteria...),
 		RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 	}
 }

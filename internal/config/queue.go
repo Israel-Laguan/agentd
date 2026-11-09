@@ -12,6 +12,8 @@ const (
 	DefaultQueuedReconcileAfter   = 10 * time.Minute
 	DefaultPollMaxInterval        = 10 * time.Second
 	DefaultMaxToolIterations      = 10
+	DefaultGoldenCycleCap         = 5
+	DefaultGoldenStallCap         = 2
 	DefaultTokenBudget            = 0
 	DefaultAgenticTruncatorMax    = 30
 	DefaultAgenticCharacterBudget = 0 // 0 = inherit gateway.truncator.max_input_chars at daemon startup
@@ -96,6 +98,8 @@ type HITLConfig struct {
 }
 
 type QueueConfig struct {
+	GoldenCycleCap         int
+	GoldenStallCap         int
 	TaskDeadline           time.Duration
 	QueuedReconcileAfter   time.Duration
 	PollMaxInterval        time.Duration
@@ -115,6 +119,8 @@ type QueueConfig struct {
 }
 
 func setQueueDefaults(v *viper.Viper) {
+	v.SetDefault("queue.golden_cycle_cap", DefaultGoldenCycleCap)
+	v.SetDefault("queue.golden_stall_cap", DefaultGoldenStallCap)
 	v.SetDefault("queue.task_deadline", DefaultTaskDeadline.String())
 	v.SetDefault("queue.queued_reconcile_after", DefaultQueuedReconcileAfter.String())
 	v.SetDefault("queue.poll_max_interval", DefaultPollMaxInterval.String())
@@ -175,6 +181,8 @@ func loadAgenticCharacterBudget(v *viper.Viper) int {
 
 func loadQueueConfig(v *viper.Viper) QueueConfig {
 	return QueueConfig{
+		GoldenCycleCap:         v.GetInt("queue.golden_cycle_cap"),
+		GoldenStallCap:         v.GetInt("queue.golden_stall_cap"),
 		TaskDeadline:           v.GetDuration("queue.task_deadline"),
 		QueuedReconcileAfter:   v.GetDuration("queue.queued_reconcile_after"),
 		PollMaxInterval:        v.GetDuration("queue.poll_max_interval"),

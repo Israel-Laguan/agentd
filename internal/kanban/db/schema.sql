@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     cached_token_usage INTEGER NOT NULL DEFAULT 0,
     cache_write_token_usage INTEGER NOT NULL DEFAULT 0,
     success_criteria TEXT NOT NULL DEFAULT '[]',
+    golden_criteria TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(golden_criteria) AND json_type(golden_criteria) = 'array'),
     criteria_met TEXT NOT NULL DEFAULT '[]',
     requires_workspace_change INTEGER NOT NULL DEFAULT 0 CHECK (requires_workspace_change IN (0, 1)),
     created_at TEXT NOT NULL,

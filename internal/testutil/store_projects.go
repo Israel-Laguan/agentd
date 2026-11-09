@@ -40,6 +40,7 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 			State:                   state,
 			Assignee:                draft.Assignee,
 			SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+			GoldenCriteria:          append([]models.GoldenCriterion(nil), draft.GoldenCriteria...),
 			RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 		}
 		if task.Assignee == "" {
@@ -165,6 +166,7 @@ func (s *FakeKanbanStore) EnsureProjectTask(_ context.Context, projectID string,
 		Assignee:                draft.Assignee,
 		State:                   models.TaskStateReady,
 		SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+		GoldenCriteria:          append([]models.GoldenCriterion(nil), draft.GoldenCriteria...),
 		RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 	}
 	s.tasks[task.ID] = task

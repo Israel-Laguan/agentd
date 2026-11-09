@@ -154,6 +154,8 @@ A `.env` file in the current working directory (and `<home>/.env`) is merged int
 
 See [`config.reference.yaml`](config.reference.yaml) for every available key (copy-paste template). See [`docs/config-reference.md`](docs/config-reference.md) for extended configuration documentation and [`docs/reference.md`](docs/reference.md) for config key defaults, task states, event types, and feature catalog.
 
+See [golden task criteria](docs/golden-criteria.md) for controller-run checks on task completion.
+
 ## Chat Intake
 
 `POST /v1/chat/completions` accepts OpenAI-style chat messages, routes the last user message through Frontdesk, and returns structured JSON (plans, status reports, or clarification payloads). See [`docs/frontdesk.md`](docs/frontdesk.md) for the full decision flow.

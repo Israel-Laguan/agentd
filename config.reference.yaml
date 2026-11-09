@@ -145,6 +145,8 @@ channel:
   rate_limit: 0
   rate_window: 60
 queue:
+  golden_cycle_cap: 5 # maximum failed golden check cycles
+  golden_stall_cap: 2 # consecutive cycles without increasing passing checks
   task_deadline: "10m"
   queued_reconcile_after: "10m"
   poll_max_interval: "10s"

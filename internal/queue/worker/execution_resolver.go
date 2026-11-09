@@ -46,7 +46,7 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 			return
 		}
 	}
-	resolved := w.resolveExecutionAgent(ctx, task, project, profile)
+	resolved := w.resolveForGoldenRepair(ctx, task, project, profile)
 	switch resolved.kind {
 	case executionAgentRollup:
 		if handled, err := w.tryRollUpBreakdown(ctx, task); err != nil {
@@ -83,6 +83,17 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
 		w.handleLoopResult(ctx, task, result)
 	}
+}
+
+func (w *Worker) resolveForGoldenRepair(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {
+	resolved := w.resolveExecutionAgent(ctx, task, project, profile)
+	if !w.goldenRepairPending(ctx, task) || (resolved.kind != executionAgentRollup && resolved.kind != executionAgentTieredOrigin && resolved.kind != executionAgentHostReport) {
+		return resolved
+	}
+	if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
+		return executionResolution{kind: executionAgentACP, route: d, agent: a}
+	}
+	return executionResolution{kind: executionAgentAgentic}
 }
 
 func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {

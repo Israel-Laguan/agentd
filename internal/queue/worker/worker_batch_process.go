@@ -52,6 +52,15 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 
 	runnable, stopHeartbeats := w.prepareBatchRunnable(ctx, tasks, *profile)
 	defer stopHeartbeats()
+	remaining := runnable[:0:0]
+	for _, task := range runnable {
+		if w.goldenRepairPending(ctx, task) {
+			w.dispatchProcess(ctx, task, *project, *profile)
+		} else {
+			remaining = append(remaining, task)
+		}
+	}
+	runnable = remaining
 	runnable = w.renderBatchHostReports(ctx, runnable, *project)
 
 	if len(runnable) < 2 {
@@ -89,6 +98,11 @@ func (w *Worker) prepareBatchRunnable(
 			} else if done {
 				continue
 			}
+		}
+		if w.goldenRepairPending(ctx, task) {
+			heartbeats = append(heartbeats, w.startHeartbeat(ctx, task.ID))
+			runnable = append(runnable, task)
+			continue
 		}
 		if handled, rollupErr := w.tryRollUpBreakdown(ctx, task); rollupErr != nil {
 			w.Emit(ctx, task, "BREAKDOWN_ROLLUP_ERROR", rollupErr.Error())

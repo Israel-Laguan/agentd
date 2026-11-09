@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"agentd/internal/models"
 )
@@ -15,6 +16,31 @@ type TaskService struct {
 	Store models.KanbanStore
 	Board models.KanbanBoardContract
 	Bus   TaskBus
+}
+
+type taskCriteriaStore interface {
+	UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error)
+}
+
+func (s *TaskService) UpdateTaskCriteria(ctx context.Context, id string, criteria *[]string, golden *[]models.GoldenCriterion) (*models.Task, error) {
+	current, err := s.Store.GetTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if criteria != nil {
+		current.SuccessCriteria = *criteria
+	}
+	if golden != nil {
+		current.GoldenCriteria = *golden
+	}
+	if err := models.ValidateGoldenCriteria(current.SuccessCriteria, current.GoldenCriteria); err != nil {
+		return nil, fmt.Errorf("%w: %v", models.ErrInvalidDraftPlan, err)
+	}
+	store, ok := s.Store.(taskCriteriaStore)
+	if !ok {
+		return nil, fmt.Errorf("task criteria updates are unavailable")
+	}
+	return store.UpdateTaskCriteria(ctx, id, current.UpdatedAt, current.SuccessCriteria, current.GoldenCriteria)
 }
 
 // TaskBus is the optional bus surface used to publish manager-loop

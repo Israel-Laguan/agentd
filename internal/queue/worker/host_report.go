@@ -21,6 +21,9 @@ import (
 // path runs instead of burning the retry budget on an unchanged workspace
 // (B-046).
 func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, project models.Project) bool {
+	if w.goldenRepairPending(ctx, task) {
+		return false
+	}
 	target, ok := hostreport.ReportTarget(task.Title, task.Description)
 	if !ok || w.validateProjectWorkspace(project) != nil {
 		return false

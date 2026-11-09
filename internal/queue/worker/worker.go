@@ -59,6 +59,8 @@ type Worker struct {
 	sandboxExtraEnv         []string
 	sandboxScrubber         sandbox.Scrubber
 	maxRetries              int
+	goldenCycleCap          int
+	goldenStallCap          int
 	maxToolIterations       int
 	truncatorMax            int
 	characterBudget         int

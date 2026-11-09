@@ -24,11 +24,6 @@ type commentRequest struct {
 	Content string `json:"content"`
 }
 
-type patchRequest struct {
-	State       string  `json:"state"`
-	Description *string `json:"description,omitempty"`
-}
-
 type assignRequest struct {
 	AgentID string `json:"agent_id"`
 }
@@ -38,8 +33,10 @@ type splitRequest struct {
 }
 
 type splitSubtask struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	Title           string                   `json:"title"`
+	Description     string                   `json:"description"`
+	SuccessCriteria []string                 `json:"success_criteria,omitempty"`
+	GoldenCriteria  []models.GoldenCriterion `json:"golden_criteria,omitempty"`
 }
 
 // taskResponse augments models.Task with an embedded AgentProfile snapshot.
@@ -109,52 +106,6 @@ func (h TaskHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteSuccess(w, http.StatusCreated, comment, nil)
-}
-
-// Patch handles PATCH /api/v1/tasks/{id}.
-func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	taskID := r.PathValue("id")
-	var req patchRequest
-	if err := httpx.DecodeJSON(w, r, httpx.DefaultMaxBody, &req); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "invalid JSON request body")
-		return
-	}
-	hasState := strings.TrimSpace(req.State) != ""
-	hasDescription := req.Description != nil
-	if !hasState && !hasDescription {
-		httpx.WriteValidationError(w, http.StatusBadRequest, httpx.CodeValidation,
-			"at least one of state or description is required",
-			[]string{"state or description must be provided"})
-		return
-	}
-	if h.Tasks == nil {
-		httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, "task service is not configured")
-		return
-	}
-	var updated *models.Task
-	var err error
-	if hasState && hasDescription {
-		next := models.TaskState(strings.ToUpper(strings.TrimSpace(req.State)))
-		updated, err = h.Tasks.PatchTask(r.Context(), taskID, &next, req.Description)
-		if err != nil {
-			httpx.WriteMappedError(w, err)
-			return
-		}
-	} else if hasState {
-		next := models.TaskState(strings.ToUpper(strings.TrimSpace(req.State)))
-		updated, err = h.Tasks.UpdateTaskState(r.Context(), taskID, next)
-		if err != nil {
-			httpx.WriteMappedError(w, err)
-			return
-		}
-	} else {
-		updated, err = h.Tasks.UpdateTaskDescription(r.Context(), taskID, *req.Description)
-		if err != nil {
-			httpx.WriteMappedError(w, err)
-			return
-		}
-	}
-	httpx.WriteSuccess(w, http.StatusOK, h.attachAgent(r.Context(), updated), nil)
 }
 
 // ListComments handles GET /api/v1/tasks/{id}/comments.
@@ -244,8 +195,13 @@ func (h TaskHandler) Split(w http.ResponseWriter, r *http.Request) {
 	}
 	drafts := make([]models.DraftTask, 0, len(req.Subtasks))
 	for _, s := range req.Subtasks {
+		if err := models.ValidateGoldenCriteria(s.SuccessCriteria, s.GoldenCriteria); err != nil {
+			httpx.WriteValidationError(w, http.StatusBadRequest, httpx.CodeValidation, "invalid golden criteria", []string{err.Error()})
+			return
+		}
 		drafts = append(drafts, models.DraftTask{
 			Title: s.Title, Description: s.Description, Assignee: models.TaskAssigneeSystem,
+			SuccessCriteria: s.SuccessCriteria, GoldenCriteria: s.GoldenCriteria,
 		})
 	}
 	parent, children, err := h.Tasks.Split(r.Context(), taskID, drafts)
