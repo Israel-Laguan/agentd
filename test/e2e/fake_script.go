@@ -24,5 +24,7 @@ func fakeCompleted(summary string, before ...fakeagent.Step) string {
 
 // fakeTask is a task whose description runs fakeCompleted.
 func fakeTask(title, summary string, before ...fakeagent.Step) DraftTask {
-	return DraftTask{Title: title, Description: fakeCompleted(summary, before...)}
+	task := DraftTask{Title: title}
+	task.Description = fakeCompleted(summary, before...)
+	return task
 }
