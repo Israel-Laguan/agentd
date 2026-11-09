@@ -158,12 +158,19 @@ func TestOverBudgetAttemptKeepsLastHandoff(t *testing.T) {
 
 // A loop error also ends with ResultNone but leaves the task RUNNING; only a
 // task handed to a human skips the note.
+type nilTaskStore struct{ models.KanbanStore }
+
+func (nilTaskStore) GetTask(context.Context, string) (*models.Task, error) { return nil, nil }
+
 func TestStoppedAtHumanUsesStoredState(t *testing.T) {
 	ctx := context.Background()
 	store, task, _, _ := acpTask(t, "Fix tests", "d", false)
 	w := &Worker{store: store}
 	if w.stoppedAtHuman(ctx, task.ID, agentic.Result{}) {
 		t.Fatal("a RUNNING task after a loop error counted as a human stop")
+	}
+	if (&Worker{store: nilTaskStore{store}}).stoppedAtHuman(ctx, task.ID, agentic.Result{}) {
+		t.Fatal("a missing task counted as a human stop")
 	}
 	if !w.stoppedAtHuman(ctx, task.ID, agentic.Result{Kind: agentic.ResultPromptHandoff}) {
 		t.Fatal("prompt handoff did not count as a human stop")

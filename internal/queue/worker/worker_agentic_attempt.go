@@ -85,7 +85,7 @@ func (w *Worker) stoppedAtHuman(ctx context.Context, taskID string, outcome agen
 		return false
 	}
 	current, err := w.store.GetTask(ctx, taskID)
-	if err != nil {
+	if err != nil || current == nil {
 		return false // writing a note is the safe default
 	}
 	switch current.State {
