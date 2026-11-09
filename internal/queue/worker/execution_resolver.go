@@ -35,9 +35,7 @@ type executionResolution struct {
 }
 
 func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
-	resolved := w.resolveExecutionAgent(ctx, task, project, profile)
-	switch resolved.kind {
-	case executionAgentReview:
+	if profile.RequireReview {
 		done, err := w.tryFinalizeApprovedReview(ctx, task)
 		if err != nil {
 			w.FailHard(ctx, task, err)
@@ -46,6 +44,9 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 		if done {
 			return
 		}
+	}
+	resolved := w.resolveExecutionAgent(ctx, task, project, profile)
+	switch resolved.kind {
 	case executionAgentRollup:
 		if handled, err := w.tryRollUpBreakdown(ctx, task); err != nil {
 			w.Emit(ctx, task, "BREAKDOWN_ROLLUP_ERROR", err.Error())
@@ -84,11 +85,10 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 }
 
 func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {
-	// Review-required tasks stay on the builtin path: the approved-draft
-	// finalization flow (executionAgentReview) is not yet designed for an ACP
-	// run, and routing them to ACP here would re-run the agent before the
-	// draft is finalized.
 	if profile.RequireReview {
+		if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
+			return executionResolution{kind: executionAgentACP, route: d, agent: a}
+		}
 		return executionResolution{kind: executionAgentReview}
 	}
 	if w.hasBreakdownToRollUp(ctx, task) {

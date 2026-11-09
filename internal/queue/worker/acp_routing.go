@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"agentd/internal/agent/acp"
+	agenthooks "agentd/internal/agent/hooks"
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/correction"
 	"agentd/internal/gateway/route"
@@ -108,6 +109,10 @@ func (r routedStageAgent) Call(ctx context.Context, req stage.StageRequest) (sta
 // ones (the denylist), as a builtin tool call does.
 // shortcut: every call cold-starts the agent; keep a warm driver per task if the start-up cost shows.
 func (w *Worker) callACP(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, d route.Decision, a route.Agent, req stage.StageRequest) (stage.StageResult, error) {
+	return w.callACPWithSessionStart(ctx, task, project, profile, d, a, req, nil, false)
+}
+
+func (w *Worker) callACPWithSessionStart(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, d route.Decision, a route.Agent, req stage.StageRequest, taskHooks *agenthooks.HookChain, sessionStarted bool) (stage.StageResult, error) {
 	slog.InfoContext(ctx, "routing decision", "purpose", d.Purpose, "required_level", d.Required,
 		"rule", d.Rule, "agent", d.Agent, "task_id", task.ID)
 	budgetGuard := runaudit.NewBudgetGuard(w.budgetTracker, task.ID)
@@ -131,9 +136,11 @@ func (w *Worker) callACP(ctx context.Context, task models.Task, project models.P
 		return stage.StageResult{}, fmt.Errorf("worker: acp agent %q: %w", d.Agent, err)
 	}
 	defer stop()
-	taskHooks, _ := w.MountAgenticHooks(project, profile)
-	if err := w.RunSessionStart(ctx, task, project, taskHooks); err != nil {
-		return stage.StageResult{}, err
+	if !sessionStarted {
+		taskHooks, _ = w.MountAgenticHooks(project, profile)
+		if err := w.RunSessionStart(ctx, task, project, taskHooks); err != nil {
+			return stage.StageResult{}, err
+		}
 	}
 	agent := ACPAgent{
 		Driver: driver, Store: w.store, ProjectID: project.ID,
@@ -247,15 +254,22 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 		access = stage.AccessReadOnly
 	}
 	ctx = gateway.WithTaskID(ctx, task.ID)
-	// A resumed task answers a blocked clarification with a HUMAN subtask;
-	// consume the answer before the ACP prompt so it leads the context again.
-	if enriched, ok, err := w.tryConsumeElicitationAnswers(ctx, task); err != nil {
+	taskHooks, _ := w.MountAgenticHooks(project, profile)
+	if err := w.RunSessionStart(ctx, task, project, taskHooks); err != nil {
 		w.FailHard(ctx, task, err)
 		return
-	} else if ok {
-		task = enriched
 	}
-	res, err := w.callACP(ctx, task, project, profile, resolved.route, resolved.agent, w.acpExecutionRequest(ctx, task, project, profile, access))
+	clarified, blocked, err := w.RunPreTaskElicitation(ctx, task, project)
+	if err != nil {
+		w.FailHard(ctx, task, err)
+		return
+	}
+	if blocked {
+		audit.suspended = true
+		return
+	}
+	task = clarified
+	res, err := w.callACPWithSessionStart(ctx, task, project, profile, resolved.route, resolved.agent, w.acpExecutionRequest(ctx, task, project, profile, access), taskHooks, true)
 	w.RecordTaskTokenUsage(ctx, task, res.TokenUsage, res.UsageDetails)
 	switch {
 	case errors.Is(err, acp.ErrSuspended):
@@ -275,7 +289,7 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	default:
 		var out acpExecution
 		_ = json.Unmarshal(res.Output, &out) // the contract has validated it
-		succeeded = w.CommitTextWithProfile(ctx, task, out.Summary, &profile)
+		succeeded = w.commitExecution(ctx, task, project, profile, out.Summary)
 	}
 }
 
