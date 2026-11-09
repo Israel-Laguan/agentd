@@ -87,6 +87,15 @@ func (r *attemptRecords) lastFailure(taskID string) *attemptFailure {
 	return nil
 }
 
+func (r *attemptRecords) currentFailure(taskID string) *attemptFailure {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if rec := r.byTask[taskID]; rec != nil {
+		return rec.current
+	}
+	return nil
+}
+
 // RecordAttemptFailure remembers the first failing shell command of the attempt
 // that is running.
 func (w *Worker) RecordAttemptFailure(task models.Task, call gateway.ToolCall, tr agenttools.ToolResult) {
@@ -94,7 +103,7 @@ func (w *Worker) RecordAttemptFailure(task models.Task, call gateway.ToolCall, t
 	if command == "" {
 		return
 	}
-	w.attempts.recordFirst(task.ID, attemptFailure{command: command, failure: truncate(tr.Content, 500)})
+	w.attempts.recordFirst(task.ID, attemptFailure{command: command, failure: tr.Content})
 }
 
 // RepeatedAttemptFailure returns the refusal feedback for a bash call that sends

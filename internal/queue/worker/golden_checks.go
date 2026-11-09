@@ -11,6 +11,7 @@ import (
 	agenthooks "agentd/internal/agent/hooks"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/truncation"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
@@ -53,7 +54,8 @@ func (w *Worker) checkGoldenCriteria(ctx context.Context, task models.Task) bool
 	}
 	cycle := nextGoldenCycle(previous, passed, failures)
 	payload, _ := json.Marshal(cycle)
-	liveCtx := liveContext(ctx)
+	liveCtx, cancel := liveContext(ctx)
+	defer cancel()
 	if err := w.store.AppendEvent(liveCtx, models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: goldenEventType, Payload: string(payload)}); err != nil {
 		w.failTerminal(liveCtx, task, fmt.Errorf("persist golden check failure: %w", err), models.TaskStateFailedRequiresHuman)
 		return false
@@ -95,17 +97,19 @@ func (w *Worker) runGoldenChecks(ctx context.Context, task models.Task, project 
 		if w.sandboxScrubber != nil {
 			output = w.sandboxScrubber.Scrub(output)
 		}
-		failures = append(failures, fmt.Sprintf("Criterion: %s\nCheck: %s\nOutput:\n%s", check.Criterion, check.CheckCommand, truncate(output, 4000)))
+		output = (truncation.HeadTailStrategy{HeadRatio: .5}).Truncate(output, 4000)
+		failures = append(failures, fmt.Sprintf("Criterion: %s\nCheck: %s\nOutput:\n%s", check.Criterion, check.CheckCommand, output))
 	}
 	return passed, failures
 }
 
-func liveContext(ctx context.Context) context.Context {
+// liveContext lets board writes finish after ctx is cancelled, for at most 15s.
+// Callers must call the returned cancel.
+func liveContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if ctx.Err() != nil {
-		live, _ := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second) //nolint:govet
-		return live
+		return context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	}
-	return ctx
+	return ctx, func() {}
 }
 
 func nextGoldenCycle(previous goldenCycle, passed int, failures []string) goldenCycle {

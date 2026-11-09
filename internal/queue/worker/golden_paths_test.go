@@ -111,7 +111,10 @@ func TestACPGoldenFailureAndRepairInWorkspace(t *testing.T) {
 	if len(queued.GoldenCriteria) != 1 {
 		t.Fatalf("stored checks = %+v", queued.GoldenCriteria)
 	}
-	messages := w.buildStageContext(ctx, queued, project, profile)
+	messages, err := w.buildStageContext(ctx, queued, project, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var prompt string
 	for _, m := range messages {
 		prompt += m.Content

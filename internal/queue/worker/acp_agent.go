@@ -50,15 +50,21 @@ func (a ACPAgent) Call(ctx context.Context, req stage.StageRequest) (stage.Stage
 	if err := req.Validate(); err != nil {
 		return stage.StageResult{}, err
 	}
-	pack := renderContext(req.Context)
+	messages, err := fitStageContext(req.Context, acpContextBudget-len("\n\n")-len(outcomePrompt))
+	if err != nil {
+		return stage.StageResult{}, err
+	}
+	pack := renderContext(messages)
 	session := agentmcp.NewSession(a.Store, agentmcp.SessionConfig{ProjectID: a.ProjectID, Contract: req.Contract, Context: pack})
 	path, remove := a.Sessions.Add(session.HTTPHandler())
 	defer remove()
 	repaired := false
+	var evidence acpAttemptEvidence
 	run, err := a.Driver.Call(ctx, acp.Request{
 		Prompt:      pack + "\n\n" + outcomePrompt,
 		MCPServers:  []acpsdk.McpServer{{Http: &acpsdk.McpServerHttpInline{Name: "agentd", Type: "http", Url: a.MCPURL + path, Headers: []acpsdk.HttpHeader{}}}},
 		Permit:      a.Permit,
+		OnUpdate:    evidence.record,
 		ReadOnly:    req.Access != stage.AccessWrite,
 		NoWorkspace: req.Access == stage.AccessNone,
 		Followup: func() string {
@@ -70,21 +76,25 @@ func (a ACPAgent) Call(ctx context.Context, req stage.StageRequest) (stage.Stage
 		},
 	})
 	tokens := 0
+	facts := evidence.result()
 	if run.Usage != nil {
 		tokens = run.Usage.TotalTokens
 	}
 	if err != nil {
-		return stage.StageResult{TokenUsage: tokens}, err
+		return stage.StageResult{TokenUsage: tokens, Progress: run.Text, FailedTools: facts.Failures, FilesTouched: facts.Files, Plan: facts.Plan}, err
 	}
 	res, err := session.Result()
 	res.TokenUsage = tokens
+	res.Progress = run.Text
+	res.FailedTools, res.FilesTouched, res.Plan = facts.Failures, facts.Files, facts.Plan
 	if err != nil {
 		return res, err
 	}
 	flagged := req.Attrs.RequiresWorkspaceChange != nil && *req.Attrs.RequiresWorkspaceChange
 	// As the builtin's gate, only a run that could write is held to it.
 	if res.Outcome == stage.OutcomeCompleted && flagged && req.Access == stage.AccessWrite && run.Evidence == 0 {
-		return stage.StageResult{Output: res.Output, TokenUsage: tokens}, stage.ErrUnverifiedCompletion
+		res.Outcome = ""
+		return res, stage.ErrUnverifiedCompletion
 	}
 	return res, nil
 }

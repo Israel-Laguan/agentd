@@ -44,7 +44,10 @@ func TestACPRequestIncludesCoordinatorContext(t *testing.T) {
 	w := &Worker{store: store, instructionLoader: &InstructionLoader{ProjectFile: "AGENTS.md", UserPreferencesPath: prefs}, skillLoader: &wskills.SkillLoader{ProjectDir: ".agentd/skills"}, skillRouter: &wskills.SkillRouter{Threshold: 0, TopK: 3}, retriever: &recordingRetriever{memories: []models.Memory{lessonMemory("flaky test", "retry once")}}}
 	w.attempts.recordFirst(task.ID, attemptFailure{command: "go test ./...", failure: "tests failed"})
 	w.attempts.finish(task.ID, false)
-	req := w.acpExecutionRequest(ctx, task, models.Project{WorkspacePath: dir}, models.AgentProfile{}, stage.AccessWrite)
+	req, err := w.acpExecutionRequest(ctx, task, models.Project{WorkspacePath: dir}, models.AgentProfile{}, stage.AccessWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
 	text := renderContext(req.Context)
 	t.Logf("ACP stage context: %d bytes", len(text))
 	for _, want := range []string{"write tests first", "retry once", "Run deployment checks", "Please add error handling", "go test ./...", "tests failed", "<external_content"} {

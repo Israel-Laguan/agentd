@@ -54,6 +54,10 @@ func TestAgenticAskHumanBlocksTaskWithClarification(t *testing.T) {
 	if gw.callCount != 1 {
 		t.Fatalf("gateway calls = %d, want 1: the loop must stop at the ask_human call", gw.callCount)
 	}
+	// A stop at a human is not a failed attempt, so no handoff note is written.
+	if msg, err := w.attemptHandoffMessage(ctx, task, models.Project{}); err != nil || msg != nil {
+		t.Fatalf("human stop left a handoff note: %v, %v", msg, err)
+	}
 }
 
 // The question is recorded on the task, so the run that resumes after the

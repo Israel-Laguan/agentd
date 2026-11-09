@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"agentd/internal/models"
 )
@@ -67,11 +68,14 @@ func TestUpdateTaskCriteriaResetsHistory(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	task := seedTaskWithHistory(t, store, ctx)
+	if _, err := store.UpdateTaskCriteria(ctx, task.ID, task.UpdatedAt.Add(-time.Second), []string{"tests pass"}, nil); !errors.Is(err, models.ErrStateConflict) {
+		t.Fatalf("stale update: %v", err)
+	}
 	updated, err := store.UpdateTaskCriteria(ctx, task.ID, task.UpdatedAt, []string{"tests pass"}, []models.GoldenCriterion{{Criterion: "tests pass", CheckCommand: "true"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(updated.CriteriaMet) != 0 {
+	if len(updated.CriteriaMet) != 0 || !updated.UpdatedAt.After(task.UpdatedAt) {
 		t.Fatalf("criteria_met = %v, want reset", updated.CriteriaMet)
 	}
 	events, err := store.ListEventsByTask(ctx, task.ID)

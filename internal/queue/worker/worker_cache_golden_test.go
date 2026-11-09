@@ -82,7 +82,10 @@ func buildScopedCapabilities() *capabilities.Registry {
 
 func executeRequest(t *testing.T, w *Worker, executor *agenttools.ToolExecutor, scoped *capabilities.Registry, task models.Task, project models.Project, profile models.AgentProfile) ([]byte, []byte) {
 	t.Helper()
-	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, project, profile)
+	messages, err := w.AssembleAgenticSystemPrompt(context.Background(), task, project, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tools, _ := w.AgenticToolsWithExtras(context.Background(), executor, scoped)
 	tools, _ = w.FilterAgenticTools(tools, nil, task, profile)
 	messagesBytes, err := json.Marshal(messages)

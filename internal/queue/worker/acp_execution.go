@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"agentd/internal/agent/acp"
@@ -72,9 +73,20 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 		return
 	}
 	task = clarified
-	res, err := w.callACP(ctx, task, project, profile, resolved.route, resolved.agent, w.acpExecutionRequest(ctx, task, project, profile, access), taskHooks, true)
+	req, err := w.acpExecutionRequest(ctx, task, project, profile, access)
+	if err != nil {
+		w.FailHard(ctx, task, err)
+		return
+	}
+	res, err := w.callACP(ctx, task, project, profile, resolved.route, resolved.agent, req, taskHooks, true)
 	w.RecordTaskTokenUsage(ctx, task, res.TokenUsage, res.UsageDetails)
+	if !w.saveACPHandoff(ctx, task, project, res, err) {
+		return
+	}
 	succeeded = w.applyACPExecutionResult(ctx, task, project, profile, res, err, audit)
+	if succeeded {
+		w.clearAttemptHandoff(ctx, task)
+	}
 	audit.reviewHandoff = succeeded && profile.RequireReview
 }
 
@@ -102,14 +114,36 @@ func (w *Worker) applyACPExecutionResult(ctx context.Context, task models.Task, 
 	return false
 }
 
-func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, access stage.WorkspaceAccess) stage.StageRequest {
+// saveACPHandoff stores the note before the result is applied, which may make
+// the task READY for a retry. It reports false once it has failed the task.
+func (w *Worker) saveACPHandoff(ctx context.Context, task models.Task, project models.Project, res stage.StageResult, err error) bool {
+	if errors.Is(err, acp.ErrSuspended) || errors.Is(err, errStageContextOverBudget) || res.Outcome == stage.OutcomeNeedsHuman {
+		return true
+	}
+	if err == nil {
+		err = errors.New("attempt awaiting coordinator checks; see check feedback if it was rejected")
+	}
+	if handoffErr := w.writeAttemptHandoff(ctx, task, res, err); handoffErr != nil {
+		liveCtx, cancel := liveContext(ctx)
+		defer cancel()
+		w.failTerminal(liveCtx, task, fmt.Errorf("persist attempt handoff: %w", handoffErr), models.TaskStateFailedRequiresHuman)
+		return false
+	}
+	return true
+}
+
+func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, access stage.WorkspaceAccess) (none stage.StageRequest, err error) {
+	messages, err := w.buildStageContext(ctx, task, project, profile)
+	if err != nil {
+		return none, err
+	}
 	return stage.StageRequest{
 		Stage:    stage.StageExecution,
 		Purpose:  gateway.PurposeExecTurn,
-		Context:  w.buildStageContext(ctx, task, project, profile),
+		Context:  messages,
 		Contract: stage.NewContract[acpExecution](),
 		Access:   access,
 		AgentID:  task.AgentID,
 		Attrs:    gateway.AttrsForTask(task.RequiresWorkspaceChange),
-	}
+	}, nil
 }

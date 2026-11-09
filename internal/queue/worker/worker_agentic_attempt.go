@@ -3,9 +3,11 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"agentd/internal/models"
 	"agentd/internal/queue/worker/agentic"
+	"agentd/internal/stage"
 )
 
 // runAgenticAttempt checks the provider, mounts the task's hooks, runs session
@@ -40,6 +42,27 @@ func (w *Worker) runAgenticAttempt(
 		return LoopResult{}, false
 	}
 	result, outcome, ok := engine.Process(ctx, clarified, project, profile, taskHooks, taskCaps)
+	// Save before applying the result, which may make the task READY for a
+	// concurrent retry. Success clears the note after the coordinator commits.
+	detail := result.Meta.LastError
+	if outcome.Err != nil {
+		detail = outcome.Err.Error() + "\n" + detail
+	}
+	if failure := w.attempts.currentFailure(task.ID); failure != nil {
+		detail = fmt.Sprintf("First failed command: %s\nFailure: %s\n%s", failure.command, failure.failure, detail)
+	}
+	if detail == "" {
+		detail = "Attempt awaiting coordinator checks; see check feedback if it was rejected."
+	}
+	// An attempt that could not read the last note never ran; keep that note.
+	if !errors.Is(outcome.Err, errAttemptHandoffUnavailable) && !w.stoppedAtHuman(ctx, clarified.ID, outcome) {
+		if err := w.writeAttemptHandoff(ctx, clarified, stage.StageResult{Progress: outcome.Text}, errors.New(detail)); err != nil {
+			liveCtx, cancelLive := liveContext(ctx)
+			defer cancelLive()
+			w.failTerminal(liveCtx, clarified, fmt.Errorf("persist attempt handoff: %w", err), models.TaskStateFailedRequiresHuman)
+			return LoopResult{}, false
+		}
+	}
 	// Process registers its own cancel for the run and deregisters it on
 	// return, replacing the one above. Re-register ours so a cancel during the
 	// terminal board write still reaches this attempt.
@@ -49,6 +72,27 @@ func (w *Worker) runAgenticAttempt(
 	// A coordinator rejection already failed or requeued the task, so the attempt
 	// is not a success and the loop result needs no further handling.
 	return result, ok && committed
+}
+
+// stoppedAtHuman reports an attempt that handed the task to a human, which is
+// not a failure. ResultNone alone is not enough: a loop error also ends with
+// it, and leaves the task RUNNING, so the stored state decides.
+func (w *Worker) stoppedAtHuman(ctx context.Context, taskID string, outcome agentic.Result) bool {
+	if outcome.Kind == agentic.ResultPromptHandoff {
+		return true
+	}
+	if outcome.Kind != agentic.ResultNone || w.store == nil {
+		return false
+	}
+	current, err := w.store.GetTask(ctx, taskID)
+	if err != nil || current == nil {
+		return false // writing a note is the safe default
+	}
+	switch current.State {
+	case models.TaskStateBlocked, models.TaskStateNeedsContext, models.TaskStateInConsideration:
+		return true
+	}
+	return false
 }
 
 // registerRunCancel makes a task run cancellable by its task ID until done is

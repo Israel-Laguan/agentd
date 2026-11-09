@@ -24,7 +24,10 @@ func TestAgenticSeedMessagesAreTaggedBySection(t *testing.T) {
 		Solution: sql.NullString{String: "Add retry", Valid: true},
 	}}}}
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "t1"}, Title: "Fix bug", Description: "Fix it"}
-	msgs := w.AssembleAgenticSystemPrompt(context.Background(), task, models.Project{}, models.AgentProfile{})
+	msgs, err := w.AssembleAgenticSystemPrompt(context.Background(), task, models.Project{}, models.AgentProfile{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := []gateway.Section{gateway.SectionSystem, gateway.SectionTask, gateway.SectionMemories}
 	got := sectionsOf(msgs)
 	if len(got) != len(want) {

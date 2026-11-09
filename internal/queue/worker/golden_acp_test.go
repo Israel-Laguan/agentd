@@ -41,7 +41,10 @@ func TestACPFalseCompletionIsRequeuedWithGoldenFeedback(t *testing.T) {
 	if got.State != models.TaskStateReady {
 		t.Fatalf("state = %s, want READY after failed golden check", got.State)
 	}
-	messages := w.buildStageContext(ctx, got, project, profile)
+	messages, err := w.buildStageContext(ctx, got, project, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, message := range messages {
 		if strings.Contains(message.Content, "proof is missing") {
 			return
