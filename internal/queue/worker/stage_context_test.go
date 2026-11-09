@@ -46,7 +46,8 @@ func TestACPRequestIncludesCoordinatorContext(t *testing.T) {
 	w.attempts.finish(task.ID, false)
 	req := w.acpExecutionRequest(ctx, task, models.Project{WorkspacePath: dir}, models.AgentProfile{}, stage.AccessWrite)
 	text := renderContext(req.Context)
-	for _, want := range []string{"write tests first", "retry once", "Run deployment checks", "Please add error handling", "go test ./...", "tests failed"} {
+	t.Logf("ACP stage context: %d bytes", len(text))
+	for _, want := range []string{"write tests first", "retry once", "Run deployment checks", "Please add error handling", "go test ./...", "tests failed", "<external_content"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("ACP stage request missing %q", want)
 		}
