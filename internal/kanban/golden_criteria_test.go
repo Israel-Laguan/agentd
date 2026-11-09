@@ -43,9 +43,8 @@ func TestGoldenCriteriaSurvivePlanMaterialization(t *testing.T) {
 	}
 }
 
-func TestUpdateTaskCriteriaResetsHistoryAndRejectsRunning(t *testing.T) {
-	ctx := context.Background()
-	store := newTestStore(t)
+func seedTaskWithHistory(t *testing.T, store *Store, ctx context.Context) models.Task {
+	t.Helper()
 	_, tasks, err := store.MaterializePlan(ctx, models.DraftPlan{ProjectName: "golden-update", Tasks: []models.DraftTask{{Title: "task"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +60,13 @@ func TestUpdateTaskCriteriaResetsHistoryAndRejectsRunning(t *testing.T) {
 	if err != nil || len(seeded.CriteriaMet) != 1 {
 		t.Fatalf("seeded task = %+v, error = %v", seeded, err)
 	}
-	task = *seeded
+	return *seeded
+}
+
+func TestUpdateTaskCriteriaResetsHistory(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	task := seedTaskWithHistory(t, store, ctx)
 	updated, err := store.UpdateTaskCriteria(ctx, task.ID, task.UpdatedAt, []string{"tests pass"}, []models.GoldenCriterion{{Criterion: "tests pass", CheckCommand: "true"}})
 	if err != nil {
 		t.Fatal(err)
@@ -72,6 +77,16 @@ func TestUpdateTaskCriteriaResetsHistoryAndRejectsRunning(t *testing.T) {
 	events, err := store.ListEventsByTask(ctx, task.ID)
 	if err != nil || len(events) < 2 || events[len(events)-1].Type != "GOLDEN_CRITERIA_RESET" {
 		t.Fatalf("events = %+v, error = %v", events, err)
+	}
+}
+
+func TestUpdateTaskCriteriaRejectsRunning(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	task := seedTaskWithHistory(t, store, ctx)
+	updated, err := store.UpdateTaskCriteria(ctx, task.ID, task.UpdatedAt, []string{"tests pass"}, []models.GoldenCriterion{{Criterion: "tests pass", CheckCommand: "true"}})
+	if err != nil {
+		t.Fatal(err)
 	}
 	claimed, err := store.ClaimNextReadyTasks(ctx, 1)
 	if err != nil || len(claimed) != 1 {

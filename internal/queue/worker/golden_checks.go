@@ -50,18 +50,9 @@ func (w *Worker) checkGoldenCriteria(ctx context.Context, task models.Task) bool
 	if len(failures) == 0 {
 		return true
 	}
-	cycle := goldenCycle{Cycle: previous.Cycle + 1, Best: previous.Best, Stall: previous.Stall, Feedback: strings.Join(failures, "\n\n")}
-	if previous.Cycle == 0 || passed > previous.Best {
-		cycle.Best = passed
-		cycle.Stall = 0
-	} else {
-		cycle.Stall++
-	}
+	cycle := nextGoldenCycle(previous, passed, failures)
 	payload, _ := json.Marshal(cycle)
-	liveCtx := ctx
-	if ctx.Err() != nil {
-		liveCtx = context.WithoutCancel(ctx)
-	}
+	liveCtx := liveContext(ctx)
 	if err := w.store.AppendEvent(liveCtx, models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: goldenEventType, Payload: string(payload)}); err != nil {
 		w.failTerminal(liveCtx, task, fmt.Errorf("persist golden check failure: %w", err), models.TaskStateFailedRequiresHuman)
 		return false
@@ -106,6 +97,24 @@ func (w *Worker) runGoldenChecks(ctx context.Context, task models.Task, project 
 		failures = append(failures, fmt.Sprintf("Criterion: %s\nCheck: %s\nOutput:\n%s", check.Criterion, check.CheckCommand, truncate(output, 4000)))
 	}
 	return passed, failures
+}
+
+func liveContext(ctx context.Context) context.Context {
+	if ctx.Err() != nil {
+		return context.WithoutCancel(ctx)
+	}
+	return ctx
+}
+
+func nextGoldenCycle(previous goldenCycle, passed int, failures []string) goldenCycle {
+	cycle := goldenCycle{Cycle: previous.Cycle + 1, Best: previous.Best, Stall: previous.Stall, Feedback: strings.Join(failures, "\n\n")}
+	if previous.Cycle == 0 || passed > previous.Best {
+		cycle.Best = passed
+		cycle.Stall = 0
+		return cycle
+	}
+	cycle.Stall++
+	return cycle
 }
 
 func lastGoldenCycle(events []models.Event) goldenCycle {
