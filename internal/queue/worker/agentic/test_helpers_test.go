@@ -85,8 +85,8 @@ func (h *noopHost) RecoverAgenticPrivilege(
 
 func (h *noopHost) Emit(_ context.Context, _ models.Task, _, _ string) {}
 
-func (h *noopHost) AssembleAgenticSystemPrompt(_ context.Context, _ models.Task, _ models.Project, _ models.AgentProfile) []gateway.PromptMessage {
-	return nil
+func (h *noopHost) AssembleAgenticSystemPrompt(_ context.Context, _ models.Task, _ models.Project, _ models.AgentProfile) ([]gateway.PromptMessage, error) {
+	return nil, nil
 }
 
 func (h *noopHost) AssembleAgenticSystemPromptWithUserContent(_ context.Context, _ models.Task, _ models.Project, _ models.AgentProfile, _ string) []gateway.PromptMessage {

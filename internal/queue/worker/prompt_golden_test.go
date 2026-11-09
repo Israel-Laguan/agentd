@@ -12,7 +12,7 @@ import (
 func TestBuiltinPromptGolden(t *testing.T) {
 	w := &Worker{}
 	task := models.Task{BaseEntity: models.BaseEntity{ID: "fixed"}, Title: "Fix bug", Description: "Fix the login bug"}
-	messages := w.AssembleAgenticSystemPrompt(context.Background(), task, models.Project{}, models.AgentProfile{})
+	messages, _ := w.AssembleAgenticSystemPrompt(context.Background(), task, models.Project{}, models.AgentProfile{})
 	got, err := json.MarshalIndent(messages, "", "  ")
 	if err != nil {
 		t.Fatal(err)

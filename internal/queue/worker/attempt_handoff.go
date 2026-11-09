@@ -17,6 +17,10 @@ import (
 
 const attemptHandoffEvent = "ATTEMPT_HANDOFF"
 
+// errAttemptHandoffUnavailable marks a retry that cannot see the last note. It
+// is retried as a failure and never replaces the note it could not read.
+var errAttemptHandoffUnavailable = errors.New("attempt handoff unavailable")
+
 // attemptHandoff contains only facts available to the controller. Agent text
 // may describe decisions, files and remaining work; it is not inferred.
 type attemptHandoff struct {
@@ -56,7 +60,9 @@ func (w *Worker) writeAttemptHandoff(ctx context.Context, task models.Task, proj
 	}
 	payload, err := json.Marshal(note)
 	if err == nil {
-		err = w.store.AppendEvent(liveContext(ctx), models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: attemptHandoffEvent, Payload: string(payload)})
+		liveCtx, cancel := liveContext(ctx)
+		defer cancel()
+		err = w.store.AppendEvent(liveCtx, models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: attemptHandoffEvent, Payload: string(payload)})
 	}
 	return err
 }
@@ -69,7 +75,7 @@ func (w *Worker) attemptHandoffMessage(ctx context.Context, task models.Task) (*
 	}
 	events, err := w.store.ListEventsByTask(ctx, task.ID)
 	if err != nil {
-		return nil, fmt.Errorf("load attempt handoff: %w", err)
+		return nil, fmt.Errorf("%w: load: %w", errAttemptHandoffUnavailable, err)
 	}
 	for i := len(events) - 1; i >= 0; i-- {
 		if events[i].Type != attemptHandoffEvent {
@@ -80,7 +86,7 @@ func (w *Worker) attemptHandoffMessage(ctx context.Context, task models.Task) (*
 		}
 		var note attemptHandoff
 		if err := json.Unmarshal([]byte(events[i].Payload), &note); err != nil {
-			return nil, fmt.Errorf("invalid attempt handoff: %w", err)
+			return nil, fmt.Errorf("%w: invalid note: %w", errAttemptHandoffUnavailable, err)
 		}
 		// User text stays verbatim; only the agent's observations are wrapped
 		// as external, untrusted content.
@@ -103,7 +109,9 @@ func (w *Worker) clearAttemptHandoff(ctx context.Context, task models.Task) {
 	if w.store == nil {
 		return
 	}
-	events, err := w.store.ListEventsByTask(liveContext(ctx), task.ID)
+	liveCtx, cancel := liveContext(ctx)
+	defer cancel()
+	events, err := w.store.ListEventsByTask(liveCtx, task.ID)
 	if err != nil {
 		slog.Error("failed to inspect attempt handoff", "task_id", task.ID, "error", err)
 		return
@@ -111,7 +119,7 @@ func (w *Worker) clearAttemptHandoff(ctx context.Context, task models.Task) {
 	for i := len(events) - 1; i >= 0; i-- {
 		if events[i].Type == attemptHandoffEvent {
 			if events[i].Payload != "" {
-				err = w.store.AppendEvent(liveContext(ctx), models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: attemptHandoffEvent})
+				err = w.store.AppendEvent(liveCtx, models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: attemptHandoffEvent})
 				if err != nil {
 					slog.Error("failed to clear attempt handoff", "task_id", task.ID, "error", err)
 				}

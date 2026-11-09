@@ -23,7 +23,7 @@ func TestPrepareAgenticRunCarriesTaskAttrs(t *testing.T) {
 			RequiresWorkspaceChange: flagged,
 		}
 		project := models.Project{BaseEntity: models.BaseEntity{ID: "p1"}}
-		_, _, _, _, _, _, exec := e.prepareAgenticRun(context.Background(), task, project, models.AgentProfile{}, nil)
+		_, _, _, _, _, _, exec, _ := e.prepareAgenticRun(context.Background(), task, project, models.AgentProfile{}, nil)
 		got := exec.Attrs().RequiresWorkspaceChange
 		if got == nil || *got != flagged {
 			t.Fatalf("flagged=%v: executor Attrs.RequiresWorkspaceChange = %v, want %v", flagged, got, flagged)

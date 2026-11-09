@@ -28,16 +28,19 @@ func (e *Engine) prepareAgenticRun(
 	allToolToAdapter map[string]string,
 	routedProfile models.AgentProfile,
 	taskToolExecutor *agenttools.ToolExecutor,
+	err error,
 ) {
 	taskToolExecutor = e.newAgenticTaskToolExecutor(project, task).
 		WithAllowedTools(profile.AllowedTools).
 		WithReadOnlyWorkspace(profile.WorkspaceReadonly).
 		WithIntent(task.Title + "\n" + task.Description).
 		WithAttrs(gateway.AttrsForTask(task.RequiresWorkspaceChange))
-	messages = e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile)
+	if messages, err = e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile); err != nil {
+		return nil, nil, nil, nil, nil, profile, nil, err
+	}
 	allTools, allToolToAdapter = e.host.AgenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 	tools, toolToAdapter, routedProfile = e.selectAgenticTools(task, profile, messages, allTools, allToolToAdapter)
-	return messages, tools, toolToAdapter, allTools, allToolToAdapter, routedProfile, taskToolExecutor
+	return messages, tools, toolToAdapter, allTools, allToolToAdapter, routedProfile, taskToolExecutor, nil
 }
 
 // selectAgenticTools filters the full tool set for the task without changing

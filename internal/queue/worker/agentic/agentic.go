@@ -32,8 +32,12 @@ func (e *Engine) Process(
 
 	// prepareAgenticRun builds messages and tools for the clarified task.
 	baseProfile := profile
-	messages, tools, toolToAdapter, _, _, profile, taskToolExecutor :=
+	messages, tools, toolToAdapter, _, _, profile, taskToolExecutor, err :=
 		e.prepareAgenticRun(ctx, task, project, baseProfile, taskCaps)
+	if err != nil {
+		e.result = Result{Kind: ResultFailed, Task: task, Err: err}
+		return agentruntime.LoopResult{}, e.result, false
+	}
 
 	if !gateway.ProviderSupportsChatTools(e.config.Gateway, profile.Provider) {
 		e.rejectWithoutToolSupport(cancelCtx, task, profile.Provider)

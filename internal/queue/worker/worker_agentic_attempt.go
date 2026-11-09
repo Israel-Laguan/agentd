@@ -41,10 +41,6 @@ func (w *Worker) runAgenticAttempt(
 	if blocked {
 		return LoopResult{}, false
 	}
-	if _, err := w.attemptHandoffMessage(ctx, clarified); err != nil {
-		w.failTerminal(liveContext(ctx), clarified, err, models.TaskStateFailedRequiresHuman)
-		return LoopResult{}, false
-	}
 	result, outcome, ok := engine.Process(ctx, clarified, project, profile, taskHooks, taskCaps)
 	// Save before applying the result, which may make the task READY for a
 	// concurrent retry. Success clears the note after the coordinator commits.
@@ -58,9 +54,14 @@ func (w *Worker) runAgenticAttempt(
 	if detail == "" {
 		detail = "Attempt awaiting coordinator checks; see check feedback if it was rejected."
 	}
-	if err := w.writeAttemptHandoff(ctx, clarified, project, stage.StageResult{Progress: outcome.Text}, errors.New(detail)); err != nil {
-		w.failTerminal(liveContext(ctx), clarified, fmt.Errorf("persist attempt handoff: %w", err), models.TaskStateFailedRequiresHuman)
-		return LoopResult{}, false
+	// An attempt that could not read the last note never ran; keep that note.
+	if !errors.Is(outcome.Err, errAttemptHandoffUnavailable) {
+		if err := w.writeAttemptHandoff(ctx, clarified, project, stage.StageResult{Progress: outcome.Text}, errors.New(detail)); err != nil {
+			liveCtx, cancelLive := liveContext(ctx)
+			defer cancelLive()
+			w.failTerminal(liveCtx, clarified, fmt.Errorf("persist attempt handoff: %w", err), models.TaskStateFailedRequiresHuman)
+			return LoopResult{}, false
+		}
 	}
 	// Process registers its own cancel for the run and deregisters it on
 	// return, replacing the one above. Re-register ours so a cancel during the

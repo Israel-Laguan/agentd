@@ -97,7 +97,7 @@ type Host interface {
 		dispatch func(gateway.ToolCall) (agenttools.ToolResult, bool),
 	) (agenttools.ToolResult, bool)
 	Emit(ctx context.Context, task models.Task, kind, payload string)
-	AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage
+	AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) ([]gateway.PromptMessage, error)
 	AssembleAgenticSystemPromptWithUserContent(
 		ctx context.Context,
 		task models.Task,

@@ -166,16 +166,10 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 // This replaces the old buildAgenticMessages which modified an existing message
 // list in-place. The new implementation builds messages from scratch via
 // SystemPromptBuilder, appends a user message, then appends memory lessons.
-func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
+func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) ([]gateway.PromptMessage, error) {
 	systemPrompt := w.buildSystemPromptContent(task, project, profile)
 	userContent := fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
-	messages, err := w.assembleStageContext(ctx, task, project, systemPrompt, userContent, false)
-	if err != nil {
-		// shortcut: the engine interface cannot fail here; runAgenticAttempt checks
-		// the note first, so only a read failing between the two lands here.
-		slog.Error("attempt handoff unavailable", "task_id", task.ID, "error", err)
-	}
-	return messages
+	return w.assembleStageContext(ctx, task, project, systemPrompt, userContent, false)
 }
 
 func (w *Worker) buildStageContext(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) ([]gateway.PromptMessage, error) {

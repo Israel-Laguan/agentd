@@ -75,7 +75,7 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	task = clarified
 	req, err := w.acpExecutionRequest(ctx, task, project, profile, access)
 	if err != nil {
-		w.failTerminal(liveContext(ctx), task, err, models.TaskStateFailedRequiresHuman)
+		w.FailHard(ctx, task, err)
 		return
 	}
 	res, err := w.callACP(ctx, task, project, profile, resolved.route, resolved.agent, req, taskHooks, true)
@@ -124,7 +124,9 @@ func (w *Worker) saveACPHandoff(ctx context.Context, task models.Task, project m
 		err = errors.New("attempt awaiting coordinator checks; see check feedback if it was rejected")
 	}
 	if handoffErr := w.writeAttemptHandoff(ctx, task, project, res, err); handoffErr != nil {
-		w.failTerminal(liveContext(ctx), task, fmt.Errorf("persist attempt handoff: %w", handoffErr), models.TaskStateFailedRequiresHuman)
+		liveCtx, cancel := liveContext(ctx)
+		defer cancel()
+		w.failTerminal(liveCtx, task, fmt.Errorf("persist attempt handoff: %w", handoffErr), models.TaskStateFailedRequiresHuman)
 		return false
 	}
 	return true

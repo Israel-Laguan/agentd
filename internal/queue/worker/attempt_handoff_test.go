@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"agentd/internal/agent/acp/fakeagent"
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
@@ -28,8 +29,12 @@ func (handoffReadFailureStore) ListEventsByTask(context.Context, string) ([]mode
 func TestUnreadableHandoffStopsRetry(t *testing.T) {
 	ctx := context.Background()
 	w := &Worker{store: handoffReadFailureStore{KanbanStore: testutil.NewFakeStore()}}
-	if _, err := w.acpExecutionRequest(ctx, models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, models.Project{}, models.AgentProfile{}, stage.AccessWrite); err == nil {
-		t.Fatal("retry context built without the previous attempt's handoff")
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t"}}
+	if _, err := w.acpExecutionRequest(ctx, task, models.Project{}, models.AgentProfile{}, stage.AccessWrite); !errors.Is(err, errAttemptHandoffUnavailable) {
+		t.Fatalf("ACP retry context built without the previous attempt's handoff: %v", err)
+	}
+	if _, err := w.AssembleAgenticSystemPrompt(ctx, task, models.Project{}, models.AgentProfile{}); !errors.Is(err, errAttemptHandoffUnavailable) {
+		t.Fatalf("builtin retry context built without the previous attempt's handoff: %v", err)
 	}
 	store := testutil.NewFakeStore()
 	if err := store.AppendEvent(ctx, models.Event{TaskID: sql.NullString{String: "t", Valid: true}, Type: attemptHandoffEvent, Payload: "{broken"}); err != nil {
@@ -38,6 +43,64 @@ func TestUnreadableHandoffStopsRetry(t *testing.T) {
 	if _, err := (&Worker{store: store}).attemptHandoffMessage(ctx, models.Task{BaseEntity: models.BaseEntity{ID: "t"}}); err == nil {
 		t.Fatal("corrupt handoff was silently dropped")
 	}
+}
+
+// An unreadable note fails the attempt as a counted retry before any agent
+// runs, and the note it could not read is kept for the next try.
+func TestUnreadableHandoffRetriesWithoutAgentOrOverwrite(t *testing.T) {
+	ctx := context.Background()
+	const corrupt = "{broken"
+	lastNote := func(t *testing.T, store *testutil.FakeKanbanStore, task models.Task) string {
+		events, err := store.ListEventsByTask(ctx, task.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		note := ""
+		for _, e := range events {
+			if e.Type == attemptHandoffEvent {
+				note = e.Payload
+			}
+		}
+		return note
+	}
+	check := func(t *testing.T, store *testutil.FakeKanbanStore, task models.Task) {
+		t.Helper()
+		if got := lastNote(t, store, task); got != corrupt {
+			t.Fatalf("handoff note replaced with %q", got)
+		}
+		after, err := store.GetTask(ctx, task.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if after.State == models.TaskStateFailedRequiresHuman || after.State == models.TaskStateCompleted {
+			t.Fatalf("task state = %s, want a counted retry", after.State)
+		}
+	}
+	seed := func(t *testing.T, store *testutil.FakeKanbanStore, task models.Task) {
+		if err := store.AppendEvent(ctx, models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: attemptHandoffEvent, Payload: corrupt}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("builtin", func(t *testing.T) {
+		store, task, project, _ := acpTask(t, "Fix tests", "d", false)
+		seed(t, store, task)
+		gw := &agenticHostGateway{}
+		NewWorker(store, gw, panicSandbox{t}, nil, &mockEventSink{}, WorkerOptions{}).
+			dispatchProcess(ctx, task, project, models.AgentProfile{AgenticMode: true, Provider: "openai"})
+		for _, req := range gw.requests {
+			if req.Purpose == gateway.PurposeExecTurn {
+				t.Fatal("agent turn ran without the previous attempt's handoff")
+			}
+		}
+		check(t, store, task)
+	})
+	t.Run("acp", func(t *testing.T) {
+		w, store, task, project, profile, _, _ := acpFixture(t, fakeagent.Script(fakeagent.Step{Error: "agent must not run"}), false)
+		seed(t, store, task)
+		w.dispatchProcess(ctx, task, project, profile)
+		check(t, store, task)
+	})
 }
 
 func TestAttemptHandoffReportsPersistenceFailure(t *testing.T) {

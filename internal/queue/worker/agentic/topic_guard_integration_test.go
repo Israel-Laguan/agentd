@@ -94,8 +94,8 @@ func (h *topicDriftHost) CommitTextWithProfile(ctx context.Context, task models.
 	*h.committed = text
 }
 
-func (h *topicDriftHost) AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	return []gateway.PromptMessage{{Role: "system", Content: "sys"}}
+func (h *topicDriftHost) AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) ([]gateway.PromptMessage, error) {
+	return []gateway.PromptMessage{{Role: "system", Content: "sys"}}, nil
 }
 
 func (h *topicDriftHost) AssembleAgenticSystemPromptWithUserContent(
