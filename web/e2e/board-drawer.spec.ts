@@ -7,13 +7,25 @@ import { seedProject, taskEventTypes, uniqueTag } from "./helpers";
 test("a seeded task opens in the drawer with its event log", async ({ page, request }) => {
   const tag = uniqueTag("drawer");
   const title = `Drawer task ${tag}`;
-  const { taskId } = await seedProject(request, `Drawer project ${tag}`, title);
+  // exec.turn runs on the devenv's fake acp agent, which reads its script from
+  // the task description: a completed edit, then a summary that names the task.
+  const summary = `done title=${title}`;
+  const script = JSON.stringify([
+    { did: "edit" },
+    {
+      tool: {
+        name: "report_outcome",
+        args: { outcome: "completed", summary, result: { summary } },
+      },
+    },
+  ]);
+  const { taskId } = await seedProject(request, `Drawer project ${tag}`, title, script);
 
-  // The worker claims the task and writes its first events on its own; wait
-  // for the daemon to have them so the drawer has something to render.
+  // The worker claims the task and writes its result on its own; wait for the
+  // daemon to have it so the drawer has something to render.
   await expect
     .poll(() => taskEventTypes(request, taskId), { timeout: 30_000 })
-    .toContain("LOG_CHUNK");
+    .toContain("RESULT");
 
   await page.goto("/");
   await page.getByRole("button", { name: "Workforce Board" }).click();
@@ -24,11 +36,11 @@ test("a seeded task opens in the drawer with its event log", async ({ page, requ
 
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Task events" })).toBeVisible();
-  // Each event is a collapsed <details>; the payload is the daemon's own log
-  // line, which names the task, so static text cannot satisfy this.
-  const logRow = page.locator("details").filter({ hasText: "LOG_CHUNK" });
-  await logRow.getByText("LOG_CHUNK", { exact: true }).click();
-  await expect(logRow.getByText(new RegExp(`title=${title}`))).toBeVisible();
+  // Each event is a collapsed <details>; the payload is the agent's summary,
+  // which names the task, so static text cannot satisfy this.
+  const resultRow = page.locator("details").filter({ hasText: "RESULT" });
+  await resultRow.getByText("RESULT", { exact: true }).click();
+  await expect(resultRow.getByText(new RegExp(`title=${title}`))).toBeVisible();
 
   await page.getByRole("button", { name: "Close task drawer" }).click();
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeHidden();
