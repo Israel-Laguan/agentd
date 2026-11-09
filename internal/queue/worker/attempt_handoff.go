@@ -87,7 +87,7 @@ func capList(list []string, max int, what string) []string {
 	if len(list) <= max {
 		return list
 	}
-	return append(list[:max], fmt.Sprintf("%d more %s omitted", len(list)-max, what))
+	return append(list[:max:max], fmt.Sprintf("%d more %s omitted", len(list)-max, what)) // never writes into the caller's array
 }
 
 // attemptHandoffMessage returns the latest uncleared handoff note, or nil. A

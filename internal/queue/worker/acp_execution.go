@@ -132,8 +132,11 @@ func (w *Worker) saveACPHandoff(ctx context.Context, task models.Task, project m
 	return true
 }
 
-func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, access stage.WorkspaceAccess) (stage.StageRequest, error) {
+func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, access stage.WorkspaceAccess) (none stage.StageRequest, err error) {
 	messages, err := w.buildStageContext(ctx, task, project, profile)
+	if err != nil {
+		return none, err
+	}
 	return stage.StageRequest{
 		Stage:    stage.StageExecution,
 		Purpose:  gateway.PurposeExecTurn,
@@ -142,5 +145,5 @@ func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, proj
 		Access:   access,
 		AgentID:  task.AgentID,
 		Attrs:    gateway.AttrsForTask(task.RequiresWorkspaceChange),
-	}, err
+	}, nil
 }
