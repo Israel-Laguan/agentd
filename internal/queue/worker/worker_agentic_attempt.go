@@ -3,9 +3,11 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"agentd/internal/models"
 	"agentd/internal/queue/worker/agentic"
+	"agentd/internal/stage"
 )
 
 // runAgenticAttempt checks the provider, mounts the task's hooks, runs session
@@ -39,7 +41,27 @@ func (w *Worker) runAgenticAttempt(
 	if blocked {
 		return LoopResult{}, false
 	}
+	if _, err := w.attemptHandoffMessage(ctx, clarified); err != nil {
+		w.failTerminal(liveContext(ctx), clarified, err, models.TaskStateFailedRequiresHuman)
+		return LoopResult{}, false
+	}
 	result, outcome, ok := engine.Process(ctx, clarified, project, profile, taskHooks, taskCaps)
+	// Save before applying the result, which may make the task READY for a
+	// concurrent retry. Success clears the note after the coordinator commits.
+	detail := result.Meta.LastError
+	if outcome.Err != nil {
+		detail = outcome.Err.Error() + "\n" + detail
+	}
+	if failure := w.attempts.currentFailure(task.ID); failure != nil {
+		detail = fmt.Sprintf("First failed command: %s\nFailure: %s\n%s", failure.command, failure.failure, detail)
+	}
+	if detail == "" {
+		detail = "Attempt awaiting coordinator checks; see check feedback if it was rejected."
+	}
+	if err := w.writeAttemptHandoff(ctx, clarified, project, stage.StageResult{Progress: outcome.Text}, errors.New(detail)); err != nil {
+		w.failTerminal(liveContext(ctx), clarified, fmt.Errorf("persist attempt handoff: %w", err), models.TaskStateFailedRequiresHuman)
+		return LoopResult{}, false
+	}
 	// Process registers its own cancel for the run and deregisters it on
 	// return, replacing the one above. Re-register ours so a cancel during the
 	// terminal board write still reaches this attempt.

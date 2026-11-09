@@ -82,8 +82,13 @@ func (r StageRequest) Validate() error {
 // every attempt and are set when Call fails too, so a caller that records
 // tokens records what a failed call cost. The agent itself records nothing.
 type StageResult struct {
-	Outcome      Outcome
-	Output       json.RawMessage
+	Outcome Outcome
+	Output  json.RawMessage
+	// Progress is the agent's streamed text, when available, including on failure.
+	Progress     string
+	FailedTools  []string
+	FilesTouched []string
+	Plan         string
 	TokenUsage   int
 	UsageDetails spec.UsageDetails
 }

@@ -21,7 +21,7 @@ func TestTruncateMessagesUsesProvidedStrategy(t *testing.T) {
 	input := strings.Repeat("a", 50) + strings.Repeat("b", 50)
 	messages := []spec.PromptMessage{{Role: "user", Content: input}}
 	got := truncateMessages(messages, 40, HeadTailStrategy{HeadRatio: 1})
-	if got[0].Content != input[:40-len(truncationMarker)]+truncationMarker {
+	if got[0].Content != (HeadTailStrategy{HeadRatio: 1}).Truncate(input, 40) {
 		t.Fatalf("truncateMessages() = %q, want head-only truncation", got[0].Content)
 	}
 	if messages[0].Content != input {

@@ -1,5 +1,7 @@
 package truncation
 
+import "fmt"
+
 // HeadTailStrategy keeps a configurable amount from the start and end.
 type HeadTailStrategy struct {
 	HeadRatio float64
@@ -15,13 +17,20 @@ func (s HeadTailStrategy) Truncate(input string, budget int) string {
 	if budget <= 0 || len(input) <= budget {
 		return input
 	}
-	if budget <= len(truncationMarker) {
-		return input[:budget]
-	}
-
 	ratio := normalizeHeadRatio(s.HeadRatio)
-	remaining := budget - len(truncationMarker)
-	head := int(float64(remaining) * ratio)
-	tail := remaining - head
-	return input[:head] + truncationMarker + input[len(input)-tail:]
+	marker := fmt.Sprintf("%s(%d bytes omitted)", truncationMarker, len(input))
+	for {
+		remaining := budget - len(marker)
+		if remaining <= 0 {
+			return utf8SafePrefix(input, budget)
+		}
+		headSize := int(float64(remaining) * ratio)
+		head := utf8SafePrefix(input, headSize)
+		tail := utf8SafeSuffix(input, remaining-headSize)
+		next := fmt.Sprintf("%s(%d bytes omitted)", truncationMarker, len(input)-len(head)-len(tail))
+		if len(next) == len(marker) {
+			return head + next + tail
+		}
+		marker = next
+	}
 }

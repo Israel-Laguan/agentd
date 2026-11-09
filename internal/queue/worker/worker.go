@@ -283,5 +283,8 @@ func (w *Worker) processAgentic(ctx context.Context, task models.Task, project m
 	audit.reviewHandoff = succeeded && profile.RequireReview
 	w.finishTaskAudit(task, project, profile.Provider, audit)
 	w.attempts.finish(task.ID, succeeded)
+	if succeeded {
+		w.clearAttemptHandoff(ctx, task)
+	}
 	return result, ok
 }

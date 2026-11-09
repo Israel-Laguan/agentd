@@ -169,10 +169,16 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
 	systemPrompt := w.buildSystemPromptContent(task, project, profile)
 	userContent := fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
-	return w.assembleStageContext(ctx, task, project, systemPrompt, userContent, false)
+	messages, err := w.assembleStageContext(ctx, task, project, systemPrompt, userContent, false)
+	if err != nil {
+		// shortcut: the engine interface cannot fail here; runAgenticAttempt checks
+		// the note first, so only a read failing between the two lands here.
+		slog.Error("attempt handoff unavailable", "task_id", task.ID, "error", err)
+	}
+	return messages
 }
 
-func (w *Worker) buildStageContext(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
+func (w *Worker) buildStageContext(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) ([]gateway.PromptMessage, error) {
 	systemPrompt := w.buildSystemPromptContent(task, project, profile, true)
 	userContent := task.Title + "\n\n" + task.Description
 	if len(task.SuccessCriteria) > 0 {
@@ -184,7 +190,7 @@ func (w *Worker) buildStageContext(ctx context.Context, task models.Task, projec
 	return w.assembleStageContext(ctx, task, project, systemPrompt, userContent, true)
 }
 
-func (w *Worker) assembleStageContext(ctx context.Context, task models.Task, project models.Project, systemPrompt, userContent string, forACP bool) []gateway.PromptMessage {
+func (w *Worker) assembleStageContext(ctx context.Context, task models.Task, project models.Project, systemPrompt, userContent string, forACP bool) ([]gateway.PromptMessage, error) {
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: systemPrompt, Section: gateway.SectionSystem},
 		{Role: "user", Content: userContent, Section: gateway.SectionTask},
@@ -195,13 +201,20 @@ func (w *Worker) assembleStageContext(ctx context.Context, task models.Task, pro
 		messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
 		messages = w.PrependSandboxViolationFeedback(ctx, task, messages)
 		messages = w.appendGoldenFeedback(ctx, task, messages)
+		handoff, err := w.attemptHandoffMessage(ctx, task)
+		if err != nil {
+			return messages, err
+		}
+		if handoff != nil {
+			messages = append(messages, *handoff)
+		}
 	}
 	if forACP {
 		if failure := w.attempts.lastFailure(task.ID); failure != nil {
 			messages = append(messages, gateway.PromptMessage{Role: "user", Content: fmt.Sprintf("The first failed command in the previous attempt was %q. Failure: %s", failure.command, failure.failure), Section: gateway.SectionComments})
 		}
 	}
-	return messages
+	return messages, nil
 }
 
 // assembleAgenticSystemPromptWithUserContent builds the layered system prompt and sets the

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -374,16 +375,22 @@ func (s *apiStore) SetSetting(context.Context, string, string) error         { r
 var _ models.KanbanStore = (*apiStore)(nil)
 var _ = sql.ErrNoRows
 
-func (s *apiStore) UpdateTaskCriteria(_ context.Context, id string, _ time.Time, criteria []string, golden []models.GoldenCriterion) (*models.Task, error) {
+func (s *apiStore) UpdateTaskCriteria(_ context.Context, id string, expected time.Time, criteria []string, golden []models.GoldenCriterion) (*models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if id != s.task.ID {
 		return nil, models.ErrTaskNotFound
 	}
 	if err := models.ValidateGoldenCriteria(criteria, golden); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", models.ErrInvalidDraftPlan, err)
+	}
+	if !s.task.UpdatedAt.Equal(expected) || s.task.State == models.TaskStateRunning ||
+		(s.task.State == models.TaskStateCompleted && len(s.task.GoldenCriteria) == 0 && len(golden) > 0) {
+		return nil, models.ErrStateConflict
 	}
 	s.task.SuccessCriteria = append([]string(nil), criteria...)
 	s.task.GoldenCriteria = append([]models.GoldenCriterion(nil), golden...)
+	s.task.CriteriaMet = []string{}
+	s.task.UpdatedAt = time.Now().UTC()
 	return &s.task, nil
 }

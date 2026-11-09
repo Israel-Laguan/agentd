@@ -1,6 +1,7 @@
 package truncation
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -15,7 +16,8 @@ func TestHeadTailShortInput(t *testing.T) {
 func TestHeadTailDynamicRatios(t *testing.T) {
 	input := strings.Repeat("a", 50) + strings.Repeat("b", 50)
 	budget := 40
-	remaining := budget - len(truncationMarker)
+	marker := fmt.Sprintf("【...】(%d bytes omitted)", len(input)-(budget-len("【...】(00 bytes omitted)")))
+	remaining := budget - len(marker)
 
 	tests := []struct {
 		name      string
@@ -36,8 +38,8 @@ func TestHeadTailDynamicRatios(t *testing.T) {
 			if len(got) != tt.wantTotal {
 				t.Fatalf("len(got) = %d, want %d", len(got), tt.wantTotal)
 			}
-			if !strings.Contains(got, truncationMarker) {
-				t.Fatalf("got %q missing marker %q", got, truncationMarker)
+			if !strings.Contains(got, marker) {
+				t.Fatalf("got %q missing marker %q", got, marker)
 			}
 			if tt.wantHead > 0 && !strings.HasPrefix(got, input[:tt.wantHead]) {
 				t.Fatalf("got %q does not preserve requested head", got)

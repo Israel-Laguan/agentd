@@ -11,6 +11,7 @@ import (
 	agenthooks "agentd/internal/agent/hooks"
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/truncation"
 	"agentd/internal/models"
 	"agentd/internal/sandbox"
 )
@@ -95,7 +96,8 @@ func (w *Worker) runGoldenChecks(ctx context.Context, task models.Task, project 
 		if w.sandboxScrubber != nil {
 			output = w.sandboxScrubber.Scrub(output)
 		}
-		failures = append(failures, fmt.Sprintf("Criterion: %s\nCheck: %s\nOutput:\n%s", check.Criterion, check.CheckCommand, truncate(output, 4000)))
+		output = (truncation.HeadTailStrategy{HeadRatio: .5}).Truncate(output, 4000)
+		failures = append(failures, fmt.Sprintf("Criterion: %s\nCheck: %s\nOutput:\n%s", check.Criterion, check.CheckCommand, output))
 	}
 	return passed, failures
 }
