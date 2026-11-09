@@ -8,7 +8,6 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
-	"agentd/internal/queue/planning"
 )
 
 const (
@@ -100,29 +99,7 @@ func (w *Worker) processRunningTask(
 	profile models.AgentProfile,
 ) {
 	defer w.recoverPanic(ctx, task)
-	release, ok := w.gateProvider(ctx, task, profile.Provider)
-	if !ok {
-		return
-	}
-	defer release()
-	if profile.RequireReview {
-		if done, err := w.tryFinalizeApprovedReview(ctx, task); err != nil {
-			w.FailHard(ctx, task, err)
-			return
-		} else if done {
-			return
-		}
-	}
-	if planning.IsPhasePlanningTask(task.Title) {
-		w.handlePhasePlanning(ctx, task, project)
-		return
-	}
-	if w.tryRenderHostReport(ctx, task, project) {
-		return
-	}
-	if result, ok := w.processAgentic(ctx, task, project, profile); ok {
-		w.handleLoopResult(ctx, task, result)
-	}
+	w.dispatchProcess(ctx, task, project, profile)
 }
 
 type batchTextSlot struct {
