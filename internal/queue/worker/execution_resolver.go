@@ -87,8 +87,11 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 
 func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {
 	if profile.RequireReview {
-		if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
-			return executionResolution{kind: executionAgentACP, route: d, agent: a}
+		// A tiered step keeps its own dispatch path, so only whole tasks go to ACP.
+		if !w.isTieredStep(task) {
+			if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
+				return executionResolution{kind: executionAgentACP, route: d, agent: a}
+			}
 		}
 		return executionResolution{kind: executionAgentReview}
 	}

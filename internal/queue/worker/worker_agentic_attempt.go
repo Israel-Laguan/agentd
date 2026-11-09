@@ -44,9 +44,11 @@ func (w *Worker) runAgenticAttempt(
 	// return, replacing the one above. Re-register ours so a cancel during the
 	// terminal board write still reaches this attempt.
 	w.RegisterCancel(task.ID, cancel)
-	w.applyAgenticResult(ctx, project, outcome)
+	committed := w.applyAgenticResult(ctx, project, outcome)
 	w.DeregisterCancel(task.ID)
-	return result, ok
+	// A coordinator rejection already failed or requeued the task, so the attempt
+	// is not a success and the loop result needs no further handling.
+	return result, ok && committed
 }
 
 // registerRunCancel makes a task run cancellable by its task ID until done is
@@ -62,18 +64,19 @@ func (w *Worker) registerRunCancel(ctx context.Context, taskID string) (context.
 
 // applyAgenticResult writes the terminal result the engine settled on to the
 // board. The engine only decides the outcome (T-041: only the core writes the
-// board).
-func (w *Worker) applyAgenticResult(ctx context.Context, project models.Project, r agentic.Result) {
+// board). It reports false only when a completed result was rejected on commit.
+func (w *Worker) applyAgenticResult(ctx context.Context, project models.Project, r agentic.Result) bool {
 	switch r.Kind {
 	case agentic.ResultFailed:
 		w.FailHard(ctx, r.Task, r.Err)
 	case agentic.ResultGatewayError:
 		w.HandleGatewayError(ctx, r.Task, r.Err)
 	case agentic.ResultCompleted:
-		w.commitExecution(ctx, r.Task, project, r.Profile, r.Text)
+		return w.commitExecution(ctx, r.Task, project, r.Profile, r.Text)
 	case agentic.ResultPromptHandoff:
 		w.HandlePromptHandoff(ctx, r.Task, r.Payload)
 	}
+	return true
 }
 
 // commitExecution applies coordinator checks to a completed execution before
@@ -87,7 +90,7 @@ func (w *Worker) commitExecution(ctx context.Context, task models.Task, project 
 		if errors.Is(err, models.ErrBreakdownIncomplete) {
 			w.failTerminal(ctx, task, err, models.TaskStateFailedRequiresHuman)
 		} else {
-			w.requeue(ctx, task, err.Error())
+			w.handleAgentFailure(ctx, task, err.Error())
 		}
 		return false
 	}

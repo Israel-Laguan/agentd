@@ -139,6 +139,9 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 	builder := NewSystemPromptBuilder()
 	if builtin {
 		builder.WithGlobal(agenticToolUseSystemText(profile.WorkspaceReadonly, goal))
+	} else {
+		// Recalled lessons are wrapped as external content for every agent.
+		builder.WithGlobal(agenthooks.ExternalContentInstruction)
 	}
 	w.enrichBuilderUserPreferences(builder)
 	w.enrichBuilderProjectInstructions(builder, project, profile)
