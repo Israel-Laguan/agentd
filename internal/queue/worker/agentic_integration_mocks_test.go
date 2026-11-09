@@ -381,3 +381,7 @@ func (m *mockAgenticStore) ListUnprocessedHumanComments(context.Context) ([]mode
 func (m *mockAgenticStore) MarkCommentProcessed(context.Context, string, string) error {
 	return nil
 }
+
+func (s *mockAgenticStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

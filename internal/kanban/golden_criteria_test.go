@@ -54,9 +54,20 @@ func TestUpdateTaskCriteriaResetsHistoryAndRejectsRunning(t *testing.T) {
 	if err := store.AppendEvent(ctx, models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: "GOLDEN_CHECK_FAILURE", Payload: `{"cycle":2}`}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE tasks SET criteria_met='["tests pass"]' WHERE id=?`, task.ID); err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := store.GetTask(ctx, task.ID)
+	if err != nil || len(seeded.CriteriaMet) != 1 {
+		t.Fatalf("seeded task = %+v, error = %v", seeded, err)
+	}
+	task = *seeded
 	updated, err := store.UpdateTaskCriteria(ctx, task.ID, task.UpdatedAt, []string{"tests pass"}, []models.GoldenCriterion{{Criterion: "tests pass", CheckCommand: "true"}})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(updated.CriteriaMet) != 0 {
+		t.Fatalf("criteria_met = %v, want reset", updated.CriteriaMet)
 	}
 	events, err := store.ListEventsByTask(ctx, task.ID)
 	if err != nil || len(events) < 2 || events[len(events)-1].Type != "GOLDEN_CRITERIA_RESET" {

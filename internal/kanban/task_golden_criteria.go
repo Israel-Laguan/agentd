@@ -30,7 +30,7 @@ func (s *Store) UpdateTaskCriteria(ctx context.Context, id string, expected time
 	if err != nil {
 		return nil, err
 	}
-	return retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
+	return s.notifyTask(retryOnBusy(ctx, func(ctx context.Context) (*models.Task, error) {
 		tx, err := beginImmediate(ctx, s.db)
 		if err != nil {
 			return nil, err
@@ -41,6 +41,9 @@ func (s *Store) UpdateTaskCriteria(ctx context.Context, id string, expected time
 			return nil, err
 		}
 		if !current.UpdatedAt.Equal(expected) || current.State == models.TaskStateRunning {
+			return nil, models.ErrStateConflict
+		}
+		if current.State == models.TaskStateCompleted && len(golden) > 0 {
 			return nil, models.ErrStateConflict
 		}
 		now := utcNow()
@@ -60,5 +63,5 @@ func (s *Store) UpdateTaskCriteria(ctx context.Context, id string, expected time
 			return nil, err
 		}
 		return task, commitTx(tx, "update task criteria")
-	})
+	}))
 }

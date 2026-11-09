@@ -181,17 +181,6 @@ func (w *Worker) tryFinalizeApprovedReview(ctx context.Context, task models.Task
 	if err != nil {
 		return false, fmt.Errorf("refresh task for approved review commit: %w", err)
 	}
-	if !w.checkGoldenCriteria(ctx, *fresh) {
-		if err := markReviewUsed(ctx, w.store, task.ID, review.ID); err != nil {
-			return true, err
-		}
-		return true, nil
-	}
-	ctx = context.WithValue(ctx, goldenCheckedKey{}, task.ID)
-	// A review-required tiered execute/verify step can produce the same
-	// NEEDS_CONTEXT sentinel as an unreviewed one. Route the approved draft
-	// through interception before committing: committing it as a success
-	// would unlock BLOCKED dependents before handleNeedsContext rewires them.
 	if w.interceptTieredNeedsContext(ctx, *fresh, draft) {
 		if err := markReviewUsed(ctx, w.store, task.ID, review.ID); err != nil {
 			slog.Warn("failed to mark intercepted review as consumed",
@@ -199,6 +188,13 @@ func (w *Worker) tryFinalizeApprovedReview(ctx context.Context, task models.Task
 		}
 		return true, nil
 	}
+	if !w.checkGoldenCriteria(ctx, *fresh) {
+		if err := markReviewUsed(ctx, w.store, task.ID, review.ID); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	ctx = context.WithValue(ctx, goldenCheckedKey{}, task.ID)
 	result := sandbox.Result{Success: true, Stdout: draft}
 	if !w.commitSucceeded(ctx, *fresh, result, nil) {
 		return false, nil

@@ -216,3 +216,7 @@ func (s *routingTestSandbox) Execute(_ context.Context, _ sandbox.Payload) (sand
 	s.execCount++
 	return sandbox.Result{Success: true, ExitCode: 0, Stdout: "ok"}, nil
 }
+
+func (s *routingTestStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

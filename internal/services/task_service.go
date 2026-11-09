@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"agentd/internal/models"
 )
@@ -18,29 +17,29 @@ type TaskService struct {
 	Bus   TaskBus
 }
 
-type taskCriteriaStore interface {
-	UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error)
-}
+type taskCriteriaStore = models.TaskCriteriaStore
 
 func (s *TaskService) UpdateTaskCriteria(ctx context.Context, id string, criteria *[]string, golden *[]models.GoldenCriterion) (*models.Task, error) {
 	current, err := s.Store.GetTask(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	// GetTask may return a live pointer; never mutate it before persistence.
+	nextCriteria, nextGolden := current.SuccessCriteria, current.GoldenCriteria
 	if criteria != nil {
-		current.SuccessCriteria = *criteria
+		nextCriteria = *criteria
 	}
 	if golden != nil {
-		current.GoldenCriteria = *golden
+		nextGolden = *golden
 	}
-	if err := models.ValidateGoldenCriteria(current.SuccessCriteria, current.GoldenCriteria); err != nil {
+	if err := models.ValidateGoldenCriteria(nextCriteria, nextGolden); err != nil {
 		return nil, fmt.Errorf("%w: %v", models.ErrInvalidDraftPlan, err)
 	}
 	store, ok := s.Store.(taskCriteriaStore)
 	if !ok {
 		return nil, fmt.Errorf("task criteria updates are unavailable")
 	}
-	return store.UpdateTaskCriteria(ctx, id, current.UpdatedAt, current.SuccessCriteria, current.GoldenCriteria)
+	return store.UpdateTaskCriteria(ctx, id, current.UpdatedAt, nextCriteria, nextGolden)
 }
 
 // TaskBus is the optional bus surface used to publish manager-loop
@@ -108,6 +107,9 @@ func (s *TaskService) UpdateTaskState(ctx context.Context, taskID string, next m
 	if err != nil {
 		return nil, err
 	}
+	if next == models.TaskStateCompleted && current.State == models.TaskStateRunning && len(current.GoldenCriteria) > 0 {
+		return nil, fmt.Errorf("%w: golden criteria must be verified before completing", models.ErrStateConflict)
+	}
 	return s.Store.UpdateTaskState(ctx, taskID, current.UpdatedAt, next)
 }
 
@@ -132,6 +134,9 @@ func (s *TaskService) PatchTask(ctx context.Context, taskID string, state *model
 	current, err := s.Store.GetTask(ctx, taskID)
 	if err != nil {
 		return nil, err
+	}
+	if state != nil && *state == models.TaskStateCompleted && current.State == models.TaskStateRunning && len(current.GoldenCriteria) > 0 {
+		return nil, fmt.Errorf("%w: golden criteria must be verified before completing", models.ErrStateConflict)
 	}
 	return s.Store.UpdateTaskPatch(ctx, taskID, current.UpdatedAt, state, description)
 }

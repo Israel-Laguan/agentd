@@ -54,7 +54,7 @@ func (s *FakeKanbanStore) UpdateTaskCriteria(_ context.Context, id string, expec
 	}
 	t.SuccessCriteria = append([]string(nil), criteria...)
 	t.GoldenCriteria = append([]models.GoldenCriterion(nil), golden...)
-	t.CriteriaMet = nil
+	t.CriteriaMet = []string{}
 	t.UpdatedAt = now()
 	s.tasks[id] = t
 	s.events = append(s.events, models.Event{BaseEntity: models.BaseEntity{CreatedAt: t.UpdatedAt}, ProjectID: t.ProjectID, TaskID: sql.NullString{String: id, Valid: true}, Type: "GOLDEN_CRITERIA_RESET"})

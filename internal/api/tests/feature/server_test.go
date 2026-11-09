@@ -373,3 +373,7 @@ func (s *apiStore) SetSetting(context.Context, string, string) error         { r
 
 var _ models.KanbanStore = (*apiStore)(nil)
 var _ = sql.ErrNoRows
+
+func (s *apiStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

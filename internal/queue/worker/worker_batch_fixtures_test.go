@@ -329,3 +329,7 @@ func summarizeTasks(n int) []models.Task {
 	}
 	return tasks
 }
+
+func (s *batchTestStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

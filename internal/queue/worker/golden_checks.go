@@ -42,7 +42,7 @@ func (w *Worker) checkGoldenCriteria(ctx context.Context, task models.Task) bool
 	}
 	events, err := w.store.ListEventsByTask(ctx, task.ID)
 	if err != nil {
-		w.failTerminal(ctx, task, fmt.Errorf("read golden check history: %w", err), models.TaskStateFailedRequiresHuman)
+		w.requeue(ctx, task, fmt.Sprintf("read golden check history: %v", err))
 		return false
 	}
 	previous := lastGoldenCycle(events)
@@ -58,8 +58,12 @@ func (w *Worker) checkGoldenCriteria(ctx context.Context, task models.Task) bool
 		cycle.Stall++
 	}
 	payload, _ := json.Marshal(cycle)
-	if err := w.store.AppendEvent(ctx, models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: goldenEventType, Payload: string(payload)}); err != nil {
-		w.failTerminal(ctx, task, fmt.Errorf("persist golden check failure: %w", err), models.TaskStateFailedRequiresHuman)
+	liveCtx := ctx
+	if ctx.Err() != nil {
+		liveCtx = context.WithoutCancel(ctx)
+	}
+	if err := w.store.AppendEvent(liveCtx, models.Event{ProjectID: task.ProjectID, TaskID: sql.NullString{String: task.ID, Valid: true}, Type: goldenEventType, Payload: string(payload)}); err != nil {
+		w.failTerminal(liveCtx, task, fmt.Errorf("persist golden check failure: %w", err), models.TaskStateFailedRequiresHuman)
 		return false
 	}
 	if cycle.Cycle >= w.goldenCycleCap || cycle.Stall >= w.goldenStallCap {
@@ -74,6 +78,10 @@ func (w *Worker) runGoldenChecks(ctx context.Context, task models.Task, project 
 	passed := 0
 	var failures []string
 	for _, check := range task.GoldenCriteria {
+		if verdict, reason := agenthooks.EvaluateCommand(check.CheckCommand); verdict == agenthooks.CommandDeny {
+			failures = append(failures, fmt.Sprintf("Criterion: %s\nCheck: %s\nOutput:\n%s", check.Criterion, check.CheckCommand, reason))
+			continue
+		}
 		result, runErr := w.sandbox.Execute(ctx, sandbox.Payload{TaskID: task.ID, ProjectID: task.ProjectID,
 			WorkspacePath: project.WorkspacePath, Command: check.CheckCommand,
 			EnvVars: agenttools.BuildSandboxEnv(w.sandboxEnvAllowlist, w.sandboxExtraEnv), WallTimeout: w.sandboxWallTimeout})
@@ -86,6 +94,9 @@ func (w *Worker) runGoldenChecks(ctx context.Context, task models.Task, project 
 			output += "\n" + runErr.Error()
 		}
 		output = strings.TrimSpace(output)
+		if output == "" {
+			output = strings.TrimSpace(result.Output)
+		}
 		if output == "" {
 			output = fmt.Sprintf("exit code %d", result.ExitCode)
 		}

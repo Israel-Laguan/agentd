@@ -28,8 +28,8 @@ func (h TaskHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	hasCriteria := req.SuccessCriteria != nil || req.GoldenCriteria != nil
 	if !hasState && !hasDescription && !hasCriteria {
 		httpx.WriteValidationError(w, http.StatusBadRequest, httpx.CodeValidation,
-			"at least one of state or description is required",
-			[]string{"state or description must be provided"})
+			"at least one of state, description, success_criteria, or golden_criteria is required",
+			[]string{"state, description, success_criteria, or golden_criteria must be provided"})
 		return
 	}
 	if hasCriteria && (hasState || hasDescription) {

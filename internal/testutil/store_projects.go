@@ -14,6 +14,11 @@ func (s *FakeKanbanStore) MaterializePlan(_ context.Context, plan models.DraftPl
 	if err := s.validateDraftAgentIDs(plan.Tasks); err != nil {
 		return nil, nil, err
 	}
+	for _, draft := range plan.Tasks {
+		if err := models.ValidateGoldenCriteria(draft.SuccessCriteria, draft.GoldenCriteria); err != nil {
+			return nil, nil, err
+		}
+	}
 	projectID := s.nextID()
 	project := models.Project{
 		BaseEntity:    models.BaseEntity{ID: projectID, CreatedAt: now(), UpdatedAt: now()},
@@ -150,6 +155,9 @@ func (s *FakeKanbanStore) EnsureProjectTask(_ context.Context, projectID string,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.validateDraftAgentIDs([]models.DraftTask{draft}); err != nil {
+		return nil, false, err
+	}
+	if err := models.ValidateGoldenCriteria(draft.SuccessCriteria, draft.GoldenCriteria); err != nil {
 		return nil, false, err
 	}
 	for _, t := range s.tasks {

@@ -190,9 +190,13 @@ func (w *Worker) resolveTieredOrigin(ctx context.Context, origin models.Task, su
 		return
 	}
 	if success && len(current.GoldenCriteria) != 0 {
-		// A pipeline can resolve its origin while it is BLOCKED or READY.
-		// Let normal dispatch claim it before checking, so a rejection can
-		// requeue it under the same state rules as any other attempt.
+		if current.State == models.TaskStateReady {
+			if updated, err := w.store.UpdateTaskState(ctx, current.ID, current.UpdatedAt, models.TaskStateRunning); err == nil && updated != nil {
+				current = updated
+			} else {
+				return
+			}
+		}
 		if current.State != models.TaskStateRunning {
 			return
 		}

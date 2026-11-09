@@ -160,6 +160,27 @@ type GoldenCriterion struct {
 	CheckCommand string `json:"check_command"`
 }
 
+// UnmarshalJSON accepts snake_case and legacy camel-case keys.
+func (g *GoldenCriterion) UnmarshalJSON(data []byte) error {
+	type alias GoldenCriterion
+	var raw struct {
+		alias
+		CriterionLegacy    string `json:"Criterion"`
+		CheckCommandLegacy string `json:"CheckCommand"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*g = GoldenCriterion(raw.alias)
+	if g.Criterion == "" {
+		g.Criterion = raw.CriterionLegacy
+	}
+	if g.CheckCommand == "" {
+		g.CheckCommand = raw.CheckCommandLegacy
+	}
+	return nil
+}
+
 // ValidateGoldenCriteria rejects missing commands, unknown criteria, and
 // duplicate checks, which would otherwise give a misleading progress count.
 func ValidateGoldenCriteria(criteria []string, golden []GoldenCriterion) error {
@@ -188,14 +209,15 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 	type alias DraftTask
 	var raw struct {
 		alias
-		TempIDLegacy          string       `json:"TempID"`
-		ReferenceIDLegacy     string       `json:"ReferenceID"`
-		TitleLegacy           string       `json:"Title"`
-		DescriptionLegacy     string       `json:"Description"`
-		AssigneeLegacy        TaskAssignee `json:"Assignee"`
-		AgentIDLegacy         string       `json:"AgentID"`
-		DependsOnLegacy       []string     `json:"DependsOn"`
-		SuccessCriteriaLegacy []string     `json:"SuccessCriteria"`
+		TempIDLegacy          string            `json:"TempID"`
+		ReferenceIDLegacy     string            `json:"ReferenceID"`
+		TitleLegacy           string            `json:"Title"`
+		DescriptionLegacy     string            `json:"Description"`
+		AssigneeLegacy        TaskAssignee      `json:"Assignee"`
+		AgentIDLegacy         string            `json:"AgentID"`
+		DependsOnLegacy       []string          `json:"DependsOn"`
+		SuccessCriteriaLegacy []string          `json:"SuccessCriteria"`
+		GoldenCriteriaLegacy  []GoldenCriterion `json:"GoldenCriteria"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -224,6 +246,9 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 	}
 	if len(d.SuccessCriteria) == 0 && len(raw.SuccessCriteriaLegacy) > 0 {
 		d.SuccessCriteria = append([]string(nil), raw.SuccessCriteriaLegacy...)
+	}
+	if len(d.GoldenCriteria) == 0 && len(raw.GoldenCriteriaLegacy) > 0 {
+		d.GoldenCriteria = append([]GoldenCriterion(nil), raw.GoldenCriteriaLegacy...)
 	}
 	return nil
 }

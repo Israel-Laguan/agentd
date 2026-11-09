@@ -461,3 +461,7 @@ func (g *testGateway) answerClassify(_ context.Context, intent string) (*intake.
 func (g *testGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.EmbedResponse, error) {
 	return gateway.EmbedResponse{}, nil
 }
+
+func (s *testStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

@@ -10,6 +10,7 @@ func TestGoldenCriteriaValidation(t *testing.T) {
 	}{
 		{"valid", []GoldenCriterion{{Criterion: "tests pass", CheckCommand: "go test ./..."}}, true},
 		{"unknown", []GoldenCriterion{{Criterion: "other", CheckCommand: "true"}}, false},
+		{"blank criterion", []GoldenCriterion{{Criterion: "  ", CheckCommand: "true"}}, false},
 		{"missing command", []GoldenCriterion{{Criterion: "tests pass"}}, false},
 		{"duplicate", []GoldenCriterion{{Criterion: "tests pass", CheckCommand: "true"}, {Criterion: "tests pass", CheckCommand: "true"}}, false},
 	} {

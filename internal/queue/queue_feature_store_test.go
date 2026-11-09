@@ -43,3 +43,7 @@ func (s *queueStore) seed(count int, state models.TaskState) {
 		})
 	}
 }
+
+func (s *queueStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

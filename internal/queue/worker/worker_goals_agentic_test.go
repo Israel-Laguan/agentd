@@ -98,3 +98,7 @@ func (s *goalStallRefreshedStore) SpawnTieredContinuation(context.Context, strin
 func (s *goalStallRefreshedStore) RewireDependsOn(context.Context, string, string) ([]models.Task, error) {
 	return nil, nil
 }
+
+func (s *goalStallRefreshedStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}
