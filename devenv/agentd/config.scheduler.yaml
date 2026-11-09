@@ -42,3 +42,18 @@ agentic:
       - id: j23-once
         run_after: "2020-01-01T00:00:00Z"
         title: "J23 scheduled once"
+        # The fake agent's script, one line: a completed edit, then report_outcome.
+        description_template: '[{"did":"edit"},{"tool":{"name":"report_outcome","args":{"outcome":"completed","result":{"summary":"J23: the scheduled task ran"},"summary":"J23: the scheduled task ran"}}}]'
+
+sandbox:
+  backend: bubblewrap
+
+# exec.turn runs on the scripted fake acp agent (T-069), so a journey's task
+# needs no model: its script is in the task description. An acp agent runs only
+# in the bubblewrap jail, so the backend is required; mockllm answers the
+# daemon's own L1 calls (intake, clarify, split, memory).
+agents:
+  fake: { kind: acp, preset: fake, model: "fake" }
+stages:
+  exec.turn:
+    default: fake

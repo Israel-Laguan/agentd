@@ -115,6 +115,10 @@ services:
     environment:
       LITELLM_API_KEY: "sk-demo-litellm-plan-execute-only"
       AGENTD_API_ADDRESS: "0.0.0.0:8765"
+    # The acp agent runs in the bubblewrap jail; rootless podman needs
+    # unmask=ALL for its /proc (see agentd-acp). Devenv only.
+    security_opt:
+      - unmask=ALL
     volumes:
       - agentd-data:/home/agentd
       - ./agentd/config.yaml:/etc/agentd/config.yaml:ro
@@ -187,6 +191,10 @@ services:
       # bind-mounting the crontab there makes podman create the parent dirs
       # as root, which the non-root agentd user then cannot write.
       AGENTD_HOME: "/home/agentd-disk"
+    # The acp agent runs in the bubblewrap jail; rootless podman needs
+    # unmask=ALL for its /proc (see agentd-acp). Devenv only.
+    security_opt:
+      - unmask=ALL
     volumes:
       - agentd-data-disk:/home/agentd-disk
       - ./agentd/config.disk.yaml:/etc/agentd/config.yaml:ro
@@ -295,6 +303,9 @@ services:
       # J23 writes <home>/.env to enable the scheduler, so home must be the
       # named volume (home: in the config file is ignored; see agentd-disk).
       AGENTD_HOME: "/home/agentd-sched"
+    # The acp agent runs in the bubblewrap jail; see agentd-acp. Devenv only.
+    security_opt:
+      - unmask=ALL
     volumes:
       - agentd-data-sched:/home/agentd-sched
       - ./agentd/config.scheduler.yaml:/etc/agentd/config.yaml:ro

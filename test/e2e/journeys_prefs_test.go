@@ -9,13 +9,19 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agentd/internal/agent/acp/fakeagent"
 )
+
+// j11CanaryMarker starts the saved preference; the fake agent echoes the prompt
+// lines that contain it.
+const j11CanaryMarker = "J11 PREF CANARY"
 
 // j11Preference is the preference saved and then expected in a later task's
 // prompt. The token is unique per run so a stale capture entry from an
 // earlier run can never satisfy the assertion.
 func j11PreferenceText() string {
-	return fmt.Sprintf("J11 PREF CANARY %d always answer in haiku", time.Now().UnixNano())
+	return fmt.Sprintf("%s %d always answer in haiku", j11CanaryMarker, time.Now().UnixNano())
 }
 
 // TestJ11_PreferenceRecallOnLaterTask tests J11: a preference saved through
@@ -32,11 +38,12 @@ func j11PreferenceText() string {
 //	same user. Its captured prompt MUST contain the canary, without the
 //	client ever re-sending it.
 //
-// Observability: nothing in the agentd API exposes prompt contents, so the
-// devenv mock LLM appends every request body it receives to a JSONL log and
-// serves it back at GET /requests (see devenv/mockllm/server.py's
-// record_request). Each request carries agentd_metadata.task_id, which is how
-// a captured prompt is attributed to the task that produced it.
+// Observability: nothing in the agentd API exposes prompt contents, and the
+// task runs on the fake acp agent, so the model mock never sees its prompt.
+// The task's script uses the fake agent's Echo step: it completes with the
+// prompt's size and the prompt lines that contain the canary, and that
+// summary is the task's RESULT event. A summary with no "echo bytes=" means
+// the agent never read a prompt, so "absent" cannot pass by accident.
 func TestJ11_PreferenceRecallOnLaterTask(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
@@ -55,15 +62,13 @@ func TestJ11_PreferenceRecallOnLaterTask(t *testing.T) {
 	// (e.g. J09). Reset it to prevent dispatch from being blocked for 5 minutes.
 	j11ResetBreaker(ctx, t, client)
 
-	mock := NewMockLLMClient(mockLLMBaseURL)
-
 	const userID = "j11-user"
 	canary := j11PreferenceText()
 
 	// Phase 1: baseline. The preference does not exist yet, so the worker's
 	// prompt for this task must not contain it. If it did, the assertion in
 	// phase 2 would be meaningless.
-	beforeTask := j11RunProject(ctx, t, client, mock, userID, "j11-before", "J11 baseline before the preference exists")
+	beforeTask := j11RunProject(ctx, t, client, userID, "j11-before", "J11 baseline before the preference exists")
 	j11AssertPrefAbsent(t, "phase 1 (preference not yet saved)", beforeTask, canary)
 
 	// Save the preference.
@@ -71,13 +76,13 @@ func TestJ11_PreferenceRecallOnLaterTask(t *testing.T) {
 
 	// Phase 2: a different project, materialized after the save. The
 	// preference must now reach the worker's prompt unprompted.
-	afterTask := j11RunProject(ctx, t, client, mock, userID, "j11-after", "J11 task after the preference was saved")
+	afterTask := j11RunProject(ctx, t, client, userID, "j11-after", "J11 task after the preference was saved")
 	j11AssertPrefPresent(t, "phase 2 (later task)", afterTask, canary)
 
 	// A different user must NOT see it: recall is scoped by user_id, not
 	// global. Without this, a bug that leaked every preference into every
 	// prompt would still pass the phase-2 assertion above.
-	otherTask := j11RunProject(ctx, t, client, mock, "j11-other-user", "j11-other", "J11 task for an unrelated user")
+	otherTask := j11RunProject(ctx, t, client, "j11-other-user", "j11-other", "J11 task for an unrelated user")
 	j11AssertPrefAbsent(t, "cross-user isolation", otherTask, canary)
 
 	t.Logf("J11: preference %q absent before save, present in task %s after, absent for an unrelated user",
@@ -92,12 +97,11 @@ type j11CapturedTask struct {
 }
 
 // j11RunProject materializes a single-task project, waits for it to complete,
-// and returns the prompt(s) the mock received for that task's execution.
+// and returns what the fake agent echoed of the task's execution prompt.
 func j11RunProject(
 	ctx context.Context,
 	t *testing.T,
 	client *APIClient,
-	mock *MockLLMClient,
 	userID, tag, description string,
 ) j11CapturedTask {
 	t.Helper()
@@ -108,7 +112,7 @@ func j11RunProject(
 		Description:         description,
 		StartEmptyWorkspace: true,
 		Tasks: []DraftTask{
-			{Title: fmt.Sprintf("%s worker task", tag), Description: description},
+			{Title: fmt.Sprintf("%s worker task", tag), Description: fakeagent.Script(fakeagent.Step{Echo: j11CanaryMarker})},
 		},
 	}
 
@@ -134,18 +138,20 @@ func j11RunProject(
 		t.Fatalf("%s [tasks] did not complete: %v", tag, err)
 	}
 
-	captured := j11CapturedTask{taskID: taskID}
-	prompts, err := mock.WorkerPrompts(ctx, taskID)
+	events, err := client.ListTaskEvents(ctx, taskID)
 	if err != nil {
-		t.Fatalf("%s [mock] could not read captured requests: %v", tag, err)
+		t.Fatalf("%s [events] %v", tag, err)
 	}
-	captured.prompts = prompts
-	captured.requests = len(prompts)
+	var prompts []string
+	for _, e := range events {
+		if e.Type == "RESULT" && strings.Contains(e.Payload, "echo bytes=") {
+			prompts = append(prompts, e.Payload)
+		}
+	}
 	if len(prompts) == 0 {
-		t.Fatalf("%s [mock] the mock LLM captured no request for task %s — the capture log "+
-			"is unreachable (is mockllm publishing :8000?)", tag, taskID)
+		t.Fatalf("%s [echo] task %s has no RESULT carrying the agent's prompt echo; events: %+v", tag, taskID, events)
 	}
-	return captured
+	return j11CapturedTask{taskID: taskID, prompts: prompts, requests: len(prompts)}
 }
 
 func j11AssertPrefPresent(t *testing.T, phase string, captured j11CapturedTask, canary string) {

@@ -37,7 +37,7 @@ func TestJ18_CuratorCuratesEachTaskOnce(t *testing.T) {
 		ProjectName:         UniqueProjectName("j18"),
 		Description:         "J18 curator idempotency task",
 		StartEmptyWorkspace: true,
-		Tasks:               []DraftTask{{Title: "J18 curator check", Description: "Complete so the curator archives this task once."}},
+		Tasks:               []DraftTask{fakeTask("J18 curator check", "J18: completed so the curator archives this task once")},
 	}
 	projectID := materializePlan(ctx, t, client, "J18", plan).Project.ID
 	tasks, err := NewTaskPoller(client, projectID).WaitForAllComplete(ctx, 30*time.Second)

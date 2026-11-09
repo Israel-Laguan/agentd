@@ -2,6 +2,7 @@ package fakeagent
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	acp "github.com/coder/acp-go-sdk"
@@ -30,5 +31,24 @@ func TestScriptFromPromptRejectsBlankOrUnknownArrayLines(t *testing.T) {
 		if steps := scriptFromPrompt("a system message\n" + line); steps != nil {
 			t.Fatalf("scriptFromPrompt(%q) = %+v, want no script from a stray array line", line, steps)
 		}
+	}
+}
+
+func TestEchoStepSkipsScriptLines(t *testing.T) {
+	script := Script(Step{Echo: "CANARY"})
+	step := echoStep("CANARY", "pref: CANARY 1\n"+script+"\nother")
+	summary := step.Tool.Args.(map[string]any)["summary"].(string)
+	if !strings.HasPrefix(summary, "echo bytes=") || !strings.HasSuffix(summary, "matched=1: pref: CANARY 1") {
+		t.Fatalf("summary = %q, want exactly the one non-script line", summary)
+	}
+}
+
+func TestRunSleepStopsOnCancel(t *testing.T) {
+	a := &agent{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	stop, err := a.run(ctx, "session", Step{SleepMS: 60_000})
+	if stop != acp.StopReasonCancelled || err != nil {
+		t.Fatalf("run = %q, %v; want cancelled", stop, err)
 	}
 }

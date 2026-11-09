@@ -56,8 +56,8 @@ func TestJ15_MCPBoardExport(t *testing.T) {
 		Description:         "J15: MCP board export sees this project and its tasks",
 		StartEmptyWorkspace: true,
 		Tasks: []DraftTask{
-			{Title: "J15 export task A", Description: "Exported via board.list_tasks."},
-			{Title: "J15 export task B", Description: "Exported via board.list_tasks."},
+			fakeTask("J15 export task A", "J15: exported via board.list_tasks"),
+			fakeTask("J15 export task B", "J15: exported via board.list_tasks"),
 		},
 	})
 
@@ -209,8 +209,8 @@ func TestJ15_MCPBoardExportStateFilter(t *testing.T) {
 		Description:         "J15: the state filter composes with project_id",
 		StartEmptyWorkspace: true,
 		Tasks: []DraftTask{
-			{Title: "J15 state task A", Description: "Completes, then is filtered on."},
-			{Title: "J15 state task B", Description: "Completes, then is filtered on."},
+			fakeTask("J15 state task A", "J15: completed, then filtered on"),
+			fakeTask("J15 state task B", "J15: completed, then filtered on"),
 		},
 	})
 

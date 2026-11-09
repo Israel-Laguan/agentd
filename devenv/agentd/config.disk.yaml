@@ -53,3 +53,16 @@ disk:
 librarian:
   retention_hours: 0
   archive_grace_days: 0
+
+sandbox:
+  backend: bubblewrap
+
+# exec.turn runs on the scripted fake acp agent (T-069), so a journey's task
+# needs no model: its script is in the task description. An acp agent runs only
+# in the bubblewrap jail, so the backend is required; mockllm answers the
+# daemon's own L1 calls (intake, clarify, split, memory).
+agents:
+  fake: { kind: acp, preset: fake, model: "fake" }
+stages:
+  exec.turn:
+    default: fake

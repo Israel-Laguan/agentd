@@ -128,6 +128,21 @@ path. Python unit tests for the dispatch live in
 | **J23** | A one-shot scheduled task runs exactly once | 0. Delete agentd-sched's board and `.env`, then restart (a fired one-shot keeps `last_fired_at`, so a reused volume would never fire it again); 1. Materialize a project on agentd-sched; 2. Write `AGENTD_AGENTIC_SCHEDULER_ENABLED=true` and `AGENTD_AGENTIC_SCHEDULER_PROJECT_ID=<id>` to `<home>/.env`; 3. Restart the daemon; 4. Wait for the `J23 scheduled once` task to reach COMPLETED; 5. Restart again and wait 15 s (several 2 s ticks) | One scheduled task in the project, COMPLETED; no second one after the restart | scheduler (`tick_interval: 2s`, one `run_after` entry, scheduler off at boot) | The scheduler boots disabled because an enabled scheduler whose task has no project fails config load (B-076) and project IDs are generated | P2 | T-058, B-076 |
 | **J24** | A task runs on an acp agent in the bubblewrap jail | 1. Materialize a single-task project on agentd-acp whose description is a fake-agent script: one completed edit, then `report_outcome` completed with a summary; 2. Wait for COMPLETED; 3. `GET /api/v1/tasks/{id}/events` | The task is COMPLETED and a `RESULT` event carries the agent's summary. An acp agent is refused without a usable jail, so COMPLETED also proves the jail ran | acp (`exec.turn` on the fake preset, `sandbox.backend: bubblewrap`) | The fake agent is agentd's hidden `fake-acp-agent` subcommand, only in the `-tags fakeacp` build; no model runs the task | P1 | T-069 |
 
+### Execution journeys on the fake acp agent (S20 PR 16, T-069)
+
+`exec.turn` routes to the scripted fake agent in the `default`, `disk` and `scheduler` profiles (`agents`/`stages` in their configs, `sandbox.backend: bubblewrap`, `security_opt: unmask=ALL` in compose). The script is the task description (`fakeCompleted` in `test/e2e/fake_script.go`: a completed edit, then `report_outcome`); mockllm still answers the L1 calls. A script cannot fail once and then pass: every attempt of a task runs the same script, so retries stay in Go tests.
+
+| Journey | What changed from the builtin version |
+| --- | --- |
+| J02, J04, J05 (seeded), J15 (all) | Tasks carry a completed script. J04 replaces the mock plan's descriptions with scripts. |
+| J08 | The agent holds its turn 30 s (`sleep_ms`). The RESULT carries the agent's summary instead of `tick 29`. The `carried-over` marker check is dropped (it read the builtin command's output); `RECOVERY_WORKSPACE_RESET` stays. |
+| J11 | The prompt is not sent to the mock. The `echo` step completes the task with the prompt's size and its lines containing the canary; the RESULT is what the journey reads. `echo bytes=` must be present, so "absent" cannot pass without a prompt. |
+| J14 | An ACP task writes no `LOG_CHUNK`, so the journey now asserts `TOKEN_USAGE` (a `usage` step with 2 tokens, ledger checked) before `RESULT` instead of `LOG_CHUNK` before `RESULT`. |
+| J17 | The token is in the agent's summary, so it reaches `RESULT` (no `COMMAND` or `LOG_CHUNK`). |
+| J18, J23 | Completed script (J23's in the scheduler entry's `description_template`). |
+
+Not ported, still on the builtin until T-070/T-071 (owner, 2026-11-09): J07, J09 part B, J16 assert gateway failures on the exec call (a dead provider, a 429), which an ACP agent never makes: the clarify step's gateway errors are logged and skipped. They stay on their own profiles (`healing`, `breaker`, `provider`), unchanged, and move to `_harness/` in T-071 with J12 and J19–J21. J09 part A (chat cascade) runs no task and is unchanged. J19–J22 keep the builtin on the `default` profile because their agent profile pins a provider and model.
+
 ---
 
 ## P0 Exit Criteria (must pass on 2 clean runs)
