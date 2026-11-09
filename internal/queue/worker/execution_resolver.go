@@ -35,6 +35,7 @@ type executionResolution struct {
 }
 
 func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) {
+	defer w.recoverPanic(ctx, task)
 	if profile.RequireReview {
 		done, err := w.tryFinalizeApprovedReview(ctx, task)
 		if err != nil {

@@ -72,13 +72,17 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 		return
 	}
 	task = clarified
-	res, err := w.callACPWithSessionStart(ctx, task, project, profile, resolved.route, resolved.agent, w.acpExecutionRequest(ctx, task, project, profile, access), taskHooks, true)
+	res, err := w.callACP(ctx, task, project, profile, resolved.route, resolved.agent, w.acpExecutionRequest(ctx, task, project, profile, access), taskHooks, true)
 	w.RecordTaskTokenUsage(ctx, task, res.TokenUsage, res.UsageDetails)
+	succeeded = w.applyACPExecutionResult(ctx, task, project, profile, res, err, audit)
+}
+
+func (w *Worker) applyACPExecutionResult(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, res stage.StageResult, err error, audit *taskAudit) bool {
 	switch {
 	case errors.Is(err, acp.ErrSuspended):
 		// An approval gate blocked the task on a human; it runs again once answered.
 		audit.suspended = true
-		return
+		return false
 	case errors.Is(err, stage.ErrUnverifiedCompletion):
 		w.failTerminal(ctx, task, err, models.TaskStateFailedRequiresHuman)
 	case err != nil:
@@ -92,15 +96,16 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	default:
 		var out acpExecution
 		_ = json.Unmarshal(res.Output, &out) // the contract has validated it
-		succeeded = w.commitExecution(ctx, task, project, profile, out.Summary)
+		return w.commitExecution(ctx, task, project, profile, out.Summary)
 	}
+	return false
 }
 
 func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, access stage.WorkspaceAccess) stage.StageRequest {
 	return stage.StageRequest{
 		Stage:    stage.StageExecution,
 		Purpose:  gateway.PurposeExecTurn,
-		Context:  w.buildStageContext(ctx, task, project, profile, false),
+		Context:  w.buildStageContext(ctx, task, project, profile),
 		Contract: stage.NewContract[acpExecution](),
 		Access:   access,
 		AgentID:  task.AgentID,

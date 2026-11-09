@@ -34,7 +34,7 @@ func (e *Engine) prepareAgenticRun(
 		WithReadOnlyWorkspace(profile.WorkspaceReadonly).
 		WithIntent(task.Title + "\n" + task.Description).
 		WithAttrs(gateway.AttrsForTask(task.RequiresWorkspaceChange))
-	messages = e.buildAgenticMessages(ctx, task, project, profile)
+	messages = e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile)
 	allTools, allToolToAdapter = e.host.AgenticToolsWithExtras(ctx, taskToolExecutor, taskCaps)
 	tools, toolToAdapter, routedProfile = e.selectAgenticTools(task, profile, messages, allTools, allToolToAdapter)
 	return messages, tools, toolToAdapter, allTools, allToolToAdapter, routedProfile, taskToolExecutor
@@ -53,12 +53,6 @@ func (e *Engine) selectAgenticTools(
 	tools := filteredTools
 	toolToAdapter := filteredMap
 	return tools, toolToAdapter, profile
-}
-
-// buildAgenticMessages is the prompt for task: the layered system prompt and the
-// task anchor, with any review-rejection and sandbox-violation feedback.
-func (e *Engine) buildAgenticMessages(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	return e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile)
 }
 
 func (e *Engine) setupAgenticCancel(ctx context.Context, taskID string) (context.Context, func()) {

@@ -92,16 +92,6 @@ func batchUserPrompt(tasks []models.Task) string {
 	return strings.TrimSpace(b.String())
 }
 
-func (w *Worker) processRunningTask(
-	ctx context.Context,
-	task models.Task,
-	project models.Project,
-	profile models.AgentProfile,
-) {
-	defer w.recoverPanic(ctx, task)
-	w.dispatchProcess(ctx, task, project, profile)
-}
-
 type batchTextSlot struct {
 	Slot    int    `json:"slot"`
 	Content string `json:"content"`

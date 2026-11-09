@@ -98,7 +98,7 @@ func (r routedStageAgent) Call(ctx context.Context, req stage.StageRequest) (sta
 	if err != nil {
 		return stage.StageResult{}, fmt.Errorf("worker: acp agent %q: load the task's profile: %w", d.Agent, err)
 	}
-	return r.w.callACP(ctx, r.task, r.project, *profile, d, a, req)
+	return r.w.callACP(ctx, r.task, r.project, *profile, d, a, req, nil, false)
 }
 
 // callACP runs one stage call on an acp agent with a driver of its own: a driver
@@ -106,11 +106,7 @@ func (r routedStageAgent) Call(ctx context.Context, req stage.StageRequest) (sta
 // across tasks. Its permissions pass the task's hooks and the worker-global
 // ones (the denylist), as a builtin tool call does.
 // shortcut: every call cold-starts the agent; keep a warm driver per task if the start-up cost shows.
-func (w *Worker) callACP(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, d route.Decision, a route.Agent, req stage.StageRequest) (stage.StageResult, error) {
-	return w.callACPWithSessionStart(ctx, task, project, profile, d, a, req, nil, false)
-}
-
-func (w *Worker) callACPWithSessionStart(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, d route.Decision, a route.Agent, req stage.StageRequest, taskHooks *agenthooks.HookChain, sessionStarted bool) (stage.StageResult, error) {
+func (w *Worker) callACP(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, d route.Decision, a route.Agent, req stage.StageRequest, taskHooks *agenthooks.HookChain, sessionStarted bool) (stage.StageResult, error) {
 	slog.InfoContext(ctx, "routing decision", "purpose", d.Purpose, "required_level", d.Required,
 		"rule", d.Rule, "agent", d.Agent, "task_id", task.ID)
 	budgetGuard := runaudit.NewBudgetGuard(w.budgetTracker, task.ID)

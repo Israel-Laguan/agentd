@@ -56,7 +56,7 @@ func (w *Worker) ProcessBatch(ctx context.Context, tasks []models.Task) {
 
 	if len(runnable) < 2 {
 		for _, task := range runnable {
-			w.processRunningTask(ctx, task, *project, *profile)
+			w.dispatchProcess(ctx, task, *project, *profile)
 		}
 		return
 	}
@@ -132,7 +132,7 @@ func (w *Worker) processBatchAgentic(
 	for i, task := range tasks {
 		slot, ok := bySlot[i]
 		if !ok || strings.TrimSpace(slot.Content) == "" {
-			w.processRunningTask(ctx, task, project, profile)
+			w.dispatchProcess(ctx, task, project, profile)
 			continue
 		}
 		p := profile
