@@ -75,6 +75,7 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	res, err := w.callACP(ctx, task, project, profile, resolved.route, resolved.agent, w.acpExecutionRequest(ctx, task, project, profile, access), taskHooks, true)
 	w.RecordTaskTokenUsage(ctx, task, res.TokenUsage, res.UsageDetails)
 	succeeded = w.applyACPExecutionResult(ctx, task, project, profile, res, err, audit)
+	audit.reviewHandoff = succeeded && profile.RequireReview
 }
 
 func (w *Worker) applyACPExecutionResult(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, res stage.StageResult, err error, audit *taskAudit) bool {

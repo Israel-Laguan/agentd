@@ -83,12 +83,16 @@ func TestACPReviewFinalizesWithoutSecondRun(t *testing.T) {
 	profile.RequireReview = true
 	w.gateway = &batchTrackingGateway{}
 	w.stageAgent = &stageRecorder{output: `{"needs_clarification":false}`}
+	path := withAuditFile(t, w)
 	w.dispatchProcess(ctx, task, project, profile)
 	if got := mustGetTask(t, store, task.ID).State; got != models.TaskStateBlocked {
 		t.Fatalf("state = %s, want BLOCKED for review", got)
 	}
 	if starts, _ := log.runs(); len(starts) != 1 {
 		t.Fatalf("ACP sessions = %d, want 1", len(starts))
+	}
+	if got := auditTypesFor(t, path, task.ID); len(got) != 2 || got[1] != "task_review" {
+		t.Fatalf("audit records = %v, want [task_start task_review]", got)
 	}
 	completeReviewSubtask(t, store, ctx, task.ID)
 	queued := requeueParentTask(t, store, ctx, task.ID)
