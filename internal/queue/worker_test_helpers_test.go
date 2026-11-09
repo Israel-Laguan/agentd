@@ -424,3 +424,7 @@ func (s *workerStore) MarkCommentProcessed(context.Context, string, string) erro
 	s.task.Assignee = models.TaskAssigneeSystem
 	return nil
 }
+
+func (s *workerStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

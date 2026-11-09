@@ -55,6 +55,22 @@ func phaseContinuationDescription(remaining []models.DraftTask) string {
 			b.WriteString(": ")
 			b.WriteString(description)
 		}
+		if len(task.SuccessCriteria) > 0 || len(task.GoldenCriteria) > 0 {
+			b.WriteString(" [success_criteria: ")
+			b.WriteString(strings.Join(task.SuccessCriteria, "; "))
+			if len(task.GoldenCriteria) > 0 {
+				b.WriteString(" | golden_criteria: ")
+				for i, g := range task.GoldenCriteria {
+					if i > 0 {
+						b.WriteString("; ")
+					}
+					b.WriteString(g.Criterion)
+					b.WriteString(" => ")
+					b.WriteString(g.CheckCommand)
+				}
+			}
+			b.WriteString("]")
+		}
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())

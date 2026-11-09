@@ -344,3 +344,7 @@ func numberedToolCalls(calls []gateway.ToolCall, turn int) []gateway.ToolCall {
 	}
 	return out
 }
+
+func (s *workerTestStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

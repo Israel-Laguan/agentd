@@ -318,3 +318,7 @@ func (m *mockCommitStore) ListUnprocessedHumanComments(ctx context.Context) ([]m
 func (m *mockCommitStore) MarkCommentProcessed(ctx context.Context, taskID, commentEventID string) error {
 	return nil
 }
+
+func (s *mockCommitStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

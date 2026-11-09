@@ -437,3 +437,7 @@ func TestRefreshRollingLedgerFromStore_Throttled(t *testing.T) {
 		t.Fatalf("ListTokenUsageEventsSince queries = %d, want 0 while throttled", store.queries)
 	}
 }
+
+func (s *dispatchBatchStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

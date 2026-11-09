@@ -126,6 +126,7 @@ func (s *FakeKanbanStore) insertReadyTask(
 		Assignee:                draft.Assignee,
 		State:                   models.TaskStateReady,
 		SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+		GoldenCriteria:          append([]models.GoldenCriterion(nil), draft.GoldenCriteria...),
 		RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 	}
 	if task.Assignee == "" {

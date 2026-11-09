@@ -80,3 +80,7 @@ func legacyCapOptions() WorkerOptions {
 		Split:             config.SplitConfig{MaxDepth: 2, MaxSubtasks: 5},
 	}
 }
+
+func (s *legacyHandoffStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

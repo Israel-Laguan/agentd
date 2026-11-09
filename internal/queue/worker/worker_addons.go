@@ -95,6 +95,12 @@ func (w *Worker) handlePhasePlanning(ctx context.Context, task models.Task, proj
 		w.HandleGatewayError(ctx, task, fmt.Errorf("%w: %s", errPhasePlanAsked, plan.ClarificationQuestion))
 		return
 	}
+	// Check before appending: a rejected completion requeues this task, and
+	// the retry would otherwise append the continuation tasks a second time.
+	if !w.checkGoldenCriteria(ctx, task) {
+		return
+	}
+	ctx = context.WithValue(ctx, goldenCheckedKey{}, task.ID)
 	plan.Tasks = planning.RetitlePhaseContinuationTasks(plan.Tasks, planning.NextPhaseNumber(task.Title))
 	created, err := w.store.AppendTasksToProject(ctx, project.ID, task.ID, plan.Tasks)
 	if err != nil {

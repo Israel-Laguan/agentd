@@ -241,6 +241,8 @@ Cron schedules live in `<home>/agentd.crontab`.
 | --- | --- |
 | `task_deadline` | Wall-clock timeout per worker task (the Reaper). |
 | `queued_reconcile_after` | Min age before resetting stale `QUEUED` claims; independent of `task_deadline`. |
+| `golden_cycle_cap` | Failed golden-check cycles before a task goes to `FAILED_REQUIRES_HUMAN` (default `5`). |
+| `golden_stall_cap` | Consecutive failed cycles without more passing checks before `FAILED_REQUIRES_HUMAN` (default `2`). |
 | `token_budget` | Worker-level per-task token cap; `0` = unlimited. `gateway.budget` (`tokens_per_task`) is not implemented (parsed and ignored); use this key. |
 | `agentic_character_budget` | `0` inherits `gateway.truncator.max_input_chars`. |
 | `hitl.legacy_handoff_timeout` | Prompt/permission/healing/provider handoffs. Tool approval uses `agentic.approval_gates.timeout`; review and clarification use a fixed 30m. |

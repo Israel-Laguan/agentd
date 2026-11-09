@@ -61,6 +61,11 @@ type SandboxEnvironment interface {
 	CleanupZombie(pid int) error
 }
 
+// TaskCriteriaStore is the store method for criteria updates.
+type TaskCriteriaStore interface {
+	UpdateTaskCriteria(ctx context.Context, id string, expectedUpdatedAt time.Time, criteria []string, golden []GoldenCriterion) (*Task, error)
+}
+
 // TaskStatusStore is the read side the status summary needs: project listing
 // plus grouped state counts and the few tasks that can need attention, so a
 // summary never loads every task of every project.
@@ -109,6 +114,7 @@ type KanbanStore interface {
 	// dispatcher could claim. The generic UpdateTaskState machine still
 	// rejects BLOCKED/READY → COMPLETED; only this path may bypass it.
 	CompleteTieredOrigin(ctx context.Context, id string, expectedUpdatedAt time.Time, result TaskResult) (*Task, error)
+	UpdateTaskCriteria(ctx context.Context, id string, expectedUpdatedAt time.Time, criteria []string, golden []GoldenCriterion) (*Task, error)
 	UpdateCriteriaMet(ctx context.Context, id string, met []string) error
 	ReconcileGhostTasks(ctx context.Context, alivePIDs []int) ([]Task, error)
 	ReconcileStaleTasks(ctx context.Context, alivePIDs []int, staleThreshold time.Duration) ([]Task, error)

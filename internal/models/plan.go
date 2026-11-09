@@ -105,6 +105,9 @@ func (p *DraftPlan) Validate() error {
 		if strings.TrimSpace(t.Title) == "" {
 			return fmt.Errorf("task %d: title is required", i+1)
 		}
+		if err := ValidateGoldenCriteria(t.SuccessCriteria, t.GoldenCriteria); err != nil {
+			return fmt.Errorf("task %d: %w", i+1, err)
+		}
 		if path := hostReadPath(t.Title + "\n" + t.Description); path != "" {
 			return fmt.Errorf("task %d: reads %q, which is outside the project workspace and unreadable to workers; use commands such as hostnamectl or lscpu instead of system files", i+1, path)
 		}
@@ -139,9 +142,10 @@ type DraftTask struct {
 	// creation time. When non-empty the materialized task row carries this
 	// agent_id, eliminating the race between dispatch and a separate assign
 	// call. Empty means the store default ("default") is used.
-	AgentID         string   `json:"agent_id,omitempty"`
-	DependsOn       []string `json:"depends_on,omitempty"`
-	SuccessCriteria []string `json:"success_criteria,omitempty"`
+	AgentID         string            `json:"agent_id,omitempty"`
+	DependsOn       []string          `json:"depends_on,omitempty"`
+	SuccessCriteria []string          `json:"success_criteria,omitempty"`
+	GoldenCriteria  []GoldenCriterion `json:"golden_criteria,omitempty"`
 	// RequiresWorkspaceChange marks a task that must change the workspace.
 	RequiresWorkspaceChange bool `json:"requires_workspace_change,omitempty"`
 	// SplitChild marks a draft created by the split stage, so the store links
@@ -150,19 +154,70 @@ type DraftTask struct {
 	SplitChild bool `json:"-"`
 }
 
+// GoldenCriterion names a success criterion and the controller's check for it.
+type GoldenCriterion struct {
+	Criterion    string `json:"criterion"`
+	CheckCommand string `json:"check_command"`
+}
+
+// UnmarshalJSON accepts snake_case and legacy camel-case keys.
+func (g *GoldenCriterion) UnmarshalJSON(data []byte) error {
+	type alias GoldenCriterion
+	var raw struct {
+		alias
+		CriterionLegacy    string `json:"Criterion"`
+		CheckCommandLegacy string `json:"CheckCommand"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*g = GoldenCriterion(raw.alias)
+	if g.Criterion == "" {
+		g.Criterion = raw.CriterionLegacy
+	}
+	if g.CheckCommand == "" {
+		g.CheckCommand = raw.CheckCommandLegacy
+	}
+	return nil
+}
+
+// ValidateGoldenCriteria rejects missing commands, unknown criteria, and
+// duplicate checks, which would otherwise give a misleading progress count.
+func ValidateGoldenCriteria(criteria []string, golden []GoldenCriterion) error {
+	allowed := make(map[string]bool, len(criteria))
+	for _, c := range criteria {
+		allowed[c] = true
+	}
+	seen := make(map[string]bool, len(golden))
+	for _, g := range golden {
+		if strings.TrimSpace(g.Criterion) == "" || !allowed[g.Criterion] {
+			return fmt.Errorf("golden criterion %q must name a success criterion", g.Criterion)
+		}
+		if strings.TrimSpace(g.CheckCommand) == "" {
+			return fmt.Errorf("golden criterion %q requires a check command", g.Criterion)
+		}
+		if seen[g.Criterion] {
+			return fmt.Errorf("duplicate golden criterion %q", g.Criterion)
+		}
+		seen[g.Criterion] = true
+	}
+	return nil
+}
+
 // UnmarshalJSON accepts both proposal snake_case and legacy camel-case keys.
 func (d *DraftTask) UnmarshalJSON(data []byte) error {
 	type alias DraftTask
 	var raw struct {
 		alias
-		TempIDLegacy          string       `json:"TempID"`
-		ReferenceIDLegacy     string       `json:"ReferenceID"`
-		TitleLegacy           string       `json:"Title"`
-		DescriptionLegacy     string       `json:"Description"`
-		AssigneeLegacy        TaskAssignee `json:"Assignee"`
-		AgentIDLegacy         string       `json:"AgentID"`
-		DependsOnLegacy       []string     `json:"DependsOn"`
-		SuccessCriteriaLegacy []string     `json:"SuccessCriteria"`
+		TempIDLegacy          string            `json:"TempID"`
+		ReferenceIDLegacy     string            `json:"ReferenceID"`
+		TitleLegacy           string            `json:"Title"`
+		DescriptionLegacy     string            `json:"Description"`
+		AssigneeLegacy        TaskAssignee      `json:"Assignee"`
+		AgentIDLegacy         string            `json:"AgentID"`
+		DependsOnLegacy       []string          `json:"DependsOn"`
+		SuccessCriteriaLegacy []string          `json:"SuccessCriteria"`
+		GoldenCriteriaLegacy  []GoldenCriterion `json:"GoldenCriteria"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -191,6 +246,9 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 	}
 	if len(d.SuccessCriteria) == 0 && len(raw.SuccessCriteriaLegacy) > 0 {
 		d.SuccessCriteria = append([]string(nil), raw.SuccessCriteriaLegacy...)
+	}
+	if len(d.GoldenCriteria) == 0 && len(raw.GoldenCriteriaLegacy) > 0 {
+		d.GoldenCriteria = append([]GoldenCriterion(nil), raw.GoldenCriteriaLegacy...)
 	}
 	return nil
 }

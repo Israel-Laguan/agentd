@@ -24,6 +24,8 @@ import (
 )
 
 type WorkerOptions struct {
+	GoldenCycleCap             int
+	GoldenStallCap             int
 	ProjectsDir                string
 	MaxRetries                 int
 	MaxToolIterations          int
@@ -88,6 +90,12 @@ type WorkerOptions struct {
 }
 
 func normalizeOpts(opts WorkerOptions) WorkerOptions {
+	if opts.GoldenCycleCap <= 0 {
+		opts.GoldenCycleCap = config.DefaultGoldenCycleCap
+	}
+	if opts.GoldenStallCap <= 0 {
+		opts.GoldenStallCap = config.DefaultGoldenStallCap
+	}
 	if opts.MaxRetries < 1 {
 		opts.MaxRetries = DefaultMaxRetries
 	}
@@ -178,12 +186,13 @@ func newWorkerCore(
 		sandboxExtraEnv:     append([]string(nil), opts.SandboxExtraEnv...),
 		sandboxScrubber:     scrubber,
 		maxRetries:          opts.MaxRetries,
-		maxToolIterations:   opts.MaxToolIterations,
-		truncatorMax:        opts.AgenticTruncatorMax,
-		characterBudget:     opts.AgenticCharacterBudget,
-		toolExecutor:        toolExecutor,
-		toolTimeouts:        opts.ToolTimeouts,
-		toolRetries:         opts.ToolRetries,
+		goldenCycleCap:      opts.GoldenCycleCap, goldenStallCap: opts.GoldenStallCap,
+		maxToolIterations: opts.MaxToolIterations,
+		truncatorMax:      opts.AgenticTruncatorMax,
+		characterBudget:   opts.AgenticCharacterBudget,
+		toolExecutor:      toolExecutor,
+		toolTimeouts:      opts.ToolTimeouts,
+		toolRetries:       opts.ToolRetries,
 		toolRetrier: agenttools.NewRetryingExecutor(agenttools.RetryConfig{
 			MaxAttempts: opts.ToolRetries.MaxAttempts,
 			BaseDelay:   opts.ToolRetries.BaseDelay,

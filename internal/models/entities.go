@@ -37,21 +37,22 @@ type Project struct {
 // Task is the durable unit of work moved by the Kanban state machine.
 type Task struct {
 	BaseEntity
-	ProjectID            string       `json:"project_id"`
-	AgentID              string       `json:"agent_id"`
-	Title                string       `json:"title"`
-	Description          string       `json:"description"`
-	State                TaskState    `json:"state"`
-	Assignee             TaskAssignee `json:"assignee"`
-	OSProcessID          *int         `json:"os_process_id,omitempty"`
-	StartedAt            *time.Time   `json:"started_at,omitempty"`
-	CompletedAt          *time.Time   `json:"completed_at,omitempty"`
-	LastHeartbeat        *time.Time   `json:"last_heartbeat,omitempty"`
-	RetryCount           int          `json:"retry_count"`
-	TokenUsage           int          `json:"token_usage"`
-	CachedTokenUsage     int          `json:"cached_token_usage"`
-	CacheWriteTokenUsage int          `json:"cache_write_token_usage"`
-	SuccessCriteria      []string     `json:"success_criteria"`
+	ProjectID            string            `json:"project_id"`
+	AgentID              string            `json:"agent_id"`
+	Title                string            `json:"title"`
+	Description          string            `json:"description"`
+	State                TaskState         `json:"state"`
+	Assignee             TaskAssignee      `json:"assignee"`
+	OSProcessID          *int              `json:"os_process_id,omitempty"`
+	StartedAt            *time.Time        `json:"started_at,omitempty"`
+	CompletedAt          *time.Time        `json:"completed_at,omitempty"`
+	LastHeartbeat        *time.Time        `json:"last_heartbeat,omitempty"`
+	RetryCount           int               `json:"retry_count"`
+	TokenUsage           int               `json:"token_usage"`
+	CachedTokenUsage     int               `json:"cached_token_usage"`
+	CacheWriteTokenUsage int               `json:"cache_write_token_usage"`
+	SuccessCriteria      []string          `json:"success_criteria"`
+	GoldenCriteria       []GoldenCriterion `json:"golden_criteria,omitempty"`
 	// RequiresWorkspaceChange marks a task that must change the workspace, so a
 	// run of it cannot finish on text alone (B-082).
 	RequiresWorkspaceChange bool     `json:"requires_workspace_change"`

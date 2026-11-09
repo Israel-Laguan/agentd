@@ -289,3 +289,7 @@ func newStore() (*minimalStore, fullStore) {
 	m := &minimalStore{}
 	return m, fullStore{m}
 }
+
+func (f fullStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
+	return nil, nil
+}

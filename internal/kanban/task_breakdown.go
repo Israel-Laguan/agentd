@@ -181,6 +181,7 @@ func readySubtask(projectID string, draft models.DraftTask, now time.Time) model
 		State:                   models.TaskStateReady,
 		Assignee:                assignee,
 		SuccessCriteria:         append([]string(nil), draft.SuccessCriteria...),
+		GoldenCriteria:          append([]models.GoldenCriterion(nil), draft.GoldenCriteria...),
 		RequiresWorkspaceChange: draft.RequiresWorkspaceChange,
 	}
 }

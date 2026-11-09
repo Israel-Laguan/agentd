@@ -189,6 +189,21 @@ func (w *Worker) resolveTieredOrigin(ctx context.Context, origin models.Task, su
 		slog.Error("tiered origin: failed to re-read before resolving", "task_id", origin.ID, "error", err)
 		return
 	}
+	if success && len(current.GoldenCriteria) != 0 {
+		if current.State == models.TaskStateReady {
+			if updated, err := w.store.UpdateTaskState(ctx, current.ID, current.UpdatedAt, models.TaskStateRunning); err == nil && updated != nil {
+				current = updated
+			} else {
+				return
+			}
+		}
+		if current.State != models.TaskStateRunning {
+			return
+		}
+		if !w.checkGoldenCriteria(ctx, *current) {
+			return
+		}
+	}
 	if _, err := w.store.CompleteTieredOrigin(ctx, current.ID, current.UpdatedAt, models.TaskResult{
 		Success: success,
 		Payload: truncate(reason, 1000),

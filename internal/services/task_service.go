@@ -17,6 +17,31 @@ type TaskService struct {
 	Bus   TaskBus
 }
 
+type taskCriteriaStore = models.TaskCriteriaStore
+
+func (s *TaskService) UpdateTaskCriteria(ctx context.Context, id string, criteria *[]string, golden *[]models.GoldenCriterion) (*models.Task, error) {
+	current, err := s.Store.GetTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	// GetTask may return a live pointer; never mutate it before persistence.
+	nextCriteria, nextGolden := current.SuccessCriteria, current.GoldenCriteria
+	if criteria != nil {
+		nextCriteria = *criteria
+	}
+	if golden != nil {
+		nextGolden = *golden
+	}
+	if err := models.ValidateGoldenCriteria(nextCriteria, nextGolden); err != nil {
+		return nil, fmt.Errorf("%w: %v", models.ErrInvalidDraftPlan, err)
+	}
+	store, ok := s.Store.(taskCriteriaStore)
+	if !ok {
+		return nil, fmt.Errorf("task criteria updates are unavailable")
+	}
+	return store.UpdateTaskCriteria(ctx, id, current.UpdatedAt, nextCriteria, nextGolden)
+}
+
 // TaskBus is the optional bus surface used to publish manager-loop
 // signals (assign / split / retry). Implementations MUST be non-blocking;
 // the durable record of these actions lives in the events table.
@@ -70,10 +95,12 @@ func (s *TaskService) AddHumanComment(ctx context.Context, taskID, content strin
 }
 
 // UpdateTaskState transitions a task to the requested state using the
-// store's optimistic-locked update. The current task is fetched only to
-// supply the expected updated_at timestamp; the SQL WHERE clause inside
-// UpdateTaskState rejects the write if another writer raced ahead, in
-// which case ErrStateConflict propagates back to the controller.
+// store's optimistic-locked update. It also enforces a service-level
+// completion guard: a RUNNING task with golden criteria cannot be marked
+// COMPLETED, because golden checks are verified by the worker, not by the
+// API. The current task is fetched for the expected updated_at timestamp
+// and this guard; the SQL WHERE clause inside UpdateTaskState rejects the
+// write if another writer raced ahead.
 func (s *TaskService) UpdateTaskState(ctx context.Context, taskID string, next models.TaskState) (*models.Task, error) {
 	if !next.Valid() {
 		return nil, fmt.Errorf("%w: %q", models.ErrUnknownTaskState, next)
@@ -81,6 +108,9 @@ func (s *TaskService) UpdateTaskState(ctx context.Context, taskID string, next m
 	current, err := s.Store.GetTask(ctx, taskID)
 	if err != nil {
 		return nil, err
+	}
+	if next == models.TaskStateCompleted && current.State == models.TaskStateRunning && len(current.GoldenCriteria) > 0 {
+		return nil, fmt.Errorf("%w: golden criteria must be verified before completing", models.ErrStateConflict)
 	}
 	return s.Store.UpdateTaskState(ctx, taskID, current.UpdatedAt, next)
 }
@@ -106,6 +136,9 @@ func (s *TaskService) PatchTask(ctx context.Context, taskID string, state *model
 	current, err := s.Store.GetTask(ctx, taskID)
 	if err != nil {
 		return nil, err
+	}
+	if state != nil && *state == models.TaskStateCompleted && current.State == models.TaskStateRunning && len(current.GoldenCriteria) > 0 {
+		return nil, fmt.Errorf("%w: golden criteria must be verified before completing", models.ErrStateConflict)
 	}
 	return s.Store.UpdateTaskPatch(ctx, taskID, current.UpdatedAt, state, description)
 }
