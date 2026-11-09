@@ -72,9 +72,9 @@ func Script(steps ...Step) string {
 func echoStep(match, prompt string) Step {
 	var lines []string
 	for _, line := range strings.Split(prompt, "\n") {
-		line = strings.TrimSpace(line)
-		if _, isScript := parseScriptLine(line); strings.Contains(line, match) && !isScript {
-			lines = append(lines, line)
+		trimmed := strings.TrimSpace(line)
+		if _, isScript := parseScriptLine(trimmed); strings.Contains(line, match) && !isScript {
+			lines = append(lines, trimmed)
 		}
 	}
 	summary := fmt.Sprintf("echo bytes=%d matched=%d: %s", len(prompt), len(lines), strings.Join(lines, " | "))
