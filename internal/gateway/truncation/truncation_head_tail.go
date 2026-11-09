@@ -19,23 +19,24 @@ func (s HeadTailStrategy) Truncate(input string, budget int) string {
 	}
 	ratio := normalizeHeadRatio(s.HeadRatio)
 	marker := fmt.Sprintf("%s(%d bytes omitted)", truncationMarker, len(input))
-	for len(marker) < budget {
-		head, tail := headAndTail(input, budget-len(marker), ratio)
+	for {
+		if len(marker) >= budget {
+			// Too small for the count: the bare marker still shows the cut.
+			if marker == truncationMarker || len(truncationMarker) >= budget {
+				return utf8SafePrefix(input, budget)
+			}
+			marker = truncationMarker
+		}
+		remaining := budget - len(marker)
+		headSize := int(float64(remaining) * ratio)
+		head, tail := utf8SafePrefix(input, headSize), utf8SafeSuffix(input, remaining-headSize)
+		if marker == truncationMarker {
+			return head + marker + tail
+		}
 		next := fmt.Sprintf("%s(%d bytes omitted)", truncationMarker, len(input)-len(head)-len(tail))
 		if len(next) == len(marker) {
 			return head + next + tail
 		}
 		marker = next
 	}
-	// Too small for the count: the bare marker still shows the cut.
-	if len(truncationMarker) < budget {
-		head, tail := headAndTail(input, budget-len(truncationMarker), ratio)
-		return head + truncationMarker + tail
-	}
-	return utf8SafePrefix(input, budget)
-}
-
-func headAndTail(input string, remaining int, ratio float64) (string, string) {
-	headSize := int(float64(remaining) * ratio)
-	return utf8SafePrefix(input, headSize), utf8SafeSuffix(input, remaining-headSize)
 }

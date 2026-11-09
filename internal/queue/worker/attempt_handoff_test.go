@@ -12,6 +12,7 @@ import (
 	"agentd/internal/gateway"
 	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
+	"agentd/internal/queue/worker/agentic"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
 )
@@ -152,6 +153,26 @@ func TestOverBudgetAttemptKeepsLastHandoff(t *testing.T) {
 	msg, err := w.attemptHandoffMessage(ctx, task, models.Project{})
 	if err != nil || msg == nil || !strings.Contains(msg.Content, "edited handler.go") {
 		t.Fatalf("last handoff lost: %v, %v", msg, err)
+	}
+}
+
+// A loop error also ends with ResultNone but leaves the task RUNNING; only a
+// task handed to a human skips the note.
+func TestStoppedAtHumanUsesStoredState(t *testing.T) {
+	ctx := context.Background()
+	store, task, _, _ := acpTask(t, "Fix tests", "d", false)
+	w := &Worker{store: store}
+	if w.stoppedAtHuman(ctx, task.ID, agentic.Result{}) {
+		t.Fatal("a RUNNING task after a loop error counted as a human stop")
+	}
+	if !w.stoppedAtHuman(ctx, task.ID, agentic.Result{Kind: agentic.ResultPromptHandoff}) {
+		t.Fatal("prompt handoff did not count as a human stop")
+	}
+	if _, err := store.UpdateTaskState(ctx, task.ID, task.UpdatedAt, models.TaskStateBlocked); err != nil {
+		t.Fatal(err)
+	}
+	if !w.stoppedAtHuman(ctx, task.ID, agentic.Result{}) {
+		t.Fatal("a BLOCKED task did not count as a human stop")
 	}
 }
 

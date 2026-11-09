@@ -55,10 +55,7 @@ func (w *Worker) runAgenticAttempt(
 		detail = "Attempt awaiting coordinator checks; see check feedback if it was rejected."
 	}
 	// An attempt that could not read the last note never ran; keep that note.
-	// A stop at a human is not a failure: the board is already set (ResultNone)
-	// or the prompt handoff goes to a human.
-	stoppedAtHuman := (!ok && outcome.Kind == agentic.ResultNone) || outcome.Kind == agentic.ResultPromptHandoff
-	if !errors.Is(outcome.Err, errAttemptHandoffUnavailable) && !stoppedAtHuman {
+	if !errors.Is(outcome.Err, errAttemptHandoffUnavailable) && !w.stoppedAtHuman(ctx, clarified.ID, outcome) {
 		if err := w.writeAttemptHandoff(ctx, clarified, stage.StageResult{Progress: outcome.Text}, errors.New(detail)); err != nil {
 			liveCtx, cancelLive := liveContext(ctx)
 			defer cancelLive()
@@ -75,6 +72,27 @@ func (w *Worker) runAgenticAttempt(
 	// A coordinator rejection already failed or requeued the task, so the attempt
 	// is not a success and the loop result needs no further handling.
 	return result, ok && committed
+}
+
+// stoppedAtHuman reports an attempt that handed the task to a human, which is
+// not a failure. ResultNone alone is not enough: a loop error also ends with
+// it, and leaves the task RUNNING, so the stored state decides.
+func (w *Worker) stoppedAtHuman(ctx context.Context, taskID string, outcome agentic.Result) bool {
+	if outcome.Kind == agentic.ResultPromptHandoff {
+		return true
+	}
+	if outcome.Kind != agentic.ResultNone || w.store == nil {
+		return false
+	}
+	current, err := w.store.GetTask(ctx, taskID)
+	if err != nil {
+		return false // writing a note is the safe default
+	}
+	switch current.State {
+	case models.TaskStateBlocked, models.TaskStateNeedsContext, models.TaskStateInConsideration:
+		return true
+	}
+	return false
 }
 
 // registerRunCancel makes a task run cancellable by its task ID until done is

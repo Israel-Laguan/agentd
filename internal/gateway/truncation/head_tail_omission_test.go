@@ -27,3 +27,23 @@ func TestHeadTailReportsExactOmittedBytes(t *testing.T) {
 		t.Fatalf("incorrect omitted count: %q", got)
 	}
 }
+
+func TestUTF8SafePrefixChecksOnlyTheEnd(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"a\xe4\xb8x", "a"},   // partial rune at the cut is dropped
+		{"a中b", "a"},          // cut inside a valid rune backs off to it
+		{"\xffabc", "\xffab"}, // an invalid byte earlier does not empty the prefix
+		{"ab\x80cd", "ab"},    // a stray continuation byte at the end is dropped
+	} {
+		if got := utf8SafePrefix(tc.input, 3); got != tc.want {
+			t.Errorf("utf8SafePrefix(%q, 3) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestHeadTailSmallBudgetKeepsBareMarker(t *testing.T) {
+	got := HeadTailStrategy{HeadRatio: .5}.Truncate(strings.Repeat("a", 100), 20)
+	if len(got) > 20 || !strings.Contains(got, truncationMarker) {
+		t.Fatalf("Truncate = %q (%d bytes), want the bare marker within 20 bytes", got, len(got))
+	}
+}
