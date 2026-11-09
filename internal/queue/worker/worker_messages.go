@@ -24,12 +24,16 @@ import (
 // header) because nothing on the task itself carries it: phase continuations,
 // breakdowns, and handoff children are all created long after the chat turn
 // that identified the user, and all inherit the project's identity.
-func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, projectID string, userID string, messages []gateway.PromptMessage) []gateway.PromptMessage {
+func (w *Worker) appendMemoryLessons(ctx context.Context, intent string, projectID string, userID string, messages []gateway.PromptMessage, forACP ...bool) []gateway.PromptMessage {
 	if w.retriever == nil {
 		return messages
 	}
 	recalled := w.retriever.Recall(ctx, intent, projectID, userID)
 	if lessons := memory.FormatLessons(recalled); lessons != "" {
+		// ACP gets the external-content instruction, so mark recalled lessons as data for it.
+		if len(forACP) > 0 && forACP[0] {
+			lessons = agenthooks.WrapExternalContent("memory", lessons)
+		}
 		messages = append(messages, gateway.PromptMessage{Role: "system", Content: lessons, Section: gateway.SectionMemories})
 	}
 	// Preferences are formatted separately from lessons: memoryFormatLessons
@@ -140,7 +144,6 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 	if builtin {
 		builder.WithGlobal(agenticToolUseSystemText(profile.WorkspaceReadonly, goal))
 	} else {
-		// Recalled lessons are wrapped as external content for every agent.
 		builder.WithGlobal(agenthooks.ExternalContentInstruction)
 	}
 	w.enrichBuilderUserPreferences(builder)
@@ -187,7 +190,7 @@ func (w *Worker) assembleStageContext(ctx context.Context, task models.Task, pro
 		{Role: "user", Content: userContent, Section: gateway.SectionTask},
 	}
 	intent := task.Title + " " + task.Description
-	messages = w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages)
+	messages = w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages, forACP)
 	if w.store != nil {
 		messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
 		messages = w.PrependSandboxViolationFeedback(ctx, task, messages)
