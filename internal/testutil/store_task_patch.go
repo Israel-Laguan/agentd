@@ -49,6 +49,9 @@ func (s *FakeKanbanStore) UpdateTaskCriteria(_ context.Context, id string, expec
 	if !t.UpdatedAt.Equal(expected) || t.State == models.TaskStateRunning {
 		return nil, models.ErrStateConflict
 	}
+	if t.State == models.TaskStateCompleted && len(t.GoldenCriteria) == 0 && len(golden) > 0 {
+		return nil, models.ErrStateConflict
+	}
 	if err := models.ValidateGoldenCriteria(criteria, golden); err != nil {
 		return nil, fmt.Errorf("%w: %v", models.ErrInvalidDraftPlan, err)
 	}

@@ -462,9 +462,15 @@ func (g *testGateway) Embed(context.Context, gateway.EmbedRequest) (gateway.Embe
 	return gateway.EmbedResponse{}, nil
 }
 
-func (s *testStore) UpdateTaskCriteria(_ context.Context, _ string, _ time.Time, criteria []string, golden []models.GoldenCriterion) (*models.Task, error) {
+func (s *testStore) UpdateTaskCriteria(_ context.Context, id string, _ time.Time, criteria []string, golden []models.GoldenCriterion) (*models.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if id != s.task.ID {
+		return nil, models.ErrTaskNotFound
+	}
+	if err := models.ValidateGoldenCriteria(criteria, golden); err != nil {
+		return nil, err
+	}
 	s.task.SuccessCriteria = append([]string(nil), criteria...)
 	s.task.GoldenCriteria = append([]models.GoldenCriterion(nil), golden...)
 	return &s.task, nil

@@ -77,7 +77,13 @@ func execUpdateTaskCriteria(tx db.SQLExecutor, ctx context.Context, id string, c
 	return requireRowsAffected(result, 1, models.ErrStateConflict)
 }
 
+// insertCriteriaResetEvent records the reset marker that tells the worker
+// to discard earlier golden cycles for this task.
 func insertCriteriaResetEvent(tx db.SQLExecutor, ctx context.Context, projectID, id string, now time.Time) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO events (id, project_id, task_id, type, payload, created_at, updated_at) VALUES (?, ?, ?, 'GOLDEN_CRITERIA_RESET', '', ?, ?)`, uuid.NewString(), projectID, id, formatTime(now), formatTime(now))
+	if projectID == "" || id == "" {
+		return models.ErrInvalidDraftPlan
+	}
+	eventID := uuid.NewString()
+	_, err := tx.ExecContext(ctx, `INSERT INTO events (id, project_id, task_id, type, payload, created_at, updated_at) VALUES (?, ?, ?, 'GOLDEN_CRITERIA_RESET', '', ?, ?)`, eventID, projectID, id, formatTime(now), formatTime(now))
 	return err
 }
