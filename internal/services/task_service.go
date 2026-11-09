@@ -95,10 +95,12 @@ func (s *TaskService) AddHumanComment(ctx context.Context, taskID, content strin
 }
 
 // UpdateTaskState transitions a task to the requested state using the
-// store's optimistic-locked update. The current task is fetched only to
-// supply the expected updated_at timestamp; the SQL WHERE clause inside
-// UpdateTaskState rejects the write if another writer raced ahead, in
-// which case ErrStateConflict propagates back to the controller.
+// store's optimistic-locked update. It also enforces a service-level
+// completion guard: a RUNNING task with golden criteria cannot be marked
+// COMPLETED, because golden checks are verified by the worker, not by the
+// API. The current task is fetched for the expected updated_at timestamp
+// and this guard; the SQL WHERE clause inside UpdateTaskState rejects the
+// write if another writer raced ahead.
 func (s *TaskService) UpdateTaskState(ctx context.Context, taskID string, next models.TaskState) (*models.Task, error) {
 	if !next.Valid() {
 		return nil, fmt.Errorf("%w: %q", models.ErrUnknownTaskState, next)

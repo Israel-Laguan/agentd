@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	agenthooks "agentd/internal/agent/hooks"
 	agenttools "agentd/internal/agent/tools"
@@ -58,9 +59,9 @@ func (w *Worker) checkGoldenCriteria(ctx context.Context, task models.Task) bool
 		return false
 	}
 	if cycle.Cycle >= w.goldenCycleCap || cycle.Stall >= w.goldenStallCap {
-		w.failTerminal(ctx, task, fmt.Errorf("golden checks stopped after %d cycles (%d stalled): %s", cycle.Cycle, cycle.Stall, cycle.Feedback), models.TaskStateFailedRequiresHuman)
+		w.failTerminal(liveCtx, task, fmt.Errorf("golden checks stopped after %d cycles (%d stalled): %s", cycle.Cycle, cycle.Stall, cycle.Feedback), models.TaskStateFailedRequiresHuman)
 	} else {
-		w.requeue(ctx, task, "golden checks failed; feedback will be included in the next attempt")
+		w.requeue(liveCtx, task, "golden checks failed; feedback will be included in the next attempt")
 	}
 	return false
 }
@@ -101,7 +102,8 @@ func (w *Worker) runGoldenChecks(ctx context.Context, task models.Task, project 
 
 func liveContext(ctx context.Context) context.Context {
 	if ctx.Err() != nil {
-		return context.WithoutCancel(ctx)
+		live, _ := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second) //nolint:govet
+		return live
 	}
 	return ctx
 }

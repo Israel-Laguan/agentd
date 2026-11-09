@@ -374,6 +374,10 @@ func (s *apiStore) SetSetting(context.Context, string, string) error         { r
 var _ models.KanbanStore = (*apiStore)(nil)
 var _ = sql.ErrNoRows
 
-func (s *apiStore) UpdateTaskCriteria(context.Context, string, time.Time, []string, []models.GoldenCriterion) (*models.Task, error) {
-	return nil, nil
+func (s *apiStore) UpdateTaskCriteria(_ context.Context, _ string, _ time.Time, criteria []string, golden []models.GoldenCriterion) (*models.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.task.SuccessCriteria = append([]string(nil), criteria...)
+	s.task.GoldenCriteria = append([]models.GoldenCriterion(nil), golden...)
+	return &s.task, nil
 }

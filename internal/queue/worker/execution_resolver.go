@@ -87,7 +87,7 @@ func (w *Worker) dispatchProcess(ctx context.Context, task models.Task, project 
 
 func (w *Worker) resolveForGoldenRepair(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {
 	resolved := w.resolveExecutionAgent(ctx, task, project, profile)
-	if !w.goldenRepairPending(ctx, task) || (resolved.kind != executionAgentRollup && resolved.kind != executionAgentTieredOrigin && resolved.kind != executionAgentHostReport && resolved.kind != executionAgentPhasePlanning) {
+	if !w.goldenRepairPending(ctx, task) || (resolved.kind != executionAgentRollup && resolved.kind != executionAgentTieredOrigin && resolved.kind != executionAgentHostReport) {
 		return resolved
 	}
 	if d, a, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {

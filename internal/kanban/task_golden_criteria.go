@@ -52,7 +52,7 @@ func (s *Store) updateTaskCriteriaTx(ctx context.Context, id string, expected ti
 	if current.State == models.TaskStateRunning {
 		return nil, models.ErrStateConflict
 	}
-	if current.State == models.TaskStateCompleted && hasGolden {
+	if current.State == models.TaskStateCompleted && len(current.GoldenCriteria) == 0 && hasGolden {
 		return nil, models.ErrStateConflict
 	}
 	now := utcNow()
