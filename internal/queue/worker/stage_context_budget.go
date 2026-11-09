@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,6 +12,10 @@ import (
 // ACP agents do not expose their model window. This conservative byte limit
 // applies to the complete prompt, including the outcome instruction.
 const acpContextBudget = 64 * 1024
+
+// errStageContextOverBudget means the agent never ran, so the last handoff
+// note is kept as it is.
+var errStageContextOverBudget = errors.New("stage context: protected instructions exceed budget")
 
 // fitStageContext sheds older named copies and exact duplicates before cutting
 // optional content. The task and system instructions are never silently cut.
@@ -35,7 +40,7 @@ func fitStageContext(messages []spec.PromptMessage, budget int) ([]spec.PromptMe
 			}
 		}
 		if largest == -1 {
-			return nil, fmt.Errorf("stage context: protected instructions exceed %d-byte budget", budget)
+			return nil, fmt.Errorf("%w of %d bytes", errStageContextOverBudget, budget)
 		}
 		allowed := len(out[largest].Content) - excess
 		// Do not leave a partial external-content wrapper or an unreadable

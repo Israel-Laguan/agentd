@@ -195,7 +195,7 @@ func (w *Worker) assembleStageContext(ctx context.Context, task models.Task, pro
 		messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
 		messages = w.PrependSandboxViolationFeedback(ctx, task, messages)
 		messages = w.appendGoldenFeedback(ctx, task, messages)
-		handoff, err := w.attemptHandoffMessage(ctx, task)
+		handoff, err := w.attemptHandoffMessage(ctx, task, project)
 		if err != nil {
 			return messages, err
 		}

@@ -117,13 +117,13 @@ func (w *Worker) applyACPExecutionResult(ctx context.Context, task models.Task, 
 // saveACPHandoff stores the note before the result is applied, which may make
 // the task READY for a retry. It reports false once it has failed the task.
 func (w *Worker) saveACPHandoff(ctx context.Context, task models.Task, project models.Project, res stage.StageResult, err error) bool {
-	if errors.Is(err, acp.ErrSuspended) || res.Outcome == stage.OutcomeNeedsHuman {
+	if errors.Is(err, acp.ErrSuspended) || errors.Is(err, errStageContextOverBudget) || res.Outcome == stage.OutcomeNeedsHuman {
 		return true
 	}
 	if err == nil {
 		err = errors.New("attempt awaiting coordinator checks; see check feedback if it was rejected")
 	}
-	if handoffErr := w.writeAttemptHandoff(ctx, task, project, res, err); handoffErr != nil {
+	if handoffErr := w.writeAttemptHandoff(ctx, task, res, err); handoffErr != nil {
 		liveCtx, cancel := liveContext(ctx)
 		defer cancel()
 		w.failTerminal(liveCtx, task, fmt.Errorf("persist attempt handoff: %w", handoffErr), models.TaskStateFailedRequiresHuman)

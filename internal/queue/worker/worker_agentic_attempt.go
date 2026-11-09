@@ -55,8 +55,11 @@ func (w *Worker) runAgenticAttempt(
 		detail = "Attempt awaiting coordinator checks; see check feedback if it was rejected."
 	}
 	// An attempt that could not read the last note never ran; keep that note.
-	if !errors.Is(outcome.Err, errAttemptHandoffUnavailable) {
-		if err := w.writeAttemptHandoff(ctx, clarified, project, stage.StageResult{Progress: outcome.Text}, errors.New(detail)); err != nil {
+	// A stop at a human is not a failure: the board is already set (ResultNone)
+	// or the prompt handoff goes to a human.
+	stoppedAtHuman := (!ok && outcome.Kind == agentic.ResultNone) || outcome.Kind == agentic.ResultPromptHandoff
+	if !errors.Is(outcome.Err, errAttemptHandoffUnavailable) && !stoppedAtHuman {
+		if err := w.writeAttemptHandoff(ctx, clarified, stage.StageResult{Progress: outcome.Text}, errors.New(detail)); err != nil {
 			liveCtx, cancelLive := liveContext(ctx)
 			defer cancelLive()
 			w.failTerminal(liveCtx, clarified, fmt.Errorf("persist attempt handoff: %w", err), models.TaskStateFailedRequiresHuman)

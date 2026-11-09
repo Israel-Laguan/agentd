@@ -19,18 +19,23 @@ func (s HeadTailStrategy) Truncate(input string, budget int) string {
 	}
 	ratio := normalizeHeadRatio(s.HeadRatio)
 	marker := fmt.Sprintf("%s(%d bytes omitted)", truncationMarker, len(input))
-	for {
-		remaining := budget - len(marker)
-		if remaining <= 0 {
-			return utf8SafePrefix(input, budget)
-		}
-		headSize := int(float64(remaining) * ratio)
-		head := utf8SafePrefix(input, headSize)
-		tail := utf8SafeSuffix(input, remaining-headSize)
+	for len(marker) < budget {
+		head, tail := headAndTail(input, budget-len(marker), ratio)
 		next := fmt.Sprintf("%s(%d bytes omitted)", truncationMarker, len(input)-len(head)-len(tail))
 		if len(next) == len(marker) {
 			return head + next + tail
 		}
 		marker = next
 	}
+	// Too small for the count: the bare marker still shows the cut.
+	if len(truncationMarker) < budget {
+		head, tail := headAndTail(input, budget-len(truncationMarker), ratio)
+		return head + truncationMarker + tail
+	}
+	return utf8SafePrefix(input, budget)
+}
+
+func headAndTail(input string, remaining int, ratio float64) (string, string) {
+	headSize := int(float64(remaining) * ratio)
+	return utf8SafePrefix(input, headSize), utf8SafeSuffix(input, remaining-headSize)
 }

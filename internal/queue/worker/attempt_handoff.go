@@ -21,25 +21,34 @@ const attemptHandoffEvent = "ATTEMPT_HANDOFF"
 // is retried as a failure and never replaces the note it could not read.
 var errAttemptHandoffUnavailable = errors.New("attempt handoff unavailable")
 
+// Caps keep the protected note well inside acpContextBudget: at most
+// 3*4 KiB of text, 4*2 KiB of failed calls, 50 paths and 8 KiB of user request.
+const (
+	handoffTextCap    = 4096
+	handoffToolCap    = 2048
+	handoffMaxTools   = 4
+	handoffMaxFiles   = 50
+	handoffPathCap    = 256
+	handoffRequestCap = 8192
+)
+
 // attemptHandoff contains only facts available to the controller. Agent text
-// may describe decisions, files and remaining work; it is not inferred.
+// may describe decisions, files and remaining work; it is not inferred. The
+// task and the user's request are read live when the note is shown, so the
+// event log never holds a copy of them.
 type attemptHandoff struct {
-	Goal          string   `json:"goal"`
-	TaskDetails   string   `json:"task_details_verbatim"`
-	Criteria      []string `json:"criteria_verbatim,omitempty"`
-	OriginalInput string   `json:"original_user_request_verbatim,omitempty"`
-	Progress      string   `json:"agent_progress,omitempty"`
-	Failure       string   `json:"failure,omitempty"`
-	FailedTools   []string `json:"failed_tools,omitempty"`
-	Files         []string `json:"files_touched,omitempty"`
-	Plan          string   `json:"agent_plan,omitempty"`
+	Progress    string   `json:"agent_progress,omitempty"`
+	Failure     string   `json:"failure,omitempty"`
+	FailedTools []string `json:"failed_tools,omitempty"`
+	Files       []string `json:"files_touched,omitempty"`
+	Plan        string   `json:"agent_plan,omitempty"`
 }
 
-func (w *Worker) writeAttemptHandoff(ctx context.Context, task models.Task, project models.Project, result stage.StageResult, failure error) error {
+func (w *Worker) writeAttemptHandoff(ctx context.Context, task models.Task, result stage.StageResult, failure error) error {
 	if w.store == nil {
 		return errors.New("attempt handoff store unavailable")
 	}
-	note := attemptHandoff{Goal: task.Title, TaskDetails: task.Description, Criteria: task.SuccessCriteria, OriginalInput: project.OriginalInput, Progress: result.Progress, FailedTools: append([]string(nil), result.FailedTools...), Files: result.FilesTouched, Plan: result.Plan}
+	note := attemptHandoff{Progress: result.Progress, FailedTools: append([]string(nil), result.FailedTools...), Files: append([]string(nil), result.FilesTouched...), Plan: result.Plan}
 	if failure != nil {
 		note.Failure = failure.Error()
 	}
@@ -52,11 +61,17 @@ func (w *Worker) writeAttemptHandoff(ctx context.Context, task models.Task, proj
 		}
 	}
 	cut := truncation.HeadTailStrategy{HeadRatio: .5}
-	note.Progress = cut.Truncate(note.Progress, 8192)
-	note.Failure = cut.Truncate(note.Failure, 8192)
-	note.Plan = cut.Truncate(note.Plan, 8192)
+	note.Progress = cut.Truncate(note.Progress, handoffTextCap)
+	note.Failure = cut.Truncate(note.Failure, handoffTextCap)
+	note.Plan = cut.Truncate(note.Plan, handoffTextCap)
+	// The first failures are kept: later ones usually follow from them.
+	note.FailedTools = capList(note.FailedTools, handoffMaxTools, "failed calls")
 	for i := range note.FailedTools {
-		note.FailedTools[i] = cut.Truncate(note.FailedTools[i], 8192)
+		note.FailedTools[i] = cut.Truncate(note.FailedTools[i], handoffToolCap)
+	}
+	note.Files = capList(note.Files, handoffMaxFiles, "files")
+	for i := range note.Files {
+		note.Files[i] = cut.Truncate(note.Files[i], handoffPathCap)
 	}
 	payload, err := json.Marshal(note)
 	if err == nil {
@@ -67,9 +82,17 @@ func (w *Worker) writeAttemptHandoff(ctx context.Context, task models.Task, proj
 	return err
 }
 
+// capList keeps the first max entries and notes how many were dropped.
+func capList(list []string, max int, what string) []string {
+	if len(list) <= max {
+		return list
+	}
+	return append(list[:max], fmt.Sprintf("%d more %s omitted", len(list)-max, what))
+}
+
 // attemptHandoffMessage returns the latest uncleared handoff note, or nil. A
 // note that cannot be read is an error: a retry must not run without it.
-func (w *Worker) attemptHandoffMessage(ctx context.Context, task models.Task) (*gateway.PromptMessage, error) {
+func (w *Worker) attemptHandoffMessage(ctx context.Context, task models.Task, project models.Project) (*gateway.PromptMessage, error) {
 	if w.store == nil {
 		return nil, nil
 	}
@@ -88,16 +111,13 @@ func (w *Worker) attemptHandoffMessage(ctx context.Context, task models.Task) (*
 		if err := json.Unmarshal([]byte(events[i].Payload), &note); err != nil {
 			return nil, fmt.Errorf("%w: invalid note: %w", errAttemptHandoffUnavailable, err)
 		}
-		// User text stays verbatim; only the agent's observations are wrapped
-		// as external, untrusted content.
-		userText := "Previous failed attempt handoff\nGoal: " + note.Goal + "\nTask details (verbatim):\n" + note.TaskDetails
-		for _, criterion := range note.Criteria {
-			userText += "\nSuccess criterion (verbatim): " + criterion
+		// The task is already in the protected task message. The user's request
+		// stays verbatim up to its cap; only the agent's observations are
+		// wrapped as external, untrusted content.
+		userText := "Previous failed attempt handoff for the task above."
+		if project.OriginalInput != "" {
+			userText += "\nOriginal user request (verbatim):\n" + truncation.HeadTailStrategy{HeadRatio: .5}.Truncate(project.OriginalInput, handoffRequestCap)
 		}
-		if note.OriginalInput != "" {
-			userText += "\nOriginal user request (verbatim):\n" + note.OriginalInput
-		}
-		note.Goal, note.TaskDetails, note.OriginalInput, note.Criteria = "", "", "", nil
 		observations, _ := json.Marshal(note)
 		return &gateway.PromptMessage{Role: "user", Name: "attempt_handoff", Section: gateway.SectionComments,
 			Content: userText + "\nAgent progress is reported, not verified:\n" + agenthooks.WrapExternalContent("attempt handoff", string(observations))}, nil
@@ -105,6 +125,9 @@ func (w *Worker) attemptHandoffMessage(ctx context.Context, task models.Task) (*
 	return nil, nil
 }
 
+// clearAttemptHandoff runs after the coordinator committed a success, which it
+// cannot undo, so a failure is logged. A note left behind is only shown again
+// if the task is reopened, where the last failure is still useful history.
 func (w *Worker) clearAttemptHandoff(ctx context.Context, task models.Task) {
 	if w.store == nil {
 		return

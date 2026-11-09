@@ -9,15 +9,18 @@ import (
 	"agentd/internal/models"
 )
 
+// TestCriteriaStoresEnforceUpdateContract keeps the API fakes in step with
+// kanban.Store.UpdateTaskCriteria, which internal/kanban/golden_criteria_test.go
+// tests against a real database.
 func TestCriteriaStoresEnforceUpdateContract(t *testing.T) {
 	for name, makeStore := range map[string]func() (*models.Task, func(time.Time) (*models.Task, error)){
-		"api": func() (*models.Task, func(time.Time) (*models.Task, error)) {
+		"apiStore": func() (*models.Task, func(time.Time) (*models.Task, error)) {
 			s := newAPITestStore()
 			return &s.task, func(expected time.Time) (*models.Task, error) {
 				return s.UpdateTaskCriteria(context.Background(), s.task.ID, expected, []string{"new"}, nil)
 			}
 		},
-		"http": func() (*models.Task, func(time.Time) (*models.Task, error)) {
+		"testStore": func() (*models.Task, func(time.Time) (*models.Task, error)) {
 			s := newTestStore()
 			return &s.task, func(expected time.Time) (*models.Task, error) {
 				return s.UpdateTaskCriteria(context.Background(), s.task.ID, expected, []string{"new"}, nil)

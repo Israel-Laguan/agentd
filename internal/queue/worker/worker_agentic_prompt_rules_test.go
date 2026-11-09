@@ -36,7 +36,10 @@ func TestAgenticSystemPromptStatesWorkspaceIsCurrentDirectory(t *testing.T) {
 func agenticSystemPromptFor(t *testing.T) string {
 	t.Helper()
 	w := NewWorker(&mockAgenticStore{}, nil, &batchCountingSandbox{}, nil, &mockEventSink{}, WorkerOptions{})
-	msgs, _ := w.AssembleAgenticSystemPrompt(context.Background(), models.Task{Title: "t", Description: "d"}, models.Project{}, models.AgentProfile{})
+	msgs, err := w.AssembleAgenticSystemPrompt(context.Background(), models.Task{Title: "t", Description: "d"}, models.Project{}, models.AgentProfile{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(msgs) == 0 {
 		t.Fatal("AssembleAgenticSystemPrompt returned no messages")
 	}

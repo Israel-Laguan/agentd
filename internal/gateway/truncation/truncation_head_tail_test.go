@@ -1,7 +1,6 @@
 package truncation
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -16,7 +15,7 @@ func TestHeadTailShortInput(t *testing.T) {
 func TestHeadTailDynamicRatios(t *testing.T) {
 	input := strings.Repeat("a", 50) + strings.Repeat("b", 50)
 	budget := 40
-	marker := fmt.Sprintf("【...】(%d bytes omitted)", len(input)-(budget-len("【...】(00 bytes omitted)")))
+	marker := "【...】(87 bytes omitted)" // 40-byte budget minus 27-byte marker keeps 13 of 100 bytes
 	remaining := budget - len(marker)
 
 	tests := []struct {

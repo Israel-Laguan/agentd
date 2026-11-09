@@ -57,7 +57,9 @@ func utf8SafePrefix(input string, maxBytes int) string {
 	if maxBytes >= len(input) {
 		return input
 	}
-	for maxBytes > 0 && !utf8.ValidString(input[:maxBytes]) {
+	// Back off only to a rune boundary; invalid bytes earlier in the prefix
+	// stay as they are, as utf8SafeSuffix does.
+	for i := 0; i < utf8.UTFMax && maxBytes > 0 && !utf8.RuneStart(input[maxBytes]); i++ {
 		maxBytes--
 	}
 	return input[:maxBytes]

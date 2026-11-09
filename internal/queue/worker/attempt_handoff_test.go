@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"agentd/internal/agent/acp/fakeagent"
 	"agentd/internal/gateway"
+	"agentd/internal/gateway/spec"
 	"agentd/internal/models"
 	"agentd/internal/stage"
 	"agentd/internal/testutil"
@@ -40,7 +42,7 @@ func TestUnreadableHandoffStopsRetry(t *testing.T) {
 	if err := store.AppendEvent(ctx, models.Event{TaskID: sql.NullString{String: "t", Valid: true}, Type: attemptHandoffEvent, Payload: "{broken"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (&Worker{store: store}).attemptHandoffMessage(ctx, models.Task{BaseEntity: models.BaseEntity{ID: "t"}}); err == nil {
+	if _, err := (&Worker{store: store}).attemptHandoffMessage(ctx, models.Task{BaseEntity: models.BaseEntity{ID: "t"}}, models.Project{}); err == nil {
 		t.Fatal("corrupt handoff was silently dropped")
 	}
 }
@@ -103,9 +105,59 @@ func TestUnreadableHandoffRetriesWithoutAgentOrOverwrite(t *testing.T) {
 	})
 }
 
+// The note is protected from shedding, so its worst case must leave room in
+// the ACP budget for the system and task messages.
+func TestAttemptHandoffIsBounded(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	w := &Worker{store: store}
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t"}}
+	huge := strings.Repeat("x", 100_000)
+	var tools, files []string
+	for i := range 40 {
+		tools = append(tools, huge)
+		files = append(files, fmt.Sprintf("%d/%s", i, huge))
+	}
+	res := stage.StageResult{Progress: huge, Plan: huge, FailedTools: tools, FilesTouched: append(files, files...)}
+	if err := w.writeAttemptHandoff(ctx, task, res, errors.New(huge)); err != nil {
+		t.Fatal(err)
+	}
+	msg, err := w.attemptHandoffMessage(ctx, task, models.Project{OriginalInput: huge})
+	if err != nil || msg == nil {
+		t.Fatalf("message = %v, error = %v", msg, err)
+	}
+	if len(msg.Content) > acpContextBudget*3/4 {
+		t.Fatalf("handoff is %d bytes, over 3/4 of the %d-byte budget", len(msg.Content), acpContextBudget)
+	}
+	for _, want := range []string{"36 more failed calls omitted", "30 more files omitted"} {
+		if !strings.Contains(msg.Content, want) {
+			t.Errorf("handoff does not say %q", want)
+		}
+	}
+}
+
+// An attempt whose context did not fit never ran, so the last note is kept.
+func TestOverBudgetAttemptKeepsLastHandoff(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	w := &Worker{store: store}
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t"}}
+	if err := w.writeAttemptHandoff(ctx, task, stage.StageResult{Progress: "edited handler.go"}, errors.New("tests failed")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := fitStageContext([]spec.PromptMessage{{Role: "system", Section: spec.SectionSystem, Content: strings.Repeat("s", 100)}}, 10)
+	if !w.saveACPHandoff(ctx, task, models.Project{}, stage.StageResult{}, err) {
+		t.Fatal("over-budget attempt failed the task")
+	}
+	msg, err := w.attemptHandoffMessage(ctx, task, models.Project{})
+	if err != nil || msg == nil || !strings.Contains(msg.Content, "edited handler.go") {
+		t.Fatalf("last handoff lost: %v, %v", msg, err)
+	}
+}
+
 func TestAttemptHandoffReportsPersistenceFailure(t *testing.T) {
 	w := &Worker{store: handoffWriteFailureStore{KanbanStore: testutil.NewFakeStore()}}
-	if err := w.writeAttemptHandoff(context.Background(), models.Task{}, models.Project{}, stage.StageResult{}, errors.New("failed")); err == nil {
+	if err := w.writeAttemptHandoff(context.Background(), models.Task{}, stage.StageResult{}, errors.New("failed")); err == nil {
 		t.Fatal("lost handoff was not reported")
 	}
 }
@@ -120,11 +172,20 @@ func TestFailedAttemptHandoffSurvivesWorkerRestart(t *testing.T) {
 	task := tasks[0]
 	w := &Worker{store: store}
 	original := "Do not push.\nKeep 'quotes' and <symbols> verbatim."
-	if err := w.writeAttemptHandoff(ctx, task, models.Project{OriginalInput: original}, stage.StageResult{Progress: "Changed handler.go; chose a smaller patch; run integration tests."}, errors.New("go test ./...: exact failure")); err != nil {
+	if err := w.writeAttemptHandoff(ctx, task, stage.StageResult{Progress: "Changed handler.go; chose a smaller patch; run integration tests."}, errors.New("go test ./...: exact failure")); err != nil {
 		t.Fatal(err)
 	}
+	events, err := store.ListEventsByTask(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events {
+		if e.Type == attemptHandoffEvent && strings.Contains(e.Payload, "Keep 'quotes'") {
+			t.Fatalf("event log holds the user's request: %s", e.Payload)
+		}
+	}
 	other := &Worker{store: store}
-	messages, err := other.buildStageContext(ctx, task, models.Project{}, models.AgentProfile{})
+	messages, err := other.buildStageContext(ctx, task, models.Project{OriginalInput: original}, models.AgentProfile{})
 	if err != nil {
 		t.Fatal(err)
 	}

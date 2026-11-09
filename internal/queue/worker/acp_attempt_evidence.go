@@ -103,7 +103,8 @@ func (e *acpAttemptEvidence) result() acpAttemptFacts {
 }
 
 func appendTouchedFiles(files []string, seen map[string]bool, c *acpAttemptCall) []string {
-	if c.status != acp.ToolCallStatusCompleted || (c.kind != acp.ToolKindEdit && c.kind != acp.ToolKindDelete && c.kind != acp.ToolKindMove) {
+	// An edit still in progress when the attempt stopped may have written.
+	if (c.status != acp.ToolCallStatusCompleted && c.status != acp.ToolCallStatusInProgress) || (c.kind != acp.ToolKindEdit && c.kind != acp.ToolKindDelete && c.kind != acp.ToolKindMove) {
 		return files
 	}
 	var paths []string
