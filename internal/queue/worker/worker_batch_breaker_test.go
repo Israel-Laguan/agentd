@@ -32,7 +32,7 @@ func TestProcessRunningTask_ProviderBreakerAdmitsProbeAfterTimeout(t *testing.T)
 	gw := &batchTrackingGateway{}
 	w := NewWorker(store, gw, nil, nil, nil, WorkerOptions{ProviderBreakers: pb})
 
-	w.processRunningTask(context.Background(), task, store.project, store.profile)
+	w.dispatchProcess(context.Background(), task, store.project, store.profile)
 
 	gw.mu.Lock()
 	defer gw.mu.Unlock()
@@ -65,7 +65,7 @@ func TestProcessRunningTask_ProviderProbeInFlightRequeues(t *testing.T) {
 	gw := &batchTrackingGateway{}
 	w := NewWorker(store, gw, nil, nil, nil, WorkerOptions{ProviderBreakers: pb})
 
-	w.processRunningTask(context.Background(), task, store.project, store.profile)
+	w.dispatchProcess(context.Background(), task, store.project, store.profile)
 
 	gw.mu.Lock()
 	defer gw.mu.Unlock()
@@ -133,7 +133,7 @@ func TestProcessRunningTask_ProbeInFlightEmitsNoRetry(t *testing.T) {
 	log := &eventLog{}
 	w := NewWorker(store, &batchTrackingGateway{}, nil, nil, log, WorkerOptions{ProviderBreakers: pb})
 
-	w.processRunningTask(context.Background(), task, store.project, store.profile)
+	w.dispatchProcess(context.Background(), task, store.project, store.profile)
 
 	if n := log.count("RETRY"); n != 0 {
 		t.Fatalf("RETRY events = %d, want 0", n)
@@ -154,7 +154,7 @@ func TestProcessRunningTask_OpenBreakerStillHandsOff(t *testing.T) {
 	log := &eventLog{}
 	w := NewWorker(store, gw, nil, nil, log, WorkerOptions{ProviderBreakers: pb})
 
-	w.processRunningTask(context.Background(), task, store.project, store.profile)
+	w.dispatchProcess(context.Background(), task, store.project, store.profile)
 
 	gw.mu.Lock()
 	defer gw.mu.Unlock()

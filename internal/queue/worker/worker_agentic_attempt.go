@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 
 	"agentd/internal/models"
 	"agentd/internal/queue/worker/agentic"
@@ -20,19 +21,19 @@ func (w *Worker) runAgenticAttempt(
 	// A provider that cannot call tools fails before any model call, so
 	// clarification never asks a human about a doomed run.
 	if refusal, refused := agentic.CheckChatTools(w.gateway, task, profile.Provider); refused {
-		w.applyAgenticResult(ctx, refusal)
+		w.applyAgenticResult(ctx, project, refusal)
 		return LoopResult{}, false
 	}
 	taskHooks, taskCaps := w.MountAgenticHooks(project, profile)
 	// Session start validates credentials, so it fails a task before clarification
 	// can ask a human anything.
 	if err := w.RunSessionStart(ctx, task, project, taskHooks); err != nil {
-		w.applyAgenticResult(ctx, agentic.Result{Kind: agentic.ResultFailed, Task: task, Err: err})
+		w.applyAgenticResult(ctx, project, agentic.Result{Kind: agentic.ResultFailed, Task: task, Err: err})
 		return LoopResult{}, false
 	}
 	clarified, blocked, err := w.RunPreTaskElicitation(ctx, task, project)
 	if err != nil {
-		w.applyAgenticResult(ctx, agentic.Result{Kind: agentic.ResultFailed, Task: clarified, Err: err})
+		w.applyAgenticResult(ctx, project, agentic.Result{Kind: agentic.ResultFailed, Task: clarified, Err: err})
 		return LoopResult{}, false
 	}
 	if blocked {
@@ -43,9 +44,11 @@ func (w *Worker) runAgenticAttempt(
 	// return, replacing the one above. Re-register ours so a cancel during the
 	// terminal board write still reaches this attempt.
 	w.RegisterCancel(task.ID, cancel)
-	w.applyAgenticResult(ctx, outcome)
+	committed := w.applyAgenticResult(ctx, project, outcome)
 	w.DeregisterCancel(task.ID)
-	return result, ok
+	// A coordinator rejection already failed or requeued the task, so the attempt
+	// is not a success and the loop result needs no further handling.
+	return result, ok && committed
 }
 
 // registerRunCancel makes a task run cancellable by its task ID until done is
@@ -61,16 +64,35 @@ func (w *Worker) registerRunCancel(ctx context.Context, taskID string) (context.
 
 // applyAgenticResult writes the terminal result the engine settled on to the
 // board. The engine only decides the outcome (T-041: only the core writes the
-// board).
-func (w *Worker) applyAgenticResult(ctx context.Context, r agentic.Result) {
+// board). It reports false only when a completed result was rejected on commit.
+func (w *Worker) applyAgenticResult(ctx context.Context, project models.Project, r agentic.Result) bool {
 	switch r.Kind {
 	case agentic.ResultFailed:
 		w.FailHard(ctx, r.Task, r.Err)
 	case agentic.ResultGatewayError:
 		w.HandleGatewayError(ctx, r.Task, r.Err)
 	case agentic.ResultCompleted:
-		w.CommitTextWithProfile(ctx, r.Task, r.Text, &r.Profile)
+		return w.commitExecution(ctx, r.Task, project, r.Profile, r.Text)
 	case agentic.ResultPromptHandoff:
 		w.HandlePromptHandoff(ctx, r.Task, r.Payload)
 	}
+	return true
+}
+
+// commitExecution applies coordinator checks to a completed execution before
+// handing its result to review or persisting it.
+func (w *Worker) commitExecution(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, text string) bool {
+	if err := w.VerifyPostConditions(task, project); err != nil {
+		w.failTerminal(ctx, task, err, models.TaskStateFailedRequiresHuman)
+		return false
+	}
+	if err := w.VerifyBreakdownComplete(ctx, task); err != nil {
+		if errors.Is(err, models.ErrBreakdownIncomplete) {
+			w.failTerminal(ctx, task, err, models.TaskStateFailedRequiresHuman)
+		} else {
+			w.handleAgentFailure(ctx, task, err.Error())
+		}
+		return false
+	}
+	return w.CommitTextWithProfile(ctx, task, text, &profile)
 }
