@@ -172,6 +172,11 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 		t.Fatalf("J08 [running] task never reached RUNNING: %v", err)
 	}
 
+	// RUNNING is set before the agent process starts and an ACP turn emits no
+	// event to wait on, so give the jail a few seconds to start the agent; its
+	// 30s sleep outlasts the wait. Without it the kill could land before the turn.
+	time.Sleep(j08AgentStart)
+
 	devenv := NewDevenvManager(composePath, "default")
 	if err := devenv.KillAgentd(ctx); err != nil {
 		t.Fatalf("J08 [kill] %v", err)
@@ -192,6 +197,9 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 // task is still RUNNING when the container is killed and the re-run is long
 // enough to notice. It stays under the sandbox's 60s inactivity limit (B-011).
 const j08Slow = 30 * time.Second
+
+// j08AgentStart is how long the journey waits after RUNNING for the agent to be mid-turn.
+const j08AgentStart = 5 * time.Second
 
 // j08RerunBudget covers the re-dispatched slow turn: j08Slow plus slack for the
 // claim tick, the jail start and the result commit.

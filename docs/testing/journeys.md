@@ -134,7 +134,7 @@ path. Python unit tests for the dispatch live in
 
 | Journey | What changed from the builtin version |
 | --- | --- |
-| J02, J04, J05 (seeded), J15 (all) | Tasks carry a completed script. J04 replaces the mock plan's descriptions with scripts. |
+| J02, J04, J05 (seeded), J15 (except J15-large) | Executed tasks carry a completed script. J04 replaces the mock plan's descriptions with scripts; J15-large creates export-only tasks without scripts and never runs them. |
 | J08 | The agent holds its turn 30 s (`sleep_ms`). The RESULT carries the agent's summary instead of `tick 29`. The `carried-over` marker check is dropped (it read the builtin command's output); `RECOVERY_WORKSPACE_RESET` stays. |
 | J11 | The prompt is not sent to the mock. The `echo` step completes the task with the prompt's size and its lines containing the canary; the RESULT is what the journey reads. `echo bytes=` must be present, so "absent" cannot pass without a prompt. |
 | J14 | An ACP task writes no `LOG_CHUNK`, so the journey now asserts `TOKEN_USAGE` (a `usage` step with 2 tokens, ledger checked) before `RESULT` instead of `LOG_CHUNK` before `RESULT`. |

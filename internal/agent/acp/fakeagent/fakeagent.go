@@ -29,6 +29,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// maxSleepMS caps a sleep step (one hour), so the millisecond conversion cannot overflow.
+const maxSleepMS = 3_600_000
+
 // Arg is the first argument that makes a test binary serve the fake agent.
 const Arg = "fake-acp-agent"
 
@@ -136,7 +139,7 @@ func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.
 		return "", errors.New(step.Error)
 	case step.SleepMS > 0:
 		select {
-		case <-time.After(time.Duration(step.SleepMS) * time.Millisecond):
+		case <-time.After(time.Duration(min(step.SleepMS, maxSleepMS)) * time.Millisecond):
 		case <-ctx.Done():
 			a.cancels.Add(1)
 			return acp.StopReasonCancelled, nil

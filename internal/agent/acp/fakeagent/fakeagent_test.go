@@ -52,3 +52,11 @@ func TestRunSleepStopsOnCancel(t *testing.T) {
 		t.Fatalf("run = %q, %v; want cancelled", stop, err)
 	}
 }
+
+func TestEchoStepKeepsBracketPrefixedPreference(t *testing.T) {
+	prompt := "[note] CANARY keep me\n" + Script(Step{Echo: "CANARY"})
+	summary := echoStep("CANARY", prompt).Tool.Args.(map[string]any)["summary"].(string)
+	if !strings.HasSuffix(summary, "matched=1: [note] CANARY keep me") {
+		t.Fatalf("summary = %q, want the bracket-prefixed line kept and the script dropped", summary)
+	}
+}
