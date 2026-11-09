@@ -131,12 +131,18 @@ func (w *Worker) enrichBuilderMatchedSkills(builder *SystemPromptBuilder, task m
 }
 
 func (w *Worker) buildSystemPromptContent(task models.Task, project models.Project, profile models.AgentProfile) string {
+	return w.buildStageSystemPrompt(task, project, profile, true)
+}
+
+func (w *Worker) buildStageSystemPrompt(task models.Task, project models.Project, profile models.AgentProfile, builtin bool) string {
 	var goal *agentcontext.AgentGoal
 	if g := agentcontext.GoalFromTask(task); g != nil {
 		goal = g
 	}
-	builder := NewSystemPromptBuilder().
-		WithGlobal(agenticToolUseSystemText(profile.WorkspaceReadonly, goal))
+	builder := NewSystemPromptBuilder()
+	if builtin {
+		builder.WithGlobal(agenticToolUseSystemText(profile.WorkspaceReadonly, goal))
+	}
 	w.enrichBuilderUserPreferences(builder)
 	w.enrichBuilderProjectInstructions(builder, project, profile)
 	w.enrichBuilderMatchedSkills(builder, task, project)
@@ -158,14 +164,37 @@ func (w *Worker) buildSystemPromptContent(task models.Task, project models.Proje
 // list in-place. The new implementation builds messages from scratch via
 // SystemPromptBuilder, appends a user message, then appends memory lessons.
 func (w *Worker) AssembleAgenticSystemPrompt(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	systemPrompt := w.buildSystemPromptContent(task, project, profile)
+	return w.buildStageContext(ctx, task, project, profile, true)
+}
+
+func (w *Worker) buildStageContext(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, builtin bool) []gateway.PromptMessage {
+	systemPrompt := w.buildStageSystemPrompt(task, project, profile, builtin)
 	userContent := fmt.Sprintf("You are executing Task: %s\nDescription: %s", task.Title, task.Description)
+	if !builtin {
+		userContent = task.Title + "\n\n" + task.Description
+		if len(task.SuccessCriteria) > 0 {
+			userContent += "\n\nTask success criteria:\n"
+			for _, criterion := range task.SuccessCriteria {
+				userContent += "- " + criterion + "\n"
+			}
+		}
+	}
 	messages := []gateway.PromptMessage{
 		{Role: "system", Content: systemPrompt, Section: gateway.SectionSystem},
 		{Role: "user", Content: userContent, Section: gateway.SectionTask},
 	}
 	intent := task.Title + " " + task.Description
-	return w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages)
+	messages = w.appendMemoryLessons(ctx, intent, task.ProjectID, project.UserID, messages)
+	if w.store != nil {
+		messages, _ = w.PrependReviewRejectionFeedback(ctx, task, messages)
+		messages = w.PrependSandboxViolationFeedback(ctx, task, messages)
+	}
+	if !builtin {
+		if failure := w.attempts.lastFailure(task.ID); failure != nil {
+			messages = append(messages, gateway.PromptMessage{Role: "user", Content: fmt.Sprintf("The first failed command in the previous attempt was %q. Failure: %s", failure.command, failure.failure), Section: gateway.SectionComments})
+		}
+	}
+	return messages
 }
 
 // assembleAgenticSystemPromptWithUserContent builds the layered system prompt and sets the

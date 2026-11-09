@@ -255,16 +255,7 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	} else if ok {
 		task = enriched
 	}
-	res, err := w.callACP(ctx, task, project, profile, resolved.route, resolved.agent, stage.StageRequest{
-		Stage:   stage.StageExecution,
-		Purpose: gateway.PurposeExecTurn,
-		// shortcut: the pack is the task text alone; build it as the builtin does (buildAgenticMessages) once a preset needs more.
-		Context:  []spec.PromptMessage{{Role: "user", Content: task.Title + "\n\n" + task.Description}},
-		Contract: stage.NewContract[acpExecution](),
-		Access:   access,
-		AgentID:  task.AgentID,
-		Attrs:    gateway.AttrsForTask(task.RequiresWorkspaceChange),
-	})
+	res, err := w.callACP(ctx, task, project, profile, resolved.route, resolved.agent, w.acpExecutionRequest(ctx, task, project, profile, access))
 	w.RecordTaskTokenUsage(ctx, task, res.TokenUsage, res.UsageDetails)
 	switch {
 	case errors.Is(err, acp.ErrSuspended):
@@ -285,5 +276,17 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 		var out acpExecution
 		_ = json.Unmarshal(res.Output, &out) // the contract has validated it
 		succeeded = w.CommitTextWithProfile(ctx, task, out.Summary, &profile)
+	}
+}
+
+func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, access stage.WorkspaceAccess) stage.StageRequest {
+	return stage.StageRequest{
+		Stage:    stage.StageExecution,
+		Purpose:  gateway.PurposeExecTurn,
+		Context:  w.buildStageContext(ctx, task, project, profile, false),
+		Contract: stage.NewContract[acpExecution](),
+		Access:   access,
+		AgentID:  task.AgentID,
+		Attrs:    gateway.AttrsForTask(task.RequiresWorkspaceChange),
 	}
 }

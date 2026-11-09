@@ -58,9 +58,7 @@ func (e *Engine) selectAgenticTools(
 // buildAgenticMessages is the prompt for task: the layered system prompt and the
 // task anchor, with any review-rejection and sandbox-violation feedback.
 func (e *Engine) buildAgenticMessages(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) []gateway.PromptMessage {
-	messages := e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile)
-	messages, _ = e.host.PrependReviewRejectionFeedback(ctx, task, messages)
-	return e.host.PrependSandboxViolationFeedback(ctx, task, messages)
+	return e.host.AssembleAgenticSystemPrompt(ctx, task, project, profile)
 }
 
 func (e *Engine) setupAgenticCancel(ctx context.Context, taskID string) (context.Context, func()) {
