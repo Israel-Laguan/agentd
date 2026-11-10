@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestCountLines(t *testing.T) {
 	t.Parallel()
@@ -74,5 +80,36 @@ func TestExcluded(t *testing.T) {
 	}
 	if excluded("internal/foo.go", defaultExcludes) {
 		t.Fatal("expected internal path not to be excluded")
+	}
+}
+
+// B-092: a file that is not staged yet must still be measured, or a local run
+// passes on a tree CI rejects. Ignored files stay out.
+func TestTrackedFilesIncludesUntrackedButNotIgnored(t *testing.T) {
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", "t@t"}, {"config", "user.name", "t"}} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	write := func(name string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(".gitignore")
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("ignored.go\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	write("tracked.go")
+	if out, err := exec.Command("git", "-C", dir, "add", "tracked.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	write("untracked.go")
+	write("ignored.go")
+	t.Chdir(dir)
+	got := strings.Join(trackedFiles(), " ")
+	if !strings.Contains(got, "untracked.go") || !strings.Contains(got, "tracked.go") || strings.Contains(got, "ignored.go") {
+		t.Fatalf("files = %q; want tracked and untracked, not ignored", got)
 	}
 }

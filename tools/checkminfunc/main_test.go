@@ -4,7 +4,9 @@ import (
 	"go/ast"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -420,5 +422,33 @@ func TestWriteBaselineBackupDoesNotFollowSymlink(t *testing.T) {
 	}
 	if string(got) != original {
 		t.Fatalf("backup = %q, want %q", got, original)
+	}
+}
+
+// B-092: a Go file that is not staged yet must still be measured (this is how
+// fakeTask passed locally and failed CI). Ignored files stay out.
+func TestTrackedGoFilesIncludesUntrackedButNotIgnored(t *testing.T) {
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", "t@t"}, {"config", "user.name", "t"}} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	for name, body := range map[string]string{".gitignore": "ignored.go\n", "tracked.go": "package x\n", "untracked.go": "package x\n", "ignored.go": "package x\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.Command("git", "-C", dir, "add", "tracked.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	t.Chdir(dir)
+	files, err := trackedGoFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(files, " ")
+	if !strings.Contains(got, "untracked.go") || !strings.Contains(got, "tracked.go") || strings.Contains(got, "ignored.go") {
+		t.Fatalf("files = %q; want tracked and untracked, not ignored", got)
 	}
 }

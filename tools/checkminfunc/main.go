@@ -210,7 +210,7 @@ func sortViolations(violations []violation) {
 }
 
 func trackedGoFiles() ([]string, error) {
-	out, err := exec.Command("git", "ls-files", "-z", "*.go").Output()
+	out, err := exec.Command("git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.go").Output()
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}

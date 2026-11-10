@@ -111,7 +111,7 @@ func check(defaultMax int) ([]violation, error) {
 }
 
 func trackedFiles() []string {
-	out, err := exec.Command("git", "ls-files", "-z").Output()
+	out, err := exec.Command("git", "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "checkloc: git ls-files: %v\n", err)
 		os.Exit(2)
