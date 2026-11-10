@@ -259,3 +259,64 @@ func TestFakeACPAgentReceivesFailedAttemptHandoff(t *testing.T) {
 		}
 	}
 }
+
+// B-095: a failure before the agent starts (no runtime, jail down, a guard)
+// returns an empty result. Its note would be the newest, so the last real
+// attempt's history would never be shown again.
+func TestPreStartFailureKeepsLastHandoff(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	w := &Worker{store: store}
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t"}}
+	if err := w.writeAttemptHandoff(ctx, task, stage.StageResult{Progress: "edited handler.go"}, errors.New("tests failed")); err != nil {
+		t.Fatal(err)
+	}
+	if !w.saveACPHandoff(ctx, task, models.Project{}, stage.StageResult{}, errors.New("worker: acp agent \"x\": jail unavailable")) {
+		t.Fatal("pre-start failure failed the task")
+	}
+	msg, err := w.attemptHandoffMessage(ctx, task, models.Project{})
+	if err != nil || msg == nil || !strings.Contains(msg.Content, "edited handler.go") {
+		t.Fatalf("last real handoff shadowed: %v, %v", msg, err)
+	}
+}
+
+// With no earlier note, a pre-start failure is the only history there is.
+func TestPreStartFailureWithNoEarlierNoteWritesOne(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	w := &Worker{store: store}
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t"}}
+	if !w.saveACPHandoff(ctx, task, models.Project{}, stage.StageResult{}, errors.New("jail unavailable")) {
+		t.Fatal("failed the task")
+	}
+	msg, err := w.attemptHandoffMessage(ctx, task, models.Project{})
+	if err != nil || msg == nil || !strings.Contains(msg.Content, "jail unavailable") {
+		t.Fatalf("no note for the first failure: %v, %v", msg, err)
+	}
+}
+
+// B-096: the note is JSON-encoded, which turns each <, > and & into six bytes,
+// so a note at its caps can outgrow the budget its raw size fits in.
+func TestAttemptHandoffIsBoundedWhenEscaped(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	w := &Worker{store: store}
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t"}}
+	huge := strings.Repeat("<", 100_000)
+	var tools, files []string
+	for range 40 {
+		tools = append(tools, huge)
+		files = append(files, huge)
+	}
+	res := stage.StageResult{Progress: huge, Plan: huge, FailedTools: tools, FilesTouched: files}
+	if err := w.writeAttemptHandoff(ctx, task, res, errors.New(huge)); err != nil {
+		t.Fatal(err)
+	}
+	msg, err := w.attemptHandoffMessage(ctx, task, models.Project{OriginalInput: huge})
+	if err != nil || msg == nil {
+		t.Fatalf("message = %v, error = %v", msg, err)
+	}
+	if len(msg.Content) > acpContextBudget*3/4 {
+		t.Fatalf("escaped handoff is %d bytes, over 3/4 of the %d-byte budget", len(msg.Content), acpContextBudget)
+	}
+}

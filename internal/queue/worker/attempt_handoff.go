@@ -111,18 +111,73 @@ func (w *Worker) attemptHandoffMessage(ctx context.Context, task models.Task, pr
 		if err := json.Unmarshal([]byte(events[i].Payload), &note); err != nil {
 			return nil, fmt.Errorf("%w: invalid note: %w", errAttemptHandoffUnavailable, err)
 		}
-		// The task is already in the protected task message. The user's request
-		// stays verbatim up to its cap; only the agent's observations are
-		// wrapped as external, untrusted content.
-		userText := "Previous failed attempt handoff for the task above."
-		if project.OriginalInput != "" {
-			userText += "\nOriginal user request (verbatim):\n" + truncation.HeadTailStrategy{HeadRatio: .5}.Truncate(project.OriginalInput, handoffRequestCap)
-		}
-		observations, _ := json.Marshal(note)
 		return &gateway.PromptMessage{Role: "user", Name: "attempt_handoff", Section: gateway.SectionComments,
-			Content: userText + "\nAgent progress is reported, not verified:\n" + agenthooks.WrapExternalContent("attempt handoff", string(observations))}, nil
+			Content: renderAttemptHandoff(note, project.OriginalInput)}, nil
 	}
 	return nil, nil
+}
+
+// hasAttemptHandoff reports whether the newest handoff event holds a note (a
+// success writes an empty one that clears it). A store error counts as none, so
+// the caller writes a note rather than lose the failure.
+func (w *Worker) hasAttemptHandoff(ctx context.Context, task models.Task) bool {
+	if w.store == nil {
+		return false
+	}
+	events, err := w.store.ListEventsByTask(ctx, task.ID)
+	if err != nil {
+		return false
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type == attemptHandoffEvent {
+			return events[i].Payload != ""
+		}
+	}
+	return false
+}
+
+// handoffRenderedMax bounds the message as the prompt carries it, 3/4 of the
+// budget so the system and task messages still fit (B-096). The caps at write
+// time count characters; JSON and the external-content wrapper escape <, > & and
+// quotes to several bytes each, so the rendered size is what must be bounded.
+const handoffRenderedMax = acpContextBudget * 3 / 4
+
+// renderAttemptHandoff builds the handoff message text. The task is already in
+// the protected task message. The user's request stays verbatim up to its cap;
+// only the agent's observations are wrapped as external, untrusted content. If
+// the escaped result is over handoffRenderedMax, every field's cap is halved
+// until it fits: the head and tail of each field survive, never a whole field.
+func renderAttemptHandoff(note attemptHandoff, original string) string {
+	cut := truncation.HeadTailStrategy{HeadRatio: .5}
+	for limit := handoffTextCap; ; limit /= 2 {
+		text := "Previous failed attempt handoff for the task above."
+		if original != "" {
+			text += "\nOriginal user request (verbatim):\n" + cut.Truncate(original, min(handoffRequestCap, limit*2))
+		}
+		observations, _ := json.Marshal(shrinkAttemptHandoff(note, limit))
+		out := text + "\nAgent progress is reported, not verified:\n" + agenthooks.WrapExternalContent("attempt handoff", string(observations))
+		if len(out) <= handoffRenderedMax || limit <= 64 {
+			return out
+		}
+	}
+}
+
+// shrinkAttemptHandoff cuts each text field to limit characters, tools to half
+// of it and paths to a sixteenth. At limit == handoffTextCap it changes nothing
+// the writer's own caps allow.
+func shrinkAttemptHandoff(n attemptHandoff, limit int) attemptHandoff {
+	cut := truncation.HeadTailStrategy{HeadRatio: .5}
+	out := n
+	out.Progress, out.Failure, out.Plan = cut.Truncate(n.Progress, limit), cut.Truncate(n.Failure, limit), cut.Truncate(n.Plan, limit)
+	out.FailedTools = make([]string, len(n.FailedTools))
+	for i, tool := range n.FailedTools {
+		out.FailedTools[i] = cut.Truncate(tool, max(limit/2, 1))
+	}
+	out.Files = make([]string, len(n.Files))
+	for i, f := range n.Files {
+		out.Files[i] = cut.Truncate(f, max(limit/16, 16))
+	}
+	return out
 }
 
 // clearAttemptHandoff runs after the coordinator committed a success, which it

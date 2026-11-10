@@ -122,6 +122,11 @@ func (w *Worker) saveACPHandoff(ctx context.Context, task models.Task, project m
 	}
 	if err == nil {
 		err = errors.New("attempt awaiting coordinator checks; see check feedback if it was rejected")
+	} else if neverStarted(res) && w.hasAttemptHandoff(ctx, task) {
+		// An attempt that failed before the agent did anything (no runtime, jail
+		// down, a guard) has nothing to hand over. Its note would be the newest
+		// and shadow the last real one (B-095); the failure is in the ERROR path.
+		return true
 	}
 	if handoffErr := w.writeAttemptHandoff(ctx, task, res, err); handoffErr != nil {
 		liveCtx, cancel := liveContext(ctx)
@@ -146,4 +151,9 @@ func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, proj
 		AgentID:  task.AgentID,
 		Attrs:    gateway.AttrsForTask(task.RequiresWorkspaceChange),
 	}, nil
+}
+
+// neverStarted is a failed attempt's result with no agent output at all.
+func neverStarted(res stage.StageResult) bool {
+	return res.Progress == "" && res.Plan == "" && len(res.FailedTools) == 0 && len(res.FilesTouched) == 0
 }
