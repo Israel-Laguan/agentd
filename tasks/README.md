@@ -47,11 +47,11 @@ this README/backlog before the sprint folder is cleared.
 1. Capture new ideas in `backlog/` with the right type + next free ID.
 2. At planning, move (or copy) items into the sprint folder and set `Sprint` + `Status: ready`.
 3. Work in priority order; keep the sprint `README.md` table in sync.
-4. Close the sprint with `retro/RETRO.md`; move unfinished items back to backlog or the next sprint. Reconcile every item against `gh pr list --state merged` first, not against the board.
+4. Close the sprint with `retro/RETRO.md`; move unfinished items back to backlog or the next sprint. Reconcile every item against `gh pr list --state merged --limit 1000` first, not against the board.
 5. IDs never reuse. Status vocabulary stays fixed (see templates).
 6. When a PR merges, set every ticket's Status and the sprint board in the same sitting. (S18, S19 and S20 each closed with stale ticket statuses.)
 7. The Status cell holds one word from the list below. Put merge details (PR, sha, date) in the Sprint cell or Notes, not in Status.
-8. Before merge, each review thread is resolved by a commit, or by a reply that says why not. A closed thread with no change is a finding the next sprint inherits (S20 left 45 open on merged PRs).
+8. Before merge, address each review thread with a commit, or with a reply that says why not, then mark the conversation resolved. A thread closed with neither a commit nor a reply is a finding the next sprint inherits (S20 left 45 open on merged PRs).
 
 ## ID allocation
 

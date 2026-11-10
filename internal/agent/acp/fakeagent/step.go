@@ -24,6 +24,8 @@ type Step struct {
 	Stop acp.StopReason `json:"stop,omitempty"`
 	// Error fails the prompt with this message.
 	Error string `json:"error,omitempty"`
+	// Touch and Stderr are side effects: they happen beside the step's one main
+	// action (Message, Exit, Stop, ...), so a step can write a line and then exit.
 	// Touch creates an empty file with this base name in the session's
 	// workspace, a readiness marker a journey can see from outside the jail.
 	Touch string `json:"touch,omitempty"`

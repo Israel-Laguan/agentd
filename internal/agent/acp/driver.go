@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"sync"
 
@@ -235,8 +236,10 @@ func spawn(ctx context.Context, cfg Config, servers []acpsdk.McpServer) (*proces
 		return nil, fmt.Errorf("acp: agent stdout: %w", err)
 	}
 	tail := &stderrTail{}
-	if cmd.Stderr == nil { // a Command that routes stderr itself keeps it
+	if cmd.Stderr == nil {
 		cmd.Stderr = tail
+	} else { // a Command that routes stderr itself keeps it, and the tail sees it too
+		cmd.Stderr = io.MultiWriter(cmd.Stderr, tail)
 	}
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("acp: start agent: %w", err)

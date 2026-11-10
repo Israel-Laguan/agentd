@@ -108,7 +108,7 @@ func TestTrackedFilesIncludesUntrackedButNotIgnored(t *testing.T) {
 	write("untracked.go")
 	write("ignored.go")
 	t.Chdir(dir)
-	got := strings.Join(trackedFiles(), " ")
+	got := strings.Join(candidateFiles(), " ")
 	if !strings.Contains(got, "untracked.go") || !strings.Contains(got, "tracked.go") || strings.Contains(got, "ignored.go") {
 		t.Fatalf("files = %q; want tracked and untracked, not ignored", got)
 	}

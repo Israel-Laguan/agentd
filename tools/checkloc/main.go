@@ -49,7 +49,7 @@ func main() {
 		os.Exit(2)
 	}
 	if len(violations) == 0 {
-		fmt.Println("LOC check passed: no tracked files exceed their limits.")
+		fmt.Println("LOC check passed: no files exceed their limits.")
 		return
 	}
 
@@ -75,7 +75,7 @@ func check(defaultMax int) ([]violation, error) {
 	}
 
 	var violations []violation
-	for _, relPath := range trackedFiles() {
+	for _, relPath := range candidateFiles() {
 		if excluded(relPath, defaultExcludes) {
 			continue
 		}
@@ -110,7 +110,7 @@ func check(defaultMax int) ([]violation, error) {
 	return violations, nil
 }
 
-func trackedFiles() []string {
+func candidateFiles() []string {
 	out, err := exec.Command("git", "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "checkloc: git ls-files: %v\n", err)

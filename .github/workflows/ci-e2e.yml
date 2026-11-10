@@ -55,9 +55,9 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
-      issues: write
-    env:
-      GH_TOKEN: ${{ github.token }}
+    # The reporting job reads this, so a setup failure is not "journeys red".
+    outputs:
+      journeys: ${{ steps.journeys.outcome }}
     steps:
       - uses: actions/checkout@v6
 
@@ -99,26 +99,33 @@ jobs:
         if: always()
         run: make dev-clean || true
 
-      # Only main (push or schedule) reports through an issue. The title is the
-      # key: one open issue at a time, updated while the suite stays red.
-      - name: Red on main opens an issue
-        if: steps.journeys.outcome == 'failure' && github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch'
+  # Only main (push or schedule) reports through an issue, from its own job so
+  # the issue-writing token never reaches the code `make test-e2e` runs. The
+  # title is the key: one open issue at a time, updated while the suite stays
+  # red. always() is needed: without a status function this job is skipped when
+  # e2e fails, which is exactly when it must run.
+  report:
+    name: Report to the issue
+    needs: e2e
+    if: always() && github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch' && needs.e2e.outputs.journeys != ''
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: e2e journeys red on main
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      JOURNEYS: ${{ needs.e2e.outputs.journeys }}
+    steps:
+      - name: Red opens or updates the issue, green closes it
         run: |
-          title="e2e journeys red on main"
-          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          body="Run: $run_url
+          n="$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title --jq "[.[] | select(.title==\"$TITLE\")][0].number // empty")"
+          if [ "$JOURNEYS" = failure ]; then
+            body="Run: $RUN_URL
           Commit: $GITHUB_SHA ($GITHUB_EVENT_NAME)
           Failing tests: see the Journeys step ('--- FAIL: TestJ...') in the run log."
-          n="$(gh issue list --state open --search "\"$title\" in:title" --json number,title --jq "[.[] | select(.title==\"$title\")][0].number // empty")"
-          if [ -n "$n" ]; then
-            gh issue comment "$n" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body"
+            if [ -n "$n" ]; then gh issue comment "$n" --body "$body"; else gh issue create --title "$TITLE" --body "$body"; fi
+          elif [ "$JOURNEYS" = success ] && [ -n "$n" ]; then
+            gh issue close "$n" --comment "Green again: $RUN_URL"
           fi
-
-      - name: Green on main closes the issue
-        if: steps.journeys.outcome == 'success' && github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch'
-        run: |
-          title="e2e journeys red on main"
-          n="$(gh issue list --state open --search "\"$title\" in:title" --json number,title --jq "[.[] | select(.title==\"$title\")][0].number // empty")"
-          [ -z "$n" ] || gh issue close "$n" --comment "Green again: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

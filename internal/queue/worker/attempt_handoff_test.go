@@ -320,3 +320,54 @@ func TestAttemptHandoffIsBoundedWhenEscaped(t *testing.T) {
 		t.Fatalf("escaped handoff is %d bytes, over 3/4 of the %d-byte budget", len(msg.Content), acpContextBudget)
 	}
 }
+
+// Review (cubic, #PR01): "never started" must mean the whole result is empty.
+// An unverified completion has an Output and no messages or files, and its
+// failure must still reach the next attempt.
+func TestUnverifiedCompletionWritesItsNoteOverAnOlderOne(t *testing.T) {
+	ctx := context.Background()
+	store := testutil.NewFakeStore()
+	w := &Worker{store: store}
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t"}}
+	if err := w.writeAttemptHandoff(ctx, task, stage.StageResult{Progress: "older attempt"}, errors.New("tests failed")); err != nil {
+		t.Fatal(err)
+	}
+	res := stage.StageResult{Output: []byte(`{"summary":"done"}`)}
+	if !w.saveACPHandoff(ctx, task, models.Project{}, res, stage.ErrUnverifiedCompletion) {
+		t.Fatal("failed the task")
+	}
+	msg, err := w.attemptHandoffMessage(ctx, task, models.Project{})
+	if err != nil || msg == nil || !strings.Contains(msg.Content, "UNVERIFIED_COMPLETION") {
+		t.Fatalf("the unverified completion's failure was dropped: %v, %v", msg, err)
+	}
+}
+
+// Review (cubic): a call that ended on a cancelled context must still see the
+// older note, or the pre-start shortcut writes over it.
+func TestPreStartFailureOnACancelledContextKeepsLastHandoff(t *testing.T) {
+	store := testutil.NewFakeStore()
+	w := &Worker{store: ctxHonoringStore{store}}
+	task := models.Task{BaseEntity: models.BaseEntity{ID: "t"}}
+	if err := w.writeAttemptHandoff(context.Background(), task, stage.StageResult{Progress: "edited handler.go"}, errors.New("tests failed")); err != nil {
+		t.Fatal(err)
+	}
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	if !w.saveACPHandoff(dead, task, models.Project{}, stage.StageResult{}, context.Canceled) {
+		t.Fatal("failed the task")
+	}
+	msg, err := w.attemptHandoffMessage(context.Background(), task, models.Project{})
+	if err != nil || msg == nil || !strings.Contains(msg.Content, "edited handler.go") {
+		t.Fatalf("older note shadowed after a cancelled call: %v, %v", msg, err)
+	}
+}
+
+// ctxHonoringStore fails reads on a done context, as the SQLite store does.
+type ctxHonoringStore struct{ models.KanbanStore }
+
+func (s ctxHonoringStore) ListEventsByTask(ctx context.Context, id string) ([]models.Event, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s.KanbanStore.ListEventsByTask(ctx, id)
+}

@@ -117,16 +117,20 @@ func (w *Worker) attemptHandoffMessage(ctx context.Context, task models.Task, pr
 	return nil, nil
 }
 
-// hasAttemptHandoff reports whether the newest handoff event holds a note (a
-// success writes an empty one that clears it). A store error counts as none, so
-// the caller writes a note rather than lose the failure.
-func (w *Worker) hasAttemptHandoff(ctx context.Context, task models.Task) bool {
+// keepsOlderHandoff reports whether a pre-start failure should leave the
+// newest handoff event alone: it holds a note (a success writes an empty one
+// that clears it), or it cannot be read. The read uses a live context, since the
+// failed call's own may be done, and a read error keeps the old note rather than
+// risk shadowing it.
+func (w *Worker) keepsOlderHandoff(ctx context.Context, task models.Task) bool {
 	if w.store == nil {
 		return false
 	}
-	events, err := w.store.ListEventsByTask(ctx, task.ID)
+	liveCtx, cancel := liveContext(ctx)
+	defer cancel()
+	events, err := w.store.ListEventsByTask(liveCtx, task.ID)
 	if err != nil {
-		return false
+		return true
 	}
 	for i := len(events) - 1; i >= 0; i-- {
 		if events[i].Type == attemptHandoffEvent {

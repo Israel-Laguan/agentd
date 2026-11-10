@@ -184,7 +184,7 @@ define dev-up-recipe
 	@echo "waiting up to $(DEV_HEALTH_WAIT)s for containers to become healthy"
 	@deadline=$$(( $$(date +%s) + $(DEV_HEALTH_WAIT) )); \
 	while :; do \
-		pending=$$(podman ps --filter label=io.podman.compose.project --format '{{.Names}} {{.Status}}' | grep -E 'starting|unhealthy' || true); \
+		pending=$$(podman ps --filter label=io.podman.compose.project --format '{{.Names}} {{.Status}}' $(if $(findstring --profile web,$(PROFILE_ARGS)),,| grep -v '^agentd_web_') | grep -E 'starting|unhealthy' || true); \
 		[ -z "$$pending" ] && break; \
 		if [ $$(date +%s) -ge $$deadline ]; then echo "not healthy in time:"; echo "$$pending"; exit 1; fi; \
 		sleep 2; \

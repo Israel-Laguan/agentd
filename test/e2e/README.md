@@ -261,8 +261,11 @@ activated profiles, so `--profile breaker up -d` alone fails with
 ```bash
 podman compose -f "$PWD/devenv/compose.yaml" \
   --profile default --profile healing --profile faults \
-  --profile breaker --profile disk up -d
+  --profile breaker --profile disk --profile tiered \
+  --profile provider --profile scheduler --profile acp up -d
 ```
+
+`make dev-up` names exactly these profiles (`COMPOSE_PROFILES` in the Makefile); add `--profile web` for the UI.
 
 The mock LLM is published on `127.0.0.1:8000` for J11's request capture.
 
