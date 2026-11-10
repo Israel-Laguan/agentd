@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/gateway"
@@ -127,5 +128,34 @@ func TestAuditHook_BashExitCode127(t *testing.T) {
 	}
 	if resultEvent.ExitCode != 127 {
 		t.Fatalf("ExitCode = %d, want 127", resultEvent.ExitCode)
+	}
+}
+
+func TestAuditHook_CommandPolicyDenyEmitsToolResult(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{}
+	mockSB := &mockExecSandbox{result: sandbox.Result{Stdout: "ok\n", Success: true}}
+	w := NewWorker(&mockAgenticStore{}, nil, mockSB, nil, sink, WorkerOptions{MaxToolIterations: 5})
+
+	executor := agenttools.NewToolExecutor(mockSB, t.TempDir(), agenttools.BuildSandboxEnv(nil, nil), 0)
+	call := gateway.ToolCall{
+		ID:       "call_sudo",
+		Function: gateway.ToolCallFunction{Name: "bash", Arguments: `{"command":"sudo id"}`},
+	}
+	tr, _ := w.DispatchToolWithHooks(context.Background(), "task-sudo", "proj-sudo", "turn-1", time.Now(), call, nil, executor, nil, nil, "")
+
+	if tr.Status != agenttools.ToolStatusVetoed {
+		t.Fatalf("status = %s, want vetoed", tr.Status)
+	}
+	if len(sink.events) != 2 {
+		t.Fatalf("expected TOOL_CALL and TOOL_RESULT for the refusal, got %d events", len(sink.events))
+	}
+	var result ToolResultEvent
+	if err := json.Unmarshal([]byte(sink.events[1].Payload), &result); err != nil {
+		t.Fatalf("unmarshal TOOL_RESULT: %v", err)
+	}
+	if result.ExitCode != -1 {
+		t.Fatalf("ExitCode = %d, want -1", result.ExitCode)
 	}
 }
