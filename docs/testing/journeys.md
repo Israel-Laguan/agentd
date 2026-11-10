@@ -135,7 +135,7 @@ path. Python unit tests for the dispatch live in
 | Journey | What changed from the builtin version |
 | --- | --- |
 | J02, J04, J05 (seeded), J15 (except J15-large) | Executed tasks carry a completed script. J04 replaces the mock plan's descriptions with scripts; J15-large creates export-only tasks without scripts and never runs them. |
-| J08 | The agent holds its turn 30 s (`sleep_ms`). The RESULT carries the agent's summary instead of `tick 29`. The `carried-over` marker check is dropped (it read the builtin command's output); `RECOVERY_WORKSPACE_RESET` stays. |
+| J08 | The agent first creates a readiness marker file (`touch` step, `j08-agent-ready`) in the workspace, then holds its turn 30 s (`sleep_ms`). The journey waits for the marker through `podman exec test -f`, up to 45 s, and fails with "agent never became ready" otherwise (T-074; it replaced a fixed 5 s sleep). The RESULT carries the agent's summary instead of `tick 29`. The `carried-over` marker check is dropped (it read the builtin command's output); `RECOVERY_WORKSPACE_RESET` stays. |
 | J11 | The prompt is not sent to the mock. The `echo` step completes the task with the prompt's size and its lines containing the canary; the RESULT is what the journey reads. `echo bytes=` must be present, so "absent" cannot pass without a prompt. |
 | J14 | An ACP task writes no `LOG_CHUNK`, so the journey now asserts `TOKEN_USAGE` (a `usage` step with 2 tokens, ledger checked) before `RESULT` instead of `LOG_CHUNK` before `RESULT`. |
 | J17 | The token is in the agent's summary, so it reaches `RESULT` (no `COMMAND` or `LOG_CHUNK`). |

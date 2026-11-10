@@ -24,6 +24,9 @@ type Step struct {
 	Stop acp.StopReason `json:"stop,omitempty"`
 	// Error fails the prompt with this message.
 	Error string `json:"error,omitempty"`
+	// Touch creates an empty file with this base name in the session's
+	// workspace, a readiness marker a journey can see from outside the jail.
+	Touch string `json:"touch,omitempty"`
 	// Stderr writes this line to the process's stderr, so a test can check
 	// that the driver keeps a dying agent's last words.
 	Stderr string `json:"stderr,omitempty"`

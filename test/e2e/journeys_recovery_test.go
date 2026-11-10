@@ -149,7 +149,7 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 	// WaitForHealthy (60s) + the recovery poll (30s). The deadline must cover
 	// all of them, or a slow-but-successful run dies mid-poll. The re-run then
 	// repeats the ~30s slow command from the start (j08RerunBudget).
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second+j08RerunBudget)
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second+j08AgentReadyBudget+j08RerunBudget)
 	defer cancel()
 
 	harness := NewHarness(baseURL, "default")
@@ -162,7 +162,7 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 		ProjectName:         UniqueProjectName("j08"),
 		Description:         "J08 unclean-kill recovery task",
 		StartEmptyWorkspace: true,
-		Tasks:               []DraftTask{fakeTask("J08 slow task", j08RerunMarker, fakeagent.Step{SleepMS: int(j08Slow / time.Millisecond)})},
+		Tasks:               []DraftTask{fakeTask("J08 slow task", j08RerunMarker, fakeagent.Step{Touch: j08ReadyMarker}, fakeagent.Step{SleepMS: int(j08Slow / time.Millisecond)})},
 	}
 	materialized := materializePlan(ctx, t, client, "J08", plan)
 	projectID, taskID := materialized.Project.ID, materialized.Tasks[0].ID
@@ -173,11 +173,12 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 	}
 
 	// RUNNING is set before the agent process starts and an ACP turn emits no
-	// event to wait on, so give the jail a few seconds to start the agent; its
-	// 30s sleep outlasts the wait. Without it the kill could land before the turn.
-	time.Sleep(j08AgentStart)
-
+	// event, so wait for the agent's own marker file: it is written by the
+	// script's first step, so the 30s sleep that follows is the turn the kill
+	// interrupts. A clock here would pass on a slow start without testing it.
 	devenv := NewDevenvManager(composePath, "default")
+	j08AwaitAgentReady(ctx, t, devenv, materialized.Project.WorkspacePath)
+
 	if err := devenv.KillAgentd(ctx); err != nil {
 		t.Fatalf("J08 [kill] %v", err)
 	}
@@ -198,8 +199,31 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 // enough to notice. It stays under the sandbox's 60s inactivity limit (B-011).
 const j08Slow = 30 * time.Second
 
-// j08AgentStart is how long the journey waits after RUNNING for the agent to be mid-turn.
-const j08AgentStart = 5 * time.Second
+// j08ReadyMarker is the file the fake agent creates in the workspace when its
+// turn has started; j08AgentReadyBudget bounds the wait for it (a cold jail).
+const (
+	j08ReadyMarker      = "j08-agent-ready"
+	j08AgentReadyBudget = 45 * time.Second
+)
+
+// j08AwaitAgentReady fails the journey unless the agent's marker appears in the
+// workspace, read from inside the agentd container.
+func j08AwaitAgentReady(ctx context.Context, t *testing.T, devenv *DevenvManager, workspace string) {
+	t.Helper()
+	marker := strings.TrimRight(workspace, "/") + "/" + j08ReadyMarker
+	deadline := time.Now().Add(j08AgentReadyBudget)
+	for time.Now().Before(deadline) {
+		if _, err := devenv.Exec(ctx, "test", "-f", marker); err == nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("J08 [ready] context expired waiting for %s: %v", marker, ctx.Err())
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	t.Fatalf("J08 [ready] agent never became ready: no %s within %s, so a kill now would not land mid-turn", marker, j08AgentReadyBudget)
+}
 
 // j08RerunBudget covers the re-dispatched slow turn: j08Slow plus slack for the
 // claim tick, the jail start and the result commit.
