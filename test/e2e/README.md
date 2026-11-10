@@ -252,7 +252,7 @@ if err != nil {
 
 ## Bringing up the non-default profiles
 
-`make test-e2e` only starts the `default` profile. Journeys on other profiles
+`make test-e2e` (via `make dev-up`) starts every agentd profile but not `web` (its own profile, T-077; `make dev-up-all` adds it). To start profiles by hand, journeys on other profiles
 need them started explicitly, and **all profiles must be named in a single
 invocation** — podman-compose 1.3.0 resolves `depends_on` only within the
 activated profiles, so `--profile breaker up -d` alone fails with

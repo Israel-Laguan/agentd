@@ -15,10 +15,11 @@ name: agentd
 #   agentd-prb     - variant (port 8771) - provider breaker profile (J16)
 #   agentd-sched   - variant (port 8772) - scheduler profile (J23)
 #   agentd-acp     - variant (port 8773) - acp profile (J24): exec.turn on the fake acp agent, in the jail
-#   web     - Next.js frontend (port 3000) - default profile
+#   web     - Next.js frontend (port 3000) - web profile (with default, for the UI tier)
 #
 # Usage:
-#   make dev-up            # Builds agentd:local, then brings up all profiles (agentd variants + web)
+#   make dev-up            # Builds agentd:local, then brings up every agentd variant (no web)
+#   make dev-up-all        # The same plus the web app on :3000
 #   podman compose -f devenv/compose.yaml up -d agentd-healing  # Brings up healing variant
 #
 # The agentd services take a prebuilt image (AGENTD_IMAGE, default agentd:local)
@@ -347,7 +348,7 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     profiles:
-      - default
+      - web
     environment:
       NODE_ENV: "development"
       NEXT_PUBLIC_USE_MOCK: "false"
