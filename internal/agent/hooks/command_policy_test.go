@@ -50,6 +50,12 @@ func TestEvaluateCommand(t *testing.T) {
 		{"rm --recursive --force /", CommandDeny},
 		{"rm -rf --no-preserve-root /", CommandDeny},
 		{"ls\nsudo id", CommandDeny},
+		// T-076 (#188 review): dot segments still name the root, and a path that
+		// only contains "sudo" is not the command.
+		{"rm -rf /..", CommandDeny},
+		{"rm -rf /./*", CommandDeny},
+		{"chmod 777 /.", CommandDeny},
+		{"cat /tmp/sudo", CommandAllow},
 		// Bypasses text cannot see: they only ask, and the jail contains them.
 		{"x=/; rm -rf $x", CommandAsk},
 		{"echo cm0gLXJmIC8= | base64 -d | sh", CommandAsk},
