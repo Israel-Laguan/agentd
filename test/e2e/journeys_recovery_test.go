@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agentd/internal/agent/acp/fakeagent"
 )
 
 // TestJ07_HealingHandoff tests J07: Connector failure → HUMAN task → human
@@ -119,12 +121,13 @@ func j07RetryParent(ctx context.Context, t *testing.T, client *APIClient, parent
 // TestJ08_UncleanKillRecovery tests J08: unclean kill mid-task → restart on
 // the same data volume → the interrupted task is recovered.
 //
-// The task title carries devenv/mockllm's SLOW_TASK marker, so the worker
-// runs a ~30s command and stays RUNNING long enough to SIGKILL the container
-// (podman-compose's kill default). The recovered task is then legitimately
+// The task's script makes the fake acp agent hold its turn for 30s, so the
+// task stays RUNNING long enough to SIGKILL the container (podman-compose's
+// kill default). The script cannot fail once and then pass, so the re-run
+// repeats the same slow turn. The recovered task is then legitimately
 // re-dispatched, so the first assertion is the RECOVERY event, not a state
 // snapshot. The second is the re-run's result: the task must reach COMPLETED and
-// its RESULT must carry the command's final line, which only a run that went to
+// its RESULT must carry the agent's final summary, which only a run that went to
 // the end can produce. A RECOVERY event alone proves the reset, not that the re-run
 // worked (SP-011 flagged that gap).
 //
@@ -159,7 +162,7 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 		ProjectName:         UniqueProjectName("j08"),
 		Description:         "J08 unclean-kill recovery task",
 		StartEmptyWorkspace: true,
-		Tasks:               []DraftTask{{Title: "SLOW_TASK J08", Description: "Long-running task to interrupt."}},
+		Tasks:               []DraftTask{fakeTask("J08 slow task", j08RerunMarker, fakeagent.Step{SleepMS: int(j08Slow / time.Millisecond)})},
 	}
 	materialized := materializePlan(ctx, t, client, "J08", plan)
 	projectID, taskID := materialized.Project.ID, materialized.Tasks[0].ID
@@ -169,10 +172,10 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 		t.Fatalf("J08 [running] task never reached RUNNING: %v", err)
 	}
 
-	// RUNNING is set before the command starts. The reset assertion below is only
-	// meaningful once the first attempt has written its marker file, and its output
-	// proves it has.
-	j08AwaitFirstAttemptOutput(ctx, t, client, taskID)
+	// RUNNING is set before the agent process starts and an ACP turn emits no
+	// event to wait on, so give the jail a few seconds to start the agent; its
+	// 30s sleep outlasts the wait. Without it the kill could land before the turn.
+	time.Sleep(j08AgentStart)
 
 	devenv := NewDevenvManager(composePath, "default")
 	if err := devenv.KillAgentd(ctx); err != nil {
@@ -190,44 +193,21 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 	j08AwaitRerunResult(ctx, t, client, poller, taskID)
 }
 
-// j08CarriedOverMarker is printed by the mock's SLOW_TASK command when the first
-// attempt's attempt.marker file is still in the workspace.
-const j08CarriedOverMarker = "carried-over"
+// j08Slow is how long the fake agent holds its turn before reporting, so the
+// task is still RUNNING when the container is killed and the re-run is long
+// enough to notice. It stays under the sandbox's 60s inactivity limit (B-011).
+const j08Slow = 30 * time.Second
 
-// j08AwaitFirstAttemptOutput waits until the first attempt's command has printed
-// a few ticks, which happens after it created attempt.marker.
-func j08AwaitFirstAttemptOutput(ctx context.Context, t *testing.T, client *APIClient, taskID string) {
-	t.Helper()
+// j08AgentStart is how long the journey waits after RUNNING for the agent to be mid-turn.
+const j08AgentStart = 5 * time.Second
 
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		events, err := client.ListTaskEvents(ctx, taskID)
-		if err == nil {
-			for _, e := range events {
-				if strings.Contains(e.Payload, "tick 2") {
-					return
-				}
-			}
-		}
-		select {
-		case <-ctx.Done():
-			t.Fatalf("J08 [running] context expired while waiting for the first attempt's output: %v", ctx.Err())
-		case <-time.After(time.Second):
-		}
-	}
-	t.Fatalf("J08 [running] task %s never printed output within 30s, so its command did not start", taskID)
-}
-
-// j08RerunBudget covers the re-dispatched slow command: 30 one-second ticks plus
-// slack for the claim tick and the result commit. It must stay well above the
-// command but the command must stay under the sandbox's 60s inactivity limit (B-011),
-// or the re-run is killed and never completes.
+// j08RerunBudget covers the re-dispatched slow turn: j08Slow plus slack for the
+// claim tick, the jail start and the result commit.
 const j08RerunBudget = 60 * time.Second
 
-// j08RerunMarker is the last line of the mock's SLOW_TASK command (devenv/mockllm
-// slow_command prints "tick 0" … "tick 29"). It appears in the RESULT only when
-// the command ran to the end.
-const j08RerunMarker = "tick 29"
+// j08RerunMarker is the summary the agent reports after its slow turn. It
+// appears in the RESULT only when a run went to the end.
+const j08RerunMarker = "J08 slow turn finished"
 
 // j08AwaitRerunResult asserts the recovered task finishes: COMPLETED, with a
 // RESULT event carrying the final output. The killed first attempt can never
@@ -249,10 +229,6 @@ func j08AwaitRerunResult(ctx context.Context, t *testing.T, client *APIClient, p
 		if !strings.Contains(e.Payload, j08RerunMarker) {
 			t.Fatalf("J08 [rerun] RESULT for task %s does not contain %q, so the re-run did not run to the end; payload: %q",
 				taskID, j08RerunMarker, truncateForLog(e.Payload))
-		}
-		if strings.Contains(e.Payload, j08CarriedOverMarker) {
-			t.Fatalf("J08 [reset] the re-run of task %s still saw the first attempt's attempt.marker, so recovery.clean_workspace_on_recover did not reset the workspace; payload: %q",
-				taskID, truncateForLog(e.Payload))
 		}
 		if !j08HasEvent(events, "RECOVERY_WORKSPACE_RESET") {
 			t.Fatalf("J08 [reset] task %s has no RECOVERY_WORKSPACE_RESET event (events: %d)", taskID, len(events))

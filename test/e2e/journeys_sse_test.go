@@ -7,6 +7,10 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"agentd/internal/agent/acp/fakeagent"
+
+	acpsdk "github.com/coder/acp-go-sdk"
 )
 
 // Internal event types for a task running to completion, mirrored from
@@ -16,7 +20,6 @@ import (
 const (
 	evtTypeWarning    = "WARNING"
 	evtTypeTokenUsage = "TOKEN_USAGE"
-	evtTypeLogChunk   = "LOG_CHUNK"
 	evtTypeResult     = "RESULT"
 )
 
@@ -26,7 +29,7 @@ const (
 // The journey spec originally expected "task-started", "task-claimed" and
 // "task-completed" events. Those names do not exist. The stream is a bus
 // firehose (internal/api/sse/stream.go) fed by internal/bus/emitter.go, and
-// the worker emits LOG_CHUNK for command output, TOKEN_USAGE for spend,
+// the worker emits TOKEN_USAGE for spend (an ACP task writes no LOG_CHUNK),
 // WARNING for dispatch advisories, and RESULT on commit. Claim and start are
 // not events at all: ClaimNextReadyTasks and the READY→RUNNING transition
 // write no event row, so there is nothing to stream for them. This test
@@ -62,7 +65,8 @@ func TestJ14_SSEStreamDeliversTaskEvents(t *testing.T) {
 		Description:         "J14 SSE lifecycle events",
 		StartEmptyWorkspace: true,
 		Tasks: []DraftTask{
-			{Title: "J14 SSE lifecycle task", Description: "Emit log, token-usage and result signals."},
+			fakeTask("J14 SSE lifecycle task", "J14: lifecycle signals emitted",
+				fakeagent.Step{Usage: &acpsdk.Usage{TotalTokens: j14Tokens}}),
 		},
 	}
 	materialized := materializePlan(ctx, t, client, "J14", plan)
@@ -104,7 +108,7 @@ func TestJ14_SSEStreamDeliversTaskEvents(t *testing.T) {
 	// Every event the daemon actually recorded must also have streamed. This
 	// is the transport assertion: a frame dropped between the emitter and the
 	// SSE writer fails here even when the row is safely in the log.
-	for _, typ := range []string{evtTypeLogChunk, evtTypeTokenUsage, evtTypeWarning} {
+	for _, typ := range []string{evtTypeTokenUsage, evtTypeWarning} {
 		if durable[typ] && !live[typ] {
 			t.Fatalf("J14 [sse] %s was persisted for task %s but never arrived on the stream (saw %v) — "+
 				"the SSE fan-out dropped a frame", typ, taskID, j14Order(events))
@@ -116,7 +120,7 @@ func TestJ14_SSEStreamDeliversTaskEvents(t *testing.T) {
 	// connections had no busy_timeout (see docs/testing/journeys.md), so
 	// writes failed with SQLITE_BUSY and were dropped. That is fixed, so a
 	// missing row is now a regression and fails the journey.
-	for _, typ := range []string{evtTypeLogChunk, evtTypeTokenUsage} {
+	for _, typ := range []string{evtTypeTokenUsage} {
 		if !durable[typ] {
 			t.Fatalf("J14 [events] task %s recorded no %s event (durable: %v) — the daemon dropped the write",
 				taskID, typ, j14Keys(durable))
@@ -152,23 +156,22 @@ func j14LiveTypes(events []SSEEvent, projectID string) map[string]bool {
 }
 
 // j14AssertOrdering checks the lifecycle signals arrived in causal order: the
-// command's output (LOG_CHUNK) before the result that reports its exit code.
-// Only compares the two it can meaningfully order — TOKEN_USAGE and WARNING
-// are emitted at varying points relative to each other.
+// agent's token usage (TOKEN_USAGE) before the result that closes the task.
+// WARNING is emitted at varying points, so it is not ordered.
 func j14AssertOrdering(t *testing.T, events []SSEEvent, projectID string) {
 	t.Helper()
 
 	want := "project:" + projectID
-	logAt, resultAt := -1, -1
+	usageAt, resultAt := -1, -1
 	for i, e := range events {
 		sig, err := e.Signal()
 		if err != nil || sig.Topic != want {
 			continue
 		}
 		switch sig.Type {
-		case evtTypeLogChunk:
-			if logAt < 0 {
-				logAt = i
+		case evtTypeTokenUsage:
+			if usageAt < 0 {
+				usageAt = i
 			}
 		case evtTypeResult:
 			if resultAt < 0 {
@@ -176,12 +179,12 @@ func j14AssertOrdering(t *testing.T, events []SSEEvent, projectID string) {
 			}
 		}
 	}
-	if logAt < 0 || resultAt < 0 {
+	if usageAt < 0 || resultAt < 0 {
 		return // Absence is already a hard failure in the caller.
 	}
-	if logAt > resultAt {
-		t.Fatalf("J14 [order] %s arrived at position %d, after %s at %d — output must stream before the result that reports it (order: %v)",
-			evtTypeLogChunk, logAt, evtTypeResult, resultAt, j14Order(events))
+	if usageAt > resultAt {
+		t.Fatalf("J14 [order] %s arrived at position %d, after %s at %d — usage must stream before the result that closes the task (order: %v)",
+			evtTypeTokenUsage, usageAt, evtTypeResult, resultAt, j14Order(events))
 	}
 }
 
@@ -224,11 +227,11 @@ func j14Keys(m map[string]bool) []string {
 	return out
 }
 
-// mockTokensPerCall is the total_tokens the devenv mock LLM reports on every
-// completion (devenv/mockllm/server.py's "usage"). The worker records one
-// TOKEN_USAGE row per call, so every persisted row must carry exactly this
-// figure; a different value means the ledger is mis-recording spend.
-const mockTokensPerCall = 2
+// j14Tokens is the total the fake agent reports in its PromptResponse usage.
+// The worker records a TOKEN_USAGE row for it, so every persisted row must
+// carry exactly this figure; a different value means the ledger is mis-recording
+// spend.
+const j14Tokens = 2
 
 // j14AssertTokenLedger checks the durable TOKEN_USAGE rows for the task carry
 // the token count the provider reported, not just that a row exists.
@@ -251,9 +254,9 @@ func j14AssertTokenLedger(ctx context.Context, t *testing.T, client *APIClient, 
 		if err := json.Unmarshal([]byte(e.Payload), &payload); err != nil {
 			t.Fatalf("J14 [ledger] TOKEN_USAGE %s has an unparseable payload %q: %v", e.ID, e.Payload, err)
 		}
-		if payload.Tokens != mockTokensPerCall {
-			t.Fatalf("J14 [ledger] TOKEN_USAGE %s recorded %d tokens, want %d (the mock's reported usage)",
-				e.ID, payload.Tokens, mockTokensPerCall)
+		if payload.Tokens != j14Tokens {
+			t.Fatalf("J14 [ledger] TOKEN_USAGE %s recorded %d tokens, want %d (the usage the agent reported)",
+				e.ID, payload.Tokens, j14Tokens)
 		}
 	}
 	if rows == 0 {

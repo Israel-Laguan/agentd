@@ -185,7 +185,7 @@ func (w *Worker) DispatchToolWithHooks(
 	hookCtx.CommandPolicy = policy
 	if policy == agenthooks.CommandDeny {
 		tr := agenttools.VetoedResult(call.ID, reason)
-		w.finalizeDispatchAudit(hookCtx, tr)
+		tr.Content = w.runDispatchPostHooks(hookCtx, tr, taskHooks)
 		return tr, false
 	}
 

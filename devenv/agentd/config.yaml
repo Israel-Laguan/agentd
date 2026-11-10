@@ -66,4 +66,16 @@ mcp:
 # J17: the events API must scrub this pattern (sandbox.scrub_patterns, B-065).
 # It matches only the journey's own token, so no other journey's events change.
 sandbox:
+  backend: bubblewrap
   scrub_patterns: ["E2E-SCRUB-[0-9]{6}"]
+
+# exec.turn runs on the scripted fake acp agent (T-069), so a journey's task
+# needs no model: its script is in the task description. An acp agent runs only
+# in the bubblewrap jail, so the backend is required; mockllm answers the
+# daemon's own L1 calls (intake, clarify, split, memory).
+agents:
+  fake: { kind: acp, preset: fake, model: "fake" }
+stages:
+  exec.turn:
+    default: fake
+

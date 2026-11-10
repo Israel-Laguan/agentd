@@ -45,7 +45,7 @@ func TestJ23_ScheduledTaskRunsExactlyOnce(t *testing.T) {
 		ProjectName:         UniqueProjectName("j23"),
 		Description:         "J23 scheduler target project",
 		StartEmptyWorkspace: true,
-		Tasks:               []DraftTask{{Title: "J23 seed task", Description: "Give the project a first task."}},
+		Tasks:               []DraftTask{fakeTask("J23 seed task", "J23: the project's first task")},
 	}).Project.ID
 
 	env := fmt.Sprintf("AGENTD_AGENTIC_SCHEDULER_ENABLED=true\nAGENTD_AGENTIC_SCHEDULER_PROJECT_ID=%s\n", projectID)

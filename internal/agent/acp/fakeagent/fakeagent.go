@@ -15,7 +15,6 @@ package fakeagent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -24,68 +23,20 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	acp "github.com/coder/acp-go-sdk"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// maxSleepMS caps a sleep step (one hour), so the millisecond conversion cannot overflow.
+const maxSleepMS = 3_600_000
 
 // Arg is the first argument that makes a test binary serve the fake agent.
 const Arg = "fake-acp-agent"
 
 // AuthMethod is the only method id Authenticate accepts.
 const AuthMethod = "token"
-
-// Step is one scripted action of a prompt turn. Set one field per step.
-type Step struct {
-	// Message streams one agent_message_chunk.
-	Message string `json:"message,omitempty"`
-	// Permission asks the client for permission and then streams
-	// "permission: <optionId>" or "permission: cancelled".
-	Permission *Permission `json:"permission,omitempty"`
-	// WaitCancel blocks until the client cancels the prompt.
-	WaitCancel bool `json:"wait_cancel,omitempty"`
-	// Cancels streams "cancels: N", the prompts this process saw cancelled.
-	Cancels bool `json:"cancels,omitempty"`
-	// Stop ends the turn with this stop reason, the way opencode ends one
-	// cancelled after a rejected permission.
-	Stop acp.StopReason `json:"stop,omitempty"`
-	// Error fails the prompt with this message.
-	Error string `json:"error,omitempty"`
-	// Exit, when not zero, ends the process with this code, mid-prompt.
-	Exit int `json:"exit,omitempty"`
-	// Tool calls a tool on the session's "agentd" http MCP server and
-	// streams "tool: <text>" or "tool error: <text>".
-	Tool *Tool `json:"tool,omitempty"`
-	// Did reports a tool call of this kind that ran and completed.
-	Did acp.ToolKind `json:"did,omitempty"`
-	// Usage reports this turn's token counts, as an agent's PromptResponse does.
-	Usage *acp.Usage `json:"usage,omitempty"`
-	// Next is what the session's next prompt that is not a script runs, as
-	// an agent answers agentd's own follow-up.
-	Next []Step `json:"next,omitempty"`
-}
-
-// Tool is the MCP tool call a Tool step makes.
-type Tool struct {
-	Name string `json:"name"`
-	Args any    `json:"args,omitempty"`
-}
-
-// Permission is the tool call a Permission step asks about.
-type Permission struct {
-	Kind     acp.ToolKind `json:"kind"`
-	Title    string       `json:"title,omitempty"`
-	RawInput any          `json:"raw_input,omitempty"`
-}
-
-// Script is the prompt that runs steps.
-func Script(steps ...Step) string {
-	b, err := json.Marshal(steps)
-	if err != nil {
-		panic(err)
-	}
-	return string(b)
-}
 
 // Serve runs the agent on in and out until the client disconnects. With
 // "-protocol N" it answers initialize with protocol version N, and with
@@ -148,8 +99,10 @@ func (a *agent) NewSession(_ context.Context, p acp.NewSessionRequest) (acp.NewS
 // Prompt runs the scripted steps, or the next scripted prompt for the session.
 func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResponse, error) {
 	var steps []Step
+	var text string
 	if len(p.Prompt) == 1 && p.Prompt[0].Text != nil {
-		steps = scriptFromPrompt(p.Prompt[0].Text.Text)
+		text = p.Prompt[0].Text.Text
+		steps = scriptFromPrompt(text)
 	}
 	if steps == nil {
 		a.mu.Lock()
@@ -162,6 +115,9 @@ func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}
 	var usage *acp.Usage
 	for _, step := range steps {
+		if step.Echo != "" {
+			step = echoStep(step.Echo, text)
+		}
 		if step.Usage != nil {
 			usage = step.Usage
 		}
@@ -181,6 +137,14 @@ func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.
 		return step.Stop, nil
 	case step.Error != "":
 		return "", errors.New(step.Error)
+	case step.SleepMS > 0:
+		select {
+		case <-time.After(time.Duration(min(step.SleepMS, maxSleepMS)) * time.Millisecond):
+		case <-ctx.Done():
+			a.cancels.Add(1)
+			return acp.StopReasonCancelled, nil
+		}
+		return "", nil
 	case step.WaitCancel:
 		<-ctx.Done()
 		a.cancels.Add(1)

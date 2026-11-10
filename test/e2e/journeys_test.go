@@ -112,7 +112,7 @@ func TestJ02_BoardAndSSE(t *testing.T) {
 		Description:         "J02 board/SSE/loop smoke task",
 		StartEmptyWorkspace: true,
 		Tasks: []DraftTask{
-			{Title: "J02 smoke task", Description: "Prove the dispatch loop claims and runs a task."},
+			fakeTask("J02 smoke task", "J02: the dispatch loop ran the task"),
 		},
 	}
 	projectID := materializePlan(ctx, t, client, "J02", plan).Project.ID
@@ -287,6 +287,10 @@ func j04RequestPlan(ctx context.Context, t *testing.T, client *APIClient) DraftP
 	// materializing — the mock only loosely regexes a name out of the
 	// message text.
 	plan.ProjectName = projectName
+	// The mock plans the tasks; the fake agent runs them, so each gets a script.
+	for i := range plan.Tasks {
+		plan.Tasks[i].Description = fakeCompleted("J04: " + plan.Tasks[i].Title)
+	}
 	return plan
 }
 

@@ -16,10 +16,11 @@ const j17Token = "E2E-SCRUB-482913"
 // TestJ17_EventsAPIScrubsSecrets tests J17: a value matching
 // sandbox.scrub_patterns never leaves the daemon through the task events API.
 //
-// The mock LLM's command echoes the task title (devenv/mockllm/server.py's
-// build_command), so the token reaches the COMMAND, LOG_CHUNK and RESULT
-// events. The API must serve them with "[REDACTED]" in its place (B-065: the
-// pattern used to apply to the sandbox only, not to the events the API serves).
+// The fake agent's report_outcome summary carries the token, so it reaches the
+// RESULT event. The API must serve it with "[REDACTED]" in its place (B-065:
+// the pattern used to apply to the sandbox only, not to the events the API
+// serves). The ACP path writes no COMMAND or LOG_CHUNK events, so RESULT is
+// the event under test.
 func TestJ17_EventsAPIScrubsSecrets(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
@@ -36,7 +37,7 @@ func TestJ17_EventsAPIScrubsSecrets(t *testing.T) {
 		ProjectName:         UniqueProjectName("j17"),
 		Description:         "J17 events scrub task",
 		StartEmptyWorkspace: true,
-		Tasks:               []DraftTask{{Title: "J17 scrub " + j17Token, Description: "Echo a token the events API must scrub."}},
+		Tasks:               []DraftTask{fakeTask("J17 scrub", "J17 agent summary carries "+j17Token)},
 	}
 	projectID := materializePlan(ctx, t, client, "J17", plan).Project.ID
 	tasks, err := NewTaskPoller(client, projectID).WaitForAllComplete(ctx, 30*time.Second)

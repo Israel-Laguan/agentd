@@ -213,7 +213,7 @@ func j05SeedsFromGoodSourcePath(ctx context.Context, t *testing.T, client *APICl
 		ProjectName: projectName,
 		Description: "J05: source_path seeds the workspace and unlocks root tasks",
 		SourcePath:  sourcePath,
-		Tasks:       []DraftTask{{Title: "J05 seeded task", Description: "Runs with a pre-seeded workspace."}},
+		Tasks:       []DraftTask{fakeTask("J05 seeded task", "J05: ran with a pre-seeded workspace")},
 	})
 	if materialized.Tasks[0].State != TaskStateReady {
 		t.Fatalf("J05 [materialize] task %s state = %s, want READY (source_path seeds the workspace)", materialized.Tasks[0].ID, materialized.Tasks[0].State)
