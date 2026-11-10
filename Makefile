@@ -3,7 +3,7 @@ GOLANGCI_LINT ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 # Comma-separated patterns for merged coverage (default: entire module). Override to narrow the denominator, e.g. internal-only: $(shell go list ./internal/... | paste -sd, -)
 COVERPKG ?= ./...
 
-.PHONY: print-pkg build test test-integration test-fakeacp test-e2e test-ui test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-up-ui dev-down dev-clean dev-logs
+.PHONY: print-pkg build test test-integration test-fakeacp test-e2e test-ui test-bins coverage run tidy lint lint-install loc minfunc minfunc-accept check check-commits hooks-install podman-test lint-md lint-links lint-docs smoke-contract dev-build dev-up dev-up-all dev-up-ui dev-down dev-clean dev-logs
 
 # Workspace-local GOCACHE; default GOMODCACHE to the user module cache (agent
 # sandboxes often set an empty GOMODCACHE and break go test / make build).
@@ -128,10 +128,16 @@ COMPOSE_PROFILES := --profile default --profile healing --profile faults \
                      --profile breaker --profile disk --profile tiered \
                      --profile provider --profile scheduler --profile acp
 
-# The UI smoke (web/e2e) needs the default profile only: agentd + litellm +
+# The UI smoke (web/e2e) needs the default profile plus web: agentd + litellm +
 # mockllm + web. Nothing in the UI tier touches the other variants, and
 # leaving them down is what keeps `make test-ui` (and the CI UI job) cheap.
-COMPOSE_PROFILES_UI := --profile default
+# web has its own profile (T-077): the journey suite never calls it, so a
+# failing web build (B-093) must not fail `make dev-up` / `make test-e2e`.
+COMPOSE_PROFILES_UI := --profile default --profile web
+
+# Everything, board included: `make dev-up-all`, and the set that down, clean
+# and logs must name so a running web container is stopped with the rest.
+COMPOSE_PROFILES_ALL := $(COMPOSE_PROFILES) --profile web
 
 # dev-up blocks until every container with a healthcheck is healthy. podman-compose
 # does not reliably honour depends_on service_healthy, and `up -d` returns as soon
@@ -178,7 +184,7 @@ define dev-up-recipe
 	@echo "waiting up to $(DEV_HEALTH_WAIT)s for containers to become healthy"
 	@deadline=$$(( $$(date +%s) + $(DEV_HEALTH_WAIT) )); \
 	while :; do \
-		pending=$$(podman ps --filter label=io.podman.compose.project --format '{{.Names}} {{.Status}}' | grep -E 'starting|unhealthy' || true); \
+		pending=$$(podman ps --filter label=io.podman.compose.project --format '{{.Names}} {{.Status}}' $(if $(findstring --profile web,$(PROFILE_ARGS)),,| grep -v '^agentd_web_') | grep -E 'starting|unhealthy' || true); \
 		[ -z "$$pending" ] && break; \
 		if [ $$(date +%s) -ge $$deadline ]; then echo "not healthy in time:"; echo "$$pending"; exit 1; fi; \
 		sleep 2; \
@@ -189,24 +195,29 @@ dev-up: PROFILE_ARGS := $(COMPOSE_PROFILES)
 dev-up: dev-build
 	$(call dev-up-recipe)
 
-# Default profile only, for the Playwright tier: `make test-ui` and the CI
+# Every variant plus the web app, for a human who wants the board in a browser.
+dev-up-all: PROFILE_ARGS := $(COMPOSE_PROFILES_ALL)
+dev-up-all: dev-build
+	$(call dev-up-recipe)
+
+# Default profile and web, for the Playwright tier: `make test-ui` and the CI
 # UI workflow bring up the stack through this target.
 dev-up-ui: PROFILE_ARGS := $(COMPOSE_PROFILES_UI)
 dev-up-ui: dev-build
 	$(call dev-up-recipe)
 
 dev-down:
-	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) down
+	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES_ALL) down
 
 # dev-clean is like dev-down but also removes all named volumes, forcing a
 # clean database and cache on the next dev-up. Use this for repeated test
 # runs that need to verify fixes; plain dev-down keeps volumes intact so
 # state persists across restarts (useful for manual testing).
 dev-clean:
-	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) down -v
+	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES_ALL) down -v
 
 dev-logs:
-	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES) logs -f
+	podman compose -f $(COMPOSE) $(COMPOSE_PROFILES_ALL) logs -f
 
 loc:
 	$(GO) run ./tools/checkloc --max-lines 300

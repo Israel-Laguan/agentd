@@ -17,8 +17,6 @@ type TaskService struct {
 	Bus   TaskBus
 }
 
-type taskCriteriaStore = models.TaskCriteriaStore
-
 func (s *TaskService) UpdateTaskCriteria(ctx context.Context, id string, criteria *[]string, golden *[]models.GoldenCriterion) (*models.Task, error) {
 	current, err := s.Store.GetTask(ctx, id)
 	if err != nil {
@@ -35,11 +33,7 @@ func (s *TaskService) UpdateTaskCriteria(ctx context.Context, id string, criteri
 	if err := models.ValidateGoldenCriteria(nextCriteria, nextGolden); err != nil {
 		return nil, fmt.Errorf("%w: %v", models.ErrInvalidDraftPlan, err)
 	}
-	store, ok := s.Store.(taskCriteriaStore)
-	if !ok {
-		return nil, fmt.Errorf("task criteria updates are unavailable")
-	}
-	return store.UpdateTaskCriteria(ctx, id, current.UpdatedAt, nextCriteria, nextGolden)
+	return s.Store.UpdateTaskCriteria(ctx, id, current.UpdatedAt, nextCriteria, nextGolden)
 }
 
 // TaskBus is the optional bus surface used to publish manager-loop

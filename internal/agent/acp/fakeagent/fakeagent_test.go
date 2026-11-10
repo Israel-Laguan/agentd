@@ -2,6 +2,8 @@ package fakeagent
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -58,5 +60,17 @@ func TestEchoStepKeepsBracketPrefixedPreference(t *testing.T) {
 	summary := echoStep("CANARY", prompt).Tool.Args.(map[string]any)["summary"].(string)
 	if !strings.HasSuffix(summary, "matched=1: [note] CANARY keep me") {
 		t.Fatalf("summary = %q, want the bracket-prefixed line kept and the script dropped", summary)
+	}
+}
+
+// T-074: the readiness marker lands in the session's workspace, by base name.
+func TestRunTouchWritesTheMarkerInTheWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	a := &agent{cwd: map[acp.SessionId]string{"s": dir}}
+	if stop, err := a.run(context.Background(), "s", Step{Touch: "../ready.marker"}); stop != "" || err != nil {
+		t.Fatalf("run = %q, %v; want no stop and no error", stop, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ready.marker")); err != nil {
+		t.Fatalf("marker not in the workspace: %v", err)
 	}
 }

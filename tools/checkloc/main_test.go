@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"testing"
+)
 
 func TestCountLines(t *testing.T) {
 	t.Parallel()
@@ -74,5 +80,52 @@ func TestExcluded(t *testing.T) {
 	}
 	if excluded("internal/foo.go", defaultExcludes) {
 		t.Fatal("expected internal path not to be excluded")
+	}
+}
+
+// B-092: a file that is not staged yet must still be measured, or a local run
+// passes on a tree CI rejects. Ignored files stay out.
+func TestTrackedFilesIncludesUntrackedButNotIgnored(t *testing.T) {
+	dir := t.TempDir()
+	// A hook's GIT_DIR must not reach the temp repo, and neither may an inherited
+	// object database (test setup only: production keeps those, see cleanGitEnv).
+	for _, name := range append([]string{"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"}, gitEnvVars...) {
+		t.Setenv(name, "")
+		_ = os.Unsetenv(name)
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", "t@t"}, {"config", "user.name", "t"}} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	write := func(name string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("ignored.go\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	write("tracked.go")
+	if out, err := exec.Command("git", "-C", dir, "add", "tracked.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	write("untracked.go")
+	write("ignored.go")
+	t.Chdir(dir)
+	// A hook's GIT_DIR pointing elsewhere must not win over the current directory:
+	// a regression in cleanGitEnv fails here, because setup above ran without it.
+	t.Setenv("GIT_DIR", filepath.Join(t.TempDir(), "elsewhere"))
+	got := candidateFiles()
+	if !slices.Contains(got, "tracked.go") || !slices.Contains(got, "untracked.go") || slices.Contains(got, "ignored.go") {
+		t.Fatalf("files = %q; want tracked.go and untracked.go, not ignored.go", got)
+	}
+}
+
+func TestCleanGitEnvDropsSelectorsAndKeepsTheRest(t *testing.T) {
+	got := cleanGitEnv([]string{"PATH=/bin", "GIT_DIR=/x", "GIT_WORK_TREE=/y", "GIT_INDEX_FILE=/z", "GIT_COMMON_DIR=/c", "GIT_PREFIX=p", "GIT_OBJECT_DIRECTORY=/o", "HOME=/h"})
+	want := []string{"PATH=/bin", "GIT_OBJECT_DIRECTORY=/o", "HOME=/h"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("cleanGitEnv = %v; want %v", got, want)
 	}
 }

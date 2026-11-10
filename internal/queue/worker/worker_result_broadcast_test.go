@@ -185,3 +185,21 @@ func seedCommitTask(t *testing.T, store *testutil.FakeKanbanStore) models.Task {
 	}
 	return *running
 }
+
+// B-097: the store skips the RESULT row for a blank payload, so announcing it
+// would show SSE subscribers an event the events API never returns.
+func TestUpdateTaskResultDoesNotBroadcastABlankPayload(t *testing.T) {
+	for _, payload := range []string{"", " \n\t"} {
+		store := testutil.NewFakeStore()
+		sink := &broadcastSink{}
+		w := &Worker{store: store, sink: sink}
+		task := seedCommitTask(t, store)
+
+		if _, err := w.updateTaskResult(context.Background(), task, models.TaskResult{Success: true, Payload: payload}); err != nil {
+			t.Fatalf("updateTaskResult(%q): %v", payload, err)
+		}
+		if got := resultEventCount(sink); got != 0 {
+			t.Fatalf("payload %q: broadcast RESULT events = %d, want 0 (nothing was stored)", payload, got)
+		}
+	}
+}

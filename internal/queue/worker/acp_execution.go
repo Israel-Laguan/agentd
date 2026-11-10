@@ -122,6 +122,11 @@ func (w *Worker) saveACPHandoff(ctx context.Context, task models.Task, project m
 	}
 	if err == nil {
 		err = errors.New("attempt awaiting coordinator checks; see check feedback if it was rejected")
+	} else if neverStarted(res) && w.keepsOlderHandoff(ctx, task) {
+		// An attempt that failed before the agent did anything (no runtime, jail
+		// down, a guard) has nothing to hand over. Its note would be the newest
+		// and shadow the last real one (B-095); the failure is in the ERROR path.
+		return true
 	}
 	if handoffErr := w.writeAttemptHandoff(ctx, task, res, err); handoffErr != nil {
 		liveCtx, cancel := liveContext(ctx)
@@ -146,4 +151,17 @@ func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, proj
 		AgentID:  task.AgentID,
 		Attrs:    gateway.AttrsForTask(task.RequiresWorkspaceChange),
 	}, nil
+}
+
+// neverStarted is a failed attempt's result with nothing in it: no output, no
+// outcome, no tokens and no agent output. Callers return StageResult{} before the
+// agent runs; an unverified completion carries an Output and is not this.
+func neverStarted(res stage.StageResult) bool {
+	if len(res.Output) > 0 || res.Outcome != "" || res.TokenUsage != 0 {
+		return false
+	}
+	if res.Progress != "" || res.Plan != "" {
+		return false
+	}
+	return len(res.FailedTools) == 0 && len(res.FilesTouched) == 0
 }

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -210,7 +211,9 @@ func sortViolations(violations []violation) {
 }
 
 func trackedGoFiles() ([]string, error) {
-	out, err := exec.Command("git", "ls-files", "-z", "*.go").Output()
+	cmd := exec.Command("git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.go")
+	cmd.Env = cleanGitEnv(os.Environ())
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
@@ -222,4 +225,21 @@ func trackedGoFiles() ([]string, error) {
 		}
 	}
 	return files, nil
+}
+
+// gitEnvVars select a repository, worktree or index (object-database settings
+// are left alone); a hook sets them, and they would send
+// `git ls-files` to the hook's repository instead of the current directory.
+var gitEnvVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX"}
+
+// cleanGitEnv is env without the repository-locating variables.
+func cleanGitEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		if !slices.Contains(gitEnvVars, name) {
+			out = append(out, kv)
+		}
+	}
+	return out
 }

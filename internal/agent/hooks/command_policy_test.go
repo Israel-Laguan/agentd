@@ -74,3 +74,20 @@ func TestEvaluateToolCallJudgesBashOnly(t *testing.T) {
 		t.Errorf("malformed args = %d; want CommandAsk", got)
 	}
 }
+
+// T-076 (#188 review): dot segments still name the root, and a path that only
+// contains "sudo" is not the command.
+func TestEvaluateCommandDotSegmentsAndPaths(t *testing.T) {
+	t.Parallel()
+	cases := map[string]CommandVerdict{
+		"rm -rf /..":    CommandDeny,
+		"rm -rf /./*":   CommandDeny,
+		"chmod 777 /.":  CommandDeny,
+		"cat /tmp/sudo": CommandAllow,
+	}
+	for command, want := range cases {
+		if got, _ := EvaluateCommand(command); got != want {
+			t.Errorf("EvaluateCommand(%q) = %d; want %d", command, got, want)
+		}
+	}
+}

@@ -13,18 +13,28 @@ name: CI (e2e journeys)
 # both.
 #
 # Runs:
-#   - weekly, on main;
+#   - weekly, on main, and on every push to main (T-075: a regression that
+#     lands on main shows up at the merge, not at the next Monday);
 #   - on demand (Actions > CI (e2e journeys) > Run workflow);
 #   - on a pull request that touches the stack or the journeys themselves, so a
 #     change to devenv/, the Dockerfile or test/e2e/ is proven by the suite it
 #     changes. Markdown-only changes (test/e2e/README.md) never trigger it.
+#     internal/** and cmd/** are in the list because worker and hook changes
+#     are what the journeys exercise (S20: J19 sat red on main for 76 hours).
+#
+# A failed run on main opens (or comments on) one issue, and a green run on
+# main closes it. A pull request run never touches the issue.
 on:
   schedule:
     - cron: "17 5 * * 1"
   workflow_dispatch:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - "test/e2e/**"
+      - "internal/**"
+      - "cmd/**"
       - "devenv/**"
       - "Makefile"
       - "Dockerfile"
@@ -34,7 +44,9 @@ on:
 
 concurrency:
   group: ci-e2e-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to main must not cancel the run that is checking the one
+  # before it; only superseded PR runs are cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   e2e:
@@ -43,6 +55,9 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+    # The reporting job reads this, so a setup failure is not "journeys red".
+    outputs:
+      journeys: ${{ steps.journeys.outcome }}
     steps:
       - uses: actions/checkout@v6
 
@@ -67,6 +82,7 @@ jobs:
           podman --version
 
       - name: Journeys (make test-e2e)
+        id: journeys
         run: make test-e2e
 
       - name: Stack state on failure
@@ -82,3 +98,34 @@ jobs:
       - name: Tear down
         if: always()
         run: make dev-clean || true
+
+  # Only main (push or schedule) reports through an issue, from its own job so
+  # the issue-writing token never reaches the code `make test-e2e` runs. The
+  # title is the key: one open issue at a time, updated while the suite stays
+  # red. always() is needed: without a status function this job is skipped when
+  # e2e fails, which is exactly when it must run.
+  report:
+    name: Report to the issue
+    needs: e2e
+    if: always() && github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch' && (needs.e2e.outputs.journeys == 'failure' || needs.e2e.outputs.journeys == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: e2e journeys red on main
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      JOURNEYS: ${{ needs.e2e.outputs.journeys }}
+    steps:
+      - name: Red opens or updates the issue, green closes it
+        run: |
+          n="$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title --jq "[.[] | select(.title==\"$TITLE\")][0].number // empty")"
+          if [ "$JOURNEYS" = failure ]; then
+            body="Run: $RUN_URL
+          Commit: $GITHUB_SHA ($GITHUB_EVENT_NAME)
+          Failing tests: see the Journeys step ('--- FAIL: TestJ...') in the run log."
+            if [ -n "$n" ]; then gh issue comment "$n" --body "$body"; else gh issue create --title "$TITLE" --body "$body"; fi
+          elif [ "$JOURNEYS" = success ] && [ -n "$n" ]; then
+            gh issue close "$n" --comment "Green again: $RUN_URL"
+          fi

@@ -185,7 +185,8 @@ Devenv supports multiple configurations via profiles in `devenv/compose.yaml`:
 
 | Profile | Use Case | Services | Config Changes |
 |---------|----------|----------|-----------------|
-| default | Development | agentd, web | Standard config |
+| default | Development | agentd | Standard config |
+| web | The board in a browser (UI tier, `make dev-up-ui` / `dev-up-all`) | web | Next.js dev server on :3000; the journeys never call it |
 | healing | Self-healing (J07) | agentd-healing | healing.enabled: true |
 | faults | Provider cascade (J09-A) | agentd-faults | gateway.order: [dead, secondary] |
 | breaker | Breaker trip (J09-B) | agentd-brk | gateway.order: [dead, dead2] (all dead) |
@@ -252,7 +253,7 @@ if err != nil {
 
 ## Bringing up the non-default profiles
 
-`make test-e2e` only starts the `default` profile. Journeys on other profiles
+`make test-e2e` (via `make dev-up`) starts every agentd profile but not `web` (its own profile, T-077; `make dev-up-all` adds it). To start profiles by hand, journeys on other profiles
 need them started explicitly, and **all profiles must be named in a single
 invocation** — podman-compose 1.3.0 resolves `depends_on` only within the
 activated profiles, so `--profile breaker up -d` alone fails with
@@ -261,7 +262,8 @@ activated profiles, so `--profile breaker up -d` alone fails with
 ```bash
 podman compose -f "$PWD/devenv/compose.yaml" \
   --profile default --profile healing --profile faults \
-  --profile breaker --profile disk up -d
+  --profile breaker --profile disk --profile tiered \
+  --profile provider --profile scheduler --profile acp up -d
 ```
 
 The mock LLM is published on `127.0.0.1:8000` for J11's request capture.

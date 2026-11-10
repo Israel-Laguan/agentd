@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"agentd/internal/models"
 )
@@ -38,6 +39,11 @@ func (w *Worker) updateTaskResult(ctx context.Context, task models.Task, result 
 // completion only became visible on the next poll or reconnect. Broadcasting
 // the already-written event closes that gap.
 func (w *Worker) broadcastResult(ctx context.Context, task models.Task, payload string) {
+	// The store writes no RESULT row for a blank payload (B-097); announcing
+	// one would show subscribers an event the events API never returns.
+	if strings.TrimSpace(payload) == "" {
+		return
+	}
 	broadcaster, ok := w.sink.(models.EventBroadcaster)
 	if !ok {
 		return

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,6 +67,8 @@ type agent struct {
 	// mcp is each session's agentd MCP url, next its steps for the next prompt.
 	mcp  map[acp.SessionId]string
 	next map[acp.SessionId][]Step
+	// cwd is each session's workspace, where a Touch step writes.
+	cwd map[acp.SessionId]string
 }
 
 var _ acp.Agent = (*agent)(nil)
@@ -86,6 +89,12 @@ func (a *agent) Authenticate(_ context.Context, p acp.AuthenticateRequest) (acp.
 // process from a restarted one.
 func (a *agent) NewSession(_ context.Context, p acp.NewSessionRequest) (acp.NewSessionResponse, error) {
 	id := acp.SessionId(fmt.Sprintf("sess-%d-%d", os.Getpid(), a.sessions.Add(1)))
+	a.mu.Lock()
+	if a.cwd == nil {
+		a.cwd = map[acp.SessionId]string{}
+	}
+	a.cwd[id] = p.Cwd
+	a.mu.Unlock()
 	for _, server := range p.McpServers {
 		if server.Http != nil && server.Http.Name == "agentd" {
 			a.mu.Lock()
@@ -128,8 +137,26 @@ func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn, Usage: usage}, nil
 }
 
+// sideEffects does a step's stderr line and marker file, which a step can carry
+// beside its main action.
+func (a *agent) sideEffects(session acp.SessionId, step Step) error {
+	if step.Stderr != "" {
+		fmt.Fprintln(os.Stderr, step.Stderr)
+	}
+	if step.Touch == "" {
+		return nil
+	}
+	a.mu.Lock()
+	dir := a.cwd[session]
+	a.mu.Unlock()
+	return os.WriteFile(filepath.Join(dir, filepath.Base(step.Touch)), nil, 0o644)
+}
+
 // run does one step. A non-empty stop reason or an error ends the turn.
 func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.StopReason, error) {
+	if err := a.sideEffects(session, step); err != nil {
+		return "", err
+	}
 	switch {
 	case step.Exit != 0:
 		os.Exit(step.Exit)

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -49,7 +50,7 @@ func main() {
 		os.Exit(2)
 	}
 	if len(violations) == 0 {
-		fmt.Println("LOC check passed: no tracked files exceed their limits.")
+		fmt.Println("LOC check passed: no files exceed their limits.")
 		return
 	}
 
@@ -75,7 +76,7 @@ func check(defaultMax int) ([]violation, error) {
 	}
 
 	var violations []violation
-	for _, relPath := range trackedFiles() {
+	for _, relPath := range candidateFiles() {
 		if excluded(relPath, defaultExcludes) {
 			continue
 		}
@@ -110,8 +111,10 @@ func check(defaultMax int) ([]violation, error) {
 	return violations, nil
 }
 
-func trackedFiles() []string {
-	out, err := exec.Command("git", "ls-files", "-z").Output()
+func candidateFiles() []string {
+	cmd := exec.Command("git", "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	cmd.Env = cleanGitEnv(os.Environ())
+	out, err := cmd.Output()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "checkloc: git ls-files: %v\n", err)
 		os.Exit(2)
@@ -238,4 +241,21 @@ func emitGitHubAnnotations(violations []violation) {
 			len(violations), remaining,
 		)
 	}
+}
+
+// gitEnvVars select a repository, worktree or index (object-database settings
+// are left alone); a hook sets them, and they would send
+// `git ls-files` to the hook's repository instead of the current directory.
+var gitEnvVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX"}
+
+// cleanGitEnv is env without the repository-locating variables.
+func cleanGitEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		if !slices.Contains(gitEnvVars, name) {
+			out = append(out, kv)
+		}
+	}
+	return out
 }
