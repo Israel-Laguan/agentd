@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 )
@@ -18,6 +20,8 @@ type process struct {
 	// mcpURL is the agentd MCP url this process runs with; the driver restarts
 	// a process that reads it from its own config when the url changes.
 	mcpURL string
+	// stderr is the agent's last words, kept for the exit error.
+	stderr *stderrTail
 }
 
 func (p *process) turn(ctx context.Context, s *session, prompt string, result *Result) error {
@@ -82,4 +86,33 @@ func (p *process) kill() {
 		p.stop()
 	}
 	<-p.exited
+}
+
+// stderrTailBytes caps how much of an agent's stderr an error carries.
+const stderrTailBytes = 4096
+
+// stderrTail keeps the last stderrTailBytes of an agent's stderr (T-078).
+type stderrTail struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *stderrTail) Write(b []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, b...)
+	if len(t.buf) > stderrTailBytes {
+		t.buf = append([]byte(nil), t.buf[len(t.buf)-stderrTailBytes:]...)
+	}
+	return len(b), nil
+}
+
+// suffix is the tail as " stderr: ..." for an error, or "" when empty.
+func (t *stderrTail) suffix() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if s := strings.TrimSpace(string(t.buf)); s != "" {
+		return " stderr: " + s
+	}
+	return ""
 }

@@ -3,6 +3,7 @@ package acp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -21,6 +22,7 @@ import (
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == fakeagent.Arg {
 		if err := fakeagent.Serve(os.Args[2:], os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "fake agent:", err) // B-094: exit 2 alone said nothing
 			os.Exit(2)
 		}
 		os.Exit(0)
@@ -319,5 +321,21 @@ func TestFollowupPromptsAgainInTheSameSession(t *testing.T) {
 		fakeagent.Step{Message: "one "}, fakeagent.Step{Next: []fakeagent.Step{{Message: "two"}}})
 	if err != nil || r.Text != "one two" || prompts != 2 {
 		t.Fatalf("err = %v, text = %q, followup called %d times; want two turns of one session", err, r.Text, prompts)
+	}
+}
+
+// T-078: a dying agent's last words reach the error, or a crash is a bare
+// "exit status N" (B-094).
+func TestAgentStderrTailIsInTheExitError(t *testing.T) {
+	t.Parallel()
+	d := fakeDriver(t, Config{})
+	_, err := call(t, d, Request{}, fakeagent.Step{Stderr: "boom: nil map write", Exit: 2})
+	if err == nil || !strings.Contains(err.Error(), "boom: nil map write") {
+		t.Fatalf("err = %v; want the agent's stderr line in it", err)
+	}
+	long := strings.Repeat("x", 3*stderrTailBytes)
+	_, err = call(t, fakeDriver(t, Config{}), Request{}, fakeagent.Step{Stderr: long, Exit: 2})
+	if err == nil || len(err.Error()) > 2*stderrTailBytes {
+		t.Fatalf("err length = %d; want the tail capped near %d", len(err.Error()), stderrTailBytes)
 	}
 }

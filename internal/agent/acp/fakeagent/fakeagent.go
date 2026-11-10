@@ -130,6 +130,9 @@ func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 
 // run does one step. A non-empty stop reason or an error ends the turn.
 func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.StopReason, error) {
+	if step.Stderr != "" {
+		fmt.Fprintln(os.Stderr, step.Stderr)
+	}
 	switch {
 	case step.Exit != 0:
 		os.Exit(step.Exit)

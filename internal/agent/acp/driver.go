@@ -234,10 +234,14 @@ func spawn(ctx context.Context, cfg Config, servers []acpsdk.McpServer) (*proces
 	if err != nil {
 		return nil, fmt.Errorf("acp: agent stdout: %w", err)
 	}
+	tail := &stderrTail{}
+	if cmd.Stderr == nil { // a Command that routes stderr itself keeps it
+		cmd.Stderr = tail
+	}
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("acp: start agent: %w", err)
 	}
-	p := &process{client: &client{sessions: map[acpsdk.SessionId]*session{}}, exited: make(chan struct{})}
+	p := &process{client: &client{sessions: map[acpsdk.SessionId]*session{}}, exited: make(chan struct{}), stderr: tail}
 	p.conn = acpsdk.NewClientSideConnection(p.client, stdin, stdout)
 	go func() {
 		// Wait closes stdout once the agent exits, so a dying agent's last line
@@ -250,4 +254,3 @@ func spawn(ctx context.Context, cfg Config, servers []acpsdk.McpServer) (*proces
 
 // handshake runs initialize, pinned to the SDK's protocol version, then
 // authenticate when a method is configured.
-

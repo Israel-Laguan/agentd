@@ -34,9 +34,9 @@ func (p *process) fail(ctx context.Context, op string, err error) error {
 	if p.dead() {
 		select {
 		case <-p.exited:
-			return fmt.Errorf("acp: agent process exited during %s: %v (%v)", op, p.waitErr, err)
+			return fmt.Errorf("acp: agent process exited during %s: %v (%v)%s", op, p.waitErr, err, p.stderr.suffix())
 		case <-time.After(time.Second):
-			return fmt.Errorf("acp: agent process exited during %s: %w", op, err)
+			return fmt.Errorf("acp: agent process exited during %s: %w%s", op, err, p.stderr.suffix())
 		}
 	}
 	return fmt.Errorf("acp: %s: %w", op, err)
