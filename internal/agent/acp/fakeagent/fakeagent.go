@@ -137,19 +137,29 @@ func (a *agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn, Usage: usage}, nil
 }
 
-// run does one step. A non-empty stop reason or an error ends the turn.
-func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.StopReason, error) {
+// sideEffects does a step's stderr line and marker file, which a step can carry
+// beside its main action.
+func (a *agent) sideEffects(session acp.SessionId, step Step) error {
 	if step.Stderr != "" {
 		fmt.Fprintln(os.Stderr, step.Stderr)
+	}
+	if step.Touch == "" {
+		return nil
+	}
+	a.mu.Lock()
+	dir := a.cwd[session]
+	a.mu.Unlock()
+	return os.WriteFile(filepath.Join(dir, filepath.Base(step.Touch)), nil, 0o644)
+}
+
+// run does one step. A non-empty stop reason or an error ends the turn.
+func (a *agent) run(ctx context.Context, session acp.SessionId, step Step) (acp.StopReason, error) {
+	if err := a.sideEffects(session, step); err != nil {
+		return "", err
 	}
 	switch {
 	case step.Exit != 0:
 		os.Exit(step.Exit)
-	case step.Touch != "":
-		a.mu.Lock()
-		dir := a.cwd[session]
-		a.mu.Unlock()
-		return "", os.WriteFile(filepath.Join(dir, filepath.Base(step.Touch)), nil, 0o644)
 	case step.Stop != "":
 		return step.Stop, nil
 	case step.Error != "":
