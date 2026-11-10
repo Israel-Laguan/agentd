@@ -107,7 +107,7 @@ jobs:
   report:
     name: Report to the issue
     needs: e2e
-    if: always() && github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch' && needs.e2e.outputs.journeys != ''
+    if: always() && github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch' && (needs.e2e.outputs.journeys == 'failure' || needs.e2e.outputs.journeys == 'success')
     runs-on: ubuntu-latest
     permissions:
       issues: write

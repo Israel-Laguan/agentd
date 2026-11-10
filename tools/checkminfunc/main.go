@@ -227,9 +227,10 @@ func trackedGoFiles() ([]string, error) {
 	return files, nil
 }
 
-// gitEnvVars locate a repository; a hook sets them, and they would send
+// gitEnvVars select a repository, worktree or index (object-database settings
+// are left alone); a hook sets them, and they would send
 // `git ls-files` to the hook's repository instead of the current directory.
-var gitEnvVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"}
+var gitEnvVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX"}
 
 // cleanGitEnv is env without the repository-locating variables.
 func cleanGitEnv(env []string) []string {

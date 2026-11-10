@@ -111,8 +111,19 @@ func TestTrackedFilesIncludesUntrackedButNotIgnored(t *testing.T) {
 	write("untracked.go")
 	write("ignored.go")
 	t.Chdir(dir)
+	// A hook's GIT_DIR pointing elsewhere must not win over the current directory:
+	// a regression in cleanGitEnv fails here, because setup above ran without it.
+	t.Setenv("GIT_DIR", filepath.Join(t.TempDir(), "elsewhere"))
 	got := candidateFiles()
 	if !slices.Contains(got, "tracked.go") || !slices.Contains(got, "untracked.go") || slices.Contains(got, "ignored.go") {
 		t.Fatalf("files = %q; want tracked.go and untracked.go, not ignored.go", got)
+	}
+}
+
+func TestCleanGitEnvDropsSelectorsAndKeepsTheRest(t *testing.T) {
+	got := cleanGitEnv([]string{"PATH=/bin", "GIT_DIR=/x", "GIT_WORK_TREE=/y", "GIT_INDEX_FILE=/z", "GIT_OBJECT_DIRECTORY=/o", "HOME=/h"})
+	want := []string{"PATH=/bin", "GIT_OBJECT_DIRECTORY=/o", "HOME=/h"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("cleanGitEnv = %v; want %v", got, want)
 	}
 }
