@@ -87,7 +87,9 @@ func TestExcluded(t *testing.T) {
 // passes on a tree CI rejects. Ignored files stay out.
 func TestTrackedFilesIncludesUntrackedButNotIgnored(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range gitEnvVars { // a hook's GIT_DIR must not reach the temp repo
+	// A hook's GIT_DIR must not reach the temp repo, and neither may an inherited
+	// object database (test setup only: production keeps those, see cleanGitEnv).
+	for _, name := range append([]string{"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"}, gitEnvVars...) {
 		t.Setenv(name, "")
 		_ = os.Unsetenv(name)
 	}
@@ -121,7 +123,7 @@ func TestTrackedFilesIncludesUntrackedButNotIgnored(t *testing.T) {
 }
 
 func TestCleanGitEnvDropsSelectorsAndKeepsTheRest(t *testing.T) {
-	got := cleanGitEnv([]string{"PATH=/bin", "GIT_DIR=/x", "GIT_WORK_TREE=/y", "GIT_INDEX_FILE=/z", "GIT_OBJECT_DIRECTORY=/o", "HOME=/h"})
+	got := cleanGitEnv([]string{"PATH=/bin", "GIT_DIR=/x", "GIT_WORK_TREE=/y", "GIT_INDEX_FILE=/z", "GIT_COMMON_DIR=/c", "GIT_PREFIX=p", "GIT_OBJECT_DIRECTORY=/o", "HOME=/h"})
 	want := []string{"PATH=/bin", "GIT_OBJECT_DIRECTORY=/o", "HOME=/h"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("cleanGitEnv = %v; want %v", got, want)
