@@ -185,7 +185,8 @@ Devenv supports multiple configurations via profiles in `devenv/compose.yaml`:
 
 | Profile | Use Case | Services | Config Changes |
 |---------|----------|----------|-----------------|
-| default | Development | agentd, web | Standard config |
+| default | Development | agentd | Standard config |
+| web | The board in a browser (UI tier, `make dev-up-ui` / `dev-up-all`) | web | Next.js dev server on :3000; the journeys never call it |
 | healing | Self-healing (J07) | agentd-healing | healing.enabled: true |
 | faults | Provider cascade (J09-A) | agentd-faults | gateway.order: [dead, secondary] |
 | breaker | Breaker trip (J09-B) | agentd-brk | gateway.order: [dead, dead2] (all dead) |

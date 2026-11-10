@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+	"slices"
 	"testing"
 )
 
@@ -429,6 +429,10 @@ func TestWriteBaselineBackupDoesNotFollowSymlink(t *testing.T) {
 // fakeTask passed locally and failed CI). Ignored files stay out.
 func TestTrackedGoFilesIncludesUntrackedButNotIgnored(t *testing.T) {
 	dir := t.TempDir()
+	for _, name := range gitEnvVars { // a hook's GIT_DIR must not reach the temp repo
+		t.Setenv(name, "")
+		_ = os.Unsetenv(name)
+	}
 	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", "t@t"}, {"config", "user.name", "t"}} {
 		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -447,8 +451,7 @@ func TestTrackedGoFilesIncludesUntrackedButNotIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := strings.Join(files, " ")
-	if !strings.Contains(got, "untracked.go") || !strings.Contains(got, "tracked.go") || strings.Contains(got, "ignored.go") {
-		t.Fatalf("files = %q; want tracked and untracked, not ignored", got)
+	if !slices.Contains(files, "tracked.go") || !slices.Contains(files, "untracked.go") || slices.Contains(files, "ignored.go") {
+		t.Fatalf("files = %q; want tracked.go and untracked.go, not ignored.go", files)
 	}
 }

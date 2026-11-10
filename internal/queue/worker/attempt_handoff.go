@@ -173,6 +173,8 @@ func shrinkAttemptHandoff(n attemptHandoff, limit int) attemptHandoff {
 	cut := truncation.HeadTailStrategy{HeadRatio: .5}
 	out := n
 	out.Progress, out.Failure, out.Plan = cut.Truncate(n.Progress, limit), cut.Truncate(n.Failure, limit), cut.Truncate(n.Plan, limit)
+	// Re-cap the lists: the bound must not depend on what the writer allowed.
+	n.FailedTools, n.Files = recap(n.FailedTools, handoffMaxTools, "failed calls"), recap(n.Files, handoffMaxFiles, "files")
 	out.FailedTools = make([]string, len(n.FailedTools))
 	for i, tool := range n.FailedTools {
 		out.FailedTools[i] = cut.Truncate(tool, max(limit/2, 1))
@@ -182,6 +184,15 @@ func shrinkAttemptHandoff(n attemptHandoff, limit int) attemptHandoff {
 		out.Files[i] = cut.Truncate(f, max(limit/16, 16))
 	}
 	return out
+}
+
+// recap keeps a list within max entries plus the writer's own "N more omitted"
+// marker, and notes how many it dropped beyond that.
+func recap(list []string, max int, what string) []string {
+	if len(list) <= max+1 {
+		return list
+	}
+	return capList(list, max, what)
 }
 
 // clearAttemptHandoff runs after the coordinator committed a success, which it

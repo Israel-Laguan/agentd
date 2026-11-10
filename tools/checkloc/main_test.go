@@ -4,7 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+	"slices"
 	"testing"
 )
 
@@ -87,6 +87,10 @@ func TestExcluded(t *testing.T) {
 // passes on a tree CI rejects. Ignored files stay out.
 func TestTrackedFilesIncludesUntrackedButNotIgnored(t *testing.T) {
 	dir := t.TempDir()
+	for _, name := range gitEnvVars { // a hook's GIT_DIR must not reach the temp repo
+		t.Setenv(name, "")
+		_ = os.Unsetenv(name)
+	}
 	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", "t@t"}, {"config", "user.name", "t"}} {
 		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -97,7 +101,6 @@ func TestTrackedFilesIncludesUntrackedButNotIgnored(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(".gitignore")
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("ignored.go\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -108,8 +111,8 @@ func TestTrackedFilesIncludesUntrackedButNotIgnored(t *testing.T) {
 	write("untracked.go")
 	write("ignored.go")
 	t.Chdir(dir)
-	got := strings.Join(candidateFiles(), " ")
-	if !strings.Contains(got, "untracked.go") || !strings.Contains(got, "tracked.go") || strings.Contains(got, "ignored.go") {
-		t.Fatalf("files = %q; want tracked and untracked, not ignored", got)
+	got := candidateFiles()
+	if !slices.Contains(got, "tracked.go") || !slices.Contains(got, "untracked.go") || slices.Contains(got, "ignored.go") {
+		t.Fatalf("files = %q; want tracked.go and untracked.go, not ignored.go", got)
 	}
 }

@@ -102,7 +102,11 @@ func (t *stderrTail) Write(b []byte) (int, error) {
 	defer t.mu.Unlock()
 	t.buf = append(t.buf, b...)
 	if len(t.buf) > stderrTailBytes {
-		t.buf = append([]byte(nil), t.buf[len(t.buf)-stderrTailBytes:]...)
+		start := len(t.buf) - stderrTailBytes
+		for start < len(t.buf) && t.buf[start]&0xC0 == 0x80 { // do not start inside a rune
+			start++
+		}
+		t.buf = append([]byte(nil), t.buf[start:]...)
 	}
 	return len(b), nil
 }

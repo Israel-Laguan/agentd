@@ -211,16 +211,21 @@ const (
 func j08AwaitAgentReady(ctx context.Context, t *testing.T, devenv *DevenvManager, workspace string) {
 	t.Helper()
 	marker := strings.TrimRight(workspace, "/") + "/" + j08ReadyMarker
-	deadline := time.Now().Add(j08AgentReadyBudget)
-	for time.Now().Before(deadline) {
-		if _, err := devenv.Exec(ctx, "test", "-f", marker); err == nil {
+	// The budget bounds each Exec too: a hung `podman exec` must fail the wait at
+	// the budget, not at the whole test's deadline.
+	waitCtx, stop := context.WithTimeout(ctx, j08AgentReadyBudget)
+	defer stop()
+	for waitCtx.Err() == nil {
+		if _, err := devenv.Exec(waitCtx, "test", "-f", marker); err == nil {
 			return
 		}
 		select {
-		case <-ctx.Done():
-			t.Fatalf("J08 [ready] context expired waiting for %s: %v", marker, ctx.Err())
+		case <-waitCtx.Done():
 		case <-time.After(500 * time.Millisecond):
 		}
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("J08 [ready] test context expired waiting for %s: %v", marker, ctx.Err())
 	}
 	t.Fatalf("J08 [ready] agent never became ready: no %s within %s, so a kill now would not land mid-turn", marker, j08AgentReadyBudget)
 }

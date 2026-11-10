@@ -371,3 +371,17 @@ func (s ctxHonoringStore) ListEventsByTask(ctx context.Context, id string) ([]mo
 	}
 	return s.KanbanStore.ListEventsByTask(ctx, id)
 }
+
+// Review (CodeRabbit): the rendered bound must not rest on the write-time list
+// caps, which an older or hand-written event may exceed.
+func TestRenderAttemptHandoffBoundsOversizedLists(t *testing.T) {
+	var tools, files []string
+	for range 400 {
+		tools = append(tools, strings.Repeat("<", 2048))
+		files = append(files, strings.Repeat("<", 256))
+	}
+	out := renderAttemptHandoff(attemptHandoff{FailedTools: tools, Files: files}, "")
+	if len(out) > handoffRenderedMax {
+		t.Fatalf("rendered %d bytes, over the %d-byte bound", len(out), handoffRenderedMax)
+	}
+}
