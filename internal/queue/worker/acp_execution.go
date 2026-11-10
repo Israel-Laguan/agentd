@@ -155,5 +155,8 @@ func (w *Worker) acpExecutionRequest(ctx context.Context, task models.Task, proj
 
 // neverStarted is a failed attempt's result with no agent output at all.
 func neverStarted(res stage.StageResult) bool {
-	return res.Progress == "" && res.Plan == "" && len(res.FailedTools) == 0 && len(res.FilesTouched) == 0
+	if res.Progress != "" || res.Plan != "" {
+		return false
+	}
+	return len(res.FailedTools) == 0 && len(res.FilesTouched) == 0
 }
