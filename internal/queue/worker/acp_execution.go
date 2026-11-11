@@ -39,15 +39,6 @@ func (e acpExecution) Validate() error {
 // no provider call of its own.
 type skipGlobalBreakerSuccessKey struct{}
 
-func withoutGlobalBreakerSuccess(ctx context.Context) context.Context {
-	return context.WithValue(ctx, skipGlobalBreakerSuccessKey{}, true)
-}
-
-func breakerSuccessSkipped(ctx context.Context) bool {
-	skip, _ := ctx.Value(skipGlobalBreakerSuccessKey{}).(bool)
-	return skip
-}
-
 // executionAccess is the workspace access an execution stage runs with: a task
 // the plan explicitly classified as text-only runs read-only even on a writable
 // agent (SP-029), and a read-only agent that is handed a task that changes the
@@ -58,7 +49,7 @@ func (w *Worker) executionAccess(ctx context.Context, task models.Task, profile 
 		w.failTerminal(ctx, task, stage.ErrUnverifiedCompletion, models.TaskStateFailedRequiresHuman)
 		return stage.AccessNone, false
 	}
-	if task.RequiresWorkspaceChangeClassified && !task.RequiresWorkspaceChange {
+	if profile.WorkspaceReadonly || (task.RequiresWorkspaceChangeClassified && !task.RequiresWorkspaceChange) {
 		return stage.AccessReadOnly, true
 	}
 	return stage.AccessWrite, true
@@ -86,7 +77,7 @@ func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project 
 	// The agent runs the task; agentd makes no provider request for it. A
 	// completion here must not be read as the provider recovering (the global
 	// breaker is fed by the calls agentd still makes).
-	ctx = withoutGlobalBreakerSuccess(ctx)
+	ctx = context.WithValue(ctx, skipGlobalBreakerSuccessKey{}, true)
 	ctx = gateway.WithTaskID(ctx, task.ID)
 	taskHooks, _ := w.MountAgenticHooks(project, profile)
 	if err := w.RunSessionStart(ctx, task, project, taskHooks); err != nil {

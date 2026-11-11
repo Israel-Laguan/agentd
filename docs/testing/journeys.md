@@ -161,10 +161,10 @@ Not ported: `TestJ07_HealingHandoff`, `TestJ09_BreakerOpens`, `TestJ12_TieredExe
 ## T-026 Status: Complete
 
 All eleven P0 journeys (10 distinct journeys, J09 is two tests) were
-implemented and pass under stress: **J01, J02, J03, J04, J08, J09
-(cascade + breaker), J10, J11, J14**. J07 was deferred in T-071 (its
-builtin-loop test is skipped as `moves in T-071`), so the P0 exit
-criteria are not met until it is ported. Verified 4 consecutive runs on one
+implemented and passed under stress (historical): **J01, J02, J03, J04, J08,
+J09 (cascade + breaker), J10, J11, J14**. J07 and the J09 breaker test were
+skipped in T-071 (`moves in T-071`), so the P0 exit criteria are not met
+until they are ported. Verified 4 consecutive runs on one
 stack with zero failures, zero SQLITE_BUSY, and TOKEN_USAGE rows durable
 (0→26 projects, 0→29 tasks, 0→76 token events).
 
@@ -301,6 +301,6 @@ shows both a verify-step and an escalate-step request.
 
 ## Todos for T-026, T-027, T-028
 
-**T-027** (run and triage): done, except J07. P0 journeys passed on repeated clean runs and on 4 consecutive runs against one accumulating stack **before J07 was deferred in T-071**; the current P0 set is J01, J02, J03, J04, J08, J09 (cascade + breaker), J10, J11, J14, so J07 must be ported before the exit criteria are met. P1 journeys J05, J12, J13 and J15 are implemented and passing, and J06 is deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`, B-005, B-006. Filed (now resolved): B-001, B-002 (fixed), B-003 (closed as not a bug; see results.md). `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 passed before the T-071 deferral. Cycle entries are in `results-history.md`.
+**T-027** (run and triage): done, except J07. P0 journeys passed on repeated clean runs and on 4 consecutive runs against one accumulating stack **before J07, the J09 breaker test and J12 were skipped in T-071** (historical results); currently passing P0 are J01, J02, J03, J04, J08, J09 cascade, J10, J11, J14, so J07 and the J09 breaker test must be ported before the exit criteria are met. P1 journeys J05, J13 and J15 are passing (J12 is skipped until T-071 ports it), and J06 is deferred with written reasons. Defects found and fixed: SQLite per-connection pragmas, J09 profiles, J10 crontab, J11 product gap, J14 unpublished RESULT, B-004 orphan project on a bad `source_path`, B-005, B-006. Filed (now resolved): B-001, B-002 (fixed), B-003 (closed as not a bug; see results.md). `test/e2e/chat-kanban.sh` is deleted now that J04 and J07 passed before the T-071 deferral. Cycle entries are in `results-history.md`.
 
 **T-028** (mock scenarios): done. Request capture (`GET /requests`), the published mock port, per-request scenario selection (in-band `@scenario=` tag, `X-Mock-Scenario` header, or model name via `MOCKLLM_MODEL_SCENARIOS`), error/latency responses, and tiered step replies (each step detected from its system-prompt suffix; verify fails by default) all land. Python unit tests for the dispatch run under `make check` (`devenv/mockllm/test_server.py`). **J12 is the only consumer** of the tiered replies and is now implemented.

@@ -261,6 +261,20 @@ func (d *DraftTask) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON keeps an explicit requires_workspace_change:false, which omitempty
+// would drop, so a returned plan still materializes as text-only.
+func (d DraftTask) MarshalJSON() ([]byte, error) {
+	type alias DraftTask
+	out := struct {
+		alias
+		RequiresWorkspaceChange *bool `json:"requires_workspace_change,omitempty"`
+	}{alias: alias(d)}
+	if d.RequiresWorkspaceChange || d.RequiresWorkspaceChangeSet {
+		out.RequiresWorkspaceChange = &d.RequiresWorkspaceChange
+	}
+	return json.Marshal(out)
+}
+
 // ID returns the canonical draft-local task identifier.
 func (d DraftTask) ID() string {
 	if id := strings.TrimSpace(d.ReferenceID); id != "" {

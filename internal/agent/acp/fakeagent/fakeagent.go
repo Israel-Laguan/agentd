@@ -213,12 +213,14 @@ func (a *agent) ask(ctx context.Context, session acp.SessionId, p Permission) er
 		if err := a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionId: session, Update: start}); err != nil {
 			return err
 		}
+		// shortcut: the SDK handles a notification and the next request concurrently, so wait for the start to be recorded; a real agent can race the same way.
+		time.Sleep(50 * time.Millisecond)
 	}
 	// A permission request carries the kind only when the agent names it; the
 	// driver merges the recorded kind otherwise (ToolCallUpdate.Kind is
 	// optional).
 	toolCall := acp.ToolCallUpdate{ToolCallId: id, Title: acp.Ptr(p.Title), RawInput: p.RawInput}
-	if p.Kind != "" {
+	if p.Kind != "" && p.CallID == "" {
 		toolCall.Kind = acp.Ptr(p.Kind)
 	}
 	resp, err := a.conn.RequestPermission(ctx, acp.RequestPermissionRequest{

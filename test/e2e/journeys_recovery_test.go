@@ -161,7 +161,7 @@ func TestJ08_UncleanKillRecovery(t *testing.T) {
 
 	// The agent's Touch step writes the workspace, so the task must run writable.
 	slow := fakeTask("J08 slow task", j08RerunMarker, fakeagent.Step{Touch: j08ReadyMarker}, fakeagent.Step{SleepMS: int(j08Slow / time.Millisecond)})
-	slow.RequiresWorkspaceChange = true
+	slow.RequiresWorkspaceChange = new(true)
 	plan := DraftPlan{
 		ProjectName:         UniqueProjectName("j08"),
 		Description:         "J08 unclean-kill recovery task",

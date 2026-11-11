@@ -181,21 +181,18 @@ func (c *client) RequestPermission(_ context.Context, p acpsdk.RequestPermission
 	if s == nil {
 		return acpsdk.RequestPermissionResponse{Outcome: acpsdk.RequestPermissionOutcome{Cancelled: &acpsdk.RequestPermissionOutcomeCancelled{}}}, nil
 	}
-	perms := newPermissions(p.ToolCall)
 	// A later request_permission may omit the kind ACP recorded for the call
 	// (ToolCallUpdate.Kind is optional). Merge the recorded kind before the
 	// check: preserve an explicit request kind, otherwise use the recorded one,
 	// and keep the request denied when neither is known (decide refuses an
 	// empty kind). This lets an agent that first named the call report_outcome
 	// reach the driver instead of being refused as unknown.
-	if perms[0].Kind == "" {
+	if p.ToolCall.Kind == nil || *p.ToolCall.Kind == "" {
 		if k := s.recordedKind(p.ToolCall.ToolCallId); k != "" {
-			for i := range perms {
-				perms[i].Kind = string(k)
-				perms[i].Tool = toolForKind[k]
-			}
+			p.ToolCall.Kind = &k
 		}
 	}
+	perms := newPermissions(p.ToolCall)
 	perm := perms[0]
 	v := Verdict{Allow: true}
 	if !ownTool(perm, s.req.MCPServers) {

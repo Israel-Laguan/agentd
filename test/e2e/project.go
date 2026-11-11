@@ -88,7 +88,7 @@ type DraftTask struct {
 	DependsOn       []string `json:"depends_on,omitempty"`
 	// RequiresWorkspaceChange runs the task writable. Omit it when unsure; an
 	// explicit false marks a text-only task and mounts the workspace read-only.
-	RequiresWorkspaceChange bool `json:"requires_workspace_change,omitempty"`
+	RequiresWorkspaceChange *bool `json:"requires_workspace_change,omitempty"`
 	// AgentID pre-assigns the task to an agent profile at creation.
 	AgentID string `json:"agent_id,omitempty"`
 }

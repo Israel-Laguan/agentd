@@ -168,6 +168,8 @@ export interface DraftPlanTask {
   id?: string;
   title: string;
   description: string;
+  // Omitted when the planner did not classify the task; false is text-only.
+  requires_workspace_change?: boolean;
 };
 
 export interface DraftPlan {

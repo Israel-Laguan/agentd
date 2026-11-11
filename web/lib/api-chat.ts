@@ -107,6 +107,7 @@ export async function postApprovePlan(plan: DraftPlan): Promise<MaterializeResul
       title: t.title,
       description: t.description,
       ...(t.id ? { temp_id: t.id } : {}),
+      ...(t.requires_workspace_change !== undefined ? { requires_workspace_change: t.requires_workspace_change } : {}),
     })),
   };
 
