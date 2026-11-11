@@ -34,11 +34,6 @@ func (e acpExecution) Validate() error {
 	return nil
 }
 
-// runACPExecution runs the task on the acp agent its exec.turn route names and
-// applies the outcome as the builtin loop's is applied: a completion is
-// committed, a question goes to a human, an unverified completion fails to a
-// human (B-082), and any other error takes the gateway error path (breaker,
-// defer or retry).
 // executionAccess is the workspace access an execution stage runs with: a task
 // that changes nothing runs read-only even on a writable agent (SP-029), and a
 // read-only agent that is handed a task that changes the workspace cannot do it.
@@ -53,6 +48,11 @@ func (w *Worker) executionAccess(ctx context.Context, task models.Task, profile 
 	return stage.AccessWrite, true
 }
 
+// runACPExecution runs the task on the acp agent its exec.turn route names and
+// applies the outcome as the builtin loop's is applied: a completion is
+// committed, a question goes to a human, an unverified completion fails to a
+// human (B-082), and any other error takes the gateway error path (breaker,
+// defer or retry).
 func (w *Worker) runACPExecution(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile, resolved executionResolution) {
 	audit := w.beginTaskAudit(task, project, route.KindACP)
 	succeeded := false

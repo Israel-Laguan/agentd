@@ -16,7 +16,7 @@ Measured 2026-11-11 on `main` at `f18b820d`. Claims are tagged **[run]** (measur
 1. **The seam does not carry the chat.** `Planner.Agent` is a `stage.Agent`, but it is wired to `stage.NewModelAgent(deps.Gateway)` (`api/server/server.go:60`). Comment intake is wired the same way (`cmd/agentd/start_runtime.go:49`) [read]. Only the worker routes a stage to an acp agent (`routedStageAgent`, `callACP` in `queue/worker/acp_routing.go`), and that path needs a task, a project with a `WorkspacePath`, and an agent profile [read]. Adding purposes to `stageAgentPurposes` would only let the config load. Unscoped chat has no project, and so no workspace to bind [read].
 2. **`AccessNone` binds the workspace read-only.** `callACP` passes `readOnly = req.Access != AccessWrite` to the jail. `NoWorkspace` only refuses permission requests [read], and opencode does not ask before a read (preset config `{"bash": "ask", "edit": "ask"}`). So under `AccessNone`, opencode can still read the workspace [inferred].
 3. **A question becomes a text task only on some paths.** Comment intake and approved-scope chat go straight to `intake.Plan` [read]. Unscoped chat classifies first, and the classifier has no "question" intent. On `codestral-latest` it sent explain and pros/cons questions and "Where is the per-phase task cap configured?" to `plan_request` in 7 of 7 answered runs, and "What does this project do?" to `ambiguous` in 1 of 1 [run, 8 answered of 20; the other 12 were 429s].
-4. **A text task gets write access on the ACP path.** `runACPExecution` takes its access level from `profile.WorkspaceReadonly`, not from `requires_workspace_change` (`queue/worker/acp_execution.go:52-59`) [read]. After T-070 a question would run on an agent that can write, unless its profile is read-only.
+4. **ACP execution access follows task intent and profile policy.** `runACPExecution` runs tasks with `requires_workspace_change: false` read-only, even on a writable agent, and rejects workspace-changing tasks on read-only profiles (`queue/worker/acp_execution.go:46-59`) [read]. This is the T-082 behaviour, implemented in T-070/PR 02; the pre-PR text read access from `profile.WorkspaceReadonly` alone.
 5. **Every ACP stage call cold-starts the agent** (`acp_routing.go:108`, marked as a shortcut) [read].
 6. **A direct call's gathered data is capped at 12,000 chars per message.** The router's default (`routing/router.go:19`) and `gateway.truncator.max_input_chars` (default 12,000) cut each message head and tail [read]. A 35,432-char gathered prompt reached the model as about 3,300 tokens [run, 3 answered `codestral-latest` runs].
 
@@ -74,9 +74,9 @@ Setup [run]: opencode `opencode/deepseek-v4.1-flash-free`, driven by `Worker.acp
 
 **Thin evidence.** The general-question direct answer has 0 answered runs, and the classifier rows rest on 1–4 answered runs each. The ranking does not depend on them, because the agent's cost alone separates the options. **The one run that would settle the direct-answer leg:** codestral, the general question and the two failure/memory examples, 5 runs each, at a delay of 30 s or more.
 
-## What T-070 should do with text tasks
+## What T-070 did with text tasks
 
-- **Run a text task read-only.** In `runACPExecution`, take `AccessReadOnly` when `requires_workspace_change` is false, not only when the profile is read-only (fact 4). Size: S; fold it into T-070.
+- **Run a text task read-only.** In `runACPExecution`, take `AccessReadOnly` when `requires_workspace_change` is false, not only when the profile is read-only (fact 4). Size: S; folded into T-070 (`executionAccess`). [done]
 - **Reject an empty result on a text task.** opencode reported `{"answer": ""}` once and the contract accepted it [run, 1 of 9]; cline did twice [run, 2 of 6 answered runs]. The `exec.turn` contract (`acpExecution{Summary}`) has the same shape, so an empty summary would likely pass too [inferred]. Size: XS.
 - **Until the answer intent exists, expect each text task to cost an agent run:** 46,000–275,000 tokens and 17–127 s on opencode for read-only questions [run, 9 runs], not the 21,000 floor (SP-022).
 - A text task with no `exec.turn` route fails `FAILED_REQUIRES_HUMAN` as T-070 plans [read]; nothing here changes that.
@@ -86,7 +86,7 @@ Setup [run]: opencode `opencode/deepseek-v4.1-flash-free`, driven by `Worker.acp
 | ID | What | Size |
 |---|---|---|
 | T-081 | Chat answer intent: the classifier gains a question intent; one direct call answers general, failure and memory questions from gathered data (status, events, handoff note, recall) within the 12,000-char budget, with a new response kind. No tools. Live test behind `-tags live` | M |
-| T-082 | ACP text tasks run read-only: access follows `requires_workspace_change: false` (fold into T-070 if it is not merged yet) | S |
+| T-082 | ACP text tasks run read-only: access follows `requires_workspace_change: false` — **done in T-070/PR 02** (folded into `executionAccess`) | S |
 | B-100 | An empty `answer` or `summary` passes the ACP result contract; reject it with the repair prompt (opencode 1 of 9, cline 2 of 6 answered runs) | XS |
 | T-083 | Route chat workspace questions to a read-only text task in the project the user names (`approved_scopes`), and post the answer back to the chat or the board | M |
 | SP-030 | Done in this spike: the cline preset copies the `cline-pass` (ClinePass) login when present and passes it as `CLINE_PROVIDER`; `lastUsedProvider` is not what ACP sessions read (`presets.go`, `preset_test.go`) | S |

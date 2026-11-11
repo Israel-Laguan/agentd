@@ -15,7 +15,7 @@ import (
 // A failed attempt takes the tuner's next step. The step the coordinator can
 // still apply is the requeue and the TUNE event: the model override itself went
 // with the builtin loop (docs/harness-extraction.md, "What agentd loses").
-func TestWorkerTuneStepRequeuesAndAppliesNextAttemptOverride(t *testing.T) {
+func TestWorkerTuneStepRequeuesAndEmitsTune(t *testing.T) {
 	store := newACPWorkerStore(t)
 	store.task.RetryCount = 1
 	scriptTask(store, fakeagent.Step{Error: "tool crashed"})

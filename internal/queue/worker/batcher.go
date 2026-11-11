@@ -5,6 +5,7 @@ import (
 
 	agenttools "agentd/internal/agent/tools"
 	"agentd/internal/config"
+	"agentd/internal/gateway"
 	"agentd/internal/models"
 	"agentd/internal/queue/planning"
 )
@@ -142,6 +143,13 @@ func (b *TaskBatcher) independentWith(batch []models.Task, task models.Task) boo
 
 func (w *Worker) isTaskBatchable(ctx context.Context, task models.Task) bool {
 	if planning.IsPhasePlanningTask(task.Title) {
+		return false
+	}
+	// An ACP task runs a whole external agent, which can take minutes. A shared
+	// batch runs its tasks serially under one task_deadline, so one slow task
+	// would spend the deadline and cancel the tasks behind it. Keep each ACP task
+	// in its own batch, which dispatch runs with its own deadline.
+	if _, _, ok := w.acpRoute(gateway.PurposeExecTurn, task.AgentID, gateway.AttrsForTask(task.RequiresWorkspaceChange)); ok {
 		return false
 	}
 	project, profile, err := w.loadContext(ctx, task)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"agentd/internal/agent/acp/fakeagent"
@@ -143,8 +145,15 @@ func (s *queueScenario) startDaemon() {
 
 func (s *queueScenario) workerRunningSandbox(context.Context) error {
 	s.store.seed(1, models.TaskStateReady)
+	// The marker is the fake agent's Touch side effect, which fires when the
+	// turn starts. Waiting on it (rather than the Command hook, which fires
+	// before cmd.Start) ensures the interrupt cancels an in-flight turn.
+	marker := fmt.Sprintf("agentd-ready-%d.marker", time.Now().UnixNano())
 	for i := range s.store.tasks {
-		s.store.tasks[i].Title = fakeagent.Script(fakeagent.Step{SleepMS: 60_000})
+		s.store.tasks[i].Title = fakeagent.Script(
+			fakeagent.Step{Touch: marker},
+			fakeagent.Step{SleepMS: 60_000},
+		)
 	}
 	s.useACP = true
 	s.acpGateway = &fakeGateway{}
@@ -153,14 +162,10 @@ func (s *queueScenario) workerRunningSandbox(context.Context) error {
 	s.rebuild(1)
 	s.startDaemon()
 	go func() { _, _, _ = s.daemon.dispatch(s.ctx) }()
-	select {
-	case <-s.acpStarted:
-		return nil
-	case <-time.After(5 * time.Second):
-		return fmt.Errorf("the agent did not start")
-	case <-s.ctx.Done():
-		return fmt.Errorf("daemon context canceled before the agent started")
-	}
+	return waitFor(func() bool {
+		_, err := os.Stat(filepath.Join(s.store.project.WorkspacePath, marker))
+		return err == nil
+	}, "the agent to start its turn")
 }
 
 func (s *queueScenario) osInterrupt(context.Context) error {

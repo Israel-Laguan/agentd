@@ -47,6 +47,14 @@ func resolverCases(store *testutil.FakeKanbanStore) []resolverCase {
 			want: executionAgentRollup,
 		},
 		{
+			// A review-required task must not take the roll-up shortcut: the
+			// roll-up commits the parent directly, with no review handoff.
+			name:    "review required skips rollup",
+			worker:  &Worker{store: &resolverRollupStore{FakeKanbanStore: store, comments: []models.Comment{breakdownMarker(1)}}},
+			profile: models.AgentProfile{RequireReview: true},
+			want:    executionAgentMissingRoute,
+		},
+		{
 			name:   "phase planning",
 			worker: &Worker{store: store},
 			task:   models.Task{Title: "plan phase 2"},

@@ -15,6 +15,9 @@ import (
 func (s *queueScenario) maxWorkersLimit(_ context.Context, limit int) error {
 	s.sandbox = newBlockingQueueSandbox()
 	s.useACP = true
+	// The task runs on an agent, and the pre-task clarify still makes an L1
+	// call; give it a gateway that answers without clarifying.
+	s.acpGateway = &fakeGateway{}
 	s.rebuild(limit)
 	return nil
 }
@@ -65,6 +68,20 @@ func (s *queueScenario) oneWorkerFinishes(ctx context.Context) error {
 	}
 	if !ok {
 		return fmt.Errorf("no active task found")
+	}
+	// The task holds its slot while its agent is in the turn. Cancel the real
+	// turn and wait for the worker to release the slot itself, so the next tick
+	// cannot exceed the active-worker limit behind a still-running agent.
+	if s.useACP {
+		// The turn registers its cancel after MarkTaskRunning, so poll until a
+		// RUNNING task has one.
+		if err := waitFor(func() bool {
+			running, ok := s.store.first(models.TaskStateRunning)
+			return ok && s.canceller.Cancel(running.ID)
+		}, "an in-flight agent turn to finish"); err != nil {
+			return err
+		}
+		return waitFor(func() bool { return s.daemon.sem.Available() > 0 }, "the finished worker to release its slot")
 	}
 	if _, err := s.store.UpdateTaskResult(ctx, task.ID, task.UpdatedAt, models.TaskResult{Success: true}); err != nil {
 		return err

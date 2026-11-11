@@ -25,7 +25,7 @@ Each call:
 | --- | --- | --- |
 | Runs | `opencode acp` | the compiled `bin/.cline --acp --config $HOME/.cline`, not the Node wrapper |
 | Egress | `opencode.ai:443` | `api.cline.bot:443`, `data.cline.bot:443` |
-| Login copied | the model's provider (the part before `/`) from `auth.json` | `providers.json` cut to the `cline` provider, plus `cline-pass` (ClinePass) when the user has it; `lastUsedProvider` is `cline-pass` if present, else `cline`. The usage-billed `cline` login refuses even free models once its balance is negative. Other fields stay as written, or cline fails its schema and sees no login |
+| Login copied | the model's provider (the part before `/`) from `auth.json` | `providers.json` cut to the `cline` provider, plus `cline-pass` (ClinePass) when the user has it; `lastUsedProvider` and `CLINE_PROVIDER` (the provider an ACP session actually reads) are `cline-pass` if present, else `cline`. The usage-billed `cline` login refuses even free models once its balance is negative. Other fields stay as written, or cline fails its schema and sees no login |
 | Also in the home | `models.json` and `rg` from your `~/.cache/opencode`, so the catalog fetch (disabled) and the ripgrep download need no host | `cline_mcp_settings.json` (`CLINE_MCP_SETTINGS_PATH`) and `rules/agentd.md`, the SP-026 rules file |
 | agentd's MCP server | http, from `session/new` | http, from the settings file. cline's ACP mode asks before every tool and ignores the file's `autoApprove`; the driver allows the tools of the server it attached (`agentd__*`, kind `other`) with no hook, and refuses any other `other` |
 | Permissions | `OPENCODE_CONFIG_CONTENT` sets `bash` and `edit` to `ask` | cline asks on its own |

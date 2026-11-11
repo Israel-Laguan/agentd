@@ -43,6 +43,16 @@ func newDaemonSafetyScenario() *daemonSafetyScenario {
 }
 
 func registerDaemonSafetySteps(sc *godog.ScenarioContext, s *daemonSafetyScenario) {
+	// Close the scenario's ACP runtime and its httptest server before the
+	// suite resets state, so a deadline or panic scenario does not leak one
+	// server per run.
+	sc.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+		if s.closeACP != nil {
+			s.closeACP()
+			s.closeACP = nil
+		}
+		return ctx, nil
+	})
 	// Task deadline / reaper
 	sc.Step(`^the task deadline is set to (\S+)$`, s.setTaskDeadline)
 	sc.Step(`^(\d+) READY task exists with a blocking sandbox$`, s.readyBlockingSandbox)

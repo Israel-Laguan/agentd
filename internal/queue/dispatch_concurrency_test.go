@@ -18,6 +18,7 @@ type runningCounter struct {
 	mu      sync.Mutex
 	current int
 	peak    int
+	claimed map[string]bool
 }
 
 func (c *runningCounter) MarkTaskRunning(ctx context.Context, id string, at time.Time, pid int) (*models.Task, error) {
@@ -26,27 +27,39 @@ func (c *runningCounter) MarkTaskRunning(ctx context.Context, id string, at time
 		return task, err
 	}
 	c.mu.Lock()
-	c.current++
-	if c.current > c.peak {
-		c.peak = c.current
+	if c.claimed == nil {
+		c.claimed = map[string]bool{}
+	}
+	if !c.claimed[id] {
+		c.claimed[id] = true
+		c.current++
+		if c.current > c.peak {
+			c.peak = c.current
+		}
 	}
 	c.mu.Unlock()
 	return task, nil
 }
 
-func (c *runningCounter) leave() {
+// leave drops one claimed task, once. Failure paths commit a result and then
+// make a second state transition, so leaving per call would decrement twice
+// for one claim and underreport peak overlap.
+func (c *runningCounter) leave(id string) {
 	c.mu.Lock()
-	c.current--
+	if c.claimed[id] {
+		delete(c.claimed, id)
+		c.current--
+	}
 	c.mu.Unlock()
 }
 
 func (c *runningCounter) UpdateTaskResult(ctx context.Context, id string, at time.Time, result models.TaskResult) (*models.Task, error) {
-	defer c.leave()
+	defer c.leave(id)
 	return c.queueStore.UpdateTaskResult(ctx, id, at, result)
 }
 
 func (c *runningCounter) UpdateTaskState(ctx context.Context, id string, at time.Time, next models.TaskState) (*models.Task, error) {
-	defer c.leave()
+	defer c.leave(id)
 	return c.queueStore.UpdateTaskState(ctx, id, at, next)
 }
 

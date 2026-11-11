@@ -71,19 +71,22 @@ func TestACPTokenUsageIsRecordedAndEmitted(t *testing.T) {
 		t.Fatalf("token calls = %+v, want 15 for task %s", tokens.calls, task.ID)
 	}
 	for _, event := range sink.events {
-		if event.Type == models.EventTypeTokenUsage && event.Payload == `{"tokens":15}` {
+		if event.Type == models.EventTypeTokenUsage && event.TaskID.String == task.ID && event.Payload == `{"tokens":15}` {
 			return
 		}
 	}
-	t.Fatalf("events = %+v, want TOKEN_USAGE for 15", sink.events)
+	t.Fatalf("events = %+v, want TOKEN_USAGE for 15 on task %s", sink.events, task.ID)
 }
 
 func TestACPTokenRecordingCanBeDisabled(t *testing.T) {
 	step := report(map[string]any{"summary": "done"})
 	step.Usage = &acpsdk.Usage{TotalTokens: 15}
-	w, _, task, project, profile, _, _ := acpFixture(t, fakeagent.Script(step), false)
+	store, task, project, profile := acpTask(t, fakeagent.Script(step), "do the thing", false)
+	rt, _, _ := acpRuntime(t)
 	tokens := &fakeTokenStore{}
-	w.tokenStore, w.disableTokenRecording = tokens, true
+	w := NewWorker(store, nil, &routingTestSandbox{}, nil, &mockEventSink{}, WorkerOptions{
+		Routes: acpRoutes(), ACP: rt, TokenStore: tokens, DisableTokenRecording: true,
+	})
 	w.dispatchProcess(context.Background(), task, project, profile)
 	if tokens.callCount() != 0 {
 		t.Fatalf("token calls = %d, want 0", tokens.callCount())

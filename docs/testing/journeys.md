@@ -151,7 +151,7 @@ Not ported: `TestJ07_HealingHandoff`, `TestJ09_BreakerOpens`, `TestJ12_TieredExe
 - J02: board + SSE (2 runs)
 - J03: chat-only response (2 runs)
 - J04: full happy path (2 runs)
-- J07: HUMAN handoff (2 runs)
+- J07: HUMAN handoff (2 runs) — **deferred until T-071** (the test is skipped as `moves in T-071`)
 - J08: unclean restart recovery (2 runs)
 - J09: cascade (faults) + breaker trip (breaker) (2 runs)
 - J10: disk watchdog dedup (2 runs)

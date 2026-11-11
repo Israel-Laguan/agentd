@@ -60,8 +60,10 @@ func soakLoop(t *testing.T, store *countingStore, d *Daemon, budget time.Duratio
 }
 
 // newSoakDaemon builds a daemon over the fake store with short intervals. The
-// global breaker stays CLOSED so dispatch is never gated; the held probe lives on
-// the *provider* registry, which is where the sibling wait happens.
+// global breaker stays CLOSED so dispatch is never gated. There is no held
+// provider probe to keep re-queuing siblings: the dispatch-side provider gate
+// left with the builtin exec path in T-070, so this only measures the loop's own
+// tick pacing.
 func newSoakDaemon(t *testing.T, store *countingStore, pb *ProviderBreakers, taskInterval, maxTaskInterval time.Duration) *Daemon {
 	t.Helper()
 	gw := &fakeGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "echo ok")}}

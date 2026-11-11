@@ -186,7 +186,7 @@ func TestClinePresetPrefersTheClinePassLogin(t *testing.T) {
 	creds := filepath.Join(t.TempDir(), "providers.json")
 	writeFile(t, creds, `{"version": 1, "lastUsedProvider": "cline", "modes": {}, "providers": {
 		"cline": {"settings": {"provider": "cline", "auth": {"accessToken": "CL-TOKEN"}}},
-		"cline-pass": {"settings": {"provider": "cline-pass", "auth": {"accessToken": "CL-TOKEN"}}},
+		"cline-pass": {"settings": {"provider": "cline-pass", "auth": {"accessToken": "PASS-TOKEN"}}},
 		"openrouter": {"settings": {"provider": "openrouter", "auth": {"apiKey": "OR-KEY"}}}}}`)
 	argv, err := Presets["cline"].Home(Launch{Home: home, Model: "cline-free/solar-mini4", Credentials: creds, MCPURL: "http://127.0.0.1:3129/mcp/abc"})
 	if err != nil {
@@ -199,6 +199,14 @@ func TestClinePresetPrefersTheClinePassLogin(t *testing.T) {
 	byName, _ := providers["providers"].(map[string]any)
 	if len(byName) != 2 || byName["cline"] == nil || byName["cline-pass"] == nil || providers["lastUsedProvider"] != "cline-pass" {
 		t.Fatalf("providers.json keeps %v, last used %v; want cline and cline-pass, last cline-pass", keys(byName), providers["lastUsedProvider"])
+	}
+	// Each provider keeps its own credential: the login cline uses is the
+	// ClinePass token, not cline's.
+	pass, _ := byName["cline-pass"].(map[string]any)
+	settings, _ := pass["settings"].(map[string]any)
+	auth, _ := settings["auth"].(map[string]any)
+	if auth["accessToken"] != "PASS-TOKEN" {
+		t.Fatalf("cline-pass auth = %v, want the ClinePass token", pass)
 	}
 }
 

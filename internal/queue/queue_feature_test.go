@@ -105,6 +105,7 @@ type queueScenario struct {
 	acpStop       chan struct{}
 	closeACP      func()
 	useACP        bool
+	canceller     *CancelRegistry
 	daemonStarted bool
 	lastQueued    int
 }
@@ -123,9 +124,9 @@ func (s *queueScenario) reset() {
 		s.closeACP()
 		s.closeACP = nil
 	}
-	if s.acp == nil {
-		s.acp, s.closeACP = newACPRuntime()
-	}
+	// Always build a fresh runtime: reset closes the previous server, and
+	// reusing the struct would hand later scenarios a closed MCP endpoint.
+	s.acp, s.closeACP = newACPRuntime()
 	s.store = newQueueStore()
 	s.breaker = NewCircuitBreaker()
 	s.now = time.Now().UTC()
@@ -133,6 +134,7 @@ func (s *queueScenario) reset() {
 	s.gateway = &queueGateway{toolCalls: []gateway.ToolCall{testutil.BashToolCall("call_1", "true")}}
 	s.sandbox = &queueSandbox{result: sandbox.Result{Success: true, ExitCode: 0}}
 	s.useACP = false
+	s.canceller = NewCancelRegistry()
 	s.sink = &queueSink{}
 	s.maxRetries = DefaultWorkerMaxRetries
 	s.ctx = nil
@@ -144,7 +146,7 @@ func (s *queueScenario) reset() {
 
 func (s *queueScenario) rebuild(maxWorkers int) {
 	var gw gateway.AIGateway = s.gateway
-	opts := WorkerOptions{MaxRetries: s.maxRetries, ToolFailureStreak: 1}
+	opts := WorkerOptions{MaxRetries: s.maxRetries, ToolFailureStreak: 1, Canceller: s.canceller}
 	if s.useACP {
 		gw = s.acpGateway
 		// The breaker scenario needs a task that reaches an agent: the global

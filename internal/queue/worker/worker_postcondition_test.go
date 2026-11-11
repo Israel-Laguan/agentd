@@ -59,10 +59,19 @@ func seedWorkspaceWithMain(t *testing.T, store *testutil.FakeKanbanStore, ctx co
 func runPostconditionAgentic(t *testing.T, store *testutil.FakeKanbanStore, sb sandbox.Executor, task models.Task) (*mockEventSink, models.Task) {
 	t.Helper()
 	ctx := context.Background()
-	steps := []fakeagent.Step{{Did: acpsdk.ToolKindEdit}}
-	if _, broken := sb.(breakingSandbox); broken {
-		steps[0].Touch = "main.go"
+	// The ACP path never invokes the supplied sandbox, so a breakingSandbox
+	// would otherwise leave main.go untouched. Write its malformed content into
+	// the workspace before the turn, which is the state the sandbox replays.
+	if broken, ok := sb.(breakingSandbox); ok {
+		project, err := store.GetProject(ctx, task.ProjectID)
+		if err != nil {
+			t.Fatalf("GetProject: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(project.WorkspacePath, "main.go"), []byte(broken.breakWith), 0o644); err != nil {
+			t.Fatalf("seed broken main.go: %v", err)
+		}
 	}
+	steps := []fakeagent.Step{{Did: acpsdk.ToolKindEdit}}
 	steps = append(steps, report(map[string]any{"summary": "done"}))
 	updated, err := store.UpdateTaskDescription(ctx, task.ID, task.UpdatedAt, task.Description+"\n"+fakeagent.Script(steps...))
 	if err != nil {

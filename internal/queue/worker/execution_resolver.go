@@ -76,6 +76,12 @@ func (w *Worker) resolveForGoldenRepair(ctx context.Context, task models.Task, p
 }
 
 func (w *Worker) resolveExecutionAgent(ctx context.Context, task models.Task, project models.Project, profile models.AgentProfile) executionResolution {
+	// A review-required task must go through createReviewHandoff, not the
+	// roll-up: tryRollUpBreakdown commits the parent directly, which would
+	// complete it with no human review (T-068).
+	if profile.RequireReview {
+		return w.resolveExecutionRoute(task)
+	}
 	if w.hasBreakdownToRollUp(ctx, task) {
 		return executionResolution{kind: executionAgentRollup}
 	}

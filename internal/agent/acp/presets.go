@@ -103,11 +103,12 @@ const clineRules = "# agentd\n\nNever guess a detail the task does not give you.
 	"call the ask_human tool from the agentd MCP server and end your turn without changing any file.\n"
 
 // clineHome writes cline's config dir: the user's providers file cut to the
-// one provider, agentd's MCP server (cline ignores session/new's), and the
-// rules. The file's other fields stay as written: cline drops a file that
-// fails its schema and then sees no login. The model is CLINE_MODEL, since
-// the session ignores the file's (it ran cline's paid default).
-// Cline's hub daemon starts inside the jail and dies with its PID namespace.
+// `cline` provider, plus `cline-pass` when the user has it, agentd's MCP server
+// (cline ignores session/new's), and the rules. The file's other fields stay as
+// written: cline drops a file that fails its schema and then sees no login. The
+// model is CLINE_MODEL, since the session ignores the file's (it ran cline's
+// paid default). Cline's hub daemon starts inside the jail and dies with its PID
+// namespace.
 // shortcut: cline may refresh its token into the run's copy, which is then dropped; write it back if a rotated token ever breaks the user's login.
 func clineHome(l Launch) ([]string, error) {
 	if l.MCPURL == "" {

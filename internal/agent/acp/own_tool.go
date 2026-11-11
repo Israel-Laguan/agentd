@@ -23,6 +23,12 @@ func ownTool(p Permission, servers []acpsdk.McpServer) bool {
 	if p.Tool != "" {
 		return false
 	}
+	// Only cline's kind other names an MCP tool. A fetch, switch_mode, think or
+	// unset-kind call whose title happens to start with an agentd tool name must
+	// not ride the bypass (decide refuses those kinds).
+	if p.Kind != string(acpsdk.ToolKindOther) {
+		return false
+	}
 	// cline 3.0.74 titles a call "server__tool: <arguments JSON>".
 	name, _, _ := strings.Cut(p.Title, ": ")
 	for _, s := range servers {

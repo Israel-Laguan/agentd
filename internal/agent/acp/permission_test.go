@@ -151,6 +151,15 @@ func TestOwnToolNamesAsCline3Sends(t *testing.T) {
 	if ownTool(Permission{Kind: string(acpsdk.ToolKindOther), Title: "agentd__report_outcome: {}"}, nil) {
 		t.Error("own tool allowed with no agentd server attached")
 	}
+	// Only kind other names an MCP tool: a fetch, switch_mode, think or
+	// unset-kind call titled like an agentd tool must still reach decide.
+	for _, kind := range []acpsdk.ToolKind{
+		acpsdk.ToolKindFetch, acpsdk.ToolKindSwitchMode, acpsdk.ToolKindThink, "",
+	} {
+		if ownTool(Permission{Kind: string(kind), Title: "agentd__report_outcome"}, own) {
+			t.Errorf("ownTool(kind %q) = true, want false so decide can refuse it", kind)
+		}
+	}
 }
 
 func TestPermissionDeniedByTheHooksRejects(t *testing.T) {

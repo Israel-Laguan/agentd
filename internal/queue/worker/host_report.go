@@ -17,9 +17,9 @@ import (
 // identifiers are never read. It returns false, leaving the task untouched,
 // when the task is not a report task, when no host facts were collected, or
 // when the collection is partial: retrying the render on the same workspace
-// cannot produce the missing facts (the collectors already ran), so the model
-// path runs instead of burning the retry budget on an unchanged workspace
-// (B-046).
+// cannot produce the missing facts (the collectors already ran), and no ACP
+// route can either, so the task fails with the render reason on its event log
+// rather than burning the retry budget on an unchanged workspace (B-046).
 func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, project models.Project) bool {
 	if w.goldenRepairPending(ctx, task) {
 		return false
@@ -34,9 +34,11 @@ func (w *Worker) tryRenderHostReport(ctx context.Context, task models.Task, proj
 		var missing *hostreport.MissingFactsError
 		if errors.As(err, &missing) {
 			slog.Warn("host report incomplete; execution requires an ACP route", "task_id", task.ID, "error", err)
+			w.Emit(ctx, task, "HOST_REPORT_INCOMPLETE", err.Error())
 			return false
 		}
 		slog.Warn("host report render failed; execution requires an ACP route", "task_id", task.ID, "error", err)
+		w.Emit(ctx, task, "HOST_REPORT_RENDER_FAILED", err.Error())
 		return false
 	}
 	if !ok {
